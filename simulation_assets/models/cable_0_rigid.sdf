@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="cable_0">
+    <link name="cable_link">
+      <pose>1.5 0.25 0.065 0 0 0</pose>
+      <inertial>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.0001</ixx>
+          <iyy>0.0001</iyy>
+          <izz>0.0001</izz>
+        </inertia>
+      </inertial>
+      <collision name="col">
+        <geometry>
+          <cylinder>
+            <radius>0.01</radius>
+            <length>1.0</length>
+          </cylinder>
+        </geometry>
+      </collision>
+      <visual name="vis">
+        <geometry>
+          <cylinder>
+            <radius>0.01</radius>
+            <length>1.0</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.2 0.2 0.2 1</ambient>
+          <diffuse>0.45 0.45 0.45 1</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

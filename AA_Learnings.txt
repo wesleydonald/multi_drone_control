@@ -1,0 +1,30 @@
+Use this command to send motor speeds for drone0
+
+gz topic -t /x3_drone0/gazebo/command/motor_speed -m gz.msgs.Actuators -p 'velocity: 1000 velocity: 1000 velocity: 1000 velocity: 1000'
+
+Use this command to echo imu topic for drone0
+
+gz topic -e -t /world/quadcopter/model/x3_drone0/link/base_link/sensor/x3_drone0_imu_sensor/imu
+
+These are the topics
+
+/drone_{i}/ELRSCommand, 
+/drone_{i}/motion_capture_state, 
+/x3_drone{i}/gazebo/command/motor_speed
+
+Can run betaflight launch file with:
+ros2 launch simulation_communication betaflight_simulation_launch.py num_drones := 2
+
+To run controller_pid for an individual drone
+ros2 run controller_pid main --ros-args -p drone_id:=0
+
+Can arm/takeoff/disarm without rviz
+ros2 service call /drone_arming_service interfaces/srv/SetArming "{arm: true}"
+ros2 topic pub /drone_command std_msgs/msg/String "{data: TAKEOFF}"
+ros2 topic pub /drone_command std_msgs/msg/String "{data: DISARM}"
+
+
+SETUP:
+gz sim world_large_2.sdf -v -r
+ros2 launch simulation_communication betaflight_simulation_launch.py num_drones:=4
+ros2 run controller_pid main --ros-args -p drone_id:=0

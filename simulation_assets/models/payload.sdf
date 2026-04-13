@@ -1,0 +1,115 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="payload">
+    <pose>1.000000 0.500000 0.030000 0 0 0</pose>
+
+    <!-- Main payload body -->
+    <link name="payload_body">
+      <inertial>
+        <mass>0.5</mass>
+        <inertia>
+          <ixx>0.001817</ixx><iyy>0.001817</iyy><izz>0.003333</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="col">
+        <geometry><box><size>0.2 0.2 0.06</size></box></geometry>
+      </collision>
+      <visual name="vis">
+        <geometry><box><size>0.2 0.2 0.06</size></box></geometry>
+        <material>
+          <ambient>0.70 0.45 0.15 1</ambient>
+          <diffuse>0.85 0.58 0.20 1</diffuse>
+          <specular>0.15 0.10 0.05 1</specular>
+        </material>
+      </visual>
+    </link>
+
+    <!-- 4 hook links (one attachment point per drone cable) -->
+    <!-- <link name="hook_0">
+      <pose>1.070000 0.570000 0.060000 0 0 0</pose>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia>
+          <ixx>0.000000040</ixx><iyy>0.000000040</iyy><izz>0.000000040</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="vis">
+        <geometry><sphere><radius>0.012</radius></sphere></geometry>
+        <material>
+          <ambient>0.8 0.3 0.1 1</ambient>
+          <diffuse>0.9 0.4 0.1 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="hook_1">
+      <pose>0.930000 0.570000 0.060000 0 0 0</pose>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia>
+          <ixx>0.000000040</ixx><iyy>0.000000040</iyy><izz>0.000000040</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="vis">
+        <geometry><sphere><radius>0.012</radius></sphere></geometry>
+        <material>
+          <ambient>0.8 0.3 0.1 1</ambient>
+          <diffuse>0.9 0.4 0.1 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="hook_2">
+      <pose>0.930000 0.430000 0.060000 0 0 0</pose>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia>
+          <ixx>0.000000040</ixx><iyy>0.000000040</iyy><izz>0.000000040</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="vis">
+        <geometry><sphere><radius>0.012</radius></sphere></geometry>
+        <material>
+          <ambient>0.8 0.3 0.1 1</ambient>
+          <diffuse>0.9 0.4 0.1 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="hook_3">
+      <pose>1.070000 0.430000 0.060000 0 0 0</pose>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia>
+          <ixx>0.000000040</ixx><iyy>0.000000040</iyy><izz>0.000000040</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="vis">
+        <geometry><sphere><radius>0.012</radius></sphere></geometry>
+        <material>
+          <ambient>0.8 0.3 0.1 1</ambient>
+          <diffuse>0.9 0.4 0.1 1</diffuse>
+        </material>
+      </visual>
+    </link> -->
+
+    <!-- <joint name="hook_0_joint" type="fixed">
+      <parent>payload_body</parent>
+      <child>hook_0</child>
+    </joint>
+    <joint name="hook_1_joint" type="fixed">
+      <parent>payload_body</parent>
+      <child>hook_1</child>
+    </joint>
+    <joint name="hook_2_joint" type="fixed">
+      <parent>payload_body</parent>
+      <child>hook_2</child>
+    </joint>
+    <joint name="hook_3_joint" type="fixed">
+      <parent>payload_body</parent>
+      <child>hook_3</child> -->
+    <!-- </joint> -->
+  </model>
+</sdf>

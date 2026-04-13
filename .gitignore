@@ -1,0 +1,19 @@
+# Ignore build directories
+build/
+
+# Ignore log files
+log/
+
+# Ignore install directories
+install/
+
+c_generated_code/
+acados_ocp.json
+acados_sim.json
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+**/__pycache__/
+**/*.pyc

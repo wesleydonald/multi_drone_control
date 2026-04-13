@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<robot name="tbs_sourceone_v5">
+
+  <!-- URDF for visualising the TBS Source One V5 frame in RViz2 -->
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/mitchell/Documents/PhD/drone_cage_control/simulation_assets/tbs_sourceone_v5.stl" scale="0.002 0.002 0.002"/>
+      </geometry>
+      <material name="carbon">
+        <color rgba="0.55 0.15 0.15 0.75"/>
+      </material>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="file:///home/mitchell/Documents/PhD/drone_cage_control/simulation_assets/tbs_sourceone_v5.stl" scale="0.002 0.002 0.002"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="0.25"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0"
+               iyy="0.001" iyz="0.0"
+               izz="0.001"/>
+    </inertial>
+  </link>
+
+</robot>

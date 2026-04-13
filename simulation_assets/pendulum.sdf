@@ -1,0 +1,91 @@
+
+<sdf version="1.6">
+    <model name="pendulum">
+        <static>false</static>
+        <pose>0 0 0.04 0 0 0</pose>
+        <link name="base">
+            <pose frame="">0 0 0 0 0 0</pose>
+            <inertial>
+                <pose frame="">0.0 0.0 0 0 -0 0</pose>
+                <mass>0.05</mass>
+                <inertia>
+                    <ixx>0.000000708</ixx>
+                    <ixy>0</ixy>
+                    <ixz>0</ixz>
+                    <iyy>0.000000708</iyy>
+                    <iyz>0</iyz>
+                    <izz>0.000001333</izz>
+                </inertia>
+            </inertial>
+            <collision name="base_link_inertia_collision">
+                <pose frame="">0 0 0 0 0.0 0</pose>
+                <geometry>
+                    <box>
+                        <size>0.02 0.02 0.005</size>
+                    </box>
+                </geometry>
+            </collision>
+
+            <visual name="base">
+                <pose frame="">0 0 0 0 0.0 0</pose>
+                <geometry>
+                    <box>
+                        <size>0.02 0.02 0.005</size>
+                    </box>
+                </geometry>
+            </visual>
+        </link>
+        <link name="pendulum_link">
+        <pose relative_to='pendulum_pivot'>0.0 0.0 0.3 0.0 0.0 0</pose>
+        <inertial>
+            <mass>0.032</mass>
+            <inertia>
+            <ixx>0.001190371216</ixx> <iyy>0.001190371216</iyy> <izz>0.000001333</izz>
+            <ixy>0</ixy> <ixz>0</ixz> <iyz>0</iyz>
+            </inertia>
+        </inertial>
+        <visual name="visual">
+            <geometry>
+            <cylinder>
+                <radius>0.01</radius>
+                <length>0.6</length>
+            </cylinder>
+            </geometry>
+        </visual>
+        <gravity>1</gravity>
+        <collision name="collision">
+            <geometry>
+            <cylinder>
+                <radius>0.01</radius>
+                <length>0.6</length>
+            </cylinder>
+            </geometry>
+        </collision>
+        </link>
+
+        <joint name='pendulum_pivot' type='universal'>
+            <parent>base</parent>
+            <child>pendulum_link</child>
+            <pose relative_to="base">0 0 0.01 0 -0 0</pose>
+            <axis>
+                <xyz> 1 1 0</xyz>
+                <use_parent_model_frame>1</use_parent_model_frame>
+                <limit>
+                <lower>-1.57</lower>
+                <upper>1.57</upper>
+                <effort>0.0</effort>
+                <velocity>100000000</velocity>
+                </limit>
+                <dynamics>
+                <spring_reference>0</spring_reference>
+                <spring_stiffness>0</spring_stiffness>
+                <damping>0.0</damping>
+                <friction>0.0</friction>
+                </dynamics>
+            </axis>
+            </joint>
+
+       
+
+    </model>
+</sdf>
