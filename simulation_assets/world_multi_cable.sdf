@@ -80,7 +80,7 @@
     </model>
 
     <include>
-      <uri>models/x3_drone0.sdf</uri>
+      <uri>models_cable/x3_drone0.sdf</uri>
       <pose>2.0 0.0 0.1 0 0 0</pose>
     </include>
 

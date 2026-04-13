@@ -32,7 +32,14 @@ class PentaVerify(Node):
         
         #self.get_logger().info(f'Motion capture emulator tracking object ID: {self.target_object_id}')
         
-        self.worldPoseSub_ = self.create_subscription(PoseArray, f'/model/x3_drone{self.drone_id}/pose', self.worldPoseCallback, 10)
+        #self.worldPoseSub_ = self.create_subscription(PoseArray, f'/model/x3_drone{self.drone_id}/pose', self.worldPoseCallback, 10)
+
+        self.worldPoseSub_ = self.create_subscription(
+    PoseArray,
+    f'/model/lift_system/model/x3_drone{self.drone_id}/pose',  # updated
+    self.worldPoseCallback,
+    10
+)
         self.publisher = self.create_publisher(MotionCaptureState, f'/drone_{self.drone_id}/motion_capture_state', 10)
         self.pose_publisher = self.create_publisher(PoseStamped, '/rviz_pose', 10)
 
@@ -58,8 +65,11 @@ class PentaVerify(Node):
             self.get_logger().warn('No pose available MOCAP')
             return
 
-        current_position = msg.poses[7].position
-        current_orientation = msg.poses[7].orientation
+        #current_position = msg.poses[5].position
+        #current_orientation = msg.poses[5].orientation
+
+        current_position = msg.poses[-1].position
+        current_orientation = msg.poses[-1].orientation
 
         # Ensure w is positive
         current_orientation.x, current_orientation.y, current_orientation.z, current_orientation.w = self.normalize_quaternion_positive_w(

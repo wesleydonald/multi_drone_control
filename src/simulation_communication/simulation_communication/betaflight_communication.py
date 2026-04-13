@@ -19,7 +19,14 @@ class BetaflightInterfaceNode(Node):
         self.declare_parameter('drone_id', 0)
         self.drone_id = self.get_parameter('drone_id').get_parameter_value().integer_value
         
-        self.subscription_motion_capture = self.create_subscription(PoseArray, f'/model/x3_drone{self.drone_id}/pose', self.pose_callback, 10)
+        #self.subscription_motion_capture = self.create_subscription(PoseArray, f'/model/x3_drone{self.drone_id}/pose', self.pose_callback, 10)
+        self.subscription_motion_capture = self.create_subscription(
+            PoseArray, 
+            f'/model/lift_system/model/x3_drone{self.drone_id}/pose',  # updated
+            self.pose_callback, 
+            10
+        )
+        
         self.subscription_control = self.create_subscription(ELRSCommand, f'/drone_{self.drone_id}/ELRSCommand', self.controller_commands_callback, 10)
         self.publisher = self.create_publisher(Actuators, f'/x3_drone{self.drone_id}/gazebo/command/motor_speed', 10)
 
@@ -71,8 +78,10 @@ class BetaflightInterfaceNode(Node):
         return x, y, z, w
 
     def pose_callback(self, msg):
-        current_position = msg.poses[self.pose_index].position
-        current_orientation = msg.poses[self.pose_index].orientation
+        #current_position = msg.poses[self.pose_index].position
+        #current_orientation = msg.poses[self.pose_index].orientation
+        current_position = msg.poses[-1].position
+        current_orientation = msg.poses[-1].orientation
        
         current_orientation.x, current_orientation.y, current_orientation.z, current_orientation.w = self.normalize_quaternion_positive_w(
             current_orientation.x, current_orientation.y, current_orientation.z, current_orientation.w

@@ -34,15 +34,34 @@ def launch_drones(context):
             )
         )
         nodes.append(
+            # Node(
+            #     package='ros_gz_bridge',
+            #     executable='parameter_bridge',
+            #     name=f'pose_bridge_{i}',
+            #     arguments=[
+            #         f'/model/x3_drone{i}/pose@geometry_msgs/msg/PoseArray[ignition.msgs.Pose_V'
+            #     ]
+            # )
+            # Node(
+            #     package='ros_gz_bridge',
+            #     executable='parameter_bridge',
+            #     name=f'pose_bridge_{i}',
+            #     arguments=[
+            #         f'/model/quad_lift_system/pose@geometry_msgs/msg/PoseArray[ignition.msgs.Pose_V'
+            #     ]
+            # ) for when the whole thing is one model cables.sdf
             Node(
                 package='ros_gz_bridge',
                 executable='parameter_bridge',
                 name=f'pose_bridge_{i}',
                 arguments=[
-                    f'/model/x3_drone{i}/pose@geometry_msgs/msg/PoseArray[ignition.msgs.Pose_V'
+                    f'/model/lift_system/model/x3_drone{i}/pose'
+                    f'@geometry_msgs/msg/PoseArray'
+                    f'[ignition.msgs.Pose_V'
                 ]
             )
         )
+        
     return nodes
 
 

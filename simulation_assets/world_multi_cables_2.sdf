@@ -1,0 +1,337 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="quadcopter">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>500</real_time_update_rate>
+    </physics>
+    <plugin filename="ignition-gazebo-physics-system"
+      name="gz::sim::systems::Physics"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+      name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-sensors-system"
+      name="gz::sim::systems::Sensors"/>
+
+    <scene>
+      <background>0.6 0.8 1.0 1</background>
+      <ambient>0.5 0.5 0.5 1</ambient>
+    </scene>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>100 100</size></plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>100 100</size></plane>
+          </geometry>
+          <material>
+            <ambient>0.2 0.5 0.2 1</ambient>
+            <diffuse>0.3 0.6 0.3 1</diffuse>
+            <specular>0.05 0.05 0.05 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="lift_system">
+      <pose>0 0 0 0 0 0</pose>
+
+      <!-- ===== INCLUDE DRONES AS NESTED MODELS ===== -->
+      <include>
+        <uri>models/x3_drone0.sdf</uri>
+        <name>x3_drone0</name>
+        <pose>0.0 0.0 0.1 0 0 0</pose>
+      </include>
+      <include>
+        <uri>models/x3_drone1.sdf</uri>
+        <name>x3_drone1</name>
+        <pose>1.0 0.0 0.1 0 0 0</pose>
+      </include>
+      <include>
+        <uri>models/x3_drone2.sdf</uri>
+        <name>x3_drone2</name>
+        <pose>0.0 1.0 0.1 0 0 0</pose>
+      </include>
+      <include>
+        <uri>models/x3_drone3.sdf</uri>
+        <name>x3_drone3</name>
+        <pose>1.0 1.0 0.1 0 0 0</pose>
+      </include>
+
+      <!-- ===== PAYLOAD (root of tether chain) ===== -->
+      <link name="payload">
+        <pose>0.5 0.5 0.025 0 0 0</pose>
+        <gravity>1</gravity>
+        <inertial>
+          <mass>0.4</mass>
+          <inertia>
+            <ixx>1.67e-03</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>1.67e-03</iyy><iyz>0</iyz>
+            <izz>3.33e-03</izz>
+          </inertia>
+        </inertial>
+        <collision name="payload_collision">
+          <geometry>
+            <box><size>0.2 0.2 0.05</size></box>
+          </geometry>
+        </collision>
+        <visual name="payload_visual">
+          <geometry>
+            <box><size>0.2 0.2 0.05</size></box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.4 0.0 1</ambient>
+            <diffuse>0.8 0.4 0.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ===== TETHER 0: payload -> drone0 (0,0) ===== -->
+      <!-- midpoint=(0.25,0.25), yaw=225deg=-2.3562rad, pitch=90deg -->
+      <link name="tether_0">
+        <pose>0.25 0.25 0.05 0 1.5707963 -2.3562</pose>
+        <inertial>
+          <mass>0.001</mass>
+          <inertia>
+            <ixx>8.35e-08</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.35e-08</iyy><iyz>0</iyz>
+            <izz>5.0e-12</izz>
+          </inertia>
+        </inertial>
+        <visual name="tether_0_visual">
+          <geometry>
+            <cylinder><radius>0.001</radius><length>0.707</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.1 0.1 1</ambient>
+            <diffuse>0.1 0.1 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ===== TETHER 1: payload -> drone1 (1,0) ===== -->
+      <!-- midpoint=(0.75,0.25), yaw=-45deg=-0.7854rad -->
+      <link name="tether_1">
+        <pose>0.75 0.25 0.05 0 1.5707963 -0.7854</pose>
+        <inertial>
+          <mass>0.001</mass>
+          <inertia>
+            <ixx>8.35e-08</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.35e-08</iyy><iyz>0</iyz>
+            <izz>5.0e-12</izz>
+          </inertia>
+        </inertial>
+        <visual name="tether_1_visual">
+          <geometry>
+            <cylinder><radius>0.001</radius><length>0.707</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.1 0.1 1</ambient>
+            <diffuse>0.1 0.1 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ===== TETHER 2: payload -> drone2 (0,1) ===== -->
+      <!-- midpoint=(0.25,0.75), yaw=135deg=2.3562rad -->
+      <link name="tether_2">
+        <pose>0.25 0.75 0.05 0 1.5707963 2.3562</pose>
+        <inertial>
+          <mass>0.001</mass>
+          <inertia>
+            <ixx>8.35e-08</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.35e-08</iyy><iyz>0</iyz>
+            <izz>5.0e-12</izz>
+          </inertia>
+        </inertial>
+        <visual name="tether_2_visual">
+          <geometry>
+            <cylinder><radius>0.001</radius><length>0.707</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.1 0.1 1</ambient>
+            <diffuse>0.1 0.1 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ===== TETHER 3: payload -> drone3 (1,1) ===== -->
+      <!-- midpoint=(0.75,0.75), yaw=45deg=0.7854rad -->
+      <link name="tether_3">
+        <pose>0.75 0.75 0.05 0 1.5707963 0.7854</pose>
+        <inertial>
+          <mass>0.001</mass>
+          <inertia>
+            <ixx>8.35e-08</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.35e-08</iyy><iyz>0</iyz>
+            <izz>5.0e-12</izz>
+          </inertia>
+        </inertial>
+        <visual name="tether_3_visual">
+          <geometry>
+            <cylinder><radius>0.001</radius><length>0.707</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.1 0.1 1</ambient>
+            <diffuse>0.1 0.1 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ===== FIXED JOINTS: payload to tether bottoms ===== -->
+      <joint name="payload_to_tether_0" type="ball">
+    <parent>payload</parent>
+    <child>tether_0</child>
+    <pose relative_to="tether_0">0 0 -0.3535 0 0 0</pose>
+    <axis>
+        <xyz>1 0 0</xyz>
+        <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+        <dynamics><damping>0.5</damping></dynamics>
+    </axis>
+    <axis2>
+        <xyz>0 1 0</xyz>
+        <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+        <dynamics><damping>0.5</damping></dynamics>
+    </axis2>
+</joint>
+
+<joint name="payload_to_tether_1" type="ball">
+    <parent>payload</parent>
+    <child>tether_1</child>
+    <pose relative_to="tether_1">0 0 -0.3535 0 0 0</pose>
+    <axis>
+        <xyz>1 0 0</xyz>
+        <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+        <dynamics><damping>0.5</damping></dynamics>
+    </axis>
+    <axis2>
+        <xyz>0 1 0</xyz>
+        <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+        <dynamics><damping>0.5</damping></dynamics>
+    </axis2>
+</joint>
+
+<joint name="payload_to_tether_2" type="ball">
+    <parent>payload</parent>
+    <child>tether_2</child>
+    <pose relative_to="tether_2">0 0 -0.3535 0 0 0</pose>
+    <axis>
+        <xyz>1 0 0</xyz>
+        <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+        <dynamics><damping>0.5</damping></dynamics>
+    </axis>
+    <axis2>
+        <xyz>0 1 0</xyz>
+        <limit><lower>-1.5708</lower><upper>1.5728</upper></limit>
+        <dynamics><damping>0.5</damping></dynamics>
+    </axis2>
+</joint>
+
+<joint name="payload_to_tether_3" type="ball">
+    <parent>payload</parent>
+    <child>tether_3</child>
+    <pose relative_to="tether_3">0 0 -0.3535 0 0 0</pose>
+    <axis>
+        <xyz>1 0 0</xyz>
+        <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+        <dynamics><damping>0.5</damping></dynamics>
+    </axis>
+    <axis2>
+        <xyz>0 1 0</xyz>
+        <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+        <dynamics><damping>0.5</damping></dynamics>
+    </axis2>
+</joint>
+
+      <!-- ===== BALL JOINTS: tether tops to drone base_links ===== -->
+      <!-- Uses nested model scoping: x3_droneN::base_link -->
+      <joint name="tether_0_to_drone0" type="ball">
+        <parent>tether_0</parent>
+        <child>x3_drone0::base_link</child>
+        <pose relative_to="tether_0">0 0 0.3535 0 0 0</pose>
+        <axis>
+          <xyz>1 0 0</xyz>
+          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+          <dynamics><damping>0.5</damping></dynamics>
+        </axis>
+        <axis2>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+          <dynamics><damping>0.5</damping></dynamics>
+        </axis2>
+      </joint>
+
+      <joint name="tether_1_to_drone1" type="ball">
+        <parent>tether_1</parent>
+        <child>x3_drone1::base_link</child>
+        <pose relative_to="tether_1">0 0 0.3535 0 0 0</pose>
+        <axis>
+          <xyz>1 0 0</xyz>
+          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+          <dynamics><damping>0.5</damping></dynamics>
+        </axis>
+        <axis2>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+          <dynamics><damping>0.5</damping></dynamics>
+        </axis2>
+      </joint>
+
+      <joint name="tether_2_to_drone2" type="ball">
+        <parent>tether_2</parent>
+        <child>x3_drone2::base_link</child>
+        <pose relative_to="tether_2">0 0 0.3535 0 0 0</pose>
+        <axis>
+          <xyz>1 0 0</xyz>
+          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+          <dynamics><damping>0.5</damping></dynamics>
+        </axis>
+        <axis2>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+          <dynamics><damping>0.5</damping></dynamics>
+        </axis2>
+      </joint>
+
+      <joint name="tether_3_to_drone3" type="ball">
+        <parent>tether_3</parent>
+        <child>x3_drone3::base_link</child>
+        <pose relative_to="tether_3">0 0 0.3535 0 0 0</pose>
+        <axis>
+          <xyz>1 0 0</xyz>
+          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+          <dynamics><damping>0.5</damping></dynamics>
+        </axis>
+        <axis2>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
+          <dynamics><damping>0.5</damping></dynamics>
+        </axis2>
+      </joint>
+
+    </model>
+
+  </world>
+</sdf>
