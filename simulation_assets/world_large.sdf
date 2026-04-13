@@ -82,110 +82,12 @@
 
     <include>
       <uri>
-        modelLarge.sdf
+        <uri>models/x3_drone0.sdf</uri>
+        <pose>2.0 0.0 0.1 0 0 0</pose>
       </uri>
-
-      <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
-            <publish_link_pose>true</publish_link_pose>
-            <publish_nested_model_pose>true</publish_nested_model_pose>
-            <use_pose_vector_msg>true</use_pose_vector_msg>
-            <update_frequency>500</update_frequency>
-          </plugin>
-
-      <pose>0.0 0.0 0.1 0 0 0</pose> <!-- Drone positioned at (0,0,1) --> 
-      <plugin
-        filename="gz-sim-multicopter-motor-model-system"
-        name="gz::sim::systems::MulticopterMotorModel">
-        <robotNamespace>X3</robotNamespace>
-        <jointName>X3/rotor_0_joint</jointName>
-        <linkName>X3/rotor_0</linkName>
-        <turningDirection>cw</turningDirection>
-        <timeConstantUp>0.02</timeConstantUp>
-        <timeConstantDown>0.02</timeConstantDown>
-        <maxRotVelocity>4631.0</maxRotVelocity>
-        <motorConstant>1.42e-06</motorConstant>
-        <momentConstant>0.2</momentConstant>
-        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
-        <actuator_number>0</actuator_number>
-        <rotorDragCoefficient>0.0</rotorDragCoefficient>
-        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
-        <motorSpeedPubTopic>motor_speed/0</motorSpeedPubTopic>
-        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
-        <motorType>velocity</motorType>
-      </plugin>
-      <plugin
-        filename="gz-sim-multicopter-motor-model-system"
-        name="gz::sim::systems::MulticopterMotorModel">
-        <robotNamespace>X3</robotNamespace>
-        <jointName>X3/rotor_1_joint</jointName>
-        <linkName>X3/rotor_1</linkName>
-        <turningDirection>ccw</turningDirection>
-        <timeConstantUp>0.02</timeConstantUp>
-        <timeConstantDown>0.02</timeConstantDown>
-        <maxRotVelocity>4631.0</maxRotVelocity>
-        <motorConstant>1.42e-06</motorConstant>
-        <momentConstant>0.2</momentConstant>
-        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
-        <actuator_number>1</actuator_number>
-        <rotorDragCoefficient>0.0</rotorDragCoefficient>
-        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
-        <motorSpeedPubTopic>motor_speed/1</motorSpeedPubTopic>
-        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
-        <motorType>velocity</motorType>
-      </plugin>
-      <plugin
-        filename="gz-sim-multicopter-motor-model-system"
-        name="gz::sim::systems::MulticopterMotorModel">
-        <robotNamespace>X3</robotNamespace>
-        <jointName>X3/rotor_2_joint</jointName>
-        <linkName>X3/rotor_2</linkName>
-        <turningDirection>ccw</turningDirection>
-        <timeConstantUp>0.02</timeConstantUp>
-        <timeConstantDown>0.02</timeConstantDown>
-        <maxRotVelocity>4631.0</maxRotVelocity>
-        <motorConstant>1.42e-06</motorConstant>
-        <momentConstant>0.2</momentConstant>
-        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
-        <actuator_number>2</actuator_number>
-        <rotorDragCoefficient>0.0</rotorDragCoefficient>
-        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
-        <motorSpeedPubTopic>motor_speed/2</motorSpeedPubTopic>
-        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
-        <motorType>velocity</motorType>
-      </plugin>
-      <plugin
-        filename="gz-sim-multicopter-motor-model-system"
-        name="gz::sim::systems::MulticopterMotorModel">
-        <robotNamespace>X3</robotNamespace>
-        <jointName>X3/rotor_3_joint</jointName>
-        <linkName>X3/rotor_3</linkName>
-        <turningDirection>cw</turningDirection>
-        <timeConstantUp>0.02</timeConstantUp>
-        <timeConstantDown>0.02</timeConstantDown>
-        <maxRotVelocity>4631.0</maxRotVelocity>
-        <motorConstant>1.42e-06</motorConstant>
-        <momentConstant>0.2</momentConstant>
-        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
-        <actuator_number>3</actuator_number>
-        <rotorDragCoefficient>0.0</rotorDragCoefficient>
-        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
-        <motorSpeedPubTopic>motor_speed/3</motorSpeedPubTopic>
-        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
-        <motorType>velocity</motorType>
-      </plugin>
-
-      <plugin filename="libignition-gazebo-imu-system.so"
-        name="ignition::gazebo::systems::Imu">
-      </plugin>
-
-
-      <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
-    </plugin>
-
-
     </include>
 
-
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors"></plugin>
 
   <!-- Green floor -->
   <model name="floor">
