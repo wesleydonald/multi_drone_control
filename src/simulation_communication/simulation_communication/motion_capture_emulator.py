@@ -58,8 +58,8 @@ class PentaVerify(Node):
             self.get_logger().warn('No pose available MOCAP')
             return
 
-        current_position = msg.poses[5].position
-        current_orientation = msg.poses[5].orientation
+        current_position = msg.poses[7].position
+        current_orientation = msg.poses[7].orientation
 
         # Ensure w is positive
         current_orientation.x, current_orientation.y, current_orientation.z, current_orientation.w = self.normalize_quaternion_positive_w(
@@ -95,6 +95,7 @@ class PentaVerify(Node):
         dy = current_position.y - self.last_pose.y
         dz = current_position.z - self.last_pose.z
         linear_velocity_world = np.array([dx / dt, dy / dt, dz / dt])
+        print(f"vx={linear_velocity_world[0]:.3f} vy={linear_velocity_world[1]:.3f} vz={linear_velocity_world[2]:.3f}")
 
         # Calculate angular velocity
         q1 = [self.last_orientation.x, self.last_orientation.y, self.last_orientation.z, self.last_orientation.w]

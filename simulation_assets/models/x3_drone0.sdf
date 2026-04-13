@@ -342,5 +342,151 @@
         <plugin filename="libignition-gazebo-imu-system.so"
             name="ignition::gazebo::systems::Imu">
         </plugin>
+
+        <plugin
+    filename="gz-sim-multicopter-velocity-control-system"
+    name="gz::sim::systems::MulticopterVelocityControl">
+    <robotNamespace>x3_drone0</robotNamespace>
+    <commandSubTopic>cmd_vel</commandSubTopic>
+    <enableSubTopic>enable</enableSubTopic>
+    <comLinkName>base_link</comLinkName>
+    <velocityGain>2.5 2.5 2.5</velocityGain>
+    <attitudeGain>2 3 0.15</attitudeGain>
+    <angularRateGain>0.4 0.52 0.18</angularRateGain>
+    <maximumLinearAcceleration>2 2 2</maximumLinearAcceleration>
+    <rotorConfiguration>
+        <rotor>
+            <jointName>rotor_0_joint</jointName>
+            <forceConstant>1.42e-06</forceConstant>
+            <momentConstant>0.2</momentConstant>
+            <direction>1</direction>
+        </rotor>
+        <rotor>
+            <jointName>rotor_1_joint</jointName>
+            <forceConstant>1.42e-06</forceConstant>
+            <momentConstant>0.2</momentConstant>
+            <direction>-1</direction>
+        </rotor>
+        <rotor>
+            <jointName>rotor_2_joint</jointName>
+            <forceConstant>1.42e-06</forceConstant>
+            <momentConstant>0.2</momentConstant>
+            <direction>-1</direction>
+        </rotor>
+        <rotor>
+            <jointName>rotor_3_joint</jointName>
+            <forceConstant>1.42e-06</forceConstant>
+            <momentConstant>0.2</momentConstant>
+            <direction>1</direction>
+        </rotor>
+    </rotorConfiguration>
+</plugin>
+
+<link name="tether">
+    <!-- Cylinder center at z=0.05 (halfway up its 0.1m compressed spawn length) -->
+    <!-- We spawn it SHORT (0.1m) vertically so it fits between drone and ground -->
+    <!-- Use vertical orientation: no rotation needed, cylinder default is along Z -->
+    <pose>0.5 0 0.05 0 1.5707963 0</pose> 
+    <inertial>
+        <mass>0.001</mass>
+        <inertia>
+            <ixx>8.35e-08</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>8.35e-08</iyy>
+            <iyz>0</iyz>
+            <izz>5.0e-12</izz>
+        </inertia>
+    </inertial>
+    <collision name="tether_collision">
+        <geometry>
+            <cylinder>
+                <radius>0.002</radius>
+                <length>1.0</length>
+            </cylinder>
+        </geometry>
+    </collision>
+    <visual name="tether_visual">
+        <geometry>
+            <cylinder>
+                <radius>0.001</radius>
+                <length>1.0</length>
+            </cylinder>
+        </geometry>
+        <material>
+            <ambient>0.05 0.05 0.05 1</ambient>
+            <diffuse>0.05 0.05 0.05 1</diffuse>
+        </material>
+    </visual>
+</link>
+
+<joint name="tether_to_drone" type="ball">
+    <parent>base_link</parent>
+    <child>tether</child>
+    <!-- Joint is expressed in child (tether) frame -->
+    <!-- Connect at the TOP of the tether cylinder: +0.5m along tether's Z -->
+    <pose relative_to="tether">0 0 0.5 0 0 0</pose>
+    <axis>
+        <xyz>1 0 0</xyz>
+        <limit>
+            <lower>-1.5708</lower>
+            <upper>1.5708</upper>
+        </limit>
+        <dynamics>
+            <damping>0.5</damping>
+        </dynamics>
+    </axis>
+    <axis2>
+        <xyz>0 1 0</xyz>
+        <limit>
+            <lower>-1.5708</lower>
+            <upper>1.5708</upper>
+        </limit>
+        <dynamics>
+            <damping>0.5</damping>
+        </dynamics>
+    </axis2>
+</joint>
+
+<!-- Payload sits on the ground at model origin -->
+<!-- z=0.025 = half of payload height (0.05m box) so it rests on ground -->
+<link name="payload">
+    <gravity>1</gravity>
+    <pose>1.0 0 0.025 0 0 0</pose> 
+    <inertial>
+        <mass>0.1</mass>
+        <inertia>
+            <ixx>4.17e-04</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>4.17e-04</iyy>
+            <iyz>0</iyz>
+            <izz>8.33e-04</izz>
+        </inertia>
+    </inertial>
+    <collision name="payload_collision">
+        <geometry>
+            <box><size>0.1 0.1 0.05</size></box>
+        </geometry>
+    </collision>
+    <visual name="payload_visual">
+        <geometry>
+            <box><size>0.1 0.1 0.05</size></box>
+        </geometry>
+        <material>
+            <ambient>0.8 0.4 0.0 1</ambient>
+            <diffuse>0.8 0.4 0.0 1</diffuse>
+        </material>
+    </visual>
+</link>
+
+<!-- Connect bottom of tether to payload top -->
+<joint name="tether_to_payload" type="fixed">
+    <parent>tether</parent>
+    <child>payload</child>
+    <!-- Bottom of tether cylinder: -0.5m along tether's Z -->
+    <pose relative_to="tether">0 0 -0.5 0 0 0</pose>
+</joint>
+
     </model>
 </sdf>

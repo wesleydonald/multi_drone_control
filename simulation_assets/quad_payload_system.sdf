@@ -1,8 +1,11 @@
 <?xml version="1.0" ?>
 <sdf version="1.6">
-  <model name="payload">
-    <pose>1.0 0.5 0.05 0 0 0</pose>
+  <model name="quad_payload_system">
+    <pose>1.0 0.5 1.0 0 0 0</pose>
+    
+    <!-- ========== PAYLOAD ========== -->
     <link name="payload_body">
+      <pose>0 0 -0.95 0 0 0</pose>
       <inertial>
         <mass>0.5</mass>
         <inertia>
@@ -35,9 +38,9 @@
       </visual>
     </link>
 
-    <!-- Cable attachment point 0 (front-right) -->
-    <link name="cable_attach_0">
-      <pose relative_to="payload_body">0.075 -0.075 0.075 0 0 0</pose>
+    <!-- Cable attachment points on payload -->
+    <link name="payload_attach_0">
+      <pose>0.075 -0.075 -0.875 0 0 0</pose>
       <inertial>
         <mass>0.001</mass>
         <inertia>
@@ -52,7 +55,7 @@
       <visual name="visual">
         <geometry>
           <sphere>
-            <radius>0.01</radius>
+            <radius>0.008</radius>
           </sphere>
         </geometry>
         <material>
@@ -61,14 +64,13 @@
         </material>
       </visual>
     </link>
-    <joint name="cable_attach_joint_0" type="ball">
+    <joint name="payload_attach_0_joint" type="ball">
       <parent>payload_body</parent>
-      <child>cable_attach_0</child>
+      <child>payload_attach_0</child>
     </joint>
 
-    <!-- Cable attachment point 1 (front-left) -->
-    <link name="cable_attach_1">
-      <pose relative_to="payload_body">-0.075 -0.075 0.075 0 0 0</pose>
+    <link name="payload_attach_1">
+      <pose>-0.075 -0.075 -0.875 0 0 0</pose>
       <inertial>
         <mass>0.001</mass>
         <inertia>
@@ -83,7 +85,7 @@
       <visual name="visual">
         <geometry>
           <sphere>
-            <radius>0.01</radius>
+            <radius>0.008</radius>
           </sphere>
         </geometry>
         <material>
@@ -92,14 +94,13 @@
         </material>
       </visual>
     </link>
-    <joint name="cable_attach_joint_1" type="ball">
+    <joint name="payload_attach_1_joint" type="ball">
       <parent>payload_body</parent>
-      <child>cable_attach_1</child>
+      <child>payload_attach_1</child>
     </joint>
 
-    <!-- Cable attachment point 2 (back-left) -->
-    <link name="cable_attach_2">
-      <pose relative_to="payload_body">-0.075 0.075 0.075 0 0 0</pose>
+    <link name="payload_attach_2">
+      <pose>-0.075 0.075 -0.875 0 0 0</pose>
       <inertial>
         <mass>0.001</mass>
         <inertia>
@@ -114,7 +115,7 @@
       <visual name="visual">
         <geometry>
           <sphere>
-            <radius>0.01</radius>
+            <radius>0.008</radius>
           </sphere>
         </geometry>
         <material>
@@ -123,14 +124,13 @@
         </material>
       </visual>
     </link>
-    <joint name="cable_attach_joint_2" type="ball">
+    <joint name="payload_attach_2_joint" type="ball">
       <parent>payload_body</parent>
-      <child>cable_attach_2</child>
+      <child>payload_attach_2</child>
     </joint>
 
-    <!-- Cable attachment point 3 (back-right) -->
-    <link name="cable_attach_3">
-      <pose relative_to="payload_body">0.075 0.075 0.075 0 0 0</pose>
+    <link name="payload_attach_3">
+      <pose>0.075 0.075 -0.875 0 0 0</pose>
       <inertial>
         <mass>0.001</mass>
         <inertia>
@@ -145,7 +145,7 @@
       <visual name="visual">
         <geometry>
           <sphere>
-            <radius>0.01</radius>
+            <radius>0.008</radius>
           </sphere>
         </geometry>
         <material>
@@ -154,10 +154,84 @@
         </material>
       </visual>
     </link>
-    <joint name="cable_attach_joint_3" type="ball">
+    <joint name="payload_attach_3_joint" type="ball">
       <parent>payload_body</parent>
-      <child>cable_attach_3</child>
+      <child>payload_attach_3</child>
     </joint>
 
+    <!-- ========== DRONE 0 (front-right) ========== -->
+    <include>
+      <uri>models/x3_drone0.sdf</uri>
+      <name>drone0</name>
+      <pose>0.5 -0.5 0 0 0 0</pose>
+    </include>
+
+    <!-- ========== DRONE 1 (front-left) ========== -->
+    <include>
+      <uri>models/x3_drone1.sdf</uri>
+      <name>drone1</name>
+      <pose>-0.5 -0.5 0 0 0 0</pose>
+    </include>
+
+    <!-- ========== DRONE 2 (back-left) ========== -->
+    <include>
+      <uri>models/x3_drone2.sdf</uri>
+      <name>drone2</name>
+      <pose>-0.5 0.5 0 0 0 0</pose>
+    </include>
+
+    <!-- ========== DRONE 3 (back-right) ========== -->
+    <include>
+      <uri>models/x3_drone3.sdf</uri>
+      <name>drone3</name>
+      <pose>0.5 0.5 0 0 0 0</pose>
+    </include>
+
+    <!-- ========== CABLE 0: Drone0 to Payload ========== -->
+    <link name="cable_0">
+      <pose>0.5 -0.5 -0.45 0 0 0</pose>
+      <inertial>
+        <mass>0.005</mass>
+        <inertia>
+          <ixx>0.0001</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0001</iyy>
+          <iyz>0</iyz>
+          <izz>1e-6</izz>
+        </inertia>
+      </inertial>
+      <visual name="visual">
+        <geometry>
+          <cylinder>
+            <radius>0.002</radius>
+            <length>0.9</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.1 0.1 0.1 1</ambient>
+          <diffuse>0.2 0.2 0.2 1</diffuse>
+        </material>
+      </visual>
+      <collision name="collision">
+        <geometry>
+          <cylinder>
+            <radius>0.002</radius>
+            <length>0.9</length>
+          </cylinder>
+        </geometry>
+      </collision>
+    </link>
+
+    <joint name="payload_to_cable_0" type="ball">
+      <parent>payload_body</parent>
+      <child>cable_0</child>
+      <pose>0.075 -0.075 0.075 0 0 0</pose>
+    </joint>
+
+    <joint name="cable_0_to_drone0" type="ball">
+      <parent>cable_0</parent>
+      <child>drone0::base_link</child>
+    </joint>
   </model>
 </sdf>

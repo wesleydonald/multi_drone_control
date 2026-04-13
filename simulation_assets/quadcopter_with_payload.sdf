@@ -1,0 +1,325 @@
+<?xml version="1.0" ?>
+<!--
+  Multicopter motor plugin demo with cable-suspended payload
+  Send commands to go straight up:
+      ign topic -t /x3_drone0/gazebo/command/motor_speed --msgtype ignition.msgs.Actuators -p 'velocity:[700, 700, 700, 700]'
+  And to turn off propellers:
+      ign topic -t /x3_drone0/gazebo/command/motor_speed --msgtype ignition.msgs.Actuators -p 'velocity:[0, 0, 0, 0]'
+-->
+<sdf version="1.6">
+  <world name="quadcopter">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>500</real_time_update_rate>
+    </physics>
+    <plugin
+      filename="ignition-gazebo-physics-system"
+      name="gz::sim::systems::Physics">
+    </plugin>
+    <plugin
+      filename="ignition-gazebo-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+    <plugin
+      filename="ignition-gazebo-user-commands-system"
+      name="gz::sim::systems::UserCommands">
+    </plugin>
+    <scene>
+      <background>0.6 0.8 1.0 1</background>  <!-- light blue -->
+      <ambient>0.5 0.5 0.5 1</ambient>
+    </scene>
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+    
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+            <specular>0.8 0.8 0.8 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+    
+    <!-- Drones positioned in a square formation around the payload -->
+    <include>
+      <uri>models/x3_drone0.sdf</uri>
+      <name>x3_drone0</name>
+      <pose>1.5 0.0 1.0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>models/x3_drone1.sdf</uri>
+      <name>x3_drone1</name>
+      <pose>0.5 0.0 1.0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>models/x3_drone2.sdf</uri>
+      <name>x3_drone2</name>
+      <pose>0.5 1.0 1.0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>models/x3_drone3.sdf</uri>
+      <name>x3_drone3</name>
+      <pose>1.5 1.0 1.0 0 0 0</pose>
+    </include>
+    
+    <!-- Payload model -->
+    <include>
+      <uri>models/payload.sdf</uri>
+      <name>payload</name>
+    </include>
+
+    <!-- Cable 0: drone0 to payload corner 0 -->
+    <model name="cable_0">
+      <pose>1.5 0.0 0.5 0 0 0</pose>
+      <link name="cable_link">
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>0.001</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>0.001</iyy>
+            <iyz>0</iyz>
+            <izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.002</radius>
+              <length>0.9</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.1 0.1 1</ambient>
+            <diffuse>0.2 0.2 0.2 1</diffuse>
+          </material>
+        </visual>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.002</radius>
+              <length>0.9</length>
+            </cylinder>
+          </geometry>
+        </collision>
+      </link>
+      <joint name="cable_to_drone_0" type="ball">
+        <parent>x3_drone0::base_link</parent>
+        <child>cable_link</child>
+        <pose>0 0 0.45 0 0 0</pose>
+      </joint>
+      <joint name="cable_to_payload_0" type="ball">
+        <parent>cable_link</parent>
+        <child>payload::cable_attach_0</child>
+        <pose>0 0 -0.45 0 0 0</pose>
+      </joint>
+    </model>
+
+    <!-- Cable 1: drone1 to payload corner 1 -->
+    <model name="cable_1">
+      <pose>0.5 0.0 0.5 0 0 0</pose>
+      <link name="cable_link">
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>0.001</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>0.001</iyy>
+            <iyz>0</iyz>
+            <izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.002</radius>
+              <length>0.9</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.1 0.1 1</ambient>
+            <diffuse>0.2 0.2 0.2 1</diffuse>
+          </material>
+        </visual>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.002</radius>
+              <length>0.9</length>
+            </cylinder>
+          </geometry>
+        </collision>
+      </link>
+      <joint name="cable_to_drone_1" type="ball">
+        <parent>x3_drone1::base_link</parent>
+        <child>cable_link</child>
+        <pose>0 0 0.45 0 0 0</pose>
+      </joint>
+      <joint name="cable_to_payload_1" type="ball">
+        <parent>cable_link</parent>
+        <child>payload::cable_attach_1</child>
+        <pose>0 0 -0.45 0 0 0</pose>
+      </joint>
+    </model>
+
+    <!-- Cable 2: drone2 to payload corner 2 -->
+    <model name="cable_2">
+      <pose>0.5 1.0 0.5 0 0 0</pose>
+      <link name="cable_link">
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>0.001</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>0.001</iyy>
+            <iyz>0</iyz>
+            <izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.002</radius>
+              <length>0.9</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.1 0.1 1</ambient>
+            <diffuse>0.2 0.2 0.2 1</diffuse>
+          </material>
+        </visual>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.002</radius>
+              <length>0.9</length>
+            </cylinder>
+          </geometry>
+        </collision>
+      </link>
+      <joint name="cable_to_drone_2" type="ball">
+        <parent>x3_drone2::base_link</parent>
+        <child>cable_link</child>
+        <pose>0 0 0.45 0 0 0</pose>
+      </joint>
+      <joint name="cable_to_payload_2" type="ball">
+        <parent>cable_link</parent>
+        <child>payload::cable_attach_2</child>
+        <pose>0 0 -0.45 0 0 0</pose>
+      </joint>
+    </model>
+
+    <!-- Cable 3: drone3 to payload corner 3 -->
+    <model name="cable_3">
+      <pose>1.5 1.0 0.5 0 0 0</pose>
+      <link name="cable_link">
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>0.001</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>0.001</iyy>
+            <iyz>0</iyz>
+            <izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.002</radius>
+              <length>0.9</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.1 0.1 1</ambient>
+            <diffuse>0.2 0.2 0.2 1</diffuse>
+          </material>
+        </visual>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.002</radius>
+              <length>0.9</length>
+            </cylinder>
+          </geometry>
+        </collision>
+      </link>
+      <joint name="cable_to_drone_3" type="ball">
+        <parent>x3_drone3::base_link</parent>
+        <child>cable_link</child>
+        <pose>0 0 0.45 0 0 0</pose>
+      </joint>
+      <joint name="cable_to_payload_3" type="ball">
+        <parent>cable_link</parent>
+        <child>payload::cable_attach_3</child>
+        <pose>0 0 -0.45 0 0 0</pose>
+      </joint>
+    </model>
+
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors"></plugin>
+    
+    <!-- Green floor -->
+    <model name="floor">
+      <static>true</static>
+      <pose>0 0 0 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <!-- Soft grassy green -->
+            <ambient>0.2 0.5 0.2 1</ambient>
+            <diffuse>0.3 0.6 0.3 1</diffuse>
+            <specular>0.05 0.05 0.05 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>
