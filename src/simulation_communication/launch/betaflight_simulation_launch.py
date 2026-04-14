@@ -6,6 +6,17 @@ from launch_ros.actions import Node
 def launch_drones(context):
     N = int(LaunchConfiguration('num_drones').perform(context))
     nodes = []
+
+    nodes.append(
+        Node(
+            package='ros_gz_bridge',
+            executable='parameter_bridge',
+            name='payload_pose_bridge',
+            arguments=[
+                '/model/lift_system/model/payload/pose@geometry_msgs/msg/PoseArray[ignition.msgs.Pose_V'
+            ]
+        )
+    )
     for i in range(N):
         nodes.append(
             Node(

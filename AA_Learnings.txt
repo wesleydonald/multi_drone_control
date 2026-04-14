@@ -13,7 +13,7 @@ These are the topics
 /x3_drone{i}/gazebo/command/motor_speed
 
 Can run betaflight launch file with:
-ros2 launch simulation_communication betaflight_simulation_launch.py num_drones := 2
+ros2 launch simulation_communication betaflight_simulation_launch.py num_drones:=2
 
 To run controller_pid for an individual drone
 ros2 run controller_pid main --ros-args -p drone_id:=0

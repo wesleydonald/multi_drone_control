@@ -35,11 +35,18 @@ class PentaVerify(Node):
         #self.worldPoseSub_ = self.create_subscription(PoseArray, f'/model/x3_drone{self.drone_id}/pose', self.worldPoseCallback, 10)
 
         self.worldPoseSub_ = self.create_subscription(
-    PoseArray,
-    f'/model/lift_system/model/x3_drone{self.drone_id}/pose',  # updated
-    self.worldPoseCallback,
-    10
-)
+            PoseArray,
+            f'/model/lift_system/model/x3_drone{self.drone_id}/pose',  # updated
+            self.worldPoseCallback,
+            10
+        )
+        self.payloadPoseSub_ = self.create_subscription(
+            PoseArray,
+            '/model/lift_system/model/payload/pose',
+            self.payloadPoseCallback,
+            10
+        )
+
         self.publisher = self.create_publisher(MotionCaptureState, f'/drone_{self.drone_id}/motion_capture_state', 10)
         self.pose_publisher = self.create_publisher(PoseStamped, '/rviz_pose', 10)
 
@@ -151,6 +158,26 @@ class PentaVerify(Node):
         self.last_pose = current_position
         self.last_orientation = current_orientation
         self.last_time = current_time
+
+    def payloadPoseCallback(self, msg):
+        self.get_logger().info("PAYLOAD CALLBACK")
+        if len(msg.poses) == 0:
+            self.get_logger().warn('No payload pose available')
+            return
+
+        pose = msg.poses[0]
+
+        payload_msg = PoseStamped()
+        payload_msg.header.stamp = self.get_clock().now().to_msg()
+        payload_msg.header.frame_id = "world"
+
+        payload_msg.pose = pose
+
+        self.pose_publisher.publish(payload_msg)
+
+        self.get_logger().info(
+            f"Payload: x={pose.position.x:.2f}, y={pose.position.y:.2f}, z={pose.position.z:.2f}"
+        )
 
 def main(args=None):
     rclpy.init(args=args)
