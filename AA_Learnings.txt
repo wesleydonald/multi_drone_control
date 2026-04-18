@@ -28,3 +28,10 @@ SETUP:
 gz sim world_large_2.sdf -v -r
 ros2 launch simulation_communication betaflight_simulation_launch.py num_drones:=4
 ros2 run controller_pid main --ros-args -p drone_id:=0
+
+verify recieving takeoff same time/make own arm call
+
+payload make sdf and index based on the topic echo
+
+ros use gazebo simulation time so frequency matches real world.
+

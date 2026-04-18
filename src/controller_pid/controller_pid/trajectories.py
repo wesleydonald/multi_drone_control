@@ -146,6 +146,100 @@ def hover_trajectory(dt, init_pose):
     return traj, "hover"
 
 
+def circle_trajectory(dt, init_pose):
+    # Takeoff first
+    takeoff_traj, _ = takeoff_trajectory(dt, init_pose)
+
+    # =========================
+    # Circle parameters
+    # =========================
+    R_circle = 1.0          # radius (m)
+    T_circle = 20.0         # period (s)
+    n_loops = 1             # number of full circles
+
+    # Ensure exact discretisation
+    steps_per_loop = int(T_circle / dt)
+    steps_circle = n_loops * steps_per_loop
+    time_space = np.arange(steps_circle) * dt
+
+    omega = 2 * np.pi / T_circle
+
+    x0 = init_pose[0]
+    y0 = init_pose[1]
+    z0 = init_pose[2] + 1.2
+
+    # =========================
+    # Position (STARTS at init_pose)
+    # =========================
+    x_traj = x0 + R_circle * (np.cos(omega * time_space) - 1)
+    y_traj = y0 + R_circle * np.sin(omega * time_space)
+    z_traj = np.ones_like(time_space) * z0
+
+    # =========================
+    # Velocity (analytic)
+    # =========================
+    vx_traj = -R_circle * omega * np.sin(omega * time_space)
+    vy_traj =  R_circle * omega * np.cos(omega * time_space)
+    vz_traj = np.zeros_like(time_space)
+
+    # =========================
+    # Acceleration (analytic)
+    # =========================
+    ax_traj = -R_circle * omega**2 * np.cos(omega * time_space)
+    ay_traj = -R_circle * omega**2 * np.sin(omega * time_space)
+    az_traj = np.zeros_like(time_space)
+
+    # =========================
+    # Yaw (tangent direction)
+    # =========================
+    yaw_traj = np.arctan2(vy_traj, vx_traj)
+    roll_traj = np.zeros_like(time_space)
+    pitch_traj = np.zeros_like(time_space)
+
+    rpy_traj = np.vstack((roll_traj, pitch_traj, yaw_traj)).T
+    quaternions = R.from_euler('xyz', rpy_traj).as_quat()
+
+    qx_traj = quaternions[:, 0]
+    qy_traj = quaternions[:, 1]
+    qz_traj = quaternions[:, 2]
+    qw_traj = quaternions[:, 3]
+
+    # =========================
+    # Inputs (placeholder)
+    # =========================
+    u1 = np.zeros_like(time_space)
+    u2 = np.zeros_like(time_space)
+    u3 = np.zeros_like(time_space)
+    u4 = np.zeros_like(time_space)
+
+    circle_traj = np.array([
+        x_traj, y_traj, z_traj,
+        qw_traj, qx_traj, qy_traj, qz_traj,
+        vx_traj, vy_traj, vz_traj,
+        ax_traj, ay_traj, az_traj,
+        u1, u2, u3, u4
+    ])
+
+    # =========================
+    # Hover buffer (prevents early landing feel)
+    # =========================
+    hover_time = 3.0  # seconds
+    steps_hover = int(hover_time / dt)
+
+    hover_traj = np.tile(circle_traj[:, -1].reshape(-1, 1), (1, steps_hover))
+
+    # =========================
+    # Land after hover
+    # =========================
+    land_traj, _ = land_trajectory(dt, hover_traj[:, -1])
+
+    # =========================
+    # Full trajectory
+    # =========================
+    traj = np.concatenate((takeoff_traj, circle_traj, hover_traj, land_traj), axis=1)
+
+    return traj, "circle"
+
 
 
 def z_sin_trajectory(dt):

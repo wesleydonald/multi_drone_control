@@ -7,16 +7,16 @@ def launch_drones(context):
     N = int(LaunchConfiguration('num_drones').perform(context))
     nodes = []
 
-    nodes.append(
-        Node(
-            package='ros_gz_bridge',
-            executable='parameter_bridge',
-            name='payload_pose_bridge',
-            arguments=[
-                '/model/lift_system/model/payload/pose@geometry_msgs/msg/PoseArray[ignition.msgs.Pose_V'
-            ]
-        )
-    )
+    # nodes.append(
+    #     Node(
+    #         package='ros_gz_bridge',
+    #         executable='parameter_bridge',
+    #         name='payload_pose_bridge',
+    #         arguments=[
+    #             '/model/lift_system/model/payload/pose@geometry_msgs/msg/PoseArray[ignition.msgs.Pose_V'
+    #         ]
+    #     )
+    # )
     for i in range(N):
         nodes.append(
             Node(
@@ -45,14 +45,14 @@ def launch_drones(context):
             )
         )
         nodes.append(
-            # Node(
-            #     package='ros_gz_bridge',
-            #     executable='parameter_bridge',
-            #     name=f'pose_bridge_{i}',
-            #     arguments=[
-            #         f'/model/x3_drone{i}/pose@geometry_msgs/msg/PoseArray[ignition.msgs.Pose_V'
-            #     ]
-            # )
+            Node(
+                package='ros_gz_bridge',
+                executable='parameter_bridge',
+                name=f'pose_bridge_{i}',
+                arguments=[
+                    f'/model/x3_drone{i}/pose@geometry_msgs/msg/PoseArray[ignition.msgs.Pose_V'
+                ]
+            )
             # Node(
             #     package='ros_gz_bridge',
             #     executable='parameter_bridge',
@@ -61,16 +61,16 @@ def launch_drones(context):
             #         f'/model/quad_lift_system/pose@geometry_msgs/msg/PoseArray[ignition.msgs.Pose_V'
             #     ]
             # ) for when the whole thing is one model cables.sdf
-            Node(
-                package='ros_gz_bridge',
-                executable='parameter_bridge',
-                name=f'pose_bridge_{i}',
-                arguments=[
-                    f'/model/lift_system/model/x3_drone{i}/pose'
-                    f'@geometry_msgs/msg/PoseArray'
-                    f'[ignition.msgs.Pose_V'
-                ]
-            )
+            # Node(
+            #     package='ros_gz_bridge',
+            #     executable='parameter_bridge',
+            #     name=f'pose_bridge_{i}',
+            #     arguments=[
+            #         f'/model/lift_system/model/x3_drone{i}/pose'
+            #         f'@geometry_msgs/msg/PoseArray'
+            #         f'[ignition.msgs.Pose_V'
+            #     ]
+            # )
         )
         
     return nodes

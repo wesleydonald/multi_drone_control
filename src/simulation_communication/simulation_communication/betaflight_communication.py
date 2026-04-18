@@ -19,13 +19,13 @@ class BetaflightInterfaceNode(Node):
         self.declare_parameter('drone_id', 0)
         self.drone_id = self.get_parameter('drone_id').get_parameter_value().integer_value
         
-        #self.subscription_motion_capture = self.create_subscription(PoseArray, f'/model/x3_drone{self.drone_id}/pose', self.pose_callback, 10)
-        self.subscription_motion_capture = self.create_subscription(
-            PoseArray, 
-            f'/model/lift_system/model/x3_drone{self.drone_id}/pose',  # updated
-            self.pose_callback, 
-            10
-        )
+        self.subscription_motion_capture = self.create_subscription(PoseArray, f'/model/x3_drone{self.drone_id}/pose', self.pose_callback, 10)
+        # self.subscription_motion_capture = self.create_subscription(
+        #     PoseArray, 
+        #     f'/model/lift_system/model/x3_drone{self.drone_id}/pose',  # updated
+        #     self.pose_callback, 
+        #     10
+        # )
         
         self.subscription_control = self.create_subscription(ELRSCommand, f'/drone_{self.drone_id}/ELRSCommand', self.controller_commands_callback, 10)
         self.publisher = self.create_publisher(Actuators, f'/x3_drone{self.drone_id}/gazebo/command/motor_speed', 10)

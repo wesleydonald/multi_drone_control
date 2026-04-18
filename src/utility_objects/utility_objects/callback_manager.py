@@ -14,6 +14,7 @@ from interfaces.srv import SetArming
 class CallbackManager:
     def __init__(self, node, drone_id=0, USE_MOTION_CAPTURE: bool = True):      
         self.node = node
+        self.drone_id = drone_id
 
         self.cmd_publisher_ = self.node.create_publisher(ELRSCommand, f'/drone_{drone_id}/ELRSCommand', 1)
 
@@ -38,10 +39,15 @@ class CallbackManager:
         ]), 3)
 
         self.motion_capture_pose = arr
+        self.node.get_logger().info(
+            f"[Drone {self.drone_id}] Pose: {arr}"
+        )
 
         if self.use_motion_capture:
             self.node.current_pose = self.motion_capture_pose
             self.node.last_pose_update_time = time.time()
+
+
 
             if hasattr(self.node, "ukf_update_from_current_pose"):
                 self.node.ukf_update_from_current_pose()

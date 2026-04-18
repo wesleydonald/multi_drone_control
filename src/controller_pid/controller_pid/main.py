@@ -6,7 +6,7 @@ import math
 from rclpy.node import Node
 from scipy.spatial.transform import Rotation as R
 import time
-from .trajectories import hover_trajectory, z_sin_trajectory, xyz_sine_trajectory
+from .trajectories import hover_trajectory, circle_trajectory, z_sin_trajectory, xyz_sine_trajectory
 from utility_objects.visualization import TrajectoryVisualizer
 from utility_objects.data_logger import DataLogger
 from utility_objects.callback_manager import CallbackManager
@@ -38,7 +38,7 @@ class Controller(Node):
         init_pose = self.current_pose
 
         # Generate hover trajectory relative to initial pose
-        self.traj, trajectory_name = hover_trajectory(DT, init_pose=init_pose)
+        self.traj, trajectory_name = circle_trajectory(DT, init_pose=init_pose)
 
         self.trajectory_visualizer = TrajectoryVisualizer(self, frame_id="map")
         self.trajectory_visualizer.publish_all_visualizations(self.traj,  pose_subsample=15, show_velocity=False,  velocity_scale=0.3, color_by_time=True )
