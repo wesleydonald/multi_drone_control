@@ -152,7 +152,7 @@ def circle_trajectory(dt, init_pose, center_offset_x=0.0, center_offset_y=0.0):
     # =========================
     # Circle parameters
     # =========================
-    R_circle = 1.0          # radius (m)
+    R_circle = 0.5          # radius (m)
     T_circle = 20.0         # period (s)
     n_loops = 1             # number of full circles
 
