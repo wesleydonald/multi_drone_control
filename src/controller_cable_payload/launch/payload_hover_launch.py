@@ -1,32 +1,27 @@
 """
 payload_hover_launch.py
 -----------------------
-Launches the full cable-payload hover stack for world_quad_payload.sdf.
+Full cable-payload hover stack for world_quad_payload.sdf.
 
-Nodes started (per drone 0-3):
-  payload_betaflight_comm  — Betaflight inner-loop for nested-model topics
-  payload_mocap_emulator   — Pose → MotionCaptureState converter
+Architecture:
+  Gazebo world: lift_system model with 4 drones + payload (no rigid tethers)
+  per drone:
+    payload_betaflight_comm   — Betaflight inner-loop, nested-model pose topic
+    payload_mocap_emulator    — Gazebo pose → MotionCaptureState
+    drone_controller          — PD position control + cable compensation
+  once:
+    planner                   — hover setpoints + ARM/TAKEOFF fleet commands
+    cable_tension_node        — spring-damper cable forces via gz transport
 
-Nodes started (once):
-  planner                  — Central hover planner + fleet commander
-  per-drone drone_controller
-
-ROS-Gazebo bridges:
-  /model/lift_system/model/x3_drone{i}/pose  →  PoseArray
-  /lift_system/x3_drone{i}/gazebo/command/motor_speed  →  Actuators
-  /model/lift_system/model/payload/pose  →  PoseArray
-  /clock
-
-NOTE: The motor command topic path for nested Gazebo models may need
-      adjustment after verifying with `gz topic --list` once Gazebo is
-      running.  The expected path is:
-        /lift_system/x3_drone{i}/gazebo/command/motor_speed
-      If that is wrong, update the 'control_bridge_{i}' argument below.
+Confirmed topic paths (from gz topic --list with world running):
+  Drone pose:   /model/lift_system/model/x3_drone{i}/pose
+  Motor cmd:    /x3_drone{i}/gazebo/command/motor_speed   (no parent prefix)
+  Payload pose: /model/lift_system/model/payload/pose
+  Force apply:  /world/quad_payload/wrench/persistent    (gz transport)
 """
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
-
 
 PARENT_MODEL = 'lift_system'
 DRONE_NAMES = ['x3_drone0', 'x3_drone1', 'x3_drone2', 'x3_drone3']
@@ -68,13 +63,13 @@ def generate_launch_description():
             ],
         ))
 
-        # ── Motor command bridge ──────────────────────────────────────────────
+        # ── Motor command bridge (confirmed: no parent prefix) ────────────────
         nodes.append(Node(
             package='ros_gz_bridge',
             executable='parameter_bridge',
             name=f'motor_bridge_{i}',
             arguments=[
-                f'/{PARENT_MODEL}/{drone_name}/gazebo/command/motor_speed'
+                f'/{drone_name}/gazebo/command/motor_speed'
                 f'@actuator_msgs/msg/Actuators]ignition.msgs.Actuators'
             ],
         ))
@@ -104,7 +99,7 @@ def generate_launch_description():
             }],
         ))
 
-        # ── Per-drone controller ──────────────────────────────────────────────
+        # ── Per-drone position controller ─────────────────────────────────────
         nodes.append(Node(
             package='controller_cable_payload',
             executable='drone_controller',
@@ -112,11 +107,18 @@ def generate_launch_description():
             parameters=[{'drone_id': i}],
         ))
 
-    # ── Central planner ───────────────────────────────────────────────────────
+    # ── Central hover planner ─────────────────────────────────────────────────
     nodes.append(Node(
         package='controller_cable_payload',
         executable='planner',
         name='planner',
+    ))
+
+    # ── Cable tension simulation (gz transport spring-damper) ─────────────────
+    nodes.append(Node(
+        package='controller_cable_payload',
+        executable='cable_tension_node',
+        name='cable_tension',
     ))
 
     return LaunchDescription(nodes)

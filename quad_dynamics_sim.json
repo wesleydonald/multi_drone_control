@@ -13,7 +13,7 @@
             "qpoases": ""
         },
         "acados_version": "db1c3caa6",
-        "code_export_directory": "/home/wesley/thesis/src/multi_drone_control/c_generated_code",
+        "code_export_directory": "/home/wesley/multi_drone_control/c_generated_code",
         "cython_include_dirs": [
             "/home/wesley/.local/lib/python3.10/site-packages/numpy/core/include",
             "/usr/include/python3.10"

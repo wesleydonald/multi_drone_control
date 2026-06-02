@@ -167,30 +167,18 @@ def circle_trajectory(dt, init_pose, center_offset_x=0.0, center_offset_y=0.0):
     y0 = init_pose[1]
     z0 = init_pose[2] + 1.2
 
-    # =========================
-    # Position (STARTS at init_pose)
-    # =========================
     x_traj = x0 + R_circle * (np.cos(omega * time_space) - 1)
     y_traj = y0 + R_circle * np.sin(omega * time_space)
     z_traj = np.ones_like(time_space) * z0
 
-    # =========================
-    # Velocity (analytic)
-    # =========================
     vx_traj = -R_circle * omega * np.sin(omega * time_space)
     vy_traj =  R_circle * omega * np.cos(omega * time_space)
     vz_traj = np.zeros_like(time_space)
 
-    # =========================
-    # Acceleration (analytic)
-    # =========================
     ax_traj = -R_circle * omega**2 * np.cos(omega * time_space)
     ay_traj = -R_circle * omega**2 * np.sin(omega * time_space)
     az_traj = np.zeros_like(time_space)
 
-    # =========================
-    # Yaw (tangent direction)
-    # =========================
     #yaw_traj = np.arctan2(vy_traj, vx_traj)
     yaw_traj = np.zeros_like(time_space)
     roll_traj = np.zeros_like(time_space)
@@ -204,9 +192,6 @@ def circle_trajectory(dt, init_pose, center_offset_x=0.0, center_offset_y=0.0):
     qz_traj = quaternions[:, 2]
     qw_traj = quaternions[:, 3]
 
-    # =========================
-    # Inputs (placeholder)
-    # =========================
     u1 = np.zeros_like(time_space)
     u2 = np.zeros_like(time_space)
     u3 = np.zeros_like(time_space)
@@ -220,22 +205,13 @@ def circle_trajectory(dt, init_pose, center_offset_x=0.0, center_offset_y=0.0):
         u1, u2, u3, u4
     ])
 
-    # =========================
-    # Hover buffer (prevents early landing feel)
-    # =========================
     hover_time = 3.0  # seconds
     steps_hover = int(hover_time / dt)
 
     hover_traj = np.tile(circle_traj[:, -1].reshape(-1, 1), (1, steps_hover))
 
-    # =========================
-    # Land after hover
-    # =========================
     land_traj, _ = land_trajectory(dt, hover_traj[:, -1])
 
-    # =========================
-    # Full trajectory
-    # =========================
     traj = np.concatenate((takeoff_traj, circle_traj, hover_traj, land_traj), axis=1)
 
     return traj, "circle"

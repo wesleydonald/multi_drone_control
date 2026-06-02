@@ -46,10 +46,14 @@ class PayloadBetaflightComm(Node):
         self.rates_g = self.get_parameter('rates_g_val').value
 
         pose_topic = f'/model/{parent}/model/{drone_name}/pose'
-        motor_topic = f'/{parent}/{drone_name}/gazebo/command/motor_speed'
+        # Motor topic uses only the drone model name (not the nested hierarchy path).
+        # Verified with: gz topic --list | grep motor_speed
+        motor_topic = f'/{drone_name}/gazebo/command/motor_speed'
 
         self.get_logger().info(
-            f'[BF{self.drone_id}] pose={pose_topic}  motor={motor_topic}')
+            f'[BF{self.drone_id}] pose  = {pose_topic}')
+        self.get_logger().info(
+            f'[BF{self.drone_id}] motor = {motor_topic}')
 
         self.create_subscription(PoseArray, pose_topic, self._pose_cb, 10)
         self.create_subscription(
