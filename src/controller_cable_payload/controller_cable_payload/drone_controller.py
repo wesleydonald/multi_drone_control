@@ -74,7 +74,7 @@ class DroneController(Node):
         self.drone_id = self.get_parameter('drone_id').value
 
         self._wall_clock = Clock(clock_type=ClockType.SYSTEM_TIME)
-        self.last_pose_time = self._wall_clock.now()
+        self.last_pose_update_time = self._wall_clock.now()  # updated by CallbackManagerMulti
         self.current_pose = None
         self.setpoint = None
         self.armed = False
@@ -113,7 +113,7 @@ class DroneController(Node):
             return
 
         # Pose timeout watchdog
-        elapsed = (self._wall_clock.now() - self.last_pose_time).nanoseconds * 1e-9
+        elapsed = (self._wall_clock.now() - self.last_pose_update_time).nanoseconds * 1e-9
         if elapsed > 0.25:
             self.get_logger().error(
                 f'[Drone {self.drone_id}] Pose timeout — disarming.')
