@@ -27,6 +27,7 @@ setup(
             'drone_controller = controller_cable_payload.drone_controller:main',
             'payload_mocap_emulator = controller_cable_payload.payload_mocap_emulator:main',
             'payload_betaflight_comm = controller_cable_payload.payload_betaflight_comm:main',
+            'cable_tension_node = controller_cable_payload.cable_tension_node:main',
         ],
     },
 )

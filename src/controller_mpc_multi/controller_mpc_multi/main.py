@@ -1,13 +1,13 @@
 """
 central_controller.py
 ────────────────
-Single node that owns the master trajectory clock and coordinates all drones.
+Single node that coordinates all drones.
 
 Responsibilities
 ────────────────
 1. Waits for all N_DRONES poses to arrive before doing anything.
 2. Handles /fleet/command  (ARM | TAKEOFF | DISARM | ESTOP)
-3. Broadcasts /fleet/step  at FREQUENCY_HZ using Gazebo sim time.
+3. Broadcasts /fleet/step at FREQUENCY_HZ using Gazebo sim time.
 4. Arms / disarms individual drones via /drone_N/arming_service.
 5. Monitors /drone_N/arming_state_feedback — any unexpected disarm
    triggers an emergency stop of the whole fleet.
@@ -34,7 +34,7 @@ from interfaces.srv import SetArming
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 N_DRONES = 4
-FREQUENCY_HZ = 30.0          # Must match DT in controller_mpc_multi.py
+FREQUENCY_HZ = 30.0          # Must match DT in controller_mpc.py
 DT = 1.0 / FREQUENCY_HZ
 
 # How long (real seconds) to wait for all drones to be ready before timing out

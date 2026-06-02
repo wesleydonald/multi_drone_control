@@ -1,9 +1,9 @@
 # import os
-# os.chdir('/home/wesley/thesis/src/multi_drone_control/c_generated_code')
+# os.chdir('/home/wesley/multi_drone_control/c_generated_code')
 import os
 import fcntl
 
-ACADOS_DIR = '/home/wesley/thesis/src/multi_drone_control/c_generated_code'
+ACADOS_DIR = '/home/wesley/multi_drone_control/c_generated_code'
 os.chdir(ACADOS_DIR)
 
 # Serialize compilation across the 4 drone processes
@@ -213,7 +213,10 @@ class Controller(Node):
                 warm_start_from_previous_solution(self.ocp, self.N)
 
             # ── Solve ─────────────────────────────────────────────────────
+            t0 = time.perf_counter()
             status = self.ocp.solve()
+            solve_ms = (time.perf_counter() - t0) * 1000
+            self.get_logger().info(f"Solve time: {solve_ms:.2f}ms")
             if status != 0:
                 self.get_logger().error(
                     f"[Drone {self.drone_id}] acados returned status {status}.")

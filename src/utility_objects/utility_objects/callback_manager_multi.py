@@ -2,8 +2,7 @@
 utility_objects/callback_manager.py
 ────────────────────────────────────
 Per-drone scoped callbacks.  All topics and services are namespaced
-under /drone_<id>/ so the fleet manager can target each drone individually
-and the global broadcast bug from the original is fixed.
+under /drone_<id>/ so the central controller can target each drone individually
 """
 
 import rclpy

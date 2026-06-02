@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # === CONFIG ===
-WORKSPACE=~/thesis/src/multi_drone_control
+WORKSPACE=~/multi_drone_control
 SIM_ASSETS=$WORKSPACE/simulation_assets
 ROS_SETUP="/opt/ros/humble/setup.bash"
 

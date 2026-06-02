@@ -112,4 +112,12 @@ def generate_launch_description():
             name='pendulum_state_listener'
         ),
 
+        Node(
+            package='ros_gz_bridge',
+            executable='parameter_bridge',
+            name='clock_bridge',
+            arguments=['/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'],
+            output='screen'
+        ),
+
     ])

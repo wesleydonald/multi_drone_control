@@ -1,16 +1,21 @@
 <?xml version="1.0" ?>
 <!--
-  4-drone cable-suspended payload world for the TU Delft-style controller.
+  4-drone cable-suspended payload world — tension-only cable model.
 
-  Formation:  drones at (±0.25, ±0.25) around payload origin.
-  Cable:      0.75 m rigid rod with ball joints at both ends.
-  Initial:    drones placed so cables are just taut (z ≈ 0.686 m).
-  Hover eq:   drones at ~1.5 m, payload reaches ~0.84 m.
+  Tethers are NOT modelled as rigid joints.  Instead the ApplyLinkWrench
+  plugin exposes  /world/quad_payload/wrench/persistent  and
+  /world/quad_payload/wrench/clear  topics.  The cable_tension_node ROS 2
+  node subscribes to drone + payload poses and publishes spring-damper
+  forces on those topics whenever a cable is taut (dist > cable_length).
+
+  This allows drones to start on the ground (z≈0.1 m) with slack cables.
 
   Topic paths (nested inside lift_system):
     Drone pose:   /model/lift_system/model/x3_drone{i}/pose
-    Motor cmd:    /lift_system/x3_drone{i}/gazebo/command/motor_speed
+    Motor cmd:    /x3_drone{i}/gazebo/command/motor_speed  (flat, no prefix)
     Payload pose: /model/lift_system/model/payload/pose
+    Force apply:  /world/quad_payload/wrench/persistent    (gz transport)
+    Force clear:  /world/quad_payload/wrench/clear         (gz transport)
 -->
 <sdf version="1.6">
   <world name="quad_payload">
@@ -29,6 +34,9 @@
             name="gz::sim::systems::UserCommands"/>
     <plugin filename="gz-sim-sensors-system"
             name="gz::sim::systems::Sensors"/>
+    <!-- Exposes /world/quad_payload/wrench/persistent and /wrench/clear -->
+    <plugin filename="gz-sim-apply-link-wrench-system"
+            name="gz::sim::systems::ApplyLinkWrench"/>
 
     <scene>
       <background>0.6 0.8 1.0 1</background>
@@ -65,31 +73,30 @@
     <model name="lift_system">
       <pose>0 0 0 0 0 0</pose>
 
-      <!-- ===== DRONES (±0.25, ±0.25) — initial z chosen so cables are taut ===== -->
-      <!-- Horizontal dist to payload: sqrt(0.25²+0.25²)=0.354 m                  -->
-      <!-- Cable=0.75 m → z_drone = sqrt(0.75²-0.354²) = 0.661 m above payload    -->
+      <!-- Drones start on the ground.  No cable joints — forces are applied
+           programmatically by cable_tension_node via the wrench topics. -->
       <include>
         <uri>models/x3_drone0.sdf</uri>
         <name>x3_drone0</name>
-        <pose> 0.25  0.25 0.686 0 0 0</pose>
+        <pose> 0.25  0.25 0.1 0 0 0</pose>
       </include>
       <include>
         <uri>models/x3_drone1.sdf</uri>
         <name>x3_drone1</name>
-        <pose>-0.25  0.25 0.686 0 0 0</pose>
+        <pose>-0.25  0.25 0.1 0 0 0</pose>
       </include>
       <include>
         <uri>models/x3_drone2.sdf</uri>
         <name>x3_drone2</name>
-        <pose>-0.25 -0.25 0.686 0 0 0</pose>
+        <pose>-0.25 -0.25 0.1 0 0 0</pose>
       </include>
       <include>
         <uri>models/x3_drone3.sdf</uri>
         <name>x3_drone3</name>
-        <pose> 0.25 -0.25 0.686 0 0 0</pose>
+        <pose> 0.25 -0.25 0.1 0 0 0</pose>
       </include>
 
-      <!-- ===== PAYLOAD (0.4 kg box, 0.2×0.2×0.05 m) ===== -->
+      <!-- Payload: 0.4 kg box resting on the ground -->
       <model name="payload">
         <pose>0 0 0.025 0 0 0</pose>
         <link name="body">
@@ -117,141 +124,6 @@
           <publish_link_pose>true</publish_link_pose>
         </plugin>
       </model>
-
-      <!-- ===== TETHERS (0.75 m rigid rod, ball joints at both ends) =====
-           Cable midpoint z ≈ (0.686 + 0.025)/2 = 0.356
-           Tether_0: drone0 (+0.25,+0.25) — midpoint (+0.125,+0.125,0.356), yaw=+45°, pitch=-28.1°
-           Tether_1: drone1 (-0.25,+0.25) — midpoint (-0.125,+0.125,0.356), yaw=+135°
-           Tether_2: drone2 (-0.25,-0.25) — midpoint (-0.125,-0.125,0.356), yaw=-135°
-           Tether_3: drone3 (+0.25,-0.25) — midpoint (+0.125,-0.125,0.356), yaw=-45°       -->
-      <link name="tether_0">
-        <pose> 0.125  0.125 0.356  0 -0.4913  0.7854</pose>
-        <inertial><mass>0.001</mass>
-          <inertia><ixx>3.5e-08</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>3.5e-08</iyy><iyz>0</iyz><izz>5e-12</izz></inertia>
-        </inertial>
-        <visual name="vis">
-          <geometry><cylinder><radius>0.002</radius><length>0.75</length></cylinder></geometry>
-          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
-        </visual>
-      </link>
-      <link name="tether_1">
-        <pose>-0.125  0.125 0.356  0 -0.4913  2.3562</pose>
-        <inertial><mass>0.001</mass>
-          <inertia><ixx>3.5e-08</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>3.5e-08</iyy><iyz>0</iyz><izz>5e-12</izz></inertia>
-        </inertial>
-        <visual name="vis">
-          <geometry><cylinder><radius>0.002</radius><length>0.75</length></cylinder></geometry>
-          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
-        </visual>
-      </link>
-      <link name="tether_2">
-        <pose>-0.125 -0.125 0.356  0 -0.4913 -2.3562</pose>
-        <inertial><mass>0.001</mass>
-          <inertia><ixx>3.5e-08</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>3.5e-08</iyy><iyz>0</iyz><izz>5e-12</izz></inertia>
-        </inertial>
-        <visual name="vis">
-          <geometry><cylinder><radius>0.002</radius><length>0.75</length></cylinder></geometry>
-          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
-        </visual>
-      </link>
-      <link name="tether_3">
-        <pose> 0.125 -0.125 0.356  0 -0.4913 -0.7854</pose>
-        <inertial><mass>0.001</mass>
-          <inertia><ixx>3.5e-08</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>3.5e-08</iyy><iyz>0</iyz><izz>5e-12</izz></inertia>
-        </inertial>
-        <visual name="vis">
-          <geometry><cylinder><radius>0.002</radius><length>0.75</length></cylinder></geometry>
-          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
-        </visual>
-      </link>
-
-      <!-- Payload → tether bottom (lower end of each rod) -->
-      <joint name="payload_to_tether_0" type="ball">
-        <parent>payload::body</parent><child>tether_0</child>
-        <pose relative_to="tether_0">0 0 -0.375 0 0 0</pose>
-        <axis><xyz>1 0 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis>
-        <axis2><xyz>0 1 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis2>
-      </joint>
-      <joint name="payload_to_tether_1" type="ball">
-        <parent>payload::body</parent><child>tether_1</child>
-        <pose relative_to="tether_1">0 0 -0.375 0 0 0</pose>
-        <axis><xyz>1 0 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis>
-        <axis2><xyz>0 1 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis2>
-      </joint>
-      <joint name="payload_to_tether_2" type="ball">
-        <parent>payload::body</parent><child>tether_2</child>
-        <pose relative_to="tether_2">0 0 -0.375 0 0 0</pose>
-        <axis><xyz>1 0 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis>
-        <axis2><xyz>0 1 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis2>
-      </joint>
-      <joint name="payload_to_tether_3" type="ball">
-        <parent>payload::body</parent><child>tether_3</child>
-        <pose relative_to="tether_3">0 0 -0.375 0 0 0</pose>
-        <axis><xyz>1 0 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis>
-        <axis2><xyz>0 1 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis2>
-      </joint>
-
-      <!-- Tether top → drone base_link (upper end of each rod) -->
-      <joint name="tether_0_to_drone0" type="ball">
-        <parent>tether_0</parent><child>x3_drone0::base_link</child>
-        <pose relative_to="tether_0">0 0 0.375 0 0 0</pose>
-        <axis><xyz>1 0 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis>
-        <axis2><xyz>0 1 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis2>
-      </joint>
-      <joint name="tether_1_to_drone1" type="ball">
-        <parent>tether_1</parent><child>x3_drone1::base_link</child>
-        <pose relative_to="tether_1">0 0 0.375 0 0 0</pose>
-        <axis><xyz>1 0 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis>
-        <axis2><xyz>0 1 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis2>
-      </joint>
-      <joint name="tether_2_to_drone2" type="ball">
-        <parent>tether_2</parent><child>x3_drone2::base_link</child>
-        <pose relative_to="tether_2">0 0 0.375 0 0 0</pose>
-        <axis><xyz>1 0 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis>
-        <axis2><xyz>0 1 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis2>
-      </joint>
-      <joint name="tether_3_to_drone3" type="ball">
-        <parent>tether_3</parent><child>x3_drone3::base_link</child>
-        <pose relative_to="tether_3">0 0 0.375 0 0 0</pose>
-        <axis><xyz>1 0 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis>
-        <axis2><xyz>0 1 0</xyz>
-          <limit><lower>-1.5708</lower><upper>1.5708</upper></limit>
-          <dynamics><damping>0.3</damping></dynamics></axis2>
-      </joint>
 
     </model>
 
