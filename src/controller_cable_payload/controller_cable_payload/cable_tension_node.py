@@ -46,9 +46,11 @@ N_DRONES = 4
 WORLD_NAME = 'quad_payload'
 FREQUENCY_HZ = 30.0
 
-# Full Gazebo entity names (lift_system > sub-model > link)
-DRONE_LINK_NAMES = [f'lift_system::x3_drone{i}::base_link' for i in range(N_DRONES)]
-PAYLOAD_LINK_NAME = 'lift_system::payload::body'
+# Gazebo entity names for ApplyLinkWrench.
+# Use model::link format (no parent-model prefix) — confirmed by gz topic --list
+# showing /x3_drone0/... rather than /lift_system/x3_drone0/...
+DRONE_LINK_NAMES = [f'x3_drone{i}::base_link' for i in range(N_DRONES)]
+PAYLOAD_LINK_NAME = 'payload::body'
 LINK_TYPE = 3   # gz.msgs.Entity.LINK
 
 
@@ -144,6 +146,10 @@ class CableTensionNode(Node):
 
             self._apply_force(DRONE_LINK_NAMES[i], force_on_drone)
             self._taut[i] = True
+            self.get_logger().info(
+                f'Cable {i} taut: dist={dist:.3f}m ext={extension:.3f}m '
+                f'T={T:.2f}N  entity={DRONE_LINK_NAMES[i]}',
+                throttle_duration_sec=1.0)
 
         # Apply summed cable tension to payload
         self._apply_force(PAYLOAD_LINK_NAME, total_payload_force)

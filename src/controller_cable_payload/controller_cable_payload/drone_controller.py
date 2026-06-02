@@ -53,12 +53,16 @@ G = 9.81               # m/s²
 THRUST_RATIO = 38.0    # from dynamics.py est_params[0]
 RATE_CENTER = 70.0     # Betaflight centre rate, deg/s per unit channel
 
-# Position PD gains
-KP = np.diag([3.0, 3.0, 5.0])
-KV = np.diag([2.0, 2.0, 3.5])
+# Position PD gains — kept low to avoid overshoot on large initial errors
+KP = np.diag([1.5, 1.5, 2.0])
+KV = np.diag([1.5, 1.5, 2.5])
+
+# Maximum desired acceleration (m/s²) — prevents runaway on large step inputs
+MAX_ACC_XY = 2.0
+MAX_ACC_Z  = 3.0
 
 # Attitude P gain (rad/s per rad error)
-KA = 8.0
+KA = 6.0
 
 FREQUENCY_HZ = 30.0
 
@@ -135,6 +139,11 @@ class DroneController(Node):
         pos_err = p_des - p
         vel_err = v_des - v
         a_des = KP @ pos_err + KV @ vel_err
+
+        # Clamp desired acceleration so large step inputs don't create runaway
+        a_des[0] = float(np.clip(a_des[0], -MAX_ACC_XY, MAX_ACC_XY))
+        a_des[1] = float(np.clip(a_des[1], -MAX_ACC_XY, MAX_ACC_XY))
+        a_des[2] = float(np.clip(a_des[2], -MAX_ACC_Z,  MAX_ACC_Z))
 
         # ── Cable tension compensation (simplified: constant vertical force) ──
         # Each drone must support its share of the payload weight.
