@@ -1,0 +1,289 @@
+<?xml version="1.0" ?>
+<!--
+  4-drone cable-suspended payload world with rigid cable joints.
+
+  All 4 drones are connected to the central payload via ball-jointed cable
+  links.  Drones start hovering at 1.5 m; payload hangs 1.0 m below at 0.5 m.
+
+  Motor topics (flat namespace, no model prefix):
+    /x3_drone{0-3}/gazebo/command/motor_speed
+
+  Quick motor test (spin all at once):
+    for i in 0 1 2 3; do
+      gz topic -t /x3_drone${i}/gazebo/command/motor_speed \
+               --msgtype gz.msgs.Actuators \
+               -p 'velocity:[700,700,700,700]'
+    done
+-->
+<sdf version="1.6">
+  <world name="cable_payload">
+
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <plugin filename="ignition-gazebo-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors"/>
+    <plugin filename="gz-sim-apply-link-wrench-system"
+            name="gz::sim::systems::ApplyLinkWrench"/>
+
+    <scene>
+      <background>0.6 0.8 1.0 1</background>
+      <ambient>0.4 0.4 0.4 1</ambient>
+    </scene>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.3 0.3 0.3 1</specular>
+      <attenuation>
+        <range>1000</range><constant>0.9</constant>
+        <linear>0.01</linear><quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Ground plane -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <material>
+            <ambient>0.2 0.5 0.2 1</ambient><diffuse>0.3 0.6 0.3 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!--
+      lift_system: single model containing all 4 drones, 4 cables, and payload.
+
+      Kinematic tree (payload is canonical link):
+        payload
+          ├─[ball]─ cable_0 ─[ball]─ x3_drone0::base_link
+          ├─[ball]─ cable_1 ─[ball]─ x3_drone1::base_link
+          ├─[ball]─ cable_2 ─[ball]─ x3_drone2::base_link
+          └─[ball]─ cable_3 ─[ball]─ x3_drone3::base_link
+
+      Cable geometry (same for all 4, by symmetry):
+        length = sqrt(0.5²+0.5²+1.0²) = 1.2247 m
+        pitch  = 0.6155 rad (35.3° from vertical)
+    -->
+    <model name="lift_system">
+      <pose>0 0 0 0 0 0</pose>
+
+      <!-- ===== PAYLOAD ===== -->
+      <!-- Orange box, 0.2×0.2×0.1 m, centre at z=0.45 (top face at z=0.5) -->
+      <link name="payload">
+        <pose>0 0 0.45 0 0 0</pose>
+        <inertial>
+          <mass>0.4</mass>
+          <inertia>
+            <ixx>1.67e-3</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>1.67e-3</iyy><iyz>0</iyz>
+            <izz>3.33e-3</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry><box><size>0.2 0.2 0.1</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 0.2 0.1</size></box></geometry>
+          <material>
+            <ambient>0.8 0.4 0.0 1</ambient>
+            <diffuse>0.9 0.5 0.1 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ===== DRONES ===== -->
+      <!-- 1 m square formation, 1.5 m above ground -->
+      <include>
+        <uri>models/x3_drone0.sdf</uri>
+        <name>x3_drone0</name>
+        <pose> 0.5 -0.5 1.5 0 0 0</pose>
+      </include>
+      <include>
+        <uri>models/x3_drone1.sdf</uri>
+        <name>x3_drone1</name>
+        <pose>-0.5 -0.5 1.5 0 0 0</pose>
+      </include>
+      <include>
+        <uri>models/x3_drone2.sdf</uri>
+        <name>x3_drone2</name>
+        <pose>-0.5  0.5 1.5 0 0 0</pose>
+      </include>
+      <include>
+        <uri>models/x3_drone3.sdf</uri>
+        <name>x3_drone3</name>
+        <pose> 0.5  0.5 1.5 0 0 0</pose>
+      </include>
+
+      <!-- ===== CABLES =====
+           Each cylinder is positioned at the midpoint between
+           payload top-centre (0,0,0.5) and its drone centre,
+           then rotated to align with the drone-payload line.
+
+           Pose format: x y z roll pitch yaw
+             pitch 0.6155 rad tilts the cylinder Z-axis toward the drone.
+             yaw selects the horizontal quadrant.
+      -->
+
+      <!-- cable_0 → drone0 (+x, -y quadrant) -->
+      <link name="cable_0">
+        <pose>0.25 -0.25 1.0 0 0.6155 -0.7854</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>6.25e-4</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>6.25e-4</iyy><iyz>0</iyz><izz>1e-8</izz>
+          </inertia>
+        </inertial>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.003</radius><length>1.2247</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.15 0.15 0.15 1</ambient>
+            <diffuse>0.25 0.25 0.25 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- cable_1 → drone1 (-x, -y quadrant) -->
+      <link name="cable_1">
+        <pose>-0.25 -0.25 1.0 0 0.6155 -2.3562</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>6.25e-4</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>6.25e-4</iyy><iyz>0</iyz><izz>1e-8</izz>
+          </inertia>
+        </inertial>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.003</radius><length>1.2247</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.15 0.15 0.15 1</ambient>
+            <diffuse>0.25 0.25 0.25 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- cable_2 → drone2 (-x, +y quadrant) -->
+      <link name="cable_2">
+        <pose>-0.25 0.25 1.0 0 0.6155 2.3562</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>6.25e-4</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>6.25e-4</iyy><iyz>0</iyz><izz>1e-8</izz>
+          </inertia>
+        </inertial>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.003</radius><length>1.2247</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.15 0.15 0.15 1</ambient>
+            <diffuse>0.25 0.25 0.25 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- cable_3 → drone3 (+x, +y quadrant) -->
+      <link name="cable_3">
+        <pose>0.25 0.25 1.0 0 0.6155 0.7854</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>6.25e-4</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>6.25e-4</iyy><iyz>0</iyz><izz>1e-8</izz>
+          </inertia>
+        </inertial>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.003</radius><length>1.2247</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.15 0.15 0.15 1</ambient>
+            <diffuse>0.25 0.25 0.25 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ===== JOINTS =====
+           In SDF 1.6, joint <pose> is in the parent link's frame.
+
+           payload_cable_i: joint at top-centre of payload box.
+             Payload top = +0.05 m above payload link origin.
+             <pose>0 0 0.05 0 0 0</pose>
+
+           cable_drone_i: joint at the drone end of the cable.
+             Cable top in cable frame = (0, 0, +half_length) = (0, 0, +0.6124).
+             <pose>0 0 0.6124 0 0 0</pose>
+      -->
+
+      <joint name="payload_cable_0" type="ball">
+        <parent>payload</parent>
+        <child>cable_0</child>
+        <pose>0 0 0.05 0 0 0</pose>
+      </joint>
+      <joint name="cable_drone_0" type="ball">
+        <parent>cable_0</parent>
+        <child>x3_drone0::base_link</child>
+        <pose>0 0 0.6124 0 0 0</pose>
+      </joint>
+
+      <joint name="payload_cable_1" type="ball">
+        <parent>payload</parent>
+        <child>cable_1</child>
+        <pose>0 0 0.05 0 0 0</pose>
+      </joint>
+      <joint name="cable_drone_1" type="ball">
+        <parent>cable_1</parent>
+        <child>x3_drone1::base_link</child>
+        <pose>0 0 0.6124 0 0 0</pose>
+      </joint>
+
+      <joint name="payload_cable_2" type="ball">
+        <parent>payload</parent>
+        <child>cable_2</child>
+        <pose>0 0 0.05 0 0 0</pose>
+      </joint>
+      <joint name="cable_drone_2" type="ball">
+        <parent>cable_2</parent>
+        <child>x3_drone2::base_link</child>
+        <pose>0 0 0.6124 0 0 0</pose>
+      </joint>
+
+      <joint name="payload_cable_3" type="ball">
+        <parent>payload</parent>
+        <child>cable_3</child>
+        <pose>0 0 0.05 0 0 0</pose>
+      </joint>
+      <joint name="cable_drone_3" type="ball">
+        <parent>cable_3</parent>
+        <child>x3_drone3::base_link</child>
+        <pose>0 0 0.6124 0 0 0</pose>
+      </joint>
+
+    </model>
+
+  </world>
+</sdf>

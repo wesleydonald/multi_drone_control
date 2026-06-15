@@ -344,7 +344,7 @@
         </plugin>
 
         <plugin
-    filename="gz-sim-multicopter-velocity-control-system"
+    filename="gz-sim-multicopter-control-system"
     name="gz::sim::systems::MulticopterVelocityControl">
     <robotNamespace>x3_drone0</robotNamespace>
     <commandSubTopic>cmd_vel</commandSubTopic>
