@@ -43,20 +43,14 @@ from interfaces.srv import SetArming
 # ── Configuration ──────────────────────────────────────────────────────────────
 
 N_DRONES = 4
-CABLE_LENGTH = 0.75          # m — must match world_quad_payload.sdf
 FREQUENCY_HZ = 30.0
 
-# XY offsets of each drone from payload centre (formation layout, m).
-# These match the drone positions in world_quad_payload.sdf.
-DRONE_OFFSETS_XY = {
-    0: ( 0.25,  0.25),
-    1: (-0.25,  0.25),
-    2: (-0.25, -0.25),
-    3: ( 0.25, -0.25),
-}
-
-# Desired payload hover height (above ground, m).
-PAYLOAD_HOVER_Z = 0.84       # ≈ equilibrium with drones at 1.5 m
+# Defaults match world_quad_payload.sdf (overridden via ROS params for other worlds).
+_DEFAULT_CABLE_LENGTH   = 0.75
+_DEFAULT_PAYLOAD_HOVER_Z = 0.84
+# Drone XY offsets from payload centre, indexed 0-3.
+_DEFAULT_OFFSETS_X = [ 0.25, -0.25, -0.25,  0.25]
+_DEFAULT_OFFSETS_Y = [ 0.25,  0.25, -0.25, -0.25]
 
 
 class Planner(Node):
@@ -66,12 +60,38 @@ class Planner(Node):
             rclpy.parameter.Parameter('use_sim_time', rclpy.Parameter.Type.BOOL, False)
         ])
 
+        self.declare_parameter('cable_length',    _DEFAULT_CABLE_LENGTH)
+        self.declare_parameter('payload_hover_z', _DEFAULT_PAYLOAD_HOVER_Z)
+        self.declare_parameter('drone_offsets_x', _DEFAULT_OFFSETS_X)
+        self.declare_parameter('drone_offsets_y', _DEFAULT_OFFSETS_Y)
+        # tether_length > 0 enables sphere projection for rigid-cable worlds.
+        # Set to the physical SDF joint length. 0.0 = disabled (spring-damper worlds).
+        self.declare_parameter('tether_length', 0.0)
+
+        cable_length    = self.get_parameter('cable_length').value
+        payload_hover_z = self.get_parameter('payload_hover_z').value
+        offsets_x       = list(self.get_parameter('drone_offsets_x').value)
+        offsets_y       = list(self.get_parameter('drone_offsets_y').value)
+        tether_length   = float(self.get_parameter('tether_length').value)
+
+        self._cable_length    = float(cable_length)
+        self._payload_hover_z = float(payload_hover_z)
+        self._offsets_xy = {i: (float(offsets_x[i]), float(offsets_y[i]))
+                            for i in range(N_DRONES)}
+        self._tether_length = tether_length  # 0 = no projection
+
+        self.get_logger().info(
+            f'Planner: cable_length={self._cable_length:.3f}m  '
+            f'payload_hover_z={self._payload_hover_z:.3f}m  '
+            f'tether_length={self._tether_length:.3f}m  '
+            f'offsets={self._offsets_xy}')
+
         # Fleet state
         self.fleet_armed = False
         self.flying = False
 
         # Payload state (updated from /payload/motion_capture_state)
-        self.payload_pos = np.array([0.0, 0.0, PAYLOAD_HOVER_Z])
+        self.payload_pos = np.array([0.0, 0.0, self._payload_hover_z])
 
         # Publishers — one setpoint topic per drone
         self._setpoint_pubs = {}
@@ -168,19 +188,43 @@ class Planner(Node):
         for i in range(N_DRONES):
             self._drone_cmd_pubs[i].publish(msg)
 
+    # ── Sphere projection (rigid-cable worlds only) ───────────────────────────
+
+    def _project_to_sphere(self, p_des: np.ndarray) -> np.ndarray:
+        """
+        Project p_des onto the sphere of radius tether_length centred on the
+        current payload position.  This guarantees the setpoint is reachable
+        under a rigid cable constraint, preventing the controller from fighting
+        the physics engine.
+
+        With no rigid constraint (tether_length == 0) the raw p_des is returned.
+        """
+        if self._tether_length <= 0.0:
+            return p_des
+        direction = p_des - self.payload_pos
+        dist = np.linalg.norm(direction)
+        if dist < 1e-6:
+            return self.payload_pos + np.array([0.0, 0.0, self._tether_length])
+        return self.payload_pos + self._tether_length * direction / dist
+
     # ── Setpoint publisher ────────────────────────────────────────────────────
 
     def _publish_setpoints(self):
         """Compute and publish desired position for each drone."""
         for i in range(N_DRONES):
-            ox, oy = DRONE_OFFSETS_XY[i]
-            x_des = self.payload_pos[0] + ox
-            y_des = self.payload_pos[1] + oy
-            # Target drone z = desired payload z + cable_length
-            z_des = PAYLOAD_HOVER_Z + CABLE_LENGTH
+            ox, oy = self._offsets_xy[i]
+            p_des = np.array([
+                self.payload_pos[0] + ox,
+                self.payload_pos[1] + oy,
+                self._payload_hover_z + self._cable_length,
+            ])
+            # For rigid-cable worlds: project onto the feasible sphere so the
+            # controller never commands a position the tether cannot reach.
+            p_des = self._project_to_sphere(p_des)
 
             msg = Float64MultiArray()
-            msg.data = [x_des, y_des, z_des, 0.0, 0.0, 0.0]
+            msg.data = [float(p_des[0]), float(p_des[1]), float(p_des[2]),
+                        0.0, 0.0, 0.0]
             self._setpoint_pubs[i].publish(msg)
 
 
