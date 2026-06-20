@@ -14,7 +14,7 @@ source /usr/share/gz/setup.bash 2>/dev/null || true
 source $WORKSPACE/install/setup.bash
 
 echo 'Starting Gazebo...'
-gz sim world_multi.sdf -v 4 -r
+gz sim four_no_cables.sdf -v 4 -r
 
 exec bash
 "

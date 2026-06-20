@@ -1,7 +1,7 @@
 """
 rigid_cables_launch.py
 ----------------------
-ROS 2 launch file for world_multi_cables_2.sdf — 4-drone payload system
+ROS 2 launch file for four_rigid.sdf — 4-drone payload system
 with RIGID SDF ball-joint tethers (no cable_tension_node needed).
 
 World geometry (payload at centre of 1 m square drone formation):
@@ -40,7 +40,7 @@ PARENT_MODEL = 'lift_system'
 DRONE_NAMES  = ['x3_drone0', 'x3_drone1', 'x3_drone2', 'x3_drone3']
 N            = len(DRONE_NAMES)
 
-# Physical tether length in world_multi_cables_2.sdf (SDF joint cylinder length).
+# Physical tether length in four_rigid.sdf (SDF joint cylinder length).
 # The planner projects every setpoint onto the sphere of this radius so the
 # controller never fights the rigid-joint constraint.
 TETHER_LENGTH = 0.707
@@ -48,7 +48,7 @@ TETHER_LENGTH = 0.707
 # Desired hover direction for each drone from the payload centre.
 # These are the unconstrained offsets — they are normalised + scaled to
 # TETHER_LENGTH by the sphere projection, so only the DIRECTION matters here.
-# Drone order matches world_multi_cables_2.sdf: drone0 at (-x,-y), etc.
+# Drone order matches four_rigid.sdf: drone0 at (-x,-y), etc.
 OFFSETS_X = [-0.25,  0.25, -0.25,  0.25]
 OFFSETS_Y = [-0.25, -0.25,  0.25,  0.25]
 
@@ -154,6 +154,6 @@ def generate_launch_description():
     ))
 
     # NOTE: cable_tension_node is NOT launched here — tethers are rigid SDF
-    # ball joints in world_multi_cables_2.sdf, so no gz-transport wrenches needed.
+    # ball joints in four_rigid.sdf, so no gz-transport wrenches needed.
 
     return LaunchDescription(nodes)
