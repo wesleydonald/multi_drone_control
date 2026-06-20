@@ -1,68 +1,46 @@
 """
-rigid_cables_launch.py
-----------------------
-ROS 2 launch file for four_rigid.sdf — 4-drone payload system
-with RIGID SDF ball-joint tethers (no cable_tension_node needed).
+two_no_cables_launch.py
+-----------------------
+ROS 2 launch file for two_no_cables.sdf — 2-drone system with a FREE,
+unattached payload (no cables, no tethers).
 
-World geometry (payload at centre of 1 m square drone formation):
-  Drone positions on the ground:
-    x3_drone0: (0.0,  0.0, 0.1)
-    x3_drone1: (1.0,  0.0, 0.1)
-    x3_drone2: (0.0,  1.0, 0.1)
-    x3_drone3: (1.0,  1.0, 0.1)
-  Payload: (0.5, 0.5, 0.025)  [centre of the square]
-  Tether length: 0.707 m (horizontal at rest)
+Brings up the full sensing + actuation pipeline for two drones so the
+state/command path can be verified before controller work:
+  bridges:
+    clock_bridge          — /clock
+    payload_pose_bridge    — /model/lift_system/model/payload/pose  (Pose_V)
+    drone_pose_bridge_{i}  — /model/lift_system/model/x3_drone{i}/pose
+    motor_bridge_{i}       — /x3_drone{i}/gazebo/command/motor_speed
+  per drone:
+    payload_betaflight_comm — Betaflight inner-loop (ELRSCommand -> motors)
+    payload_mocap_emulator  — Gazebo pose -> MotionCaptureState
+    drone_controller        — PD position control
 
-Hover geometry (rigid tether at 35° diagonal, ±0.25 m XY formation):
-  Horizontal drone-payload offset: sqrt(0.25²+0.25²) = 0.354 m
-  Vertical component: sqrt(0.707² - 0.354²) = 0.612 m
-  → Drones hover at  payload_z + 0.612 m
+World geometry (two_no_cables.sdf):
+    x3_drone0 : (0.0, 0.5, 0.1)
+    x3_drone1 : (1.0, 0.5, 0.1)
+    payload   : (0.5, 0.5, 0.025)   free body, not attached
 
-Step 1 — verify gz (motors, no ROS needed):
-  gz topic -t /x3_drone0/gazebo/command/motor_speed \\
-           --msgtype gz.msgs.Actuators -p 'velocity:[700,700,700,700]'
+NOTE — no `planner` node here:
+  The `planner` executable is currently hardcoded to N_DRONES = 4 (it loops
+  range(N_DRONES) and addresses /drone_0../drone_3), so it cannot drive a
+  2-drone world unmodified. Once it is parameterised for drone count, add it
+  back here. Until then, drive setpoints / ARM / TAKEOFF manually for testing.
 
-Step 2 — bridge verification (launch this file, then check):
-  ros2 topic echo /drone_0/motion_capture_state
-  ros2 topic echo /payload/motion_capture_state
-  ros2 topic pub --once /x3_drone0/gazebo/command/motor_speed \\
-    actuator_msgs/msg/Actuators '{velocity: [700.0,700.0,700.0,700.0]}'
-
-Step 3 — run the controller:
-  ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: ARM}"
-  ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: TAKEOFF}"
+NOTE — no `cable_tension_node`: this world has no cables.
 """
 
 from launch import LaunchDescription
 from launch_ros.actions import Node, SetParameter
 
 PARENT_MODEL = 'lift_system'
-DRONE_NAMES  = ['x3_drone0', 'x3_drone1', 'x3_drone2', 'x3_drone3']
+DRONE_NAMES  = ['x3_drone0', 'x3_drone1']
 N            = len(DRONE_NAMES)
-
-# Physical tether length in four_rigid.sdf (SDF joint cylinder length).
-# The planner projects every setpoint onto the sphere of this radius so the
-# controller never fights the rigid-joint constraint.
-TETHER_LENGTH = 0.707
-
-# Desired hover direction for each drone from the payload centre.
-# These are the unconstrained offsets — they are normalised + scaled to
-# TETHER_LENGTH by the sphere projection, so only the DIRECTION matters here.
-# Drone order matches four_rigid.sdf: drone0 at (-x,-y), etc.
-OFFSETS_X = [-0.25,  0.25, -0.25,  0.25]
-OFFSETS_Y = [-0.25, -0.25,  0.25,  0.25]
-
-# How high above the payload we want the drones (sets the "up" component of the
-# target direction before projection).  Larger = steeper cable angle.
-CABLE_LENGTH_VERT = 0.612
-
-# Desired payload hover height (m above ground).
-PAYLOAD_HOVER_Z = 0.5
 
 
 def generate_launch_description():
     # Drive every node off Gazebo's /clock so velocity dt (finite-differenced
-    # in the mocap emulator) stays correct even when RTF < 1 (cable worlds run
+    # in the mocap emulator) stays correct even when RTF < 1 (e.g. cable worlds
     # at ~50%). Applies use_sim_time=true to all nodes below.
     nodes = [SetParameter(name='use_sim_time', value=True)]
 
@@ -121,15 +99,15 @@ def generate_launch_description():
             }],
         ))
 
-        # ── Mocap emulator ────────────────────────────────────────────────────
+        # ── Mocap emulator (drone 0 also publishes payload pose) ──────────────
         nodes.append(Node(
             package='controller_cable_payload',
             executable='payload_mocap_emulator',
             name=f'mocap_{i}',
             parameters=[{
-                'drone_id':       i,
-                'drone_name':     drone_name,
-                'parent_model':   PARENT_MODEL,
+                'drone_id':        i,
+                'drone_name':      drone_name,
+                'parent_model':    PARENT_MODEL,
                 'publish_payload': (i == 0),
             }],
         ))
@@ -141,22 +119,5 @@ def generate_launch_description():
             name=f'drone_ctrl_{i}',
             parameters=[{'drone_id': i}],
         ))
-
-    # ── Central hover planner (world-specific geometry) ───────────────────────
-    nodes.append(Node(
-        package='controller_cable_payload',
-        executable='planner',
-        name='planner',
-        parameters=[{
-            'cable_length':    CABLE_LENGTH_VERT,
-            'payload_hover_z': PAYLOAD_HOVER_Z,
-            'drone_offsets_x': OFFSETS_X,
-            'drone_offsets_y': OFFSETS_Y,
-            'tether_length':   TETHER_LENGTH,
-        }],
-    ))
-
-    # NOTE: cable_tension_node is NOT launched here — tethers are rigid SDF
-    # ball joints in four_rigid.sdf, so no gz-transport wrenches needed.
 
     return LaunchDescription(nodes)

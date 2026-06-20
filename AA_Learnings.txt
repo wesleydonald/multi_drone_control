@@ -35,3 +35,4 @@ payload make sdf and index based on the topic echo
 
 ros use gazebo simulation time so frequency matches real world.
 
+verfiy controller is in sim time: ros2 topic hz /drone_0/ELRSCommand

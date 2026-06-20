@@ -70,9 +70,12 @@ FREQUENCY_HZ = 30.0
 class DroneController(Node):
 
     def __init__(self):
-        super().__init__('drone_controller', parameter_overrides=[
-            rclpy.parameter.Parameter('use_sim_time', rclpy.Parameter.Type.BOOL, False)
-        ])
+        # use_sim_time is left to the launch (SetParameter -> True in sim so the
+        # 30 Hz control loop ticks on sim time, matching the 30 Hz real-time
+        # cadence on hardware even when RTF < 1). Standalone `ros2 run` (no /clock)
+        # defaults to wall time, which is correct for real-world flights.
+        # The pose-timeout watchdog stays wall-clock via self._wall_clock below.
+        super().__init__('drone_controller')
 
         self.declare_parameter('drone_id', 0)
         self.drone_id = self.get_parameter('drone_id').value
