@@ -55,8 +55,26 @@
       </link>
     </model>
 
-    <model name="lift_system">
+    <model name="lift_system" canonical_link="anchor">
       <pose>0 0 0 0 0 0</pose>
+
+      <!-- WORLD-FIXED ANCHOR: pins the lift_system frame to the world origin so
+           nested drone/payload poses are published in the WORLD frame. Without
+           it, lift_system's canonical frame rides x3_drone0 and the mocap reads
+           a frozen/relative pose (controller flies blind). See two_no_cables.sdf. -->
+      <link name="anchor">
+        <inertial>
+          <mass>0.001</mass>
+          <inertia>
+            <ixx>1e-6</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>1e-6</iyy><iyz>0</iyz><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+      </link>
+      <joint name="anchor_to_world" type="fixed">
+        <parent>world</parent>
+        <child>anchor</child>
+      </joint>
 
       <!-- ===== INCLUDE DRONES AS NESTED MODELS =====
            Two drones facing each other along y=0.5, payload between them. -->
