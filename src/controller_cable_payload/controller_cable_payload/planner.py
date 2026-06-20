@@ -212,15 +212,19 @@ class Planner(Node):
     def _publish_setpoints(self):
         """Compute and publish desired position for each drone."""
         for i in range(N_DRONES):
-            ox, oy = self._offsets_xy[i]
-            p_des = np.array([
-                self.payload_pos[0] + ox,
-                self.payload_pos[1] + oy,
-                self._payload_hover_z + self._cable_length,
-            ])
-            # For rigid-cable worlds: project onto the feasible sphere so the
-            # controller never commands a position the tether cannot reach.
-            p_des = self._project_to_sphere(p_des)
+            if not self.flying:
+                # Hover at starting position when not flying (z=0.1m)
+                p_des = np.array([0.5, 0.5, 0.1])
+            else:
+                ox, oy = self._offsets_xy[i]
+                p_des = np.array([
+                    self.payload_pos[0] + ox,
+                    self.payload_pos[1] + oy,
+                    self._payload_hover_z + self._cable_length,
+                ])
+                # For rigid-cable worlds: project onto the feasible sphere so the
+                # controller never commands a position the tether cannot reach.
+                p_des = self._project_to_sphere(p_des)
 
             msg = Float64MultiArray()
             msg.data = [float(p_des[0]), float(p_des[1]), float(p_des[2]),

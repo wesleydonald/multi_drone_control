@@ -131,10 +131,10 @@ def generate_launch_description():
             }],
         ))
 
-        # ── Per-drone position controller ─────────────────────────────────────
+        # ── Per-drone MPC controller (acados, reused from controller_mpc_multi) ─
         nodes.append(Node(
             package='controller_cable_payload',
-            executable='drone_controller',
+            executable='mpc_drone_controller',
             name=f'drone_ctrl_{i}',
             parameters=[{'drone_id': i}],
         ))

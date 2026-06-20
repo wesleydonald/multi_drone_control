@@ -1,23 +1,25 @@
 """
-payload_hover_launch.py
------------------------
-Full cable-payload hover stack for world_quad_payload.sdf.
+soft_cables_launch.py
+---------------------
+Launch stack for world_soft_cables.sdf — 4 drones lifting a payload via
+NON-RIGID segmented cables (flexible chains modelled directly in the SDF).
 
-Architecture:
-  Gazebo world: lift_system model with 4 drones + payload (no rigid tethers)
-  per drone:
-    payload_betaflight_comm   — Betaflight inner-loop, nested-model pose topic
-    payload_mocap_emulator    — Gazebo pose → MotionCaptureState
-    drone_controller          — PD position control + cable compensation
-  once:
-    planner                   — hover setpoints + ARM/TAKEOFF fleet commands
-    cable_tension_node        — spring-damper cable forces via gz transport
+Unlike rigid_cables_launch.py there is NO cable_tension_node: the cables are
+real jointed link-chains in the world, so tension is computed by the physics
+engine every step.  Unlike the rigid world, the cables can go slack and the
+drones sit roughly above their attach points, so thrust becomes lift.
 
-Confirmed topic paths (from gz topic --list with world running):
+Per drone:
+  payload_betaflight_comm   — Betaflight inner-loop (nested-model pose topic)
+  payload_mocap_emulator    — Gazebo pose → MotionCaptureState
+  mpc_drone_controller      — acados MPC (reused from controller_mpc_multi)
+Once:
+  planner                   — relays /fleet/command (ARM/TAKEOFF/DISARM)
+
+Topic paths (parent model 'lift_system'):
   Drone pose:   /model/lift_system/model/x3_drone{i}/pose
-  Motor cmd:    /x3_drone{i}/gazebo/command/motor_speed   (no parent prefix)
+  Motor cmd:    /x3_drone{i}/gazebo/command/motor_speed
   Payload pose: /model/lift_system/model/payload/pose
-  Force apply:  /world/quad_payload/wrench/persistent    (gz transport)
 """
 
 from launch import LaunchDescription
@@ -63,7 +65,7 @@ def generate_launch_description():
             ],
         ))
 
-        # ── Motor command bridge (confirmed: no parent prefix) ────────────────
+        # ── Motor command bridge ──────────────────────────────────────────────
         nodes.append(Node(
             package='ros_gz_bridge',
             executable='parameter_bridge',
@@ -99,7 +101,7 @@ def generate_launch_description():
             }],
         ))
 
-        # ── Per-drone MPC controller (acados, reused from controller_mpc_multi) ─
+        # ── Per-drone MPC controller ──────────────────────────────────────────
         nodes.append(Node(
             package='controller_cable_payload',
             executable='mpc_drone_controller',
@@ -107,18 +109,12 @@ def generate_launch_description():
             parameters=[{'drone_id': i}],
         ))
 
-    # ── Central hover planner ─────────────────────────────────────────────────
+    # ── Central planner (ARM / TAKEOFF / DISARM relay) ────────────────────────
     nodes.append(Node(
         package='controller_cable_payload',
         executable='planner',
         name='planner',
-    ))
-
-    # ── Cable tension simulation (gz transport spring-damper) ─────────────────
-    nodes.append(Node(
-        package='controller_cable_payload',
-        executable='cable_tension_node',
-        name='cable_tension',
+        parameters=[{'tether_length': 0.0}],   # MPC ignores setpoints; no projection
     ))
 
     return LaunchDescription(nodes)

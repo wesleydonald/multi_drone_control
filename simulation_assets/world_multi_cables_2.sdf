@@ -87,7 +87,7 @@
         <link name="body">
           <gravity>1</gravity>
           <inertial>
-            <mass>0.4</mass>
+            <mass>0.1</mass>
             <inertia>
               <ixx>1.67e-03</ixx><ixy>0</ixy><ixz>0</ixz>
               <iyy>1.67e-03</iyy><iyz>0</iyz>
@@ -112,10 +112,11 @@
           </visual>
         </link>
 
-        <!-- Pose publisher (same as drones) -->
+        <!-- Pose publisher for body link -->
         <plugin filename="gz-sim-pose-publisher-system"
                 name="gz::sim::systems::PosePublisher">
           <publish_link_pose>true</publish_link_pose>
+          <body_name>body</body_name>
         </plugin>
 
       </model>
