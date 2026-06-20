@@ -21,7 +21,7 @@ Confirmed topic paths (from gz topic --list with world running):
 """
 
 from launch import LaunchDescription
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetParameter
 
 PARENT_MODEL = 'lift_system'
 DRONE_NAMES = ['x3_drone0', 'x3_drone1', 'x3_drone2', 'x3_drone3']
@@ -29,7 +29,10 @@ N = len(DRONE_NAMES)
 
 
 def generate_launch_description():
-    nodes = []
+    # Drive every node off Gazebo's /clock so velocity dt (finite-differenced
+    # in the mocap emulator) stays correct even when RTF < 1 (cable worlds run
+    # at ~50%). Applies use_sim_time=true to all nodes below.
+    nodes = [SetParameter(name='use_sim_time', value=True)]
 
     # ── Clock bridge ──────────────────────────────────────────────────────────
     nodes.append(Node(

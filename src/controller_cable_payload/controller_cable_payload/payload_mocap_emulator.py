@@ -97,6 +97,8 @@ class PayloadMocapEmulator(Node):
         ang_vel_body = R.T @ ang_vel_world
 
         mcs = MotionCaptureState()
+        mcs.header.stamp = now
+        mcs.header.frame_id = 'world'
         mcs.pose = Pose()
         mcs.pose.position.x = float(pos.x)
         mcs.pose.position.y = float(pos.y)
