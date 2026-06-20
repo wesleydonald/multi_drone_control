@@ -1,33 +1,36 @@
 """
-two_no_cables_launch.py
------------------------
-ROS 2 launch file for two_no_cables.sdf — 2-drone system with a FREE,
-unattached payload (no cables, no tethers).
+mpc_two_no_cables_launch.py
+---------------------------
+MPC control stack for two_no_cables.sdf — 2 drones, free (unattached) payload.
 
-Brings up the full sensing + actuation pipeline for two drones so the
-state/command path can be verified before controller work:
-  bridges:
-    clock_bridge          — /clock
-    payload_pose_bridge    — /model/lift_system/model/payload/pose  (Pose_V)
-    drone_pose_bridge_{i}  — /model/lift_system/model/x3_drone{i}/pose
-    motor_bridge_{i}       — /x3_drone{i}/gazebo/command/motor_speed
-  per drone:
-    payload_betaflight_comm — Betaflight inner-loop (ELRSCommand -> motors)
-    payload_mocap_emulator  — Gazebo pose -> MotionCaptureState
-    drone_controller        — PD position control
+Reuses controller_mpc_multi (the per-drone MPC + central fleet manager) at
+N=2, sitting on top of the nested-lift_system bridge nodes that now live in
+simulation_communication:
+  bridges (per drone + payload):
+    clock_bridge / payload_pose_bridge / drone_pose_bridge_{i} / motor_bridge_{i}
+    payload_betaflight_comm  — ELRSCommand -> motor_speed
+    payload_mocap_emulator   — Gazebo pose -> /drone_{i}/motion_capture_state
+  control:
+    controller (x2)          — per-drone acados MPC (drone_id 0,1)
+    main                     — central fleet manager (num_drones:=2)
 
-World geometry (two_no_cables.sdf):
-    x3_drone0 : (0.0, 0.5, 0.1)
-    x3_drone1 : (1.0, 0.5, 0.1)
-    payload   : (0.5, 0.5, 0.025)   free body, not attached
+Run Gazebo first (separate terminal):
+    gz sim two_no_cables.sdf -v 4 -r
+then:
+    ros2 launch controller_mpc_multi mpc_two_no_cables_launch.py
+then drive the fleet:
+    ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: ARM}"
+    ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: TAKEOFF}"
 
-NOTE — no `planner` node here:
-  The `planner` executable is currently hardcoded to N_DRONES = 4 (it loops
-  range(N_DRONES) and addresses /drone_0../drone_3), so it cannot drive a
-  2-drone world unmodified. Once it is parameterised for drone count, add it
-  back here. Until then, drive setpoints / ARM / TAKEOFF manually for testing.
-
-NOTE — no `cable_tension_node`: this world has no cables.
+Notes:
+  * SetParameter(use_sim_time=True) below applies to the BRIDGES so the mocap
+    emulator's finite-differenced velocity uses sim time (correct at any RTF).
+    The MPC controller / fleet nodes pin use_sim_time=False internally via
+    parameter_overrides (existing design — their 30 Hz loop / step clock runs
+    on wall time); revisit for low-RTF cable worlds.
+  * acados compilation is serialised by a file lock inside controller_mpc.py,
+    so the two controllers starting together is safe (one compiles, the other
+    waits).
 """
 
 from launch import LaunchDescription
@@ -39,9 +42,8 @@ N            = len(DRONE_NAMES)
 
 
 def generate_launch_description():
-    # Drive every node off Gazebo's /clock so velocity dt (finite-differenced
-    # in the mocap emulator) stays correct even when RTF < 1 (e.g. cable worlds
-    # at ~50%). Applies use_sim_time=true to all nodes below.
+    # use_sim_time for the bridge nodes (mocap velocity dt). MPC nodes override
+    # this internally, so it only affects the bridges — which is what we want.
     nodes = [SetParameter(name='use_sim_time', value=True)]
 
     # ── Clock bridge ──────────────────────────────────────────────────────────
@@ -89,7 +91,7 @@ def generate_launch_description():
 
         # ── Betaflight inner-loop ─────────────────────────────────────────────
         nodes.append(Node(
-            package='controller_cable_payload',
+            package='simulation_communication',
             executable='payload_betaflight_comm',
             name=f'bf_comm_{i}',
             parameters=[{
@@ -99,9 +101,9 @@ def generate_launch_description():
             }],
         ))
 
-        # ── Mocap emulator (drone 0 also publishes payload pose) ──────────────
+        # ── Mocap emulator (drone 0 also publishes the payload pose) ──────────
         nodes.append(Node(
-            package='controller_cable_payload',
+            package='simulation_communication',
             executable='payload_mocap_emulator',
             name=f'mocap_{i}',
             parameters=[{
@@ -112,12 +114,22 @@ def generate_launch_description():
             }],
         ))
 
-        # ── Per-drone position controller ─────────────────────────────────────
+        # ── Per-drone MPC controller ──────────────────────────────────────────
         nodes.append(Node(
-            package='controller_cable_payload',
-            executable='drone_controller',
-            name=f'drone_ctrl_{i}',
+            package='controller_mpc_multi',
+            executable='controller',
+            name=f'controller_{i}',
             parameters=[{'drone_id': i}],
+            output='screen',
         ))
+
+    # ── Central fleet manager ─────────────────────────────────────────────────
+    nodes.append(Node(
+        package='controller_mpc_multi',
+        executable='main',
+        name='central_controller',
+        parameters=[{'num_drones': N}],
+        output='screen',
+    ))
 
     return LaunchDescription(nodes)

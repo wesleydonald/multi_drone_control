@@ -33,7 +33,7 @@ from interfaces.srv import SetArming
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-N_DRONES = 4
+N_DRONES_DEFAULT = 4         # overridable via the 'num_drones' ROS param
 FREQUENCY_HZ = 30.0          # Must match DT in controller_mpc.py
 DT = 1.0 / FREQUENCY_HZ
 
@@ -51,6 +51,11 @@ class CentralController(Node):
             rclpy.parameter.Parameter('use_sim_time', rclpy.Parameter.Type.BOOL, False)
         ])
 
+        # ── Fleet size (configurable so the same node serves 2- or 4-drone
+        #    worlds via `num_drones` launch arg / ROS param) ───────────────
+        self.declare_parameter('num_drones', N_DRONES_DEFAULT)
+        self.num_drones = self.get_parameter('num_drones').value
+
         # ── Wall clock for real-time safety checks ────────────────────────
         self._wall_clock = Clock(clock_type=ClockType.SYSTEM_TIME)
 
@@ -61,8 +66,8 @@ class CentralController(Node):
         self.shutdown_requested = False
 
         # Per-drone arming state (updated by feedback callbacks)
-        self.drone_armed = {i: False for i in range(N_DRONES)}
-        self.drone_last_feedback = {i: self._wall_clock.now() for i in range(N_DRONES)}
+        self.drone_armed = {i: False for i in range(self.num_drones)}
+        self.drone_last_feedback = {i: self._wall_clock.now() for i in range(self.num_drones)}
 
         # ── Publishers ────────────────────────────────────────────────────
         self.step_pub = self.create_publisher(Int32, '/fleet/step', 1)
@@ -73,12 +78,12 @@ class CentralController(Node):
 
         # ── Per-drone arming service clients ──────────────────────────────
         self.arming_clients = {}
-        for i in range(N_DRONES):
+        for i in range(self.num_drones):
             client = self.create_client(SetArming, f'/drone_{i}/arming_service')
             self.arming_clients[i] = client
 
         # ── Per-drone arming feedback subscriptions ───────────────────────
-        for i in range(N_DRONES):
+        for i in range(self.num_drones):
             self.create_subscription(
                 Bool,
                 f'/drone_{i}/arming_state_feedback',
@@ -90,10 +95,10 @@ class CentralController(Node):
 
         self.get_logger().info(
             f"CentralController ready. Listening on /fleet/command. "
-            f"Managing {N_DRONES} drones at {FREQUENCY_HZ} Hz (sim time).")
+            f"Managing {self.num_drones} drones at {FREQUENCY_HZ} Hz (sim time).")
 
         self.drone_cmd_publishers = {}
-        for i in range(N_DRONES):
+        for i in range(self.num_drones):
             self.drone_cmd_publishers[i] = self.create_publisher(
                 String, f'/drone_{i}/command', 10)
     # ─────────────────────────────────────────────────────────────────────
@@ -163,7 +168,7 @@ class CentralController(Node):
         self.get_logger().info("Arming all drones...")
 
         # Wait for all arming services to become available
-        for i in range(N_DRONES):
+        for i in range(self.num_drones):
             client = self.arming_clients[i]
             if not client.wait_for_service(timeout_sec=5.0):
                 self.get_logger().error(
@@ -172,7 +177,7 @@ class CentralController(Node):
 
         # Send arm requests in parallel
         futures = {}
-        for i in range(N_DRONES):
+        for i in range(self.num_drones):
             req = SetArming.Request()
             req.arm = True
             futures[i] = self.arming_clients[i].call_async(req)
@@ -225,7 +230,7 @@ class CentralController(Node):
 
     def _disarm_fleet_thread(self):
         futures = {}
-        for i in range(N_DRONES):
+        for i in range(self.num_drones):
             client = self.arming_clients[i]
             if client.service_is_ready():
                 req = SetArming.Request()
@@ -248,9 +253,9 @@ class CentralController(Node):
 
     def _publish_drone_command(self, command: str):
         msg = String(data=command)
-        for i in range(N_DRONES):
+        for i in range(self.num_drones):
             self.drone_cmd_publishers[i].publish(msg)
-        self.get_logger().info(f"Published '{command}' to all {N_DRONES} drone command topics.")
+        self.get_logger().info(f"Published '{command}' to all {self.num_drones} drone command topics.")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
