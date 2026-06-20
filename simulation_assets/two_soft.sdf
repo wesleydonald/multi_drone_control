@@ -1,0 +1,352 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="quadcopter">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>500</real_time_update_rate>
+    </physics>
+    <plugin filename="ignition-gazebo-physics-system"
+      name="gz::sim::systems::Physics"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+      name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-sensors-system"
+      name="gz::sim::systems::Sensors"/>
+
+    <scene>
+      <background>0.6 0.8 1.0 1</background>
+      <ambient>0.5 0.5 0.5 1</ambient>
+    </scene>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>100 100</size></plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>100 100</size></plane>
+          </geometry>
+          <material>
+            <ambient>0.2 0.5 0.2 1</ambient>
+            <diffuse>0.3 0.6 0.3 1</diffuse>
+            <specular>0.05 0.05 0.05 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="lift_system">
+      <pose>0 0 0 0 0 0</pose>
+
+      <!-- ===== INCLUDE DRONES AS NESTED MODELS =====
+           Two drones facing each other along y=0.5, payload between them. -->
+      <include>
+        <uri>models/x3_drone0.sdf</uri>
+        <name>x3_drone0</name>
+        <pose>0.000000 0.500000 0.100000 0 0 0</pose>
+      </include>
+      <include>
+        <uri>models/x3_drone1.sdf</uri>
+        <name>x3_drone1</name>
+        <pose>1.000000 0.500000 0.100000 0 0 0</pose>
+      </include>
+
+      <!-- ===== PAYLOAD (root of tether chain) ===== -->
+      <model name="payload">
+        <pose>0.500000 0.500000 0.025000 0 0 0</pose>
+
+        <link name="body">
+          <gravity>1</gravity>
+          <inertial>
+            <mass>0.4</mass>
+            <inertia>
+              <ixx>1.67e-03</ixx><ixy>0</ixy><ixz>0</ixz>
+              <iyy>1.67e-03</iyy><iyz>0</iyz>
+              <izz>3.33e-03</izz>
+            </inertia>
+          </inertial>
+
+          <collision name="collision">
+            <geometry>
+              <box><size>0.2 0.2 0.05</size></box>
+            </geometry>
+          </collision>
+
+          <visual name="visual">
+            <geometry>
+              <box><size>0.2 0.2 0.05</size></box>
+            </geometry>
+            <material>
+              <ambient>0.8 0.4 0.0 1</ambient>
+              <diffuse>0.8 0.4 0.0 1</diffuse>
+            </material>
+          </visual>
+        </link>
+
+        <plugin filename="gz-sim-pose-publisher-system"
+                name="gz::sim::systems::PosePublisher">
+          <publish_link_pose>true</publish_link_pose>
+        </plugin>
+
+      </model>
+
+      <!-- ===== CABLE 0: drone0 -> payload  (len=0.5056, len/seg=0.1011) ===== -->
+      <link name="cable0_seg0">
+        <pose>0.050000 0.500000 0.092500 0.000000 1.719686 0.000000</pose>
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>8.583e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.583e-06</iyy><iyz>0</iyz>
+            <izz>1.250e-07</izz>
+          </inertia>
+        </inertial>
+        <visual name="v">
+          <geometry><cylinder><radius>0.005</radius><length>0.101119</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="cable0_seg1">
+        <pose>0.150000 0.500000 0.077500 0.000000 1.719686 0.000000</pose>
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>8.583e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.583e-06</iyy><iyz>0</iyz>
+            <izz>1.250e-07</izz>
+          </inertia>
+        </inertial>
+        <visual name="v">
+          <geometry><cylinder><radius>0.005</radius><length>0.101119</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="cable0_seg2">
+        <pose>0.250000 0.500000 0.062500 0.000000 1.719686 0.000000</pose>
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>8.583e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.583e-06</iyy><iyz>0</iyz>
+            <izz>1.250e-07</izz>
+          </inertia>
+        </inertial>
+        <visual name="v">
+          <geometry><cylinder><radius>0.005</radius><length>0.101119</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="cable0_seg3">
+        <pose>0.350000 0.500000 0.047500 0.000000 1.719686 0.000000</pose>
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>8.583e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.583e-06</iyy><iyz>0</iyz>
+            <izz>1.250e-07</izz>
+          </inertia>
+        </inertial>
+        <visual name="v">
+          <geometry><cylinder><radius>0.005</radius><length>0.101119</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="cable0_seg4">
+        <pose>0.450000 0.500000 0.032500 0.000000 1.719686 0.000000</pose>
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>8.583e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.583e-06</iyy><iyz>0</iyz>
+            <izz>1.250e-07</izz>
+          </inertia>
+        </inertial>
+        <visual name="v">
+          <geometry><cylinder><radius>0.005</radius><length>0.101119</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <joint name="cable0_payload" type="universal">
+        <parent>payload::body</parent>
+        <child>cable0_seg4</child>
+        <pose relative_to="cable0_seg4">0 0 0.050559 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.01</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.01</damping></dynamics></axis2>
+      </joint>
+      <joint name="cable0_j0" type="universal">
+        <parent>cable0_seg1</parent>
+        <child>cable0_seg0</child>
+        <pose relative_to="cable0_seg0">0 0 0.050559 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.01</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.01</damping></dynamics></axis2>
+      </joint>
+      <joint name="cable0_j1" type="universal">
+        <parent>cable0_seg2</parent>
+        <child>cable0_seg1</child>
+        <pose relative_to="cable0_seg1">0 0 0.050559 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.01</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.01</damping></dynamics></axis2>
+      </joint>
+      <joint name="cable0_j2" type="universal">
+        <parent>cable0_seg3</parent>
+        <child>cable0_seg2</child>
+        <pose relative_to="cable0_seg2">0 0 0.050559 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.01</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.01</damping></dynamics></axis2>
+      </joint>
+      <joint name="cable0_j3" type="universal">
+        <parent>cable0_seg4</parent>
+        <child>cable0_seg3</child>
+        <pose relative_to="cable0_seg3">0 0 0.050559 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.01</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.01</damping></dynamics></axis2>
+      </joint>
+      <joint name="cable0_drone" type="universal">
+        <parent>cable0_seg0</parent>
+        <child>x3_drone0::base_link</child>
+        <pose relative_to="cable0_seg0">0 0 -0.050559 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.01</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.01</damping></dynamics></axis2>
+      </joint>
+      <!-- ===== CABLE 1: drone1 -> payload  (len=0.5056, len/seg=0.1011) ===== -->
+      <link name="cable1_seg0">
+        <pose>0.950000 0.500000 0.092500 0.000000 1.719686 3.141593</pose>
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>8.583e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.583e-06</iyy><iyz>0</iyz>
+            <izz>1.250e-07</izz>
+          </inertia>
+        </inertial>
+        <visual name="v">
+          <geometry><cylinder><radius>0.005</radius><length>0.101119</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="cable1_seg1">
+        <pose>0.850000 0.500000 0.077500 0.000000 1.719686 3.141593</pose>
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>8.583e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.583e-06</iyy><iyz>0</iyz>
+            <izz>1.250e-07</izz>
+          </inertia>
+        </inertial>
+        <visual name="v">
+          <geometry><cylinder><radius>0.005</radius><length>0.101119</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="cable1_seg2">
+        <pose>0.750000 0.500000 0.062500 0.000000 1.719686 3.141593</pose>
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>8.583e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.583e-06</iyy><iyz>0</iyz>
+            <izz>1.250e-07</izz>
+          </inertia>
+        </inertial>
+        <visual name="v">
+          <geometry><cylinder><radius>0.005</radius><length>0.101119</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="cable1_seg3">
+        <pose>0.650000 0.500000 0.047500 0.000000 1.719686 3.141593</pose>
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>8.583e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.583e-06</iyy><iyz>0</iyz>
+            <izz>1.250e-07</izz>
+          </inertia>
+        </inertial>
+        <visual name="v">
+          <geometry><cylinder><radius>0.005</radius><length>0.101119</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="cable1_seg4">
+        <pose>0.550000 0.500000 0.032500 0.000000 1.719686 3.141593</pose>
+        <inertial>
+          <mass>0.01</mass>
+          <inertia>
+            <ixx>8.583e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>8.583e-06</iyy><iyz>0</iyz>
+            <izz>1.250e-07</izz>
+          </inertia>
+        </inertial>
+        <visual name="v">
+          <geometry><cylinder><radius>0.005</radius><length>0.101119</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <joint name="cable1_payload" type="universal">
+        <parent>payload::body</parent>
+        <child>cable1_seg4</child>
+        <pose relative_to="cable1_seg4">0 0 0.050559 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.01</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.01</damping></dynamics></axis2>
+      </joint>
+      <joint name="cable1_j0" type="universal">
+        <parent>cable1_seg1</parent>
+        <child>cable1_seg0</child>
+        <pose relative_to="cable1_seg0">0 0 0.050559 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.01</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.01</damping></dynamics></axis2>
+      </joint>
+      <joint name="cable1_j1" type="universal">
+        <parent>cable1_seg2</parent>
+        <child>cable1_seg1</child>
+        <pose relative_to="cable1_seg1">0 0 0.050559 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.01</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.01</damping></dynamics></axis2>
+      </joint>
+      <joint name="cable1_j2" type="universal">
+        <parent>cable1_seg3</parent>
+        <child>cable1_seg2</child>
+        <pose relative_to="cable1_seg2">0 0 0.050559 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.01</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.01</damping></dynamics></axis2>
+      </joint>
+      <joint name="cable1_j3" type="universal">
+        <parent>cable1_seg4</parent>
+        <child>cable1_seg3</child>
+        <pose relative_to="cable1_seg3">0 0 0.050559 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.01</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.01</damping></dynamics></axis2>
+      </joint>
+      <joint name="cable1_drone" type="universal">
+        <parent>cable1_seg0</parent>
+        <child>x3_drone1::base_link</child>
+        <pose relative_to="cable1_seg0">0 0 -0.050559 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.01</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.01</damping></dynamics></axis2>
+      </joint>
+    </model>
+
+  </world>
+</sdf>

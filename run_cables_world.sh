@@ -39,7 +39,7 @@ cd $SIM_ASSETS || { echo 'SIM_ASSETS NOT FOUND'; exec bash; }
 source $ROS_SETUP
 source /usr/share/gz/setup.bash 2>/dev/null || true
 source $WORKSPACE/install/setup.bash
-gz sim world_multi_cables_2.sdf -v 4 -r
+gz sim four_rigid.sdf -v 4 -r
 exec bash
 "
 sleep 5
