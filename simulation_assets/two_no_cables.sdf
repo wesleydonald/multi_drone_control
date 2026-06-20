@@ -55,8 +55,30 @@
       </link>
     </model>
 
-    <model name="lift_system">
+    <model name="lift_system" canonical_link="anchor">
       <pose>0 0 0 0 0 0</pose>
+
+      <!-- ===== WORLD-FIXED ANCHOR =====
+           lift_system has no link of its own, so without this its canonical
+           frame rides x3_drone0's base_link — making every nested model's
+           published pose relative to drone0 (so drone0 reads a frozen spawn
+           pose and the others read drone0-relative junk). This massless link
+           is fixed to the world, becomes the model's canonical link, and pins
+           the lift_system frame to the world origin so all nested PosePublisher
+           poses are reported in the WORLD frame. -->
+      <link name="anchor">
+        <inertial>
+          <mass>0.001</mass>
+          <inertia>
+            <ixx>1e-6</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>1e-6</iyy><iyz>0</iyz><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+      </link>
+      <joint name="anchor_to_world" type="fixed">
+        <parent>world</parent>
+        <child>anchor</child>
+      </joint>
 
       <!-- ===== INCLUDE DRONES AS NESTED MODELS =====
            Two drones facing each other along y=0.5 (no cables; payload free, unattached). -->
