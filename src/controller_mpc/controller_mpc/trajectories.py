@@ -378,11 +378,7 @@ def circle_trajectory(dt):
 
     traj = np.concatenate((take_off_traj, hover_traj, land_traj, zeros), axis=1)
     return traj, "circle"
-
-
-
-
-
+    
 
 def figure8_zsine_trajectory(dt, duration=10.0, repeats=3, z_amplitude=0.5, z_offset=1.5):
     """
