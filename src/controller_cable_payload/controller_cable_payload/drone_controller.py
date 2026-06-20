@@ -53,16 +53,16 @@ G = 9.81               # m/s²
 THRUST_RATIO = 38.0    # from dynamics.py est_params[0]
 RATE_CENTER = 70.0     # Betaflight centre rate, deg/s per unit channel
 
-# Position PD gains — kept low to avoid overshoot on large initial errors
-KP = np.diag([1.5, 1.5, 2.0])
-KV = np.diag([1.5, 1.5, 2.5])
+# Position PD gains — very conservative for stable hover
+KP = np.diag([0.02, 0.02, 0.04])
+KV = np.diag([0.03, 0.03, 0.06])
 
-# Maximum desired acceleration (m/s²) — prevents runaway on large step inputs
-MAX_ACC_XY = 2.0
-MAX_ACC_Z  = 3.0
+# Maximum desired acceleration (m/s²) — very gentle
+MAX_ACC_XY = 0.1
+MAX_ACC_Z  = 0.1
 
-# Attitude P gain (rad/s per rad error)
-KA = 6.0
+# Attitude P gain (rad/s per rad error) — very gentle attitude control
+KA = 0.1
 
 FREQUENCY_HZ = 30.0
 

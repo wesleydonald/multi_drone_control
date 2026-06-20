@@ -34,6 +34,7 @@ gz sim world_multi.sdf -v 4 -r
 exec bash
 "
 sleep 3
+# gz sim world_multi.sdf -v 4 -r
 
 # === ROS Launch ===
 launch_term "ROS Launch" "

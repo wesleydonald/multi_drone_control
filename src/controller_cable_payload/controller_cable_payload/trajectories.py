@@ -61,20 +61,24 @@ def takeoff_trajectory_with_goal(dt, init_pose, target_pose):
     return traj, "takeoff"
 
 
-def takeoff_trajectory(dt, init_pose):
+def takeoff_trajectory(dt, init_pose, target_pose):
     steps_takeoff = 4 * 120
     steps_hover = 1 * 120
 
+    # start + (goal - start) * t
+    goal_x = target_pose[0]
+    goal_y = target_pose[1]
+
     # Takeoff from initial pose z to hover height 1.2m above
     time_space_takeoff = np.linspace(0, steps_takeoff * dt, steps_takeoff)
-    x_traj_takeoff = np.ones_like(time_space_takeoff) * init_pose[0]
-    y_traj_takeoff = np.ones_like(time_space_takeoff) * init_pose[1]
+    x_traj_takeoff = np.ones_like(time_space_takeoff) * (init_pose[0] + (goal_x - init_pose[0]) * np.linspace(0, 1, steps_takeoff))
+    y_traj_takeoff = np.ones_like(time_space_takeoff) * (init_pose[1] + (goal_y - init_pose[1]) * np.linspace(0, 1, steps_takeoff))
     z_traj_takeoff = np.linspace(init_pose[2], init_pose[2] + 1.2, steps_takeoff)
 
     # Small hover to smooth transition
     time_space_hover = np.linspace(0, steps_hover * dt, steps_hover)
-    x_traj_hover = np.ones_like(time_space_hover) * init_pose[0]
-    y_traj_hover = np.ones_like(time_space_hover) * init_pose[1]
+    x_traj_hover = np.ones_like(time_space_hover) * goal_x
+    y_traj_hover = np.ones_like(time_space_hover) * goal_y
     z_traj_hover = np.ones_like(time_space_hover) * (init_pose[2] + 1.2)
 
     x_traj = np.concatenate((x_traj_takeoff, x_traj_hover))

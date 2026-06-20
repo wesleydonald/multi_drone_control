@@ -24,7 +24,7 @@ from datetime import datetime
 from scipy.spatial.transform import Rotation as R
 import time
 from .acados import generate_ocp_controller, set_initial_guess, warm_start_from_previous_solution, set_trajectory_reference_aligned, update_ocp_parameters
-from .trajectories import circle_trajectory
+from .trajectories import circle_trajectory, takeoff_trajectory_with_goal
 from utility_objects.visualization import TrajectoryVisualizer
 from utility_objects.data_logger import DataLogger
 from utility_objects.callback_manager_multi import CallbackManagerMulti
@@ -45,6 +45,13 @@ DRONE_OFFSETS = {
     1: (1.0, 0.0),
     2: (0.0, 1.0),
     3: (1.0, 1.0),
+}
+
+DRONE_GOALS = {
+    0: (0.2, 0.2),
+    1: (0.8, 0.2),
+    2: (0.2, 0.8),
+    3: (0.8, 0.8),
 }
 
 class Controller(Node):
@@ -79,7 +86,7 @@ class Controller(Node):
         # ── Build offset trajectory ───────────────────────────────────────
         # The fleet manager publishes the master step; each drone applies its
         # own spatial offset so all four fly congruent circles in formation.
-        self.traj, trajectory_name = self._build_offset_trajectory(DT, init_pose)
+        self.traj, trajectory_name = self._build_hover_trajectory(DT, init_pose)
 
         # ── Visualizer ────────────────────────────────────────────────────
         self.trajectory_visualizer = TrajectoryVisualizer(self, frame_id="map")
@@ -132,6 +139,20 @@ class Controller(Node):
     # ─────────────────────────────────────────────────────────────────────
     # Trajectory helpers
     # ─────────────────────────────────────────────────────────────────────
+    def _build_hover_trajectory(self, dt, init_pose):
+        """Generate a hover trajectory centred on this drone's formation position."""
+
+        goal_x, goal_y = DRONE_GOALS.get(self.drone_id, (0.0, 0.0))
+        traj, name = takeoff_trajectory_with_goal(dt, init_pose=init_pose, 
+                                    target_pose=np.array([goal_x, goal_y]))
+        return traj, f"{name}_drone{self.drone_id}"
+
+    # DRONE_OFFSETS = {
+    #     0: (0.0, 0.0),
+    #     1: (1.0, 0.0),
+    #     2: (0.0, 1.0),
+    #     3: (1.0, 1.0),
+    # }
 
     def _build_offset_trajectory(self, dt, init_pose):
         """Generate a circle trajectory centred on this drone's formation position."""

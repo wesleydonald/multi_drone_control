@@ -48,7 +48,7 @@ sleep 5
 launch_term "ROS Launch" "
 source $ROS_SETUP
 source $WORKSPACE/install/setup.bash
-ros2 launch controller_cable_payload rigid_cables_launch.py
+ros2 launch controller_cable_payload soft_cables_launch.py
 exec bash
 "
 sleep 4

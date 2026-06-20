@@ -83,20 +83,28 @@ def generate_ocp_controller(dynamics=None):
     ny = 3 + 3 + 3 + 4 + 4 + 3      
     ny_e = 3 + 3 + 3 + 4 + 3        
 
+# W = np.diag([
+#         80.0, 80.0, 40.0,
+#         2.0, 2.0, 2.0,
+#         0.2, 0.2, 0.2,
+#         2e-4, 2e-4, 2e-4, 2e-4,
+#         0.1, 0.1, 5.0, 0.1,  # Reduced control effort penalty
+#         0.5, 0.5, 5.0
+#     ])
     W = np.diag([
-        80.0, 80.0, 40.0,
+        80.0, 80.0, 80.0,
         2.0, 2.0, 2.0,
         0.2, 0.2, 0.2,
         2e-4, 2e-4, 2e-4, 2e-4,
-        0.1, 0.1, 5.0, 0.1,  # Reduced control effort penalty
-        0.5, 0.5, 5.0
+        0.1, 0.1, 0.1, 0.1,  # Reduced control effort penalty
+        40, 40, 20
     ])
     W_e = np.diag([
-        80.0, 80.0, 40.0,         # pos
+        80.0, 80.0, 80.0,         # pos
         2.0, 2.0, 2.0,        # vel
         0.2, 0.2, 0.2,         # omega
         2e-4, 2e-4, 2e-4, 2e-4,# u_state
-        0.5, 0.5, 5.0          # attitude error
+        40, 40, 20          # attitude error
     ])
     ocp.cost.W = W
     ocp.cost.W_e = W_e
