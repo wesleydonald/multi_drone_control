@@ -8,8 +8,11 @@ log/
 install/
 
 c_generated_code/
+c_generated_code_load_planner/
 acados_ocp.json
 acados_sim.json
+*_ocp.json
+*_sim.json
 
 __pycache__/
 *.py[cod]

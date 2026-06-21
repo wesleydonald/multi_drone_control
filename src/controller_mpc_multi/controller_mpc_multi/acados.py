@@ -209,6 +209,30 @@ def update_ocp_parameters(ocp_solver, est_params, N_horizon):
     ocp_solver.set(N_horizon, "p", np.concatenate([dyn_par, default_qref]))
 
 
+def set_planner_reference(ocp_solver, ref_pos: np.ndarray, ref_vel: np.ndarray,
+                          N_horizon: int, est_params=None):
+    """Set the MPC reference from an external planner trajectory.
+
+    ref_pos / ref_vel are (N_horizon+1, 3) world-frame position/velocity nodes
+    (the load planner publishes them at the MPC's 0.1 s node spacing, so planner
+    node j maps directly to MPC stage j). Attitude reference is level (identity
+    quaternion, zero yaw) since the planner does not command drone heading.
+    """
+    dyn_par = np.array(est_params, dtype=float)
+    qref = np.array([1.0, 0.0, 0.0, 0.0], dtype=float)
+    for j in range(N_horizon):
+        yref = np.zeros((20,), dtype=float)
+        yref[0:3] = ref_pos[j]
+        yref[3:6] = ref_vel[j]
+        # yref[6:9] omega ref = 0; u_state / u / e_att refs = 0
+        ocp_solver.set(j, "yref", yref)
+        ocp_solver.set(j, "p", np.concatenate([dyn_par, qref]))
+    yref_N = np.zeros((16,), dtype=float)
+    yref_N[0:3] = ref_pos[N_horizon]
+    ocp_solver.set(N_horizon, "yref", yref_N)
+    ocp_solver.set(N_horizon, "p", np.concatenate([dyn_par, qref]))
+
+
 def set_trajectory_reference_aligned(ocp_solver, traj_states: np.ndarray, N_horizon: int, step_counter: int, skip_steps: int, est_params=None):
 
     horizon_indices = [step_counter + j * skip_steps for j in range(N_horizon)]

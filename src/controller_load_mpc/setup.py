@@ -21,7 +21,7 @@ setup(
     license='Apache-2.0',
     entry_points={
         'console_scripts': [
-            # filled in once the planner node is implemented
+            'planner = controller_load_mpc.planner_node:main',
         ],
     },
 )

@@ -23,7 +23,7 @@ from rclpy.clock import Clock, ClockType
 from datetime import datetime
 from scipy.spatial.transform import Rotation as R
 import time
-from .acados import generate_ocp_controller, set_initial_guess, warm_start_from_previous_solution, set_trajectory_reference_aligned, update_ocp_parameters
+from .acados import generate_ocp_controller, set_initial_guess, warm_start_from_previous_solution, set_trajectory_reference_aligned, set_planner_reference, update_ocp_parameters
 from .trajectories import circle_trajectory
 from utility_objects.visualization import TrajectoryVisualizer
 from utility_objects.data_logger import DataLogger
@@ -57,6 +57,13 @@ class Controller(Node):
         self.declare_parameter("drone_id", 0)
         self.drone_id = self.get_parameter("drone_id").value
         self.offset_x, self.offset_y = DRONE_OFFSETS.get(self.drone_id, (0.0, 0.0))
+
+        # Reference source: 'internal' = own circle (default, unchanged);
+        # 'planner' = track /drone_{id}/reference_trajectory from controller_load_mpc.
+        self.declare_parameter("reference_source", "internal")
+        self.reference_source = self.get_parameter("reference_source").value
+        self.planner_ref_pos = None      # (N+1, 3) world-frame position nodes
+        self.planner_ref_vel = None      # (N+1, 3) world-frame velocity nodes
 
         # ── Sim-time clock ────────────────────────────────────────────────
         # self.get_clock() will return sim time because use_sim_time=True.
@@ -102,6 +109,16 @@ class Controller(Node):
             '/fleet/step',
             self._fleet_step_callback,
             1)  # depth=1: always use the latest, never queue stale steps
+
+        # ── Planner reference subscription (planner mode only) ────────────
+        if self.reference_source == "planner":
+            self.create_subscription(
+                Float64MultiArray,
+                f'/drone_{self.drone_id}/reference_trajectory',
+                self._planner_ref_callback,
+                1)
+            self.get_logger().info(
+                f"[Drone {self.drone_id}] Tracking external planner reference.")
 
         # ── MPC ───────────────────────────────────────────────────────────
         self.N = 20
@@ -150,6 +167,18 @@ class Controller(Node):
         if new_step != self.step_counter:
             self.step_counter = new_step
 
+    def _planner_ref_callback(self, msg: Float64MultiArray):
+        """Parse [n_nodes, dt, px,py,pz,vx,vy,vz, ...] from controller_load_mpc."""
+        data = msg.data
+        if len(data) < 2:
+            return
+        n_nodes = int(data[0])
+        if n_nodes < self.N + 1 or len(data) < 2 + 6 * n_nodes:
+            return
+        arr = np.array(data[2:2 + 6 * n_nodes], dtype=float).reshape(n_nodes, 6)
+        self.planner_ref_pos = arr[:, 0:3]
+        self.planner_ref_vel = arr[:, 3:6]
+
     # ─────────────────────────────────────────────────────────────────────
     # Main control loop
     # ─────────────────────────────────────────────────────────────────────
@@ -173,20 +202,32 @@ class Controller(Node):
         # ── Armed + pose available ─────────────────────────────────────────
         if self.armed and self.current_pose is not None:
 
-            # End-of-trajectory → land + shutdown
-            if self.step_counter + self.N * self.skip_steps > self.steps:
-                self.get_logger().info(
-                    f"[Drone {self.drone_id}] Trajectory complete — disarming.")
-                msg = ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0,
-                                  channel_2=-1.0, channel_3=0.0)
-                self.cb.disarm(msg)
-                self.cb.request_shutdown()
-                return
-
             # ── Set MPC reference ─────────────────────────────────────────
-            set_trajectory_reference_aligned(
-                self.ocp, self.traj, self.N,
-                self.step_counter, self.skip_steps, self.est_params)
+            if self.reference_source == "planner":
+                # External planner: track the streamed receding-horizon
+                # reference (no fixed trajectory length / landing phase).
+                if self.planner_ref_pos is None:
+                    # No reference streamed yet — hold armed-idle on the ground.
+                    self.cb.cmd_publisher_.publish(ELRSCommand(
+                        armed=True, channel_0=0.0, channel_1=0.0,
+                        channel_2=-1.0, channel_3=0.0))
+                    return
+                set_planner_reference(
+                    self.ocp, self.planner_ref_pos, self.planner_ref_vel,
+                    self.N, self.est_params)
+            else:
+                # Internal circle: land + shutdown at end of trajectory.
+                if self.step_counter + self.N * self.skip_steps > self.steps:
+                    self.get_logger().info(
+                        f"[Drone {self.drone_id}] Trajectory complete — disarming.")
+                    msg = ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0,
+                                      channel_2=-1.0, channel_3=0.0)
+                    self.cb.disarm(msg)
+                    self.cb.request_shutdown()
+                    return
+                set_trajectory_reference_aligned(
+                    self.ocp, self.traj, self.N,
+                    self.step_counter, self.skip_steps, self.est_params)
 
             estimated_state = copy.deepcopy(self.current_pose[:13])
 
