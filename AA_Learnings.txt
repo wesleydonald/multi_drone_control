@@ -36,3 +36,8 @@ payload make sdf and index based on the topic echo
 ros use gazebo simulation time so frequency matches real world.
 
 verfiy controller is in sim time: ros2 topic hz /drone_0/ELRSCommand
+
+If wifi stops:
+journalctl -k -b | grep -iE "rtw89|firmware|reset|timeout|deauth" | tail -50
+  - And try recovering without a reboot:
+  sudo modprobe -r rtw89_8852be && sudo modprobe rtw89_8852be
