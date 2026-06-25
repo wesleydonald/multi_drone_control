@@ -3,7 +3,6 @@ import scipy.linalg
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosModel
 from .dynamics import QuadDynamics
 import casadi as ca
-from acados_template import AcadosSim, AcadosSimSolver
 
 
 # ---------------------------
@@ -29,7 +28,7 @@ def quat_mul(q1, q2):
 # --------------------------------
 # Public API: build OCP & simulator
 # --------------------------------
-def generate_ocp_controller(dynamics=None):
+def generate_ocp_controller(dynamics=None, generate=True, build=True):
     if dynamics is None:
         quad_dynamics = QuadDynamics()
     else:
@@ -87,7 +86,7 @@ def generate_ocp_controller(dynamics=None):
         80.0, 80.0, 40.0,
         2.0, 2.0, 2.0,
         0.2, 0.2, 0.2,
-        2e-4, 2e-4, 2e-4, 2e-4,
+        2e-4, 2e-4, 0.3, 2e-4,  # u_state: throttle (idx 11) tracks planner thrust ff
         0.1, 0.1, 5.0, 0.1,  # Reduced control effort penalty
         0.5, 0.5, 5.0
     ])
@@ -95,7 +94,7 @@ def generate_ocp_controller(dynamics=None):
         80.0, 80.0, 40.0,         # pos
         2.0, 2.0, 2.0,        # vel
         0.2, 0.2, 0.2,         # omega
-        2e-4, 2e-4, 2e-4, 2e-4,# u_state
+        2e-4, 2e-4, 0.3, 2e-4,# u_state: throttle (idx 11) tracks planner thrust ff
         0.5, 0.5, 5.0          # attitude error
     ])
     ocp.cost.W = W
@@ -139,17 +138,14 @@ def generate_ocp_controller(dynamics=None):
     ocp.constraints.ubu = np.array([ 1.0,  1.0,  0.5,  1.0])
     ocp.constraints.idxbu = np.arange(nu)
 
-    # Create OCP solver
-    ocp_solver = AcadosOcpSolver(ocp)
+    # Create OCP solver. With generate=build=False the previously compiled shared
+    # library is loaded as-is (fast path for the 2nd..Nth drone, and for relaunches
+    # with no solver-source changes) — see _solver_is_fresh in controller_mpc.py.
+    ocp_solver = AcadosOcpSolver(
+        ocp, json_file='quad_dynamics_ocp.json',
+        generate=generate, build=build)
 
-    # Create simulation configuration
-    sim = AcadosSim()
-    sim.model = ocp.model
-    sim.solver_options.T = 1.0 / 30.0
-    sim.parameter_values = np.array([38.0, 0.5, 0.12, 100.0, 100.0, 0.5, 1.0, 0.0, 0.0, 0.0])
-    sim_solver = AcadosSimSolver(sim)
-
-    return ocp_solver, sim_solver
+    return ocp_solver
 
 
 # ------------------------
@@ -209,28 +205,61 @@ def update_ocp_parameters(ocp_solver, est_params, N_horizon):
     ocp_solver.set(N_horizon, "p", np.concatenate([dyn_par, default_qref]))
 
 
+def _tilt_quat_from_accel(aT: np.ndarray, thrust_ratio: float):
+    """Map a required specific-thrust-acceleration vector (world frame) to a
+    (throttle, quaternion) feedforward for the tracker.
+
+    The tracker's thrust is along body-z with magnitude thrust_ratio*throttle
+    (see dynamics.py), so ||aT|| = thrust_ratio*throttle and aT/||aT|| is the
+    desired body-z axis. The minimal (yaw-free) tilt quaternion aligning body-z
+    to a unit vector a=(ax,ay,az) is normalize([1+az, -ay, ax, 0]).
+    """
+    nrm = float(np.linalg.norm(aT))
+    if nrm < 1e-3:                       # slack cable / freefall: hover, level
+        return 9.81 / thrust_ratio, np.array([1.0, 0.0, 0.0, 0.0])
+    throttle = float(np.clip(nrm / thrust_ratio, 0.05, 0.6))
+    ax, ay, az = aT / nrm
+    q = np.array([1.0 + az, -ay, ax, 0.0])
+    return throttle, _normalize(q)
+
+
 def set_planner_reference(ocp_solver, ref_pos: np.ndarray, ref_vel: np.ndarray,
-                          N_horizon: int, est_params=None):
+                          ref_acc: np.ndarray, N_horizon: int, est_params=None):
     """Set the MPC reference from an external planner trajectory.
 
-    ref_pos / ref_vel are (N_horizon+1, 3) world-frame position/velocity nodes
-    (the load planner publishes them at the MPC's 0.1 s node spacing, so planner
-    node j maps directly to MPC stage j). Attitude reference is level (identity
-    quaternion, zero yaw) since the planner does not command drone heading.
+    ref_pos / ref_vel / ref_acc are (N_horizon+1, 3) world-frame nodes (the load
+    planner publishes them at the MPC's 0.1 s node spacing, so planner node j maps
+    directly to MPC stage j). ref_acc is the required SPECIFIC thrust acceleration
+    f_i/m_i; it is converted to a per-stage throttle (yref u_state slot) and
+    attitude (q_ref parameter) feedforward so the cable-blind tracker holds the
+    steady cable-tension tilt+thrust instead of discovering it via position error.
     """
     dyn_par = np.array(est_params, dtype=float)
-    qref = np.array([1.0, 0.0, 0.0, 0.0], dtype=float)
+    thrust_ratio = float(dyn_par[0])
+
+    # per-node feedforward, with sign-continuous attitude quaternions
+    throttles, qrefs = [], []
+    for j in range(N_horizon + 1):
+        thr, q = _tilt_quat_from_accel(np.asarray(ref_acc[j], dtype=float),
+                                       thrust_ratio)
+        throttles.append(thr)
+        qrefs.append(q)
+    qrefs = _make_quat_sequence_continuous(qrefs)
+
     for j in range(N_horizon):
         yref = np.zeros((20,), dtype=float)
         yref[0:3] = ref_pos[j]
         yref[3:6] = ref_vel[j]
-        # yref[6:9] omega ref = 0; u_state / u / e_att refs = 0
+        yref[11] = throttles[j]          # u_state throttle slot (idx 2 of u_state)
+        # yref[6:9] omega ref = 0; remaining u / e_att refs = 0
         ocp_solver.set(j, "yref", yref)
-        ocp_solver.set(j, "p", np.concatenate([dyn_par, qref]))
+        ocp_solver.set(j, "p", np.concatenate([dyn_par, qrefs[j]]))
+
     yref_N = np.zeros((16,), dtype=float)
     yref_N[0:3] = ref_pos[N_horizon]
+    yref_N[11] = throttles[N_horizon]
     ocp_solver.set(N_horizon, "yref", yref_N)
-    ocp_solver.set(N_horizon, "p", np.concatenate([dyn_par, qref]))
+    ocp_solver.set(N_horizon, "p", np.concatenate([dyn_par, qrefs[N_horizon]]))
 
 
 def set_trajectory_reference_aligned(ocp_solver, traj_states: np.ndarray, N_horizon: int, step_counter: int, skip_steps: int, est_params=None):

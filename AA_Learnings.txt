@@ -41,3 +41,24 @@ If wifi stops:
 journalctl -k -b | grep -iE "rtw89|firmware|reset|timeout|deauth" | tail -50
   - And try recovering without a reboot:
   sudo modprobe -r rtw89_8852be && sudo modprobe rtw89_8852be
+
+
+ros2 launch controller_mpc_multi mpc_three_soft_planner_launch.py
+
+ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: ARM}"
+
+ ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: TAKEOFF}"
+
+gz sim three_soft.sdf -v 4 -r
+
+Okay so there are a few steps I want to take. I believe the issue with my current setup
+is that the individual drone MPCs try to follow the planner trajectories but have the wrong
+model (not the one from the TUdelft paper). The key thing I am missing is the t_i * s_i term
+which models the force from the cable tension in the quadcopter model. Since I do not have this
+at the moment it is causing the quadcopters to tilt away from the payload and fall down.
+
+The steps I need to take are:
+1 - Implement a EKF to estimate the full state of the load_cable_dynamics.py state vector. I want
+    use ideally a similar method to TUDelft for this task. I then want to verify that this EKF works.
+
+2 - I want to update the quadrotor model with the tension force (and it )

@@ -13,7 +13,11 @@ Runs the load-cable OCP (planner_ocp.py) at PLANNER_HZ. Each cycle it:
   3. solves (SQP-RTI), extracts each drone's reference trajectory via the
      kinematic constraint p_i = p + R(q) rho_i - l_i s_i (+ velocity)
   4. publishes /drone_{i}/reference_trajectory (Float64MultiArray):
-       [n_nodes, dt, px0,py0,pz0,vx0,vy0,vz0, px1,...]  (world frame)
+       [n_nodes, dt, px0,py0,pz0, vx0,vy0,vz0, ax0,ay0,az0, px1,...]  (world frame)
+     where a_i is the required SPECIFIC thrust acceleration (f_i / m_i) — its
+     magnitude maps to the tracker throttle and its direction to the tracker's
+     desired (yaw-free) attitude. This is the feedforward that lets the
+     cable-blind per-drone MPC hold against cable tension (Sun et al. piece 1).
 
 These references are consumed by the per-drone tracker (controller_mpc_multi),
 which replaces its hardcoded circle with this stream (tracker hookup = next step).
@@ -34,12 +38,15 @@ from .planner_ocp import generate_load_ocp, nominal_hover_state
 N_DRONES      = 3
 LOAD_MASS     = 0.4
 LOAD_INERTIA  = [1.67e-3, 1.67e-3, 3.33e-3]
-CABLE_LEN     = 0.423
+CABLE_LEN     = 0.6            # slack 0.6 m cables (see generate_soft_world --cable-len)
 ATTACH_RADIUS = 0.08
 ATTACH_Z      = 0.025          # attach height above load CoG (load frame)
 DRONE_MASS    = 0.6
 PLANNER_HZ    = 10.0
 TARGET_Z      = 0.6            # load hover height reference
+LIFT_STEP     = 0.12          # max commanded climb above current load z (gentle,
+                              # self-pacing takeoff: target chases the load up so
+                              # the planner never commands a big step from spawn)
 
 
 def quat_to_rot_np(q):
@@ -74,6 +81,10 @@ class LoadPlanner(Node):
         self.pos_fun = [ca.Function(f'p{i}', [self.dyn.x], [self.dyn.quad_position(i)])
                         for i in range(self.n)]
         self.vel_fun = [ca.Function(f'v{i}', [self.dyn.x], [self.dyn.quad_velocity(i)])
+                        for i in range(self.n)]
+        # required specific thrust acceleration a_i = f_i / m_i (feedforward)
+        self.acc_fun = [ca.Function(f'a{i}', [self.dyn.x],
+                                    [self.dyn.thrust_vec(i) / self.dyn.mi[i]])
                         for i in range(self.n)]
 
         # state
@@ -144,7 +155,11 @@ class LoadPlanner(Node):
     def _yref(self):
         x0, y0 = self.hover_xy
         t_nom = self.dyn.m * 9.81 / (self.n * np.sin(np.deg2rad(45.0)))
-        pose = [x0, y0, TARGET_Z, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # p, v, e_att, w
+        # self-pacing target height: never command more than LIFT_STEP above the
+        # load's current height, so takeoff is a gentle ramp (the target chases
+        # the load up to TARGET_Z) instead of a step from the 0.025 m spawn.
+        z_target = min(TARGET_Z, float(self.load_state[2]) + LIFT_STEP)
+        pose = [x0, y0, z_target, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # p, v, e_att, w
         y = np.array(pose + [t_nom] * self.n
                      + [0.0] * (3 * self.n)        # r_vec ref (no cable swing)
                      + [0.0] * self.dyn.nu)
@@ -192,7 +207,8 @@ class LoadPlanner(Node):
                 xk = X[:, k]
                 p_i = np.array(self.pos_fun[i](xk)).flatten()
                 v_i = np.array(self.vel_fun[i](xk)).flatten()
-                data += [*p_i, *v_i]
+                a_i = np.array(self.acc_fun[i](xk)).flatten()
+                data += [*p_i, *v_i, *a_i]
             msg = Float64MultiArray()
             msg.data = data
             self.ref_pub[i].publish(msg)

@@ -23,8 +23,32 @@ from rclpy.clock import Clock, ClockType
 from datetime import datetime
 from scipy.spatial.transform import Rotation as R
 import time
+from . import acados as _acados_mod
 from .acados import generate_ocp_controller, set_initial_guess, warm_start_from_previous_solution, set_trajectory_reference_aligned, set_planner_reference, update_ocp_parameters
-from .trajectories import circle_trajectory
+
+
+# Solver-source files; if any is newer than the compiled .so, the solver is
+# stale and must be regenerated/recompiled (otherwise we load the existing lib).
+_PKG_DIR = os.path.dirname(_acados_mod.__file__)
+_SOLVER_SRC = [os.path.join(_PKG_DIR, 'acados.py'),
+               os.path.join(_PKG_DIR, 'dynamics.py')]
+# cwd is ACADOS_DIR and acados' default code_export_directory is the relative
+# 'c_generated_code', so the compiled solver actually lands in a NESTED dir
+# (ACADOS_DIR/c_generated_code/...). The json is written to cwd (ACADOS_DIR).
+_SOLVER_SO = os.path.join(ACADOS_DIR, 'c_generated_code',
+                          'libacados_ocp_solver_quad_dynamics.so')
+_SOLVER_JSON = os.path.join(ACADOS_DIR, 'quad_dynamics_ocp.json')
+
+
+def _solver_is_fresh():
+    """True if the compiled solver exists and is newer than its source files,
+    so it can be loaded without recompiling."""
+    if not (os.path.exists(_SOLVER_SO) and os.path.exists(_SOLVER_JSON)):
+        return False
+    so_mtime = os.path.getmtime(_SOLVER_SO)
+    return all(os.path.exists(s) and os.path.getmtime(s) <= so_mtime
+               for s in _SOLVER_SRC)
+from .trajectories import circle_trajectory, hover_trajectory
 from utility_objects.visualization import TrajectoryVisualizer
 from utility_objects.data_logger import DataLogger
 from utility_objects.callback_manager_multi import CallbackManagerMulti
@@ -62,8 +86,17 @@ class Controller(Node):
         # 'planner' = track /drone_{id}/reference_trajectory from controller_load_mpc.
         self.declare_parameter("reference_source", "internal")
         self.reference_source = self.get_parameter("reference_source").value
+
+        # Internal trajectory shape: 'circle' (default, fly a wide circle) or
+        # 'hover' (lift straight up over the spawn point and hold, then land).
+        # 'hover' is the cable-carry test: with slack cables the drones climb
+        # straight up, the cable goes taut, and the load lifts 1:1 — no wide
+        # lateral motion that would fight the tethers.
+        self.declare_parameter("trajectory", "circle")
+        self.trajectory_type = self.get_parameter("trajectory").value
         self.planner_ref_pos = None      # (N+1, 3) world-frame position nodes
         self.planner_ref_vel = None      # (N+1, 3) world-frame velocity nodes
+        self.planner_ref_acc = None      # (N+1, 3) required specific thrust accel
 
         # ── Sim-time clock ────────────────────────────────────────────────
         # self.get_clock() will return sim time because use_sim_time=True.
@@ -124,8 +157,13 @@ class Controller(Node):
         self.N = 20
         self.skip_steps = 3
         self.first_solve = True
-        self.ocp, self.sim_integrator = generate_ocp_controller()
-        fcntl.flock(_lock_file, fcntl.LOCK_UN) 
+        fresh = _solver_is_fresh()
+        if fresh:
+            self.get_logger().info("[acados] loading cached quad_dynamics solver.")
+        else:
+            self.get_logger().info("[acados] compiling quad_dynamics solver (sources changed)...")
+        self.ocp = generate_ocp_controller(generate=not fresh, build=not fresh)
+        fcntl.flock(_lock_file, fcntl.LOCK_UN)
         self.est_params = np.array([38.0, 0.0, 0.12, 70.0, 670.0, 0.5])
 
         # ── Logging ───────────────────────────────────────────────────────
@@ -151,10 +189,17 @@ class Controller(Node):
     # ─────────────────────────────────────────────────────────────────────
 
     def _build_offset_trajectory(self, dt, init_pose):
-        """Generate a circle trajectory centred on this drone's formation position."""
-        traj, name = circle_trajectory(dt, init_pose=init_pose, 
-                                    center_offset_x=self.offset_x,
-                                    center_offset_y=self.offset_y)
+        """Generate this drone's internal trajectory from its spawn pose.
+
+        'hover' lifts straight up over the spawn point and holds (cable-carry
+        test); 'circle' flies a wide circle (free-flight default).
+        """
+        if self.trajectory_type == "hover":
+            traj, name = hover_trajectory(dt, init_pose=init_pose)
+        else:
+            traj, name = circle_trajectory(dt, init_pose=init_pose,
+                                           center_offset_x=self.offset_x,
+                                           center_offset_y=self.offset_y)
         return traj, f"{name}_drone{self.drone_id}"
 
     # ─────────────────────────────────────────────────────────────────────
@@ -168,16 +213,19 @@ class Controller(Node):
             self.step_counter = new_step
 
     def _planner_ref_callback(self, msg: Float64MultiArray):
-        """Parse [n_nodes, dt, px,py,pz,vx,vy,vz, ...] from controller_load_mpc."""
+        """Parse [n_nodes, dt, px,py,pz, vx,vy,vz, ax,ay,az, ...] from
+        controller_load_mpc (9 fields/node: position, velocity, specific thrust
+        acceleration feedforward)."""
         data = msg.data
         if len(data) < 2:
             return
         n_nodes = int(data[0])
-        if n_nodes < self.N + 1 or len(data) < 2 + 6 * n_nodes:
+        if n_nodes < self.N + 1 or len(data) < 2 + 9 * n_nodes:
             return
-        arr = np.array(data[2:2 + 6 * n_nodes], dtype=float).reshape(n_nodes, 6)
+        arr = np.array(data[2:2 + 9 * n_nodes], dtype=float).reshape(n_nodes, 9)
         self.planner_ref_pos = arr[:, 0:3]
         self.planner_ref_vel = arr[:, 3:6]
+        self.planner_ref_acc = arr[:, 6:9]
 
     # ─────────────────────────────────────────────────────────────────────
     # Main control loop
@@ -214,7 +262,7 @@ class Controller(Node):
                     return
                 set_planner_reference(
                     self.ocp, self.planner_ref_pos, self.planner_ref_vel,
-                    self.N, self.est_params)
+                    self.planner_ref_acc, self.N, self.est_params)
             else:
                 # Internal circle: land + shutdown at end of trajectory.
                 if self.step_counter + self.N * self.skip_steps > self.steps:
