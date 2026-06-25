@@ -27,15 +27,38 @@ import argparse
 import math
 
 
-def cable_block(idx, drone_xyz, attach_xyz, n_seg, seg_mass=0.01, radius=0.005):
-    """Return SDF text (links + joints) for one cable from a drone to the load."""
+def _solve_arc_angle(k):
+    """Solve alpha/sin(alpha) = k for alpha in (0, pi) by bisection (k > 1)."""
+    lo, hi = 1e-6, math.pi - 1e-6
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        # f(alpha) = alpha - k*sin(alpha); increasing through the root on (0, pi)
+        if mid - k * math.sin(mid) < 0.0:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+def cable_block(idx, drone_xyz, attach_xyz, n_seg, cable_len=None,
+                seg_mass=0.01, radius=0.005):
+    """Return SDF text (links + joints) for one cable from a drone to the load.
+
+    If `cable_len` is given and exceeds the straight drone->attach distance, the
+    cable is SLACK: its kinematic length is `cable_len` and the segments are laid
+    out along a downward-sagging circular arc (so the universal-joint anchors
+    coincide at spawn — no snap). A slack cable lets the drone climb ABOVE the
+    load and develop vertical lifting tension; a taut cable (len == distance)
+    pins the drone to a near-horizontal shell and cannot lift. See the geometry
+    discussion in the launch notes.
+    """
     dx = attach_xyz[0] - drone_xyz[0]
     dy = attach_xyz[1] - drone_xyz[1]
     dz = attach_xyz[2] - drone_xyz[2]
-    L = math.sqrt(dx * dx + dy * dy + dz * dz)
-    ux, uy, uz = dx / L, dy / L, dz / L
-    pitch = math.acos(max(-1.0, min(1.0, uz)))
-    yaw = math.atan2(uy, ux)
+    chord = math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    slack = cable_len is not None and cable_len > chord * 1.001
+    L = cable_len if slack else chord
     seg_len = L / n_seg
     half = seg_len / 2.0
 
@@ -43,17 +66,56 @@ def cable_block(idx, drone_xyz, attach_xyz, n_seg, seg_mass=0.01, radius=0.005):
     it = seg_mass * seg_len * seg_len / 12.0
     ia = 0.5 * seg_mass * radius * radius
 
+    # per-segment center positions + orientations (cylinder local-z = cable dir)
+    centers, pitches, yaws = [], [], []
+    if not slack:
+        ux, uy, uz = dx / chord, dy / chord, dz / chord
+        pitch = math.acos(max(-1.0, min(1.0, uz)))
+        yaw = math.atan2(uy, ux)
+        for j in range(n_seg):
+            frac = (j + 0.5) / n_seg
+            centers.append((drone_xyz[0] + frac * dx,
+                            drone_xyz[1] + frac * dy,
+                            drone_xyz[2] + frac * dz))
+            pitches.append(pitch)
+            yaws.append(yaw)
+    else:
+        # downward-sagging circular arc: chord = `chord`, arc length = L.
+        alpha = _solve_arc_angle(L / chord)          # half subtended angle
+        r_arc = chord / (2.0 * math.sin(alpha))
+        tx, ty, tz = dx / chord, dy / chord, dz / chord            # chord unit
+        # n = component of "down" perpendicular to the chord (sag direction)
+        d_dot = -tz                                               # down=(0,0,-1)
+        nx, ny, nz = -d_dot * tx, -d_dot * ty, -1.0 - d_dot * tz
+        nn = math.sqrt(nx * nx + ny * ny + nz * nz)
+        nx, ny, nz = nx / nn, ny / nn, nz / nn
+        mx = 0.5 * (drone_xyz[0] + attach_xyz[0])
+        my = 0.5 * (drone_xyz[1] + attach_xyz[1])
+        mz = 0.5 * (drone_xyz[2] + attach_xyz[2])
+        a = r_arc * math.cos(alpha)
+        cx0, cy0, cz0 = mx - nx * a, my - ny * a, mz - nz * a     # arc center
+        for j in range(n_seg):
+            phi = -alpha + (j + 0.5) * (2.0 * alpha / n_seg)
+            cph, sph = math.cos(phi), math.sin(phi)
+            centers.append((cx0 + r_arc * (cph * nx + sph * tx),
+                            cy0 + r_arc * (cph * ny + sph * ty),
+                            cz0 + r_arc * (cph * nz + sph * tz)))
+            # unit tangent (drone -> payload direction along the arc)
+            ttx = -sph * nx + cph * tx
+            tty = -sph * ny + cph * ty
+            ttz = -sph * nz + cph * tz
+            pitches.append(math.acos(max(-1.0, min(1.0, ttz))))
+            yaws.append(math.atan2(tty, ttx))
+
     s = [f"      <!-- ===== CABLE {idx}: drone{idx} -> payload "
-         f"(len={L:.4f}, seg_len={seg_len:.4f}) ===== -->"]
+         f"(len={L:.4f}, seg_len={seg_len:.4f}, "
+         f"{'SLACK' if slack else 'taut'}) ===== -->"]
 
     # seg0 is at the drone end, seg(n_seg-1) at the payload end
     for j in range(n_seg):
-        frac = (j + 0.5) / n_seg
-        cx = drone_xyz[0] + frac * dx
-        cy = drone_xyz[1] + frac * dy
-        cz = drone_xyz[2] + frac * dz
+        cx, cy, cz = centers[j]
         s.append(f"""      <link name="cable{idx}_seg{j}">
-        <pose>{cx:.6f} {cy:.6f} {cz:.6f} 0 {pitch:.6f} {yaw:.6f}</pose>
+        <pose>{cx:.6f} {cy:.6f} {cz:.6f} 0 {pitches[j]:.6f} {yaws[j]:.6f}</pose>
         <inertial>
           <mass>{seg_mass}</mass>
           <inertia>
@@ -89,7 +151,7 @@ def cable_block(idx, drone_xyz, attach_xyz, n_seg, seg_mass=0.01, radius=0.005):
 
 
 def generate(n, R_d=0.35, z_d=0.1, R_a=0.08, payload_z=0.025, payload_top=0.05,
-             n_seg=5, payload_mass=0.3):
+             n_seg=5, payload_mass=0.3, cable_len=None):
     drones, attaches, includes = [], [], []
     for i in range(n):
         th = 2.0 * math.pi * i / n
@@ -103,7 +165,8 @@ def generate(n, R_d=0.35, z_d=0.1, R_a=0.08, payload_z=0.025, payload_top=0.05,
         <pose>{d[0]:.6f} {d[1]:.6f} {d[2]:.6f} 0 0 0</pose>
       </include>""")
 
-    cables = "\n".join(cable_block(i, drones[i], attaches[i], n_seg) for i in range(n))
+    cables = "\n".join(cable_block(i, drones[i], attaches[i], n_seg, cable_len)
+                       for i in range(n))
     # payload box inertia (0.2 x 0.2 x 0.05)
     bx, by, bz = 0.2, 0.2, 0.05
     ixx = payload_mass * (by * by + bz * bz) / 12.0
@@ -213,8 +276,13 @@ if __name__ == "__main__":
     ap.add_argument("--payload-mass", type=float, default=0.3)
     ap.add_argument("--r-drone", type=float, default=0.5,
                     help="horizontal distance from payload center to each drone (m)")
+    ap.add_argument("--cable-len", type=float, default=None,
+                    help="cable length (m). If > the drone->attach distance the "
+                         "cable is SLACK (drones can climb above the load and "
+                         "lift it). Default: taut at spawn (legacy).")
     args = ap.parse_args()
-    sdf = generate(args.n, R_d=args.r_drone, n_seg=args.seg, payload_mass=args.payload_mass)
+    sdf = generate(args.n, R_d=args.r_drone, n_seg=args.seg,
+                   payload_mass=args.payload_mass, cable_len=args.cable_len)
     with open(args.out, "w") as f:
         f.write(sdf)
     print(f"Wrote {args.out}  ({args.n} drones, {args.seg} segments/cable)")

@@ -1,8 +1,8 @@
 """
 planner_ocp.py
 --------------
-acados OCP for the centralized cable-suspended load planner (Sun et al. 2025,
-Eqs 6-12). Wraps the LoadCableDynamics model.
+acados OCP for the centralized cable-suspended load planner tudelft. 
+Wraps the LoadCableDynamics model.
 
 Cost (Eq 6): NONLINEAR_LS tracking the LOAD pose/twist (position, sign-invariant
 quaternion attitude error, velocity, angular velocity), a tension regulariser
@@ -24,7 +24,6 @@ from acados_template import AcadosOcp, AcadosOcpSolver, AcadosModel
 from .load_cable_dynamics import LoadCableDynamics, quat_mul, LOAD_DIM, CABLE_DIM
 
 GRAV = 9.81
-
 
 def quat_conj(q):
     return ca.vertcat(q[0], -q[1], -q[2], -q[3])
