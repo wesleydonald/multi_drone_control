@@ -191,6 +191,15 @@ class LoadCableDynamics:
         """Collective thrust magnitude of drone i (Eq 9, drag neglected)."""
         return cs.norm_2(self.thrust_vec(i))
 
+    def cable_accel(self, i):
+        """Acceleration imparted on drone i by its cable tension, world frame.
+
+        The cable force on the drone is +t_i s_i (s_i points drone->load, so the
+        taut cable pulls the drone toward the load). The per-drone tracker model
+        works in acceleration units (no explicit mass), so we hand it the cable
+        ACCELERATION a_cable_i = t_i s_i / m_i to add to its v_dynamics."""
+        return self.t[i] * self.s[i] / self.mi[i]
+
 
 if __name__ == "__main__":
     # quick self-test for the three_soft geometry (3 drones at 120deg, R_a=0.08)

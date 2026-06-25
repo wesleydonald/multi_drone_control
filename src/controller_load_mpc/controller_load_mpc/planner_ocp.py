@@ -89,7 +89,11 @@ def generate_load_ocp(dyn: LoadCableDynamics, N=20, tf=2.0,
     ocp.cost.cost_type = 'NONLINEAR_LS'
     ocp.cost.cost_type_e = 'NONLINEAR_LS'
 
-    w_pose = [60., 60., 80.] + [4., 4., 4.] + [30., 30., 30.] + [1., 1., 1.]
+    # pos(3), vel(3), att(3), omega(3). Velocity weight raised from [4,4,4] to
+    # [18,18,22]: the original let the load/drones build climb speed and overshoot
+    # the slack->taut transition, spiking cable tension past the drones' thrust
+    # authority. Heavier velocity damping keeps the lift slow and bounded.
+    w_pose = [60., 60., 80.] + [18., 18., 22.] + [30., 30., 30.] + [1., 1., 1.]
     w_t = [0.05] * n
     w_r = [3.0] * (3 * n)                          # damp cable swing (key)
     w_u = []

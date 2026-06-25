@@ -3,7 +3,10 @@
 import os
 import fcntl
 
-ACADOS_DIR = '/home/wesley/multi_drone_control/c_generated_code'
+# Separate export dir from controller_mpc_multi so the two solvers never clobber
+# each other (this package's model is quad_load_dynamics, with the cable term).
+ACADOS_DIR = '/home/wesley/multi_drone_control/c_generated_code_quad_load'
+os.makedirs(ACADOS_DIR, exist_ok=True)
 os.chdir(ACADOS_DIR)
 
 # Serialize compilation across the 4 drone processes
@@ -36,8 +39,8 @@ _SOLVER_SRC = [os.path.join(_PKG_DIR, 'acados.py'),
 # 'c_generated_code', so the compiled solver actually lands in a NESTED dir
 # (ACADOS_DIR/c_generated_code/...). The json is written to cwd (ACADOS_DIR).
 _SOLVER_SO = os.path.join(ACADOS_DIR, 'c_generated_code',
-                          'libacados_ocp_solver_quad_dynamics.so')
-_SOLVER_JSON = os.path.join(ACADOS_DIR, 'quad_dynamics_ocp.json')
+                          'libacados_ocp_solver_quad_load_dynamics.so')
+_SOLVER_JSON = os.path.join(ACADOS_DIR, 'quad_load_dynamics_ocp.json')
 
 
 def _solver_is_fresh():
@@ -58,10 +61,14 @@ from std_msgs.msg import Int32, Float64MultiArray
 
 POSE_TIMEOUT_THRESHOLD = 0.25  # seconds
 USE_MOTION_CAPTURE = True
-FREQUENCY_HZ = 30.0
+# Cable-aware tracker runs faster than the cable-blind one (was 30 Hz): the
+# tautening cable is a stiff disturbance and a low-rate loop has little phase
+# margin against it (the paper runs the tracker at >=100 Hz). Watch the "Solve
+# time" log — if it approaches the control period (1000/FREQUENCY_HZ ms), back off.
+FREQUENCY_HZ = 50.0
 DT = 1.0 / FREQUENCY_HZ
 
-LOGGING_NAME = 'controller_mpc_multi'
+LOGGING_NAME = 'controller_quad_load'
 
 # Formation offsets (x, y) for each drone relative to drone 0
 DRONE_OFFSETS = {
@@ -97,6 +104,7 @@ class Controller(Node):
         self.planner_ref_pos = None      # (N+1, 3) world-frame position nodes
         self.planner_ref_vel = None      # (N+1, 3) world-frame velocity nodes
         self.planner_ref_acc = None      # (N+1, 3) required specific thrust accel
+        self.planner_ref_cable = None    # (N+1, 3) cable tension accel t*s/m (world)
 
         # ── Sim-time clock ────────────────────────────────────────────────
         # self.get_clock() will return sim time because use_sim_time=True.
@@ -159,9 +167,9 @@ class Controller(Node):
         self.first_solve = True
         fresh = _solver_is_fresh()
         if fresh:
-            self.get_logger().info("[acados] loading cached quad_dynamics solver.")
+            self.get_logger().info("[acados] loading cached quad_load_dynamics solver.")
         else:
-            self.get_logger().info("[acados] compiling quad_dynamics solver (sources changed)...")
+            self.get_logger().info("[acados] compiling quad_load_dynamics solver (sources changed)...")
         self.ocp = generate_ocp_controller(generate=not fresh, build=not fresh)
         fcntl.flock(_lock_file, fcntl.LOCK_UN)
         self.est_params = np.array([38.0, 0.0, 0.12, 70.0, 670.0, 0.5])
@@ -213,18 +221,16 @@ class Controller(Node):
             self.step_counter = new_step
 
     def _planner_ref_callback(self, msg: Float64MultiArray):
-        """Parse [n_nodes, dt, px,py,pz, vx,vy,vz, ax,ay,az, ...] from
-        controller_load_mpc. Uses the first 9 fields/node (position, velocity,
-        specific thrust acceleration feedforward); this cable-blind tracker ignores
-        any extra trailing fields (e.g. the cable acceleration the planner now also
-        publishes for controller_quad_load)."""
+        """Parse [n_nodes, dt, px,py,pz, vx,vy,vz, ax,ay,az, cx,cy,cz, ...] from
+        controller_load_mpc (12 fields/node: position, velocity, specific thrust
+        acceleration feedforward, and cable tension acceleration t*s/m)."""
         data = msg.data
         if len(data) < 2:
             return
         n_nodes = int(data[0])
         if n_nodes < 1:
             return
-        fields = (len(data) - 2) // n_nodes      # 9 (legacy) or 12 (cable-aware)
+        fields = (len(data) - 2) // n_nodes      # 12 (cable-aware) or 9 (legacy)
         if n_nodes < self.N + 1 or fields < 9 or len(data) < 2 + fields * n_nodes:
             return
         arr = np.array(data[2:2 + fields * n_nodes],
@@ -232,6 +238,7 @@ class Controller(Node):
         self.planner_ref_pos = arr[:, 0:3]
         self.planner_ref_vel = arr[:, 3:6]
         self.planner_ref_acc = arr[:, 6:9]
+        self.planner_ref_cable = arr[:, 9:12] if fields >= 12 else None
 
     # ─────────────────────────────────────────────────────────────────────
     # Main control loop
@@ -268,7 +275,8 @@ class Controller(Node):
                     return
                 set_planner_reference(
                     self.ocp, self.planner_ref_pos, self.planner_ref_vel,
-                    self.planner_ref_acc, self.N, self.est_params)
+                    self.planner_ref_acc, self.N, self.est_params,
+                    ref_cable=self.planner_ref_cable)
             else:
                 # Internal circle: land + shutdown at end of trajectory.
                 if self.step_counter + self.N * self.skip_steps > self.steps:
@@ -320,6 +328,27 @@ class Controller(Node):
             x = self.ocp.get(1, "x")
             u = x[-4:]
             u_rate = self.ocp.get(0, "u")
+
+            # ── Diagnostic (planner mode) ─────────────────────────────────
+            # ~2 Hz: shows whether the planner feedforward is actually engaging.
+            #   ez   = z tracking error (zref - z); large/growing => losing altitude
+            #   thr  = commanded throttle u_state (0.05..0.6); 0.6 => saturating
+            #   |aT| = thrust-ff accel magnitude (should be >9.81 and rising w/ load)
+            #   |aC| = cable accel magnitude applied to the model (0 => gate shut /
+            #          cable not engaging => effectively cable-blind)
+            if self.reference_source == "planner" and self.takeoff_requested:
+                self._diag_ctr = getattr(self, "_diag_ctr", 0) + 1
+                if self._diag_ctr % 15 == 0:
+                    zc = float(self.current_pose[2])
+                    zr = float(self.planner_ref_pos[0][2])
+                    aT = float(np.linalg.norm(self.planner_ref_acc[0]))
+                    aC = (float(np.linalg.norm(self.planner_ref_cable[0]))
+                          if self.planner_ref_cable is not None else 0.0)
+                    self.get_logger().info(
+                        f"[diag d{self.drone_id}] z={zc:.2f} zref={zr:.2f} "
+                        f"ez={zr - zc:+.2f} thr={float(u[2]):.3f} "
+                        f"roll={float(u[0]):+.2f} pitch={float(u[1]):+.2f} "
+                        f"|aT|={aT:.2f} |aC|={aC:.2f}")
 
             # ── Publish command ───────────────────────────────────────────
             if self.takeoff_requested:

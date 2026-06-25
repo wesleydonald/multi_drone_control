@@ -61,4 +61,8 @@ The steps I need to take are:
 1 - Implement a EKF to estimate the full state of the load_cable_dynamics.py state vector. I want
     use ideally a similar method to TUDelft for this task. I then want to verify that this EKF works.
 
-2 - I want to update the quadrotor model with the tension force (and it )
+2 - I want to update the quadrotor model with the tension force (and the information should come from my state estimation).
+    Additionally, I want this to be in a new controller, i.e. keep controller_mpc_multi as is, because it can be used for a 
+    case where no cables are attached, and create a new similar one called controller_quad_load
+
+Let's start by working on the state estimation method, take your time reading the paper and let me know if you have any questions.
