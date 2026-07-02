@@ -28,17 +28,13 @@ class CallbackManagerMulti:
         self._wall_clock = Clock(clock_type=ClockType.SYSTEM_TIME)
 
         # ── Publishers ────────────────────────────────────────────────────
-        self.cmd_publisher_ = self.node.create_publisher(
-            ELRSCommand, f'/drone_{drone_id}/ELRSCommand', 1)
+        self.cmd_publisher_ = self.node.create_publisher(ELRSCommand, f'/drone_{drone_id}/ELRSCommand', 1)
 
-        self.arming_state_publisher_ = self.node.create_publisher(
-            Bool, f'/drone_{drone_id}/arming_state_feedback', 5)
+        self.arming_state_publisher_ = self.node.create_publisher(Bool, f'/drone_{drone_id}/arming_state_feedback', 5)
 
         # ── Subscriptions ─────────────────────────────────────────────────
         self.pose_subscription_ = self.node.create_subscription(
-            MotionCaptureState,
-            f'/drone_{drone_id}/motion_capture_state',
-            self.pose_callback, 5)
+            MotionCaptureState, f'/drone_{drone_id}/motion_capture_state', self.pose_callback, 5)
 
         self.telemetry_subscription_ = self.node.create_subscription(
             Telemetry, f'/drone_{drone_id}/telemetry',

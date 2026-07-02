@@ -153,6 +153,70 @@ lift ramp (#8). The next run's decisive signal is the **post-handover `|aT|` col
 
 ---
 
+## 8b. Outward-drift diagnosis & feedforward-correction hypothesis (2026-07-01)
+
+**Observation (invariant across every test):** during the lift the drones tilt/fall *away*
+from the payload. Log archaeology shows the radial distance `r` grows (0.5 → ~0.7) while each
+drone-to-attach distance pins at the cable length (0.6) — i.e. the drones slide **down and
+outward along the taut-cable sphere**. This is *identical* in logs taken before any
+cable-force-model change, so the failure is **independent of the cable-force estimator** — it
+lives in code that was never the suspect (the thrust feedforward / acados cost), which
+overturns §8's framing that "the tracker tracks well, the problem is the planner."
+
+**Computed mechanism (hypothesis, not yet verified in sim):** the thrust feedforward commands
+`a_thrust = [0,0,g]` → an **unloaded, level** hover (`_tilt_quat_from_accel([0,0,g], 38)`
+gives throttle ≈ 0.258, identity/level attitude). But the loaded equilibrium at r=0.5 (≈44°
+cables) needs throttle ≈ 0.32 **and ≈10° outward tilt** to support the load's share and pull
+in. The acados cost (throttle weight 0.3, attitude weight 0.5) then holds the drone near the
+*wrong* feedforward → chronic under-throttle + under-tilt → it loses altitude and slides
+outward. Invariant to cable-model changes because none of them corrected the thrust FF.
+
+**Potential solution (INDI-style thrust FF correction):** feed the *loaded* equilibrium into
+the feedforward using the measured cable acceleration (§9.3's IMU estimate):
+
+```
+a_ff = a_planned − a_cable_measured + a_cable_planned      # during creep: [0,0,g] − a_cable_meas
+```
+
+This raises the commanded throttle and adds the outward tilt the equilibrium requires, instead
+of pinning the tracker to an unloaded hover. Prototyped in this session but **reverted** (code
+returned to last commit) pending a clean implementation.
+
+**Decisive confirming experiment (do this to split the hypothesis before trusting the fix):**
+regenerate the world with **near-vertical cables** (horizontal tension ≈ 0):
+`python3 simulation_assets/generate_soft_world.py --n 3 --r-drone 0.15 --out simulation_assets/three_soft.sdf`
+(planner reads spawn positions from mocap, so no code change needed; revert with `--r-drone 0.5`).
+- Drones **hold and lift** → horizontal cable tension / loaded-hover FF was the cause → the
+  correction above is the right track.
+- Drones **still drift out** with ≈no horizontal force → it is **not** the cable tension.
+  Next suspect is the inner loop: the MPC→Betaflight rate command path, the throttle slew-rate
+  limit (`throttle_dot ∈ [−1,1]`), or a frame error in the rate mapping — none yet audited.
+
+---
+
+## 8c. Geometry mismatch found + §8b refuted (via `three_soft_paper.sdf`)
+
+Switched to `simulation_assets/three_soft_paper.sdf` — drones spawn **elevated & taut**
+(1.0 m cables at ~45° from vertical), which removes the slack→taut snap and isolates the
+steady taut-hover problem. **Blocking bug found:** the planner geometry was hard-coded for
+`three_soft.sdf` (`CABLE_LEN=0.6`) while the paper world has **1.0 m** cables. With the
+wrong length the kinematic constraint `p_i = p + R·ρ_i − l_i·s_i` places every drone
+reference ~0.4 m *inside* the physical cable sphere, and the tautness gate saturates — so
+every reference in that world was invalid, upstream of any feedforward question.
+
+**Fix (done):** planner geometry is now ROS params — `cable_len`, `attach_radius`,
+`attach_z`, and `start_taut` (skip creep, enter the coupled planner on cycle 0 for taut
+worlds). The quad-load launch declares `cable_len:=1.0 start_taut:=true` by default (paper
+world); pass `cable_len:=0.6 start_taut:=false` for `three_soft.sdf`.
+
+**Offline equilibrium check** (`controller_load_mpc/diag_equilibrium.py`, no Gazebo) with
+the corrected geometry: OCP **status 0**, `t_i=1.85 N` (= analytic), drone refs consistent
+(residual 0), and feedforward **loaded** — `throttle 0.321, tilt 10.3° outward` vs the
+unloaded `0.258, 0°`. **This refutes §8b for the planner phase:** the unloaded `[0,0,g]`
+FF was a *creep-phase* artifact; the coupled planner already commands the loaded tilt +
+throttle. `|aC|=3.1 m/s²` per drone, well under the ~13 authority ceiling. The live test
+below is now the pending signal.
+
 ## 9. Next steps (toward replicating the paper)
 
 ### 9.1 If the planner-hold is still unstable — make the planner open-loop, tracker stabilizes

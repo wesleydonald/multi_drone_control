@@ -1,0 +1,108 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <!-- three_no_cables.sdf — same formation as three_soft.sdf (3 drones at 120°
+       around the origin, R_d=0.5, payload at origin) but with NO cables.
+       Use for the cable-free baseline / comparison against three_soft.sdf. -->
+  <world name="quadcopter">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+    <plugin filename="ignition-gazebo-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors"/>
+
+    <scene>
+      <background>0.6 0.8 1.0 1</background>
+      <ambient>0.5 0.5 0.5 1</ambient>
+    </scene>
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <material><ambient>0.2 0.5 0.2 1</ambient><diffuse>0.3 0.6 0.3 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="lift_system" canonical_link="anchor">
+      <pose>0 0 0 0 0 0</pose>
+
+      <!-- WORLD-FIXED ANCHOR: pins the lift_system frame to the world origin so
+           nested drone/payload poses are published in the WORLD frame. -->
+      <link name="anchor">
+        <inertial>
+          <mass>0.001</mass>
+          <inertia>
+            <ixx>1e-6</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>1e-6</iyy><iyz>0</iyz><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+      </link>
+      <joint name="anchor_to_world" type="fixed">
+        <parent>world</parent>
+        <child>anchor</child>
+      </joint>
+
+      <!-- ===== DRONES (equal angular intervals, resting near ground) ===== -->
+      <include>
+        <uri>models/x3_drone0.sdf</uri>
+        <name>x3_drone0</name>
+        <pose>0.500000 0.000000 0.100000 0 0 0</pose>
+      </include>
+      <include>
+        <uri>models/x3_drone1.sdf</uri>
+        <name>x3_drone1</name>
+        <pose>-0.250000 0.433013 0.100000 0 0 0</pose>
+      </include>
+      <include>
+        <uri>models/x3_drone2.sdf</uri>
+        <name>x3_drone2</name>
+        <pose>-0.250000 -0.433013 0.100000 0 0 0</pose>
+      </include>
+
+      <!-- ===== PAYLOAD (free, unattached — no cables) ===== -->
+      <model name="payload">
+        <pose>0 0 0.025 0 0 0</pose>
+        <link name="body">
+          <gravity>1</gravity>
+          <inertial>
+            <mass>0.4</mass>
+            <inertia>
+              <ixx>1.417e-03</ixx><ixy>0</ixy><ixz>0</ixz>
+              <iyy>1.417e-03</iyy><iyz>0</iyz><izz>2.667e-03</izz>
+            </inertia>
+          </inertial>
+          <collision name="collision">
+            <geometry><box><size>0.2 0.2 0.05</size></box></geometry>
+          </collision>
+          <visual name="visual">
+            <geometry><box><size>0.2 0.2 0.05</size></box></geometry>
+            <material><ambient>0.8 0.4 0.0 1</ambient><diffuse>0.8 0.4 0.0 1</diffuse></material>
+          </visual>
+        </link>
+        <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+          <publish_link_pose>true</publish_link_pose>
+          <publish_nested_model_pose>true</publish_nested_model_pose>
+          <use_pose_vector_msg>true</use_pose_vector_msg>
+          <update_frequency>500</update_frequency>
+        </plugin>
+      </model>
+
+    </model>
+  </world>
+</sdf>

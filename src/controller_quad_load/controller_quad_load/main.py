@@ -34,7 +34,7 @@ from interfaces.srv import SetArming
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 N_DRONES_DEFAULT = 4         # overridable via the 'num_drones' ROS param
-FREQUENCY_HZ = 30.0          # Must match DT in controller_mpc.py
+FREQUENCY_HZ = 50.0          # Must match DT in controller_mpc.py
 DT = 1.0 / FREQUENCY_HZ
 
 # How long (real seconds) to wait for all drones to be ready before timing out
