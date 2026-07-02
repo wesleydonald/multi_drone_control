@@ -31,8 +31,7 @@ from rclpy.clock import Clock, ClockType
 from std_msgs.msg import String, Bool, Int32
 from interfaces.srv import SetArming
 
-# ── Configuration ─────────────────────────────────────────────────────────────
-
+# Configuration
 N_DRONES_DEFAULT = 4         # overridable via the 'num_drones' ROS param
 FREQUENCY_HZ = 30.0          # Must match DT in controller_mpc.py
 DT = 1.0 / FREQUENCY_HZ
@@ -51,15 +50,15 @@ class CentralController(Node):
             rclpy.parameter.Parameter('use_sim_time', rclpy.Parameter.Type.BOOL, False)
         ])
 
-        # ── Fleet size (configurable so the same node serves 2- or 4-drone
-        #    worlds via `num_drones` launch arg / ROS param) ───────────────
+        # Fleet size (configurable so the same node serves 2- or 4-drone
+        # worlds via `num_drones` launch arg / ROS param)
         self.declare_parameter('num_drones', N_DRONES_DEFAULT)
         self.num_drones = self.get_parameter('num_drones').value
 
-        # ── Wall clock for real-time safety checks ────────────────────────
+        # Wall clock for real-time safety checks
         self._wall_clock = Clock(clock_type=ClockType.SYSTEM_TIME)
 
-        # ── Fleet state ───────────────────────────────────────────────────
+        # Fleet state
         self.master_step = 0
         self.flying = False          # True after TAKEOFF, False before/after
         self.fleet_armed = False     # True after ARM, before DISARM
@@ -69,20 +68,20 @@ class CentralController(Node):
         self.drone_armed = {i: False for i in range(self.num_drones)}
         self.drone_last_feedback = {i: self._wall_clock.now() for i in range(self.num_drones)}
 
-        # ── Publishers ────────────────────────────────────────────────────
+        # Publishers
         self.step_pub = self.create_publisher(Int32, '/fleet/step', 1)
 
-        # ── Fleet command subscription ────────────────────────────────────
+        # Fleet command subscription
         self.cmd_sub = self.create_subscription(
             String, '/fleet/command', self._command_callback, 10)
 
-        # ── Per-drone arming service clients ──────────────────────────────
+        # Per-drone arming service clients
         self.arming_clients = {}
         for i in range(self.num_drones):
             client = self.create_client(SetArming, f'/drone_{i}/arming_service')
             self.arming_clients[i] = client
 
-        # ── Per-drone arming feedback subscriptions ───────────────────────
+        # Per-drone arming feedback subscriptions
         for i in range(self.num_drones):
             self.create_subscription(
                 Bool,
@@ -90,7 +89,7 @@ class CentralController(Node):
                 lambda msg, drone_id=i: self._arming_feedback_callback(msg, drone_id),
                 5)
 
-        # ── Master step timer (sim time) ──────────────────────────────────
+        # Master step timer (sim time)
         self.timer = self.create_timer(DT, self._step_timer_callback)
 
         self.get_logger().info(
@@ -101,10 +100,8 @@ class CentralController(Node):
         for i in range(self.num_drones):
             self.drone_cmd_publishers[i] = self.create_publisher(
                 String, f'/drone_{i}/command', 10)
-    # ─────────────────────────────────────────────────────────────────────
-    # Timer — master step broadcast
-    # ─────────────────────────────────────────────────────────────────────
 
+    # Timer — master step broadcast
     def _step_timer_callback(self):
         if self.shutdown_requested:
             return
@@ -118,10 +115,7 @@ class CentralController(Node):
         if self.flying:
             self.master_step += 1
 
-    # ─────────────────────────────────────────────────────────────────────
     # Fleet command handler
-    # ─────────────────────────────────────────────────────────────────────
-
     def _command_callback(self, msg: String):
         command = msg.data.strip().upper()
         self.get_logger().info(f"Fleet command received: '{command}'")
@@ -138,10 +132,7 @@ class CentralController(Node):
         else:
             self.get_logger().warn(f"Unknown fleet command: '{command}'")
 
-    # ─────────────────────────────────────────────────────────────────────
     # Arming feedback — safety monitor
-    # ─────────────────────────────────────────────────────────────────────
-
     def _arming_feedback_callback(self, msg: Bool, drone_id: int):
         self.drone_last_feedback[drone_id] = self._wall_clock.now()
         was_armed = self.drone_armed[drone_id]
@@ -155,11 +146,8 @@ class CentralController(Node):
                 f"triggering emergency stop for all drones!")
             self._disarm_fleet(emergency=True)
 
-    # ─────────────────────────────────────────────────────────────────────
     # Fleet operations (run in background threads to avoid blocking the
     # ROS spin loop while waiting for service responses)
-    # ─────────────────────────────────────────────────────────────────────
-
     def _arm_fleet(self):
         thread = threading.Thread(target=self._arm_fleet_thread, daemon=True)
         thread.start()
@@ -257,8 +245,6 @@ class CentralController(Node):
             self.drone_cmd_publishers[i].publish(msg)
         self.get_logger().info(f"Published '{command}' to all {self.num_drones} drone command topics.")
 
-
-# ── Entry point ───────────────────────────────────────────────────────────────
 
 def main(args=None):
     rclpy.init(args=args)
