@@ -1,0 +1,315 @@
+================================================================================
+LEARNING NOTES — Cable-suspended multi-drone load transport (ROS2 + Gazebo)
+Goal: replicate the HIGH-LEVEL controller of Sun et al. 2025 (arXiv 2501.18802),
+"Agile and Cooperative Aerial Manipulation of a Cable-Suspended Load".
+3 quadrotors carry a 0.4 kg payload on soft cables.
+Key deviation from paper: we use MPC at the low level, NOT INDI.
+================================================================================
+
+--------------------------------------------------------------------------------
+SYSTEM OVERVIEW (data flow)
+--------------------------------------------------------------------------------
+- Gazebo (three_soft_paper.sdf) --pose--> mocap emulator --> /drone_N/motion_capture_state
+                                                          --> /payload/motion_capture_state
+- Planner (controller_load_mpc) reads all poses, emits per-drone reference:
+    /drone_N/reference_trajectory = [pos, vel, a_thrust, a_cable] x (N+1 nodes)
+- Tracker (controller_quad_load) x3: per-drone MPC, turns reference into
+    /drone_N/ELRSCommand [roll_rate, pitch_rate, throttle, yaw_rate]
+- Bridge (simulation_communication) converts ELRS -> Gazebo motor speeds.
+- Fleet manager (main.py) owns ARM/TAKEOFF and the /fleet/step clock.
+State vector (13): [x y z, qw qx qy qz, vx vy vz, wx wy wz].
+
+================================================================================
+PACKAGES & KEY FILES
+================================================================================
+
+--- controller_load_mpc  [THE PLANNER — "high-level controller" of the paper] ---
+- load_cable_dynamics.py : full coupled load+cable+drone dynamics (CasADi).
+    state = load[p,v,q,w] + per-drone[s_i, r_i, ṙ_i, r̈_i, t_i, ṫ_i]; nx=13+14n.
+    Helpers: quad_position/velocity (kinematic constraint), thrust_vec (req'd
+    thrust force), cable_accel (t_i·s_i/m = cable pull as acceleration).
+- planner_ocp.py : acados OCP over that model. Cost tracks LOAD pose/twist +
+    tension regulariser + control effort. SQP-RTI, N=20, tf=2s.
+- planner_node.py : the running node. Two modes (planner_mode param):
+    * 'coupled'   = solve the OCP online every cycle (paper-like). ABANDONED —
+                    unstable online (see issues).
+    * 'kinematic' = OPEN-LOOP: latch the taut spawn config, lift it rigidly,
+                    stream analytic loaded-hover FF. No online OCP, no feedback.
+    Also owns: two-phase takeoff (creep->planner), lift ramp, tautness gate.
+- diag_equilibrium.py : OFFLINE sanity check (no sim). Builds OCP at a hover
+    setpoint, prints tension/FF/geometry consistency. USE THIS to validate math.
+  Design decisions:
+    * Geometry is ROS params (cable_len, attach_radius, attach_z) — must match
+      the .sdf world (cable_len=1.0 for three_soft_paper, 0.6 for three_soft).
+    * Cable/thrust FF gated on LOAD being airborne (not cable length) — a taut
+      cable to a grounded load bears ~0 tension.
+  vs PAPER: paper runs the planner as a trajectory generator + resamples its own
+    OCP solution; it does NOT re-solve pinned to noisy measurement each cycle.
+    Our 'kinematic' mode is a simplified analytic stand-in (works only for
+    hover/lift, not agile trajectories).
+
+--- controller_quad_load  [THE TRACKER — per-drone cable-AWARE MPC] ------------
+- dynamics.py : single quad model, nx=17 = [p,q,v,w,u_state]; u_state =
+    [roll_rate,pitch_rate,throttle,yaw_rate]. ADDS a_cable term to v̇.
+- acados.py : the tracker OCP. NONLINEAR_LS cost on pos/vel/omega/u_state +
+    quaternion attitude error. set_planner_reference() converts a_thrust into a
+    throttle + tilt-quaternion attitude feedforward (_tilt_quat_from_accel).
+- controller_mpc.py : the node. 50 Hz timer -> solve -> publish ELRS.
+    diag line: z ez exy rdrift thr roll pitch |aT| |aC|.
+    Diagnostic knobs (params): cable_ff_scale (0=cable-blind), attitude_ff.
+- main.py : fleet manager (ARM/TAKEOFF, /fleet/step broadcast).
+  Design decisions:
+    * Separate package from controller_mpc_multi so the cable-free case is
+      untouched; own acados codegen dir (c_generated_code_quad_load).
+    * Cable enters the MODEL (prediction), not just the cost — the intended
+      "piece 1" of the paper (feedforward the known thrust+cable).
+  vs PAPER: paper's low level is INDI at >=100Hz (inner loop 300Hz) using a
+    MEASURED external force f_ext from the IMU. We use MPC at 50Hz with an
+    OPEN-LOOP modelled cable force from the planner. This is the core difference
+    and (see issues) likely the root of the instability.
+
+--- controller_mpc_multi  [ORIGINAL cable-BLIND tracker, kept as reference] -----
+- Same structure, no cable term. Flies formation circles fine. Used as the
+  "known-good" baseline to prove the base MPC/rate-mapping is correct.
+
+--- simulation_communication  [Gazebo <-> ROS bridge] --------------------------
+- payload_betaflight_comm.py : /drone_N/ELRSCommand -> Gazebo motor speeds.
+- payload_mocap_emulator.py  : Gazebo pose -> /drone_N/motion_capture_state and
+    /payload/motion_capture_state (sim stands in for a real MoCap system).
+  vs PAPER: paper estimates load pose + cable directions with an EKF; we use
+    sim ground-truth mocap (EKF deferred).
+
+--- utility_objects ------------------------------------------------------------
+- callback_manager_multi.py : per-drone pub/sub/arming service wiring.
+- data_logger.py : CSV logs. visualization.py : RViz.
+
+--- interfaces : custom msgs (MotionCaptureState, ELRSCommand, SetArming). ------
+--- controller_mpc / drone_communication / drone_visualisation : legacy / real- -
+    hardware / single-drone; not used in the current multi-lift work. -----------
+
+--- worlds (simulation_assets) -------------------------------------------------
+- three_soft_paper.sdf : 3 drones spawn ELEVATED + TAUT (1.0 m cables, ~45deg).
+    Current test world — removes the slack->taut snap, isolates steady hover.
+- three_soft.sdf : 3 drones on the ground, SLACK 0.6 m cables (needs creep).
+- *_rigid / *_no_cables : variants for isolation.
+
+================================================================================
+KEY NUMBERS
+================================================================================
+- Payload 0.4 kg; drone 0.6 kg; cable 1.0 m @ 45deg (paper world).
+- Thrust model: accel = thrust_ratio*throttle, thrust_ratio=38 (body-z).
+- Per-drone thrust authority ~= 0.6*38 = 22.8 m/s^2; minus g leaves ~13 to fight
+  the cable. Analytic taut-hover: tension 1.85 N/cable -> a_cable=3.1 m/s^2,
+  loaded FF throttle 0.32 + ~10deg outward tilt (|aT|=12.19). All verified
+  offline in diag_equilibrium.py.
+
+================================================================================
+*** RESOLVED (rigid cables) — READ THIS FIRST ***
+================================================================================
+- ROOT CAUSE FOUND & FIXED: the tracker instability was the SOFT cable. Soft
+  segmented cables act as a position-dependent spring; feeding a CONSTANT
+  open-loop cable force (a_cable) into the short-horizon MPC mismatched the real
+  (position-varying) force and destabilised the attitude loop -> "sliding away".
+- FIX: switched to RIGID massless cables (the reference paper's model) via
+  three_rigid.sdf (new; generate_rigid_world.py). Rigid cable tension is ~position
+  independent, so the constant a_cable model is valid.
+- RESULT: first STABLE lift. Drones hold attitude (roll/pitch ~+/-0.1, never rail),
+  the cable term engages smoothly (gate 0->1), the load lifts, and the formation
+  recovers radially as the load loads onto the cables.
+- Also added takeoff platforms so the (stiff) rigid-cabled drones rest at their
+  spawn pose until TAKEOFF instead of collapsing.
+- Remaining polish (minor, not blocking): small inward drift (~0.2 m) during the
+  pre-load climb that recovers once the cable engages; lift ramp slightly slower
+  than the drones climb (ez ~ -0.25). Tunable.
+- This is now the paper-faithful config. Next: measured f_ext (IMU) for realism.
+
+================================================================================
+PART 2 — MEASURED f_ext FROM IMU (attempt at the paper's reactive cable force)
+================================================================================
+WHAT WAS BUILT:
+- Bridged each drone's Gazebo IMU into ROS. Added an explicit
+  <topic>x3_droneN/imu</topic> to models/x3_droneN.sdf so the sensor publishes a
+  clean topic even under the nested lift_system world; ros_gz_bridge maps it to
+  /drone_N/imu (sensor_msgs/Imu). Verified live.
+- measured_cable_accel() in the tracker: the accelerometer reads the body-frame
+  SPECIFIC FORCE = (thrust + cable)/m. Subtract the modelled thrust and rotate to
+  world:  a_cable_meas = R * (imu_specific_force - [0,0, thrust_ratio*throttle]).
+- EMA low-pass (alpha=0.03) on the raw 1 kHz IMU — raw is far too noisy to use
+  (|aCm| swung 0.9..4.4 between samples; filtered settles ~1.4..1.7).
+- cable_source param (A/B): 'model' = planner open-loop t*s/m (default, unchanged),
+  'measured' = IMU f_ext held constant over the MPC horizon (the paper's idea).
+
+WHAT IT REVEALED (good thesis result):
+- MEASURED cable accel (~1.5) is ~HALF the open-loop MODEL (3.08) for the whole
+  lift. The drones climb AHEAD of the load, so the cables never reach the model's
+  assumed design tension -> the open-loop t*s/m is ~2x too high in transient.
+  This is exactly why the paper uses a MEASURED reactive f_ext, not a model.
+- Corroborated by a persistent ez ~ -0.30 bias: drones ride ~0.3 m above their
+  reference, hovering at thr~0.25 while the model predicts 0.32 -> the MPC feedback
+  is quietly cancelling the over-large open-loop cable/thrust FF.
+- thrust_ratio=38 is confirmed correct (loaded hover wants thr~0.32 = 12.19/38,
+  matches the first pre-load sample before the drones outrun the load).
+
+CURRENT BLOCKER (OPEN):
+- cable_source:=measured CRASHES within ~1 s. Closing the loop
+  IMU -> model -> command -> IMU is unstable on the takeoff transient (most likely
+  acados returns a nonzero status and the node raises). Need the paper's safeguards
+  before it is usable: (a) clamp the measured magnitude, (b) slew/rate-limit it,
+  (c) make a failed solve NON-FATAL (hold last command) so instability shows in the
+  diag instead of killing the node, and probably (d) blend model->measured rather
+  than switch hard. This is the reactive-inner-loop gap and the next task.
+
+--- ORIGINAL ISSUE WRITE-UP (kept for the debugging story) ---
+
+================================================================================
+CURRENT ISSUE (historical — resolved above)
+================================================================================
+SYMPTOM: In the HOLD/lift test the drones track perfectly at first, then one or
+more "slide away" radially outward (rdrift grows), attitude rate commands rail at
++/-1.0, they lose altitude and crash. The load overshoots its target.
+
+WHAT IS NOW PROVEN (via controlled experiments):
+- The PLANNER/reference is correct: offline OCP converges, tension & FF match
+  analytic values, drone ref positions are geometrically consistent.
+- The TRACKER is the failure: given a perfect, constant, feedback-free reference
+  to simply HOLD, it still goes unstable and rails the attitude loop.
+- Instability tracks |aC| (the applied cable feedforward): with a_cable OFF the
+  hold is far more stable; the moment the modelled cable force reaches full
+  magnitude (~3 m/s^2) the tracker destabilises — EVEN when the cable is really
+  loaded. Hypothesis: soft cable => real tension varies with position, but we
+  feed a CONSTANT open-loop force across the horizon -> feedback mismatch the
+  short-horizon RTI can't hold.
+- Latest run: even cable-BLIND + gated thrust FF + gentle lift, one drone (d0)
+  still slides out as the loaded thrust FF engages. So the loaded tilt/throttle
+  FF itself (not only a_cable) is part of it. Asymmetry (d0 fails first) is
+  unexplained.
+
+================================================================================
+EVERYTHING TRIED (chronological, most recent last)
+================================================================================
+- Added attitude+thrust feedforward from planner (was missing -> tilt & fall).  [helped]
+- Added a_cable term to the tracker MODEL (not just cost).                       [see issues]
+- Tautness gate on cable LENGTH to avoid feeding tension while slack.            [wrong metric]
+- Coupled online OCP: more SQP iters + recovery/reseed on failed solve.          [still diverged]
+- Replaced positive-feedback lift target with a time-based ramp.                 [fixed 1 bug]
+- Two-phase creep takeoff (rise, anchor xy to spawn) for the slack world.        [partial]
+- Switched to three_soft_paper.sdf (elevated/taut) to isolate steady hover.      [good test bed]
+- FOUND: planner geometry hard-coded cable_len=0.6 vs world 1.0 -> every ref off.[major fix]
+  Made geometry ROS params; added start_taut (skip creep) + diag_equilibrium.py.
+- FOUND: a ZOMBIE planner from an old launch was co-publishing and corrupting
+  every run. Added preflight_quad_load.sh + publisher-count check.               [major fix]
+- Replaced coupled planner with OPEN-LOOP 'kinematic' generator.                 [reference now perfect]
+- Gated lift ramp on TAKEOFF (/fleet/step>0) to stop pre-arm runaway.            [fixed a bug]
+- Added exy/rdrift to diag (was z-only) -> could finally SEE the radial slide.
+- Controlled A/B: attitude_ff OFF (no help) vs cable_ff_scale=0 (big help)
+  -> localised the destabiliser to the a_cable model term.
+- Gated a_cable on the LOAD being airborne (not cable length).                   [holds until load loads up]
+- Gated the WHOLE thrust FF (unloaded level -> loaded tilted) by the same gate.  [still slides on load-up]
+
+STILL OPEN: even with a provably-blind model and load-gated FF, the loaded thrust
+FF + real soft-cable coupling destabilises at least one drone as the payload's
+weight transfers onto the cables.
+
+================================================================================
+LIMITATIONS — WHY THIS DOES NOT (YET) OPERATE LIKE THE TU DELFT PAPER
+================================================================================
+1. LOW-LEVEL CONTROLLER: MPC @ 50 Hz vs the paper's INDI (inner rate loop 300 Hz,
+   outer 100 Hz). INDI reacts to a MEASURED external force every inner tick; our
+   MPC re-plans a horizon at 50 Hz. Bandwidth is likely the real limiter for
+   rejecting the fast cable disturbance.
+2. CABLE FORCE SOURCE: we feed an OPEN-LOOP MODELLED cable force (planner t*s/m).
+   The paper feeds a MEASURED reactive f_ext from the IMU. Part 2 shows the model
+   is ~2x too high in transient. The measured path is built but UNSTABLE when fed
+   back (see Part 2 blocker) — the reactive inner loop is not yet working.
+3. CABLE MODEL: our STABLE config uses RIGID massless links (matches the paper's
+   modelling assumption and removes the soft-cable position-dependent spring that
+   broke the tracker). Real cables are flexible with mass/drag/stretch — a genuine
+   sim-to-real gap in BOTH directions (soft world was unstable; rigid world is an
+   idealisation).
+4. STATE ESTIMATION: we use Gazebo GROUND-TRUTH mocap for load pose AND cable
+   directions. The paper runs an EKF fusing mocap + IMU to estimate load state and
+   each cable's direction/rate. We have NO estimator — cable directions are read
+   from perfect sim geometry.
+5. PLANNER: 'kinematic' open-loop analytic lift (latch taut config, ramp up). The
+   paper solves a full cooperative trajectory-optimisation online. Ours only does
+   hover/vertical-lift; it CANNOT do the paper's agile maneuvers (figure-8, throw,
+   pose changes). The 'coupled' online OCP we wrote diverges and is abandoned.
+6. START CONDITION: our load starts on the GROUND (takeoff platforms, load-transfer
+   transient). The paper's flight tests start from an already-airborne hover, so
+   they never fight the ground-release impulse.
+7. MISSING PHYSICS: no aerodynamic drag on drones/cables/payload, no cable mass,
+   no wind/disturbance, no motor/battery sag. thrust_ratio=38 is an identified
+   scalar gain, not a physical thrust curve.
+
+================================================================================
+REAL-WORLD TESTING — WHAT TO CHANGE (cable length, payload mass, etc.)
+================================================================================
+GOLDEN RULE: every physical quantity lives in BOTH a sim place and a
+controller/param place. In the real world there is no SDF — you keep ONLY the
+controller/param values, and they MUST equal the measured physical hardware.
+
+CABLE LENGTH:
+- Sim: generate_rigid_world.py --cable-len (or edit the .sdf tether geometry) AND
+  attach geometry (--attach-radius, --attach-z, --elev).
+- Controller: planner param cable_len (launch arg cable_len:=...), attach_radius,
+  attach_z. THESE are what matter for real hardware — set them to the measured
+  physical cable length and the payload attachment ring radius/height.
+- Keep sim and param in sync or every reference is geometrically wrong (this bug
+  cost us many runs: world 1.0 m vs planner 0.6 m).
+
+PAYLOAD MASS (and inertia):
+- Sim: payload <mass> and <inertia> in the world SDF.
+- Controller: the load mass/inertia in controller_load_mpc/load_cable_dynamics.py
+  (m_load, load inertia). Set to the measured payload. The per-cable hover tension
+  scales as m_load*g/(n*sin(elev)); check with diag_equilibrium.py after changing.
+
+DRONE MASS + THRUST:
+- thrust_ratio (est_params[0]=38): the throttle->acceleration gain. For a REAL
+  drone, IDENTIFY it: hover at steady throttle thr_h, then thrust_ratio = g/thr_h
+  (our sim: 9.81/0.258 ~= 38). Wrong value => steady altitude bias (we saw ez~-0.3
+  when the applied thrust didn't match the model).
+- Per-drone mass m_i appears in the planner's cable_accel = t_i*s_i/m_i — set to
+  the real drone mass (incl. battery + its share of the rig).
+
+BETAFLIGHT RATE PARAMS:
+- est_params = [mass?, drag, arm_len(0.12), rc_rate(70), super_rate(670), ...].
+  The rate constants MUST match the FC's actual Rateprofile (Betaflight
+  Configurator) or roll/pitch/yaw rate commands are mis-scaled. Re-identify per
+  airframe.
+
+IMU / MEASURED f_ext (Part 2):
+- On real hardware the FC IMU already exists; publish its accelerometer as
+  /drone_N/imu (sensor_msgs/Imu), body frame, gravity INCLUDED (reads ~[0,0,9.81]
+  at rest, like Gazebo). Calibrate/remove bias. Keep the same EMA filter.
+- measured_cable_accel() needs thrust_ratio and the applied throttle to be right,
+  or the thrust it subtracts is wrong and f_ext is corrupted.
+
+STATE / MoCap:
+- Replace payload_mocap_emulator with the real MoCap feed publishing
+  /drone_N/motion_capture_state and /payload/motion_capture_state.
+- Real cable directions are NOT observed directly -> need the EKF (deferred) to
+  estimate s_i, or a marker on each cable.
+
+FLEET / TOPOLOGY:
+- N_DRONES / DRONE_NAMES (launch), planner n, formation geometry, and the
+  num_drones bridge arg must all agree.
+- FREQUENCY_HZ must match across planner, tracker and fleet manager.
+
+================================================================================
+QUESTIONS FOR SUPERVISOR
+================================================================================
+- Is open-loop modelled cable force (from the planner) fundamentally the wrong
+  approach for SOFT cables, given the paper uses MEASURED f_ext (IMU) + INDI?
+  Should I bridge the drone IMUs and switch to a measured reactive force?
+- Is 50 Hz MPC too slow vs the paper's >=100 Hz (INDI 300 Hz)? Is control-loop
+  bandwidth the real limiter for rejecting the cable disturbance?
+- For a thesis, is it acceptable to demonstrate the HIGH-LEVEL planner with a
+  cable-blind / disturbance-rejecting tracker, and treat the cable-aware inner
+  loop (INDI/f_ext) as future work? Or is the inner loop essential to the claim?
+- Should the cables be modelled stiffer (more joint damping) or as rigid links
+  to better match the paper's rigid-cable assumption, or is soft-cable realism
+  a contribution?
+- Is the load-transfer transient (payload lifting off the ground) worth solving,
+  or should experiments start from an already-airborne/hovering load like the
+  paper's flight tests?
+================================================================================

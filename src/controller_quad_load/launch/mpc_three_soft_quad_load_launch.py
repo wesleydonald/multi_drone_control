@@ -27,7 +27,10 @@ Notes:
 """
 
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
+from launch_ros.parameter_descriptions import ParameterValue
 
 PARENT_MODEL = 'lift_system'
 DRONE_NAMES  = ['x3_drone0', 'x3_drone1', 'x3_drone2']
@@ -35,7 +38,50 @@ N            = len(DRONE_NAMES)
 
 
 def generate_launch_description():
-    nodes = [SetParameter(name='use_sim_time', value=True)]
+    # Geometry defaults target three_soft_paper.sdf (elevated, TAUT 1.0 m cables
+    # at ~45deg). For the ground-start slack three_soft.sdf, launch with
+    #   cable_len:=0.6 start_taut:=false
+    cable_len     = ParameterValue(LaunchConfiguration('cable_len'), value_type=float)
+    start_taut    = ParameterValue(LaunchConfiguration('start_taut'), value_type=bool)
+    target_z      = ParameterValue(LaunchConfiguration('target_z'), value_type=float)
+    lift_ramp_vel = ParameterValue(LaunchConfiguration('lift_ramp_vel'), value_type=float)
+    planner_mode  = LaunchConfiguration('planner_mode')
+    ff_gate_mode  = LaunchConfiguration('ff_gate_mode')
+    load_traj     = LaunchConfiguration('load_traj')
+    traj_speed    = ParameterValue(LaunchConfiguration('traj_speed'), value_type=float)
+    traj_distance = ParameterValue(LaunchConfiguration('traj_distance'), value_type=float)
+    traj_radius   = ParameterValue(LaunchConfiguration('traj_radius'), value_type=float)
+    cable_ff_scale = ParameterValue(LaunchConfiguration('cable_ff_scale'), value_type=float)
+    attitude_ff    = ParameterValue(LaunchConfiguration('attitude_ff'), value_type=bool)
+    cable_source   = LaunchConfiguration('cable_source')
+
+    nodes = [
+        DeclareLaunchArgument('cable_len', default_value='1.0'),
+        DeclareLaunchArgument('start_taut', default_value='true'),
+        DeclareLaunchArgument('target_z', default_value='0.6'),
+        # HOLD test: lift_ramp_vel:=0.0 (no lift, just hold the taut config).
+        DeclareLaunchArgument('lift_ramp_vel', default_value='0.05'),
+        # Tracker diagnostic knobs: cable_ff_scale:=0.0 = cable-blind model;
+        # attitude_ff:=false = level attitude reference (keep throttle FF).
+        DeclareLaunchArgument('cable_ff_scale', default_value='1.0'),
+        DeclareLaunchArgument('attitude_ff', default_value='true'),
+        # 'model' = planner open-loop t*s/m cable term (default); 'measured' =
+        # IMU-derived f_ext held over the horizon (Part 2c A/B).
+        DeclareLaunchArgument('cable_source', default_value='model'),
+        # 'kinematic' = open-loop feedforward (tracker stabilizes); 'coupled' =
+        # online load-cable OCP (diverges — kept for A/B comparison).
+        DeclareLaunchArgument('planner_mode', default_value='kinematic'),
+        # 'taut' = engage FF from spawn (rigid cables); 'airborne' = ramp with the
+        # load lift (soft cables).
+        DeclareLaunchArgument('ff_gate_mode', default_value='airborne'),
+        # LOAD reference trajectory after the lift tops out: 'hover' (current
+        # behaviour), 'line_x' (+x translate), 'circle'. Keep traj_speed slow.
+        DeclareLaunchArgument('load_traj', default_value='hover'),
+        DeclareLaunchArgument('traj_speed', default_value='0.1'),
+        DeclareLaunchArgument('traj_distance', default_value='1.0'),
+        DeclareLaunchArgument('traj_radius', default_value='0.5'),
+        SetParameter(name='use_sim_time', value=True),
+    ]
 
     # ── Clock + payload pose bridges ───────────────────────────────────────
     nodes.append(Node(
@@ -58,6 +104,11 @@ def generate_launch_description():
             arguments=[f'/{drone_name}/gazebo/command/motor_speed'
                        f'@actuator_msgs/msg/Actuators]ignition.msgs.Actuators']))
         nodes.append(Node(
+            package='ros_gz_bridge', executable='parameter_bridge',
+            name=f'imu_bridge_{i}',
+            arguments=[f'/{drone_name}/imu@sensor_msgs/msg/Imu[gz.msgs.IMU'],
+            remappings=[(f'/{drone_name}/imu', f'/drone_{i}/imu')]))
+        nodes.append(Node(
             package='simulation_communication', executable='payload_betaflight_comm',
             name=f'bf_comm_{i}',
             parameters=[{'drone_id': i, 'drone_name': drone_name,
@@ -71,7 +122,10 @@ def generate_launch_description():
         nodes.append(Node(
             package='controller_quad_load', executable='controller',
             name=f'controller_{i}',
-            parameters=[{'drone_id': i, 'reference_source': 'planner'}],
+            parameters=[{'drone_id': i, 'reference_source': 'planner',
+                         'cable_ff_scale': cable_ff_scale,
+                         'attitude_ff': attitude_ff,
+                         'cable_source': cable_source}],
             output='screen'))
 
     # ── Central fleet manager ──────────────────────────────────────────────
@@ -82,6 +136,11 @@ def generate_launch_description():
     # ── Centralized cable-suspended load planner ───────────────────────────
     nodes.append(Node(
         package='controller_load_mpc', executable='planner', name='load_planner',
+        parameters=[{'cable_len': cable_len, 'start_taut': start_taut,
+                      'target_z': target_z, 'lift_ramp_vel': lift_ramp_vel,
+                      'planner_mode': planner_mode, 'ff_gate_mode': ff_gate_mode,
+                      'load_traj': load_traj, 'traj_speed': traj_speed,
+                      'traj_distance': traj_distance, 'traj_radius': traj_radius}],
         output='screen'))
 
     return LaunchDescription(nodes)

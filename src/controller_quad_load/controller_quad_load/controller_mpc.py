@@ -57,6 +57,7 @@ from utility_objects.data_logger import DataLogger
 from utility_objects.callback_manager_multi import CallbackManagerMulti
 from interfaces.msg import MotionCaptureState, ELRSCommand, Telemetry
 from std_msgs.msg import Int32, Float64MultiArray
+from sensor_msgs.msg import Imu
 
 
 POSE_TIMEOUT_THRESHOLD = 0.25  # seconds
@@ -67,6 +68,14 @@ USE_MOTION_CAPTURE = True
 # time" log — if it approaches the control period (1000/FREQUENCY_HZ ms), back off.
 FREQUENCY_HZ = 50.0
 DT = 1.0 / FREQUENCY_HZ
+
+# Part 2c safeguards for the measured-f_ext feedback path (cable_source=measured).
+# Feeding the raw IMU-derived cable force straight into the model closes an
+# IMU->model->command->IMU loop that goes unstable on the takeoff transient; these
+# condition it the way the paper filters/rate-limits its external force.
+CABLE_ACCEL_CAP = 6.0          # m/s^2: clamp measured cable-accel magnitude (~2x taut)
+CABLE_SLEW = 25.0              # m/s^2 per second: max rate-of-change of applied cable
+MAX_CONSEC_SOLVE_FAILS = 15    # tolerate this many bad solves (hold) before disarming
 
 LOGGING_NAME = 'controller_quad_load'
 
@@ -101,10 +110,50 @@ class Controller(Node):
         # lateral motion that would fight the tethers.
         self.declare_parameter("trajectory", "circle")
         self.trajectory_type = self.get_parameter("trajectory").value
+
+        # ── Tracker feedforward toggles (diagnostic A/B knobs) ──────────────
+        # The planner-driven tracker adds two things the (stable) circle tracker
+        # never uses: the a_cable term in the prediction MODEL, and a non-level
+        # (outward-tilt) attitude reference. These knobs disable each one so the
+        # HOLD test can localise which destabilises the attitude loop:
+        #   cable_ff_scale:=0.0  -> cable-blind model (ignore a_cable)
+        #   attitude_ff:=false   -> level attitude reference, keep throttle FF
+        self.declare_parameter("cable_ff_scale", 1.0)
+        self.cable_ff_scale = float(self.get_parameter("cable_ff_scale").value)
+        self.declare_parameter("attitude_ff", True)
+        self.attitude_ff = bool(self.get_parameter("attitude_ff").value)
+        # Part 2c: where the cable acceleration in the MPC prediction model comes
+        # from. 'model' = planner's open-loop t*s/m (default, unchanged behaviour);
+        # 'measured' = IMU-derived f_ext (R*(imu - thrust)), held constant over the
+        # horizon (the paper's reactive external-force term).
+        self.declare_parameter("cable_source", "model")
+        self.cable_source = self.get_parameter("cable_source").value
+        self.get_logger().warn(
+            f"[Drone {self.drone_id}] tracker FF toggles: "
+            f"cable_ff_scale={self.cable_ff_scale} attitude_ff={self.attitude_ff} "
+            f"cable_source={self.cable_source}")
+
         self.planner_ref_pos = None      # (N+1, 3) world-frame position nodes
         self.planner_ref_vel = None      # (N+1, 3) world-frame velocity nodes
         self.planner_ref_acc = None      # (N+1, 3) required specific thrust accel
         self.planner_ref_cable = None    # (N+1, 3) cable tension accel t*s/m (world)
+        self._current_ref_pos = None     # desired position now (node 0), for logging
+
+        # ── IMU-measured external (cable) force, Part 2 ─────────────────────
+        # The accelerometer reads the body-frame specific force (thrust+cable)/m.
+        # Subtracting the modelled thrust gives the MEASURED cable acceleration,
+        # to cross-check (and later replace) the planner's open-loop t*s/m model.
+        self.imu_lin_acc = None          # (3,) low-pass filtered body specific force
+        self.last_cmd_throttle = None    # throttle actually applied to the FC
+        # EMA smoothing of the raw 1 kHz accelerometer: alpha per sample. The raw
+        # signal is far too noisy to use as a feedback term; ~0.03 gives a ~30 ms
+        # time constant, fast vs the tautening dynamics but killing the aliasing.
+        self.imu_alpha = 0.03
+        # Conditioned cable accel actually fed to the model (slew-limited), plus
+        # solve-failure bookkeeping for the non-fatal recovery path.
+        self._applied_cable_vec = None   # (3,) last applied cable accel (for slew)
+        self._last_good_msg = None       # last successfully-solved ELRS command
+        self._solve_fail_ct = 0
 
         # ── Sim-time clock ────────────────────────────────────────────────
         # self.get_clock() will return sim time because use_sim_time=True.
@@ -161,6 +210,24 @@ class Controller(Node):
             self.get_logger().info(
                 f"[Drone {self.drone_id}] Tracking external planner reference.")
 
+        # ── IMU subscription (measured specific force -> cable force) ──────
+        self.create_subscription(
+            Imu, f'/drone_{self.drone_id}/imu', self._imu_callback, 10)
+
+        # ── Payload actual + desired (drone 0 only, for plot_run.py) ───────
+        # Only one node needs to log the payload; drone 0 owns it. Actual comes
+        # from the mocap emulator, desired from the planner.
+        self.payload_pos = None
+        self.payload_ref = None
+        self._log_payload = (self.drone_id == 0)
+        if self._log_payload:
+            self.create_subscription(
+                MotionCaptureState, '/payload/motion_capture_state',
+                self._payload_state_cb, 5)
+            self.create_subscription(
+                Float64MultiArray, '/payload/desired_position',
+                self._payload_ref_cb, 5)
+
         # ── MPC ───────────────────────────────────────────────────────────
         self.N = 20
         self.skip_steps = 3
@@ -178,7 +245,15 @@ class Controller(Node):
         log_headers = [
             'step', 'sim_time', 'u0', 'u1', 'u2', 'u3',
             'pose_x', 'pose_y', 'pose_z', 'pose_qw', 'pose_qx', 'pose_qy', 'pose_qz',
+            # desired reference position (node 0) — plot_run.py reads ref_* to
+            # overlay desired vs actual trajectory.
+            'ref_x', 'ref_y', 'ref_z',
         ]
+        # drone 0 also logs the payload actual + desired so plot_run.py can
+        # overlay the load track alongside the drones.
+        if self._log_payload:
+            log_headers += ['payload_x', 'payload_y', 'payload_z',
+                            'payload_ref_x', 'payload_ref_y', 'payload_ref_z']
         self.data_logger = DataLogger(LOGGING_NAME, trajectory_name, log_headers)
 
         self.observed_state_history = []
@@ -240,6 +315,57 @@ class Controller(Node):
         self.planner_ref_acc = arr[:, 6:9]
         self.planner_ref_cable = arr[:, 9:12] if fields >= 12 else None
 
+    def _imu_callback(self, msg: Imu):
+        """Store the body-frame linear acceleration (specific force) from the
+        drone IMU. At rest this reads [0,0,+9.81]; in flight it is
+        (thrust + cable_force)/m expressed in the body frame."""
+        a = np.array([msg.linear_acceleration.x,
+                      msg.linear_acceleration.y,
+                      msg.linear_acceleration.z])
+        if self.imu_lin_acc is None:
+            self.imu_lin_acc = a
+        else:
+            self.imu_lin_acc += self.imu_alpha * (a - self.imu_lin_acc)
+
+    def _payload_state_cb(self, msg: MotionCaptureState):
+        p = msg.pose.position
+        self.payload_pos = np.array([p.x, p.y, p.z])
+
+    def _payload_ref_cb(self, msg: Float64MultiArray):
+        if len(msg.data) >= 3:
+            self.payload_ref = np.array(msg.data[:3], dtype=float)
+
+    def measured_cable_accel(self):
+        """MEASURED cable acceleration in the WORLD frame from the IMU:
+        a_cable = R * (imu_specific_force - [0,0, kT*throttle]).
+        Returns None until an IMU sample and an applied throttle are available."""
+        if self.imu_lin_acc is None or self.current_pose is None:
+            return None
+        thr = self.last_cmd_throttle
+        if thr is None:
+            return None
+        q = self.current_pose[3:7]          # [qw, qx, qy, qz]
+        Rmat = R.from_quat([q[1], q[2], q[3], q[0]]).as_matrix()
+        kT = float(self.est_params[0])      # thrust_ratio (accel per unit throttle)
+        thrust_body = np.array([0.0, 0.0, kT * float(thr)])
+        return Rmat @ (self.imu_lin_acc - thrust_body)
+
+    def _condition_measured_cable(self, ac):
+        """Clamp + slew-limit the measured cable accel before it enters the MPC
+        model, so the IMU->model->command->IMU feedback cannot spike or slam the
+        solver. Updates and returns the running applied value."""
+        m = float(np.linalg.norm(ac))
+        if m > CABLE_ACCEL_CAP:
+            ac = ac * (CABLE_ACCEL_CAP / m)
+        prev = self._applied_cable_vec
+        max_step = CABLE_SLEW * DT
+        delta = ac - prev
+        dn = float(np.linalg.norm(delta))
+        if dn > max_step:
+            ac = prev + delta * (max_step / dn)
+        self._applied_cable_vec = ac
+        return ac
+
     # ─────────────────────────────────────────────────────────────────────
     # Main control loop
     # ─────────────────────────────────────────────────────────────────────
@@ -273,10 +399,43 @@ class Controller(Node):
                         armed=True, channel_0=0.0, channel_1=0.0,
                         channel_2=-1.0, channel_3=0.0))
                     return
+                # Diagnostic toggles: scale/zero the cable model term, and/or
+                # replace the tilt attitude FF with a level one (vertical accel of
+                # the same magnitude -> identity tilt quat, throttle FF preserved).
+                ref_acc = self.planner_ref_acc
+                if not self.attitude_ff and ref_acc is not None:
+                    ref_acc = np.stack([[0.0, 0.0, float(np.linalg.norm(a))]
+                                        for a in self.planner_ref_acc])
+                ref_cable = self.planner_ref_cable
+                if ref_cable is not None and self.cable_ff_scale != 1.0:
+                    ref_cable = ref_cable * self.cable_ff_scale
+                # Part 2c: optionally replace the open-loop model cable term with
+                # the IMU-measured f_ext, held constant across the horizon. Falls
+                # back to the model until a valid measurement is available.
+                if self.cable_source == "measured":
+                    ac_meas = self.measured_cable_accel()
+                    if ac_meas is not None:
+                        # Seed the slew from the model value on the first measured
+                        # cycle so the model->measured switch ramps in gently
+                        # instead of stepping (e.g. 3.08 -> 1.5) in one tick.
+                        if self._applied_cable_vec is None:
+                            self._applied_cable_vec = (
+                                ref_cable[0].copy() if ref_cable is not None
+                                else np.zeros(3))
+                        ac_cond = self._condition_measured_cable(ac_meas)
+                        rows = (self.planner_ref_pos.shape[0]
+                                if self.planner_ref_pos is not None else self.N + 1)
+                        ref_cable = np.tile(ac_cond, (rows, 1)) * self.cable_ff_scale
+                # Remember what the model actually received, so the diag |aC|
+                # reflects the applied value under either cable_source.
+                self._applied_cable0 = (float(np.linalg.norm(ref_cable[0]))
+                                        if ref_cable is not None else 0.0)
                 set_planner_reference(
                     self.ocp, self.planner_ref_pos, self.planner_ref_vel,
-                    self.planner_ref_acc, self.N, self.est_params,
-                    ref_cable=self.planner_ref_cable)
+                    ref_acc, self.N, self.est_params,
+                    ref_cable=ref_cable)
+                # desired reference position now (node 0) for the log / plot
+                self._current_ref_pos = np.asarray(self.planner_ref_pos[0], float)
             else:
                 # Internal circle: land + shutdown at end of trajectory.
                 if self.step_counter + self.N * self.skip_steps > self.steps:
@@ -290,6 +449,9 @@ class Controller(Node):
                 set_trajectory_reference_aligned(
                     self.ocp, self.traj, self.N,
                     self.step_counter, self.skip_steps, self.est_params)
+                # desired reference position now (aligned node 0) for the log / plot
+                idx = min(self.step_counter, self.traj.shape[1] - 1)
+                self._current_ref_pos = np.asarray(self.traj[0:3, idx], float)
 
             estimated_state = copy.deepcopy(self.current_pose[:13])
 
@@ -321,9 +483,26 @@ class Controller(Node):
             solve_ms = (time.perf_counter() - t0) * 1000
             #self.get_logger().info(f"Solve time: {solve_ms:.2f}ms")
             if status != 0:
-                self.get_logger().error(
-                    f"[Drone {self.drone_id}] acados returned status {status}.")
-                raise RuntimeError(f"acados returned status {status}.")
+                # NON-FATAL: a single bad solve should not kill the node. Hold the
+                # last good command, re-seed the initial guess (a bad warm start
+                # perpetuates failure), and only disarm after sustained failure.
+                self._solve_fail_ct += 1
+                self.get_logger().warn(
+                    f"[Drone {self.drone_id}] acados status {status} "
+                    f"(consecutive fail {self._solve_fail_ct}) — holding last command.")
+                self.first_solve = True   # force set_initial_guess next cycle
+                if self._solve_fail_ct > MAX_CONSEC_SOLVE_FAILS:
+                    self.get_logger().error(
+                        f"[Drone {self.drone_id}] {self._solve_fail_ct} consecutive "
+                        f"solver failures — disarming for safety.")
+                    self.cb.disarm(ELRSCommand(
+                        armed=False, channel_0=0.0, channel_1=0.0,
+                        channel_2=-1.0, channel_3=0.0))
+                    return
+                if self._last_good_msg is not None:
+                    self.cb.cmd_publisher_.publish(self._last_good_msg)
+                return
+            self._solve_fail_ct = 0
 
             x = self.ocp.get(1, "x")
             u = x[-4:]
@@ -342,16 +521,46 @@ class Controller(Node):
                     zc = float(self.current_pose[2])
                     zr = float(self.planner_ref_pos[0][2])
                     aT = float(np.linalg.norm(self.planner_ref_acc[0]))
-                    aC = (float(np.linalg.norm(self.planner_ref_cable[0]))
-                          if self.planner_ref_cable is not None else 0.0)
+                    # APPLIED cable accel (what the model actually got): under
+                    # cable_source='measured' this is the IMU value, else the
+                    # scaled open-loop model — set where ref_cable is built above.
+                    aC = getattr(self, "_applied_cable0", 0.0)
+                    # Horizontal / radial tracking — the "fly outward" failure is a
+                    # HORIZONTAL one, invisible in z alone. exy = |xy error|; rdrift =
+                    # (drone radius) - (ref radius) about the formation centre (world
+                    # xy origin = load): rdrift>0 means the drone is FARTHER OUT than
+                    # its reference (flying outward); <0 means pulled inward.
+                    cxy = np.array([float(self.current_pose[0]),
+                                    float(self.current_pose[1])])
+                    rxy = np.array([float(self.planner_ref_pos[0][0]),
+                                    float(self.planner_ref_pos[0][1])])
+                    exy = float(np.linalg.norm(rxy - cxy))
+                    rdrift = float(np.linalg.norm(cxy) - np.linalg.norm(rxy))
+                    # Part 2: IMU-measured cable accel vs the applied model value.
+                    #   |aCm| = measured cable-accel magnitude
+                    #   dC    = |measured - modelled| (should be small in a stable
+                    #           taut hover once the two agree -> model is trustworthy)
+                    ac_meas = self.measured_cable_accel()
+                    if ac_meas is not None:
+                        ac_mod = (self.planner_ref_cable[0] * self.cable_ff_scale
+                                  if self.planner_ref_cable is not None
+                                  else np.zeros(3))
+                        aCm = float(np.linalg.norm(ac_meas))
+                        dC = float(np.linalg.norm(ac_meas - ac_mod))
+                    else:
+                        aCm = float('nan')
+                        dC = float('nan')
                     self.get_logger().info(
-                        f"[diag d{self.drone_id}] z={zc:.2f} zref={zr:.2f} "
-                        f"ez={zr - zc:+.2f} thr={float(u[2]):.3f} "
+                        f"[diag d{self.drone_id}] z={zc:.2f} ez={zr - zc:+.2f} "
+                        f"exy={exy:.2f} rdrift={rdrift:+.2f} thr={float(u[2]):.3f} "
                         f"roll={float(u[0]):+.2f} pitch={float(u[1]):+.2f} "
-                        f"|aT|={aT:.2f} |aC|={aC:.2f}")
+                        f"|aT|={aT:.2f} |aC|={aC:.2f} |aCm|={aCm:.2f} dC={dC:.2f}")
 
             # ── Publish command ───────────────────────────────────────────
             if self.takeoff_requested:
+                # Record the throttle actually applied to the FC so the next IMU
+                # sample can be decomposed into thrust + cable (measured_cable_accel).
+                self.last_cmd_throttle = float(u[2])
                 msg = ELRSCommand(
                     armed=True,
                     channel_0=round(u[0], 3),
@@ -368,6 +577,9 @@ class Controller(Node):
                     f"[Drone {self.drone_id}] Armed — waiting for TAKEOFF command.")
 
             self.cb.cmd_publisher_.publish(msg)
+            # Remember this good command so a later failed solve can hold it.
+            if self.takeoff_requested:
+                self._last_good_msg = msg
 
             # ── Visualisation ─────────────────────────────────────────────
             mpc_trajectory = np.zeros((13, self.N))
@@ -383,6 +595,8 @@ class Controller(Node):
 
             # ── Logging ───────────────────────────────────────────────────
             sim_time_sec = self.get_clock().now().nanoseconds * 1e-9
+            ref = (self._current_ref_pos if self._current_ref_pos is not None
+                   else np.full(3, np.nan))
             log_row = [
                 self.step_counter, sim_time_sec,
                 float(u[0]), float(u[1]), float(u[2]), float(u[3]),
@@ -390,7 +604,15 @@ class Controller(Node):
                 float(self.current_pose[2]),
                 float(self.current_pose[3]), float(self.current_pose[4]),
                 float(self.current_pose[5]), float(self.current_pose[6]),
+                float(ref[0]), float(ref[1]), float(ref[2]),
             ]
+            if self._log_payload:
+                pa = (self.payload_pos if self.payload_pos is not None
+                      else np.full(3, np.nan))
+                pr = (self.payload_ref if self.payload_ref is not None
+                      else np.full(3, np.nan))
+                log_row += [float(pa[0]), float(pa[1]), float(pa[2]),
+                            float(pr[0]), float(pr[1]), float(pr[2])]
             self.data_logger.append_row(log_row)
 
             self.control_history.append(np.concatenate((u, u_rate)).tolist())

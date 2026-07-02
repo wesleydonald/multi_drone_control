@@ -170,6 +170,7 @@ class Controller(Node):
         log_headers = [
             'step', 'sim_time', 'u0', 'u1', 'u2', 'u3',
             'pose_x', 'pose_y', 'pose_z', 'pose_qw', 'pose_qx', 'pose_qy', 'pose_qz',
+            'ref_x', 'ref_y', 'ref_z',   # desired (reference) position for this step
         ]
         self.data_logger = DataLogger(LOGGING_NAME, trajectory_name, log_headers)
 
@@ -354,6 +355,8 @@ class Controller(Node):
 
             # ── Logging ───────────────────────────────────────────────────
             sim_time_sec = self.get_clock().now().nanoseconds * 1e-9
+            ref_idx = min(self.step_counter, self.traj.shape[1] - 1)
+            ref_pos = self.traj[0:3, ref_idx]
             log_row = [
                 self.step_counter, sim_time_sec,
                 float(u[0]), float(u[1]), float(u[2]), float(u[3]),
@@ -361,6 +364,7 @@ class Controller(Node):
                 float(self.current_pose[2]),
                 float(self.current_pose[3]), float(self.current_pose[4]),
                 float(self.current_pose[5]), float(self.current_pose[6]),
+                float(ref_pos[0]), float(ref_pos[1]), float(ref_pos[2]),
             ]
             self.data_logger.append_row(log_row)
 
