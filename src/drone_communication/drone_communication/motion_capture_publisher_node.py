@@ -3,7 +3,8 @@ from rclpy.node import Node
 from geometry_msgs.msg import Pose, Twist
 from std_msgs.msg import Header
 from interfaces.msg import MotionCaptureState  # Import the new message type
-from geometry_msgs.msg import Twist, PoseArray, Pose, PoseStamped
+from geometry_msgs.msg import Twist, PoseArray, Pose, PoseStamped, TransformStamped
+from tf2_ros import TransformBroadcaster
 from tf_transformations import quaternion_multiply, quaternion_inverse, quaternion_matrix
 import socket
 from dataclasses import dataclass
@@ -14,7 +15,24 @@ import numpy as np
 from collections import deque  # Import deque for the rolling average filter
 import csv
 import scipy.signal  # Import scipy.signal for Butterworth filter
-import re 
+import re
+
+# ═════════════════════════════════════════════════════════════════════════════
+# REAL-WORLD CONFIG
+# ─────────────────────────────────────────────────────────────────────────────
+# Map each MoCap rigid-body ID to a drone_id. This node publishes each body to
+# /drone_<drone_id>/motion_capture_state (the topic the MPC controllers read).
+# Add/rename entries to match the rigid-body IDs right now its 10 and 20.
+RIGID_BODY_TO_DRONE = {10: 0, 11: 1}
+# Rigid-body ID routed to /pendulum_state_publisher instead of a drone (or None).
+PENDULUM_RIGID_BODY_ID = 8
+# MoCap UDP stream endpoint (the host/port your mocap software streams to).
+MOCAP_UDP_HOST = "192.168.0.87"
+MOCAP_UDP_PORT = 1511
+# TF: broadcast each drone as map -> drone_<id> so RViz can show it live. Match
+# the controllers' visualization frame ("map") so paths + drones share one frame.
+MOCAP_WORLD_FRAME = "map"
+# ═════════════════════════════════════════════════════════════════════════════
 
 @dataclass
 class ObjectData:
@@ -277,15 +295,19 @@ class MotionCapturePublisher(Node):
     def __init__(self):
         super().__init__('udp_to_pose_node')
         
-        # ROS2 Publisher
-        self.publisher = self.create_publisher(MotionCaptureState, 'motion_capture_state', 10)
+        # ROS2 Publishers: one per drone, keyed by drone_id, publishing to
+        # /drone_<drone_id>/motion_capture_state (see RIGID_BODY_TO_DRONE above).
+        self.drone_publishers = {
+            drone_id: self.create_publisher(
+                MotionCaptureState, f'/drone_{drone_id}/motion_capture_state', 10)
+            for drone_id in RIGID_BODY_TO_DRONE.values()}
         self.pose_publisher = self.create_publisher(PoseStamped, '/rviz_pose', 10)
         self.pen_publisher = self.create_publisher(MotionCaptureState, '/pendulum_state_publisher', 10)
+        # TF broadcaster so RViz can render each drone live (map -> drone_<id>).
+        self.tf_broadcaster = TransformBroadcaster(self)
         # UDP Setup
-        #self.HOST = "192.168.1.105"
-        #self.PORT = 1511
-        self.HOST = "192.168.0.87" #"192.168.1.105"
-        self.PORT = 1511
+        self.HOST = MOCAP_UDP_HOST
+        self.PORT = MOCAP_UDP_PORT
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((self.HOST, self.PORT))
         
@@ -330,9 +352,27 @@ class MotionCapturePublisher(Node):
         return msg
 
 
+    def broadcast_drone_tf(self, drone_id, obj_data):
+        """Broadcast map -> drone_<id> from the MoCap pose so RViz shows it live."""
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = MOCAP_WORLD_FRAME
+        t.child_frame_id = f'drone_{drone_id}'
+        t.transform.translation.x = float(obj_data.position[0])
+        t.transform.translation.y = float(obj_data.position[1])
+        t.transform.translation.z = float(obj_data.position[2])
+        t.transform.rotation.w = float(obj_data.rotation[0])
+        t.transform.rotation.x = float(obj_data.rotation[1])
+        t.transform.rotation.y = float(obj_data.rotation[2])
+        t.transform.rotation.z = float(obj_data.rotation[3])
+        self.tf_broadcaster.sendTransform(t)
+
     def run(self):
+        # A SEPARATE parser per rigid body: ParseData holds per-object velocity
+        # filter state, so sharing one across drones would corrupt their twists.
         self.penParseData = ParseData()
-        self.quadParseData = ParseData()
+        self.drone_parsers = {drone_id: ParseData()
+                              for drone_id in RIGID_BODY_TO_DRONE.values()}
         try:
             while rclpy.ok():
                 data, _ = self.sock.recvfrom(255)
@@ -354,17 +394,24 @@ class MotionCapturePublisher(Node):
                     print("Error")
                     continue
 
-                if re.search("8", obj_id):
-                    # use pen parse data object
+                # Route by rigid-body ID: extract the integer id from obj_id and
+                # look it up in RIGID_BODY_TO_DRONE (pendulum id handled first).
+                m = re.search(r'-?\d+', obj_id)
+                rb_id = int(m.group()) if m else None
+
+                if rb_id is not None and rb_id == PENDULUM_RIGID_BODY_ID:
                     obj_data = self.penParseData.parse_packet(data)
-                    pendulum_msg = self.create_motion_capture_state_msg(obj_data)
-                    self.pen_publisher.publish(pendulum_msg)
-                    
-                else:
-                    #use quad parse data object
-                    obj_data = self.quadParseData.parse_packet(data)
-                    motion_capture_msg = self.create_motion_capture_state_msg(obj_data)
-                    self.publisher.publish(motion_capture_msg)
+                    if obj_data is not None:
+                        self.pen_publisher.publish(
+                            self.create_motion_capture_state_msg(obj_data))
+                elif rb_id in RIGID_BODY_TO_DRONE:
+                    drone_id = RIGID_BODY_TO_DRONE[rb_id]
+                    obj_data = self.drone_parsers[drone_id].parse_packet(data)
+                    if obj_data is not None:
+                        self.drone_publishers[drone_id].publish(
+                            self.create_motion_capture_state_msg(obj_data))
+                        self.broadcast_drone_tf(drone_id, obj_data)
+                # else: unknown rigid body -> ignore
 
                 
         except KeyboardInterrupt:

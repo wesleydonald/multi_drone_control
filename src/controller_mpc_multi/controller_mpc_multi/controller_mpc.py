@@ -80,7 +80,10 @@ class Controller(Node):
         # ── Drone identity ────────────────────────────────────────────────
         self.declare_parameter("drone_id", 0)
         self.drone_id = self.get_parameter("drone_id").value
-        self.offset_x, self.offset_y = DRONE_OFFSETS.get(self.drone_id, (0.0, 0.0))
+        if self.drone_id not in DRONE_OFFSETS:
+            raise ValueError(f"No offset defined for drone_id={self.drone_id!r}")
+            sys.exit(1)
+        self.offset_x, self.offset_y = DRONE_OFFSETS.get(self.drone_id)
 
         # Reference source: 'internal' = own circle (default, unchanged);
         # 'planner' = track /drone_{id}/reference_trajectory from controller_load_mpc.
@@ -164,7 +167,7 @@ class Controller(Node):
             self.get_logger().info("[acados] compiling quad_dynamics solver (sources changed)...")
         self.ocp = generate_ocp_controller(generate=not fresh, build=not fresh)
         fcntl.flock(_lock_file, fcntl.LOCK_UN)
-        self.est_params = np.array([38.0, 0.0, 0.12, 70.0, 670.0, 0.5])
+        self.est_params = np.array([24.0, 0.0, 0.12, 70.0, 670.0, 0.5])
 
         # ── Logging ───────────────────────────────────────────────────────
         log_headers = [
