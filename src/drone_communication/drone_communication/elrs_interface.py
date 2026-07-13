@@ -100,6 +100,13 @@ class ELRSInterface(Node):
         self.telemetry_timer = self.create_timer(0.1, self.publish_telemetry)  # Timer for 10Hz publishing
         self.get_logger().info('ELRS Interface Node has started.')
 
+        # Explicit serial device for this drone's ELRS TX (e.g. /dev/ttyUSB0). With
+        # two drones each instance MUST bind a distinct device — otherwise both grab
+        # the first /dev/ttyUSB*. Empty string keeps the old auto-detect behaviour.
+        self.declare_parameter('serial_port', '')
+        self.serial_port = self.get_parameter('serial_port').value
+        self.get_logger().info(f'Serial port MULTI {self.serial_port} connected.')
+
         self.ser = None
         self.connect_serial()  # Initialize serial connection
 
@@ -136,11 +143,17 @@ class ELRSInterface(Node):
     def connect_serial(self):
         while self.ser is None:
             try:
+                # Explicit device if the serial_port param is set; else auto-detect
+                # the first /dev/ttyUSB* (single-drone fallback, unchanged).
+                if self.serial_port:
+                    self.ser = serial.Serial(self.serial_port, 921600, timeout=0.1)
+                    self.get_logger().info(f'Serial port MULTI {self.serial_port} connected.')
+                    return
                 ports = serial.tools.list_ports.comports()
                 for port in ports:
                     if '/dev/ttyUSB' in port.device:  # Check for USB serial devices
                         self.ser = serial.Serial(port.device, 921600, timeout=0.1)  # Reduced timeout
-                        self.get_logger().info(f'Serial port {port.device} connected.')
+                        self.get_logger().info(f'Serial port SINGLE {port.device} connected.')
                         return
                 self.get_logger().warn('No suitable serial port found. Retrying...')
                 time.sleep(1)  # Wait before retrying

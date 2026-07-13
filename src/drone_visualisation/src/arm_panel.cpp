@@ -52,22 +52,23 @@ void ArmPanel::onInitialize()
 {
   auto ros_node = getDisplayContext()->getRosNodeAbstraction().lock();
   node_ = ros_node->get_raw_node();
-  command_pub_ = node_->create_publisher<std_msgs::msg::String>("drone_command", 10);
-  
-  // Create service client for arming
-  arming_client_ = node_->create_client<interfaces::srv::SetArming>("drone_arming_service");
-  
-  // Subscribe to arming state feedback from the controller
+  // FLEET-DRIVEN: the buttons publish ARM/DISARM/TAKEOFF strings to the central
+  // fleet manager (/fleet/command), which arms/disarms ALL drones together — the
+  // same path as `ros2 topic pub /fleet/command ...`. (The old per-drone
+  // `drone_arming_service` doesn't exist in the multi-drone stack.)
+  command_pub_ = node_->create_publisher<std_msgs::msg::String>("/fleet/command", 10);
+
+  // Reflect the fleet armed state from drone 0's feedback (drones arm together).
   arming_state_sub_ = node_->create_subscription<std_msgs::msg::Bool>(
-    "drone_arming_state_feedback", 10,
+    "/drone_0/arming_state_feedback", 10,
     std::bind(&ArmPanel::armingStateCallback, this, std::placeholders::_1));
-  
-  // Subscribe to telemetry for battery voltage
+
+  // Battery voltage from drone 0's telemetry (elrs_interface publishes per-drone).
   telemetry_sub_ = node_->create_subscription<interfaces::msg::Telemetry>(
-    "/telemetry", 10,
+    "/drone_0/telemetry", 10,
     std::bind(&ArmPanel::telemetryCallback, this, std::placeholders::_1));
-  
-  RCLCPP_INFO(node_->get_logger(), "ArmPanel initialized");
+
+  RCLCPP_INFO(node_->get_logger(), "ArmPanel initialized (fleet mode -> /fleet/command)");
 }
 
 void ArmPanel::onButtonPressed()
@@ -96,40 +97,23 @@ void ArmPanel::onTakeoffPressed()
 
 void ArmPanel::callArmingService(bool arm)
 {
-  if (!arming_client_->service_is_ready()) {
-    status_message_ = "Controller not running - service unavailable";
+  // FLEET COMMAND: publish ARM/DISARM to /fleet/command (the fleet manager arms
+  // every drone). No subscriber => the fleet manager (terminal 2) isn't running.
+  if (!command_pub_ || command_pub_->get_subscription_count() == 0) {
+    status_message_ = "Fleet manager not running";
     updateStatusLabel();
-    RCLCPP_WARN(node_->get_logger(), "Arming service not available - controller may not be running");
+    RCLCPP_WARN(node_->get_logger(),
+                "No subscriber on /fleet/command — fleet manager may not be running");
     return;
   }
 
-  auto request = std::make_shared<interfaces::srv::SetArming::Request>();
-  request->arm = arm;
+  std_msgs::msg::String msg;
+  msg.data = arm ? "ARM" : "DISARM";
+  command_pub_->publish(msg);
 
-  // Send async request with callback
-  auto result_callback = [this, arm](rclcpp::Client<interfaces::srv::SetArming>::SharedFuture future) {
-    try {
-      auto response = future.get();
-      status_message_ = response->message;
-      updateStatusLabel();
-      
-      if (response->success) {
-        RCLCPP_INFO(node_->get_logger(), "%s", response->message.c_str());
-        // The arming state will be updated via the feedback subscription
-      } else {
-        RCLCPP_WARN(node_->get_logger(), "Arming service failed: %s", response->message.c_str());
-      }
-    } catch (const std::exception& e) {
-      RCLCPP_ERROR(node_->get_logger(), "Service call exception: %s", e.what());
-      status_message_ = "Service error: " + std::string(e.what());
-      updateStatusLabel();
-    }
-  };
-
-  arming_client_->async_send_request(request, result_callback);
-  status_message_ = arm ? "Requesting ARM..." : "Requesting DISARM...";
+  status_message_ = arm ? "Sent ARM to fleet" : "Sent DISARM to fleet";
   updateStatusLabel();
-  RCLCPP_INFO(node_->get_logger(), "Arming service request sent: %s", arm ? "ARM" : "DISARM");
+  RCLCPP_INFO(node_->get_logger(), "Fleet command sent: %s", msg.data.c_str());
 }
 
 void ArmPanel::updateButtonState()
