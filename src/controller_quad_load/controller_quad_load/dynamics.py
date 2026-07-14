@@ -177,7 +177,7 @@ if __name__ == "__main__":
     dyn = QuadLoadDynamics()
     f = dyn.quad_dynamics()
     x0 = np.zeros(17); x0[3] = 1.0          # identity quaternion (level)
-    p_base = np.array([38.0, 0.0, 0.12, 70.0, 670.0, 0.5, 0.0, 0.0, 0.0])
+    p_base = np.array([24.0, 0.0, 0.12, 70.0, 670.0, 0.5, 0.0, 0.0, 0.0])
     a_cable = np.array([0.3, -0.4, -2.5])   # inward/downward cable pull
     p_cab = p_base.copy(); p_cab[6:9] = a_cable
     u0 = np.zeros(4)
