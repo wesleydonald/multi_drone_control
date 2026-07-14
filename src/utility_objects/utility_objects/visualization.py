@@ -35,15 +35,19 @@ import struct
 
 class TrajectoryVisualizer:
     
-    def __init__(self, node: Node, frame_id: str = "map"):
+    def __init__(self, node: Node, frame_id: str = "map", topic_prefix: str = ""):
         self.node = node
         self.frame_id = frame_id
-        
+        # topic_prefix namespaces the path topics so multiple drones don't clobber
+        # each other, e.g. topic_prefix="/drone_0" -> /drone_0/actual_path. Default
+        # "" preserves the original global topics (/actual_path, ...).
+        self.topic_prefix = topic_prefix.rstrip("/")
+
         # Create publishers for different visualization types
-        self.path_publisher = node.create_publisher(Path, '/trajectory_path', 10)
-        self.actual_path_publisher = node.create_publisher(Path, '/actual_path', 10)
-        self.mpc_plan_publisher = node.create_publisher(Path, '/mpc_plan', 10)
-        self.marker_publisher = node.create_publisher(MarkerArray, '/trajectory_markers', 10)
+        self.path_publisher = node.create_publisher(Path, f'{self.topic_prefix}/trajectory_path', 10)
+        self.actual_path_publisher = node.create_publisher(Path, f'{self.topic_prefix}/actual_path', 10)
+        self.mpc_plan_publisher = node.create_publisher(Path, f'{self.topic_prefix}/mpc_plan', 10)
+        self.marker_publisher = node.create_publisher(MarkerArray, f'{self.topic_prefix}/trajectory_markers', 10)
         
         # Create transform broadcaster instead of pose publishers
         self.tf_broadcaster = TransformBroadcaster(node)

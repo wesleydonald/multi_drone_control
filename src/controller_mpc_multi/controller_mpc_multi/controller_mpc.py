@@ -125,7 +125,8 @@ class Controller(Node):
         self.traj, trajectory_name = self._build_offset_trajectory(DT, init_pose)
 
         # ── Visualizer ────────────────────────────────────────────────────
-        self.trajectory_visualizer = TrajectoryVisualizer(self, frame_id="map")
+        self.trajectory_visualizer = TrajectoryVisualizer(
+            self, frame_id="map", topic_prefix=f"/drone_{self.drone_id}")
         self.trajectory_visualizer.publish_all_visualizations(
             self.traj, pose_subsample=15, show_velocity=False,
             velocity_scale=0.3, color_by_time=True)
@@ -167,7 +168,7 @@ class Controller(Node):
             self.get_logger().info("[acados] compiling quad_dynamics solver (sources changed)...")
         self.ocp = generate_ocp_controller(generate=not fresh, build=not fresh)
         fcntl.flock(_lock_file, fcntl.LOCK_UN)
-        self.est_params = np.array([24.0, 0.0, 0.12, 70.0, 670.0, 0.5])
+        self.est_params = np.array([38.0, 0.0, 0.12, 70.0, 670.0, 0.5])
 
         # ── Logging ───────────────────────────────────────────────────────
         log_headers = [

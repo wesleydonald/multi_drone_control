@@ -108,7 +108,7 @@ def generate_ocp_controller(dynamics=None, generate=True, build=True):
     ocp.constraints.x0 = x0
 
     # -------- Parameters default (6 dyn + 3 a_cable + 4 q_ref) --------
-    ocp.parameter_values = np.array([38.0, 0.5, 0.07, 100.0, 100.0, 0.5,
+    ocp.parameter_values = np.array([24.0, 0.5, 0.07, 100.0, 100.0, 0.5,
                                      0.0, 0.0, 0.0,            # a_cable default = 0
                                      1.0, 0.0, 0.0, 0.0])      # q_ref default = identity
 
