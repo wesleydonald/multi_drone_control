@@ -239,7 +239,7 @@ class Controller(Node):
             self.get_logger().info("[acados] compiling quad_load_dynamics solver (sources changed)...")
         self.ocp = generate_ocp_controller(generate=not fresh, build=not fresh)
         fcntl.flock(_lock_file, fcntl.LOCK_UN)
-        self.est_params = np.array([38.0, 0.0, 0.12, 70.0, 670.0, 0.5])
+        self.est_params = np.array([24.0, 0.0, 0.12, 70.0, 670.0, 0.5])
 
         # ── Logging ───────────────────────────────────────────────────────
         log_headers = [

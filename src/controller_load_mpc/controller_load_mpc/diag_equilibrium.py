@@ -36,7 +36,7 @@ def main():
     ap.add_argument('--attach-z', type=float, default=0.025)
     ap.add_argument('--elev', type=float, default=45.0, help='cable elevation deg')
     ap.add_argument('--hover-z', type=float, default=0.6)
-    ap.add_argument('--thrust-ratio', type=float, default=38.0,
+    ap.add_argument('--thrust-ratio', type=float, default=24.0,
                     help='tracker throttle->accel gain (est_params[0])')
     ap.add_argument('--iters', type=int, default=60)
     a = ap.parse_args()
