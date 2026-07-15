@@ -142,7 +142,7 @@ def generate_ocp_controller(dynamics=None, generate=True, build=True):
 
     # Create OCP solver. With generate=build=False the previously compiled shared
     # library is loaded as-is (fast path for the 2nd..Nth drone, and for relaunches
-    # with no solver-source changes) — see _solver_is_fresh in controller_mpc.py.
+    # with no solver-source changes) - see _solver_is_fresh in controller_mpc.py.
     ocp_solver = AcadosOcpSolver(
         ocp, json_file='quad_load_dynamics_ocp.json',
         generate=generate, build=build)

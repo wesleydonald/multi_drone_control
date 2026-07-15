@@ -9,7 +9,7 @@ Responsibilities
 2. Handles /fleet/command  (ARM | TAKEOFF | DISARM | ESTOP)
 3. Broadcasts /fleet/step at FREQUENCY_HZ using Gazebo sim time.
 4. Arms / disarms individual drones via /drone_N/arming_service.
-5. Monitors /drone_N/arming_state_feedback — any unexpected disarm
+5. Monitors /drone_N/arming_state_feedback - any unexpected disarm
    triggers an emergency stop of the whole fleet.
 
 Usage
@@ -102,7 +102,7 @@ class CentralController(Node):
             self.drone_cmd_publishers[i] = self.create_publisher(
                 String, f'/drone_{i}/command', 10)
     # ─────────────────────────────────────────────────────────────────────
-    # Timer — master step broadcast
+    # Timer - master step broadcast
     # ─────────────────────────────────────────────────────────────────────
 
     def _step_timer_callback(self):
@@ -139,7 +139,7 @@ class CentralController(Node):
             self.get_logger().warn(f"Unknown fleet command: '{command}'")
 
     # ─────────────────────────────────────────────────────────────────────
-    # Arming feedback — safety monitor
+    # Arming feedback - safety monitor
     # ─────────────────────────────────────────────────────────────────────
 
     def _arming_feedback_callback(self, msg: Bool, drone_id: int):
@@ -151,7 +151,7 @@ class CentralController(Node):
         # trigger an emergency stop for the entire fleet.
         if self.flying and was_armed and not msg.data:
             self.get_logger().error(
-                f"Drone {drone_id} disarmed unexpectedly during flight — "
+                f"Drone {drone_id} disarmed unexpectedly during flight - "
                 f"triggering emergency stop for all drones!")
             self._disarm_fleet(emergency=True)
 
@@ -172,7 +172,7 @@ class CentralController(Node):
             client = self.arming_clients[i]
             if not client.wait_for_service(timeout_sec=5.0):
                 self.get_logger().error(
-                    f"Arming service for drone {i} not available — aborting ARM.")
+                    f"Arming service for drone {i} not available - aborting ARM.")
                 return
 
         # Send arm requests in parallel
@@ -238,7 +238,7 @@ class CentralController(Node):
                 futures[i] = client.call_async(req)
             else:
                 self.get_logger().warn(
-                    f"Arming service for drone {i} not ready during disarm — skipping.")
+                    f"Arming service for drone {i} not ready during disarm - skipping.")
 
         deadline = time.time() + 3.0
         for i, future in futures.items():
