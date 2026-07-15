@@ -3,13 +3,12 @@
 import os
 import fcntl
 
-# Separate export dir from controller_mpc_multi so the two solvers never clobber
-# each other (this package's model is quad_load_dynamics, with the cable term).
+# own acados dir so this solver doesn't clash with controller_mpc_multi's
 ACADOS_DIR = '/home/wesley/multi_drone_control/c_generated_code_quad_load'
 os.makedirs(ACADOS_DIR, exist_ok=True)
 os.chdir(ACADOS_DIR)
 
-# Serialize compilation across the 4 drone processes
+# file lock so the drone processes don't compile at the same time
 _lock_path = os.path.join(ACADOS_DIR, '.compile.lock')
 _lock_file = open(_lock_path, 'w')
 fcntl.flock(_lock_file, fcntl.LOCK_EX)
@@ -30,22 +29,18 @@ from . import acados as _acados_mod
 from .acados import generate_ocp_controller, set_initial_guess, warm_start_from_previous_solution, set_trajectory_reference_aligned, set_planner_reference, update_ocp_parameters
 
 
-# Solver-source files; if any is newer than the compiled .so, the solver is
-# stale and must be regenerated/recompiled (otherwise we load the existing lib).
+# recompile the solver if acados.py/dynamics.py changed since the last build
 _PKG_DIR = os.path.dirname(_acados_mod.__file__)
 _SOLVER_SRC = [os.path.join(_PKG_DIR, 'acados.py'),
                os.path.join(_PKG_DIR, 'dynamics.py')]
-# cwd is ACADOS_DIR and acados' default code_export_directory is the relative
-# 'c_generated_code', so the compiled solver actually lands in a NESTED dir
-# (ACADOS_DIR/c_generated_code/...). The json is written to cwd (ACADOS_DIR).
+# the .so lands in a nested c_generated_code dir, json goes in ACADOS_DIR
 _SOLVER_SO = os.path.join(ACADOS_DIR, 'c_generated_code',
                           'libacados_ocp_solver_quad_load_dynamics.so')
 _SOLVER_JSON = os.path.join(ACADOS_DIR, 'quad_load_dynamics_ocp.json')
 
 
 def _solver_is_fresh():
-    """True if the compiled solver exists and is newer than its source files,
-    so it can be loaded without recompiling."""
+    """solver exists and is newer than its source -> load it, don't recompile"""
     if not (os.path.exists(_SOLVER_SO) and os.path.exists(_SOLVER_JSON)):
         return False
     so_mtime = os.path.getmtime(_SOLVER_SO)
@@ -62,17 +57,15 @@ from sensor_msgs.msg import Imu
 
 POSE_TIMEOUT_THRESHOLD = 0.25  # seconds
 USE_MOTION_CAPTURE = True
-# Cable-aware tracker runs faster than the cable-blind one (was 30 Hz): the
-# tautening cable is a stiff disturbance and a low-rate loop has little phase
-# margin against it (the paper runs the tracker at >=100 Hz). Watch the "Solve
-# time" log — if it approaches the control period (1000/FREQUENCY_HZ ms), back off.
+# run at 50 Hz (up from 30). the taut cable is a stiff disturbance so the loop
+# needs to be fast. if the "Solve time" log gets close to the control period,
+# drop this.
 FREQUENCY_HZ = 50.0
 DT = 1.0 / FREQUENCY_HZ
 
-# Part 2c safeguards for the measured-f_ext feedback path (cable_source=measured).
-# Feeding the raw IMU-derived cable force straight into the model closes an
-# IMU->model->command->IMU loop that goes unstable on the takeoff transient; these
-# condition it the way the paper filters/rate-limits its external force.
+# limits for the measured-f_ext path (cable_source=measured). feeding the raw
+# imu cable force straight in makes an imu->model->command->imu loop that blows
+# up at takeoff, so filter/clamp/ramp it.
 CABLE_ACCEL_CAP = 6.0          # m/s^2: clamp measured cable-accel magnitude (~2x taut)
 CABLE_SLEW = 25.0              # m/s^2 per second: max rate-of-change of applied cable
 MAX_CONSEC_SOLVE_FAILS = 15    # tolerate this many bad solves (hold) before disarming
@@ -103,29 +96,20 @@ class Controller(Node):
         self.declare_parameter("reference_source", "internal")
         self.reference_source = self.get_parameter("reference_source").value
 
-        # Internal trajectory shape: 'circle' (default, fly a wide circle) or
-        # 'hover' (lift straight up over the spawn point and hold, then land).
-        # 'hover' is the cable-carry test: with slack cables the drones climb
-        # straight up, the cable goes taut, and the load lifts 1:1 — no wide
-        # lateral motion that would fight the tethers.
+        # 'circle' = fly a wide circle, 'hover' = go straight up and hold (the
+        # cable test - climb till the cable goes taut and the load lifts with it)
         self.declare_parameter("trajectory", "circle")
         self.trajectory_type = self.get_parameter("trajectory").value
 
-        # ── Tracker feedforward toggles (diagnostic A/B knobs) ──────────────
-        # The planner-driven tracker adds two things the (stable) circle tracker
-        # never uses: the a_cable term in the prediction MODEL, and a non-level
-        # (outward-tilt) attitude reference. These knobs disable each one so the
-        # HOLD test can localise which destabilises the attitude loop:
-        #   cable_ff_scale:=0.0  -> cable-blind model (ignore a_cable)
-        #   attitude_ff:=false   -> level attitude reference, keep throttle FF
+        # A/B toggles for the two cable feedforward bits, to see which one
+        # upsets the attitude loop:
+        #   cable_ff_scale=0.0  ignore a_cable in the model
+        #   attitude_ff=false   level attitude ref, keep throttle FF
         self.declare_parameter("cable_ff_scale", 1.0)
         self.cable_ff_scale = float(self.get_parameter("cable_ff_scale").value)
         self.declare_parameter("attitude_ff", True)
         self.attitude_ff = bool(self.get_parameter("attitude_ff").value)
-        # Part 2c: where the cable acceleration in the MPC prediction model comes
-        # from. 'model' = planner's open-loop t*s/m (default, unchanged behaviour);
-        # 'measured' = IMU-derived f_ext (R*(imu - thrust)), held constant over the
-        # horizon (the paper's reactive external-force term).
+        # cable accel source: 'model' = planner t*s/m, 'measured' = from the imu
         self.declare_parameter("cable_source", "model")
         self.cable_source = self.get_parameter("cable_source").value
         self.get_logger().warn(
@@ -139,26 +123,20 @@ class Controller(Node):
         self.planner_ref_cable = None    # (N+1, 3) cable tension accel t*s/m (world)
         self._current_ref_pos = None     # desired position now (node 0), for logging
 
-        # ── IMU-measured external (cable) force, Part 2 ─────────────────────
-        # The accelerometer reads the body-frame specific force (thrust+cable)/m.
-        # Subtracting the modelled thrust gives the MEASURED cable acceleration,
-        # to cross-check (and later replace) the planner's open-loop t*s/m model.
+        # imu measured cable force: accel reads (thrust+cable)/m in body frame,
+        # subtract the modelled thrust to get the measured cable accel
         self.imu_lin_acc = None          # (3,) low-pass filtered body specific force
         self.last_cmd_throttle = None    # throttle actually applied to the FC
-        # EMA smoothing of the raw 1 kHz accelerometer: alpha per sample. The raw
-        # signal is far too noisy to use as a feedback term; ~0.03 gives a ~30 ms
-        # time constant, fast vs the tautening dynamics but killing the aliasing.
+        # ema smoothing of the raw imu (alpha per sample). raw is too noisy to
+        # feed back; 0.03 ~= 30 ms time constant
         self.imu_alpha = 0.03
-        # Conditioned cable accel actually fed to the model (slew-limited), plus
-        # solve-failure bookkeeping for the non-fatal recovery path.
+        # slew-limited cable accel actually fed to the model + solve-fail counters
         self._applied_cable_vec = None   # (3,) last applied cable accel (for slew)
         self._last_good_msg = None       # last successfully-solved ELRS command
         self._solve_fail_ct = 0
 
-        # ── Sim-time clock ────────────────────────────────────────────────
-        # self.get_clock() will return sim time because use_sim_time=True.
-        # We also keep a wall-clock reference for the pose-timeout watchdog,
-        # because that check is about real comms latency, not sim latency.
+        # get_clock() is sim time (use_sim_time=True). keep a separate wall clock
+        # for the pose-timeout watchdog since that's about real comms latency.
         self._wall_clock = Clock(clock_type=ClockType.SYSTEM_TIME)
         self.last_pose_update_time = self._wall_clock.now()
 
@@ -173,9 +151,7 @@ class Controller(Node):
         self.get_logger().info(f"[Drone {self.drone_id}] Pose received.")
         init_pose = self.current_pose
 
-        # ── Build offset trajectory ───────────────────────────────────────
-        # The fleet manager publishes the master step; each drone applies its
-        # own spatial offset so all four fly congruent circles in formation.
+        # each drone offsets the shared trajectory so they fly in formation
         self.traj, trajectory_name = self._build_offset_trajectory(DT, init_pose)
 
         # ── Visualizer ────────────────────────────────────────────────────
@@ -191,9 +167,7 @@ class Controller(Node):
         self.step_counter = 0
         self.steps = self.traj.shape[1] - 1
 
-        # ── Fleet step subscription ───────────────────────────────────────
-        # The fleet manager owns the master clock and broadcasts the current
-        # step index.  We simply shadow it here.
+        # fleet manager broadcasts the master step index, just follow it
         self.fleet_step_sub = self.create_subscription(
             Int32,
             '/fleet/step',
@@ -214,9 +188,7 @@ class Controller(Node):
         self.create_subscription(
             Imu, f'/drone_{self.drone_id}/imu', self._imu_callback, 10)
 
-        # ── Payload actual + desired (drone 0 only, for plot_run.py) ───────
-        # Only one node needs to log the payload; drone 0 owns it. Actual comes
-        # from the mocap emulator, desired from the planner.
+        # only drone 0 logs the payload (actual from mocap, desired from planner)
         self.payload_pos = None
         self.payload_ref = None
         self._log_payload = (self.drone_id == 0)
@@ -245,7 +217,7 @@ class Controller(Node):
         log_headers = [
             'step', 'sim_time', 'u0', 'u1', 'u2', 'u3',
             'pose_x', 'pose_y', 'pose_z', 'pose_qw', 'pose_qx', 'pose_qy', 'pose_qz',
-            # desired reference position (node 0) — plot_run.py reads ref_* to
+            # desired reference position (node 0) - plot_run.py reads ref_* to
             # overlay desired vs actual trajectory.
             'ref_x', 'ref_y', 'ref_z',
         ]
@@ -380,7 +352,7 @@ class Controller(Node):
         elapsed = (self._wall_clock.now() - self.last_pose_update_time).nanoseconds * 1e-9
         if self.armed and elapsed > POSE_TIMEOUT_THRESHOLD:
             self.get_logger().error(
-                f"[Drone {self.drone_id}] Pose timeout ({elapsed:.2f}s) — disarming.")
+                f"[Drone {self.drone_id}] Pose timeout ({elapsed:.2f}s) - disarming.")
             msg = ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0,
                               channel_2=-1.0, channel_3=0.0)
             self.cb.disarm(msg)
@@ -394,7 +366,7 @@ class Controller(Node):
                 # External planner: track the streamed receding-horizon
                 # reference (no fixed trajectory length / landing phase).
                 if self.planner_ref_pos is None:
-                    # No reference streamed yet — hold armed-idle on the ground.
+                    # No reference streamed yet - hold armed-idle on the ground.
                     self.cb.cmd_publisher_.publish(ELRSCommand(
                         armed=True, channel_0=0.0, channel_1=0.0,
                         channel_2=-1.0, channel_3=0.0))
@@ -440,7 +412,7 @@ class Controller(Node):
                 # Internal circle: land + shutdown at end of trajectory.
                 if self.step_counter + self.N * self.skip_steps > self.steps:
                     self.get_logger().info(
-                        f"[Drone {self.drone_id}] Trajectory complete — disarming.")
+                        f"[Drone {self.drone_id}] Trajectory complete - disarming.")
                     msg = ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0,
                                       channel_2=-1.0, channel_3=0.0)
                     self.cb.disarm(msg)
@@ -457,7 +429,7 @@ class Controller(Node):
 
             if len(self.control_history) == 0:
                 self.get_logger().warn(
-                    f"[Drone {self.drone_id}] Control history empty — using zero initial control.")
+                    f"[Drone {self.drone_id}] Control history empty - using zero initial control.")
                 estimated_state_with_control = np.concatenate(
                     (estimated_state, np.array([0.0, 0.0, 0.0, 0.0])))
             else:
@@ -489,12 +461,12 @@ class Controller(Node):
                 self._solve_fail_ct += 1
                 self.get_logger().warn(
                     f"[Drone {self.drone_id}] acados status {status} "
-                    f"(consecutive fail {self._solve_fail_ct}) — holding last command.")
+                    f"(consecutive fail {self._solve_fail_ct}) - holding last command.")
                 self.first_solve = True   # force set_initial_guess next cycle
                 if self._solve_fail_ct > MAX_CONSEC_SOLVE_FAILS:
                     self.get_logger().error(
                         f"[Drone {self.drone_id}] {self._solve_fail_ct} consecutive "
-                        f"solver failures — disarming for safety.")
+                        f"solver failures - disarming for safety.")
                     self.cb.disarm(ELRSCommand(
                         armed=False, channel_0=0.0, channel_1=0.0,
                         channel_2=-1.0, channel_3=0.0))
@@ -508,38 +480,27 @@ class Controller(Node):
             u = x[-4:]
             u_rate = self.ocp.get(0, "u")
 
-            # ── Diagnostic (planner mode) ─────────────────────────────────
-            # ~2 Hz: shows whether the planner feedforward is actually engaging.
-            #   ez   = z tracking error (zref - z); large/growing => losing altitude
-            #   thr  = commanded throttle u_state (0.05..0.6); 0.6 => saturating
-            #   |aT| = thrust-ff accel magnitude (should be >9.81 and rising w/ load)
-            #   |aC| = cable accel magnitude applied to the model (0 => gate shut /
-            #          cable not engaging => effectively cable-blind)
+            # ~2 Hz planner diagnostic. ez = z error, thr = throttle (0.6=sat),
+            # |aT| = thrust-ff accel (>9.81), |aC| = cable accel (0 = gate shut)
             if self.reference_source == "planner" and self.takeoff_requested:
                 self._diag_ctr = getattr(self, "_diag_ctr", 0) + 1
                 if self._diag_ctr % 15 == 0:
                     zc = float(self.current_pose[2])
                     zr = float(self.planner_ref_pos[0][2])
                     aT = float(np.linalg.norm(self.planner_ref_acc[0]))
-                    # APPLIED cable accel (what the model actually got): under
-                    # cable_source='measured' this is the IMU value, else the
-                    # scaled open-loop model — set where ref_cable is built above.
+                    # applied cable accel (imu value if measured, else the model)
                     aC = getattr(self, "_applied_cable0", 0.0)
-                    # Horizontal / radial tracking — the "fly outward" failure is a
-                    # HORIZONTAL one, invisible in z alone. exy = |xy error|; rdrift =
-                    # (drone radius) - (ref radius) about the formation centre (world
-                    # xy origin = load): rdrift>0 means the drone is FARTHER OUT than
-                    # its reference (flying outward); <0 means pulled inward.
+                    # horizontal tracking - the "fly outward" failure doesn't show
+                    # in z. exy = xy error, rdrift = drone radius - ref radius
+                    # (>0 = flying outward, <0 = pulled in)
                     cxy = np.array([float(self.current_pose[0]),
                                     float(self.current_pose[1])])
                     rxy = np.array([float(self.planner_ref_pos[0][0]),
                                     float(self.planner_ref_pos[0][1])])
                     exy = float(np.linalg.norm(rxy - cxy))
                     rdrift = float(np.linalg.norm(cxy) - np.linalg.norm(rxy))
-                    # Part 2: IMU-measured cable accel vs the applied model value.
-                    #   |aCm| = measured cable-accel magnitude
-                    #   dC    = |measured - modelled| (should be small in a stable
-                    #           taut hover once the two agree -> model is trustworthy)
+                    # imu measured cable accel vs applied model: |aCm| = measured,
+                    # dC = |measured - modelled| (small once they agree)
                     ac_meas = self.measured_cable_accel()
                     if ac_meas is not None:
                         ac_mod = (self.planner_ref_cable[0] * self.cable_ff_scale
@@ -574,7 +535,7 @@ class Controller(Node):
                 msg = ELRSCommand(armed=True, channel_0=0.0, channel_1=0.0,
                                   channel_2=-1.0, channel_3=0.0)
                 self.get_logger().info(
-                    f"[Drone {self.drone_id}] Armed — waiting for TAKEOFF command.")
+                    f"[Drone {self.drone_id}] Armed - waiting for TAKEOFF command.")
 
             self.cb.cmd_publisher_.publish(msg)
             # Remember this good command so a later failed solve can hold it.
@@ -624,7 +585,7 @@ class Controller(Node):
             msg = ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0,
                               channel_2=-1.0, channel_3=0.0)
             self.cb.cmd_publisher_.publish(msg)
-            # Do NOT reset step_counter here — fleet manager owns it
+            # Do NOT reset step_counter here - fleet manager owns it
 
     # ─────────────────────────────────────────────────────────────────────
     # Shutdown helpers

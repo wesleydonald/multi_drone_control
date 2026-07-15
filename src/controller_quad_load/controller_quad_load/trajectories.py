@@ -141,7 +141,7 @@ def hover_trajectory(dt, init_pose):
     # Land after hover
     land_traj, _ = land_trajectory(dt, hover_traj[:, -1])
 
-    # Concatenate full trajectory: takeoff → hover → land
+    # Concatenate full trajectory: takeoff -> hover -> land
     traj = np.concatenate((takeoff_traj, hover_traj, land_traj), axis=1)
     return traj, "hover"
 
