@@ -60,7 +60,10 @@ from std_msgs.msg import Int32, Float64MultiArray
 from sensor_msgs.msg import Imu
 
 
-POSE_TIMEOUT_THRESHOLD = 0.25  # seconds
+POSE_TIMEOUT_THRESHOLD = 0.75  # seconds (relaxed from 0.25: on a headless machine
+                               # running gz + N acados solvers + planner + logging,
+                               # mocap delivery can transiently stall >0.25s at
+                               # startup and spuriously trip the disarm watchdog)
 USE_MOTION_CAPTURE = True
 # Cable-aware tracker runs faster than the cable-blind one (was 30 Hz): the
 # tautening cable is a stiff disturbance and a low-rate loop has little phase
@@ -128,6 +131,13 @@ class Controller(Node):
         # horizon (the paper's reactive external-force term).
         self.declare_parameter("cable_source", "model")
         self.cable_source = self.get_parameter("cable_source").value
+        # thrust_ratio (kT): accel per unit throttle the MPC assumes. If it is set
+        # BELOW the sim's true motor thrust, the controller over-commands throttle
+        # and the drones float above their commanded height (load rises to the
+        # drones, flattening soft cables). Raise toward the sim value to hold the
+        # taut geometry. Overrides est_params[0] below.
+        self.declare_parameter("thrust_ratio", 24.0)
+        self.thrust_ratio = float(self.get_parameter("thrust_ratio").value)
         self.get_logger().warn(
             f"[Drone {self.drone_id}] tracker FF toggles: "
             f"cable_ff_scale={self.cable_ff_scale} attitude_ff={self.attitude_ff} "
@@ -239,7 +249,7 @@ class Controller(Node):
             self.get_logger().info("[acados] compiling quad_load_dynamics solver (sources changed)...")
         self.ocp = generate_ocp_controller(generate=not fresh, build=not fresh)
         fcntl.flock(_lock_file, fcntl.LOCK_UN)
-        self.est_params = np.array([24.0, 0.0, 0.12, 70.0, 670.0, 0.5])
+        self.est_params = np.array([self.thrust_ratio, 0.0, 0.12, 70.0, 670.0, 0.5])
 
         # ── Logging ───────────────────────────────────────────────────────
         log_headers = [

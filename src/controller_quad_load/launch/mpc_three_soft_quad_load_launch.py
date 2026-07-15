@@ -54,9 +54,15 @@ def generate_launch_description():
     cable_ff_scale = ParameterValue(LaunchConfiguration('cable_ff_scale'), value_type=float)
     attitude_ff    = ParameterValue(LaunchConfiguration('attitude_ff'), value_type=bool)
     cable_source   = LaunchConfiguration('cable_source')
+    thrust_ratio   = ParameterValue(LaunchConfiguration('thrust_ratio'), value_type=float)
+    # geometric (closed-loop) load-position PD(+I) gains — Stage 3
+    kp_load_xy = ParameterValue(LaunchConfiguration('kp_load_xy'), value_type=float)
+    kd_load_xy = ParameterValue(LaunchConfiguration('kd_load_xy'), value_type=float)
+    ki_load_xy = ParameterValue(LaunchConfiguration('ki_load_xy'), value_type=float)
+    kp_load_z  = ParameterValue(LaunchConfiguration('kp_load_z'), value_type=float)
 
     nodes = [
-        DeclareLaunchArgument('cable_len', default_value='1.0'),
+        DeclareLaunchArgument('cable_len', default_value='0.6'),
         DeclareLaunchArgument('start_taut', default_value='true'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         # HOLD test: lift_ramp_vel:=0.0 (no lift, just hold the taut config).
@@ -68,16 +74,26 @@ def generate_launch_description():
         # 'model' = planner open-loop t*s/m cable term (default); 'measured' =
         # IMU-derived f_ext held over the horizon (Part 2c A/B).
         DeclareLaunchArgument('cable_source', default_value='model'),
+        # thrust accel per unit throttle the MPC assumes; raise toward the sim's
+        # true motor thrust to stop the drones floating above their commanded
+        # height (which flattens the soft cables).
+        DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
         # 'kinematic' = open-loop feedforward (tracker stabilizes); 'coupled' =
-        # online load-cable OCP (diverges — kept for A/B comparison).
+        # online load-cable OCP (diverges — kept for A/B comparison); 'geometric' =
+        # closed-loop PD(+I) load-position controller (Stage 3).
         DeclareLaunchArgument('planner_mode', default_value='kinematic'),
+        # geometric-mode load-position PD(+I) gains (xy closed, z open by default).
+        DeclareLaunchArgument('kp_load_xy', default_value='1.5'),
+        DeclareLaunchArgument('kd_load_xy', default_value='0.6'),
+        DeclareLaunchArgument('ki_load_xy', default_value='0.2'),
+        DeclareLaunchArgument('kp_load_z', default_value='0.0'),
         # 'taut' = engage FF from spawn (rigid cables); 'airborne' = ramp with the
         # load lift (soft cables).
         DeclareLaunchArgument('ff_gate_mode', default_value='airborne'),
         # LOAD reference trajectory after the lift tops out: 'hover' (current
         # behaviour), 'line_x' (+x translate), 'circle'. Keep traj_speed slow.
-        DeclareLaunchArgument('load_traj', default_value='hover'),
-        DeclareLaunchArgument('traj_speed', default_value='0.1'),
+        DeclareLaunchArgument('load_traj', default_value='circle'),
+        DeclareLaunchArgument('traj_speed', default_value='0.3'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
         DeclareLaunchArgument('traj_radius', default_value='0.5'),
         SetParameter(name='use_sim_time', value=True),
@@ -125,13 +141,21 @@ def generate_launch_description():
             parameters=[{'drone_id': i, 'reference_source': 'planner',
                          'cable_ff_scale': cable_ff_scale,
                          'attitude_ff': attitude_ff,
-                         'cable_source': cable_source}],
+                         'cable_source': cable_source,
+                         'thrust_ratio': thrust_ratio}],
             output='screen'))
 
     # ── Central fleet manager ──────────────────────────────────────────────
     nodes.append(Node(
         package='controller_quad_load', executable='main', name='central_controller',
         parameters=[{'num_drones': N}], output='screen'))
+
+    # ── Load-state pipeline (Stage 1): republish mocap as /payload/state ────
+    # position + linear velocity + N cable directions s_i, for the closed-loop
+    # (geometric) planner mode and for baselining the open-loop load error.
+    nodes.append(Node(
+        package='controller_load_mpc', executable='load_state', name='load_state',
+        parameters=[{'n_drones': N}], output='screen'))
 
     # ── Centralized cable-suspended load planner ───────────────────────────
     nodes.append(Node(
@@ -140,7 +164,9 @@ def generate_launch_description():
                       'target_z': target_z, 'lift_ramp_vel': lift_ramp_vel,
                       'planner_mode': planner_mode, 'ff_gate_mode': ff_gate_mode,
                       'load_traj': load_traj, 'traj_speed': traj_speed,
-                      'traj_distance': traj_distance, 'traj_radius': traj_radius}],
+                      'traj_distance': traj_distance, 'traj_radius': traj_radius,
+                      'kp_load_xy': kp_load_xy, 'kd_load_xy': kd_load_xy,
+                      'ki_load_xy': ki_load_xy, 'kp_load_z': kp_load_z}],
         output='screen'))
 
     return LaunchDescription(nodes)

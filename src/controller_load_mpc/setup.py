@@ -22,6 +22,7 @@ setup(
     entry_points={
         'console_scripts': [
             'planner = controller_load_mpc.planner_node:main',
+            'load_state = controller_load_mpc.load_state_node:main',
         ],
     },
 )

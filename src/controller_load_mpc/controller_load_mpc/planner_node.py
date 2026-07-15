@@ -154,6 +154,25 @@ class LoadPlanner(Node):
         self.descending = False      # latched once the lateral trajectory closes
         self._landed = False         # descent finished, load back at start height
         self._lift_vel = 0.0         # signed vertical velocity of the lift target
+        # ── geometric (closed-loop) mode gains ──────────────────────────────
+        # PD(+I) on the MEASURED load position. The correction is a horizontal
+        # SHIFT applied to the whole taut formation: shifting all drones together
+        # drags the suspended load back to its setpoint, so the open-loop steady
+        # offset is nulled and disturbances are rejected. Cables stay ~taut
+        # (every drone shifts by the same vector), so the cached FF stays valid.
+        # z is left OPEN-LOOP by default (kp_z=0): the sim's residual load-height
+        # offset is a thrust-ratio artifact, not a control error (accurate on hw).
+        self.kp_xy = float(self.declare_parameter('kp_load_xy', 1.5).value)
+        self.kd_xy = float(self.declare_parameter('kd_load_xy', 0.6).value)
+        self.ki_xy = float(self.declare_parameter('ki_load_xy', 0.3).value)
+        self.kp_z  = float(self.declare_parameter('kp_load_z', 0.0).value)
+        self.kd_z  = float(self.declare_parameter('kd_load_z', 0.0).value)
+        self.ki_z  = float(self.declare_parameter('ki_load_z', 0.0).value)
+        # i_clamp large enough that the integral alone can supply the full formation
+        # shift that cancels the open-loop model-mismatch bias (~1 m) as e_xy -> 0.
+        self.i_clamp    = float(self.declare_parameter('i_clamp', 4.0).value)
+        self.corr_clamp = float(self.declare_parameter('corr_clamp', 1.8).value)
+        self._i_load = np.zeros(3)   # integral of load-position error (world)
         self.get_logger().info(
             f'[planner] geometry: cable_len={self.cable_len:.3f} '
             f'attach_radius={self.attach_radius:.3f} attach_z={self.attach_z:.3f} '
@@ -344,12 +363,12 @@ class LoadPlanner(Node):
                 self.lift_progress = min(
                     self.target_z - self.lift_z0,
                     self.lift_progress + self.lift_ramp_vel / PLANNER_HZ)
-                # Lateral trajectory runs once hovering (kinematic mode only); when
-                # it closes, latch the descent.
+                # Lateral trajectory runs once hovering (open-loop kinematic or
+                # closed-loop geometric); when it closes, latch the descent.
                 lift_done = (self.lift_progress
                              >= (self.target_z - self.lift_z0) - 1e-6)
-                if (self.planner_mode == 'kinematic' and self.load_traj != 'hover'
-                        and lift_done):
+                if (self.planner_mode in ('kinematic', 'geometric')
+                        and self.load_traj != 'hover' and lift_done):
                     self.traj_t += 1.0 / PLANNER_HZ
                     if self._traj_complete():
                         self.descending = True
@@ -362,6 +381,12 @@ class LoadPlanner(Node):
         # Open-loop kinematic feedforward: no OCP, no mocap feedback loop.
         if self.planner_mode == 'kinematic':
             self._publish_kinematic_refs(self._lift_vel)
+            return
+
+        # Closed-loop geometric position controller (Stage 3): kinematic FF plus a
+        # PD(+I) correction on the measured load position.
+        if self.planner_mode == 'geometric':
+            self._publish_geometric_refs(self._lift_vel)
             return
 
         x_init = self._build_x_init()
@@ -462,6 +487,7 @@ class LoadPlanner(Node):
         self._recover = True              # hard-reconverge from x_init on entry
         self.lift_z0 = float(self.load_state[2])   # ramp lift from here
         self.lift_progress = 0.0
+        self._i_load = np.zeros(3)                  # reset closed-loop integrator
         # Latch the taut spawn config for the kinematic (open-loop) generator: the
         # per-drone cable direction, tension, and analytic FF, computed ONCE from
         # the geometry at handover. The whole rigid config is then translated up.
@@ -482,9 +508,14 @@ class LoadPlanner(Node):
             f'[planner] {reason} — {self.planner_mode} planner active '
             f'(lift from z={self.lift_z0:.2f})')
 
-    def _publish_kinematic_refs(self, lift_vel):
+    def _publish_kinematic_refs(self, lift_vel, corr=(0.0, 0.0, 0.0)):
         """Open-loop feedforward reference: translate the latched taut config
         straight up by lift_progress and stream the analytic loaded-hover FF.
+
+        `corr` is an extra world-frame position SHIFT (cx, cy, cz) applied to the
+        whole formation. Zero for open-loop kinematic; the closed-loop geometric
+        mode passes its PD(+I) load-position correction here so the drones drag
+        the load back to its setpoint.
 
         This is an ABSOLUTE reference (independent of the live mocap), so the
         tracker sees a real position error when it drifts and pulls itself back —
@@ -512,9 +543,9 @@ class LoadPlanner(Node):
             ac_i = gate * self.kin_acable[i]
             data = [float(self.N + 1), float(self.dt)]
             for k in range(self.N + 1):
-                x_off = dx + vx * self.dt * k
-                y_off = dy + vy * self.dt * k
-                z_off = self.lift_progress + lift_vel * self.dt * k
+                x_off = dx + corr[0] + vx * self.dt * k
+                y_off = dy + corr[1] + vy * self.dt * k
+                z_off = self.lift_progress + corr[2] + lift_vel * self.dt * k
                 p_i = [float(base[0] + x_off), float(base[1] + y_off),
                        float(base[2] + z_off)]
                 v_i = [float(vx), float(vy), float(lift_vel)]
@@ -536,6 +567,57 @@ class LoadPlanner(Node):
                 f"traj={self.load_traj} off=({dx:+.2f},{dy:+.2f}) "
                 f"|aT|={np.linalg.norm(self.kin_athrust[0]):.2f} "
                 f"|aC|={np.linalg.norm(self.kin_acable[0]):.2f}  {s}")
+
+    def _publish_geometric_refs(self, lift_vel):
+        """Closed-loop 3-DOF load-position controller (Route B, Stage 3).
+
+        Same taut-config feedforward as kinematic mode, but with a PD(+I)
+        correction on the MEASURED load position layered on top. The correction
+        is a world-frame shift of the whole formation:
+
+            e    = p_set - p_meas         (load position error)
+            edot = v_set - v_meas         (load velocity error)
+            corr = Kp·e + Kd·edot + Ki·∫e
+
+        Shifting all drones by `corr` drags the suspended load toward its
+        setpoint, nulling the open-loop steady offset and rejecting shoves. xy is
+        closed; z is left open-loop by default (kp_z=0) since the sim's residual
+        load-height offset is a thrust-ratio artifact, not a control error.
+        """
+        dx, dy, vx, vy = self._load_offset()
+        x0, y0 = self.hover_xy
+        z_set = min(self.target_z, self.lift_z0 + self.lift_progress)
+        p_set = np.array([x0 + dx, y0 + dy, z_set])
+        v_set = np.array([vx, vy, lift_vel])
+        p_meas = self.load_state[0:3]
+        v_meas = self.load_state[7:10]
+        e = p_set - p_meas
+        edot = v_set - v_meas
+
+        # Engage the loop only once the fleet is flying (don't fight the takeoff
+        # transient). Until then hold the open-loop reference and don't integrate.
+        active = self.takeoff_seen and self.phase == 'planner'
+        kp = np.array([self.kp_xy, self.kp_xy, self.kp_z])
+        kd = np.array([self.kd_xy, self.kd_xy, self.kd_z])
+        ki = np.array([self.ki_xy, self.ki_xy, self.ki_z])
+        if active:
+            self._i_load = np.clip(self._i_load + e / PLANNER_HZ,
+                                   -self.i_clamp, self.i_clamp)
+            corr = kp * e + kd * edot + ki * self._i_load
+            corr = np.clip(corr, -self.corr_clamp, self.corr_clamp)
+        else:
+            corr = np.zeros(3)
+
+        self._publish_kinematic_refs(lift_vel, corr=tuple(corr))
+
+        self._geo_ctr = getattr(self, '_geo_ctr', 0) + 1
+        if self._geo_ctr % int(max(PLANNER_HZ, 1)) == 0:
+            self.get_logger().info(
+                f"[planner geometric] load=({p_meas[0]:+.2f},{p_meas[1]:+.2f},"
+                f"{p_meas[2]:.2f}) set=({p_set[0]:+.2f},{p_set[1]:+.2f},{z_set:.2f}) "
+                f"e_xy={np.hypot(e[0], e[1]):.3f} "
+                f"corr=({corr[0]:+.2f},{corr[1]:+.2f},{corr[2]:+.2f}) "
+                f"I=({self._i_load[0]:+.2f},{self._i_load[1]:+.2f}) active={active}")
 
     def _publish_creep_refs(self, gates):
         """Phase-1 takeoff: command each drone to rise straight up at CREEP_VEL,
