@@ -5,7 +5,7 @@ import casadi as cs
 import numpy as np
 from copy import copy
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosModel
-
+# from interfaces.msg import MotionCaptureState
 
 class QuadLoadDynamics:
     """Quadrotor model with an external cable-tension acceleration term.
@@ -15,6 +15,8 @@ class QuadLoadDynamics:
     the cable-suspended-load planner."""
 
     def __init__(self):
+        # self.create_subscription(MotionCaptureState, '/payload/motion_capture_state', self._payload_cb, 5)
+        # self.payload_state = 0 # resting
         # Declare model variables
         self.p = cs.MX.sym('p', 3)
         self.q = cs.MX.sym('a', 4)
@@ -44,6 +46,10 @@ class QuadLoadDynamics:
         self.p_param = cs.vertcat(self.thrust_ratio, self.drag_coeff_z, self.tau_rate, self.centre_rate_deg, self.max_rate_deg, self.rate_expo, self.cable_accel)  # Parameter vector
 
         self.g = 9.81
+
+    # def _payload_cb(self, msg: MotionCaptureState):
+    #     if (msg.pose.position.z > 0.03):
+    #         self.payload_state = 1 # suspended
     
     def q_to_rot_mat(self, q):
         qw, qx, qy, qz = q[0], q[1], q[2], q[3]
@@ -110,7 +116,8 @@ class QuadLoadDynamics:
         # drone toward the load; making the model aware of it stops the tracker's
         # feedback from fighting the cable once it is taut.
         v_dynamics = self.v_dot_q(a_thrust, self.q) - g + drag_force + self.cable_accel
-
+        # if (self.payload_state == 0):
+        #     v_dynamics = self.v_dot_q(a_thrust, self.q) - g + drag_force
         return v_dynamics
 
     def betaflight_rates(self, x):
