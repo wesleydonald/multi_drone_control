@@ -54,13 +54,16 @@ def generate_launch_description():
     cable_ff_scale = ParameterValue(LaunchConfiguration('cable_ff_scale'), value_type=float)
     attitude_ff    = ParameterValue(LaunchConfiguration('attitude_ff'), value_type=bool)
     cable_source   = LaunchConfiguration('cable_source')
+    payload_rest_z = ParameterValue(LaunchConfiguration('payload_rest_z'), value_type=float)
+    takeoff_spool_s = ParameterValue(LaunchConfiguration('takeoff_spool_s'), value_type=float)
+    thrust_ratio    = ParameterValue(LaunchConfiguration('thrust_ratio'), value_type=float)
 
     nodes = [
         DeclareLaunchArgument('cable_len', default_value='0.6'),
         DeclareLaunchArgument('start_taut', default_value='true'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         # HOLD test: lift_ramp_vel:=0.0 (no lift, just hold the taut config).
-        DeclareLaunchArgument('lift_ramp_vel', default_value='0.05'),
+        DeclareLaunchArgument('lift_ramp_vel', default_value='0.01'),
         # Tracker diagnostic knobs: cable_ff_scale:=0.0 = cable-blind model;
         # attitude_ff:=false = level attitude reference (keep throttle FF).
         DeclareLaunchArgument('cable_ff_scale', default_value='1.0'),
@@ -68,12 +71,20 @@ def generate_launch_description():
         # 'model' = planner open-loop t*s/m cable term (default); 'measured' =
         # IMU-derived f_ext held over the horizon (Part 2c A/B).
         DeclareLaunchArgument('cable_source', default_value='model'),
+        # payload counts as resting (cable term zeroed) at/below this z; set a
+        # bit above the payload's on-ground height for the world in use.
+        DeclareLaunchArgument('payload_rest_z', default_value='0.05'),
+        # seconds to spool the throttle up at takeoff (gentle liftoff); 0 = instant.
+        DeclareLaunchArgument('takeoff_spool_s', default_value='5.0'),
+        # thrust accel per unit throttle the MPC assumes. 24 ~= hardware; raise
+        # toward the sim's real value (~40) so the drones don't over-throttle.
+        DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
         # 'kinematic' = open-loop feedforward (tracker stabilizes); 'coupled' =
         # online load-cable OCP (diverges — kept for A/B comparison).
         DeclareLaunchArgument('planner_mode', default_value='kinematic'),
         # 'taut' = engage FF from spawn (rigid cables); 'airborne' = ramp with the
         # load lift (soft cables).
-        DeclareLaunchArgument('ff_gate_mode', default_value='airborne'),
+        DeclareLaunchArgument('ff_gate_mode', default_value='taut'),
         # LOAD reference trajectory after the lift tops out: 'hover' (current
         # behaviour), 'line_x' (+x translate), 'circle'. Keep traj_speed slow.
         DeclareLaunchArgument('load_traj', default_value='circle'),
@@ -125,7 +136,10 @@ def generate_launch_description():
             parameters=[{'drone_id': i, 'reference_source': 'planner',
                          'cable_ff_scale': cable_ff_scale,
                          'attitude_ff': attitude_ff,
-                         'cable_source': cable_source}],
+                         'cable_source': cable_source,
+                         'payload_rest_z': payload_rest_z,
+                         'takeoff_spool_s': takeoff_spool_s,
+                         'thrust_ratio': thrust_ratio}],
             output='screen'))
 
     # ── Central fleet manager ──────────────────────────────────────────────

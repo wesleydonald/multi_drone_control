@@ -188,14 +188,33 @@ class Controller(Node):
         self.create_subscription(
             Imu, f'/drone_{self.drone_id}/imu', self._imu_callback, 10)
 
-        # only drone 0 logs the payload (actual from mocap, desired from planner)
+        # every drone watches the payload height so it knows if the load is
+        # resting on the ground (cable slack, no tension) or suspended. drone 0
+        # also logs the payload actual + desired.
         self.payload_pos = None
         self.payload_ref = None
+        self.payload_resting = True       # assume grounded until told otherwise
+        # payload counts as resting while its z is at/below this. set per world
+        # (a bit above the payload's on-ground height).
+        self.declare_parameter("payload_rest_z", 0.05)
+        self.payload_rest_z = float(self.get_parameter("payload_rest_z").value)
+        # takeoff spool-up: ramp the applied throttle from 0 up to the MPC value
+        # over this many seconds so the drones ease off the platforms instead of
+        # popping up the instant TAKEOFF fires. 0 = off (instant, old behaviour).
+        self.declare_parameter("takeoff_spool_s", 2.0)
+        self.takeoff_spool_s = float(self.get_parameter("takeoff_spool_s").value)
+        # thrust_ratio (kT): accel per unit throttle the MPC assumes. if it's set
+        # below the sim's real thrust the drones over-throttle and shoot up (worst
+        # at takeoff). keep 24 for hardware; raise toward the sim value (~40) in
+        # sim. overrides est_params[0] below.
+        self.declare_parameter("thrust_ratio", 24.0)
+        self.thrust_ratio = float(self.get_parameter("thrust_ratio").value)
+        self._takeoff_step = None         # cycles since takeoff (None = not spooling)
         self._log_payload = (self.drone_id == 0)
+        self.create_subscription(
+            MotionCaptureState, '/payload/motion_capture_state',
+            self._payload_state_cb, 5)
         if self._log_payload:
-            self.create_subscription(
-                MotionCaptureState, '/payload/motion_capture_state',
-                self._payload_state_cb, 5)
             self.create_subscription(
                 Float64MultiArray, '/payload/desired_position',
                 self._payload_ref_cb, 5)
@@ -211,7 +230,7 @@ class Controller(Node):
             self.get_logger().info("[acados] compiling quad_load_dynamics solver (sources changed)...")
         self.ocp = generate_ocp_controller(generate=not fresh, build=not fresh)
         fcntl.flock(_lock_file, fcntl.LOCK_UN)
-        self.est_params = np.array([24.0, 0.0, 0.12, 70.0, 670.0, 0.5])
+        self.est_params = np.array([self.thrust_ratio, 0.0, 0.12, 70.0, 670.0, 0.5])
 
         # ── Logging ───────────────────────────────────────────────────────
         log_headers = [
@@ -302,6 +321,7 @@ class Controller(Node):
     def _payload_state_cb(self, msg: MotionCaptureState):
         p = msg.pose.position
         self.payload_pos = np.array([p.x, p.y, p.z])
+        self.payload_resting = (p.z <= self.payload_rest_z + 0.05)
 
     def _payload_ref_cb(self, msg: Float64MultiArray):
         if len(msg.data) >= 3:
@@ -398,6 +418,15 @@ class Controller(Node):
                         rows = (self.planner_ref_pos.shape[0]
                                 if self.planner_ref_pos is not None else self.N + 1)
                         ref_cable = np.tile(ac_cond, (rows, 1)) * self.cable_ff_scale
+                # payload resting on the ground -> the cable carries ~no tension,
+                # so zero the cable term. a_cable=0 in the same model IS the
+                # resting (free-flight) dynamics, so no separate solver is needed;
+                # it switches back on by itself once the load lifts off.
+                if self.payload_resting and ref_cable is not None:
+                    #self.get_logger().info("PAYLOAD RESTING")
+                    ref_cable = np.zeros_like(ref_cable)
+                #else:
+                    #self.get_logger().info("PAYLOAD LIFTED")
                 # Remember what the model actually received, so the diag |aC|
                 # reflects the applied value under either cable_source.
                 self._applied_cable0 = (float(np.linalg.norm(ref_cable[0]))
@@ -519,19 +548,31 @@ class Controller(Node):
 
             # ── Publish command ───────────────────────────────────────────
             if self.takeoff_requested:
+                thr = float(u[2])
+                # takeoff spool-up: for the first takeoff_spool_s, scale the
+                # throttle up from 0 to the commanded value so thrust rises
+                # smoothly and the drones ease off the platforms.
+                if self.takeoff_spool_s > 0.0:
+                    if self._takeoff_step is None:
+                        self._takeoff_step = 0
+                    spool_cycles = max(1.0, self.takeoff_spool_s * FREQUENCY_HZ)
+                    if self._takeoff_step < spool_cycles:
+                        thr *= self._takeoff_step / spool_cycles
+                        self._takeoff_step += 1
                 # Record the throttle actually applied to the FC so the next IMU
                 # sample can be decomposed into thrust + cable (measured_cable_accel).
-                self.last_cmd_throttle = float(u[2])
+                self.last_cmd_throttle = thr
                 msg = ELRSCommand(
                     armed=True,
                     channel_0=round(u[0], 3),
                     channel_1=round(u[1], 3),
-                    channel_2=round((u[2] * 2) - 1, 3),
+                    channel_2=round((thr * 2) - 1, 3),
                     channel_3=round(u[3], 3))
                 self.get_logger().debug(
                     f"[Drone {self.drone_id}] r:{u[0]:.3f} p:{u[1]:.3f} "
                     f"t:{u[2]:.3f} y:{u[3]:.3f}")
             else:
+                self._takeoff_step = None    # reset so the next takeoff spools again
                 msg = ELRSCommand(armed=True, channel_0=0.0, channel_1=0.0,
                                   channel_2=-1.0, channel_3=0.0)
                 self.get_logger().info(

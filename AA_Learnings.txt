@@ -77,6 +77,8 @@ Detaching in sim using detachable joint
 
 Cables more horizontal than vertical for attaching case/detaching fine just move along vector for payload
 
+Land trajectory difficult if there is z error
+
 Cone no fly zone around payload
 
 Testing two weeks time test, hover back and forth circle, spinning circle (vertical oscillation). 
@@ -85,3 +87,4 @@ Spreading out, should be able to handle 2-4 drones.
 In one week we can test the two drone case with same trajectories
 
 Quartonion issue with "yaw" - fix in ukf
+
