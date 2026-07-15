@@ -56,7 +56,7 @@ def generate_launch_description():
     cable_source   = LaunchConfiguration('cable_source')
 
     nodes = [
-        DeclareLaunchArgument('cable_len', default_value='1.0'),
+        DeclareLaunchArgument('cable_len', default_value='0.6'),
         DeclareLaunchArgument('start_taut', default_value='true'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         # HOLD test: lift_ramp_vel:=0.0 (no lift, just hold the taut config).
@@ -76,8 +76,8 @@ def generate_launch_description():
         DeclareLaunchArgument('ff_gate_mode', default_value='airborne'),
         # LOAD reference trajectory after the lift tops out: 'hover' (current
         # behaviour), 'line_x' (+x translate), 'circle'. Keep traj_speed slow.
-        DeclareLaunchArgument('load_traj', default_value='hover'),
-        DeclareLaunchArgument('traj_speed', default_value='0.1'),
+        DeclareLaunchArgument('load_traj', default_value='circle'),
+        DeclareLaunchArgument('traj_speed', default_value='0.4'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
         DeclareLaunchArgument('traj_radius', default_value='0.5'),
         SetParameter(name='use_sim_time', value=True),
