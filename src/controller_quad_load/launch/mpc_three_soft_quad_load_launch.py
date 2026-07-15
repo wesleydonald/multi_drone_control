@@ -77,7 +77,7 @@ def generate_launch_description():
         # thrust accel per unit throttle the MPC assumes; raise toward the sim's
         # true motor thrust to stop the drones floating above their commanded
         # height (which flattens the soft cables).
-        DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
+        DeclareLaunchArgument('thrust_ratio', default_value='38.0'),
         # 'kinematic' = open-loop feedforward (tracker stabilizes); 'coupled' =
         # online load-cable OCP (diverges — kept for A/B comparison); 'geometric' =
         # closed-loop PD(+I) load-position controller (Stage 3).

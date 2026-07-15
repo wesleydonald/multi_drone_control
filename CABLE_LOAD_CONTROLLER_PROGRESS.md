@@ -229,11 +229,32 @@ hierarchical *position* controller. We do **not** modify the coupled OCP.
     (`controller_quad_load/controller_mpc.py`): on a loaded headless box, mocap delivery
     transiently stalls >0.25 s at takeoff and spuriously trips the disarm→ESTOP. Purely a
     test-robustness change; does not affect control.
-- **Stage 4 — Prove a stable 2-drone carry (RISK GATE — do not skip).** Same controller,
-  2 active cables, on `two_rigid.sdf`. Two cables under-constrain the load (unactuated
-  rotational DOF; a 120° pair doesn't balance a centered load horizontally). If a slow
-  2-drone circle can't stay bounded, the reconfiguration scenario needs rethinking *before*
-  building the handoff. Deliverable: bounded 2-drone slow circle.
+- **Stage 4 — Prove a stable 2-drone carry (RISK GATE). ✅ DONE (2026-07-15) — BOUNDED, with a
+  key caveat.**
+  - **Enablers built:** `N_DRONES` is now a runtime param (`n_drones`, `planner_node.py:185`);
+    everything derives from `self.n`. Generated an elevated 2-drone world matching the planner
+    (`simulation_assets/two_rigid_paper.sdf`, via `generate_rigid_world.py --n 2`): drones at
+    (±0.787, 0, 0.757), load centred, 45° cables, attach points at 0/180° (opposite — the
+    balanced phase-1 geometry). New launch `mpc_two_quad_load_launch.py`. Pre-built the n=2
+    acados OCP (`load_cable_2`).
+  - **Result (geometric, default gains 1.5/0.6/0.3, rigid world):** the carry stays **bounded**
+    (no divergence) — risk gate passes the literal deliverable. BUT the two DOFs behave very
+    differently:
+    - **In-plane (x, the drone-drone line): well controlled** — load x std **0.10 m**.
+    - **Out-of-plane (y, perpendicular): under-actuated** — load y swings **±0.6–0.9 m**
+      (std 0.45, max 0.87). Two collinear cables have near-zero out-of-plane force authority:
+      the controller saturates its y-correction at the 1.8 m clamp but the load barely responds.
+  - **Fragility:** softer gains (kp1.0/kd1.0/ki0.05) **diverged** (load shot to z=10 m, crashed
+    gz) — rigid cables are numerically touchy; the default gains sit in the stable island.
+  - **Implication for the thesis:** a centred 2-drone carry can *hold bounded* but cannot
+    precisely position/track the load out-of-plane (so a 2-drone *circle* with y-motion is not
+    cleanly trackable). This is fine for the 2→3 scenario **if** the 2-drone phase is treated as
+    "bounded holding until drone 3 attaches" (a 3rd non-collinear drone makes the load fully
+    actuated horizontally), and the fly-in tolerates the ±0.6 m out-of-plane swing.
+  - **Principled next step (feeds Stage 5):** project the load-position correction onto the
+    *controllable* subspace (the plane spanned by the cable directions) instead of fighting the
+    unactuated DOF — the controller currently wastes authority saturating in y.
+  - Artifacts: `stage4_two_drone/stage4_two_drone_carry.png`, `two_drone_hover.csv`.
 - **Stage 5 — Runtime-reconfigurable allocation + N (where the contribution lives).**
   Factor the FF/tension derivation out of `_enter_planner_phase` into a
   `_relatch_config(active_set)` you can call again. Replace the equal-split (`line 477`)
@@ -249,13 +270,13 @@ hierarchical *position* controller. We do **not** modify the coupled OCP.
   other controller stops commanding drone 3 on that signal. **Hard safety rule: never two
   controllers on one drone's ELRS.** Deliverable: real fly-in → your stack takes over.
 
-**Immediate next step:** Stages 1–3 done and **PAUSED for user review** (2026-07-15) before
-Stage 4. Attach geometry decided: **2-then-3 re-centering (§7)** → the 2-drone carry is
-symmetric/balanced. **Next is Stage 4** (RISK GATE) — prove a stable balanced 2-drone carry
-with the geometric controller (`N=2`). Blocker to clear first: `N_DRONES=3` is baked in at
-module scope in `planner_node.py:43`; a 2-drone run needs that made runtime (also needed by
-Stage 5). Use `two_rigid.sdf` (or a 2-drone soft-paper-style world) with geometry matched to
-the planner defaults, cables ~180° apart.
+**Immediate next step:** Stages 1–4 done. Stage 4 risk gate **passed (bounded) but exposed the
+2-drone out-of-plane under-actuation** (±0.6 m swing, uncontrollable with 2 collinear cables).
+**Next is Stage 5** — runtime reconfigurable allocation + N (the contribution): factor the
+FF/tension derivation out of `_enter_planner_phase` into a re-callable `_relatch_config(active_set)`,
+replace the equal-split with a per-cycle tension QP valid for |active_set|∈{2,3}, and drive a
+manual `/fleet/reconfigure`. Consider the subspace-projection fix from Stage 4 as part of the
+allocation (don't command force in the uncontrollable direction).
 
 ---
 

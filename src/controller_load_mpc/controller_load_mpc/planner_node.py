@@ -172,6 +172,10 @@ class LoadPlanner(Node):
         # shift that cancels the open-loop model-mismatch bias (~1 m) as e_xy -> 0.
         self.i_clamp    = float(self.declare_parameter('i_clamp', 4.0).value)
         self.corr_clamp = float(self.declare_parameter('corr_clamp', 1.8).value)
+        # project the correction onto the cable-controllable subspace (drops the
+        # out-of-plane direction for a 2-collinear-cable carry; ~no-op for 3).
+        self.subspace_project = bool(
+            self.declare_parameter('subspace_project', True).value)
         self._i_load = np.zeros(3)   # integral of load-position error (world)
         self.get_logger().info(
             f'[planner] geometry: cable_len={self.cable_len:.3f} '
@@ -182,10 +186,16 @@ class LoadPlanner(Node):
             f'traj_speed={self.traj_speed:.3f} traj_distance={self.traj_distance:.3f} '
             f'traj_radius={self.traj_radius:.3f}')
 
-        self.n = N_DRONES
+        # Fleet size is a runtime param (default N_DRONES) so the same planner
+        # drives a 2-drone carry (Stage 4) or a 3-drone carry. Everything below
+        # derives from self.n; the attach points rho_i are evenly spaced on the
+        # circle, so n=2 -> two points at 0/180deg (opposite, load centred between
+        # the drones — the balanced 2-then-3 phase-1 geometry).
+        self.n = int(self.declare_parameter('n_drones', N_DRONES).value)
         self.rho = [np.array([self.attach_radius * np.cos(2 * np.pi * k / self.n),
                               self.attach_radius * np.sin(2 * np.pi * k / self.n),
                               self.attach_z]) for k in range(self.n)]
+        self.get_logger().info(f'[planner] fleet size n_drones={self.n}')
 
         self.dyn = LoadCableDynamics(
             self.n, LOAD_MASS, LOAD_INERTIA, [self.cable_len] * self.n,
@@ -568,6 +578,33 @@ class LoadPlanner(Node):
                 f"|aT|={np.linalg.norm(self.kin_athrust[0]):.2f} "
                 f"|aC|={np.linalg.norm(self.kin_acable[0]):.2f}  {s}")
 
+    def _controllable_projector(self):
+        """3x3 orthogonal projector onto the subspace the cables can actually
+        push the load in — the span of the current cable directions s_i.
+
+        For 3 non-collinear drones the cables span R^3 (fully actuated) so this
+        is ~identity. For 2 collinear cables the span is the plane containing
+        them, so the projector DROPS the out-of-plane normal: the controller then
+        never commands a formation shift the cables can't realise, which is what
+        was exciting the unactuated out-of-plane swing (Stage 4 finding).
+        """
+        ls = self.load_state
+        R = quat_to_rot_np(ls[3:7])
+        cols = []
+        for i in range(self.n):
+            attach = ls[0:3] + R @ self.rho[i]
+            d = attach - self.drone_pos[i]
+            nrm = np.linalg.norm(d)
+            if nrm > 1e-6:
+                cols.append(d / nrm)
+        if not cols:
+            return np.eye(3)
+        S = np.array(cols).T                       # 3 x n cable directions
+        try:
+            return S @ np.linalg.inv(S.T @ S + 1e-6 * np.eye(S.shape[1])) @ S.T
+        except np.linalg.LinAlgError:
+            return np.eye(3)
+
     def _publish_geometric_refs(self, lift_vel):
         """Closed-loop 3-DOF load-position controller (Route B, Stage 3).
 
@@ -593,6 +630,16 @@ class LoadPlanner(Node):
         v_meas = self.load_state[7:10]
         e = p_set - p_meas
         edot = v_set - v_meas
+
+        # Project the correction onto the subspace the cables can control, so we
+        # never command a formation shift in a direction the load can't be pushed
+        # (2 collinear cables -> no out-of-plane authority). Fighting that
+        # direction just excites the unactuated swing. For 3 drones the projector
+        # is ~identity, so 3-drone behaviour is unchanged.
+        if self.subspace_project:
+            P = self._controllable_projector()
+            e = P @ e
+            edot = P @ edot
 
         # Engage the loop only once the fleet is flying (don't fight the takeoff
         # transient). Until then hold the open-loop reference and don't integrate.
