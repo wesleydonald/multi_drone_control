@@ -43,8 +43,10 @@ def generate_launch_description():
     #   cable_len:=0.6 start_taut:=false
     cable_len     = ParameterValue(LaunchConfiguration('cable_len'), value_type=float)
     start_taut    = ParameterValue(LaunchConfiguration('start_taut'), value_type=bool)
+    load_mass     = ParameterValue(LaunchConfiguration('load_mass'), value_type=float)
     target_z      = ParameterValue(LaunchConfiguration('target_z'), value_type=float)
     lift_ramp_vel = ParameterValue(LaunchConfiguration('lift_ramp_vel'), value_type=float)
+    land_vel      = ParameterValue(LaunchConfiguration('land_vel'), value_type=float)
     planner_mode  = LaunchConfiguration('planner_mode')
     ff_gate_mode  = LaunchConfiguration('ff_gate_mode')
     load_traj     = LaunchConfiguration('load_traj')
@@ -59,15 +61,23 @@ def generate_launch_description():
     thrust_ratio    = ParameterValue(LaunchConfiguration('thrust_ratio'), value_type=float)
 
     nodes = [
-        DeclareLaunchArgument('cable_len', default_value='0.6'),
+        # must match the tether length in the world SDF - three_rigid_short.sdf
+        # uses rigid 0.5 m rods, and a mismatch here commands a formation radius
+        # the tethers physically can't reach (drones fight the rod on takeoff).
+        DeclareLaunchArgument('cable_len', default_value='1.0'),
         DeclareLaunchArgument('start_taut', default_value='true'),
+        # payload mass in the world SDF: 0.4 for three_soft/three_rigid_short,
+        # 0.1 for three_soft_paper.
+        DeclareLaunchArgument('load_mass', default_value='0.4'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         # HOLD test: lift_ramp_vel:=0.0 (no lift, just hold the taut config).
-        DeclareLaunchArgument('lift_ramp_vel', default_value='0.01'),
+        DeclareLaunchArgument('lift_ramp_vel', default_value='0.20'),
+        # LAND descent rate (separate from the slow takeoff lift_ramp_vel).
+        DeclareLaunchArgument('land_vel', default_value='0.20'),
         # Tracker diagnostic knobs: cable_ff_scale:=0.0 = cable-blind model;
         # attitude_ff:=false = level attitude reference (keep throttle FF).
-        DeclareLaunchArgument('cable_ff_scale', default_value='1.0'),
-        DeclareLaunchArgument('attitude_ff', default_value='true'),
+        DeclareLaunchArgument('cable_ff_scale', default_value='0.0'),
+        DeclareLaunchArgument('attitude_ff', default_value='false'),
         # 'model' = planner open-loop t*s/m cable term (default); 'measured' =
         # IMU-derived f_ext held over the horizon (Part 2c A/B).
         DeclareLaunchArgument('cable_source', default_value='model'),
@@ -75,10 +85,10 @@ def generate_launch_description():
         # bit above the payload's on-ground height for the world in use.
         DeclareLaunchArgument('payload_rest_z', default_value='0.05'),
         # seconds to spool the throttle up at takeoff (gentle liftoff); 0 = instant.
-        DeclareLaunchArgument('takeoff_spool_s', default_value='5.0'),
+        DeclareLaunchArgument('takeoff_spool_s', default_value='0.0'),
         # thrust accel per unit throttle the MPC assumes. 24 ~= hardware; raise
         # toward the sim's real value (~40) so the drones don't over-throttle.
-        DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
+        DeclareLaunchArgument('thrust_ratio', default_value='38.0'),
         # 'kinematic' = open-loop feedforward (tracker stabilizes); 'coupled' =
         # online load-cable OCP (diverges — kept for A/B comparison).
         DeclareLaunchArgument('planner_mode', default_value='kinematic'),
@@ -151,7 +161,9 @@ def generate_launch_description():
     nodes.append(Node(
         package='controller_load_mpc', executable='planner', name='load_planner',
         parameters=[{'cable_len': cable_len, 'start_taut': start_taut,
+                      'load_mass': load_mass,
                       'target_z': target_z, 'lift_ramp_vel': lift_ramp_vel,
+                      'land_vel': land_vel,
                       'planner_mode': planner_mode, 'ff_gate_mode': ff_gate_mode,
                       'load_traj': load_traj, 'traj_speed': traj_speed,
                       'traj_distance': traj_distance, 'traj_radius': traj_radius}],
