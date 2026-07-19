@@ -9,6 +9,7 @@ install/
 
 c_generated_code/
 c_generated_code_load_planner/
+c_generated_code_quad_load/
 acados_ocp.json
 acados_sim.json
 *_ocp.json

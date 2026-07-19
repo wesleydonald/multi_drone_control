@@ -191,23 +191,6 @@ def _make_quat_sequence_continuous(q_list):
     return np.array(out)
 
 
-def update_ocp_parameters(ocp_solver, est_params, N_horizon):
-    """
-    Update the dynamic parameters for all stages in the OCP solver.
-    """
-    dyn_par = np.array(est_params, dtype=float)
-    zero_cable = np.zeros(3, dtype=float)
-    default_qref = np.array([1.0, 0.0, 0.0, 0.0], dtype=float)
-
-    # Update parameters for all intermediate stages
-    for j in range(N_horizon):
-        full_params = np.concatenate([dyn_par, zero_cable, default_qref])
-        ocp_solver.set(j, "p", full_params)
-
-    # Update terminal stage parameters
-    ocp_solver.set(N_horizon, "p", np.concatenate([dyn_par, zero_cable, default_qref]))
-
-
 def _tilt_quat_from_accel(aT: np.ndarray, thrust_ratio: float):
     """Map a required specific-thrust-acceleration vector (world frame) to a
     (throttle, quaternion) feedforward for the tracker.

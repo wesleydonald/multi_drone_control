@@ -68,6 +68,17 @@ def _args():
         # radius the tethers physically can't reach (drones fight the rod).
         DeclareLaunchArgument('cable_len', default_value='0.5'),
         DeclareLaunchArgument('start_taut', default_value='true'),
+        # GROUND-START rigid worlds only (three_rigid_ground.sdf). Degrees of
+        # cable elevation the drones must sweep up to -- along the rod's arc,
+        # pivoting about the grounded attach points -- before the planner takes
+        # over. A rigid rod is always full length, so the usual slack->taut
+        # handover fires instantly at ~6 deg where tension is ~13 N/drone. 0 =
+        # off (elevated or soft worlds).
+        DeclareLaunchArgument('handover_elev_deg', default_value='0.0'),
+        # Seconds to hold the latched config after handover before lifting.
+        # Ground starts want ~2.0 so the reference step and the payload breaking
+        # ground don't land in the same cycle. 0 = off (elevated worlds).
+        DeclareLaunchArgument('handover_settle_s', default_value='0.0'),
         # payload mass in the world SDF.
         DeclareLaunchArgument('load_mass', default_value='0.4'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
@@ -99,14 +110,20 @@ def _args():
         # 'kinematic' = open-loop feedforward (tracker stabilizes); 'coupled' =
         # online load-cable OCP (diverges -- and costs a ~50 s acados rebuild).
         DeclareLaunchArgument('planner_mode', default_value='kinematic'),
-        # 'taut' = engage FF from spawn (rigid cables); 'airborne' = ramp with
-        # the load lift (soft cables).
+        # 'taut'     = engage FF from spawn. Correct when the load is ALREADY
+        #              hanging on the cables at startup (the elevated worlds).
+        # 'airborne' = ramp the FF in as the load lifts off the ground. Required
+        #              for any GROUND START (handover_elev_deg > 0) and for soft
+        #              cables: there the payload is still on the floor when the
+        #              planner takes over, so engaging the full FF steps the
+        #              attitude reference ~13 deg outward in one cycle and the
+        #              drones lurch.
         DeclareLaunchArgument('ff_gate_mode', default_value='taut'),
         # LOAD reference after the lift tops out: 'hover', 'line_x' (continuous
         # back-and-forth shuttle), 'circle'. Keep traj_speed slow -- lateral
         # accel is not fed forward.
         DeclareLaunchArgument('load_traj', default_value='hover'),
-        DeclareLaunchArgument('traj_speed', default_value='0.2'),
+        DeclareLaunchArgument('traj_speed', default_value='0.4'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
         DeclareLaunchArgument('traj_radius', default_value='0.5'),
     ]
@@ -175,6 +192,8 @@ def launch_setup(context, *args, **kwargs):
                      'target_z': f('target_z'),
                      'lift_ramp_vel': f('lift_ramp_vel'),
                      'land_vel': f('land_vel'),
+                     'handover_elev_deg': f('handover_elev_deg'),
+                     'handover_settle_s': f('handover_settle_s'),
                      'planner_mode': LaunchConfiguration('planner_mode'),
                      'ff_gate_mode': LaunchConfiguration('ff_gate_mode'),
                      'load_traj': LaunchConfiguration('load_traj'),

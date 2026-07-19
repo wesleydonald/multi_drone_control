@@ -104,6 +104,10 @@ def build(n, cable_len, elev_deg, attach_radius, attach_z, payload_z):
     platforms = []
     for i, (dx, dy, dz) in enumerate(drones):
         h = dz - 0.1
+        # GROUND START: with the drones already on the floor there is nothing to
+        # stand them on, and a zero/negative-height box is invalid SDF. Skip.
+        if h < 0.05:
+            continue
         platforms.append(f"""    <model name="platform_{i}">
       <static>true</static>
       <pose>{_fmt(dx)} {_fmt(dy)} {_fmt(h / 2.0)} 0 0 0</pose>
@@ -197,8 +201,23 @@ def main():
     ap.add_argument('--attach-z', type=float, default=0.025)
     ap.add_argument('--payload-z', type=float, default=0.025)
     ap.add_argument('--out', type=str, default='three_rigid.sdf')
+    ap.add_argument('--ground-start', action='store_true',
+                    help='place the drones ON THE FLOOR: overrides --elev so the '
+                         'rod runs from the payload attach point out to a drone '
+                         'at ground height (a near-horizontal rod). Use with the '
+                         "planner's handover_elev_deg so it creeps up to a "
+                         'liftable angle before taking over.')
     a = ap.parse_args()
-    sdf = build(a.n, a.cable_len, a.elev, a.attach_radius, a.attach_z, a.payload_z)
+    elev = a.elev
+    if a.ground_start:
+        # drone_z = payload_z + attach_z + cable_len*sin(elev); solve for the
+        # elev that puts the drone at DRONE_GROUND_Z.
+        DRONE_GROUND_Z = 0.10
+        need = (DRONE_GROUND_Z - a.payload_z - a.attach_z) / a.cable_len
+        elev = math.degrees(math.asin(max(-1.0, min(1.0, need))))
+        print(f'ground start: elev overridden to {elev:.2f} deg '
+              f'(drone z = {DRONE_GROUND_Z}, payload z = {a.payload_z})')
+    sdf = build(a.n, a.cable_len, elev, a.attach_radius, a.attach_z, a.payload_z)
     with open(a.out, 'w') as f:
         f.write(sdf)
     print(f"wrote {a.out}: n={a.n} cable_len={a.cable_len} elev={a.elev}deg")

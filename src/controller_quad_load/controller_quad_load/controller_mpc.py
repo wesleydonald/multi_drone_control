@@ -26,7 +26,7 @@ from datetime import datetime
 from scipy.spatial.transform import Rotation as R
 import time
 from . import acados as _acados_mod
-from .acados import generate_ocp_controller, set_initial_guess, warm_start_from_previous_solution, set_trajectory_reference_aligned, set_planner_reference, update_ocp_parameters
+from .acados import generate_ocp_controller, set_initial_guess, warm_start_from_previous_solution, set_trajectory_reference_aligned, set_planner_reference
 
 
 # recompile the solver if acados.py/dynamics.py changed since the last build
