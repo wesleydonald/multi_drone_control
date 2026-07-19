@@ -36,7 +36,16 @@ ArmPanel::ArmPanel(QWidget* parent)
   takeoff_button_->setEnabled(false);  // Disabled by default
   takeoff_button_->setFixedHeight(80);  // or setMinimumHeight(40);
   layout->addWidget(takeoff_button_);
-  
+
+  // LAND button. The planner descends the payload to touchdown and then
+  // announces /fleet/landed, at which point the fleet manager disarms — so this
+  // is the graceful counterpart to DISARM (which cuts thrust immediately).
+  land_button_ = new QPushButton("LAND");
+  land_button_->setStyleSheet("background-color: #f59f00; color: white; font-weight: bold;");
+  land_button_->setEnabled(false);  // only meaningful once flying
+  land_button_->setFixedHeight(80);
+  layout->addWidget(land_button_);
+
   setLayout(layout);
 
   // Create spacebar shortcut for DISARM
@@ -46,6 +55,7 @@ ArmPanel::ArmPanel(QWidget* parent)
   connect(space_shortcut_, &QShortcut::activated, this, &ArmPanel::onSpacePressed);
   connect(arm_button_, &QPushButton::clicked, this, &ArmPanel::onButtonPressed);
   connect(takeoff_button_, &QPushButton::clicked, this, &ArmPanel::onTakeoffPressed);
+  connect(land_button_, &QPushButton::clicked, this, &ArmPanel::onLandPressed);
 }
 
 void ArmPanel::onInitialize()
@@ -95,6 +105,20 @@ void ArmPanel::onTakeoffPressed()
   }
 }
 
+void ArmPanel::onLandPressed()
+{
+  if (command_pub_ && is_armed_) {
+    std_msgs::msg::String msg;
+    msg.data = "LAND";
+    command_pub_->publish(msg);
+    status_message_ = "Sent LAND to fleet";
+    updateStatusLabel();
+    RCLCPP_INFO(node_->get_logger(), "LAND command sent");
+  } else if (!is_armed_) {
+    RCLCPP_WARN(node_->get_logger(), "Cannot land - drone is not armed");
+  }
+}
+
 void ArmPanel::callArmingService(bool arm)
 {
   // FLEET COMMAND: publish ARM/DISARM to /fleet/command (the fleet manager arms
@@ -122,10 +146,12 @@ void ArmPanel::updateButtonState()
     arm_button_->setText("DISARM");
     arm_button_->setStyleSheet("background-color: #ff6b6b; color: white; font-weight: bold;");
     takeoff_button_->setEnabled(true);
+    land_button_->setEnabled(true);
   } else {
     arm_button_->setText("ARM");
     arm_button_->setStyleSheet("background-color: #51cf66; color: white; font-weight: bold;");
     takeoff_button_->setEnabled(false);
+    land_button_->setEnabled(false);
   }
   updateStatusLabel();
 }

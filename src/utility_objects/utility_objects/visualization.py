@@ -35,23 +35,36 @@ import struct
 
 class TrajectoryVisualizer:
     
-    def __init__(self, node: Node, frame_id: str = "map"):
+    def __init__(self, node: Node, frame_id: str = "map", prefix: str = ""):
+        """prefix namespaces every visualization topic, e.g. prefix='drone_0'
+        publishes /drone_0/mpc_plan instead of /mpc_plan.
+
+        Multi-drone stacks MUST pass a prefix. These topics are absolute, so a
+        launch-file namespace does NOT separate them: without a prefix every
+        drone publishes its plan to the same /mpc_plan and RViz shows N drones
+        interleaved on one topic at 50 Hz each, with no way to tell them apart.
+        Defaults to '' so the existing single-drone controllers are unaffected.
+        """
         self.node = node
         self.frame_id = frame_id
-        
+        self.prefix = prefix.strip('/')
+        ns = f'/{self.prefix}' if self.prefix else ''
+
         # Create publishers for different visualization types
-        self.path_publisher = node.create_publisher(Path, '/trajectory_path', 10)
-        self.actual_path_publisher = node.create_publisher(Path, '/actual_path', 10)
-        self.mpc_plan_publisher = node.create_publisher(Path, '/mpc_plan', 10)
-        self.marker_publisher = node.create_publisher(MarkerArray, '/trajectory_markers', 10)
-        
+        self.path_publisher = node.create_publisher(Path, f'{ns}/trajectory_path', 10)
+        self.actual_path_publisher = node.create_publisher(Path, f'{ns}/actual_path', 10)
+        self.mpc_plan_publisher = node.create_publisher(Path, f'{ns}/mpc_plan', 10)
+        self.marker_publisher = node.create_publisher(MarkerArray, f'{ns}/trajectory_markers', 10)
+
         # Create transform broadcaster instead of pose publishers
         self.tf_broadcaster = TransformBroadcaster(node)
-        
+
         # Store actual path history
         self.actual_path_history = []
-        
-        self.node.get_logger().info("TrajectoryVisualizer initialized with TF broadcasting")
+
+        self.node.get_logger().info(
+            f"TrajectoryVisualizer initialized with TF broadcasting "
+            f"(topic namespace: '{ns or '/'}')")
     
     def _create_header(self) -> Header:
         """Create a header with current timestamp and frame_id"""

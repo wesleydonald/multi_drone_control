@@ -160,7 +160,11 @@ class Controller(Node):
         self.traj, trajectory_name = self._build_offset_trajectory(DT, init_pose)
 
         # ── Visualizer ────────────────────────────────────────────────────
-        self.trajectory_visualizer = TrajectoryVisualizer(self, frame_id="map")
+        # prefix the viz topics per drone (/drone_N/mpc_plan etc) so RViz can
+        # show each drone's plan on its own display instead of N drones fighting
+        # over one global /mpc_plan.
+        self.trajectory_visualizer = TrajectoryVisualizer(
+            self, frame_id="map", prefix=f"drone_{self.drone_id}")
         self.trajectory_visualizer.publish_all_visualizations(
             self.traj, pose_subsample=15, show_velocity=False,
             velocity_scale=0.3, color_by_time=True)
@@ -615,9 +619,20 @@ class Controller(Node):
                 mpc_trajectory[:, i] = x_i[:13]
             mpc_trajectory[:, 0] = self.current_pose[:13]
 
-            self.trajectory_visualizer.publish_mpc_plan(mpc_trajectory)
-            self.trajectory_visualizer.publish_transform_frame(
-                self.current_pose, f"drone_{self.drone_id}_mocap")
+            # Only publish the plan once we're actually flying it. Pre-TAKEOFF
+            # u_state is pinned to the applied idle (throttle 0 -- see the
+            # stage-0 pin above), so the model correctly predicts free fall and,
+            # with u_dot capped at 0.5/s, cannot recover inside the 2 s horizon:
+            # the plan dives ~4 m through the floor. That is an honest answer to
+            # "what if the throttle stayed at zero", but it never happens (the
+            # drones rest on platforms and the throttle ramps at TAKEOFF), so
+            # drawing it in RViz is just misleading.
+            if self.takeoff_requested:
+                self.trajectory_visualizer.publish_mpc_plan(mpc_trajectory)
+            # NOTE: the map -> drone_N_mocap TF is deliberately NOT broadcast
+            # here. simulation_communication/fleet_viz owns it, so the RViz
+            # stack can come up and show the fleet BEFORE any controller runs.
+            # Broadcasting from both would just spam TF_REPEATED_DATA.
             self.trajectory_visualizer.publish_actual_path(self.current_pose)
 
             # ── Logging ───────────────────────────────────────────────────

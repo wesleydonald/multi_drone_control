@@ -34,6 +34,8 @@ import casadi as ca
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray, Int32, String, Bool
+from nav_msgs.msg import Path
+from geometry_msgs.msg import PoseStamped
 from interfaces.msg import MotionCaptureState
 
 from .load_cable_dynamics import LoadCableDynamics, LOAD_DIM, CABLE_DIM
@@ -310,6 +312,12 @@ class LoadPlanner(Node):
         # drone-0 tracker so plot_run.py can overlay payload desired vs actual.
         self.load_ref_pub = self.create_publisher(
             Float64MultiArray, '/payload/desired_position', 5)
+        # Same load reference, but as the full horizon in RViz-native form, so
+        # the payload's planned path can be displayed alongside each drone's
+        # /drone_N/mpc_plan. desired_position above is only node 0 (a single
+        # point), which is all the logger needs but is not a trajectory.
+        self.load_plan_pub = self.create_publisher(
+            Path, '/payload/mpc_plan', 5)
 
         self.create_timer(1.0 / PLANNER_HZ, self._plan)
         self.get_logger().info('[planner] ready, waiting for mocap...')
@@ -685,11 +693,29 @@ class LoadPlanner(Node):
             z_des = min(self.target_z, self.lift_z0 + self.lift_progress)
         else:
             z_des = float(self.load_state[2])
-        dx, dy, _vx, _vy = self._load_offset()
+        dx, dy, vx, vy = self._load_offset()
+        x0 = float(self.hover_xy[0] + dx)
+        y0 = float(self.hover_xy[1] + dy)
         msg = Float64MultiArray()
-        msg.data = [float(self.hover_xy[0] + dx), float(self.hover_xy[1] + dy),
-                    float(z_des)]
+        msg.data = [x0, y0, float(z_des)]
         self.load_ref_pub.publish(msg)
+
+        # Horizon path for RViz. Extrapolated exactly the way the drone
+        # references are (_publish_kinematic_refs): constant lateral velocity
+        # from the trajectory and the current lift rate, held over N+1 nodes.
+        path = Path()
+        path.header.frame_id = 'map'
+        path.header.stamp = self.get_clock().now().to_msg()
+        z_cap = self.target_z if self.lift_z0 is not None else z_des
+        for k in range(self.N + 1):
+            ps = PoseStamped()
+            ps.header = path.header
+            ps.pose.position.x = x0 + vx * self.dt * k
+            ps.pose.position.y = y0 + vy * self.dt * k
+            ps.pose.position.z = min(z_cap, z_des + self._lift_vel * self.dt * k)
+            ps.pose.orientation.w = 1.0
+            path.poses.append(ps)
+        self.load_plan_pub.publish(path)
 
     def _enter_planner_phase(self, reason):
         """Transition creep -> coupled planner: latch the lift-ramp start height

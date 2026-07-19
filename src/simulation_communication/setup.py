@@ -29,6 +29,9 @@ setup(
             'orbslam_emulator = simulation_communication.orbslam_emulator:main',
             # Bridges for nested lift_system + payload worlds (two_*/four_*.sdf)
             'payload_mocap_emulator = simulation_communication.payload_mocap_emulator:main',
+            # viz-only: TF for drones + payload, payload marker/track. Runs
+            # independently of the controllers so RViz can come up first.
+            'fleet_viz = simulation_communication.fleet_viz:main',
             'payload_betaflight_comm = simulation_communication.payload_betaflight_comm:main',
         ],
     },
