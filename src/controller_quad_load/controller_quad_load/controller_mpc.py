@@ -134,6 +134,11 @@ class Controller(Node):
         self._applied_cable_vec = None   # (3,) last applied cable accel (for slew)
         self._last_good_msg = None       # last successfully-solved ELRS command
         self._solve_fail_ct = 0
+        # channel values ACTUALLY sent to the FC last cycle [roll, pitch, thr,
+        # yaw]. The MPC pins its u_state to this, so the model's actuator state
+        # matches reality even while we're publishing idle (pre-TAKEOFF) or a
+        # spooled-down throttle. Starts at the disarmed/idle value: all zero.
+        self._applied_u = np.zeros(4)
 
         # get_clock() is sim time (use_sim_time=True). keep a separate wall clock
         # for the pose-timeout watchdog since that's about real comms latency.
@@ -456,14 +461,21 @@ class Controller(Node):
 
             estimated_state = copy.deepcopy(self.current_pose[:13])
 
-            if len(self.control_history) == 0:
-                self.get_logger().warn(
-                    f"[Drone {self.drone_id}] Control history empty - using zero initial control.")
-                estimated_state_with_control = np.concatenate(
-                    (estimated_state, np.array([0.0, 0.0, 0.0, 0.0])))
-            else:
-                estimated_state_with_control = np.concatenate(
-                    (estimated_state, np.array(self.control_history[-1][0:4])))
+            # u_state is a MODEL STATE: it represents where the four channels
+            # physically are right now. So pin it to what was actually SENT to
+            # the FC, not to what the solver last computed. Those differ whenever
+            # we don't publish the solution — pre-TAKEOFF we publish idle
+            # (0, 0, throttle 0, 0) while the solver keeps converging to the full
+            # loaded-hover command. Pinning the solved value told the MPC the
+            # actuators were already at hover throttle and ~14 deg of pitch while
+            # they sat at zero, so the whole command was waiting at full value the
+            # instant TAKEOFF flipped, and the drones leapt (measured: 0.77 m/s
+            # climb against a reference moving at 0.00, overshooting 0.51 m).
+            # Pinned to the applied value, u_state starts at zero and the solver
+            # ramps it up under its own u_dot bounds (throttle 0.5/s), which is a
+            # correct soft-start rather than a bolted-on one.
+            estimated_state_with_control = np.concatenate(
+                (estimated_state, self._applied_u))
 
             relaxation_factor = 0.025
             relaxed_lbx = estimated_state_with_control * (1 - relaxation_factor)
@@ -540,11 +552,11 @@ class Controller(Node):
                     else:
                         aCm = float('nan')
                         dC = float('nan')
-                    self.get_logger().info(
-                        f"[diag d{self.drone_id}] z={zc:.2f} ez={zr - zc:+.2f} "
-                        f"exy={exy:.2f} rdrift={rdrift:+.2f} thr={float(u[2]):.3f} "
-                        f"roll={float(u[0]):+.2f} pitch={float(u[1]):+.2f} "
-                        f"|aT|={aT:.2f} |aC|={aC:.2f} |aCm|={aCm:.2f} dC={dC:.2f}")
+                    # self.get_logger().info(
+                    #     f"[diag d{self.drone_id}] z={zc:.2f} ez={zr - zc:+.2f} "
+                    #     f"exy={exy:.2f} rdrift={rdrift:+.2f} thr={float(u[2]):.3f} "
+                    #     f"roll={float(u[0]):+.2f} pitch={float(u[1]):+.2f} "
+                    #     f"|aT|={aT:.2f} |aC|={aC:.2f} |aCm|={aCm:.2f} dC={dC:.2f}")
 
             # ── Publish command ───────────────────────────────────────────
             if self.takeoff_requested:
@@ -568,6 +580,8 @@ class Controller(Node):
                     channel_1=round(u[1], 3),
                     channel_2=round((thr * 2) - 1, 3),
                     channel_3=round(u[3], 3))
+                self._applied_u = np.array(
+                    [float(u[0]), float(u[1]), float(thr), float(u[3])])
                 self.get_logger().debug(
                     f"[Drone {self.drone_id}] r:{u[0]:.3f} p:{u[1]:.3f} "
                     f"t:{u[2]:.3f} y:{u[3]:.3f}")
@@ -575,8 +589,19 @@ class Controller(Node):
                 self._takeoff_step = None    # reset so the next takeoff spools again
                 msg = ELRSCommand(armed=True, channel_0=0.0, channel_1=0.0,
                                   channel_2=-1.0, channel_3=0.0)
+                # channel_2 = -1.0 maps to throttle 0, so every channel is at zero
+                self._applied_u = np.zeros(4)
+                # THROTTLED: this branch runs every cycle of the 50 Hz loop for
+                # as long as the fleet sits armed waiting for TAKEOFF. Logging it
+                # unthrottled put 50 lines/s PER DRONE through the launch stdout
+                # pipe (200/s with four drones); when that pipe backs up the write
+                # blocks the timer, which stalls the single-threaded executor, so
+                # the node can't service the /drone_N/command subscription that
+                # TAKEOFF arrives on. That showed up as TAKEOFF taking seconds to
+                # be acted on while ARM was instant. Once every 2 s is plenty.
                 self.get_logger().info(
-                    f"[Drone {self.drone_id}] Armed - waiting for TAKEOFF command.")
+                    f"[Drone {self.drone_id}] Armed - waiting for TAKEOFF command.",
+                    throttle_duration_sec=2.0)
 
             self.cb.cmd_publisher_.publish(msg)
             # Remember this good command so a later failed solve can hold it.

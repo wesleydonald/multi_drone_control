@@ -81,7 +81,7 @@ Attachment points not at centre.
 
 Detaching in sim using detachable joint
 
-Testing two weeks time test, hover back and forth circle, spinning circle (vertical oscillation). 
+Testing two weeks time test, hover, back and forth, circle, spinning circle (vertical oscillation). 
 Spreading out, should be able to handle 2-4 drones.
 
 In one week we can test the two drone case with same trajectories
