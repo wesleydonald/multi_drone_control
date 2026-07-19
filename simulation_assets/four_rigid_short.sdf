@@ -1,0 +1,241 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="quadcopter">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>500</real_time_update_rate>
+    </physics>
+    <plugin filename="ignition-gazebo-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors"/>
+
+    <scene><background>0.6 0.8 1.0 1</background><ambient>0.5 0.5 0.5 1</ambient></scene>
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows><pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse><specular>0.2 0.2 0.2 1</specular>
+      <attenuation><range>1000</range><constant>0.9</constant><linear>0.01</linear><quadratic>0.001</quadratic></attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision"><geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry></collision>
+        <visual name="visual"><geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <material><ambient>0.2 0.5 0.2 1</ambient><diffuse>0.3 0.6 0.3 1</diffuse><specular>0.05 0.05 0.05 1</specular></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="lift_system" canonical_link="anchor">
+      <pose>0 0 0 0 0 0</pose>
+      <!-- WORLD-FIXED ANCHOR: nested poses publish in the WORLD frame. -->
+      <link name="anchor">
+        <inertial><mass>0.001</mass>
+          <inertia><ixx>1e-6</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-6</iyy><iyz>0</iyz><izz>1e-6</izz></inertia>
+        </inertial>
+      </link>
+      <joint name="anchor_to_world" type="fixed"><parent>world</parent><child>anchor</child></joint>
+
+      <!-- ===== DRONES (elevated, taut rigid cables) ===== -->
+      <include>
+        <uri>models/x3_drone0.sdf</uri>
+        <name>x3_drone0</name>
+        <pose>0.433553 0.000000 0.503553 0 0 0</pose>
+      </include>
+      <include>
+        <uri>models/x3_drone1.sdf</uri>
+        <name>x3_drone1</name>
+        <pose>0.000000 0.433553 0.503553 0 0 0</pose>
+      </include>
+      <include>
+        <uri>models/x3_drone2.sdf</uri>
+        <name>x3_drone2</name>
+        <pose>-0.433553 0.000000 0.503553 0 0 0</pose>
+      </include>
+      <include>
+        <uri>models/x3_drone3.sdf</uri>
+        <name>x3_drone3</name>
+        <pose>-0.000000 -0.433553 0.503553 0 0 0</pose>
+      </include>
+
+      <!-- ===== PAYLOAD ===== -->
+      <model name="payload">
+        <pose>0 0 0.125 0 0 0</pose>
+        <link name="body">
+          <gravity>1</gravity>
+          <inertial><mass>0.4</mass>
+            <inertia><ixx>1.67e-03</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1.67e-03</iyy><iyz>0</iyz><izz>3.33e-03</izz></inertia>
+          </inertial>
+          <collision name="collision"><geometry><box><size>0.2 0.2 0.05</size></box></geometry></collision>
+          <visual name="visual"><geometry><box><size>0.2 0.2 0.05</size></box></geometry>
+            <material><ambient>0.8 0.4 0.0 1</ambient><diffuse>0.8 0.4 0.0 1</diffuse></material>
+          </visual>
+        </link>
+        <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+          <publish_link_pose>true</publish_link_pose>
+          <publish_nested_model_pose>true</publish_nested_model_pose>
+          <use_pose_vector_msg>true</use_pose_vector_msg>
+          <update_frequency>500</update_frequency>
+        </plugin>
+      </model>
+
+      <!-- ===== TETHER 0: payload -> drone0 (rigid, len=0.5000) ===== -->
+      <link name="tether_0">
+        <pose>0.256777 0.000000 0.326777 0 0.785398 0.000000</pose>
+        <inertial>
+          <mass>0.001</mass>
+          <inertia>
+            <ixx>2.083e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>2.083e-05</iyy><iyz>0</iyz><izz>8.000e-09</izz>
+          </inertia>
+        </inertial>
+        <visual name="tether_0_visual">
+          <geometry><cylinder><radius>0.004</radius><length>0.5000</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <joint name="payload_to_tether_0" type="ball">
+        <parent>payload::body</parent>
+        <child>tether_0</child>
+        <pose relative_to="tether_0">0 0 -0.2500 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+      </joint>
+      <joint name="tether_0_to_drone0" type="ball">
+        <parent>tether_0</parent>
+        <child>x3_drone0::base_link</child>
+        <pose relative_to="tether_0">0 0 0.2500 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+      </joint>
+      <!-- ===== TETHER 1: payload -> drone1 (rigid, len=0.5000) ===== -->
+      <link name="tether_1">
+        <pose>0.000000 0.256777 0.326777 0 0.785398 1.570796</pose>
+        <inertial>
+          <mass>0.001</mass>
+          <inertia>
+            <ixx>2.083e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>2.083e-05</iyy><iyz>0</iyz><izz>8.000e-09</izz>
+          </inertia>
+        </inertial>
+        <visual name="tether_1_visual">
+          <geometry><cylinder><radius>0.004</radius><length>0.5000</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <joint name="payload_to_tether_1" type="ball">
+        <parent>payload::body</parent>
+        <child>tether_1</child>
+        <pose relative_to="tether_1">0 0 -0.2500 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+      </joint>
+      <joint name="tether_1_to_drone1" type="ball">
+        <parent>tether_1</parent>
+        <child>x3_drone1::base_link</child>
+        <pose relative_to="tether_1">0 0 0.2500 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+      </joint>
+      <!-- ===== TETHER 2: payload -> drone2 (rigid, len=0.5000) ===== -->
+      <link name="tether_2">
+        <pose>-0.256777 0.000000 0.326777 0 0.785398 3.141593</pose>
+        <inertial>
+          <mass>0.001</mass>
+          <inertia>
+            <ixx>2.083e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>2.083e-05</iyy><iyz>0</iyz><izz>8.000e-09</izz>
+          </inertia>
+        </inertial>
+        <visual name="tether_2_visual">
+          <geometry><cylinder><radius>0.004</radius><length>0.5000</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <joint name="payload_to_tether_2" type="ball">
+        <parent>payload::body</parent>
+        <child>tether_2</child>
+        <pose relative_to="tether_2">0 0 -0.2500 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+      </joint>
+      <joint name="tether_2_to_drone2" type="ball">
+        <parent>tether_2</parent>
+        <child>x3_drone2::base_link</child>
+        <pose relative_to="tether_2">0 0 0.2500 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+      </joint>
+      <!-- ===== TETHER 3: payload -> drone3 (rigid, len=0.5000) ===== -->
+      <link name="tether_3">
+        <pose>-0.000000 -0.256777 0.326777 0 0.785398 -1.570796</pose>
+        <inertial>
+          <mass>0.001</mass>
+          <inertia>
+            <ixx>2.083e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>2.083e-05</iyy><iyz>0</iyz><izz>8.000e-09</izz>
+          </inertia>
+        </inertial>
+        <visual name="tether_3_visual">
+          <geometry><cylinder><radius>0.004</radius><length>0.5000</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <joint name="payload_to_tether_3" type="ball">
+        <parent>payload::body</parent>
+        <child>tether_3</child>
+        <pose relative_to="tether_3">0 0 -0.2500 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+      </joint>
+      <joint name="tether_3_to_drone3" type="ball">
+        <parent>tether_3</parent>
+        <child>x3_drone3::base_link</child>
+        <pose relative_to="tether_3">0 0 0.2500 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+      </joint>
+    </model>
+
+    <!-- ===== TAKEOFF PLATFORMS (rest the drones at spawn until TAKEOFF) ===== -->
+    <model name="platform_0">
+      <static>true</static>
+      <pose>0.433553 0.000000 0.201777 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.30 0.30 0.403553</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>0.30 0.30 0.403553</size></box></geometry>
+          <material><ambient>0.35 0.35 0.4 1</ambient><diffuse>0.5 0.5 0.55 1</diffuse></material></visual>
+      </link>
+    </model>
+    <model name="platform_1">
+      <static>true</static>
+      <pose>0.000000 0.433553 0.201777 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.30 0.30 0.403553</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>0.30 0.30 0.403553</size></box></geometry>
+          <material><ambient>0.35 0.35 0.4 1</ambient><diffuse>0.5 0.5 0.55 1</diffuse></material></visual>
+      </link>
+    </model>
+    <model name="platform_2">
+      <static>true</static>
+      <pose>-0.433553 0.000000 0.201777 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.30 0.30 0.403553</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>0.30 0.30 0.403553</size></box></geometry>
+          <material><ambient>0.35 0.35 0.4 1</ambient><diffuse>0.5 0.5 0.55 1</diffuse></material></visual>
+      </link>
+    </model>
+    <model name="platform_3">
+      <static>true</static>
+      <pose>-0.000000 -0.433553 0.201777 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.30 0.30 0.403553</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>0.30 0.30 0.403553</size></box></geometry>
+          <material><ambient>0.35 0.35 0.4 1</ambient><diffuse>0.5 0.5 0.55 1</diffuse></material></visual>
+      </link>
+    </model>
+  </world>
+</sdf>

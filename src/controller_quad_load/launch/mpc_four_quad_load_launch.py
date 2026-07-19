@@ -1,34 +1,31 @@
 """
-mpc_three_soft_quad_load_launch.py
-----------------------------------
-PLANNER-DRIVEN, CABLE-AWARE stack for three_soft.sdf: the centralized
+mpc_four_quad_load_launch.py
+----------------------------
+FOUR-drone counterpart of mpc_three_soft_quad_load_launch.py: the centralized
 cable-suspended load planner (controller_load_mpc) generates each drone's
 reference trajectory AND its per-node cable tension acceleration (t*s/m), and the
 per-drone cable-aware MPC (controller_quad_load) tracks it with the cable force in
 its prediction model (reference_source:=planner).
 
-vs controller_mpc_multi/mpc_three_soft_planner_launch.py (cable-blind tracker),
-this swaps the controllers + fleet manager to the controller_quad_load package.
-
 Run Gazebo first:
-    gz sim simulation_assets/three_rigid_short.sdf -v 4 -r
+    gz sim simulation_assets/four_rigid_short.sdf -v 4 -r
 then:
-    ros2 launch controller_quad_load mpc_three_soft_quad_load_launch.py
+    ros2 launch controller_quad_load mpc_four_quad_load_launch.py
 
-The defaults target three_rigid_short.sdf (0.5 m rigid rods, 0.4 kg payload) and
-need no arguments. For the other worlds override the geometry:
-    three_soft.sdf        cable_len:=0.6
-    three_soft_paper.sdf  cable_len:=1.0 load_mass:=0.1
-The planner streams references continuously; ARM + TAKEOFF via /fleet/command
-hands the drones over to tracking it:
+The defaults target four_rigid_short.sdf (0.5 m rigid rods at 45deg, 0.4 kg
+payload) and need no arguments — the same geometry as three_rigid_short.sdf with
+a fourth drone, so the per-drone tension drops from mg/(3 sin45) to mg/(4 sin45).
+For four_rigid.sdf override the geometry:
+    four_rigid.sdf  cable_len:=0.707
+
+ARM + TAKEOFF via /fleet/command hands the drones over to tracking:
     ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: ARM}"
     ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: TAKEOFF}"
+    ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: LAND}"
 
-Notes:
-  * planner codegen is isolated (c_generated_code_load_planner/), and the
-    cable-aware tracker codegen is isolated (c_generated_code_quad_load/), so
-    nothing clashes with controller_mpc_multi's quad_dynamics solver.
-  * until the planner streams a reference, controllers hold armed-idle.
+Note: num_drones is passed to BOTH the fleet manager and the planner. They must
+agree with the world SDF — the planner divides the load tension by n, so a
+mismatch mis-scales every drone's feedforward.
 """
 
 from launch import LaunchDescription
@@ -38,14 +35,11 @@ from launch_ros.actions import Node, SetParameter
 from launch_ros.parameter_descriptions import ParameterValue
 
 PARENT_MODEL = 'lift_system'
-DRONE_NAMES  = ['x3_drone0', 'x3_drone1', 'x3_drone2']
+DRONE_NAMES  = ['x3_drone0', 'x3_drone1', 'x3_drone2', 'x3_drone3']
 N            = len(DRONE_NAMES)
 
 
 def generate_launch_description():
-    # Geometry defaults target three_soft_paper.sdf (elevated, TAUT 1.0 m cables
-    # at ~45deg). For the ground-start slack three_soft.sdf, launch with
-    #   cable_len:=0.6 start_taut:=false
     cable_len     = ParameterValue(LaunchConfiguration('cable_len'), value_type=float)
     start_taut    = ParameterValue(LaunchConfiguration('start_taut'), value_type=bool)
     load_mass     = ParameterValue(LaunchConfiguration('load_mass'), value_type=float)
@@ -66,14 +60,13 @@ def generate_launch_description():
     thrust_ratio    = ParameterValue(LaunchConfiguration('thrust_ratio'), value_type=float)
 
     nodes = [
-        # must match the tether length in the world SDF - three_rigid_short.sdf
+        # must match the tether length in the world SDF - four_rigid_short.sdf
         # uses rigid 0.5 m rods, and a mismatch here commands a formation radius
         # the tethers physically can't reach (drones fight the rod on takeoff).
-        # three_soft.sdf = 0.6, three_soft_paper.sdf = 1.0 (with load_mass:=0.1).
+        # four_rigid.sdf = 0.707.
         DeclareLaunchArgument('cable_len', default_value='0.5'),
         DeclareLaunchArgument('start_taut', default_value='true'),
-        # payload mass in the world SDF: 0.4 for three_soft/three_rigid_short,
-        # 0.1 for three_soft_paper.
+        # payload mass in the world SDF.
         DeclareLaunchArgument('load_mass', default_value='0.4'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         # HOLD test: lift_ramp_vel:=0.0 (no lift, just hold the taut config).
@@ -81,20 +74,18 @@ def generate_launch_description():
         # LAND descent rate (separate from the slow takeoff lift_ramp_vel).
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         # Cable compensation. ON is the correct flight config: the cable pulls
-        # each drone inward-and-down (~3.1 m/s^2, 2.2 of it horizontal at 45deg),
-        # so the drone must hold ~10deg of outward tilt just to stay put. These
-        # feed that in. Turning them off leaves the tracker to rediscover the
-        # tilt from position error, which is what made the drones sag inboard on
-        # takeoff. Only zero them for a deliberate A/B:
+        # each drone inward-and-down, so the drone must hold an outward tilt just
+        # to stay put. With four drones the per-drone tension is mg/(4 sin45) =
+        # 1.39 N (vs 1.85 N on three), so the required tilt is ~7.9deg not 10.3.
+        # Only zero these for a deliberate A/B:
         #   cable_ff_scale:=0.0  cable-blind prediction model
         #   attitude_ff:=false   level attitude reference (throttle FF kept)
         DeclareLaunchArgument('cable_ff_scale', default_value='1.0'),
         DeclareLaunchArgument('attitude_ff', default_value='true'),
         # 'model' = planner open-loop t*s/m cable term (default); 'measured' =
-        # IMU-derived f_ext held over the horizon (Part 2c A/B).
+        # IMU-derived f_ext held over the horizon.
         DeclareLaunchArgument('cable_source', default_value='model'),
-        # payload counts as resting (cable term zeroed) at/below this z; set a
-        # bit above the payload's on-ground height for the world in use.
+        # payload counts as resting (cable term zeroed) at/below this z.
         DeclareLaunchArgument('payload_rest_z', default_value='0.05'),
         # seconds to spool the throttle up at takeoff (gentle liftoff); 0 = instant.
         DeclareLaunchArgument('takeoff_spool_s', default_value='0.0'),
@@ -130,9 +121,9 @@ def generate_launch_description():
         # 'taut' = engage FF from spawn (rigid cables); 'airborne' = ramp with the
         # load lift (soft cables).
         DeclareLaunchArgument('ff_gate_mode', default_value='taut'),
-        # LOAD reference trajectory after the lift tops out: 'hover' (current
-        # behaviour), 'line_x' (+x translate), 'circle'. Keep traj_speed slow.
-        DeclareLaunchArgument('load_traj', default_value='circle'),
+        # LOAD reference trajectory after the lift tops out: 'hover', 'line_x',
+        # 'circle'. Keep traj_speed slow.
+        DeclareLaunchArgument('load_traj', default_value='line_x'),
         DeclareLaunchArgument('traj_speed', default_value='0.4'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
         DeclareLaunchArgument('traj_radius', default_value='0.5'),
@@ -195,13 +186,14 @@ def generate_launch_description():
     # ── Centralized cable-suspended load planner ───────────────────────────
     nodes.append(Node(
         package='controller_load_mpc', executable='planner', name='load_planner',
-        parameters=[{'cable_len': cable_len, 'start_taut': start_taut,
-                      'load_mass': load_mass,
-                      'target_z': target_z, 'lift_ramp_vel': lift_ramp_vel,
-                      'land_vel': land_vel,
-                      'planner_mode': planner_mode, 'ff_gate_mode': ff_gate_mode,
-                      'load_traj': load_traj, 'traj_speed': traj_speed,
-                      'traj_distance': traj_distance, 'traj_radius': traj_radius}],
+        parameters=[{'num_drones': N,
+                     'cable_len': cable_len, 'start_taut': start_taut,
+                     'load_mass': load_mass,
+                     'target_z': target_z, 'lift_ramp_vel': lift_ramp_vel,
+                     'land_vel': land_vel,
+                     'planner_mode': planner_mode, 'ff_gate_mode': ff_gate_mode,
+                     'load_traj': load_traj, 'traj_speed': traj_speed,
+                     'traj_distance': traj_distance, 'traj_radius': traj_radius}],
         output='screen'))
 
     return LaunchDescription(nodes)

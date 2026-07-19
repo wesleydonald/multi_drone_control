@@ -48,6 +48,11 @@ ATTACH_RADIUS = 0.08
 ATTACH_Z      = 0.025          # attach height above load CoG (load frame)
 DRONE_MASS    = 0.6
 PLANNER_HZ    = 10.0
+# Reference horizon. Kinematic mode needs these WITHOUT building the OCP, so they
+# live here and are passed into generate_load_ocp rather than read back off it —
+# that way the two modes cannot drift apart. The tracker expects N+1 nodes.
+PLAN_N        = 20
+PLAN_TF       = 2.0           # s -> node dt 0.1
 STEADY_ITERS  = 5             # SQP iterations per planner cycle once running (was 1;
                               # 1 RTI step can't track the taut transition online)
 CREEP_VEL     = 0.10          # m/s straight-up rise during the slack takeoff phase
@@ -58,7 +63,28 @@ TAUT_SWITCH_GATE = 0.95       # hand over from creep to the coupled planner once
 TARGET_Z      = 0.6           # load hover height reference
 LIFT_RAMP_VEL = 0.05          # m/s: fixed-schedule load lift rate after handover
                               # (decoupled from measured load_z, see _yref)
-LAND_DRONE_Z  = 0.20          # LAND stops once every drone is at/below this z (m)
+# Lift-ramp easing. The ramp rate is shaped 0 -> lift_ramp_vel -> 0 instead of
+# stepping, so the vertical velocity FEEDFORWARD has no discontinuity at either
+# end of the climb (a step there is taken directly by the drones as a jolt).
+# Tuned for a 0.475 m climb at 0.20 m/s: peak accel 2.00 -> 0.59 m/s^2 (3.4x
+# gentler) and the drones arrive at ~0.01 m/s instead of stopping dead from
+# 0.20, at the cost of ~1.5 s more climb time.
+LIFT_SOFT_S   = 1.2           # s: ease the climb rate IN over this long
+LIFT_SOFT_D   = 0.08          # m: ease it back OUT over the last of the climb
+LIFT_SOFT_MIN = 0.12          # floor on the shape factor, so the climb always
+                              # terminates instead of asymptoting at the target
+# LAND completes on TOUCHDOWN (the drones stop following the descending
+# reference), not at an absolute height — see _touchdown_stalled(). A fixed
+# height can't work: the fleet may be over a takeoff platform rather than open
+# ground when LAND is commanded.
+LAND_STALL_FRAC = 0.25        # descending slower than this fraction of the
+                              # commanded rate counts as stalled
+LAND_STALL_S  = 1.0           # stall must persist this long to be touchdown (s)
+LAND_MIN_DESCENT = 0.05       # m: fleet must actually drop this far after LAND
+                              # before touchdown can be declared at all
+LAND_GRACE_S  = 1.5           # ignore the stall test for this long after LAND:
+                              # the drones lag the newly-descending reference at
+                              # first, which would otherwise read as touchdown
 LAND_MAX_DROP = 1.50          # m: safety floor on how far below the handover
                               # height the LAND descent pushes the reference
 LAND_VEL      = 0.20          # m/s: LAND descent rate (own knob, faster than the
@@ -102,6 +128,11 @@ class LoadPlanner(Node):
         # ── geometry / mode params (override the module defaults per world) ──
         # three_soft.sdf spawns SLACK 0.6 m cables (creep to take up slack);
         # three_soft_paper.sdf spawns TAUT 1.0 m cables at ~45deg (start_taut).
+        # number of drones carrying the load. Must match the world SDF and the
+        # fleet manager's num_drones - the planner sizes the attach ring and
+        # divides the load tension by this, so a mismatch mis-scales every
+        # drone's feedforward. three_* worlds = 3, four_* worlds = 4.
+        self.n = int(self.declare_parameter('num_drones', N_DRONES).value)
         self.cable_len = float(
             self.declare_parameter('cable_len', CABLE_LEN).value)
         self.attach_radius = float(
@@ -148,7 +179,10 @@ class LoadPlanner(Node):
         # mode rigidly translates the latched taut config, a pure translation
         # keeps the cable geometry (so the cached FF stays valid). Shapes:
         #   'hover'  — no lateral motion (current behaviour: lift then hold).
-        #   'line_x' — move +x at traj_speed for traj_distance metres, then hold.
+        #   'line_x' — CONTINUOUS back-and-forth shuttle along x: 0 -> +
+        #              traj_distance -> 0, repeating until LAND. Sinusoidal, so
+        #              traj_speed is the PEAK speed (reached mid-stroke) and
+        #              traj_distance is the stroke length.
         #   'circle' — horizontal circle of traj_radius at tangential traj_speed.
         # Keep traj_speed slow: centripetal/lateral accel is NOT fed forward, so
         # fast motion would need cable tilt this open-loop translation can't model.
@@ -165,14 +199,15 @@ class LoadPlanner(Node):
         self._land_to_ground = False # LAND command: descend all the way to ground
         self._landed = False         # descent finished, load back at start height
         self._lift_vel = 0.0         # signed vertical velocity of the lift target
-        # LAND stops once every drone is at/below this height (override per world).
-        self.land_drone_z = float(
-            self.declare_parameter('land_drone_z', LAND_DRONE_Z).value)
+        # touchdown detector state (see _touchdown_stalled)
+        self._land_prev_max_z = None
+        self._land_stall_ct = 0
+        self._land_cycles = 0
         # LAND descent rate (separate from lift_ramp_vel so a slow takeoff doesn't
         # force a slow landing).
         self.land_vel = float(self.declare_parameter('land_vel', LAND_VEL).value)
         self.get_logger().info(
-            f'[planner] geometry: cable_len={self.cable_len:.3f} '
+            f'[planner] geometry: n={self.n} cable_len={self.cable_len:.3f} '
             f'attach_radius={self.attach_radius:.3f} attach_z={self.attach_z:.3f} '
             f'load_mass={self.load_mass:.3f} '
             f'start_taut={self.start_taut} target_z={self.target_z:.3f} '
@@ -181,7 +216,6 @@ class LoadPlanner(Node):
             f'traj_speed={self.traj_speed:.3f} traj_distance={self.traj_distance:.3f} '
             f'traj_radius={self.traj_radius:.3f}')
 
-        self.n = N_DRONES
         self.rho = [np.array([self.attach_radius * np.cos(2 * np.pi * k / self.n),
                               self.attach_radius * np.sin(2 * np.pi * k / self.n),
                               self.attach_z]) for k in range(self.n)]
@@ -189,11 +223,28 @@ class LoadPlanner(Node):
         self.dyn = LoadCableDynamics(
             self.n, self.load_mass, LOAD_INERTIA, [self.cable_len] * self.n,
             self.rho, DRONE_MASS)
-        self.get_logger().info(
-            f'[planner] building OCP (nx={self.dyn.nx}, nu={self.dyn.nu})...')
-        self.ocp, self.solver = generate_load_ocp(self.dyn)
-        self.N = self.ocp.solver_options.N_horizon
-        self.dt = self.ocp.solver_options.tf / self.N
+        # Build the coupled load-cable OCP ONLY if we're going to solve it.
+        # acados regenerates and recompiles this on every launch (no freshness
+        # check), which is ~50 s for n=4 — and in kinematic mode it is never
+        # solved: that path needs nothing from the solver but the horizon size,
+        # and reads only the scalars .m/.g/.mi off self.dyn. Building it anyway
+        # meant the planner published no references for the whole compile, so the
+        # drones acknowledged TAKEOFF instantly and then sat armed-idle until it
+        # finished (controller_mpc holds when planner_ref_pos is None).
+        if self.planner_mode == 'coupled':
+            self.get_logger().info(
+                f'[planner] building OCP (nx={self.dyn.nx}, nu={self.dyn.nu}) — '
+                f'acados recompiles every launch, this takes a while...')
+            self.ocp, self.solver = generate_load_ocp(
+                self.dyn, N=PLAN_N, tf=PLAN_TF)
+            self.N = self.ocp.solver_options.N_horizon
+            self.dt = self.ocp.solver_options.tf / self.N
+        else:
+            self.ocp, self.solver = None, None
+            self.N, self.dt = PLAN_N, PLAN_TF / PLAN_N
+            self.get_logger().info(
+                f'[planner] kinematic mode — skipping the coupled OCP build '
+                f'(N={self.N}, dt={self.dt:.3f})')
 
         # numeric kinematic functions for reference extraction
         self.pos_fun = [ca.Function(f'p{i}', [self.dyn.x], [self.dyn.quad_position(i)])
@@ -224,6 +275,7 @@ class LoadPlanner(Node):
         self.takeoff_seen = False              # gate the lift ramp on TAKEOFF (see below)
         self.lift_z0 = None                    # load height latched at handover
         self.lift_progress = 0.0               # ramped lift above lift_z0 (m)
+        self._lift_t = 0.0                     # s since the lift ramp started
 
         # subs
         self.create_subscription(
@@ -280,13 +332,42 @@ class LoadPlanner(Node):
 
     def _fleet_command_cb(self, msg: String):
         cmd = msg.data.strip().upper()
+        # Log EVERY command, before any filtering. LAND is the only command this
+        # node acts on, so if the subscription were silently not matching there
+        # would be no symptom until a LAND was ignored — with no way to tell
+        # "never delivered" from "delivered and filtered out".
+        self.get_logger().info(
+            f'[planner] /fleet/command received: {cmd!r} '
+            f'(phase={self.phase} takeoff_seen={self.takeoff_seen} '
+            f'descending={self.descending} land_to_ground={self._land_to_ground})')
         if cmd != 'LAND':
             return
         if self.phase != 'planner' or not self.takeoff_seen:
             self.get_logger().warn('[planner] LAND ignored - not flying yet')
             return
-        if self.descending:
-            return                       # already landing
+        if self._land_to_ground:
+            # Already landing (or landed). A REPEAT LAND is the user telling us
+            # the first one didn't take — almost always because the central
+            # controller missed it while we heard it (separate subscribers, and
+            # `ros2 topic pub --once` races discovery on a fresh publisher each
+            # call). If we have already touched down, re-announce it: otherwise
+            # the one-shot /fleet/landed is long gone, the controller never set
+            # landing=True, and no retry can ever complete the handshake.
+            if self._landed:
+                self.landed_pub.publish(Bool(data=True))
+                self.get_logger().info(
+                    '[planner] LAND repeated after touchdown — re-announcing '
+                    '/fleet/landed')
+            else:
+                self.get_logger().info('[planner] LAND already in progress')
+            return
+        # NOTE: self.descending alone must NOT gate this. When a lateral
+        # trajectory closes the planner latches descending=True on its own, but
+        # that auto-descent stops at the handover height and never sets
+        # _land_to_ground, so /fleet/landed is never published and the fleet
+        # never disarms. Ignoring LAND here left the drones hovering with no way
+        # down. A LAND command upgrades an in-progress auto-descent to a full
+        # descent to the floor.
         # Stop the lateral trajectory (traj_t stops advancing while descending)
         # and ramp the reference down to the handover height. _land_to_ground
         # marks this as a commanded LAND so we publish /fleet/landed at the end
@@ -294,7 +375,50 @@ class LoadPlanner(Node):
         self.descending = True
         self._land_to_ground = True
         self._landed = False
+        # arm the touchdown detector fresh (this may be upgrading an auto-descent
+        # that was already running, so stale stall state must not carry over)
+        self._land_prev_max_z = None
+        self._land_stall_ct = 0
+        self._land_cycles = 0
+        self._land_start_z = None
         self.get_logger().info('[planner] LAND - descending to the floor')
+
+    def _touchdown_stalled(self):
+        """True once every drone has stopped descending, i.e. touched down.
+
+        Called only while a LAND descent is driving the reference down at
+        land_vel. If a drone's height is no longer following that command it has
+        hit something solid (ground, platform, whatever it happens to be over),
+        which is the only landing test that holds when the fleet is not above its
+        takeoff points. Requires the stall to persist for LAND_STALL_S so a brief
+        tracking lag or a swing of the load doesn't read as touchdown.
+        """
+        if any(d is None for d in self.drone_pos):
+            return False
+        max_dz = max(d[2] for d in self.drone_pos)
+        # Only arm the stall test once the fleet has ACTUALLY descended a real
+        # distance from where LAND was commanded. The grace period alone isn't
+        # enough: if the tracker ever lagged longer than LAND_GRACE_S the drones
+        # would still be stationary when the test armed, and "not moving yet"
+        # would be misread as "landed" while still at altitude.
+        if self._land_start_z is None:
+            self._land_start_z = max_dz
+        self._land_cycles += 1
+        if (self._land_cycles < int(LAND_GRACE_S * PLANNER_HZ)
+                or max_dz > self._land_start_z - LAND_MIN_DESCENT):
+            self._land_prev_max_z = max_dz
+            return False
+        prev = self._land_prev_max_z
+        self._land_prev_max_z = max_dz
+        if prev is None:
+            return False
+        # expected drop this cycle if the drones were tracking the reference
+        expected = self.land_vel / PLANNER_HZ
+        if (prev - max_dz) < expected * LAND_STALL_FRAC:
+            self._land_stall_ct += 1
+        else:
+            self._land_stall_ct = 0
+        return self._land_stall_ct >= int(LAND_STALL_S * PLANNER_HZ)
 
     # ── x_init assembly ─────────────────────────────────────────────────────
     def _build_x_init(self):
@@ -391,10 +515,15 @@ class LoadPlanner(Node):
                 self.lift_progress = max(
                     floor, self.lift_progress - rate / PLANNER_HZ)
                 if self._land_to_ground:
-                    have = all(d is not None for d in self.drone_pos)
-                    max_dz = max((d[2] for d in self.drone_pos if d is not None),
-                                 default=1e9)
-                    done = (have and max_dz <= self.land_drone_z) \
+                    # TOUCHDOWN by stall, not by absolute height. We can't test
+                    # "drone z <= land_drone_z": the drones may be over a takeoff
+                    # platform (top at ~0.40 m here) rather than open ground, so a
+                    # fixed threshold is unreachable and the descent only ends when
+                    # lift_progress bottoms out — 10 s of grinding the drones into
+                    # the platform. Instead: the reference is being driven steadily
+                    # down, so if the drones have STOPPED descending they are
+                    # resting on something. Works over ground or platform alike.
+                    done = self._touchdown_stalled() \
                         or self.lift_progress <= floor + 1e-6
                 else:
                     done = self.lift_progress <= 1e-6
@@ -404,10 +533,33 @@ class LoadPlanner(Node):
                         self.landed_pub.publish(Bool(data=True))
                     self.get_logger().info(
                         '[planner] descent complete — drones on the floor')
+                elif self._landed and self._land_to_ground:
+                    # Keep announcing touchdown until the fleet actually disarms.
+                    # A single publish is lost if the central controller missed
+                    # the original LAND (landing=False -> its callback drops the
+                    # message), and nothing would ever resend it. Republishing is
+                    # free — the controller ignores repeats once it has disarmed.
+                    self.landed_pub.publish(Bool(data=True))
             else:
+                # EASED lift ramp. Stepping lift_progress at a constant
+                # lift_ramp_vel means the vertical velocity reference jumps
+                # 0 -> lift_ramp_vel in a single cycle the moment TAKEOFF lands,
+                # and drops back to 0 just as abruptly at the top. _lift_vel is
+                # fed forward directly, so both ends were a velocity step the
+                # drones had to absorb — the aggressive liftoff. Ease in over
+                # LIFT_SOFT_S and out over the last LIFT_SOFT_D metres.
+                total = self.target_z - self.lift_z0
+                self._lift_t += 1.0 / PLANNER_HZ
+                ease_in = 0.5 * (1.0 - np.cos(
+                    np.pi * min(self._lift_t / max(LIFT_SOFT_S, 1e-6), 1.0)))
+                remaining = max(total - self.lift_progress, 0.0)
+                ease_out = 0.5 * (1.0 - np.cos(
+                    np.pi * min(remaining / max(LIFT_SOFT_D, 1e-6), 1.0)))
+                # floor the shape so the climb always finishes: a pure ease-out
+                # approaches the target asymptotically and lift_done never fires.
+                shape = max(min(ease_in, ease_out), LIFT_SOFT_MIN)
                 self.lift_progress = min(
-                    self.target_z - self.lift_z0,
-                    self.lift_progress + self.lift_ramp_vel / PLANNER_HZ)
+                    total, self.lift_progress + shape * self.lift_ramp_vel / PLANNER_HZ)
                 # Lateral trajectory runs once hovering (kinematic mode only); when
                 # it closes, latch the descent.
                 lift_done = (self.lift_progress
@@ -474,7 +626,9 @@ class LoadPlanner(Node):
         """True once the lateral load trajectory has finished, so the descent can
         begin. 'hover' never completes (holds indefinitely, the old behaviour)."""
         if self.load_traj == 'line_x':
-            return self.traj_speed * self.traj_t >= self.traj_distance
+            # Shuttles continuously - like 'hover' it never self-completes, so
+            # there is no auto-descent. End the run with a LAND command.
+            return False
         if self.load_traj == 'circle':
             w = self.traj_speed / max(self.traj_radius, 1e-6)
             return self.traj_t >= 2.0 * np.pi / w
@@ -493,8 +647,19 @@ class LoadPlanner(Node):
         if t <= 0.0:
             return 0.0, 0.0, 0.0, 0.0
         if self.load_traj == 'line_x':
-            dx = min(self.traj_speed * t, self.traj_distance)
-            vx = self.traj_speed if dx < self.traj_distance else 0.0
+            # Continuous back-and-forth shuttle along +x, 0 -> traj_distance -> 0,
+            # repeating until LAND. SINUSOIDAL, not a triangle wave: a constant-
+            # speed shuttle reverses velocity instantaneously at each end, and
+            # since lateral acceleration is not fed forward that step would be
+            # taken entirely by the payload as a pendulum kick. The half-cosine
+            # has continuous velocity AND acceleration, and starts from rest by
+            # construction (dx=0, vx=0 at t=0), so it needs no startup guard.
+            #   w chosen so peak speed (at mid-stroke) is exactly traj_speed
+            #   round-trip period = pi * traj_distance / traj_speed
+            d = max(self.traj_distance, 1e-6)
+            w = 2.0 * self.traj_speed / d
+            dx = 0.5 * d * (1.0 - np.cos(w * t))
+            vx = 0.5 * d * w * np.sin(w * t)
             return dx, 0.0, vx, 0.0
         if self.load_traj == 'circle':
             r = max(self.traj_radius, 1e-6)
