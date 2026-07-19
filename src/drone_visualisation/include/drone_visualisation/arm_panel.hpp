@@ -30,6 +30,7 @@ private Q_SLOTS:
   void onButtonPressed();
   void onSpacePressed();
   void onTakeoffPressed();
+  void onLandPressed();
 
 private:
   void updateButtonState();
@@ -46,6 +47,7 @@ private:
   
   QPushButton* arm_button_;
   QPushButton* takeoff_button_;
+  QPushButton* land_button_;
   QShortcut* space_shortcut_;
   QLabel* status_label_;
   QLabel* battery_label_;

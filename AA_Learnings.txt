@@ -51,12 +51,6 @@ ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: ARM}"
 
 gz sim three_soft.sdf -v 4 -r
 
-Okay so there are a few steps I want to take. I believe the issue with my current setup
-is that the individual drone MPCs try to follow the planner trajectories but have the wrong
-model (not the one from the TUdelft paper). The key thing I am missing is the t_i * s_i term
-which models the force from the cable tension in the quadcopter model. Since I do not have this
-at the moment it is causing the quadcopters to tilt away from the payload and fall down.
-
 The steps I need to take are:
 1 - Implement a EKF to estimate the full state of the load_cable_dynamics.py state vector. I want
     use ideally a similar method to TUDelft for this task. I then want to verify that this EKF works.
@@ -68,23 +62,23 @@ The steps I need to take are:
 Let's start by working on the state estimation method, take your time reading the paper and let me know if you have any questions.
 
 
-Smoother takeoff from payload flag for resting or suspended to change model
-Make rviz better + landing button rviz
+DONE: Smoother takeoff from payload flag for resting or suspended to change model
+DONE: Land trajectory difficult if there is z error
+DONE: Make rviz better + landing button rviz
+DONE: Create hover, circle, back and forth trajectories
 
 Cables more horizontal than vertical for attaching case/detaching fine just move along vector for payload
-
-Land trajectory difficult if there is z error
-
-Cone no fly zone around payload
+Cone no fly zone around payload. Spreading out, should be able to handle 2-4 drones.
 
 Attachment points not at centre.
-
 Detaching in sim using detachable joint
 
-Testing two weeks time test, hover, back and forth, circle, spinning circle (vertical oscillation). 
-Spreading out, should be able to handle 2-4 drones.
+Create spinning circle (vertical oscillation) traj + Quartonion issue with "yaw" - fix in ukf
+
+Testing two weeks time test trajectories for 3/4 drones
 
 In one week we can test the two drone case with same trajectories
 
-Quartonion issue with "yaw" - fix in ukf
+Additional
 
+Estimate thrust ratio
