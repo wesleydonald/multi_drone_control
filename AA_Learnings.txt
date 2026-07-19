@@ -71,15 +71,15 @@ Let's start by working on the state estimation method, take your time reading th
 Smoother takeoff from payload flag for resting or suspended to change model
 Make rviz better + landing button rviz
 
-Attachment points not at centre.
-
-Detaching in sim using detachable joint
-
 Cables more horizontal than vertical for attaching case/detaching fine just move along vector for payload
 
 Land trajectory difficult if there is z error
 
 Cone no fly zone around payload
+
+Attachment points not at centre.
+
+Detaching in sim using detachable joint
 
 Testing two weeks time test, hover back and forth circle, spinning circle (vertical oscillation). 
 Spreading out, should be able to handle 2-4 drones.

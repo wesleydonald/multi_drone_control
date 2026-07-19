@@ -33,7 +33,7 @@ import numpy as np
 import casadi as ca
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float64MultiArray, Int32
+from std_msgs.msg import Float64MultiArray, Int32, String, Bool
 from interfaces.msg import MotionCaptureState
 
 from .load_cable_dynamics import LoadCableDynamics, LOAD_DIM, CABLE_DIM
@@ -58,6 +58,11 @@ TAUT_SWITCH_GATE = 0.95       # hand over from creep to the coupled planner once
 TARGET_Z      = 0.6           # load hover height reference
 LIFT_RAMP_VEL = 0.05          # m/s: fixed-schedule load lift rate after handover
                               # (decoupled from measured load_z, see _yref)
+LAND_DRONE_Z  = 0.20          # LAND stops once every drone is at/below this z (m)
+LAND_MAX_DROP = 1.50          # m: safety floor on how far below the handover
+                              # height the LAND descent pushes the reference
+LAND_VEL      = 0.20          # m/s: LAND descent rate (own knob, faster than the
+                              # slow lift_ramp_vel used for a gentle takeoff)
 LIFT_STEP     = 0.04          # max commanded climb above current load z. Kept
                               # SMALL: a large lead makes the drones build climb
                               # speed and overshoot the taut transition, spiking
@@ -103,6 +108,11 @@ class LoadPlanner(Node):
             self.declare_parameter('attach_radius', ATTACH_RADIUS).value)
         self.attach_z = float(
             self.declare_parameter('attach_z', ATTACH_Z).value)
+        # must match the payload mass in the world SDF - the planner sizes the
+        # cable tension off this, so a mismatch scales every drone's tension FF.
+        # three_soft.sdf/three_rigid_short.sdf = 0.4, three_soft_paper.sdf = 0.1.
+        self.load_mass = float(
+            self.declare_parameter('load_mass', LOAD_MASS).value)
         # start_taut: cables already taut at spawn (elevated world) -> skip the
         # creep takeoff and hand straight to the coupled planner.
         self.start_taut = bool(
@@ -152,11 +162,19 @@ class LoadPlanner(Node):
             self.declare_parameter('traj_radius', 0.5).value)     # m (circle)
         self.traj_t = 0.0            # elapsed lateral-trajectory time (post-hover)
         self.descending = False      # latched once the lateral trajectory closes
+        self._land_to_ground = False # LAND command: descend all the way to ground
         self._landed = False         # descent finished, load back at start height
         self._lift_vel = 0.0         # signed vertical velocity of the lift target
+        # LAND stops once every drone is at/below this height (override per world).
+        self.land_drone_z = float(
+            self.declare_parameter('land_drone_z', LAND_DRONE_Z).value)
+        # LAND descent rate (separate from lift_ramp_vel so a slow takeoff doesn't
+        # force a slow landing).
+        self.land_vel = float(self.declare_parameter('land_vel', LAND_VEL).value)
         self.get_logger().info(
             f'[planner] geometry: cable_len={self.cable_len:.3f} '
             f'attach_radius={self.attach_radius:.3f} attach_z={self.attach_z:.3f} '
+            f'load_mass={self.load_mass:.3f} '
             f'start_taut={self.start_taut} target_z={self.target_z:.3f} '
             f'lift_ramp_vel={self.lift_ramp_vel:.3f} mode={self.planner_mode} '
             f'ff_gate_mode={self.ff_gate_mode} load_traj={self.load_traj} '
@@ -169,7 +187,7 @@ class LoadPlanner(Node):
                               self.attach_z]) for k in range(self.n)]
 
         self.dyn = LoadCableDynamics(
-            self.n, LOAD_MASS, LOAD_INERTIA, [self.cable_len] * self.n,
+            self.n, self.load_mass, LOAD_INERTIA, [self.cable_len] * self.n,
             self.rho, DRONE_MASS)
         self.get_logger().info(
             f'[planner] building OCP (nx={self.dyn.nx}, nu={self.dyn.nu})...')
@@ -222,11 +240,19 @@ class LoadPlanner(Node):
             self.create_subscription(
                 MotionCaptureState, f'/drone_{i}/motion_capture_state',
                 lambda msg, k=i: self._drone_cb(msg, k), 5)
+        # /fleet/command (ARM|TAKEOFF|DISARM|ESTOP|LAND). We only act on LAND:
+        # start the descent (stop the lateral trajectory, lower the load back to
+        # the handover height). The central controller disarms once we finish.
+        self.create_subscription(
+            String, '/fleet/command', self._fleet_command_cb, 10)
 
         # pubs
         self.ref_pub = [self.create_publisher(
             Float64MultiArray, f'/drone_{i}/reference_trajectory', 5)
             for i in range(self.n)]
+        # published True once the LAND descent has finished (load back at the
+        # handover height), so the central controller knows it can disarm.
+        self.landed_pub = self.create_publisher(Bool, '/fleet/landed', 1)
         # desired LOAD position [x, y, z] — the payload setpoint the planner is
         # driving toward (captured hover xy + ramped lift target). Logged by the
         # drone-0 tracker so plot_run.py can overlay payload desired vs actual.
@@ -251,6 +277,24 @@ class LoadPlanner(Node):
     def _drone_cb(self, msg: MotionCaptureState, i):
         p = msg.pose.position
         self.drone_pos[i] = np.array([p.x, p.y, p.z])
+
+    def _fleet_command_cb(self, msg: String):
+        cmd = msg.data.strip().upper()
+        if cmd != 'LAND':
+            return
+        if self.phase != 'planner' or not self.takeoff_seen:
+            self.get_logger().warn('[planner] LAND ignored - not flying yet')
+            return
+        if self.descending:
+            return                       # already landing
+        # Stop the lateral trajectory (traj_t stops advancing while descending)
+        # and ramp the reference down to the handover height. _land_to_ground
+        # marks this as a commanded LAND so we publish /fleet/landed at the end
+        # (the central controller then disarms and the drones settle down).
+        self.descending = True
+        self._land_to_ground = True
+        self._landed = False
+        self.get_logger().info('[planner] LAND - descending to the floor')
 
     # ── x_init assembly ─────────────────────────────────────────────────────
     def _build_x_init(self):
@@ -333,13 +377,33 @@ class LoadPlanner(Node):
         prev_progress = self.lift_progress
         if self.takeoff_seen:
             if self.descending:
-                # Descent: ramp the lift target back down to lift_z0 (start height).
+                # Descent. Auto-descent (trajectory finished) stops at the
+                # handover height (lift_progress -> 0). A LAND command keeps
+                # driving the reference down below that (lift_progress negative)
+                # until every drone is on the floor: the reference goes under the
+                # ground, but the drones just stop once they physically hit it.
+                # NOTE: this tracks cleanly only when the drones follow the
+                # reference closely; if thrust_ratio is mistuned the load floats
+                # ~1 m above its reference and the descent goes unstable.
+                # LAND descends at land_vel; auto-descent keeps lift_ramp_vel.
+                floor = -LAND_MAX_DROP if self._land_to_ground else 0.0
+                rate = self.land_vel if self._land_to_ground else self.lift_ramp_vel
                 self.lift_progress = max(
-                    0.0, self.lift_progress - self.lift_ramp_vel / PLANNER_HZ)
-                if self.lift_progress <= 1e-6 and not self._landed:
+                    floor, self.lift_progress - rate / PLANNER_HZ)
+                if self._land_to_ground:
+                    have = all(d is not None for d in self.drone_pos)
+                    max_dz = max((d[2] for d in self.drone_pos if d is not None),
+                                 default=1e9)
+                    done = (have and max_dz <= self.land_drone_z) \
+                        or self.lift_progress <= floor + 1e-6
+                else:
+                    done = self.lift_progress <= 1e-6
+                if done and not self._landed:
                     self._landed = True
+                    if self._land_to_ground:
+                        self.landed_pub.publish(Bool(data=True))
                     self.get_logger().info(
-                        '[planner] descent complete — load landed at start')
+                        '[planner] descent complete — drones on the floor')
             else:
                 self.lift_progress = min(
                     self.target_z - self.lift_z0,

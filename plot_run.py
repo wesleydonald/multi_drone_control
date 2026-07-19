@@ -30,9 +30,10 @@ import matplotlib
 matplotlib.use("Agg")  # switched to a GUI backend below if --show
 import matplotlib.pyplot as plt
 
+_REPO = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_LOGDIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "c_generated_code", "logs", "controller_mpc_multi")
+    _REPO, "c_generated_code_quad_load", "logs", "controller_quad_load")
+DEFAULT_OUTDIR = os.path.join(_REPO, "images")
 
 DIR_RE = re.compile(r"^(?P<traj>.+)_drone(?P<id>\d+)_(?P<ts>\d{8}_\d{6})$")
 
@@ -74,7 +75,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--logdir", default=DEFAULT_LOGDIR,
-                    help="base logs dir (default: controller_mpc_multi)")
+                    help="base logs dir (default: controller_quad_load)")
+    ap.add_argument("--outdir", default=DEFAULT_OUTDIR,
+                    help="where to save the PNG (default: multi_drone_control/images)")
     ap.add_argument("--run", default=None,
                     help="run timestamp YYYYmmdd_HHMMSS (default: latest)")
     ap.add_argument("--window", type=float, default=120.0,
@@ -186,8 +189,8 @@ def main():
     ax.legend(fontsize=8)
     _equalize_3d(ax)
 
-    out = os.path.join(max(dirs, key=lambda d: d["ts"])["path"],
-                       f"run_{anchor}.png")
+    os.makedirs(args.outdir, exist_ok=True)
+    out = os.path.join(args.outdir, f"run_{anchor}.png")
     fig.savefig(out, dpi=120)
     print(f"Saved {out}")
     if args.show:
