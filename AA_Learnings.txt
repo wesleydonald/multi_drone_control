@@ -63,7 +63,7 @@ Let's start by working on the state estimation method, take your time reading th
 
 
 DONE: Smoother takeoff from payload flag for resting or suspended to change model
-DONE: Land trajectory difficult if there is z error
+DONE: Create landing trajectory
 DONE: Make rviz better + landing button rviz
 DONE: Create hover, circle, back and forth trajectories
 
@@ -71,14 +71,15 @@ Cables more horizontal than vertical for attaching case/detaching fine just move
 Cone no fly zone around payload. Spreading out, should be able to handle 2-4 drones.
 
 Attachment points not at centre.
-Detaching in sim using detachable joint
+Detaching a drone in simulation using detachable joint
 
-Create spinning circle (vertical oscillation) traj + Quartonion issue with "yaw" - fix in ukf
+Create spinning circle (vertical oscillation) traj + Quartonion issue with "yaw" - fix in ukf controller
 
+Testing next week with two drones with those trajectories
 Testing two weeks time test trajectories for 3/4 drones
-
-In one week we can test the two drone case with same trajectories
 
 Additional
 
 Estimate thrust ratio
+
+for three_ground: ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=3 cable_len:=0.5 start_taut:=false handover_elev_deg:=45.0 ff_gate_mode:=airborne handover_settle_s:=2.0 lift_ramp_vel:=0.2 payload_rest_z:=0.03 thrust_ratio:=40

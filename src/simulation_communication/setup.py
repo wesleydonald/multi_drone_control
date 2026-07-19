@@ -26,7 +26,6 @@ setup(
             'betaflight_communication = simulation_communication.betaflight_communication:main',
             'angle_betaflight_communication = simulation_communication.angle_betaflight_communication:main',
             'pendulum_state_listener = simulation_communication.pendulum_state_listener:main',
-            'orbslam_emulator = simulation_communication.orbslam_emulator:main',
             # Bridges for nested lift_system + payload worlds (two_*/four_*.sdf)
             'payload_mocap_emulator = simulation_communication.payload_mocap_emulator:main',
             # viz-only: TF for drones + payload, payload marker/track. Runs
