@@ -485,6 +485,13 @@ class LoadPlanner(Node):
         traj_t. The whole taut formation is translated by this, so the load
         follows it. Returns (dx, dy, vx, vy); zero until the lift has topped out."""
         t = self.traj_t
+        # traj_t only advances once the lift has topped out, but at t=0 the
+        # velocity terms are NOT zero (vx = traj_speed*cos(0) = traj_speed), so
+        # the drones were handed a full-speed velocity reference from startup
+        # while the position reference sat still. Hold everything at zero until
+        # the trajectory actually starts.
+        if t <= 0.0:
+            return 0.0, 0.0, 0.0, 0.0
         if self.load_traj == 'line_x':
             dx = min(self.traj_speed * t, self.traj_distance)
             vx = self.traj_speed if dx < self.traj_distance else 0.0
