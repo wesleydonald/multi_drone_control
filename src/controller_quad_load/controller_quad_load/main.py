@@ -6,7 +6,8 @@ Single node that coordinates all drones.
 Responsibilities
 ────────────────
 1. Waits for all N_DRONES poses to arrive before doing anything.
-2. Handles /fleet/command  (ARM | TAKEOFF | DISARM | ESTOP)
+2. Handles /fleet/command  (ARM | TAKEOFF | LAND | DISARM | ESTOP)
+   LAND: planner lowers the load back down, then we disarm once it reports done.
 3. Broadcasts /fleet/step at FREQUENCY_HZ using Gazebo sim time.
 4. Arms / disarms individual drones via /drone_N/arming_service.
 5. Monitors /drone_N/arming_state_feedback - any unexpected disarm
@@ -19,6 +20,7 @@ ros2 run <your_package> central_controller
 Then:
   ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: ARM}"
   ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: TAKEOFF}"
+  ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: LAND}"
   ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: DISARM}"
   ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: ESTOP}"
 """
@@ -63,6 +65,7 @@ class CentralController(Node):
         self.master_step = 0
         self.flying = False          # True after TAKEOFF, False before/after
         self.fleet_armed = False     # True after ARM, before DISARM
+        self.landing = False         # True after LAND, until the descent finishes
         self.shutdown_requested = False
 
         # Per-drone arming state (updated by feedback callbacks)
@@ -75,6 +78,9 @@ class CentralController(Node):
         # ── Fleet command subscription ────────────────────────────────────
         self.cmd_sub = self.create_subscription(
             String, '/fleet/command', self._command_callback, 10)
+        # planner signals here once the LAND descent has finished, so we disarm.
+        self.landed_sub = self.create_subscription(
+            Bool, '/fleet/landed', self._landed_callback, 1)
 
         # ── Per-drone arming service clients ──────────────────────────────
         self.arming_clients = {}
@@ -130,6 +136,8 @@ class CentralController(Node):
             self._arm_fleet()
         elif command == "TAKEOFF":
             self._takeoff_fleet()
+        elif command == "LAND":
+            self._land_fleet()
         elif command == "DISARM":
             self._disarm_fleet(emergency=False)
         elif command == "ESTOP":
@@ -215,6 +223,25 @@ class CentralController(Node):
         # flags.  We publish TAKEOFF via the per-drone command topic so each
         # controller's takeoff_requested flag is set.
         self._publish_drone_command("TAKEOFF")
+
+    def _land_fleet(self):
+        if not self.flying:
+            self.get_logger().warn("Cannot LAND: fleet is not flying.")
+            return
+        self.landing = True
+        self.get_logger().info(
+            "LAND: planner is descending; will disarm once the load is down.")
+        # The planner also subscribes to /fleet/command and starts the descent.
+        # The drones keep tracking the (now descending) reference until we disarm
+        # on /fleet/landed below.
+
+    def _landed_callback(self, msg: Bool):
+        # planner reports the descent is complete; disarm to settle on the ground.
+        if not (self.landing and msg.data):
+            return
+        self.landing = False
+        self.get_logger().info("Landed - disarming the fleet.")
+        self._disarm_fleet(emergency=False)
 
     def _disarm_fleet(self, emergency: bool = False):
         self.flying = False
