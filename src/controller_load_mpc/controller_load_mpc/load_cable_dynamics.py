@@ -43,6 +43,22 @@ CABLE_DIM = 14         # s(3) r(3) rd(3) rdd(3) t(1) td(1)
 CTRL_DIM = 4           # gamma(3) lambda(1)
 
 
+def observed_state_indices(n):
+    """State indices that mocap observes cleanly and that MAY be hard-pinned at OCP
+    node 0: the full load block p,v,q,w (0..12) and each cable DIRECTION s_i. The
+    cable rates r_i and everything above (rd_i, rdd_i, t_i, td_i) are NOT included:
+    they are unobservable / noisy-to-differentiate, are only warm-started by
+    resampling the previous solution, and must stay FREE decision variables. Pinning
+    the stale resampled tension against a measured pose the tracker didn't quite hit
+    makes node 0 inconsistent, and the planned tension ratchets up cycle over cycle.
+    """
+    idx = list(range(LOAD_DIM))                     # p, v, q, w
+    for i in range(n):
+        b = LOAD_DIM + CABLE_DIM * i
+        idx += [b, b + 1, b + 2]                    # s_i only
+    return np.array(idx, dtype=int)
+
+
 def quat_mul(q1, q2):
     """Hamilton product q1 (x) q2, both [w, x, y, z]."""
     w1, x1, y1, z1 = q1[0], q1[1], q1[2], q1[3]

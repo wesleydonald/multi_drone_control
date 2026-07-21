@@ -30,6 +30,14 @@ worlds:
     three_soft.sdf                  cable_len:=0.6
     three_soft_paper.sdf            cable_len:=1.0 load_mass:=0.1
 
+PAPER MODE (default on this branch): planner_mode:=coupled runs the online
+load-cable OCP. It requires a TAUT start -- use a *_rigid_short or soft world with
+start_taut:=true and handover_elev_deg:=0 (the defaults), e.g.
+    gz sim simulation_assets/three_rigid_short.sdf -v 4 -r
+    ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=3
+The creep/arc-handover ground-pickup path is not exercised in coupled mode; the
+paper assumes taut cables throughout.
+
 Fleet control:
     ros2 topic pub -t 3 /fleet/command std_msgs/msg/String "{data: ARM}"
     ros2 topic pub -t 3 /fleet/command std_msgs/msg/String "{data: TAKEOFF}"
@@ -106,10 +114,30 @@ def _args():
         # single kT is right everywhere. 50.0 matches near the hover operating
         # point for n=2..4 (52.3 / 49.7 / 48.4), and agrees with flight-log
         # estimates (50.9 steady-state, 51.1 least squares). Use ~24 for hardware.
+        # NOTE: raising this toward the hover value (50) STARVES takeoff -- at the
+        # low throttle on the stands the quadratic plant's effective kT (203*u) is
+        # only ~20, so 50 under-thrusts and the drones slide off and drop. 45 is the
+        # takeoff-safe compromise. The residual hover drift is handled by scheduling
+        # kT to the operating point once airborne (thrust_quad_c below), NOT by
+        # raising this constant.
         DeclareLaunchArgument('thrust_ratio', default_value='45.0'),
-        # 'kinematic' = open-loop feedforward (tracker stabilizes); 'coupled' =
-        # online load-cable OCP (diverges -- and costs a ~50 s acados rebuild).
-        DeclareLaunchArgument('planner_mode', default_value='kinematic'),
+        # Quadratic-plant coefficient c in a(u)=c*u^2 (SDF motor model gives ~203).
+        # Once AIRBORNE, the tracker schedules its linear kT to the operating point,
+        # kT = clip(c*throttle, thrust_ratio, 55), so the assumed thrust matches the
+        # true secant gain at hover (203*0.24 ~ 49) instead of the takeoff-safe 45.
+        # This removes the ~8% hover over-thrust that the coupled outer loop turns
+        # into a slow runaway, while takeoff keeps the fixed thrust_ratio (kT never
+        # drops below it). Set 0.0 to disable (pure fixed thrust_ratio, all phases).
+        DeclareLaunchArgument('thrust_quad_c', default_value='203.0'),
+        # 'coupled' = online load-cable OCP planner (the paper's method: Sun et al.
+        # 2025, whole-body kinodynamic planner feeding per-drone references). This
+        # is the default on the paper-implementation branch. It builds x_init from
+        # mocap (load pose/twist, cable directions AND cable rates) and resamples
+        # only tensions/higher cable states from the last solution. Requires a TAUT
+        # start (start_taut:=true, handover_elev_deg:=0) -- the paper assumes taut
+        # cables throughout and never picks up off the ground. First launch costs a
+        # ~50 s acados rebuild. 'kinematic' = the old open-loop feedforward path.
+        DeclareLaunchArgument('planner_mode', default_value='coupled'),
         # 'taut'     = engage FF from spawn. Correct when the load is ALREADY
         #              hanging on the cables at startup (the elevated worlds).
         # 'airborne' = ramp the FF in as the load lifts off the ground. Required
@@ -174,7 +202,8 @@ def launch_setup(context, *args, **kwargs):
                          'cable_source': LaunchConfiguration('cable_source'),
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
-                         'thrust_ratio': f('thrust_ratio')}],
+                         'thrust_ratio': f('thrust_ratio'),
+                         'thrust_quad_c': f('thrust_quad_c')}],
             output='screen'))
 
     # ── Central fleet manager ──────────────────────────────────────────────
