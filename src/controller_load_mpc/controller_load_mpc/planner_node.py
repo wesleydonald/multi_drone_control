@@ -28,6 +28,8 @@ Two modes (planner_mode):
 
 Geometry must match the world SDF (see generate_rigid_world.py).
 """
+import os
+import hashlib
 import numpy as np
 import casadi as ca
 import rclpy
@@ -37,9 +39,17 @@ from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 from interfaces.msg import MotionCaptureState
 
+from . import planner_ocp as _planner_ocp
+from . import load_cable_dynamics as _lcd
 from .load_cable_dynamics import (LoadCableDynamics, observed_state_indices,
                                   LOAD_DIM, CABLE_DIM)
 from .planner_ocp import generate_load_ocp, nominal_hover_state
+
+# acados solver cache: the .so bakes in the geometry (n, cable_len, load_mass,
+# rho, inertia) as compile-time constants, so a rebuild is needed when a SOURCE
+# file changes OR the geometry signature changes. Mirrors controller_quad_load.
+_PLANNER_CODE_DIR = 'c_generated_code_load_planner'
+_PLANNER_SRC = [_planner_ocp.__file__, _lcd.__file__]
 
 # World geometry, must match the world SDF. All overridable as ROS params.
 N_DRONES      = 3
@@ -122,6 +132,20 @@ def quat_to_rot_np(q):
         [2 * (x * y + w * z),     1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
         [2 * (x * z - w * y),     2 * (y * z + w * x),     1 - 2 * (x * x + y * y)],
     ])
+
+
+def rot_align(a, b):
+    """Rotation matrix mapping unit vector a onto unit vector b (Rodrigues). Used to
+    tilt the nominal cable formation toward the effective-gravity direction."""
+    a = a / max(np.linalg.norm(a), 1e-12)
+    b = b / max(np.linalg.norm(b), 1e-12)
+    v = np.cross(a, b)
+    c = float(np.dot(a, b))
+    s = float(np.linalg.norm(v))
+    if s < 1e-9:                         # already aligned (c~+1) or opposite (c~-1)
+        return np.eye(3) if c > 0 else -np.eye(3)
+    vx = np.array([[0.0, -v[2], v[1]], [v[2], 0.0, -v[0]], [-v[1], v[0], 0.0]])
+    return np.eye(3) + vx + vx @ vx * ((1.0 - c) / (s * s))
 
 
 class LoadPlanner(Node):
@@ -241,17 +265,34 @@ class LoadPlanner(Node):
         # states pinned at OCP node 0 (observed): load pose/twist + cable dirs s_i.
         # Must match idxbx_0 in generate_load_ocp. r_i/tensions stay free.
         self._obs_idx = observed_state_indices(self.n)
+        # nominal 45 deg cable directions (drone->load), the flatness s_i reference
+        # at hover; tilted per node by the load acceleration in _yref_at.
+        _phi = np.deg2rad(45.0)
+        self._s_nom = []
+        for i in range(self.n):
+            th = np.arctan2(self.rho[i][1], self.rho[i][0])
+            self._s_nom.append(np.array([-np.cos(th) * np.cos(_phi),
+                                         -np.sin(th) * np.cos(_phi),
+                                         -np.sin(_phi)]))
         # Build the OCP only if we will solve it. acados recompiles it every
         # launch with no freshness check (~50 s for n=4), and kinematic mode never
         # solves it. Building it anyway published no references for the whole
         # compile, so the drones acknowledged TAKEOFF and then sat armed-idle
         # until it finished (the tracker holds while planner_ref_pos is None).
         if self.planner_mode == 'coupled':
-            self.get_logger().info(
-                f'[planner] building OCP (nx={self.dyn.nx}, nu={self.dyn.nu}) — '
-                f'acados recompiles every launch, this takes a while...')
+            fresh = self._cached_solver_fresh()
+            if fresh:
+                self.get_logger().info(
+                    '[planner] loading cached OCP solver (geometry + sources '
+                    'unchanged) — skipping the acados rebuild.')
+            else:
+                self.get_logger().info(
+                    f'[planner] compiling OCP (nx={self.dyn.nx}, nu={self.dyn.nu}) '
+                    f'— first build for this geometry, tens of seconds...')
             self.ocp, self.solver = generate_load_ocp(
-                self.dyn, N=PLAN_N, tf=PLAN_TF)
+                self.dyn, N=PLAN_N, tf=PLAN_TF, generate=not fresh, build=not fresh)
+            if not fresh:
+                self._write_solver_signature()
             self.N = self.ocp.solver_options.N_horizon
             self.dt = self.ocp.solver_options.tf / self.N
         else:
@@ -431,6 +472,46 @@ class LoadPlanner(Node):
             self._land_stall_ct = 0
         return self._land_stall_ct >= int(LAND_STALL_S * PLANNER_HZ)
 
+    # acados solver cache
+    def _ocp_signature(self):
+        """Hash of everything baked into the compiled OCP (geometry + horizon), so a
+        cached .so from a different cable_len / load_mass / fleet size is never
+        reused -- those are compile-time constants in the CasADi model."""
+        d = self.dyn
+        parts = (d.n, round(float(d.m), 6),
+                 tuple(round(float(v), 6) for v in d.l),
+                 tuple(tuple(round(float(c), 6) for c in r) for r in d.rho),
+                 tuple(round(float(v), 6) for v in np.asarray(d.J).ravel()),
+                 tuple(round(float(v), 6) for v in d.mi),
+                 PLAN_N, round(float(PLAN_TF), 6))
+        return hashlib.md5(repr(parts).encode()).hexdigest()
+
+    def _cached_solver_fresh(self):
+        """True if the compiled solver exists, is newer than its sources, and was
+        built for the current geometry -> load it instead of recompiling."""
+        so = os.path.join(_PLANNER_CODE_DIR,
+                          f'libacados_ocp_solver_load_cable_{self.n}.so')
+        sig = os.path.join(_PLANNER_CODE_DIR, f'.build_sig_{self.n}')
+        if not (os.path.exists(so) and os.path.exists(sig)):
+            return False
+        so_mtime = os.path.getmtime(so)
+        if any(not os.path.exists(s) or os.path.getmtime(s) > so_mtime
+               for s in _PLANNER_SRC):
+            return False
+        try:
+            with open(sig) as f:
+                return f.read().strip() == self._ocp_signature()
+        except OSError:
+            return False
+
+    def _write_solver_signature(self):
+        try:
+            with open(os.path.join(_PLANNER_CODE_DIR,
+                                   f'.build_sig_{self.n}'), 'w') as f:
+                f.write(self._ocp_signature())
+        except OSError as e:
+            self.get_logger().warn(f'[planner] could not write build signature: {e}')
+
     # x_init assembly
     def _build_x_init(self):
         ls = self.load_state
@@ -484,10 +565,54 @@ class LoadPlanner(Node):
             vz_k = 0.0 if z_k >= self.target_z - 1e-6 else vz
         else:
             vz_k = vz                              # descending (LAND): keep the rate
-        pose = [x0, y0, z_k, 0.0, 0.0, vz_k, 0, 0, 0, 0, 0, 0]  # p, v, e_att, w
-        return np.array(pose + [t_nom] * self.n
-                        + [0.0] * (3 * self.n)     # r_vec ref (no cable swing)
+        # Lateral load trajectory (line_x / circle), evaluated at THIS node's horizon
+        # time so the whole 2 s window tracks the moving load, not just node 0. Gated
+        # on traj_t > 0 (set once the lift tops out) so nothing drifts during the
+        # climb; the trajectories start from rest so the first active cycle is smooth.
+        dx = dy = vx = vy = ax = ay = 0.0
+        yaw = yaw_rate = 0.0
+        if self.traj_t > 0.0:
+            t_k = self.traj_t + self.dt * k
+            dx, dy, vx, vy = self._load_offset_at(t_k)
+            ax, ay = self._load_accel_at(t_k)
+            yaw, yaw_rate = self._load_yaw_at(t_k)          # 'spin' only, else 0
+        # p, v, e_att, w. The load yaw REFERENCE goes on the q_ref parameter (set per
+        # node in _plan), so e_att stays 0 here; the yaw RATE is the load angular
+        # velocity ref (world z), which drives the OCP to actually rotate the load.
+        pose = [x0 + dx, y0 + dy, z_k, vx, vy, vz_k, 0, 0, 0, 0, 0, yaw_rate]
+        # Flatness cable references. A load accelerating at a_load must have its cables
+        # counter an EFFECTIVE gravity g_eff = g - a_load: the formation tilts toward
+        # g_eff and the tension scales with |g_eff|. Feeding this anticipates the
+        # maneuver (drives the cable-direction chain directly) instead of discovering
+        # the tilt reactively from load-position error. At hover a_load=0 -> nominal
+        # 45 deg directions + nominal tension, so this also pins the formation radius.
+        g_eff = np.array([-ax, -ay, -self.dyn.g])
+        g_eff_mag = float(np.linalg.norm(g_eff))
+        R_tilt = rot_align(np.array([0.0, 0.0, -1.0]), g_eff)
+        # For 'spin' the attach points rotate with the load yaw, so the nominal cable
+        # directions rotate with it too (about world z): yaw the formation, then tilt
+        # onto g_eff. yaw=0 for all other trajectories -> R_yaw = I (unchanged).
+        cy, sy = np.cos(yaw), np.sin(yaw)
+        R_yaw = np.array([[cy, -sy, 0.0], [sy, cy, 0.0], [0.0, 0.0, 1.0]])
+        R_form = R_tilt @ R_yaw
+        s_ref = []
+        for i in range(self.n):
+            s_ref.extend((R_form @ self._s_nom[i]).tolist())
+        t_ref = t_nom * g_eff_mag / self.dyn.g
+        return np.array(pose + s_ref              # cable directions (flatness)
+                        + [t_ref] * self.n        # cable tensions (flatness)
+                        + [0.0] * (3 * self.n)    # r_vec ref (no cable swing)
                         + [0.0] * self.dyn.nu)
+
+    def _q_ref_at(self, k):
+        """Stage-k load attitude reference (the q_ref acados parameter). Identity
+        except for 'spin', where it is a pure yaw about world z tracking
+        _load_yaw_at along the horizon, so the OCP holds the rotating attitude while
+        the yaw-rate term in _yref_at drives the rotation."""
+        yaw = 0.0
+        if self.traj_t > 0.0:
+            yaw, _ = self._load_yaw_at(self.traj_t + self.dt * k)
+        return np.array([np.cos(0.5 * yaw), 0.0, 0.0, np.sin(0.5 * yaw)])
 
     # Plan step
     def _plan(self):
@@ -610,12 +735,13 @@ class LoadPlanner(Node):
                 shape = max(min(ease_in, ease_out), LIFT_SOFT_MIN)
                 self.lift_progress = min(
                     total, self.lift_progress + shape * self.lift_ramp_vel / PLANNER_HZ)
-                # Lateral trajectory runs once hovering (kinematic mode only); when
-                # it closes, latch the descent.
+                # Lateral trajectory runs once the lift tops out (both modes: the
+                # coupled OCP tracks the moving load reference via _yref_at, the
+                # kinematic path translates the latched config). When it closes,
+                # latch the descent.
                 lift_done = (self.lift_progress
                              >= (self.target_z - self.lift_z0) - 1e-6)
-                if (self.planner_mode == 'kinematic' and self.load_traj != 'hover'
-                        and lift_done):
+                if self.load_traj != 'hover' and lift_done:
                     self.traj_t += 1.0 / PLANNER_HZ
                     if self._traj_complete():
                         self.descending = True
@@ -631,13 +757,12 @@ class LoadPlanner(Node):
             return
 
         x_init = self._build_x_init()
-        q_ref = np.array([1.0, 0.0, 0.0, 0.0])
 
         for k in range(self.N):
             self.solver.set(k, 'yref', self._yref_at(k))
-            self.solver.set(k, 'p', q_ref)
+            self.solver.set(k, 'p', self._q_ref_at(k))
         self.solver.set(self.N, 'yref', self._yref_at(self.N)[:-self.dyn.nu])
-        self.solver.set(self.N, 'p', q_ref)
+        self.solver.set(self.N, 'p', self._q_ref_at(self.N))
 
         # Reseed all nodes from x_init on the first solve, OR when recovering from a
         # failed solve (the previous warm start is NaN/garbage and would poison this
@@ -681,16 +806,56 @@ class LoadPlanner(Node):
             # Shuttles continuously - like 'hover' it never self-completes, so
             # there is no auto-descent. End the run with a LAND command.
             return False
-        if self.load_traj == 'circle':
-            w = self.traj_speed / max(self.traj_radius, 1e-6)
-            return self.traj_t >= 2.0 * np.pi / w
+        if self.load_traj in ('circle', 'spin'):
+            # eased-circle duration (see _circle_theta); T is independent of t.
+            return self.traj_t >= self._circle_theta(0.0)[3]
+        if self.load_traj == 'fig_8':
+            return self.traj_t >= self._fig8_theta(0.0)[3]
         return False
+
+    def _eased_sweep(self, t, T):
+        """Smootherstep angle sweep. theta goes 0 -> 2*pi over duration T via
+        6u^5-15u^4+10u^3, whose 1st AND 2nd derivatives vanish at both ends, so the
+        maneuver spins up from rest and winds down to rest (no velocity step /
+        pendulum kick at either end). Peak d(theta)/dt = 2*pi/T * 1.875 at u=0.5.
+        Returns (theta, dtheta/dt, d2theta/dt2)."""
+        u = min(max(t / T, 0.0), 1.0)
+        s   = u * u * u * (u * (6.0 * u - 15.0) + 10.0)   # 6u^5-15u^4+10u^3
+        ds  = 30.0 * u * u * (u - 1.0) * (u - 1.0)        # 30u^2(u-1)^2
+        dds = 60.0 * u * (2.0 * u - 1.0) * (u - 1.0)      # 60u(2u-1)(u-1)
+        two_pi = 2.0 * np.pi
+        return two_pi * s, two_pi * ds / T, two_pi * dds / (T * T)
+
+    def _circle_theta(self, t):
+        """Eased circle/spin angle (see _eased_sweep). Duration is stretched so the
+        PEAK tangential speed equals traj_speed (peak speed = r * dtheta_max).
+        Returns (theta, dtheta/dt, d2theta/dt2, T)."""
+        r = max(self.traj_radius, 1e-6)
+        T = 1.875 * 2.0 * np.pi * r / max(self.traj_speed, 1e-6)
+        th, dth, ddth = self._eased_sweep(t, T)
+        return th, dth, ddth, T
+
+    def _fig8_theta(self, t):
+        """Eased figure-eight angle (see _eased_sweep). The lemniscate's peak speed
+        is a*sqrt(2)*dtheta_max (at the centre crossing), so T is stretched by the
+        extra sqrt(2) to keep the peak tangential speed at traj_speed. Returns
+        (theta, dtheta/dt, d2theta/dt2, T)."""
+        a = max(self.traj_radius, 1e-6)
+        T = 1.875 * 2.0 * np.pi * a * np.sqrt(2.0) / max(self.traj_speed, 1e-6)
+        th, dth, ddth = self._eased_sweep(t, T)
+        return th, dth, ddth, T
 
     def _load_offset(self):
         """Lateral (x, y) offset + velocity of the LOAD reference at the current
-        traj_t. The whole taut formation is translated by this, so the load
-        follows it. Returns (dx, dy, vx, vy); zero until the lift has topped out."""
-        t = self.traj_t
+        traj_t. Thin wrapper over _load_offset_at for the existing single-point
+        callers (RViz desired, kinematic refs)."""
+        return self._load_offset_at(self.traj_t)
+
+    def _load_offset_at(self, t):
+        """Lateral (x, y) offset + velocity of the LOAD reference at absolute
+        trajectory time t. The whole taut formation is translated by this, so the
+        load follows it. Returns (dx, dy, vx, vy); zero at/ before t=0. Evaluated
+        per horizon node by _yref_at (coupled) and at traj_t by the callers above."""
         # At t=0 the velocity terms are not zero (vx = traj_speed*cos(0)), so the
         # drones were handed a full-speed reference at startup while the position
         # reference sat still. Hold at zero until the trajectory starts.
@@ -708,19 +873,75 @@ class LoadPlanner(Node):
             dx = 0.5 * d * (1.0 - np.cos(w * t))
             vx = 0.5 * d * w * np.sin(w * t)
             return dx, 0.0, vx, 0.0
-        if self.load_traj == 'circle':
+        if self.load_traj in ('circle', 'spin'):
+            # 'spin' has the SAME circular load path as 'circle'; it additionally
+            # yaws the load (formation rotates about the payload, see _load_yaw_at).
             r = max(self.traj_radius, 1e-6)
-            w = self.traj_speed / r                    # angular rate
-            period = 2.0 * np.pi / w                    # time for one full loop
-            if t >= period:
+            th, dth, _, T = self._circle_theta(t)
+            if t >= T:
                 # completed one revolution -> back at the start point, hold there.
                 return 0.0, 0.0, 0.0, 0.0
-            dx = r * np.sin(w * t)                     # starts at (0,0), heads +x
-            dy = r * (1.0 - np.cos(w * t))             # then curves +y
-            vx = self.traj_speed * np.cos(w * t)
-            vy = self.traj_speed * np.sin(w * t)
+            dx = r * np.sin(th)                        # starts at (0,0), heads +x
+            dy = r * (1.0 - np.cos(th))               # then curves +y
+            vx = r * np.cos(th) * dth
+            vy = r * np.sin(th) * dth
+            return dx, dy, vx, vy
+        if self.load_traj == 'fig_8':
+            # Gerono lemniscate through the origin: x = a*sin(th), y = a/2*sin(2th),
+            # th swept 0 -> 2*pi (eased). Traces the right lobe then the left,
+            # crossing the start point at th=pi; starts and ends at rest at (0,0).
+            a = max(self.traj_radius, 1e-6)
+            th, dth, _, T = self._fig8_theta(t)
+            if t >= T:
+                return 0.0, 0.0, 0.0, 0.0
+            dx = a * np.sin(th)
+            dy = 0.5 * a * np.sin(2.0 * th)
+            vx = a * np.cos(th) * dth
+            vy = a * np.cos(2.0 * th) * dth
             return dx, dy, vx, vy
         return 0.0, 0.0, 0.0, 0.0
+
+    def _load_accel_at(self, t):
+        """Lateral (ax, ay) ACCELERATION of the LOAD reference at trajectory time t.
+        Used for the flatness-based cable references in _yref_at. Analytic 2nd
+        derivative of the offsets above; zero at/before t=0."""
+        if t <= 0.0:
+            return 0.0, 0.0
+        if self.load_traj == 'line_x':
+            d = max(self.traj_distance, 1e-6)
+            w = 2.0 * self.traj_speed / d
+            return 0.5 * d * w * w * np.cos(w * t), 0.0
+        if self.load_traj in ('circle', 'spin'):
+            r = max(self.traj_radius, 1e-6)
+            th, dth, ddth, T = self._circle_theta(t)
+            if t >= T:
+                return 0.0, 0.0
+            ax = r * (-np.sin(th) * dth * dth + np.cos(th) * ddth)
+            ay = r * (np.cos(th) * dth * dth + np.sin(th) * ddth)
+            return ax, ay
+        if self.load_traj == 'fig_8':
+            a = max(self.traj_radius, 1e-6)
+            th, dth, ddth, T = self._fig8_theta(t)
+            if t >= T:
+                return 0.0, 0.0
+            # dx = a sin th; dy = a/2 sin 2th
+            ax = a * (-np.sin(th) * dth * dth + np.cos(th) * ddth)
+            ay = a * (-2.0 * np.sin(2.0 * th) * dth * dth + np.cos(2.0 * th) * ddth)
+            return ax, ay
+        return 0.0, 0.0
+
+    def _load_yaw_at(self, t):
+        """Load YAW angle + rate at trajectory time t. Nonzero only for 'spin':
+        the load rotates one full turn about its vertical axis, synchronised with
+        the circular path (same eased sweep), so the drone formation orbits the
+        payload while the payload also circles. Zero (level) for every other
+        trajectory. Returns (yaw, yaw_rate)."""
+        if t <= 0.0 or self.load_traj != 'spin':
+            return 0.0, 0.0
+        th, dth, _, T = self._circle_theta(t)
+        if t >= T:
+            return 0.0, 0.0                            # closed a full turn, hold level
+        return th, dth
 
     def _publish_load_desired(self):
         """Publish the desired LOAD position [x, y, z]: the captured hover xy and

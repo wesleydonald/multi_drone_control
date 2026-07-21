@@ -78,7 +78,30 @@ KT_SCHED_CEIL = 55.0
 # height, i.e. off the stands. The takeoff-safe thrust_ratio (which slightly
 # OVER-thrusts, giving the oomph to break off the stands) is kept until then; only
 # the settled climb/hover gets the operating-point kT.
-AIRBORNE_MARGIN = 0.15         # m above spawn z before scheduling kT
+AIRBORNE_MARGIN = 0.04         # m above spawn z before scheduling kT. This is
+                               # FUNCTIONAL, not just cosmetic: on a taut air-start the
+                               # drones rest on stands that mask their weight-support
+                               # need. Pinning kT to thrust_ratio (~45, ~15% below the
+                               # true hover gain 203*throttle~52) makes the MPC
+                               # over-throttle, which POPS the drones off the stands and
+                               # tensions the cables -> the load lifts and stays taut.
+                               # That pop IS the takeoff surge. Set the margin to 0 and
+                               # kT snaps to the correct ~50 immediately: the drones hold
+                               # exactly at spawn, never pop off, never tension the
+                               # cables, the load droops to the floor and gets abandoned
+                               # (payload_resting zeros the cable FF -> runaway sag). So
+                               # the surge and the lift are the same event; the margin
+                               # must be big enough to pop the drones off the stands, then
+                               # the schedule corrects kT once airborne. Soften the surge
+                               # via thrust_ratio (gentler over-thrust), not the margin.
+
+# Takeoff spool floor. The applied throttle eases from FLOOR*u to u over
+# takeoff_spool_s, NOT from 0. On a taut air-start the drones bear the load from
+# the first cycle: spooling from 0 starves the lift, the cables go slack and the
+# payload never leaves the ground. The floor gives near-hover thrust immediately
+# (so the load lifts) while the cosine still eases the last bit on smoothly (so
+# there is no lurch). 0.0 recovers the old spool-from-zero (ground-takeoff) shape.
+TAKEOFF_SPOOL_FLOOR = 0.5
 
 LOGGING_NAME = 'controller_quad_load'
 
@@ -610,13 +633,24 @@ class Controller(Node):
                 thr = float(u[2])
                 # takeoff spool-up: for the first takeoff_spool_s, scale the
                 # throttle up from 0 to the commanded value so thrust rises
-                # smoothly and the drones ease off the platforms.
+                # smoothly and the drones ease off the platforms. Raised-cosine
+                # (not linear): the applied throttle jumps from idle-0 to the full
+                # MPC hover value in one cycle when the spool is off/too short, and
+                # a linear ramp still kinks the acceleration at both ends. The taut
+                # air-start feels every bit of that as an initial lurch-and-bounce.
+                # A cosine has zero slope at both ends, so thrust eases on and
+                # settles onto hover without a step.
                 if self.takeoff_spool_s > 0.0:
                     if self._takeoff_step is None:
                         self._takeoff_step = 0
                     spool_cycles = max(1.0, self.takeoff_spool_s * FREQUENCY_HZ)
                     if self._takeoff_step < spool_cycles:
-                        thr *= self._takeoff_step / spool_cycles
+                        ease = 0.5 * (1.0 - np.cos(
+                            np.pi * self._takeoff_step / spool_cycles))
+                        # ease from FLOOR*u up to u (not 0*u): keep enough thrust to
+                        # hold the load taut from cycle 0, see TAKEOFF_SPOOL_FLOOR.
+                        frac = TAKEOFF_SPOOL_FLOOR + (1.0 - TAKEOFF_SPOOL_FLOOR) * ease
+                        thr *= frac
                         self._takeoff_step += 1
                 # Record the throttle actually applied to the FC so the next IMU
                 # sample can be decomposed into thrust + cable (measured_cable_accel).

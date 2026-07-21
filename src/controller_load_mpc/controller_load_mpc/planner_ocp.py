@@ -58,7 +58,7 @@ def generate_load_ocp(dyn: LoadCableDynamics, N=20, tf=2.0,
                       thrust_min=0.5, thrust_max=15.0,
                       tension_min=0.1, tension_max=25.0,
                       gamma_max=50.0, lambda_max=80.0,
-                      build=True):
+                      generate=True, build=True):
     n = dyn.n
 
     # ── model ──────────────────────────────────────────────────────────────
@@ -81,10 +81,11 @@ def generate_load_ocp(dyn: LoadCableDynamics, N=20, tf=2.0,
     # ── cost: NONLINEAR_LS ─────────────────────────────────────────────────
     q_err = quat_mul(q_ref, quat_conj(dyn.q))
     e_att = 2 * q_err[1:4]                         # sign-invariant attitude error
+    s_vec = ca.vertcat(*[dyn.s[i] for i in range(n)])   # cable DIRECTIONS
     t_vec = ca.vertcat(*[dyn.t[i] for i in range(n)])
     r_vec = ca.vertcat(*[dyn.r[i] for i in range(n)])   # cable angular velocities
-    y = ca.vertcat(dyn.p, dyn.v, e_att, dyn.w, t_vec, r_vec, model.u)
-    y_e = ca.vertcat(dyn.p, dyn.v, e_att, dyn.w, t_vec, r_vec)
+    y = ca.vertcat(dyn.p, dyn.v, e_att, dyn.w, s_vec, t_vec, r_vec, model.u)
+    y_e = ca.vertcat(dyn.p, dyn.v, e_att, dyn.w, s_vec, t_vec, r_vec)
     ocp.model.cost_y_expr = y
     ocp.model.cost_y_expr_e = y_e
     ocp.cost.cost_type = 'NONLINEAR_LS'
@@ -94,7 +95,15 @@ def generate_load_ocp(dyn: LoadCableDynamics, N=20, tf=2.0,
     # [18,18,22]: the original let the load/drones build climb speed and overshoot
     # the slack->taut transition, spiking cable tension past the drones' thrust
     # authority. Heavier velocity damping keeps the lift slow and bounded.
-    w_pose = [60., 60., 80.] + [18., 18., 22.] + [30., 30., 30.] + [1., 1., 1.]
+    #
+    # Load ATTITUDE weight lowered 30 -> 5: at speed the solver was trading lateral
+    # position tracking against holding the payload perfectly level (spending
+    # asymmetric tension to keep it flat instead of translating it), which capped
+    # the agile amplitude. Payload tilt is not a mission concern, so relax it and
+    # let the load pitch a few degrees into the maneuver -> better position tracking.
+    # NOTE: this does NOT touch drone/formation splay -- that is held by w_s (cable
+    # direction) and w_t (tension) below, which stay pinned.
+    w_pose = [60., 60., 80.] + [18., 18., 22.] + [5., 5., 5.] + [1., 1., 1.]
     # Tension regularisation toward nominal. Raised 0.05 -> 5.0: the cost has no term
     # on cable DIRECTION s_i, so nothing else pins the formation radius. A weak w_t
     # let the drones drift outward (cable elevation 45 -> 20 deg, tension climbing),
@@ -103,12 +112,20 @@ def generate_load_ocp(dyn: LoadCableDynamics, N=20, tf=2.0,
     # restores a flattened formation over the horizon. (For agile time-varying loads
     # this static target should become the flatness-derived tension reference.)
     w_t = [5.0] * n
+    # Cable DIRECTION regularisation toward the flatness reference (set per node by
+    # the planner: the tilt the load's acceleration demands). This anticipates the
+    # maneuver and drives the sluggish 4th-order cable chain (s<-r<-rd<-rdd<-gamma)
+    # directly, instead of discovering the tilt reactively from load-position error
+    # (which lags and undershoots at speed). At hover the reference is the nominal
+    # 45deg direction, so this ALSO pins the formation radius (subsumes what the
+    # raised w_t was doing for the drift).
+    w_s = [25.0] * (3 * n)
     w_r = [3.0] * (3 * n)                          # damp cable swing (key)
     w_u = []
     for _ in range(n):
         w_u += [1e-3, 1e-3, 1e-3, 5e-3]           # gamma(3), lambda
-    W = np.diag(w_pose + w_t + w_r + w_u)
-    W_e = np.diag(w_pose + w_t + w_r)
+    W = np.diag(w_pose + w_s + w_t + w_r + w_u)
+    W_e = np.diag(w_pose + w_s + w_t + w_r)
     ocp.cost.W = W
     ocp.cost.W_e = W_e
     ocp.cost.yref = np.zeros(W.shape[0])
@@ -169,8 +186,11 @@ def generate_load_ocp(dyn: LoadCableDynamics, N=20, tf=2.0,
     # c_generated_code/ (different model, shared dir would race on the Makefile)
     ocp.code_export_directory = 'c_generated_code_load_planner'
 
-    solver = (AcadosOcpSolver(ocp, json_file=f'{model.name}_ocp.json')
-              if build else None)
+    # generate=build=False loads the previously compiled shared library as-is
+    # (the fast path when sources + geometry are unchanged; see the freshness check
+    # in planner_node). Mirrors controller_quad_load's solver cache.
+    solver = AcadosOcpSolver(ocp, json_file=f'{model.name}_ocp.json',
+                             generate=generate, build=build)
     return ocp, solver
 
 
