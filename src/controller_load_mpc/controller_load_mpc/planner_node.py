@@ -206,6 +206,15 @@ class LoadPlanner(Node):
         #              rather than sliding inward or running ahead of the ramp.
         self.ff_gate_mode = str(
             self.declare_parameter('ff_gate_mode', 'airborne').value)
+        # Auto slot assignment (coupled mode). OFF: OCP slot i is physical drone i,
+        # so the drones must spawn in the nominal ring order (drone 0 at +x, CCW).
+        # ON: at the first solve each physical drone is matched to the nearest
+        # nominal azimuth slot around the load, so you can place the drones anywhere
+        # in the ring (~cable_len out) in ANY order and the planner figures out the
+        # labelling. It only relabels the drone<->slot I/O; the OCP is unchanged
+        # (the attach ring is symmetric), so no recompile. Real-world default.
+        self.auto_slot_assign = bool(
+            self.declare_parameter('auto_slot_assign', False).value)
         # Load reference trajectory (kinematic mode). Once the lift tops out at
         # target_z the whole taut formation translates laterally, which preserves
         # the cable geometry so the cached FF stays valid.
@@ -321,6 +330,10 @@ class LoadPlanner(Node):
         self.load_state = None                 # [p(3), q(4 wxyz), v(3), w(3)]
         self.drone_pos = [None] * self.n
         self.drone_vel = [None] * self.n       # world velocity from mocap twist
+        # OCP slot i -> physical drone slot2drone[i]. Identity until (optionally)
+        # reassigned by azimuth on the first solve (see _assign_slots).
+        self.slot2drone = list(range(self.n))
+        self._slots_assigned = False
         self.last_X = None                     # previous solution (nx, N+1)
         self.hover_xy = None                   # captured load x,y for the reference
         self.first_solve = True
@@ -512,6 +525,38 @@ class LoadPlanner(Node):
         except OSError as e:
             self.get_logger().warn(f'[planner] could not write build signature: {e}')
 
+    def _drone_at(self, i):
+        """Measured position of the physical drone occupying OCP slot i (identity
+        unless auto_slot_assign remapped it)."""
+        return self.drone_pos[self.slot2drone[i]]
+
+    def _assign_slots(self):
+        """Match each physical drone to the nearest nominal azimuth slot around the
+        load, so the drones can be placed in the ring in any order. The slots are
+        equally spaced (slot i at 2*pi*i/n), so the optimal assignment is a cyclic
+        rotation of the drones sorted by their measured azimuth; we pick the shift
+        that minimises the total angular error. Relabels I/O only -- the OCP (built
+        on the symmetric attach ring) is unchanged."""
+        lp = self.load_state[0:2]
+        az = np.array([np.arctan2(self.drone_pos[j][1] - lp[1],
+                                  self.drone_pos[j][0] - lp[0])
+                       for j in range(self.n)])
+        order = list(np.argsort(az))                       # drones CCW by azimuth
+        slot_az = np.array([2.0 * np.pi * i / self.n for i in range(self.n)])
+        best, best_cost = list(range(self.n)), np.inf
+        for shift in range(self.n):
+            perm = [order[(k + shift) % self.n] for k in range(self.n)]
+            cost = 0.0
+            for i in range(self.n):
+                d = (az[perm[i]] - slot_az[i] + np.pi) % (2.0 * np.pi) - np.pi
+                cost += d * d
+            if cost < best_cost:
+                best_cost, best = cost, perm
+        self.slot2drone = best
+        self._slots_assigned = True
+        self.get_logger().info(
+            f'[planner] auto slot assignment (slot->drone): {self.slot2drone}')
+
     # x_init assembly
     def _build_x_init(self):
         ls = self.load_state
@@ -537,7 +582,7 @@ class LoadPlanner(Node):
         for i in range(self.n):
             b = LOAD_DIM + CABLE_DIM * i
             attach = p + R @ self.rho[i]
-            d = attach - self.drone_pos[i]              # points drone -> load
+            d = attach - self._drone_at(i)              # points drone -> load
             nrm = np.linalg.norm(d)
             if nrm > 1e-6:
                 x[b:b + 3] = d / nrm
@@ -618,6 +663,12 @@ class LoadPlanner(Node):
     def _plan(self):
         if self.load_state is None or any(d is None for d in self.drone_pos):
             return
+
+        # Match drones to nominal slots once, now that every pose is in (coupled
+        # mode only -- the kinematic/creep refs assume slot i == drone i).
+        if (self.auto_slot_assign and not self._slots_assigned
+                and self.planner_mode == 'coupled'):
+            self._assign_slots()
 
         self._publish_load_desired()
 
@@ -1203,7 +1254,7 @@ class LoadPlanner(Node):
         ls = self.load_state
         R = quat_to_rot_np(ls[3:7])
         attach = ls[0:3] + R @ self.rho[i]
-        d = attach - self.drone_pos[i]
+        d = attach - self._drone_at(i)
         nrm = float(np.linalg.norm(d))
         if nrm < 1e-6:
             return 0.0
@@ -1226,7 +1277,7 @@ class LoadPlanner(Node):
         ls = self.load_state
         R = quat_to_rot_np(ls[3:7])
         attach = ls[0:3] + R @ self.rho[i]
-        dist = float(np.linalg.norm(attach - self.drone_pos[i]))
+        dist = float(np.linalg.norm(attach - self._drone_at(i)))
         d_lo = CABLE_TAUT_LO_FRAC * self.cable_len
         d_hi = CABLE_TAUT_HI_FRAC * self.cable_len
         len_gate = float(np.clip((dist - d_lo) / max(d_hi - d_lo, 1e-6), 0.0, 1.0))
@@ -1257,7 +1308,8 @@ class LoadPlanner(Node):
                     np.array(self.vel_fun[i](xk)).flatten(),
                     np.array(self.acc_fun[i](xk)).flatten(),
                     gate * np.array(self.cable_fun[i](xk)).flatten()))
-            self._publish_ref(i, nodes)
+            # slot i's planned trajectory belongs to the physical drone occupying it
+            self._publish_ref(self.slot2drone[i], nodes)
 
         # ~1 Hz: per-drone cable tautness so you can see when (and whether) the
         # cable term engages. dist -> CABLE_LEN means taut; gate is the applied
@@ -1276,7 +1328,7 @@ class LoadPlanner(Node):
             tilt = np.degrees(np.arccos(np.clip(R[2, 2], -1.0, 1.0)))
             elevs = []
             for i in range(self.n):
-                d = (ls[0:3] + R @ self.rho[i]) - self.drone_pos[i]
+                d = (ls[0:3] + R @ self.rho[i]) - self._drone_at(i)
                 nd = np.linalg.norm(d)
                 elevs.append(np.degrees(np.arcsin(np.clip(-d[2] / max(nd, 1e-6), -1, 1))))
             e = ' '.join(f"{x:.0f}" for x in elevs)

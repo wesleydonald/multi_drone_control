@@ -24,8 +24,9 @@ import re
 # /drone_<drone_id>/motion_capture_state (the topic the MPC controllers read).
 # Add/rename entries to match the rigid-body IDs right now its 10 and 20.
 RIGID_BODY_TO_DRONE = {10: 0, 11: 1}
-# Rigid-body ID routed to /pendulum_state_publisher instead of a drone (or None).
-PENDULUM_RIGID_BODY_ID = 8
+# Rigid-body ID routed to /payload/motion_capture_state instead of a drone (the
+# cable-suspended load; set to None if there is no payload body).
+PAYLOAD_RIGID_BODY_ID = 8
 # MoCap UDP stream endpoint (the host/port your mocap software streams to).
 MOCAP_UDP_HOST = "192.168.0.87"
 MOCAP_UDP_PORT = 1511
@@ -302,7 +303,8 @@ class MotionCapturePublisher(Node):
                 MotionCaptureState, f'/drone_{drone_id}/motion_capture_state', 10)
             for drone_id in RIGID_BODY_TO_DRONE.values()}
         self.pose_publisher = self.create_publisher(PoseStamped, '/rviz_pose', 10)
-        self.pen_publisher = self.create_publisher(MotionCaptureState, '/pendulum_state_publisher', 10)
+        self.payload_publisher = self.create_publisher(
+            MotionCaptureState, '/payload/motion_capture_state', 10)
         # TF broadcaster so RViz can render each drone live (map -> drone_<id>).
         self.tf_broadcaster = TransformBroadcaster(self)
         # UDP Setup
@@ -370,7 +372,7 @@ class MotionCapturePublisher(Node):
     def run(self):
         # A SEPARATE parser per rigid body: ParseData holds per-object velocity
         # filter state, so sharing one across drones would corrupt their twists.
-        self.penParseData = ParseData()
+        self.payloadParseData = ParseData()
         self.drone_parsers = {drone_id: ParseData()
                               for drone_id in RIGID_BODY_TO_DRONE.values()}
         try:
@@ -395,14 +397,14 @@ class MotionCapturePublisher(Node):
                     continue
 
                 # Route by rigid-body ID: extract the integer id from obj_id and
-                # look it up in RIGID_BODY_TO_DRONE (pendulum id handled first).
+                # look it up in RIGID_BODY_TO_DRONE (payload id handled first).
                 m = re.search(r'-?\d+', obj_id)
                 rb_id = int(m.group()) if m else None
 
-                if rb_id is not None and rb_id == PENDULUM_RIGID_BODY_ID:
-                    obj_data = self.penParseData.parse_packet(data)
+                if rb_id is not None and rb_id == PAYLOAD_RIGID_BODY_ID:
+                    obj_data = self.payloadParseData.parse_packet(data)
                     if obj_data is not None:
-                        self.pen_publisher.publish(
+                        self.payload_publisher.publish(
                             self.create_motion_capture_state_msg(obj_data))
                 elif rb_id in RIGID_BODY_TO_DRONE:
                     drone_id = RIGID_BODY_TO_DRONE[rb_id]

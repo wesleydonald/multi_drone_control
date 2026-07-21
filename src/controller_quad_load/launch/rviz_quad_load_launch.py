@@ -274,7 +274,7 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('num_drones', default_value='3'),
+        DeclareLaunchArgument('num_drones', default_value='2'),
         # The STL is the real TBS frame in mm; 0.001 renders it at its true
         # 209 mm size. The URDF's own 0.002 draws it at ~2x life size.
         DeclareLaunchArgument('mesh_scale', default_value='0.001'),
