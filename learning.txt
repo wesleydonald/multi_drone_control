@@ -1,3 +1,152 @@
+################################################################################
+# BRANCH: paper-implementation  --  WHAT WAS ACHIEVED
+# (This section SUPERSEDES the historical conclusions further down, especially
+#  any claim that the coupled OCP is "abandoned/unstable" or that the controller
+#  "cannot do agile maneuvers". On this branch the coupled OCP is the working
+#  default and tracks moving load trajectories. The old notes are kept below for
+#  the debugging story and the still-valid reference material -- KEY NUMBERS,
+#  REAL-WORLD TESTING, etc.)
+################################################################################
+
+GOAL OF THIS BRANCH
+  Make the controller match the paper's actual method as closely as possible:
+  an online whole-body kinodynamic OCP planner (planner_mode='coupled',
+  planner_ocp.py + load_cable_dynamics.py) that plans the full load+cable+drone
+  state over a 2 s horizon and hands each drone a reference trajectory. Exploit
+  that in sim we have exact mocap of the payload AND every drone (the paper needs
+  an EKF only because it has no load sensors). INDI stays out of scope.
+
+  The coupled OCP already existed but was DISABLED because it diverged; the
+  pre-paper working path was 'kinematic' (open-loop, the quasi-static baseline the
+  paper argues against). This branch makes the coupled OCP fly stably and become
+  the default.
+
+LOCKED SCOPE (agreed up front)
+  - Taut air-start only. The paper assumes taut cables throughout and never lifts
+    off the ground; the coupled instability lived entirely in the slack->taut
+    creep. Use *_rigid_short.sdf with start_taut, handover_elev_deg=0; the creep/
+    handover path is bypassed.
+  - Hover/setpoint first, agile trajectories second.
+  - Keep the existing per-drone MPC tracker. No INDI.
+
+THE 5 ROOT-CAUSE FIXES THAT MADE THE COUPLED OCP FLY
+  (each reproduced/validated offline by driving the planner solver directly in
+   planner-as-plant closed loops, not guessed)
+
+  1. Mocap state estimator, the paper's way (_build_x_init, planner_node.py).
+     Cable DIRECTION s_i is measured from geometry each tick (clean). Cable RATES
+     r_i and tensions t_i are RESAMPLED from the previous solution, NOT
+     differentiated from mocap -- the paper (Fig 8) avoids differentiating
+     estimator values because it is too noisy. (An earlier version measured r_i
+     from drone-velocity differences and fed jitter the OCP fought; reverted.)
+
+  2. Partial node-0 pin (planner_ocp.py idxbx_0; observed_state_indices in
+     load_cable_dynamics.py; planner_node.py _plan). Pin ONLY the observed states
+     at node 0 (load pose/twist + s_i); leave the unobserved tensions and cable
+     rates FREE decision variables (warm-started by resampling). Hard-pinning the
+     stale resampled tension against a measured pose the tracker did not exactly
+     hit made the planned tension RATCHET up to ~8 N until the QP went infeasible
+     (acados status 4) and the fleet dropped.
+
+  3. Coordinated-climb reference (_yref_at). Feed the lift velocity forward and
+     ramp the height ALONG the horizon. Previously the coupled yref held
+     velocity=0 against a rising setpoint, so the load lagged and (via the pin)
+     ratcheted tension. Now the load climbs 0.13->0.60 m in ~3 s, tension bounded.
+
+  4. Airborne thrust-gain schedule (controller_quad_load _scheduled_kT;
+     thrust_quad_c launch arg). The sim plant is QUADRATIC a(u)=203*u^2, so the
+     effective linear gain kT=203*u varies (~20 at takeoff, ~49 at hover). No
+     single kT works: 45 over-thrusts at hover (the coupled outer loop turned that
+     into a runaway), 50 starves takeoff (drones slid off the stands). Fix: keep
+     kT=45 until the drone climbs 0.15 m off the stands, then schedule
+     kT=clip(203*throttle, thrust_ratio, 55). Clamped so it can never starve
+     takeoff. thrust_quad_c=0 disables.
+
+  5. Formation-holding. The OCP cost had NO term on cable direction and the
+     formation radius is a free mode; the drones drifted OUTWARD (elevation
+     54->20 deg, tension 1.5->3.9 N, tilting further out -- the "drones tilt a
+     lot" symptom). First fixed by raising tension regularisation w_t 0.05->5.0
+     (nominal tension IS the 45 deg equilibrium); later subsumed by the explicit
+     cable-direction cost (whose hover reference is the nominal 45 deg direction).
+
+RESULT: STABLE COUPLED FLIGHT
+  Verified in sim on three_rigid_short.sdf (and 2- and 4-drone worlds): taut
+  hover + lift holds, load level (tilt < 1 deg), tensions symmetric (~1.8-2.1 N),
+  cable elevation steady ~45 deg, clean DISARM. n=2 and n=4 both work. This is the
+  paper's whole-body OCP method flying stably in the sim for the first time.
+  Minor, not chased: load settles ~0.53 vs target 0.60 (no integral action; within
+  the paper's own tracking RMSE range).
+
+SOLVER-COMPILE CACHE (planner_node.py, planner_ocp.py)
+  The planner used to recompile the acados solver EVERY launch (~16 s n=3, ~87 s
+  n=4). Added a freshness check + a GEOMETRY SIGNATURE: the .so bakes in n /
+  cable_len / load_mass / rho / inertia as compile-time constants, so the cache is
+  invalidated when a source file changes OR the geometry changes (a stale .so can
+  never fly the wrong geometry). 16.2 s -> 1.2 s on repeat launches.
+  Recompiles on: planner_ocp.py/load_cable_dynamics.py edits, or num_drones/
+  cable_len/load_mass/inertia changes. Does NOT recompile on thrust_ratio or any
+  runtime value (yref, weights).
+
+AGILE TRAJECTORY TRACKING (line_x) + FLATNESS REFERENCE
+  - _yref_at(k) now follows a moving load-pose trajectory at each node's horizon
+    time (traj_t + k*dt) so the whole 2 s window tracks the moving load; traj_t
+    advances in coupled mode once the lift tops out. Reuses the existing sinusoidal
+    line_x/circle shapes. At traj_speed 0.2 m/s the load tracks line_x cleanly
+    (tension ~1.85 N, tilt < 0.5 deg, elevation 45 deg).
+  - Flatness-based cable reference (planner_ocp.py added s_i to the cost;
+    _yref_at + rot_align in planner_node.py): a load accelerating at a_load must
+    have its cables counter an effective gravity g_eff = g - a_load, so per node
+    the cable-direction reference is the nominal formation tilted onto g_eff and
+    the tension reference is t_nom*|g_eff|/g. At hover this reduces to nominal
+    (so it also pins the formation). This is the paper's approach: derive the
+    reference cable state from the load trajectory's acceleration.
+
+  HIGH-SPEED LIMIT (honest finding). At traj_speed >= 0.5 the load lags/
+  undershoots. Diagnosed offline: NOT control saturation (|gamma|~0.4 of 50), and
+  NOT fixed by the flatness reference in a perfect-tracker model -- reaching full
+  amplitude at 0.8 m/s (2.56 m/s^2 lateral) requires pitching the load ~13-15 deg,
+  a real position-tracking-vs-load-tilt trade-off tunable via the position weight.
+  The flatness reference's real payoff (cables tilt in ANTICIPATION so the drones
+  lead the load, cutting REAL tracker lag) cannot appear in a perfect-tracker
+  offline model -- it needs sim evaluation. Clean working range today ~0.2-0.4 m/s.
+  Pushing toward the paper's 5 m/s needs the position/tilt trade-off tuned and,
+  fundamentally, the INDI tracker (deferred) to kill per-drone tracking lag.
+
+KEY FILES CHANGED ON THIS BRANCH
+  controller_load_mpc/planner_node.py  -- mocap estimator, _yref_at (climb +
+      flatness + line_x), _load_offset_at/_load_accel_at, rot_align, solver cache,
+      node-0 partial pin.
+  controller_load_mpc/planner_ocp.py   -- partial idxbx_0, cost s_i term, w_t/w_s,
+      generate/build flags.
+  controller_load_mpc/load_cable_dynamics.py -- observed_state_indices().
+  controller_quad_load/controller_mpc.py     -- _scheduled_kT.
+  controller_quad_load/launch/mpc_quad_load_launch.py -- planner_mode default
+      coupled; thrust_quad_c; taut-start docs.
+
+HOW TO RUN
+  ./cleanup.sh
+  gz sim simulation_assets/three_rigid_short.sdf -v4 -r
+  ros2 launch controller_quad_load rviz_quad_load_launch.py num_drones:=3
+  ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=3
+      # coupled is default; add load_traj:=line_x traj_speed:=0.2 for agility
+  Planner-log tells: tilt (load off-vertical, keep small); elev (per-cable, hold
+  ~45 deg; collapsing = splay); t= (planned tension, ratcheting up = instability).
+
+OPEN / NEXT STEPS
+  - Evaluate the flatness reference in sim at 0.5 m/s (did real lag improve?);
+    tune w_s (cable-direction weight, currently 25) if the load pitches too much.
+  - figure-eight: same seam, add a shape to _load_offset_at/_load_accel_at.
+  - Optional small integral/FF to remove the ~0.07 m load-height offset.
+  - Non-equidistant horizon grid (paper p.23), minor.
+  - For true high-speed agility: the INDI tracker (deferred).
+
+################################################################################
+# HISTORICAL NOTES (pre-paper-implementation branch)
+# Kept for the debugging story and reference material. NOTE: conclusions here
+# about the coupled OCP being "abandoned" and agile maneuvers being impossible
+# are SUPERSEDED by the branch section above.
+################################################################################
+
 ================================================================================
 LEARNING NOTES — Cable-suspended multi-drone load transport (ROS2 + Gazebo)
 Goal: replicate the HIGH-LEVEL controller of Sun et al. 2025 (arXiv 2501.18802),

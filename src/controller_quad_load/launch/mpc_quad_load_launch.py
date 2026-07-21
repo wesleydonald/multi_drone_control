@@ -85,13 +85,16 @@ def _args():
         DeclareLaunchArgument('handover_elev_deg', default_value='0.0'),
         # Seconds to hold the latched config after handover before lifting.
         # Ground starts want ~2.0 so the reference step and the payload breaking
-        # ground don't land in the same cycle. 0 = off (elevated worlds).
-        DeclareLaunchArgument('handover_settle_s', default_value='0.0'),
+        # ground don't land in the same cycle. 1.0 lets the coupled taut-air-start
+        # solver converge on the taut hover before the climb ramp begins (smoother
+        # takeoff); 0 = off.
+        DeclareLaunchArgument('handover_settle_s', default_value='1.0'),
         # payload mass in the world SDF.
         DeclareLaunchArgument('load_mass', default_value='0.4'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         # HOLD test: lift_ramp_vel:=0.0 (no lift, just hold the taut config).
-        DeclareLaunchArgument('lift_ramp_vel', default_value='0.20'),
+        # 0.12 is the gentle taut-air-start climb rate (smoother than 0.20).
+        DeclareLaunchArgument('lift_ramp_vel', default_value='0.12'),
         # LAND descent rate (separate from the slow takeoff lift_ramp_vel).
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         # Cable compensation. ON is the correct flight config: the cable pulls
@@ -105,10 +108,12 @@ def _args():
         DeclareLaunchArgument('cable_source', default_value='model'),
         # payload counts as resting (cable term zeroed) at/below this z.
         DeclareLaunchArgument('payload_rest_z', default_value='0.05'),
-        # seconds to spool throttle up at takeoff; 0 = instant. Largely redundant
-        # now that the MPC's u_state is pinned to the APPLIED command, so the
-        # solver ramps from zero under its own u_dot bounds.
-        DeclareLaunchArgument('takeoff_spool_s', default_value='0.0'),
+        # seconds to spool throttle up at takeoff; 0 = instant. 0.5 eases the
+        # applied throttle on (raised-cosine from TAKEOFF_SPOOL_FLOOR*u to u) and
+        # completes inside handover_settle_s, so it smooths the idle->hover
+        # engagement without scaling throttle during the climb (which would starve
+        # the lift). See TAKEOFF_SPOOL_FLOOR in controller_mpc.py.
+        DeclareLaunchArgument('takeoff_spool_s', default_value='0.5'),
         # Thrust accel per unit throttle the MPC assumes (kT). The sim plant is
         # actually QUADRATIC -- a(u) = 203*u^2 from the SDF motor model -- so no
         # single kT is right everywhere. 50.0 matches near the hover operating
@@ -148,8 +153,11 @@ def _args():
         #              drones lurch.
         DeclareLaunchArgument('ff_gate_mode', default_value='taut'),
         # LOAD reference after the lift tops out: 'hover', 'line_x' (continuous
-        # back-and-forth shuttle), 'circle'. Keep traj_speed slow -- lateral
-        # accel is not fed forward.
+        # back-and-forth shuttle), 'circle', 'fig_8' (figure-eight lemniscate),
+        # 'spin' (circle + the load yaws one full turn, so the formation also
+        # rotates about the payload). circle/fig_8/spin use traj_radius; line_x uses
+        # traj_distance; all use traj_speed. Keep traj_speed slow -- lateral accel
+        # is fed forward via the flatness cable ref but tracking still lags at speed.
         DeclareLaunchArgument('load_traj', default_value='hover'),
         DeclareLaunchArgument('traj_speed', default_value='0.4'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
