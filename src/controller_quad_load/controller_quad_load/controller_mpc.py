@@ -70,6 +70,16 @@ CABLE_ACCEL_CAP = 6.0          # m/s^2: clamp measured cable-accel magnitude (~2
 CABLE_SLEW = 25.0              # m/s^2 per second: max rate-of-change of applied cable
 MAX_CONSEC_SOLVE_FAILS = 15    # tolerate this many bad solves (hold) before disarming
 
+# Ceiling for the airborne kT schedule (a(u)=c*u^2 -> secant c*throttle). Hover
+# throttle ~0.24 gives ~49, so 55 caps momentary highs without ever exceeding the
+# real plant. The floor is thrust_ratio, so takeoff can never be starved.
+KT_SCHED_CEIL = 55.0
+# The kT schedule only engages once the drone has climbed this far above its spawn
+# height, i.e. off the stands. The takeoff-safe thrust_ratio (which slightly
+# OVER-thrusts, giving the oomph to break off the stands) is kept until then; only
+# the settled climb/hover gets the operating-point kT.
+AIRBORNE_MARGIN = 0.15         # m above spawn z before scheduling kT
+
 LOGGING_NAME = 'controller_quad_load'
 
 # Formation offsets (x, y) for each drone relative to drone 0
@@ -218,7 +228,14 @@ class Controller(Node):
         # sim. overrides est_params[0] below.
         self.declare_parameter("thrust_ratio", 24.0)
         self.thrust_ratio = float(self.get_parameter("thrust_ratio").value)
+        # Quadratic-plant coefficient c in a(u)=c*u^2. Once airborne the linear kT
+        # is scheduled to the operating point, kT = clip(c*throttle, thrust_ratio,
+        # KT_SCHED_CEIL), so the assumed thrust matches the true secant gain at
+        # hover. 0 disables (fixed thrust_ratio everywhere). See _scheduled_kT.
+        self.declare_parameter("thrust_quad_c", 0.0)
+        self.thrust_quad_c = float(self.get_parameter("thrust_quad_c").value)
         self._takeoff_step = None         # cycles since takeoff (None = not spooling)
+        self._takeoff_z = None            # spawn z, latched to gate the kT schedule
         self._log_payload = (self.drone_id == 0)
         self.create_subscription(
             MotionCaptureState, '/payload/motion_capture_state',
@@ -336,6 +353,28 @@ class Controller(Node):
         if len(msg.data) >= 3:
             self.payload_ref = np.array(msg.data[:3], dtype=float)
 
+    def _scheduled_kT(self):
+        """Operating-point thrust gain for the assumed linear model a=kT*throttle.
+
+        The sim plant is quadratic a(u)=c*u^2, so the secant gain a/u = c*throttle
+        varies with the operating point (~20 at takeoff, ~49 at hover). A single kT
+        cannot serve both, AND the takeoff-safe thrust_ratio slightly over-thrusts
+        on purpose (oomph to break off the stands). So keep thrust_ratio until the
+        drone is clearly airborne, then schedule kT = clip(c*throttle, thrust_ratio,
+        KT_SCHED_CEIL) to kill the residual hover over-thrust. Never drops below
+        thrust_ratio, so scheduling can never starve takeoff. Disabled when c=0.
+        """
+        if self.thrust_quad_c <= 0.0 or self.last_cmd_throttle is None \
+                or self.current_pose is None:
+            return self.thrust_ratio
+        z = float(self.current_pose[2])
+        if self._takeoff_z is None:
+            self._takeoff_z = z
+        if z < self._takeoff_z + AIRBORNE_MARGIN:     # still on/near the stands
+            return self.thrust_ratio
+        kT = self.thrust_quad_c * float(self.last_cmd_throttle)
+        return float(np.clip(kT, self.thrust_ratio, KT_SCHED_CEIL))
+
     def measured_cable_accel(self):
         """MEASURED cable acceleration in the WORLD frame from the IMU:
         a_cable = R * (imu_specific_force - [0,0, kT*throttle]).
@@ -389,6 +428,10 @@ class Controller(Node):
 
         # ── Armed + pose available ─────────────────────────────────────────
         if self.armed and self.current_pose is not None:
+
+            # Schedule the assumed thrust gain to the operating point (quadratic
+            # plant). No-op during takeoff/resting and when disabled (c=0).
+            self.est_params[0] = self._scheduled_kT()
 
             # ── Set MPC reference ─────────────────────────────────────────
             if self.reference_source == "planner":

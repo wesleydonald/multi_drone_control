@@ -13,12 +13,18 @@ Wire format (Float64MultiArray), 12 fields per node, world frame:
          prediction model so its feedback stops fighting the cable.
 
 Two modes (planner_mode):
-    kinematic  open-loop feedforward. Lifts the latched taut config rigidly and
-               streams the analytic loaded-hover FF. This is the working path.
     coupled    solves the load-cable OCP (planner_ocp.py) online, pinning node 0
-               to the measured state. Unstable in practice: the pin leaves no
-               restoring force, so the system overshoots and diverges. Kept for
-               comparison only.
+               to the measured state. This is the paper's method (Sun et al. 2025)
+               and the default on the paper-implementation branch. x_init is built
+               from mocap -- load pose/twist, cable directions s_i AND cable
+               angular velocities r_i are all measured; only the unobservable
+               higher cable states (rd_i, rdd_i) and tensions (t_i, td_i) are
+               resampled from the previous solution (paper Fig 8). Requires a TAUT
+               start: the paper assumes taut cables throughout and never lifts off
+               the ground, so run it with start_taut and handover_elev_deg=0.
+    kinematic  open-loop feedforward. Lifts the latched taut config rigidly and
+               streams the analytic loaded-hover FF. The pre-paper working path,
+               kept as a fallback.
 
 Geometry must match the world SDF (see generate_rigid_world.py).
 """
@@ -31,7 +37,8 @@ from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 from interfaces.msg import MotionCaptureState
 
-from .load_cable_dynamics import LoadCableDynamics, LOAD_DIM, CABLE_DIM
+from .load_cable_dynamics import (LoadCableDynamics, observed_state_indices,
+                                  LOAD_DIM, CABLE_DIM)
 from .planner_ocp import generate_load_ocp, nominal_hover_state
 
 # World geometry, must match the world SDF. All overridable as ROS params.
@@ -231,6 +238,9 @@ class LoadPlanner(Node):
         self.dyn = LoadCableDynamics(
             self.n, self.load_mass, LOAD_INERTIA, [self.cable_len] * self.n,
             self.rho, DRONE_MASS)
+        # states pinned at OCP node 0 (observed): load pose/twist + cable dirs s_i.
+        # Must match idxbx_0 in generate_load_ocp. r_i/tensions stay free.
+        self._obs_idx = observed_state_indices(self.n)
         # Build the OCP only if we will solve it. acados recompiles it every
         # launch with no freshness check (~50 s for n=4), and kinematic mode never
         # solves it. Building it anyway published no references for the whole
@@ -269,6 +279,7 @@ class LoadPlanner(Node):
         # state
         self.load_state = None                 # [p(3), q(4 wxyz), v(3), w(3)]
         self.drone_pos = [None] * self.n
+        self.drone_vel = [None] * self.n       # world velocity from mocap twist
         self.last_X = None                     # previous solution (nx, N+1)
         self.hover_xy = None                   # captured load x,y for the reference
         self.first_solve = True
@@ -339,7 +350,9 @@ class LoadPlanner(Node):
 
     def _drone_cb(self, msg: MotionCaptureState, i):
         p = msg.pose.position
+        lv = msg.twist.linear
         self.drone_pos[i] = np.array([p.x, p.y, p.z])
+        self.drone_vel[i] = np.array([lv.x, lv.y, lv.z])
 
     def _fleet_command_cb(self, msg: String):
         cmd = msg.data.strip().upper()
@@ -433,29 +446,48 @@ class LoadPlanner(Node):
         x[3:6] = ls[7:10]      # v
         x[6:10] = q            # q (wxyz)
         x[10:13] = ls[10:13]   # w
-        # overwrite each cable direction s_i from geometry (keep rates/tension)
+        # Overwrite each cable DIRECTION s_i from measured geometry (drone->load, no
+        # differentiation, clean). The cable RATES r_i and everything above them
+        # (rd_i, rdd_i, t_i, td_i) stay RESAMPLED from the previous solution -- per
+        # the paper (Fig 8), which resamples these rather than differentiating
+        # estimator values, since numerical differentiation is too noisy. (An
+        # earlier version measured r_i from drone-velocity differences; that fed
+        # exactly that jitter into the pinned node 0 and the OCP fought it.)
         for i in range(self.n):
+            b = LOAD_DIM + CABLE_DIM * i
             attach = p + R @ self.rho[i]
-            d = attach - self.drone_pos[i]
+            d = attach - self.drone_pos[i]              # points drone -> load
             nrm = np.linalg.norm(d)
             if nrm > 1e-6:
-                b = LOAD_DIM + CABLE_DIM * i
                 x[b:b + 3] = d / nrm
         return x
 
-    def _yref(self):
+    def _yref_at(self, k):
+        """Stage-k tracking reference (paper Eq 6, x_{k,ref}).
+
+        The height is ramped ALONG the horizon and the lift velocity is fed into the
+        velocity reference, so the OCP plans a coordinated climb. Feeding zero
+        velocity against a rising setpoint made the load lag the target, and the
+        planner ratcheted cable tension up trying to catch it (to the point the QP
+        went infeasible). An agile time-varying load reference drops into the same
+        position/velocity slots. The height ramp is decoupled from the measured
+        load height (a fixed schedule from lift_z0), so a dip cannot lower the
+        target and become positive feedback.
+        """
         x0, y0 = self.hover_xy
         t_nom = self.dyn.m * 9.81 / (self.n * np.sin(np.deg2rad(45.0)))
-        # Time-based lift ramp, decoupled from the measured load height. The old
-        # self-pacing target (load_z + LIFT_STEP) was positive feedback: a dip
-        # lowered the target, cutting thrust, dropping the load further. A fixed
-        # schedule from the handover height is not self-reinforcing.
-        z_target = min(self.target_z, self.lift_z0 + self.lift_progress)
-        pose = [x0, y0, z_target, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # p, v, e_att, w
-        y = np.array(pose + [t_nom] * self.n
-                     + [0.0] * (3 * self.n)        # r_vec ref (no cable swing)
-                     + [0.0] * self.dyn.nu)
-        return y, y[:-self.dyn.nu]
+        z_base = min(self.target_z, self.lift_z0 + self.lift_progress)
+        vz = float(self._lift_vel)                 # signed lift rate this cycle
+        z_k = z_base + vz * self.dt * k            # ramp the height along the horizon
+        if vz >= 0.0:
+            z_k = min(z_k, self.target_z)
+            vz_k = 0.0 if z_k >= self.target_z - 1e-6 else vz
+        else:
+            vz_k = vz                              # descending (LAND): keep the rate
+        pose = [x0, y0, z_k, 0.0, 0.0, vz_k, 0, 0, 0, 0, 0, 0]  # p, v, e_att, w
+        return np.array(pose + [t_nom] * self.n
+                        + [0.0] * (3 * self.n)     # r_vec ref (no cable swing)
+                        + [0.0] * self.dyn.nu)
 
     # Plan step
     def _plan(self):
@@ -599,13 +631,12 @@ class LoadPlanner(Node):
             return
 
         x_init = self._build_x_init()
-        yref, yref_e = self._yref()
         q_ref = np.array([1.0, 0.0, 0.0, 0.0])
 
         for k in range(self.N):
-            self.solver.set(k, 'yref', yref)
+            self.solver.set(k, 'yref', self._yref_at(k))
             self.solver.set(k, 'p', q_ref)
-        self.solver.set(self.N, 'yref', yref_e)
+        self.solver.set(self.N, 'yref', self._yref_at(self.N)[:-self.dyn.nu])
         self.solver.set(self.N, 'p', q_ref)
 
         # Reseed all nodes from x_init on the first solve, OR when recovering from a
@@ -614,8 +645,11 @@ class LoadPlanner(Node):
         if self.first_solve or self._recover:
             for k in range(self.N + 1):
                 self.solver.set(k, 'x', x_init)
-        self.solver.set(0, 'lbx', x_init)
-        self.solver.set(0, 'ubx', x_init)
+        # Pin only the observed states at node 0 (see _obs_idx / idxbx_0). The full
+        # x_init still seeds the warm start above; the unobserved tensions and cable
+        # rates are left free so they cannot ratchet against a measured pose.
+        self.solver.set(0, 'lbx', x_init[self._obs_idx])
+        self.solver.set(0, 'ubx', x_init[self._obs_idx])
 
         # A single RTI iteration cannot track the stiff soft-cable transition online,
         # so the planner diverges and emits degenerate references. Take several SQP
@@ -1013,9 +1047,21 @@ class LoadPlanner(Node):
             s = '  '.join(f"d{i}:dist={d:.2f} gate={g:.2f} t={t:.2f}"
                           for (i, d, g, t) in diag)
             z_tgt = min(self.target_z, self.lift_z0 + self.lift_progress)
+            # load tilt (angle of the load body-z off world-z) and each MEASURED
+            # cable elevation, so an asymmetric divergence is visible before it
+            # blows up: a rotating load / flattening cables drives the tension split.
+            ls = self.load_state
+            R = quat_to_rot_np(ls[3:7])
+            tilt = np.degrees(np.arccos(np.clip(R[2, 2], -1.0, 1.0)))
+            elevs = []
+            for i in range(self.n):
+                d = (ls[0:3] + R @ self.rho[i]) - self.drone_pos[i]
+                nd = np.linalg.norm(d)
+                elevs.append(np.degrees(np.arcsin(np.clip(-d[2] / max(nd, 1e-6), -1, 1))))
+            e = ' '.join(f"{x:.0f}" for x in elevs)
             self.get_logger().info(
                 f"[planner cable] L={self.cable_len:.2f} load_z={self.load_state[2]:.2f} "
-                f"z_tgt={z_tgt:.2f}  {s}")
+                f"z_tgt={z_tgt:.2f} tilt={tilt:.1f}deg elev=[{e}]  {s}")
 
 
 def main(args=None):

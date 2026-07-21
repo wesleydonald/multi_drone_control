@@ -21,7 +21,8 @@ import numpy as np
 import casadi as ca
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosModel
 
-from .load_cable_dynamics import LoadCableDynamics, quat_mul, LOAD_DIM, CABLE_DIM
+from .load_cable_dynamics import (LoadCableDynamics, quat_mul, observed_state_indices,
+                                  LOAD_DIM, CABLE_DIM)
 
 GRAV = 9.81
 
@@ -94,7 +95,14 @@ def generate_load_ocp(dyn: LoadCableDynamics, N=20, tf=2.0,
     # the slack->taut transition, spiking cable tension past the drones' thrust
     # authority. Heavier velocity damping keeps the lift slow and bounded.
     w_pose = [60., 60., 80.] + [18., 18., 22.] + [30., 30., 30.] + [1., 1., 1.]
-    w_t = [0.05] * n
+    # Tension regularisation toward nominal. Raised 0.05 -> 5.0: the cost has no term
+    # on cable DIRECTION s_i, so nothing else pins the formation radius. A weak w_t
+    # let the drones drift outward (cable elevation 45 -> 20 deg, tension climbing),
+    # tilting further and further out. Holding tension near nominal holds the
+    # elevation near 45 deg (nominal tension IS the 45 deg equilibrium), which
+    # restores a flattened formation over the horizon. (For agile time-varying loads
+    # this static target should become the flatness-derived tension reference.)
+    w_t = [5.0] * n
     w_r = [3.0] * (3 * n)                          # damp cable swing (key)
     w_u = []
     for _ in range(n):
@@ -107,7 +115,18 @@ def generate_load_ocp(dyn: LoadCableDynamics, N=20, tf=2.0,
     ocp.cost.yref_e = np.zeros(W_e.shape[0])
 
     # ── initial condition + parameter defaults ─────────────────────────────
-    ocp.constraints.x0 = nominal_hover_state(dyn)
+    # Pin ONLY the observed states at node 0 (load pose/twist + cable directions
+    # s_i); leave the unobserved cable rates and tensions FREE (warm-started by
+    # resampling). Pinning the full state hard-constrained the stale resampled
+    # tension against a measured pose the tracker did not exactly hit, and the
+    # planned tension ratcheted up until the QP went infeasible. idxbxe_0 marks
+    # these as equalities for the QP solver.
+    x0 = nominal_hover_state(dyn)
+    obs = observed_state_indices(n)
+    ocp.constraints.idxbx_0 = obs
+    ocp.constraints.lbx_0 = x0[obs]
+    ocp.constraints.ubx_0 = x0[obs]
+    ocp.constraints.idxbxe_0 = np.arange(obs.shape[0])
     ocp.parameter_values = np.array([1.0, 0.0, 0.0, 0.0])   # q_ref = identity
 
     # ── tautness: state bounds on each t_i ─────────────────────────────────
