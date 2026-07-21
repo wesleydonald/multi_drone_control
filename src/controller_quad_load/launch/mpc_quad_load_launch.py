@@ -70,7 +70,7 @@ def _args():
         # Fleet size. MUST match the world SDF: the planner sizes the attach ring
         # and divides the load tension by this, so a mismatch mis-scales every
         # drone's feedforward.
-        DeclareLaunchArgument('num_drones', default_value='3'),
+        DeclareLaunchArgument('num_drones', default_value='2'),
         # must match the tether length in the world SDF -- the *_rigid_short
         # worlds use rigid 0.5 m rods, and a mismatch here commands a formation
         # radius the tethers physically can't reach (drones fight the rod).
@@ -152,6 +152,13 @@ def _args():
         #              attitude reference ~13 deg outward in one cycle and the
         #              drones lurch.
         DeclareLaunchArgument('ff_gate_mode', default_value='taut'),
+        # Auto slot assignment (coupled mode). OFF by default so the sim behaves as
+        # before (slot i == drone i, matching the SDF spawn order). Set true to test
+        # the real-world behaviour: each drone is matched to the nearest nominal ring
+        # slot at the first solve, so spawn order/labelling stops mattering. In a
+        # normally-ordered sim world this resolves to the identity (a no-op) -- to
+        # actually exercise the reorder, spawn the drones out of azimuth order.
+        DeclareLaunchArgument('auto_slot_assign', default_value='true'),
         # LOAD reference after the lift tops out: 'hover', 'line_x' (continuous
         # back-and-forth shuttle), 'circle', 'fig_8' (figure-eight lemniscate),
         # 'spin' (circle + the load yaws one full turn, so the formation also
@@ -159,7 +166,7 @@ def _args():
         # traj_distance; all use traj_speed. Keep traj_speed slow -- lateral accel
         # is fed forward via the flatness cable ref but tracking still lags at speed.
         DeclareLaunchArgument('load_traj', default_value='hover'),
-        DeclareLaunchArgument('traj_speed', default_value='0.4'),
+        DeclareLaunchArgument('traj_speed', default_value='0.6'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
         DeclareLaunchArgument('traj_radius', default_value='0.5'),
     ]
@@ -233,6 +240,7 @@ def launch_setup(context, *args, **kwargs):
                      'handover_settle_s': f('handover_settle_s'),
                      'planner_mode': LaunchConfiguration('planner_mode'),
                      'ff_gate_mode': LaunchConfiguration('ff_gate_mode'),
+                     'auto_slot_assign': b('auto_slot_assign'),
                      'load_traj': LaunchConfiguration('load_traj'),
                      'traj_speed': f('traj_speed'),
                      'traj_distance': f('traj_distance'),
