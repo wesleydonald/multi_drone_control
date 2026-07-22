@@ -94,13 +94,6 @@
         <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
         <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
       </joint>
-      <joint name="tether_0_to_drone0" type="ball">
-        <parent>tether_0</parent>
-        <child>x3_drone0::base_link</child>
-        <pose relative_to="tether_0">0 0 0.2500 0 0 0</pose>
-        <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
-        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
-      </joint>
       <!-- ===== TETHER 1: payload -> drone1 (rigid, len=0.5000) ===== -->
       <link name="tether_1">
         <pose>-0.328747 0.000000 0.075000 0 1.470629 3.141593</pose>
@@ -123,13 +116,26 @@
         <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
         <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
       </joint>
-      <joint name="tether_1_to_drone1" type="ball">
-        <parent>tether_1</parent>
-        <child>x3_drone1::base_link</child>
-        <pose relative_to="tether_1">0 0 0.2500 0 0 0</pose>
-        <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
-        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
-      </joint>
+      <!-- ===== DETACH 0: release drone0 from tether_0 ===== -->
+      <plugin filename="gz-sim-detachable-joint-system"
+              name="gz::sim::systems::DetachableJoint">
+        <parent_link>tether_0</parent_link>
+        <child_model>x3_drone0</child_model>
+        <child_link>base_link</child_link>
+        <detach_topic>/drone_0/detach</detach_topic>
+        <attach_topic>/drone_0/attach</attach_topic>
+        <output_topic>/drone_0/detachable_joint_state</output_topic>
+      </plugin>
+      <!-- ===== DETACH 1: release drone1 from tether_1 ===== -->
+      <plugin filename="gz-sim-detachable-joint-system"
+              name="gz::sim::systems::DetachableJoint">
+        <parent_link>tether_1</parent_link>
+        <child_model>x3_drone1</child_model>
+        <child_link>base_link</child_link>
+        <detach_topic>/drone_1/detach</detach_topic>
+        <attach_topic>/drone_1/attach</attach_topic>
+        <output_topic>/drone_1/detachable_joint_state</output_topic>
+      </plugin>
     </model>
 
     <!-- ===== TAKEOFF PLATFORMS (rest the drones at spawn until TAKEOFF) ===== -->

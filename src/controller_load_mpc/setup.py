@@ -22,6 +22,7 @@ setup(
     entry_points={
         'console_scripts': [
             'planner = controller_load_mpc.planner_node:main',
+            'dissipative = controller_load_mpc.dissipative_node:main',
         ],
     },
 )
