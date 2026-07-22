@@ -255,33 +255,3 @@ def set_planner_reference(ocp_solver, ref_pos: np.ndarray, ref_vel: np.ndarray,
     ocp_solver.set(N_horizon, "yref", yref_N)
     ocp_solver.set(N_horizon, "p", np.concatenate(
         [dyn_par, np.asarray(ref_cable[N_horizon], dtype=float), qrefs[N_horizon]]))
-
-
-def set_trajectory_reference_aligned(ocp_solver, traj_states: np.ndarray, N_horizon: int, step_counter: int, skip_steps: int, est_params=None):
-
-    horizon_indices = [step_counter + j * skip_steps for j in range(N_horizon)]
-    terminal_index = step_counter + N_horizon * skip_steps
-    all_indices = horizon_indices + [terminal_index]
-
-    qs_raw = [traj_states[3:7, idx].copy() for idx in all_indices]
-    qs_cont = _make_quat_sequence_continuous(qs_raw)
-    dyn_par = np.array(est_params, dtype=float)
-    zero_cable = np.zeros(3, dtype=float)   # internal trajectory: no cable model
-
-    for j, sc in enumerate(horizon_indices):
-        # 1) yref
-        yref = np.zeros((20,), dtype=float)
-        yref[0:3] = traj_states[0:3, sc]
-        yref[3:6]  = traj_states[7:10, sc]
-        yref[6:9]  = traj_states[10:13, sc]
-        yref[13:17]= [0.0, 0.0, 0.0, 0.0]
-        ocp_solver.set(j, "yref", yref)
-
-        # 2) parameters: [dyn(6), a_cable(3), q_ref(4)]
-        qref = qs_cont[j]
-        ocp_solver.set(j, "p", np.concatenate([dyn_par, zero_cable, qref]))
-
-    yref_N = np.zeros((16,), dtype=float)
-    yref_N[0:3] = traj_states[0:3, terminal_index]
-    ocp_solver.set(N_horizon, "yref", yref_N)
-    ocp_solver.set(N_horizon, "p", np.concatenate([dyn_par, zero_cable, qs_cont[-1]]))

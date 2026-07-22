@@ -5,7 +5,7 @@ PLANNER-DRIVEN, CABLE-AWARE stack for the cable-suspended payload, for ANY
 fleet size. The centralized planner (controller_load_mpc) generates each drone's
 reference trajectory AND its per-node cable tension acceleration (t*s/m), and the
 per-drone cable-aware MPC (controller_quad_load) tracks it with the cable force in
-its prediction model (reference_source:=planner).
+its prediction model (it tracks the planner's streamed reference trajectory).
 
 This replaces the separate two/three/four launch files: num_drones is an
 argument. The node list is built inside an OpaqueFunction because a
@@ -30,13 +30,13 @@ worlds:
     three_soft.sdf                  cable_len:=0.6
     three_soft_paper.sdf            cable_len:=1.0 load_mass:=0.1
 
-PAPER MODE (default on this branch): planner_mode:=coupled runs the online
-load-cable OCP. It requires a TAUT start -- use a *_rigid_short or soft world with
-start_taut:=true and handover_elev_deg:=0 (the defaults), e.g.
-    gz sim simulation_assets/three_rigid_short.sdf -v 4 -r
-    ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=3
-The creep/arc-handover ground-pickup path is not exercised in coupled mode; the
-paper assumes taut cables throughout.
+The online load-cable OCP (Sun et al. 2025) generates the references. The default
+config is a GROUND START: the drones sit on the floor, arc-sweep the rigid rods up
+to handover_elev_deg, then the OCP takes over and lifts the load, e.g.
+    gz sim simulation_assets/two_rigid_ground.sdf -v 4 -r
+    ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=2
+For an elevated taut world instead, set start_taut:=true handover_elev_deg:=0 to
+skip the creep and hand straight to the OCP.
 
 Fleet control:
     ros2 topic pub -t 3 /fleet/command std_msgs/msg/String "{data: ARM}"
@@ -75,20 +75,20 @@ def _args():
         # worlds use rigid 0.5 m rods, and a mismatch here commands a formation
         # radius the tethers physically can't reach (drones fight the rod).
         DeclareLaunchArgument('cable_len', default_value='0.5'),
-        DeclareLaunchArgument('start_taut', default_value='true'),
+        DeclareLaunchArgument('start_taut', default_value='false'),
         # GROUND-START rigid worlds only (three_rigid_ground.sdf). Degrees of
         # cable elevation the drones must sweep up to -- along the rod's arc,
         # pivoting about the grounded attach points -- before the planner takes
         # over. A rigid rod is always full length, so the usual slack->taut
         # handover fires instantly at ~6 deg where tension is ~13 N/drone. 0 =
         # off (elevated or soft worlds).
-        DeclareLaunchArgument('handover_elev_deg', default_value='0.0'),
+        DeclareLaunchArgument('handover_elev_deg', default_value='45.0'),
         # Seconds to hold the latched config after handover before lifting.
         # Ground starts want ~2.0 so the reference step and the payload breaking
         # ground don't land in the same cycle. 1.0 lets the coupled taut-air-start
         # solver converge on the taut hover before the climb ramp begins (smoother
         # takeoff); 0 = off.
-        DeclareLaunchArgument('handover_settle_s', default_value='1.0'),
+        DeclareLaunchArgument('handover_settle_s', default_value='2.0'),
         # payload mass in the world SDF.
         DeclareLaunchArgument('load_mass', default_value='0.4'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
@@ -107,7 +107,7 @@ def _args():
         # 'model' = planner open-loop t*s/m cable term; 'measured' = IMU f_ext.
         DeclareLaunchArgument('cable_source', default_value='model'),
         # payload counts as resting (cable term zeroed) at/below this z.
-        DeclareLaunchArgument('payload_rest_z', default_value='0.05'),
+        DeclareLaunchArgument('payload_rest_z', default_value='-0.1'),
         # seconds to spool throttle up at takeoff; 0 = instant. 0.5 eases the
         # applied throttle on (raised-cosine from TAKEOFF_SPOOL_FLOOR*u to u) and
         # completes inside handover_settle_s, so it smooths the idle->hover
@@ -134,24 +134,6 @@ def _args():
         # into a slow runaway, while takeoff keeps the fixed thrust_ratio (kT never
         # drops below it). Set 0.0 to disable (pure fixed thrust_ratio, all phases).
         DeclareLaunchArgument('thrust_quad_c', default_value='203.0'),
-        # 'coupled' = online load-cable OCP planner (the paper's method: Sun et al.
-        # 2025, whole-body kinodynamic planner feeding per-drone references). This
-        # is the default on the paper-implementation branch. It builds x_init from
-        # mocap (load pose/twist, cable directions AND cable rates) and resamples
-        # only tensions/higher cable states from the last solution. Requires a TAUT
-        # start (start_taut:=true, handover_elev_deg:=0) -- the paper assumes taut
-        # cables throughout and never picks up off the ground. First launch costs a
-        # ~50 s acados rebuild. 'kinematic' = the old open-loop feedforward path.
-        DeclareLaunchArgument('planner_mode', default_value='coupled'),
-        # 'taut'     = engage FF from spawn. Correct when the load is ALREADY
-        #              hanging on the cables at startup (the elevated worlds).
-        # 'airborne' = ramp the FF in as the load lifts off the ground. Required
-        #              for any GROUND START (handover_elev_deg > 0) and for soft
-        #              cables: there the payload is still on the floor when the
-        #              planner takes over, so engaging the full FF steps the
-        #              attitude reference ~13 deg outward in one cycle and the
-        #              drones lurch.
-        DeclareLaunchArgument('ff_gate_mode', default_value='taut'),
         # Auto slot assignment (coupled mode). OFF by default so the sim behaves as
         # before (slot i == drone i, matching the SDF spawn order). Set true to test
         # the real-world behaviour: each drone is matched to the nearest nominal ring
@@ -211,7 +193,7 @@ def launch_setup(context, *args, **kwargs):
         nodes.append(Node(
             package='controller_quad_load', executable='controller',
             name=f'controller_{i}',
-            parameters=[{'drone_id': i, 'reference_source': 'planner',
+            parameters=[{'drone_id': i,
                          'cable_ff_scale': f('cable_ff_scale'),
                          'attitude_ff': b('attitude_ff'),
                          'cable_source': LaunchConfiguration('cable_source'),
@@ -238,8 +220,6 @@ def launch_setup(context, *args, **kwargs):
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
-                     'planner_mode': LaunchConfiguration('planner_mode'),
-                     'ff_gate_mode': LaunchConfiguration('ff_gate_mode'),
                      'auto_slot_assign': b('auto_slot_assign'),
                      'load_traj': LaunchConfiguration('load_traj'),
                      'traj_speed': f('traj_speed'),

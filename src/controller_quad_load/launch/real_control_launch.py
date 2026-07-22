@@ -17,12 +17,12 @@ here too so the planner and fleet manager agree.
 
   * controller (xN)  — per-drone cable-aware acados MPC (drone_id 0..N-1), reads
     /drone_i/motion_capture_state + /payload/motion_capture_state and the planner
-    reference (reference_source:=planner), publishes /drone_i/ELRSCommand.
+    reference trajectory, publishes /drone_i/ELRSCommand.
   * main             — central fleet manager: owns ARM/TAKEOFF/LAND via
     /fleet/command and the /fleet/step tick.
   * load_planner     — centralized load-cable OCP (Sun et al. 2025). Builds x_init
     from MoCap (load pose/twist + cable directions/rates) and feeds each drone its
-    reference trajectory + per-node cable tension accel. planner_mode:=coupled.
+    reference trajectory + per-node cable tension accel (the online load-cable OCP).
 
 Run (terminal 2, after terminal 1):
     ros2 launch controller_quad_load real_control_launch.py num_drones:=2
@@ -72,8 +72,6 @@ def _args():
         # Airborne quadratic-kT schedule is a SIM-plant fit -- off by default on
         # hardware. Set to your measured a(u)=c*u^2 coefficient to enable.
         DeclareLaunchArgument('thrust_quad_c', default_value='0.0'),
-        DeclareLaunchArgument('planner_mode', default_value='coupled'),
-        DeclareLaunchArgument('ff_gate_mode', default_value='taut'),
         # ON: match each drone to the nearest nominal ring slot at the first solve,
         # so you can place the drones ~cable_len out in ANY order (no need to line
         # drone 0 up with +x). Relabels I/O only -- no OCP recompile.
@@ -106,7 +104,7 @@ def launch_setup(context, *args, **kwargs):
         nodes.append(Node(
             package='controller_quad_load', executable='controller',
             name=f'controller_{i}',
-            parameters=[{'drone_id': i, 'reference_source': 'planner',
+            parameters=[{'drone_id': i,
                          'cable_ff_scale': f('cable_ff_scale'),
                          'attitude_ff': b('attitude_ff'),
                          'cable_source': LaunchConfiguration('cable_source'),
@@ -133,8 +131,6 @@ def launch_setup(context, *args, **kwargs):
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
-                     'planner_mode': LaunchConfiguration('planner_mode'),
-                     'ff_gate_mode': LaunchConfiguration('ff_gate_mode'),
                      'auto_slot_assign': b('auto_slot_assign'),
                      'load_traj': LaunchConfiguration('load_traj'),
                      'traj_speed': f('traj_speed'),

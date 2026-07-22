@@ -89,14 +89,14 @@ TODO: See how much tension magnet can handle ~10N
 
 Additional
 
-for three_ground: ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=3 cable_len:=0.5 start_taut:=false handover_elev_deg:=45.0 ff_gate_mode:=airborne handover_settle_s:=2.0 lift_ramp_vel:=0.2 payload_rest_z:=0.03 thrust_ratio:=40
+for three_ground: ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=3 cable_len:=0.5 start_taut:=false handover_elev_deg:=45.0 handover_settle_s:=2.0 lift_ramp_vel:=0.2 payload_rest_z:=0.03 thrust_ratio:=40
 
-ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=2 start_taut:=false handover_elev_deg:=45 handover_settle_s:=2.0 ff_gate_mode:=taut payload_rest_z:=-0.1 load_traj:=hover
+ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=2 start_taut:=false handover_elev_deg:=45 handover_settle_s:=2.0 payload_rest_z:=-0.1 load_traj:=hover
 
 for 2_ground:
-ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=2 start_taut:=false handover_elev_deg:=45 handover_settle_s:=2.0 ff_gate_mode:=taut payload_rest_z:=-0.1 load_traj:=hover
+ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=2 start_taut:=false handover_elev_deg:=45 handover_settle_s:=2.0 payload_rest_z:=-0.1 load_traj:=hover
 
-ros2 launch controller_quad_load mpc_quad_load_launch.py start_taut:=false handover_elev_deg:=45 handover_settle_s:=2.0 ff_gate_mode:=taut payload_rest_z:=-0.1 load_traj:=hover num_drones:=2
+ros2 launch controller_quad_load mpc_quad_load_launch.py start_taut:=false handover_elev_deg:=45 handover_settle_s:=2.0 payload_rest_z:=-0.1 load_traj:=hover num_drones:=2
 
 
 TOPICS FOR TEJEN:
