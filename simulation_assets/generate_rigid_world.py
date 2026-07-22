@@ -30,8 +30,19 @@ def _fmt(x):
 
 
 def tether_block(idx, drone, attach, cable_len, radius=0.004, mass=0.001,
-                 damping=0.1):
-    """One rigid tether link + its two ball joints (payload bottom, drone top)."""
+                 damping=0.1, detachable=False):
+    """One rigid tether link + its joints (payload bottom, drone top).
+
+    Normally both ends are ball joints (a two-force rigid link: the paper model).
+    With detachable=True the DRONE-end ball joint is omitted here and replaced by a
+    DetachableJoint plugin emitted at model level (see detachable_joint_block): that
+    is the only release mechanism Gazebo offers, and it requires a child *model*
+    (the drone is an <include>d model; the tether is only a link, so the payload end
+    cannot host it). The plugin makes a FIXED joint, but the tether is near-massless
+    (mass={mass}, inertia ~1e-8), so the force it transmits is unchanged vs a ball
+    joint and only a negligible torque couples the drone attitude to the rod.
+    Publishing /drone_{idx}/detach releases drone_{idx}; the rod stays hanging on the
+    payload via its (retained) payload-end ball joint."""
     dx = drone[0] - attach[0]
     dy = drone[1] - attach[1]
     dz = drone[2] - attach[2]
@@ -44,6 +55,16 @@ def tether_block(idx, drone, attach, cable_len, radius=0.004, mass=0.001,
     half = L / 2.0
     it = mass * L * L / 12.0
     ia = 0.5 * mass * radius * radius
+    # Drone-end connection: a ball joint normally, or nothing when detachable (the
+    # DetachableJoint plugin, emitted at model level, replaces it).
+    drone_joint = "" if detachable else f"""
+      <joint name="tether_{idx}_to_drone{idx}" type="ball">
+        <parent>tether_{idx}</parent>
+        <child>x3_drone{idx}::base_link</child>
+        <pose relative_to="tether_{idx}">0 0 {half:.4f} 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis2>
+      </joint>"""
     return f"""
       <!-- ===== TETHER {idx}: payload -> drone{idx} (rigid, len={L:.4f}) ===== -->
       <link name="tether_{idx}">
@@ -66,17 +87,29 @@ def tether_block(idx, drone, attach, cable_len, radius=0.004, mass=0.001,
         <pose relative_to="tether_{idx}">0 0 {-half:.4f} 0 0 0</pose>
         <axis><xyz>1 0 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis>
         <axis2><xyz>0 1 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis2>
-      </joint>
-      <joint name="tether_{idx}_to_drone{idx}" type="ball">
-        <parent>tether_{idx}</parent>
-        <child>x3_drone{idx}::base_link</child>
-        <pose relative_to="tether_{idx}">0 0 {half:.4f} 0 0 0</pose>
-        <axis><xyz>1 0 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis>
-        <axis2><xyz>0 1 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis2>
-      </joint>"""
+      </joint>{drone_joint}"""
 
 
-def build(n, cable_len, elev_deg, attach_radius, attach_z, payload_z):
+def detachable_joint_block(idx):
+    """A DetachableJoint plugin releasing drone_{idx} from its tether on
+    /drone_{idx}/detach. Emitted at the lift_system model level (which owns both the
+    tether_{idx} link and the included x3_drone{idx} model). Re-attach on
+    /drone_{idx}/attach is available too, for the future reattach step."""
+    return f"""
+      <!-- ===== DETACH {idx}: release drone{idx} from tether_{idx} ===== -->
+      <plugin filename="gz-sim-detachable-joint-system"
+              name="gz::sim::systems::DetachableJoint">
+        <parent_link>tether_{idx}</parent_link>
+        <child_model>x3_drone{idx}</child_model>
+        <child_link>base_link</child_link>
+        <detach_topic>/drone_{idx}/detach</detach_topic>
+        <attach_topic>/drone_{idx}/attach</attach_topic>
+        <output_topic>/drone_{idx}/detachable_joint_state</output_topic>
+      </plugin>"""
+
+
+def build(n, cable_len, elev_deg, attach_radius, attach_z, payload_z,
+          detachable=False):
     phi = math.radians(elev_deg)
     horiz = cable_len * math.cos(phi)
     vert = cable_len * math.sin(phi)
@@ -96,8 +129,12 @@ def build(n, cable_len, elev_deg, attach_radius, attach_z, payload_z):
         <name>x3_drone{i}</name>
         <pose>{_fmt(dx)} {_fmt(dy)} {_fmt(dz)} 0 0 0</pose>
       </include>""")
-    tethers = "".join(tether_block(i, drones[i], attaches[i], cable_len)
+    tethers = "".join(tether_block(i, drones[i], attaches[i], cable_len,
+                                   detachable=detachable)
                       for i in range(n))
+    # Per-drone DetachableJoint plugins (model-level), only when detachable.
+    detaches = ("".join(detachable_joint_block(i) for i in range(n))
+                if detachable else "")
     # takeoff platforms: static pillars from the ground to just under each drone
     # so the (stiff, rigid-cabled) drones REST at their design pose until TAKEOFF
     # instead of collapsing to the floor while disarmed.
@@ -182,7 +219,7 @@ def build(n, cable_len, elev_deg, attach_radius, attach_z, payload_z):
           <update_frequency>500</update_frequency>
         </plugin>
       </model>
-{tethers}
+{tethers}{detaches}
     </model>
 
     <!-- ===== TAKEOFF PLATFORMS (rest the drones at spawn until TAKEOFF) ===== -->
@@ -201,6 +238,10 @@ def main():
     ap.add_argument('--attach-z', type=float, default=0.025)
     ap.add_argument('--payload-z', type=float, default=0.025)
     ap.add_argument('--out', type=str, default='three_rigid.sdf')
+    ap.add_argument('--detachable', action='store_true',
+                    help='add a per-drone DetachableJoint (drone end) keyed to '
+                         '/drone_k/detach, so a drone can be released mid-flight. '
+                         'Used by the dissipative detach controller.')
     ap.add_argument('--ground-start', action='store_true',
                     help='place the drones ON THE FLOOR: overrides --elev so the '
                          'rod runs from the payload attach point out to a drone '
@@ -217,10 +258,12 @@ def main():
         elev = math.degrees(math.asin(max(-1.0, min(1.0, need))))
         print(f'ground start: elev overridden to {elev:.2f} deg '
               f'(drone z = {DRONE_GROUND_Z}, payload z = {a.payload_z})')
-    sdf = build(a.n, a.cable_len, elev, a.attach_radius, a.attach_z, a.payload_z)
+    sdf = build(a.n, a.cable_len, elev, a.attach_radius, a.attach_z, a.payload_z,
+                detachable=a.detachable)
     with open(a.out, 'w') as f:
         f.write(sdf)
-    print(f"wrote {a.out}: n={a.n} cable_len={a.cable_len} elev={a.elev}deg")
+    print(f"wrote {a.out}: n={a.n} cable_len={a.cable_len} elev={a.elev}deg "
+          f"detachable={a.detachable}")
 
 
 if __name__ == '__main__':
