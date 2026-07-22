@@ -84,11 +84,11 @@ def generate_ocp_controller(dynamics=None, generate=True, build=True):
 
     W = np.diag([
         80.0, 80.0, 40.0,
-        2.0, 2.0, 2.0,
+        2.0, 2.0, 2.0, # could increase velocity tracking weight
         0.2, 0.2, 0.2,
         2e-4, 2e-4, 2e-4, 2e-4,  # u_state: throttle (idx 11) tracks planner thrust ff
         0.1, 0.1, 5.0, 0.1,  # Reduced control effort penalty
-        0.5, 0.5, 5.0
+        0.5, 0.5, 5.0 # rate of change of throttle (could lower for more agile)
     ])
     W_e = np.diag([
         80.0, 80.0, 40.0,         # pos
@@ -108,7 +108,7 @@ def generate_ocp_controller(dynamics=None, generate=True, build=True):
     ocp.constraints.x0 = x0
 
     # -------- Parameters default (6 dyn + 3 a_cable + 4 q_ref) --------
-    ocp.parameter_values = np.array([38.0, 0.5, 0.07, 100.0, 100.0, 0.5,
+    ocp.parameter_values = np.array([38.0, 0.5, 0.07, 100.0, 100.0, 0.5, 
                                      0.0, 0.0, 0.0,            # a_cable default = 0
                                      1.0, 0.0, 0.0, 0.0])      # q_ref default = identity
 

@@ -65,28 +65,129 @@ Let's start by working on the state estimation method, take your time reading th
 DONE: Smoother takeoff from payload flag for resting or suspended to change model
 DONE: Create landing trajectory
 DONE: Make rviz better + landing button rviz
-DONE: Create hover, circle, back and forth trajectories
+DONE: Create hover, circle, back and forth trajectories, and spinny circle
+DONE: Attachment points not at centre.
 
-Cables more horizontal than vertical for attaching case/detaching fine just move along vector for payload
-Cone no fly zone around payload. Spreading out, should be able to handle 2-4 drones.
+TODO/DISCUSS: 
+2 - Cables more horizontal than vertical for attaching case/detaching fine just move along vector for payload
+    Cone no fly zone around payload. Spreading out, should be able to handle 2-4 drones.
 
-Attachment points not at centre.
-Detaching a drone in simulation using detachable joint
+3 - Detaching a drone in simulation using detachable joint
 
-Create spinning circle (vertical oscillation) traj + Quartonion issue with "yaw" - fix in ukf controller
+4 - Alg: Quartonion/Yaw issue (fix in ukf controller). Thrust ratio estimation in ukf as well
 
-Testing next week with two drones with those trajectories
-Testing two weeks time test trajectories for 3/4 drones
+5 - DONE: Send tejen relevant topics (drone positions, payload positions + velocities?)
+
+6 - Attaching reconfiguration method (need to modify mpc there may be jumps in desired position)
+
+Testing week 9 week with two drones with those trajectories, and test trajectories for 3/4 drones
+
+TODO: Weights changing too quickly between stages causing sharp change in takeoff switch
+TODO: Focus on deatching using maagnitsation with detachable joints and restabilization with dissipative method
+TODO: How agressively I can push detaching/check tudelft to try make more agile
+TODO: See how much tension magnet can handle ~10N
 
 Additional
-
-Estimate thrust ratio
 
 for three_ground: ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=3 cable_len:=0.5 start_taut:=false handover_elev_deg:=45.0 ff_gate_mode:=airborne handover_settle_s:=2.0 lift_ramp_vel:=0.2 payload_rest_z:=0.03 thrust_ratio:=40
 
 ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=2 start_taut:=false handover_elev_deg:=45 handover_settle_s:=2.0 ff_gate_mode:=taut payload_rest_z:=-0.1 load_traj:=hover
 
-
-
-for 2_ground
+for 2_ground:
 ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=2 start_taut:=false handover_elev_deg:=45 handover_settle_s:=2.0 ff_gate_mode:=taut payload_rest_z:=-0.1 load_traj:=hover
+
+ros2 launch controller_quad_load mpc_quad_load_launch.py start_taut:=false handover_elev_deg:=45 handover_settle_s:=2.0 ff_gate_mode:=taut payload_rest_z:=-0.1 load_traj:=hover num_drones:=2
+
+
+TOPICS FOR TEJEN:
+wesley@tuf:~/multi_drone_control$ ros2 topic list
+/clock
+/drone_0/arming_state_feedback
+/drone_0/motion_capture_state
+/drone_0/mpc_plan
+/drone_0/telemetry
+/drone_1/motion_capture_state
+/drone_1/mpc_plan
+/fleet/command
+/joint_states
+/model/lift_system/model/payload/pose
+/model/lift_system/model/x3_drone0/pose
+/model/lift_system/model/x3_drone1/pose
+/parameter_events
+/payload/actual_path
+/payload/marker
+/payload/marker_array
+/payload/motion_capture_state
+/payload/mpc_plan
+/robot_description_0
+/robot_description_1
+/rosout
+/tf
+/tf_static
+
+wesley@tuf:~/multi_drone_control$ ros2 topic info /drone_0/motion_capture_state 
+Type: interfaces/msg/MotionCaptureState
+Publisher count: 1
+Subscription count: 1
+ECHOED:
+header:
+  stamp:
+    sec: 71
+    nanosec: 61000000
+  frame_id: world
+child_frame_id: ''
+pose:
+  position:
+    x: 0.5774948337693379
+    y: 5.040642791045148e-16
+    z: 0.09999985467605588
+  orientation:
+    x: 6.661935602530561e-16
+    y: 1.1707094015045519e-07
+    z: 1.0320379763443337e-14
+    w: 0.9999999999999931
+twist:
+  linear:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  angular:
+    x: -9.40395480656655e-35
+    y: 1.9410476829718954e-48
+    z: -2.2018596606743216e-41
+---
+
+
+wesley@tuf:~/multi_drone_control$ ros2 topic info /payload/motion_capture_state 
+Type: interfaces/msg/MotionCaptureState
+Publisher count: 1
+Subscription count: 1
+ECHOED:
+header:
+  stamp:
+    sec: 191
+    nanosec: 679000000
+  frame_id: world
+child_frame_id: ''
+pose:
+  position:
+    x: 5.4798656773579365e-08
+    y: -2.9955912653330905e-12
+    z: 0.024999748418688492
+  orientation:
+    x: 8.270534246469344e-13
+    y: 1.4588634937139662e-09
+    z: 8.32589180819452e-11
+    w: 1.0
+twist:
+  linear:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  angular:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+---
+
+
