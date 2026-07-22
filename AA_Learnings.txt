@@ -82,10 +82,8 @@ TODO/DISCUSS:
 
 Testing week 9 week with two drones with those trajectories, and test trajectories for 3/4 drones
 
-TODO: Weights changing too quickly between stages causing sharp change in takeoff switch
 TODO: Focus on deatching using maagnitsation with detachable joints and restabilization with dissipative method
 TODO: How agressively I can push detaching/check tudelft to try make more agile
-TODO: See how much tension magnet can handle ~10N
 
 Additional
 
