@@ -26,7 +26,7 @@ from datetime import datetime
 from scipy.spatial.transform import Rotation as R
 import time
 from . import acados as _acados_mod
-from .acados import generate_ocp_controller, set_initial_guess, warm_start_from_previous_solution, set_trajectory_reference_aligned, set_planner_reference
+from .acados import generate_ocp_controller, set_initial_guess, warm_start_from_previous_solution, set_planner_reference
 
 
 # recompile the solver if acados.py/dynamics.py changed since the last build
@@ -46,7 +46,6 @@ def _solver_is_fresh():
     so_mtime = os.path.getmtime(_SOLVER_SO)
     return all(os.path.exists(s) and os.path.getmtime(s) <= so_mtime
                for s in _SOLVER_SRC)
-from .trajectories import circle_trajectory, hover_trajectory
 from utility_objects.visualization import TrajectoryVisualizer
 from utility_objects.data_logger import DataLogger
 from utility_objects.callback_manager_multi import CallbackManagerMulti
@@ -124,16 +123,6 @@ class Controller(Node):
         self.drone_id = self.get_parameter("drone_id").value
         self.offset_x, self.offset_y = DRONE_OFFSETS.get(self.drone_id, (0.0, 0.0))
 
-        # Reference source: 'internal' = own circle (default, unchanged);
-        # 'planner' = track /drone_{id}/reference_trajectory from controller_load_mpc.
-        self.declare_parameter("reference_source", "internal")
-        self.reference_source = self.get_parameter("reference_source").value
-
-        # 'circle' = fly a wide circle, 'hover' = go straight up and hold (the
-        # cable test - climb till the cable goes taut and the load lifts with it)
-        self.declare_parameter("trajectory", "circle")
-        self.trajectory_type = self.get_parameter("trajectory").value
-
         # A/B toggles for the two cable feedforward bits, to see which one
         # upsets the attitude loop:
         #   cable_ff_scale=0.0  ignore a_cable in the model
@@ -187,27 +176,19 @@ class Controller(Node):
         while self.current_pose is None and rclpy.ok():
             rclpy.spin_once(self, timeout_sec=0.1)
         self.get_logger().info(f"[Drone {self.drone_id}] Pose received.")
-        init_pose = self.current_pose
-
-        # each drone offsets the shared trajectory so they fly in formation
-        self.traj, trajectory_name = self._build_offset_trajectory(DT, init_pose)
-
         # ── Visualizer ────────────────────────────────────────────────────
         # prefix the viz topics per drone (/drone_N/mpc_plan etc) so RViz can
         # show each drone's plan on its own display instead of N drones fighting
-        # over one global /mpc_plan.
+        # over one global /mpc_plan. Publishes the live MPC horizon + actual path
+        # during flight (see control_loop); the reference is streamed by the planner.
         self.trajectory_visualizer = TrajectoryVisualizer(
             self, frame_id="map", prefix=f"drone_{self.drone_id}")
-        self.trajectory_visualizer.publish_all_visualizations(
-            self.traj, pose_subsample=15, show_velocity=False,
-            velocity_scale=0.3, color_by_time=True)
 
         # ── State ─────────────────────────────────────────────────────────
         self.armed = False
         self.takeoff_requested = False
         self.shutdown_requested = False
         self.step_counter = 0
-        self.steps = self.traj.shape[1] - 1
 
         # fleet manager broadcasts the master step index, just follow it
         self.fleet_step_sub = self.create_subscription(
@@ -216,15 +197,14 @@ class Controller(Node):
             self._fleet_step_callback,
             1)  # depth=1: always use the latest, never queue stale steps
 
-        # ── Planner reference subscription (planner mode only) ────────────
-        if self.reference_source == "planner":
-            self.create_subscription(
-                Float64MultiArray,
-                f'/drone_{self.drone_id}/reference_trajectory',
-                self._planner_ref_callback,
-                1)
-            self.get_logger().info(
-                f"[Drone {self.drone_id}] Tracking external planner reference.")
+        # ── Planner reference subscription ────────────────────────────────
+        self.create_subscription(
+            Float64MultiArray,
+            f'/drone_{self.drone_id}/reference_trajectory',
+            self._planner_ref_callback,
+            1)
+        self.get_logger().info(
+            f"[Drone {self.drone_id}] Tracking external planner reference.")
 
         # ── IMU subscription (measured specific force -> cable force) ──────
         self.create_subscription(
@@ -294,7 +274,8 @@ class Controller(Node):
         if self._log_payload:
             log_headers += ['payload_x', 'payload_y', 'payload_z',
                             'payload_ref_x', 'payload_ref_y', 'payload_ref_z']
-        self.data_logger = DataLogger(LOGGING_NAME, trajectory_name, log_headers)
+        self.data_logger = DataLogger(
+            LOGGING_NAME, f"planner_drone{self.drone_id}", log_headers)
 
         self.observed_state_history = []
         self.control_history = []
@@ -304,26 +285,7 @@ class Controller(Node):
         self.timer = self.create_timer(DT, self.control_loop)
         self.get_logger().info(
             f"[Drone {self.drone_id}] Controller ready. "
-            f"Offset=({self.offset_x}, {self.offset_y}). "
-            f"Traj length={self.steps} steps.")
-
-    # ─────────────────────────────────────────────────────────────────────
-    # Trajectory helpers
-    # ─────────────────────────────────────────────────────────────────────
-
-    def _build_offset_trajectory(self, dt, init_pose):
-        """Generate this drone's internal trajectory from its spawn pose.
-
-        'hover' lifts straight up over the spawn point and holds (cable-carry
-        test); 'circle' flies a wide circle (free-flight default).
-        """
-        if self.trajectory_type == "hover":
-            traj, name = hover_trajectory(dt, init_pose=init_pose)
-        else:
-            traj, name = circle_trajectory(dt, init_pose=init_pose,
-                                           center_offset_x=self.offset_x,
-                                           center_offset_y=self.offset_y)
-        return traj, f"{name}_drone{self.drone_id}"
+            f"Offset=({self.offset_x}, {self.offset_y}).")
 
     # ─────────────────────────────────────────────────────────────────────
     # Fleet step callback
@@ -456,78 +418,62 @@ class Controller(Node):
             # plant). No-op during takeoff/resting and when disabled (c=0).
             self.est_params[0] = self._scheduled_kT()
 
-            # ── Set MPC reference ─────────────────────────────────────────
-            if self.reference_source == "planner":
-                # External planner: track the streamed receding-horizon
-                # reference (no fixed trajectory length / landing phase).
-                if self.planner_ref_pos is None:
-                    # No reference streamed yet - hold armed-idle on the ground.
-                    self.cb.cmd_publisher_.publish(ELRSCommand(
-                        armed=True, channel_0=0.0, channel_1=0.0,
-                        channel_2=-1.0, channel_3=0.0))
-                    return
-                # Diagnostic toggles: scale/zero the cable model term, and/or
-                # replace the tilt attitude FF with a level one (vertical accel of
-                # the same magnitude -> identity tilt quat, throttle FF preserved).
-                ref_acc = self.planner_ref_acc
-                if not self.attitude_ff and ref_acc is not None:
-                    ref_acc = np.stack([[0.0, 0.0, float(np.linalg.norm(a))]
-                                        for a in self.planner_ref_acc])
-                ref_cable = self.planner_ref_cable
-                if ref_cable is not None and self.cable_ff_scale != 1.0:
-                    ref_cable = ref_cable * self.cable_ff_scale
-                # Part 2c: optionally replace the open-loop model cable term with
-                # the IMU-measured f_ext, held constant across the horizon. Falls
-                # back to the model until a valid measurement is available.
-                if self.cable_source == "measured":
-                    ac_meas = self.measured_cable_accel()
-                    if ac_meas is not None:
-                        # Seed the slew from the model value on the first measured
-                        # cycle so the model->measured switch ramps in gently
-                        # instead of stepping (e.g. 3.08 -> 1.5) in one tick.
-                        if self._applied_cable_vec is None:
-                            self._applied_cable_vec = (
-                                ref_cable[0].copy() if ref_cable is not None
-                                else np.zeros(3))
-                        ac_cond = self._condition_measured_cable(ac_meas)
-                        rows = (self.planner_ref_pos.shape[0]
-                                if self.planner_ref_pos is not None else self.N + 1)
-                        ref_cable = np.tile(ac_cond, (rows, 1)) * self.cable_ff_scale
-                # payload resting on the ground -> the cable carries ~no tension,
-                # so zero the cable term. a_cable=0 in the same model IS the
-                # resting (free-flight) dynamics, so no separate solver is needed;
-                # it switches back on by itself once the load lifts off.
-                if self.payload_resting and ref_cable is not None:
-                    #self.get_logger().info("PAYLOAD RESTING")
-                    ref_cable = np.zeros_like(ref_cable)
-                #else:
-                    #self.get_logger().info("PAYLOAD LIFTED")
-                # Remember what the model actually received, so the diag |aC|
-                # reflects the applied value under either cable_source.
-                self._applied_cable0 = (float(np.linalg.norm(ref_cable[0]))
-                                        if ref_cable is not None else 0.0)
-                set_planner_reference(
-                    self.ocp, self.planner_ref_pos, self.planner_ref_vel,
-                    ref_acc, self.N, self.est_params,
-                    ref_cable=ref_cable)
-                # desired reference position now (node 0) for the log / plot
-                self._current_ref_pos = np.asarray(self.planner_ref_pos[0], float)
-            else:
-                # Internal circle: land + shutdown at end of trajectory.
-                if self.step_counter + self.N * self.skip_steps > self.steps:
-                    self.get_logger().info(
-                        f"[Drone {self.drone_id}] Trajectory complete - disarming.")
-                    msg = ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0,
-                                      channel_2=-1.0, channel_3=0.0)
-                    self.cb.disarm(msg)
-                    self.cb.request_shutdown()
-                    return
-                set_trajectory_reference_aligned(
-                    self.ocp, self.traj, self.N,
-                    self.step_counter, self.skip_steps, self.est_params)
-                # desired reference position now (aligned node 0) for the log / plot
-                idx = min(self.step_counter, self.traj.shape[1] - 1)
-                self._current_ref_pos = np.asarray(self.traj[0:3, idx], float)
+            # ── Set MPC reference (external planner) ──────────────────────
+            # Track the streamed receding-horizon reference. There is no fixed
+            # trajectory length / landing phase here: the fleet manager arms and
+            # lands the fleet and the planner drives the timeline.
+            if self.planner_ref_pos is None:
+                # No reference streamed yet - hold armed-idle on the ground.
+                self.cb.cmd_publisher_.publish(ELRSCommand(
+                    armed=True, channel_0=0.0, channel_1=0.0,
+                    channel_2=-1.0, channel_3=0.0))
+                return
+            # Diagnostic toggles: scale/zero the cable model term, and/or
+            # replace the tilt attitude FF with a level one (vertical accel of
+            # the same magnitude -> identity tilt quat, throttle FF preserved).
+            ref_acc = self.planner_ref_acc
+            if not self.attitude_ff and ref_acc is not None:
+                ref_acc = np.stack([[0.0, 0.0, float(np.linalg.norm(a))]
+                                    for a in self.planner_ref_acc])
+            ref_cable = self.planner_ref_cable
+            if ref_cable is not None and self.cable_ff_scale != 1.0:
+                ref_cable = ref_cable * self.cable_ff_scale
+            # Part 2c: optionally replace the open-loop model cable term with
+            # the IMU-measured f_ext, held constant across the horizon. Falls
+            # back to the model until a valid measurement is available.
+            if self.cable_source == "measured":
+                ac_meas = self.measured_cable_accel()
+                if ac_meas is not None:
+                    # Seed the slew from the model value on the first measured
+                    # cycle so the model->measured switch ramps in gently
+                    # instead of stepping (e.g. 3.08 -> 1.5) in one tick.
+                    if self._applied_cable_vec is None:
+                        self._applied_cable_vec = (
+                            ref_cable[0].copy() if ref_cable is not None
+                            else np.zeros(3))
+                    ac_cond = self._condition_measured_cable(ac_meas)
+                    rows = (self.planner_ref_pos.shape[0]
+                            if self.planner_ref_pos is not None else self.N + 1)
+                    ref_cable = np.tile(ac_cond, (rows, 1)) * self.cable_ff_scale
+            # payload resting on the ground -> the cable carries ~no tension,
+            # so zero the cable term. a_cable=0 in the same model IS the
+            # resting (free-flight) dynamics, so no separate solver is needed;
+            # it switches back on by itself once the load lifts off.
+            if self.payload_resting and ref_cable is not None:
+                #self.get_logger().info("PAYLOAD RESTING")
+                ref_cable = np.zeros_like(ref_cable)
+            #else:
+                #self.get_logger().info("PAYLOAD LIFTED")
+            # Remember what the model actually received, so the diag |aC|
+            # reflects the applied value under either cable_source.
+            self._applied_cable0 = (float(np.linalg.norm(ref_cable[0]))
+                                    if ref_cable is not None else 0.0)
+            set_planner_reference(
+                self.ocp, self.planner_ref_pos, self.planner_ref_vel,
+                ref_acc, self.N, self.est_params,
+                ref_cable=ref_cable)
+            # desired reference position now (node 0) for the log / plot
+            self._current_ref_pos = np.asarray(self.planner_ref_pos[0], float)
 
             estimated_state = copy.deepcopy(self.current_pose[:13])
 
@@ -593,7 +539,7 @@ class Controller(Node):
 
             # ~2 Hz planner diagnostic. ez = z error, thr = throttle (0.6=sat),
             # |aT| = thrust-ff accel (>9.81), |aC| = cable accel (0 = gate shut)
-            if self.reference_source == "planner" and self.takeoff_requested:
+            if self.takeoff_requested:
                 self._diag_ctr = getattr(self, "_diag_ctr", 0) + 1
                 if self._diag_ctr % 15 == 0:
                     zc = float(self.current_pose[2])
