@@ -117,11 +117,18 @@ class DissipativeNetwork:
         load_vel = np.asarray(load_vel, float)
         p_des = np.asarray(p_des_load, float)
         R = quat_to_rot_np(load_quat)
-        # world-frame attach points and formation anchors this tick
-        attach = [load_pos + R @ self.rho[i] for i in range(self.n)]
-        # anchors: desired-load position + cable_len along the (yaw-rotated) nominal
-        # cable direction reversed (drone sits up-and-outward from the attach point).
-        anchor = [p_des + R @ (-self.cable_len * self._nom_dir[i]) for i in range(self.n)]
+        # DESIRED-frame geometry. Both the cable-length spring and the station anchor
+        # ride on the desired load pose, not the measured (grounded) one -- otherwise
+        # the cable spring pins the node to a sphere around the grounded load while the
+        # anchor climbs, dragging the node to the TOP of that sphere (cable direction
+        # goes vertical) so the drones cluster in over the load. In the desired frame
+        # the node settles up-and-outward at the design elevation and the formation
+        # simply translates up as the lift target rises. Measured load feeds back only
+        # through the velocity damping below (and physically through the rigid rod).
+        attach = [p_des + R @ self.rho[i] for i in range(self.n)]
+        # anchors: desired attach point + cable_len up-and-outward (−nominal dir).
+        anchor = [p_des + R @ (self.rho[i] - self.cable_len * self._nom_dir[i])
+                  for i in range(self.n)]
 
         h = dt / max(self.p.substeps, 1)
         for _ in range(max(self.p.substeps, 1)):
@@ -152,34 +159,45 @@ class DissipativeNetwork:
                 self.q[i] += h * self.qd[i]
 
     # ── reference extraction ────────────────────────────────────────────────
-    def reference(self, i, load_pos, load_quat, taut_gate=1.0):
+    def reference(self, i, load_pos, load_quat, p_des_load, taut_gate=1.0):
         """Per-drone reference derived from node i, as (p_ref, v_ref, a_ff, a_cable),
         each a length-3 numpy array -- the tuple _publish_ref expects.
 
-        p_ref is the node projected onto the taut sphere of the MEASURED payload, so it
-        is always a valid taut config. a_cable is the analytic hover tension shared over
-        the currently-attached drones (rises as drones detach), gated to 0 while the
-        cable is slack (taut_gate)."""
-        load_pos = np.asarray(load_pos, float)
+        The cable DIRECTION u comes from the network node relative to the MEASURED
+        attach point (formation shaping + dissipation), but the reference is BASED at
+        the DESIRED load attach point (p_des_load). Anchoring p_ref to the measured
+        (grounded) load could never command a lift -- the drone would just slide around
+        a fixed sphere while the load stays put. Basing it on the desired load makes the
+        rising lift target actually raise the drone target; the rigid rod then drags the
+        load up. At hover p_des == measured, so hold/detach behaviour is unchanged.
+        a_cable is the analytic hover tension shared over the currently-attached drones
+        (rises as drones detach), gated to 0 while the cable is slack (taut_gate)."""
+        p_des_load = np.asarray(p_des_load, float)
         R = quat_to_rot_np(load_quat)
-        attach = load_pos + R @ self.rho[i]
-        dvec = self.q[i] - attach
+        # DESIRED-frame direction + base (consistent with step()): u points up-and-out
+        # at the design elevation, so the drone is commanded up-and-outward from the
+        # desired load -- never straight up over it. -u (down-and-in) is the cable pull
+        # the tracker feeds forward, which tilts the drone OUTWARD to hold it.
+        attach_des = p_des_load + R @ self.rho[i]
+        dvec = self.q[i] - attach_des
         dist = float(np.linalg.norm(dvec))
         u = dvec / dist if dist > 1e-9 else np.array([0.0, 0.0, 1.0])
-        p_ref = attach + self.cable_len * u
+        p_ref = attach_des + self.cable_len * u
         v_ref = self.qd[i].copy()
-        # level-hover specific-thrust feedforward (magnitude sets throttle, direction
-        # sets attitude); the tension term below tilts it outward.
-        a_ff = np.array([0.0, 0.0, self.g])
         # analytic per-drone tension shared over the attached set: t = m_load g /
-        # (n' sin phi). sin phi from the cable's measured elevation (u points from
-        # attach up to the drone, so u_z is sin phi).
+        # (n' sin phi). sin phi from the cable elevation (u points from attach up to
+        # the drone, so u_z is sin phi).
         n_att = max(self.n_attached(), 1)
         sin_phi = float(np.clip(u[2], 0.05, 1.0))
         t_i = self.load_mass * self.g / (n_att * sin_phi)
         # a_cable = t*s/m: the cable pulls the drone toward the attach point (inward
         # and down), i.e. along -u. Gated by tautness.
         a_cable = taut_gate * (t_i / self.drone_mass) * (-u)
+        # LOADED-hover specific-thrust feedforward: counter gravity AND the cable pull,
+        # so the throttle+attitude FF is the equilibrium (up-and-out, magnitude > g).
+        # A bare [0,0,g] FF only supports the drone's own weight -- the whole load share
+        # then has to come from the tracker's feedback, which lifts weakly and laggily.
+        a_ff = np.array([0.0, 0.0, self.g]) - a_cable
         return p_ref, v_ref, a_ff, a_cable
 
     def fly_away_reference(self, i, clearance=0.6):
@@ -234,7 +252,7 @@ def _self_test():
         attach = load_pos + R @ rho[i]
         d = float(np.linalg.norm(net.q[i] - attach))
         dists.append(d)
-        _, _, _, ac = net.reference(i, load_pos, load_quat)
+        _, _, _, ac = net.reference(i, load_pos, load_quat, p_des)
         tens.append(float(np.linalg.norm(ac)) * drone_mass)
     dists = np.array(dists); tens = np.array(tens)
     assert np.all(np.abs(dists - cable_len) < 0.05), \
@@ -246,6 +264,27 @@ def _self_test():
     print(f"[self-test] n=4 settle OK: dists={np.round(dists,3)} "
           f"tension/drone={np.round(tens,3)} N (expect ~{exp4:.2f})")
 
+    # LIFT: with the desired load raised and the network re-settled, the drone
+    # reference must rise ~1:1 AND stay up-and-outward (~45deg), not collapse
+    # vertically over the load. Bug 1 was p_ref anchored to the MEASURED grounded
+    # load (lift target never reached the drones); bug 2 was the cable direction
+    # migrating vertical (drones commanded straight up -> tilting inward).
+    p_hold, _, _, _ = net.reference(0, load_pos, load_quat, load_pos)   # settled @0.6
+    net_hi = DissipativeNetwork(n, rho, cable_len, drone_mass, load_mass, g)
+    hi = load_pos + np.array([0.0, 0.0, 0.3])
+    net_hi.seed([hi - cable_len * nom[i] for i in range(n)])
+    for _ in range(200):
+        net_hi.step(load_pos, load_quat, load_vel, hi, dt)
+    p_lift, _, _, _ = net_hi.reference(0, load_pos, load_quat, hi)
+    u_lift = (p_lift - (hi + net_hi.rho[0])) / cable_len
+    elev = np.degrees(np.arcsin(np.clip(u_lift[2], -1.0, 1.0)))
+    assert p_lift[2] - p_hold[2] > 0.25, \
+        f"reference did not track the lift target: {p_hold[2]:.3f} -> {p_lift[2]:.3f}"
+    assert 30.0 < elev < 60.0, \
+        f"cable not ~45deg up-and-out (inward collapse?): elev={elev:.0f}deg"
+    print(f"[self-test] lift tracking OK: p_des +0.3 m -> p_ref z "
+          f"{p_hold[2]:.3f} -> {p_lift[2]:.3f}, cable elev {elev:.0f}deg")
+
     # analytic redistribution: detach one, tension per remaining drone must rise 4->3.
     t4 = tens.mean()
     net.detach(2)
@@ -255,7 +294,7 @@ def _self_test():
     for i in range(n):
         if not net.attached[i]:
             continue
-        _, _, _, ac = net.reference(i, load_pos, load_quat)
+        _, _, _, ac = net.reference(i, load_pos, load_quat, p_des)
         tens3.append(float(np.linalg.norm(ac)) * drone_mass)
     tens3 = np.array(tens3)
     assert np.all(np.isfinite(net.q)), "network diverged after detach"

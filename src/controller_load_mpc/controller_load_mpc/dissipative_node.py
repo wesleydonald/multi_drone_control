@@ -82,6 +82,12 @@ class DissipativeController(Node):
             node_mass=float(p('diss_node_mass', 0.5).value),
             substeps=int(p('diss_substeps', 10).value),
             elev_deg=float(p('diss_elev_deg', 45.0).value))
+        # Pace the lift reference to the MEASURED load: the desired height leads the
+        # actual lift by at most this, so the reference stays within rod reach and
+        # cannot run away from the lagging load and destabilise (the open-loop ramp
+        # otherwise outruns the load, over-stretches the config, and it flips). Raise
+        # for a faster but harder pull.
+        self.lift_lead = float(p('lift_lead', 0.10).value)
 
         self.rho = attach_points(self.n, self.attach_radius, self.attach_z)
         self.net = DissipativeNetwork(
@@ -296,7 +302,7 @@ class DissipativeController(Node):
         self.net.step(load_pos, load_quat, load_vel, p_des, 1.0 / PLANNER_HZ)
 
         ff = float(np.clip(self._ff_t / FF_EASE_S, 0.0, 1.0))
-        self._publish_all_refs(load_pos, load_quat, ff)
+        self._publish_all_refs(load_pos, load_quat, p_des, ff)
         self._diag(load_pos, load_quat, ff)
 
     def _advance_lift(self):
@@ -316,8 +322,14 @@ class DissipativeController(Node):
                 self.landed_pub.publish(Bool(data=True))
         else:
             total = self.target_z - self.lift_z0
+            # Pace the ramp to the MEASURED load: lead the actual lift by at most
+            # lift_lead so the reference stays within rod reach and can't run away from
+            # the lagging load (which over-stretches the config and flips it). As the
+            # load rises the cap rises with it.
+            measured = float(self.load_state[2]) - self.lift_z0
+            cap = min(total, measured + self.lift_lead)
             self.lift_progress = min(
-                total, self.lift_progress + self.lift_ramp_vel / PLANNER_HZ)
+                cap, self.lift_progress + self.lift_ramp_vel / PLANNER_HZ)
             lift_done = self.lift_progress >= total - 1e-6
             if self.load_traj != 'hover' and lift_done:
                 self.traj_t += 1.0 / PLANNER_HZ
@@ -326,7 +338,7 @@ class DissipativeController(Node):
                     self.get_logger().info(
                         '[dissipative] trajectory complete - descending')
 
-    def _publish_all_refs(self, load_pos, load_quat, ff):
+    def _publish_all_refs(self, load_pos, load_quat, p_des, ff):
         for i in range(self.n):
             drone = self.slot2drone[i]
             if self.detached[drone]:
@@ -336,7 +348,7 @@ class DissipativeController(Node):
                 continue
             gate = self._cable_taut_gate(i) * ff
             p_ref, v_ref, a_ff, a_cable = self.net.reference(
-                i, load_pos, load_quat, taut_gate=gate)
+                i, load_pos, load_quat, p_des, taut_gate=gate)
             # constant-velocity horizon extrapolation of the node reference, matching
             # how the creep refs are shaped (the tracker tracks a receding horizon).
             nodes = [(p_ref + v_ref * self.dt * k, v_ref, a_ff, a_cable)
