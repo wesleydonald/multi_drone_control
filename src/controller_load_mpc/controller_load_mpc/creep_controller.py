@@ -26,7 +26,10 @@ TAUT_SWITCH_GATE = 0.95        # hand over once every cable is at least this tau
 # behind it, so demanding the exact target means handover never fires. Latching a
 # few degrees low is cheap since tension comes from the measured geometry
 # (40 deg needs 2.03 N/drone vs 1.85 N at 45).
-HANDOVER_ELEV_TOL  = 5.0       # deg the measurement may lag
+HANDOVER_ELEV_TOL  = 8.0       # deg the measurement may lag. The drones track ~6 deg
+                               # behind the swept reference, so a 5 deg tol never latched
+                               # on the settle path -- it burned the full timeout every
+                               # takeoff. 8 deg latches promptly once the sweep completes.
 HANDOVER_SETTLE_S  = 1.0       # s within tolerance before latching
 HANDOVER_TIMEOUT_S = 3.0       # s after the sweep ends, latch regardless (the OCP
                                # is primed warm through creep, so a shallower-than-
