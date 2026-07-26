@@ -88,13 +88,13 @@ def _args():
         # ground don't land in the same cycle. 1.0 lets the coupled taut-air-start
         # solver converge on the taut hover before the climb ramp begins (smoother
         # takeoff); 0 = off.
-        DeclareLaunchArgument('handover_settle_s', default_value='2.0'),
+        DeclareLaunchArgument('handover_settle_s', default_value='0.75'),
         # payload mass in the world SDF.
         DeclareLaunchArgument('load_mass', default_value='0.4'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         # HOLD test: lift_ramp_vel:=0.0 (no lift, just hold the taut config).
-        # 0.12 is the gentle taut-air-start climb rate (smoother than 0.20).
-        DeclareLaunchArgument('lift_ramp_vel', default_value='0.12'),
+        # 0.22 is a brisk-but-trackable climb rate; drop toward 0.12 for a gentler lift.
+        DeclareLaunchArgument('lift_ramp_vel', default_value='0.22'),
         # LAND descent rate (separate from the slow takeoff lift_ramp_vel).
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         # Cable compensation. ON is the correct flight config: the cable pulls
