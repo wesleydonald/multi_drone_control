@@ -1,12 +1,13 @@
 #include "drone_visualisation/arm_panel.hpp"
 #include <pluginlib/class_list_macros.hpp>
 #include <rviz_common/display_context.hpp>
+#include <QHBoxLayout>
 
 namespace drone_visualisation
 {
 
 ArmPanel::ArmPanel(QWidget* parent)
-: rviz_common::Panel(parent), is_armed_(false), battery_voltage_(0.0f), status_message_("Waiting for controller...")
+: rviz_common::Panel(parent), is_armed_(false), show_detach_(true), battery_voltage_(0.0f), status_message_("Waiting for controller...")
 {
   auto layout = new QVBoxLayout;
   
@@ -46,16 +47,37 @@ ArmPanel::ArmPanel(QWidget* parent)
   land_button_->setFixedHeight(80);
   layout->addWidget(land_button_);
 
+  // DETACH row: pick a drone id and release it mid-flight. Publishes the physical
+  // drone id to /fleet/detach, which the dissipative controller hands to the
+  // spring-damper network (the remaining fleet re-settles with the load suspended).
+  detach_row_ = new QWidget;
+  auto detach_layout = new QHBoxLayout(detach_row_);
+  detach_layout->setContentsMargins(0, 0, 0, 0);
+  auto detach_label = new QLabel("drone");
+  detach_id_spin_ = new QSpinBox;
+  detach_id_spin_->setRange(0, 9);
+  detach_id_spin_->setValue(1);
+  detach_id_spin_->setFixedHeight(80);
+  detach_button_ = new QPushButton("DETACH");
+  detach_button_->setStyleSheet("background-color: #cc5de8; color: white; font-weight: bold;");
+  detach_button_->setEnabled(false);  // only meaningful once flying
+  detach_button_->setFixedHeight(80);
+  detach_layout->addWidget(detach_label);
+  detach_layout->addWidget(detach_id_spin_);
+  detach_layout->addWidget(detach_button_, 1);
+  layout->addWidget(detach_row_);
+
   setLayout(layout);
 
   // Create spacebar shortcut for DISARM
   space_shortcut_ = new QShortcut(QKeySequence(Qt::Key_Space), this);
   space_shortcut_->setContext(Qt::ApplicationShortcut);
-  
+
   connect(space_shortcut_, &QShortcut::activated, this, &ArmPanel::onSpacePressed);
   connect(arm_button_, &QPushButton::clicked, this, &ArmPanel::onButtonPressed);
   connect(takeoff_button_, &QPushButton::clicked, this, &ArmPanel::onTakeoffPressed);
   connect(land_button_, &QPushButton::clicked, this, &ArmPanel::onLandPressed);
+  connect(detach_button_, &QPushButton::clicked, this, &ArmPanel::onDetachPressed);
 }
 
 void ArmPanel::onInitialize()
@@ -67,6 +89,8 @@ void ArmPanel::onInitialize()
   // same path as `ros2 topic pub /fleet/command ...`. (The old per-drone
   // `drone_arming_service` doesn't exist in the multi-drone stack.)
   command_pub_ = node_->create_publisher<std_msgs::msg::String>("/fleet/command", 10);
+  // DETACH goes to the dissipative controller (physical drone id).
+  detach_pub_ = node_->create_publisher<std_msgs::msg::Int32>("/fleet/detach", 10);
 
   // Reflect the fleet armed state from drone 0's feedback (drones arm together).
   arming_state_sub_ = node_->create_subscription<std_msgs::msg::Bool>(
@@ -119,6 +143,54 @@ void ArmPanel::onLandPressed()
   }
 }
 
+void ArmPanel::onDetachPressed()
+{
+  if (!is_armed_) {
+    RCLCPP_WARN(node_->get_logger(), "Cannot detach - fleet is not armed/flying");
+    return;
+  }
+  if (!detach_pub_ || detach_pub_->get_subscription_count() == 0) {
+    status_message_ = "No /fleet/detach subscriber (dissipative not running)";
+    updateStatusLabel();
+    RCLCPP_WARN(node_->get_logger(),
+                "No subscriber on /fleet/detach — the dissipative controller may not be running");
+    return;
+  }
+  std_msgs::msg::Int32 msg;
+  msg.data = detach_id_spin_->value();
+  detach_pub_->publish(msg);
+  status_message_ = "Detached drone " + std::to_string(msg.data);
+  updateStatusLabel();
+  RCLCPP_INFO(node_->get_logger(), "DETACH command sent for drone %d", msg.data);
+  // advance to the next drone id for a quick 4->3->2 sequence.
+  if (detach_id_spin_->value() < detach_id_spin_->maximum()) {
+    detach_id_spin_->setValue(detach_id_spin_->value() + 1);
+  }
+}
+
+void ArmPanel::applyShowDetach()
+{
+  if (detach_row_) {
+    detach_row_->setVisible(show_detach_);
+  }
+}
+
+void ArmPanel::load(const rviz_common::Config& config)
+{
+  rviz_common::Panel::load(config);
+  bool show = true;
+  if (config.mapGetBool("ShowDetach", &show)) {
+    show_detach_ = show;
+  }
+  applyShowDetach();
+}
+
+void ArmPanel::save(rviz_common::Config config) const
+{
+  rviz_common::Panel::save(config);
+  config.mapSetValue("ShowDetach", show_detach_);
+}
+
 void ArmPanel::callArmingService(bool arm)
 {
   // FLEET COMMAND: publish ARM/DISARM to /fleet/command (the fleet manager arms
@@ -147,11 +219,13 @@ void ArmPanel::updateButtonState()
     arm_button_->setStyleSheet("background-color: #ff6b6b; color: white; font-weight: bold;");
     takeoff_button_->setEnabled(true);
     land_button_->setEnabled(true);
+    detach_button_->setEnabled(true);
   } else {
     arm_button_->setText("ARM");
     arm_button_->setStyleSheet("background-color: #51cf66; color: white; font-weight: bold;");
     takeoff_button_->setEnabled(false);
     land_button_->setEnabled(false);
+    detach_button_->setEnabled(false);
   }
   updateStatusLabel();
 }

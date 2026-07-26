@@ -73,12 +73,18 @@ def taut_gate(plant, i):
     return float(np.clip((dist - lo) / max(hi - lo, 1e-6), 0.0, 1.0))
 
 
-def run_closed_loop(detach_slot=None, detach_t=None, sim_t=16.0):
+def run_closed_loop(detach_slot=None, detach_t=None, sim_t=16.0, detaches=None,
+                    params=None):
     """Drive the network + plant closed loop through lift -> hold (-> detach). Returns a
-    history dict logged at each control tick."""
+    history dict logged at each control tick. `detaches` is a list of (slot, t) events
+    (supersedes the single detach_slot/detach_t); `params` overrides the network tuning
+    (used to compare detach-smoothing off vs on)."""
+    if detaches is None:
+        detaches = ([(detach_slot, detach_t)]
+                    if detach_slot is not None and detach_t is not None else [])
     rho = attach_points(N, ATTACH_RADIUS, ATTACH_Z)
     net = DissipativeNetwork(N, rho, CABLE_LEN, DRONE_MASS, LOAD_MASS, G,
-                             DissipativeParams())
+                             params or DissipativeParams())
     plant = MiniPlant(N, rho, CABLE_LEN, DRONE_MASS, LOAD_MASS, G, GROUND_Z)
 
     # initial config: AIRBORNE taut handover -- load lifted, drones on the ~45 deg cone.
@@ -100,10 +106,10 @@ def run_closed_loop(detach_slot=None, detach_t=None, sim_t=16.0):
     n_ticks = int(sim_t / CTRL_DT)
     for tick in range(n_ticks):
         t = tick * CTRL_DT
-        if detach_slot is not None and detach_t is not None and t >= detach_t \
-                and attached[detach_slot]:
-            net.detach(detach_slot)
-            attached[detach_slot] = False
+        for slot, dt_ev in detaches:
+            if t >= dt_ev and attached[slot]:
+                net.detach(slot)
+                attached[slot] = False
 
         ramp_z = lift_z0 + LIFT_VEL * max(t - SETTLE_S, 0.0)
         p_des = lift_target(plant.xL, hover_xy, TARGET_Z, ramp_z)
@@ -142,6 +148,20 @@ def run_closed_loop(detach_slot=None, detach_t=None, sim_t=16.0):
     for k in hist:
         hist[k] = np.array(hist[k], dtype=float)
     return hist
+
+
+def transient_after(hist, t0, window=4.0):
+    """Post-detach transient in [t0, t0+window]: the worst survivor tracking-error spike
+    (|p_ref - drone|) and the deepest load-height dip below the pre-detach height. Lower
+    is more robust -- the numbers the detach-smoothing is meant to shrink."""
+    t = hist['t']
+    idx_pre = int(np.argmax(t >= t0 - 0.11)) if np.any(t >= t0 - 0.11) else 0
+    pre_z = float(hist['load_z'][idx_pre])
+    m = (t >= t0) & (t <= t0 + window)
+    perr = hist['perr'][m]
+    peak_perr = float(np.nanmax(perr)) if perr.size and np.any(np.isfinite(perr)) else 0.0
+    dip = float(pre_z - np.min(hist['load_z'][m])) if np.any(m) else 0.0
+    return peak_perr, dip
 
 
 def check(lift, detach):
@@ -265,6 +285,24 @@ def main(args=None):
     lift = run_closed_loop(sim_t=16.0)
     detach = run_closed_loop(detach_slot=1, detach_t=11.0, sim_t=16.0)
     all_ok, results = check(lift, detach)
+
+    # E: the phased-slot azimuth pinning reduces the detach transient. Run the harder
+    # 4->3->2 sequence twice -- slot spring OFF (k_slot=0, the free-rotation degeneracy) vs
+    # ON (default) -- and compare the transient after the 3->2 detach (where the real run
+    # limit-cycled). ON must lower BOTH the peak tracking error and the load dip.
+    evs = [(1, 6.0), (2, 11.0)]
+    off = run_closed_loop(detaches=evs, sim_t=18.0,
+                          params=DissipativeParams(k_slot=0.0))
+    on = run_closed_loop(detaches=evs, sim_t=18.0, params=DissipativeParams())
+    off_perr, off_dip = transient_after(off, 11.0)
+    on_perr, on_dip = transient_after(on, 11.0)
+    e_ok = bool(on_perr < off_perr and on_dip <= off_dip + 1e-3
+                and np.all(np.isfinite(on['load_z'])))
+    results.append(('E azimuth-pin robustness', e_ok,
+                    f'3->2 peak track err {off_perr:.3f} -> {on_perr:.3f} m '
+                    f'({100*(off_perr-on_perr)/max(off_perr,1e-6):.0f}% lower), '
+                    f'load dip {off_dip:.3f} -> {on_dip:.3f} m'))
+    all_ok = all_ok and e_ok
 
     print('\n=== dissipative controller CLOSED-LOOP verification ===')
     for name, ok, detail in results:

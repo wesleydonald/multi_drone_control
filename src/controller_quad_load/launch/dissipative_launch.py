@@ -69,9 +69,12 @@ def _args():
         DeclareLaunchArgument('diss_k_anchor', default_value='40.0'),
         DeclareLaunchArgument('diss_c', default_value='6.0'),
         DeclareLaunchArgument('diss_k_ring', default_value='20.0'),
+        DeclareLaunchArgument('diss_k_slot', default_value='18.0'),
         DeclareLaunchArgument('diss_node_mass', default_value='0.5'),
         DeclareLaunchArgument('diss_substeps', default_value='10'),
         DeclareLaunchArgument('diss_elev_deg', default_value='45.0'),
+        # floor the network descends the held load to on a network-phase LAND.
+        DeclareLaunchArgument('net_land_z', default_value='0.06'),
     ]
 
 
@@ -151,9 +154,11 @@ def launch_setup(context, *args, **kwargs):
                      'diss_k_anchor': f('diss_k_anchor'),
                      'diss_c': f('diss_c'),
                      'diss_k_ring': f('diss_k_ring'),
+                     'diss_k_slot': f('diss_k_slot'),
                      'diss_node_mass': f('diss_node_mass'),
                      'diss_substeps': i_('diss_substeps'),
-                     'diss_elev_deg': f('diss_elev_deg')}],
+                     'diss_elev_deg': f('diss_elev_deg'),
+                     'net_land_z': f('net_land_z')}],
         output='screen'))
 
     return nodes
