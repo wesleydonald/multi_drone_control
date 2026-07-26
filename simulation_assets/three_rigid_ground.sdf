@@ -77,8 +77,23 @@
         </plugin>
       </model>
 
-      <!-- ===== TETHER 0: payload -> drone0 (rigid, len=0.5000) ===== -->
-      <link name="tether_0">
+      <!-- ===== TETHER 0: payload -> drone0 (rigid, len=0.5000, detach@payload) ===== -->
+      <link name="stub_pay_0">
+        <pose>0.080000 0.000000 0.050000 0 0 0</pose>
+        <inertial>
+          <mass>0.001</mass>
+          <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
+        </inertial>
+      </link>
+      <joint name="payload_to_stub_0" type="ball">
+        <parent>payload::body</parent>
+        <child>stub_pay_0</child>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+      </joint>
+      <model name="tether_0">
+        <pose>0 0 0 0 0 0</pose>
+        <link name="rod">
         <pose>0.328747 0.000000 0.075000 0 1.470629 0.000000</pose>
         <inertial>
           <mass>0.001</mass>
@@ -91,16 +106,31 @@
           <geometry><cylinder><radius>0.004</radius><length>0.5000</length></cylinder></geometry>
           <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
         </visual>
-      </link>
-      <joint name="payload_to_tether_0" type="ball">
-        <parent>payload::body</parent>
-        <child>tether_0</child>
-        <pose relative_to="tether_0">0 0 -0.2500 0 0 0</pose>
+        </link>
+      </model>
+      <joint name="tether_0_to_drone0" type="ball">
+        <parent>tether_0::rod</parent>
+        <child>x3_drone0::base_link</child>
         <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
         <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
       </joint>
-      <!-- ===== TETHER 1: payload -> drone1 (rigid, len=0.5000) ===== -->
-      <link name="tether_1">
+      <!-- ===== TETHER 1: payload -> drone1 (rigid, len=0.5000, detach@payload) ===== -->
+      <link name="stub_pay_1">
+        <pose>-0.040000 0.069282 0.050000 0 0 0</pose>
+        <inertial>
+          <mass>0.001</mass>
+          <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
+        </inertial>
+      </link>
+      <joint name="payload_to_stub_1" type="ball">
+        <parent>payload::body</parent>
+        <child>stub_pay_1</child>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+      </joint>
+      <model name="tether_1">
+        <pose>0 0 0 0 0 0</pose>
+        <link name="rod">
         <pose>-0.164373 0.284703 0.075000 0 1.470629 2.094395</pose>
         <inertial>
           <mass>0.001</mass>
@@ -113,16 +143,31 @@
           <geometry><cylinder><radius>0.004</radius><length>0.5000</length></cylinder></geometry>
           <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
         </visual>
-      </link>
-      <joint name="payload_to_tether_1" type="ball">
-        <parent>payload::body</parent>
-        <child>tether_1</child>
-        <pose relative_to="tether_1">0 0 -0.2500 0 0 0</pose>
+        </link>
+      </model>
+      <joint name="tether_1_to_drone1" type="ball">
+        <parent>tether_1::rod</parent>
+        <child>x3_drone1::base_link</child>
         <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
         <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
       </joint>
-      <!-- ===== TETHER 2: payload -> drone2 (rigid, len=0.5000) ===== -->
-      <link name="tether_2">
+      <!-- ===== TETHER 2: payload -> drone2 (rigid, len=0.5000, detach@payload) ===== -->
+      <link name="stub_pay_2">
+        <pose>-0.040000 -0.069282 0.050000 0 0 0</pose>
+        <inertial>
+          <mass>0.001</mass>
+          <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
+        </inertial>
+      </link>
+      <joint name="payload_to_stub_2" type="ball">
+        <parent>payload::body</parent>
+        <child>stub_pay_2</child>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+      </joint>
+      <model name="tether_2">
+        <pose>0 0 0 0 0 0</pose>
+        <link name="rod">
         <pose>-0.164373 -0.284703 0.075000 0 1.470629 -2.094395</pose>
         <inertial>
           <mass>0.001</mass>
@@ -135,40 +180,40 @@
           <geometry><cylinder><radius>0.004</radius><length>0.5000</length></cylinder></geometry>
           <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
         </visual>
-      </link>
-      <joint name="payload_to_tether_2" type="ball">
-        <parent>payload::body</parent>
-        <child>tether_2</child>
-        <pose relative_to="tether_2">0 0 -0.2500 0 0 0</pose>
+        </link>
+      </model>
+      <joint name="tether_2_to_drone2" type="ball">
+        <parent>tether_2::rod</parent>
+        <child>x3_drone2::base_link</child>
         <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
         <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
       </joint>
-      <!-- ===== DETACH 0: release drone0 from tether_0 ===== -->
+      <!-- ===== DETACH 0: release cable+drone0 from the payload (payload left clean) ===== -->
       <plugin filename="gz-sim-detachable-joint-system"
               name="gz::sim::systems::DetachableJoint">
-        <parent_link>tether_0</parent_link>
-        <child_model>x3_drone0</child_model>
-        <child_link>base_link</child_link>
+        <parent_link>stub_pay_0</parent_link>
+        <child_model>tether_0</child_model>
+        <child_link>rod</child_link>
         <detach_topic>/drone_0/detach</detach_topic>
         <attach_topic>/drone_0/attach</attach_topic>
         <output_topic>/drone_0/detachable_joint_state</output_topic>
       </plugin>
-      <!-- ===== DETACH 1: release drone1 from tether_1 ===== -->
+      <!-- ===== DETACH 1: release cable+drone1 from the payload (payload left clean) ===== -->
       <plugin filename="gz-sim-detachable-joint-system"
               name="gz::sim::systems::DetachableJoint">
-        <parent_link>tether_1</parent_link>
-        <child_model>x3_drone1</child_model>
-        <child_link>base_link</child_link>
+        <parent_link>stub_pay_1</parent_link>
+        <child_model>tether_1</child_model>
+        <child_link>rod</child_link>
         <detach_topic>/drone_1/detach</detach_topic>
         <attach_topic>/drone_1/attach</attach_topic>
         <output_topic>/drone_1/detachable_joint_state</output_topic>
       </plugin>
-      <!-- ===== DETACH 2: release drone2 from tether_2 ===== -->
+      <!-- ===== DETACH 2: release cable+drone2 from the payload (payload left clean) ===== -->
       <plugin filename="gz-sim-detachable-joint-system"
               name="gz::sim::systems::DetachableJoint">
-        <parent_link>tether_2</parent_link>
-        <child_model>x3_drone2</child_model>
-        <child_link>base_link</child_link>
+        <parent_link>stub_pay_2</parent_link>
+        <child_model>tether_2</child_model>
+        <child_link>rod</child_link>
         <detach_topic>/drone_2/detach</detach_topic>
         <attach_topic>/drone_2/attach</attach_topic>
         <output_topic>/drone_2/detachable_joint_state</output_topic>

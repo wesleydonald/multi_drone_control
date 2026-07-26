@@ -3,9 +3,11 @@ dissipative_launch.py
 ----------------------
 DECENTRALIZED DISSIPATIVE stack for the cable-suspended payload -- the detach-capable
 counterpart of mpc_quad_load_launch.py. Identical wiring (per-drone cable-aware MPC
-tracker + central fleet manager), but the reference generator is the dissipative
-spring-damper network (controller_load_mpc `dissipative`) instead of the centralized
-load-cable OCP (`planner`). The trackers are UNCHANGED: same reference wire format.
+tracker + central fleet manager). Takeoff reuses the proven OCP planner unchanged, then at
+the first /fleet/detach it hands over to the dissipative spring-damper network
+(controller_dissipative `dissipative`, an OCP-takeoff subclass of LoadPlanner) which holds
+the load and re-settles the reduced fleet. The trackers are UNCHANGED: same reference wire
+format.
 
 The point of this stack: a drone can detach mid-flight (4->3, then 3->2) and the
 remaining fleet re-settles with the load still suspended -- no solver switch, no
@@ -63,10 +65,10 @@ def _args():
         DeclareLaunchArgument('traj_radius', default_value='0.5'),
         # dissipative network tuning (see DissipativeParams; defaults are the tuned
         # rigid-short values). Exposed so a different geometry can be retuned live.
-        DeclareLaunchArgument('diss_k_station', default_value='8.0'),
-        DeclareLaunchArgument('diss_k_cable', default_value='40.0'),
+        DeclareLaunchArgument('diss_k_pay', default_value='40.0'),
+        DeclareLaunchArgument('diss_k_anchor', default_value='40.0'),
         DeclareLaunchArgument('diss_c', default_value='6.0'),
-        DeclareLaunchArgument('diss_c_ring', default_value='2.0'),
+        DeclareLaunchArgument('diss_k_ring', default_value='20.0'),
         DeclareLaunchArgument('diss_node_mass', default_value='0.5'),
         DeclareLaunchArgument('diss_substeps', default_value='10'),
         DeclareLaunchArgument('diss_elev_deg', default_value='45.0'),
@@ -130,7 +132,7 @@ def launch_setup(context, *args, **kwargs):
 
     # ── Decentralized dissipative reference generator ──────────────────────
     nodes.append(Node(
-        package='controller_load_mpc', executable='dissipative', name='dissipative_controller',
+        package='controller_dissipative', executable='dissipative', name='dissipative_controller',
         parameters=[{'num_drones': n,
                      'cable_len': f('cable_len'),
                      'start_taut': b('start_taut'),
@@ -145,10 +147,10 @@ def launch_setup(context, *args, **kwargs):
                      'traj_speed': f('traj_speed'),
                      'traj_distance': f('traj_distance'),
                      'traj_radius': f('traj_radius'),
-                     'diss_k_station': f('diss_k_station'),
-                     'diss_k_cable': f('diss_k_cable'),
+                     'diss_k_pay': f('diss_k_pay'),
+                     'diss_k_anchor': f('diss_k_anchor'),
                      'diss_c': f('diss_c'),
-                     'diss_c_ring': f('diss_c_ring'),
+                     'diss_k_ring': f('diss_k_ring'),
                      'diss_node_mass': f('diss_node_mass'),
                      'diss_substeps': i_('diss_substeps'),
                      'diss_elev_deg': f('diss_elev_deg')}],

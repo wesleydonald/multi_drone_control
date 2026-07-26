@@ -29,45 +29,13 @@ def _fmt(x):
     return f"{x:.6f}"
 
 
-def tether_block(idx, drone, attach, cable_len, radius=0.004, mass=0.001,
-                 damping=0.1, detachable=False):
-    """One rigid tether link + its joints (payload bottom, drone top).
-
-    Normally both ends are ball joints (a two-force rigid link: the paper model).
-    With detachable=True the DRONE-end ball joint is omitted here and replaced by a
-    DetachableJoint plugin emitted at model level (see detachable_joint_block): that
-    is the only release mechanism Gazebo offers, and it requires a child *model*
-    (the drone is an <include>d model; the tether is only a link, so the payload end
-    cannot host it). The plugin makes a FIXED joint, but the tether is near-massless
-    (mass={mass}, inertia ~1e-8), so the force it transmits is unchanged vs a ball
-    joint and only a negligible torque couples the drone attitude to the rod.
-    Publishing /drone_{idx}/detach releases drone_{idx}; the rod stays hanging on the
-    payload via its (retained) payload-end ball joint."""
-    dx = drone[0] - attach[0]
-    dy = drone[1] - attach[1]
-    dz = drone[2] - attach[2]
-    L = math.sqrt(dx * dx + dy * dy + dz * dz)
-    ux, uy, uz = dx / L, dy / L, dz / L
-    pitch = math.acos(max(-1.0, min(1.0, uz)))   # cylinder local-z -> cable dir
-    yaw = math.atan2(uy, ux)
-    cx, cy, cz = (attach[0] + drone[0]) / 2.0, (attach[1] + drone[1]) / 2.0, \
-                 (attach[2] + drone[2]) / 2.0
-    half = L / 2.0
+def _rod_body(idx, radius, mass, L, cx, cy, cz, pitch, yaw):
+    """The rigid tether cylinder's <inertial>+<visual> body (used both as a plain
+    lift_system link and, when detachable, as the single link of a nested tether
+    model)."""
     it = mass * L * L / 12.0
     ia = 0.5 * mass * radius * radius
-    # Drone-end connection: a ball joint normally, or nothing when detachable (the
-    # DetachableJoint plugin, emitted at model level, replaces it).
-    drone_joint = "" if detachable else f"""
-      <joint name="tether_{idx}_to_drone{idx}" type="ball">
-        <parent>tether_{idx}</parent>
-        <child>x3_drone{idx}::base_link</child>
-        <pose relative_to="tether_{idx}">0 0 {half:.4f} 0 0 0</pose>
-        <axis><xyz>1 0 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis>
-        <axis2><xyz>0 1 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis2>
-      </joint>"""
     return f"""
-      <!-- ===== TETHER {idx}: payload -> drone{idx} (rigid, len={L:.4f}) ===== -->
-      <link name="tether_{idx}">
         <pose>{_fmt(cx)} {_fmt(cy)} {_fmt(cz)} 0 {_fmt(pitch)} {_fmt(yaw)}</pose>
         <inertial>
           <mass>{mass}</mass>
@@ -79,7 +47,79 @@ def tether_block(idx, drone, attach, cable_len, radius=0.004, mass=0.001,
         <visual name="tether_{idx}_visual">
           <geometry><cylinder><radius>{radius}</radius><length>{L:.4f}</length></cylinder></geometry>
           <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
-        </visual>
+        </visual>"""
+
+
+def tether_block(idx, drone, attach, cable_len, radius=0.004, mass=0.001,
+                 damping=0.1, detachable=False):
+    """One rigid tether (payload bottom -> drone top). Both ends are ball joints (a
+    two-force rigid link: the paper model), so the drone's ATTITUDE is decoupled from
+    the rod at the top AND the rod swings freely at the payload -- the MPC tilts the
+    drone to vector its thrust while the rod pivots independently at both ends.
+
+    Non-detachable: the rod is a plain lift_system link with a payload-end and a
+    drone-end ball joint.
+
+    Detachable (drone flies away WITH its cable, payload left clean): release must
+    happen at the PAYLOAD end, and Gazebo's only release mechanism (DetachableJoint)
+    (a) makes a FIXED weld and (b) requires the released body to be a *model*. So:
+      * the rod becomes its own nested MODEL `tether_{idx}` (so it can be a detach child),
+      * a near-massless payload-side STUB link is ball-jointed to the payload (this keeps
+        the payload-end PIVOT: welding the rod straight to the payload would lock the rod
+        upright and break flight, exactly as a drone-end weld would),
+      * the DetachableJoint (emitted at model level) welds that stub to the rod model,
+      * the drone-end stays a ball joint straight to the drone.
+    During flight this is identical to the plain two-ball rod (both ends pivot). On
+    /drone_{idx}/detach the stub<->rod weld releases, so the rod + drone (still joined by
+    the drone-end ball) fly off together; only the tiny stub stays on the payload."""
+    dx = drone[0] - attach[0]
+    dy = drone[1] - attach[1]
+    dz = drone[2] - attach[2]
+    L = math.sqrt(dx * dx + dy * dy + dz * dz)
+    ux, uy, uz = dx / L, dy / L, dz / L
+    pitch = math.acos(max(-1.0, min(1.0, uz)))   # cylinder local-z -> cable dir
+    yaw = math.atan2(uy, ux)
+    cx, cy, cz = (attach[0] + drone[0]) / 2.0, (attach[1] + drone[1]) / 2.0, \
+                 (attach[2] + drone[2]) / 2.0
+    half = L / 2.0
+    rod = _rod_body(idx, radius, mass, L, cx, cy, cz, pitch, yaw)
+
+    if detachable:
+        # Payload-side stub (stays on the payload after detach), rod as a nested model,
+        # and a drone-end ball joint. The stub<->rod weld is the DetachableJoint
+        # (detachable_joint_block). Ball-joint poses are omitted so they default to the
+        # child link origin: payload_to_stub -> attach point, tether_to_drone -> drone
+        # (= rod top) -- avoids scoped relative_to across nested models.
+        return f"""
+      <!-- ===== TETHER {idx}: payload -> drone{idx} (rigid, len={L:.4f}, detach@payload) ===== -->
+      <link name="stub_pay_{idx}">
+        <pose>{_fmt(attach[0])} {_fmt(attach[1])} {_fmt(attach[2])} 0 0 0</pose>
+        <inertial>
+          <mass>{mass}</mass>
+          <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
+        </inertial>
+      </link>
+      <joint name="payload_to_stub_{idx}" type="ball">
+        <parent>payload::body</parent>
+        <child>stub_pay_{idx}</child>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis2>
+      </joint>
+      <model name="tether_{idx}">
+        <pose>0 0 0 0 0 0</pose>
+        <link name="rod">{rod}
+        </link>
+      </model>
+      <joint name="tether_{idx}_to_drone{idx}" type="ball">
+        <parent>tether_{idx}::rod</parent>
+        <child>x3_drone{idx}::base_link</child>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis2>
+      </joint>"""
+
+    return f"""
+      <!-- ===== TETHER {idx}: payload -> drone{idx} (rigid, len={L:.4f}) ===== -->
+      <link name="tether_{idx}">{rod}
       </link>
       <joint name="payload_to_tether_{idx}" type="ball">
         <parent>payload::body</parent>
@@ -87,21 +127,31 @@ def tether_block(idx, drone, attach, cable_len, radius=0.004, mass=0.001,
         <pose relative_to="tether_{idx}">0 0 {-half:.4f} 0 0 0</pose>
         <axis><xyz>1 0 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis>
         <axis2><xyz>0 1 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis2>
-      </joint>{drone_joint}"""
+      </joint>
+      <joint name="tether_{idx}_to_drone{idx}" type="ball">
+        <parent>tether_{idx}</parent>
+        <child>x3_drone{idx}::base_link</child>
+        <pose relative_to="tether_{idx}">0 0 {half:.4f} 0 0 0</pose>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis2>
+      </joint>"""
 
 
 def detachable_joint_block(idx):
-    """A DetachableJoint plugin releasing drone_{idx} from its tether on
-    /drone_{idx}/detach. Emitted at the lift_system model level (which owns both the
-    tether_{idx} link and the included x3_drone{idx} model). Re-attach on
-    /drone_{idx}/attach is available too, for the future reattach step."""
+    """A DetachableJoint plugin welding the payload-side stub to the tether ROD model
+    (a nested model -- see tether_block), released on /drone_{idx}/detach. Because the
+    stub is the parent and the rod model is the child, releasing it drops the whole rod
+    (and, via the retained drone-end ball joint, the drone) away from the payload, so the
+    drone flies off carrying its cable and the payload is left clean. Emitted at the
+    lift_system model level (which owns both stub_pay_{idx} and the tether_{idx} model).
+    Re-attach on /drone_{idx}/attach is available too, for the future reattach step."""
     return f"""
-      <!-- ===== DETACH {idx}: release drone{idx} from tether_{idx} ===== -->
+      <!-- ===== DETACH {idx}: release cable+drone{idx} from the payload (payload left clean) ===== -->
       <plugin filename="gz-sim-detachable-joint-system"
               name="gz::sim::systems::DetachableJoint">
-        <parent_link>tether_{idx}</parent_link>
-        <child_model>x3_drone{idx}</child_model>
-        <child_link>base_link</child_link>
+        <parent_link>stub_pay_{idx}</parent_link>
+        <child_model>tether_{idx}</child_model>
+        <child_link>rod</child_link>
         <detach_topic>/drone_{idx}/detach</detach_topic>
         <attach_topic>/drone_{idx}/attach</attach_topic>
         <output_topic>/drone_{idx}/detachable_joint_state</output_topic>
@@ -239,9 +289,9 @@ def main():
     ap.add_argument('--payload-z', type=float, default=0.025)
     ap.add_argument('--out', type=str, default='three_rigid.sdf')
     ap.add_argument('--detachable', action='store_true',
-                    help='add a per-drone DetachableJoint (drone end) keyed to '
-                         '/drone_k/detach, so a drone can be released mid-flight. '
-                         'Used by the dissipative detach controller.')
+                    help='make each cable releasable at the PAYLOAD end, keyed to '
+                         '/drone_k/detach, so a drone flies away WITH its cable mid-flight '
+                         '(payload left clean). Used by the dissipative detach controller.')
     ap.add_argument('--ground-start', action='store_true',
                     help='place the drones ON THE FLOOR: overrides --elev so the '
                          'rod runs from the payload attach point out to a drone '
