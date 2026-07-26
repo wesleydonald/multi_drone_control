@@ -31,7 +31,8 @@ Adaptation to THIS system (rigid rods, load pinned by mocap, pinned "table top")
     the reference can never tilt inward.
   * ROBOT nodes are dynamic. Per node, springs to the payload (rest cable_len), the
     anchor (rest cable_len*cos(elev) = cone radius), and its two ring neighbours (rest =
-    the full-fleet chord, held fixed so the ring re-spaces after a detach), plus
+    the chord of the EVEN m-gon for the currently-attached count m, so survivors re-space
+    to equal azimuth gaps after a detach), plus
     graph-Laplacian relative-velocity damping to those same neighbours and to the pinned
     anchor/payload (i.e. absolute damping, since they are still) -- the dissipation that
     absorbs the detach transient. With every spring at its rest length the desired cone
@@ -92,10 +93,9 @@ class DissipativeNetwork:
         # anchor height above the payload (on the vertical axis) and the cone radius.
         self._anchor_h = self.cable_len * self._sin_e
         self._cone_r = self.cable_len * self._cos_e
-        # ring rest length = the FULL-fleet chord between adjacent cone slots, held
-        # fixed so that after a detach the wider gap is stretched and the remaining
-        # nodes pull together to re-space (the paper keeps a constant rest length 2.02).
-        self._ring_rest = 2.0 * self._cone_r * float(np.sin(np.pi / self.n))
+        # ring rest length is recomputed from the CURRENTLY-attached count each step
+        # (see _ring_rest_for) so that after a detach the remaining drones redistribute
+        # to EVEN azimuth gaps -- the reduced m-gon becomes the spring rest equilibrium.
 
         # robot node state (world frame); seeded at takeoff/handover from measurements.
         self.q = np.zeros((self.n, 3))
@@ -121,6 +121,15 @@ class DissipativeNetwork:
 
     def n_attached(self):
         return sum(1 for a in self.attached if a)
+
+    def _ring_rest_for(self, m):
+        """Chord between adjacent slots of an EVEN m-gon on the cone rim, for the
+        CURRENTLY-attached count m. Using this (not the fixed full-fleet chord) as the
+        ring-spring rest length makes the reduced fleet's EVEN spacing the force-free
+        equilibrium: after a detach the survivors spread to equal azimuth gaps instead
+        of collapsing into the gap the departed drone left."""
+        m = max(int(m), 2)
+        return 2.0 * self._cone_r * float(np.sin(np.pi / m))
 
     def _ring_neighbours(self, i):
         """The two azimuth neighbours of node i among the CURRENTLY attached nodes.
@@ -160,6 +169,8 @@ class DissipativeNetwork:
         anchor = p_des + np.array([0.0, 0.0, self._anchor_h])
         # per-slot outward cone target (the force-free equilibrium of the springs).
         azi = [self._azimuth(i, R) for i in range(self.n)]
+        # ring rest for the CURRENTLY-attached fleet, so survivors re-space evenly.
+        ring_rest = self._ring_rest_for(self.n_attached())
 
         h = dt / max(self.p.substeps, 1)
         for _ in range(max(self.p.substeps, 1)):
@@ -180,7 +191,7 @@ class DissipativeNetwork:
                 # ring-neighbour springs (rest = fixed chord) + damping (the dissipation
                 # that couples the robots and absorbs the detach transient).
                 for j in self._ring_neighbours(i):
-                    f += self._spring(qi, self.q[j], self.p.k_ring, self._ring_rest)
+                    f += self._spring(qi, self.q[j], self.p.k_ring, ring_rest)
                     f += -self.p.c * (self.qd[i] - self.qd[j])
                 acc[i] = f / self.p.node_mass
             # semi-implicit Euler (velocity then position) -- stable for these springs.
@@ -339,6 +350,16 @@ def _self_test():
     exp3 = load_mass * g / (3 * np.sin(np.radians(45)))
     print(f"[self-test] 4->3 detach OK: tension/drone {t_before:.3f} -> "
           f"{tens3.mean():.3f} N (expect ~{exp3:.2f}), remaining nodes finite & re-settled")
+
+    # EVEN redistribution: the 3 survivors must sit at ~120 deg azimuth gaps (not merely
+    # close the gap left by the departed drone -- the ring-rest-for-m fix).
+    az = sorted(np.degrees(np.arctan2(net.q[i][1] - p_hi[1], net.q[i][0] - p_hi[0]))
+                % 360.0 for i in range(n) if net.attached[i])
+    gaps = np.diff(az + [az[0] + 360.0])
+    assert np.all(np.abs(gaps - 120.0) < 15.0), \
+        f"survivors not evenly redistributed after 4->3: azimuth gaps {np.round(gaps,1)} deg"
+    print(f"[self-test] even redistribution OK: 3 survivors at azimuth gaps "
+          f"{np.round(gaps,1)} deg (expect ~120)")
 
     # detached node fly-away reference: no cable term, rises.
     _, _, _, ac = net.fly_away_reference(2)
