@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>controller_dissipative</name>
+  <version>0.0.0</version>
+  <description>
+    Decentralized dissipative virtual-node spring-damper reference generator for a
+    cable-suspended load, ported from Quan et al., "Self-Organizing Aerial Swarm
+    Robotics: A Table-Mechanics-Inspired Approach". A robot can detach mid-flight
+    (n -> n-1) and the remaining fleet re-settles with the load suspended, with no
+    solver switch. Publishes the same per-drone reference wire format as the
+    centralized OCP (controller_load_mpc), so the per-drone trackers are unchanged.
+    Depends on controller_load_mpc only for stateless shared helpers (geometry,
+    load_trajectory, creep_controller) -- no OCP/acados import.
+  </description>
+  <maintainer email="wesleydonaldnz2@gmail.com">Wesley Donald</maintainer>
+  <license>Apache-2.0</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>interfaces</exec_depend>
+  <exec_depend>utility_objects</exec_depend>
+  <exec_depend>controller_load_mpc</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
