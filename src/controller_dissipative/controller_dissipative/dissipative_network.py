@@ -62,10 +62,12 @@ class DissipativeParams:
     scheme is stable while sqrt(k/m)*h << 2 (here ~0.09) and settles in ~1 s with c near
     half of critical (2*sqrt(k*m))."""
     def __init__(self, k_pay=40.0, k_anchor=40.0, k_ring=20.0, c=6.0,
-                 node_mass=0.5, substeps=10, elev_deg=45.0):
+                 node_mass=0.5, substeps=10, elev_deg=45.0, k_slot=18.0):
         self.k_pay = k_pay          # N/m spring to the payload node (rest cable_len)
         self.k_anchor = k_anchor    # N/m spring to the anchor node (rest cone radius)
         self.k_ring = k_ring        # N/m spring to each ring neighbour (rest chord)
+        self.k_slot = k_slot        # N/m spring to the phased even-azimuth slot (removes
+        #                             the formation's free-rotation degeneracy; 0 disables)
         self.c = c                  # N.s/m graph-Laplacian relative-velocity damping
         self.node_mass = node_mass  # kg virtual node mass (sets network timescale)
         self.substeps = int(substeps)  # integrator sub-steps per control tick
@@ -114,8 +116,9 @@ class DissipativeNetwork:
 
     def detach(self, k):
         """Drop node k (paper init.m:74-79: zero its rows/cols in W and M). Its springs
-        and damping edges vanish, the attached count n' falls, and the remaining nodes
-        re-settle -- their tension feedforward rises by itself. Idempotent."""
+        and damping edges vanish, the ring re-closes, the phased even-azimuth slots
+        recompute for the reduced fleet, and the remaining nodes re-settle -- their tension
+        feedforward rises by itself. Idempotent."""
         if 0 <= k < self.n:
             self.attached[k] = False
 
@@ -128,7 +131,7 @@ class DissipativeNetwork:
         ring-spring rest length makes the reduced fleet's EVEN spacing the force-free
         equilibrium: after a detach the survivors spread to equal azimuth gaps instead
         of collapsing into the gap the departed drone left."""
-        m = max(int(m), 2)
+        m = max(float(m), 2.0)   # float so the eased n_eff gives a smooth rest length
         return 2.0 * self._cone_r * float(np.sin(np.pi / m))
 
     def _ring_neighbours(self, i):
@@ -172,6 +175,25 @@ class DissipativeNetwork:
         # ring rest for the CURRENTLY-attached fleet, so survivors re-space evenly.
         ring_rest = self._ring_rest_for(self.n_attached())
 
+        # phased EVEN azimuth slots: the attached nodes are assigned equal 2*pi/m gaps,
+        # and the whole m-gon is phased to the payload's FIXED attach directions (rho) by
+        # the circular mean of the attached homes. This pins absolute azimuth (removing
+        # the free-rotation degeneracy that destabilises n=2) while keeping spacing even
+        # and repositioning minimal. A rho-anchored slot cannot spin with the nodes, so a
+        # rotation of the formation is restored. k_slot=0 disables it (pure ring behaviour).
+        slot = {}
+        att = [i for i in range(self.n) if self.attached[i]]
+        m = len(att)
+        if self.p.k_slot > 0.0 and m >= 1:
+            home = [float(np.arctan2(azi[i][1], azi[i][0])) for i in att]
+            implied = [home[r] - 2.0 * np.pi * r / m for r in range(m)]
+            ref = float(np.arctan2(np.mean(np.sin(implied)), np.mean(np.cos(implied))))
+            for r, i in enumerate(att):
+                th = ref + 2.0 * np.pi * r / m
+                d = np.array([self._cos_e * np.cos(th), self._cos_e * np.sin(th),
+                              self._sin_e])
+                slot[i] = payload + self.cable_len * d
+
         h = dt / max(self.p.substeps, 1)
         for _ in range(max(self.p.substeps, 1)):
             acc = np.zeros((self.n, 3))
@@ -185,11 +207,14 @@ class DissipativeNetwork:
                 # spring to the anchor node, rest length cone radius (sets height/radius,
                 # pinning the node to the OUTWARD rim -- horizontal at equilibrium).
                 f += self._spring(qi, anchor, self.p.k_anchor, self._cone_r)
+                # spring to the phased even-azimuth slot (rest 0), pinning absolute azimuth.
+                if i in slot:
+                    f += self._spring(qi, slot[i], self.p.k_slot, 0.0)
                 # graph-Laplacian damping toward the pinned anchor & payload (both still,
                 # so this is absolute damping) -- 2 edges.
                 f += -self.p.c * (self.qd[i] - 0.0) * 2.0
-                # ring-neighbour springs (rest = fixed chord) + damping (the dissipation
-                # that couples the robots and absorbs the detach transient).
+                # ring-neighbour springs (rest = current-fleet chord) + damping (the
+                # dissipation that couples the robots and absorbs the detach transient).
                 for j in self._ring_neighbours(i):
                     f += self._spring(qi, self.q[j], self.p.k_ring, ring_rest)
                     f += -self.p.c * (self.qd[i] - self.qd[j])
@@ -234,6 +259,9 @@ class DissipativeNetwork:
         p_ref = p_des + self.cable_len * u
         v_ref = self.qd[i].copy()
         # tension from the node elevation: t = m_load g / (n' sin phi), phi = asin(u_z).
+        # n' is the TRUE attached count (not eased): the survivors must pick up the
+        # departed drone's load share IMMEDIATELY or the load sags. Only the ring-rest
+        # REPOSITIONING is eased (see step()); the load-bearing feedforward is not.
         sin_phi = float(np.clip(u[2], 0.05, 1.0))
         n_att = max(self.n_attached(), 1)
         t_i = self.load_mass * self.g / (n_att * sin_phi)
@@ -360,6 +388,29 @@ def _self_test():
         f"survivors not evenly redistributed after 4->3: azimuth gaps {np.round(gaps,1)} deg"
     print(f"[self-test] even redistribution OK: 3 survivors at azimuth gaps "
           f"{np.round(gaps,1)} deg (expect ~120)")
+
+    # ROTATIONAL STABILITY (the n=2 degeneracy fix): at n=2 the ring fixes the two nodes'
+    # SEPARATION but not the formation's absolute rotation -- without the phased-slot spring
+    # the pair can spin freely (what destabilised n=2 in sim). Settle a 2-node net, apply a
+    # rigid +30 deg azimuth spin, and confirm the slots restore it.
+    net2 = DissipativeNetwork(2, attach_points(2, 0.08, 0.025), cable_len, drone_mass,
+                              load_mass, g)
+    net2.seed([net2.cone_target(i, load_quat, p_des) for i in range(2)])
+    for _ in range(200):
+        net2.step([0, 0, 0.6], load_quat, load_vel, p_des, dt)
+    settled = net2.q.copy()
+    a = np.radians(30.0)
+    Rz = np.array([[np.cos(a), -np.sin(a), 0], [np.sin(a), np.cos(a), 0], [0, 0, 1]])
+    for i in range(2):
+        net2.q[i] = p_des + Rz @ (net2.q[i] - p_des)
+    net2.qd[:] = 0.0
+    for _ in range(300):
+        net2.step([0, 0, 0.6], load_quat, load_vel, p_des, dt)
+    ret = max(float(np.linalg.norm(net2.q[i] - settled[i])) for i in range(2))
+    assert ret < 0.05, f"n=2 did not restore after a +30deg azimuth spin: {ret:.3f} m " \
+                       f"(rotational degeneracy -- k_slot too weak?)"
+    print(f"[self-test] n=2 rotational stability OK: restored to {ret*1000:.0f} mm after "
+          f"a +30deg spin (free-rotation degeneracy removed)")
 
     # detached node fly-away reference: no cable term, rises.
     _, _, _, ac = net.fly_away_reference(2)

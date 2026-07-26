@@ -101,7 +101,7 @@ def _robot_display(i, enabled=True):
       Update Interval: 0"""
 
 
-def _build_config(n: int, show_actual: bool = False) -> str:
+def _build_config(n: int, show_actual: bool = False, detach: bool = True) -> str:
     displays = ["""    - Class: rviz_default_plugins/Grid
       Name: Grid
       Enabled: true
@@ -142,6 +142,17 @@ def _build_config(n: int, show_actual: bool = False) -> str:
     displays.append(_path_display(
         'Payload actual', '/payload/actual_path', '255; 255; 255', 0.015,
         enabled=show_actual))
+    # floating drone-id labels (fleet_viz /fleet/id_markers), one text per drone
+    displays.append("""    - Class: rviz_default_plugins/MarkerArray
+      Name: Drone IDs
+      Enabled: true
+      Topic:
+        Value: /fleet/id_markers
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Namespaces:
+        drone_id: true""")
 
     for i in range(n):
         c = DRONE_COLOURS[i % len(DRONE_COLOURS)][0]
@@ -164,6 +175,7 @@ def _build_config(n: int, show_actual: bool = False) -> str:
     Tree Height: 500
   - Class: drone_visualisation/ArmPanel
     Name: ArmPanel
+    ShowDetach: {str(detach).lower()}
 Visualization Manager:
   Class: ""
   Name: root
@@ -210,6 +222,8 @@ def launch_setup(context, *args, **kwargs):
     scale = float(LaunchConfiguration('mesh_scale').perform(context))
     show_actual = (LaunchConfiguration('show_actual').perform(context).lower()
                    in ('1', 'true', 'yes'))
+    detach = (LaunchConfiguration('detach').perform(context).lower()
+              in ('1', 'true', 'yes'))
     parent = LaunchConfiguration('parent_model').perform(context)
 
     nodes = [SetParameter(name='use_sim_time', value=True)]
@@ -262,7 +276,7 @@ def launch_setup(context, *args, **kwargs):
     os.makedirs(cfg_dir, exist_ok=True)
     cfg = os.path.join(cfg_dir, f'quad_load_{n}drone.rviz')
     with open(cfg, 'w') as fh:
-        fh.write(_build_config(n, show_actual))
+        fh.write(_build_config(n, show_actual, detach))
 
     nodes.append(Node(
         package='rviz2', executable='rviz2', name='rviz2',
@@ -282,5 +296,8 @@ def generate_launch_description():
         # Flown/travelled trails. Off by default: they grow for the whole run and
         # clutter the view. The planned paths (MPC plan / payload desired) stay on.
         DeclareLaunchArgument('show_actual', default_value='false'),
+        # Show the DETACH drone-id selector + button in the ArmPanel (for the
+        # dissipative detach controller). Off by default; detach:=true shows the row.
+        DeclareLaunchArgument('detach', default_value='false'),
         OpaqueFunction(function=launch_setup),
     ])

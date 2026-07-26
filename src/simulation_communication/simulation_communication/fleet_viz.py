@@ -17,6 +17,7 @@ Publishes:
     TF  map -> payload_mocap     from /payload/motion_capture_state
     /payload/marker              the payload box (matches the world SDF)
     /payload/actual_path         where the payload has actually been
+    /fleet/id_markers            floating text label (drone id) above each drone
 
 Params:
     num_drones      (int)   fleet size
@@ -28,7 +29,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import TransformStamped, PoseStamped
 from nav_msgs.msg import Path
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import Marker, MarkerArray
 from tf2_ros import TransformBroadcaster
 
 from interfaces.msg import MotionCaptureState
@@ -44,8 +45,12 @@ class FleetViz(Node):
             'payload_size', [0.2, 0.2, 0.05]).value]
         self.path_max_len = int(self.declare_parameter('path_max_len', 2000).value)
 
+        self.id_label_z = float(self.declare_parameter('id_label_z', 0.15).value)
+        self.id_label_size = float(self.declare_parameter('id_label_size', 0.15).value)
+
         self.tf = TransformBroadcaster(self)
         self.marker_pub = self.create_publisher(Marker, '/payload/marker', 1)
+        self.id_pub = self.create_publisher(MarkerArray, '/fleet/id_markers', 1)
         self.path_pub = self.create_publisher(Path, '/payload/actual_path', 5)
         self._payload_path = []
 
@@ -78,6 +83,22 @@ class FleetViz(Node):
 
     def _drone_cb(self, msg, i):
         self._send_tf(msg, f'drone_{i}_mocap')
+
+        # floating text label with the drone id, anchored to the drone frame so it
+        # follows the live pose (published each tick so it stays alive in RViz).
+        m = Marker()
+        m.header.frame_id = f'drone_{i}_mocap'
+        m.header.stamp = self.get_clock().now().to_msg()
+        m.ns = 'drone_id'
+        m.id = i
+        m.type = Marker.TEXT_VIEW_FACING
+        m.action = Marker.ADD
+        m.text = str(i)
+        m.pose.position.z = self.id_label_z
+        m.pose.orientation.w = 1.0
+        m.scale.z = self.id_label_size
+        m.color.r, m.color.g, m.color.b, m.color.a = 1.0, 1.0, 1.0, 1.0
+        self.id_pub.publish(MarkerArray(markers=[m]))
 
     def _payload_cb(self, msg):
         self._send_tf(msg, 'payload_mocap')
