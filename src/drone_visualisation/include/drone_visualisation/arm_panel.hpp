@@ -40,11 +40,13 @@ private Q_SLOTS:
   void onTakeoffPressed();
   void onLandPressed();
   void onDetachPressed();
+  void onAttachPressed();
 
 private:
   void updateButtonState();
   void updateStatusLabel();
   void applyShowDetach();
+  void applyShowAttach();
   void armingStateCallback(const std_msgs::msg::Bool::SharedPtr msg);
   void telemetryCallback(const interfaces::msg::Telemetry::SharedPtr msg);
   void callArmingService(bool arm);
@@ -52,6 +54,9 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr command_pub_;
   rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr detach_pub_;
+  // ATTACH: arms the approach drone's electromagnet (/magnet/command "ON"); it then welds
+  // to the payload on contact and folds into the dissipative network.
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr magnet_cmd_pub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr arming_state_sub_;
   rclcpp::Subscription<interfaces::msg::Telemetry>::SharedPtr telemetry_sub_;
   rclcpp::Client<interfaces::srv::SetArming>::SharedPtr arming_client_;
@@ -62,12 +67,15 @@ private:
   QPushButton* detach_button_;
   QSpinBox* detach_id_spin_;
   QWidget* detach_row_;
+  QPushButton* attach_button_;
+  QWidget* attach_row_;
   QShortcut* space_shortcut_;
   QLabel* status_label_;
   QLabel* battery_label_;
 
   bool is_armed_;
   bool show_detach_;
+  bool show_attach_;
   float battery_voltage_;
   std::string status_message_;
 };

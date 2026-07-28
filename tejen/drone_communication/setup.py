@@ -1,0 +1,36 @@
+from setuptools import setup
+from glob import glob
+import os
+
+package_name = 'drone_communication'
+
+setup(
+    name=package_name,
+    version='0.0.0',
+    packages=[package_name],
+    data_files=[
+        ('share/ament_index/resource_index/packages',
+            ['resource/' + package_name]),
+        ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
+    ],
+    install_requires=['setuptools'],
+    zip_safe=True,
+    maintainer='your_name',
+    maintainer_email='your_email@example.com',
+    description='A ROS 2 package for quadcopter communication.',
+    license='Apache License 2.0',
+    entry_points={
+        'console_scripts': [
+            'elrs_interface = drone_communication.elrs_interface:main',
+            'video_interface = drone_communication.video_interface:main',
+            'motion_capture_publisher_node = drone_communication.motion_capture_publisher_node:main',
+            'fake_cooperative_transport_world = drone_communication.fake_cooperative_transport_world:main',
+            'online_join_planner = drone_communication.online_join_planner:main',
+            'pendulum_state_publisher = drone_communication.pendulum_state_publisher:main',
+            'magnet_tip_publisher = drone_communication.magnet_tip_publisher:main',
+            'magnet_attachment_manager = drone_communication.magnet_attachment_manager:main',
+            'pickup_mission_planner = drone_communication.pickup_mission_planner:main',
+        ],
+    },
+)

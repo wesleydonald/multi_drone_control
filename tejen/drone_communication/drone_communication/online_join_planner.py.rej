@@ -1,0 +1,88 @@
+--- online_join_planner.py
++++ online_join_planner.py
+@@ -453,6 +453,13 @@
+         self.step_reference_in_pickup_approach = bool(
+             self.declare_parameter('step_reference_in_pickup_approach', True).value
+         )
++        # Settling/waiting phases require the vehicle to reach and hold a precise
++        # equilibrium before the state-machine tolerance gates can advance. A
++        # rolling Hermite reference can keep moving that equilibrium to the end of
++        # the receding horizon, so use a firm target across the full horizon.
++        self.firm_reference_in_static_states = bool(
++            self.declare_parameter('firm_reference_in_static_states', True).value
++        )
+         # During pickup testing the attached object can expose thrust/model
+         # mismatch: a gentle rolling lift reference may let the controller settle
+         # at a low loaded hover and never satisfy the ideal lift-height gate.
+@@ -2080,6 +2087,18 @@
+         accelerations = np.zeros_like(positions)
+         return positions, velocities, accelerations
+ 
++    def build_firm_target_reference_arrays(
++        self,
++        target_position: np.ndarray,
++    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
++        """Return a stationary target repeated across the complete horizon."""
++        target = np.asarray(target_position, dtype=float).copy()
++        target[2] = max(target[2], self.min_reference_z)
++        positions = np.repeat(target.reshape(1, 3), self.horizon_samples, axis=0)
++        velocities = np.zeros_like(positions)
++        accelerations = np.zeros_like(positions)
++        return positions, velocities, accelerations
++
+     def build_reference_arrays_for_state(self, candidate_state: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+         """Build a candidate reference as though the planner were in candidate_state.
+ 
+@@ -2276,19 +2295,26 @@
+         if self.state in (LANDING, LANDED_DISARMED):
+             return self.build_landing_reference_arrays()
+ 
+-        if self.state == APPROACH_ABOVE_PICKUP and self.step_reference_in_pickup_approach:
+-            # The pickup object often starts directly below the drone at the same
+-            # XY position. A normal receding Hermite segment begins at the current
+-            # hover pose every update, which was too weak for this controller in
+-            # isolated testing. In this one pickup approach phase only, publish a
+-            # firm hold at the desired above-object quad-body target.
++        firm_static_states = (
++            SETTLE_ABOVE_PICKUP,
++            MAGNET_ATTACH_WAIT,
++            SETTLE_ABOVE_DROP_POINT,
++            DROP_OBJECT,
++        )
++        use_firm_reference = (
++            self.state == APPROACH_ABOVE_PICKUP
++            and self.step_reference_in_pickup_approach
++        ) or (
++            self.firm_reference_in_static_states
++            and self.state in firm_static_states
++        )
++
++        if use_firm_reference:
++            # These states require a precise stationary equilibrium. Repeating the
++            # target at every stage prevents a freshly rebuilt Hermite trajectory
++            # from continually pushing convergence toward the end of the horizon.
+             p_target = p_attach_now + magnet_tip_offset + quad_body_offset
+-            if p_target[2] < self.min_reference_z:
+-                p_target[2] = self.min_reference_z
+-            positions = np.repeat(p_target.reshape(1, 3), self.horizon_samples, axis=0)
+-            velocities = np.zeros_like(positions)
+-            accelerations = np.zeros_like(positions)
+-            return positions, velocities, accelerations
++            return self.build_firm_target_reference_arrays(p_target)
+ 
+         if self.state == LIFT_OBJECT and self.step_reference_in_lift_object:
+             # Once attached, use a strong loaded-lift reference instead of a
+@@ -2297,12 +2323,7 @@
+             # mismatch; the clean final improvement is to switch the controller to
+             # the known loaded model after attachment.
+             p_target = p_attach_now + magnet_tip_offset + quad_body_offset
+-            if p_target[2] < self.min_reference_z:
+-                p_target[2] = self.min_reference_z
+-            positions = np.repeat(p_target.reshape(1, 3), self.horizon_samples, axis=0)
+-            velocities = np.zeros_like(positions)
+-            accelerations = np.zeros_like(positions)
+-            return positions, velocities, accelerations
++            return self.build_firm_target_reference_arrays(p_target)
+ 
+         # In ATTACH_READY, use a time-indexed moving-target-following horizon.
+         # This is deliberately different from the approach/intercept horizon:

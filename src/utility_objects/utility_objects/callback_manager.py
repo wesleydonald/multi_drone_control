@@ -39,9 +39,6 @@ class CallbackManager:
         ]), 3)
 
         self.motion_capture_pose = arr
-        self.node.get_logger().info(
-            f"[Drone {self.drone_id}] Pose: {arr}"
-        )
 
         if self.use_motion_capture:
             self.node.current_pose = self.motion_capture_pose
@@ -79,12 +76,12 @@ class CallbackManager:
         command = msg.data.upper()
         
         if command == "ARM":
-            if self.current_pose is not None:
+            if self.node.current_pose is not None:
                 self.node.armed = True
                 self.node.get_logger().info("Drone armed via command")
                 self.publish_arming_state()
             else:
-                self.get_logger().warn("Cannot arm: No pose data available")
+                self.node.get_logger().warn("Cannot arm: No pose data available")
         
         elif command == "DISARM":
             self.node.armed = False

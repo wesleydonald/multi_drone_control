@@ -1,0 +1,514 @@
+================================================================================
+ CONTROLLERS EXPLAINED — MPC vs DISSIPATIVE, TAKEOFF, AND THE HANDOVER
+================================================================================
+ Multi-drone cable-suspended-load control (ROS 2 Humble + Gazebo/Ignition + acados)
+ Written 2026-07-28. Scope: how the two reference-generation methods work, the
+ files that matter, how takeoff works, and how we switch from one method to the
+ other. Read section 1 first — the whole design falls out of it.
+
+
+================================================================================
+ 1. THE BIG PICTURE — TWO LAYERS, ONE CONTRACT
+================================================================================
+
+The system is split into TWO layers that talk over ONE small message:
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  REFERENCE GENERATOR  (one per fleet, 10 Hz)                         │
+  │   - decides WHERE each drone should be, how hard it should push,     │
+  │     and how hard its cable is pulling.                              │
+  │   - TWO interchangeable implementations:                            │
+  │       (A) centralized load-cable OCP     = "the MPC method"          │
+  │       (B) dissipative spring-damper net  = "the dissipative method"  │
+  └───────────────┬─────────────────────────────────────────────────────┘
+                  │  /drone_{i}/reference_trajectory   (12 fields/node)
+                  │  = the CONTRACT. See section 2.
+                  ▼
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  PER-DRONE TRACKER  (one per drone, 50 Hz)                           │
+  │   - a small quadrotor MPC (acados) that FOLLOWS whatever reference   │
+  │     is streamed to it and emits stick commands (roll/pitch/thr/yaw). │
+  │   - IDENTICAL regardless of which generator produced the reference.  │
+  │   - does NOT know or care whether (A) or (B) is upstream.            │
+  └─────────────────────────────────────────────────────────────────────┘
+
+The single most important idea in this codebase:
+
+    We do NOT switch controllers on the drone. We switch the REFERENCE
+    GENERATOR feeding an unchanged tracker.
+
+The per-drone tracker (controller_quad_load) runs the whole flight. "MPC method"
+and "dissipative method" are two ways of producing the SAME 12-field reference
+stream it consumes. Swapping them is just swapping who publishes that stream —
+which is why the transition is bumpless and needs no solver switch on the drones.
+
+
+================================================================================
+ 2. THE CONTRACT — /drone_{i}/reference_trajectory
+================================================================================
+
+Every generator publishes, per drone, a Float64MultiArray of N+1 horizon nodes
+(defined once in planner_node.py `_publish_ref`, wire format documented at the top
+of planner_node.py):
+
+    [ n_nodes, dt,
+      px,py,pz,   <- desired POSITION            (world frame)
+      vx,vy,vz,   <- desired VELOCITY
+      ax,ay,az,   <- required specific-thrust ACCELERATION  a_ff = f_i / m_i
+      cx,cy,cz,   <- cable-tension ACCELERATION  a_cable = t_i * s_i / m_i
+      ... repeated per node ... ]
+
+What each block is FOR (this is the key to understanding the tracker):
+
+  * p, v      the trajectory to follow. Standard MPC tracking targets.
+  * a_ff      the "how hard to push" feedforward. Its MAGNITUDE sets the tracker's
+              throttle operating point; its DIRECTION sets the desired (yaw-free)
+              tilt. For a loaded hover a_ff points up-and-OUTWARD and exceeds g,
+              because each drone must support its share of the load AND lean out to
+              keep the cable taut.
+  * a_cable   the cable pull, as an acceleration, fed straight into the tracker's
+              PREDICTION MODEL (see section 3). This is what stops the tracker's
+              feedback from "fighting" the taut cable: the model already expects the
+              inward-downward tug, so it plans thrust to counter it instead of
+              treating it as a disturbance to reject after the fact.
+
+Both generators fill in all four blocks. The dissipative net computes a_ff and
+a_cable from cable geometry + a tension solve; the OCP gets them from its solved
+horizon. The tracker cannot tell them apart.
+
+
+================================================================================
+ 3. THE PER-DRONE TRACKER  (controller_quad_load)  — always running
+================================================================================
+
+Files:
+  src/controller_quad_load/controller_quad_load/controller_mpc.py   (the node)
+  src/controller_quad_load/controller_quad_load/dynamics.py         (the model)
+  src/controller_quad_load/controller_quad_load/acados.py           (OCP wiring)
+
+One node per drone (drone_id param), 50 Hz (FREQUENCY_HZ). It is a receding-horizon
+quadrotor MPC with horizon N=20.
+
+THE MODEL (dynamics.py, class QuadLoadDynamics)
+  State x (17): position p(3), attitude quaternion q(4), velocity v(3), body rates
+  r(3), and the four "actuator" channels u(4) = [roll, pitch, throttle, yaw]. The
+  control is u_dot (how fast the sticks move), rate-limited (throttle slews ≤0.5/s)
+  — that limit is the built-in soft-start.
+
+  The one line that matters most (dynamics.py:118):
+
+      v_dot = R(q)·[0,0, kT·throttle]   -   [0,0,g]   +   drag   +   a_cable
+              └── body thrust rotated ──┘   gravity          └ the streamed
+                  into the world                                cable feedforward ┘
+
+  So a_cable enters the model as an OPEN-LOOP PARAMETER supplied per horizon node by
+  the reference. The MPC plans thrust ASSUMING that cable pull. Betaflight "rates"
+  curves map stick -> body-rate command (betaflight_rates / w_dynamics), so the
+  model speaks the same language as the real flight controller.
+
+  kT (thrust_ratio / est_params[0]) = assumed accel per unit throttle. Because the
+  sim plant is really quadratic a(u)=c·u², kT is SCHEDULED to the operating point
+  once airborne (_scheduled_kT): takeoff-safe low value near the stands, corrected
+  to the true hover gain (~50) after the drone lifts AIRBORNE_MARGIN off its stand.
+
+THE LOOP (controller_mpc.py `control_loop`, 50 Hz)
+  1. Read the streamed reference (_planner_ref_callback parses the 12-field wire).
+  2. Condition the cable term:
+       - payload resting on the ground -> zero a_cable (a_cable=0 in the SAME model
+         IS free-flight dynamics, so no separate "grounded" solver is needed; it
+         re-enables itself when the load lifts).
+       - cable_source="model" (default): trust the streamed a_cable open-loop,
+         clamped to CABLE_ACCEL_CAP=6 m/s².  <-- SEE THE CAVEAT BELOW.
+       - cable_source="measured" (optional): replace it with the IMU-derived cable
+         accel, clamped+slew-limited (measured_cable_accel / _condition_measured_cable).
+  3. Pin stage-0 state to the MEASURED pose + the ACTUALLY-APPLIED sticks (_applied_u),
+     not the last solved sticks — so pre-TAKEOFF the model knows the throttle is
+     really at zero and doesn't "leap" the instant TAKEOFF flips.
+  4. Warm-start from last solve, solve the acados OCP, take stage-1's u as the command.
+  5. Publish ELRSCommand(roll, pitch, throttle, yaw). During takeoff the throttle is
+     eased on with a raised-cosine spool from a floor (TAKEOFF_SPOOL_FLOOR·u up to u)
+     so the drones ease off the stands without a lurch.
+  A bad solve is non-fatal: hold the last good command, reseed, disarm only after
+  MAX_CONSEC_SOLVE_FAILS=15 in a row.
+
+IMPORTANT CAVEAT — why the tracker is "feedforward-trusting" (this drives the
+attach design): in the default cable_source="model" the tracker believes the
+streamed a_cable, capped at 6 m/s², and has NO integrator. If the ACTUAL cable
+force exceeds what the reference modelled (e.g. a newcomer being hauled fast
+through a high-tension transient), the tracker UNDER-THRUSTS and the load droops /
+runs away — it never integrates the error away. This is exactly why the mid-flight
+ATTACH uses a slow "soft hand-out" (keep the newcomer near equilibrium so actual ≈
+modelled force at all times). See the attach memory / soft-hand-out notes.
+
+
+================================================================================
+ 4. THE "MPC METHOD" — CENTRALIZED LOAD-CABLE OCP  (controller_load_mpc)
+================================================================================
+
+This is the reference generator that treats the WHOLE coupled system — load + all
+n cables + all n drones — as one optimal-control problem and solves it online. It
+is the method from Sun et al. 2025 (noted at the top of planner_node.py).
+
+Files:
+  planner_node.py         the ROS node (class LoadPlanner): 10 Hz loop, phases,
+                          takeoff, publishes the per-drone references.
+  load_cable_dynamics.py  the coupled model (class LoadCableDynamics).
+  planner_ocp.py          builds the acados OCP (cost + constraints).
+  planner_solver.py       warm-start + solve wrapper (build_x_init, solve_horizon).
+  reference_builder.py    turns the lift schedule + trajectory into per-node yref.
+  creep_controller.py     the ground-to-taut takeoff creep (section 6).
+  load_trajectory.py      the lateral load path (hover / line / circle / ...).
+  geometry.py, params.py  attach-ring geometry, config.
+
+THE COUPLED MODEL (load_cable_dynamics.py)
+  One big state vector:
+    LOAD_DIM=13   load position p(3), velocity v(3), attitude q(4), body rate w(3)
+    CABLE_DIM=14  PER cable i: direction s(3), cable angular vel r(3), rd(3), rdd(3),
+                  tension t(1), tension-rate td(1)
+  Total nx = 13 + 14·n. The model captures how each cable's tension and swing couple
+  into the load's 6-DOF motion — so the optimizer reasons about tension and swing
+  directly, not just positions.
+
+HOW IT RUNS (planner_node.py `_plan`, 10 Hz = PLANNER_HZ)
+  1. Build x_init from MOCAP: measured load pose/twist, measured cable directions s_i
+     and cable angular velocities r_i. Only the UNOBSERVABLE higher cable states
+     (rd, rdd) and tensions (t, td) are resampled from the previous solution
+     (observed_state_indices; paper Fig 8). Node 0 is pinned to the measured state.
+  2. Advance the lift schedule (reference_builder.update): a smooth vertical ramp
+     lift_z0 -> target_z (raised-cosine eased), then the lateral trajectory once the
+     lift tops out, then descent on LAND.
+  3. Solve the horizon (planner_solver.solve_horizon) — warm-started from last_X,
+     hard reseed (COLD_ITERS) only on the first solve or after a failure.
+  4. From the solved horizon, extract each drone's reference (position of the cable
+     endpoint, velocity, the required specific thrust a_ff, and the cable accel
+     a_cable = t_i·s_i/m_i) and publish the 12-field wire (_publish_refs).
+
+In one sentence: the OCP method optimally coordinates tensions and drone thrusts
+across the whole coupled load-cable system, and that solution becomes the reference
+the trackers fly. It is what performs the TAKEOFF break-off (section 6) — the part
+the dissipative net cannot do.
+
+
+================================================================================
+ 5. THE "DISSIPATIVE METHOD" — VIRTUAL SPRING-DAMPER NETWORK  (controller_dissipative)
+================================================================================
+
+A decentralized alternative reference generator. Instead of solving an optimization,
+it runs a tiny VIRTUAL PHYSICS SIMULATION — a spring-damper network of "virtual
+nodes" — and reads each drone's reference off where its node settles. It is a port
+of Quan et al. "Self-Organizing Aerial Swarm Robotics" (the MATLAB is in
+matlab_dissipative_method/). Its whole reason to exist: a member LEAVING or JOINING
+the fleet is its NATIVE operating mode — no solver switch, no hand-tuned transient.
+
+Files:
+  dissipative_network.py  the network physics (class DissipativeNetwork). Pure
+                          numpy, no ROS — so it is unit-tested standalone.
+  dissipative_node.py     the ROS node (class DissipativeController) — SUBCLASSES
+                          the OCP LoadPlanner and reuses its takeoff (section 6/7).
+  mini_plant.py           an offline rigid-body plant (drones+rods+payload) used to
+                          close the loop in verification without Gazebo.
+  verify_dissipative.py   offline closed-loop test harness (Tests A–J). Run:
+                          python3 -m controller_dissipative.verify_dissipative
+
+THE NETWORK (dissipative_network.py)
+  Nodes: [payload, n robot nodes, anchor]. The payload node is PINNED to the desired
+  load position p_des (the cone apex). The anchor node is pinned on the vertical axis
+  a height cable_len·sin(elev) above p_des — the paper's fixed "table top". Together
+  they pin every robot node onto an OUTWARD CONE of elevation `elev` (default 45°),
+  so a reference can never tilt inward.
+
+  Each robot node feels (step()):
+    - a spring to the payload   (rest = cable_len)      -> sets cable distance
+    - a spring to the anchor     (rest = cone radius)    -> pins it to the cone rim
+    - a spring to a phased even-azimuth "slot"           -> pins absolute azimuth
+    - springs to its two ring neighbours (rest = chord of the even m-gon for the
+      CURRENT attached count m)                          -> even spacing
+    - graph-Laplacian relative-velocity DAMPING          -> "the dissipation" that
+      absorbs a detach/attach transient.
+  With every spring at rest the desired cone is an exact force-free equilibrium; the
+  damper makes it the STABLE one. Integrated with semi-implicit Euler in substeps.
+
+READING THE REFERENCE (reference())
+  p_ref = p_payload + cable_len · unit(node − p_payload)   (the paper's map: the node
+  position IS the reference; the drone sits one cable-length out along the cable dir).
+  Tension feedforward from the node's own elevation φ: t_i = m_load·g / (n'·sinφ),
+  shared over the currently-attached count n' (so it RISES as members leave). Then
+  a_cable = (t_i/m)·(−u) (inward-down), and a_ff = (0,0,g) − a_cable (outward, > g).
+
+DETACH / ATTACH are one-liners on the flag:
+  detach(k): attached[k]=False. Its springs/damping vanish, the ring re-closes, the
+             even slots recompute for the smaller m, survivors re-space, and every
+             remaining drone's tension share rises by itself. The freed drone flies
+             away (fly_away_reference, a_cable=0).
+  attach(k): the exact reverse — flip the flag true, seed the node bumplessly at the
+             measured drone position, and the fleet re-spaces into an (m+1)-gon with
+             each share dropping. For an OFF-CENTRE weld there are two extra modes:
+               * balanced_tensions: solve per-drone tensions from a 6-DOF WRENCH
+                 BALANCE at the true attach geometry, so an asymmetric attach set
+                 holds the load LEVEL with unequal tensions.
+               * SOFT HAND-OUT: a welded ring newcomer joins as a central lifter
+                 (elevation 90°, over its own weld point) and is eased to its ring
+                 slot over T_handout≈12 s, so its actual force tracks the modelled
+                 feedforward the whole way and the feedforward-trusting tracker
+                 (section 3 caveat) never under-thrusts. This is the robust attach fix.
+
+Because the network only ever runs AIRBORNE (a taut hover), it never has to do the
+hard ground break-off — that stays with the OCP. See section 7.
+
+
+================================================================================
+ 6. HOW TAKEOFF WORKS  (creep -> OCP lift -> hover)
+================================================================================
+
+Takeoff is ALWAYS done by the centralized OCP (controller_load_mpc). Neither the
+dissipative net nor an open-loop analytic lift can reliably break the load off the
+ground from a shallow start — so the OCP owns it. Two sub-steps:
+
+  PHASE 'creep'  (creep_controller.py)  — only for a GROUND start (start_taut=false,
+    handover_elev_deg>0). The drones sit on stands; the cables are slack. The creep
+    slowly sweeps the rigid rods upward (raising the drones on an arc) until the
+    cables come TAUT at the handover elevation. During creep the OCP is kept "warm"
+    on the live measured config (_prime_solver) WITHOUT publishing its horizon, so
+    the moment of handover already has a converged warm start (no post-handover jump).
+    An elevated start_taut world skips creep entirely and hands over immediately.
+
+  Handover -> PHASE 'planner'  (_enter_planner_phase)
+    Latch lift_z0 = current load height. From here the OCP runs the smooth vertical
+    LIFT RAMP (raised-cosine eased 0 -> lift_ramp_vel -> 0) up to target_z, then the
+    lateral trajectory, then hover. A soft-start clock (_ff_t) eases the cable
+    feedforward in so the break-off is gentle.
+
+The actual "pop off the stands" is a deliberate, subtle detail on the TRACKER side:
+early in takeoff kT is pinned to a takeoff-safe value that slightly OVER-thrusts
+(AIRBORNE_MARGIN in controller_mpc.py). That gentle over-thrust pops the drones off
+their stands and tensions the cables — the load lifts — and once airborne the kT
+schedule corrects to the true hover gain. Set the margin to zero and the drones just
+hold at spawn, never tension the cables, and the load is abandoned on the floor. The
+surge and the lift are the same event.
+
+So the takeoff timeline is:
+    creep (rods sweep up to taut)  ->  OCP lift ramp (load breaks off, rises)  ->
+    OCP hover at target_z (+ optional lateral trajectory).
+
+
+================================================================================
+ 7. HOW WE SWITCH — OCP  ->  DISSIPATIVE  (the handover)
+================================================================================
+
+The switch lives ENTIRELY in the reference generator. The dissipative ROS node
+(DissipativeController) SUBCLASSES the OCP planner (LoadPlanner) and overrides the
+10 Hz `_plan` to DISPATCH on a phase variable:
+
+    phase 'creep'   -> inherited OCP creep         (takeoff, section 6)
+    phase 'planner' -> inherited OCP lift + hover  (takeoff, section 6)
+    phase 'network' -> THIS class's _network_plan  (dissipative hold/detach/attach)
+
+So the SAME node does OCP takeoff first, then flips to the dissipative network in
+the air. The flip (_enter_network_phase) happens on the first detach command (or an
+explicit trigger) and is deliberately BUMPLESS:
+
+  1. SEED the network from the current measured, airborne, taut drone positions
+     (net.seed) — every virtual node starts exactly where its drone is, zero velocity,
+     so the first network step makes no jump.
+  2. Capture the load target the network will hold (_net_p_des / _net_hold_z).
+  3. Stop solving the OCP. From now on _network_plan runs each tick: net.step(...),
+     then net.reference(i) per drone, published on the SAME /drone_{i}/reference_
+     trajectory wire.
+
+The per-drone trackers (section 3) never notice: they keep receiving the same 12-field
+messages at the same topic. Only the SOURCE of those numbers changed from "solved OCP
+horizon" to "settled spring-damper node". That is the whole switch.
+
+Direction of the switch:
+  * We switch OCP -> dissipative (never back) once airborne, because the network's
+    strength is mid-flight reconfiguration (detach/attach) and it must NOT attempt
+    the ground break-off.
+  * The reverse (dissipative -> OCP) is not needed: LAND in the network phase is
+    handled directly by _network_plan (descend the held target to the floor, announce
+    /fleet/landed to disarm) — see _fleet_command_cb / _network_plan.
+
+Mental model:
+  TAKEOFF  = OCP method (only it can break the load off the ground)
+  HOLD / RECONFIGURE / DETACH / ATTACH  = dissipative method (its native mode)
+  FOLLOW THE REFERENCE  = the unchanged per-drone tracker, the whole time.
+
+
+================================================================================
+ 8. FILE MAP — WHERE TO LOOK
+================================================================================
+
+PER-DRONE TRACKER (always running, 50 Hz, one per drone)
+  src/controller_quad_load/controller_quad_load/controller_mpc.py  main loop, cable
+                                                                    conditioning, spool
+  .../dynamics.py                                                   17-state quad model,
+                                                                    a_cable term (:118)
+  .../acados.py                                                     OCP build / warm start
+
+REFERENCE GENERATOR A — "MPC method" (centralized load-cable OCP, 10 Hz)
+  src/controller_load_mpc/controller_load_mpc/planner_node.py       node, phases, takeoff,
+                                                                    _plan, _publish_ref
+  .../load_cable_dynamics.py                                        coupled load+cables model
+  .../planner_ocp.py, planner_solver.py                             OCP + solve/warm-start
+  .../reference_builder.py                                          lift/traj -> yref
+  .../creep_controller.py                                           ground->taut creep
+  .../load_trajectory.py, geometry.py, params.py                    path, ring, config
+
+REFERENCE GENERATOR B — "dissipative method" (spring-damper net, 10 Hz)
+  src/controller_dissipative/controller_dissipative/dissipative_network.py  the physics
+  .../dissipative_node.py    ROS node; SUBCLASSES LoadPlanner; phase dispatch + handover
+  .../mini_plant.py          offline rigid-body plant for verification
+  .../verify_dissipative.py  offline closed-loop tests A–J (run before Gazebo)
+
+THE CONTRACT
+  /drone_{i}/reference_trajectory   12 fields/node, defined in planner_node._publish_ref
+                                    and parsed in controller_mpc._planner_ref_callback.
+
+
+================================================================================
+ 9. TL;DR
+================================================================================
+
+* There is ONE tracker per drone (controller_quad_load), a 50 Hz quadrotor MPC. It
+  just follows a streamed reference and never changes. The cable pull enters ITS
+  model as an open-loop feedforward, and it has no integrator — so it trusts the
+  reference to be honest about force (this is why fast/off-model transients hurt).
+
+* There are TWO reference generators that produce that stream:
+    - "MPC method" = a centralized OCP over the whole load+cables system. It is
+      optimal, coordinated, and is what performs TAKEOFF (the ground break-off).
+    - "dissipative method" = a virtual spring-damper network. It is decentralized and
+      makes DETACH/ATTACH/reconfiguration its native, transient-free operating mode.
+
+* TAKEOFF: OCP creep (rods sweep to taut) -> OCP lift ramp (load breaks off) -> hover.
+
+* SWITCH: one node (DissipativeController) does OCP takeoff, then flips to the
+  dissipative network in the air by seeding the network from the current state and
+  changing which code fills the SAME reference message. The trackers never notice.
+  We go OCP -> dissipative once airborne and stay there through hold/detach/attach/land.
+================================================================================
+
+
+================================================================================
+ 10. LIMITATIONS & DEVIATIONS FROM THE PAPERS
+================================================================================
+
+Both methods are ADAPTATIONS, not verbatim re-implementations. The biggest reason
+is architectural and applies to BOTH: the papers assume the controller commands the
+vehicles directly (thrust / attitude). Our system flies real Betaflight flight
+controllers, so we insert a SEPARATE per-drone Betaflight-rates MPC tracker (section
+3) between the reference generator and the motors. That split is WHY the reference
+carries the a_ff (specific-thrust) and a_cable (cable-accel) feedforwards at all — the
+tracker has to be TOLD the operating point and the cable pull, because it does not
+solve the coupled system itself. The rest of the deviations follow from real hardware,
+rigid rods, and a hovering (not table-top) load.
+
+10.1 DISSIPATIVE METHOD  (vs Quan et al., "Self-Organizing Aerial Swarm Robotics")
+  * PAYLOAD NODE PINNED, not free. The paper couples the payload as a free node with
+    gravity on it and drives it toward the trajectory. We PIN the payload node to the
+    DESIRED load position p_des (the cone apex). The real load closes the loop
+    physically through the rigid rods; building the cone on p_des (not the measured,
+    lagging, possibly-grounded load) is what makes the reference LIFT the load instead
+    of collapsing onto a sphere around it. (dissipative_network.py step()).
+  * RIGID RODS, not cables. The sim attaches drones to the load with a Gazebo
+    DetachableJoint (a rigid, moment-transmitting rod), not a slack cable. This changes
+    what a "detach" and an off-centre "attach" do dynamically (a rod pushes AND pulls,
+    and transmits moment), and is the root of the off-centre-attach tilt problems.
+  * WE ADD A TENSION FEEDFORWARD the paper's tracker does not need (t_i =
+    m_load g/(n' sinφ), and a_cable / a_ff derived from it) — because our tracker is a
+    separate MPC (see the architectural note above).
+  * ADDED: phased even-azimuth SLOT springs (k_slot) to pin ABSOLUTE rotation and kill
+    the free-rotation degeneracy that destabilised n=2. Not in the paper.
+  * ADDED: YAW-ONLY formation frame in balanced mode, so a load tilt cannot distort the
+    references and self-amplify. Not in the paper.
+  * ADDED: BALANCED (unequal, moment-balanced) force sharing via a 6-DOF wrench solve,
+    for asymmetric / off-centre attach sets. Not in the paper.
+  * ADDED: SOFT HAND-OUT continuation for mid-flight attach (central -> ring over
+    ~12 s). Not in the paper; it exists specifically to work around the tracker's
+    feedforward-trusting, no-integrator behaviour (10.3).
+  * AIRBORNE-ONLY. The network is only ever engaged in a taut hover; it never does the
+    ground break-off. Takeoff is delegated to the OCP (section 6). So the paper's
+    "self-organizing from arbitrary states" is not exercised on the ground.
+
+10.2 MPC METHOD  (vs Sun et al. 2025, the centralized load-cable OCP)
+  * This one is a FAITHFUL implementation of the paper's online scheme, including the
+    state-estimation shortcut from the paper's Fig 8: x_init is built from mocap (load
+    pose/twist, cable directions s_i, cable angular velocities r_i all measured), and
+    only the UNOBSERVABLE higher cable states (rd_i, rdd_i) and tensions (t_i, td_i) are
+    resampled from the previous solution (observed_state_indices in load_cable_dynamics.py).
+  * DEVIATION — it is a REFERENCE GENERATOR, not the final controller. The paper's OCP
+    output would drive the vehicles; ours is tracked by the per-drone MPC (10 / section 3).
+  * CENTRALIZED single solver for the whole fleet (one node solves all n cables). Fine in
+    sim; a real deployment would want this on a reliable compute/comms path.
+  * Geometry is baked to the world SDF (attach ring, cable length); a mismatch silently
+    degrades the solve. It runs at 10 Hz.
+
+10.3 PER-DRONE TRACKER LIMITATIONS  (controller_quad_load)  — these bite in practice
+  * NO INTEGRATOR. Steady-state errors are not driven out. Under unmodelled drag or a
+    force the reference did not predict, the drone settles with a persistent offset
+    (e.g. a slight height droop) rather than correcting to zero.
+  * FEEDFORWARD-TRUSTING + a_cable CAPPED at 6 m/s² (CABLE_ACCEL_CAP). The cable pull
+    enters the model open-loop from the reference. If the ACTUAL cable force exceeds the
+    modelled/capped value (a fast transit, a rigid off-centre weld), the drone
+    UNDER-THRUSTS and can droop / run away. This is the exact mechanism behind the
+    mid-flight attach runaway, and why the fix is reference-side (keep actual ≈ modelled).
+  * kT (thrust gain) SCHEDULING is a hand-tuned hack for the sim's quadratic thrust plant
+    (a takeoff-safe over-thrust near the stands, corrected once airborne). It is tuned to
+    THIS sim; real hardware uses a different thrust_ratio.
+  * cable_source="model" by default. A measured-cable (IMU f_ext) path exists but is off
+    by default because the IMU->model->command->IMU loop needs careful filtering/clamping.
+
+10.4 SYSTEM-LEVEL LIMITATIONS
+  * OFFLINE VERIFICATION CANNOT REPRODUCE THE ATTACH RUNAWAY. The mini_plant tracker
+    proxy is a PD controller; even made feedforward-dominant it still corrects position
+    error in a way the real no-integrator MPC does not, so an instant off-centre weld
+    RECOVERS offline (~8°) while it DIVERGED in Gazebo (12->90°). The offline gate (Tests
+    A–J) therefore validates geometry, levelness, and the hand-out's near-equilibrium
+    property — but NOT the runaway fix itself. That needs Gazebo.
+  * OFF-CENTRE RING ATTACH IS SIMULATION-ONLY and, under a rigid weld, was the hard part;
+    the soft hand-out is the current fix but is NOT yet Gazebo-validated. The stable,
+    demonstrated fallback is the CENTRAL LIFTER (a centre weld adds pure vertical lift,
+    no reconfiguration to destabilise).
+  * NO OBSTACLE AVOIDANCE in the fleet reference generators. The single approach drone's
+    planner (online_join_planner) has avoidance, but the OCP and the dissipative network
+    do not — they assume clear space around the load.
+  * DETACH/ATTACH validated in SIM ONLY so far; real-world tests are pending (section 11).
+  * MINOR VIZ INCONSISTENCY: /payload/mpc_plan is a straight constant-velocity
+    extrapolation (a cheap RViz shortcut in _publish_load_desired), so the payload's
+    desired horizon draws straight even on a curved trajectory while the drones' horizons
+    (taken from the real solved OCP states) curve. Cosmetic; the OCP's internal load
+    horizon is curved.
+
+
+================================================================================
+ 11. NEXT STEPS
+================================================================================
+
+Roughly in priority order:
+
+  1. GAZEBO-VALIDATE THE SOFT HAND-OUT ring attach (the offline gate cannot, see 10.4).
+     Run three_attach_launch with attach_central:=false diss_balanced_tensions:=true
+     attach_handout:=true + a gap-centre weld (attach_x_offset:=-0.08), and confirm the
+     tilt rides the ~12 s hand-out down to level instead of diverging.
+
+  2. REAL-WORLD HARDWARE TESTS. Validate the MPC and dissipative HOLD across the
+     trajectories with 2–4 drones first; then detach on hardware; attach last (it is the
+     least-proven and the thesis novelty).
+
+  3. CHARACTERISE THE ATTACH ENVELOPE. How off-centre a weld, how heavy a newcomer, and
+     how fast a hand-out the fleet tolerates before it tilts — turn "it works for this one
+     case" into a stated operating range.
+
+  4. TRACKER ROBUSTIFICATION (longer-term hedge). The runaway fix is deliberately
+     reference-side only, but an integrator and/or an adaptive (not fixed-cap) cable
+     feedforward on the per-drone MPC would harden EVERY transient, not just attach.
+     Weigh against the risk of the IMU->model->command loop (10.3).
+
+  5. WIRE OBSTACLE AVOIDANCE into the fleet reference (10.4) if the flight environment
+     needs it — the approach planner already has the machinery to borrow.
+
+  6. INTEGRATION CLEANUP. Finish lifting the approach stack out of tejen/ into src/ and
+     delete tejen/ once the Gazebo attach is validated.
+
+  7. MINOR: make /payload/mpc_plan sample the trajectory per node so the desired payload
+     horizon curves (10.4) — a one-block change in _publish_load_desired.
+================================================================================

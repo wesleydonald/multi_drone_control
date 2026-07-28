@@ -31,13 +31,24 @@ class PayloadMocapEmulator(Node):
         self.declare_parameter('drone_name', 'x3_drone0')
         self.declare_parameter('parent_model', 'lift_system')
         self.declare_parameter('publish_payload', True)
+        # Overrides for a STANDALONE (non-nested) drone model, e.g. the free approach drone:
+        #   pose_topic  non-empty -> use this pose topic instead of the nested-path default
+        #               (a standalone model publishes on /model/{drone_name}/pose).
+        #   pose_index  which PoseArray entry is the drone body (-1 = last, the nested-drone
+        #               default). A model with extra links (a magnet arm) may need a fixed
+        #               index -- inspect `gz topic -e -t <pose_topic>` to pick base_link.
+        self.declare_parameter('pose_topic', '')
+        self.declare_parameter('pose_index', -1)
 
         drone_id = self.get_parameter('drone_id').value
         drone_name = self.get_parameter('drone_name').value
         parent = self.get_parameter('parent_model').value
         publish_payload = self.get_parameter('publish_payload').value
+        self._pose_index = int(self.get_parameter('pose_index').value)
 
-        drone_pose_topic = f'/model/{parent}/model/{drone_name}/pose'
+        pose_topic_override = str(self.get_parameter('pose_topic').value)
+        drone_pose_topic = (pose_topic_override if pose_topic_override
+                            else f'/model/{parent}/model/{drone_name}/pose')
         payload_pose_topic = f'/model/{parent}/model/payload/pose'
 
         self.get_logger().info(
@@ -120,8 +131,9 @@ class PayloadMocapEmulator(Node):
     def _drone_cb(self, msg: PoseArray):
         if not msg.poses:
             return
-        pos = msg.poses[-1].position
-        ori = msg.poses[-1].orientation
+        idx = self._pose_index if -len(msg.poses) <= self._pose_index < len(msg.poses) else -1
+        pos = msg.poses[idx].position
+        ori = msg.poses[idx].orientation
         ori.x, ori.y, ori.z, ori.w = self._normalize_quat(ori.x, ori.y, ori.z, ori.w)
 
         mcs, self._drone_last_pos, self._drone_last_ori, self._drone_last_time = \

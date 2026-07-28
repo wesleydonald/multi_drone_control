@@ -7,7 +7,7 @@ namespace drone_visualisation
 {
 
 ArmPanel::ArmPanel(QWidget* parent)
-: rviz_common::Panel(parent), is_armed_(false), show_detach_(true), battery_voltage_(0.0f), status_message_("Waiting for controller...")
+: rviz_common::Panel(parent), is_armed_(false), show_detach_(true), show_attach_(true), battery_voltage_(0.0f), status_message_("Waiting for controller...")
 {
   auto layout = new QVBoxLayout;
   
@@ -67,6 +67,19 @@ ArmPanel::ArmPanel(QWidget* parent)
   detach_layout->addWidget(detach_button_, 1);
   layout->addWidget(detach_row_);
 
+  // ATTACH row: arm the approach drone's electromagnet. Publishes "ON" to /magnet/command;
+  // the magnet then welds to the payload on contact and the drone folds into the dissipative
+  // network (via /magnet/object_attached). Shown when the launch sets attach:=true.
+  attach_row_ = new QWidget;
+  auto attach_layout = new QHBoxLayout(attach_row_);
+  attach_layout->setContentsMargins(0, 0, 0, 0);
+  attach_button_ = new QPushButton("ATTACH");
+  attach_button_->setStyleSheet("background-color: #20c997; color: white; font-weight: bold;");
+  attach_button_->setEnabled(false);  // only meaningful once flying
+  attach_button_->setFixedHeight(80);
+  attach_layout->addWidget(attach_button_, 1);
+  layout->addWidget(attach_row_);
+
   setLayout(layout);
 
   // Create spacebar shortcut for DISARM
@@ -78,6 +91,7 @@ ArmPanel::ArmPanel(QWidget* parent)
   connect(takeoff_button_, &QPushButton::clicked, this, &ArmPanel::onTakeoffPressed);
   connect(land_button_, &QPushButton::clicked, this, &ArmPanel::onLandPressed);
   connect(detach_button_, &QPushButton::clicked, this, &ArmPanel::onDetachPressed);
+  connect(attach_button_, &QPushButton::clicked, this, &ArmPanel::onAttachPressed);
 }
 
 void ArmPanel::onInitialize()
@@ -91,6 +105,8 @@ void ArmPanel::onInitialize()
   command_pub_ = node_->create_publisher<std_msgs::msg::String>("/fleet/command", 10);
   // DETACH goes to the dissipative controller (physical drone id).
   detach_pub_ = node_->create_publisher<std_msgs::msg::Int32>("/fleet/detach", 10);
+  // ATTACH arms the approach drone's magnet (the magnet manager welds on contact).
+  magnet_cmd_pub_ = node_->create_publisher<std_msgs::msg::String>("/magnet/command", 10);
 
   // Reflect the fleet armed state from drone 0's feedback (drones arm together).
   arming_state_sub_ = node_->create_subscription<std_msgs::msg::Bool>(
@@ -168,10 +184,38 @@ void ArmPanel::onDetachPressed()
   }
 }
 
+void ArmPanel::onAttachPressed()
+{
+  if (!is_armed_) {
+    RCLCPP_WARN(node_->get_logger(), "Cannot attach - fleet is not armed/flying");
+    return;
+  }
+  if (!magnet_cmd_pub_ || magnet_cmd_pub_->get_subscription_count() == 0) {
+    status_message_ = "No /magnet/command subscriber (magnet manager not running)";
+    updateStatusLabel();
+    RCLCPP_WARN(node_->get_logger(),
+                "No subscriber on /magnet/command — the magnet manager may not be running");
+    return;
+  }
+  std_msgs::msg::String msg;
+  msg.data = "ON";
+  magnet_cmd_pub_->publish(msg);
+  status_message_ = "Magnet ON — approaching & attaching to payload";
+  updateStatusLabel();
+  RCLCPP_INFO(node_->get_logger(), "ATTACH: magnet armed (/magnet/command ON)");
+}
+
 void ArmPanel::applyShowDetach()
 {
   if (detach_row_) {
     detach_row_->setVisible(show_detach_);
+  }
+}
+
+void ArmPanel::applyShowAttach()
+{
+  if (attach_row_) {
+    attach_row_->setVisible(show_attach_);
   }
 }
 
@@ -183,12 +227,18 @@ void ArmPanel::load(const rviz_common::Config& config)
     show_detach_ = show;
   }
   applyShowDetach();
+  bool show_a = true;
+  if (config.mapGetBool("ShowAttach", &show_a)) {
+    show_attach_ = show_a;
+  }
+  applyShowAttach();
 }
 
 void ArmPanel::save(rviz_common::Config config) const
 {
   rviz_common::Panel::save(config);
   config.mapSetValue("ShowDetach", show_detach_);
+  config.mapSetValue("ShowAttach", show_attach_);
 }
 
 void ArmPanel::callArmingService(bool arm)
@@ -220,12 +270,14 @@ void ArmPanel::updateButtonState()
     takeoff_button_->setEnabled(true);
     land_button_->setEnabled(true);
     detach_button_->setEnabled(true);
+    attach_button_->setEnabled(true);
   } else {
     arm_button_->setText("ARM");
     arm_button_->setStyleSheet("background-color: #51cf66; color: white; font-weight: bold;");
     takeoff_button_->setEnabled(false);
     land_button_->setEnabled(false);
     detach_button_->setEnabled(false);
+    attach_button_->setEnabled(false);
   }
   updateStatusLabel();
 }

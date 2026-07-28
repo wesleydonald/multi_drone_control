@@ -1,0 +1,116 @@
+=====================================================================
+ THESIS PROGRESS UPDATE
+ Multi-drone cooperative cable-suspended payload transport
+ (ROS 2 + Gazebo/Ignition, acados nonlinear MPC)
+=====================================================================
+Date: 2026-07-27
+
+---------------------------------------------------------------------
+1. ONE-LINE SUMMARY
+---------------------------------------------------------------------
+A fleet of quadrotors cooperatively carries a cable-suspended payload
+along prescribed trajectories. Drones can LEAVE the fleet mid-flight
+(detach) and JOIN it mid-flight (attach) while the payload keeps
+flying. Mid-flight ATTACH is the novel contribution of the thesis.
+
+---------------------------------------------------------------------
+2. CONTROL METHODS DEVELOPED
+---------------------------------------------------------------------
+
+(a) CENTRALIZED MPC METHOD  [working in sim]
+    - Nonlinear model-predictive control built on the acados OCP
+      solver. A central planner generates the payload trajectory;
+      a cable-aware MPC tracker flies each drone so the load follows
+      it. Handles the coupled quad + cable + payload dynamics.
+    - Status: flies the 2-4 drone fleet along the trajectory set
+      (hover, straight-line, circle/orbit) with the load stable.
+    - Role: the baseline / reference controller and the takeoff
+      (ground break-off) stage.
+
+(b) DECENTRALIZED DISSIPATIVE METHOD  [working in sim]
+    - A virtual-node spring-damper "network" that generates each
+      drone's flight reference in a decentralized way. It is a
+      faithful port of Quan et al., "Self-Organizing Aerial Swarm
+      Robotics: A Table-Mechanics-Inspired Approach," adapted to the
+      rigid-cable, mocap-pinned payload here.
+    - Key property: a member joining or leaving is the network's
+      NATIVE operating mode -- no solver switch, no hand-designed
+      redistribution. When a drone leaves, the survivors re-settle and
+      their share of the load rises automatically; when one joins, the
+      reverse happens.
+    - Verified OFFLINE first: a numpy closed-loop test harness drives
+      the real controller against a small multibody plant (drones +
+      cables + payload + ground contact) and asserts, as a pass/fail
+      gate, that the load stays aloft, tensions redistribute correctly,
+      and the formation re-settles through each detach/attach event.
+      This gate is run before every Gazebo test.
+
+---------------------------------------------------------------------
+3. DETACHING  [working & verified in sim -- this is the demo video]
+---------------------------------------------------------------------
+    - A tethered drone can leave the fleet mid-flight (via an RViz
+      DETACH button). It releases, flies clear, and the remaining
+      drones re-settle around the payload with the load held level and
+      the trajectory continuing uninterrupted.
+    - Confirmed in simulation with both the MPC and the dissipative
+      method. The fleet redistributes to even spacing after a detach
+      (e.g. 4->3->2), the per-drone load share rises correctly, and a
+      LAND command safely lands both the attached and detached drones.
+    - This is the mechanism I will show in the video.
+
+---------------------------------------------------------------------
+4. ATTACHING  [in progress -- the thesis novelty]
+---------------------------------------------------------------------
+    - Goal: a free drone carrying a swung electromagnet flies to the
+      already-suspended payload, welds onto it mid-flight, and JOINS
+      the fleet so the load continues with one more drone. This is the
+      reverse of detach and, to my knowledge, the novel contribution.
+    - Pipeline integrated end-to-end in simulation:
+        * an approach MPC flies the free drone to the payload;
+        * the electromagnet welds it on (Gazebo detachable joint),
+          triggered by an RViz ATTACH button;
+        * motor authority hands over from the approach controller to
+          the fleet's tracker at the weld;
+        * the drone becomes node 4 of the dissipative network.
+    - Working today: the drone approaches, welds, and joins as a
+      central (vertical) lifter -- stable and tilt-free.
+    - Current focus: making the fleet visibly RECONFIGURE after the
+      newcomer joins (redistribute the load rather than just add a
+      central lifter). The physics challenge: three tethers are fixed
+      at 120-degree attach points, so the four drones cannot form an
+      evenly-spaced ring under equal load sharing. The solution being
+      implemented is UNEQUAL (moment-balanced) force sharing: the
+      network solves for per-drone tensions from a full 6-DOF
+      force/moment balance at the true attach geometry, so an
+      asymmetric four-drone arrangement holds the payload level. This
+      is passing the offline verification gate; sim tuning is ongoing.
+
+---------------------------------------------------------------------
+5. NEXT STEPS / PLAN
+---------------------------------------------------------------------
+    - Wednesday: real-world flight tests with 2-4 drones, validating
+      the MPC and dissipative controllers across the trajectory set
+      (hover, line, circle). Goal: confirm the controllers transfer
+      from sim to hardware.
+    - Next week (tentative): real-world DETACHING test, once the
+      2-4 drone baseline flights are confirmed.
+    - Continuing in sim: finish the attach RECONFIGURATION (unequal
+      force sharing + off-centre weld), then trajectory-attach.
+
+---------------------------------------------------------------------
+6. SUGGESTED TALKING POINTS FOR THE UPDATE (2-5 min)
+---------------------------------------------------------------------
+    - Frame up front: the thesis contribution is mid-flight ATTACH;
+      detach is the (working) stepping stone that proves the fleet can
+      reconfigure mid-flight.
+    - Show the detach video (the concrete, working result).
+    - One sentence on WHY the dissipative network makes detach/attach
+      natural: members leaving/joining is its native mode.
+    - Mention the offline verification gate as evidence of rigour --
+      every sim run is preceded by a pass/fail closed-loop check.
+    - State the attach status honestly: approach + weld + join works
+      (central lifter); load-sharing reconfiguration is the piece
+      being finished now, with the geometry/physics reason it's hard.
+    - End with the hardware plan: 2-4 drone trajectory validation
+      Wednesday, detach on hardware next week.
+=====================================================================

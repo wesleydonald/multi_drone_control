@@ -101,7 +101,8 @@ def _robot_display(i, enabled=True):
       Update Interval: 0"""
 
 
-def _build_config(n: int, show_actual: bool = False, detach: bool = True) -> str:
+def _build_config(n: int, show_actual: bool = False, detach: bool = True,
+                  attach: bool = False) -> str:
     displays = ["""    - Class: rviz_default_plugins/Grid
       Name: Grid
       Enabled: true
@@ -176,6 +177,7 @@ def _build_config(n: int, show_actual: bool = False, detach: bool = True) -> str
   - Class: drone_visualisation/ArmPanel
     Name: ArmPanel
     ShowDetach: {str(detach).lower()}
+    ShowAttach: {str(attach).lower()}
 Visualization Manager:
   Class: ""
   Name: root
@@ -224,7 +226,16 @@ def launch_setup(context, *args, **kwargs):
                    in ('1', 'true', 'yes'))
     detach = (LaunchConfiguration('detach').perform(context).lower()
               in ('1', 'true', 'yes'))
+    attach = (LaunchConfiguration('attach').perform(context).lower()
+              in ('1', 'true', 'yes'))
     parent = LaunchConfiguration('parent_model').perform(context)
+
+    # With attach:=true a free approach drone (id n, standalone) also flies. Its pose bridge
+    # + mocap come from three_attach_launch (it is NOT nested under lift_system), so the
+    # sim-interface loop below stays at `n`. But its VISUALISATION (fleet_viz TF, RobotModel,
+    # displays) belongs here -- driven purely off /drone_{n}/motion_capture_state -- so the
+    # viz count is n+1.
+    n_viz = n + (1 if attach else 0)
 
     nodes = [SetParameter(name='use_sim_time', value=True)]
 
@@ -254,9 +265,9 @@ def launch_setup(context, *args, **kwargs):
     # TF for every drone + the payload, plus the payload box and its track
     nodes.append(Node(
         package='simulation_communication', executable='fleet_viz',
-        name='fleet_viz', parameters=[{'num_drones': n}], output='screen'))
+        name='fleet_viz', parameters=[{'num_drones': n_viz}], output='screen'))
 
-    for i in range(n):
+    for i in range(n_viz):
         # Point the model's only link at the frame the tracker actually
         # broadcasts, so the mesh follows the live pose.
         urdf = base_urdf.replace('name="base_link"', f'name="drone_{i}_mocap"')
@@ -276,7 +287,7 @@ def launch_setup(context, *args, **kwargs):
     os.makedirs(cfg_dir, exist_ok=True)
     cfg = os.path.join(cfg_dir, f'quad_load_{n}drone.rviz')
     with open(cfg, 'w') as fh:
-        fh.write(_build_config(n, show_actual, detach))
+        fh.write(_build_config(n_viz, show_actual, detach, attach))
 
     nodes.append(Node(
         package='rviz2', executable='rviz2', name='rviz2',
@@ -299,5 +310,8 @@ def generate_launch_description():
         # Show the DETACH drone-id selector + button in the ArmPanel (for the
         # dissipative detach controller). Off by default; detach:=true shows the row.
         DeclareLaunchArgument('detach', default_value='false'),
+        # Show the ATTACH button in the ArmPanel (arms the approach drone's magnet for the
+        # attach flow). Off by default; pass attach:=true with three_attach.sdf.
+        DeclareLaunchArgument('attach', default_value='false'),
         OpaqueFunction(function=launch_setup),
     ])

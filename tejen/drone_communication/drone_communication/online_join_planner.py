@@ -1,0 +1,3876 @@
+#!/usr/bin/env python3
+"""
+Online join planner with a simple mission state machine.
+
+Consumes the current quadrotor body state and a moving attachment-point pose/twist,
+then publishes a rolling MultiDOFJointTrajectory reference for the quadrotor body.
+The key convention is that the attachment point is a target for the suspended
+magnet tip, not for the quadrotor body. The planner therefore converts a desired
+magnet-tip target into a quadrotor-body reference by adding a vertical cable/drop
+compensation.
+
+This version adds reference-level obstacle avoidance. The planner first builds
+a nominal rolling quad-body reference toward the moving attachment point, then
+deforms that reference away from predicted moving obstacle spheres before
+publishing it to the controller. Diagnostics are still published for both the
+nominal and safe/deformed paths. This version also adds a blocked-target fallback: if the candidate safe
+reference cannot maintain the requested obstacle margin, the planner holds or
+retreats instead of descending. If the blocked state persists too long, it
+aborts the joining attempt, publishes a gentle landing reference at the current
+XY position, and sends a DISARM command once the vehicle is low enough.
+"""
+
+import csv
+import math
+import os
+import time
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import rclpy
+from rclpy.node import Node
+
+from geometry_msgs.msg import Point, PoseArray, PoseStamped, Transform, Twist, TwistStamped
+from interfaces.msg import MotionCaptureState
+from std_msgs.msg import Bool, String
+from trajectory_msgs.msg import MultiDOFJointTrajectory, MultiDOFJointTrajectoryPoint
+from visualization_msgs.msg import Marker, MarkerArray
+
+
+APPROACH_ABOVE_TARGET = 'APPROACH_ABOVE_TARGET'
+MATCH_VELOCITY = 'MATCH_VELOCITY'
+DESCEND_TO_ATTACHMENT = 'DESCEND_TO_ATTACHMENT'
+ATTACH_READY = 'ATTACH_READY'
+APPROACH_ABOVE_PICKUP = 'APPROACH_ABOVE_PICKUP'
+SETTLE_ABOVE_PICKUP = 'SETTLE_ABOVE_PICKUP'
+DESCEND_TO_PICKUP = 'DESCEND_TO_PICKUP'
+MAGNET_ATTACH_WAIT = 'MAGNET_ATTACH_WAIT'
+LIFT_OBJECT = 'LIFT_OBJECT'
+TRANSIT_TO_DROP_POINT = 'TRANSIT_TO_DROP_POINT'
+SETTLE_ABOVE_DROP_POINT = 'SETTLE_ABOVE_DROP_POINT'
+DESCEND_TO_DROP_HEIGHT = 'DESCEND_TO_DROP_HEIGHT'
+DROP_OBJECT = 'DROP_OBJECT'
+CLEAR_DROP_ZONE = 'CLEAR_DROP_ZONE'
+TRANSIT_TO_REATTACH = 'TRANSIT_TO_REATTACH'
+HOLD_FOR_OBSTACLE = 'HOLD_FOR_OBSTACLE'
+LANDING = 'LANDING'
+LANDED_DISARMED = 'LANDED_DISARMED'
+WAIT_FOR_TAKEOFF = 'WAIT_FOR_TAKEOFF'
+
+
+def _vec3_from_position(p) -> np.ndarray:
+    return np.array([float(p.x), float(p.y), float(p.z)], dtype=float)
+
+
+def _vec3_from_linear(v) -> np.ndarray:
+    return np.array([float(v.x), float(v.y), float(v.z)], dtype=float)
+
+
+def _make_point(v: np.ndarray) -> Point:
+    msg = Point()
+    msg.x = float(v[0])
+    msg.y = float(v[1])
+    msg.z = float(v[2])
+    return msg
+
+
+def _yaw_from_quaternion(q) -> float:
+    """Return yaw from a geometry_msgs Quaternion."""
+    return _rpy_from_quaternion(q)[2]
+
+
+def _rpy_from_quaternion(q) -> Tuple[float, float, float]:
+    """Return roll, pitch, yaw in radians from a geometry_msgs Quaternion."""
+    w = float(q.w)
+    x = float(q.x)
+    y = float(q.y)
+    z = float(q.z)
+
+    sinr_cosp = 2.0 * (w * x + y * z)
+    cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
+    roll = math.atan2(sinr_cosp, cosr_cosp)
+
+    sinp = 2.0 * (w * y - z * x)
+    pitch = math.copysign(math.pi / 2.0, sinp) if abs(sinp) >= 1.0 else math.asin(sinp)
+
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    yaw = math.atan2(siny_cosp, cosy_cosp)
+    return roll, pitch, yaw
+
+
+def _set_quaternion_from_yaw(orientation, yaw: float) -> None:
+    """Set a geometry_msgs Quaternion-like object from yaw only."""
+    orientation.x = 0.0
+    orientation.y = 0.0
+    orientation.z = math.sin(0.5 * yaw)
+    orientation.w = math.cos(0.5 * yaw)
+
+
+def _rotate_yaw(v: np.ndarray, yaw: float) -> np.ndarray:
+    """Rotate a vector about z by yaw."""
+    c = math.cos(yaw)
+    ss = math.sin(yaw)
+    return np.array([
+        c * v[0] - ss * v[1],
+        ss * v[0] + c * v[1],
+        v[2],
+    ], dtype=float)
+
+
+class OnlineJoinPlanner(Node):
+    def __init__(self) -> None:
+        super().__init__('online_join_planner')
+
+        # Topics
+        self.drone_state_topic = self.declare_parameter('drone_state_topic', '/motion_capture_state').value
+        self.attachment_pose_topic = self.declare_parameter('attachment_pose_topic', '/fake_attachment_point/pose').value
+        self.attachment_twist_topic = self.declare_parameter('attachment_twist_topic', '/fake_attachment_point/twist').value
+        self.payload_pose_topic = self.declare_parameter('payload_pose_topic', '/fake_payload/pose').value
+        self.payload_twist_topic = self.declare_parameter('payload_twist_topic', '/fake_payload/twist').value
+        self.reference_topic = self.declare_parameter('reference_topic', '/join_planner/reference').value
+        self.marker_topic = self.declare_parameter('marker_topic', '/join_planner/markers').value
+        self.state_topic = self.declare_parameter('state_topic', '/join_planner/state').value
+        self.obstacle_diagnostics_topic = self.declare_parameter(
+            'obstacle_diagnostics_topic', '/join_planner/obstacle_diagnostics'
+        ).value
+        # Optional command topic. This lets the fallback gate use the user's actual
+        # TAKEOFF click when available, rather than time since the planner process
+        # started. If the topic is absent, the planner still detects takeoff from
+        # measured height above the initial spawn z.
+        self.drone_command_topic = self.declare_parameter('drone_command_topic', 'drone_command').value
+
+        # External emergency / operator landing request. This is a ROS 2 Bool topic
+        # intended to be fed from Gazebo through ros_gz_bridge. A True message enters
+        # the existing LANDING branch; False messages have no effect.
+        self.enable_external_landing_trigger = bool(
+            self.declare_parameter('enable_external_landing_trigger', True).value
+        )
+        self.external_landing_topic = str(
+            self.declare_parameter('external_landing_topic', '/join_planner/land_now').value
+        )
+
+        # End-to-end pickup/drop/reattach mission topics. These are inactive in the
+        # default join-only mode, but let this planner reuse the existing reference,
+        # RViz, diagnostics, and fallback pipeline for the complete payload story.
+        self.mission_mode = str(self.declare_parameter('mission_mode', 'join').value).lower()
+        self.pickup_object_pose_topic = self.declare_parameter(
+            'pickup_object_pose_topic', '/model/payload_model/pose'
+        ).value
+        self.pickup_object_index = int(self.declare_parameter('pickup_object_index', 1).value)
+        self.object_attached_topic = self.declare_parameter(
+            'object_attached_topic', '/magnet/object_attached'
+        ).value
+        self.magnet_command_topic = self.declare_parameter('magnet_command_topic', '/magnet/command').value
+
+        # IRL safety/static-target controls. For first real-world tests we may not
+        # want to rely on a mocap marker on the pickup object or carried payload.
+        # Static pickup defaults to the known start position on the ground.
+        self.use_static_pickup_object = bool(
+            self.declare_parameter('use_static_pickup_object', True).value
+        )
+        self.static_pickup_object_x = float(self.declare_parameter('static_pickup_object_x', 0.0).value)
+        self.static_pickup_object_y = float(self.declare_parameter('static_pickup_object_y', 0.0).value)
+        self.static_pickup_object_z = float(self.declare_parameter('static_pickup_object_z', 0.0).value)
+
+        # Static drop point defaults to the same fixed XY. This avoids requiring a
+        # live transported-payload/basket marker during the first IRL tests.
+        self.static_drop_point_x = float(self.declare_parameter('static_drop_point_x', 0.0).value)
+        self.static_drop_point_y = float(self.declare_parameter('static_drop_point_y', 0.0).value)
+        self.static_drop_point_z = float(self.declare_parameter('static_drop_point_z', 0.0).value)
+
+        # Safety timeout: after dwelling in ATTACH_READY for too long, land at the
+        # current XY position using the existing landing reference. Landing bypasses
+        # avoidance deformation so fake/sim obstacle logic cannot move the IRL test.
+        self.enable_attach_ready_timeout_landing = bool(
+            self.declare_parameter('enable_attach_ready_timeout_landing', True).value
+        )
+        self.attach_ready_land_after_s = float(
+            self.declare_parameter('attach_ready_land_after_s', 30.0).value
+        )
+
+        # added 17/07/2026 pickup timeout
+        self.enable_pickup_timeout_landing = bool(
+            self.declare_parameter('enable_pickup_timeout_landing', True).value
+        )
+        self.pickup_land_after_s = float(
+            self.declare_parameter('pickup_land_after_s', 10.0).value
+        )
+
+        # RViz visualisation controls. The detailed status is always published on
+        # /join_planner/state and /join_planner/obstacle_diagnostics. These
+        # parameters only affect marker clutter in RViz.
+        self.show_debug_text = bool(self.declare_parameter('show_debug_text', True).value)
+        self.show_obstacle_diagnostic_markers = bool(
+            self.declare_parameter('show_obstacle_diagnostic_markers', True).value
+        )
+        self.show_nominal_reference_marker = bool(
+            self.declare_parameter('show_nominal_reference_marker', True).value
+        )
+
+        # Obstacle modelling / diagnostics / avoidance. Obstacles are represented
+        # as predicted moving spheres in the planning frame. The avoidance layer
+        # deforms the quad-body reference before it is published to the controller.
+        self.enable_obstacle_diagnostics = bool(
+            self.declare_parameter('enable_obstacle_diagnostics', True).value
+        )
+        self.enable_obstacle_avoidance = bool(
+            self.declare_parameter('enable_obstacle_avoidance', True).value
+        )
+        self.obstacle_count = max(0, int(self.declare_parameter('obstacle_count', 2).value))
+        self.obstacle_state_topic_prefix = self.declare_parameter(
+            'obstacle_state_topic_prefix', '/fake_obstacles/drone'
+        ).value
+        # Minimum allowed centre-to-centre distance between the planned quad-body
+        # reference and each obstacle centre. This should match the fake-world
+        # safety sphere unless you want a different planner-side margin.
+        self.obstacle_safety_radius = float(
+            self.declare_parameter('obstacle_safety_radius', 0.35).value
+        )
+        self.obstacle_timeout_s = float(self.declare_parameter('obstacle_timeout_s', 0.5).value)
+
+        # Payload-body avoidance. This models the transported basket/payload as a
+        # moving yawed rectangular safety volume. It is separate from the fake
+        # drone obstacle spheres: the drone may still approach the designated
+        # attachment/drop point, but the quad body reference is kept outside the
+        # inflated payload body whenever it is not high enough to clear it.
+        self.enable_payload_avoidance = bool(
+            self.declare_parameter('enable_payload_avoidance', True).value
+        )
+        self.show_payload_avoidance_markers = bool(
+            self.declare_parameter('show_payload_avoidance_markers', True).value
+        )
+        self.payload_timeout_s = float(self.declare_parameter('payload_timeout_s', 0.5).value)
+        self.payload_body_size_x = float(self.declare_parameter('payload_body_size_x', 0.80).value)
+        self.payload_body_size_y = float(self.declare_parameter('payload_body_size_y', 0.30).value)
+        self.payload_body_size_z = float(self.declare_parameter('payload_body_size_z', 0.12).value)
+        self.payload_safety_margin_xy = float(self.declare_parameter('payload_safety_margin_xy', 0.20).value)
+        self.payload_safety_margin_z = float(self.declare_parameter('payload_safety_margin_z', 0.10).value)
+        self.payload_avoidance_influence_margin = float(
+            self.declare_parameter('payload_avoidance_influence_margin', 0.35).value
+        )
+        self.payload_avoidance_gain = float(self.declare_parameter('payload_avoidance_gain', 0.85).value)
+        self.payload_avoidance_max_correction = float(
+            self.declare_parameter('payload_avoidance_max_correction', 0.45).value
+        )
+        self.payload_avoidance_vertical_weight = float(
+            self.declare_parameter('payload_avoidance_vertical_weight', 0.0).value
+        )
+
+        # The suspended electromagnet is below the quad body, so checking only
+        # the quad reference against the payload box can miss collisions where
+        # the tip sweeps into the basket/payload. Tip avoidance checks the
+        # estimated future magnet-tip path as well. A small corridor around the
+        # desired attachment/drop point is allowed so the magnet can still make
+        # intentional contact with the target region.
+        self.enable_payload_tip_avoidance = bool(
+            self.declare_parameter('enable_payload_tip_avoidance', True).value
+        )
+        self.payload_tip_safety_margin_xy = float(
+            self.declare_parameter('payload_tip_safety_margin_xy', 0.15).value
+        )
+        self.payload_tip_safety_margin_z = float(
+            self.declare_parameter('payload_tip_safety_margin_z', 0.05).value
+        )
+        self.payload_allow_tip_target_corridor = bool(
+            self.declare_parameter('payload_allow_tip_target_corridor', True).value
+        )
+        self.payload_tip_corridor_radius_xy = float(
+            self.declare_parameter('payload_tip_corridor_radius_xy', 0.20).value
+        )
+        self.payload_tip_corridor_height_above = float(
+            self.declare_parameter('payload_tip_corridor_height_above', 0.30).value
+        )
+        self.payload_tip_corridor_height_below = float(
+            self.declare_parameter('payload_tip_corridor_height_below', 0.08).value
+        )
+
+        # Reference-level deformation settings. By default the correction is
+        # horizontal-only, which matches the current mostly-horizontal cooperative
+        # transport task and avoids disturbing the final magnet-tip clearance.
+        self.avoidance_influence_radius = float(
+            self.declare_parameter('avoidance_influence_radius', 0.65).value
+        )
+        self.avoidance_gain = float(self.declare_parameter('avoidance_gain', 0.75).value)
+        self.avoidance_max_correction = float(
+            self.declare_parameter('avoidance_max_correction', 0.45).value
+        )
+        self.avoidance_smoothing_passes = max(0, int(
+            self.declare_parameter('avoidance_smoothing_passes', 3).value
+        ))
+        self.avoidance_ramp_time_s = float(
+            self.declare_parameter('avoidance_ramp_time_s', 0.35).value
+        )
+        self.avoidance_vertical_weight = float(
+            self.declare_parameter('avoidance_vertical_weight', 0.0).value
+        )
+
+        # Blocked-target fallback. Enabled by default so impossible or temporarily
+        # obstructed joins become an explicit hold state instead of an unsafe
+        # descent/attachment attempt. The blocked/recovered thresholds use
+        # obstacle margin, where margin = nearest distance - obstacle_safety_radius.
+        self.enable_blocked_fallback = bool(
+            self.declare_parameter('enable_blocked_fallback', True).value
+        )
+        self.blocked_margin_threshold = float(
+            self.declare_parameter('blocked_margin_threshold', 0.05).value
+        )
+        self.recovered_margin_threshold = float(
+            self.declare_parameter('recovered_margin_threshold', 0.15).value
+        )
+        self.blocked_dwell_time_s = float(
+            self.declare_parameter('blocked_dwell_time_s', 0.30).value
+        )
+        self.recovered_dwell_time_s = float(
+            self.declare_parameter('recovered_dwell_time_s', 0.50).value
+        )
+        # Startup/takeoff gate for blocked fallback. This prevents the planner
+        # from entering HOLD_FOR_OBSTACLE while the drone and fake objects are
+        # still sitting near the ground at spawn. The timer starts at the TAKEOFF
+        # command if seen, otherwise when the drone has visibly lifted above its
+        # initial z. The height gate is still required in both cases.
+        self.enable_fallback_takeoff_gate = bool(
+            self.declare_parameter('enable_fallback_takeoff_gate', True).value
+        )
+        self.fallback_after_takeoff_grace_time_s = float(
+            self.declare_parameter('fallback_after_takeoff_grace_time_s', 2.0).value
+        )
+        self.fallback_min_height_above_start = float(
+            self.declare_parameter('fallback_min_height_above_start', 0.30).value
+        )
+        self.takeoff_detection_height = float(
+            self.declare_parameter('takeoff_detection_height', 0.12).value
+        )
+
+        # Hold/retreat behaviour used by the blocked fallback. The hold point is
+        # normally stationary, but if an obstacle moves into the actual quadrotor
+        # safety bubble, the hold point is nudged horizontally away from the
+        # nearest obstacle instead of waiting in-place.
+        self.enable_hold_retreat = bool(
+            self.declare_parameter('enable_hold_retreat', True).value
+        )
+        self.hold_retreat_speed = float(
+            self.declare_parameter('hold_retreat_speed', 0.40).value
+        )
+        self.hold_retreat_extra_margin = float(
+            self.declare_parameter('hold_retreat_extra_margin', 0.10).value
+        )
+        self.hold_retreat_raise_z = float(
+            self.declare_parameter('hold_retreat_raise_z', 0.05).value
+        )
+
+        # Abort-to-land behaviour. If the planner remains in HOLD_FOR_OBSTACLE
+        # for too long, it gives up on the join attempt, descends at the current
+        # XY position, and publishes DISARM once the drone is low enough. The
+        # disarm height is relative to the measured start/spawn z so it is robust
+        # to map/world z offsets.
+        self.enable_blocked_timeout_landing = bool(
+            self.declare_parameter('enable_blocked_timeout_landing', True).value
+        )
+        self.max_blocked_time_s = float(
+            self.declare_parameter('max_blocked_time_s', 10.0).value
+        )
+        self.landing_descent_speed = float(
+            self.declare_parameter('landing_descent_speed', 0.25).value
+        )
+        self.landing_disarm_height_above_start = float(
+            self.declare_parameter('landing_disarm_height_above_start', 0.2).value
+        )
+        self.landing_min_time_before_disarm_s = float(
+            self.declare_parameter('landing_min_time_before_disarm_s', 1.0).value
+        )
+        self.landing_disarm_command = str(
+            self.declare_parameter('landing_disarm_command', 'DISARM').value
+        )
+
+        # Planning parameters
+        self.frame_id = self.declare_parameter('frame_id', 'map').value
+        self.publish_rate_hz = float(self.declare_parameter('publish_rate_hz', 30.0).value)
+        self.horizon_seconds = float(self.declare_parameter('horizon_seconds', 3.0).value)
+        self.intercept_time = float(self.declare_parameter('intercept_time', 2.0).value)
+
+        # Continuously retargeted reference timing. The moving payload target is
+        # refreshed every callback, while only the reference origin carries over.
+        # The 1.5 duration scale makes reference_nominal_speed approximately the
+        # peak speed of a zero-endpoint-velocity cubic Hermite segment.
+        self.reference_nominal_speed = max(
+            0.05,
+            float(self.declare_parameter('reference_nominal_speed', 0.30).value),
+        )
+        self.reference_duration_scale = max(
+            1.0,
+            float(self.declare_parameter('reference_duration_scale', 1.5).value),
+        )
+        self.reference_min_duration_s = max(
+            0.25,
+            float(self.declare_parameter('reference_min_duration_s', 1.0).value),
+        )
+        self.reference_max_duration_s = max(
+            self.reference_min_duration_s,
+            float(self.declare_parameter('reference_max_duration_s', 6.0).value),
+        )
+        self.reference_tracking_error_soft_m = max(
+            0.0,
+            float(self.declare_parameter('reference_tracking_error_soft_m', 0.10).value),
+        )
+        self.reference_tracking_error_hard_m = max(
+            self.reference_tracking_error_soft_m + 0.01,
+            float(self.declare_parameter('reference_tracking_error_hard_m', 0.35).value),
+        )
+        self.reference_min_progress_scale = float(np.clip(
+            self.declare_parameter('reference_min_progress_scale', 0.10).value,
+            0.0,
+            1.0,
+        ))
+        # In ATTACH_READY, the planner can stop generating an intercept curve from
+        # the current quad position and instead publish a time-indexed moving-target
+        # following horizon. This reduces the steady phase lag observed when the
+        # attachment point keeps moving. The lead time is intentionally small because
+        # large constant-velocity prediction around circular motion causes tangent
+        # overshoot.
+        self.attach_ready_tracking_mode = bool(
+            self.declare_parameter('attach_ready_tracking_mode', True).value
+        )
+        self.attach_ready_target_lead_time = float(
+            self.declare_parameter('attach_ready_target_lead_time', 0.20).value
+        )
+        self.approach_offset_x = float(self.declare_parameter('approach_offset_x', 0.0).value)
+        self.approach_offset_y = float(self.declare_parameter('approach_offset_y', 0.0).value)
+        self.approach_offset_z = float(self.declare_parameter('approach_offset_z', 0.30).value)
+        # These offsets refer to the magnet tip relative to the moving attachment point.
+        # The quadrotor body reference is computed by adding magnet_drop_below_quad in z.
+        self.final_attach_offset_z = float(self.declare_parameter('final_attach_offset_z', 0.05).value)
+        self.magnet_drop_below_quad = float(self.declare_parameter('magnet_drop_below_quad', 0.50).value)
+        self.use_measured_magnet_tip = bool(self.declare_parameter('use_measured_magnet_tip', False).value)
+        self.magnet_tip_pose_topic = self.declare_parameter('magnet_tip_pose_topic', '/magnet_tip_pose').value
+        self.descend_rate = float(self.declare_parameter('descend_rate', 0.08).value)  # m/s
+        self.auto_descend = bool(self.declare_parameter('auto_descend', False).value)
+        self.min_reference_z = float(self.declare_parameter('min_reference_z', 0.60).value)
+        self.max_reference_speed = float(self.declare_parameter('max_reference_speed', 2.0).value)
+        self.input_timeout_s = float(self.declare_parameter('input_timeout_s', 0.5).value)
+
+
+        # Pickup/drop mission parameters. Heights are magnet-tip heights relative
+        # to either the pickup object pose or the basket/drop point pose.
+        self.pickup_approach_clearance = float(
+            self.declare_parameter('pickup_approach_clearance', 0.35).value
+        )
+        self.pickup_attach_clearance = float(
+            self.declare_parameter('pickup_attach_clearance', 0.12).value
+        )
+        self.pickup_lift_height = float(self.declare_parameter('pickup_lift_height', 0.45).value)
+        self.pickup_descent_speed = float(self.declare_parameter('pickup_descent_speed', 0.04).value)
+        self.pickup_lift_speed = float(self.declare_parameter('pickup_lift_speed', 0.06).value)
+        self.pickup_settle_time_s = float(self.declare_parameter('pickup_settle_time_s', 1.0).value)
+        self.pickup_xy_tolerance = float(self.declare_parameter('pickup_xy_tolerance', 0.08).value)
+        self.pickup_lift_xy_tolerance = float(
+            self.declare_parameter(
+                'pickup_lift_xy_tolerance',
+                0.08,
+            ).value
+        )
+
+        self.pickup_lift_xy_dwell_s = float(
+            self.declare_parameter(
+                'pickup_lift_xy_dwell_s',
+                0.3,
+            ).value
+        )
+        self.pickup_z_tolerance = float(self.declare_parameter('pickup_z_tolerance', 0.1).value)
+        self.pickup_tip_speed_tolerance = float(
+            self.declare_parameter('pickup_tip_speed_tolerance', 0.25).value
+        )
+        self.attach_wait_timeout_s = float(self.declare_parameter('attach_wait_timeout_s', 8.0).value)
+        self.drop_point_source = str(self.declare_parameter('drop_point_source', 'static').value).lower()
+        self.drop_offset_x = float(self.declare_parameter('drop_offset_x', 0.0).value)
+        self.drop_offset_y = float(self.declare_parameter('drop_offset_y', 0.0).value)
+        self.drop_offset_z = float(self.declare_parameter('drop_offset_z', 0.15).value)
+        self.drop_approach_clearance = float(
+            self.declare_parameter('drop_approach_clearance', 0.35).value
+        )
+        self.drop_release_clearance = float(
+            self.declare_parameter('drop_release_clearance', 0.14).value
+        )
+        self.drop_clear_height = float(self.declare_parameter('drop_clear_height', 0.45).value)
+        self.drop_descent_speed = float(self.declare_parameter('drop_descent_speed', 0.04).value)
+        self.drop_clear_speed = float(self.declare_parameter('drop_clear_speed', 0.08).value)
+        self.drop_settle_time_s = float(self.declare_parameter('drop_settle_time_s', 1.0).value)
+        self.drop_wait_time_s = float(self.declare_parameter('drop_wait_time_s', 0.4).value)
+        self.step_reference_in_pickup_approach = bool(
+            self.declare_parameter('step_reference_in_pickup_approach', True).value
+        )
+        # Settling and attachment/drop waiting states require the vehicle to reach
+        # a precise static target. A rolling Hermite reference can repeatedly push
+        # that target toward the end of the receding horizon, so these states use a
+        # firm target at every horizon sample when enabled.
+        self.firm_reference_in_static_states = bool(
+            self.declare_parameter('firm_reference_in_static_states', True).value
+        )
+        # During pickup testing the attached object can expose thrust/model
+        # mismatch: a gentle rolling lift reference may let the controller settle
+        # at a low loaded hover and never satisfy the ideal lift-height gate.
+        # This option publishes a firm hold at the final lift target during
+        # LIFT_OBJECT, similar to the pickup-approach step reference.
+        self.step_reference_in_lift_object = bool(
+            self.declare_parameter('step_reference_in_lift_object', True).value
+        )
+        # Mission-completion gates for LIFT_OBJECT. These let the planner move on
+        # once the object is demonstrably airborne, without requiring perfect
+        # tracking of the nominal lift height. This is intentionally planner-side;
+        # the final controller improvement is to switch to a known loaded model.
+        self.lift_complete_object_clearance = float(
+            self.declare_parameter('lift_complete_object_clearance', 0.10).value
+        )
+        self.lift_timeout_s = float(self.declare_parameter('lift_timeout_s', 4.0).value)
+        self.lift_min_clearance_after_timeout = float(
+            self.declare_parameter('lift_min_clearance_after_timeout', 0.04).value
+        )
+
+        # CSV logging. Enabled by default so planner runs produce report-ready
+        # metrics under logs/join_planner when launched from the workspace root.
+        self.enable_csv_logging = bool(self.declare_parameter('enable_csv_logging', True).value)
+        self.log_directory = self.declare_parameter('log_directory', 'logs/join_planner').value
+        self.log_every_n_updates = max(1, int(self.declare_parameter('log_every_n_updates', 1).value))
+        self.obstacle_scenario = self.declare_parameter('obstacle_scenario', 'unknown').value
+
+        # These diagnostic parameters mirror how controller_mpc_payload samples the
+        # rolling planner trajectory. They do not alter the reference. They only let
+        # the CSV show what the controller sees at stage 0, intermediate stages, and
+        # the terminal stage. Current controller defaults are N=20 and skip_steps=3.
+        self.diagnostic_mpc_horizon_stages = max(
+            1, int(self.declare_parameter('diagnostic_mpc_horizon_stages', 20).value)
+        )
+        self.diagnostic_mpc_skip_steps = max(
+            1, int(self.declare_parameter('diagnostic_mpc_skip_steps', 3).value)
+        )
+        self.csv_file = None
+        self.csv_writer = None
+        self.csv_path = ''
+        self.update_counter = 0
+
+        # State-machine thresholds
+        self.approach_xy_threshold = float(self.declare_parameter('approach_xy_threshold', 0.15).value)
+        self.match_xy_threshold = float(self.declare_parameter('match_xy_threshold', 0.10).value)
+        self.match_xy_velocity_threshold = float(self.declare_parameter('match_xy_velocity_threshold', 0.10).value)
+        self.dwell_time_s = float(self.declare_parameter('dwell_time_s', 1.0).value)
+        self.descend_abort_xy_threshold = float(self.declare_parameter('descend_abort_xy_threshold', 0.25).value)
+        self.descend_abort_xy_velocity_threshold = float(self.declare_parameter('descend_abort_xy_velocity_threshold', 0.30).value)
+
+        self.dt = 1.0 / self.publish_rate_hz
+        self.horizon_samples = max(2, int(math.ceil(self.horizon_seconds / self.dt)))
+        self.intercept_time = max(self.dt, self.intercept_time)
+        self.approach_offset = np.array([
+            self.approach_offset_x,
+            self.approach_offset_y,
+            self.approach_offset_z,
+        ], dtype=float)
+
+        self.drone_position: Optional[np.ndarray] = None
+        self.drone_velocity: Optional[np.ndarray] = None
+        self.drone_quaternion = np.array([1.0, 0.0, 0.0, 0.0], dtype=float)  # [w, x, y, z]
+        self.drone_rpy = np.zeros(3, dtype=float)
+        self.drone_angular_velocity = np.zeros(3, dtype=float)
+        self.attachment_position: Optional[np.ndarray] = None
+        self.attachment_velocity: Optional[np.ndarray] = None
+        self.payload_position: Optional[np.ndarray] = None
+        self.payload_velocity: Optional[np.ndarray] = None
+        self.payload_yaw: float = 0.0
+        self.payload_yaw_rate: float = 0.0
+        self.last_payload_pose_time: Optional[float] = None
+        self.last_payload_twist_time: Optional[float] = None
+        self.last_drone_time: Optional[float] = None
+        self.last_attachment_pose_time: Optional[float] = None
+        self.last_attachment_twist_time: Optional[float] = None
+        self.measured_magnet_tip_position: Optional[np.ndarray] = None
+        self.last_magnet_tip_pose_time: Optional[float] = None
+
+        if self.use_static_pickup_object:
+            self.pickup_object_position: Optional[np.ndarray] = np.array([
+                self.static_pickup_object_x,
+                self.static_pickup_object_y,
+                self.static_pickup_object_z,
+            ], dtype=float)
+            self.pickup_object_velocity: Optional[np.ndarray] = np.zeros(3, dtype=float)
+            self.last_pickup_object_pose_time: Optional[float] = time.time()
+        else:
+            self.pickup_object_position: Optional[np.ndarray] = None
+            self.pickup_object_velocity: Optional[np.ndarray] = None
+            self.last_pickup_object_pose_time: Optional[float] = None
+        self.object_attached = False
+        self.latched_pickup_position: Optional[np.ndarray] = None
+        self.current_pickup_tip_clearance = self.pickup_approach_clearance
+        self.current_drop_tip_clearance = self.drop_approach_clearance
+        self.attach_wait_start_time: Optional[float] = None
+        self.drop_start_time: Optional[float] = None
+        self.last_magnet_command: Optional[str] = None
+
+        self.obstacle_positions: List[Optional[np.ndarray]] = [None] * self.obstacle_count
+        self.obstacle_velocities: List[Optional[np.ndarray]] = [None] * self.obstacle_count
+        self.last_obstacle_times: List[Optional[float]] = [None] * self.obstacle_count
+        self.last_obstacle_diagnostics: Optional[Dict[str, object]] = None
+        self.last_nominal_obstacle_diagnostics: Optional[Dict[str, object]] = None
+        self.last_obstacle_diagnostics_text = 'obstacles: no diagnostics yet'
+        self.last_avoidance_info: Optional[Dict[str, object]] = None
+        self.last_payload_avoidance_info: Optional[Dict[str, object]] = None
+        self.last_payload_diagnostics: Optional[Dict[str, object]] = None
+        self.last_nominal_payload_diagnostics: Optional[Dict[str, object]] = None
+        self.last_actual_payload_diagnostics: Optional[Dict[str, object]] = None
+        self.last_payload_tip_avoidance_info: Optional[Dict[str, object]] = None
+        self.last_nominal_positions: Optional[np.ndarray] = None
+
+        self.state = WAIT_FOR_TAKEOFF if self.mission_mode == 'pickup_delivery' else APPROACH_ABOVE_TARGET
+        self.state_entry_time = time.time()
+        self.condition_start_time: Optional[float] = None
+
+        # Persistent origin of the continuously retargeted smooth reference.
+        # The target itself is deliberately not latched because the payload moves.
+        self.reference_segment_state: Optional[str] = None
+        self.reference_position: Optional[np.ndarray] = None
+        self.reference_velocity: Optional[np.ndarray] = None
+        self.reference_last_duration_s = float('nan')
+        self.reference_last_progress_scale = 1.0
+
+        self.current_offset_z = self.approach_offset_z
+        self.last_status_text = ''
+
+        self.resume_state_after_hold = APPROACH_ABOVE_TARGET
+        self.hold_position: Optional[np.ndarray] = None
+        self.blocked_condition_start_time: Optional[float] = None
+        self.recovered_condition_start_time: Optional[float] = None
+        self.last_blocked_reason = ''
+        self.last_candidate_margin = float('inf')
+        self.last_fallback_active = False
+        self.initial_quad_z: Optional[float] = None
+        self.takeoff_command_time: Optional[float] = None
+        self.takeoff_detected_time: Optional[float] = None
+        self.last_fallback_allowed = False
+        self.last_fallback_gate_reason = 'waiting for takeoff'
+        self.last_actual_quad_obstacle_diagnostics: Optional[Dict[str, object]] = None
+        self.last_actual_quad_margin = float('inf')
+        self.last_actual_quad_distance_3d = float('inf')
+        self.last_actual_quad_distance_xy = float('inf')
+        self.last_actual_quad_obstacle_index = -1
+        self.last_hold_retreat_active = False
+        self.last_hold_retreat_step = 0.0
+        self.landing_target_xy: Optional[np.ndarray] = None
+        self.landing_start_z: Optional[float] = None
+        self.landing_start_time: Optional[float] = None
+        self.landing_disarm_z: Optional[float] = None
+        self.landing_disarm_sent = False
+        self.last_landing_reference_z = float('nan')
+        self.last_landing_elapsed_s = 0.0
+        self.external_landing_pending = False
+
+        self.create_subscription(MotionCaptureState, self.drone_state_topic, self.drone_state_callback, 10)
+        self.create_subscription(PoseStamped, self.attachment_pose_topic, self.attachment_pose_callback, 10)
+        self.create_subscription(TwistStamped, self.attachment_twist_topic, self.attachment_twist_callback, 10)
+        if self.enable_payload_avoidance or (
+            self.mission_mode == 'pickup_delivery' and self.drop_point_source == 'payload'
+        ):
+            self.create_subscription(PoseStamped, self.payload_pose_topic, self.payload_pose_callback, 10)
+            self.create_subscription(TwistStamped, self.payload_twist_topic, self.payload_twist_callback, 10)
+        if self.mission_mode == 'pickup_delivery':
+            if not self.use_static_pickup_object:
+                self.create_subscription(PoseArray, self.pickup_object_pose_topic, self.pickup_object_pose_callback, 10)
+            self.create_subscription(Bool, self.object_attached_topic, self.object_attached_callback, 10)
+        if self.use_measured_magnet_tip:
+            self.create_subscription(PoseStamped, self.magnet_tip_pose_topic, self.magnet_tip_pose_callback, 10)
+
+        self.create_subscription(String, self.drone_command_topic, self.drone_command_callback, 10)
+        if self.enable_external_landing_trigger:
+            self.create_subscription(
+                Bool,
+                self.external_landing_topic,
+                self.external_landing_callback,
+                10,
+            )
+
+        if self.enable_obstacle_diagnostics:
+            for obstacle_index in range(self.obstacle_count):
+                topic = f'{self.obstacle_state_topic_prefix}_{obstacle_index}/state'
+                self.create_subscription(
+                    MotionCaptureState,
+                    topic,
+                    lambda msg, idx=obstacle_index: self.obstacle_state_callback(msg, idx),
+                    10,
+                )
+
+        self.reference_publisher = self.create_publisher(MultiDOFJointTrajectory, self.reference_topic, 1)
+        self.marker_publisher = self.create_publisher(MarkerArray, self.marker_topic, 1)
+        self.state_publisher = self.create_publisher(String, self.state_topic, 5)
+        self.obstacle_diagnostics_publisher = self.create_publisher(String, self.obstacle_diagnostics_topic, 5)
+        self.drone_command_publisher = self.create_publisher(String, self.drone_command_topic, 5)
+        self.magnet_command_publisher = self.create_publisher(String, self.magnet_command_topic, 5)
+
+        self.initialise_csv_logger()
+
+        self.timer = self.create_timer(self.dt, self.timer_callback)
+        self.get_logger().info(
+            f'Online join planner started. Publishing {self.reference_topic} at {self.publish_rate_hz:.1f} Hz. '
+            f'frame_id={self.frame_id}, mission_mode={self.mission_mode}, auto_descend={self.auto_descend}, '
+            f'use_static_pickup_object={self.use_static_pickup_object}, '
+            f'static_pickup=({self.static_pickup_object_x:.2f},{self.static_pickup_object_y:.2f},{self.static_pickup_object_z:.2f}), '
+            f'drop_point_source={self.drop_point_source}, '
+            f'static_drop=({self.static_drop_point_x:.2f},{self.static_drop_point_y:.2f},{self.static_drop_point_z:.2f}), '
+            f'attach_ready_land_after={self.attach_ready_land_after_s:.1f} s, '
+            f'magnet_drop_below_quad={self.magnet_drop_below_quad:.2f} m, '
+            f'use_measured_magnet_tip={self.use_measured_magnet_tip}, '
+            f'obstacle_diagnostics={self.enable_obstacle_diagnostics}, '
+            f'obstacle_avoidance={self.enable_obstacle_avoidance}, '
+            f'obstacle_count={self.obstacle_count}, '
+            f'obstacle_safety_radius={self.obstacle_safety_radius:.2f} m, '
+            f'payload_avoidance={self.enable_payload_avoidance}, '
+            f'payload_size=({self.payload_body_size_x:.2f},{self.payload_body_size_y:.2f},{self.payload_body_size_z:.2f}) m, '
+            f'payload_margins=({self.payload_safety_margin_xy:.2f} xy,{self.payload_safety_margin_z:.2f} z) m, '
+            f'payload_tip_avoidance={self.enable_payload_tip_avoidance}, '
+            f'payload_tip_margins=({self.payload_tip_safety_margin_xy:.2f} xy,{self.payload_tip_safety_margin_z:.2f} z) m, '
+            f'payload_tip_corridor_r={self.payload_tip_corridor_radius_xy:.2f} m, '
+            f'avoidance_influence_radius={self.avoidance_influence_radius:.2f} m, '
+            f'blocked_fallback={self.enable_blocked_fallback}, '
+            f'blocked_margin_threshold={self.blocked_margin_threshold:.2f} m, '
+            f'recovered_margin_threshold={self.recovered_margin_threshold:.2f} m, '
+            f'fallback_takeoff_gate={self.enable_fallback_takeoff_gate}, '
+            f'fallback_after_takeoff_grace_time={self.fallback_after_takeoff_grace_time_s:.2f} s, '
+            f'fallback_min_height_above_start={self.fallback_min_height_above_start:.2f} m, '
+            f'hold_retreat={self.enable_hold_retreat}, '
+            f'hold_retreat_speed={self.hold_retreat_speed:.2f} m/s, '
+            f'blocked_timeout_landing={self.enable_blocked_timeout_landing}, '
+            f'max_blocked_time={self.max_blocked_time_s:.1f} s, '
+            f'landing_descent_speed={self.landing_descent_speed:.2f} m/s, '
+            f'landing_disarm_height={self.landing_disarm_height_above_start:.2f} m above start, '
+            f'external_landing_trigger={self.enable_external_landing_trigger}, '
+            f'external_landing_topic={self.external_landing_topic}, '
+            f'show_debug_text={self.show_debug_text}, '
+            f'csv_logging={self.enable_csv_logging}, csv_path={self.csv_path if self.csv_path else "disabled"}'
+        )
+
+    def initialise_csv_logger(self) -> None:
+        if not self.enable_csv_logging:
+            return
+
+        try:
+            os.makedirs(self.log_directory, exist_ok=True)
+            timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+            scenario_suffix = str(self.obstacle_scenario).replace('/', '_').replace(' ', '_')
+            filename = f'join_planner_{timestamp}_{scenario_suffix}.csv'
+            self.csv_path = os.path.join(self.log_directory, filename)
+            self.csv_file = open(self.csv_path, 'w', newline='')
+            self.csv_writer = csv.DictWriter(self.csv_file, fieldnames=self.csv_columns())
+            self.csv_writer.writeheader()
+            self.csv_file.flush()
+        except OSError as exc:
+            self.csv_file = None
+            self.csv_writer = None
+            self.csv_path = ''
+            self.get_logger().error(f'Could not open join planner CSV log: {exc}')
+
+    def csv_columns(self) -> List[str]:
+        return [
+            # Time and planner mode
+            'time_sec', 'ros_time_sec', 'planner_state', 'obstacle_scenario',
+            'auto_descend', 'enable_obstacle_avoidance', 'enable_obstacle_diagnostics',
+            'enable_payload_avoidance', 'payload_avoidance_active',
+            'enable_blocked_fallback', 'blocked_fallback_active', 'blocked_reason',
+            'candidate_safe_margin',
+            'actual_quad_nearest_obstacle', 'actual_quad_min_distance_3d', 'actual_quad_min_distance_xy',
+            'actual_quad_margin', 'actual_quad_violation',
+            'hold_retreat_active', 'hold_retreat_step',
+            'enable_blocked_timeout_landing', 'landing_active', 'landing_disarm_sent',
+            'landing_elapsed_s', 'landing_target_x', 'landing_target_y',
+            'landing_reference_z', 'landing_disarm_z',
+            # Quad body state
+            'quad_x', 'quad_y', 'quad_z', 'quad_vx', 'quad_vy', 'quad_vz',
+            'quad_qw', 'quad_qx', 'quad_qy', 'quad_qz',
+            'quad_roll', 'quad_pitch', 'quad_yaw',
+            'quad_wx', 'quad_wy', 'quad_wz',
+            # Moving attachment point state
+            'attach_x', 'attach_y', 'attach_z', 'attach_vx', 'attach_vy', 'attach_vz',
+            # Moving transported payload/body state
+            'payload_x', 'payload_y', 'payload_z', 'payload_vx', 'payload_vy', 'payload_vz',
+            'payload_yaw', 'payload_yaw_rate',
+            # Desired magnet tip target at the current planner phase/clearance
+            'tip_target_x', 'tip_target_y', 'tip_target_z',
+            'tip_target_vx', 'tip_target_vy', 'tip_target_vz',
+            # Estimated or measured magnet tip state
+            'tip_actual_x', 'tip_actual_y', 'tip_actual_z',
+            'tip_actual_vx', 'tip_actual_vy', 'tip_actual_vz',
+            # Ideal quad target implied by the current magnet-tip target.
+            'quad_target_x', 'quad_target_y', 'quad_target_z',
+            # Published reference endpoints, useful for checking receding-horizon timing
+            'quad_reference_start_x', 'quad_reference_start_y', 'quad_reference_start_z',
+            'quad_reference_end_x', 'quad_reference_end_y', 'quad_reference_end_z',
+            'tip_reference_start_x', 'tip_reference_start_y', 'tip_reference_start_z',
+            'tip_reference_end_x', 'tip_reference_end_y', 'tip_reference_end_z',
+            # Samples that match the controller's skip-3, N=20 horizon by default.
+            'quad_reference_stage0_x', 'quad_reference_stage0_y', 'quad_reference_stage0_z',
+            'quad_reference_stage1_x', 'quad_reference_stage1_y', 'quad_reference_stage1_z',
+            'quad_reference_stage5_x', 'quad_reference_stage5_y', 'quad_reference_stage5_z',
+            'quad_reference_stage10_x', 'quad_reference_stage10_y', 'quad_reference_stage10_z',
+            'quad_reference_stage19_x', 'quad_reference_stage19_y', 'quad_reference_stage19_z',
+            'quad_reference_terminal_x', 'quad_reference_terminal_y', 'quad_reference_terminal_z',
+            # Tracking errors
+            'tip_error_x', 'tip_error_y', 'tip_error_z', 'tip_error_xy', 'tip_error_3d',
+            'tip_relative_speed_xy',
+            'quad_error_x', 'quad_error_y', 'quad_error_z', 'quad_error_xy', 'quad_error_3d',
+            # Nominal unavoided obstacle diagnostics
+            'nominal_nearest_obstacle', 'nominal_min_distance_3d', 'nominal_min_distance_xy',
+            'nominal_margin', 'nominal_violation', 'nominal_violation_time',
+            # Safe/deformed obstacle diagnostics
+            'safe_nearest_obstacle', 'safe_min_distance_3d', 'safe_min_distance_xy',
+            'safe_margin', 'safe_violation', 'safe_violation_time',
+            # Payload-body diagnostics. Margin is signed distance to the inflated
+            # yawed payload box: positive is outside/clear, negative is inside.
+            'nominal_payload_margin', 'nominal_payload_violation', 'nominal_payload_time',
+            'nominal_payload_query_type', 'nominal_payload_tip_allowed_corridor',
+            'safe_payload_margin', 'safe_payload_violation', 'safe_payload_time',
+            'safe_payload_query_type', 'safe_payload_tip_allowed_corridor',
+            'actual_payload_margin', 'actual_payload_violation',
+            'actual_payload_query_type', 'actual_payload_tip_allowed_corridor',
+            # Avoidance effort
+            'num_corrected_points', 'max_correction_norm', 'mean_correction_norm',
+            'payload_num_corrected_points', 'payload_max_correction_norm', 'payload_mean_correction_norm',
+            'payload_tip_num_corrected_points', 'payload_tip_max_correction_norm', 'payload_tip_mean_correction_norm',
+            # Reproducibility parameters
+            'clearance_z', 'magnet_drop_below_quad', 'attach_ready_target_lead_time',
+            'reference_horizon_sec', 'intercept_time_sec', 'publish_rate_hz',
+            'diagnostic_mpc_horizon_stages', 'diagnostic_mpc_skip_steps', 'diagnostic_mpc_horizon_sec',
+            'step_reference_in_pickup_approach',
+            'pickup_xy_tolerance', 'pickup_z_tolerance', 'pickup_tip_speed_tolerance',
+            'approach_xy_threshold', 'match_xy_threshold', 'match_xy_velocity_threshold',
+            'descend_abort_xy_threshold', 'descend_abort_xy_velocity_threshold',
+            'obstacle_safety_radius', 'avoidance_influence_radius',
+            'payload_body_size_x', 'payload_body_size_y', 'payload_body_size_z',
+            'payload_safety_margin_xy', 'payload_safety_margin_z',
+            'payload_avoidance_influence_margin', 'payload_avoidance_gain',
+            'payload_avoidance_max_correction', 'payload_avoidance_vertical_weight',
+            'enable_payload_tip_avoidance', 'payload_tip_safety_margin_xy', 'payload_tip_safety_margin_z',
+            'payload_allow_tip_target_corridor', 'payload_tip_corridor_radius_xy',
+            'payload_tip_corridor_height_above', 'payload_tip_corridor_height_below',
+            'avoidance_gain', 'avoidance_max_correction', 'avoidance_vertical_weight',
+            'blocked_margin_threshold', 'recovered_margin_threshold',
+            'blocked_dwell_time_s', 'recovered_dwell_time_s',
+            'enable_fallback_takeoff_gate', 'fallback_allowed', 'fallback_gate_reason',
+            'initial_quad_z', 'height_above_start', 'takeoff_detected_time_sec',
+            'time_since_takeoff_s', 'fallback_after_takeoff_grace_time_s',
+            'fallback_min_height_above_start', 'takeoff_detection_height',
+            'enable_hold_retreat', 'hold_retreat_speed', 'hold_retreat_extra_margin',
+            'hold_retreat_raise_z',
+            'max_blocked_time_s', 'landing_descent_speed',
+            'landing_disarm_height_above_start', 'landing_min_time_before_disarm_s',
+            'landing_disarm_command',
+        ]
+
+    def _diagnostic_value(self, diagnostics: Optional[Dict[str, object]], key: str, default=''):
+        if not diagnostics or not diagnostics.get('active', False):
+            return default
+        return diagnostics.get(key, default)
+
+    def _diagnostic_obstacle_name(self, diagnostics: Optional[Dict[str, object]]) -> str:
+        if diagnostics and diagnostics.get('object_name'):
+            return str(diagnostics.get('object_name'))
+        obstacle_index = self._diagnostic_value(diagnostics, 'obstacle_index', '')
+        if obstacle_index == '':
+            return ''
+        try:
+            idx = int(obstacle_index)
+            if idx == -2:
+                return 'payload_body'
+            return f'drone_{idx}'
+        except (TypeError, ValueError):
+            return str(obstacle_index)
+
+    def _diagnostic_violation(self, diagnostics: Optional[Dict[str, object]]) -> str:
+        if not diagnostics or not diagnostics.get('active', False):
+            return ''
+        return str(bool(diagnostics.get('violation', False))).lower()
+
+    def write_csv_log_row(self, positions: np.ndarray) -> None:
+        if not self.enable_csv_logging or self.csv_writer is None or self.csv_file is None:
+            return
+        self.update_counter += 1
+        if (self.update_counter - 1) % self.log_every_n_updates != 0:
+            return
+        if (
+            self.drone_position is None
+            or self.drone_velocity is None
+            or self.attachment_position is None
+            or self.attachment_velocity is None
+            or positions.shape[0] == 0
+        ):
+            return
+
+        quad = self.drone_position.copy()
+        quad_vel = self.drone_velocity.copy()
+        attach = self.attachment_position.copy()
+        attach_vel = self.attachment_velocity.copy()
+        payload = self.payload_position.copy() if self.payload_position is not None else np.array([float('nan')] * 3)
+        payload_vel = self.payload_velocity.copy() if self.payload_velocity is not None else np.array([float('nan')] * 3)
+        tip_target = attach + self.desired_magnet_tip_offset()
+        tip_target_vel = attach_vel.copy()
+        tip_actual = self.current_magnet_tip_position()
+        tip_actual_vel = quad_vel.copy()
+        quad_target = tip_target + self.quad_body_offset_from_magnet_tip()
+
+        quad_ref_start = positions[0].copy()
+        quad_ref_end = positions[-1].copy()
+        tip_ref_start = quad_ref_start - self.quad_body_offset_from_magnet_tip()
+        tip_ref_end = quad_ref_end - self.quad_body_offset_from_magnet_tip()
+
+        def controller_stage_reference(stage: int) -> np.ndarray:
+            sample_index = min(
+                max(0, int(stage)) * self.diagnostic_mpc_skip_steps,
+                positions.shape[0] - 1,
+            )
+            return positions[sample_index].copy()
+
+        quad_ref_stage0 = controller_stage_reference(0)
+        quad_ref_stage1 = controller_stage_reference(1)
+        quad_ref_stage5 = controller_stage_reference(5)
+        quad_ref_stage10 = controller_stage_reference(10)
+        quad_ref_stage19 = controller_stage_reference(max(0, self.diagnostic_mpc_horizon_stages - 1))
+        quad_ref_terminal = controller_stage_reference(self.diagnostic_mpc_horizon_stages)
+
+        tip_error = tip_actual - tip_target
+        quad_error = quad - quad_target
+        tip_rel_vel_xy = float(np.linalg.norm(tip_actual_vel[:2] - tip_target_vel[:2]))
+
+        nominal_diag = self.last_nominal_obstacle_diagnostics
+        safe_diag = self.last_obstacle_diagnostics
+        nominal_payload_diag = self.last_nominal_payload_diagnostics
+        safe_payload_diag = self.last_payload_diagnostics
+        actual_payload_diag = self.last_actual_payload_diagnostics
+        avoidance = self.last_avoidance_info or {}
+        payload_avoidance = self.last_payload_avoidance_info or {}
+        payload_tip_avoidance = self.last_payload_tip_avoidance_info or {}
+        now_msg = self.get_clock().now().to_msg()
+        ros_time_sec = float(now_msg.sec) + 1e-9 * float(now_msg.nanosec)
+
+        row = {
+            'time_sec': time.time(),
+            'ros_time_sec': ros_time_sec,
+            'planner_state': self.state,
+            'obstacle_scenario': self.obstacle_scenario,
+            'auto_descend': str(bool(self.auto_descend)).lower(),
+            'enable_obstacle_avoidance': str(bool(self.enable_obstacle_avoidance)).lower(),
+            'enable_obstacle_diagnostics': str(bool(self.enable_obstacle_diagnostics)).lower(),
+            'enable_payload_avoidance': str(bool(self.enable_payload_avoidance)).lower(),
+            'payload_avoidance_active': str(bool(self.last_payload_diagnostics and self.last_payload_diagnostics.get('active', False))).lower(),
+            'enable_blocked_fallback': str(bool(self.enable_blocked_fallback)).lower(),
+            'blocked_fallback_active': str(bool(self.last_fallback_active)).lower(),
+            'blocked_reason': self.last_blocked_reason,
+            'candidate_safe_margin': self.last_candidate_margin,
+            'actual_quad_nearest_obstacle': (
+                'payload_body' if self.last_actual_quad_obstacle_index == -2
+                else ('' if self.last_actual_quad_obstacle_index < 0 else f'drone_{self.last_actual_quad_obstacle_index}')
+            ),
+            'actual_quad_min_distance_3d': self.last_actual_quad_distance_3d,
+            'actual_quad_min_distance_xy': self.last_actual_quad_distance_xy,
+            'actual_quad_margin': self.last_actual_quad_margin,
+            'actual_quad_violation': str(bool(self.last_actual_quad_margin < 0.0)).lower(),
+            'hold_retreat_active': str(bool(self.last_hold_retreat_active)).lower(),
+            'hold_retreat_step': self.last_hold_retreat_step,
+            'enable_blocked_timeout_landing': str(bool(self.enable_blocked_timeout_landing)).lower(),
+            'landing_active': str(bool(self.state == LANDING)).lower(),
+            'landing_disarm_sent': str(bool(self.landing_disarm_sent)).lower(),
+            'landing_elapsed_s': self.last_landing_elapsed_s,
+            'landing_target_x': '' if self.landing_target_xy is None else float(self.landing_target_xy[0]),
+            'landing_target_y': '' if self.landing_target_xy is None else float(self.landing_target_xy[1]),
+            'landing_reference_z': self.last_landing_reference_z,
+            'landing_disarm_z': '' if self.landing_disarm_z is None else self.landing_disarm_z,
+            'quad_x': quad[0], 'quad_y': quad[1], 'quad_z': quad[2],
+            'quad_vx': quad_vel[0], 'quad_vy': quad_vel[1], 'quad_vz': quad_vel[2],
+            'quad_qw': self.drone_quaternion[0], 'quad_qx': self.drone_quaternion[1],
+            'quad_qy': self.drone_quaternion[2], 'quad_qz': self.drone_quaternion[3],
+            'quad_roll': self.drone_rpy[0], 'quad_pitch': self.drone_rpy[1], 'quad_yaw': self.drone_rpy[2],
+            'quad_wx': self.drone_angular_velocity[0], 'quad_wy': self.drone_angular_velocity[1],
+            'quad_wz': self.drone_angular_velocity[2],
+            'attach_x': attach[0], 'attach_y': attach[1], 'attach_z': attach[2],
+            'attach_vx': attach_vel[0], 'attach_vy': attach_vel[1], 'attach_vz': attach_vel[2],
+            'payload_x': payload[0], 'payload_y': payload[1], 'payload_z': payload[2],
+            'payload_vx': payload_vel[0], 'payload_vy': payload_vel[1], 'payload_vz': payload_vel[2],
+            'payload_yaw': self.payload_yaw if self.payload_position is not None else '',
+            'payload_yaw_rate': self.payload_yaw_rate if self.payload_velocity is not None else '',
+            'tip_target_x': tip_target[0], 'tip_target_y': tip_target[1], 'tip_target_z': tip_target[2],
+            'tip_target_vx': tip_target_vel[0], 'tip_target_vy': tip_target_vel[1], 'tip_target_vz': tip_target_vel[2],
+            'tip_actual_x': tip_actual[0], 'tip_actual_y': tip_actual[1], 'tip_actual_z': tip_actual[2],
+            'tip_actual_vx': tip_actual_vel[0], 'tip_actual_vy': tip_actual_vel[1], 'tip_actual_vz': tip_actual_vel[2],
+            'quad_target_x': quad_target[0], 'quad_target_y': quad_target[1], 'quad_target_z': quad_target[2],
+            'quad_reference_start_x': quad_ref_start[0], 'quad_reference_start_y': quad_ref_start[1],
+            'quad_reference_start_z': quad_ref_start[2],
+            'quad_reference_end_x': quad_ref_end[0], 'quad_reference_end_y': quad_ref_end[1],
+            'quad_reference_end_z': quad_ref_end[2],
+            'tip_reference_start_x': tip_ref_start[0], 'tip_reference_start_y': tip_ref_start[1],
+            'tip_reference_start_z': tip_ref_start[2],
+            'tip_reference_end_x': tip_ref_end[0], 'tip_reference_end_y': tip_ref_end[1],
+            'tip_reference_end_z': tip_ref_end[2],
+            'quad_reference_stage0_x': quad_ref_stage0[0], 'quad_reference_stage0_y': quad_ref_stage0[1],
+            'quad_reference_stage0_z': quad_ref_stage0[2],
+            'quad_reference_stage1_x': quad_ref_stage1[0], 'quad_reference_stage1_y': quad_ref_stage1[1],
+            'quad_reference_stage1_z': quad_ref_stage1[2],
+            'quad_reference_stage5_x': quad_ref_stage5[0], 'quad_reference_stage5_y': quad_ref_stage5[1],
+            'quad_reference_stage5_z': quad_ref_stage5[2],
+            'quad_reference_stage10_x': quad_ref_stage10[0], 'quad_reference_stage10_y': quad_ref_stage10[1],
+            'quad_reference_stage10_z': quad_ref_stage10[2],
+            'quad_reference_stage19_x': quad_ref_stage19[0], 'quad_reference_stage19_y': quad_ref_stage19[1],
+            'quad_reference_stage19_z': quad_ref_stage19[2],
+            'quad_reference_terminal_x': quad_ref_terminal[0], 'quad_reference_terminal_y': quad_ref_terminal[1],
+            'quad_reference_terminal_z': quad_ref_terminal[2],
+            'tip_error_x': tip_error[0], 'tip_error_y': tip_error[1], 'tip_error_z': tip_error[2],
+            'tip_error_xy': float(np.linalg.norm(tip_error[:2])),
+            'tip_error_3d': float(np.linalg.norm(tip_error)),
+            'tip_relative_speed_xy': tip_rel_vel_xy,
+            'quad_error_x': quad_error[0], 'quad_error_y': quad_error[1], 'quad_error_z': quad_error[2],
+            'quad_error_xy': float(np.linalg.norm(quad_error[:2])),
+            'quad_error_3d': float(np.linalg.norm(quad_error)),
+            'nominal_nearest_obstacle': self._diagnostic_obstacle_name(nominal_diag),
+            'nominal_min_distance_3d': self._diagnostic_value(nominal_diag, 'distance_3d'),
+            'nominal_min_distance_xy': self._diagnostic_value(nominal_diag, 'distance_xy'),
+            'nominal_margin': self._diagnostic_value(nominal_diag, 'margin'),
+            'nominal_violation': self._diagnostic_violation(nominal_diag),
+            'nominal_violation_time': self._diagnostic_value(nominal_diag, 'time_s'),
+            'safe_nearest_obstacle': self._diagnostic_obstacle_name(safe_diag),
+            'safe_min_distance_3d': self._diagnostic_value(safe_diag, 'distance_3d'),
+            'safe_min_distance_xy': self._diagnostic_value(safe_diag, 'distance_xy'),
+            'safe_margin': self._diagnostic_value(safe_diag, 'margin'),
+            'safe_violation': self._diagnostic_violation(safe_diag),
+            'safe_violation_time': self._diagnostic_value(safe_diag, 'time_s'),
+            'nominal_payload_margin': self._diagnostic_value(nominal_payload_diag, 'margin'),
+            'nominal_payload_violation': self._diagnostic_violation(nominal_payload_diag),
+            'nominal_payload_time': self._diagnostic_value(nominal_payload_diag, 'time_s'),
+            'nominal_payload_query_type': self._diagnostic_value(nominal_payload_diag, 'query_type'),
+            'nominal_payload_tip_allowed_corridor': self._diagnostic_value(nominal_payload_diag, 'tip_allowed_corridor'),
+            'safe_payload_margin': self._diagnostic_value(safe_payload_diag, 'margin'),
+            'safe_payload_violation': self._diagnostic_violation(safe_payload_diag),
+            'safe_payload_time': self._diagnostic_value(safe_payload_diag, 'time_s'),
+            'safe_payload_query_type': self._diagnostic_value(safe_payload_diag, 'query_type'),
+            'safe_payload_tip_allowed_corridor': self._diagnostic_value(safe_payload_diag, 'tip_allowed_corridor'),
+            'actual_payload_margin': self._diagnostic_value(actual_payload_diag, 'margin'),
+            'actual_payload_violation': self._diagnostic_violation(actual_payload_diag),
+            'actual_payload_query_type': self._diagnostic_value(actual_payload_diag, 'query_type'),
+            'actual_payload_tip_allowed_corridor': self._diagnostic_value(actual_payload_diag, 'tip_allowed_corridor'),
+            'num_corrected_points': int(avoidance.get('corrected_points', 0)),
+            'max_correction_norm': float(avoidance.get('max_correction', 0.0)),
+            'mean_correction_norm': float(avoidance.get('mean_correction', 0.0)),
+            'payload_num_corrected_points': int(payload_avoidance.get('corrected_points', 0)),
+            'payload_max_correction_norm': float(payload_avoidance.get('max_correction', 0.0)),
+            'payload_mean_correction_norm': float(payload_avoidance.get('mean_correction', 0.0)),
+            'payload_tip_num_corrected_points': int(payload_tip_avoidance.get('corrected_points', 0)),
+            'payload_tip_max_correction_norm': float(payload_tip_avoidance.get('max_correction', 0.0)),
+            'payload_tip_mean_correction_norm': float(payload_tip_avoidance.get('mean_correction', 0.0)),
+            'clearance_z': self.current_offset_z,
+            'magnet_drop_below_quad': self.magnet_drop_below_quad,
+            'attach_ready_target_lead_time': self.attach_ready_target_lead_time,
+            'reference_horizon_sec': self.horizon_seconds,
+            'intercept_time_sec': self.intercept_time,
+            'publish_rate_hz': self.publish_rate_hz,
+            'diagnostic_mpc_horizon_stages': self.diagnostic_mpc_horizon_stages,
+            'diagnostic_mpc_skip_steps': self.diagnostic_mpc_skip_steps,
+            'diagnostic_mpc_horizon_sec': (
+                self.diagnostic_mpc_horizon_stages * self.diagnostic_mpc_skip_steps * self.dt
+            ),
+            'step_reference_in_pickup_approach': str(bool(self.step_reference_in_pickup_approach)).lower(),
+            'pickup_xy_tolerance': self.pickup_xy_tolerance,
+            'pickup_z_tolerance': self.pickup_z_tolerance,
+            'pickup_tip_speed_tolerance': self.pickup_tip_speed_tolerance,
+            'approach_xy_threshold': self.approach_xy_threshold,
+            'match_xy_threshold': self.match_xy_threshold,
+            'match_xy_velocity_threshold': self.match_xy_velocity_threshold,
+            'descend_abort_xy_threshold': self.descend_abort_xy_threshold,
+            'descend_abort_xy_velocity_threshold': self.descend_abort_xy_velocity_threshold,
+            'obstacle_safety_radius': self.obstacle_safety_radius,
+            'avoidance_influence_radius': self.avoidance_influence_radius,
+            'payload_body_size_x': self.payload_body_size_x,
+            'payload_body_size_y': self.payload_body_size_y,
+            'payload_body_size_z': self.payload_body_size_z,
+            'payload_safety_margin_xy': self.payload_safety_margin_xy,
+            'payload_safety_margin_z': self.payload_safety_margin_z,
+            'payload_avoidance_influence_margin': self.payload_avoidance_influence_margin,
+            'payload_avoidance_gain': self.payload_avoidance_gain,
+            'payload_avoidance_max_correction': self.payload_avoidance_max_correction,
+            'payload_avoidance_vertical_weight': self.payload_avoidance_vertical_weight,
+            'enable_payload_tip_avoidance': str(bool(self.enable_payload_tip_avoidance)).lower(),
+            'payload_tip_safety_margin_xy': self.payload_tip_safety_margin_xy,
+            'payload_tip_safety_margin_z': self.payload_tip_safety_margin_z,
+            'payload_allow_tip_target_corridor': str(bool(self.payload_allow_tip_target_corridor)).lower(),
+            'payload_tip_corridor_radius_xy': self.payload_tip_corridor_radius_xy,
+            'payload_tip_corridor_height_above': self.payload_tip_corridor_height_above,
+            'payload_tip_corridor_height_below': self.payload_tip_corridor_height_below,
+            'avoidance_gain': self.avoidance_gain,
+            'avoidance_max_correction': self.avoidance_max_correction,
+            'avoidance_vertical_weight': self.avoidance_vertical_weight,
+            'blocked_margin_threshold': self.blocked_margin_threshold,
+            'recovered_margin_threshold': self.recovered_margin_threshold,
+            'blocked_dwell_time_s': self.blocked_dwell_time_s,
+            'recovered_dwell_time_s': self.recovered_dwell_time_s,
+            'enable_fallback_takeoff_gate': str(bool(self.enable_fallback_takeoff_gate)).lower(),
+            'fallback_allowed': str(bool(self.last_fallback_allowed)).lower(),
+            'fallback_gate_reason': self.last_fallback_gate_reason,
+            'initial_quad_z': '' if self.initial_quad_z is None else self.initial_quad_z,
+            'height_above_start': '' if self.initial_quad_z is None else self.drone_position[2] - self.initial_quad_z,
+            'takeoff_detected_time_sec': '' if self.takeoff_detected_time is None else self.takeoff_detected_time,
+            'time_since_takeoff_s': '' if self.takeoff_detected_time is None else time.time() - self.takeoff_detected_time,
+            'fallback_after_takeoff_grace_time_s': self.fallback_after_takeoff_grace_time_s,
+            'fallback_min_height_above_start': self.fallback_min_height_above_start,
+            'takeoff_detection_height': self.takeoff_detection_height,
+            'enable_hold_retreat': str(bool(self.enable_hold_retreat)).lower(),
+            'hold_retreat_speed': self.hold_retreat_speed,
+            'hold_retreat_extra_margin': self.hold_retreat_extra_margin,
+            'hold_retreat_raise_z': self.hold_retreat_raise_z,
+            'max_blocked_time_s': self.max_blocked_time_s,
+            'landing_descent_speed': self.landing_descent_speed,
+            'landing_disarm_height_above_start': self.landing_disarm_height_above_start,
+            'landing_min_time_before_disarm_s': self.landing_min_time_before_disarm_s,
+            'landing_disarm_command': self.landing_disarm_command,
+        }
+
+        self.csv_writer.writerow(row)
+        self.csv_file.flush()
+
+    def close_csv_logger(self) -> None:
+        if self.csv_file is not None:
+            try:
+                self.csv_file.flush()
+                self.csv_file.close()
+            finally:
+                self.csv_file = None
+                self.csv_writer = None
+
+    def drone_state_callback(self, msg: MotionCaptureState) -> None:
+        self.drone_position = _vec3_from_position(msg.pose.position)
+        self.drone_velocity = _vec3_from_linear(msg.twist.linear)
+        self.drone_quaternion = np.array([
+            float(msg.pose.orientation.w),
+            float(msg.pose.orientation.x),
+            float(msg.pose.orientation.y),
+            float(msg.pose.orientation.z),
+        ], dtype=float)
+        self.drone_rpy = np.array(_rpy_from_quaternion(msg.pose.orientation), dtype=float)
+        self.drone_angular_velocity = _vec3_from_linear(msg.twist.angular)
+        self.last_drone_time = time.time()
+
+        if self.initial_quad_z is None:
+            self.initial_quad_z = float(self.drone_position[2])
+
+        # Fallback path if the command topic is not connected: infer that
+        # takeoff has begun once the vehicle has visibly moved above spawn height.
+        height_above_start = (
+            float(self.drone_position[2]) - self.initial_quad_z
+        )
+
+        if (
+            self.state == WAIT_FOR_TAKEOFF
+            and height_above_start >= self.takeoff_detection_height
+        ):
+            if self.takeoff_detected_time is None:
+                self.takeoff_detected_time = self.last_drone_time
+
+            self.transition_to(
+                APPROACH_ABOVE_PICKUP,
+                f'takeoff detected at {height_above_start:.2f} m above start',
+            )
+
+        # If an external landing request arrived before the first mocap sample,
+        # start the normal landing branch now that current XY and Z are known.
+        if (
+            self.external_landing_pending
+            and self.state not in (LANDING, LANDED_DISARMED)
+        ):
+            self.external_landing_pending = False
+            self.transition_to(
+                LANDING,
+                'external land_now request received before drone state became available',
+            )
+
+    def external_landing_callback(self, msg: Bool) -> None:
+        """Enter the existing safe-landing state when /land_now is True."""
+        if not bool(msg.data):
+            return
+
+        if self.state in (LANDING, LANDED_DISARMED):
+            # Do not relatch current XY/Z or restart the descent ramp if a publisher
+            # sends True repeatedly.
+            return
+
+        if self.drone_position is None:
+            self.external_landing_pending = True
+            self.get_logger().warning(
+                f'Received True on {self.external_landing_topic}, but no drone state is available yet; '
+                'landing request latched until the first state sample.'
+            )
+            return
+
+        self.external_landing_pending = False
+        self.get_logger().warning(
+            f'Received True on {self.external_landing_topic}; entering LANDING.'
+        )
+        self.transition_to(LANDING, f'external land_now trigger on {self.external_landing_topic}')
+
+    def drone_command_callback(self, msg: String) -> None:
+        command = str(msg.data).strip().upper()
+        now = time.time()
+
+        if command == 'TAKEOFF':
+            self.takeoff_command_time = now
+
+            if self.initial_quad_z is None and self.drone_position is not None:
+                self.initial_quad_z = float(self.drone_position[2])
+
+            self.get_logger().info(
+                'Join planner saw TAKEOFF command; waiting for measured lift-off.'
+            )
+            
+        elif command in ('ARM', 'ARMED'):
+            # Treat arming as a fresh pre-takeoff setup point, but do not start
+            # the fallback grace timer until TAKEOFF or physical lift is detected.
+            if self.drone_position is not None:
+                self.initial_quad_z = float(self.drone_position[2])
+            self.takeoff_command_time = None
+            self.takeoff_detected_time = None
+            self.last_fallback_allowed = False
+            self.last_fallback_gate_reason = 'armed: waiting for takeoff'
+
+        elif command in ('DISARM', 'DISARMED', 'LAND', 'LANDED'):
+            # Reset the gate so a subsequent run starts cleanly at the new ground
+            # height instead of using stale takeoff timing.
+            if self.drone_position is not None:
+                self.initial_quad_z = float(self.drone_position[2])
+            self.takeoff_command_time = None
+            self.takeoff_detected_time = None
+            self.last_fallback_allowed = False
+            self.last_fallback_gate_reason = f'{command.lower()}: waiting for takeoff'
+
+    def update_takeoff_detection_from_height(self) -> None:
+        if self.drone_position is None:
+            return
+        if self.initial_quad_z is None:
+            self.initial_quad_z = float(self.drone_position[2])
+        if (
+            self.takeoff_detected_time is None
+            and (float(self.drone_position[2]) - self.initial_quad_z) >= self.takeoff_detection_height
+        ):
+            self.takeoff_detected_time = time.time()
+            self.state_entry_time = time.time()
+
+    def blocked_fallback_allowed_now(self) -> bool:
+        if not self.enable_fallback_takeoff_gate:
+            self.last_fallback_allowed = True
+            self.last_fallback_gate_reason = 'takeoff gate disabled'
+            return True
+
+        self.update_takeoff_detection_from_height()
+
+        if self.drone_position is None:
+            self.last_fallback_allowed = False
+            self.last_fallback_gate_reason = 'waiting for drone state'
+            return False
+        if self.initial_quad_z is None:
+            self.initial_quad_z = float(self.drone_position[2])
+
+        height_above_start = float(self.drone_position[2]) - self.initial_quad_z
+        if self.takeoff_detected_time is None:
+            self.last_fallback_allowed = False
+            self.last_fallback_gate_reason = (
+                f'waiting for TAKEOFF or height rise > {self.takeoff_detection_height:.2f} m '
+                f'(current {height_above_start:.2f} m)'
+            )
+            return False
+
+        time_since_takeoff = time.time() - self.takeoff_detected_time
+        if time_since_takeoff < self.fallback_after_takeoff_grace_time_s:
+            self.last_fallback_allowed = False
+            self.last_fallback_gate_reason = (
+                f'takeoff grace {time_since_takeoff:.2f}/'
+                f'{self.fallback_after_takeoff_grace_time_s:.2f} s'
+            )
+            return False
+
+        if height_above_start < self.fallback_min_height_above_start:
+            self.last_fallback_allowed = False
+            self.last_fallback_gate_reason = (
+                f'height gate {height_above_start:.2f}/'
+                f'{self.fallback_min_height_above_start:.2f} m above start'
+            )
+            return False
+
+        self.last_fallback_allowed = True
+        self.last_fallback_gate_reason = (
+            f'fallback enabled: {time_since_takeoff:.2f} s after takeoff, '
+            f'{height_above_start:.2f} m above start'
+        )
+        return True
+
+    def attachment_pose_callback(self, msg: PoseStamped) -> None:
+        self.attachment_position = _vec3_from_position(msg.pose.position)
+        self.last_attachment_pose_time = time.time()
+
+    def attachment_twist_callback(self, msg: TwistStamped) -> None:
+        self.attachment_velocity = _vec3_from_linear(msg.twist.linear)
+        self.last_attachment_twist_time = time.time()
+
+    def payload_pose_callback(self, msg: PoseStamped) -> None:
+        self.payload_position = _vec3_from_position(msg.pose.position)
+        self.payload_yaw = _yaw_from_quaternion(msg.pose.orientation)
+        self.last_payload_pose_time = time.time()
+
+    def payload_twist_callback(self, msg: TwistStamped) -> None:
+        self.payload_velocity = _vec3_from_linear(msg.twist.linear)
+        self.payload_yaw_rate = float(msg.twist.angular.z)
+        self.last_payload_twist_time = time.time()
+
+    def magnet_tip_pose_callback(self, msg: PoseStamped) -> None:
+        self.measured_magnet_tip_position = _vec3_from_position(msg.pose.position)
+        self.last_magnet_tip_pose_time = time.time()
+
+    def obstacle_state_callback(self, msg: MotionCaptureState, obstacle_index: int) -> None:
+        if obstacle_index < 0 or obstacle_index >= self.obstacle_count:
+            return
+        self.obstacle_positions[obstacle_index] = _vec3_from_position(msg.pose.position)
+        self.obstacle_velocities[obstacle_index] = _vec3_from_linear(msg.twist.linear)
+        self.last_obstacle_times[obstacle_index] = time.time()
+
+    def inputs_ready(self) -> bool:
+        now = time.time()
+        required = [
+            (self.drone_position, self.last_drone_time, 'drone state'),
+            (self.attachment_position, self.last_attachment_pose_time, 'attachment pose'),
+            (self.attachment_velocity, self.last_attachment_twist_time, 'attachment twist'),
+        ]
+        if self.use_measured_magnet_tip:
+            required.append((self.measured_magnet_tip_position, self.last_magnet_tip_pose_time, 'magnet tip pose'))
+        if self.mission_mode == 'pickup_delivery':
+            if self.use_static_pickup_object:
+                # Keep the static object timestamp fresh so input timeout does not
+                # reject a deliberately hard-coded pickup point.
+                self.last_pickup_object_pose_time = now
+            else:
+                required.append((self.pickup_object_position, self.last_pickup_object_pose_time, 'pickup object pose'))
+            if self.drop_point_source == 'payload':
+                required.append((self.payload_position, self.last_payload_pose_time, 'drop/payload pose'))
+                required.append((self.payload_velocity, self.last_payload_twist_time, 'drop/payload twist'))
+        for value, stamp, name in required:
+            if value is None or stamp is None:
+                self.get_logger().warn(f'Waiting for {name}...', throttle_duration_sec=1.0)
+                return False
+            if now - stamp > self.input_timeout_s:
+                self.get_logger().warn(f'{name} is stale.', throttle_duration_sec=1.0)
+                return False
+        return True
+
+    def pickup_object_pose_callback(self, msg: PoseArray) -> None:
+        if self.use_static_pickup_object:
+            return
+        if self.pickup_object_index < 0:
+            index = len(msg.poses) + self.pickup_object_index
+        else:
+            index = self.pickup_object_index
+        if index < 0 or index >= len(msg.poses):
+            self.get_logger().warn(
+                f'pickup_object_index={self.pickup_object_index} out of range for '
+                f'{self.pickup_object_pose_topic}; length={len(msg.poses)}',
+                throttle_duration_sec=2.0,
+            )
+            return
+
+        now = time.time()
+        pos = _vec3_from_position(msg.poses[index].position)
+        if self.pickup_object_position is None or self.last_pickup_object_pose_time is None:
+            vel = np.zeros(3, dtype=float)
+        else:
+            dt = max(1e-6, now - self.last_pickup_object_pose_time)
+            vel = (pos - self.pickup_object_position) / dt
+        self.pickup_object_position = pos
+        self.pickup_object_velocity = vel
+        self.last_pickup_object_pose_time = now
+
+    def object_attached_callback(self, msg: Bool) -> None:
+        self.object_attached = bool(msg.data)
+
+    def publish_magnet_command(self, command: str) -> None:
+        command = str(command).strip().upper()
+        if self.last_magnet_command == command:
+            return
+        msg = String()
+        msg.data = command
+        self.magnet_command_publisher.publish(msg)
+        self.last_magnet_command = command
+        self.get_logger().info(f'Magnet command: {command}')
+
+    def tip_speed(self) -> float:
+        if self.use_measured_magnet_tip and self.drone_velocity is not None:
+            # There is not currently a separate magnet-tip velocity topic, so this
+            # is a conservative proxy for final approach gating.
+            return float(np.linalg.norm(self.drone_velocity))
+        if self.drone_velocity is None:
+            return 0.0
+        return float(np.linalg.norm(self.drone_velocity))
+
+    def transition_to(self, new_state: str, reason: str) -> None:
+        if new_state == self.state:
+            return
+
+        old_state = self.state
+        self.state = new_state
+        self.state_entry_time = time.time()
+        self.condition_start_time = None
+        self.reset_reference_segment()
+
+        if new_state in (APPROACH_ABOVE_TARGET, MATCH_VELOCITY, TRANSIT_TO_REATTACH):
+            self.current_offset_z = self.approach_offset_z
+        elif new_state == DESCEND_TO_ATTACHMENT:
+            self.current_offset_z = self.approach_offset_z
+        elif new_state == ATTACH_READY:
+            self.current_offset_z = self.final_attach_offset_z
+        elif new_state in (APPROACH_ABOVE_PICKUP, SETTLE_ABOVE_PICKUP):
+            self.current_pickup_tip_clearance = self.pickup_approach_clearance
+        elif new_state == DESCEND_TO_PICKUP:
+            if self.pickup_object_position is not None:
+                self.latched_pickup_position = self.pickup_object_position.copy()
+            self.current_pickup_tip_clearance = self.pickup_approach_clearance
+        elif new_state == MAGNET_ATTACH_WAIT:
+            self.current_pickup_tip_clearance = self.pickup_attach_clearance
+            self.attach_wait_start_time = time.time()
+        elif new_state == LIFT_OBJECT:
+            self.current_pickup_tip_clearance = self.pickup_attach_clearance
+        elif new_state in (TRANSIT_TO_DROP_POINT, SETTLE_ABOVE_DROP_POINT):
+            self.current_drop_tip_clearance = self.drop_approach_clearance
+        elif new_state == DESCEND_TO_DROP_HEIGHT:
+            self.current_drop_tip_clearance = self.drop_approach_clearance
+        elif new_state == DROP_OBJECT:
+            self.current_drop_tip_clearance = self.drop_release_clearance
+            self.drop_start_time = time.time()
+        elif new_state == CLEAR_DROP_ZONE:
+            self.current_drop_tip_clearance = self.drop_release_clearance
+        elif new_state == HOLD_FOR_OBSTACLE:
+            # Do not keep descending while the candidate path is blocked. Raising
+            # this clearance also makes the displayed target/CSV state reflect
+            # that the planner has backed out of attachment descent.
+            self.current_offset_z = max(self.current_offset_z, self.approach_offset_z)
+        elif new_state == LANDING:
+            self.initialise_landing_reference(reason)
+        elif new_state == LANDED_DISARMED:
+            # Keep the final landing reference available, but do not reinitialise
+            # the descent ramp after sending DISARM.
+            pass
+
+        self.get_logger().info(f'Planner state: {old_state} -> {new_state}. Reason: {reason}')
+
+    def condition_true_for(self, condition: bool, duration_s: float) -> bool:
+        now = time.time()
+        if not condition:
+            self.condition_start_time = None
+            return False
+        if self.condition_start_time is None:
+            self.condition_start_time = now
+            return False
+        return (now - self.condition_start_time) >= duration_s
+
+    def initialise_landing_reference(self, reason: str = '') -> None:
+        """Latch a simple current-XY landing target and descent ramp."""
+        if self.drone_position is None:
+            return
+
+        if self.initial_quad_z is None:
+            self.initial_quad_z = float(self.drone_position[2])
+
+        self.landing_target_xy = self.drone_position[:2].copy()
+        self.landing_start_z = float(self.drone_position[2])
+        self.landing_start_time = time.time()
+        self.landing_disarm_z = float(self.initial_quad_z + self.landing_disarm_height_above_start)
+        self.landing_disarm_sent = False
+        self.last_landing_reference_z = self.landing_start_z
+        self.last_landing_elapsed_s = 0.0
+        self.hold_position = None
+        self.blocked_condition_start_time = None
+        self.recovered_condition_start_time = None
+        self.last_blocked_reason = reason
+
+    def maybe_start_landing_from_blocked_timeout(self) -> None:
+        """Abort the join attempt if HOLD_FOR_OBSTACLE persists too long."""
+        if self.state != HOLD_FOR_OBSTACLE:
+            return
+        if not self.enable_blocked_timeout_landing:
+            return
+        if self.max_blocked_time_s <= 0.0:
+            return
+
+        blocked_time = time.time() - self.state_entry_time
+        if blocked_time >= self.max_blocked_time_s:
+            self.transition_to(
+                LANDING,
+                f'blocked for {blocked_time:.1f} s >= {self.max_blocked_time_s:.1f} s; aborting to landing',
+            )
+
+    def landing_target_z_at(self, elapsed_s: float) -> Tuple[float, float]:
+        """Return desired landing z and vertical velocity for a time on the ramp."""
+        if self.landing_start_z is None:
+            start_z = float(self.drone_position[2]) if self.drone_position is not None else 0.0
+        else:
+            start_z = float(self.landing_start_z)
+
+        if self.landing_disarm_z is None:
+            if self.initial_quad_z is None:
+                ground_z = 0.0
+            else:
+                ground_z = float(self.initial_quad_z)
+            disarm_z = ground_z + self.landing_disarm_height_above_start
+            self.landing_disarm_z = disarm_z
+        else:
+            disarm_z = float(self.landing_disarm_z)
+
+        speed = max(0.0, float(self.landing_descent_speed))
+        if speed <= 1e-9:
+            return start_z, 0.0
+
+        z = max(disarm_z, start_z - speed * max(0.0, elapsed_s))
+        vz = -speed if z > disarm_z + 1e-6 else 0.0
+        return z, vz
+
+    def build_landing_reference_arrays(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Build a gentle current-XY descent reference for abort-to-land."""
+        assert self.drone_position is not None
+
+        if self.landing_target_xy is None or self.landing_start_z is None or self.landing_start_time is None:
+            self.initialise_landing_reference('landing reference initialised lazily')
+
+        if self.landing_target_xy is None:
+            target_xy = self.drone_position[:2].copy()
+        else:
+            target_xy = self.landing_target_xy.copy()
+
+        elapsed_now = 0.0 if self.landing_start_time is None else time.time() - self.landing_start_time
+        self.last_landing_elapsed_s = float(max(0.0, elapsed_now))
+
+        positions = []
+        velocities = []
+        accelerations = []
+        for k in range(self.horizon_samples):
+            t = self.last_landing_elapsed_s + k * self.dt
+            z, vz = self.landing_target_z_at(t)
+            p = np.array([target_xy[0], target_xy[1], z], dtype=float)
+            v = np.array([0.0, 0.0, vz], dtype=float)
+            a = np.zeros(3, dtype=float)
+            positions.append(p)
+            velocities.append(v)
+            accelerations.append(a)
+
+        self.last_landing_reference_z = float(positions[0][2]) if positions else float('nan')
+        return np.array(positions), np.array(velocities), np.array(accelerations)
+
+    def maybe_publish_landing_disarm(self) -> None:
+        """Publish DISARM once the landing descent reaches the low-impact height."""
+        if self.state != LANDING:
+            return
+        if self.landing_disarm_sent:
+            return
+        if self.drone_position is None:
+            return
+        if self.landing_start_time is None:
+            return
+
+        elapsed = time.time() - self.landing_start_time
+        self.last_landing_elapsed_s = float(max(0.0, elapsed))
+        if elapsed < self.landing_min_time_before_disarm_s:
+            return
+
+        if self.landing_disarm_z is None:
+            if self.initial_quad_z is None:
+                self.initial_quad_z = float(self.drone_position[2])
+            self.landing_disarm_z = float(self.initial_quad_z + self.landing_disarm_height_above_start)
+
+        if float(self.drone_position[2]) <= float(self.landing_disarm_z):
+            msg = String()
+            msg.data = self.landing_disarm_command
+            self.drone_command_publisher.publish(msg)
+            self.landing_disarm_sent = True
+            self.transition_to(
+                LANDED_DISARMED,
+                f'published {self.landing_disarm_command} at z={self.drone_position[2]:.2f} m '
+                f'(threshold {self.landing_disarm_z:.2f} m)',
+            )
+
+    def pickup_base_position_velocity(self) -> Tuple[np.ndarray, np.ndarray]:
+        assert self.pickup_object_position is not None
+        if self.latched_pickup_position is not None and self.state in (
+            DESCEND_TO_PICKUP,
+            MAGNET_ATTACH_WAIT,
+            LIFT_OBJECT,
+            TRANSIT_TO_DROP_POINT,
+            SETTLE_ABOVE_DROP_POINT,
+            DESCEND_TO_DROP_HEIGHT,
+            DROP_OBJECT,
+            CLEAR_DROP_ZONE,
+            TRANSIT_TO_REATTACH,
+            APPROACH_ABOVE_TARGET,
+            MATCH_VELOCITY,
+            DESCEND_TO_ATTACHMENT,
+            ATTACH_READY,
+        ):
+            return self.latched_pickup_position.copy(), np.zeros(3, dtype=float)
+        vel = self.pickup_object_velocity.copy() if self.pickup_object_velocity is not None else np.zeros(3, dtype=float)
+        return self.pickup_object_position.copy(), vel
+
+    def drop_point_position_velocity(self) -> Tuple[np.ndarray, np.ndarray]:
+        offset = np.array([self.drop_offset_x, self.drop_offset_y, self.drop_offset_z], dtype=float)
+        if self.drop_point_source in ('static', 'fixed', 'hardcoded'):
+            base = np.array([
+                self.static_drop_point_x,
+                self.static_drop_point_y,
+                self.static_drop_point_z,
+            ], dtype=float)
+            return base + offset, np.zeros(3, dtype=float)
+        if self.drop_point_source == 'payload' and self.payload_position is not None:
+            offset_world = _rotate_yaw(np.array([offset[0], offset[1], 0.0], dtype=float), self.payload_yaw)
+            offset_world[2] = offset[2]
+            vel = self.payload_velocity.copy() if self.payload_velocity is not None else np.zeros(3, dtype=float)
+            return self.payload_position.copy() + offset_world, vel
+        assert self.attachment_position is not None
+        vel = self.attachment_velocity.copy() if self.attachment_velocity is not None else np.zeros(3, dtype=float)
+        return self.attachment_position.copy() + offset, vel
+
+    def target_base_position_velocity(self) -> Tuple[np.ndarray, np.ndarray]:
+        if self.state in (
+            WAIT_FOR_TAKEOFF,
+            APPROACH_ABOVE_PICKUP,
+            SETTLE_ABOVE_PICKUP,
+            DESCEND_TO_PICKUP,
+            MAGNET_ATTACH_WAIT,
+            LIFT_OBJECT,
+        ):
+            return self.pickup_base_position_velocity()
+        if self.state in (
+            TRANSIT_TO_DROP_POINT,
+            SETTLE_ABOVE_DROP_POINT,
+            DESCEND_TO_DROP_HEIGHT,
+            DROP_OBJECT,
+            CLEAR_DROP_ZONE,
+        ):
+            return self.drop_point_position_velocity()
+        assert self.attachment_position is not None
+        assert self.attachment_velocity is not None
+        return self.attachment_position.copy(), self.attachment_velocity.copy()
+
+    def desired_magnet_tip_offset(self) -> np.ndarray:
+        """Desired magnet-tip offset relative to the active target point."""
+        if self.state in (WAIT_FOR_TAKEOFF, APPROACH_ABOVE_PICKUP, SETTLE_ABOVE_PICKUP):
+            return np.array([0.0, 0.0, self.pickup_approach_clearance], dtype=float)
+        if self.state in (DESCEND_TO_PICKUP, MAGNET_ATTACH_WAIT):
+            return np.array([0.0, 0.0, self.current_pickup_tip_clearance], dtype=float)
+        if self.state == LIFT_OBJECT:
+            lift_clearance = (
+                self.pickup_lift_height
+                if self.step_reference_in_lift_object
+                else self.current_pickup_tip_clearance
+            )
+            return np.array([0.0, 0.0, lift_clearance], dtype=float)
+        if self.state in (TRANSIT_TO_DROP_POINT, SETTLE_ABOVE_DROP_POINT):
+            return np.array([0.0, 0.0, self.drop_approach_clearance], dtype=float)
+        if self.state in (DESCEND_TO_DROP_HEIGHT, DROP_OBJECT):
+            return np.array([0.0, 0.0, self.current_drop_tip_clearance], dtype=float)
+        if self.state == CLEAR_DROP_ZONE:
+            return np.array([0.0, 0.0, self.current_drop_tip_clearance], dtype=float)
+        return np.array([
+            self.approach_offset_x,
+            self.approach_offset_y,
+            self.current_offset_z,
+        ], dtype=float)
+
+    def quad_body_offset_from_magnet_tip(self) -> np.ndarray:
+        """Approximate quad-body offset from the magnet tip for level, taut cable motion."""
+        return np.array([0.0, 0.0, self.magnet_drop_below_quad], dtype=float)
+
+    def current_magnet_tip_position(self) -> np.ndarray:
+        """Return measured magnet-tip pose if enabled, otherwise estimate it below the quad body."""
+        assert self.drone_position is not None
+        if self.use_measured_magnet_tip and self.measured_magnet_tip_position is not None:
+            return self.measured_magnet_tip_position.copy()
+        return self.drone_position - self.quad_body_offset_from_magnet_tip()
+
+    def compute_tracking_errors(self) -> Tuple[float, float, float]:
+        assert self.drone_position is not None
+        assert self.drone_velocity is not None
+
+        target_base_now, target_base_velocity = self.target_base_position_velocity()
+        magnet_tip_target_now = target_base_now + self.desired_magnet_tip_offset()
+        magnet_tip_now = self.current_magnet_tip_position()
+
+        # Horizontal tip velocity is approximated by the quad body velocity. This is exact only for
+        # a vertical, non-swinging cable, but is sufficient for this first joining planner.
+        xy_error = float(np.linalg.norm(magnet_tip_now[:2] - magnet_tip_target_now[:2]))
+        z_error = float(magnet_tip_now[2] - magnet_tip_target_now[2])
+        xy_relative_velocity = float(np.linalg.norm(self.drone_velocity[:2] - target_base_velocity[:2]))
+        return xy_error, xy_relative_velocity, z_error
+
+    def update_state_machine(self) -> None:
+        xy_error, xy_rel_vel, z_error = self.compute_tracking_errors()
+        tip_speed_now = self.tip_speed()
+        abs_z_error = abs(z_error)
+
+        if self.state == HOLD_FOR_OBSTACLE:
+            # The blocked-fallback logic owns transitions out of this state. Do
+            # not run the normal state machine while holding.
+            pass
+
+        elif self.state in (LANDING, LANDED_DISARMED):
+            # Landing is a mission-abort terminal branch. It should not be pulled
+            # back into approach/match/descent by tracking errors.
+            pass
+
+        elif self.state == WAIT_FOR_TAKEOFF:
+            pass
+        
+        elif self.state == APPROACH_ABOVE_PICKUP:
+            self.publish_magnet_command('OFF')
+            pickup_elapsed = time.time() - self.state_entry_time
+            if (
+                self.enable_pickup_timeout_landing
+                and self.pickup_land_after_s > 0.0
+                and pickup_elapsed >= self.pickup_land_after_s
+                and self.takeoff_detected_time is not None
+            ):
+                self.transition_to(
+                    LANDING,
+                    f'pickup for {pickup_elapsed:.1f} s >= {self.pickup_land_after_s:.1f} s; landing at current XY',
+                )
+            good = (
+                xy_error < self.pickup_xy_tolerance
+                and abs_z_error < self.pickup_z_tolerance
+                and tip_speed_now < self.pickup_tip_speed_tolerance
+            )
+            if self.condition_true_for(good, 0.5):
+                self.transition_to(SETTLE_ABOVE_PICKUP, 'magnet tip above pickup object')
+
+        elif self.state == SETTLE_ABOVE_PICKUP:
+            self.publish_magnet_command('OFF')
+            good = (
+                xy_error < self.pickup_xy_tolerance
+                and abs_z_error < self.pickup_z_tolerance
+                and tip_speed_now < self.pickup_tip_speed_tolerance
+            )
+            if self.condition_true_for(good, self.pickup_settle_time_s):
+                self.transition_to(DESCEND_TO_PICKUP, 'settled above pickup object')
+
+        elif self.state == DESCEND_TO_PICKUP:
+            self.publish_magnet_command('ON')
+            self.current_pickup_tip_clearance = max(
+                self.pickup_attach_clearance,
+                self.current_pickup_tip_clearance - self.pickup_descent_speed * self.dt,
+            )
+            if self.current_pickup_tip_clearance <= self.pickup_attach_clearance + 1e-6:
+                self.transition_to(MAGNET_ATTACH_WAIT, 'pickup attach clearance reached')
+
+        elif self.state == MAGNET_ATTACH_WAIT:
+            self.publish_magnet_command('ON')
+
+            lift_ready = (
+                self.object_attached
+                and xy_error < self.pickup_lift_xy_tolerance
+            )
+
+            if self.condition_true_for(
+                lift_ready,
+                self.pickup_lift_xy_dwell_s,
+            ):
+                self.transition_to(
+                    LIFT_OBJECT,
+                    f'pickup attached and aligned: xy_error={xy_error:.3f} m',
+                )
+            elif self.attach_wait_start_time is not None and time.time() - self.attach_wait_start_time > self.attach_wait_timeout_s:
+                self.get_logger().warn(
+                    'Still waiting for pickup attachment. Check /magnet/attachment_state distance/radius/speed.',
+                    throttle_duration_sec=2.0,
+                )
+
+        elif self.state == LIFT_OBJECT:
+            self.publish_magnet_command('ON')
+            self.current_pickup_tip_clearance = min(
+                self.pickup_lift_height,
+                self.current_pickup_tip_clearance + self.pickup_lift_speed * self.dt,
+            )
+
+            # Prefer mission-progress evidence over perfect z tracking. In the
+            # simulator the controller can settle below the ideal loaded lift
+            # target due to thrust/model mismatch, even though the object is
+            # attached and safely airborne.
+            object_clearance = float('-inf')
+            if self.latched_pickup_position is not None and self.pickup_object_position is not None:
+                object_clearance = float(self.pickup_object_position[2] - self.latched_pickup_position[2])
+
+            time_in_lift = time.time() - self.state_entry_time
+            object_lifted_enough = (
+                self.object_attached
+                and object_clearance >= self.lift_complete_object_clearance
+            )
+            timeout_lifted_somewhat = (
+                self.object_attached
+                and self.lift_timeout_s > 0.0
+                and time_in_lift >= self.lift_timeout_s
+                and object_clearance >= self.lift_min_clearance_after_timeout
+            )
+            ideal_lift_reached = (
+                self.current_pickup_tip_clearance >= self.pickup_lift_height - 1e-6
+                and abs_z_error < self.pickup_z_tolerance
+            )
+
+            if object_lifted_enough:
+                self.transition_to(
+                    TRANSIT_TO_DROP_POINT,
+                    f'object lifted {object_clearance:.2f} m above pickup height',
+                )
+            elif timeout_lifted_somewhat:
+                self.transition_to(
+                    TRANSIT_TO_DROP_POINT,
+                    f'lift timeout with object {object_clearance:.2f} m above pickup height',
+                )
+            elif ideal_lift_reached:
+                self.transition_to(TRANSIT_TO_DROP_POINT, 'pickup lift height reached')
+
+        elif self.state == TRANSIT_TO_DROP_POINT:
+            self.publish_magnet_command('ON')
+            good = (
+                xy_error < self.approach_xy_threshold
+                and abs_z_error < self.pickup_z_tolerance
+                and xy_rel_vel < self.match_xy_velocity_threshold
+            )
+            if self.condition_true_for(good, 0.5):
+                self.transition_to(SETTLE_ABOVE_DROP_POINT, 'arrived above drop point')
+
+        elif self.state == SETTLE_ABOVE_DROP_POINT:
+            self.publish_magnet_command('ON')
+            good = (
+                xy_error < self.match_xy_threshold
+                and abs_z_error < self.pickup_z_tolerance
+                and tip_speed_now < self.pickup_tip_speed_tolerance
+            )
+            if self.condition_true_for(good, self.drop_settle_time_s):
+                self.transition_to(DESCEND_TO_DROP_HEIGHT, 'settled above drop point')
+
+        elif self.state == DESCEND_TO_DROP_HEIGHT:
+            self.publish_magnet_command('ON')
+            self.current_drop_tip_clearance = max(
+                self.drop_release_clearance,
+                self.current_drop_tip_clearance - self.drop_descent_speed * self.dt,
+            )
+            if self.current_drop_tip_clearance <= self.drop_release_clearance + 1e-6:
+                self.transition_to(DROP_OBJECT, 'drop release clearance reached')
+
+        elif self.state == DROP_OBJECT:
+            self.publish_magnet_command('OFF')
+            waited = self.drop_start_time is not None and time.time() - self.drop_start_time >= self.drop_wait_time_s
+            if (not self.object_attached) or waited:
+                self.transition_to(CLEAR_DROP_ZONE, 'payload object released or release dwell elapsed')
+
+        elif self.state == CLEAR_DROP_ZONE:
+            self.publish_magnet_command('OFF')
+            self.current_drop_tip_clearance = min(
+                self.drop_clear_height,
+                self.current_drop_tip_clearance + self.drop_clear_speed * self.dt,
+            )
+            if self.current_drop_tip_clearance >= self.drop_clear_height - 1e-6 and abs_z_error < self.pickup_z_tolerance:
+                self.transition_to(TRANSIT_TO_REATTACH, 'cleared drop zone')
+
+        elif self.state == TRANSIT_TO_REATTACH:
+            self.publish_magnet_command('OFF')
+            self.transition_to(APPROACH_ABOVE_TARGET, 'switching to existing reattach planner')
+
+        elif self.state == APPROACH_ABOVE_TARGET:
+            self.publish_magnet_command('OFF')
+            aligned_xy = xy_error < self.approach_xy_threshold
+            if self.condition_true_for(aligned_xy, self.dwell_time_s):
+                self.transition_to(
+                    MATCH_VELOCITY,
+                    f'xy_error={xy_error:.3f} m < {self.approach_xy_threshold:.3f} m for {self.dwell_time_s:.1f} s',
+                )
+
+        elif self.state == MATCH_VELOCITY:
+            self.publish_magnet_command('OFF')
+            matched = (
+                xy_error < self.match_xy_threshold
+                and xy_rel_vel < self.match_xy_velocity_threshold
+            )
+            if self.condition_true_for(matched, self.dwell_time_s):
+                if self.auto_descend:
+                    self.transition_to(
+                        DESCEND_TO_ATTACHMENT,
+                        f'xy_error={xy_error:.3f} m and xy_rel_vel={xy_rel_vel:.3f} m/s matched',
+                    )
+                else:
+                    # Stay in this state but keep reporting that descent is inhibited.
+                    self.condition_start_time = time.time()
+
+        elif self.state == DESCEND_TO_ATTACHMENT:
+            self.publish_magnet_command('OFF')
+            if (
+                xy_error > self.descend_abort_xy_threshold
+                or xy_rel_vel > self.descend_abort_xy_velocity_threshold
+            ):
+                self.transition_to(
+                    APPROACH_ABOVE_TARGET,
+                    f'descent aborted: xy_error={xy_error:.3f} m, xy_rel_vel={xy_rel_vel:.3f} m/s',
+                )
+            else:
+                self.current_offset_z = max(
+                    self.final_attach_offset_z,
+                    self.current_offset_z - self.descend_rate * self.dt,
+                )
+                if self.current_offset_z <= self.final_attach_offset_z + 1e-6:
+                    self.transition_to(ATTACH_READY, 'final attachment offset reached')
+
+        elif self.state == ATTACH_READY:
+            self.publish_magnet_command('OFF')
+            attach_ready_elapsed = time.time() - self.state_entry_time
+            if (
+                self.enable_attach_ready_timeout_landing
+                and self.attach_ready_land_after_s > 0.0
+                and attach_ready_elapsed >= self.attach_ready_land_after_s
+            ):
+                self.transition_to(
+                    LANDING,
+                    f'ATTACH_READY for {attach_ready_elapsed:.1f} s >= {self.attach_ready_land_after_s:.1f} s; landing at current XY',
+                )
+            elif (
+                xy_error > self.descend_abort_xy_threshold
+                or xy_rel_vel > self.descend_abort_xy_velocity_threshold
+            ):
+                self.transition_to(
+                    APPROACH_ABOVE_TARGET,
+                    f'attach-ready lost: xy_error={xy_error:.3f} m, xy_rel_vel={xy_rel_vel:.3f} m/s',
+                )
+
+        hold_text = ''
+        if self.state == MATCH_VELOCITY and not self.auto_descend:
+            hold_text = ' | auto_descend=false'
+        elif self.state == ATTACH_READY and self.attach_ready_tracking_mode:
+            attach_elapsed = time.time() - self.state_entry_time
+            timeout_text = ''
+            if self.enable_attach_ready_timeout_landing and self.attach_ready_land_after_s > 0.0:
+                timeout_text = f', land in {max(0.0, self.attach_ready_land_after_s - attach_elapsed):.1f}s'
+            hold_text = f' | target-follow lead={self.attach_ready_target_lead_time:.2f}s{timeout_text}'
+        elif self.state == HOLD_FOR_OBSTACLE:
+            hold_text = ' | waiting for safe candidate path'
+        elif self.state == LANDING:
+            hold_text = ' | abort-to-land'
+        elif self.state == LANDED_DISARMED:
+            hold_text = ' | disarm sent'
+
+        assert self.drone_position is not None
+        target_base_now, _ = self.target_base_position_velocity()
+        magnet_tip_now = self.current_magnet_tip_position()
+        magnet_tip_target_now = target_base_now + self.desired_magnet_tip_offset()
+        quad_body_target_now = magnet_tip_target_now + self.quad_body_offset_from_magnet_tip()
+
+        self.last_status_text = (
+            f'{self.state}{hold_text}\n'
+            f'xy tip err={xy_error:.2f} m, xy rel vel={xy_rel_vel:.2f} m/s\n'
+            f'tip z err={z_error:.2f} m, active clearance={self.desired_magnet_tip_offset()[2]:.2f} m\n'
+            f'target z={target_base_now[2]:.2f}, tip tgt z={magnet_tip_target_now[2]:.2f}, '
+            f'quad tgt z={quad_body_target_now[2]:.2f}\n'
+            f'tip z={magnet_tip_now[2]:.2f}, quad z={self.drone_position[2]:.2f}, '
+            f'object_attached={self.object_attached}'
+        )
+        if self.mission_mode == 'pickup_delivery' and self.pickup_object_position is not None:
+            self.last_status_text += (
+                f'\npickup object=({self.pickup_object_position[0]:+.2f},'
+                f'{self.pickup_object_position[1]:+.2f},{self.pickup_object_position[2]:+.2f}), '
+                f'idx={self.pickup_object_index}'
+            )
+            if self.state == LIFT_OBJECT and self.latched_pickup_position is not None:
+                object_clearance = self.pickup_object_position[2] - self.latched_pickup_position[2]
+                self.last_status_text += (
+                    f'\nlift clearance={object_clearance:.2f} m '
+                    f'(complete at {self.lift_complete_object_clearance:.2f} m), '
+                    f'timeout={time.time() - self.state_entry_time:.1f}/{self.lift_timeout_s:.1f} s'
+                )
+        if self.state in (LANDING, LANDED_DISARMED):
+            disarm_z_text = 'unknown' if self.landing_disarm_z is None else f'{self.landing_disarm_z:.2f}'
+            self.last_status_text += (
+                f'\nlanding elapsed={self.last_landing_elapsed_s:.1f} s, '
+                f'landing ref z={self.last_landing_reference_z:.2f}, '
+                f'disarm z={disarm_z_text}, disarm sent={self.landing_disarm_sent}'
+            )
+        if self.enable_fallback_takeoff_gate and not self.last_fallback_allowed:
+            self.last_status_text += f'\nfallback gate: {self.last_fallback_gate_reason}'
+
+
+    def hermite_segment(
+        self,
+        t: float,
+        T: float,
+        p0: np.ndarray,
+        v0: np.ndarray,
+        pT: np.ndarray,
+        vT: np.ndarray,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        s = np.clip(t / T, 0.0, 1.0)
+
+        h00 = 2.0 * s**3 - 3.0 * s**2 + 1.0
+        h10 = s**3 - 2.0 * s**2 + s
+        h01 = -2.0 * s**3 + 3.0 * s**2
+        h11 = s**3 - s**2
+
+        p = h00 * p0 + h10 * T * v0 + h01 * pT + h11 * T * vT
+
+        dh00 = (6.0 * s**2 - 6.0 * s) / T
+        dh10 = 3.0 * s**2 - 4.0 * s + 1.0
+        dh01 = (-6.0 * s**2 + 6.0 * s) / T
+        dh11 = 3.0 * s**2 - 2.0 * s
+
+        v = dh00 * p0 + dh10 * v0 + dh01 * pT + dh11 * vT
+
+        ddh00 = (12.0 * s - 6.0) / (T * T)
+        ddh10 = (6.0 * s - 4.0) / T
+        ddh01 = (6.0 - 12.0 * s) / (T * T)
+        ddh11 = (6.0 * s - 2.0) / T
+
+        a = ddh00 * p0 + ddh10 * v0 + ddh01 * pT + ddh11 * vT
+        return p, v, a
+
+    def reset_reference_segment(self) -> None:
+        """Reset the carried reference origin after a real mission-state change."""
+        self.reference_segment_state = None
+        self.reference_position = None
+        self.reference_velocity = None
+        self.reference_last_duration_s = float('nan')
+        self.reference_last_progress_scale = 1.0
+
+    def reference_progress_scale(self, measured_position: np.ndarray) -> float:
+        """Slow virtual reference progress when the vehicle falls behind it."""
+        if self.reference_position is None:
+            return 1.0
+
+        tracking_error = float(np.linalg.norm(
+            np.asarray(measured_position, dtype=float) - self.reference_position
+        ))
+        soft = self.reference_tracking_error_soft_m
+        hard = self.reference_tracking_error_hard_m
+
+        if tracking_error <= soft:
+            return 1.0
+        if tracking_error >= hard:
+            return self.reference_min_progress_scale
+
+        fraction = (tracking_error - soft) / max(1e-9, hard - soft)
+        return float(
+            1.0 - fraction * (1.0 - self.reference_min_progress_scale)
+        )
+
+    def reference_duration(
+        self,
+        start_position: np.ndarray,
+        target_position_now: np.ndarray,
+        target_velocity: np.ndarray,
+    ) -> float:
+        """Choose a distance-scaled duration using the latest moving target state."""
+        start_position = np.asarray(start_position, dtype=float)
+        target_position_now = np.asarray(target_position_now, dtype=float)
+        target_velocity = self.clamp_velocity(
+            np.asarray(target_velocity, dtype=float).copy()
+        )
+
+        duration = self.reference_min_duration_s
+        for _ in range(3):
+            target_position_at_end = target_position_now + target_velocity * duration
+            distance = float(np.linalg.norm(target_position_at_end - start_position))
+            duration = float(np.clip(
+                self.reference_duration_scale
+                * distance
+                / self.reference_nominal_speed,
+                self.reference_min_duration_s,
+                self.reference_max_duration_s,
+            ))
+        return duration
+
+    def build_continuously_retargeted_reference(
+        self,
+        measured_position: np.ndarray,
+        measured_velocity: np.ndarray,
+        target_position_now: np.ndarray,
+        target_velocity: np.ndarray,
+        advance_reference: bool,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Build a fresh moving-target horizon from a continuous reference origin."""
+        measured_position = np.asarray(measured_position, dtype=float).copy()
+        measured_velocity = self.clamp_velocity(
+            np.asarray(measured_velocity, dtype=float).copy()
+        )
+        target_position_now = np.asarray(target_position_now, dtype=float).copy()
+        target_velocity = self.clamp_velocity(
+            np.asarray(target_velocity, dtype=float).copy()
+        )
+
+        reference_missing = (
+            self.reference_segment_state != self.state
+            or self.reference_position is None
+            or self.reference_velocity is None
+        )
+        if reference_missing:
+            start_position = measured_position
+            start_velocity = measured_velocity
+        else:
+            start_position = self.reference_position.copy()
+            start_velocity = self.reference_velocity.copy()
+
+        duration = self.reference_duration(
+            start_position,
+            target_position_now,
+            target_velocity,
+        )
+        target_position_at_end = target_position_now + target_velocity * duration
+
+        positions = []
+        velocities = []
+        accelerations = []
+        for k in range(self.horizon_samples):
+            t = k * self.dt
+            if t <= duration:
+                p, v, a = self.hermite_segment(
+                    t,
+                    duration,
+                    start_position,
+                    start_velocity,
+                    target_position_at_end,
+                    target_velocity,
+                )
+            else:
+                extra_time = t - duration
+                p = target_position_at_end + target_velocity * extra_time
+                v = target_velocity.copy()
+                a = np.zeros(3, dtype=float)
+
+            if p[2] < self.min_reference_z:
+                p[2] = self.min_reference_z
+                v[2] = 0.0
+                a[2] = 0.0
+
+            positions.append(p)
+            velocities.append(self.clamp_velocity(v))
+            accelerations.append(a)
+
+        if advance_reference:
+            if reference_missing:
+                self.reference_segment_state = self.state
+                self.reference_position = start_position.copy()
+                self.reference_velocity = start_velocity.copy()
+
+            progress_scale = self.reference_progress_scale(measured_position)
+            advance_time = self.dt * progress_scale
+            next_position, next_velocity, _ = self.hermite_segment(
+                min(advance_time, duration),
+                duration,
+                start_position,
+                start_velocity,
+                target_position_at_end,
+                target_velocity,
+            )
+            if next_position[2] < self.min_reference_z:
+                next_position[2] = self.min_reference_z
+                next_velocity[2] = 0.0
+
+            self.reference_segment_state = self.state
+            self.reference_position = next_position
+            self.reference_velocity = self.clamp_velocity(next_velocity)
+            self.reference_last_duration_s = duration
+            self.reference_last_progress_scale = progress_scale
+
+        return (
+            np.array(positions),
+            np.array(velocities),
+            np.array(accelerations),
+        )
+
+    def clamp_velocity(self, v: np.ndarray) -> np.ndarray:
+        speed = float(np.linalg.norm(v))
+        if speed > self.max_reference_speed and speed > 1e-9:
+            return v * (self.max_reference_speed / speed)
+        return v
+
+    def current_approach_offset(self) -> np.ndarray:
+        # Backwards-compatible alias. This is now the desired magnet-tip offset.
+        return self.desired_magnet_tip_offset()
+
+    def safe_margin_from_diagnostics(self, diagnostics: Optional[Dict[str, object]]) -> float:
+        if not diagnostics or not diagnostics.get('active', False):
+            return float('inf')
+        try:
+            return float(diagnostics.get('margin', float('inf')))
+        except (TypeError, ValueError):
+            return float('inf')
+
+    def compute_actual_quad_obstacle_diagnostics(self) -> Dict[str, object]:
+        """Check the measured/current quad body against current obstacle positions.
+
+        This is separate from the horizon diagnostic. It catches the case where
+        the candidate reference looks recoverable, but a moving fake drone has
+        entered the actual controlled drone's safety bubble.
+        """
+        if self.drone_position is None:
+            return {
+                'active': False,
+                'text': 'actual quad: waiting for drone state',
+                'violation': False,
+            }
+        diagnostics = self.compute_obstacle_diagnostics(self.drone_position.reshape(1, 3))
+        if diagnostics.get('active', False):
+            status = 'VIOLATION' if bool(diagnostics.get('violation', False)) else 'clear'
+            diagnostics['text'] = (
+                f'actual quad: {status} | nearest={self._diagnostic_obstacle_name(diagnostics)}, '
+                f'd={float(diagnostics.get("distance_3d", float("nan"))):.2f} m, '
+                f'margin={float(diagnostics.get("margin", float("nan"))):.2f} m'
+            )
+        return diagnostics
+
+    def update_actual_quad_obstacle_state(self) -> Dict[str, object]:
+        obstacle_diagnostics = self.compute_actual_quad_obstacle_diagnostics()
+        payload_diagnostics = (
+            self.compute_payload_diagnostics(self.drone_position.reshape(1, 3))
+            if self.drone_position is not None else None
+        )
+        self.last_actual_payload_diagnostics = payload_diagnostics
+        diagnostics = self.combine_safety_diagnostics(obstacle_diagnostics, payload_diagnostics)
+        if diagnostics.get('active', False):
+            status = 'VIOLATION' if bool(diagnostics.get('violation', False)) else 'clear'
+            diagnostics['text'] = (
+                f'actual quad: {status} | nearest={self._diagnostic_obstacle_name(diagnostics)}, '
+                f'margin={float(diagnostics.get("margin", float("nan"))):.2f} m'
+            )
+        self.last_actual_quad_obstacle_diagnostics = diagnostics
+
+        if not diagnostics or not diagnostics.get('active', False):
+            self.last_actual_quad_margin = float('inf')
+            self.last_actual_quad_distance_3d = float('inf')
+            self.last_actual_quad_distance_xy = float('inf')
+            self.last_actual_quad_obstacle_index = -1
+            return diagnostics
+
+        self.last_actual_quad_margin = self.safe_margin_from_diagnostics(diagnostics)
+        self.last_actual_quad_distance_3d = float(diagnostics.get('distance_3d', float('inf')))
+        self.last_actual_quad_distance_xy = float(diagnostics.get('distance_xy', float('inf')))
+        self.last_actual_quad_obstacle_index = int(diagnostics.get('obstacle_index', -1))
+        return diagnostics
+
+    def build_hold_reference_arrays(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Build the fallback hold reference.
+
+        In the simple case this is a stationary hold point. If a moving obstacle
+        enters the actual quadrotor safety bubble while holding, the hold point is
+        nudged horizontally away from the nearest obstacle. This makes
+        HOLD_FOR_OBSTACLE re-entrant and reactive rather than a one-shot frozen
+        hover command.
+        """
+        assert self.drone_position is not None
+
+        if self.hold_position is None:
+            self.hold_position = self.drone_position.copy()
+
+        self.last_hold_retreat_active = False
+        self.last_hold_retreat_step = 0.0
+
+        diagnostics = self.update_actual_quad_obstacle_state()
+        margin = self.safe_margin_from_diagnostics(diagnostics)
+        active = bool(diagnostics and diagnostics.get('active', False))
+
+        if self.enable_hold_retreat and active and margin < self.recovered_margin_threshold:
+            obstacle_position = np.array(diagnostics.get('obstacle_position', self.drone_position), dtype=float)
+
+            # Prefer the measured relative direction. If the drone is exactly above
+            # the obstacle in XY, fall back to the stored hold point, then a fixed
+            # arbitrary direction. Keep the retreat horizontal so it does not fight
+            # the magnet-tip clearance logic.
+            direction_xy = self.drone_position[:2] - obstacle_position[:2]
+            norm_xy = float(np.linalg.norm(direction_xy))
+            if norm_xy < 1e-6:
+                direction_xy = self.hold_position[:2] - obstacle_position[:2]
+                norm_xy = float(np.linalg.norm(direction_xy))
+            if norm_xy < 1e-6:
+                if self.attachment_velocity is not None and float(np.linalg.norm(self.attachment_velocity[:2])) > 1e-6:
+                    # Retreat sideways relative to payload motion if available.
+                    v = self.attachment_velocity[:2]
+                    direction_xy = np.array([-v[1], v[0]], dtype=float)
+                    norm_xy = float(np.linalg.norm(direction_xy))
+                else:
+                    direction_xy = np.array([1.0, 0.0], dtype=float)
+                    norm_xy = 1.0
+            direction_xy = direction_xy / norm_xy
+
+            # Move the hold point away gradually, but keep moving while the actual
+            # drone margin is below the recovered threshold plus a small buffer.
+            target_margin = self.recovered_margin_threshold + self.hold_retreat_extra_margin
+            margin_shortfall = max(0.0, target_margin - margin)
+            max_step = max(0.0, self.hold_retreat_speed) * self.dt
+            step = min(max_step, margin_shortfall)
+            if step > 1e-6:
+                self.hold_position[:2] = self.hold_position[:2] + direction_xy * step
+                # Maintain or slightly raise altitude while escaping a close obstacle.
+                self.hold_position[2] = max(
+                    self.hold_position[2],
+                    self.drone_position[2] + max(0.0, self.hold_retreat_raise_z),
+                    self.min_reference_z,
+                )
+                self.last_hold_retreat_active = True
+                self.last_hold_retreat_step = float(step)
+
+        hold = self.hold_position.copy()
+        hold[2] = max(hold[2], self.min_reference_z)
+
+        positions = np.repeat(hold.reshape(1, 3), self.horizon_samples, axis=0)
+        velocities = np.zeros_like(positions)
+        accelerations = np.zeros_like(positions)
+        return positions, velocities, accelerations
+
+    def build_firm_target_reference(
+        self,
+        target_position: np.ndarray,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Repeat a stationary target across the full planner horizon."""
+        target = np.asarray(target_position, dtype=float).copy()
+        target[2] = max(target[2], self.min_reference_z)
+        positions = np.repeat(target.reshape(1, 3), self.horizon_samples, axis=0)
+        velocities = np.zeros_like(positions)
+        accelerations = np.zeros_like(positions)
+        return positions, velocities, accelerations
+
+    def build_reference_arrays_for_state(self, candidate_state: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Build a candidate path, advancing only the active published reference."""
+        actual_state = self.state
+        advance_reference = (
+            candidate_state == actual_state
+            and actual_state != HOLD_FOR_OBSTACLE
+        )
+        try:
+            self.state = candidate_state
+            return self.build_reference_arrays(
+                advance_reference=advance_reference,
+            )
+        finally:
+            self.state = actual_state
+
+    def fallback_condition_true_for(self, which: str, condition: bool, duration_s: float) -> bool:
+        now = time.time()
+        attr = 'blocked_condition_start_time' if which == 'blocked' else 'recovered_condition_start_time'
+
+        if not condition:
+            setattr(self, attr, None)
+            return False
+
+        start_time = getattr(self, attr)
+        if start_time is None:
+            setattr(self, attr, now)
+            return False
+
+        return (now - start_time) >= duration_s
+
+    def evaluate_blocked_fallback(
+        self,
+        candidate_safe_diagnostics: Optional[Dict[str, object]],
+    ) -> bool:
+        """Update blocked fallback state from path and actual-quad margins.
+
+        Returns True when HOLD_FOR_OBSTACLE should be published this update.
+
+        The previous version only looked at the candidate safe path. That could
+        falsely recover if the deformed future path looked safe while a fake drone
+        was actually entering the controlled drone's current safety bubble. This
+        version is re-entrant: both the candidate path and the measured current
+        drone position must recover before leaving HOLD_FOR_OBSTACLE, and either
+        can trigger/keep the hold state.
+        """
+        self.last_fallback_active = self.state == HOLD_FOR_OBSTACLE
+        actual_diagnostics = self.update_actual_quad_obstacle_state()
+
+        if self.state in (LANDING, LANDED_DISARMED):
+            self.blocked_condition_start_time = None
+            self.recovered_condition_start_time = None
+            self.last_fallback_active = False
+            return False
+
+        if not self.enable_blocked_fallback:
+            self.blocked_condition_start_time = None
+            self.recovered_condition_start_time = None
+            self.last_blocked_reason = ''
+            self.last_candidate_margin = float('inf')
+            return False
+
+        if not self.blocked_fallback_allowed_now():
+            # Do not enter HOLD_FOR_OBSTACLE before the user has actually started
+            # the takeoff mission. This avoids false blocks at spawn, when the
+            # drone, payload, and fake obstacles may all be close to the ground.
+            self.blocked_condition_start_time = None
+            self.recovered_condition_start_time = None
+            self.last_candidate_margin = float('inf')
+            self.last_blocked_reason = self.last_fallback_gate_reason
+            if self.state == HOLD_FOR_OBSTACLE:
+                self.hold_position = None
+                self.transition_to(APPROACH_ABOVE_TARGET, self.last_fallback_gate_reason)
+            return False
+
+        candidate_margin = self.safe_margin_from_diagnostics(candidate_safe_diagnostics)
+        actual_margin = self.safe_margin_from_diagnostics(actual_diagnostics)
+        self.last_candidate_margin = candidate_margin
+
+        candidate_active = bool(candidate_safe_diagnostics and candidate_safe_diagnostics.get('active', False))
+        actual_active = bool(actual_diagnostics and actual_diagnostics.get('active', False))
+
+        if not candidate_active and not actual_active:
+            # Do not block merely because obstacle messages are absent/stale.
+            self.blocked_condition_start_time = None
+            self.recovered_condition_start_time = None
+            if self.state != HOLD_FOR_OBSTACLE:
+                self.last_blocked_reason = ''
+            return self.state == HOLD_FOR_OBSTACLE
+
+        candidate_blocked = candidate_active and candidate_margin < self.blocked_margin_threshold
+        actual_blocked = actual_active and actual_margin < self.blocked_margin_threshold
+
+        candidate_recovered = (not candidate_active) or candidate_margin > self.recovered_margin_threshold
+        actual_recovered = (not actual_active) or actual_margin > self.recovered_margin_threshold
+
+        blocked_now = candidate_blocked or actual_blocked
+        recovered_now = candidate_recovered and actual_recovered
+
+        reasons = []
+        if candidate_active:
+            reasons.append(f'candidate={candidate_margin:.3f} m')
+        if actual_active:
+            reasons.append(f'actual={actual_margin:.3f} m')
+        margins_text = ', '.join(reasons) if reasons else 'no active obstacle margins'
+
+        if self.state != HOLD_FOR_OBSTACLE:
+            self.recovered_condition_start_time = None
+            if self.fallback_condition_true_for('blocked', blocked_now, self.blocked_dwell_time_s):
+                self.resume_state_after_hold = self.state
+                self.hold_position = self.drone_position.copy() if self.drone_position is not None else None
+                if actual_blocked:
+                    primary = (
+                        f'actual quad margin {actual_margin:.3f} m < '
+                        f'{self.blocked_margin_threshold:.3f} m'
+                    )
+                else:
+                    primary = (
+                        f'candidate safe margin {candidate_margin:.3f} m < '
+                        f'{self.blocked_margin_threshold:.3f} m'
+                    )
+                self.last_blocked_reason = f'{primary} ({margins_text})'
+                self.transition_to(HOLD_FOR_OBSTACLE, self.last_blocked_reason)
+                self.last_fallback_active = True
+                self.blocked_condition_start_time = None
+                return True
+
+            self.last_blocked_reason = '' if not blocked_now else (
+                f'fallback pending: {margins_text}; block threshold '
+                f'{self.blocked_margin_threshold:.3f} m'
+            )
+            return False
+
+        # Already holding. Keep holding unless both the candidate path and the
+        # actual measured quad position have recovered with hysteresis. This lets
+        # HOLD_FOR_OBSTACLE re-trigger/continue cleanly if an obstacle moves into
+        # the drone while it is holding.
+        self.blocked_condition_start_time = None
+        self.last_blocked_reason = (
+            f'holding: {margins_text}; resume when candidate and actual margins '
+            f'> {self.recovered_margin_threshold:.3f} m'
+        )
+
+        if blocked_now:
+            # Any renewed close approach resets the recovery dwell timer.
+            self.recovered_condition_start_time = None
+            self.last_fallback_active = True
+            return True
+
+        if self.fallback_condition_true_for('recovered', recovered_now, self.recovered_dwell_time_s):
+            resume_state = self.resume_state_after_hold
+            if resume_state == ATTACH_READY:
+                # Recovering straight into ATTACH_READY can be too abrupt after a
+                # blocked hold. Re-enter descent and let the normal thresholds
+                # decide when final attachment is valid again.
+                resume_state = DESCEND_TO_ATTACHMENT
+            self.hold_position = None
+            self.last_blocked_reason = (
+                f'recovered: {margins_text}; both margins > '
+                f'{self.recovered_margin_threshold:.3f} m'
+            )
+            self.transition_to(resume_state, self.last_blocked_reason)
+            self.recovered_condition_start_time = None
+            self.last_fallback_active = False
+            return False
+
+        self.last_fallback_active = True
+        return True
+
+    def build_reference_arrays(
+        self,
+        advance_reference: bool = True,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        assert self.drone_position is not None
+        assert self.drone_velocity is not None
+        p0 = self.drone_position.copy()
+        v0 = self.clamp_velocity(self.drone_velocity.copy())
+
+        # if self.state == WAIT_FOR_TAKEOFF:
+        #     # Before measured lift-off, publish a neutral reference that follows the
+        #     # current measured pose and requests zero motion. This prevents the normal
+        #     # target-intercept trajectory from commanding movement while the vehicle
+        #     # is still on the ground.
+        #     positions = np.repeat(p0.reshape(1, 3), self.horizon_samples, axis=0)
+        #     velocities = np.zeros_like(positions)
+        #     accelerations = np.zeros_like(positions)
+        #     return positions, velocities, accelerations
+
+        p_attach_now, v_attach = self.target_base_position_velocity()
+        magnet_tip_offset = self.desired_magnet_tip_offset()
+        quad_body_offset = self.quad_body_offset_from_magnet_tip()
+
+        positions = []
+        velocities = []
+        accelerations = []
+
+        if self.state == HOLD_FOR_OBSTACLE:
+            return self.build_hold_reference_arrays()
+
+        if self.state in (LANDING, LANDED_DISARMED):
+            return self.build_landing_reference_arrays()
+
+        firm_static_states = (
+            SETTLE_ABOVE_PICKUP,
+            MAGNET_ATTACH_WAIT,
+            SETTLE_ABOVE_DROP_POINT,
+            DROP_OBJECT,
+        )
+        use_firm_target = (
+            (
+                self.state in (APPROACH_ABOVE_PICKUP, WAIT_FOR_TAKEOFF)
+                and self.step_reference_in_pickup_approach
+            )
+            or (self.state == LIFT_OBJECT and self.step_reference_in_lift_object)
+            or (
+                self.state in firm_static_states
+                and self.firm_reference_in_static_states
+            )
+        )
+
+        if use_firm_target:
+            # Static mission phases need the target to appear at every MPC stage,
+            # rather than being continually pushed toward the end of a regenerated
+            # Hermite horizon. The existing pickup-approach and lift options are
+            # routed through the same helper without changing their behaviour.
+            p_target = p_attach_now + magnet_tip_offset + quad_body_offset
+            return self.build_firm_target_reference(p_target)
+
+        # In ATTACH_READY, use a time-indexed moving-target-following horizon.
+        # This is deliberately different from the approach/intercept horizon:
+        #   - approach/intercept: start at current drone state, then converge
+        #   - attach-ready: every future reference point follows the predicted
+        #     attachment point plus magnet-tip clearance and cable/drop offset
+        # This reduces systematic temporal lag when the target keeps moving.
+        if self.state == ATTACH_READY and self.attach_ready_tracking_mode:
+            lead = max(0.0, self.attach_ready_target_lead_time)
+            for k in range(self.horizon_samples):
+                t = k * self.dt + lead
+                p_magnet_tip = p_attach_now + v_attach * t + magnet_tip_offset
+                p = p_magnet_tip + quad_body_offset
+                v = v_attach.copy()
+                a = np.zeros(3, dtype=float)
+
+                if p[2] < self.min_reference_z:
+                    p[2] = self.min_reference_z
+                    v[2] = 0.0
+
+                v = self.clamp_velocity(v)
+                positions.append(p)
+                velocities.append(v)
+                accelerations.append(a)
+
+            return np.array(positions), np.array(velocities), np.array(accelerations)
+
+        # Otherwise, continuously retarget the horizon using the newest payload
+        # pose/velocity. Only the reference origin is carried between callbacks.
+        target_position_now = p_attach_now + magnet_tip_offset + quad_body_offset
+        target_velocity = v_attach.copy()
+
+        if target_position_now[2] < self.min_reference_z:
+            target_position_now[2] = self.min_reference_z
+            target_velocity[2] = 0.0
+
+        return self.build_continuously_retargeted_reference(
+            measured_position=p0,
+            measured_velocity=v0,
+            target_position_now=target_position_now,
+            target_velocity=target_velocity,
+            advance_reference=advance_reference,
+        )
+
+    def payload_active(self) -> bool:
+        if not self.enable_payload_avoidance:
+            return False
+        if self.payload_position is None or self.payload_velocity is None:
+            return False
+        if self.last_payload_pose_time is None or self.last_payload_twist_time is None:
+            return False
+        now = time.time()
+        return (
+            now - self.last_payload_pose_time <= self.payload_timeout_s
+            and now - self.last_payload_twist_time <= self.payload_timeout_s
+        )
+
+    def payload_half_extents(self) -> np.ndarray:
+        return np.array([
+            0.5 * self.payload_body_size_x + self.payload_safety_margin_xy,
+            0.5 * self.payload_body_size_y + self.payload_safety_margin_xy,
+            0.5 * self.payload_body_size_z + self.payload_safety_margin_z,
+        ], dtype=float)
+
+    def payload_tip_half_extents(self) -> np.ndarray:
+        """Inflated payload box used for suspended electromagnet-tip checks."""
+        return np.array([
+            0.5 * self.payload_body_size_x + self.payload_tip_safety_margin_xy,
+            0.5 * self.payload_body_size_y + self.payload_tip_safety_margin_xy,
+            0.5 * self.payload_body_size_z + self.payload_tip_safety_margin_z,
+        ], dtype=float)
+
+    def predicted_attachment_state(self, t_future: float) -> Tuple[np.ndarray, np.ndarray]:
+        """Constant-velocity prediction of the moving attachment/drop point."""
+        assert self.attachment_position is not None
+        assert self.attachment_velocity is not None
+        return (
+            self.attachment_position + self.attachment_velocity * t_future,
+            self.attachment_velocity.copy(),
+        )
+
+    def magnet_tip_position_from_quad_reference(self, quad_reference: np.ndarray) -> np.ndarray:
+        """Estimate magnet-tip position from a future quad-body reference point."""
+        return quad_reference - self.quad_body_offset_from_magnet_tip()
+
+    def point_in_payload_tip_allowed_corridor(self, tip_point: np.ndarray, t_future: float) -> bool:
+        """Allow deliberate magnet-tip approach near the intended attachment/drop point.
+
+        The payload box should repel accidental collisions, but it must not repel
+        the magnet away from the specific point it is supposed to approach. The
+        corridor is a simple vertical cylinder around the predicted attachment
+        point, with a small allowance below and a larger allowance above.
+        """
+        if not self.payload_allow_tip_target_corridor:
+            return False
+        if self.attachment_position is None or self.attachment_velocity is None:
+            return False
+
+        if self.mission_mode == 'pickup_delivery' and self.state in (TRANSIT_TO_DROP_POINT, SETTLE_ABOVE_DROP_POINT, DESCEND_TO_DROP_HEIGHT, DROP_OBJECT, CLEAR_DROP_ZONE):
+            attach_pred, _ = self.drop_point_position_velocity()
+        else:
+            attach_pred, _ = self.predicted_attachment_state(t_future)
+        rel = tip_point - attach_pred
+        xy = float(np.linalg.norm(rel[:2]))
+        z_rel = float(rel[2])
+        return (
+            xy <= max(0.0, self.payload_tip_corridor_radius_xy)
+            and z_rel <= max(0.0, self.payload_tip_corridor_height_above)
+            and z_rel >= -max(0.0, self.payload_tip_corridor_height_below)
+        )
+
+    def predicted_payload_state(self, t_future: float) -> Tuple[np.ndarray, float]:
+        assert self.payload_position is not None
+        assert self.payload_velocity is not None
+        p = self.payload_position + self.payload_velocity * t_future
+        yaw = float(self.payload_yaw + self.payload_yaw_rate * t_future)
+        return p, yaw
+
+    def point_to_payload_box(
+        self,
+        point: np.ndarray,
+        t_future: float,
+        half_extents: Optional[np.ndarray] = None,
+        object_name: str = 'payload_body_quad',
+        query_type: str = 'quad_body',
+        tip_allowed_corridor: bool = False,
+    ) -> Dict[str, object]:
+        """Signed-distance-style query for an inflated yawed payload box.
+
+        The margin is positive outside the inflated box and negative inside it.
+        For tip queries, the point is the estimated magnet-tip location rather
+        than the quad-body reference location.
+        """
+        if not self.payload_active():
+            return {
+                'active': False,
+                'text': 'payload: waiting for payload pose/twist',
+                'violation': False,
+            }
+
+        payload_center, payload_yaw = self.predicted_payload_state(t_future)
+        half = self.payload_half_extents() if half_extents is None else np.array(half_extents, dtype=float)
+        rel_world = point - payload_center
+        local = _rotate_yaw(rel_world, -payload_yaw)
+        q = np.abs(local) - half
+        outside = np.maximum(q, 0.0)
+        outside_distance = float(np.linalg.norm(outside))
+        inside = bool(np.max(q) <= 0.0)
+        if inside:
+            margin = float(np.max(q))  # negative, closest face penetration
+        else:
+            margin = outside_distance
+
+        closest_local = np.minimum(np.maximum(local, -half), half)
+        closest_world = payload_center + _rotate_yaw(closest_local, payload_yaw)
+
+        return {
+            'active': True,
+            'source': 'payload_body',
+            'object_name': object_name,
+            'obstacle_index': -2,
+            'sample_index': -1,
+            'time_s': t_future,
+            'distance_3d': outside_distance,
+            'distance_xy': float(np.linalg.norm((point - closest_world)[:2])),
+            'margin': margin,
+            'reference_position': point.copy(),
+            'obstacle_position': closest_world.copy(),
+            'payload_center': payload_center.copy(),
+            'payload_yaw': payload_yaw,
+            'payload_local_position': local.copy(),
+            'payload_half_extents': half.copy(),
+            'query_type': query_type,
+            'tip_allowed_corridor': str(bool(tip_allowed_corridor)).lower(),
+            'violation': margin < 0.0,
+        }
+
+    def compute_payload_diagnostics(self, positions: np.ndarray) -> Dict[str, object]:
+        if not self.payload_active():
+            return {
+                'active': False,
+                'text': 'payload: waiting for payload pose/twist',
+                'violation': False,
+            }
+
+        best: Optional[Dict[str, object]] = None
+        tip_skipped_in_corridor = False
+        for k, reference_position in enumerate(positions):
+            t_future = k * self.dt
+
+            # 1) Quad body versus inflated payload body.
+            body_query = self.point_to_payload_box(
+                reference_position,
+                t_future,
+                half_extents=self.payload_half_extents(),
+                object_name='payload_body_quad',
+                query_type='quad_body',
+            )
+            if body_query.get('active', False):
+                body_query['sample_index'] = k
+                if best is None or float(body_query.get('margin', float('inf'))) < float(best.get('margin', float('inf'))):
+                    best = body_query
+
+            # 2) Suspended magnet tip versus payload body. Skip only inside the
+            # allowed approach/drop corridor around the intended target point.
+            if self.enable_payload_tip_avoidance:
+                tip_position = self.magnet_tip_position_from_quad_reference(reference_position)
+                allowed = self.point_in_payload_tip_allowed_corridor(tip_position, t_future)
+                if allowed:
+                    tip_skipped_in_corridor = True
+                else:
+                    tip_query = self.point_to_payload_box(
+                        tip_position,
+                        t_future,
+                        half_extents=self.payload_tip_half_extents(),
+                        object_name='payload_body_tip',
+                        query_type='magnet_tip',
+                        tip_allowed_corridor=False,
+                    )
+                    if tip_query.get('active', False):
+                        tip_query['sample_index'] = k
+                        if best is None or float(tip_query.get('margin', float('inf'))) < float(best.get('margin', float('inf'))):
+                            best = tip_query
+
+        if best is None:
+            return {
+                'active': False,
+                'text': 'payload: waiting for payload pose/twist',
+                'violation': False,
+            }
+
+        status = 'VIOLATION' if bool(best.get('violation', False)) else 'clear'
+        qtype = str(best.get('query_type', 'payload'))
+        corridor_note = ' | tip corridor allowed' if tip_skipped_in_corridor else ''
+        best['text'] = (
+            f'payload {qtype}: {status} | margin={float(best.get("margin", float("nan"))):.2f} m, '
+            f't={float(best.get("time_s", 0.0)):.2f} s{corridor_note}'
+        )
+        return best
+
+    def combine_safety_diagnostics(
+        self,
+        obstacle_diagnostics: Optional[Dict[str, object]],
+        payload_diagnostics: Optional[Dict[str, object]],
+    ) -> Dict[str, object]:
+        """Return the worst active margin across fake drones and payload body."""
+        active_diags = [
+            d for d in (obstacle_diagnostics, payload_diagnostics)
+            if d is not None and d.get('active', False)
+        ]
+        if not active_diags:
+            return {
+                'active': False,
+                'text': 'safety: waiting for active obstacles/payload',
+                'violation': False,
+            }
+        worst = min(active_diags, key=lambda d: float(d.get('margin', float('inf'))))
+        return worst.copy()
+
+    def payload_query_to_correction(self, query: Dict[str, object]) -> Tuple[np.ndarray, float]:
+        """Convert a payload-box signed-distance query into a quad-reference correction."""
+        if not query.get('active', False):
+            return np.zeros(3, dtype=float), 0.0
+
+        margin = float(query.get('margin', float('inf')))
+        influence = max(0.0, float(self.payload_avoidance_influence_margin))
+        if margin >= influence:
+            return np.zeros(3, dtype=float), 0.0
+
+        payload_yaw = float(query.get('payload_yaw', 0.0))
+        local = np.array(query.get('payload_local_position'), dtype=float)
+        half = np.array(query.get('payload_half_extents'), dtype=float)
+        query_point = np.array(query.get('reference_position'), dtype=float)
+        inside = margin < 0.0
+
+        if inside:
+            # Push along the nearest face. Prefer horizontal escape because
+            # vertical deformation can fight the magnet-tip clearance logic.
+            face_clearances = half - np.abs(local)
+            candidate_axes = [0, 1]
+            if self.payload_avoidance_vertical_weight > 1e-6:
+                candidate_axes.append(2)
+            axis = min(candidate_axes, key=lambda idx: float(face_clearances[idx]))
+            local_direction = np.zeros(3, dtype=float)
+            local_direction[axis] = 1.0 if local[axis] >= 0.0 else -1.0
+        else:
+            closest_world = np.array(query.get('obstacle_position'), dtype=float)
+            delta_world = query_point - closest_world
+            local_direction = _rotate_yaw(delta_world, -payload_yaw)
+            norm_local = float(np.linalg.norm(local_direction))
+            if norm_local < 1e-6:
+                local_direction = np.array([1.0, 0.0, 0.0], dtype=float)
+            else:
+                local_direction /= norm_local
+
+        if self.payload_avoidance_vertical_weight <= 1e-6:
+            local_direction[2] = 0.0
+        else:
+            local_direction[2] *= self.payload_avoidance_vertical_weight
+        norm_dir = float(np.linalg.norm(local_direction))
+        if norm_dir < 1e-6:
+            local_direction = np.array([1.0, 0.0, 0.0], dtype=float)
+        else:
+            local_direction /= norm_dir
+
+        direction_world = _rotate_yaw(local_direction, payload_yaw)
+        penetration = max(0.0, -margin)
+        influence_depth = max(0.0, influence - margin)
+        strength = self.payload_avoidance_gain * influence_depth + penetration
+        correction = direction_world * strength
+        correction_norm = float(np.linalg.norm(correction))
+        if correction_norm > self.payload_avoidance_max_correction and correction_norm > 1e-9:
+            correction *= self.payload_avoidance_max_correction / correction_norm
+            correction_norm = self.payload_avoidance_max_correction
+        return correction, correction_norm
+
+    def compute_payload_avoidance_corrections(self, positions: np.ndarray) -> Tuple[np.ndarray, Dict[str, object]]:
+        """Compute reference deformation away from the transported payload body.
+
+        This checks both the quad-body reference and the estimated suspended
+        magnet-tip reference. Tip corrections are applied to the quad-body
+        reference, because moving the quad also moves the cable/magnet tip in
+        this first-order planning model.
+        """
+        corrections = np.zeros_like(positions)
+        self.last_payload_tip_avoidance_info = {
+            'enabled': self.enable_payload_tip_avoidance,
+            'active': False,
+            'max_correction': 0.0,
+            'mean_correction': 0.0,
+            'corrected_points': 0,
+        }
+        if (not self.enable_payload_avoidance) or (not self.payload_active()):
+            return corrections, {
+                'enabled': self.enable_payload_avoidance,
+                'active': False,
+                'max_correction': 0.0,
+                'mean_correction': 0.0,
+                'corrected_points': 0,
+                'text': 'payload avoidance: off or waiting for payload pose/twist',
+            }
+
+        body_corrected_points = 0
+        tip_corrected_points = 0
+        tip_allowed_corridor_points = 0
+        max_raw_correction = 0.0
+        max_raw_tip_correction = 0.0
+
+        for k, reference_position in enumerate(positions):
+            t_future = k * self.dt
+            total_correction = np.zeros(3, dtype=float)
+
+            # Quad-body clearance from the payload body.
+            body_query = self.point_to_payload_box(
+                reference_position,
+                t_future,
+                half_extents=self.payload_half_extents(),
+                object_name='payload_body_quad',
+                query_type='quad_body',
+            )
+            body_correction, body_norm = self.payload_query_to_correction(body_query)
+            if body_norm > 1e-6:
+                body_corrected_points += 1
+                total_correction += body_correction
+                max_raw_correction = max(max_raw_correction, body_norm)
+
+            # Suspended magnet-tip clearance from the payload body, except near
+            # the deliberate attachment/drop target corridor.
+            if self.enable_payload_tip_avoidance:
+                tip_position = self.magnet_tip_position_from_quad_reference(reference_position)
+                allowed = self.point_in_payload_tip_allowed_corridor(tip_position, t_future)
+                if allowed:
+                    tip_allowed_corridor_points += 1
+                else:
+                    tip_query = self.point_to_payload_box(
+                        tip_position,
+                        t_future,
+                        half_extents=self.payload_tip_half_extents(),
+                        object_name='payload_body_tip',
+                        query_type='magnet_tip',
+                        tip_allowed_corridor=False,
+                    )
+                    tip_correction, tip_norm = self.payload_query_to_correction(tip_query)
+                    if tip_norm > 1e-6:
+                        tip_corrected_points += 1
+                        total_correction += tip_correction
+                        max_raw_correction = max(max_raw_correction, tip_norm)
+                        max_raw_tip_correction = max(max_raw_tip_correction, tip_norm)
+
+            correction_norm = float(np.linalg.norm(total_correction))
+            if correction_norm > self.payload_avoidance_max_correction and correction_norm > 1e-9:
+                total_correction *= self.payload_avoidance_max_correction / correction_norm
+                correction_norm = self.payload_avoidance_max_correction
+
+            corrections[k, :] = total_correction
+
+        smoothed = self.smooth_corrections(corrections)
+        correction_norms = np.linalg.norm(smoothed, axis=1) if smoothed.size else np.array([0.0])
+        max_smoothed_correction = float(np.max(correction_norms))
+        mean_smoothed_correction = float(np.mean(correction_norms))
+        corrected_points = int(np.count_nonzero(correction_norms > 1e-6))
+
+        # Approximate tip-only smoothed stats by assigning the same smoothing-level
+        # scale to the tip count. The key practical values are corrected point
+        # count and whether tip corrections are being requested at all.
+        self.last_payload_tip_avoidance_info = {
+            'enabled': self.enable_payload_tip_avoidance,
+            'active': bool(self.enable_payload_tip_avoidance),
+            'max_correction': max_raw_tip_correction,
+            'mean_correction': 0.0 if tip_corrected_points == 0 else max_raw_tip_correction,
+            'corrected_points': tip_corrected_points,
+            'allowed_corridor_points': tip_allowed_corridor_points,
+        }
+
+        return smoothed, {
+            'enabled': True,
+            'active': True,
+            'max_correction': max_smoothed_correction,
+            'mean_correction': mean_smoothed_correction,
+            'max_raw_correction': max_raw_correction,
+            'corrected_points': corrected_points,
+            'body_corrected_points': body_corrected_points,
+            'tip_corrected_points': tip_corrected_points,
+            'tip_allowed_corridor_points': tip_allowed_corridor_points,
+            'text': (
+                f'payload avoidance: on | corrected={corrected_points}/{positions.shape[0]} '
+                f'(body={body_corrected_points}, tip={tip_corrected_points}, corridor={tip_allowed_corridor_points}), '
+                f'max correction={max_smoothed_correction:.2f} m'
+            ),
+        }
+
+    def active_obstacles(self) -> List[Tuple[int, np.ndarray, np.ndarray]]:
+        if not self.enable_obstacle_diagnostics:
+            return []
+
+        now = time.time()
+        active: List[Tuple[int, np.ndarray, np.ndarray]] = []
+        for obstacle_index in range(self.obstacle_count):
+            pos = self.obstacle_positions[obstacle_index]
+            vel = self.obstacle_velocities[obstacle_index]
+            stamp = self.last_obstacle_times[obstacle_index]
+            if pos is None or vel is None or stamp is None:
+                continue
+            if now - stamp > self.obstacle_timeout_s:
+                continue
+            active.append((obstacle_index, pos.copy(), vel.copy()))
+        return active
+
+    def smooth_corrections(self, corrections: np.ndarray) -> np.ndarray:
+        """Apply light temporal smoothing to trajectory correction vectors."""
+        smoothed = corrections.copy()
+        if smoothed.shape[0] < 3:
+            smoothed[0, :] = 0.0
+            return smoothed
+
+        for _ in range(self.avoidance_smoothing_passes):
+            previous = smoothed.copy()
+            smoothed[1:-1, :] = (
+                0.25 * previous[:-2, :]
+                + 0.50 * previous[1:-1, :]
+                + 0.25 * previous[2:, :]
+            )
+            # The first point is the measured current state. Do not move it,
+            # otherwise the controller receives a discontinuous reference.
+            smoothed[0, :] = 0.0
+
+        ramp_samples = max(1, int(round(self.avoidance_ramp_time_s / self.dt)))
+        for k in range(smoothed.shape[0]):
+            ramp = min(1.0, k / float(ramp_samples))
+            smoothed[k, :] *= ramp
+        smoothed[0, :] = 0.0
+        return smoothed
+
+    def compute_obstacle_avoidance_corrections(self, positions: np.ndarray) -> Tuple[np.ndarray, Dict[str, object]]:
+        """Compute a smooth reference deformation away from predicted obstacles.
+
+        The current implementation is deliberately simple and reportable:
+        obstacles are predicted with a constant-velocity model, each reference
+        point receives a repulsive correction when it enters an obstacle's
+        influence radius, and the correction is smoothed along the horizon.
+        """
+        corrections = np.zeros_like(positions)
+        active = self.active_obstacles()
+        if (not self.enable_obstacle_avoidance) or not active:
+            return corrections, {
+                'enabled': self.enable_obstacle_avoidance,
+                'active_obstacles': len(active),
+                'max_correction': 0.0,
+                'mean_correction': 0.0,
+                'corrected_points': 0,
+                'text': 'avoidance: off or waiting for active obstacles',
+            }
+
+        influence_radius = max(self.obstacle_safety_radius, self.avoidance_influence_radius)
+        corrected_points = 0
+        max_raw_correction = 0.0
+
+        for k, reference_position in enumerate(positions):
+            t_future = k * self.dt
+            correction = np.zeros(3, dtype=float)
+            point_was_corrected = False
+
+            for _obstacle_index, obstacle_position, obstacle_velocity in active:
+                predicted_obstacle = obstacle_position + obstacle_velocity * t_future
+                delta = reference_position - predicted_obstacle
+
+                # The current task is mostly horizontal. Keep z deformation disabled
+                # unless avoidance_vertical_weight is explicitly increased.
+                weighted_delta = np.array([
+                    delta[0],
+                    delta[1],
+                    self.avoidance_vertical_weight * delta[2],
+                ], dtype=float)
+                distance = float(np.linalg.norm(weighted_delta))
+
+                if distance >= influence_radius:
+                    continue
+
+                if distance < 1e-6:
+                    # If the reference point lies exactly at the obstacle centre,
+                    # choose a sideways direction based on the local path tangent.
+                    if positions.shape[0] > 1:
+                        if k < positions.shape[0] - 1:
+                            tangent = positions[k + 1] - positions[k]
+                        else:
+                            tangent = positions[k] - positions[k - 1]
+                        direction = np.array([-tangent[1], tangent[0], 0.0], dtype=float)
+                        norm_direction = float(np.linalg.norm(direction))
+                        if norm_direction < 1e-6:
+                            direction = np.array([1.0, 0.0, 0.0], dtype=float)
+                        else:
+                            direction /= norm_direction
+                    else:
+                        direction = np.array([1.0, 0.0, 0.0], dtype=float)
+                else:
+                    direction = weighted_delta / distance
+                    # Convert weighted direction back into a real-world correction.
+                    if self.avoidance_vertical_weight > 1e-6:
+                        direction[2] *= self.avoidance_vertical_weight
+                    else:
+                        direction[2] = 0.0
+                    norm_direction = float(np.linalg.norm(direction))
+                    if norm_direction < 1e-6:
+                        direction = np.array([1.0, 0.0, 0.0], dtype=float)
+                    else:
+                        direction /= norm_direction
+
+                # Linear penalty inside the influence region, with an extra push
+                # if the point actually violates the hard safety radius.
+                penetration = max(0.0, self.obstacle_safety_radius - distance)
+                influence_depth = max(0.0, influence_radius - distance)
+                strength = self.avoidance_gain * influence_depth + penetration
+                correction += direction * strength
+                point_was_corrected = True
+
+            correction_norm = float(np.linalg.norm(correction))
+            if correction_norm > self.avoidance_max_correction and correction_norm > 1e-9:
+                correction *= self.avoidance_max_correction / correction_norm
+                correction_norm = self.avoidance_max_correction
+
+            corrections[k, :] = correction
+            max_raw_correction = max(max_raw_correction, correction_norm)
+            if point_was_corrected and correction_norm > 1e-6:
+                corrected_points += 1
+
+        smoothed = self.smooth_corrections(corrections)
+        correction_norms = np.linalg.norm(smoothed, axis=1) if smoothed.size else np.array([0.0])
+        max_smoothed_correction = float(np.max(correction_norms))
+        mean_smoothed_correction = float(np.mean(correction_norms))
+        return smoothed, {
+            'enabled': True,
+            'active_obstacles': len(active),
+            'max_correction': max_smoothed_correction,
+            'mean_correction': mean_smoothed_correction,
+            'max_raw_correction': max_raw_correction,
+            'corrected_points': corrected_points,
+            'text': (
+                f'avoidance: on | corrected={corrected_points}/{positions.shape[0]}, '
+                f'max correction={max_smoothed_correction:.2f} m'
+            ),
+        }
+
+    def recompute_derivatives_from_positions(self, positions: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Recompute velocity and acceleration after reference deformation."""
+        if positions.shape[0] < 2:
+            velocities = np.zeros_like(positions)
+            accelerations = np.zeros_like(positions)
+            return velocities, accelerations
+
+        velocities = np.gradient(positions, self.dt, axis=0, edge_order=1)
+        for k in range(velocities.shape[0]):
+            velocities[k, :] = self.clamp_velocity(velocities[k, :])
+
+        if positions.shape[0] < 3:
+            accelerations = np.zeros_like(positions)
+        else:
+            accelerations = np.gradient(velocities, self.dt, axis=0, edge_order=1)
+        return velocities, accelerations
+
+    def apply_obstacle_avoidance(
+        self,
+        nominal_positions: np.ndarray,
+        nominal_velocities: np.ndarray,
+        nominal_accelerations: np.ndarray,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        if self.state in (WAIT_FOR_TAKEOFF, LANDING, LANDED_DISARMED):
+            bypass_reason = (
+                'wait_for_takeoff: avoidance bypassed'
+                if self.state == WAIT_FOR_TAKEOFF
+                else 'landing: avoidance bypassed'
+            )
+            self.last_payload_avoidance_info = {'text': bypass_reason}
+            self.last_avoidance_info = {
+                'enabled': False,
+                'active_obstacles': 0,
+                'max_correction': 0.0,
+                'mean_correction': 0.0,
+                'corrected_points': 0,
+                'obstacle_max_correction': 0.0,
+                'payload_max_correction': 0.0,
+                'text': bypass_reason,
+            }
+            return nominal_positions, nominal_velocities, nominal_accelerations
+
+        obstacle_corrections, obstacle_info = self.compute_obstacle_avoidance_corrections(nominal_positions)
+        payload_corrections, payload_info = self.compute_payload_avoidance_corrections(nominal_positions)
+        self.last_payload_avoidance_info = payload_info
+
+        combined_corrections = obstacle_corrections + payload_corrections
+        if combined_corrections.shape[0] > 0:
+            combined_corrections[0, :] = 0.0
+
+        correction_norms = np.linalg.norm(combined_corrections, axis=1) if combined_corrections.size else np.array([0.0])
+        combined_cap = max(float(self.avoidance_max_correction), float(self.payload_avoidance_max_correction))
+        for k, norm in enumerate(correction_norms):
+            if norm > combined_cap and norm > 1e-9:
+                combined_corrections[k, :] *= combined_cap / norm
+
+        combined_norms = np.linalg.norm(combined_corrections, axis=1) if combined_corrections.size else np.array([0.0])
+        corrected_points = int(np.count_nonzero(combined_norms > 1e-6))
+        max_correction = float(np.max(combined_norms))
+        mean_correction = float(np.mean(combined_norms))
+
+        obstacle_text = str(obstacle_info.get('text', ''))
+        payload_text = str(payload_info.get('text', ''))
+        self.last_avoidance_info = {
+            'enabled': bool(self.enable_obstacle_avoidance or self.enable_payload_avoidance),
+            'active_obstacles': int(obstacle_info.get('active_obstacles', 0)),
+            'max_correction': max_correction,
+            'mean_correction': mean_correction,
+            'corrected_points': corrected_points,
+            'obstacle_max_correction': float(obstacle_info.get('max_correction', 0.0)),
+            'payload_max_correction': float(payload_info.get('max_correction', 0.0)),
+            'text': '\n'.join(p for p in (obstacle_text, payload_text) if p),
+        }
+
+        if max_correction <= 1e-9:
+            return nominal_positions, nominal_velocities, nominal_accelerations
+
+        safe_positions = nominal_positions + combined_corrections
+        if self.state in (LANDING, LANDED_DISARMED) and self.landing_disarm_z is not None:
+            min_safe_z = float(self.landing_disarm_z)
+        else:
+            min_safe_z = float(self.min_reference_z)
+        safe_positions[:, 2] = np.maximum(safe_positions[:, 2], min_safe_z)
+
+        # Keep the first point exactly at the measured/current reference start.
+        safe_positions[0, :] = nominal_positions[0, :]
+
+        safe_velocities, safe_accelerations = self.recompute_derivatives_from_positions(safe_positions)
+        # Preserve the measured initial velocity to avoid a large artificial velocity
+        # jump at the first MPC reference point.
+        safe_velocities[0, :] = nominal_velocities[0, :]
+        return safe_positions, safe_velocities, safe_accelerations
+
+    def compute_obstacle_diagnostics(self, positions: np.ndarray) -> Dict[str, object]:
+        """Check the rolling quad-body reference against predicted obstacle positions.
+
+        The obstacles are currently modelled as moving spheres. Their future states are
+        predicted with a constant-velocity model over the planner horizon. This is
+        diagnostic-only and does not modify the trajectory.
+        """
+        active = self.active_obstacles()
+        if not active:
+            return {
+                'active': False,
+                'text': 'obstacles: waiting for active obstacle states',
+                'violation': False,
+            }
+
+        best = {
+            'active': True,
+            'source': 'drone_obstacle',
+            'object_name': '',
+            'obstacle_index': -1,
+            'sample_index': -1,
+            'time_s': 0.0,
+            'distance_3d': float('inf'),
+            'distance_xy': float('inf'),
+            'margin': float('inf'),
+            'reference_position': np.zeros(3, dtype=float),
+            'obstacle_position': np.zeros(3, dtype=float),
+            'violation': False,
+        }
+
+        for k, reference_position in enumerate(positions):
+            t_future = k * self.dt
+            for obstacle_index, obstacle_position, obstacle_velocity in active:
+                predicted_obstacle = obstacle_position + obstacle_velocity * t_future
+                delta = reference_position - predicted_obstacle
+                distance_3d = float(np.linalg.norm(delta))
+                distance_xy = float(np.linalg.norm(delta[:2]))
+                margin = distance_3d - self.obstacle_safety_radius
+                if distance_3d < best['distance_3d']:
+                    best.update({
+                        'obstacle_index': obstacle_index,
+                        'object_name': f'drone_{obstacle_index}',
+                        'sample_index': k,
+                        'time_s': t_future,
+                        'distance_3d': distance_3d,
+                        'distance_xy': distance_xy,
+                        'margin': margin,
+                        'reference_position': reference_position.copy(),
+                        'obstacle_position': predicted_obstacle.copy(),
+                        'violation': margin < 0.0,
+                    })
+
+        status = 'VIOLATION' if best['violation'] else 'clear'
+        best['text'] = (
+            f'obstacles: {status} | nearest=drone_{best["obstacle_index"]}, '
+            f'min 3D={best["distance_3d"]:.2f} m, '
+            f'min xy={best["distance_xy"]:.2f} m, '
+            f'margin={best["margin"]:.2f} m, '
+            f't={best["time_s"]:.2f} s'
+        )
+        return best
+
+    def update_obstacle_diagnostics(
+        self,
+        safe_positions: np.ndarray,
+        nominal_positions: Optional[np.ndarray] = None,
+    ) -> None:
+        self.last_obstacle_diagnostics = self.compute_obstacle_diagnostics(safe_positions)
+        self.last_payload_diagnostics = self.compute_payload_diagnostics(safe_positions)
+        safe_text = str(self.last_obstacle_diagnostics.get('text', ''))
+        safe_payload_text = str(self.last_payload_diagnostics.get('text', ''))
+
+        if nominal_positions is not None:
+            self.last_nominal_obstacle_diagnostics = self.compute_obstacle_diagnostics(nominal_positions)
+            self.last_nominal_payload_diagnostics = self.compute_payload_diagnostics(nominal_positions)
+            nominal_text = str(self.last_nominal_obstacle_diagnostics.get('text', ''))
+            nominal_payload_text = str(self.last_nominal_payload_diagnostics.get('text', ''))
+        else:
+            self.last_nominal_obstacle_diagnostics = None
+            self.last_nominal_payload_diagnostics = None
+            nominal_text = ''
+            nominal_payload_text = ''
+
+        avoidance_text = ''
+        if self.last_avoidance_info is not None:
+            avoidance_text = str(self.last_avoidance_info.get('text', ''))
+
+        pieces_diag = []
+        if nominal_text:
+            pieces_diag.append(f'nominal {nominal_text}')
+        if nominal_payload_text:
+            pieces_diag.append(f'nominal {nominal_payload_text}')
+        if safe_text:
+            pieces_diag.append(f'safe {safe_text}')
+        if safe_payload_text:
+            pieces_diag.append(f'safe {safe_payload_text}')
+        self.last_obstacle_diagnostics_text = '\n'.join(pieces_diag) if pieces_diag else safe_text
+
+        if self.enable_obstacle_diagnostics or self.enable_payload_avoidance:
+            pieces = [self.last_status_text]
+            if avoidance_text:
+                pieces.append(avoidance_text)
+            pieces.append(self.last_obstacle_diagnostics_text)
+            self.last_status_text = '\n'.join(p for p in pieces if p)
+
+    def publish_obstacle_diagnostics(self) -> None:
+        msg = String()
+        msg.data = self.last_obstacle_diagnostics_text
+        self.obstacle_diagnostics_publisher.publish(msg)
+
+    def publish_reference(self, positions: np.ndarray, velocities: np.ndarray, accelerations: np.ndarray) -> None:
+        msg = MultiDOFJointTrajectory()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self.frame_id
+        msg.joint_names = ['drone']
+
+        for k in range(positions.shape[0]):
+            point = MultiDOFJointTrajectoryPoint()
+
+            transform = Transform()
+            transform.translation.x = float(positions[k, 0])
+            transform.translation.y = float(positions[k, 1])
+            transform.translation.z = float(positions[k, 2])
+            transform.rotation.w = 1.0
+            transform.rotation.x = 0.0
+            transform.rotation.y = 0.0
+            transform.rotation.z = 0.0
+            point.transforms.append(transform)
+
+            velocity = Twist()
+            velocity.linear.x = float(velocities[k, 0])
+            velocity.linear.y = float(velocities[k, 1])
+            velocity.linear.z = float(velocities[k, 2])
+            point.velocities.append(velocity)
+
+            acceleration = Twist()
+            acceleration.linear.x = float(accelerations[k, 0])
+            acceleration.linear.y = float(accelerations[k, 1])
+            acceleration.linear.z = float(accelerations[k, 2])
+            point.accelerations.append(acceleration)
+
+            total_nanoseconds = int(round(k * self.dt * 1e9))
+            point.time_from_start.sec = total_nanoseconds // 1_000_000_000
+            point.time_from_start.nanosec = total_nanoseconds % 1_000_000_000
+            msg.points.append(point)
+
+        self.reference_publisher.publish(msg)
+
+    def publish_state(self) -> None:
+        msg = String()
+        msg.data = self.last_status_text if self.last_status_text else self.state
+        self.state_publisher.publish(msg)
+
+    def publish_markers(self, positions: np.ndarray, nominal_positions: Optional[np.ndarray] = None) -> None:
+        now = self.get_clock().now().to_msg()
+        markers = MarkerArray()
+
+        # Path markers use deliberately separate namespaces so RViz can hide/show
+        # each layer independently.
+        if (
+            self.show_nominal_reference_marker
+            and nominal_positions is not None
+            and nominal_positions.shape == positions.shape
+        ):
+            nominal_line = Marker()
+            nominal_line.header.stamp = now
+            nominal_line.header.frame_id = self.frame_id
+            nominal_line.ns = 'path_nominal_unavoided'
+            nominal_line.id = 0
+            nominal_line.type = Marker.LINE_STRIP
+            nominal_line.action = Marker.ADD
+            nominal_line.scale.x = 0.012
+            nominal_line.color.r = 0.7
+            nominal_line.color.g = 0.7
+            nominal_line.color.b = 0.7
+            nominal_line.color.a = 0.65
+            nominal_line.points = [_make_point(p) for p in nominal_positions]
+            markers.markers.append(nominal_line)
+
+        safe_line = Marker()
+        safe_line.header.stamp = now
+        safe_line.header.frame_id = self.frame_id
+        safe_line.ns = 'path_safe_reference'
+        safe_line.id = 0
+        safe_line.type = Marker.LINE_STRIP
+        safe_line.action = Marker.ADD
+        safe_line.scale.x = 0.025
+        safe_line.color.r = 1.0
+        safe_line.color.g = 0.5
+        safe_line.color.b = 0.0
+        safe_line.color.a = 1.0
+        safe_line.points = [_make_point(p) for p in positions]
+        markers.markers.append(safe_line)
+
+        start = Marker()
+        start.header.stamp = now
+        start.header.frame_id = self.frame_id
+        start.ns = 'current_quad_reference_start'
+        start.id = 0
+        start.type = Marker.SPHERE
+        start.action = Marker.ADD
+        start.pose.position = _make_point(positions[0])
+        start.pose.orientation.w = 1.0
+        start.scale.x = 0.08
+        start.scale.y = 0.08
+        start.scale.z = 0.08
+        start.color.r = 1.0
+        start.color.g = 1.0
+        start.color.b = 0.0
+        start.color.a = 1.0
+        markers.markers.append(start)
+
+        end = Marker()
+        end.header.stamp = now
+        end.header.frame_id = self.frame_id
+        end.ns = 'future_quad_reference_end'
+        end.id = 0
+        end.type = Marker.SPHERE
+        end.action = Marker.ADD
+        end.pose.position = _make_point(positions[-1])
+        end.pose.orientation.w = 1.0
+        end.scale.x = 0.10
+        end.scale.y = 0.10
+        end.scale.z = 0.10
+        end.color.r = 1.0
+        end.color.g = 0.2
+        end.color.b = 0.0
+        end.color.a = 1.0
+        markers.markers.append(end)
+
+        target_base_now, _ = self.target_base_position_velocity()
+        magnet_tip_target_now = target_base_now + self.desired_magnet_tip_offset()
+        quad_body_target_now = magnet_tip_target_now + self.quad_body_offset_from_magnet_tip()
+        magnet_tip_now = self.current_magnet_tip_position()
+
+        target = Marker()
+        target.header.stamp = now
+        target.header.frame_id = self.frame_id
+        target.ns = 'desired_magnet_tip_target'
+        target.id = 0
+        target.type = Marker.SPHERE
+        target.action = Marker.ADD
+        target.pose.position = _make_point(magnet_tip_target_now)
+        target.pose.orientation.w = 1.0
+        target.scale.x = 0.12
+        target.scale.y = 0.12
+        target.scale.z = 0.12
+        target.color.r = 0.0
+        target.color.g = 1.0
+        target.color.b = 1.0
+        target.color.a = 1.0
+        markers.markers.append(target)
+
+        tolerance = Marker()
+        tolerance.header.stamp = now
+        tolerance.header.frame_id = self.frame_id
+        tolerance.ns = 'desired_magnet_tip_tolerance'
+        tolerance.id = 0
+        tolerance.type = Marker.SPHERE
+        tolerance.action = Marker.ADD
+        tolerance.pose.position = _make_point(magnet_tip_target_now)
+        tolerance.pose.orientation.w = 1.0
+        diameter = 2.0 * self.match_xy_threshold
+        tolerance.scale.x = diameter
+        tolerance.scale.y = diameter
+        tolerance.scale.z = 0.02
+        tolerance.color.r = 0.0
+        tolerance.color.g = 1.0
+        tolerance.color.b = 1.0
+        tolerance.color.a = 0.25
+        markers.markers.append(tolerance)
+
+        current_tip = Marker()
+        current_tip.header.stamp = now
+        current_tip.header.frame_id = self.frame_id
+        current_tip.ns = 'estimated_current_magnet_tip'
+        current_tip.id = 0
+        current_tip.type = Marker.SPHERE
+        current_tip.action = Marker.ADD
+        current_tip.pose.position = _make_point(magnet_tip_now)
+        current_tip.pose.orientation.w = 1.0
+        current_tip.scale.x = 0.09
+        current_tip.scale.y = 0.09
+        current_tip.scale.z = 0.09
+        current_tip.color.r = 1.0
+        current_tip.color.g = 0.0
+        current_tip.color.b = 1.0
+        current_tip.color.a = 1.0
+        markers.markers.append(current_tip)
+
+        desired_cable = Marker()
+        desired_cable.header.stamp = now
+        desired_cable.header.frame_id = self.frame_id
+        desired_cable.ns = 'desired_cable_drop_line'
+        desired_cable.id = 0
+        desired_cable.type = Marker.LINE_STRIP
+        desired_cable.action = Marker.ADD
+        desired_cable.scale.x = 0.018
+        desired_cable.color.r = 0.8
+        desired_cable.color.g = 0.8
+        desired_cable.color.b = 0.8
+        desired_cable.color.a = 1.0
+        desired_cable.points = [_make_point(quad_body_target_now), _make_point(magnet_tip_target_now)]
+        markers.markers.append(desired_cable)
+
+        if self.show_debug_text:
+            label = Marker()
+            label.header.stamp = now
+            label.header.frame_id = self.frame_id
+            label.ns = 'text_join_state_summary'
+            label.id = 0
+            label.type = Marker.TEXT_VIEW_FACING
+            label.action = Marker.ADD
+            label.pose.position = _make_point(positions[-1] + np.array([0.0, 0.0, 0.25]))
+            label.pose.orientation.w = 1.0
+            label.scale.z = 0.12
+            label.color.r = 1.0
+            label.color.g = 0.5
+            label.color.b = 0.0
+            label.color.a = 1.0
+            # Keep RViz readable. The full multiline status remains available on
+            # /join_planner/state.
+            label.text = (
+                f'{self.state}\n'
+                f'clearance={self.current_offset_z:.2f} m\n'
+                f'obstacles={self.short_obstacle_status_text()}'
+            )
+            markers.markers.append(label)
+
+        if (
+            self.enable_obstacle_diagnostics
+            and self.show_obstacle_diagnostic_markers
+            and self.last_obstacle_diagnostics is not None
+        ):
+            self.add_obstacle_diagnostic_markers(markers, now)
+
+        if self.enable_payload_avoidance and self.show_payload_avoidance_markers:
+            self.add_payload_avoidance_markers(markers, now)
+
+        self.marker_publisher.publish(markers)
+
+    def short_obstacle_status_text(self) -> str:
+        combined = self.combine_safety_diagnostics(self.last_obstacle_diagnostics, self.last_payload_diagnostics)
+        if not combined or not combined.get('active', False):
+            return 'waiting'
+        status = 'VIOLATION' if bool(combined.get('violation', False)) else 'clear'
+        margin = float(combined.get('margin', float('nan')))
+        name = self._diagnostic_obstacle_name(combined)
+        return f'{status}, {name}, margin={margin:.2f} m'
+
+    def add_payload_avoidance_markers(self, markers: MarkerArray, stamp) -> None:
+        if not self.payload_active():
+            return
+        assert self.payload_position is not None
+
+        half = self.payload_half_extents()
+        payload_volume = Marker()
+        payload_volume.header.stamp = stamp
+        payload_volume.header.frame_id = self.frame_id
+        payload_volume.ns = 'payload_body_avoidance_volume'
+        payload_volume.id = 0
+        payload_volume.type = Marker.CUBE
+        payload_volume.action = Marker.ADD
+        payload_volume.pose.position = _make_point(self.payload_position)
+        _set_quaternion_from_yaw(payload_volume.pose.orientation, self.payload_yaw)
+        payload_volume.scale.x = 2.0 * half[0]
+        payload_volume.scale.y = 2.0 * half[1]
+        payload_volume.scale.z = 2.0 * half[2]
+        payload_volume.color.r = 0.9
+        payload_volume.color.g = 0.1
+        payload_volume.color.b = 1.0
+        payload_volume.color.a = 0.16
+        payload_volume.lifetime.sec = 1
+        markers.markers.append(payload_volume)
+
+        diagnostics = self.last_payload_diagnostics
+        if not diagnostics or not diagnostics.get('active', False):
+            return
+
+        reference_position = np.array(diagnostics.get('reference_position'), dtype=float)
+        closest_position = np.array(diagnostics.get('obstacle_position'), dtype=float)
+        violation = bool(diagnostics.get('violation', False))
+        margin = float(diagnostics.get('margin', float('nan')))
+        time_s = float(diagnostics.get('time_s', 0.0))
+
+        connection = Marker()
+        connection.header.stamp = stamp
+        connection.header.frame_id = self.frame_id
+        connection.ns = 'payload_closest_distance_line'
+        connection.id = 0
+        connection.type = Marker.LINE_STRIP
+        connection.action = Marker.ADD
+        connection.scale.x = 0.018
+        connection.color.r = 1.0
+        connection.color.g = 0.0 if violation else 1.0
+        connection.color.b = 1.0
+        connection.color.a = 1.0
+        connection.points = [_make_point(reference_position), _make_point(closest_position)]
+        connection.lifetime.sec = 1
+        markers.markers.append(connection)
+
+        closest = Marker()
+        closest.header.stamp = stamp
+        closest.header.frame_id = self.frame_id
+        closest.ns = 'payload_closest_reference_point'
+        closest.id = 0
+        closest.type = Marker.SPHERE
+        closest.action = Marker.ADD
+        closest.pose.position = _make_point(reference_position)
+        closest.pose.orientation.w = 1.0
+        closest.scale.x = 0.09
+        closest.scale.y = 0.09
+        closest.scale.z = 0.09
+        closest.color.r = 1.0
+        closest.color.g = 0.0 if violation else 1.0
+        closest.color.b = 1.0
+        closest.color.a = 1.0
+        closest.lifetime.sec = 1
+        markers.markers.append(closest)
+
+        if self.show_debug_text:
+            label = Marker()
+            label.header.stamp = stamp
+            label.header.frame_id = self.frame_id
+            label.ns = 'text_payload_diagnostic_summary'
+            label.id = 0
+            label.type = Marker.TEXT_VIEW_FACING
+            label.action = Marker.ADD
+            label.pose.position = _make_point(
+                0.5 * (reference_position + closest_position) + np.array([0.0, 0.0, 0.18])
+            )
+            label.pose.orientation.w = 1.0
+            label.scale.z = 0.10
+            label.color.r = 1.0
+            label.color.g = 0.0 if violation else 1.0
+            label.color.b = 1.0
+            label.color.a = 1.0
+            label.text = (
+                f'{self._diagnostic_obstacle_name(diagnostics)}\n'
+                f'margin={margin:.2f} m, t={time_s:.2f} s'
+            )
+            label.lifetime.sec = 1
+            markers.markers.append(label)
+
+    def add_obstacle_diagnostic_markers(self, markers: MarkerArray, stamp) -> None:
+        diagnostics = self.last_obstacle_diagnostics
+        if not diagnostics or not diagnostics.get('active', False):
+            return
+
+        reference_position = diagnostics['reference_position']
+        obstacle_position = diagnostics['obstacle_position']
+        violation = bool(diagnostics.get('violation', False))
+        margin = float(diagnostics.get('margin', float('nan')))
+        obstacle_index = int(diagnostics.get('obstacle_index', -1))
+        time_s = float(diagnostics.get('time_s', 0.0))
+
+        # This line is the time-indexed closest-distance diagnostic: closest point
+        # on the safe reference horizon to the predicted obstacle centre at the
+        # same future time.
+        connection = Marker()
+        connection.header.stamp = stamp
+        connection.header.frame_id = self.frame_id
+        connection.ns = 'obstacle_closest_distance_line'
+        connection.id = 0
+        connection.type = Marker.LINE_STRIP
+        connection.action = Marker.ADD
+        connection.scale.x = 0.018
+        connection.color.r = 1.0
+        connection.color.g = 0.0 if violation else 1.0
+        connection.color.b = 0.0
+        connection.color.a = 1.0
+        connection.points = [_make_point(reference_position), _make_point(obstacle_position)]
+        connection.lifetime.sec = 1
+        markers.markers.append(connection)
+
+        closest_ref = Marker()
+        closest_ref.header.stamp = stamp
+        closest_ref.header.frame_id = self.frame_id
+        closest_ref.ns = 'obstacle_closest_reference_point'
+        closest_ref.id = 0
+        closest_ref.type = Marker.SPHERE
+        closest_ref.action = Marker.ADD
+        closest_ref.pose.position = _make_point(reference_position)
+        closest_ref.pose.orientation.w = 1.0
+        closest_ref.scale.x = 0.09
+        closest_ref.scale.y = 0.09
+        closest_ref.scale.z = 0.09
+        closest_ref.color.r = 1.0
+        closest_ref.color.g = 0.0 if violation else 1.0
+        closest_ref.color.b = 0.0
+        closest_ref.color.a = 1.0
+        closest_ref.lifetime.sec = 1
+        markers.markers.append(closest_ref)
+
+        predicted_safety = Marker()
+        predicted_safety.header.stamp = stamp
+        predicted_safety.header.frame_id = self.frame_id
+        predicted_safety.ns = 'obstacle_predicted_safety_sphere'
+        predicted_safety.id = 0
+        predicted_safety.type = Marker.SPHERE
+        predicted_safety.action = Marker.ADD
+        predicted_safety.pose.position = _make_point(obstacle_position)
+        predicted_safety.pose.orientation.w = 1.0
+        diameter = 2.0 * self.obstacle_safety_radius
+        predicted_safety.scale.x = diameter
+        predicted_safety.scale.y = diameter
+        predicted_safety.scale.z = diameter
+        predicted_safety.color.r = 1.0
+        predicted_safety.color.g = 0.0 if violation else 1.0
+        predicted_safety.color.b = 0.0
+        predicted_safety.color.a = 0.18
+        predicted_safety.lifetime.sec = 1
+        markers.markers.append(predicted_safety)
+
+        if self.show_debug_text:
+            label = Marker()
+            label.header.stamp = stamp
+            label.header.frame_id = self.frame_id
+            label.ns = 'text_obstacle_diagnostic_summary'
+            label.id = 0
+            label.type = Marker.TEXT_VIEW_FACING
+            label.action = Marker.ADD
+            label.pose.position = _make_point(
+                0.5 * (reference_position + obstacle_position) + np.array([0.0, 0.0, 0.18])
+            )
+            label.pose.orientation.w = 1.0
+            label.scale.z = 0.10
+            label.color.r = 1.0
+            label.color.g = 0.0 if violation else 1.0
+            label.color.b = 0.0
+            label.color.a = 1.0
+            label.text = (
+                f'closest: drone_{obstacle_index}\n'
+                f'margin={margin:.2f} m, t={time_s:.2f} s\n'
+                f'predicted safety sphere'
+            )
+            label.lifetime.sec = 1
+            markers.markers.append(label)
+
+    def timer_callback(self) -> None:
+        if not self.inputs_ready():
+            return
+
+        holding_at_start = self.state == HOLD_FOR_OBSTACLE
+
+        # Update current tracking/status text. In HOLD_FOR_OBSTACLE this does not
+        # advance the normal state machine; it only refreshes diagnostics text.
+        self.update_state_machine()
+        state_before_timeout_check = self.state
+        self.maybe_start_landing_from_blocked_timeout()
+        if self.state != state_before_timeout_check:
+            self.update_state_machine()
+
+        # Build the candidate path that we would like to publish if it is safe.
+        # While holding, keep evaluating the would-be resume path instead of the
+        # stationary hold path. This prevents immediate false recovery just because
+        # the stationary hold reference is safe.
+        candidate_state = self.resume_state_after_hold if self.state == HOLD_FOR_OBSTACLE else self.state
+        nominal_positions, nominal_velocities, nominal_accelerations = self.build_reference_arrays_for_state(candidate_state)
+        self.last_nominal_positions = nominal_positions.copy()
+
+        candidate_positions, candidate_velocities, candidate_accelerations = self.apply_obstacle_avoidance(
+            nominal_positions,
+            nominal_velocities,
+            nominal_accelerations,
+        )
+
+        candidate_obstacle_diagnostics = self.compute_obstacle_diagnostics(candidate_positions)
+        candidate_payload_diagnostics = self.compute_payload_diagnostics(candidate_positions)
+        candidate_safety_diagnostics = self.combine_safety_diagnostics(
+            candidate_obstacle_diagnostics, candidate_payload_diagnostics
+        )
+        publish_hold = self.evaluate_blocked_fallback(candidate_safety_diagnostics)
+
+        if publish_hold:
+            positions, velocities, accelerations = self.build_hold_reference_arrays()
+            # Diagnostics shown/logged during hold still describe the candidate
+            # resume trajectory, because that is what matters for deciding when it
+            # is safe to continue. The published orange path is the hold reference.
+            self.last_obstacle_diagnostics = candidate_obstacle_diagnostics
+            self.last_payload_diagnostics = candidate_payload_diagnostics
+            self.last_nominal_obstacle_diagnostics = self.compute_obstacle_diagnostics(nominal_positions)
+            self.last_nominal_payload_diagnostics = self.compute_payload_diagnostics(nominal_positions)
+            safe_text = str(self.last_obstacle_diagnostics.get('text', ''))
+            safe_payload_text = str(self.last_payload_diagnostics.get('text', ''))
+            nominal_text = str(self.last_nominal_obstacle_diagnostics.get('text', ''))
+            nominal_payload_text = str(self.last_nominal_payload_diagnostics.get('text', ''))
+            hold_diag_pieces = []
+            if nominal_text:
+                hold_diag_pieces.append(f'nominal {nominal_text}')
+            if nominal_payload_text:
+                hold_diag_pieces.append(f'nominal {nominal_payload_text}')
+            if safe_text:
+                hold_diag_pieces.append(f'candidate {safe_text}')
+            if safe_payload_text:
+                hold_diag_pieces.append(f'candidate {safe_payload_text}')
+            self.last_obstacle_diagnostics_text = '\n'.join(hold_diag_pieces)
+            self.last_avoidance_info = self.last_avoidance_info or {}
+            avoidance_text = str(self.last_avoidance_info.get('text', '')) if self.last_avoidance_info else ''
+            pieces = [self.last_status_text]
+            if avoidance_text:
+                pieces.append(avoidance_text)
+            pieces.append(self.last_obstacle_diagnostics_text)
+            if self.last_actual_quad_obstacle_diagnostics is not None:
+                pieces.append(str(self.last_actual_quad_obstacle_diagnostics.get('text', '')))
+            if self.last_hold_retreat_active:
+                pieces.append(f'hold retreat active: step={self.last_hold_retreat_step:.3f} m/update')
+            pieces.append(self.last_blocked_reason)
+            self.last_status_text = '\n'.join(p for p in pieces if p)
+        else:
+            positions, velocities, accelerations = candidate_positions, candidate_velocities, candidate_accelerations
+            self.update_obstacle_diagnostics(positions, nominal_positions)
+            if self.last_actual_quad_obstacle_diagnostics is not None and self.state == HOLD_FOR_OBSTACLE:
+                self.last_status_text = (
+                    f'{self.last_status_text}\n'
+                    f'{self.last_actual_quad_obstacle_diagnostics.get("text", "")}'
+                )
+            if self.last_blocked_reason:
+                self.last_status_text = f'{self.last_status_text}\n{self.last_blocked_reason}'
+
+        self.write_csv_log_row(positions)
+        self.publish_reference(positions, velocities, accelerations)
+        state_before_disarm_check = self.state
+        self.maybe_publish_landing_disarm()
+        if self.state != state_before_disarm_check:
+            self.update_state_machine()
+        self.publish_markers(positions, nominal_positions)
+        self.publish_state()
+        self.publish_obstacle_diagnostics()
+
+
+def main(args=None) -> None:
+    rclpy.init(args=args)
+    node = OnlineJoinPlanner()
+    try:
+        rclpy.spin(node)
+    finally:
+        node.close_csv_logger()
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

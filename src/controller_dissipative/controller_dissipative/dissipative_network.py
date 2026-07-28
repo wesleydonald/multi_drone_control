@@ -62,7 +62,8 @@ class DissipativeParams:
     scheme is stable while sqrt(k/m)*h << 2 (here ~0.09) and settles in ~1 s with c near
     half of critical (2*sqrt(k*m))."""
     def __init__(self, k_pay=40.0, k_anchor=40.0, k_ring=20.0, c=6.0,
-                 node_mass=0.5, substeps=10, elev_deg=45.0, k_slot=18.0):
+                 node_mass=0.5, substeps=10, elev_deg=45.0, k_slot=18.0,
+                 balanced_tensions=False, T_handout=12.0):
         self.k_pay = k_pay          # N/m spring to the payload node (rest cable_len)
         self.k_anchor = k_anchor    # N/m spring to the anchor node (rest cone radius)
         self.k_ring = k_ring        # N/m spring to each ring neighbour (rest chord)
@@ -72,6 +73,26 @@ class DissipativeParams:
         self.node_mass = node_mass  # kg virtual node mass (sets network timescale)
         self.substeps = int(substeps)  # integrator sub-steps per control tick
         self.elev_deg = elev_deg    # design cable elevation above horizontal
+        # UNEQUAL (moment-balanced) force sharing. When the attach points are NOT
+        # symmetric -- e.g. a mid-flight newcomer welds at an off-centre point, so the
+        # fleet is 3 tethers at 120deg + 1 at an interstitial azimuth -- equal tension
+        # t_i = mg/(n sinphi) leaves a net moment and the rigid load tilts. With this on,
+        # reference() instead solves per-drone tensions from a 6-DOF wrench balance at the
+        # ACTUAL attach geometry (see _solve_tensions), so uneven azimuths hold the load
+        # LEVEL. This is what lets the fleet visibly reconfigure after an off-centre attach
+        # (a centre weld still wants the central lifter -- its moment arm is ~0). Off by
+        # default so the verified equal-share/central-lifter paths are unchanged.
+        self.balanced_tensions = bool(balanced_tensions)
+        # SOFT HAND-OUT time constant (s). A mid-flight newcomer is welded as a CENTRAL
+        # lifter (elevation 90deg, moment arm 0 -- pure vertical support that the feedforward-
+        # trusting, no-integrator tracker holds exactly) and then CONTINUOUSLY handed out to
+        # its off-centre ring slot (design elevation, captured azimuth) over T_handout seconds.
+        # Every intermediate is a near-equilibrium cone, so the ACTUAL cable force stays ~equal
+        # to the reference feedforward throughout -- the tracker never under-thrusts, and the
+        # abrupt central->ring jump that ran the load away (tilt 12->90deg) is removed. Only the
+        # newcomer's own handout scalar ramps; the existing tethers stay at full ring. Set the
+        # ramp on per node via attach(k, ..., handout=True).
+        self.T_handout = float(T_handout)
 
 
 class DissipativeNetwork:
@@ -103,6 +124,35 @@ class DissipativeNetwork:
         self.q = np.zeros((self.n, 3))
         self.qd = np.zeros((self.n, 3))
         self.attached = [True] * self.n
+        # CENTRAL lifters hang straight up from the load centre (no ring azimuth), so a
+        # mid-flight newcomer welded near the payload centre adds pure vertical lift instead of
+        # being pulled to a side ring slot it cannot hold (which levers the load over). A central
+        # node is excluded from the ring/slot springs and pinned to the vertical axis; it still
+        # carries its 1/n share via the tension feedforward (at elevation 90deg). Set via
+        # attach(k, ..., central=True). Ring members keep the outward-cone behaviour.
+        self.central = [False] * self.n
+        # per-node cable rest length (payload-spring rest + reference projection). Defaults
+        # to the shared cable_len; a mid-flight ATTACH newcomer that hangs on a different
+        # cable (e.g. a swung-electromagnet pendulum) can override its own entry via
+        # attach(k, ..., cable_len_k=...). The cone geometry (anchor height / radius / slot)
+        # stays on the shared cable_len -- only the newcomer's cable distance & reference
+        # projection use its own length.
+        self.cable_len_i = np.full(self.n, self.cable_len, dtype=float)
+        # SOFT HAND-OUT continuation scalar per node, s in [0,1]: 1 = full RING member (the
+        # legacy behaviour -- design elevation, full captured moment arm), 0 = CENTRAL lifter
+        # (elevation 90deg, zero moment arm). Existing tethers stay at 1. A newcomer attached
+        # with handout=True is seeded at 0 and ramped to 1 at _handout_rate = 1/T_handout, so
+        # its cable elevation eases from vertical to its slot and its moment arm grows from 0
+        # to the captured rho -- a quasi-static central->ring transition that keeps the actual
+        # force ~equal to the feedforward the tracker trusts. See _handout_geom / step().
+        self.handout = np.ones(self.n, dtype=float)
+        self._handout_rate = np.zeros(self.n, dtype=float)
+        # per-node SETTLE elevation (deg). The fleet uses the shared design elev_deg; a welded
+        # newcomer can be given a STEEPER target so it settles close to where it welds (high &
+        # near-vertical over its ring point) instead of transiting far out-and-down to the 45deg
+        # rim. A steeper cable is also mostly vertical -> less horizontal shove for the tension
+        # solve to balance -> the newcomer joins as a stable ring member with minimal transit.
+        self.elev_target = np.full(self.n, float(self.p.elev_deg), dtype=float)
         self._seeded = False
 
     # ── setup / topology ──────────────────────────────────────────────────
@@ -122,6 +172,52 @@ class DissipativeNetwork:
         if 0 <= k < self.n:
             self.attached[k] = False
 
+    def attach(self, k, measured_pos, cable_len_k=None, central=False, handout=False,
+               elev_deg_k=None):
+        """Add node k to the network -- the exact reverse of detach. Because step() gates
+        EVERY spring/slot/damping edge on self.attached[i], a node that was inert simply
+        rejoins: flip its flag true and seed it bumplessly at the measured drone position
+        with zero velocity (like seed() :109), so the first step() makes no jump. The ring
+        rest (_ring_rest_for), the phased even-azimuth slots, and the tension feedforward
+        (n_attached) all recompute for the INCREASED count, so the fleet re-spaces into an
+        even (m+1)-gon and every drone's load share drops by itself. If the newcomer hangs
+        on a different-length cable (a swung-electromagnet pendulum), pass cable_len_k to
+        set its per-node cable rest.
+
+        handout=True enables the SOFT HAND-OUT: the newcomer joins as a CENTRAL lifter
+        (handout scalar 0 -- vertical, zero moment arm) and is CONTINUOUSLY handed out to its
+        ring slot over T_handout seconds, so its actual cable force tracks the feedforward the
+        no-integrator tracker trusts and the load never runs away. handout=False (default)
+        keeps the legacy instant full-ring join. central=True (a pure centre weld) overrides
+        both -- it stays the frozen vertical lifter. Idempotent."""
+        if not (0 <= k < self.n):
+            return
+        self.attached[k] = True
+        self.central[k] = bool(central)
+        self.q[k] = np.asarray(measured_pos, float)
+        self.qd[k] = 0.0
+        if cable_len_k is not None:
+            self.cable_len_i[k] = float(cable_len_k)
+        # steeper settle target reduces the newcomer's out-and-down transit from its high,
+        # near-vertical weld pose (default = the shared fleet elevation).
+        self.elev_target[k] = float(elev_deg_k) if elev_deg_k is not None else self.p.elev_deg
+        if handout and not central:
+            self.handout[k] = 0.0                              # start as a central lifter
+            self._handout_rate[k] = 1.0 / max(self.p.T_handout, 1e-3)
+        else:
+            self.handout[k] = 1.0                              # legacy instant full-ring join
+            self._handout_rate[k] = 0.0
+
+    def set_attach_rho(self, k, rho_k):
+        """Relocate node k's FIXED body attach point (load-frame). Used at a mid-flight
+        weld to make the network model where the newcomer ACTUALLY attached (captured from
+        the measured geometry) instead of a nominal even-ring azimuth -- so the
+        moment-balanced tension solve (balanced_tensions) computes the RIGHT wrench and the
+        real load stays level. No-op if the network is running equal force sharing (rho
+        only feeds the azimuth/cone geometry then)."""
+        if 0 <= k < self.n:
+            self.rho[k] = np.asarray(rho_k, float)
+
     def n_attached(self):
         return sum(1 for a in self.attached if a)
 
@@ -134,11 +230,18 @@ class DissipativeNetwork:
         m = max(float(m), 2.0)   # float so the eased n_eff gives a smooth rest length
         return 2.0 * self._cone_r * float(np.sin(np.pi / m))
 
+    def _ring_members(self):
+        """Attached nodes that sit on the outward ring (excludes central lifters, which hang
+        on the vertical axis and take no azimuth slot)."""
+        return [j for j in range(self.n) if self.attached[j] and not self.central[j]]
+
     def _ring_neighbours(self, i):
-        """The two azimuth neighbours of node i among the CURRENTLY attached nodes.
-        Skips detached nodes so the ring re-closes across the gap as members leave.
-        Nodes sit at azimuth 2*pi*j/n, so index order is azimuth order."""
-        att = [j for j in range(self.n) if self.attached[j] and j != i]
+        """The two azimuth neighbours of node i among the CURRENTLY attached RING nodes.
+        Skips detached and central nodes so the ring re-closes across the gap as members
+        leave. Nodes sit at azimuth 2*pi*j/n, so index order is azimuth order."""
+        if self.central[i]:
+            return []
+        att = [j for j in self._ring_members() if j != i]
         if not att:
             return []
         order = sorted(att + [i])
@@ -149,12 +252,45 @@ class DissipativeNetwork:
             return [order[(pos + 1) % 2]]
         return [order[(pos - 1) % len(order)], order[(pos + 1) % len(order)]]
 
+    def _handout_geom(self, i):
+        """Blended cone geometry for node i under the soft hand-out. Returns (cos_phi,
+        sin_phi) at the interpolated cable elevation phi = (1-s)*90deg + s*elev_deg, where
+        s = handout[i]. At s=0 (just welded) phi=90deg -> (0,1): a vertical CENTRAL lifter
+        (zero cone radius, all support vertical). At s=1 (handed out) phi=elev_deg: the full
+        outward RING slot. Everything in step()/reference() built on these eases continuously
+        between the two, so every intermediate is a near-equilibrium cone."""
+        s = float(np.clip(self.handout[i], 0.0, 1.0))
+        phi = (1.0 - s) * (np.pi / 2.0) + s * np.radians(self.elev_target[i])
+        return float(np.cos(phi)), float(np.sin(phi))
+
     def _azimuth(self, i, R):
         """Outward horizontal unit bearing of slot i in world (attach ring rotated by
         the measured load yaw)."""
         azi = (R @ self.rho[i])[:2]
         na = float(np.linalg.norm(azi))
         return azi / na if na > 1e-9 else np.array([1.0, 0.0])
+
+    @staticmethod
+    def _yaw_rot(load_quat):
+        """Rotation matrix from the load's YAW ONLY (roll/pitch dropped). The formation is
+        defined against GRAVITY, so a load TILT must not distort where the drones are told to
+        hover. Using the full measured rotation instead lets a small tilt tip the attach-
+        direction vectors out of horizontal, shrink some nodes' cone slots inward, and pull
+        the load further over -- a self-amplifying tilt (seen post-attach: drones bunch above
+        the payload, tilt plateaus ~60deg). Yaw-only breaks that feedback."""
+        w, x, y, z = (float(load_quat[0]), float(load_quat[1]),
+                      float(load_quat[2]), float(load_quat[3]))
+        yaw = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+        c, s = np.cos(yaw), np.sin(yaw)
+        return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+
+    def _frame_rot(self, load_quat):
+        """Frame the formation is built in. Balanced (unequal-force) mode uses YAW ONLY so a
+        load tilt cannot distort the references (see _yaw_rot); the verified level/detach
+        modes keep the full measured rotation unchanged (a level load makes them identical)."""
+        if self.p.balanced_tensions:
+            return self._yaw_rot(load_quat)
+        return quat_to_rot_np(load_quat)
 
     # ── network evolution ──────────────────────────────────────────────────
     def step(self, load_pos, load_quat, load_vel, p_des_load, dt):
@@ -166,14 +302,25 @@ class DissipativeNetwork:
         closes physically through the rigid rods -- reference() reads it only for the
         measured attach point). Read references via reference(i)."""
         p_des = np.asarray(p_des_load, float)
-        R = quat_to_rot_np(load_quat)
+        R = self._frame_rot(load_quat)
+
+        # advance the SOFT HAND-OUT of any newcomer: its handout scalar creeps 0 -> 1 at
+        # 1/T_handout per second, easing it from central lifter to full ring member. Done here
+        # (once per control tick, not per substep) so the geometry is fixed within a tick.
+        for i in range(self.n):
+            if self.attached[i] and self._handout_rate[i] > 0.0:
+                self.handout[i] = min(1.0, self.handout[i] + self._handout_rate[i] * dt)
 
         payload = p_des
         anchor = p_des + np.array([0.0, 0.0, self._anchor_h])
         # per-slot outward cone target (the force-free equilibrium of the springs).
         azi = [self._azimuth(i, R) for i in range(self.n)]
-        # ring rest for the CURRENTLY-attached fleet, so survivors re-space evenly.
-        ring_rest = self._ring_rest_for(self.n_attached())
+        # ring rest for the CURRENTLY-attached RING fleet (central lifters excluded), eased by
+        # the handout scalars so a newcomer only counts toward the even m-gon as it hands out
+        # (n_eff climbs 3 -> 4 smoothly) -- the ring members re-space without a step change.
+        ring_att = self._ring_members()
+        n_eff = sum(float(self.handout[j]) for j in ring_att)
+        ring_rest = self._ring_rest_for(n_eff)
 
         # phased EVEN azimuth slots: the attached nodes are assigned equal 2*pi/m gaps,
         # and the whole m-gon is phased to the payload's FIXED attach directions (rho) by
@@ -182,17 +329,53 @@ class DissipativeNetwork:
         # and repositioning minimal. A rho-anchored slot cannot spin with the nodes, so a
         # rotation of the formation is restored. k_slot=0 disables it (pure ring behaviour).
         slot = {}
-        att = [i for i in range(self.n) if self.attached[i]]
+        att = ring_att
         m = len(att)
-        if self.p.k_slot > 0.0 and m >= 1:
-            home = [float(np.arctan2(azi[i][1], azi[i][0])) for i in att]
-            implied = [home[r] - 2.0 * np.pi * r / m for r in range(m)]
-            ref = float(np.arctan2(np.mean(np.sin(implied)), np.mean(np.cos(implied))))
-            for r, i in enumerate(att):
-                th = ref + 2.0 * np.pi * r / m
-                d = np.array([self._cos_e * np.cos(th), self._cos_e * np.sin(th),
-                              self._sin_e])
+        if self.p.balanced_tensions and m >= 1:
+            # FIXED-GEOMETRY mode (unequal force sharing). The attach points are physically
+            # fixed (tethers + an off-centre weld) and CANNOT be respaced to an even m-gon --
+            # forcing that drives every node's reference toward an unreachable ring, the fleet
+            # chases it and drifts, and a node can be sent to the OPPOSITE side of its own weld,
+            # levering the load over. Instead pin each node to the cone point at ITS OWN fixed
+            # attach azimuth (rho direction); the moment-balanced tensions (not respacing) hold
+            # the load level. The ring-neighbour chord springs are also dropped below. The cone
+            # ELEVATION per node is the handout blend (90deg -> elev_deg), so a just-welded
+            # newcomer's slot sits straight overhead and slides out to its azimuth as it hands
+            # out -- a continuous central->ring transition.
+            for i in att:
+                cos_i, sin_i = self._handout_geom(i)
+                d = np.array([azi[i][0] * cos_i, azi[i][1] * cos_i, sin_i])
                 slot[i] = payload + self.cable_len * d
+        elif self.p.k_slot > 0.0 and m >= 1:
+            # WEIGHTED even azimuth slots. Each ring member occupies an angular width
+            # proportional to its hand-out weight, so a just-welded newcomer (handout~0) takes
+            # ~no width and the existing members keep their current even (m-1)-gon; as the
+            # newcomer hands out (weight 0->1) the slots morph CONTINUOUSLY to the even m-gon.
+            # This removes the 120->90deg one-tick azimuth step that slammed the existing
+            # drones at the weld. Spacing stays keyed on the SAME eased count as ring_rest
+            # (adjacent full nodes are 2*pi/n_eff apart), so the ring and slot springs agree
+            # throughout the hand-out instead of fighting. With all handout==1 this reduces
+            # EXACTLY to the plain even m-gon (frac_r=(r+0.5)/m, ref absorbs the half-slot
+            # offset), so detach/steady behaviour is unchanged.
+            w = [max(float(self.handout[i]), 0.0) for i in att]
+            total = sum(w)
+            if total > 1e-6:
+                home = [float(np.arctan2(azi[i][1], azi[i][0])) for i in att]
+                frac, acc = [], 0.0
+                for r in range(m):
+                    frac.append((acc + 0.5 * w[r]) / total)   # angular fraction of slot CENTRE
+                    acc += w[r]
+                # phase the pattern to the members' actual bearings, weighted by presence so a
+                # barely-present newcomer does not drag the phase while it is still overhead.
+                implied = [home[r] - 2.0 * np.pi * frac[r] for r in range(m)]
+                cw = np.asarray(w)
+                ref = float(np.arctan2(float(np.sum(cw * np.sin(implied))),
+                                       float(np.sum(cw * np.cos(implied)))))
+                for r, i in enumerate(att):
+                    th = ref + 2.0 * np.pi * frac[r]
+                    cos_i, sin_i = self._handout_geom(i)   # =cos_e/sin_e unless handing out
+                    d = np.array([cos_i * np.cos(th), cos_i * np.sin(th), sin_i])
+                    slot[i] = payload + self.cable_len * d
 
         h = dt / max(self.p.substeps, 1)
         for _ in range(max(self.p.substeps, 1)):
@@ -203,21 +386,44 @@ class DissipativeNetwork:
                 qi = self.q[i]
                 f = np.zeros(3)
                 # spring to the payload node, rest length cable_len (sets cable dist).
-                f += self._spring(qi, payload, self.p.k_pay, self.cable_len)
-                # spring to the anchor node, rest length cone radius (sets height/radius,
-                # pinning the node to the OUTWARD rim -- horizontal at equilibrium).
-                f += self._spring(qi, anchor, self.p.k_anchor, self._cone_r)
+                f += self._spring(qi, payload, self.p.k_pay, self.cable_len_i[i])
+                if self.central[i]:
+                    # CENTRAL lifter: pin to the vertical axis directly above the load centre
+                    # (rest 0 to the point one cable_len straight up). No cone/ring/slot springs,
+                    # so it hovers over the centre and adds pure vertical lift -- it cannot be
+                    # pulled to a side azimuth and lever the load over.
+                    v_target = payload + np.array([0.0, 0.0, self.cable_len_i[i]])
+                    f += self._spring(qi, v_target, self.p.k_anchor, 0.0)
+                    f += -self.p.c * self.qd[i] * 2.0
+                    acc[i] = f / self.p.node_mass
+                    continue
+                # spring to the anchor node. Under a soft hand-out the anchor point and the
+                # cone-radius rest are the handout blend: at handout=0 the anchor sits one
+                # cable_len straight up with rest 0 (the node is pinned vertical -- a central
+                # lifter), easing to the design rim (height _anchor_h, rest _cone_r) at
+                # handout=1. Equals the fixed anchor/_cone_r for a full ring member.
+                cos_i, sin_i = self._handout_geom(i)
+                anchor_i = payload + np.array([0.0, 0.0, self.cable_len * sin_i])
+                f += self._spring(qi, anchor_i, self.p.k_anchor, self.cable_len * cos_i)
                 # spring to the phased even-azimuth slot (rest 0), pinning absolute azimuth.
+                # Scaled by handout so a just-welded newcomer feels no side pull (it is
+                # central); the azimuth pin fades in as it hands out.
                 if i in slot:
-                    f += self._spring(qi, slot[i], self.p.k_slot, 0.0)
+                    f += self._spring(qi, slot[i], self.p.k_slot * self.handout[i], 0.0)
                 # graph-Laplacian damping toward the pinned anchor & payload (both still,
                 # so this is absolute damping) -- 2 edges.
                 f += -self.p.c * (self.qd[i] - 0.0) * 2.0
                 # ring-neighbour springs (rest = current-fleet chord) + damping (the
                 # dissipation that couples the robots and absorbs the detach transient).
-                for j in self._ring_neighbours(i):
-                    f += self._spring(qi, self.q[j], self.p.k_ring, ring_rest)
-                    f += -self.p.c * (self.qd[i] - self.qd[j])
+                # Skipped in balanced (fixed-geometry) mode: the even-chord rest would pull the
+                # fixed attach points toward an unreachable even m-gon (the drift/lever failure).
+                # Each edge is scaled by BOTH endpoints' handout, so a mid-hand-out newcomer
+                # couples in gradually (no ring yank at the instant of weld).
+                if not self.p.balanced_tensions:
+                    for j in self._ring_neighbours(i):
+                        gij = self.handout[i] * self.handout[j]
+                        f += gij * self._spring(qi, self.q[j], self.p.k_ring, ring_rest)
+                        f += -gij * self.p.c * (self.qd[i] - self.qd[j])
                 acc[i] = f / self.p.node_mass
             # semi-implicit Euler (velocity then position) -- stable for these springs.
             for i in range(self.n):
@@ -238,6 +444,73 @@ class DissipativeNetwork:
         u = d / dist
         return k * (dist - rest) * u
 
+    # ── unequal (moment-balanced) force sharing ─────────────────────────────
+    def _attach_frame(self, i, R, p_des):
+        """Attach point (world) and up-outward cable unit vector for node i, built on the
+        FIXED body attach point rho_i (not the load centre). r_i = R@rho_i is the moment
+        arm about the load COM; a_i = p_des + r_i is where the cable meets the load; the
+        drone sits one cable-length out along u_i = unit(node - a_i). A central lifter is
+        pinned vertical (u = +z) so it adds no horizontal disturbance / moment.
+
+        The moment arm uses the TRUE captured attach point rho_i even mid-hand-out: a
+        vertical lift at an OFF-CENTRE weld still applies a real moment (rho_i x F), so the
+        wrench solve must see it to make the OTHER cables compensate and keep the load level.
+        (Scaling the arm to 0 during hand-out was a bug -- it hid the newcomer's real off-
+        centre moment, so nothing cancelled it and the load tilted.) The soft hand-out eases
+        only the cable DIRECTION (the reference elevation, via _handout_geom), not the arm."""
+        r_i = R @ self.rho[i]
+        a_i = p_des + r_i
+        if self.central[i]:
+            return a_i, r_i, np.array([0.0, 0.0, 1.0])
+        d = self.q[i] - a_i
+        nd = float(np.linalg.norm(d))
+        u = d / nd if nd > 1e-9 else np.array([0.0, 0.0, 1.0])
+        return a_i, r_i, u
+
+    def _solve_tensions(self, R, p_des, load_accel=None):
+        """Per-drone cable tensions that balance the load's 6-DOF wrench at the ACTUAL
+        (possibly asymmetric) attach geometry -- the unequal force sharing.
+
+        Each cable i pulls the load toward the drone with force T_i*u_i at attach point
+        r_i (rel COM), contributing wrench column [u_i; r_i x u_i]. We want the fleet to
+        supply the load's weight (+ desired accel) with ZERO net moment (level):
+            A T = w,  w = [ m_load*(a_des + g z) ; 0 ],  A[:,i] = [u_i ; r_i x u_i].
+        Least-squares (min residual for m<6 cables); tensions clamped >=0 (cables can only
+        pull) and then rescaled so the vertical support exactly equals the load weight --
+        the load-bearing term the tracker must not get wrong. Returns {node_index: T}."""
+        idx = [i for i in range(self.n) if self.attached[i]]
+        if not idx:
+            return {}
+        A = np.zeros((6, len(idx)))
+        for c, i in enumerate(idx):
+            _, r_i, u = self._attach_frame(i, R, p_des)
+            A[0:3, c] = u
+            A[3:6, c] = np.cross(r_i, u)
+        a_des = np.zeros(3) if load_accel is None else np.asarray(load_accel, float)
+        F = self.load_mass * (a_des + np.array([0.0, 0.0, self.g]))
+        w = np.concatenate([F, np.zeros(3)])
+        # With m<6 cables the 6-DOF wrench is over-determined, so we weight the rows: the
+        # load MUST stay supported (Fz) and LEVEL (Mx,My), so those dominate; a small net
+        # horizontal force (Fx,Fy) is left for the position tracker to trim, and yaw torque
+        # (Mz, barely controllable with near-vertical cables) is de-emphasised. Weighted
+        # least squares distributes the unavoidable residual onto the least-critical axes.
+        W = np.array([3.0, 3.0, 40.0, 40.0, 40.0, 1.0])
+        # The tension split is statically INDETERMINATE (any 3 of 4 up-out cables can hold the
+        # load), so plain min-residual can zero a redundant cable -- the newcomer would carry
+        # nothing and never actually share the load. Regularise toward EQUAL sharing (each
+        # drone's design-elevation share t0 = m_load g / (m sin_elev)) with a small weight lam:
+        # it breaks the degeneracy so every drone carries a fair share, while the wrench rows
+        # (far heavier) still keep the load supported & level. Standard cable-robot tension
+        # distribution.
+        m = len(idx)
+        t0 = self.load_mass * self.g / (max(m, 1) * max(self._sin_e, 1e-3))
+        lam = 1.0
+        A_aug = np.vstack([A * W[:, None], np.sqrt(lam) * np.eye(m)])
+        w_aug = np.concatenate([w * W, np.sqrt(lam) * t0 * np.ones(m)])
+        T, *_ = np.linalg.lstsq(A_aug, w_aug, rcond=None)
+        T = np.clip(T, 0.0, None)
+        return {i: float(T[c]) for c, i in enumerate(idx)}
+
     # ── reference extraction ────────────────────────────────────────────────
     def reference(self, i, load_quat, p_des_load, taut_gate=1.0):
         """Per-drone reference (p_ref, v_ref, a_ff, a_cable), each a length-3 numpy
@@ -253,11 +526,30 @@ class DissipativeNetwork:
         attached drones so it rises as members detach. a_cable pulls in-and-down;
         a_ff = (0,0,g) - a_cable is the loaded-hover specific thrust (outward, > g)."""
         p_des = np.asarray(p_des_load, float)
+        v_ref = self.qd[i].copy()
+
+        if self.p.balanced_tensions:
+            # UNEQUAL force sharing: reference and cable frame are built on the node's OWN
+            # fixed attach point (a_i = p_des + R@rho_i), and the tension comes from the
+            # 6-DOF wrench balance over the whole fleet -- so an asymmetric attach set holds
+            # the load LEVEL with uneven per-drone tensions instead of tilting it.
+            R = self._frame_rot(load_quat)
+            a_i, _, u = self._attach_frame(i, R, p_des)
+            p_ref = a_i + self.cable_len_i[i] * u
+            t_i = self._solve_tensions(R, p_des).get(
+                i, self.load_mass * self.g / max(self.n_attached(), 1))
+            a_cable = taut_gate * (t_i / self.drone_mass) * (-u)
+            a_ff = np.array([0.0, 0.0, self.g]) - a_cable
+            return p_ref, v_ref, a_ff, a_cable
+
         u = self.q[i] - p_des
         dist = float(np.linalg.norm(u))
         u = u / dist if dist > 1e-9 else np.array([0.0, 0.0, 1.0])
-        p_ref = p_des + self.cable_len * u
-        v_ref = self.qd[i].copy()
+        # a central lifter always references straight up over the load centre (elevation 90deg),
+        # so its cable feed-forward is purely vertical -- no inward/side pull to tilt the load.
+        if self.central[i]:
+            u = np.array([0.0, 0.0, 1.0])
+        p_ref = p_des + self.cable_len_i[i] * u
         # tension from the node elevation: t = m_load g / (n' sin phi), phi = asin(u_z).
         # n' is the TRUE attached count (not eased): the survivors must pick up the
         # departed drone's load share IMMEDIATELY or the load sags. Only the ring-rest
@@ -283,12 +575,30 @@ class DissipativeNetwork:
         a_cable = np.zeros(3)
         return p_ref, v_ref, a_ff, a_cable
 
+    def net_wrench(self, load_quat, p_des_load, load_accel=None):
+        """Total force and moment (about the load COM) the balanced-tension feedforward
+        applies to the load, and the residual against the desired (weight, zero-moment)
+        wrench. Used by the verify harness to assert the load stays LEVEL (moment~0) and
+        supported. Returns (F_total, M_total, residual_force, residual_moment)."""
+        R = self._frame_rot(load_quat)
+        p_des = np.asarray(p_des_load, float)
+        Tsol = self._solve_tensions(R, p_des, load_accel)
+        F = np.zeros(3)
+        M = np.zeros(3)
+        for i, T in Tsol.items():
+            _, r_i, u = self._attach_frame(i, R, p_des)
+            F += T * u
+            M += np.cross(r_i, T * u)
+        a_des = np.zeros(3) if load_accel is None else np.asarray(load_accel, float)
+        F_want = self.load_mass * (a_des + np.array([0.0, 0.0, self.g]))
+        return F, M, F - F_want, M
+
     # ── introspection (used by the verification harness) ────────────────────
     def cone_target(self, i, load_quat, p_des_load):
         """The force-free equilibrium position of node i (its outward cone slot). The
         network relaxes q[i] onto this; the harness compares against it."""
         p_des = np.asarray(p_des_load, float)
-        R = quat_to_rot_np(load_quat)
+        R = self._frame_rot(load_quat)
         azi = self._azimuth(i, R)
         cone_dir = np.array([azi[0] * self._cos_e, azi[1] * self._cos_e, self._sin_e])
         return p_des + self.cable_len * cone_dir
@@ -389,6 +699,32 @@ def _self_test():
     print(f"[self-test] even redistribution OK: 3 survivors at azimuth gaps "
           f"{np.round(gaps,1)} deg (expect ~120)")
 
+    # 3->4 ATTACH (reverse of detach): a newcomer flies in and node 2 rejoins. Seed it at
+    # an approach position off its cone slot, re-settle, and confirm the load share per
+    # drone DROPS back toward the 4-drone value and the fleet re-spaces to ~90 deg gaps.
+    t_before_att = np.mean([float(np.linalg.norm(net.reference(i, load_quat, p_hi)[3]))
+                            * drone_mass for i in range(n) if net.attached[i]])
+    approach = net.cone_target(2, load_quat, p_hi) + np.array([0.12, -0.10, 0.08])
+    net.attach(2, approach)
+    for _ in range(300):
+        net.step([0, 0, 0.9], load_quat, load_vel, p_hi, dt)
+    assert np.all(np.isfinite(net.q)), "network diverged after attach"
+    assert net.n_attached() == 4, f"attach did not restore n=4: {net.n_attached()}"
+    tens4 = np.array([float(np.linalg.norm(net.reference(i, load_quat, p_hi)[3])) *
+                      drone_mass for i in range(n)])
+    assert tens4.mean() < t_before_att, \
+        f"load share per drone did not drop after 3->4: {t_before_att:.3f} -> {tens4.mean():.3f}"
+    err2 = float(np.linalg.norm(net.q[2] - net.cone_target(2, load_quat, p_hi)))
+    assert err2 < 0.03, f"newcomer did not settle onto its cone slot: {err2:.3f} m"
+    az4 = sorted(np.degrees(np.arctan2(net.q[i][1] - p_hi[1], net.q[i][0] - p_hi[0]))
+                 % 360.0 for i in range(n))
+    gaps4 = np.diff(az4 + [az4[0] + 360.0])
+    assert np.all(np.abs(gaps4 - 90.0) < 15.0), \
+        f"fleet not even after 3->4 attach: azimuth gaps {np.round(gaps4,1)} deg"
+    print(f"[self-test] 3->4 attach OK: tension/drone {t_before_att:.3f} -> "
+          f"{tens4.mean():.3f} N (expect ~{exp4:.2f}), newcomer settled, gaps "
+          f"{np.round(gaps4,1)} deg (expect ~90)")
+
     # ROTATIONAL STABILITY (the n=2 degeneracy fix): at n=2 the ring fixes the two nodes'
     # SEPARATION but not the formation's absolute rotation -- without the phased-slot spring
     # the pair can spin freely (what destabilised n=2 in sim). Settle a 2-node net, apply a
@@ -416,6 +752,35 @@ def _self_test():
     _, _, _, ac = net.fly_away_reference(2)
     assert np.allclose(ac, 0.0), "fly-away reference must have a_cable=0"
     print("[self-test] fly-away reference OK (a_cable=0)")
+
+    # UNEQUAL FORCE SHARING (moment-balanced): 3 tethers at 120deg + a 4th welded at an
+    # OFF-CENTRE interstitial attach point. With equal sharing the asymmetric set leaves a
+    # net moment (the tilt bug); the wrench solve must hold the load LEVEL (moment ~0) with
+    # UNEQUAL tensions, while still supporting the full weight.
+    rho_asym = attach_points(3, 0.08, 0.025)                    # 3 at 120deg, radius 0.08
+    rho_asym.append(np.array([0.08 * np.cos(np.radians(60.0)),  # 4th tucked between two
+                              0.08 * np.sin(np.radians(60.0)), 0.025]))
+    pb = DissipativeParams(balanced_tensions=True)
+    netb = DissipativeNetwork(4, rho_asym, cable_len, drone_mass, load_mass, g, pb)
+    netb.seed([netb.cone_target(i, load_quat, p_des) for i in range(4)])
+    for _ in range(300):
+        netb.step([0, 0, 0.6], load_quat, load_vel, p_des, dt)
+    F, M, rF, rM = netb.net_wrench(load_quat, p_des)
+    tb = np.array([netb._solve_tensions(quat_to_rot_np(load_quat), p_des)[i]
+                   for i in range(4)])
+    assert np.all(np.isfinite(netb.q)), "balanced network diverged"
+    assert abs(rF[2]) < 0.01 * F[2], \
+        f"weight not supported: Fz residual {rF[2]:.4f} N of {F[2]:.2f} N"
+    assert np.linalg.norm(rM) < 0.06, \
+        f"moment not balanced (load would tilt): |M|={np.linalg.norm(rM):.3f} N.m"
+    assert np.linalg.norm(rF[:2]) < 0.5, \
+        f"net horizontal force too large: {rF[:2]}"
+    assert (tb.max() - tb.min()) > 0.02 * tb.mean(), \
+        f"tensions should be UNEQUAL for asymmetric geometry: {np.round(tb,3)}"
+    assert np.all(tb >= 0.0), f"cable tensions must be non-negative: {np.round(tb,3)}"
+    print(f"[self-test] unequal force sharing OK: tensions {np.round(tb,3)} N "
+          f"(unequal), |moment|={np.linalg.norm(rM):.4f} N.m (~0 -> level), "
+          f"Fz residual {rF[2]:.1e} N")
     print("[self-test] ALL PASSED")
 
 
