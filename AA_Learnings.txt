@@ -189,3 +189,45 @@ twist:
 ---
 
 
+Okay I have made this branch to try implement attaching. The individual drone attaching has a swung electromagnet and will
+be controlled by another students controller, I have attached the commands they told me they used here (so you can see what files
+are best to look at):
+
+ros2 run drone_communication fake_cooperative_transport_world --ros-args   -p obstacle_scenario:=transport_default   -p fake_drone_safety_radius:=0.50
+
+ros2 run drone_communication online_join_planner --ros-args   -p obstacle_scenario:=transport_default   -p mission_mode:=pickup_delivery   -p pickup_object_pose_topic:=/model/payload_model/pose   -p pickup_object_index:=1   -p object_attached_topic:=/magnet/object_attached   -p magnet_command_topic:=/magnet/command   -p use_measured_magnet_tip:=true   -p magnet_tip_pose_topic:=/magnet_tip_pose   -p auto_descend:=true   -p pickup_xy_tolerance:=0.10   -p pickup_tip_speed_tolerance:=0.60   -p pickup_lift_height:=0.40 -p pickup_lift_speed:=0.12 -p pickup_z_tolerance:=0.2   -p max_reference_speed:=1.5   -p enable_obstacle_avoidance:=false   -p enable_blocked_fallback:=false   -p step_reference_in_lift_object:=true -p lift_complete_object_clearance:=0.08 -p lift_timeout_s:=4.0 -p lift_min_clearance_after_timeout:=0.03 -p intercept_time:=1.0 -p max_reference_speed:=2.0 -p match_xy_threshold:=0.18 -p match_xy_velocity_threshold:=0.20 -p attach_ready_target_lead_time:=0.30 -p use_static_pickup_object:=false -p drop_point_source:=payload -p payload_pose_topic:=/fake_payload/pose -p use_measured_magnet_tip:=true -p magnet_tip_pose_topic:=/magnet_tip_pose
+
+ros2 run drone_communication magnet_attachment_manager --ros-args   -p enable_elrs_magnet_output:=false   -p attachment_mode:=fixed_joint   -p command_backend:=gz_cli   -p magnet_tip_pose_topic:=/magnet_tip_pose   -p magnet_tip_pose_msg_type:=pose_stamped   -p object_pose_topic:=/model/payload_model/pose   -p object_pose_index:=1   -p use_fallback_object_pose:=false   -p attach_radius:=0.18   -p attach_speed_threshold:=1.0   -p attach_dwell_time_s:=0.0
+
+gz sim -v -r world_drone_env_detach.sdf
+
+ros2 launch drone_visualisation view_frame.launch.py
+
+ros2 launch simulation_communication betaflight_linear_simulation_launch.py
+
+ros2 run drone_communication pendulum_state_publisher --ros-args   -p x3_pose_topic:=/model/x3/pose   -p magnet_index:=0   -p attachment_index:=5   -p drone_index:=7   -p x3_link_poses_are_relative:=true
+
+ros2 run controller_mpc_payload main --ros-args   -p use_external_reference:=true -p enable_thrust_ratio_ukf:=true
+
+ros2 topic pub --once /magnet/command std_msgs/msg/String "{data: OFF}"
+
+gz topic   -t /join_planner/land_now   -m gz.msgs.Boolean   -p 'data: true'
+
+Here is my ideal setup:
+RViz -> Shows all drones and their mpc paths as usual
+World file -> has three drones tethered to the payload while resting on the ground (same as three_rigid_ground.sdf) and an
+additional drone to the side (call this world three_attach.sdf).
+Controller -> When I hit takeoff it makes the three drone system takeoff as usual with whatever specified trajectory. The single
+drone also takes off but only attempts to attach when I click on the attach button in rviz (which can be a launch parameter attach:=true by default). 
+This is similar to the detach launch file case for rviz.
+Once attached -> The new added drone flicks to my dissipative contrller and joins the system.
+
+Notes: 
+At the moment I am just doing things in simulation.
+I think tejens method already has a mechanism for reattaching in simulation.
+tejens method also has some obstacle avoidance so the attachment should be able to occur even during a trajectory (although I will test hover first).
+Let me know if you have any questions or concerns or think any design decisions could be improved.
+
+
+dissipative to work better with trajectories.
+For the attach situation I am having a bit of trouble with the attachment point and where the attached drone should redistribute to.

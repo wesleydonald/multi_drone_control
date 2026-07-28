@@ -24,5 +24,17 @@ else
   echo "   clean — no stale processes."
 fi
 
+echo "── after launch, verify exactly ONE publisher per drone: ──"gz sim'                       2>/dev/null
+pkill -9 -f 'ruby.*gz'                     2>/dev/null
+pkill -9 -f 'rviz2'                        2>/dev/null
+sleep 1
+
+REMAIN=$(ps -eo pid,cmd | grep -iE 'controller_(load_mpc|quad_load)/lib|/planner |gz sim' | grep -v grep)
+if [ -n "$REMAIN" ]; then
+  echo "!! still running (kill manually):"; echo "$REMAIN"
+else
+  echo "   clean — no stale processes."
+fi
+
 echo "── after launch, verify exactly ONE publisher per drone: ──"
 echo "   ros2 topic info /drone_0/reference_trajectory   # 'Publisher count: 1'"

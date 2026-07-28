@@ -237,6 +237,11 @@ class Controller(Node):
         # hover. 0 disables (fixed thrust_ratio everywhere). See _scheduled_kT.
         self.declare_parameter("thrust_quad_c", 0.0)
         self.thrust_quad_c = float(self.get_parameter("thrust_quad_c").value)
+        # One-line ~2 Hz health diagnostic (off by default to keep the launch quiet). Enable per
+        # drone to trace why one sinks/falls: z vs ref, xy error, throttle (0.6=saturated),
+        # thrust/cable feed-forward accel. Set enable_diag_log:=true on the drone of interest.
+        self.declare_parameter("enable_diag_log", False)
+        self.enable_diag_log = bool(self.get_parameter("enable_diag_log").value)
         self._takeoff_step = None         # cycles since takeoff (None = not spooling)
         self._takeoff_z = None            # spawn z, latched to gate the kT schedule
         self._log_payload = (self.drone_id == 0)
@@ -539,7 +544,7 @@ class Controller(Node):
 
             # ~2 Hz planner diagnostic. ez = z error, thr = throttle (0.6=sat),
             # |aT| = thrust-ff accel (>9.81), |aC| = cable accel (0 = gate shut)
-            if self.takeoff_requested:
+            if self.takeoff_requested and self.enable_diag_log:
                 self._diag_ctr = getattr(self, "_diag_ctr", 0) + 1
                 if self._diag_ctr % 15 == 0:
                     zc = float(self.current_pose[2])
@@ -568,11 +573,27 @@ class Controller(Node):
                     else:
                         aCm = float('nan')
                         dC = float('nan')
-                    # self.get_logger().info(
-                    #     f"[diag d{self.drone_id}] z={zc:.2f} ez={zr - zc:+.2f} "
-                    #     f"exy={exy:.2f} rdrift={rdrift:+.2f} thr={float(u[2]):.3f} "
-                    #     f"roll={float(u[0]):+.2f} pitch={float(u[1]):+.2f} "
-                    #     f"|aT|={aT:.2f} |aC|={aC:.2f} |aCm|={aCm:.2f} dC={dC:.2f}")
+                    thr = float(u[2])
+                    # full REFERENCE (what the network/planner is asking of this drone) vs
+                    # ACTUAL (measured pose) + per-axis error, so a divergence shows exactly
+                    # where the drone goes vs where it is commanded. u = [roll, pitch, thr, yaw].
+                    rp = self.planner_ref_pos[0]
+                    rv = (self.planner_ref_vel[0] if self.planner_ref_vel is not None
+                          else np.zeros(3))
+                    cp = self.current_pose
+                    ex, ey, ezz = (float(rp[0] - cp[0]), float(rp[1] - cp[1]),
+                                   float(rp[2] - cp[2]))
+                    self.get_logger().info(
+                        f"[diag d{self.drone_id}] REF p=({rp[0]:+.2f},{rp[1]:+.2f},"
+                        f"{rp[2]:+.2f}) v=({rv[0]:+.2f},{rv[1]:+.2f},{rv[2]:+.2f}) | "
+                        f"ACT p=({cp[0]:+.2f},{cp[1]:+.2f},{cp[2]:+.2f}) | "
+                        f"ERR=({ex:+.2f},{ey:+.2f},{ezz:+.2f}) |exy|={exy:.2f}")
+                    self.get_logger().info(
+                        f"[diag d{self.drone_id}] CMD roll={float(u[0]):+.2f} "
+                        f"pitch={float(u[1]):+.2f} yaw={float(u[3]):+.2f} "
+                        f"thr={thr:.3f}{' SAT' if thr >= 0.59 else ''} | "
+                        f"|aT|={aT:.2f} |aC|={aC:.2f} |aCm|={aCm:.2f} dC={dC:.2f} "
+                        f"rdrift={rdrift:+.2f}")
 
             # ── Publish command ───────────────────────────────────────────
             if self.takeoff_requested:

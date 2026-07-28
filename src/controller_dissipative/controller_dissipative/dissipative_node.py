@@ -30,9 +30,10 @@ is the shared stack, unchanged.
 """
 import numpy as np
 import rclpy
-from std_msgs.msg import Int32, Empty, Bool
+from std_msgs.msg import Int32, Empty, Bool, Float64MultiArray
 
-from controller_load_mpc.geometry import quat_to_rot_np
+from interfaces.msg import MotionCaptureState
+from controller_load_mpc.geometry import quat_to_rot_np, attach_points
 from controller_load_mpc.planner_node import LoadPlanner, DRONE_MASS, PLANNER_HZ
 
 from controller_dissipative.dissipative_network import (
@@ -53,11 +54,67 @@ class DissipativeController(LoadPlanner):
             c=float(p('diss_c', 6.0).value),
             node_mass=float(p('diss_node_mass', 0.5).value),
             substeps=int(p('diss_substeps', 10).value),
-            elev_deg=float(p('diss_elev_deg', 45.0).value))
+            elev_deg=float(p('diss_elev_deg', 45.0).value),
+            # UNEQUAL (moment-balanced) force sharing -- see DissipativeNetwork. Enables
+            # the fleet to hold the load LEVEL at an asymmetric attach set (so an off-centre
+            # mid-flight newcomer can be a load-bearing RING member and the fleet visibly
+            # reconfigures). Mutually exclusive in spirit with attach_central (a centre weld
+            # still wants the pure vertical lifter). Off by default.
+            balanced_tensions=bool(p('diss_balanced_tensions', False).value),
+            # SOFT HAND-OUT time constant: a welded newcomer joins as a central lifter and is
+            # continuously handed out to its off-centre ring slot over this many seconds, so
+            # its actual cable force tracks the modelled feedforward and the feedforward-
+            # trusting, no-integrator tracker never under-thrusts (the mid-flight attach
+            # runaway fix). Only used when attach_handout is on. See DissipativeParams.
+            T_handout=float(p('diss_t_handout', 12.0).value))
+        # ATTACH capacity: the network is provisioned with reserved_attach EXTRA nodes
+        # beyond the n tethered drones the OCP flies. The reserved slots start off-network
+        # (detach()-ed, hence inert) and are welded in mid-flight by attach(). The parent
+        # OCP/creep stays at self.n (it never references the reserved nodes), so takeoff is
+        # unchanged; reserved_attach=0 (the default) reproduces the pure-detach node exactly.
+        self.reserved_attach = int(p('reserved_attach', 0).value)
+        self.n_net = self.n + self.reserved_attach
+        # per-node cable rest for a welded newcomer (a swung-electromagnet pendulum may hang
+        # a different length than the tethers); defaults to the shared cable_len.
+        self._attach_cable_len = float(p('attach_cable_len', self.cable_len).value)
+        # How to fold a welded newcomer into the network:
+        #   False (default) -> RING member: it swings out to a cone slot and the fleet
+        #     reconfigures. Needs a FLEXIBLE (ball-jointed) weld so it doesn't lever the load.
+        #   True -> CENTRAL lifter: it holds straight up over the load centre (no reconfigure),
+        #     tilt-free even with a rigid weld. Fallback if the ring version is unstable.
+        self._attach_central = bool(p('attach_central', False).value)
+        # SOFT HAND-OUT: fold a welded RING newcomer in gradually (central lifter -> ring
+        # member over diss_t_handout seconds) instead of instantly. The robust fix for the
+        # mid-flight attach runaway -- every intermediate is near-equilibrium so the tracker
+        # never under-thrusts. On by default; ignored for a central-lifter weld (attach_central
+        # already adds pure vertical lift with no reconfiguration to ease).
+        self._attach_handout = bool(p('attach_handout', True).value)
+        # FEEDFORWARD RAMP: at the instant of weld the newcomer's tracker would otherwise jump
+        # from armed-idle (no reference) to the FULL cable-tension feedforward in one tick
+        # (gate 0->1), and because the tracker is a no-integrator, feedforward-trusting
+        # controller that step -- applied while the just-welded magnet arm is still swinging --
+        # becomes a thrust transient. Instead ramp the newcomer's cable-FF gate 0->1 over this
+        # many seconds so the feedforward fades in (mirrors the tethers' measured-tautness gate).
+        # <=0 restores the instant gate=1.
+        self._attach_ff_ramp_s = float(p('attach_ff_ramp_s', 1.5).value)
+        self._weld_time = {}                    # physical drone id -> weld Time (for the FF ramp)
+        # SETTLE elevation for a welded newcomer (deg). Steeper than the fleet's diss_elev_deg
+        # keeps it close to its high near-vertical weld pose (small out-and-down transit ->
+        # avoids the transit-driven runaway); default = the fleet elevation (full 45deg rim).
+        self._attach_elev_deg = float(p('attach_elev_deg', float(self.diss.elev_deg)).value)
+        net_rho = attach_points(self.n_net, self.attach_radius, self.attach_z)
         self.net = DissipativeNetwork(
-            self.n, self.rho, self.cable_len, DRONE_MASS, self.load_mass,
+            self.n_net, net_rho, self.cable_len, DRONE_MASS, self.load_mass,
             self.dyn.g, self.diss)
-        self.detached = [False] * self.n       # per physical drone
+        for k in range(self.n, self.n_net):
+            self.net.detach(k)                 # reserved slots start off the load
+        self.detached = [False] * self.n_net   # per physical drone (departed after detach)
+        # per reserved drone j (physical id self.n + j): True until its magnet welds on,
+        # while Tejen's approach controller owns it and we publish no reference for it.
+        self.attach_pending = [True] * self.reserved_attach
+        # measured pose of each reserved drone (its own mocap; kept out of drone_pos so the
+        # parent's "all mocap present" takeoff guard is not blocked waiting on it).
+        self.attach_pos = [None] * self.reserved_attach
         self._net_p_des = None                 # current network target (xy from traj, z hold)
         self._net_hold_z = None                # held/descending target height
         self._net_landing = False              # LAND received in the network phase
@@ -69,8 +126,31 @@ class DissipativeController(LoadPlanner):
         # Gazebo DetachableJoint release triggers (bridged to gz.msgs.Empty in launch).
         self.detach_pub = [self.create_publisher(Empty, f'/drone_{i}/detach', 1)
                            for i in range(self.n)]
+
+        # ATTACH wiring for each reserved drone (physical id self.n + j): its own mocap in,
+        # its reference out (appended so ref_pub[d] is valid for d>=self.n), plus the two
+        # attach triggers. The magnet weld itself is done by the collaborator's manager,
+        # which announces it on /magnet/object_attached (Bool); /fleet/attach (Int32 drone
+        # id) is the manual/offline-symmetry trigger mirroring /fleet/detach.
+        for j in range(self.reserved_attach):
+            d = self.n + j
+            self.create_subscription(
+                MotionCaptureState, f'/drone_{d}/motion_capture_state',
+                lambda msg, k=j: self._attach_drone_cb(msg, k), 5)
+            self.ref_pub.append(self.create_publisher(
+                Float64MultiArray, f'/drone_{d}/reference_trajectory', 5))
+        if self.reserved_attach > 0:
+            self.create_subscription(Int32, '/fleet/attach', self._fleet_attach_cb, 10)
+            self.create_subscription(Bool, '/magnet/object_attached',
+                                     self._magnet_attached_cb, 10)
         self.get_logger().info(
-            '[dissipative] OCP-takeoff + dissipative-detach ready')
+            f'[dissipative] OCP-takeoff + dissipative-detach ready '
+            f'(n={self.n}, reserved_attach={self.reserved_attach})')
+
+    # ── attach-drone mocap ───────────────────────────────────────────────────
+    def _attach_drone_cb(self, msg: MotionCaptureState, j):
+        p = msg.pose.position
+        self.attach_pos[j] = np.array([p.x, p.y, p.z])
 
     # ── control tick: dispatch on phase (no parent modification) ─────────────
     def _plan(self):
@@ -103,12 +183,110 @@ class DissipativeController(LoadPlanner):
             f'[dissipative] DETACH drone {d} (slot {slot}); '
             f'{self.net.n_attached()} drones remain on the load')
 
+    # ── attach: weld a reserved drone in and fold it into the network ─────────
+    def _fleet_attach_cb(self, msg: Int32):
+        """Manual/offline-symmetry trigger: attach physical drone id msg.data."""
+        self._do_attach(int(msg.data))
+
+    def _magnet_attached_cb(self, msg: Bool):
+        """The collaborator's manager announces a completed magnet weld here. On True,
+        fold every still-pending reserved drone into the network (usually just one)."""
+        if not msg.data:
+            return
+        for j in range(self.reserved_attach):
+            if self.attach_pending[j]:
+                self._do_attach(self.n + j)
+
+    def _do_attach(self, d):
+        """Add physical drone d to the dissipative network (mirror of _fleet_detach_cb).
+        The first attach also performs the OCP -> network handover, so an attach works
+        from a plain OCP hover as well as after an earlier detach."""
+        if not (0 <= d < self.n_net):
+            self.get_logger().warn(f'[dissipative] /fleet/attach {d} out of range')
+            return
+        if self.phase not in ('planner', 'network'):
+            self.get_logger().warn('[dissipative] attach ignored - not flying yet')
+            return
+        if self.phase == 'planner':
+            self._enter_network_phase()
+        slot = self._drone_to_net_slot(d)
+        if slot is None:
+            self.get_logger().warn(f'[dissipative] attach: drone {d} has no network slot')
+            return
+        if self.net.attached[slot]:
+            return                                # already on the load
+        measured = self._net_pos(slot)
+        if measured is None:
+            self.get_logger().warn(f'[dissipative] attach drone {d}: no mocap yet')
+            return
+        # UNEQUAL force sharing: capture where the newcomer welded into rho[slot] so the
+        # wrench-balance solve models the true asymmetric geometry. CAUTION: `measured` is
+        # the DRONE BODY, which on a swung magnet arm can sit ~cable_len up-and-out from the
+        # actual tip weld -- using it raw hands the solver a phantom moment arm that levers
+        # the real (centre-welded) load over. So the horizontal offset is CLAMPED to the
+        # attach ring radius: a genuinely off-centre weld is captured; a leaning drone over a
+        # centre weld can no longer inject a large false lever. (A centre weld still cannot be
+        # a load-bearing ring member at all -- use attach_central for that.)
+        if self.diss.balanced_tensions and not self._attach_central \
+                and self.load_state is not None:
+            load_pos = np.asarray(self.load_state[0:3], float)
+            R = quat_to_rot_np(self.load_state[3:7])
+            rho_body = R.T @ (np.asarray(measured, float) - load_pos)
+            r_xy = float(np.hypot(rho_body[0], rho_body[1]))
+            if r_xy > self.attach_radius and r_xy > 1e-6:      # clamp the phantom lever
+                rho_body[:2] *= self.attach_radius / r_xy
+            self.net.set_attach_rho(slot, [float(rho_body[0]), float(rho_body[1]),
+                                           self.attach_z])
+            self.get_logger().info(
+                f'[dissipative] weld offset captured for slot {slot}: '
+                f'rho=({rho_body[0]:+.3f},{rho_body[1]:+.3f}) m (load frame, '
+                f'clamped to r<={self.attach_radius:.2f})')
+        # Fold the newcomer in as a ring member (reconfigures) or a central lifter (tilt-free
+        # fallback), per the attach_central param. Ring mode relies on the flexible ball-jointed
+        # weld so the drone hangs like a tether instead of levering the load.
+        self.net.attach(slot, measured, cable_len_k=self._attach_cable_len,
+                        central=self._attach_central, handout=self._attach_handout,
+                        elev_deg_k=self._attach_elev_deg)
+        if d >= self.n:
+            self.attach_pending[d - self.n] = False
+        self._weld_time[d] = self.get_clock().now()   # start the FF gate ramp for this newcomer
+        self.detached[d] = False
+        mode = ('central lifter' if self._attach_central
+                else f'soft hand-out ({self.diss.T_handout:.0f}s)' if self._attach_handout
+                else 'instant ring')
+        self.get_logger().info(
+            f'[dissipative] ATTACH drone {d} (slot {slot}) as {mode}; '
+            f'{self.net.n_attached()} drones now on the load')
+
+    def _net_slot2drone(self):
+        """Network slot -> physical drone for ALL n_net nodes: the parent's (possibly
+        azimuth-reassigned) tethered mapping, then identity for the reserved drones."""
+        return list(self.slot2drone) + list(range(self.n, self.n_net))
+
+    def _drone_to_net_slot(self, d):
+        s2d = self._net_slot2drone()
+        return s2d.index(d) if d in s2d else None
+
+    def _net_pos(self, slot):
+        """Measured position of the drone in network slot `slot`: drone_pos for a tethered
+        slot, attach_pos for a reserved one. None if that mocap has not arrived yet."""
+        d = self._net_slot2drone()[slot]
+        return self.drone_pos[d] if d < self.n else self.attach_pos[d - self.n]
+
     def _enter_network_phase(self):
         """planner -> network: seed the spring-damper network from the current (airborne,
         taut) measured drone positions so the handover is bumpless, and capture the hover
         target the network will hold. The OCP is no longer solved after this."""
         self.phase = 'network'
-        self.net.seed([self._drone_at(i) for i in range(self.n)])
+        # seed all n_net nodes bumplessly. Reserved (not-yet-welded) nodes are inert, so a
+        # finite placeholder (their mocap if present, else the load position) is enough --
+        # attach() overwrites it with the measured pose at the weld.
+        load_p = self.load_state[0:3] if self.load_state is not None else np.zeros(3)
+        seeds = []
+        for i in range(self.n_net):
+            p = self._net_pos(i)
+            seeds.append(load_p if p is None else p)
+        self.net.seed(seeds)
         self._net_p_des = self._current_load_des()
         self._net_hold_z = float(self._net_p_des[2])   # hold this height; traj_t keeps running
         self.get_logger().info(
@@ -172,13 +350,23 @@ class DissipativeController(LoadPlanner):
         load_quat = self.load_state[3:7]
         load_vel = self.load_state[7:10]
         self.net.step(load_pos, load_quat, load_vel, p_des, 1.0 / PLANNER_HZ)
-        for i in range(self.n):
-            drone = self.slot2drone[i]
+        net_s2d = self._net_slot2drone()
+        for i in range(self.n_net):
+            drone = net_s2d[i]
+            # a reserved drone that has not yet welded on is owned by the collaborator's
+            # approach controller -- publish nothing for it (the motor mux forwards their
+            # stream until /magnet/object_attached flips us in).
+            if drone >= self.n and self.attach_pending[drone - self.n]:
+                continue
             if self.detached[drone]:
                 node = self._detached_reference(i)
                 self._publish_ref(drone, [node] * (self.N + 1))
                 continue
-            gate, _ = self._cable_taut_gate(i)
+            # tethered nodes gate the cable FF on the measured rod tautness; a welded
+            # newcomer is rigidly attached (taut), but its FF is RAMPED 0->1 over
+            # attach_ff_ramp_s from the weld so the no-integrator tracker is not slammed.
+            gate = self._attach_ff_gate(drone) if drone >= self.n \
+                else self._cable_taut_gate(i)[0]
             p_ref, v_ref, a_ff, a_cable = self.net.reference(
                 i, load_quat, p_des, taut_gate=gate)
             # hold p_ref constant across the horizon (one network target per tick).
@@ -196,6 +384,17 @@ class DissipativeController(LoadPlanner):
             v_ref = np.zeros(3)
         return p_ref, v_ref, a_ff, a_cable
 
+    def _attach_ff_gate(self, drone):
+        """Cable-feedforward gate for a freshly welded newcomer: ramps 0->1 over
+        attach_ff_ramp_s from the weld instant so the tracker's cable-tension feedforward
+        fades in instead of stepping (the attach thrust-transient fix). Returns 1.0 once the
+        ramp is done, if ramping is disabled (ramp_s<=0), or if the weld time is unknown."""
+        t0 = self._weld_time.get(drone)
+        if t0 is None or self._attach_ff_ramp_s <= 0.0:
+            return 1.0
+        elapsed = (self.get_clock().now() - t0).nanoseconds * 1e-9
+        return float(np.clip(elapsed / self._attach_ff_ramp_s, 0.0, 1.0))
+
     def _net_diag(self, load_pos, load_quat, p_des):
         self._net_diag_ctr += 1
         if self._net_diag_ctr % int(max(PLANNER_HZ, 1)) != 0:
@@ -205,22 +404,28 @@ class DissipativeController(LoadPlanner):
         self.get_logger().info(
             f'[diss-net] load_z={load_pos[2]:.3f} z_tgt={p_des[2]:.2f} '
             f'tilt={tilt:.1f}deg n_att={self.net.n_attached()}')
-        for i in range(self.n):
-            drone = self.slot2drone[i]
+        # Loop ALL network slots (n_net), so the welded newcomer shows up too. r_ref = horizontal
+        # radius of the slot's reference target from the load centre: a center-welded drone that
+        # the ring model pulls outward will show a large r_ref it cannot physically reach.
+        net_s2d = self._net_slot2drone()
+        for i in range(self.n_net):
+            drone = net_s2d[i]
             if self.detached[drone]:
                 continue
-            dvec = (load_pos + R @ self.rho[i]) - self._drone_at(i)
-            nd = float(np.linalg.norm(dvec))
-            dz = np.degrees(np.arcsin(np.clip(-dvec[2] / max(nd, 1e-6), -1, 1)))
-            gate, _ = self._cable_taut_gate(i)
+            if drone >= self.n and self.attach_pending[drone - self.n]:
+                continue
+            pos = self._net_pos(i)
+            if pos is None:
+                continue
+            gate = 1.0 if drone >= self.n else self._cable_taut_gate(i)[0]
             p_ref, _, a_ff, a_cable = self.net.reference(
                 i, load_quat, p_des, taut_gate=gate)
-            perr = float(np.linalg.norm(p_ref - self._drone_at(i)))
-            aff_t = np.degrees(np.arctan2(
-                float(np.linalg.norm(a_ff[:2])), float(a_ff[2])))
+            perr = float(np.linalg.norm(p_ref - pos))
+            r_ref = float(np.linalg.norm((p_ref - load_pos)[:2]))   # outward ring radius
+            dz_ref = float(p_ref[2] - load_pos[2])                  # height above load
             self.get_logger().info(
-                f'   s{i}(d{drone}): elev={dz:.0f} perr={perr:.2f} '
-                f'|aff|={float(np.linalg.norm(a_ff)):.1f} affT={aff_t:.0f} '
+                f'   s{i}(d{drone}): perr={perr:.2f} r_ref={r_ref:.2f} dz_ref={dz_ref:+.2f} '
+                f'|aff|={float(np.linalg.norm(a_ff)):.1f} '
                 f'|acab|={float(np.linalg.norm(a_cable)):.2f}')
 
 
