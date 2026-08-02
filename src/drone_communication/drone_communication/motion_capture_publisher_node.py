@@ -23,13 +23,29 @@ import re
 # Map each MoCap rigid-body ID to a drone_id. This node publishes each body to
 # /drone_<drone_id>/motion_capture_state (the topic the MPC controllers read).
 # Add/rename entries to match the rigid-body IDs right now its 10 and 20.
-RIGID_BODY_TO_DRONE = {10: 0, 11: 1}
+RIGID_BODY_TO_DRONE = {10: 0, 20: 1, 30: 2}
 # Rigid-body ID routed to /payload/motion_capture_state instead of a drone (the
 # cable-suspended load; set to None if there is no payload body).
 PAYLOAD_RIGID_BODY_ID = 8
-# MoCap UDP stream endpoint (the host/port your mocap software streams to).
-MOCAP_UDP_HOST = "192.168.0.87"
+# LOCAL address:port to LISTEN on -- this is a bind(), so the host must be an
+# address THIS machine actually owns (a specific NIC IP, or 0.0.0.0 for all of
+# them). It is NOT the mocap server's address; pointing it at the server gives
+# OSError errno 99 "Cannot assign requested address". 0.0.0.0 survives DHCP
+# changes and works whichever NIC the mocap arrives on.
+MOCAP_UDP_HOST = "0.0.0.0"
 MOCAP_UDP_PORT = 1511
+# Per-rigid-body publish ceiling (Hz). The mocap streams far faster than the
+# controllers need (measured ~475 Hz/body), and every message costs a Python
+# callback in EVERY subscriber -- each controller takes its own pose plus the
+# payload, so an unthrottled stream saturates their executor and starves the
+# 50 Hz control_loop (ELRSCommand stops, arming services time out). Decimation
+# happens BEFORE parsing, so the velocity finite-difference dt widens to match
+# and the twist stays consistent. 0 disables throttling.
+MOCAP_MAX_PUBLISH_HZ = 120.0
+# Per-packet angular-velocity print. At full mocap rate across all bodies this
+# is >1000 lines/s into the launch's stdout pipe, which throttles the receive
+# loop itself. Leave False unless debugging the parser.
+MOCAP_DEBUG_PRINT = False
 # TF: broadcast each drone as map -> drone_<id> so RViz can show it live. Match
 # the controllers' visualization frame ("map") so paths + drones share one frame.
 MOCAP_WORLD_FRAME = "map"
@@ -264,17 +280,18 @@ class ParseData():
             low_pass_wy = round(low_pass_wy, 1)
             low_pass_wz = round(low_pass_wz, 1)
 
-            # Convert angular velocity from rad/s to deg/s for logging
-            deg_wx = np.degrees(low_pass_wx)
-            deg_wy = np.degrees(low_pass_wy)
-            deg_wz = np.degrees(low_pass_wz)
-            # Format with constant width, including sign and padding
-            print(
-                f"Angular velocity (body frame): "
-                f"wx={low_pass_wx:+08.4f} rad/s ({deg_wx:+08.2f}°/s), "
-                f"wy={low_pass_wy:+08.4f} rad/s ({deg_wy:+08.2f}°/s), "
-                f"wz={low_pass_wz:+08.4f} rad/s ({deg_wz:+08.2f}°/s)"
-            )
+            # Format with constant width, including sign and padding. Gated:
+            # at full mocap rate this alone throttles the receive loop.
+            if MOCAP_DEBUG_PRINT:
+                deg_wx = np.degrees(low_pass_wx)
+                deg_wy = np.degrees(low_pass_wy)
+                deg_wz = np.degrees(low_pass_wz)
+                print(
+                    f"Angular velocity (body frame): "
+                    f"wx={low_pass_wx:+08.4f} rad/s ({deg_wx:+08.2f}°/s), "
+                    f"wy={low_pass_wy:+08.4f} rad/s ({deg_wy:+08.2f}°/s), "
+                    f"wz={low_pass_wz:+08.4f} rad/s ({deg_wz:+08.2f}°/s)"
+                )
 
 
 
@@ -375,6 +392,10 @@ class MotionCapturePublisher(Node):
         self.payloadParseData = ParseData()
         self.drone_parsers = {drone_id: ParseData()
                               for drone_id in RIGID_BODY_TO_DRONE.values()}
+        # Per-rigid-body publish throttle. Keyed by rb_id; the decimation happens
+        # before parse_packet so the velocity dt widens with the actual spacing.
+        min_period = (1.0 / MOCAP_MAX_PUBLISH_HZ) if MOCAP_MAX_PUBLISH_HZ > 0 else 0.0
+        last_pub = {}
         try:
             while rclpy.ok():
                 data, _ = self.sock.recvfrom(255)
@@ -400,6 +421,16 @@ class MotionCapturePublisher(Node):
                 # look it up in RIGID_BODY_TO_DRONE (payload id handled first).
                 m = re.search(r'-?\d+', obj_id)
                 rb_id = int(m.group()) if m else None
+
+                # Throttle per body: the stream runs far faster than any
+                # subscriber needs, and every extra message is a callback in
+                # each controller (own pose + payload), which starves their
+                # 50 Hz control loop.
+                if min_period > 0.0 and rb_id is not None:
+                    now_t = time.time()
+                    if now_t - last_pub.get(rb_id, 0.0) < min_period:
+                        continue
+                    last_pub[rb_id] = now_t
 
                 if rb_id is not None and rb_id == PAYLOAD_RIGID_BODY_ID:
                     obj_data = self.payloadParseData.parse_packet(data)

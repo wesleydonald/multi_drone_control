@@ -17,6 +17,7 @@
 #include <interfaces/msg/telemetry.hpp>
 #include <interfaces/srv/set_arming.hpp>
 #include <chrono>
+#include <vector>
 
 namespace drone_visualisation
 {
@@ -29,8 +30,10 @@ public:
   explicit ArmPanel(QWidget* parent = nullptr);
 
   void onInitialize() override;
-  // Persist/restore the ShowDetach flag so the launch can hide the detach row
-  // (rviz config key ShowDetach, written by rviz_quad_load_launch.py detach:=).
+  // Persist/restore the ShowDetach/ShowAttach flags so a launch can hide those
+  // rows (rviz config keys ShowDetach/ShowAttach, written by the launch files),
+  // plus NumDrones, which sizes the per-drone status rows. Note load() and
+  // onInitialize() can run in either order, so both call rebuild().
   void load(const rviz_common::Config& config) override;
   void save(rviz_common::Config config) const override;
 
@@ -47,8 +50,12 @@ private:
   void updateStatusLabel();
   void applyShowDetach();
   void applyShowAttach();
-  void armingStateCallback(const std_msgs::msg::Bool::SharedPtr msg);
-  void telemetryCallback(const interfaces::msg::Telemetry::SharedPtr msg);
+  // (Re)build the per-drone rows and their subscriptions for num_drones_.
+  // Safe to call repeatedly and before node_ exists.
+  void rebuild();
+  void updateDroneLabel(int i);
+  void armingStateCallback(const std_msgs::msg::Bool::SharedPtr msg, int i);
+  void telemetryCallback(const interfaces::msg::Telemetry::SharedPtr msg, int i);
   void callArmingService(bool arm);
 
   rclcpp::Node::SharedPtr node_;
@@ -57,8 +64,10 @@ private:
   // ATTACH: arms the approach drone's electromagnet (/magnet/command "ON"); it then welds
   // to the payload on contact and folds into the dissipative network.
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr magnet_cmd_pub_;
-  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr arming_state_sub_;
-  rclcpp::Subscription<interfaces::msg::Telemetry>::SharedPtr telemetry_sub_;
+  // One arming + telemetry subscription per drone, index-aligned with
+  // drone_labels_ / drone_armed_ / drone_voltage_.
+  std::vector<rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr> arming_state_subs_;
+  std::vector<rclcpp::Subscription<interfaces::msg::Telemetry>::SharedPtr> telemetry_subs_;
   rclcpp::Client<interfaces::srv::SetArming>::SharedPtr arming_client_;
 
   QPushButton* arm_button_;
@@ -71,12 +80,21 @@ private:
   QWidget* attach_row_;
   QShortcut* space_shortcut_;
   QLabel* status_label_;
-  QLabel* battery_label_;
+  // Per-drone "Dn  ARMED  15.82 V" rows live here, one QLabel each.
+  QVBoxLayout* drone_rows_layout_;
+  std::vector<QLabel*> drone_labels_;
 
-  bool is_armed_;
+  bool is_armed_;          // fleet-level: true if ANY drone reports armed
   bool show_detach_;
   bool show_attach_;
-  float battery_voltage_;
+  int num_drones_;
+  std::vector<bool> drone_armed_;
+  std::vector<float> drone_voltage_;
+  // Tracked separately: telemetry comes from elrs_interface (terminal 1) while
+  // arming feedback comes from the controllers (terminal 2), so battery must be
+  // able to display before any arming feedback exists.
+  std::vector<bool> drone_seen_;        // first arming_state_feedback seen
+  std::vector<bool> drone_volt_seen_;   // first telemetry seen
   std::string status_message_;
 };
 

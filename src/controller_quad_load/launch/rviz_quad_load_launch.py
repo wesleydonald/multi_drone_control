@@ -178,6 +178,7 @@ def _build_config(n: int, show_actual: bool = False, detach: bool = True,
     Name: ArmPanel
     ShowDetach: {str(detach).lower()}
     ShowAttach: {str(attach).lower()}
+    NumDrones: {n}
 Visualization Manager:
   Class: ""
   Name: root

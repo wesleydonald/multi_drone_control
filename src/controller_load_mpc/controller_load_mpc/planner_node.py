@@ -42,6 +42,11 @@ from .reference_builder import ReferenceBuilder
 
 # Physical constants baked into the load-cable model (not ROS params). Geometry and
 # mode params (num_drones, cable_len, load_mass, ...) live in params.PlannerConfig.
+# Sized for the original 0.4 kg payload. Inertia scales with mass for a body of
+# fixed geometry, so it does NOT track the load_mass ROS param -- dropping
+# load_mass to 0.1 without scaling these leaves the model ~4x over-stiff in
+# rotation. Scale by (load_mass / 0.4) for a same-size lighter payload, or
+# recompute from the real payload's dimensions.
 LOAD_INERTIA  = [1.67e-3, 1.67e-3, 3.33e-3]
 DRONE_MASS    = 0.6
 PLANNER_HZ    = 10.0

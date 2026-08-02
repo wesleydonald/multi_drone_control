@@ -125,7 +125,7 @@ def _args():
         # takeoff-safe compromise. The residual hover drift is handled by scheduling
         # kT to the operating point once airborne (thrust_quad_c below), NOT by
         # raising this constant.
-        DeclareLaunchArgument('thrust_ratio', default_value='45.0'),
+        DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
         # Quadratic-plant coefficient c in a(u)=c*u^2 (SDF motor model gives ~203).
         # Once AIRBORNE, the tracker schedules its linear kT to the operating point,
         # kT = clip(c*throttle, thrust_ratio, 55), so the assumed thrust matches the

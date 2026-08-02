@@ -30,7 +30,10 @@ draws the scene straight from the mocap topics.
       - one coloured drone airframe mesh per drone, following its live pose
       - the payload box + its desired/actual track
       - each drone's MPC plan (once terminal 2 is up)
-      - the fleet ArmPanel: ARM/DISARM, TAKEOFF, LAND buttons
+      - the fleet ArmPanel: ARM/DISARM, TAKEOFF, LAND buttons, plus one
+        armed-state + battery row per drone. DETACH/ATTACH are hidden here --
+        they drive the dissipative/magnet stacks, which this launch does not
+        run (see rviz_quad_load_launch.py detach:=/attach:= for those).
     The config is generated at launch time so it scales to any num_drones.
 
 Run:
@@ -159,6 +162,9 @@ def _build_config(n: int, show_actual: bool = False) -> str:
     Tree Height: 500
   - Class: drone_visualisation/ArmPanel
     Name: ArmPanel
+    ShowDetach: false
+    ShowAttach: false
+    NumDrones: {n}
 Visualization Manager:
   Class: ""
   Name: root

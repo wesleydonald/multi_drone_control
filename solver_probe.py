@@ -27,7 +27,7 @@ from controller_quad_load.acados import (          # noqa: E402
     warm_start_from_previous_solution)
 
 N = 20
-THRUST_RATIO = 38.0
+THRUST_RATIO = 24.0
 # same vector the tracker builds: [kT, drag_z, tau_rate, centre_deg, max_deg, expo]
 EST = np.array([THRUST_RATIO, 0.0, 0.12, 70.0, 670.0, 0.5])
 

@@ -310,7 +310,7 @@ class ELRSInterface(Node):
             if self.armed:  # Only log and disarm if currently armed
                 self.get_logger().warn("No message received for 0.1 seconds. Disarming motors.")
 
-            print(" -------------------------- THIS TRIGGERED --------------------------")
+            # print(" -------------------------- THIS TRIGGERED --------------------------")
             self.armed = False
             self.packet = np.full(16, self.idle, dtype=np.uint16)
             self.packet[4] = 0

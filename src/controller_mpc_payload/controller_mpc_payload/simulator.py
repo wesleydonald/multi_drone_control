@@ -34,7 +34,7 @@ class simulator():
     self.ocp, self.sim_integrator = generate_ocp_controller()
 
       # Parameters: [Thrust ratio, drag ratio, angular velocity tau, centre rate, max rate, expo]
-    self.est_params = np.array([38.0, 0.5, 0.07, 50.0, 50.0, 0.5])
+    self.est_params = np.array([24.0, 0.5, 0.07, 50.0, 50.0, 0.5])
 
       # Logging
     log_headers = [
