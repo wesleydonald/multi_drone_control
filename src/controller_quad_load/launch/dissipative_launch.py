@@ -56,7 +56,7 @@ def _args():
         DeclareLaunchArgument('cable_source', default_value='model'),
         DeclareLaunchArgument('payload_rest_z', default_value='-0.1'),
         DeclareLaunchArgument('takeoff_spool_s', default_value='0.5'),
-        DeclareLaunchArgument('thrust_ratio', default_value='45.0'),
+        DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
         DeclareLaunchArgument('thrust_quad_c', default_value='203.0'),
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
         DeclareLaunchArgument('load_traj', default_value='hover'),

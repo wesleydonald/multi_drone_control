@@ -7,24 +7,25 @@ namespace drone_visualisation
 {
 
 ArmPanel::ArmPanel(QWidget* parent)
-: rviz_common::Panel(parent), is_armed_(false), show_detach_(true), show_attach_(true), battery_voltage_(0.0f), status_message_("Waiting for controller...")
+: rviz_common::Panel(parent), is_armed_(false), show_detach_(true), show_attach_(true), num_drones_(1), status_message_("Waiting for controller...")
 {
   auto layout = new QVBoxLayout;
-  
-  // Status label
+
+  // Fleet status label (the ARM/TAKEOFF/LAND command feedback line).
   status_label_ = new QLabel("Status: Waiting for controller...");
   status_label_->setStyleSheet("font-size: 12px; padding: 5px; background-color: #f0f0f0; border-radius: 3px;");
   status_label_->setFixedHeight(30);  // or setMinimumHeight(40);
   status_label_->setAlignment(Qt::AlignCenter);
   layout->addWidget(status_label_);
-  
-  // Battery voltage label
-  battery_label_ = new QLabel("Battery: -- V");
-  battery_label_->setStyleSheet("font-size: 12px; padding: 5px; background-color: #f0f0f0; border-radius: 3px;");
-  battery_label_->setFixedHeight(30);  // or setMinimumHeight(40);
-  battery_label_->setAlignment(Qt::AlignCenter);
-  layout->addWidget(battery_label_);
-  
+
+  // Per-drone rows (armed state + battery), one per drone. Populated by
+  // rebuild() once NumDrones is known from the rviz config -- the fleet arms
+  // together, but a drone that fails to arm or drops arm mid-flight is only
+  // visible if every drone is shown separately.
+  drone_rows_layout_ = new QVBoxLayout;
+  drone_rows_layout_->setContentsMargins(0, 0, 0, 0);
+  layout->addLayout(drone_rows_layout_);
+
   // ARM/DISARM button
   arm_button_ = new QPushButton("ARM");
   arm_button_->setStyleSheet("background-color: #51cf66; color: white; font-weight: bold;");
@@ -108,17 +109,99 @@ void ArmPanel::onInitialize()
   // ATTACH arms the approach drone's magnet (the magnet manager welds on contact).
   magnet_cmd_pub_ = node_->create_publisher<std_msgs::msg::String>("/magnet/command", 10);
 
-  // Reflect the fleet armed state from drone 0's feedback (drones arm together).
-  arming_state_sub_ = node_->create_subscription<std_msgs::msg::Bool>(
-    "/drone_0/arming_state_feedback", 10,
-    std::bind(&ArmPanel::armingStateCallback, this, std::placeholders::_1));
-
-  // Battery voltage from drone 0's telemetry (elrs_interface publishes per-drone).
-  telemetry_sub_ = node_->create_subscription<interfaces::msg::Telemetry>(
-    "/drone_0/telemetry", 10,
-    std::bind(&ArmPanel::telemetryCallback, this, std::placeholders::_1));
+  // Subscriptions are per-drone and depend on NumDrones, which arrives via
+  // load(). rviz may call load() before or after onInitialize(), so both call
+  // rebuild() and it does the work once node_ is available.
+  rebuild();
 
   RCLCPP_INFO(node_->get_logger(), "ArmPanel initialized (fleet mode -> /fleet/command)");
+}
+
+void ArmPanel::rebuild()
+{
+  // ── Qt rows ───────────────────────────────────────────────────────────────
+  for (auto* label : drone_labels_) {
+    drone_rows_layout_->removeWidget(label);
+    delete label;
+  }
+  drone_labels_.clear();
+
+  drone_armed_.assign(num_drones_, false);
+  drone_voltage_.assign(num_drones_, 0.0f);
+  drone_seen_.assign(num_drones_, false);
+  drone_volt_seen_.assign(num_drones_, false);
+
+  for (int i = 0; i < num_drones_; ++i) {
+    auto* label = new QLabel;
+    label->setFixedHeight(26);
+    label->setAlignment(Qt::AlignCenter);
+    drone_labels_.push_back(label);
+    drone_rows_layout_->addWidget(label);
+    updateDroneLabel(i);
+  }
+
+  // ── ROS subscriptions ─────────────────────────────────────────────────────
+  // Dropping the old handles unsubscribes; recreate for the new fleet size.
+  arming_state_subs_.clear();
+  telemetry_subs_.clear();
+  if (!node_) {
+    return;   // onInitialize() will call us again once node_ exists
+  }
+  for (int i = 0; i < num_drones_; ++i) {
+    const std::string ns = "/drone_" + std::to_string(i);
+    arming_state_subs_.push_back(node_->create_subscription<std_msgs::msg::Bool>(
+      ns + "/arming_state_feedback", 10,
+      [this, i](const std_msgs::msg::Bool::SharedPtr msg) {
+        this->armingStateCallback(msg, i);
+      }));
+    // Battery voltage comes from that drone's elrs_interface telemetry.
+    telemetry_subs_.push_back(node_->create_subscription<interfaces::msg::Telemetry>(
+      ns + "/telemetry", 10,
+      [this, i](const interfaces::msg::Telemetry::SharedPtr msg) {
+        this->telemetryCallback(msg, i);
+      }));
+  }
+}
+
+void ArmPanel::updateDroneLabel(int i)
+{
+  if (i < 0 || i >= static_cast<int>(drone_labels_.size())) {
+    return;
+  }
+
+  // Arming state and battery arrive from different launches, so each shows "--"
+  // until its own source is up: arming from the controllers (terminal 2),
+  // battery from elrs_interface (terminal 1).
+  const QString armed_str = drone_seen_[i]
+                              ? (drone_armed_[i] ? "ARMED" : "DISARMED")
+                              : "--";
+  const float v = drone_voltage_[i];
+  const QString volt_str = drone_volt_seen_[i]
+                             ? QString("%1 V").arg(v, 0, 'f', 2)
+                             : QString("-- V");
+  QString text = QString("D%1   %2   %3").arg(i).arg(armed_str).arg(volt_str);
+
+  // Nothing heard from this drone at all -- neutral grey, not a battery colour.
+  if (!drone_volt_seen_[i]) {
+    drone_labels_[i]->setText(text);
+    drone_labels_[i]->setStyleSheet(
+      "font-size: 12px; padding: 3px; background-color: #f0f0f0; "
+      "color: #868e96; border-radius: 3px;");
+    return;
+  }
+
+  // Colour by battery (4S LiPo: 16.8 V full, 14.8 V nominal, 12.0 V empty), so
+  // the weakest pack in the fleet is obvious at a glance.
+  QString bg, fg = "white";
+  if (v >= 15.6f)      { bg = "#51cf66"; }
+  else if (v >= 14.4f) { bg = "#ffd43b"; fg = "#495057"; }
+  else if (v >= 13.2f) { bg = "#ff922b"; }
+  else                 { bg = "#ff6b6b"; }
+
+  drone_labels_[i]->setText(text);
+  drone_labels_[i]->setStyleSheet(
+    QString("font-size: 12px; padding: 3px; background-color: %1; color: %2; "
+            "border-radius: 3px; font-weight: bold;").arg(bg).arg(fg));
 }
 
 void ArmPanel::onButtonPressed()
@@ -232,6 +315,14 @@ void ArmPanel::load(const rviz_common::Config& config)
     show_attach_ = show_a;
   }
   applyShowAttach();
+
+  // Fleet size for the per-drone rows. The launch files write this; absent or
+  // nonsensical values fall back to a single drone.
+  int n = 0;
+  if (config.mapGetInt("NumDrones", &n) && n > 0) {
+    num_drones_ = n;
+  }
+  rebuild();
 }
 
 void ArmPanel::save(rviz_common::Config config) const
@@ -239,6 +330,7 @@ void ArmPanel::save(rviz_common::Config config) const
   rviz_common::Panel::save(config);
   config.mapSetValue("ShowDetach", show_detach_);
   config.mapSetValue("ShowAttach", show_attach_);
+  config.mapSetValue("NumDrones", num_drones_);
 }
 
 void ArmPanel::callArmingService(bool arm)
@@ -295,50 +387,59 @@ void ArmPanel::updateStatusLabel()
   }
 }
 
-void ArmPanel::armingStateCallback(const std_msgs::msg::Bool::SharedPtr msg)
+void ArmPanel::armingStateCallback(const std_msgs::msg::Bool::SharedPtr msg, int i)
 {
-  // Update internal state based on feedback from controller
-  bool previous_state = is_armed_;
-  is_armed_ = msg->data;
-  
-  if (previous_state != is_armed_) {
-    if (is_armed_) {
-      status_message_ = "Armed - Ready for takeoff";
-      RCLCPP_INFO(node_->get_logger(), "Drone armed by controller");
-    } else {
-      status_message_ = "Disarmed";
-      RCLCPP_INFO(node_->get_logger(), "Drone disarmed by controller");
-    }
+  if (i < 0 || i >= static_cast<int>(drone_armed_.size())) {
+    return;
+  }
+  const bool was_seen = drone_seen_[i];
+  const bool previous_drone_state = drone_armed_[i];
+  drone_armed_[i] = msg->data;
+  drone_seen_[i] = true;
+  updateDroneLabel(i);
+
+  if (was_seen && previous_drone_state == drone_armed_[i]) {
+    return;
+  }
+
+  // Fleet-level state drives the buttons. ANY drone armed counts as armed, so
+  // DISARM and LAND stay reachable when only part of the fleet is live.
+  const bool previous_fleet = is_armed_;
+  is_armed_ = false;
+  int armed_count = 0;
+  for (int k = 0; k < static_cast<int>(drone_armed_.size()); ++k) {
+    if (drone_armed_[k]) { is_armed_ = true; ++armed_count; }
+  }
+
+  const int n = static_cast<int>(drone_armed_.size());
+  if (armed_count == 0) {
+    status_message_ = "Disarmed";
+  } else if (armed_count == n) {
+    status_message_ = "Armed - Ready for takeoff";
+  } else {
+    // Partial arm is the case the old drone-0-only panel could not show.
+    status_message_ = "PARTIAL: " + std::to_string(armed_count) + "/" +
+                      std::to_string(n) + " armed";
+  }
+
+  RCLCPP_INFO(node_->get_logger(), "drone %d %s by controller (%d/%d armed)",
+              i, drone_armed_[i] ? "armed" : "disarmed", armed_count, n);
+
+  if (previous_fleet != is_armed_) {
     updateButtonState();
+  } else {
+    updateStatusLabel();
   }
 }
 
-void ArmPanel::telemetryCallback(const interfaces::msg::Telemetry::SharedPtr msg)
+void ArmPanel::telemetryCallback(const interfaces::msg::Telemetry::SharedPtr msg, int i)
 {
-  battery_voltage_ = msg->battery_voltage;
-  
-  // Update battery label with voltage
-  QString battery_text = QString("Battery: %1 V").arg(battery_voltage_, 0, 'f', 2);
-  
-  // Color code based on voltage (typical LiPo: 4.2V max, 3.0V min per cell)
-  // Assuming 4S battery: 16.8V full, 14.8V nominal, 12.0V empty
-  QString style;
-  if (battery_voltage_ >= 15.6) {
-    // Green - Good
-    style = "font-size: 12px; padding: 5px; background-color: #51cf66; color: white; border-radius: 3px; font-weight: bold;";
-  } else if (battery_voltage_ >= 14.4) {
-    // Yellow - Medium
-    style = "font-size: 12px; padding: 5px; background-color: #ffd43b; color: #495057; border-radius: 3px; font-weight: bold;";
-  } else if (battery_voltage_ >= 13.2) {
-    // Orange - Low
-    style = "font-size: 12px; padding: 5px; background-color: #ff922b; color: white; border-radius: 3px; font-weight: bold;";
-  } else {
-    // Red - Critical
-    style = "font-size: 12px; padding: 5px; background-color: #ff6b6b; color: white; border-radius: 3px; font-weight: bold;";
+  if (i < 0 || i >= static_cast<int>(drone_voltage_.size())) {
+    return;
   }
-  
-  battery_label_->setText(battery_text);
-  battery_label_->setStyleSheet(style);
+  drone_voltage_[i] = msg->battery_voltage;
+  drone_volt_seen_[i] = true;
+  updateDroneLabel(i);
 }
 
 }  // namespace drone_visualisation

@@ -121,7 +121,7 @@ def generate_payload_ocp_controller():
         2.0, 2.0, 2.0,             # velocity
         0.2, 0.2, 0.2,             # body rates
         2e-4, 2e-4, 2e-4, 2e-4,    # control state
-        0.1, 0.1, 5.0, 0.1,        # input rate
+        0.1, 0.1, 8.0, 0.1,        # input rate
         0.5, 0.5, 5.0,             # attitude error
 
         20.0, 20.0,                # phi, theta
@@ -154,7 +154,7 @@ def generate_payload_ocp_controller():
     #  max_rate_deg, rate_expo, cable_length,
     #  q_ref_w, q_ref_x, q_ref_y, q_ref_z]
     ocp.parameter_values = np.array([
-        38.0, 0.5, 0.07, 100.0, 100.0, 0.5,
+        24.0, 0.5, 0.07, 100.0, 100.0, 0.5,
         0.533,      # cable length taken from model thing
         1.0, 0.0, 0.0, 0.0
     ])
@@ -225,7 +225,7 @@ def generate_payload_ocp_controller():
     sim.solver_options.T = 1.0 / 30.0
 
     sim.parameter_values = np.array([
-        38.0, 0.5, 0.12, 100.0, 100.0, 0.5,
+        24.0, 0.5, 0.12, 100.0, 100.0, 0.5,
         0.50,
         1.0, 0.0, 0.0, 0.0
     ])
@@ -314,7 +314,7 @@ def generate_payload_ocp_controller():
 #     ocp.constraints.x0 = x0
 
 #     # -------- Parameters default (6 dyn + 4 q_ref) --------
-#     ocp.parameter_values = np.array([38.0, 0.5, 0.07, 100.0, 100.0, 0.5, 1.0, 0.0, 0.0, 0.0])
+#     ocp.parameter_values = np.array([24.0, 0.5, 0.07, 100.0, 100.0, 0.5, 1.0, 0.0, 0.0, 0.0])
 
 #     # ---------- Solver options ----------
 #     ocp.solver_options.nlp_solver_type = 'SQP_RTI'
@@ -351,7 +351,7 @@ def generate_payload_ocp_controller():
 #     sim = AcadosSim()
 #     sim.model = ocp.model
 #     sim.solver_options.T = 1.0 / 30.0
-#     sim.parameter_values = np.array([38.0, 0.5, 0.12, 100.0, 100.0, 0.5, 1.0, 0.0, 0.0, 0.0])
+#     sim.parameter_values = np.array([24.0, 0.5, 0.12, 100.0, 100.0, 0.5, 1.0, 0.0, 0.0, 0.0])
 #     sim_solver = AcadosSimSolver(sim)
 
 #     return ocp_solver, sim_solver

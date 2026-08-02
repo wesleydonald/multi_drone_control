@@ -2201,7 +2201,7 @@
     "name": "quad_payload_dynamics",
     "p_global_values": [],
     "parameter_values": [
-        38.0,
+        24.0,
         0.5,
         0.07,
         100.0,

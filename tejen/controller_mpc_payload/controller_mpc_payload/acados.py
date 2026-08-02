@@ -153,7 +153,7 @@ def generate_payload_ocp_controller():
     #  max_rate_deg, rate_expo, cable_length,
     #  q_ref_w, q_ref_x, q_ref_y, q_ref_z]
     ocp.parameter_values = np.array([
-        38.0, 0.5, 0.07, 100.0, 100.0, 0.5,
+        24.0, 0.5, 0.07, 100.0, 100.0, 0.5,
         0.533,      # cable length taken from model thing
         1.0, 0.0, 0.0, 0.0
     ])
@@ -203,7 +203,7 @@ def generate_payload_ocp_controller():
     sim.solver_options.T = 1.0 / 30.0
 
     sim.parameter_values = np.array([
-        38.0, 0.5, 0.12, 100.0, 100.0, 0.5,
+        24.0, 0.5, 0.12, 100.0, 100.0, 0.5,
         0.50,
         1.0, 0.0, 0.0, 0.0
     ])

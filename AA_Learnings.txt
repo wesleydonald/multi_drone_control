@@ -231,3 +231,9 @@ Let me know if you have any questions or concerns or think any design decisions 
 
 dissipative to work better with trajectories.
 For the attach situation I am having a bit of trouble with the attachment point and where the attached drone should redistribute to.
+
+
+
+
+Starting positions are hard coded?
+Thrust ratio linear based on battery voltage

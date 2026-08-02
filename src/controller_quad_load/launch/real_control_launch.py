@@ -37,6 +37,14 @@ HARDWARE NOTES:
     sim-plant fit; on real hardware use the fixed thrust_ratio unless you have
     measured your own a(u)=c*u^2 coefficient.
   * cable_len / load_mass MUST match your physical rig (not the sim SDF).
+    load_mass defaults to 0.1 here. Changing it recompiles the acados .so on the
+    first launch (the solver cache keys on it), so expect a slower first start.
+    LOAD_INERTIA in planner_node.py does NOT scale with load_mass -- scale it by
+    hand if the payload's size changed too, not just its mass.
+  * Takeoff pace: handover_settle_s (frozen hold) then lift_ramp_vel (climb rate)
+    dominate. Defaults here are 0.5 s / 0.20 m/s. The ease-in/ease-out shaping
+    (LIFT_SOFT_S, LIFT_SOFT_D in planner_node.py) adds ~1 s that no launch arg
+    reaches. Raise lift_ramp_vel further only after a clean slow takeoff.
   * Prove a taut hover (load_traj:=hover) before any circle/fig_8/spin.
 """
 from launch import LaunchDescription
@@ -51,13 +59,21 @@ def _args():
         DeclareLaunchArgument('num_drones', default_value='2'),
         # MUST match the physical rig, not the sim SDF.
         DeclareLaunchArgument('cable_len', default_value='0.5'),
-        DeclareLaunchArgument('load_mass', default_value='0.4'),
+        # Physical payload mass (kg). LOAD_INERTIA in planner_node.py is a
+        # hardcoded constant and does NOT scale with this -- see the comment there.
+        DeclareLaunchArgument('load_mass', default_value='0.1'),
         DeclareLaunchArgument('start_taut', default_value='true'),
         DeclareLaunchArgument('handover_elev_deg', default_value='0.0'),
-        DeclareLaunchArgument('handover_settle_s', default_value='1.0'),
+        # Frozen hold after handover, before the lift ramp starts. Shorter = faster
+        # takeoff; too short and the fleet starts climbing before it has settled on
+        # the latched config.
+        DeclareLaunchArgument('handover_settle_s', default_value='0.5'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
-        # HOLD test: lift_ramp_vel:=0.0 (no lift, just hold the taut config).
-        DeclareLaunchArgument('lift_ramp_vel', default_value='0.12'),
+        # Climb rate (m/s) -- the dominant term in takeoff duration. The ramp is
+        # eased at both ends (LIFT_SOFT_* in planner_node.py), so peak accel stays
+        # well under the raw rate. HOLD test: lift_ramp_vel:=0.0 (no lift, just
+        # hold the taut config).
+        DeclareLaunchArgument('lift_ramp_vel', default_value='0.20'),
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         # Cable compensation. ON is the correct flight config. Zero only for a
         # deliberate A/B (cable_ff_scale:=0.0 cable-blind; attitude_ff:=false level).

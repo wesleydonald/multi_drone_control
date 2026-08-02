@@ -275,7 +275,7 @@ tune for agility (velocity/accel/jerk) per the paper's Table 1.
 - `acados.py` — model `quad_load_dynamics`; `model.p = [dyn(6), a_cable(3), q_ref(4)]` (13);
   `set_planner_reference(..., ref_cable=...)`. Throttle cost weight 0.3; throttle bounds
   [0.05, 0.6].
-- `controller_mpc.py` — `FREQUENCY_HZ=50.0`; `est_params=[38.0, 0.0, 0.12, 70.0, 670.0, 0.5]`;
+- `controller_mpc.py` — `FREQUENCY_HZ=50.0`; `est_params=[24.0, 0.0, 0.12, 70.0, 670.0, 0.5]`;
   parses 12 fields/node → `planner_ref_cable`; `ACADOS_DIR=c_generated_code_quad_load`.
 - `launch/mpc_three_soft_quad_load_launch.py` — planner + 3 cable-aware trackers + fleet mgr.
 
