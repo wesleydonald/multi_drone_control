@@ -38,6 +38,12 @@ to handover_elev_deg, then the OCP takes over and lifts the load, e.g.
 For an elevated taut world instead, set start_taut:=true handover_elev_deg:=0 to
 skip the creep and hand straight to the OCP.
 
+start_taut:=true ALSO works as a straight "skip the takeoff stage" experiment on a
+GROUND world: the planner hands to the coupled OCP on its first tick instead of
+arc-sweeping the rods up first, so the controller flies the drones off the ground
+itself. The lift ramp and handover_settle_s still happen -- only the creep phase is
+removed. See the start_taut argument below for what that risks.
+
 Fleet control:
     ros2 topic pub -t 3 /fleet/command std_msgs/msg/String "{data: ARM}"
     ros2 topic pub -t 3 /fleet/command std_msgs/msg/String "{data: TAKEOFF}"
@@ -58,7 +64,8 @@ a DOF no drone arrangement can control (see two_rigid_short.sdf notes).
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
-from launch.substitutions import LaunchConfiguration
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node, SetParameter
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -75,7 +82,24 @@ def _args():
         # worlds use rigid 0.5 m rods, and a mismatch here commands a formation
         # radius the tethers physically can't reach (drones fight the rod).
         DeclareLaunchArgument('cable_len', default_value='0.5'),
-        DeclareLaunchArgument('start_taut', default_value='false'),
+        # true = SKIP THE CREEP PHASE. The planner hands straight to the coupled OCP
+        # on its first tick (planner_node: phase 'creep' -> 'planner' immediately),
+        # rather than first sweeping the rods up to handover_elev_deg. Intended for
+        # elevated taut worlds, but it is also the switch for "no takeoff stage, let
+        # the controller fly it off the ground" on a *_ground world.
+        # WHAT REMAINS: the lift ramp (lift_ramp_vel -> target_z) and
+        # handover_settle_s. Only the creep is removed.
+        # WHAT IT RISKS on a ground start: the creep exists because the OCP assumes
+        # TAUT cables. From the ground the OCP immediately commands the full 45deg
+        # formation, which on rigid rods is a large position step the drones cannot
+        # take directly (they are constrained to an arc pivoting about grounded attach
+        # points), and while the payload is still resting the cable feedforward is
+        # gated off -- so the no-integrator tracker is asked for a big move with no
+        # tension feedforward. That is the failure the creep was written to avoid.
+        # DEFAULT TRUE: verified in sim on three_rigid_ground (run 20260803_115853),
+        # which flew clean -- 3 mm steady-state payload tracking. Set false to get
+        # the arc creep back if a different world or geometry needs it.
+        DeclareLaunchArgument('start_taut', default_value='true'),
         # GROUND-START rigid worlds only (three_rigid_ground.sdf). Degrees of
         # cable elevation the drones must sweep up to -- along the rod's arc,
         # pivoting about the grounded attach points -- before the planner takes
@@ -115,25 +139,90 @@ def _args():
         # the lift). See TAKEOFF_SPOOL_FLOOR in controller_mpc.py.
         DeclareLaunchArgument('takeoff_spool_s', default_value='0.5'),
         # Thrust accel per unit throttle the MPC assumes (kT). The sim plant is
-        # actually QUADRATIC -- a(u) = 203*u^2 from the SDF motor model -- so no
-        # single kT is right everywhere. 50.0 matches near the hover operating
-        # point for n=2..4 (52.3 / 49.7 / 48.4), and agrees with flight-log
-        # estimates (50.9 steady-state, 51.1 least squares). Use ~24 for hardware.
-        # NOTE: raising this toward the hover value (50) STARVES takeoff -- at the
-        # low throttle on the stands the quadratic plant's effective kT (203*u) is
-        # only ~20, so 50 under-thrusts and the drones slide off and drop. 45 is the
-        # takeoff-safe compromise. The residual hover drift is handled by scheduling
-        # kT to the operating point once airborne (thrust_quad_c below), NOT by
-        # raising this constant.
-        DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
-        # Quadratic-plant coefficient c in a(u)=c*u^2 (SDF motor model gives ~203).
-        # Once AIRBORNE, the tracker schedules its linear kT to the operating point,
-        # kT = clip(c*throttle, thrust_ratio, 55), so the assumed thrust matches the
-        # true secant gain at hover (203*0.24 ~ 49) instead of the takeoff-safe 45.
-        # This removes the ~8% hover over-thrust that the coupled outer loop turns
-        # into a slow runaway, while takeoff keeps the fixed thrust_ratio (kT never
-        # drops below it). Set 0.0 to disable (pure fixed thrust_ratio, all phases).
-        DeclareLaunchArgument('thrust_quad_c', default_value='203.0'),
+        # actually QUADRATIC -- a(u) = c*u^2 from the SDF motor model -- so no
+        # single kT is right everywhere; see thrust_quad_c below. 24.0 also matches
+        # the hardware airframe, which is the point of the current motorConstant.
+        # NOTE: raising this toward the hover value STARVES takeoff -- at the low
+        # throttle on the stands the quadratic plant's effective kT (c*u) is well
+        # below its hover value, so a hover-tuned constant under-thrusts and the
+        # drones slide off and drop. Keeping it a little LOW is deliberate: the
+        # resulting over-thrust is the pop that breaks them off the stands. The
+        # residual hover error is handled by the schedule/estimator once airborne,
+        # NOT by raising this constant.
+        # 30.0 (was 24.0, the HARDWARE value) because this is a SIM launch and with
+        # motorConstant=0.62e-06 the sim's true loaded-hover kT is ~33. It is now also
+        # the kT ESTIMATOR'S SEED and the centre of its +/-kt_max_deviation band, so a
+        # hardware-accurate 24 put the truth (33) outside the band (20.4..27.6) and the
+        # estimate pinned at 27.60 forever. 30 keeps 33 inside the band (25.5..34.5)
+        # while still sitting low enough for a mild (33/30)^2 = 1.2x takeoff pop.
+        # The hardware launches (real_*.py) keep their own 24.
+        DeclareLaunchArgument('thrust_ratio', default_value='30.0'),
+        # Quadratic-plant coefficient c in a(u)=c*u^2. DERIVED FROM THE SDF, and it
+        # MUST be re-derived whenever motorConstant changes:
+        #     c = 4 * motorConstant * maxRotVelocity^2 / mass
+        #       = 4 * 0.62e-06 * 4631^2 / 0.6  =  88.6
+        # It was 203.0, which was correct for the old motorConstant 1.42e-06. After
+        # that was lowered to 0.62e-06 ("match real world") the stale 203 made the
+        # airborne schedule compute kT = clip(203*0.371, 24, 55) = 55 -- clipped at
+        # the ceiling and ~67% above the true ~33 -- so the drone commanded a third
+        # of the thrust it needed and dropped, right after the fixed 24 had
+        # over-thrust it off the stand. That two-stage mismatch IS the takeoff
+        # bounce. Set 0.0 to disable the schedule and let the adaptive estimator
+        # below own kT instead (it measures c*u directly, no SDF constant needed).
+        DeclareLaunchArgument('thrust_quad_c', default_value='88.6'),
+        # ADAPTIVE kT. Every drone measures its own thrust ratio in flight from
+        # its IMU (body-z specific force minus the planner's known cable pull,
+        # divided by applied throttle) and runs a scalar Kalman filter on it, so
+        # the MPC stops depending on thrust_ratio/thrust_quad_c being right. Each
+        # tracker prints a ~1 Hz line: est vs the schedule vs what the MPC is
+        # flying. adaptive_thrust_feedback:=false = SHADOW mode (print/log only,
+        # the MPC keeps the open-loop schedule) -- use it for the first run to
+        # check the numbers before letting the estimate drive the thrust model.
+        DeclareLaunchArgument('adaptive_thrust_ratio', default_value='true'),
+        DeclareLaunchArgument('adaptive_thrust_feedback', default_value='true'),
+        # Estimator backend:
+        #   'ukf' (default) -- the controller_ukf method. 19-state UKF over
+        #     [pose(13) | 6 dynamics params], sigma points propagated through the
+        #     real model and corrected against MOCAP. No IMU dependence at all, and
+        #     drag/tau mismatch is absorbed by their own states instead of by kT.
+        #     Costs ~4.5 ms/cycle (39 integrator calls, ~22% of a 20 ms cycle).
+        #   'none' -- no estimation: the thrust_quad_c schedule, else thrust_ratio.
+        # NOTE a CONSTANT cable-tension bias moves kT ~7% per 30% of tension error.
+        # That is an identifiability limit at constant throttle, not something the
+        # filter can fix; kt_max_deviation is the practical guard.
+        DeclareLaunchArgument('thrust_ratio_estimator', default_value='ukf'),
+        # kT process-noise variance: how fast the estimate may move. Tuned on the
+        # assumption the SEED IS CLOSE (thrust_ratio from the SDF motor model / a bench
+        # test), so the metric is WANDER, not convergence. At 1e-3 the estimate holds
+        # to 0.3% through a +/-35% tension swing and still corrects a 10%-off seed in
+        # ~13 s. Raise toward 1e-2 only if the seed cannot be trusted.
+        DeclareLaunchArgument('ukf_q_kt', default_value='0.001'),
+        # HARD BAND around the seed, as a fraction: kT is confined to
+        # thrust_ratio*(1 +/- this). A disturbance the filter cannot explain can at
+        # worst nudge kT, never walk it somewhere absurd. Applies to BOTH backends.
+        # 0 disables it (raw kt_min/kt_max only).
+        DeclareLaunchArgument('kt_max_deviation', default_value='0.15'),
+        # ESTIMATOR SEED / band centre -- the drone's ACTUAL hover kT, decoupled from
+        # thrust_ratio (which is the takeoff constant and is kept LOW on purpose).
+        # 33.0 = 88.6*0.376, the operating-point secant gain the schedule measures in
+        # flight. Seeding at the takeoff-safe 30 left the estimate ~10% low, the MPC
+        # over-throttled and the load overshot its target by ~0.18 m. 0 = use
+        # thrust_ratio (the old coupled behaviour).
+        DeclareLaunchArgument('kt_seed', default_value='33.0'),
+        # LEARN-THEN-LOCK: estimate kT for this many seconds after becoming airborne
+        # (the lift -- near-hover, well modelled, load going straight up), then FREEZE
+        # it for the rest of the flight. kT is a property of the airframe and battery,
+        # not of the trajectory, so there is nothing to track once it is known; and a
+        # frozen estimate cannot be dragged around by cable-tension error or payload
+        # swing during the trajectory. Freezing also stops kt_input, so the estimator
+        # nodes idle and hand their cores back exactly when the trajectory needs them.
+        # 0 = never freeze (estimate for the whole flight).
+        DeclareLaunchArgument('kt_freeze_after_s', default_value='10.0'),
+        # UKF rate. 50 = every control cycle (as controller_ukf). Lower it for
+        # headroom; the integrator step is set at runtime, so no rebuild is needed.
+        DeclareLaunchArgument('ukf_rate_hz', default_value='10.0'),
+        # seconds between the per-drone kT reports; 0 = silent.
+        DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         # Auto slot assignment (coupled mode). OFF by default so the sim behaves as
         # before (slot i == drone i, matching the SDF spawn order). Set true to test
         # the real-world behaviour: each drone is matched to the nearest nominal ring
@@ -200,7 +289,34 @@ def launch_setup(context, *args, **kwargs):
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': f('thrust_ratio'),
-                         'thrust_quad_c': f('thrust_quad_c')}],
+                         'thrust_quad_c': f('thrust_quad_c'),
+                         'adaptive_thrust_ratio': b('adaptive_thrust_ratio'),
+                         'adaptive_thrust_feedback': b('adaptive_thrust_feedback'),
+                         'thrust_ratio_estimator':
+                             LaunchConfiguration('thrust_ratio_estimator'),
+                         'kt_max_deviation': f('kt_max_deviation'),
+                         'kt_seed': f('kt_seed'),
+                         'kt_freeze_after_s': f('kt_freeze_after_s'),
+                         'kt_print_period_s': f('kt_print_period_s')}],
+            output='screen'))
+        # OUT-OF-LOOP kT estimator, one process per drone. The parameter UKF is 39
+        # acados propagations; run inside the tracker's 50 Hz timer it measured
+        # 25-150 ms and stalled the control loop. Here it cannot: if it falls behind
+        # it just produces estimates less often. Skipped unless the ukf backend is
+        # selected -- the other backends need no helper process.
+        nodes.append(Node(
+            package='controller_quad_load', executable='kt_estimator',
+            name=f'kt_estimator_{i}',
+            parameters=[{'drone_id': i,
+                         'thrust_ratio': f('thrust_ratio'),
+                         'kt_seed': f('kt_seed'),
+                         'kt_max_deviation': f('kt_max_deviation'),
+                         'ukf_q_kt': f('ukf_q_kt'),
+                         'ukf_rate_hz': f('ukf_rate_hz'),
+                         'kt_print_period_s': f('kt_print_period_s')}],
+            condition=IfCondition(PythonExpression(
+                ["'", LaunchConfiguration('thrust_ratio_estimator'), "' == 'ukf' and '",
+                 LaunchConfiguration('adaptive_thrust_ratio'), "'.lower() == 'true'"])),
             output='screen'))
 
     # ── Central fleet manager ──────────────────────────────────────────────

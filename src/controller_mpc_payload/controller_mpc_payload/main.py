@@ -178,17 +178,23 @@ class Controller(Node):
 
         # Parameters: [Thrust ratio, drag ratio, angular velocity tau, centre rate, max rate, expo]
         # Thrust ratio is the drone's thrust-to-hover model gain: hover_throttle = 9.81/TR. It
-        # MUST match the sim's actual thrust (~45 here; ~24 real). It was 22, which made the MPC
-        # command ~2x the throttle it needed -> the drone rocketed up until feedback pulled it
-        # back (big overshoot). Launch-tunable via mpc_thrust_ratio.
-        mpc_thrust_ratio = float(self.declare_parameter('mpc_thrust_ratio', 45.0).value)
+        # MUST match the plant's actual thrust. The sim motorConstant now matches the real
+        # airframe, so 24.0 is right for both (it was 45 when the sim was over-powered, and 22
+        # before that -- too low a value makes the MPC command ~2x the throttle it needs and the
+        # drone rockets up until feedback pulls it back). Launch-tunable via mpc_thrust_ratio.
+        # This is also the seed the thrust-ratio UKF initializes from, and the centre of the
+        # +/-thrust_ratio_feedback_max_fractional_change band the feedback is allowed to move in.
+        mpc_thrust_ratio = float(self.declare_parameter('mpc_thrust_ratio', 24.0).value)
         self.est_params = np.array([mpc_thrust_ratio, 0.0, 0.12, 100.0, 100.0, 0.5, 0.531])
 
         # NEW UKF ACTIVATION THRUST RATIO PARAMETERS
+        # When true the filtered kT estimate is slewed into est_params[0] (and therefore into the
+        # OCP parameters every cycle). False = shadow mode: the UKF still runs and logs, but the
+        # MPC keeps flying on the fixed mpc_thrust_ratio.
         self.enable_thrust_ratio_feedback = bool(
             self.declare_parameter(
                 'enable_thrust_ratio_feedback',
-                False,
+                True,
             ).value
         )
 
@@ -261,7 +267,7 @@ class Controller(Node):
         # Estimation remains shadow-only unless enable_thrust_ratio_feedback is true.
         # Feedback is deliberately restricted to full_model_kt_ukf below.
         self.enable_thrust_ratio_ukf = bool(
-            self.declare_parameter('enable_thrust_ratio_ukf', False).value
+            self.declare_parameter('enable_thrust_ratio_ukf', True).value
         )
 
         self.thrust_ratio_estimator_backend = str(

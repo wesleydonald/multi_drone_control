@@ -39,7 +39,8 @@ mux to our tracker AND folds drone 3 into the dissipative network (4th member).
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
-from launch.substitutions import LaunchConfiguration
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node, SetParameter
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -65,8 +66,28 @@ def _args():
         DeclareLaunchArgument('cable_source', default_value='model'),
         DeclareLaunchArgument('payload_rest_z', default_value='-0.1'),
         DeclareLaunchArgument('takeoff_spool_s', default_value='0.5'),
-        DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
-        DeclareLaunchArgument('thrust_quad_c', default_value='203.0'),
+        DeclareLaunchArgument('thrust_ratio', default_value='30.0'),
+        # ── kT (thrust ratio) -- kept in step with mpc_quad_load_launch.py ──
+        # 30.0, not the hardware 24.0: this is a SIM launch and with
+        # motorConstant=0.62e-06 the plant's true free-flight kT is ~29.5 and its
+        # loaded-hover kT is ~33. At 24 the takeoff over-thrust is (33/24)^2 = 1.9x,
+        # which is the takeoff bounce; at 30 it is a mild 1.2x.
+        # ADAPTIVE kT is available here but OFF by default, so this stack keeps the
+        # exact process set it was verified with. Turn it on with
+        #   adaptive_thrust_ratio:=true
+        # which also starts one kt_estimator process per drone (each runs a 39-point
+        # UKF, so watch CPU on this stack -- it already runs more nodes than the
+        # plain lift). See mpc_quad_load_launch.py for what every knob does.
+        DeclareLaunchArgument('adaptive_thrust_ratio', default_value='false'),
+        DeclareLaunchArgument('adaptive_thrust_feedback', default_value='true'),
+        DeclareLaunchArgument('thrust_ratio_estimator', default_value='ukf'),
+        DeclareLaunchArgument('kt_seed', default_value='33.0'),
+        DeclareLaunchArgument('kt_max_deviation', default_value='0.15'),
+        DeclareLaunchArgument('kt_freeze_after_s', default_value='10.0'),
+        DeclareLaunchArgument('ukf_q_kt', default_value='0.001'),
+        DeclareLaunchArgument('ukf_rate_hz', default_value='10.0'),
+        DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
+        DeclareLaunchArgument('thrust_quad_c', default_value='88.6'),
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
         DeclareLaunchArgument('load_traj', default_value='hover'),
         DeclareLaunchArgument('traj_speed', default_value='0.6'),
@@ -128,6 +149,12 @@ def _args():
         DeclareLaunchArgument('enable_approach', default_value='true'),
         # the heavy approach MPC (acados) alone; set false to run the chain without it.
         DeclareLaunchArgument('enable_approach_mpc', default_value='true'),
+        # Online thrust-ratio (kT) estimation for the approach MPC. The scalar full-model UKF
+        # seeds from thrust_ratio (24.0) and re-estimates kT in flight, so a battery-sag /
+        # payload-mass mismatch does not leave the approach flying on a stale hover gain.
+        # ..._feedback false = shadow mode (estimate + log only, MPC keeps the fixed 24.0).
+        DeclareLaunchArgument('approach_kt_ukf', default_value='true'),
+        DeclareLaunchArgument('approach_kt_feedback', default_value='true'),
         # Approach-time obstacle avoidance of the REAL fleet drones. true = the approach
         # routes around drones 0..n-1 (needs a SMALL safety radius, below, or it seals the
         # corridor to the payload and never welds). false = ignore the fleet and weld
@@ -179,7 +206,32 @@ def launch_setup(context, *args, **kwargs):
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': f('thrust_ratio'),
-                         'thrust_quad_c': f('thrust_quad_c')}],
+                         'thrust_quad_c': f('thrust_quad_c'),
+                         'adaptive_thrust_ratio': b('adaptive_thrust_ratio'),
+                         'adaptive_thrust_feedback': b('adaptive_thrust_feedback'),
+                         'thrust_ratio_estimator':
+                             LaunchConfiguration('thrust_ratio_estimator'),
+                         'kt_seed': f('kt_seed'),
+                         'kt_max_deviation': f('kt_max_deviation'),
+                         'kt_freeze_after_s': f('kt_freeze_after_s'),
+                         'kt_print_period_s': f('kt_print_period_s')}],
+            output='screen'))
+        # OUT-OF-LOOP kT estimator, one process per drone (see thrust_ratio_node.py).
+        # Only started when adaptive_thrust_ratio is on, which is NOT the default for
+        # this stack.
+        nodes.append(Node(
+            package='controller_quad_load', executable='kt_estimator',
+            name=f'kt_estimator_{i}',
+            parameters=[{'drone_id': i,
+                         'thrust_ratio': f('thrust_ratio'),
+                         'kt_seed': f('kt_seed'),
+                         'kt_max_deviation': f('kt_max_deviation'),
+                         'ukf_q_kt': f('ukf_q_kt'),
+                         'ukf_rate_hz': f('ukf_rate_hz'),
+                         'kt_print_period_s': f('kt_print_period_s')}],
+            condition=IfCondition(PythonExpression(
+                ["'", LaunchConfiguration('thrust_ratio_estimator'), "' == 'ukf' and '",
+                 LaunchConfiguration('adaptive_thrust_ratio'), "'.lower() == 'true'"])),
             output='screen'))
 
     # ── Central fleet manager (tethered fleet only) ─────────────────────────
@@ -282,7 +334,12 @@ def launch_setup(context, *args, **kwargs):
             package='controller_mpc_payload', executable='main', name=f'approach_mpc_{d}',
             parameters=[{'drone_id': d,
                          'use_external_reference': True,
-                         'external_reference_topic': '/join_planner/reference'}],
+                         'external_reference_topic': '/join_planner/reference',
+                         # kT: same 24.0 the tethered trackers use, and the UKF's initial estimate.
+                         'mpc_thrust_ratio': f('thrust_ratio'),
+                         'enable_thrust_ratio_ukf': b('approach_kt_ukf'),
+                         'enable_thrust_ratio_feedback': b('approach_kt_feedback'),
+                         'thrust_ratio_estimator_backend': 'full_model_kt_ukf'}],
             # ELRSCommand out -> pre-mux _tejen. Command IN <- /fleet/command so the fleet
             # ARM/TAKEOFF (RViz ARM button) arms this drone too -- CallbackManager listens on
             # 'drone_command', which we point at the fleet command stream.
@@ -296,6 +353,12 @@ def launch_setup(context, *args, **kwargs):
     # forward -- the real drone stays on the approach MPC until the weld. takeoff_spool_s=0 so the
     # mid-air takeover applies full MPC hover thrust immediately instead of ramping up from a floor
     # (a spool ramp would drop the drone at the handoff).
+    # NOTE: deliberately NO adaptive-kT wiring on the newcomer's tracker, even when
+    # the tethered drones have it on. Drone 3's thrust regime CHANGES at the weld --
+    # free-flight kT is ~29.5, loaded-hover kT is ~33 -- so a learn-then-lock during
+    # its approach would lock the pre-weld value and then fly the post-weld phase on
+    # it. It stays on the scheduled/fixed kT, which tracks the operating point through
+    # the transition by construction.
     nodes.append(Node(
         package='controller_quad_load', executable='controller', name=f'controller_{d}',
         parameters=[{'drone_id': d,
