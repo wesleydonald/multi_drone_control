@@ -20,6 +20,26 @@ def quat_to_rot_np(q):
     ])
 
 
+def yaw_from_quat(q):
+    """Yaw (rotation about world z) of quaternion q = [w, x, y, z]. The attach ring
+    and the load attitude reference are both defined about world z, so this is the
+    only component of the load's measured attitude they need."""
+    w, x, y, z = q
+    return float(np.arctan2(2.0 * (w * z + x * y),
+                            1.0 - 2.0 * (y * y + z * z)))
+
+
+def yaw_quat(psi):
+    """Quaternion [w, x, y, z] of a pure yaw about world z."""
+    return np.array([np.cos(0.5 * psi), 0.0, 0.0, np.sin(0.5 * psi)])
+
+
+def rot_z(psi):
+    """Rotation matrix of a pure yaw about world z."""
+    c, s = np.cos(psi), np.sin(psi)
+    return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+
+
 def rot_align(a, b):
     """Rotation matrix mapping unit vector a onto unit vector b (Rodrigues). Used to
     tilt the nominal cable formation toward the effective-gravity direction."""
@@ -56,16 +76,27 @@ def nominal_cable_dirs(rho, elev_deg=45.0):
     return dirs
 
 
-def azimuth_slot_assignment(drone_pos, load_xy, n):
+def azimuth_slot_assignment(drone_pos, load_xy, n, load_yaw=0.0):
     """Match each physical drone to the nearest nominal azimuth slot around the load,
     so the drones can be placed in the ring in any order. The slots are equally
     spaced (slot i at 2*pi*i/n), so the optimal assignment is a cyclic rotation of
     the drones sorted by their measured azimuth; we pick the shift that minimises the
-    total angular error. Returns the slot->drone permutation (relabels I/O only)."""
+    total angular error. Returns the slot->drone permutation (relabels I/O only).
+
+    The slots are the attach points rho_i, which live in the LOAD frame -- slot i
+    sits at world azimuth 2*pi*i/n + load_yaw. So the measured azimuths must be
+    de-rotated by load_yaw before matching, or a payload placed at any yaw past
+    half a slot pitch (60 deg for 3 drones) matches every drone to its NEIGHBOUR's
+    attach point. That is not a cosmetic relabel: build_x_init then reads each
+    cable's direction from the wrong attach point, the implied cable length comes
+    out ~25% longer than the modelled cable_len, and the first solve goes QP
+    infeasible (acados status 4) -- the fleet never leaves the ground. Defaults to
+    0.0 so a caller with a world-aligned payload is unaffected."""
     lp = load_xy
     az = np.array([np.arctan2(drone_pos[j][1] - lp[1],
-                              drone_pos[j][0] - lp[0])
+                              drone_pos[j][0] - lp[0]) - load_yaw
                    for j in range(n)])
+    az = (az + np.pi) % (2.0 * np.pi) - np.pi        # keep the sort well defined
     order = list(np.argsort(az))                       # drones CCW by azimuth
     slot_az = np.array([2.0 * np.pi * i / n for i in range(n)])
     best, best_cost = list(range(n)), np.inf

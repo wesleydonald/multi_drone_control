@@ -421,6 +421,9 @@ class Controller(Node):
         self.N = 20
         self.skip_steps = 3
         self.first_solve = True
+        # Heading the tracker holds (rad). Re-latched from mocap while the drone
+        # rests armed, then frozen at TAKEOFF -- see control_loop.
+        self._heading_datum = 0.0
         fresh = _solver_is_fresh()
         if fresh:
             self.get_logger().info("[acados] loading cached quad_load_dynamics solver.")
@@ -757,6 +760,15 @@ class Controller(Node):
                 f"band {self.kt_min:.1f}..{self.kt_max:.1f} |{left} age={age} "
                 f"node={self._ukf_solve_ms:5.1f}ms | n={count} [{self._kt_status}]")
 
+    def _measured_heading(self):
+        """Current yaw (rad, world frame) from the mocap quaternion. This is the
+        heading the tracker holds -- latched while resting, see control_loop."""
+        if self.current_pose is None:
+            return self._heading_datum
+        w, x, y, z = (float(self.current_pose[3]), float(self.current_pose[4]),
+                      float(self.current_pose[5]), float(self.current_pose[6]))
+        return float(np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z)))
+
     def measured_cable_accel(self):
         """MEASURED cable acceleration in the WORLD frame from the IMU:
         a_cable = R * (imu_specific_force - [0,0, kT*throttle]).
@@ -816,6 +828,14 @@ class Controller(Node):
             # ends up at the true stand height whenever takeoff actually fires.
             if not self.takeoff_requested:
                 self._kt_spawn_z = float(self.current_pose[2])
+                # Same for the HEADING the drone is resting at. The planner's
+                # reference carries position/velocity/thrust but no yaw, and the
+                # attitude feedforward is a yaw-free tilt (= a commanded heading of
+                # world +x), so without this every drone spins to +x during takeoff
+                # -- worst near 180 deg, where the sign-invariant attitude error is
+                # degenerate and it can turn the long way round. Holding the resting
+                # heading also keeps a mocap yaw offset from becoming a takeoff spin.
+                self._heading_datum = self._measured_heading()
 
             # Assumed thrust gain for this cycle: the measured (adaptive) value
             # once the filter has converged, else the operating-point schedule,
@@ -881,7 +901,7 @@ class Controller(Node):
             set_planner_reference(
                 self.ocp, self.planner_ref_pos, self.planner_ref_vel,
                 ref_acc, self.N, self.est_params,
-                ref_cable=ref_cable)
+                ref_cable=ref_cable, heading=self._heading_datum)
             # desired reference position now (node 0) for the log / plot
             self._current_ref_pos = np.asarray(self.planner_ref_pos[0], float)
 

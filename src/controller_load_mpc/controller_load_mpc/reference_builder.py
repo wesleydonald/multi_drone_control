@@ -14,7 +14,7 @@ reference used to prime the solver warm during creep.
 """
 import numpy as np
 
-from .geometry import rot_align
+from .geometry import rot_align, rot_z, yaw_quat
 
 
 class ReferenceBuilder:
@@ -24,6 +24,15 @@ class ReferenceBuilder:
         self._s_nom = s_nom
         self.dt = dt
         self.traj = traj
+        # Load YAW DATUM: the payload's measured yaw, latched once by the node
+        # (set_yaw_datum) before the first solve. s_nom is built from the attach
+        # ring, which lives in the LOAD frame, and the load attitude reference is
+        # about world z -- so both must be expressed about the yaw the rig was
+        # actually placed at. Left at 0.0 the references are world-aligned, which
+        # commands the whole formation to rotate the payload back to yaw 0 on
+        # takeoff (up to half a slot pitch of unwanted rotation, dragging every
+        # drone around the ring with it).
+        self.psi0 = 0.0
         # Per-tick lift schedule, set via update() before each planner solve.
         self.hover_xy = None
         self.lift_z0 = None
@@ -31,6 +40,10 @@ class ReferenceBuilder:
         self.target_z = 0.0
         self._lift_vel = 0.0
         self.traj_t = 0.0
+
+    def set_yaw_datum(self, psi0):
+        """Latch the payload's starting yaw as the reference datum (see psi0)."""
+        self.psi0 = float(psi0)
 
     def update(self, hover_xy, lift_z0, lift_progress, target_z, lift_vel, traj_t):
         """Refresh the lift schedule for this planner tick (call before solving)."""
@@ -87,12 +100,11 @@ class ReferenceBuilder:
         g_eff = np.array([-ax, -ay, -self.dyn.g])
         g_eff_mag = float(np.linalg.norm(g_eff))
         R_tilt = rot_align(np.array([0.0, 0.0, -1.0]), g_eff)
-        # For 'spin' the attach points rotate with the load yaw, so the nominal cable
-        # directions rotate with it too (about world z): yaw the formation, then tilt
-        # onto g_eff. yaw=0 for all other trajectories -> R_yaw = I (unchanged).
-        cy, sy = np.cos(yaw), np.sin(yaw)
-        R_yaw = np.array([[cy, -sy, 0.0], [sy, cy, 0.0], [0.0, 0.0, 1.0]])
-        R_form = R_tilt @ R_yaw
+        # The attach points rotate with the load yaw, so the nominal cable directions
+        # rotate with it too (about world z): yaw the formation, then tilt onto g_eff.
+        # The yaw is the latched placement datum psi0 plus, for 'spin', the commanded
+        # load rotation (0 for every other trajectory).
+        R_form = R_tilt @ rot_z(self.psi0 + yaw)
         s_ref = []
         for i in range(self.n):
             s_ref.extend((R_form @ self._s_nom[i]).tolist())
@@ -103,25 +115,27 @@ class ReferenceBuilder:
                         + [0.0] * self.dyn.nu)
 
     def q_ref_at(self, k):
-        """Stage-k load attitude reference (the q_ref acados parameter). Identity
-        except for 'spin', where it is a pure yaw about world z tracking the load
-        yaw along the horizon, so the OCP holds the rotating attitude while the
-        yaw-rate term in yref_at drives the rotation."""
+        """Stage-k load attitude reference (the q_ref acados parameter): hold the yaw
+        the rig was placed at (psi0). For 'spin' the commanded load rotation is added
+        on top, tracking the load yaw along the horizon so the OCP holds the rotating
+        attitude while the yaw-rate term in yref_at drives the rotation."""
         yaw = 0.0
         if self.traj_t > 0.0:
             yaw, _ = self.traj.yaw_at(self.traj_t + self.dt * k)
-        return np.array([np.cos(0.5 * yaw), 0.0, 0.0, np.sin(0.5 * yaw)])
+        return yaw_quat(self.psi0 + yaw)
 
     def hold_yref(self, load_state):
         """Static hold reference for priming: keep the load at its current measured
-        position with zero twist, cables at the nominal 45 deg taut directions and
-        nominal tension. Same field layout as yref_at."""
+        position with zero twist, cables at the nominal 45 deg taut directions (about
+        the placement yaw datum, as in yref_at) and nominal tension. Same field layout
+        as yref_at."""
         p = load_state[0:3]
         t_nom = self.dyn.m * 9.81 / (self.n * np.sin(np.deg2rad(45.0)))
         pose = [float(p[0]), float(p[1]), float(p[2]),
                 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        R_yaw = rot_z(self.psi0)
         s_ref = []
         for i in range(self.n):
-            s_ref.extend(self._s_nom[i].tolist())
+            s_ref.extend((R_yaw @ self._s_nom[i]).tolist())
         return np.array(pose + s_ref + [t_nom] * self.n
                         + [0.0] * (3 * self.n) + [0.0] * self.dyn.nu)

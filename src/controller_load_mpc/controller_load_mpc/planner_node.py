@@ -32,8 +32,8 @@ from geometry_msgs.msg import PoseStamped
 from interfaces.msg import MotionCaptureState
 
 from .load_cable_dynamics import LoadCableDynamics, LOAD_DIM, CABLE_DIM
-from .geometry import (quat_to_rot_np, attach_points,
-                       nominal_cable_dirs, azimuth_slot_assignment)
+from .geometry import (quat_to_rot_np, attach_points, nominal_cable_dirs,
+                       azimuth_slot_assignment, yaw_from_quat)
 from .load_trajectory import LoadTrajectory
 from .planner_solver import PlannerSolver
 from .params import PlannerConfig
@@ -167,6 +167,11 @@ class LoadPlanner(Node):
         # reassigned by azimuth on the first solve (see _assign_slots).
         self.slot2drone = list(range(self.n))
         self._slots_assigned = False
+        # Load yaw the rig was placed at, latched on the first planner tick
+        # (_latch_yaw_datum). 0.0 until then, which is the old world-aligned
+        # behaviour and is correct for a payload that really is at yaw 0.
+        self.psi0 = 0.0
+        self._yaw_datum_latched = False
         # NB: the OCP warm-start state (last_X / recover) lives on self.solver.
         self.hover_xy = None                   # captured load x,y for the reference
         self._ff_t = 0.0                       # cable-FF soft-start clock (see _plan)
@@ -317,17 +322,40 @@ class LoadPlanner(Node):
     def _assign_slots(self):
         """Match each physical drone to the nearest nominal azimuth slot around the
         load (see geometry.azimuth_slot_assignment), so the drones can be placed in
-        the ring in any order. Relabels I/O only -- the OCP is unchanged."""
+        the ring in any order. Relabels I/O only -- the OCP is unchanged.
+
+        Matched in the LOAD frame: the slots ARE the attach points, which rotate with
+        the payload. Matching in the world frame instead mismatched every drone to a
+        neighbouring attach point as soon as the payload was placed past half a slot
+        pitch, which made the first solve QP-infeasible (see the function's docstring)."""
         self.slot2drone = azimuth_slot_assignment(
-            self.drone_pos, self.load_state[0:2], self.n)
+            self.drone_pos, self.load_state[0:2], self.n, load_yaw=self.psi0)
         self._slots_assigned = True
         self.get_logger().info(
-            f'[planner] auto slot assignment (slot->drone): {self.slot2drone}')
+            f'[planner] auto slot assignment (slot->drone): {self.slot2drone} '
+            f'(load yaw datum {np.degrees(self.psi0):+.1f} deg)')
+
+    def _latch_yaw_datum(self):
+        """Latch the payload's measured yaw as the reference datum, once, before the
+        first solve. Everything downstream -- the slot matching, the nominal cable
+        ring in yref_at/hold_yref, and the load attitude reference q_ref -- is
+        expressed about it, so the fleet holds the yaw the rig was PLACED at instead
+        of rotating the payload onto world +x on takeoff."""
+        self.psi0 = yaw_from_quat(self.load_state[3:7])
+        self.refs.set_yaw_datum(self.psi0)
+        self._yaw_datum_latched = True
+        self.get_logger().info(
+            f'[planner] load yaw datum latched at {np.degrees(self.psi0):+.1f} deg')
 
     # Plan step
     def _plan(self):
         if self.load_state is None or any(d is None for d in self.drone_pos):
             return
+
+        # Latch the placement yaw datum first: the slot matching below is expressed
+        # about it, as is every reference the builder produces.
+        if not self._yaw_datum_latched:
+            self._latch_yaw_datum()
 
         # Match drones to nominal slots once, now that every pose is in.
         if self.auto_slot_assign and not self._slots_assigned:

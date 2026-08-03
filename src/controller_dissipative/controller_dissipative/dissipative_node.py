@@ -67,6 +67,16 @@ class DissipativeController(LoadPlanner):
             # trusting, no-integrator tracker never under-thrusts (the mid-flight attach
             # runaway fix). Only used when attach_handout is on. See DissipativeParams.
             T_handout=float(p('diss_t_handout', 12.0).value))
+        # Horizon PREVIEW for the published network references. OFF (default) repeats
+        # the network's single target across all N+1 horizon nodes -- the long-standing
+        # behaviour. ON carries the load trajectory's own future displacement along the
+        # horizon, the way the OCP path does (reference_builder.yref_at).
+        #
+        # Default OFF deliberately: offline this measured strictly better (0.169 -> 0.028 m
+        # on a circle at traj_speed 0.4 against the real tracker), but in Gazebo it made
+        # payload tracking WORSE, so the offline model is missing something real. Keep the
+        # known behaviour as the default until a logged A/B says otherwise.
+        self._net_preview = bool(p('net_horizon_preview', False).value)
         # ATTACH capacity: the network is provisioned with reserved_attach EXTRA nodes
         # beyond the n tethered drones the OCP flies. The reserved slots start off-network
         # (detach()-ed, hence inert) and are welded in mid-flight by attach(). The parent
@@ -376,6 +386,22 @@ class DissipativeController(LoadPlanner):
         if not self._net_landing:
             self.traj_t += 1.0 / PLANNER_HZ
         dx, dy, _, _ = self.traj.offset_at(self.traj_t)
+        # Where the load target will be at each HORIZON node, as a displacement from
+        # where it is now. The whole formation translates with the load, so this is
+        # also the displacement each drone's reference carries along the horizon (see
+        # _publish_ref below). Evaluated ON the trajectory at t + dt*k -- exactly as
+        # the OCP does in reference_builder.yref_at -- NOT extrapolated along the
+        # current velocity: a tangent line leaves a circular path by 0.56 m over the
+        # 2 s horizon at traj_speed 0.4 / radius 0.5, which is worse than the frozen
+        # horizon it replaced. Node 0 is always zero, and the whole list is zero in
+        # hover and LAND, so those paths are bit-for-bit unchanged.
+        if self._net_landing or not self._net_preview:
+            horizon_d = [np.zeros(3)] * (self.N + 1)
+        else:
+            horizon_d = []
+            for k in range(self.N + 1):
+                kx, ky, _, _ = self.traj.offset_at(self.traj_t + self.dt * k)
+                horizon_d.append(np.array([kx - dx, ky - dy, 0.0]))
 
         # z: hold the handover height, or ramp down to the floor on LAND. Touchdown (both
         # target and measured load near the floor) announces /fleet/landed to disarm.
@@ -414,8 +440,15 @@ class DissipativeController(LoadPlanner):
                 else self._cable_taut_gate(i)[0]
             p_ref, v_ref, a_ff, a_cable = self.net.reference(
                 i, load_quat, p_des, taut_gate=gate)
-            # hold p_ref constant across the horizon (one network target per tick).
-            self._publish_ref(drone, [(p_ref, v_ref, a_ff, a_cable)] * (self.N + 1))
+            # Carry the load target's own motion along the horizon (horizon_d above).
+            # Repeating node 0 across all N+1 nodes told the tracker's 2 s lookahead
+            # "be here and stay", so it planned to decelerate onto a point the target
+            # had already left: measured against the real tracker that is a fixed
+            # ~0.67 s lag (0.27 m at traj_speed 0.4, 0.53 m at 0.8). That is what made
+            # the network phase track so much worse than the OCP phase, which has
+            # always published a time-varying horizon (planner_node._publish_refs).
+            self._publish_ref(drone, [(p_ref + horizon_d[k], v_ref, a_ff, a_cable)
+                                      for k in range(self.N + 1)])
         self._net_diag(load_pos, load_quat, p_des)
 
     def _detached_reference(self, i):
