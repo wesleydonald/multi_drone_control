@@ -238,7 +238,17 @@ def _make_quat_sequence_continuous(q_list):
     return np.array(out)
 
 
-def _tilt_quat_from_accel(aT: np.ndarray, thrust_ratio: float):
+def _quat_mul_np(q1, q2):
+    """Hamilton product of two numpy quaternions [w, x, y, z]."""
+    w1, x1, y1, z1 = q1
+    w2, x2, y2, z2 = q2
+    return np.array([w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+                     w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+                     w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+                     w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2])
+
+
+def _tilt_quat_from_accel(aT: np.ndarray, thrust_ratio: float, heading: float = 0.0):
     """Map a required specific-thrust-acceleration vector (world frame) to a
     (throttle, quaternion) feedforward for the tracker.
 
@@ -246,19 +256,28 @@ def _tilt_quat_from_accel(aT: np.ndarray, thrust_ratio: float):
     (see dynamics.py), so ||aT|| = thrust_ratio*throttle and aT/||aT|| is the
     desired body-z axis. The minimal (yaw-free) tilt quaternion aligning body-z
     to a unit vector a=(ax,ay,az) is normalize([1+az, -ay, ax, 0]).
+
+    `heading` is the yaw the drone should HOLD (rad, world frame). It is applied
+    as a rotation about BODY z after the tilt (q_tilt (x) q_z), which leaves the
+    thrust axis exactly on aT and only turns the airframe about it. Left at 0 the
+    reference is the bare yaw-free tilt -- i.e. a commanded heading of world +x,
+    which makes any drone not physically placed facing +x spin to it during
+    takeoff (the yaw term carries the largest attitude weight in the cost, 5.0
+    against 0.5 for roll/pitch), so pass the drone's own resting heading.
     """
     nrm = float(np.linalg.norm(aT))
+    q_head = np.array([np.cos(0.5 * heading), 0.0, 0.0, np.sin(0.5 * heading)])
     if nrm < 1e-3:                       # slack cable / freefall: hover, level
-        return 9.81 / thrust_ratio, np.array([1.0, 0.0, 0.0, 0.0])
+        return 9.81 / thrust_ratio, q_head
     throttle = float(np.clip(nrm / thrust_ratio, 0.05, 0.6))
     ax, ay, az = aT / nrm
-    q = np.array([1.0 + az, -ay, ax, 0.0])
-    return throttle, _normalize(q)
+    q = _normalize(np.array([1.0 + az, -ay, ax, 0.0]))
+    return throttle, _normalize(_quat_mul_np(q, q_head))
 
 
 def set_planner_reference(ocp_solver, ref_pos: np.ndarray, ref_vel: np.ndarray,
                           ref_acc: np.ndarray, N_horizon: int, est_params=None,
-                          ref_cable: np.ndarray = None):
+                          ref_cable: np.ndarray = None, heading: float = 0.0):
     """Set the MPC reference from an external planner trajectory.
 
     ref_pos / ref_vel / ref_acc are (N_horizon+1, 3) world-frame nodes (the load
@@ -271,6 +290,8 @@ def set_planner_reference(ocp_solver, ref_pos: np.ndarray, ref_vel: np.ndarray,
     ref_cable is the (N_horizon+1, 3) world-frame cable tension acceleration
     a_cable = t_i s_i / m_i. It is fed into the model parameters (not the cost) so
     the prediction accounts for the cable pull. Defaults to zero (cable-blind).
+
+    heading is the yaw (rad) the drone should hold; see _tilt_quat_from_accel.
     """
     dyn_par = np.array(est_params, dtype=float)
     thrust_ratio = float(dyn_par[0])
@@ -281,7 +302,7 @@ def set_planner_reference(ocp_solver, ref_pos: np.ndarray, ref_vel: np.ndarray,
     throttles, qrefs = [], []
     for j in range(N_horizon + 1):
         thr, q = _tilt_quat_from_accel(np.asarray(ref_acc[j], dtype=float),
-                                       thrust_ratio)
+                                       thrust_ratio, heading)
         throttles.append(thr)
         qrefs.append(q)
     qrefs = _make_quat_sequence_continuous(qrefs)

@@ -50,7 +50,7 @@ def _rod_body(idx, radius, mass, L, cx, cy, cz, pitch, yaw):
         </visual>"""
 
 
-def tether_block(idx, drone, attach, cable_len, radius=0.004, mass=0.001,
+def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
                  damping=0.1, detachable=False):
     """One rigid tether (payload bottom -> drone top). Both ends are ball joints (a
     two-force rigid link: the paper model), so the drone's ATTITUDE is decoupled from
@@ -158,28 +158,58 @@ def detachable_joint_block(idx):
       </plugin>"""
 
 
-def build(n, cable_len, elev_deg, attach_radius, attach_z, payload_z,
-          detachable=False):
+def nominal_placement(n, cable_len, elev_deg, attach_radius, attach_z, payload_z):
+    """The default world-aligned layout: payload at the origin with zero yaw, drone
+    i out along attach azimuth 2*pi*i/n at elev_deg, every drone facing world +x.
+
+    Returned in the same form generate_random_world.py builds, so both feed the
+    identical build_world():
+        payload     (x, y, z, yaw)
+        attaches    [(x, y, z)] world-frame cable attach points
+        drones      [(x, y, z)] world-frame drone spawns
+        drone_yaws  [rad] per-drone spawn heading
+    """
     phi = math.radians(elev_deg)
     horiz = cable_len * math.cos(phi)
     vert = cable_len * math.sin(phi)
-    drones, attaches, includes = [], [], []
+    drones, attaches = [], []
     for i in range(n):
         th = 2.0 * math.pi * i / n
         ax = attach_radius * math.cos(th)
         ay = attach_radius * math.sin(th)
         az = payload_z + attach_z
-        dx = ax + horiz * math.cos(th)
-        dy = ay + horiz * math.sin(th)
-        dz = az + vert
         attaches.append((ax, ay, az))
-        drones.append((dx, dy, dz))
+        drones.append((ax + horiz * math.cos(th), ay + horiz * math.sin(th),
+                       az + vert))
+    return {'payload': (0.0, 0.0, payload_z, 0.0), 'attaches': attaches,
+            'drones': drones, 'drone_yaws': [0.0] * n}
+
+
+def build(n, cable_len, elev_deg, attach_radius, attach_z, payload_z,
+          detachable=False):
+    return build_world(n, nominal_placement(n, cable_len, elev_deg, attach_radius,
+                                            attach_z, payload_z),
+                       detachable=detachable)
+
+
+def build_world(n, placement, detachable=False):
+    """Emit the world SDF for an explicit placement (see nominal_placement). Every
+    tether is a rigid rod of exactly the spawn attach->drone distance, so a
+    placement that keeps that distance constant keeps the planner's single
+    cable_len valid."""
+    px, py, pz, pyaw = placement['payload']
+    attaches = placement['attaches']
+    drones = placement['drones']
+    drone_yaws = placement.get('drone_yaws', [0.0] * n)
+    includes = []
+    for i in range(n):
+        dx, dy, dz = drones[i]
         includes.append(f"""      <include>
         <uri>models/x3_drone{i}.sdf</uri>
         <name>x3_drone{i}</name>
-        <pose>{_fmt(dx)} {_fmt(dy)} {_fmt(dz)} 0 0 0</pose>
+        <pose>{_fmt(dx)} {_fmt(dy)} {_fmt(dz)} 0 0 {_fmt(drone_yaws[i])}</pose>
       </include>""")
-    tethers = "".join(tether_block(i, drones[i], attaches[i], cable_len,
+    tethers = "".join(tether_block(i, drones[i], attaches[i],
                                    detachable=detachable)
                       for i in range(n))
     # Per-drone DetachableJoint plugins (model-level), only when detachable.
@@ -251,7 +281,7 @@ def build(n, cable_len, elev_deg, attach_radius, attach_z, payload_z,
 
       <!-- ===== PAYLOAD ===== -->
       <model name="payload">
-        <pose>0 0 {payload_z} 0 0 0</pose>
+        <pose>{_fmt(px)} {_fmt(py)} {_fmt(pz)} 0 0 {_fmt(pyaw)}</pose>
         <link name="body">
           <gravity>1</gravity>
           <inertial><mass>0.4</mass>

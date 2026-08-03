@@ -1,0 +1,68 @@
+{
+  "seed": 1,
+  "n": 3,
+  "cable_len": 0.5,
+  "ground_start": true,
+  "detachable": true,
+  "payload": {
+    "x": -0.021975772028485017,
+    "y": 0.2532785421402656,
+    "z": 0.025,
+    "yaw_deg": -131.62887211953557
+  },
+  "drones": [
+    {
+      "index": 0,
+      "x": -0.47696411782910164,
+      "y": -0.09981243241152757,
+      "z": 0.1,
+      "attach_azimuth_deg": -131.62887211953557,
+      "spawn_azimuth_deg": -143.8754208325645,
+      "azimuth_jitter_deg": -12.246548713028927,
+      "rod_length_m": 0.5,
+      "heading_deg": -18.183216676054286
+    },
+    {
+      "index": 1,
+      "x": 0.5526339835266034,
+      "y": 0.20202306451705257,
+      "z": 0.1,
+      "attach_azimuth_deg": -11.628872119535583,
+      "spawn_azimuth_deg": -4.0492234833974265,
+      "azimuth_jitter_deg": 7.579648636138156,
+      "rod_length_m": 0.5,
+      "heading_deg": -146.21054876127545
+    },
+    {
+      "index": 2,
+      "x": -0.002000873550151938,
+      "y": 0.8246385123322115,
+      "z": 0.1,
+      "attach_azimuth_deg": 108.37112788046439,
+      "spawn_azimuth_deg": 84.78850170656472,
+      "azimuth_jitter_deg": -23.582626173899687,
+      "rod_length_m": 0.5,
+      "heading_deg": -24.203855554180794
+    }
+  ],
+  "prediction": {
+    "payload_yaw_deg": -131.62887211953557,
+    "formation_rotation_demanded_deg": 11.628872119535583,
+    "heading_unwind_deg": [
+      18.183216676054286,
+      146.21054876127545,
+      24.203855554180794
+    ],
+    "planner_slot_to_drone": [
+      1,
+      2,
+      0
+    ],
+    "correct_slot_to_drone": [
+      0,
+      1,
+      2
+    ],
+    "slot_mapping_wrong": true
+  }
+}
