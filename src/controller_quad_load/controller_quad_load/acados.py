@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.linalg
-from acados_template import AcadosOcp, AcadosOcpSolver, AcadosModel
+from acados_template import (AcadosOcp, AcadosOcpSolver, AcadosModel,
+                             AcadosSim, AcadosSimSolver)
 from .dynamics import QuadLoadDynamics
 import casadi as ca
 
@@ -148,6 +149,52 @@ def generate_ocp_controller(dynamics=None, generate=True, build=True):
         generate=generate, build=build)
 
     return ocp_solver
+
+
+def generate_sim_integrator(dt, generate=True, build=True):
+    """One-step integrator over the SAME quad_load model, for the parameter UKF.
+
+    The UKF propagates each sigma point through the real nonlinear dynamics (exactly as
+    controller_ukf does) and corrects against the mocap pose, so it needs a standalone
+    integrator rather than the OCP solver. Built from a fresh AcadosOcp so the model
+    expression is identical to the controller's -- same betaflight rate curve, same
+    drag, same a_cable parameter slot -- with no risk of the two drifting apart.
+
+    x  = [p(3), q(4), v(3), r(3), u_state(4)]                       -> 17
+    u  = u_dot(4)
+    p  = [thrust_ratio, drag_coeff_z, tau_rate, centre_rate_deg,
+          max_rate_deg, rate_expo, a_cable(3), q_ref(4)]            -> 13
+         (q_ref is a cost-only parameter, unused by the dynamics, but it is part of
+          model.p so it must still be supplied.)
+    """
+    quad_dynamics = QuadLoadDynamics()
+    dynamics_expr = quad_dynamics.quad_dynamics()
+
+    model = AcadosModel()
+    model.name = 'quad_load_dynamics_sim'
+    model.x = quad_dynamics.x
+    model.u = quad_dynamics.u_dot
+    p_qref = ca.MX.sym('p_qref', 4)
+    model.p = ca.vertcat(quad_dynamics.p_param, p_qref)
+    model.f_expl_expr = dynamics_expr(model.x, model.u, model.p[:9])
+    xdot = ca.MX.sym('xdot', model.x.size()[0])
+    model.xdot = xdot
+    model.f_impl_expr = model.f_expl_expr - xdot
+
+    sim = AcadosSim()
+    sim.model = model
+    sim.solver_options.T = float(dt)
+    # ERK4 with a single step: the UKF runs one control period per call and this is a
+    # smooth model, so extra stages buy accuracy the mocap noise floor hides while
+    # costing time we do not have (this is called 2*n+1 times per control cycle).
+    sim.solver_options.integrator_type = 'ERK'
+    sim.solver_options.num_stages = 4
+    sim.solver_options.num_steps = 1
+    sim.parameter_values = np.array([24.0, 0.5, 0.12, 100.0, 100.0, 0.5,
+                                     0.0, 0.0, 0.0,
+                                     1.0, 0.0, 0.0, 0.0])
+    return AcadosSimSolver(sim, json_file='quad_load_dynamics_sim.json',
+                           generate=generate, build=build)
 
 
 # ------------------------

@@ -121,6 +121,22 @@ class DissipativeController(LoadPlanner):
         self._net_land_z = float(p('net_land_z', 0.06).value)  # floor for the held target
         self._net_diag_ctr = 0
 
+        # AUTO HANDOVER (dissipative-only flight). Normally the network is entered only by a
+        # detach/attach event, so a run with neither never leaves the OCP -- the fleet flies
+        # centralized start to finish. With this on, the node hands over as soon as the OCP
+        # lift tops out and has settled, so the dissipative network alone holds the load and
+        # flies the trajectory for the rest of the flight, with the full fleet and no member
+        # ever leaving. Takeoff still belongs to the OCP: the pure network cannot break the
+        # load off the ground from the shallow creep handover (see the module docstring), and
+        # it is only verified stable from an airborne taut config.
+        # Off by default so every existing launch keeps its exact detach/attach behaviour.
+        self._auto_handover = bool(p('auto_network_handover', False).value)
+        # Seconds to hold at the top of the OCP lift before handing over. The network seeds
+        # from MEASURED drone positions, so handing over mid-climb seeds it with the climb
+        # transient still in the config and the hold starts off-equilibrium.
+        self._auto_handover_settle_s = float(p('auto_handover_settle_s', 1.5).value)
+        self._auto_handover_t = None           # settle timer, None until the lift tops out
+
         # detach command (physical drone id): hands the fleet to the network + releases.
         self.create_subscription(Int32, '/fleet/detach', self._fleet_detach_cb, 10)
         # Gazebo DetachableJoint release triggers (bridged to gz.msgs.Empty in launch).
@@ -158,8 +174,37 @@ class DissipativeController(LoadPlanner):
         network; otherwise the inherited OCP planner flies (creep -> lift -> hover)."""
         if self.phase == 'network':
             self._network_plan()
-        else:
-            super()._plan()
+            return
+        if self._auto_handover_due():
+            self.get_logger().info(
+                '[dissipative] auto handover: OCP lift complete and settled - the '
+                'dissipative network now flies the full fleet (no detach involved)')
+            self._enter_network_phase()
+            self._network_plan()
+            return
+        super()._plan()
+
+    def _auto_handover_due(self):
+        """True on the tick the OCP lift has topped out and held for the settle time.
+
+        Deliberately conservative: it waits for a genuine steady hover, and it never fires
+        during a descent/landing, because the network seeds from measured positions and a
+        seed taken mid-transient starts the hold off-equilibrium."""
+        if not self._auto_handover or self.phase != 'planner':
+            return False
+        if self.load_state is None or self.lift_z0 is None:
+            return False
+        if self.descending or self._landed or self._net_landing:
+            return False
+        if any(self.drone_pos[d] is None for d in range(self.n)):
+            return False
+        if self.lift_progress < (self.target_z - self.lift_z0) - 1e-6:
+            self._auto_handover_t = None       # still climbing; restart the settle timer
+            return False
+        if self._auto_handover_t is None:
+            self._auto_handover_t = 0.0
+        self._auto_handover_t += 1.0 / PLANNER_HZ
+        return self._auto_handover_t >= self._auto_handover_settle_s
 
     # ── detach: hand over to the dissipative network, then drop a drone ──────
     def _fleet_detach_cb(self, msg: Int32):

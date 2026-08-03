@@ -235,5 +235,6 @@ For the attach situation I am having a bit of trouble with the attachment point 
 
 
 
-Starting positions are hard coded?
-Thrust ratio linear based on battery voltage
+Thrust ratio linear based on battery voltage -> fixing now
+Starting positions are hard coded? <- needs fixing/why does yaw move around
+Solver failing for certain starting configurations in real life.
