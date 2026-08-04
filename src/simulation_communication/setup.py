@@ -32,6 +32,9 @@ setup(
             # independently of the controllers so RViz can come up first.
             'fleet_viz = simulation_communication.fleet_viz:main',
             'payload_betaflight_comm = simulation_communication.payload_betaflight_comm:main',
+            # Placeholder Telemetry so the RViz battery rows populate in sim, and
+            # the low-battery warning path can be exercised off-hardware (F7).
+            'sim_telemetry = simulation_communication.sim_telemetry:main',
         ],
     },
 )

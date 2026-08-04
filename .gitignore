@@ -23,3 +23,10 @@ __pycache__/
 **/*.pyc
 # Run logs
 logs/
+
+# Flight data (see general/THESIS_PLAN.md §4).
+#   results/         live runs -- large, untracked, backed up by tools/backup_results.sh
+#   results_archive/ curated datasets behind thesis figures -- TRACKED, never cleaned
+# Logs used to be written inside c_generated_code*/ (ignored, and deleted on every
+# acados rebuild). They now live in results/, which no build step ever touches.
+results/

@@ -22,7 +22,10 @@ setup(
     entry_points={
         'console_scripts': [
             'planner = controller_load_mpc.planner_node:main',
-            'dissipative = controller_load_mpc.dissipative_node:main',
+            # No 'dissipative' entry point here: the live dissipative controller is
+            # `ros2 run controller_dissipative dissipative`. An earlier version lived
+            # in this package, was superseded on 2026-07-22, and stayed launchable by
+            # mistake for months -- running it silently gave you the dead controller.
         ],
     },
 )

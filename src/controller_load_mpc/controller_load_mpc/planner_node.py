@@ -39,6 +39,8 @@ from .planner_solver import PlannerSolver
 from .params import PlannerConfig
 from .creep_controller import CreepController
 from .reference_builder import ReferenceBuilder
+from utility_objects.data_logger import run_log_dir, write_params, node_params
+from utility_objects.run_context import log_base_dir
 
 # Physical constants baked into the load-cable model (not ROS params). Geometry and
 # mode params (num_drones, cable_len, load_mass, ...) live in params.PlannerConfig.
@@ -50,6 +52,10 @@ from .reference_builder import ReferenceBuilder
 LOAD_INERTIA  = [1.67e-3, 1.67e-3, 3.33e-3]
 DRONE_MASS    = 0.6
 PLANNER_HZ    = 10.0
+
+# logs/<LOG_PKG>/<node>_<ts>/params.json -- the same tree the per-drone trackers log
+# into, so a run's planner configuration sits alongside its per-drone CSVs.
+LOG_PKG       = 'controller_quad_load'
 
 # Lift-ramp easing: shape the rate 0 -> lift_ramp_vel -> 0 rather than stepping,
 # since the velocity feedforward is passed straight through and a step there is
@@ -217,7 +223,32 @@ class LoadPlanner(Node):
             Path, '/payload/mpc_plan', 5)
 
         self.create_timer(1.0 / PLANNER_HZ, self._plan)
+        # Record the run's configuration. Written here AND re-written at the end of a
+        # subclass's __init__ (see _dump_run_params), so the file always reflects the
+        # full parameter set of whichever node actually flew.
+        self._run_log_dir = None
+        self._dump_run_params()
         self.get_logger().info('[planner] ready, waiting for mocap...')
+
+    def _dump_run_params(self):
+        """Write logs/<pkg>/<node>_<ts>/params.json with every declared parameter, so a
+        run says what it was configured with instead of having to be reverse-engineered
+        from the flown trajectory. Safe to call more than once -- the directory is made
+        on the first call and the file is overwritten after that, which is how a
+        subclass folds in the parameters it declares after super().__init__()."""
+        try:
+            if self._run_log_dir is None:
+                # Absolute results root (see utility_objects.run_context) so the
+                # planner's params.json sits beside the trackers' CSVs instead of
+                # wherever the launch happened to be started from.
+                self._run_log_dir = run_log_dir(LOG_PKG, self.get_name(),
+                                                base_dir=log_base_dir())
+            write_params(self._run_log_dir, node_params(self, {
+                'node': self.get_name(), 'planner_hz': PLANNER_HZ,
+                'num_drones': self.n, 'horizon_N': self.N, 'node_dt': self.dt,
+                'phase_at_start': self.phase}))
+        except Exception as e:                      # never break the flight for a log
+            self.get_logger().warn(f'[planner] could not write params.json: {e}')
 
     # Mocap callbacks
     def _payload_cb(self, msg: MotionCaptureState):
@@ -509,36 +540,60 @@ class LoadPlanner(Node):
             reseed=self.solver.last_X is None)
         self.solver.last_X = X          # None on a failed solve -> next tick reseeds
 
-    def _publish_load_desired(self):
+    def _publish_load_desired(self, target=None):
         """Publish the desired LOAD position [x, y, z]: the captured hover xy and
         the ramped lift target. Before handover (lift_z0 unset) the load isn't
-        being lifted, so the desired height is just its current height."""
+        being lifted, so the desired height is just its current height.
+
+        `target` overrides the computed desired position, for a subclass whose flight
+        phase owns a different one (the dissipative network's p_des) -- otherwise the
+        published desired silently disagrees with what is actually being commanded,
+        which is exactly what the plot_run.py error analysis reads."""
         if self.hover_xy is None:
             return
-        if self.lift_z0 is not None:
-            z_des = min(self.target_z, self.lift_z0 + self.lift_progress)
+        if target is not None:
+            x0, y0, z_des = (float(target[0]), float(target[1]), float(target[2]))
         else:
-            z_des = float(self.load_state[2])
-        dx, dy, vx, vy = self.traj.offset_at(self.traj_t)
-        x0 = float(self.hover_xy[0] + dx)
-        y0 = float(self.hover_xy[1] + dy)
+            if self.lift_z0 is not None:
+                z_des = min(self.target_z, self.lift_z0 + self.lift_progress)
+            else:
+                z_des = float(self.load_state[2])
+            dx, dy, _, _ = self.traj.offset_at(self.traj_t)
+            x0 = float(self.hover_xy[0] + dx)
+            y0 = float(self.hover_xy[1] + dy)
         msg = Float64MultiArray()
         msg.data = [x0, y0, float(z_des)]
         self.load_ref_pub.publish(msg)
 
-        # Horizon path for RViz. Extrapolated the same way the drone references
-        # are: constant lateral velocity from the trajectory and the current lift
-        # rate, held over N+1 nodes.
+        # Horizon path for RViz: where the load is heading over the next N+1 nodes.
+        #
+        # ANCHORED ON THE MEASURED LOAD, like each drone's /drone_N/mpc_plan (whose
+        # node 0 is the pinned measurement), so the path visibly emanates from the
+        # payload instead of floating at the desired point. The tracking error is NOT
+        # lost by this -- it is the gap between /payload/desired_position and the
+        # measured load, which is what plot_run.py overlays.
+        #
+        # The lateral shape comes from evaluating the TRAJECTORY at traj_t + dt*k, as
+        # reference_builder.yref_at does. It used to extrapolate along the current
+        # velocity, which draws a straight tangent line -- so a circle rendered as a
+        # line shooting off the path (0.56 m off it by the end of a 2 s horizon at
+        # traj_speed 0.4, radius 0.5).
         path = Path()
         path.header.frame_id = 'map'
         path.header.stamp = self.get_clock().now().to_msg()
         z_cap = self.target_z if self.lift_z0 is not None else z_des
+        p_now = self.load_state[0:3]
+        dx0, dy0, _, _ = self.traj.offset_at(self.traj_t)
         for k in range(self.N + 1):
+            kx, ky, _, _ = self.traj.offset_at(self.traj_t + self.dt * k)
             ps = PoseStamped()
             ps.header = path.header
-            ps.pose.position.x = x0 + vx * self.dt * k
-            ps.pose.position.y = y0 + vy * self.dt * k
-            ps.pose.position.z = min(z_cap, z_des + self._lift_vel * self.dt * k)
+            ps.pose.position.x = float(p_now[0]) + (kx - dx0)
+            ps.pose.position.y = float(p_now[1]) + (ky - dy0)
+            # z still shows the commanded climb/descent, capped at the target, but
+            # measured from where the load actually is.
+            ps.pose.position.z = min(z_cap,
+                                     float(p_now[2]) + self._lift_vel * self.dt * k)
             ps.pose.orientation.w = 1.0
             path.poses.append(ps)
         self.load_plan_pub.publish(path)

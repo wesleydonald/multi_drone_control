@@ -86,6 +86,16 @@ def _args():
         DeclareLaunchArgument('traj_radius', default_value='0.5'),
         # dissipative network tuning (see DissipativeParams; defaults are the tuned
         # rigid-short values). Exposed so a different geometry can be retuned live.
+        # Reference-shaping for the NETWORK phase (see dissipative_node).
+        #   net_horizon_preview: carry the load trajectory's future displacement along
+        #     the published horizon instead of repeating node 0. ON by default -- logged
+        #     A/B: payload lag 3.11 s -> 1.11 s, mean error 0.172 -> 0.081 m.
+        #   net_traj_lean: tilt the reference cone onto g_eff = g - a_traj so the
+        #     formation leads the load into the maneuver (the OCP's flatness relation).
+        #     OFF by default: unvalidated, mini_plant cannot reproduce the radius
+        #     deficit it targets. Fly it as an A/B against the logs.
+        DeclareLaunchArgument('net_horizon_preview', default_value='true'),
+        DeclareLaunchArgument('net_traj_lean', default_value='false'),
         DeclareLaunchArgument('diss_k_pay', default_value='40.0'),
         DeclareLaunchArgument('diss_k_anchor', default_value='40.0'),
         DeclareLaunchArgument('diss_c', default_value='6.0'),
@@ -196,6 +206,8 @@ def launch_setup(context, *args, **kwargs):
                      'traj_speed': f('traj_speed'),
                      'traj_distance': f('traj_distance'),
                      'traj_radius': f('traj_radius'),
+                     'net_horizon_preview': b('net_horizon_preview'),
+                     'net_traj_lean': b('net_traj_lean'),
                      'diss_k_pay': f('diss_k_pay'),
                      'diss_k_anchor': f('diss_k_anchor'),
                      'diss_c': f('diss_c'),

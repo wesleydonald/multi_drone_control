@@ -29,8 +29,12 @@ import fcntl
 # taken inside __init__ rather than here: an import-time exclusive lock on the same
 # file controller_mpc locks means merely importing both modules into one process
 # deadlocks, which is a trap for any test or tool that loads both.
-ACADOS_DIR = '/home/wesley/multi_drone_control/c_generated_code_quad_load'
-os.makedirs(ACADOS_DIR, exist_ok=True)
+# Resolved from the workspace root (or MDC_ACADOS_ROOT), not a literal path, so
+# the repo is not pinned to one machine's home directory. Must match the
+# directory controller_mpc uses -- they share the generated solver.
+from utility_objects.run_context import acados_dir                 # noqa: E402
+
+ACADOS_DIR = acados_dir('quad_load')
 os.chdir(ACADOS_DIR)
 
 import signal                                                    # noqa: E402

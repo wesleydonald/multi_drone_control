@@ -1,1 +1,0 @@
-step,timestamp,u0,u1,u2,u3,u0_rate,u1_rate,u2_rate,u3_rate,pose_x,pose_y,pose_z,pose_qw,pose_qx,pose_qy,pose_qz,est_pose_x,est_pose_y,est_pose_z,traj_x_ref,traj_y_ref,traj_z_ref

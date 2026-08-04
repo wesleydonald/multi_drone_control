@@ -87,6 +87,26 @@ class CallbackManagerMulti:
 
     def handle_arming_service(self, request, response):
         if request.arm:
+            # Optional pre-arm interlock (finding F3). A node may define
+            # `safety_preflight_block()` returning a reason string to refuse arming,
+            # or None to allow it. Nodes that do not define it are unaffected, so
+            # this changes nothing for any existing controller.
+            block = None
+            hook = getattr(self.node, 'safety_preflight_block', None)
+            if callable(hook):
+                try:
+                    block = hook()
+                except Exception as e:                  # never let a check wedge arming
+                    self.node.get_logger().warn(
+                        f"[Drone {self.drone_id}] preflight check errored: {e}")
+            if block:
+                response.success = False
+                response.message = f"Drone {self.drone_id}: arming blocked — {block}"
+                self.node.get_logger().error(
+                    f"[Drone {self.drone_id}] ARMING BLOCKED: {block}")
+                self.publish_arming_state()
+                return response
+
             if self.node.current_pose is not None:
                 self.node.armed = True
                 response.success = True

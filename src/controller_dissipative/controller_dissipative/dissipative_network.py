@@ -293,7 +293,40 @@ class DissipativeNetwork:
         return quat_to_rot_np(load_quat)
 
     # ── network evolution ──────────────────────────────────────────────────
-    def step(self, load_pos, load_quat, load_vel, p_des_load, dt):
+    def _lean(self, load_accel):
+        """(R_lean, up_eff, |g_eff|) for a load commanded to accelerate at load_accel.
+
+        A load accelerating at a must have its cables counter an EFFECTIVE gravity
+        g_eff = g - a, so the whole reference cone tilts onto it and the tension scales
+        with |g_eff|. This is the flatness relation the OCP planner already uses
+        (reference_builder.yref_at); without it the network builds a cone that is always
+        symmetric about the VERTICAL through p_des, whose net horizontal pull on the load
+        is zero -- so the load can only accelerate by first falling behind far enough for
+        the geometry error to supply the force. On a circle that shows up as cutting the
+        corner (measured -18.5% radius at traj_speed 0.4, r 0.5).
+
+        load_accel None or zero returns (I, +z, g): every existing hover/detach/attach
+        path is bit-for-bit unchanged."""
+        if load_accel is None:
+            return np.eye(3), np.array([0.0, 0.0, 1.0]), self.g
+        a = np.asarray(load_accel, float)
+        if float(np.linalg.norm(a)) < 1e-9:
+            return np.eye(3), np.array([0.0, 0.0, 1.0]), self.g
+        up = np.array([a[0], a[1], self.g])          # -g_eff, the cone's new "up"
+        mag = float(np.linalg.norm(up))
+        up = up / mag
+        # Rodrigues rotation taking +z onto up (small tilt; atan(|a|/g)).
+        z = np.array([0.0, 0.0, 1.0])
+        v = np.cross(z, up)
+        s = float(np.linalg.norm(v))
+        if s < 1e-9:
+            return np.eye(3), up, mag
+        c = float(np.dot(z, up))
+        vx = np.array([[0.0, -v[2], v[1]], [v[2], 0.0, -v[0]], [-v[1], v[0], 0.0]])
+        R_lean = np.eye(3) + vx + vx @ vx * ((1.0 - c) / (s * s))
+        return R_lean, up, mag
+
+    def step(self, load_pos, load_quat, load_vel, p_des_load, dt, load_accel=None):
         """Advance the network one control tick of length dt (integrated in substeps).
         The payload node is pinned to p_des_load and the anchor to the axis above it, so
         the whole cone translates up as the lift target rises; robot nodes relax onto the
@@ -311,8 +344,11 @@ class DissipativeNetwork:
             if self.attached[i] and self._handout_rate[i] > 0.0:
                 self.handout[i] = min(1.0, self.handout[i] + self._handout_rate[i] * dt)
 
+        # Tilt the whole cone onto effective gravity, so the formation LEADS the load
+        # by exactly the geometry the commanded acceleration needs (see _lean).
+        R_lean, _up_eff, _g_eff = self._lean(load_accel)
         payload = p_des
-        anchor = p_des + np.array([0.0, 0.0, self._anchor_h])
+        anchor = p_des + R_lean @ np.array([0.0, 0.0, self._anchor_h])
         # per-slot outward cone target (the force-free equilibrium of the springs).
         azi = [self._azimuth(i, R) for i in range(self.n)]
         # ring rest for the CURRENTLY-attached RING fleet (central lifters excluded), eased by
@@ -345,7 +381,7 @@ class DissipativeNetwork:
             for i in att:
                 cos_i, sin_i = self._handout_geom(i)
                 d = np.array([azi[i][0] * cos_i, azi[i][1] * cos_i, sin_i])
-                slot[i] = payload + self.cable_len * d
+                slot[i] = payload + self.cable_len * (R_lean @ d)
         elif self.p.k_slot > 0.0 and m >= 1:
             # WEIGHTED even azimuth slots. Each ring member occupies an angular width
             # proportional to its hand-out weight, so a just-welded newcomer (handout~0) takes
@@ -375,7 +411,7 @@ class DissipativeNetwork:
                     th = ref + 2.0 * np.pi * frac[r]
                     cos_i, sin_i = self._handout_geom(i)   # =cos_e/sin_e unless handing out
                     d = np.array([cos_i * np.cos(th), cos_i * np.sin(th), sin_i])
-                    slot[i] = payload + self.cable_len * d
+                    slot[i] = payload + self.cable_len * (R_lean @ d)
 
         h = dt / max(self.p.substeps, 1)
         for _ in range(max(self.p.substeps, 1)):
@@ -392,7 +428,8 @@ class DissipativeNetwork:
                     # (rest 0 to the point one cable_len straight up). No cone/ring/slot springs,
                     # so it hovers over the centre and adds pure vertical lift -- it cannot be
                     # pulled to a side azimuth and lever the load over.
-                    v_target = payload + np.array([0.0, 0.0, self.cable_len_i[i]])
+                    v_target = payload + R_lean @ np.array(
+                        [0.0, 0.0, self.cable_len_i[i]])
                     f += self._spring(qi, v_target, self.p.k_anchor, 0.0)
                     f += -self.p.c * self.qd[i] * 2.0
                     acc[i] = f / self.p.node_mass
@@ -403,7 +440,8 @@ class DissipativeNetwork:
                 # lifter), easing to the design rim (height _anchor_h, rest _cone_r) at
                 # handout=1. Equals the fixed anchor/_cone_r for a full ring member.
                 cos_i, sin_i = self._handout_geom(i)
-                anchor_i = payload + np.array([0.0, 0.0, self.cable_len * sin_i])
+                anchor_i = payload + R_lean @ np.array(
+                    [0.0, 0.0, self.cable_len * sin_i])
                 f += self._spring(qi, anchor_i, self.p.k_anchor, self.cable_len * cos_i)
                 # spring to the phased even-azimuth slot (rest 0), pinning absolute azimuth.
                 # Scaled by handout so a just-welded newcomer feels no side pull (it is
@@ -512,7 +550,7 @@ class DissipativeNetwork:
         return {i: float(T[c]) for c, i in enumerate(idx)}
 
     # ── reference extraction ────────────────────────────────────────────────
-    def reference(self, i, load_quat, p_des_load, taut_gate=1.0):
+    def reference(self, i, load_quat, p_des_load, taut_gate=1.0, load_accel=None):
         """Per-drone reference (p_ref, v_ref, a_ff, a_cable), each a length-3 numpy
         array -- the tuple the wire-format publisher expects.
 
@@ -527,6 +565,13 @@ class DissipativeNetwork:
         a_ff = (0,0,g) - a_cable is the loaded-hover specific thrust (outward, > g)."""
         p_des = np.asarray(p_des_load, float)
         v_ref = self.qd[i].copy()
+        # Effective gravity for a load commanded to accelerate (see _lean). a_des is
+        # also added to every drone's thrust feedforward: the whole formation
+        # translates with the load, so it must accelerate with it too. All three
+        # reduce exactly to the old expressions when load_accel is None/zero.
+        _R, up_eff, g_eff = self._lean(load_accel)
+        a_des = (np.zeros(3) if load_accel is None
+                 else np.asarray(load_accel, float))
 
         if self.p.balanced_tensions:
             # UNEQUAL force sharing: reference and cable frame are built on the node's OWN
@@ -536,10 +581,10 @@ class DissipativeNetwork:
             R = self._frame_rot(load_quat)
             a_i, _, u = self._attach_frame(i, R, p_des)
             p_ref = a_i + self.cable_len_i[i] * u
-            t_i = self._solve_tensions(R, p_des).get(
+            t_i = self._solve_tensions(R, p_des, load_accel).get(
                 i, self.load_mass * self.g / max(self.n_attached(), 1))
             a_cable = taut_gate * (t_i / self.drone_mass) * (-u)
-            a_ff = np.array([0.0, 0.0, self.g]) - a_cable
+            a_ff = np.array([0.0, 0.0, self.g]) + a_des - a_cable
             return p_ref, v_ref, a_ff, a_cable
 
         u = self.q[i] - p_des
@@ -548,20 +593,57 @@ class DissipativeNetwork:
         # a central lifter always references straight up over the load centre (elevation 90deg),
         # so its cable feed-forward is purely vertical -- no inward/side pull to tilt the load.
         if self.central[i]:
-            u = np.array([0.0, 0.0, 1.0])
+            u = up_eff
         p_ref = p_des + self.cable_len_i[i] * u
         # tension from the node elevation: t = m_load g / (n' sin phi), phi = asin(u_z).
         # n' is the TRUE attached count (not eased): the survivors must pick up the
         # departed drone's load share IMMEDIATELY or the load sags. Only the ring-rest
         # REPOSITIONING is eased (see step()); the load-bearing feedforward is not.
-        sin_phi = float(np.clip(u[2], 0.05, 1.0))
+        sin_phi = float(np.clip(float(u @ up_eff), 0.05, 1.0))
         n_att = max(self.n_attached(), 1)
-        t_i = self.load_mass * self.g / (n_att * sin_phi)
+        t_i = self.load_mass * g_eff / (n_att * sin_phi)
         # cable pulls the drone toward the payload (inward, down) = along -u, gated by
         # how taut the real rod measures right now.
         a_cable = taut_gate * (t_i / self.drone_mass) * (-u)
-        a_ff = np.array([0.0, 0.0, self.g]) - a_cable
+        a_ff = np.array([0.0, 0.0, self.g]) + a_des - a_cable
         return p_ref, v_ref, a_ff, a_cable
+
+    def horizon_references(self, load_quat, p_des_seq, dt, taut_gates=None,
+                           load_accel_seq=None):
+        """Per-node references over a whole horizon: [drone][node] -> (p, v, a_ff, a_c).
+
+        Rolls a COPY of the network forward along the supplied future load targets
+        (p_des_seq[k] is the target at horizon node k, k=0 being now) and reads the
+        references off each predicted state. Node 0 is the live state -- the caller has
+        already step()ed it for this tick -- so only k>=1 are predicted.
+
+        This replaces repeating node 0 across the horizon. That repeat is exact only
+        while the formation's geometry relative to the load is constant; on a curved
+        path it is not, because the virtual nodes trail the moving cone and that trailing
+        direction rotates with the velocity. Measured on a circle at traj_speed 0.6:
+        a_cable swings by 68% of its own magnitude over one 2 s horizon, and the drone's
+        offset from the load drifts 0.35 m -- so a repeated node 0 hands the tracker a
+        prediction that is badly wrong by the end of its lookahead.
+
+        The network state is restored before returning, so this is side-effect free and
+        the caller's live q/qd/handout are untouched. With a constant p_des_seq (hover,
+        LAND) every node is identical and the result matches the old repeat exactly.
+        """
+        q0, qd0, ho0 = self.q.copy(), self.qd.copy(), self.handout.copy()
+        gates = taut_gates or [1.0] * self.n
+        out = [[] for _ in range(self.n)]
+        try:
+            for k, p_des in enumerate(p_des_seq):
+                a_k = None if load_accel_seq is None else load_accel_seq[k]
+                if k > 0:
+                    # load_pos is unused by step(); the loop closes through p_des.
+                    self.step(p_des, load_quat, np.zeros(3), p_des, dt, load_accel=a_k)
+                for i in range(self.n):
+                    out[i].append(self.reference(i, load_quat, p_des,
+                                                 taut_gate=gates[i], load_accel=a_k))
+        finally:
+            self.q, self.qd, self.handout = q0, qd0, ho0
+        return out
 
     def fly_away_reference(self, i, clearance=0.6):
         """Reference for a just-DETACHED drone: rise straight up from its frozen node

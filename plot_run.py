@@ -31,8 +31,18 @@ matplotlib.use("Agg")  # switched to a GUI backend below if --show
 import matplotlib.pyplot as plt
 
 _REPO = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_LOGDIR = os.path.join(
-    _REPO, "c_generated_code_quad_load", "logs", "controller_quad_load")
+
+# Log location moved out of the acados build directory on 2026-08-04 (it was
+# being deleted by solver rebuilds -- see results/README.md). Search the new
+# location first, then the migrated legacy copy, then the old build path, so
+# this keeps working on runs from either side of the move.
+_LOGDIR_CANDIDATES = [
+    os.path.join(_REPO, "results", "logs", "controller_quad_load"),
+    os.path.join(_REPO, "results", "legacy", "controller_quad_load"),
+    os.path.join(_REPO, "c_generated_code_quad_load", "logs", "controller_quad_load"),
+]
+DEFAULT_LOGDIR = next((p for p in _LOGDIR_CANDIDATES if os.path.isdir(p)),
+                      _LOGDIR_CANDIDATES[0])
 DEFAULT_OUTDIR = os.path.join(_REPO, "images")
 
 DIR_RE = re.compile(r"^(?P<traj>.+)_drone(?P<id>\d+)_(?P<ts>\d{8}_\d{6})$")
