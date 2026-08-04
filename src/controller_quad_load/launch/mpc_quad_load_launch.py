@@ -236,6 +236,10 @@ def _args():
         # rotates about the payload). circle/fig_8/spin use traj_radius; line_x uses
         # traj_distance; all use traj_speed. Keep traj_speed slow -- lateral accel
         # is fed forward via the flatness cable ref but tracking still lags at speed.
+        # Experiment T1 (finding F10): terminal cost tracks ref_vel instead
+        # of commanding a stop at the end of the horizon. Default false =
+        # historical behaviour, so this only changes a run you asked it to.
+        DeclareLaunchArgument('terminal_vel_ref', default_value='false'),
         DeclareLaunchArgument('load_traj', default_value='hover'),
         DeclareLaunchArgument('traj_speed', default_value='0.6'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
@@ -283,6 +287,7 @@ def launch_setup(context, *args, **kwargs):
             package='controller_quad_load', executable='controller',
             name=f'controller_{i}',
             parameters=[{'drone_id': i,
+                         'terminal_vel_ref': b('terminal_vel_ref'),
                          'cable_ff_scale': f('cable_ff_scale'),
                          'attitude_ff': b('attitude_ff'),
                          'cable_source': LaunchConfiguration('cable_source'),

@@ -89,6 +89,10 @@ def _args():
         DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         DeclareLaunchArgument('thrust_quad_c', default_value='88.6'),
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
+        # Experiment T1 (finding F10): terminal cost tracks ref_vel instead
+        # of commanding a stop at the end of the horizon. Default false =
+        # historical behaviour, so this only changes a run you asked it to.
+        DeclareLaunchArgument('terminal_vel_ref', default_value='false'),
         DeclareLaunchArgument('load_traj', default_value='hover'),
         DeclareLaunchArgument('traj_speed', default_value='0.6'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
@@ -123,10 +127,15 @@ def _args():
         # OFF-CENTRE weld point (world-frame metres) for the magnet tip -- see
         # attach_target_publisher. Non-zero => the newcomer welds at a ring point so
         # balanced-tension mode can reconfigure the fleet level. Must stay within the magnet
-        # manager's attach_radius (0.15). Ignored/harmless with the central-lifter default.
+        # manager's weld_radius (0.15). Ignored/harmless with the central-lifter default.
         DeclareLaunchArgument('attach_x_offset', default_value='0.0'),
         DeclareLaunchArgument('attach_y_offset', default_value='0.0'),
-        DeclareLaunchArgument('attach_radius', default_value='0.15'),
+        # NB this is the magnet's WELD-PROXIMITY threshold (how close the tip must
+        # get before the joint is created) -- NOT the payload's attach-ring radius,
+        # which is 0.08 and comes from params.py ATTACH_RADIUS. They were both called
+        # 'attach_radius' and the collision has caused real confusion before, so this
+        # one is now weld_radius.
+        DeclareLaunchArgument('weld_radius', default_value='0.15'),
         # how the welded newcomer joins the network. true = CENTRAL lifter (tilt-free, stable,
         # the WORKING config for a centre weld). false = RING member (fleet reconfigures) --
         # only stable together with diss_balanced_tensions:=true and an OFF-CENTRE weld.
@@ -210,6 +219,7 @@ def launch_setup(context, *args, **kwargs):
         nodes.append(Node(
             package='controller_quad_load', executable='controller', name=f'controller_{i}',
             parameters=[{'drone_id': i,
+                         'terminal_vel_ref': b('terminal_vel_ref'),
                          'cable_ff_scale': f('cable_ff_scale'),
                          'attitude_ff': b('attitude_ff'),
                          'cable_source': LaunchConfiguration('cable_source'),
@@ -397,7 +407,7 @@ def launch_setup(context, *args, **kwargs):
                      'twist_topic': '/attach_target/twist',
                      # OFF-CENTRE weld point (world frame): with diss_balanced_tensions the 4th
                      # welds at a ring point (moment arm != 0) so the fleet reconfigures level.
-                     # 0,0 = centre weld (central lifter). Keep within the manager attach_radius.
+                     # 0,0 = centre weld (central lifter). Keep within the manager weld_radius.
                      'x_offset': f('attach_x_offset'),
                      'y_offset': f('attach_y_offset'),
                      'z_offset': 0.05}],
@@ -483,7 +493,7 @@ def launch_setup(context, *args, **kwargs):
                      # tip-to-reference distance at weld ~0.10 m vertical (the reference is
                      # offset off-centre by object_x/y_offset, so the horizontal term drops
                      # out). 0.15 gives margin without welding mid-descent. Launch arg.
-                     'attach_radius': f('attach_radius'),
+                     'attach_radius': f('weld_radius'),   # magnet manager's threshold
                      'object_attached_topic': '/magnet/object_attached',
                      'command_backend': 'ros_topic',
                      'ros_attach_topic': '/payload/attach',

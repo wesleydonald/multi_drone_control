@@ -250,3 +250,43 @@ Solver failing for certain starting configurations in real life.
   matching in the load frame. See learning.txt (top).
 
 OPEN: dissipative-network trajectory tracking -> DISSIPATIVE_TRACKING_ISSUE.md
+
+
+
+Read these three first, in order, before doing anything:
+    1. general/CLAUDE.md        — orientation: package map, data flow, run commands,
+                                  traps, open problems, and the pre-commit gate
+    2. general/THESIS_PLAN.md   — the plan. §9 is what I want you to build now.
+    3. docs/design/fleet_safety.md — the failsafe policy and why it is what it is
+
+  State: all 13 audit findings (F1–F13) are closed. `./tools/gate.sh` is green —
+  5 stages: workspace · 43 unit tests · 25 module imports · world-geometry agreement ·
+  dissipative harness A–K. Run it before proposing any Gazebo run and before any commit.
+  `--quick` skips the slow last stage.
+
+  Task: Part 0 test infrastructure, THESIS_PLAN.md §9 (the W1–W2 block).
+    §9.1 tools/run_experiment.py   headless, sim-time gated, clean slate, manifest,
+                                   auto-metrics + auto-plot, fails loudly
+    §9.2 tools/metrics.py          every number in the thesis comes from here; one
+                                   function per metric, each unit-tested against a
+                                   synthetic signal with a known answer
+    §9.3 tools/sil_bench.py        HIGHEST-LEVERAGE ITEM — do this one first
+    §9.4 tools/plot_run.py, compare_runs.py, thesis_figures.py
+
+  The SIL bench has a hard acceptance test, stated in §9.3: it must REPRODUCE the
+  documented 2026-07-28 attach runaway (gap-centre weld, attach_elev_deg:=45 — drone 3's
+  error growing, |aCm| climbing past 15 m/s²). The existing verify_dissipative harness
+  drives a PD proxy and provably CANNOT reproduce it; the real tracker has no integrator,
+  caps cable feedforward at CABLE_ACCEL_CAP = 6.0, and has solver dynamics — those three
+  are the runaway mechanism. If the bench settles cleanly like the PD harness, it is not
+  good enough yet. Do not skip or soften this test; it is the whole justification for the
+  investment, and Part 3 is gated on it.
+
+
+ How I want you to work:
+  - Ask before building something the plan doesn't call for, and say so if you think the
+    plan is wrong — §9 was written before the code existed and F9 already had to change.
+  - Don't claim something works because a build passed. `colcon build` and `ast.parse`
+    both pass on a missing import that kills every node at launch; that has happened here.
+  - The offline harness has documented blind spots. When a change isn't covered by the
+    gate, say so plainly rather than implying it is verified.
