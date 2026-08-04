@@ -277,7 +277,8 @@ def _tilt_quat_from_accel(aT: np.ndarray, thrust_ratio: float, heading: float = 
 
 def set_planner_reference(ocp_solver, ref_pos: np.ndarray, ref_vel: np.ndarray,
                           ref_acc: np.ndarray, N_horizon: int, est_params=None,
-                          ref_cable: np.ndarray = None, heading: float = 0.0):
+                          ref_cable: np.ndarray = None, heading: float = 0.0,
+                          terminal_vel_ref: bool = False):
     """Set the MPC reference from an external planner trajectory.
 
     ref_pos / ref_vel / ref_acc are (N_horizon+1, 3) world-frame nodes (the load
@@ -292,6 +293,23 @@ def set_planner_reference(ocp_solver, ref_pos: np.ndarray, ref_vel: np.ndarray,
     the prediction accounts for the cable pull. Defaults to zero (cable-blind).
 
     heading is the yaw (rad) the drone should hold; see _tilt_quat_from_accel.
+
+    terminal_vel_ref selects what the TERMINAL cost asks of velocity -- this is
+    experiment T1 in general/THESIS_PLAN.md, and it defaults to the historical
+    behaviour so nothing changes until it has been measured.
+
+      False (default, historical): yref_N[3:6] stays ZERO. Every stage cost tracks
+          ref_vel[j], but the terminal stage asks for velocity 0 -- i.e. it tells
+          the drone to STOP at the end of every 2 s horizon while it is flying a
+          circle at 0.6 m/s. With W_e velocity weight 2.0 that is a standing
+          deceleration bias, and it is a leading suspect for the 0.589 s
+          tracker-stage lag documented in DISSIPATIVE_TRACKING_ISSUE.md.
+      True: yref_N[3:6] = ref_vel[N_horizon], making the terminal cost consistent
+          with the stage costs. The planner already publishes N+1 nodes, so the
+          value is available; it was simply never assigned.
+
+    For hover the two are identical (ref_vel is zero), so this only changes
+    behaviour on a moving trajectory -- which is exactly where it should be A/B'd.
     """
     dyn_par = np.array(est_params, dtype=float)
     thrust_ratio = float(dyn_par[0])
@@ -319,6 +337,8 @@ def set_planner_reference(ocp_solver, ref_pos: np.ndarray, ref_vel: np.ndarray,
 
     yref_N = np.zeros((16,), dtype=float)
     yref_N[0:3] = ref_pos[N_horizon]
+    if terminal_vel_ref:
+        yref_N[3:6] = ref_vel[N_horizon]     # experiment T1 -- see the docstring
     yref_N[11] = throttles[N_horizon]
     ocp_solver.set(N_horizon, "yref", yref_N)
     ocp_solver.set(N_horizon, "p", np.concatenate(

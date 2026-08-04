@@ -1,5 +1,5 @@
-# Introduction
-**Thesis project** (forked from Mitch's repo). This repository provides a complete framework for controlling multiple tethered UAVs within the UNSW Motion Capture system. It includes a simulator to support at-home development and features an efficient transfer pipeline for transitioning controllers from simulation to real-world deployment.
+# Robust Collective Quadcopter Payload Transport
+**Thesis project** (forked from Mitch's repo). This repository provides a complete framework for controlling multiple UAVs tethered to a payload within the UNSW Motion Capture system. It includes a simulator to support at-home development and features an efficient transfer pipeline for transitioning controllers from simulation to real-world deployment.
 
 ## What this project is about
 A fleet of quadcopters carries a payload together on cables. The goal is to let drones **attach to and detach from the payload mid-flight** — so one can drop out (say it fails, or runs low on battery) and the rest redistribute the load, and a fresh drone can fly in, hook on, and join the team, all without putting the payload down.
@@ -109,10 +109,9 @@ The packages that matter for this project:
 | `controller_quad_load` | Per-drone cable-aware MPC tracker (50 Hz) + the fleet manager. All the launch files live here. |
 | `controller_dissipative` | The dissipative spring-damper network — detach, attach and reconfiguration. Includes an offline verification harness. |
 | `controller_mpc_payload` | The approach MPC that flies the magnet drone in (from a collaborator's stack). |
-| `drone_magnet` | The attach chain: join planner, magnet manager, ELRS mux. |
-| `controller_ukf` | Single-drone UKF controller inherited from the upstream platform; the thrust-ratio UKF was ported from it. |
+| `drone_magnet` | Tejen's controller for the join planner, magnet manager, ELRS mux. |
 
-Both reference generators (the OCP planner and the dissipative network) publish the **same message format**, so the trackers don't care which one is driving. That's what makes it possible to A/B them on the same rig.
+Both reference generators (the OCP planner and the dissipative network) publish the **same message format**, so the trackers don't care which one is driving.
 
 Arm and takeoff from the RViz panel, or by topic — see `AA_Learnings.txt` for the raw commands.
 
@@ -135,7 +134,7 @@ ros2 launch controller_quad_load dissipative_launch.py num_drones:=4
 #   ARM -> TAKEOFF -> hit DETACH
 ```
 
-## Attach (a drone joins mid-flight — the thesis bit)
+## Attach (a drone joins mid-flight)
 ```bash
 cd simulation_assets && gz sim three_attach.sdf -v4 -r
 ros2 launch controller_quad_load rviz_quad_load_launch.py num_drones:=3 attach:=true

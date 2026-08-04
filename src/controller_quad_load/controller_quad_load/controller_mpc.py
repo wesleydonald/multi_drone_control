@@ -437,6 +437,22 @@ class Controller(Node):
                 Float64MultiArray, '/payload/desired_position',
                 self._payload_ref_cb, 5)
 
+        # ── Experiment T1: terminal velocity reference (finding F10) ──────
+        # `set_planner_reference` has never set yref_N[3:6], so the terminal cost
+        # asks for velocity ZERO at the end of every 2 s horizon while the stage
+        # costs track ref_vel -- a standing "stop" command on any moving
+        # trajectory, and a leading suspect for the 0.589 s tracker lag.
+        # Defaults FALSE (historical behaviour) so this changes nothing until it
+        # is measured; flip it to run the A/B:
+        #   ros2 launch ... mpc_quad_load_launch.py load_traj:=circle terminal_vel_ref:=true
+        self.declare_parameter('terminal_vel_ref', False)
+        self.terminal_vel_ref = bool(
+            self.get_parameter('terminal_vel_ref').value)
+        if self.terminal_vel_ref:
+            self.get_logger().warn(
+                f"[Drone {self.drone_id}] T1 ACTIVE: terminal velocity reference "
+                f"enabled (non-default) - this is an experiment, record it.")
+
         # ── Flight envelope (finding F3) ──────────────────────────────────
         # Any FAULT disarms this drone; the fleet manager already propagates an
         # unexpected disarm to everyone else via /drone_N/arming_state_feedback.
@@ -1066,7 +1082,8 @@ class Controller(Node):
             set_planner_reference(
                 self.ocp, self.planner_ref_pos, self.planner_ref_vel,
                 ref_acc, self.N, self.est_params,
-                ref_cable=ref_cable, heading=self._heading_datum)
+                ref_cable=ref_cable, heading=self._heading_datum,
+                terminal_vel_ref=self.terminal_vel_ref)
             # desired reference position now (node 0) for the log / plot
             self._current_ref_pos = np.asarray(self.planner_ref_pos[0], float)
 

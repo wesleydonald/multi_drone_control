@@ -26,7 +26,7 @@ QUICK=0
 FAILED=()
 step() { echo; echo "══ $* ══"; }
 
-step "1/4  workspace"
+step "1/5  workspace"
 if ./tools/clean_slate.sh --check-only 2>&1 | grep -q "WRONG WORKSPACE"; then
   echo "!! wrong workspace active — run: source install/setup.bash"
   FAILED+=("workspace")
@@ -34,30 +34,53 @@ else
   echo "   ok"
 fi
 
-step "2/4  unit tests"
+step "2/5  unit tests"
 if python3 -m pytest src/utility_objects/test/test_safety.py \
-                    src/controller_quad_load/test/test_rviz_config.py -q 2>&1 | tail -3; then
+                    src/controller_quad_load/test/test_rviz_config.py \
+                    src/controller_quad_load/test/test_planner_reference.py \
+                    src/controller_quad_load/test/test_config_tools.py -q 2>&1 | tail -3; then
   :
 else
   FAILED+=("pytest")
 fi
 
-step "3/4  import check (every console-script module)"
+step "3/5  import check (every console-script module)"
 if python3 tools/import_check.py 2>&1 | tail -3; then
   :
 else
   FAILED+=("imports")
 fi
 
+step "4/5  world geometry vs controller config"
+# A cable_len / attach_radius / load_mass mismatch makes every drone's tension
+# feedforward wrong, and presents as "the controller cannot fly" rather than as a
+# config bug. This project has lost a week to exactly that.
+GEO_BAD=0
+for pair in \
+  "simulation_assets/three_rigid_ground.sdf:mpc_quad_load_launch.py" \
+  "simulation_assets/four_rigid_ground.sdf:dissipative_launch.py" \
+  "simulation_assets/three_attach.sdf:three_attach_launch.py" ; do
+  world="${pair%%:*}"; launch="src/controller_quad_load/launch/${pair##*:}"
+  [ -f "$world" ] && [ -f "$launch" ] || continue
+  if ! python3 tools/check_geometry.py "$world" --launch "$launch" >/dev/null 2>&1; then
+    echo "!! geometry mismatch: $(basename "$world") vs $(basename "$launch")"
+    python3 tools/check_geometry.py "$world" --launch "$launch" 2>&1 | grep -E "MISMATCH|WARN"
+    GEO_BAD=1
+  else
+    echo "   ok   $(basename "$world")"
+  fi
+done
+[ "$GEO_BAD" -eq 0 ] || FAILED+=("geometry")
+
 if [ "$QUICK" -eq 0 ]; then
-  step "4/4  offline dissipative harness (tests A-K)"
+  step "5/5  offline dissipative harness (tests A-K)"
   if python3 -m controller_dissipative.verify_dissipative 2>&1 | tail -2; then
     :
   else
     FAILED+=("verify_dissipative")
   fi
 else
-  step "4/4  offline dissipative harness — SKIPPED (--quick)"
+  step "5/5  offline dissipative harness — SKIPPED (--quick)"
 fi
 
 echo

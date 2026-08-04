@@ -149,13 +149,36 @@ colcon build --symlink-install && source install/setup.bash
 #     controller_mpc_payload drone_magnet interfaces utility_objects simulation_communication
 ```
 
-### Offline gate — run this BEFORE any Gazebo test
+### Offline gate — run this BEFORE any Gazebo test, and before every commit
 
 ```bash
-python3 -m controller_dissipative.verify_dissipative     # tests A–K, nonzero exit on fail
+./tools/gate.sh              # all 5 stages, ~2 min
+./tools/gate.sh --quick      # skips stage 5 (the slow one)
 ```
 
-Saves an annotated PNG to `dissipative_verify/`. **Know its limits** (§8).
+Ordered cheapest-first so it fails fast. Every stage exists because something got
+through without it:
+
+| | stage | catches |
+|---|---|---|
+| 1 | workspace | a stale `~/thesis` shadowing this repo's `interfaces`/`utility_objects` |
+| 2 | unit tests | envelope checker, RViz config structure, planner reference, config tools |
+| 3 | **import check** (`tools/import_check.py`) | a missing import that kills a node at launch. `ast.parse` and `colcon build` **both pass** on that — only an actual import catches it |
+| 4 | world geometry (`tools/check_geometry.py`) | world SDF vs launch/`params.py` disagreement on `cable_len`/`attach_radius`/`attach_z`/`load_mass` — presents as "the controller can't fly", not as a config bug |
+| 5 | dissipative A–K | detach/attach correctness. Saves an annotated PNG to `dissipative_verify/`. **Know its limits** (§8) |
+
+Stage 4 only covers the three world/launch pairs listed in `gate.sh`. **Add new worlds
+there** or the check silently covers less than it appears to.
+
+Other config tools, not in the gate:
+
+```bash
+tools/param_diff.py --sim-vs-real     # what changes between sim and the rig, incl.
+                                      # args declared on ONE side only (silent node-default
+                                      # fallback — this is how the real dissipative launch
+                                      # ended up with no kT block at all)
+tools/check_geometry.py simulation_assets/<world>.sdf --launch <launch.py>
+```
 
 ### Simulation
 

@@ -9,7 +9,12 @@ the results onto itself, so the rest of the planner keeps reading plain self.<na
 
 # Defaults, overridable per world via ROS params. Must match the world SDF.
 N_DRONES      = 3
-CABLE_LEN     = 0.6
+CABLE_LEN     = 0.5            # matches every world in simulation_assets/ (rod
+                               # cylinder length). Was 0.6 — the cable length of
+                               # three_soft.sdf, a world that no longer exists — so
+                               # any node run WITHOUT a launch silently got a 20%
+                               # cable-length error. Verified by
+                               # tools/check_geometry.py, which is in the gate.
 ATTACH_RADIUS = 0.08
 ATTACH_Z      = 0.025          # attach height above load CoG, load frame
 LOAD_MASS     = 0.4
