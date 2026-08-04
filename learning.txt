@@ -1,4 +1,107 @@
 ################################################################################
+# SESSION 2026-08-03  --  REAL-WORLD TAKEOFF BUGS FIXED (branch: attach-week9)
+# (Supersedes nothing below; these are NEW findings against the real rig and the
+#  dissipative stack. The open dissipative tracking issue is written up in
+#  DISSIPATIVE_TRACKING_ISSUE.md -- start there for that thread.)
+################################################################################
+
+THE THREE REAL-WORLD SYMPTOMS THAT STARTED THIS -- ALL SOLVED
+  1. "MPC could not find a solution for certain starting configurations; moving
+     the drones around a bit fixed it. Never happened after takeoff."
+     ROOT CAUSE: geometry.azimuth_slot_assignment matched each drone to a ring
+     slot using WORLD azimuths, ignoring payload yaw. The slots ARE the attach
+     points rho_i, which rotate with the load. Past half a slot pitch (60 deg for
+     3 drones) every drone got paired with its NEIGHBOUR's attach point;
+     build_x_init then read that cable's direction from the wrong attach point, so
+     the implied cable length came out 0.59-0.64 m against a modelled 0.50 m -- a
+     20-28% stretch the rigid-cable model cannot represent, and the QP went
+     infeasible (acados status 4, ACADOS_MINSTEP). Needs BOTH a yawed payload and
+     a low cable elevation (drones on the ground), which is why it only ever bit
+     before takeoff and never in the air.
+     FIX: match in the LOAD frame (azimuth_slot_assignment now takes load_yaw).
+     EVIDENCE: 6 randomly-generated placements, 4 failed the first cold solve
+     before / 0 after, implied cable length exactly 0.50 m in all.
+
+  2. "For certain starting configurations the drones flew to predefined locations
+     -- the trajectory didn't factor in starting position/yaw."
+     ROOT CAUSE: two places hard-coded a world-aligned rig.
+       * reference_builder.q_ref_at returned IDENTITY, i.e. it commanded the
+         payload's yaw to 0 regardless of how the rig was placed.
+       * reference_builder.yref_at used _s_nom -- cable directions built from the
+         BODY-frame attach ring -- directly as a WORLD-frame reference. Its weight
+         (w_s=25) is the strongest formation term in the OCP cost.
+     FIX: latch the payload's measured yaw at the first solve (psi0) and express
+     both about it.
+     EVIDENCE: demanded formation rotation at takeoff went from up to 65 deg to
+     0.0 deg at every payload yaw (0/40/95/140/175).
+
+  3. "One takeoff had a drone do almost a 360 before looking good again."
+     ROOT CAUSE: acados._tilt_quat_from_accel returns a YAW-FREE tilt quaternion,
+     i.e. a commanded heading of world +x, and the yaw term carries the LARGEST
+     attitude weight in the tracker cost (5.0 vs 0.5 for roll/pitch). Any drone
+     not physically placed facing +x yaws all the way to 0 during takeoff; near
+     180 deg the sign-invariant attitude error is degenerate and it can go the
+     long way round.
+     FIX: latch each drone's resting heading while it sits armed and compose it
+     into q_ref (rotation about BODY z after the tilt, so the thrust axis is
+     unchanged).
+     EVIDENCE: commanded yaw rate 0.000 at every placement heading; net rotation
+     <= 3 deg vs up to 180 deg before.
+
+  WHY SIM NEVER CAUGHT ANY OF THESE: in Gazebo the payload and all drones spawn at
+  yaw 0, so psi0 = 0 and every one of the three bugs is the identity.
+
+ALSO FIXED THIS SESSION
+  * SIM CLOCK DOMAIN SPLIT (this invalidated earlier sim comparisons).
+    controller_mpc.Controller and main.CentralController both pinned
+    use_sim_time=False unconditionally -- correct on hardware (no /clock), wrong
+    in sim: the trackers ran at 50 Hz WALL while the planner ran at 10 Hz SIM, so
+    control updates per SIMULATED second equalled Gazebo's real-time factor, i.e.
+    a function of machine load. Two runs of the SAME trajectory at RTF 0.40 and
+    0.60 gave payload radius errors of -16% and -34%. Now both honour the launch's
+    use_sim_time (sim launches set true, real_* set false, ROS default is false).
+    LESSON: before comparing two sim runs, check they took the same wall-clock
+    time. If they didn't, the comparison is meaningless.
+
+  * params.json PER RUN. Every run now writes its full ROS parameter set next to
+    its logs (utility_objects.data_logger: run_log_dir / write_params /
+    node_params). Runs are self-identifying; a whole afternoon was previously lost
+    to not knowing which run had which configuration.
+      trackers -> c_generated_code_quad_load/logs/controller_quad_load/planner_drone<N>_<ts>/
+      planner  -> logs/controller_quad_load/dissipative_controller_<ts>/
+
+  * LAUNCH ARGS THAT WERE NEVER PLUMBED. net_horizon_preview / net_traj_lean were
+    node parameters but were not declared or passed in any launch file, so
+    "net_traj_lean:=true" was silently dropped and two A/B tests unknowingly
+    compared identical configurations. Now declared + passed in all four launches
+    that run the dissipative node. ALWAYS verify with `ros2 launch ... --show-args`.
+
+  * RVIZ PAYLOAD PATH. /payload/mpc_plan was (a) a straight tangent line -- 0.56 m
+    off a circular path by the end of the 2 s horizon, (b) anchored at the desired
+    point so it floated off the payload, and (c) in the network phase computed z
+    from the OCP lift schedule, which stops advancing at handover, so during a
+    network LAND it reported the load at hover height all the way to touchdown.
+    (c) also affected /payload/desired_position, which is what plot_run.py reads.
+
+  * RANDOM WORLD GENERATOR: simulation_assets/generate_random_world.py randomises
+    payload yaw + xy, per-drone heading and per-drone azimuth while keeping every
+    rod exactly cable_len. generate_rigid_world.py refactored to expose
+    build_world(n, placement) so both share the SDF scaffolding. This is what made
+    the three bugs above reproducible in sim.
+
+METHOD LESSONS (earned the hard way this session)
+  * CHECK THE MAGNITUDE BEFORE BUILDING THE FIX. The "lean" (tilting the cone onto
+    g_eff) was built to close an 18.5% radius deficit; the centripetal demand it
+    can supply is 0.037 m against a 0.155 m deficit -- it could never have worked,
+    and one minute of arithmetic would have shown that.
+  * AN OFFLINE HARNESS THAT CANNOT REPRODUCE THE SYMPTOM CANNOT VALIDATE THE CURE.
+    mini_plant shows a 1.6% radius deficit where Gazebo shows 18.5%; two fixes
+    were shipped on its evidence and both had to be walked back.
+  * BEWARE SOLVER STATE BETWEEN OFFLINE TRIALS. An early "24.5% of configurations
+    fail" result was pure contamination from acados' internal warm start leaking
+    between test cases; under a controlled test the effect was 0%.
+
+################################################################################
 # BRANCH: paper-implementation  --  WHAT WAS ACHIEVED
 # (This section SUPERSEDES the historical conclusions further down, especially
 #  any claim that the coupled OCP is "abandoned/unstable" or that the controller

@@ -55,148 +55,7 @@ from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-# per-drone colour: (rviz "r; g; b" for paths, urdf "r g b a" for the mesh).
-DRONE_COLOURS = [
-    ('31; 119; 180',  '0.12 0.47 0.71 0.9'),   # blue
-    ('255; 127; 14',  '1.00 0.50 0.05 0.9'),   # orange
-    ('44; 160; 44',   '0.17 0.63 0.17 0.9'),   # green
-    ('214; 39; 40',   '0.84 0.15 0.16 0.9'),   # red
-    ('148; 103; 189', '0.58 0.40 0.74 0.9'),   # purple
-]
-PAYLOAD_COLOUR = '255; 215; 0'    # gold
-
-
-def _path_display(name, topic, colour, width, enabled=True):
-    return f"""    - Class: rviz_default_plugins/Path
-      Name: {name}
-      Enabled: {str(enabled).lower()}
-      Topic:
-        Value: {topic}
-        Depth: 5
-        Durability Policy: Volatile
-        Reliability Policy: Reliable
-      Color: {colour}
-      Line Style: Lines
-      Line Width: {width}
-      Alpha: 1
-      Buffer Length: 1
-      Offset: {{X: 0, Y: 0, Z: 0}}
-      Pose Style: None"""
-
-
-def _robot_display(i, enabled=True):
-    return f"""    - Class: rviz_default_plugins/RobotModel
-      Name: Drone {i} airframe
-      Enabled: {str(enabled).lower()}
-      Description Source: Topic
-      Description Topic:
-        Value: /robot_description_{i}
-        Depth: 5
-        Durability Policy: Transient Local
-        Reliability Policy: Reliable
-      Description File: ""
-      TF Prefix: ""
-      Alpha: 1
-      Visual Enabled: true
-      Collision Enabled: false
-      Update Interval: 0"""
-
-
-def _build_config(n: int, show_actual: bool = False) -> str:
-    displays = ["""    - Class: rviz_default_plugins/Grid
-      Name: Grid
-      Enabled: true
-      Cell Size: 0.5
-      Plane Cell Count: 20
-      Color: 160; 160; 164
-      Alpha: 0.5
-      Line Style:
-        Line Width: 0.03
-        Value: Lines
-      Plane: XY
-      Normal Cell Count: 0
-      Offset: {X: 0, Y: 0, Z: 0}
-      Reference Frame: <Fixed Frame>""",
-                """    - Class: rviz_default_plugins/TF
-      Name: TF
-      Enabled: false
-      Show Names: true
-      Show Axes: true
-      Show Arrows: false
-      Marker Scale: 0.3
-      Update Interval: 0
-      Frame Timeout: 15"""]
-
-    # payload first so it draws under the drones
-    displays.append("""    - Class: rviz_default_plugins/Marker
-      Name: Payload box
-      Enabled: true
-      Topic:
-        Value: /payload/marker
-        Depth: 5
-        Durability Policy: Volatile
-        Reliability Policy: Reliable
-      Namespaces:
-        payload: true""")
-    displays.append(_path_display(
-        'Payload desired', '/payload/mpc_plan', PAYLOAD_COLOUR, 0.03))
-    displays.append(_path_display(
-        'Payload actual', '/payload/actual_path', '255; 255; 255', 0.015,
-        enabled=show_actual))
-
-    for i in range(n):
-        c = DRONE_COLOURS[i % len(DRONE_COLOURS)][0]
-        displays.append(_robot_display(i))
-        displays.append(_path_display(
-            f'Drone {i} MPC plan', f'/drone_{i}/mpc_plan', c, 0.02))
-        displays.append(_path_display(
-            f'Drone {i} actual', f'/drone_{i}/actual_path', c, 0.01,
-            enabled=show_actual))
-
-    body = "\n".join(displays)
-    return f"""Panels:
-  - Class: rviz_common/Displays
-    Name: Displays
-    Property Tree Widget:
-      Expanded: ~
-    Tree Height: 500
-  - Class: drone_visualisation/ArmPanel
-    Name: ArmPanel
-    ShowDetach: false
-    ShowAttach: false
-    NumDrones: {n}
-Visualization Manager:
-  Class: ""
-  Name: root
-  Global Options:
-    Fixed Frame: map
-    Background Color: 48; 48; 48
-    Frame Rate: 30
-  Displays:
-{body}
-  Tools:
-    - Class: rviz_default_plugins/MoveCamera
-    - Class: rviz_default_plugins/Select
-    - Class: rviz_default_plugins/FocusCamera
-  Views:
-    Current:
-      Class: rviz_default_plugins/Orbit
-      Name: Current View
-      Distance: 4
-      Focal Point: {{X: 0, Y: 0, Z: 0.5}}
-      Pitch: 0.4
-      Yaw: 0.8
-      Target Frame: <Fixed Frame>
-      Near Clip Distance: 0.01
-Window Geometry:
-  Height: 900
-  Width: 1400
-  Displays:
-    collapsed: false
-  ArmPanel:
-    collapsed: false
-"""
-
+from controller_quad_load.rviz_config import build_config, drone_mesh_colour
 
 def _args():
     return [
@@ -272,7 +131,7 @@ def launch_setup(context, *args, **kwargs):
         # ── RViz drone model on /robot_description_<i> ────────────────────────
         urdf = base_urdf.replace('name="base_link"', f'name="drone_{i}_mocap"')
         urdf = urdf.replace('<color rgba="0.15 0.15 0.15 1.0"/>',
-                            f'<color rgba="{DRONE_COLOURS[i % len(DRONE_COLOURS)][1]}"/>')
+                            f'<color rgba="{drone_mesh_colour(i)}"/>')
         urdf = urdf.replace('scale="0.002 0.002 0.002"',
                             f'scale="{scale} {scale} {scale}"')
         nodes.append(Node(
@@ -287,7 +146,8 @@ def launch_setup(context, *args, **kwargs):
     os.makedirs(cfg_dir, exist_ok=True)
     cfg = os.path.join(cfg_dir, f'real_io_{n}drone.rviz')
     with open(cfg, 'w') as fh:
-        fh.write(_build_config(n, show_actual))
+        fh.write(build_config(n, show_actual=show_actual,
+                              detach=False, attach=False))
 
     nodes.append(Node(
         package='rviz2', executable='rviz2', name='rviz2',

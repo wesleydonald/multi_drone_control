@@ -1,12 +1,20 @@
-# import os
-# os.chdir('/home/wesley/multi_drone_control/c_generated_code')
 import os
 import fcntl
 
-# own acados dir so this solver doesn't clash with controller_mpc_multi's
-ACADOS_DIR = '/home/wesley/multi_drone_control/c_generated_code_quad_load'
-os.makedirs(ACADOS_DIR, exist_ok=True)
+from utility_objects.run_context import acados_dir, log_base_dir
+
+# Own acados dir so this solver doesn't clash with controller_mpc_multi's.
+# Resolved from the workspace root (or MDC_ACADOS_ROOT) rather than a literal
+# path, so the repo can be checked out anywhere -- including a second machine
+# during a lab session.
+ACADOS_DIR = acados_dir('quad_load')
+# acados generates its C relative to the CWD, so this chdir is required. It is
+# ALSO why logs must not be written to a CWD-relative path: see LOG_BASE_DIR.
 os.chdir(ACADOS_DIR)
+
+# Captured BEFORE any further chdir, and absolute, so flight data lands in
+# results/ and never inside this build directory.
+LOG_BASE_DIR = log_base_dir()
 
 # file lock so the drone processes don't compile at the same time
 _lock_path = os.path.join(ACADOS_DIR, '.compile.lock')
@@ -57,10 +65,11 @@ def _solver_is_fresh():
 
 
 from utility_objects.visualization import TrajectoryVisualizer
-from utility_objects.data_logger import DataLogger
+from utility_objects.data_logger import DataLogger, node_params, write_params
+from utility_objects.safety import EnvelopeChecker, EnvelopeLimits
 from utility_objects.callback_manager_multi import CallbackManagerMulti
 from interfaces.msg import MotionCaptureState, ELRSCommand, Telemetry
-from std_msgs.msg import Int32, Float64MultiArray
+from std_msgs.msg import Int32, Float64MultiArray, String
 from sensor_msgs.msg import Imu
 
 
@@ -130,9 +139,18 @@ DRONE_OFFSETS = {
 
 class Controller(Node):
     def __init__(self):
-        super().__init__('controller', parameter_overrides=[
-            rclpy.parameter.Parameter('use_sim_time', rclpy.Parameter.Type.BOOL, False)
-        ])
+        # use_sim_time is the LAUNCH's call, not ours. It used to be pinned False here
+        # unconditionally, which is right on hardware (there is no /clock) but wrong in
+        # simulation: the control loop then ran at FREQUENCY_HZ of WALL time while the
+        # planner ran at PLANNER_HZ of SIM time, so the number of control updates per
+        # simulated second was Gazebo's real-time factor -- i.e. a function of machine
+        # load. Two runs of the same trajectory at RTF 0.40 and 0.60 gave payload radius
+        # errors of -16% and -34%, which made every sim A/B silently incomparable.
+        #
+        # The sim launches set use_sim_time:=true (and rviz_quad_load_launch.py bridges
+        # /clock); every real_*_launch.py sets it false, and False is also the ROS
+        # default if nothing sets it -- so hardware behaviour is unchanged.
+        super().__init__('controller')
 
         # ── Drone identity ────────────────────────────────────────────────
         self.declare_parameter("drone_id", 0)
@@ -181,8 +199,10 @@ class Controller(Node):
         # model with it, so it must be the published command, not the solver's latest.
         self._applied_u_rate = np.zeros(4)
 
-        # get_clock() is sim time (use_sim_time=True). keep a separate wall clock
-        # for the pose-timeout watchdog since that's about real comms latency.
+        # get_clock() follows use_sim_time (sim clock in simulation, wall on hardware).
+        # The pose-timeout watchdog deliberately stays on a separate WALL clock: it is
+        # about real comms latency, and CallbackManagerMulti stamps last_pose_update_time
+        # from its own wall clock, so both sides of that comparison must remain wall time.
         self._wall_clock = Clock(clock_type=ClockType.SYSTEM_TIME)
         self.last_pose_update_time = self._wall_clock.now()
 
@@ -417,9 +437,19 @@ class Controller(Node):
                 Float64MultiArray, '/payload/desired_position',
                 self._payload_ref_cb, 5)
 
+        # ── Flight envelope (finding F3) ──────────────────────────────────
+        # Any FAULT disarms this drone; the fleet manager already propagates an
+        # unexpected disarm to everyone else via /drone_N/arming_state_feedback.
+        # See docs/design/fleet_safety.md.
+        self._init_safety()
+
         # ── MPC ───────────────────────────────────────────────────────────
         self.N = 20
-        self.skip_steps = 3
+        # NB no skip_steps here (unlike controller_ukf / controller_mpc_payload):
+        # the planner publishes at this MPC's own 0.1 s node spacing, so planner
+        # node j maps directly to stage j. A `self.skip_steps = 3` used to sit here,
+        # assigned and never read; it was removed 2026-08-04 after being wrongly
+        # listed as a tracking-lag suspect in DISSIPATIVE_TRACKING_ISSUE.md.
         self.first_solve = True
         # Heading the tracker holds (rad). Re-latched from mocap while the drone
         # rests armed, then frozen at TAKEOFF -- see control_loop.
@@ -453,7 +483,12 @@ class Controller(Node):
             log_headers += ['payload_x', 'payload_y', 'payload_z',
                             'payload_ref_x', 'payload_ref_y', 'payload_ref_z']
         self.data_logger = DataLogger(
-            LOGGING_NAME, f"planner_drone{self.drone_id}", log_headers)
+            LOGGING_NAME, f"planner_drone{self.drone_id}", log_headers,
+            base_dir=LOG_BASE_DIR)
+        # Record what this run was actually configured with, next to the CSV.
+        write_params(self.data_logger.log_dir, node_params(self, {
+            'node': 'controller', 'frequency_hz': FREQUENCY_HZ,
+            'horizon_N': self.N}))
 
         self.observed_state_history = []
         self.control_history = []
@@ -494,6 +529,9 @@ class Controller(Node):
         self.planner_ref_vel = arr[:, 3:6]
         self.planner_ref_acc = arr[:, 6:9]
         self.planner_ref_cable = arr[:, 9:12] if fields >= 12 else None
+        # Wall clock, matching the pose watchdog: a stale reference must be
+        # detected in real time even when sim time is running slow.
+        self._last_ref_wall = self._wall_clock.now()
 
     def _imu_callback(self, msg: Imu):
         """Store the body-frame linear acceleration (specific force) from the
@@ -511,6 +549,128 @@ class Controller(Node):
         p = msg.pose.position
         self.payload_pos = np.array([p.x, p.y, p.z])
         self.payload_resting = (p.z <= self.payload_rest_z + 0.05)
+        # Payload attitude is the attach-failure signature (it ran past 90 deg in
+        # the ring-attach runaway), so the envelope check needs it.
+        q = msg.pose.orientation
+        self.payload_quat = (q.w, q.x, q.y, q.z)
+
+    # ── Flight envelope (F3) ─────────────────────────────────────────────────
+
+    def _init_safety(self):
+        """Declare envelope parameters and build the checker.
+
+        There is deliberately NO geofence -- the operator holds the kill switch and
+        is the out-of-bounds failsafe (Wesley, 2026-08-04). What remains is what a
+        human cannot react to in time or cannot see at all: reference staleness,
+        tilt and speed. See docs/design/fleet_safety.md."""
+        p = self.declare_parameter
+        self.safety_enabled = bool(p('safety_enabled', True).value)
+        lim = EnvelopeLimits(
+            max_tilt_deg=float(p('max_tilt_deg', 60.0).value),
+            max_payload_tilt_deg=float(p('max_payload_tilt_deg', 60.0).value),
+            warn_tilt_deg=float(p('warn_tilt_deg', 40.0).value),
+            max_speed=float(p('max_speed', 3.0).value),
+            ref_timeout_s=float(p('safety_ref_timeout_s', 1.0).value),
+            warn_battery_v=float(p('warn_battery_v', 15.0).value),
+        )
+        self.envelope = EnvelopeChecker(lim)
+        self.payload_quat = None
+        self._last_ref_wall = None
+        self._safety_warn_ctr = 0
+        self._aborted = False
+        self._was_armed = False
+        # Fleet-wide abort: the manager broadcasts here so a healthy drone stops
+        # even when its own envelope is fine.
+        self.create_subscription(String, '/fleet/abort', self._fleet_abort_cb, 5)
+        self.get_logger().info(
+            f"[Drone {self.drone_id}] envelope: no geofence (operator failsafe); "
+            f"tilt<{lim.max_tilt_deg:.0f}/{lim.max_payload_tilt_deg:.0f} deg "
+            f"speed<{lim.max_speed:.1f} m/s "
+            f"ref_stale>{lim.ref_timeout_s:.1f} s "
+            f"({'ENABLED' if self.safety_enabled else 'DISABLED'})")
+
+    def safety_preflight_block(self):
+        """Pre-arm interlock, called by CallbackManagerMulti.handle_arming_service.
+        Return a reason string to REFUSE arming, or None to allow it.
+
+        Only conditions that are knowable on the ground and would make the flight
+        unsafe from the first second. Deliberately narrow: an interlock that blocks
+        arming for marginal reasons gets bypassed, and then protects nothing."""
+        if not self.safety_enabled:
+            return None
+        if self.current_pose is None:
+            return 'no mocap pose'
+        # No position check here: there is no geofence by decision.
+        # Stale mocap: the pose watchdog would fire within 0.25 s of arming anyway,
+        # so refuse now rather than arm and immediately abort.
+        age = (self._wall_clock.now()
+               - self.last_pose_update_time).nanoseconds * 1e-9
+        if age > POSE_TIMEOUT_THRESHOLD:
+            return f'mocap pose is {age:.2f} s stale'
+        return None
+
+    def _fleet_abort_cb(self, msg: String):
+        """Another drone (or the manager) declared a fault. Stop."""
+        if self._aborted:
+            return
+        self.get_logger().error(
+            f"[Drone {self.drone_id}] FLEET ABORT: {msg.data} - disarming.")
+        self._do_safety_disarm()
+
+    def _safety_check(self):
+        """Run the envelope. Returns True if a fault fired (caller must return)."""
+        # Re-arming clears a latched fault. Detected as a rising edge on `armed`
+        # because arming is handled inside CallbackManagerMulti's service, so
+        # there is no hook to hang this on. Must run before the _aborted guard,
+        # or an aborted drone could never be re-armed.
+        if self.armed and not self._was_armed:
+            self.envelope.reset()
+            self._aborted = False
+            self.get_logger().info(
+                f"[Drone {self.drone_id}] envelope armed and reset.")
+        self._was_armed = self.armed
+
+        if not self.safety_enabled or self._aborted:
+            return False
+
+        ref_age = None
+        if self._last_ref_wall is not None:
+            ref_age = (self._wall_clock.now()
+                       - self._last_ref_wall).nanoseconds * 1e-9
+
+        pose = self.current_pose
+        verdict = self.envelope.check(
+            quat=pose[3:7] if pose is not None else None,
+            velocity=pose[7:10] if pose is not None else None,
+            payload_quat=self.payload_quat,
+            ref_age_s=ref_age,
+            battery_v=None,          # warn-only, and only meaningful on hardware
+            airborne=bool(self.armed and self.takeoff_requested),
+        )
+
+        if verdict.is_fault:
+            self.get_logger().error(
+                f"[Drone {self.drone_id}] ENVELOPE FAULT: {verdict.reason} "
+                f"- disarming fleet.")
+            self._do_safety_disarm(reason=verdict.reason)
+            return True
+
+        if verdict.level == 'WARN':
+            self._safety_warn_ctr += 1
+            if self._safety_warn_ctr % 25 == 1:      # ~2 Hz at 50 Hz control
+                self.get_logger().warn(
+                    f"[Drone {self.drone_id}] envelope warning: {verdict.reason}")
+        else:
+            self._safety_warn_ctr = 0
+        return False
+
+    def _do_safety_disarm(self, reason=''):
+        """Disarm this drone. The fleet manager sees the arming-state feedback and
+        disarms everyone else (main.py `_arming_feedback_callback`), which is the
+        propagation path this reuses rather than duplicating."""
+        self._aborted = True
+        self.cb.disarm(ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0,
+                                   channel_2=-1.0, channel_3=0.0))
 
     def _payload_ref_cb(self, msg: Float64MultiArray):
         if len(msg.data) >= 3:
@@ -822,6 +982,11 @@ class Controller(Node):
 
         # ── Armed + pose available ─────────────────────────────────────────
         if self.armed and self.current_pose is not None:
+
+            # Flight envelope (F3). Runs before any control work: if the fleet is
+            # outside its envelope there is nothing worth computing.
+            if self._safety_check():
+                return
 
             # Latch the resting height for the adaptive-kT airborne gate. Keep
             # re-latching while the fleet sits armed waiting for TAKEOFF, so this

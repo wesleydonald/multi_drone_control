@@ -32,6 +32,7 @@ from rclpy.node import Node
 from rclpy.clock import Clock, ClockType
 from std_msgs.msg import String, Bool, Int32
 from interfaces.srv import SetArming
+from interfaces.msg import ELRSCommand
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -49,9 +50,13 @@ ARMING_FEEDBACK_TIMEOUT_SEC = 1.0
 class CentralController(Node):
 
     def __init__(self):
-        super().__init__('central_controller', parameter_overrides=[
-            rclpy.parameter.Parameter('use_sim_time', rclpy.Parameter.Type.BOOL, False)
-        ])
+        # Same clock-domain fix as controller_mpc.Controller: use_sim_time is the
+        # LAUNCH's call. This was pinned False here, contradicting the module docstring
+        # ("Broadcasts /fleet/step at FREQUENCY_HZ using Gazebo sim time") and putting
+        # the step broadcast on a different clock from the sim-time planner. Since
+        # /fleet/step paces the trackers, that made the step-to-physics ratio depend on
+        # Gazebo's real-time factor. Hardware launches set it false explicitly.
+        super().__init__('central_controller')
 
         # ── Fleet size (configurable so the same node serves 2- or 4-drone
         #    worlds via `num_drones` launch arg / ROS param) ───────────────
@@ -107,6 +112,21 @@ class CentralController(Node):
         for i in range(self.num_drones):
             self.drone_cmd_publishers[i] = self.create_publisher(
                 String, f'/drone_{i}/command', 10)
+
+        # ── Emergency stop path (finding F4) ──────────────────────────────
+        # The normal disarm goes through each drone's SetArming *service* with a
+        # 3 s deadline, and SKIPS any drone whose service is not ready. That is
+        # fine for an orderly landing and wrong for an emergency: it depends on
+        # service responsiveness at exactly the moment the system is misbehaving.
+        # So an emergency additionally (a) broadcasts /fleet/abort, which every
+        # tracker acts on immediately, and (b) publishes a disarm straight to each
+        # drone's ELRSCommand topic, which reaches the radio even if a tracker
+        # process is wedged and no longer publishing.
+        self.abort_pub = self.create_publisher(String, '/fleet/abort', 5)
+        self.elrs_publishers = {
+            i: self.create_publisher(ELRSCommand, f'/drone_{i}/ELRSCommand', 1)
+            for i in range(self.num_drones)
+        }
     # ─────────────────────────────────────────────────────────────────────
     # Timer - master step broadcast
     # ─────────────────────────────────────────────────────────────────────
@@ -142,7 +162,7 @@ class CentralController(Node):
             self._disarm_fleet(emergency=False)
         elif command == "ESTOP":
             self.get_logger().error("EMERGENCY STOP commanded!")
-            self._disarm_fleet(emergency=True)
+            self._disarm_fleet(emergency=True, reason="operator ESTOP")
         else:
             self.get_logger().warn(f"Unknown fleet command: '{command}'")
 
@@ -161,7 +181,9 @@ class CentralController(Node):
             self.get_logger().error(
                 f"Drone {drone_id} disarmed unexpectedly during flight - "
                 f"triggering emergency stop for all drones!")
-            self._disarm_fleet(emergency=True)
+            self._disarm_fleet(
+                emergency=True,
+                reason=f"drone {drone_id} disarmed unexpectedly")
 
     # ─────────────────────────────────────────────────────────────────────
     # Fleet operations (run in background threads to avoid blocking the
@@ -243,7 +265,7 @@ class CentralController(Node):
         self.get_logger().info("Landed - disarming the fleet.")
         self._disarm_fleet(emergency=False)
 
-    def _disarm_fleet(self, emergency: bool = False):
+    def _disarm_fleet(self, emergency: bool = False, reason: str = ''):
         self.flying = False
         self.fleet_armed = False
         self.shutdown_requested = not emergency  # on estop keep node alive for debug
@@ -251,6 +273,19 @@ class CentralController(Node):
         label = "EMERGENCY STOP" if emergency else "DISARM"
         self.get_logger().info(f"{label}: sending disarm to all drones.")
 
+        if emergency:
+            # Fast path FIRST, synchronously, before spawning any thread or
+            # touching a service. Both of these are fire-and-forget publishes.
+            self.abort_pub.publish(String(data=reason or 'emergency stop'))
+            stop = ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0,
+                               channel_2=-1.0, channel_3=0.0)
+            for i, pub in self.elrs_publishers.items():
+                pub.publish(stop)
+            self.get_logger().error(
+                f"EMERGENCY STOP broadcast to {len(self.elrs_publishers)} drones"
+                + (f": {reason}" if reason else ""))
+
+        # Services still run, as the authoritative/acknowledged disarm.
         thread = threading.Thread(
             target=self._disarm_fleet_thread, daemon=True)
         thread.start()

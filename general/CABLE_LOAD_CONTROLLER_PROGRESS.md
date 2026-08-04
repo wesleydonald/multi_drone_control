@@ -288,7 +288,7 @@ colcon build --packages-select controller_quad_load controller_load_mpc \
   controller_mpc_multi interfaces utility_objects --symlink-install
 source install/setup.bash
 
-gz sim simulation_assets/three_soft.sdf -v 4 -r
+cd simulation_assets && gz sim three_soft.sdf -v 4 -r
 ros2 launch controller_quad_load mpc_three_soft_quad_load_launch.py
 ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: ARM}"
 ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: TAKEOFF}"

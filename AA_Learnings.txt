@@ -237,4 +237,16 @@ For the attach situation I am having a bit of trouble with the attachment point 
 
 Thrust ratio linear based on battery voltage -> fixing now
 Starting positions are hard coded? <- needs fixing/why does yaw move around
+  SOLVED 2026-08-03. Nothing was referenced to the starting yaw: the load attitude
+  reference was hardcoded to identity, the nominal cable ring was a body-frame
+  quantity used as a world-frame reference, and each drone's heading reference was
+  a yaw-free tilt (= face world +x), which is what made a drone spin ~360 on
+  takeoff. All three now latch the measured placement. See learning.txt (top).
 Solver failing for certain starting configurations in real life.
+  SOLVED 2026-08-03. The drone<->attach-point matching ignored payload yaw, so past
+  60 deg (3 drones) every drone was paired with its neighbour's attach point and the
+  OCP's implied cable length came out 0.59-0.64 m vs the modelled 0.50 -> QP
+  infeasible (status 4). Reproduced in sim with generate_random_world.py, fixed by
+  matching in the load frame. See learning.txt (top).
+
+OPEN: dissipative-network trajectory tracking -> DISSIPATIVE_TRACKING_ISSUE.md

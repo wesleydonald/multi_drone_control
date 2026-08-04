@@ -33,7 +33,7 @@ No lift — the system's only job is to hold the taut config it spawned in.
 
 Terminal A (Gazebo):
 ```bash
-gz sim simulation_assets/three_soft_paper.sdf -v 4 -r
+cd simulation_assets && gz sim three_soft_paper.sdf -v 4 -r
 ```
 Terminal B (stack, HOLD mode):
 ```bash
