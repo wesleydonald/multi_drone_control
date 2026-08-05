@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Pre-push hook — THESIS_PLAN §9.5. Enabled by:
+#
+#     git config core.hooksPath tools/hooks
+#
+# (tools/install_hooks.sh does that, and checks it took.) Kept in the repo rather than
+# in .git/hooks so it is reviewable, versioned, and present on a fresh clone.
+#
+# Runs the full gate, including the SIL smoke suite. ~2.5 minutes. If you genuinely
+# mean to push past it -- a docs-only change, a work-in-progress branch -- say so
+# explicitly:
+#
+#     git push --no-verify
+#
+# The gate needs the ROS underlay and this workspace sourced. It is sourced here rather
+# than assumed, because a hook runs in whatever environment the git client had, and a
+# gate that fails for lack of a `source` teaches everyone to use --no-verify.
+set -uo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$REPO"
+
+# `set +u` around the sourcing is not tidiness: ROS's setup.bash expands unset ament
+# variables, and under `set -u` that is a FATAL error in a non-interactive shell -- the
+# hook died silently, before printing anything, and reported only a bare exit 1.
+set +u
+for setup in "$HOME/ros2_humble/install/setup.bash" "$REPO/install/setup.bash"; do
+  # shellcheck disable=SC1090
+  [ -f "$setup" ] && source "$setup" >/dev/null 2>&1
+done
+set -u
+
+echo "── pre-push: running tools/gate.sh (git push --no-verify to skip) ──"
+if ./tools/gate.sh; then
+  exit 0
+fi
+
+echo
+echo "!! push BLOCKED by the gate above."
+echo "   Fix it, or push deliberately with:  git push --no-verify"
+exit 1

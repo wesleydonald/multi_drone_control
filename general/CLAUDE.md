@@ -152,8 +152,9 @@ colcon build --symlink-install && source install/setup.bash
 ### Offline gate — run this BEFORE any Gazebo test, and before every commit
 
 ```bash
-./tools/gate.sh              # all 5 stages, ~2 min
-./tools/gate.sh --quick      # skips stage 5 (the slow one)
+./tools/gate.sh              # all 6 stages, ~2.5 min
+./tools/gate.sh --quick      # skips stages 5 and 6 (the slow ones)
+./tools/install_hooks.sh     # once: wires the full gate as the pre-push hook
 ```
 
 Ordered cheapest-first so it fails fast. Every stage exists because something got
@@ -162,10 +163,14 @@ through without it:
 | | stage | catches |
 |---|---|---|
 | 1 | workspace | a stale `~/thesis` shadowing this repo's `interfaces`/`utility_objects` |
-| 2 | unit tests | envelope checker, RViz config structure, planner reference, config tools |
+| 2 | unit tests | envelope checker, RViz config structure, planner reference, config tools, metrics + the analysis pipeline (`tools/test`) |
 | 3 | **import check** (`tools/import_check.py`) | a missing import that kills a node at launch. `ast.parse` and `colcon build` **both pass** on that — only an actual import catches it |
 | 4 | world geometry (`tools/check_geometry.py`) | world SDF vs launch/`params.py` disagreement on `cable_len`/`attach_radius`/`attach_z`/`load_mass` — presents as "the controller can't fly", not as a config bug |
 | 5 | dissipative A–K | detach/attach correctness. Saves an annotated PNG to `dissipative_verify/`. **Know its limits** (§8) |
+| 6 | **SIL smoke** (`sil_bench.py carry_hover_n3` + `check_thresholds.py`) | the only stage that runs the real nodes over real topics — a launch that no longer comes up, a node that crashes on a parameter, a renamed topic. Everything above it is offline. Bars in `configs/gate_thresholds.yaml`, set from R0047–R0050, not guessed |
+
+`git push` runs the full gate once `install_hooks.sh` has been run; `git push
+--no-verify` bypasses it deliberately.
 
 Stage 4 only covers the three world/launch pairs listed in `gate.sh`. **Add new worlds
 there** or the check silently covers less than it appears to.
