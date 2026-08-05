@@ -95,6 +95,41 @@ def allocate(slug, kind='sim', root=None):
     return path, f'R{rid:04d}'
 
 
+def find_runs(root=None):
+    """Every run directory under a results tree, newest date first."""
+    root = root or results_root()
+    out = []
+    for dirpath, dirnames, _ in os.walk(root):
+        for d in sorted(dirnames):
+            if len(d) >= 5 and d[0] == 'R' and d[1:5].isdigit():
+                out.append(os.path.join(dirpath, d))
+        if os.path.relpath(dirpath, root).count(os.sep) >= 1:
+            dirnames[:] = []
+    return sorted(out, reverse=True)
+
+
+def resolve(spec, roots=None):
+    """A run id ('R0034'), a directory name or a path -> the run directory.
+
+    Ids are how runs are cited in a caption, a commit message and a conversation, so
+    every tool takes them. `results_archive/` is searched FIRST: once a run is promoted,
+    the frozen copy is the one a figure should be built from, and silently preferring
+    the mutable original would defeat the archive."""
+    if os.path.isdir(spec) and os.path.exists(os.path.join(spec, 'manifest.json')):
+        return os.path.abspath(spec)
+    if roots is None:
+        roots = [os.path.join(repo_root(), 'results_archive'), results_root()]
+    key = os.path.basename(spec.rstrip('/'))
+    for root in roots:
+        if not os.path.isdir(root):
+            continue
+        for path in find_runs(root):
+            name = os.path.basename(path)
+            if name == key or name.startswith(key + '_') or name[:5] == key:
+                return path
+    raise SystemExit(f'no run matching {spec!r} under ' + ' or '.join(roots))
+
+
 def write_manifest(run_path, **fields):
     """Write (or update) manifest.json. Safe to call twice -- the second call merges,
     so the runner can record the start immediately and the exit reason at the end even

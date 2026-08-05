@@ -31,7 +31,6 @@ real simulator and is what a bench result must eventually be checked against.
 """
 import argparse
 import csv
-import json
 import math
 import os
 import re
@@ -315,52 +314,18 @@ def write_logs(run_dir, rows, events, aborts, t_weld):
     return csv_path
 
 
-def write_metrics(run_dir, cfg, rows, t_weld):
-    """Auto-metrics (§9.1). Best-effort: a metrics failure must not destroy the run."""
-    try:
-        import metrics as M
-    except Exception as e:
-        return {'error': f'metrics unavailable: {e}'}
-    if not rows:
-        return {'error': 'no rows'}
-    t = np.array([r['t'] for r in rows], float)
+def write_metrics_and_plots(run_dir):
+    """metrics.json + the six figures, read back off the logs just written (§9.1/§9.4).
 
-    def col(name):
-        return np.array([r.get(name, math.nan) for r in rows], float)
-
-    out = {'n_rows': len(rows), 'duration_s': float(t[-1] - t[0]),
-           'weld_time_s': t_weld}
+    Read back rather than computed here, and computed by tools/metrics.py rather than
+    inline: §9.2 is that every number in the thesis comes from that one file, and a
+    second implementation living in the runner is exactly how two numbers for the same
+    quantity end up in the same document. Best-effort -- see plot_run.finish_run."""
     try:
-        q = np.column_stack([col('payload_qw'), col('payload_qx'),
-                             col('payload_qy'), col('payload_qz')])
-        peak, settled = M.tilt_peak_settled(t, q, t_event=t_weld or 0.0)
-        out['payload_tilt_peak_deg'] = peak
-        out['payload_tilt_settled_deg'] = settled
-    except Exception as e:
-        out['payload_tilt_error'] = str(e)
-    try:
-        des = np.column_stack([col('payload_ref_x'), col('payload_ref_y'),
-                               col('payload_ref_z')])
-        act = np.column_stack([col('payload_x'), col('payload_y'), col('payload_z')])
-        good = np.all(np.isfinite(des), axis=1) & np.all(np.isfinite(act), axis=1)
-        if good.sum() > 10:
-            out['payload_rmse_m'] = M.payload_rmse(act[good], des[good])
-    except Exception as e:
-        out['payload_rmse_error'] = str(e)
-    for i in range(cfg.n_total):
-        e = col(f'd{i}_track_err')
-        e = e[np.isfinite(e)]
-        if e.size:
-            out[f'd{i}_track_err_peak_m'] = float(np.max(e))
-        thr = col(f'd{i}_thr')
-        thr = thr[np.isfinite(thr)]
-        if thr.size:
-            out[f'd{i}_throttle_mean'] = float(np.mean(thr))
-            out[f'd{i}_throttle_saturated_pct'] = float(100.0 * np.mean(thr >= 0.6))
-    path = os.path.join(run_dir, 'metrics.json')
-    with open(path, 'w') as fh:
-        json.dump(out, fh, indent=2, sort_keys=True, default=str)
-    return out
+        from plot_run import finish_run
+    except Exception as e:                           # noqa: BLE001
+        return {'error': f'analysis unavailable: {type(e).__name__}: {e}'}
+    return finish_run(run_dir)
 
 
 # ── one run ──────────────────────────────────────────────────────────────────
@@ -521,7 +486,7 @@ def run_once(cfg, cfg_path, gui=False, repeat=0):
         pass
 
     write_logs(run_dir, rows, events, aborts, t_weld)
-    mtr = write_metrics(run_dir, cfg, rows, t_weld)
+    mtr = write_metrics_and_plots(run_dir)
     ok, checks = evaluate(cfg, rows, t_weld, aborts)
     ok = ok and not failures
 

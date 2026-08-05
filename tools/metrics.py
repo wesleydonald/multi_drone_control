@@ -423,21 +423,31 @@ def read_events(run_path):
 def load_run(run_path):
     """Load a run directory into {'manifest', 'events', 'data', 'source'}.
 
-    Understands the SIL bench layout (logs/sil.csv, one wide table) and falls back to
-    the per-drone controller CSVs. Deliberately does NOT normalise the two into one
-    schema: they record different things, and pretending otherwise would invent
-    columns. Callers ask `source` which they got."""
+    ONE LOADER FOR BOTH HARNESSES. The SIL bench writes `logs/sil.csv` and the Gazebo
+    runner writes `logs/run.csv`, and they share a column schema on purpose -- same
+    `t`, `payload_*` and `dN_*` names, with the columns a Gazebo run cannot observe
+    from outside the tracker (`dN_acm`, `dN_tension`, `dN_elev_deg`) present but NaN.
+    So both come back as one wide table and every downstream consumer is source-blind,
+    which is what lets compare_runs.py put a bench run and a Gazebo run on one axis.
+    `source` is still reported, because a caller writing a caption needs to say which.
+
+    Both files share their time origin with events.csv (t=0 at t_ready), so `t` and
+    event times are directly comparable with no re-basing.
+
+    The legacy per-drone controller CSVs are the third, unschema'd case: those come
+    back as {name: table} and `source` is 'controller'."""
     out = {'manifest': {}, 'events': read_events(run_path), 'data': {},
            'source': None, 'path': run_path}
     mf = os.path.join(run_path, 'manifest.json')
     if os.path.exists(mf):
         with open(mf) as fh:
             out['manifest'] = json.load(fh)
-    sil = os.path.join(run_path, 'logs', 'sil.csv')
-    if os.path.exists(sil):
-        out['data'] = read_csv(sil)
-        out['source'] = 'sil'
-        return out
+    for name, source in (('sil.csv', 'sil'), ('run.csv', 'gazebo')):
+        path = os.path.join(run_path, 'logs', name)
+        if os.path.exists(path):
+            out['data'] = read_csv(path)
+            out['source'] = source
+            return out
     logs = os.path.join(run_path, 'logs')
     if os.path.isdir(logs):
         per = {}
@@ -451,68 +461,162 @@ def load_run(run_path):
 
 
 def n_drones(data):
-    """How many drones a SIL table describes, from its column names."""
+    """How many drones a run table describes, from its column names."""
     i = 0
     while f'd{i}_x' in data:
         i += 1
     return i
 
 
-def summarise_sil_run(run_path):
-    """Every metric this file defines, applied to one SIL run. The thing a runner calls
-    to produce metrics.json (§4.1) -- so a finished run is already readable."""
+def has(data, name):
+    """True if a column exists AND holds at least one finite sample.
+
+    The schema keeps Gazebo-unobservable columns as all-NaN rather than omitting them,
+    so `name in data` is not the question a caller means to ask."""
+    v = data.get(name)
+    return v is not None and v.dtype.kind == 'f' and bool(np.any(np.isfinite(v)))
+
+
+def stack(data, template, n):
+    """(T, n) array of one per-drone column, e.g. stack(d, 'd{i}_thr', 3)."""
+    return np.column_stack([data[template.format(i=i)] for i in range(n)])
+
+
+def centroid(data, n, prefix='', drones=None):
+    """(T, 3) centroid of the fleet's positions (prefix='') or references ('ref_').
+
+    Averaged over the drones with finite data at each sample, so one drone dropping out
+    of the log shifts the centroid's noise rather than turning it into NaN.
+
+    Over ALL drones by default, deliberately. The `dN_attached` column would be the
+    natural filter, but it does not mean the same thing in both harnesses -- the SIL
+    plant marks every cable-linked drone attached, while the Gazebo runner only ever
+    marks the welded newcomer -- so filtering on it would silently compare a 3-drone
+    centroid against a 1-drone one. Pass `drones` explicitly when a subset is wanted."""
+    idx = range(n) if drones is None else drones
+    xs = np.dstack([np.column_stack([data[f'd{i}_{prefix}{ax}'] for ax in 'xyz'])
+                    for i in idx])                        # (T, 3, n)
+    with np.errstate(invalid='ignore'):
+        return np.nanmean(xs, axis=2)
+
+
+def azimuth_deg(drone_xy, payload_xy):
+    """Bearing of each drone from the payload, degrees in [0, 360).
+
+    The formation-reconfiguration view: even spacing is three drones 120 deg apart, and
+    a newcomer bunching against an incumbent shows up here before it shows up anywhere
+    else."""
+    d = np.asarray(drone_xy, float) - np.asarray(payload_xy, float)
+    return np.degrees(np.arctan2(d[:, 1], d[:, 0])) % 360.0
+
+
+def stage_split_run(t, data, n):
+    """`stage_split` applied to a loaded run table: desired -> reference centroid ->
+    actual centroid -> payload. Returns [] if the run has no payload reference."""
+    if not has(data, 'payload_ref_x'):
+        return []
+    desired = np.column_stack([data['payload_ref_x'], data['payload_ref_y']])
+    return stage_split(t, desired,
+                       centroid(data, n, 'ref_')[:, :2],
+                       centroid(data, n)[:, :2],
+                       np.column_stack([data['payload_x'], data['payload_y']]))
+
+
+EVENT_PRIORITY = ('WELD', 'DETACH', 'MAGNET', 'TAKEOFF')
+
+
+def primary_event(events):
+    """The event the steady window and all event-relative metrics key off.
+
+    A run has several events; only one of them is the thing under test. The weld is the
+    subject of an attach run, the detach of a detach run, and a plain carry run has
+    neither -- in which case `steady_window` falls back to the whole record."""
+    for name in EVENT_PRIORITY:
+        if name in events and np.isfinite(events[name]):
+            return name, float(events[name])
+    return None, None
+
+
+def _nanmax(x):
+    x = np.asarray(x, float)
+    return float(np.nanmax(x)) if np.any(np.isfinite(x)) else math.nan
+
+
+def _nanmean(x):
+    x = np.asarray(x, float)
+    return float(np.nanmean(x)) if np.any(np.isfinite(x)) else math.nan
+
+
+def summarise_run(run_path):
+    """Every metric this file defines, applied to one run -- SIL bench or Gazebo.
+
+    The thing a harness calls to produce metrics.json (§4.1), and the thing
+    compare_runs.py calls to build its table, so a number in a comparison and the same
+    number in the run's own directory cannot disagree.
+
+    Metrics whose input columns are all-NaN for this source are OMITTED, not reported
+    as nan: a missing key says "this harness does not observe that", where a nan reads
+    as "it was measured and came out undefined"."""
     run = load_run(run_path)
     d = run['data']
-    if run['source'] != 'sil' or not d:
-        return {'error': f'not a SIL run: {run_path}'}
+    if run['source'] not in ('sil', 'gazebo') or not d:
+        return {'error': f'no wide-schema log in {run_path} (source={run["source"]})'}
     n = n_drones(d)
-    t = d['t'] - d['t'][0]
+    t = np.asarray(d['t'], float)
     ev = run['events']
-    t_ev = ev.get('WELD', ev.get('DETACH'))
+    ev_name, t_ev = primary_event(ev)
     mask = steady_window(t, t_ev)
 
     payload = np.column_stack([d['payload_x'], d['payload_y'], d['payload_z']])
     quat = np.column_stack([d['payload_qw'], d['payload_qx'],
                             d['payload_qy'], d['payload_qz']])
     peak_tilt, settled_tilt = tilt_peak_settled(t, quat, t_ev)
-    tens = np.column_stack([d[f'd{i}_tension'] for i in range(n)])
-    thr = np.column_stack([d[f'd{i}_thr'] for i in range(n)])
 
     out = {
         'run': os.path.basename(run_path),
         'run_id': run['manifest'].get('run_id'),
+        'source': run['source'],
+        'kind': run['manifest'].get('kind'),
         'events': ev,
+        'primary_event': ev_name,
+        'primary_event_s': t_ev,
+        'steady_window_s': [float(t[mask][0]), float(t[-1])] if np.any(mask) else None,
         'n_drones': n,
+        'n_rows': int(t.size),
+        'duration_s': float(t[-1] - t[0]) if t.size else 0.0,
         'payload_tilt_peak_deg': peak_tilt,
         'payload_tilt_settled_deg': settled_tilt,
-        'payload_z_settled_m': (float(np.mean(payload[mask, 2])) if np.any(mask)
-                                else math.nan),
-        'tension_share': tension_share(tens, mask),
-        'control_effort': control_effort(thr, mask),
+        'payload_z_settled_m': _nanmean(payload[mask, 2]) if np.any(mask) else math.nan,
+        'control_effort': control_effort(stack(d, 'd{i}_thr', n), mask),
     }
-    if 'payload_ref_x' in d:
+    if all(has(d, f'd{i}_tension') for i in range(n)):
+        out['tension_share'] = tension_share(stack(d, 'd{i}_tension', n), mask)
+    if has(d, 'payload_ref_x'):
         des = np.column_stack([d['payload_ref_x'], d['payload_ref_y'],
                                d['payload_ref_z']])
-        if np.any(np.isfinite(des)):
-            out['payload_rmse_m'] = payload_rmse(payload, des, mask)
-            out['payload_radius_ratio'] = radius_ratio(payload[:, :2], des[:, :2], mask)
-            out['payload_phase_lag_s'] = phase_lag_s(t, des[:, 0], payload[:, 0])
+        out['payload_rmse_m'] = payload_rmse(payload, des, mask)
+        out['payload_radius_ratio'] = radius_ratio(payload[:, :2], des[:, :2], mask)
+        out['payload_phase_lag_s'] = phase_lag_s(t, des[:, 0], payload[:, 0])
+        out['stage_split'] = stage_split_run(t, d, n)
     per_drone = []
     for i in range(n):
         err = d[f'd{i}_track_err']
-        rec = {
-            'drone': i,
-            'peak_track_err_m': float(np.nanmax(err)) if np.any(np.isfinite(err))
-            else math.nan,
-            'settled_track_err_m': (float(np.nanmean(err[mask])) if np.any(mask)
-                                    else math.nan),
-            'peak_cable_accel': float(np.nanmax(d[f'd{i}_acm'])),
-            'settled_elev_deg': (float(np.nanmean(d[f'd{i}_elev_deg'][mask]))
-                                 if np.any(mask) else math.nan),
-        }
+        rec = {'drone': i,
+               'peak_track_err_m': _nanmax(err),
+               'settled_track_err_m': _nanmean(err[mask]) if np.any(mask) else math.nan}
+        if has(d, f'd{i}_acm'):
+            rec['peak_cable_accel'] = _nanmax(d[f'd{i}_acm'])
+        if has(d, f'd{i}_elev_deg'):
+            rec['settled_elev_deg'] = (_nanmean(d[f'd{i}_elev_deg'][mask])
+                                       if np.any(mask) else math.nan)
         if t_ev is not None:
             rec['event_peak_err_m'] = event_peak_error(t, err, t_ev)
             rec['event_settling_s'] = event_settling_time(t, err, t_ev, band=0.10)
         per_drone.append(rec)
     out['per_drone'] = per_drone
     return out
+
+
+def summarise_sil_run(run_path):
+    """Back-compatible alias; `summarise_run` handles both harnesses."""
+    return summarise_run(run_path)
