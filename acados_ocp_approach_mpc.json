@@ -639,7 +639,7 @@
                 0.0,
                 0.0,
                 0.0,
-                5.0,
+                8.0,
                 0.0,
                 0.0,
                 0.0,
@@ -1265,7 +1265,7 @@
                 0.0,
                 0.0,
                 0.0,
-                5.0,
+                8.0,
                 0.0,
                 0.0,
                 0.0,
@@ -2095,7 +2095,7 @@
         "quad_payload_dynamics_cost/quad_payload_dynamics_cost_y_e_fun_jac_ut_xt.c",
         "quad_payload_dynamics_cost/quad_payload_dynamics_cost_y_e_hess.c"
     ],
-    "hash": "24853968097f81ce689d4cc75d4903d2",
+    "hash": "cc96620afe9aee6e18501ecd375c45f4",
     "model": {
         "con_h_expr": [],
         "con_h_expr_0": [],

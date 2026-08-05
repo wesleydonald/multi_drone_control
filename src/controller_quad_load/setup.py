@@ -23,7 +23,6 @@ setup(
         'console_scripts': [
             'main = controller_quad_load.main:main',
             'controller = controller_quad_load.controller_mpc:main',
-            'kt_estimator = controller_quad_load.thrust_ratio_node:main',
         ],
     },
 )

@@ -32,10 +32,10 @@ then drive the fleet:
     ros2 topic pub -t 3 /fleet/command std_msgs/msg/String "{data: LAND}"
 
 HARDWARE NOTES:
-  * thrust_ratio defaults to 24 here (real prop/motor kT), not the sim's 45.
-    thrust_quad_c:=0.0 by default -- the airborne quadratic-kT schedule is a
-    sim-plant fit; on real hardware use the fixed thrust_ratio unless you have
-    measured your own a(u)=c*u^2 coefficient.
+  * thrust_ratio defaults to 24 here -- the measured prop/motor kT of these
+    airframes on a pack at full health, NOT the sim's ~31. It is FIXED: nothing
+    estimates or reschedules it in flight. kt_batt_sag_frac:=0.10 turns on a
+    linear derate with pack voltage once you have measured the sag.
   * cable_len / load_mass MUST match your physical rig (not the sim SDF).
     load_mass defaults to 0.1 here. Changing it recompiles the acados .so on the
     first launch (the solver cache keys on it), so expect a slower first start.
@@ -57,10 +57,10 @@ from launch_ros.parameter_descriptions import ParameterValue
 def _args():
     return [
         DeclareLaunchArgument('num_drones', default_value='2'),
-        # MUST match the physical rig, not the sim SDF.
+        # MUST match the physical cables.
         DeclareLaunchArgument('cable_len', default_value='0.5'),
         # Physical payload mass (kg). LOAD_INERTIA in planner_node.py is a
-        # hardcoded constant and does NOT scale with this -- see the comment there.
+        # hardcoded constant and does NOT scale with this.
         DeclareLaunchArgument('load_mass', default_value='0.1'),
         DeclareLaunchArgument('start_taut', default_value='true'),
         DeclareLaunchArgument('handover_elev_deg', default_value='0.0'),
@@ -82,12 +82,33 @@ def _args():
         DeclareLaunchArgument('cable_source', default_value='model'),
         DeclareLaunchArgument('payload_rest_z', default_value='0.05'),
         DeclareLaunchArgument('takeoff_spool_s', default_value='0.5'),
-        # Real prop/motor thrust accel per unit throttle (kT). ~24 on hardware
-        # (vs the sim plant's ~45). Tune to your rig's hover throttle.
+        # ── kT (thrust ratio) ───────────────────────────────────────────────
+        # The ONE number the tracker's thrust model uses: it assumes a = kT*throttle
+        # and NOTHING estimates or reschedules it in flight. The adaptive UKF and the
+        # thrust_quad_c airborne schedule were both removed on 2026-08-05.
+        #
+        # 24.0 = the MEASURED kT of these airframes on a pack at full health. (The sim
+        # launches use ~31 instead: Gazebo's motor model is quadratic, so a linear
+        # model there has to use the secant gain at hover. The two genuinely differ.)
         DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
-        # Airborne quadratic-kT schedule is a SIM-plant fit -- off by default on
-        # hardware. Set to your measured a(u)=c*u^2 coefficient to enable.
-        DeclareLaunchArgument('thrust_quad_c', default_value='0.0'),
+        # kT used before the drone is airborne. 0 = same as thrust_ratio, which is
+        # right for a GROUND takeoff: the deliberate takeoff under-assumption exists
+        # only to pop drones off the stands of a taut sim air-start. Set it below
+        # thrust_ratio only if this rig genuinely needs extra oomph to break ground.
+        DeclareLaunchArgument('takeoff_thrust_ratio', default_value='0.0'),
+        # BATTERY DERATE. kT falls as the pack sags:
+        #     kT = thrust_ratio * (1 - kt_batt_sag_frac * depletion)
+        #     depletion = clip((v_full - v)/(v_full - v_empty), 0, 1)
+        # OFF (0.0) by default -- 24.0 above is the full-health number, and the sag
+        # fraction has NOT been measured on this rig yet. To calibrate: hover the same
+        # load on a full pack and on a nearly-flat one and compare hover throttle.
+        # Voltage comes from /drone_N/telemetry (ELRS). With no telemetry the derate
+        # is skipped and kT stays at thrust_ratio.
+        DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
+        DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),   # 4S 4.20 V/cell
+        DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),  # 4S 3.50 V/cell
+        # Seconds between per-drone kT reports; 0 = silent.
+        DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         # ON: match each drone to the nearest nominal ring slot at the first solve,
         # so you can place the drones ~cable_len out in ANY order (no need to line
         # drone 0 up with +x). Relabels I/O only -- no OCP recompile.
@@ -132,7 +153,11 @@ def launch_setup(context, *args, **kwargs):
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': f('thrust_ratio'),
-                         'thrust_quad_c': f('thrust_quad_c')}],
+                         'takeoff_thrust_ratio': f('takeoff_thrust_ratio'),
+                         'kt_batt_sag_frac': f('kt_batt_sag_frac'),
+                         'kt_batt_v_full': f('kt_batt_v_full'),
+                         'kt_batt_v_empty': f('kt_batt_v_empty'),
+                         'kt_print_period_s': f('kt_print_period_s')}],
             output='screen'))
 
     # ── Central fleet manager ─────────────────────────────────────────────────

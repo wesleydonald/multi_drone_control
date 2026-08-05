@@ -72,7 +72,9 @@ def _as_float(v):
     """Cell -> float, with non-numeric cells becoming NaN.
 
     Not every logged column is a number: the controller logs a few human-readable
-    status strings (kt_status is 'waiting_for_takeoff', 'updated', 'frozen', ...).
+    status strings (older runs logged kt_status = 'waiting_for_takeoff', 'frozen', ...;
+    the adaptive kT that produced them was removed on 2026-08-05, but those CSVs are
+    still on disk and must still load).
     Those are worth keeping in the CSV for reading a run back, so parse them to NaN
     rather than refusing to load the file. Plots that ask for a numeric column are
     unaffected; anything plotting a status column gets a gap, which is honest."""

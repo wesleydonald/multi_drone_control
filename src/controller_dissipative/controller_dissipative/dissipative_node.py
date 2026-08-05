@@ -455,8 +455,15 @@ class DissipativeController(LoadPlanner):
         # across one 2 s horizon at traj_speed 0.6 and the drone's offset from the load
         # drifts 0.35 m. With a constant target -- hover, LAND -- every node comes out
         # identical and this is exactly the old repeat.
+        # One gate per NETWORK slot (n_net), not per tethered drone (n). The network is
+        # built with n_net nodes, so horizon_references indexes gates[i] for every slot;
+        # sizing this list to self.n made a ring attach raise IndexError on the first
+        # plan tick after the weld, killing the whole planner process -- every drone lost
+        # its reference, the newcomer went armed-idle and dropped onto the load, and the
+        # payload capsized into an envelope fault. The non-preview path below already
+        # guarded this with `if i < len(gates)`; the preview path (on by default) did not.
         gates = [self._attach_ff_gate(net_s2d[i]) if net_s2d[i] >= self.n
-                 else self._cable_taut_gate(i)[0] for i in range(self.n)]
+                 else self._cable_taut_gate(i)[0] for i in range(self.n_net)]
         if self._net_preview and not self._net_landing:
             p_seq, a_seq = [], []
             for k in range(self.N + 1):

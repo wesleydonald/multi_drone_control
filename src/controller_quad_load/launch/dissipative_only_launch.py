@@ -45,8 +45,7 @@ detach flow and three_attach_launch.py for the mid-flight attach flow.
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
-from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -78,45 +77,18 @@ def _args():
         DeclareLaunchArgument('cable_source', default_value='model'),
         DeclareLaunchArgument('payload_rest_z', default_value='-0.1'),
         DeclareLaunchArgument('takeoff_spool_s', default_value='0.5'),
-        # 30.0, not the hardware 24.0: this is a SIM launch and with
-        # motorConstant=0.62e-06 the sim's true loaded-hover kT is ~33. It is also the
-        # kT estimator's SEED and the centre of its +/-kt_max_deviation band, so 24
-        # would put the truth outside the band and pin the estimate at 27.60.
-        DeclareLaunchArgument('thrust_ratio', default_value='30.0'),
-        # Quadratic-plant coefficient c in a(u)=c*u^2, DERIVED FROM THE SDF -- re-derive it
-        # whenever motorConstant changes:
-        #     c = 4 * motorConstant * maxRotVelocity^2 / mass
-        #       = 4 * 0.62e-06 * 4631^2 / 0.6  =  88.6
-        # (203.0 was the value for the old motorConstant 1.42e-06; leaving it stale makes the
-        # airborne schedule clip at KT_SCHED_CEIL and badly over-estimate kT -> takeoff bounce.)
-        DeclareLaunchArgument('thrust_quad_c', default_value='88.6'),
-        # ADAPTIVE kT: each drone estimates its own thrust ratio in flight and prints a
-        # ~1 Hz [kT dN] line. adaptive_thrust_feedback:=false = shadow (print only).
-        DeclareLaunchArgument('adaptive_thrust_ratio', default_value='true'),
-        DeclareLaunchArgument('adaptive_thrust_feedback', default_value='true'),
-        # 'ukf' = the controller_ukf method (19-state UKF over pose + 6 dynamics
-        # params, mocap-driven, run out of loop by the kt_estimator node).
-        # 'none' = no estimation. See mpc_quad_load_launch.py for the details.
-        DeclareLaunchArgument('thrust_ratio_estimator', default_value='ukf'),
-        DeclareLaunchArgument('ukf_q_kt', default_value='0.001'),
-        DeclareLaunchArgument('kt_max_deviation', default_value='0.15'),
-        # ESTIMATOR SEED / band centre -- the drone's ACTUAL hover kT, decoupled from
-        # thrust_ratio (which is the takeoff constant and is kept LOW on purpose).
-        # 33.0 = 88.6*0.376, the operating-point secant gain the schedule measures in
-        # flight. Seeding at the takeoff-safe 30 left the estimate ~10% low, the MPC
-        # over-throttled and the load overshot its target by ~0.18 m. 0 = use
-        # thrust_ratio (the old coupled behaviour).
-        DeclareLaunchArgument('kt_seed', default_value='33.0'),
-        # LEARN-THEN-LOCK: estimate kT for this many seconds after becoming airborne
-        # (the lift -- near-hover, well modelled, load going straight up), then FREEZE
-        # it for the rest of the flight. kT is a property of the airframe and battery,
-        # not of the trajectory, so there is nothing to track once it is known; and a
-        # frozen estimate cannot be dragged around by cable-tension error or payload
-        # swing during the trajectory. Freezing also stops kt_input, so the estimator
-        # nodes idle and hand their cores back exactly when the trajectory needs them.
-        # 0 = never freeze (estimate for the whole flight).
-        DeclareLaunchArgument('kt_freeze_after_s', default_value='10.0'),
-        DeclareLaunchArgument('ukf_rate_hz', default_value='10.0'),
+        # ── kT (thrust ratio) -- kept in step with mpc_quad_load_launch.py ──
+        # ONE fixed number: the tracker assumes a = kT*throttle and nothing moves it
+        # in flight. 31.0, not the hardware 24.0, because Gazebo's motor model is
+        # quadratic (a = 88.6*u^2) so the linear secant gain at loaded hover is 32.9.
+        # takeoff_thrust_ratio sits below it on purpose -- that over-thrust is what
+        # pops the drones off their stands. Battery derate is OFF (0.0).
+        # See mpc_quad_load_launch.py for the full explanation of all four.
+        DeclareLaunchArgument('thrust_ratio', default_value='32.9'),
+        DeclareLaunchArgument('takeoff_thrust_ratio', default_value='30.0'),
+        DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
+        DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),
+        DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),
         DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
         # LOAD reference the NETWORK flies after handover: 'hover', 'line_x', 'circle',
@@ -212,34 +184,11 @@ def launch_setup(context, *args, **kwargs):
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': f('thrust_ratio'),
-                         'thrust_quad_c': f('thrust_quad_c'),
-                         'adaptive_thrust_ratio': b('adaptive_thrust_ratio'),
-                         'adaptive_thrust_feedback': b('adaptive_thrust_feedback'),
-                         'thrust_ratio_estimator':
-                             LaunchConfiguration('thrust_ratio_estimator'),
-                         'kt_max_deviation': f('kt_max_deviation'),
-                         'kt_seed': f('kt_seed'),
-                         'kt_freeze_after_s': f('kt_freeze_after_s'),
+                         'takeoff_thrust_ratio': f('takeoff_thrust_ratio'),
+                         'kt_batt_sag_frac': f('kt_batt_sag_frac'),
+                         'kt_batt_v_full': f('kt_batt_v_full'),
+                         'kt_batt_v_empty': f('kt_batt_v_empty'),
                          'kt_print_period_s': f('kt_print_period_s')}],
-            output='screen'))
-        # OUT-OF-LOOP kT estimator, one process per drone. The parameter UKF is 39
-        # acados propagations; run inside the tracker's 50 Hz timer it measured
-        # 25-150 ms and stalled the control loop. Here it cannot: if it falls behind
-        # it just produces estimates less often. Skipped unless the ukf backend is
-        # selected -- the other backends need no helper process.
-        nodes.append(Node(
-            package='controller_quad_load', executable='kt_estimator',
-            name=f'kt_estimator_{i}',
-            parameters=[{'drone_id': i,
-                         'thrust_ratio': f('thrust_ratio'),
-                         'kt_seed': f('kt_seed'),
-                         'kt_max_deviation': f('kt_max_deviation'),
-                         'ukf_q_kt': f('ukf_q_kt'),
-                         'ukf_rate_hz': f('ukf_rate_hz'),
-                         'kt_print_period_s': f('kt_print_period_s')}],
-            condition=IfCondition(PythonExpression(
-                ["'", LaunchConfiguration('thrust_ratio_estimator'), "' == 'ukf' and '",
-                 LaunchConfiguration('adaptive_thrust_ratio'), "'.lower() == 'true'"])),
             output='screen'))
 
     # ── Central fleet manager ──────────────────────────────────────────────

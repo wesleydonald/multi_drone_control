@@ -97,7 +97,7 @@ int main()
     u0[3] = 0.0;
     // set parameters
     double p[NP];
-    p[0] = 38;
+    p[0] = 24;
     p[1] = 0.5;
     p[2] = 0.12;
     p[3] = 100;

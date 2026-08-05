@@ -380,8 +380,8 @@ flown.
 ```
 config/
   common.yaml          # physics and geometry shared by every configuration
-  sim.yaml             # thrust_ratio 30, thrust_quad_c 88.6, kt_seed 33, load_mass 0.4 ...
-  real.yaml            # thrust_ratio 24, thrust_quad_c 0.0,  load_mass 0.1 ...
+  sim.yaml             # thrust_ratio 31, takeoff_thrust_ratio 30, load_mass 0.4 ...
+  real.yaml            # thrust_ratio 24, takeoff_thrust_ratio 0,  load_mass 0.1 ...
   worlds/three_rigid_ground.yaml   # cable_len 0.5, attach_radius 0.08, n 3, payload_rest_z ...
   rig/unsw_mocap.yaml              # geofence, mocap IDs, ELRS devices, per-airframe kT
 ```
@@ -497,6 +497,37 @@ three are the mechanisms that produce the runaway.
 climbing past 15 m/s². If it settles cleanly like the PD harness, the bench is not good
 enough yet. **Do not skip this test** — it is the entire justification for the investment.
 
+> **BLOCKED ON A STALE REFERENCE (2026-08-05).** The 2026-07-28 records were flown with
+> `motorConstant 1.42e-06` → plant gain `c = 4·mc·maxRotVel²/mass = 203 m/s²`, hover
+> throttle 0.220. Commit `f0f7b9f` (2026-08-03, "Changed the motorconstant to match real
+> world") set `0.62e-06` → `c = 88.6`, hover 0.333: **2.29× less thrust authority**. The
+> bench models today's 88.6, so this criterion currently asks it to reproduce an aircraft
+> the repo no longer contains, and neither agreement nor disagreement would mean anything.
+> Git clears the earlier ball-joint suspicion: `three_attach.sdf` and
+> `x3_drone3_magnet.sdf` were created together in `42efaaf` with `arm_to_magnet_tip`
+> already a ball joint, and the magnet model changed exactly once afterwards — `f0f7b9f`,
+> motorConstant only.
+>
+> **Resolution: re-fly 45° and 65° in Gazebo against the current SDF and replace the
+> recorded numbers.** The criterion itself stands; only its reference data is stale. Do
+> not weaken the bars to make the pair pass.
+>
+> **DONE 2026-08-05 — and the criterion does not survive it.** Both configs re-flown
+> headless, 5 repeats each (`tools/run_experiment.py`, R0034–R0043). The 45° half holds:
+> welds 5/5, diverges 5/5, drone-3 error median **1.11 m** vs the recorded 1.06. The 65°
+> half does **not**: it diverges too (aborts 4/5, drone-3 error median **1.17 m** vs the
+> recorded 0.01–0.06 m), so the two elevations are now indistinguishable and the
+> DISCRIMINATION claim is simply not true of the current simulator. No bench faithful to
+> Gazebo can reproduce a difference that Gazebo no longer shows.
+>
+> The SIL bench says the same thing under the same controller config — both elevations
+> capsize with a fixed kT — so bench and Gazebo now AGREE, which is evidence *for* the
+> bench, not against it. Prime suspect is the fixed thrust ratio against Gazebo's
+> quadratic motor model (§7.1, `controller_mpc._effective_kT`): restoring the quadratic
+> inversion makes the bench discriminate again. **Resolve the kT/plant mismatch, then
+> re-fly and re-derive this criterion.** Part 3's gate should be read against that, not
+> against the 2026-07-28 numbers.
+
 ### 9.4 Analysis and plotting pipeline — `tools/plot_run.py`, `tools/compare_runs.py`
 
 Direct answer to "how do I efficiently see how close the drones were to the correct path".
@@ -552,7 +583,7 @@ Do this in W2, once, so nothing later is built on a duplicate.
 | Item | Action |
 |---|---|
 | `controller_load_mpc/dissipative_node.py` + `dissipative_network.py` (stale since 2026-07-22, superseded by `controller_dissipative/`) | **Delete**, and remove the `dissipative` entry point at `controller_load_mpc/setup.py:25`. It is currently possible to launch the wrong, dead controller. |
-| Two `thrust_ratio_ukf.py` (two packages) | **CORRECTION (2026-08-04): these are not duplicates and must NOT be unified.** 417 vs 277 lines, 669 diff lines — one is the three-backend original, the other the ported 19-state filter propagated through an acados sim integrator. They share a filename and a class name (`ThrustRatioUKF`) and nothing else; merging them would break one. The real hazard is the shared name — plus the documented deadlock if both are imported into one process. Handled by documentation, not code. |
+| Two `thrust_ratio_ukf.py` (two packages) | **RESOLVED (2026-08-05): the `controller_quad_load` copy is DELETED**, together with `thrust_ratio_node.py` and the `kt_estimator` entry point — kT is now a fixed launch parameter (supervisor-approved). Only `controller_mpc_payload`'s three-backend original remains, and it now defaults OFF (`approach_kt_ukf:=false`). The earlier note stands as history: these were never duplicates (417 vs 277 lines, 669 diff lines) and unifying them would have broken one; the hazard was the shared filename + class name `ThrustRatioUKF` and the deadlock if both were imported into one process. Deletion removed the hazard rather than documenting it. |
 | 3 lineage copies of `acados.py` / `dynamics.py` (`controller_ukf` → `controller_mpc_payload` → `controller_quad_load`) | **Leave `controller_ukf` alone** (Mitchell's). Document the lineage and the intentional differences in the package walkthrough. Do not unify — divergence here is deliberate and unification would risk the working trackers. |
 | `plot_run.py`, `plot_xy.py`, `plot_takeoff.py` at repo root | Superseded by §9.4. Move to `tools/legacy/` rather than deleting, in case a figure depends on one. |
 | `tejen/` duplicate tree (COLCON_IGNORE'd) | Keep for reference until integration completes (D5); note in `CLAUDE.md` that `src/` is authoritative. |
@@ -696,10 +727,11 @@ matching sim config ID** so E9 comes free.
 **H5 is the hidden schedule risk** — it depends on another person's hardware and time.
 **Book those sessions with Tejen in W1** for W9–W11.
 
-**kT on hardware:** real launches keep `thrust_ratio:=24.0`, `thrust_quad_c:=0.0`. Bench-measure
-each airframe's hover kT in H0, set `kt_seed` **separately** from `thrust_ratio`, use
-learn-then-lock, and record per-airframe values in the flight card and the rig profile. A wrong
-seed has already caused a whole-flight failure mode in sim.
+**kT on hardware:** real launches keep `thrust_ratio:=24.0` — a FIXED gain; the adaptive
+estimator and the `thrust_quad_c` schedule were deleted on 2026-08-05 (supervisor-approved).
+Bench-measure each airframe's hover kT in H0 and record it per airframe in the flight card and
+the rig profile. If the packs sag enough to matter, calibrate `kt_batt_sag_frac` (hover the same
+load on a full and a nearly-flat pack, compare hover throttle) — it is built but ships at 0.0.
 
 ---
 

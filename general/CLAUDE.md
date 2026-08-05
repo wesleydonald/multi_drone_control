@@ -74,7 +74,7 @@ approaches and measurements, and are far more detailed than this file.
 | Package | What it is |
 |---|---|
 | `controller_load_mpc` | **Centralized planner** (`planner` node, 10 Hz). acados OCP over the coupled load+cable+drone model (`load_cable_dynamics.py`), emits per-drone reference trajectories. Also holds shared stateless helpers: `geometry.py`, `load_trajectory.py`, `creep_controller.py`, `reference_builder.py`, `params.py`. |
-| `controller_quad_load` | **Per-drone cable-aware MPC tracker** (`controller`, 50 Hz) + fleet manager (`main`) + kT estimator (`kt_estimator`). Owns all the **launch files**. |
+| `controller_quad_load` | **Per-drone cable-aware MPC tracker** (`controller`, 50 Hz) + fleet manager (`main`). Owns all the **launch files**. |
 | `controller_dissipative` | **The dissipative network.** `dissipative_node.py` subclasses `LoadPlanner` so takeoff stays on the proven OCP creep→lift; `dissipative_network.py` is the spring-damper network; `verify_dissipative.py` + `mini_plant.py` are the offline gate. |
 | `controller_mpc_payload` | Tejen's **approach MPC** for the magnet drone (+ his thrust-ratio UKF). |
 | `drone_magnet` | The attach chain: `online_join_planner`, `attach_target_publisher`, `magnet_attachment_manager`, `magnet_tip_publisher`, `elrs_mux`. |
@@ -225,8 +225,10 @@ ros2 launch controller_quad_load real_control_launch.py num_drones:=2   # termin
 
 The mocap rigid-body → drone routing table is at the top of
 `drone_communication/motion_capture_publisher_node.py` (`RIGID_BODY_TO_DRONE`,
-`PAYLOAD_RIGID_BODY_ID`). Real launches keep `thrust_ratio:=24.0` and
-`thrust_quad_c:=0.0` — the sim values (30 / 88.6) are **wrong on hardware**.
+`PAYLOAD_RIGID_BODY_ID`). Real launches keep `thrust_ratio:=24.0` — the measured kT of these airframes at
+full battery health. The sim launches' ~31 is **wrong on hardware** and vice versa:
+Gazebo's motor model is quadratic (`a = 88.6·u²`), so a linear kT there has to be the
+secant gain at hover.
 
 ### Logs and plots
 
@@ -314,12 +316,18 @@ confirm the parameter you think you changed actually plumbed through.
 - `dissipative_launch.py` alone **never engages the network** unless a detach or
   attach event fires. For a whole-flight network run use
   `dissipative_only_launch.py`.
-- Two different kT (thrust ratio) estimators exist — Tejen's UKF in
-  `controller_mpc_payload` and the ported UKF in `controller_quad_load`. Don't
-  conflate them. `kt_seed` is deliberately **separate** from `thrust_ratio`
-  (`thrust_ratio` is the takeoff constant, kept low; `kt_seed` is the estimator's
-  band centre and wants the true hover kT). See the `adaptive-thrust-ratio`
-  memory before touching either.
+- **kT is FIXED** (supervisor-approved, 2026-08-05). `thrust_ratio` is the whole
+  story: `a = kT·throttle`, one number, nothing moves it in flight. Two mechanisms
+  that used to — a per-drone parameter UKF (`thrust_ratio_node.py`) and the
+  `thrust_quad_c` airborne schedule — were **deleted**, because neither could be
+  reasoned about from the value the launch set (`thrust_ratio:=20` provably changed
+  nothing). The one remaining modifier is `takeoff_thrust_ratio`, deliberately below
+  `thrust_ratio` in sim so the over-thrust pops the drones off their taut-air-start
+  stands. A linear battery derate exists (`kt_batt_sag_frac`) but ships **off**,
+  uncalibrated.
+- Tejen's separate kT UKF still exists in `controller_mpc_payload` (the *approach*
+  controller). It was NOT deleted, only defaulted off (`approach_kt_ukf:=false` in
+  `three_attach_launch.py`). Don't conflate the two.
 
 ---
 

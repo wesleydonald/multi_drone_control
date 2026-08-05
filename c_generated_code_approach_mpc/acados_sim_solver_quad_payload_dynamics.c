@@ -197,7 +197,7 @@ int quad_payload_dynamics_acados_sim_create(quad_payload_dynamics_sim_solver_cap
     /* initialize parameter values */
     double* p = calloc(np, sizeof(double));
     
-    p[0] = 38;
+    p[0] = 24;
     p[1] = 0.5;
     p[2] = 0.12;
     p[3] = 100;

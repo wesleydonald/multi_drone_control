@@ -630,7 +630,15 @@ class DissipativeNetwork:
         LAND) every node is identical and the result matches the old repeat exactly.
         """
         q0, qd0, ho0 = self.q.copy(), self.qd.copy(), self.handout.copy()
-        gates = taut_gates or [1.0] * self.n
+        gates = taut_gates if taut_gates is not None else [1.0] * self.n
+        # Fail by NAME, not by IndexError. A caller sizing this list to the tethered
+        # count instead of the network count crashed the planner mid-attach, and the
+        # traceback pointed at `gates[i]` inside a comprehension rather than at the
+        # caller that got the length wrong (see dissipative_node._network_plan).
+        if len(gates) != self.n:
+            raise ValueError(
+                f'taut_gates has {len(gates)} entries but the network has {self.n} '
+                f'nodes. Size it to the NETWORK (n_net), not the tethered count.')
         out = [[] for _ in range(self.n)]
         try:
             for k, p_des in enumerate(p_des_seq):

@@ -37,8 +37,8 @@ then drive the fleet:
     ros2 topic pub -t 3 /fleet/command std_msgs/msg/String "{data: LAND}"
 
 HARDWARE NOTES (same as real_control_launch.py, plus the network tuning):
-  * thrust_ratio 24 / thrust_quad_c 0.0 -- real prop/motor kT, NOT the sim's
-    45 / 203. The quadratic-kT schedule is a sim-plant fit.
+  * thrust_ratio 24 -- the measured prop/motor kT at full battery health, NOT
+    the sim's ~31. FIXED: nothing estimates or reschedules it in flight.
   * cable_len / load_mass MUST match your physical rig.
   * The diss_* defaults are the tuned RIGID-SHORT values for cable_len=0.5,
     load_mass=0.4, drone_mass=0.6 (see dissipative_network.py). load_mass
@@ -74,9 +74,33 @@ def _args():
         DeclareLaunchArgument('cable_source', default_value='model'),
         DeclareLaunchArgument('payload_rest_z', default_value='0.05'),
         DeclareLaunchArgument('takeoff_spool_s', default_value='0.5'),
-        # Real prop/motor kT. NOT the sim's 45 / 203.
+        # ── kT (thrust ratio) ───────────────────────────────────────────────
+        # The ONE number the tracker's thrust model uses: it assumes a = kT*throttle
+        # and NOTHING estimates or reschedules it in flight. The adaptive UKF and the
+        # thrust_quad_c airborne schedule were both removed on 2026-08-05.
+        #
+        # 24.0 = the MEASURED kT of these airframes on a pack at full health. (The sim
+        # launches use ~31 instead: Gazebo's motor model is quadratic, so a linear
+        # model there has to use the secant gain at hover. The two genuinely differ.)
         DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
-        DeclareLaunchArgument('thrust_quad_c', default_value='0.0'),
+        # kT used before the drone is airborne. 0 = same as thrust_ratio, which is
+        # right for a GROUND takeoff: the deliberate takeoff under-assumption exists
+        # only to pop drones off the stands of a taut sim air-start. Set it below
+        # thrust_ratio only if this rig genuinely needs extra oomph to break ground.
+        DeclareLaunchArgument('takeoff_thrust_ratio', default_value='0.0'),
+        # BATTERY DERATE. kT falls as the pack sags:
+        #     kT = thrust_ratio * (1 - kt_batt_sag_frac * depletion)
+        #     depletion = clip((v_full - v)/(v_full - v_empty), 0, 1)
+        # OFF (0.0) by default -- 24.0 above is the full-health number, and the sag
+        # fraction has NOT been measured on this rig yet. To calibrate: hover the same
+        # load on a full pack and on a nearly-flat one and compare hover throttle.
+        # Voltage comes from /drone_N/telemetry (ELRS). With no telemetry the derate
+        # is skipped and kT stays at thrust_ratio.
+        DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
+        DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),   # 4S 4.20 V/cell
+        DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),  # 4S 3.50 V/cell
+        # Seconds between per-drone kT reports; 0 = silent.
+        DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
         # Experiment T1 (finding F10): terminal cost tracks ref_vel instead
         # of commanding a stop at the end of the horizon. Default false =
@@ -137,7 +161,11 @@ def launch_setup(context, *args, **kwargs):
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': f('thrust_ratio'),
-                         'thrust_quad_c': f('thrust_quad_c')}],
+                         'takeoff_thrust_ratio': f('takeoff_thrust_ratio'),
+                         'kt_batt_sag_frac': f('kt_batt_sag_frac'),
+                         'kt_batt_v_full': f('kt_batt_v_full'),
+                         'kt_batt_v_empty': f('kt_batt_v_empty'),
+                         'kt_print_period_s': f('kt_print_period_s')}],
             output='screen'))
 
     # ── Central fleet manager ─────────────────────────────────────────────────

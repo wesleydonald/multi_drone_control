@@ -1,0 +1,109 @@
+name: attach_ring_45
+description: >
+  THE ACCEPTANCE SCENARIO (THESIS_PLAN §9.3). Reproduce the documented 2026-07-28
+  attach runaway: a gap-centre weld (azimuth 180, attach_x_offset -0.08) with balanced
+  tensions and the soft hand-out, settling to a full 45 deg rim slot. Gazebo record:
+  briefly level (tilt 10.7 deg, load_z 0.578) then DIVERGES as the hand-out eases the
+  newcomer fully out -- drone 3's error grows REF 0.30 -> ACT 1.06, |aCm| -> 20,
+  tilt 10 -> 33 -> 72 deg.
+
+  This run must show the same. Its partner attach_ring_65.yaml must NOT: the pair is
+  the claim, not either one alone.
+
+  *** THE REFERENCE RECORD IS FROM A DIFFERENT PLANT (found 2026-08-05). ***
+  Both 2026-07-28 records were flown with motorConstant 1.42e-06, i.e. plant gain
+  c = 4*mc*maxRotVel^2/mass = 203 m/s^2 and a hover throttle of 0.220. Commit f0f7b9f
+  (2026-08-03, "Changed the motorconstant to match real world") took it to 0.62e-06,
+  c = 88.6, hover 0.333 -- 2.29x LESS thrust authority. This bench models c = 88.6, so
+  it is being asked to reproduce an aircraft that no longer exists in the repo.
+
+  Git also disposes of the earlier ball-joint worry: three_attach.sdf and
+  x3_drone3_magnet.sdf were both CREATED in 42efaaf with arm_to_magnet_tip already a
+  ball joint, and the magnet model has been touched exactly once since -- by f0f7b9f,
+  which changed only motorConstant. There is no pre-ball-joint version to compare.
+
+  *** REGENERATED IN GAZEBO 2026-08-05 (R0034-R0038, 5 repeats, current plant). ***
+  45 deg on the current SDF: welds 5/5 at t=35.6-37.4 s, then DIVERGES 5/5 --
+  /fleet/abort every run 0.4-7.6 s after the weld, payload peak tilt 69.7-180 deg
+  (median 106.5), drone 3 tracking error peaking 1.04-1.79 m (median 1.11). That last
+  number matches the 2026-07-28 record's "ACT 1.06" closely, so the 45 deg HALF of the
+  claim survives the plant change.
+
+  *** BUT THE PAIR NO LONGER DISCRIMINATES. *** attach_ring_65 was re-flown the same way
+  (R0039-R0043) and diverges too: aborts 4/5, peak tilt median 140.4 deg, drone 3 error
+  median 1.17 m -- statistically indistinguishable from 45 deg. The contrast half does
+  NOT reproduce as stable on the current plant, so "45 diverges, 65 does not" is not
+  currently a true statement about this simulator, and the bench cannot be asked to
+  reproduce it.
+
+  Both the SIL bench and Gazebo now agree that BOTH elevations diverge under a fixed kT,
+  which is itself a bench/Gazebo agreement result. The suspected cause is the fixed
+  thrust ratio against a quadratic plant (see controller_mpc._effective_kT): the same
+  bench runs discriminate again when the quadratic inversion is restored. Resolve that
+  before re-deriving this criterion. Do NOT relax the bars to make the pair pass.
+
+  Starts AIRBORNE and TAUT (start_taut:=true), matching verify_dissipative: the ground
+  break-off belongs to the centralized OCP and is a separate question from
+  reconfiguration.
+
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 1
+    start_taut: true
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.4
+    target_z: 0.6
+    # the ring-reconfiguration configuration (general/CLAUDE.md §6, "the open work")
+    attach_central: false
+    diss_balanced_tensions: true
+    attach_handout: true
+    attach_t_handout: 12.0
+    attach_x_offset: -0.08
+    attach_y_offset: 0.0
+    attach_elev_deg: 45.0
+    enable_obstacle_avoidance: false
+
+fleet:
+  n_tethered: 3
+  n_total: 4
+
+geometry:
+  cable_len: 0.5
+  attach_radius: 0.08
+  attach_z: 0.025
+  load_mass: 0.4
+  drone_mass: 0.6
+  thrust_c: 88.6
+  magnet_arm_len: 0.5
+
+initial:
+  stands: true          # take-off stands under the tethered drones (see Scenario.stands)
+  load_z: 0.45          # airborne taut handover height
+  elev_deg: 45.0        # tethers on the 45 deg cone
+  weld_x: -0.08         # gap centre between the 0/120/240 deg tethers
+  weld_y: 0.0
+  weld_z_offset: 0.05   # attach_target_publisher's z_offset
+
+timing:
+  dt: 0.02              # 50 Hz, the tracker's control period
+  substeps: 20          # 1 ms plant integration
+  duration_s: 50.0
+  step_timeout_s: 0.5
+  ready_timeout_s: 300.0
+
+events:
+  - {t: 1.0,  do: ARM}
+  - {t: 3.0,  do: TAKEOFF}
+  - {t: 12.0, do: WELD, arg: 3}
+
+acceptance:
+  drone: 3
+  window_s: 25.0
+  expect: diverge
+  min_track_err_m: 0.5
+  min_cable_accel: 15.0
+  min_tilt_deg: 45.0
