@@ -39,8 +39,7 @@ mux to our tracker AND folds drone 3 into the dissipative network (4th member).
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
-from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -51,6 +50,18 @@ ATTACH_DRONE_NAME = 'x3_drone3'
 
 def _args():
     return [
+        # SOFTWARE-IN-THE-LOOP mode (tools/sil_bench.py, docs/design/sil_bench.md).
+        # true = bring up ONLY the controllers -- the trackers, the fleet manager and
+        # the dissipative reference generator -- and leave out everything that talks to
+        # Gazebo (gz bridges, betaflight inner loops, mocap emulators) and the whole
+        # magnet/approach chain. The bench supplies mocap, IMU, /clock and a
+        # deterministic weld in their place.
+        #
+        # This exists so the bench does not restate the controller parameters: it runs
+        # THIS launch file, so every parameter below is the one the Gazebo run uses and
+        # a change here lands in the bench automatically. Default false, so a normal
+        # Gazebo run is byte-identical to before.
+        DeclareLaunchArgument('sil', default_value='false'),
         DeclareLaunchArgument('num_drones', default_value='3'),      # TETHERED fleet size
         DeclareLaunchArgument('reserved_attach', default_value='1'), # extra network capacity
         DeclareLaunchArgument('cable_len', default_value='0.5'),
@@ -66,28 +77,19 @@ def _args():
         DeclareLaunchArgument('cable_source', default_value='model'),
         DeclareLaunchArgument('payload_rest_z', default_value='-0.1'),
         DeclareLaunchArgument('takeoff_spool_s', default_value='0.5'),
-        DeclareLaunchArgument('thrust_ratio', default_value='30.0'),
         # ── kT (thrust ratio) -- kept in step with mpc_quad_load_launch.py ──
-        # 30.0, not the hardware 24.0: this is a SIM launch and with
-        # motorConstant=0.62e-06 the plant's true free-flight kT is ~29.5 and its
-        # loaded-hover kT is ~33. At 24 the takeoff over-thrust is (33/24)^2 = 1.9x,
-        # which is the takeoff bounce; at 30 it is a mild 1.2x.
-        # ADAPTIVE kT is available here but OFF by default, so this stack keeps the
-        # exact process set it was verified with. Turn it on with
-        #   adaptive_thrust_ratio:=true
-        # which also starts one kt_estimator process per drone (each runs a 39-point
-        # UKF, so watch CPU on this stack -- it already runs more nodes than the
-        # plain lift). See mpc_quad_load_launch.py for what every knob does.
-        DeclareLaunchArgument('adaptive_thrust_ratio', default_value='false'),
-        DeclareLaunchArgument('adaptive_thrust_feedback', default_value='true'),
-        DeclareLaunchArgument('thrust_ratio_estimator', default_value='ukf'),
-        DeclareLaunchArgument('kt_seed', default_value='33.0'),
-        DeclareLaunchArgument('kt_max_deviation', default_value='0.15'),
-        DeclareLaunchArgument('kt_freeze_after_s', default_value='10.0'),
-        DeclareLaunchArgument('ukf_q_kt', default_value='0.001'),
-        DeclareLaunchArgument('ukf_rate_hz', default_value='10.0'),
+        # ONE fixed number: the tracker assumes a = kT*throttle and nothing moves it
+        # in flight. 31.0, not the hardware 24.0, because Gazebo's motor model is
+        # quadratic (a = 88.6*u^2) so the linear secant gain at loaded hover is 32.9.
+        # takeoff_thrust_ratio sits below it on purpose -- that over-thrust is what
+        # pops the drones off their stands. Battery derate is OFF (0.0).
+        # See mpc_quad_load_launch.py for the full explanation of all four.
+        DeclareLaunchArgument('thrust_ratio', default_value='32.9'),
+        DeclareLaunchArgument('takeoff_thrust_ratio', default_value='30.0'),
+        DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
+        DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),
+        DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),
         DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
-        DeclareLaunchArgument('thrust_quad_c', default_value='88.6'),
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
         # Experiment T1 (finding F10): terminal cost tracks ref_vel instead
         # of commanding a stop at the end of the horizon. Default false =
@@ -172,8 +174,14 @@ def _args():
         # seeds from thrust_ratio (24.0) and re-estimates kT in flight, so a battery-sag /
         # payload-mass mismatch does not leave the approach flying on a stale hover gain.
         # ..._feedback false = shadow mode (estimate + log only, MPC keeps the fixed 24.0).
-        DeclareLaunchArgument('approach_kt_ukf', default_value='true'),
-        DeclareLaunchArgument('approach_kt_feedback', default_value='true'),
+        # The APPROACH controller (controller_mpc_payload, tejen's) has its own,
+        # separate thrust-ratio UKF. Defaulted OFF on 2026-08-05 for the same reason
+        # the tethered trackers' adaptive kT was removed: a fixed kT is what this rig
+        # is calibrated for, and an estimator that moves kT underneath a
+        # no-integrator tracker is a moving thrust feedforward. The code is left in
+        # controller_mpc_payload -- this only changes the default.
+        DeclareLaunchArgument('approach_kt_ukf', default_value='false'),
+        DeclareLaunchArgument('approach_kt_feedback', default_value='false'),
         # Approach-time obstacle avoidance of the REAL fleet drones. true = the approach
         # routes around drones 0..n-1 (needs a SMALL safety radius, below, or it seals the
         # corridor to the payload and never welds). false = ignore the fleet and weld
@@ -198,24 +206,30 @@ def launch_setup(context, *args, **kwargs):
 
     nodes = [SetParameter(name='use_sim_time', value=True)]
 
+    # SIL: controllers only. The bench is the simulator, so every Gazebo-facing node
+    # below is skipped. See the `sil` launch argument.
+    sil = (LaunchConfiguration('sil').perform(context).lower()
+           in ('1', 'true', 'yes'))
+
     # ── 3 TETHERED drones: bridges + betaflight comm + our tracker (as dissipative_launch) ──
     for i, drone_name in enumerate(drone_names):
-        nodes.append(Node(
-            package='ros_gz_bridge', executable='parameter_bridge', name=f'motor_bridge_{i}',
-            arguments=[f'/{drone_name}/gazebo/command/motor_speed'
-                       f'@actuator_msgs/msg/Actuators]ignition.msgs.Actuators']))
-        nodes.append(Node(
-            package='ros_gz_bridge', executable='parameter_bridge', name=f'imu_bridge_{i}',
-            arguments=[f'/{drone_name}/imu@sensor_msgs/msg/Imu[gz.msgs.IMU'],
-            remappings=[(f'/{drone_name}/imu', f'/drone_{i}/imu')]))
-        nodes.append(Node(
-            package='ros_gz_bridge', executable='parameter_bridge', name=f'detach_bridge_{i}',
-            arguments=[f'/drone_{i}/detach@std_msgs/msg/Empty]gz.msgs.Empty']))
-        nodes.append(Node(
-            package='simulation_communication', executable='payload_betaflight_comm',
-            name=f'bf_comm_{i}',
-            parameters=[{'drone_id': i, 'drone_name': drone_name,
-                         'parent_model': PARENT_MODEL}]))
+        if not sil:
+            nodes.append(Node(
+                package='ros_gz_bridge', executable='parameter_bridge', name=f'motor_bridge_{i}',
+                arguments=[f'/{drone_name}/gazebo/command/motor_speed'
+                           f'@actuator_msgs/msg/Actuators]ignition.msgs.Actuators']))
+            nodes.append(Node(
+                package='ros_gz_bridge', executable='parameter_bridge', name=f'imu_bridge_{i}',
+                arguments=[f'/{drone_name}/imu@sensor_msgs/msg/Imu[gz.msgs.IMU'],
+                remappings=[(f'/{drone_name}/imu', f'/drone_{i}/imu')]))
+            nodes.append(Node(
+                package='ros_gz_bridge', executable='parameter_bridge', name=f'detach_bridge_{i}',
+                arguments=[f'/drone_{i}/detach@std_msgs/msg/Empty]gz.msgs.Empty']))
+            nodes.append(Node(
+                package='simulation_communication', executable='payload_betaflight_comm',
+                name=f'bf_comm_{i}',
+                parameters=[{'drone_id': i, 'drone_name': drone_name,
+                             'parent_model': PARENT_MODEL}]))
         nodes.append(Node(
             package='controller_quad_load', executable='controller', name=f'controller_{i}',
             parameters=[{'drone_id': i,
@@ -226,32 +240,11 @@ def launch_setup(context, *args, **kwargs):
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': f('thrust_ratio'),
-                         'thrust_quad_c': f('thrust_quad_c'),
-                         'adaptive_thrust_ratio': b('adaptive_thrust_ratio'),
-                         'adaptive_thrust_feedback': b('adaptive_thrust_feedback'),
-                         'thrust_ratio_estimator':
-                             LaunchConfiguration('thrust_ratio_estimator'),
-                         'kt_seed': f('kt_seed'),
-                         'kt_max_deviation': f('kt_max_deviation'),
-                         'kt_freeze_after_s': f('kt_freeze_after_s'),
+                         'takeoff_thrust_ratio': f('takeoff_thrust_ratio'),
+                         'kt_batt_sag_frac': f('kt_batt_sag_frac'),
+                         'kt_batt_v_full': f('kt_batt_v_full'),
+                         'kt_batt_v_empty': f('kt_batt_v_empty'),
                          'kt_print_period_s': f('kt_print_period_s')}],
-            output='screen'))
-        # OUT-OF-LOOP kT estimator, one process per drone (see thrust_ratio_node.py).
-        # Only started when adaptive_thrust_ratio is on, which is NOT the default for
-        # this stack.
-        nodes.append(Node(
-            package='controller_quad_load', executable='kt_estimator',
-            name=f'kt_estimator_{i}',
-            parameters=[{'drone_id': i,
-                         'thrust_ratio': f('thrust_ratio'),
-                         'kt_seed': f('kt_seed'),
-                         'kt_max_deviation': f('kt_max_deviation'),
-                         'ukf_q_kt': f('ukf_q_kt'),
-                         'ukf_rate_hz': f('ukf_rate_hz'),
-                         'kt_print_period_s': f('kt_print_period_s')}],
-            condition=IfCondition(PythonExpression(
-                ["'", LaunchConfiguration('thrust_ratio_estimator'), "' == 'ukf' and '",
-                 LaunchConfiguration('adaptive_thrust_ratio'), "'.lower() == 'true'"])),
             output='screen'))
 
     # ── Central fleet manager (tethered fleet only) ─────────────────────────
@@ -311,53 +304,57 @@ def launch_setup(context, *args, **kwargs):
     elrs = f'/drone_{d}/ELRSCommand'
 
     # sim interface for the STANDALONE drone (not covered by the rviz/num_drones launch).
-    nodes.append(Node(
-        package='ros_gz_bridge', executable='parameter_bridge', name=f'motor_bridge_{d}',
-        arguments=[f'/{dn}/gazebo/command/motor_speed'
-                   f'@actuator_msgs/msg/Actuators]ignition.msgs.Actuators']))
-    nodes.append(Node(
-        package='ros_gz_bridge', executable='parameter_bridge', name=f'imu_bridge_{d}',
-        arguments=[f'/{dn}/imu@sensor_msgs/msg/Imu[gz.msgs.IMU'],
-        remappings=[(f'/{dn}/imu', f'/drone_{d}/imu')]))
-    nodes.append(Node(
-        package='ros_gz_bridge', executable='parameter_bridge', name=f'pose_bridge_{d}',
-        arguments=[f'/model/{dn}/pose@geometry_msgs/msg/PoseArray[gz.msgs.Pose_V']))
+    if not sil:
+        nodes.append(Node(
+            package='ros_gz_bridge', executable='parameter_bridge', name=f'motor_bridge_{d}',
+            arguments=[f'/{dn}/gazebo/command/motor_speed'
+                       f'@actuator_msgs/msg/Actuators]ignition.msgs.Actuators']))
+        nodes.append(Node(
+            package='ros_gz_bridge', executable='parameter_bridge', name=f'imu_bridge_{d}',
+            arguments=[f'/{dn}/imu@sensor_msgs/msg/Imu[gz.msgs.IMU'],
+            remappings=[(f'/{dn}/imu', f'/drone_{d}/imu')]))
+        nodes.append(Node(
+            package='ros_gz_bridge', executable='parameter_bridge', name=f'pose_bridge_{d}',
+            arguments=[f'/model/{dn}/pose@geometry_msgs/msg/PoseArray[gz.msgs.Pose_V']))
 
-    # mocap for the standalone drone -> /drone_3/motion_capture_state (state for both the
-    # approach MPC and our tracker). pose_index picks the body link from the PoseArray.
-    nodes.append(Node(
-        package='simulation_communication', executable='payload_mocap_emulator',
-        name=f'mocap_{d}',
-        parameters=[{'drone_id': d, 'drone_name': dn,
-                     'pose_topic': f'/model/{dn}/pose',
-                     'pose_index': i_('attach_pose_index'),
-                     'publish_payload': False}]))
+        # mocap for the standalone drone -> /drone_3/motion_capture_state (state for both the
+        # approach MPC and our tracker). pose_index picks the body link from the PoseArray.
+        nodes.append(Node(
+            package='simulation_communication', executable='payload_mocap_emulator',
+            name=f'mocap_{d}',
+            parameters=[{'drone_id': d, 'drone_name': dn,
+                         'pose_topic': f'/model/{dn}/pose',
+                         'pose_index': i_('attach_pose_index'),
+                         'publish_payload': False}]))
 
-    # betaflight inner loop: /drone_3/ELRSCommand -> /x3_drone3/.../motor_speed. Its pose sub
-    # is remapped from the nested default to the standalone pose topic.
-    nodes.append(Node(
-        package='simulation_communication', executable='payload_betaflight_comm',
-        name=f'bf_comm_{d}',
-        parameters=[{'drone_id': d, 'drone_name': dn, 'parent_model': PARENT_MODEL}],
-        remappings=[(f'/model/{PARENT_MODEL}/model/{dn}/pose', f'/model/{dn}/pose')]))
+        # betaflight inner loop: /drone_3/ELRSCommand -> /x3_drone3/.../motor_speed. Its pose sub
+        # is remapped from the nested default to the standalone pose topic.
+        nodes.append(Node(
+            package='simulation_communication', executable='payload_betaflight_comm',
+            name=f'bf_comm_{d}',
+            parameters=[{'drone_id': d, 'drone_name': dn, 'parent_model': PARENT_MODEL}],
+            remappings=[(f'/model/{PARENT_MODEL}/model/{dn}/pose', f'/model/{dn}/pose')]))
 
-    # ELRSCommand MUX: forwards APPROACH (_tejen) until the weld, then OURS (_diss).
-    nodes.append(Node(
-        package='drone_magnet', executable='elrs_mux', name=f'elrs_mux_{d}',
-        parameters=[{'drone_id': d, 'latch': True}], output='screen'))
+        # ELRSCommand MUX: forwards APPROACH (_tejen) until the weld, then OURS (_diss).
+        nodes.append(Node(
+            package='drone_magnet', executable='elrs_mux', name=f'elrs_mux_{d}',
+            parameters=[{'drone_id': d, 'latch': True}], output='screen'))
 
     # (a) collaborator's approach MPC -> pre-mux _tejen. Follows /join_planner/reference.
     # Gated separately (enable_approach_mpc:=false) since it is the one heavy node (acados
     # codegen at startup) -- lets you run the rest of the approach chain without it.
-    enable_approach_mpc = (LaunchConfiguration('enable_approach_mpc').perform(context).lower()
-                           in ('1', 'true', 'yes'))
+    # In SIL the whole approach chain is replaced by the bench's stand-in controller +
+    # deterministic weld (decision D5, docs/design/sil_bench.md §4).
+    enable_approach_mpc = (not sil) and (
+        LaunchConfiguration('enable_approach_mpc').perform(context).lower()
+        in ('1', 'true', 'yes'))
     if enable_approach_mpc:
         nodes.append(Node(
             package='controller_mpc_payload', executable='main', name=f'approach_mpc_{d}',
             parameters=[{'drone_id': d,
                          'use_external_reference': True,
                          'external_reference_topic': '/join_planner/reference',
-                         # kT: same 24.0 the tethered trackers use, and the UKF's initial estimate.
+                         # kT: same fixed value the tethered trackers use.
                          'mpc_thrust_ratio': f('thrust_ratio'),
                          'enable_thrust_ratio_ukf': b('approach_kt_ukf'),
                          'enable_thrust_ratio_feedback': b('approach_kt_feedback'),
@@ -390,12 +387,25 @@ def launch_setup(context, *args, **kwargs):
                      'payload_rest_z': f('payload_rest_z'),
                      'takeoff_spool_s': 0.0,
                      'thrust_ratio': f('thrust_ratio'),
-                     'thrust_quad_c': f('thrust_quad_c'),
+                     'takeoff_thrust_ratio': f('takeoff_thrust_ratio'),
+                     'kt_batt_sag_frac': f('kt_batt_sag_frac'),
+                     'kt_batt_v_full': f('kt_batt_v_full'),
+                     'kt_batt_v_empty': f('kt_batt_v_empty'),
                      # one-line ~2 Hz health log for the newcomer, to trace why it sinks/falls
                      # after the weld (z vs ref, xy error, throttle saturation, cable FF).
                      'enable_diag_log': True}],
-        remappings=[(elrs, f'{elrs}_diss'),
-                    (f'/drone_{d}/command', '/fleet/command')], output='screen'))
+        # In SIL there is no mux, so this tracker publishes straight onto
+        # /drone_3/ELRSCommand, which the bench plant consumes. Everything else about
+        # the node -- parameters, the /fleet/command remap that arms it with the fleet
+        # -- is unchanged, so it is the same tracker the Gazebo run flies.
+        remappings=([(f'/drone_{d}/command', '/fleet/command')] if sil else
+                    [(elrs, f'{elrs}_diss'),
+                     (f'/drone_{d}/command', '/fleet/command')]), output='screen'))
+
+    # SIL stops here: the bench replaces the magnet/approach chain below with a
+    # scripted weld and a /magnet/object_attached publish (decision D5).
+    if sil:
+        return nodes
 
     # attach target: republish the shared payload's mocap as the join planner's magnet-tip
     # target (PoseStamped + TwistStamped). Without this the planner never publishes a

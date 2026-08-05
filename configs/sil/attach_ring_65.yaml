@@ -1,0 +1,94 @@
+name: attach_ring_65
+description: >
+  THE CONTRAST HALF of the §9.3 acceptance pair. Identical to attach_ring_45.yaml in
+  every respect except attach_elev_deg: 65 instead of 45. Gazebo record for this
+  configuration (2026-07-28, post ball-joint fix): STABLE -- drone 3 holds its
+  reference (ERR 0.01-0.06 m), |aCm| bounded ~0.6-1.5, throttle ~hover, no crash -- but
+  the load parks at ~25 deg tilt because the steep settle keeps the newcomer too
+  central to balance the ring.
+
+  This run must NOT diverge. A bench that runs away for every configuration reproduces
+  the 45 deg runaway by accident and proves nothing; the claim is that the bench
+  DISCRIMINATES between the configuration that failed and the one that did not.
+
+  Note the tilt bound is 40 deg, not 10: the real 65 deg run parks tilted, and holding
+  the bench to "level" here would fail it for reproducing Gazebo correctly.
+
+  *** THE REFERENCE RECORD IS FROM A DIFFERENT PLANT (found 2026-08-05). ***
+  Flown at motorConstant 1.42e-06 (plant gain c = 203, hover throttle 0.220); the repo
+  has been at 0.62e-06 (c = 88.6, hover 0.333) since f0f7b9f on 2026-08-03 -- 2.29x
+  less thrust authority. See attach_ring_45.yaml for the full note.
+
+  *** REGENERATED IN GAZEBO 2026-08-05 (R0039-R0043, 5 repeats): THIS HALF NO LONGER
+  HOLDS. *** The "STABLE" behaviour above does NOT reproduce on the current plant. 65 deg
+  now diverges much like 45 deg: /fleet/abort 4/5, payload peak tilt 100.4-179.3 deg
+  (median 140.4), drone 3 tracking error 1.13-1.27 m (median 1.17) against the recorded
+  "ERR 0.01-0.06 m". It also only welded 3/5, so the approach itself is less reliable at
+  this elevation.
+
+  Since the acceptance claim is DISCRIMINATION between the two elevations, and the two
+  are now indistinguishable, the criteria below cannot be met by any bench that is
+  faithful to the current simulator -- the discrimination is absent from the thing being
+  reproduced. Fix the fixed-kT/quadratic-plant mismatch first (see attach_ring_45.yaml),
+  then re-fly both and re-derive these numbers.
+
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 1
+    start_taut: true
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.4
+    target_z: 0.6
+    attach_central: false
+    diss_balanced_tensions: true
+    attach_handout: true
+    attach_t_handout: 12.0
+    attach_x_offset: -0.08
+    attach_y_offset: 0.0
+    attach_elev_deg: 65.0
+    enable_obstacle_avoidance: false
+
+fleet:
+  n_tethered: 3
+  n_total: 4
+
+geometry:
+  cable_len: 0.5
+  attach_radius: 0.08
+  attach_z: 0.025
+  load_mass: 0.4
+  drone_mass: 0.6
+  thrust_c: 88.6
+  magnet_arm_len: 0.5
+
+initial:
+  stands: true          # take-off stands under the tethered drones (see Scenario.stands)
+  load_z: 0.45
+  elev_deg: 45.0
+  weld_x: -0.08
+  weld_y: 0.0
+  weld_z_offset: 0.05
+
+timing:
+  dt: 0.02
+  substeps: 20
+  duration_s: 50.0
+  step_timeout_s: 0.5
+  ready_timeout_s: 300.0
+
+events:
+  - {t: 1.0,  do: ARM}
+  - {t: 3.0,  do: TAKEOFF}
+  - {t: 12.0, do: WELD, arg: 3}
+
+acceptance:
+  drone: 3
+  window_s: 25.0
+  expect: stable
+  max_track_err_m: 0.15
+  max_cable_accel: 5.0
+  max_tilt_deg: 40.0

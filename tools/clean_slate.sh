@@ -92,6 +92,19 @@ if [ "$CHECK_ONLY" -eq 0 ]; then
   rm -f /dev/shm/fastrtps_* /dev/shm/sem.fastrtps_* 2>/dev/null
   echo "   removed $n_shm segment(s)"
 
+  # ── Verify the segments actually went, BEFORE restarting the daemon ───────
+  # Ordering is load-bearing. The daemon recreates fastrtps_* the instant it
+  # starts, so checking after the restart counted the daemon's OWN fresh
+  # segments as leaked ones and this script exited 1 every single time --
+  # unconditionally, on a perfectly clean machine, blaming "another user".
+  # sil_bench.py ignores the exit code so it never noticed; run_experiment.py
+  # honours it and refused to run at all.
+  shm_left=$(ls /dev/shm/fastrtps_* 2>/dev/null | wc -l)
+  if [ "$shm_left" -gt 0 ]; then
+    echo "!! $shm_left Fast-DDS segment(s) survived removal (owned by another user?)" >&2
+    exit 1
+  fi
+
   # ── ROS daemon ────────────────────────────────────────────────────────────
   # The daemon caches discovery, and after processes are killed underneath it,
   # it can go stale: `ros2 node list` then returns NOTHING while topics are
@@ -148,12 +161,6 @@ if [ -n "$REMAIN" ]; then
   echo "!! still running:" >&2
   echo "$REMAIN" >&2
   echo "!! NOT clean — a run started now would be corrupt." >&2
-  exit 1
-fi
-
-shm_left=$(ls /dev/shm/fastrtps_* 2>/dev/null | wc -l)
-if [ "$shm_left" -gt 0 ] && [ "$CHECK_ONLY" -eq 0 ]; then
-  echo "!! $shm_left Fast-DDS segment(s) survived removal (owned by another user?)" >&2
   exit 1
 fi
 

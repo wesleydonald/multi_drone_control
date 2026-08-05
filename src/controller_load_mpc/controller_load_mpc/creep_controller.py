@@ -19,6 +19,9 @@ from .geometry import quat_to_rot_np
 CREEP_VEL      = 0.10          # m/s rise
 CREEP_LEAD     = 0.10          # m z lead held while grounded, to initiate climb
 LIFTOFF_MARGIN = 0.05          # m above spawn before the ramp starts
+LIFTOFF_TIMEOUT_S  = 4.0       # s after TAKEOFF to start the sweep regardless (see
+                               # _arc_creep: a rigid rod can make the margin above
+                               # unreachable, which deadlocked the whole phase)
 TAUT_SWITCH_GATE = 0.95        # hand over once every cable is at least this taut
 
 # Rigid ground-start handover. The measured elevation is allowed to lag the swept
@@ -60,6 +63,7 @@ class CreepController:
         self._arc_wait = 0.0               # s since the arc sweep finished
         self._arc_hold = 0.0               # s measured elev held in tolerance
         self.lifted_off = False            # gate the creep climb on real liftoff
+        self._liftoff_wait = 0.0           # s since TAKEOFF without liftoff
         self._diag_ctr = 0
 
     def sin_elev(self, i, load_state):
@@ -76,11 +80,11 @@ class CreepController:
             return 0.0
         return float(-d[2] / nrm)          # drone above attach -> positive
 
-    def step(self, load_state, drone_pos, gates):
+    def step(self, load_state, drone_pos, gates, takeoff_seen=True):
         """Publish this tick's creep references and return (handover, reason).
         handover=True means the cables are ready for the OCP to take over."""
         if self.handover_elev_deg > 0.0:
-            self._arc_creep(load_state, drone_pos)
+            self._arc_creep(load_state, drone_pos, takeoff_seen)
         else:
             self._soft_creep(load_state, drone_pos, gates)
         return self._handover_check(load_state, gates)
@@ -118,7 +122,7 @@ class CreepController:
             return True, 'cables taut'
         return False, None
 
-    def _arc_creep(self, load_state, drone_pos):
+    def _arc_creep(self, load_state, drone_pos, takeoff_seen=True):
         """Phase-1 takeoff for a RIGID rod starting near-horizontal.
 
         A rigid rod fixes |drone - attach|. So commanding the drones straight up
@@ -160,6 +164,39 @@ class CreepController:
                 if drone_pos[i][2] > z_spawn + LIFTOFF_MARGIN:
                     self.lifted_off = True
                     break
+            # LIFTOFF TIMEOUT -- same principle as HANDOVER_TIMEOUT_S below: never
+            # strand the fleet in a phase it cannot leave.
+            #
+            # This gate deadlocks on a rigid rod, and measurably does. LIFTOFF_MARGIN
+            # is 0.05 m of z, which on a 0.5 m rod pivoting about a grounded attach
+            # point means reaching ~11.5 deg of elevation -- but the reference held
+            # here before liftoff is a PURE VERTICAL lead (CREEP_LEAD), which is the
+            # exact thing this class's own docstring says "cannot rotate the rod at
+            # all". The drones push up against the rod, top out at 9-10 deg (~0.031 m,
+            # measured), and never trip the gate. arc_theta then never advances,
+            # ref_done never becomes true, the handover timeout below never even arms,
+            # and the fleet sits at its spawn angle until someone kills the run.
+            #
+            # Measured over 8 identical Gazebo runs (R0026-R0033, 2026-08-05): 2 stalled
+            # here forever and 3 more only escaped after ~40 s, because whether the
+            # drones cross 0.05 m against the rod is a coin flip. Starting the sweep is
+            # what physically PERMITS the climb (it adds the inward radial component the
+            # rod needs), so on timeout the right move is to start sweeping, not to wait
+            # longer. The timer only runs once the fleet has been told to take off --
+            # before that the drones are idle on the ground and not rising is correct.
+            if takeoff_seen and not self.lifted_off:
+                self._liftoff_wait += 1.0 / self.hz
+                if self._liftoff_wait >= LIFTOFF_TIMEOUT_S:
+                    zs = [drone_pos[i][2] - (self.arc_anchor[i][0][2] + self.cable_len
+                                             * np.sin(self.arc_theta0[i]))
+                          for i in range(self.n)]
+                    self._log.warn(
+                        f'[planner] liftoff gate timed out {self._liftoff_wait:.1f}s '
+                        f'after TAKEOFF; best rise {max(zs):+.3f} m vs the '
+                        f'{LIFTOFF_MARGIN:.2f} m margin (a rigid rod resists the pure '
+                        f'vertical lead). Starting the arc sweep anyway — the sweep is '
+                        f'what lets them climb.')
+                    self.lifted_off = True
         else:
             self.arc_theta = min(target, self.arc_theta + dtheta)
 

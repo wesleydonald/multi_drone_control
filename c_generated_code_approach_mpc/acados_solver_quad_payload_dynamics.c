@@ -398,7 +398,7 @@ void quad_payload_dynamics_acados_create_set_default_parameters(quad_payload_dyn
     const int N = capsule->nlp_solver_plan->N;
     // initialize parameters to nominal value
     double* p = calloc(NP, sizeof(double));
-    p[0] = 38;
+    p[0] = 24;
     p[1] = 0.5;
     p[2] = 0.07;
     p[3] = 100;
@@ -517,7 +517,7 @@ void quad_payload_dynamics_acados_setup_nlp_in(quad_payload_dynamics_solver_caps
     W_0[12+(NY0) * 12] = 0.0002;
     W_0[13+(NY0) * 13] = 0.1;
     W_0[14+(NY0) * 14] = 0.1;
-    W_0[15+(NY0) * 15] = 5;
+    W_0[15+(NY0) * 15] = 8;
     W_0[16+(NY0) * 16] = 0.1;
     W_0[17+(NY0) * 17] = 0.5;
     W_0[18+(NY0) * 18] = 0.5;
@@ -553,7 +553,7 @@ void quad_payload_dynamics_acados_setup_nlp_in(quad_payload_dynamics_solver_caps
     W[12+(NY) * 12] = 0.0002;
     W[13+(NY) * 13] = 0.1;
     W[14+(NY) * 14] = 0.1;
-    W[15+(NY) * 15] = 5;
+    W[15+(NY) * 15] = 8;
     W[16+(NY) * 16] = 0.1;
     W[17+(NY) * 17] = 0.5;
     W[18+(NY) * 18] = 0.5;

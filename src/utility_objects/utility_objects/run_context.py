@@ -13,7 +13,7 @@ directory.
 WHY THIS EXISTS
 ---------------
 Until 2026-08-04 `DataLogger` built its path from `os.getcwd()`, and two nodes
-(`controller_mpc.py`, `thrust_ratio_node.py`) call `os.chdir()` into the acados
+(`controller_mpc.py`, and historically `thrust_ratio_node.py`) call `os.chdir()` into the acados
 build directory at import time, because acados generates its C code relative to
 the working directory. The consequence was that **237 MB of flight logs lived
 inside `c_generated_code_quad_load/`** -- a gitignored build directory that is

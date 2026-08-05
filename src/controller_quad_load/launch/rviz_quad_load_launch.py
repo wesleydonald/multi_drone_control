@@ -74,6 +74,8 @@ def launch_setup(context, *args, **kwargs):
     attach = (LaunchConfiguration('attach').perform(context).lower()
               in ('1', 'true', 'yes'))
     parent = LaunchConfiguration('parent_model').perform(context)
+    rviz = (LaunchConfiguration('rviz').perform(context).lower()
+            in ('1', 'true', 'yes'))
 
     # With attach:=true a free approach drone (id n, standalone) also flies. Its pose bridge
     # + mocap come from three_attach_launch (it is NOT nested under lift_system), so the
@@ -145,11 +147,16 @@ def launch_setup(context, *args, **kwargs):
         fh.write(build_config(n_viz, show_actual=show_actual,
                               detach=detach, attach=attach))
 
-    nodes.append(Node(
-        package='rviz2', executable='rviz2', name='rviz2',
-        arguments=['-d', cfg],
-        parameters=[{'use_sim_time': True}],
-        output='screen'))
+    # RViz itself is optional; everything above it is not. This launch owns the clock
+    # and pose bridges and the mocap emulators, so a headless batch (§9.1,
+    # tools/run_experiment.py) still has to run it -- it just must not also start a
+    # GUI that needs a display and burns CPU for nobody. rviz:=false does that.
+    if rviz:
+        nodes.append(Node(
+            package='rviz2', executable='rviz2', name='rviz2',
+            arguments=['-d', cfg],
+            parameters=[{'use_sim_time': True}],
+            output='screen'))
     return nodes
 
 
@@ -169,5 +176,10 @@ def generate_launch_description():
         # Show the ATTACH button in the ArmPanel (arms the approach drone's magnet for the
         # attach flow). Off by default; pass attach:=true with three_attach.sdf.
         DeclareLaunchArgument('attach', default_value='false'),
+        # Start the RViz GUI. Default true = the interactive behaviour everyone
+        # already relies on. rviz:=false keeps the clock/pose bridges and the mocap
+        # emulators -- which this launch OWNS and no controller can run without --
+        # and skips only the GUI, which is what a headless batch run needs.
+        DeclareLaunchArgument('rviz', default_value='true'),
         OpaqueFunction(function=launch_setup),
     ])

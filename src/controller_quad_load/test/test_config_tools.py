@@ -77,19 +77,54 @@ def test_non_uniform_attach_ring_is_flagged():
 def test_launch_args_are_parsed_without_executing_the_launch():
     a = launch_args(LAUNCHES / 'mpc_quad_load_launch.py')
     assert 'thrust_ratio' in a and 'load_mass' in a
-    assert a['thrust_ratio'] == '30.0'
+    assert a['thrust_ratio'] == '32.9'
 
 
 def test_sim_and_real_thrust_settings_still_differ():
-    """thrust_ratio 30/88.6 in sim vs 24/0.0 on hardware. If these ever converge by
-    accident, one of them is wrong — the sim plant and the real airframe genuinely
-    have different thrust curves."""
+    """thrust_ratio 32.9 in sim vs 24.0 on hardware. If these ever converge by
+    accident, one of them is wrong — Gazebo's motor model is QUADRATIC
+    (a = 88.6*u^2), so a linear kT there must be the secant gain at hover
+    (88.6 * the 0.371 measured hover throttle = 32.9); the real airframe
+    measures 24 at full battery health."""
     sim = launch_args(LAUNCHES / 'mpc_quad_load_launch.py')
     real = launch_args(LAUNCHES / 'real_control_launch.py')
     assert sim['thrust_ratio'] != real['thrust_ratio']
-    assert sim['thrust_quad_c'] != real['thrust_quad_c']
-    assert float(real['thrust_quad_c']) == 0.0, (
-        'the quadratic kT schedule is a sim-plant artifact and must stay off on hardware')
+    assert float(real['thrust_ratio']) == 24.0
+
+
+def test_the_adaptive_kt_machinery_stays_gone():
+    """kT is FIXED (supervisor-approved 2026-08-05, reaffirmed 2026-08-05 after the
+    quadratic-inversion finding below). Two mechanisms used to move it underneath the
+    tracker — a per-drone UKF and the thrust_quad_c airborne schedule — and both were
+    removed because neither could be reasoned about from the value the launch file sets:
+    `thrust_ratio:=20` provably changed nothing. If any of these names comes back in a
+    launch, the number below stops meaning what it says.
+
+    `thrust_quad_c` is on this list BY DECISION, not by oversight. Re-linearising kT on
+    the last throttle is the exact algebraic inverse of Gazebo's quadratic motor model
+    and it demonstrably removes the sim attach capsize (SIL R0022/R0023 vs R0015/R0016),
+    but Wesley's decision is that the tracker flies one fixed number and nothing else.
+    The sim/plant mismatch is to be fixed in the SIMULATOR, not by varying kT."""
+    gone = ('thrust_quad_c', 'adaptive_thrust_ratio', 'adaptive_thrust_feedback',
+            'thrust_ratio_estimator', 'kt_seed', 'kt_max_deviation',
+            'kt_freeze_after_s', 'ukf_q_kt', 'ukf_rate_hz')
+    for lf in LAUNCHES.glob('*launch.py'):
+        a = launch_args(lf)
+        for name in gone:
+            assert name not in a, f'{lf.name} re-declares {name}'
+
+
+def test_the_battery_derate_ships_disabled_everywhere():
+    """The linear kT-vs-voltage derate is built but UNCALIBRATED — nobody has measured
+    the sag fraction on this rig. Shipping it on would change every flight on the
+    strength of a guessed number."""
+    for lf in LAUNCHES.glob('*launch.py'):
+        a = launch_args(lf)
+        if 'kt_batt_sag_frac' in a:
+            assert float(a['kt_batt_sag_frac']) == 0.0, (
+                f'{lf.name} enables the battery derate by default')
+            assert float(a['kt_batt_v_full']) > float(a['kt_batt_v_empty']), (
+                f'{lf.name} has an inverted battery voltage range')
 
 
 def test_terminal_vel_ref_defaults_to_the_historical_behaviour_everywhere():

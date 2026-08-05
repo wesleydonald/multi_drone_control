@@ -404,7 +404,8 @@ class LoadPlanner(Node):
 
         gates = [self._cable_taut_gate(i) for i in range(self.n)]
         if self.phase == 'creep':
-            handover, reason = self.creep.step(self.load_state, self.drone_pos, gates)
+            handover, reason = self.creep.step(self.load_state, self.drone_pos, gates,
+                                               self.takeoff_seen)
             # Keep the OCP warm on the live measured config (discarding its horizon,
             # the trackers stay on the creep refs) so the handover has a warm start.
             self._prime_solver()

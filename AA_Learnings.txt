@@ -232,9 +232,6 @@ Let me know if you have any questions or concerns or think any design decisions 
 dissipative to work better with trajectories.
 For the attach situation I am having a bit of trouble with the attachment point and where the attached drone should redistribute to.
 
-
-
-
 Thrust ratio linear based on battery voltage -> fixing now
 Starting positions are hard coded? <- needs fixing/why does yaw move around
   SOLVED 2026-08-03. Nothing was referenced to the starting yaw: the load attitude
@@ -251,42 +248,150 @@ Solver failing for certain starting configurations in real life.
 
 OPEN: dissipative-network trajectory tracking -> DISSIPATIVE_TRACKING_ISSUE.md
 
+source ros / install/setup.bash | mdc |
+cd ~/multi_drone_control && colcon build --symlink-install && source install/setup.bash │ cb                      │
+  ├─────────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────┤
+  │ same, one package                                                                       │ cb controller_quad_load │
+  ├─────────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────┤
+  │ ros2 launch controller_quad_load real_io_launch.py num_drones:=3                        │ rio                     │
+  ├─────────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────┤
+  │ ros2 launch controller_quad_load real_control_launch.py num_drones:=3 ...               │ rctl ...                │
+  ├─────────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────┤
+
+  │ real_dissipative_launch.py num_drones:=3 ...                                            │ rdiss ...   
+ │ cd simulation_assets && gz sim three_rigid_ground.sdf -v4 -r                          │ sgz three_rigid_ground                      │
+  ├───────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+  │ ros2 launch controller_quad_load rviz_quad_load_launch.py num_drones:=3               │ sviz                                        │
+  ├───────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+  │ ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=3                │ smpc load_traj:=circle                      │
+  │ load_traj:=circle                                                                     │                                             │
+  ├───────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+  │ ... dissipative_only_launch.py num_drones:=3 ...                                      │ sdo ...                                     │
+  ├───────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+  │ ... dissipative_launch.py num_drones:=4                                               │ sdet                                        │
+  ├───────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+  │ ... three_attach_launch.py                                                            │ satt                                        │
+  ├───────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+  │ tools/check_geometry.py <world> --launch <launch>                                     │ simcheck three_attach                       │
+  │                                                                                       │ three_attach_launch.py                      │
+  ├───────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+  │ —                                                                                     │ sims — prints the pairing table 
+Tests for today:
+
+Make sure: RIGID_BODY_TO_DRONE = {10: 0, 20: 1, 30: 2}, payload body 8
+
+rio num_drones:=3 drone0_serial:=/dev/QUAD0 drone1_serial:=/dev/QUAD1 drone2_serial:=/dev/QUAD2
+
+THEN testing new takeoff method:
+
+(Make sure these are correct: load_mass:=<measured> cable_len:=<measured> thrust_ratio:=24.0)
+rctl num_drones:=3 lift_ramp_vel:=0.15 load_traj:=hover
+rctl adaptive_thrust_ratio:=true adaptive_thrust_feedback:=false   # only prints estimated thrust ratios
+rctl adaptive_thrust_ratio:=true        # estimator on, drives the MPC
 
 
-Read these three first, in order, before doing anything:
-    1. general/CLAUDE.md        — orientation: package map, data flow, run commands,
-                                  traps, open problems, and the pre-commit gate
-    2. general/THESIS_PLAN.md   — the plan. §9 is what I want you to build now.
-    3. docs/design/fleet_safety.md — the failsafe policy and why it is what it is
-
-  State: all 13 audit findings (F1–F13) are closed. `./tools/gate.sh` is green —
-  5 stages: workspace · 43 unit tests · 25 module imports · world-geometry agreement ·
-  dissipative harness A–K. Run it before proposing any Gazebo run and before any commit.
-  `--quick` skips the slow last stage.
-
-  Task: Part 0 test infrastructure, THESIS_PLAN.md §9 (the W1–W2 block).
-    §9.1 tools/run_experiment.py   headless, sim-time gated, clean slate, manifest,
-                                   auto-metrics + auto-plot, fails loudly
-    §9.2 tools/metrics.py          every number in the thesis comes from here; one
-                                   function per metric, each unit-tested against a
-                                   synthetic signal with a known answer
-    §9.3 tools/sil_bench.py        HIGHEST-LEVERAGE ITEM — do this one first
-    §9.4 tools/plot_run.py, compare_runs.py, thesis_figures.py
-
-  The SIL bench has a hard acceptance test, stated in §9.3: it must REPRODUCE the
-  documented 2026-07-28 attach runaway (gap-centre weld, attach_elev_deg:=45 — drone 3's
-  error growing, |aCm| climbing past 15 m/s²). The existing verify_dissipative harness
-  drives a PD proxy and provably CANNOT reproduce it; the real tracker has no integrator,
-  caps cable feedforward at CABLE_ACCEL_CAP = 6.0, and has solver dynamics — those three
-  are the runaway mechanism. If the bench settles cleanly like the PD harness, it is not
-  good enough yet. Do not skip or soften this test; it is the whole justification for the
-  investment, and Part 3 is gated on it.
 
 
- How I want you to work:
-  - Ask before building something the plan doesn't call for, and say so if you think the
-    plan is wrong — §9 was written before the code existed and F9 already had to change.
-  - Don't claim something works because a build passed. `colcon build` and `ast.parse`
-    both pass on a missing import that kills every node at launch; that has happened here.
-  - The offline harness has documented blind spots. When a change isn't covered by the
-    gate, say so plainly rather than implying it is verified.
+
+
+NEED TO TEST:
+1 - New takeoff method/works in different configurations
+2 - Adaptive kT
+
+
+0. Pretesting, Make sure these are correct:
+
+  mdc
+  ┌─────────────────────────────────────┬────────────────┬──────────────────────┐
+  │               Measure               │    Pass as     │ Default if you don't │
+  ├─────────────────────────────────────┼────────────────┼──────────────────────┤
+  │ Payload mass (kg)                   │ load_mass:=    │ 0.1                  │
+  ├─────────────────────────────────────┼────────────────┼──────────────────────┤
+  │ Attach point → drone CoG            │ cable_len:=    │ 0.5                  │
+  ├─────────────────────────────────────┼────────────────┼──────────────────────┤
+  │ Hover throttle → kT = 9.81/throttle │ thrust_ratio:= │ 24.0                 │
+  ├─────────────────────────────────────┼────────────────┼──────────────────────┤
+  │ Attach ring radius                  │ not declarable │ 0.08                 │
+  └─────────────────────────────────────┴────────────────┴──────────────────────┘
+
+  attach_radius/attach_z still aren't launch args on the real side currently
+
+  1. Bring-up (two terminals)
+
+  # terminal 1
+  mdc && rio num_drones:=3
+
+  # verify before starting terminal 2
+  ros2 topic hz /drone_0/motion_capture_state
+  ros2 topic hz /payload/motion_capture_state
+  ros2 topic echo /drone_0/telemetry --once      # rssi/battery = RF link up
+
+  Mocap routing is already correct for 3 ({10: 0, 20: 1, 30: 2}, payload body 8).
+
+  2. Test 1 — thrust calibration (hold, then hover)
+
+  # terminal 2 — HOLD: taut config, no climb. Isolates thrust from the lift.
+  mdc && rctl load_mass:=0.2 thrust_ratio:=24.0 lift_ramp_vel:=0.0 load_traj:=hover num_drones:=3
+
+Then the real hover, slower than the 0.20 default:
+
+  rctl load_mass:=0.2 thrust_ratio:=24.0 lift_ramp_vel:=0.15 load_traj:=hover
+
+  fleet arm  →  fleet takeoff  →  fleet land
+
+  Fix thrust_ratio.
+
+  Note the takeoff: start_taut:=true is the default on the real launches, so there's no creep phase — the OCP owns it from the first tick,
+  same as your sim launches. handover_settle_s (0.5 s) then the lift ramp.
+
+  3. Test 2 — starting configuration (the headline test)
+
+  This is the 06994f2 fix and the one thing fully testable today with no code changes. Same command each time — only the physical placement
+  changes:
+
+  rctl load_mass:=0.2 thrust_ratio:=24.0 lift_ramp_vel:=0.10 load_traj:=hover
+
+  - 2a — drones shuffled in the ring, payload world-aligned
+  - 2b — payload yawed ~70–80° (half a slot pitch is 60° for n=3; this is the case that used to break)
+  - 2c — both
+
+  Before arming, confirm in the planner log:
+
+  [planner] load yaw datum latched at +XX.X deg
+  [planner] auto slot assignment (slot->drone): [...] (load yaw datum +XX.X deg)
+
+  Failure signature: acados status 4 on the first solve, fleet never leaves the ground. If the datum prints +0.0 with a visibly yawed
+  payload, that's the mocap payload quaternion, not the planner.
+
+  4. Test 3 — trajectories (only after hover is clean)
+
+  rctl ... load_traj:=line_x  traj_speed:=0.2 traj_distance:=0.8
+  rctl ... load_traj:=circle  traj_speed:=0.2 traj_radius:=0.4
+  rctl ... load_traj:=fig_8   traj_speed:=0.2 traj_radius:=0.4
+  rctl ... load_traj:=spin    traj_speed:=0.2 traj_radius:=0.4
+
+  spin most exercises the new yaw datum (q_ref is now psi0 + commanded yaw). hover/line_x never self-complete — end those with fleet land.
+
+  5. If time allows — adaptive kT
+
+Shadow first: it estimates and prints but the MPC keeps flying the fixed ratio.
+
+  rctl ... adaptive_thrust_ratio:=true adaptive_thrust_feedback:=false kt_seed:=<measured hover kT>
+
+  Read the ~1 Hz per-drone report. Only if the numbers look sane:
+
+  rctl ... adaptive_thrust_ratio:=true kt_seed:=<measured hover kT>
+
+  Set kt_seed explicitly. It defaults to 0.0 → falls back to thrust_ratio, and the band is kt_seed × (1 ± 0.15) — a seed well below truth
+  pins the estimate at the ceiling all flight. Takeoff is unaffected either way (the estimate is gated behind 4 cm of climb), so this only
+  changes the climb and cruise.
+
+
+
+Simplify the thrust ratio situation, I want it to be simple and based on the battery level (linear relationship) the
+estimation is too complex and I will know what the thrust ratio is anyway. Work out what thrust_quad_c means/is
+
+Testing next week we have the elrs transmitters new drones coming in so we can test 4 next week just hover need new udev rules
+test on friday maybe come in before as well.
+Dissipative can restabilize then switch back to mpc need to compile for 2,3,4 on startup, or just improve the dissipative method
+Attach, new drone does not need to take any weight initially and can reoganise a bit first before taking the tension

@@ -38,7 +38,9 @@ step "2/5  unit tests"
 if python3 -m pytest src/utility_objects/test/test_safety.py \
                     src/controller_quad_load/test/test_rviz_config.py \
                     src/controller_quad_load/test/test_planner_reference.py \
-                    src/controller_quad_load/test/test_config_tools.py -q 2>&1 | tail -3; then
+                    src/controller_quad_load/test/test_config_tools.py \
+                    src/controller_dissipative/test/test_attach_network.py \
+                    src/controller_load_mpc/test/test_creep_controller.py -q 2>&1 | tail -3; then
   :
 else
   FAILED+=("pytest")

@@ -1,0 +1,74 @@
+name: attach_ring_45_gz
+description: >
+  REGENERATE THE §9.3 REFERENCE RECORD. The 45 deg ring-attach config, flown headless in
+  Gazebo against the CURRENT world and SDF.
+
+  Why this run exists: the acceptance record the SIL bench is judged against was flown
+  on 2026-07-28 with motorConstant 1.42e-06 -- plant gain c = 4*mc*maxRotVel^2/mass =
+  203 m/s^2, hover throttle 0.220. Commit f0f7b9f (2026-08-03, "Changed the
+  motorconstant to match real world") set 0.62e-06 -> c = 88.6, hover 0.333: 2.29x less
+  thrust authority. The bench models 88.6, so until this run replaces the recorded
+  numbers, bench-vs-record agreement or disagreement means nothing either way.
+
+  The matching partner is attach_ring_65_gz.yaml. The §9.3 claim is DISCRIMINATION
+  between the two elevations, so both must be re-flown before either is quoted.
+
+  NO ACCEPTANCE CRITERIA ON PURPOSE. This run is being made to FIND OUT what the current
+  plant does; asserting the old numbers would decide the question in advance. Only the
+  two things that mean "this run is not evidence" are asserted: the payload must not
+  fall through the floor, and the weld must actually happen. Read the result, then write
+  the criteria.
+
+  KNOWN OPEN ISSUE, expect to see it here: kT is a fixed 32.9 in sim, and against a
+  quadratic plant a fixed kT flies at 2x its design loop gain (secant 32.9 vs tangent
+  65.7). In the SIL bench that capsizes the payload within 1.1 s of the weld at every kT
+  tried. If Gazebo does the same, that is the mismatch showing up in the real simulator,
+  NOT a fresh bug.
+
+world: three_attach.sdf
+
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 1
+    attach_central: false
+    diss_balanced_tensions: true
+    attach_handout: true
+    attach_t_handout: 12.0
+    attach_x_offset: -0.08
+    attach_y_offset: 0.0
+    attach_elev_deg: 45.0
+    enable_obstacle_avoidance: false
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.4
+    target_z: 0.6
+
+fleet:
+  num_drones: 3
+  n_total: 4
+
+timing:
+  duration_s: 70.0
+  # WALL seconds, and generous: this is the only wall-clock deadline in the runner,
+  # and acados compiles four solvers behind it on a cold build.
+  ready_timeout_s: 420.0
+  pose_timeout_s: 2.0
+
+events:
+  - {t: 3.0,  do: ARM}
+  - {t: 6.0,  do: TAKEOFF}
+  # Let the tethered fleet settle into a taut hover at target_z before the newcomer is
+  # allowed to approach. Welding into a formation that is still rising confounds the
+  # takeoff transient with the attach transient, which is the whole quantity of interest.
+  - {t: 25.0, do: MAGNET, arg: 'ON'}
+  - {t: 65.0, do: LAND}
+
+criteria:
+  require_weld: true
+  min_payload_z: 0.02
+  # A fleet abort is expected to be INFORMATIVE here rather than disqualifying: if the
+  # fixed-kT capsize reproduces in Gazebo, the fleet disarms and that IS the result.
+  forbid_abort: false
