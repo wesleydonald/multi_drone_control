@@ -585,6 +585,21 @@ publication-ready by default.
 2 headless Gazebo runs. Thresholds in `configs/gate_thresholds.yaml`, set from the W2
 baseline, not guessed.
 
+> **BUILT 2026-08-05, minus the Gazebo stage.** Stage 6 is the SIL smoke suite
+> (`carry_hover_n3` through the real launch, then `tools/check_thresholds.py --profile
+> sil_smoke`), and `tools/hooks/pre-push` + `tools/install_hooks.sh` wire the full gate
+> to `git push`. Whole gate ~2.5 min. Thresholds come from four measured repeats
+> (R0047–R0050), recorded per check in the YAML so a later tightening can see what it
+> is tightening against.
+>
+> **The 2 headless Gazebo runs are NOT in the gate.** At ~235 s each they would put the
+> gate at ~10 minutes, and a gate that slow stops being run — which costs more than it
+> catches. The mechanism is ready (`check_thresholds.py` reads a Gazebo run's
+> metrics.json exactly the same way); what is missing is a Gazebo scenario whose bars
+> are meaningful, and on the current plant the attach scenarios all diverge. Revisit
+> once the kT/plant question is settled and there is a Gazebo run that passing means
+> something.
+
 ### Part 0 exit criteria (end W2)
 
 - [ ] One command runs a headless experiment and writes a self-describing result directory
@@ -593,7 +608,8 @@ baseline, not guessed.
 - [x] Plots auto-generate; `compare_runs` works across two archived runs — *works
       across a bench run and a Gazebo run too (R0020 vs R0034); the runs it has been
       exercised on are in `results/`, not yet promoted to `results_archive/`*
-- [ ] Gate green and wired to a pre-push hook
+- [x] Gate green and wired to a pre-push hook — *6 stages, ~2.5 min, green as of
+      2026-08-05; the 2 headless Gazebo runs are deliberately left out (see §9.5)*
 - [ ] F1–F6, F12 closed; backup restore drill passed once
 
 ---

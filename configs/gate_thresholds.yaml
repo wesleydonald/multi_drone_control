@@ -1,0 +1,69 @@
+# configs/gate_thresholds.yaml — the bars tools/gate.sh holds a smoke run to (§9.5)
+#
+# SET FROM A MEASURED BASELINE, NOT GUESSED. Every bar below is derived from the range
+# actually observed over four repeats of the scenario, then opened up by roughly 3x that
+# spread (or to the nearest physically meaningful round number, where one exists).
+# The recorded baseline is in each check's `baseline:` line so a future tightening can
+# see what it is tightening against.
+#
+# These are "does the scenario still fly" bars, not tuning targets. A gate that fails on
+# ordinary variation gets disabled, and a disabled gate catches nothing.
+#
+#   tools/check_thresholds.py <run_dir> --profile sil_smoke
+#
+# Metric paths address tools/metrics.py's summarise_run output. A path segment of
+# max/min/mean aggregates across drones, so `per_drone.max.peak_track_err_m` is the
+# worst drone -- the fleet is mechanically coupled, and averaging a diverging drone
+# against three healthy ones is how a divergence gets reported as a small degradation.
+
+profiles:
+
+  sil_smoke:
+    description: >
+      Three tethered drones lift the payload from the airborne taut handover, hover at
+      0.6 m, and land. No weld, no newcomer. This is not a control result; it is the
+      check that the whole SIL path still works -- the launch comes up, the trackers
+      publish, the planner streams references, lockstep holds, and the load flies.
+    scenario: configs/sil/carry_hover_n3.yaml
+    baseline: R0047, R0048, R0049, R0050 (2026-08-05, b985f96)
+    checks:
+      - metric: duration_s
+        min: 15.0
+        baseline: 18.54 – 18.70          # a run that dies early never reaches LAND
+
+      - metric: payload_z_settled_m
+        min: 0.55
+        max: 0.65
+        baseline: 0.596 – 0.598          # commanded 0.60; the ~4 mm sag is known
+
+      - metric: payload_tilt_peak_deg
+        max: 15.0
+        baseline: 4.46 – 5.17
+
+      - metric: payload_tilt_settled_deg
+        max: 3.0
+        baseline: 0.22 – 0.34
+
+      - metric: payload_rmse_m
+        max: 0.20
+        baseline: 0.084 – 0.090          # includes the lift transient, not just hover
+
+      - metric: tension_share.spread
+        max: 0.10
+        baseline: 0.0001 – 0.0011        # three equal tethers should share evenly
+
+      - metric: per_drone.max.peak_track_err_m
+        max: 0.40
+        baseline: 0.142 – 0.158
+
+      - metric: per_drone.max.settled_track_err_m
+        max: 0.05
+        baseline: 0.0029 – 0.0030
+
+      - metric: per_drone.max.peak_cable_accel
+        max: 8.0
+        baseline: 4.60 – 4.72            # a drone has ~13 m/s^2 left after gravity
+
+      - metric: control_effort.max.saturated_fraction
+        max: 0.02
+        baseline: 0.0                    # a saturated drone has no authority left

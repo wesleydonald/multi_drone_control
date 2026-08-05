@@ -5,7 +5,10 @@
 # which is the point: a gate that is slow does not get run.
 #
 #   ./tools/gate.sh            # everything
-#   ./tools/gate.sh --quick    # skip the offline dissipative harness (the slow part)
+#   ./tools/gate.sh --quick    # skip the two slow stages (5 and 6)
+#
+# Also wired as the pre-push hook (tools/hooks/pre-push). `git push --no-verify`
+# bypasses it when you genuinely mean to.
 #
 # Each stage exists because something got through without it:
 #
@@ -15,7 +18,11 @@
 #   3. IMPORT CHECK     — a missing `String` import killed all three trackers at launch.
 #                         ast.parse and colcon build BOTH pass on that; only an actual
 #                         import catches it
-#   4. offline gate     — dissipative tests A-K, the detach/attach correctness guard
+#   4. world geometry   — world SDF vs launch disagreement on cable_len/attach_radius
+#   5. offline gate     — dissipative tests A-K, the detach/attach correctness guard
+#   6. SIL SMOKE        — the only stage that runs the real nodes over real topics.
+#                         Everything above it is offline and cannot see a launch file
+#                         that no longer comes up. Held to configs/gate_thresholds.yaml
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -27,7 +34,7 @@ QUICK=0
 FAILED=()
 step() { echo; echo "══ $* ══"; }
 
-step "1/5  workspace"
+step "1/6  workspace"
 if ./tools/clean_slate.sh --check-only 2>&1 | grep -q "WRONG WORKSPACE"; then
   echo "!! wrong workspace active — run: source install/setup.bash"
   FAILED+=("workspace")
@@ -35,7 +42,7 @@ else
   echo "   ok"
 fi
 
-step "2/5  unit tests"
+step "2/6  unit tests"
 if python3 -m pytest src/utility_objects/test/test_safety.py \
                     src/controller_quad_load/test/test_rviz_config.py \
                     src/controller_quad_load/test/test_planner_reference.py \
@@ -48,14 +55,14 @@ else
   FAILED+=("pytest")
 fi
 
-step "3/5  import check (every console-script module)"
+step "3/6  import check (every console-script module)"
 if python3 tools/import_check.py 2>&1 | tail -3; then
   :
 else
   FAILED+=("imports")
 fi
 
-step "4/5  world geometry vs controller config"
+step "4/6  world geometry vs controller config"
 # A cable_len / attach_radius / load_mass mismatch makes every drone's tension
 # feedforward wrong, and presents as "the controller cannot fly" rather than as a
 # config bug. This project has lost a week to exactly that.
@@ -77,14 +84,48 @@ done
 [ "$GEO_BAD" -eq 0 ] || FAILED+=("geometry")
 
 if [ "$QUICK" -eq 0 ]; then
-  step "5/5  offline dissipative harness (tests A-K)"
+  step "5/6  offline dissipative harness (tests A-K)"
   if python3 -m controller_dissipative.verify_dissipative 2>&1 | tail -2; then
     :
   else
     FAILED+=("verify_dissipative")
   fi
 else
-  step "5/5  offline dissipative harness — SKIPPED (--quick)"
+  step "5/6  offline dissipative harness — SKIPPED (--quick)"
+fi
+
+if [ "$QUICK" -eq 0 ]; then
+  step "6/6  SIL smoke suite (real nodes, numerical plant)"
+  # The one stage that runs the ACTUAL controller nodes over ROS. Stages 2-5 are all
+  # offline: they cannot catch a launch file that no longer comes up, a node that
+  # crashes on a parameter it now reads, or a topic that got renamed on one side.
+  # ~25 s, and it flies a payload.
+  if ! command -v ros2 >/dev/null 2>&1; then
+    echo "!! ros2 is not on PATH — the SIL smoke suite could NOT RUN."
+    echo "   source ~/ros2_humble/install/setup.bash && source install/setup.bash"
+    FAILED+=("sil_smoke (not run)")
+  else
+    SMOKE_LOG="$(mktemp)"
+    ./tools/sil_bench.py configs/sil/carry_hover_n3.yaml >"$SMOKE_LOG" 2>&1
+    SMOKE_DIR="$(grep -m1 -oP '(?<=out:\s{4})\S+' "$SMOKE_LOG" || true)"
+    grep -E "^\s+(ran|exit:)" "$SMOKE_LOG" || true
+    if [ -z "$SMOKE_DIR" ] || [ ! -d "$SMOKE_DIR" ]; then
+      echo "!! the bench produced no run directory; see $SMOKE_LOG"
+      tail -15 "$SMOKE_LOG"
+      FAILED+=("sil_smoke")
+    # Thresholds, not just "it exited 0": the smoke scenario has no acceptance criteria
+    # of its own, so without this the stage would pass on a run that took off and then
+    # dropped the load. Bars are in configs/gate_thresholds.yaml, set from a measured
+    # baseline (R0047-R0050).
+    elif ./tools/check_thresholds.py "$SMOKE_DIR" --profile sil_smoke; then
+      rm -f "$SMOKE_LOG"
+    else
+      echo "   full log: $SMOKE_LOG"
+      FAILED+=("sil_smoke thresholds")
+    fi
+  fi
+else
+  step "6/6  SIL smoke suite — SKIPPED (--quick)"
 fi
 
 echo
