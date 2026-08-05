@@ -18,7 +18,6 @@ rig on bench evidence alone.
 Exit code is nonzero if the run fails or an acceptance criterion is not met.
 """
 import argparse
-import json
 import os
 import shutil
 import signal
@@ -198,6 +197,15 @@ def run_one(scn_path, keep_going=False, repeat=0):
         rclpy.shutdown()
         stop_stack(proc, console)
 
+    # metrics.json + the six §9.4 figures, off the logs just written, so a finished
+    # bench run is already readable. Best-effort -- see plot_run.finish_run.
+    try:
+        from plot_run import finish_run
+        mtr = finish_run(run_path)
+    except Exception as e:                           # noqa: BLE001
+        mtr = {'error': f'analysis unavailable: {type(e).__name__}: {e}'}
+        print(f'    !! {mtr["error"]}')
+
     acc_ok, results = evaluate(scn, rows, weld_t)
     print(f'\n    ran {len(rows)} steps in {wall:.1f} s wall '
           f'(x{rtf:.2f} realtime), {stalls} lockstep stalls')
@@ -211,7 +219,7 @@ def run_one(scn_path, keep_going=False, repeat=0):
                    wall_seconds=round(wall, 2), realtime_factor=round(rtf, 3),
                    sim_seconds=round(bench_sim_seconds(rows), 2),
                    lockstep_stalls=stalls, fleet_aborts=aborts,
-                   weld_sim_time=weld_t, acceptance_passed=bool(acc_ok),
+                   weld_sim_time=weld_t, acceptance_passed=bool(acc_ok), metrics=mtr,
                    acceptance=[{'check': n, 'passed': bool(g), 'detail': d}
                                for n, g, d in results],
                    log_csv=csv_path, ended_wall=time.strftime('%Y-%m-%dT%H:%M:%S'))

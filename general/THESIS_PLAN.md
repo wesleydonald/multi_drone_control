@@ -552,6 +552,26 @@ Shared style module: one colour per drone ID (matching RViz, §6.2), consistent 
 fonts, vector output. Set this up once in W2 and every figure for the next four months is
 publication-ready by default.
 
+> **BUILT 2026-08-05.** `tools/plot_style.py`, `tools/plot_run.py`,
+> `tools/compare_runs.py`, `tools/thesis_figures.py` (+ `configs/thesis_figures.yaml`),
+> tested in `tools/test/test_plot_pipeline.py` against a synthetic circle with a known
+> radius deficit and lag. Auto-plotting is wired into both harnesses on completion, and
+> `run_experiment.py`'s hand-rolled metrics were replaced by `metrics.summarise_run` so
+> §9.2's "one source of numbers" is now literally true.
+>
+> Three things the figures do NOT show, because nothing logs them — stated here rather
+> than quietly dropped from the list above:
+> - **`|aC|` (modelled cable accel)** — only `|aCm|` is logged, so figure 4 plots the
+>   measured trace alone and the `cable_accel_gap` metric has no input from a run
+>   directory. Reinstating it needs a column in both loggers.
+> - **acados solver status** — not logged by either harness; figure 4's fourth panel
+>   shows armed state instead and says so on the axes.
+> - **cable tension / elevation / `|aCm|` in Gazebo** — internal to the tracker, NaN in
+>   `run.csv`. Those panels are bench-only and annotate themselves.
+>
+> The palette is IMPORTED from `rviz_config.py`, not copied, and a test locks the two
+> together — that is what makes the §6.2 promise hold over four months.
+
 ### 9.5 Unit tests and the gate
 
 `pytest` for the ROS-free core: `geometry.attach_points` and `azimuth_slot_assignment`
@@ -570,7 +590,9 @@ baseline, not guessed.
 - [ ] One command runs a headless experiment and writes a self-describing result directory
 - [ ] Metrics reproduce the four `DISSIPATIVE_TRACKING_ISSUE.md §2` stage numbers to within 2%
 - [ ] **SIL bench reproduces the attach runaway**
-- [ ] Plots auto-generate; `compare_runs` works across two archived runs
+- [x] Plots auto-generate; `compare_runs` works across two archived runs — *works
+      across a bench run and a Gazebo run too (R0020 vs R0034); the runs it has been
+      exercised on are in `results/`, not yet promoted to `results_archive/`*
 - [ ] Gate green and wired to a pre-push hook
 - [ ] F1–F6, F12 closed; backup restore drill passed once
 

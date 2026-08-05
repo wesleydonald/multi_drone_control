@@ -232,14 +232,34 @@ secant gain at hover.
 
 ### Logs and plots
 
-```
-c_generated_code_quad_load/logs/controller_quad_load/<traj>_drone<N>_<ts>/log.csv + params.json
-python3 plot_run.py --logdir c_generated_code_quad_load/logs/controller_quad_load
+Harness runs (`tools/run_experiment.py`, `tools/sil_bench.py`) write a self-describing
+directory under `results/<date>/R####_.../` and **auto-generate metrics and the six
+figures on completion** — there is no command to remember. To redo them by hand, or to
+compare:
+
+```bash
+tools/plot_run.py R0034                       # the six figures into the run's plots/
+tools/compare_runs.py R0034-R0038 R0039-R0043 --label 45deg 65deg   # overlay + table
+tools/thesis_figures.py                       # every thesis figure, from the registry
 ```
 
-Drone 0's `log.csv` carries `payload_*` and `payload_ref_*`; every drone carries
-`pose_*` and `ref_*`. Each run writes `params.json` — **always check it** to
-confirm the parameter you think you changed actually plumbed through.
+`tools/metrics.py` is the **only** source of reported numbers; `tools/plot_style.py`
+holds the palette (imported from `rviz_config.py`, so drone 2 is the same colour in
+RViz and in every figure) and the vector output settings.
+
+Both harnesses write the **same wide CSV schema** (`logs/run.csv` for Gazebo,
+`logs/sil.csv` for the bench) so one loader and one comparison handle both. Columns a
+Gazebo run cannot observe from outside the tracker — `dN_acm`, `dN_tension`,
+`dN_elev_deg` — are present but NaN, and the plots say so on the axes rather than
+coming out blank. `dN_attached` is the one column whose MEANING differs between the two
+(the bench marks every cable-linked drone, the Gazebo runner only the welded newcomer),
+so nothing keys off it.
+
+The root `plot_run.py` is the older ad-hoc 3D plotter for the per-drone tracker logs
+(`c_generated_code_quad_load/logs/...`), unrelated to `tools/plot_run.py`.
+
+Each run writes `params/` by read-back — **always check it** to confirm the parameter
+you think you changed actually plumbed through.
 
 ---
 

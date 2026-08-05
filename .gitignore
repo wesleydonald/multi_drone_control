@@ -30,3 +30,8 @@ logs/
 # Logs used to be written inside c_generated_code*/ (ignored, and deleted on every
 # acados rebuild). They now live in results/, which no build step ever touches.
 results/
+
+# Regenerated thesis figures (tools/thesis_figures.py). Output, not source -- the source
+# is configs/thesis_figures.yaml plus the runs it cites. Track these only once those runs
+# are promoted to results_archive/, so a committed figure always has committed data.
+docs/figures/
