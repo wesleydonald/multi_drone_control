@@ -1,0 +1,60 @@
+name: carry_hover_n3_vel
+description: >
+  STAGE V LADDER STEP V-c: the same 3-drone carry the gate flies, but with
+  control_mode:=velocity_after_handover -- MPC owns creep and lift, the velocity loop
+  takes over when the dissipative network does. NOTE this scenario runs
+  three_attach_launch.py, which has no auto_network_handover, so the handover never
+  fires here and the run should be BIT-IDENTICAL to the MPC path. That is the point:
+  it proves the new mode is inert until the network actually takes the fleet. Held to the SAME configs/gate_thresholds.yaml sil_smoke bars
+  the MPC path passes, so "does the velocity loop fly a tethered fleet at all" has a
+  pass/fail answer rather than an opinion.
+
+  SMOKE SCENARIO -- the cheap one, meant for the gate. Three tethered drones hold the
+  payload from the airborne taut handover, lift to target_z, hover, and land. No weld,
+  no newcomer.
+
+  It is not a control result; it is the check that the whole SIL path still works: the
+  launch comes up, the trackers publish, the planner streams references, lockstep
+  holds, the load lifts and the fleet lands. If this fails, nothing else the bench says
+  is worth reading.
+
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 0
+    enable_approach: false
+    start_taut: true
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.4
+    target_z: 0.6
+    control_mode: velocity_after_handover
+
+fleet:
+  n_tethered: 3
+  n_total: 3
+
+geometry:
+  cable_len: 0.5
+  attach_radius: 0.08
+  attach_z: 0.025
+  load_mass: 0.4
+
+initial:
+  stands: true          # take-off stands under the tethered drones (see Scenario.stands)
+  load_z: 0.45
+  elev_deg: 45.0
+
+timing:
+  dt: 0.02
+  substeps: 20
+  duration_s: 20.0
+  step_timeout_s: 0.5
+  ready_timeout_s: 300.0
+
+events:
+  - {t: 1.0,  do: ARM}
+  - {t: 3.0,  do: TAKEOFF}
+  - {t: 16.0, do: LAND}

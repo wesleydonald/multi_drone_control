@@ -1,0 +1,65 @@
+name: diss_hover_n3
+description: >
+  PART A STAGE T BASELINE (THESIS_PLAN §12.1). Three drones carry the payload on the
+  dissipative network through a circle of radius 0.5 m at 0.6 m/s peak — the exact
+  configuration DISSIPATIVE_TRACKING_ISSUE.md §2 recorded its stage split from.
+
+  HOVER CONTROL ARM for the same question — the MPC path holding hover for 75 s, so a
+  divergence in the velocity arm has something to be a divergence AGAINST.
+
+  READ BEFORE QUOTING A PHASE LAG FROM THIS. `load_traj: circle` is ONE EASED SWEEP,
+  not continuous laps: LoadTrajectory._circle_theta stretches the duration so PEAK
+  tangential speed equals traj_speed, giving T = 1.875·2π·r/v ≈ 9.8 s here, after which
+  the planner latches the descent. So:
+    * `traj_speed: 0.6` is a PEAK, reached at the half-way point, not a constant speed.
+    * radius_ratio is well defined — the commanded path sits at r for the whole sweep.
+    * phase_lag_s has only one period to cross-correlate over, so it is noisier here
+      than on the synthetic circles tools/test/test_metrics.py pins it against. Report
+      it with the repeat range (§9.2), never as a single run's value.
+
+  The network is engaged for the whole flight by dissipative_only_launch.py's
+  auto_network_handover — dissipative_launch.py alone would fly the OCP and never
+  enter the network phase, which is the mistake documented in CLAUDE.md §8.
+
+world: three_rigid_ground.sdf
+
+launch:
+  package: controller_quad_load
+  file: dissipative_only_launch.py
+  args:
+    num_drones: 3
+    load_traj: hover
+    traj_speed: 0.6
+    traj_radius: 0.5
+    cable_len: 0.5
+    load_mass: 0.4
+    target_z: 0.6
+    terminal_vel_ref: false      # T1 OFF — this is the baseline arm
+
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+
+fleet:
+  num_drones: 3
+  n_total: 3
+
+timing:
+  # Lift tops out around t≈20 s, the eased sweep runs ~9.8 s, then the planner latches
+  # its own descent. 75 s leaves the sweep well inside the run with margin for a slow
+  # lift, and LAND at 68 s ends it rather than waiting on the auto-descent.
+  duration_s: 75.0
+  stop_after_abort_s: 8.0
+
+events:
+  - {t: 3.0,  do: ARM}
+  - {t: 6.0,  do: TAKEOFF}
+  - {t: 68.0, do: LAND}
+
+criteria:
+  min_payload_z: 0.02
+  # The load must actually have flown. R0073 sat on the ground for 75 s after all
+  # three drones timed out at ARM, and passed every other criterion.
+  min_peak_payload_z: 0.35
+  forbid_abort: true

@@ -1,0 +1,72 @@
+name: diss_circle_n3_T1
+description: >
+  PART A EXPERIMENT T1 (THESIS_PLAN §12.1). Identical to diss_circle_n3.yaml in every
+  respect except `terminal_vel_ref: true`. Compare the two with:
+
+      tools/compare_runs.py <baseline ids> <T1 ids> --label baseline T1
+
+  T1 sets yref_N[3:6] = ref_vel[N_horizon], so the terminal cost stops commanding a
+  STOP at the end of every 2 s horizon while the load is moving at 0.6 m/s (finding
+  F10). Prediction from §12.1: phase lag falls, radius ratio rises. The flag defaults
+  to the historical behaviour everywhere, so the baseline arm is byte-unchanged from
+  every run flown before it.
+
+  ONE VARIABLE. Nothing else in this file may differ from the baseline — §12.1 is
+  explicit that the T-stage candidates are measured separately and never bundled.
+
+  READ BEFORE QUOTING A PHASE LAG FROM THIS. `load_traj: circle` is ONE EASED SWEEP,
+  not continuous laps: LoadTrajectory._circle_theta stretches the duration so PEAK
+  tangential speed equals traj_speed, giving T = 1.875·2π·r/v ≈ 9.8 s here, after which
+  the planner latches the descent. So:
+    * `traj_speed: 0.6` is a PEAK, reached at the half-way point, not a constant speed.
+    * radius_ratio is well defined — the commanded path sits at r for the whole sweep.
+    * phase_lag_s has only one period to cross-correlate over, so it is noisier here
+      than on the synthetic circles tools/test/test_metrics.py pins it against. Report
+      it with the repeat range (§9.2), never as a single run's value.
+
+  The network is engaged for the whole flight by dissipative_only_launch.py's
+  auto_network_handover — dissipative_launch.py alone would fly the OCP and never
+  enter the network phase, which is the mistake documented in CLAUDE.md §8.
+
+world: three_rigid_ground.sdf
+
+launch:
+  package: controller_quad_load
+  file: dissipative_only_launch.py
+  args:
+    num_drones: 3
+    load_traj: circle
+    traj_speed: 0.6
+    traj_radius: 0.5
+    cable_len: 0.5
+    load_mass: 0.4
+    target_z: 0.6
+    terminal_vel_ref: true       # T1 ON — the only difference from the baseline
+
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+
+fleet:
+  num_drones: 3
+  n_total: 3
+
+timing:
+  # Lift tops out around t≈20 s, the eased sweep runs ~9.8 s, then the planner latches
+  # its own descent. 75 s leaves the sweep well inside the run with margin for a slow
+  # lift, and LAND at 68 s ends it rather than waiting on the auto-descent.
+  duration_s: 75.0
+  stop_after_abort_s: 8.0
+
+events:
+  - {t: 3.0,  do: ARM}
+  - {t: 6.0,  do: TAKEOFF}
+  - {t: 68.0, do: LAND}
+
+criteria:
+  min_payload_z: 0.02
+  # The load must actually have flown. R0073 sat on the ground for 75 s after all
+  # three drones timed out at ARM, and passed every other criterion.
+  min_peak_payload_z: 0.35
+  forbid_abort: true

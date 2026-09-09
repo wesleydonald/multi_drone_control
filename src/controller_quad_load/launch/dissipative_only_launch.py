@@ -98,6 +98,13 @@ def _args():
         # of commanding a stop at the end of the horizon. Default false =
         # historical behaviour, so this only changes a run you asked it to.
         DeclareLaunchArgument('terminal_vel_ref', default_value='false'),
+        # Stage V (docs/design/velocity_loop.md): 'mpc' | 'velocity'. Defaults to the
+        # verified MPC path, so this launch is byte-unchanged until it is thrown.
+        DeclareLaunchArgument('control_mode', default_value='mpc'),
+        DeclareLaunchArgument('vel_kp_pos', default_value='2.0'),
+        DeclareLaunchArgument('vel_kv', default_value='4.0'),
+        DeclareLaunchArgument('vel_ki', default_value='1.0'),
+        DeclareLaunchArgument('vel_k_att', default_value='8.0'),
         DeclareLaunchArgument('load_traj', default_value='hover'),
         DeclareLaunchArgument('traj_speed', default_value='0.6'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
@@ -122,6 +129,14 @@ def _args():
         #     deficit it targets. Fly it as an A/B against the logs.
         DeclareLaunchArgument('net_horizon_preview', default_value='true'),
         DeclareLaunchArgument('net_traj_lean', default_value='false'),
+        # ── How a fleet-size change is handled (THESIS_PLAN §12.2) ──────────
+        # 'network' (default, verified): the dissipative network takes the fleet on a
+        #     detach, redistributes, and carries the trajectory on itself.
+        # 'ocp': the OCP is RESIZED in place to the new fleet size and keeps flying.
+        #     The cables do not move when a drone leaves, so the survivors are just a
+        #     smaller (uneven) ring the OCP can solve for directly.
+        DeclareLaunchArgument('reconfig_mode', default_value='network'),
+        DeclareLaunchArgument('reconfig_hold_s', default_value='1.5'),
         DeclareLaunchArgument('diss_k_pay', default_value='40.0'),
         DeclareLaunchArgument('diss_k_anchor', default_value='40.0'),
         DeclareLaunchArgument('diss_c', default_value='6.0'),
@@ -178,6 +193,11 @@ def launch_setup(context, *args, **kwargs):
             name=f'controller_{i}',
             parameters=[{'drone_id': i,
                          'terminal_vel_ref': b('terminal_vel_ref'),
+                         'control_mode': LaunchConfiguration('control_mode'),
+                         'vel_kp_pos': f('vel_kp_pos'),
+                         'vel_kv': f('vel_kv'),
+                         'vel_ki': f('vel_ki'),
+                         'vel_k_att': f('vel_k_att'),
                          'cable_ff_scale': f('cable_ff_scale'),
                          'attitude_ff': b('attitude_ff'),
                          'cable_source': LaunchConfiguration('cable_source'),
@@ -226,6 +246,8 @@ def launch_setup(context, *args, **kwargs):
                      'diss_k_slot': f('diss_k_slot'),
                      'diss_node_mass': f('diss_node_mass'),
                      'diss_substeps': i_('diss_substeps'),
+                     'reconfig_mode': LaunchConfiguration('reconfig_mode'),
+                     'reconfig_hold_s': f('reconfig_hold_s'),
                      'diss_elev_deg': f('diss_elev_deg'),
                      'net_land_z': f('net_land_z')}],
         output='screen'))
