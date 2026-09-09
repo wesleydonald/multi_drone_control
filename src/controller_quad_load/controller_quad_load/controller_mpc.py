@@ -30,12 +30,14 @@ import math
 import threading
 from rclpy.node import Node
 from rclpy.clock import Clock, ClockType
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from datetime import datetime
 from scipy.spatial.transform import Rotation as R
 import time
 from . import acados as _acados_mod
 from .acados import (generate_ocp_controller, set_initial_guess,
                      warm_start_from_previous_solution, set_planner_reference)
+from .velocity_loop import VelocityLoop
 N_POSE = 13
 
 
@@ -343,6 +345,53 @@ class Controller(Node):
                 f"[Drone {self.drone_id}] T1 ACTIVE: terminal velocity reference "
                 f"enabled (non-default) - this is an experiment, record it.")
 
+        # ── Stage V: which controller turns the reference into channels ───
+        # 'mpc'      (default) the acados position-tracking MPC, unchanged.
+        # 'velocity' the paper's architecture -- the reference becomes a velocity
+        #            command and a velocity -> attitude -> rate loop produces the
+        #            channels directly, with no position MPC in between. Quan et
+        #            al. Fig. 2 has no such MPC, and R0054-R0065 measure that
+        #            inserted stage as +0.54 s of the +0.68 s total lag.
+        # 'velocity_after_handover'
+        #            MPC through creep and lift, velocity once the dissipative
+        #            network takes the fleet over. This is the one that matches the
+        #            architecture: the velocity loop has no cable term, so three
+        #            independent position servos capsize the load through the lift
+        #            (R0067-R0069) -- the same boundary dissipative_only_launch.py
+        #            already documents for the network itself. The OCP owns the
+        #            break-off; the paper's controller is a transport controller.
+        # Design note: docs/design/velocity_loop.md. Defaults to 'mpc' so every
+        # verified configuration is byte-unchanged until the flag is thrown.
+        MODES = ('mpc', 'velocity', 'velocity_after_handover')
+        self.declare_parameter('control_mode', 'mpc')
+        self.control_mode = str(self.get_parameter('control_mode').value).lower()
+        if self.control_mode not in MODES:
+            raise ValueError(
+                f"control_mode must be one of {MODES}, got {self.control_mode!r}")
+        self.velocity_loop = None
+        self._prev_takeoff = False
+        # True once the velocity loop is actually producing the channels. Immediate in
+        # 'velocity'; set by the handover announcement in 'velocity_after_handover'.
+        self._velocity_active = (self.control_mode == 'velocity')
+        if self.control_mode != 'mpc':
+            for name, default in (('vel_kp_pos', 2.0), ('vel_kv', 4.0),
+                                  ('vel_ki', 1.0), ('vel_k_att', 8.0),
+                                  ('vel_v_max', 2.0), ('vel_a_i_max', 2.0)):
+                self.declare_parameter(name, default)
+            gains = {n: float(self.get_parameter(f'vel_{n}').value) for n in
+                     ('kp_pos', 'kv', 'ki', 'k_att', 'v_max', 'a_i_max')}
+            self.velocity_loop = VelocityLoop(**gains)
+            self.get_logger().warn(
+                f"[Drone {self.drone_id}] STAGE V: control_mode={self.control_mode} "
+                f"({gains}). This is an experiment, record it.")
+        if self.control_mode == 'velocity_after_handover':
+            # TRANSIENT_LOCAL to match the publisher: the handover fires once, and a
+            # tracker that restarted after it must still learn the fleet has moved on.
+            self.create_subscription(
+                String, '/fleet/control_phase', self._control_phase_cb,
+                QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                           reliability=ReliabilityPolicy.RELIABLE))
+
         # ── Flight envelope (finding F3) ──────────────────────────────────
         # Any FAULT disarms this drone; the fleet manager already propagates an
         # unexpected disarm to everyone else via /drone_N/arming_state_feedback.
@@ -470,6 +519,13 @@ class Controller(Node):
         tilt and speed. See docs/design/fleet_safety.md."""
         p = self.declare_parameter
         self.safety_enabled = bool(p('safety_enabled', True).value)
+        # Mocap watchdog budget. Measured on the WALL clock on purpose (it is about real
+        # comms latency), which makes it wrong by construction in a simulator running
+        # slower than real time: at Gazebo's ~0.3x realtime, 0.25 s of wall is under four
+        # mocap periods, so ordinary scheduling jitter reads as a dead link and disarms a
+        # healthy drone. It did, ~1 s after ARM, in 6 of today's runs. Sim launches raise
+        # it; hardware keeps 0.25 s, where wall and sim time are the same thing.
+        self.pose_timeout_s = float(p('pose_timeout_s', POSE_TIMEOUT_THRESHOLD).value)
         lim = EnvelopeLimits(
             max_tilt_deg=float(p('max_tilt_deg', 60.0).value),
             max_payload_tilt_deg=float(p('max_payload_tilt_deg', 60.0).value),
@@ -510,7 +566,7 @@ class Controller(Node):
         # so refuse now rather than arm and immediately abort.
         age = (self._wall_clock.now()
                - self.last_pose_update_time).nanoseconds * 1e-9
-        if age > POSE_TIMEOUT_THRESHOLD:
+        if age > self.pose_timeout_s:
             return f'mocap pose is {age:.2f} s stale'
         return None
 
@@ -568,6 +624,122 @@ class Controller(Node):
         else:
             self._safety_warn_ctr = 0
         return False
+
+    def _control_phase_cb(self, msg):
+        """Follow the reference generator: MPC while the OCP owns the flight, velocity
+        once the dissipative network has the fleet.
+
+        The switch happens in steady airborne hover (dissipative_node only hands over
+        after the lift tops out AND settles), which is the one moment the two
+        controllers agree -- both are holding the same reference with the same thrust
+        feedforward. The integrator starts from zero rather than inheriting anything."""
+        want = (str(msg.data).strip().lower() == 'network')
+        if want == self._velocity_active:
+            return
+        self._velocity_active = want
+        if want:
+            self.velocity_loop.reset()
+        self.get_logger().warn(
+            f"[Drone {self.drone_id}] control phase -> "
+            f"{'VELOCITY LOOP' if want else 'MPC'} (/fleet/control_phase="
+            f"{msg.data!r})")
+
+    def _publish_channels(self, u, u_rate):
+        """Send [roll, pitch, throttle, yaw] to the FC, or armed-idle before TAKEOFF.
+
+        The single publish path, shared by the MPC and the velocity loop, so a mode
+        change cannot also change the takeoff spool, the applied-throttle bookkeeping
+        that measured_cable_accel depends on, or the last-good-command fallback."""
+        if self.takeoff_requested:
+            thr = float(u[2])
+            # takeoff spool-up: for the first takeoff_spool_s, scale the throttle up
+            # from 0 to the commanded value so thrust rises smoothly and the drones
+            # ease off the platforms. Raised-cosine (not linear): the applied throttle
+            # jumps from idle-0 to the full hover value in one cycle when the spool is
+            # off/too short, and a linear ramp still kinks the acceleration at both
+            # ends. The taut air-start feels every bit of that as a lurch-and-bounce.
+            if self.takeoff_spool_s > 0.0:
+                if self._takeoff_step is None:
+                    self._takeoff_step = 0
+                spool_cycles = max(1.0, self.takeoff_spool_s * FREQUENCY_HZ)
+                if self._takeoff_step < spool_cycles:
+                    ease = 0.5 * (1.0 - np.cos(
+                        np.pi * self._takeoff_step / spool_cycles))
+                    # ease from FLOOR*u up to u (not 0*u): keep enough thrust to hold
+                    # the load taut from cycle 0, see TAKEOFF_SPOOL_FLOOR.
+                    frac = TAKEOFF_SPOOL_FLOOR + (1.0 - TAKEOFF_SPOOL_FLOOR) * ease
+                    thr *= frac
+                    self._takeoff_step += 1
+            # Record the throttle actually applied to the FC so the next IMU sample
+            # can be decomposed into thrust + cable (measured_cable_accel).
+            self.last_cmd_throttle = thr
+            msg = ELRSCommand(
+                armed=True,
+                channel_0=round(float(u[0]), 3),
+                channel_1=round(float(u[1]), 3),
+                channel_2=round((thr * 2) - 1, 3),
+                channel_3=round(float(u[3]), 3))
+            self._applied_u = np.array(
+                [float(u[0]), float(u[1]), float(thr), float(u[3])])
+            self._applied_u_rate = np.asarray(u_rate, dtype=float).copy()
+            self.get_logger().debug(
+                f"[Drone {self.drone_id}] r:{u[0]:.3f} p:{u[1]:.3f} "
+                f"t:{u[2]:.3f} y:{u[3]:.3f}")
+        else:
+            self._takeoff_step = None    # reset so the next takeoff spools again
+            self.last_cmd_throttle = None
+            msg = ELRSCommand(armed=True, channel_0=0.0, channel_1=0.0,
+                              channel_2=-1.0, channel_3=0.0)
+            # channel_2 = -1.0 maps to throttle 0, so every channel is at zero
+            self._applied_u = np.zeros(4)
+            self._applied_u_rate = np.zeros(4)
+            # THROTTLED: this branch runs every cycle of the 50 Hz loop for as long as
+            # the fleet sits armed waiting for TAKEOFF. Logging it unthrottled put 50
+            # lines/s PER DRONE through the launch stdout pipe (200/s with four
+            # drones); when that pipe backs up the write blocks the timer, which stalls
+            # the single-threaded executor, so the node can't service the
+            # /drone_N/command subscription that TAKEOFF arrives on.
+            self.get_logger().info(
+                f"[Drone {self.drone_id}] Armed - waiting for TAKEOFF command.",
+                throttle_duration_sec=2.0)
+
+        self.cb.cmd_publisher_.publish(msg)
+        # Remember this good command so a later failed solve can hold it.
+        if self.takeoff_requested:
+            self._last_good_msg = msg
+        return msg
+
+    def _velocity_step(self, ref_acc):
+        """Stage V: produce the channels from the velocity loop instead of the MPC.
+
+        Uses only node 0 of the reference -- that is the point. The paper's controller
+        emits a velocity command from the current virtual-node state; the 2 s horizon
+        exists for the MPC's benefit, not the architecture's."""
+        p = np.asarray(self.current_pose[0:3], float)
+        q = np.asarray(self.current_pose[3:7], float)
+        v = np.asarray(self.current_pose[7:10], float)
+        p_ref = np.asarray(self.planner_ref_pos[0], float)
+        v_ref = (np.asarray(self.planner_ref_vel[0], float)
+                 if self.planner_ref_vel is not None else np.zeros(3))
+        a_ff = (np.asarray(ref_acc[0], float) if ref_acc is not None
+                else np.array([0.0, 0.0, 9.81]))
+        # Zero the integrator on the rising edge of TAKEOFF. Detected here rather than
+        # in the callback manager, which the proven MPC path shares -- this keeps Stage
+        # V out of it entirely.
+        if self.takeoff_requested and not self._prev_takeoff:
+            self.velocity_loop.reset()
+        self._prev_takeoff = bool(self.takeoff_requested)
+        # Integrate only while actually flying the reference. On the stand the drone
+        # cannot move toward it and the integrator would wind up against the platform,
+        # then dump that trim in as a lurch the moment thrust is applied.
+        integrate = bool(self.takeoff_requested and not self.payload_resting)
+        u = self.velocity_loop.step(
+            p, v, q, p_ref, v_ref, a_ff, 1.0 / FREQUENCY_HZ,
+            self._effective_kT(), heading=self._heading_datum,
+            integrate=integrate)
+        self._current_ref_pos = p_ref
+        self._applied_cable0 = 0.0      # no cable model in this path
+        self._publish_channels(u, np.zeros(4))
 
     def _do_safety_disarm(self, reason=''):
         """Disarm this drone. The fleet manager sees the arming-state feedback and
@@ -708,7 +880,7 @@ class Controller(Node):
 
         # ── Pose timeout watchdog (wall time) ─────────────────────────────
         elapsed = (self._wall_clock.now() - self.last_pose_update_time).nanoseconds * 1e-9
-        if self.armed and elapsed > POSE_TIMEOUT_THRESHOLD:
+        if self.armed and elapsed > self.pose_timeout_s:
             self.get_logger().error(
                 f"[Drone {self.drone_id}] Pose timeout ({elapsed:.2f}s) - disarming.")
             msg = ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0,
@@ -748,10 +920,21 @@ class Controller(Node):
             # trajectory length / landing phase here: the fleet manager arms and
             # lands the fleet and the planner drives the timeline.
             if self.planner_ref_pos is None:
-                # No reference streamed yet - hold armed-idle on the ground.
-                self.cb.cmd_publisher_.publish(ELRSCommand(
-                    armed=True, channel_0=0.0, channel_1=0.0,
-                    channel_2=-1.0, channel_3=0.0))
+                # On the ground, armed-idle (throttle 0) is right: the fleet sits waiting
+                # for TAKEOFF. In the AIR it is a crash -- channel_2 = -1.0 cuts the
+                # motors, and the mixer (throttle +/- rate offsets, clipped at 0) then has
+                # no authority to hold attitude either. Hold the last solved command
+                # instead and let ref_stale (1 s) decide; the attach handover reached this
+                # branch for ~0.2 s and tumbled the newcomer out of the sky every run.
+                if self.takeoff_requested and self._last_good_msg is not None:
+                    self.cb.cmd_publisher_.publish(self._last_good_msg)
+                    self.get_logger().warn(
+                        f"[Drone {self.drone_id}] airborne with no reference - "
+                        f"holding last command.", throttle_duration_sec=1.0)
+                else:
+                    self.cb.cmd_publisher_.publish(ELRSCommand(
+                        armed=True, channel_0=0.0, channel_1=0.0,
+                        channel_2=-1.0, channel_3=0.0))
                 return
             # Diagnostic toggles: scale/zero the cable model term, and/or
             # replace the tilt attitude FF with a level one (vertical accel of
@@ -760,6 +943,12 @@ class Controller(Node):
             if not self.attitude_ff and ref_acc is not None:
                 ref_acc = np.stack([[0.0, 0.0, float(np.linalg.norm(a))]
                                     for a in self.planner_ref_acc])
+            # Stage V: the velocity loop replaces the MPC entirely from here. It needs
+            # only node 0 and the thrust feedforward, so it branches before the cable
+            # model, the solver reference and the solve.
+            if self._velocity_active:
+                self._velocity_step(ref_acc)
+                return
             ref_cable = self.planner_ref_cable
             if ref_cable is not None and self.cable_ff_scale != 1.0:
                 ref_cable = ref_cable * self.cable_ff_scale
@@ -919,68 +1108,7 @@ class Controller(Node):
             self.report_thrust_ratio()
 
             # ── Publish command ───────────────────────────────────────────
-            if self.takeoff_requested:
-                thr = float(u[2])
-                # takeoff spool-up: for the first takeoff_spool_s, scale the
-                # throttle up from 0 to the commanded value so thrust rises
-                # smoothly and the drones ease off the platforms. Raised-cosine
-                # (not linear): the applied throttle jumps from idle-0 to the full
-                # MPC hover value in one cycle when the spool is off/too short, and
-                # a linear ramp still kinks the acceleration at both ends. The taut
-                # air-start feels every bit of that as an initial lurch-and-bounce.
-                # A cosine has zero slope at both ends, so thrust eases on and
-                # settles onto hover without a step.
-                if self.takeoff_spool_s > 0.0:
-                    if self._takeoff_step is None:
-                        self._takeoff_step = 0
-                    spool_cycles = max(1.0, self.takeoff_spool_s * FREQUENCY_HZ)
-                    if self._takeoff_step < spool_cycles:
-                        ease = 0.5 * (1.0 - np.cos(
-                            np.pi * self._takeoff_step / spool_cycles))
-                        # ease from FLOOR*u up to u (not 0*u): keep enough thrust to
-                        # hold the load taut from cycle 0, see TAKEOFF_SPOOL_FLOOR.
-                        frac = TAKEOFF_SPOOL_FLOOR + (1.0 - TAKEOFF_SPOOL_FLOOR) * ease
-                        thr *= frac
-                        self._takeoff_step += 1
-                # Record the throttle actually applied to the FC so the next IMU
-                # sample can be decomposed into thrust + cable (measured_cable_accel).
-                self.last_cmd_throttle = thr
-                msg = ELRSCommand(
-                    armed=True,
-                    channel_0=round(u[0], 3),
-                    channel_1=round(u[1], 3),
-                    channel_2=round((thr * 2) - 1, 3),
-                    channel_3=round(u[3], 3))
-                self._applied_u = np.array(
-                    [float(u[0]), float(u[1]), float(thr), float(u[3])])
-                self._applied_u_rate = np.asarray(u_rate, dtype=float).copy()
-                self.get_logger().debug(
-                    f"[Drone {self.drone_id}] r:{u[0]:.3f} p:{u[1]:.3f} "
-                    f"t:{u[2]:.3f} y:{u[3]:.3f}")
-            else:
-                self._takeoff_step = None    # reset so the next takeoff spools again
-                self.last_cmd_throttle = None
-                msg = ELRSCommand(armed=True, channel_0=0.0, channel_1=0.0,
-                                  channel_2=-1.0, channel_3=0.0)
-                # channel_2 = -1.0 maps to throttle 0, so every channel is at zero
-                self._applied_u = np.zeros(4)
-                self._applied_u_rate = np.zeros(4)
-                # THROTTLED: this branch runs every cycle of the 50 Hz loop for
-                # as long as the fleet sits armed waiting for TAKEOFF. Logging it
-                # unthrottled put 50 lines/s PER DRONE through the launch stdout
-                # pipe (200/s with four drones); when that pipe backs up the write
-                # blocks the timer, which stalls the single-threaded executor, so
-                # the node can't service the /drone_N/command subscription that
-                # TAKEOFF arrives on. That showed up as TAKEOFF taking seconds to
-                # be acted on while ARM was instant. Once every 2 s is plenty.
-                self.get_logger().info(
-                    f"[Drone {self.drone_id}] Armed - waiting for TAKEOFF command.",
-                    throttle_duration_sec=2.0)
-
-            self.cb.cmd_publisher_.publish(msg)
-            # Remember this good command so a later failed solve can hold it.
-            if self.takeoff_requested:
-                self._last_good_msg = msg
+            self._publish_channels(u, u_rate)
 
             # ── Visualisation ─────────────────────────────────────────────
             mpc_trajectory = np.zeros((13, self.N))

@@ -30,7 +30,8 @@ is the shared stack, unchanged.
 """
 import numpy as np
 import rclpy
-from std_msgs.msg import Int32, Empty, Bool, Float64MultiArray
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import Int32, Empty, Bool, Float64MultiArray, String
 
 from interfaces.msg import MotionCaptureState
 from controller_load_mpc.geometry import quat_to_rot_np, attach_points
@@ -38,6 +39,19 @@ from controller_load_mpc.planner_node import LoadPlanner, DRONE_MASS, PLANNER_HZ
 
 from controller_dissipative.dissipative_network import (
     DissipativeNetwork, DissipativeParams)
+
+
+def _largest_gap_deg(rho):
+    """Largest angular gap between consecutive attach points, degrees.
+
+    The load's centre of mass lies strictly inside the attach-point polygon -- the
+    condition for it to be able to hang level -- exactly when this is < 180 deg. See
+    _detach_ocp. tools/metrics.cog_margin is the reporting version of the same test."""
+    a = np.sort(np.mod([np.arctan2(float(r[1]), float(r[0])) for r in rho],
+                       2 * np.pi))
+    if a.size < 3:
+        return 360.0
+    return float(np.degrees(np.max(np.diff(np.r_[a, a[0] + 2 * np.pi]))))
 
 
 class DissipativeController(LoadPlanner):
@@ -125,6 +139,9 @@ class DissipativeController(LoadPlanner):
         # keeps it close to its high near-vertical weld pose (small out-and-down transit ->
         # avoids the transit-driven runaway); default = the fleet elevation (full 45deg rim).
         self._attach_elev_deg = float(p('attach_elev_deg', float(self.diss.elev_deg)).value)
+        # How close (m, drone body to load centre) a reserved drone must be before its
+        # tracker is warmed with a hold reference -- see _publish_pending_attach_refs.
+        self._attach_warm_radius = float(p('attach_warm_radius', 1.0).value)
         net_rho = attach_points(self.n_net, self.attach_radius, self.attach_z)
         self.net = DissipativeNetwork(
             self.n_net, net_rho, self.cable_len, DRONE_MASS, self.load_mass,
@@ -132,6 +149,11 @@ class DissipativeController(LoadPlanner):
         for k in range(self.n, self.n_net):
             self.net.detach(k)                 # reserved slots start off the load
         self.detached = [False] * self.n_net   # per physical drone (departed after detach)
+        # The carrying fleet at construction. self.n becomes the OCP's fleet size once
+        # resize_fleet runs, and self.detached spans n_net (which counts reserved
+        # not-yet-welded drones as 'not detached'), so neither is the right thing to
+        # count survivors over.
+        self._n_carry0 = self.n
         # per reserved drone j (physical id self.n + j): True until its magnet welds on,
         # while Tejen's approach controller owns it and we publish no reference for it.
         self.attach_pending = [True] * self.reserved_attach
@@ -159,6 +181,46 @@ class DissipativeController(LoadPlanner):
         # transient still in the config and the hold starts off-equilibrium.
         self._auto_handover_settle_s = float(p('auto_handover_settle_s', 1.5).value)
         self._auto_handover_t = None           # settle timer, None until the lift tops out
+
+        # ── How a fleet-size change is handled (THESIS_PLAN §12.2) ───────────
+        # 'network' (default, verified): the dissipative network takes the fleet on a
+        #     detach/attach, redistributes, and carries the trajectory on itself.
+        # 'ocp': the OCP is RESIZED in place to the new fleet size and keeps flying.
+        #     No network phase, no phase machine -- the cables do not move when a
+        #     drone leaves, so the surviving attach points are simply a smaller ring
+        #     and the OCP can solve for it directly. Only expressible because
+        #     attachment geometry is a runtime parameter (LoadCableDynamics).
+        self._reconfig_mode = str(p('reconfig_mode', 'network').value).lower()
+        if self._reconfig_mode not in ('network', 'ocp'):
+            raise ValueError("reconfig_mode must be 'network' or 'ocp', got "
+                             f'{self._reconfig_mode!r}')
+        # Seconds to freeze the trajectory clock across a resize. A plain timer, not a
+        # settle detector: the settle detector this replaced timed out on a fleet that
+        # was already still, because it tested "load reached its target" against a
+        # documented 5-7 cm steady sag it can never reach.
+        self._reconfig_hold_s = float(p('reconfig_hold_s', 1.5).value)
+        self._reconfig_hold_left = 0.0
+        # Where each departed drone was parked, so it keeps getting a reference after
+        # an OCP resize (the resized OCP plans only for the drones still on the load,
+        # and a tracker with no reference trips ref_stale and disarms the fleet).
+        self._departed_hold = {}
+        if self._reconfig_mode == 'ocp':
+            # Every size this flight could end up at. Built now because an acados
+            # build is 9-40 s and cannot happen mid-flight; warm cache makes it ~0.1 s
+            # (tools/prebuild_planner.py).
+            self.prebuild_solvers(range(max(2, self.n - self.reserved_attach - 2),
+                                        self.n + self.reserved_attach + 1))
+
+        # Which generator is flying the fleet, announced for anyone downstream that
+        # needs to change behaviour at the handover -- currently the trackers'
+        # control_mode:=velocity_after_handover (docs/design/velocity_loop.md §8).
+        # TRANSIENT_LOCAL: a tracker that comes up after the handover must still learn
+        # it happened, and this fires exactly once per flight.
+        self.phase_pub = self.create_publisher(
+            String, '/fleet/control_phase',
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                       reliability=ReliabilityPolicy.RELIABLE))
+        self.phase_pub.publish(String(data='planner'))
 
         # detach command (physical drone id): hands the fleet to the network + releases.
         self.create_subscription(Int32, '/fleet/detach', self._fleet_detach_cb, 10)
@@ -202,9 +264,21 @@ class DissipativeController(LoadPlanner):
     def _plan(self):
         """The inherited timer calls this. In the network phase we run the spring-damper
         network; otherwise the inherited OCP planner flies (creep -> lift -> hover)."""
+        if self._departed_hold:
+            self._publish_departed_refs()
+        self._publish_pending_attach_refs()
         if self.phase == 'network':
             self._network_plan()
             return
+        # Freeze the trajectory clock across a resize, so a fleet that is still
+        # settling into its new ring is not also asked to chase a moving target.
+        if self._reconfig_hold_left > 0.0:
+            self._reconfig_hold_left -= 1.0 / PLANNER_HZ
+            self.traj_t -= 1.0 / PLANNER_HZ      # cancel the advance super()._plan() makes
+            if self._reconfig_hold_left <= 0.0:
+                self.get_logger().info(
+                    f'[dissipative] reconfiguration hold over — trajectory resumes at '
+                    f't={self.traj_t:.2f} s')
         if self._auto_handover_due():
             self.get_logger().info(
                 '[dissipative] auto handover: OCP lift complete and settled - the '
@@ -213,6 +287,62 @@ class DissipativeController(LoadPlanner):
             self._network_plan()
             return
         super()._plan()
+
+    def _publish_departed_refs(self):
+        """Keep every drone that has left the fleet on a reference of its own.
+
+        Mirrors the contract of the network's `_detached_reference`: hold position
+        while the fleet flies, and DESCEND WITH THE FLEET ON LAND so the freed drones
+        come down too. That LAND behaviour is verified and was briefly lost when an
+        earlier version parked them at a fixed pose forever -- the fleet landed, the
+        detached drone stayed up, and the tilt envelope aborted the run.
+
+        Not optional either way: the resized OCP plans only for the drones still on
+        the load, so without this a departed drone gets no reference at all, trips
+        `ref_stale` and disarms the whole fleet."""
+        g = np.array([0.0, 0.0, self.dyn.g])
+        zero = np.zeros(3)
+        for d, p_hold in self._departed_hold.items():
+            if p_hold is None:
+                continue
+            if self._land_to_ground:
+                # Follow the fleet down at the same rate the load is descending.
+                p_hold[2] = max(0.0, float(p_hold[2]) - self.land_vel / PLANNER_HZ)
+            self._publish_ref(d, [(p_hold, zero, g, zero)] * (self.N + 1))
+
+    def _publish_pending_attach_refs(self):
+        """Keep a reserved drone's tracker WARM while the approach controller still flies it.
+
+        elrs_mux hands authority to our tracker on the first /magnet/object_attached, but
+        `attach_pending` clears on that same message and the network only publishes on its
+        next 10 Hz tick. A tracker with no reference publishes channel_2 = -1.0 -- motors
+        OFF -- so the mux switched a flying drone onto a stream commanding zero throttle.
+        Measured in Gazebo (R0031-R0046, 12/12 runs): throttle 0.36 -> 0.000 within 0.03 s
+        of the weld, ~0.2 s of dead motors, tilt 6 -> 89 deg, ENVELOPE FAULT, fleet abort.
+
+        A hold at the drone's MEASURED position is the bumpless choice: it costs the
+        approach controller nothing (the mux drops this stream until the weld), it is what
+        net.attach() seeds the newcomer's network reference with, and it means the first
+        command after the switch is `stay exactly where you are`.
+
+        Gated on PROXIMITY to the load, not on the whole approach. A tracker with a
+        reference runs a full acados solve every cycle, and warming one from ARM added a
+        fourth solver for ~35 s of approach: pose-timeout disarms went from 0 in 17 runs
+        (2026-08-05) to 6 in 5 runs, every one of them ~1 s after ARM. The tracker only has
+        to be live when the mux switches, and the weld needs 0.15 m proximity, so a 1 m
+        gate leaves seconds of warm-up and costs a fraction of the solving."""
+        if self.load_state is None:
+            return
+        load_p = np.asarray(self.load_state[0:3], float)
+        g = np.array([0.0, 0.0, self.dyn.g])
+        zero = np.zeros(3)
+        for j in range(self.reserved_attach):
+            if not self.attach_pending[j] or self.attach_pos[j] is None:
+                continue
+            p_hold = np.asarray(self.attach_pos[j], float).copy()
+            if float(np.linalg.norm(p_hold - load_p)) > self._attach_warm_radius:
+                continue
+            self._publish_ref(self.n + j, [(p_hold, zero, g, zero)] * (self.N + 1))
 
     def _auto_handover_due(self):
         """True on the tick the OCP lift has topped out and held for the settle time.
@@ -239,17 +369,20 @@ class DissipativeController(LoadPlanner):
     # ── detach: hand over to the dissipative network, then drop a drone ──────
     def _fleet_detach_cb(self, msg: Int32):
         d = int(msg.data)
-        if not (0 <= d < self.n):
+        if not (0 <= d < len(self.detached)):
             self.get_logger().warn(f'[dissipative] /fleet/detach {d} out of range')
             return
         if self.phase not in ('planner', 'network'):
             self.get_logger().warn('[dissipative] detach ignored - not flying yet')
             return
+        if self.detached[d]:
+            return
+        if self._reconfig_mode == 'ocp':
+            self._detach_ocp(d)
+            return
         # first detach also performs the OCP -> network handover (seeds bumplessly).
         if self.phase == 'planner':
             self._enter_network_phase()
-        if self.detached[d]:
-            return
         slot = self.slot2drone.index(d)          # network slot of physical drone d
         self.net.detach(slot)
         self.detached[d] = True
@@ -257,6 +390,55 @@ class DissipativeController(LoadPlanner):
         self.get_logger().info(
             f'[dissipative] DETACH drone {d} (slot {slot}); '
             f'{self.net.n_attached()} drones remain on the load')
+
+    def _detach_ocp(self, d):
+        """Detach WITHOUT handing the fleet to the network: resize the OCP in place.
+
+        The cables do not move when a drone leaves -- they stay bolted where they were
+        -- so the survivors are simply a smaller, generally UNEVEN ring, and the OCP
+        can solve for that directly now that attachment geometry is a runtime
+        parameter. No network phase, no phase machine, no settle detection.
+
+        Whether the load can still hang LEVEL afterwards is geometry, not control: the
+        load's centre of mass must stay inside the polygon of surviving attach points.
+        Removing one cable from a symmetric n-ring leaves a largest angular gap of
+        4*pi/n, so that holds only for n >= 5; n=4 sits exactly on the boundary. The
+        resize is allowed either way and the margin is logged, because flying a
+        marginal configuration is a result worth having, not an error."""
+        survivors = [x for x in range(self._n_carry0)
+                     if x != d and not self.detached[x]]
+        if len(survivors) < 2:
+            self.get_logger().error(
+                f'[dissipative] refusing to detach {d}: {len(survivors)} would remain')
+            return
+        # Each survivor keeps its OWN attach point. Captured BEFORE the resize, while
+        # self.rho and self.slot2drone still describe the current fleet.
+        rho_of = {self.slot2drone[sl]: self.rho[sl]
+                  for sl in range(len(self.slot2drone))}
+        rho_new = [rho_of[x] for x in survivors]
+        gap = _largest_gap_deg(rho_new)
+        if not self.resize_fleet(len(survivors), survivors, rho=rho_new):
+            self.get_logger().error(
+                f'[dissipative] detach {d} ABORTED: no OCP for n={len(survivors)}')
+            return
+        # Warm-start the resized solver before it flies the fleet. Leaving last_X None
+        # makes the first live solve a cold reconverge, which _prime_solver's own
+        # docstring records as "a jump and a scrambled MPC path".
+        for _ in range(2):
+            self._prime_solver()
+        if self.solver.last_X is None:
+            self.get_logger().error(
+                f'[dissipative] detach {d}: the n={self.n} OCP did not converge on the '
+                f'current state. The fleet is resized but the first solves may jump.')
+        self.detached[d] = True
+        self.detach_pub[d].publish(Empty())
+        self._departed_hold[d] = np.asarray(self.drone_pos[d], float).copy() \
+            if self.drone_pos[d] is not None else None
+        self._reconfig_hold_left = self._reconfig_hold_s
+        self.get_logger().warn(
+            f'[dissipative] DETACH drone {d} (OCP resize): n={self.n}, '
+            f'trajectory held {self._reconfig_hold_s:.1f} s; surviving ring spans a '
+            f'{gap:.0f} deg gap ({"CoG inside" if gap < 180.0 - 1e-6 else "CoG ON/OUTSIDE the hull — the load cannot hang level"})')
 
     # ── attach: weld a reserved drone in and fold it into the network ─────────
     def _fleet_attach_cb(self, msg: Int32):
@@ -364,6 +546,7 @@ class DissipativeController(LoadPlanner):
         self.net.seed(seeds)
         self._net_p_des = self._current_load_des()
         self._net_hold_z = float(self._net_p_des[2])   # hold this height; traj_t keeps running
+        self.phase_pub.publish(String(data='network'))
         self.get_logger().info(
             '[dissipative] handover OCP -> dissipative network (airborne)')
 
