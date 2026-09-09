@@ -25,6 +25,11 @@ Adaptation to THIS system (rigid rods, load pinned by mocap, pinned "table top")
     real Gazebo load closes the loop physically through the rigid rods; building the
     reference cone on p_des (not the measured, lagging, possibly-grounded load) is what
     makes the reference LIFT the load instead of collapsing onto a sphere around it.
+    Every per-node spring and reference is built from that node's OWN attach point
+    a_i = p_des + R@rho_i, not the load centre (2026-09-09): on the 500 mm disc the
+    rim is 0.25 m out, and a cone drawn from the centre asks for rod geometry the
+    0.5 m rods cannot reach -- the offline load fell to the floor (Tests A/C/F).
+    With rho -> 0 this reduces exactly to the centre-based cone.
   * The ANCHOR node is pinned on the vertical axis a height cable_len*sin(elev) above
     p_des. It is the paper's fixed "table-top" -- it and the payload together pin every
     robot node onto the OUTWARD cone rim (radius cable_len*cos(elev) from the axis), so
@@ -63,7 +68,9 @@ class DissipativeParams:
     half of critical (2*sqrt(k*m))."""
     def __init__(self, k_pay=40.0, k_anchor=40.0, k_ring=20.0, c=6.0,
                  node_mass=0.5, substeps=10, elev_deg=45.0, k_slot=18.0,
-                 balanced_tensions=False, T_handout=12.0):
+                 balanced_tensions=False, T_handout=12.0,
+                 ki_load=0.0, a_i_load_max=2.0, i_load_xyz=False,
+                 handout_tension_blend=True):
         self.k_pay = k_pay          # N/m spring to the payload node (rest cable_len)
         self.k_anchor = k_anchor    # N/m spring to the anchor node (rest cone radius)
         self.k_ring = k_ring        # N/m spring to each ring neighbour (rest chord)
@@ -93,6 +100,26 @@ class DissipativeParams:
         # newcomer's own handout scalar ramps; the existing tethers stay at full ring. Set the
         # ramp on per node via attach(k, ..., handout=True).
         self.T_handout = float(T_handout)
+        # SYMMETRIC HAND-OUT (2026-09-09). The soft hand-out eased only the NEWCOMER; the
+        # incumbents' balanced-tension solution still stepped in one tick at the weld
+        # (measured Aug 9: d0 elev 37 -> 50 deg instantly, load tilt 0.15 -> 38 deg), and
+        # the weld-variant ladder showed that step, not joint mechanics, is the failure.
+        # With this on, the tension solve blends the incumbents from their pre-weld
+        # solution to the full-fleet solution with the newcomer's hand-out scalar, and
+        # the newcomer's share ramps 0 -> full. Both endpoints balance the same wrench,
+        # so every intermediate is level. Only the balanced+hand-out path is affected
+        # (the config that had never worked); False reproduces the old step for an A/B.
+        self.handout_tension_blend = bool(handout_tension_blend)
+        # COMMON-MODE LOAD TRIM (docs/design/velocity_loop.md §11). One integrator on the
+        # measured load error, its output added IDENTICALLY to every attached node's a_ff,
+        # so the fixed-kT / capped-feedforward thrust deficit (the steady sag) is trimmed
+        # without the differential integral bias that made per-drone integrators tilt the
+        # load (§10 there). Z-ONLY by default: an XY common-mode integral would charge on
+        # the sweep's tracking lag and distort phase; the measured symptom is vertical.
+        # ki_load=0 (default) is byte-inert -- every verified config is unchanged.
+        self.ki_load = float(ki_load)          # 1/s^2: accel per metre-second of error
+        self.a_i_load_max = float(a_i_load_max)  # m/s^2 cap on the trim CONTRIBUTION
+        self.i_load_xyz = bool(i_load_xyz)     # False = integrate z only
 
 
 class DissipativeNetwork:
@@ -153,6 +180,10 @@ class DissipativeNetwork:
         # rim. A steeper cable is also mostly vertical -> less horizontal shove for the tension
         # solve to balance -> the newcomer joins as a stable ring member with minimal transit.
         self.elev_target = np.full(self.n, float(self.p.elev_deg), dtype=float)
+        # common-mode load-trim state: the raw integral (m·s) and its clamped accel
+        # contribution (m/s^2), recomputed once per live step() and read by reference().
+        self.i_load = np.zeros(3)
+        self._a_trim = np.zeros(3)
         self._seeded = False
 
     # ── setup / topology ──────────────────────────────────────────────────
@@ -228,7 +259,10 @@ class DissipativeNetwork:
         equilibrium: after a detach the survivors spread to equal azimuth gaps instead
         of collapsing into the gap the departed drone left."""
         m = max(float(m), 2.0)   # float so the eased n_eff gives a smooth rest length
-        return 2.0 * self._cone_r * float(np.sin(np.pi / m))
+        members = self._ring_members()
+        att_r = (float(np.mean([np.hypot(self.rho[j][0], self.rho[j][1]) for j in members]))
+                 if members else 0.0)
+        return 2.0 * (att_r + self._cone_r) * float(np.sin(np.pi / m))
 
     def _ring_members(self):
         """Attached nodes that sit on the outward ring (excludes central lifters, which hang
@@ -326,14 +360,17 @@ class DissipativeNetwork:
         R_lean = np.eye(3) + vx + vx @ vx * ((1.0 - c) / (s * s))
         return R_lean, up, mag
 
-    def step(self, load_pos, load_quat, load_vel, p_des_load, dt, load_accel=None):
+    def step(self, load_pos, load_quat, load_vel, p_des_load, dt, load_accel=None,
+             integrate_trim=True):
         """Advance the network one control tick of length dt (integrated in substeps).
         The payload node is pinned to p_des_load and the anchor to the axis above it, so
         the whole cone translates up as the lift target rises; robot nodes relax onto the
         cone rim under the springs and dissipate their transient through the damper.
-        load_quat orients the ring in the load's yaw; load_pos is unused here (the loop
-        closes physically through the rigid rods -- reference() reads it only for the
-        measured attach point). Read references via reference(i)."""
+        load_quat orients the ring in the load's yaw. load_pos feeds only the common-mode
+        load trim below (the spring loop still closes physically through the rigid rods).
+        `integrate_trim=False` freezes the trim without zeroing it -- for LAND/grounded,
+        and for horizon rollouts, which predict rather than measure. Read references via
+        reference(i)."""
         p_des = np.asarray(p_des_load, float)
         R = self._frame_rot(load_quat)
 
@@ -344,6 +381,22 @@ class DissipativeNetwork:
             if self.attached[i] and self._handout_rate[i] > 0.0:
                 self.handout[i] = min(1.0, self.handout[i] + self._handout_rate[i] * dt)
 
+        # COMMON-MODE LOAD TRIM (design: docs/design/velocity_loop.md §11). Integrate the
+        # measured load error and clamp the CONTRIBUTION (not the raw integral), so the
+        # authority bound stays a_i_load_max whatever ki_load is set to. The trim vector is
+        # added identically to every attached node's a_ff in reference(); an identical
+        # world-frame shift produces (Σ r_i) × Δf of moment -- the ring-centroid residual --
+        # rather than the unbounded differential moment of per-drone integrals.
+        if self.p.ki_load > 0.0 and integrate_trim:
+            e = p_des - np.asarray(load_pos, float)
+            if not self.p.i_load_xyz:
+                e = np.array([0.0, 0.0, e[2]])
+            self.i_load = self.i_load + e * dt
+            nrm = float(np.linalg.norm(self.i_load)) * self.p.ki_load
+            if nrm > self.p.a_i_load_max:
+                self.i_load = self.i_load * (self.p.a_i_load_max / nrm)
+        self._a_trim = self.p.ki_load * self.i_load
+
         # Tilt the whole cone onto effective gravity, so the formation LEADS the load
         # by exactly the geometry the commanded acceleration needs (see _lean).
         R_lean, _up_eff, _g_eff = self._lean(load_accel)
@@ -351,6 +404,8 @@ class DissipativeNetwork:
         anchor = p_des + R_lean @ np.array([0.0, 0.0, self._anchor_h])
         # per-slot outward cone target (the force-free equilibrium of the springs).
         azi = [self._azimuth(i, R) for i in range(self.n)]
+        # world attach points: every spring below hangs off the node's own rim point.
+        apt = [payload + R @ self.rho[i] for i in range(self.n)]
         # ring rest for the CURRENTLY-attached RING fleet (central lifters excluded), eased by
         # the handout scalars so a newcomer only counts toward the even m-gon as it hands out
         # (n_eff climbs 3 -> 4 smoothly) -- the ring members re-space without a step change.
@@ -381,7 +436,7 @@ class DissipativeNetwork:
             for i in att:
                 cos_i, sin_i = self._handout_geom(i)
                 d = np.array([azi[i][0] * cos_i, azi[i][1] * cos_i, sin_i])
-                slot[i] = payload + self.cable_len * (R_lean @ d)
+                slot[i] = apt[i] + self.cable_len * (R_lean @ d)
         elif self.p.k_slot > 0.0 and m >= 1:
             # WEIGHTED even azimuth slots. Each ring member occupies an angular width
             # proportional to its hand-out weight, so a just-welded newcomer (handout~0) takes
@@ -411,7 +466,7 @@ class DissipativeNetwork:
                     th = ref + 2.0 * np.pi * frac[r]
                     cos_i, sin_i = self._handout_geom(i)   # =cos_e/sin_e unless handing out
                     d = np.array([cos_i * np.cos(th), cos_i * np.sin(th), sin_i])
-                    slot[i] = payload + self.cable_len * (R_lean @ d)
+                    slot[i] = apt[i] + self.cable_len * (R_lean @ d)
 
         h = dt / max(self.p.substeps, 1)
         for _ in range(max(self.p.substeps, 1)):
@@ -422,13 +477,13 @@ class DissipativeNetwork:
                 qi = self.q[i]
                 f = np.zeros(3)
                 # spring to the payload node, rest length cable_len (sets cable dist).
-                f += self._spring(qi, payload, self.p.k_pay, self.cable_len_i[i])
+                f += self._spring(qi, apt[i], self.p.k_pay, self.cable_len_i[i])
                 if self.central[i]:
                     # CENTRAL lifter: pin to the vertical axis directly above the load centre
                     # (rest 0 to the point one cable_len straight up). No cone/ring/slot springs,
                     # so it hovers over the centre and adds pure vertical lift -- it cannot be
                     # pulled to a side azimuth and lever the load over.
-                    v_target = payload + R_lean @ np.array(
+                    v_target = apt[i] + R_lean @ np.array(
                         [0.0, 0.0, self.cable_len_i[i]])
                     f += self._spring(qi, v_target, self.p.k_anchor, 0.0)
                     f += -self.p.c * self.qd[i] * 2.0
@@ -440,9 +495,19 @@ class DissipativeNetwork:
                 # lifter), easing to the design rim (height _anchor_h, rest _cone_r) at
                 # handout=1. Equals the fixed anchor/_cone_r for a full ring member.
                 cos_i, sin_i = self._handout_geom(i)
-                anchor_i = payload + R_lean @ np.array(
-                    [0.0, 0.0, self.cable_len * sin_i])
-                f += self._spring(qi, anchor_i, self.p.k_anchor, self.cable_len * cos_i)
+                # The anchor spring pins the node's height and its distance from the cone
+                # AXIS. Both come from the node's design point: its slot when one exists,
+                # else its own attach point plus the outward cone leg -- so the slot set is
+                # an exact force-free equilibrium of payload+anchor+slot+ring together.
+                if i in slot:
+                    rel = R_lean.T @ (slot[i] - payload)
+                    rest_h, z_h = float(np.hypot(rel[0], rel[1])), float(rel[2])
+                else:
+                    rel = R_lean.T @ (apt[i] - payload)
+                    rest_h = float(np.hypot(rel[0], rel[1])) + self.cable_len * cos_i
+                    z_h = float(rel[2]) + self.cable_len * sin_i
+                anchor_i = payload + R_lean @ np.array([0.0, 0.0, z_h])
+                f += self._spring(qi, anchor_i, self.p.k_anchor, rest_h)
                 # spring to the phased even-azimuth slot (rest 0), pinning absolute azimuth.
                 # Scaled by handout so a just-welded newcomer feels no side pull (it is
                 # central); the azimuth pin fades in as it hands out.
@@ -460,7 +525,11 @@ class DissipativeNetwork:
                 if not self.p.balanced_tensions:
                     for j in self._ring_neighbours(i):
                         gij = self.handout[i] * self.handout[j]
-                        f += gij * self._spring(qi, self.q[j], self.p.k_ring, ring_rest)
+                        # rest = the neighbours' slot separation when both have slots
+                        # (consistent with the slot springs), else the even-m-gon chord.
+                        rest_ij = (float(np.linalg.norm(slot[i] - slot[j]))
+                                   if (i in slot and j in slot) else ring_rest)
+                        f += gij * self._spring(qi, self.q[j], self.p.k_ring, rest_ij)
                         f += -gij * self.p.c * (self.qd[i] - self.qd[j])
                 acc[i] = f / self.p.node_mass
             # semi-implicit Euler (velocity then position) -- stable for these springs.
@@ -519,6 +588,26 @@ class DissipativeNetwork:
         idx = [i for i in range(self.n) if self.attached[i]]
         if not idx:
             return {}
+        s_new = min(float(self.handout[i]) for i in idx)
+        if self.p.handout_tension_blend and s_new < 1.0 - 1e-9:
+            # newcomers = nodes still handing out; incumbents = everyone at handout 1.
+            inc = [i for i in idx if float(self.handout[i]) >= 1.0 - 1e-9]
+            full = self._solve_subset(idx, R, p_des, load_accel)
+            base = self._solve_subset(inc, R, p_des, load_accel) if inc else {}
+            out = {}
+            for i in idx:
+                if i in base:
+                    out[i] = (1.0 - s_new) * base[i] + s_new * full[i]
+                else:
+                    out[i] = s_new * full[i]
+            return out
+        return self._solve_subset(idx, R, p_des, load_accel)
+
+    def _solve_subset(self, idx, R, p_des, load_accel=None):
+        """The weighted least-squares wrench balance over the nodes in `idx` (see
+        _solve_tensions). Returns {node_index: T}."""
+        if not idx:
+            return {}
         A = np.zeros((6, len(idx)))
         for c, i in enumerate(idx):
             _, r_i, u = self._attach_frame(i, R, p_des)
@@ -550,7 +639,8 @@ class DissipativeNetwork:
         return {i: float(T[c]) for c, i in enumerate(idx)}
 
     # ── reference extraction ────────────────────────────────────────────────
-    def reference(self, i, load_quat, p_des_load, taut_gate=1.0, load_accel=None):
+    def reference(self, i, load_quat, p_des_load, taut_gate=1.0, load_accel=None,
+                  tensions=None):
         """Per-drone reference (p_ref, v_ref, a_ff, a_cable), each a length-3 numpy
         array -- the tuple the wire-format publisher expects.
 
@@ -581,20 +671,26 @@ class DissipativeNetwork:
             R = self._frame_rot(load_quat)
             a_i, _, u = self._attach_frame(i, R, p_des)
             p_ref = a_i + self.cable_len_i[i] * u
-            t_i = self._solve_tensions(R, p_des, load_accel).get(
+            # `tensions` lets a caller that reads every node at one tick (horizon_references)
+            # solve the fleet wrench once instead of once per drone: the solve is the whole
+            # cost of a network tick (4 nodes x 21 horizon nodes x 2 lstsq = ~50 ms, half the
+            # 10 Hz budget, measured as 0.5 s reference staleness at the R0166 handover).
+            Tsol = tensions if tensions is not None else self._solve_tensions(R, p_des, load_accel)
+            t_i = Tsol.get(
                 i, self.load_mass * self.g / max(self.n_attached(), 1))
             a_cable = taut_gate * (t_i / self.drone_mass) * (-u)
-            a_ff = np.array([0.0, 0.0, self.g]) + a_des - a_cable
+            a_ff = np.array([0.0, 0.0, self.g]) + a_des - a_cable + self._a_trim
             return p_ref, v_ref, a_ff, a_cable
 
-        u = self.q[i] - p_des
+        a_i = p_des + self._frame_rot(load_quat) @ self.rho[i]
+        u = self.q[i] - a_i
         dist = float(np.linalg.norm(u))
         u = u / dist if dist > 1e-9 else np.array([0.0, 0.0, 1.0])
         # a central lifter always references straight up over the load centre (elevation 90deg),
         # so its cable feed-forward is purely vertical -- no inward/side pull to tilt the load.
         if self.central[i]:
             u = up_eff
-        p_ref = p_des + self.cable_len_i[i] * u
+        p_ref = a_i + self.cable_len_i[i] * u
         # tension from the node elevation: t = m_load g / (n' sin phi), phi = asin(u_z).
         # n' is the TRUE attached count (not eased): the survivors must pick up the
         # departed drone's load share IMMEDIATELY or the load sags. Only the ring-rest
@@ -605,8 +701,17 @@ class DissipativeNetwork:
         # cable pulls the drone toward the payload (inward, down) = along -u, gated by
         # how taut the real rod measures right now.
         a_cable = taut_gate * (t_i / self.drone_mass) * (-u)
-        a_ff = np.array([0.0, 0.0, self.g]) + a_des - a_cable
+        # + the common-mode trim, the SAME vector for every node -- a detached/fly-away
+        # drone (fly_away_reference) deliberately does not get it.
+        a_ff = np.array([0.0, 0.0, self.g]) + a_des - a_cable + self._a_trim
         return p_ref, v_ref, a_ff, a_cable
+
+    def reset_load_trim(self):
+        """Zero the common-mode load trim. Called on network-phase ENTRY (handover) --
+        NOT on attach/detach events, where the droop the trim holds does not vanish and
+        dumping it would step every reference at once."""
+        self.i_load = np.zeros(3)
+        self._a_trim = np.zeros(3)
 
     def horizon_references(self, load_quat, p_des_seq, dt, taut_gates=None,
                            load_accel_seq=None):
@@ -644,11 +749,17 @@ class DissipativeNetwork:
             for k, p_des in enumerate(p_des_seq):
                 a_k = None if load_accel_seq is None else load_accel_seq[k]
                 if k > 0:
-                    # load_pos is unused by step(); the loop closes through p_des.
-                    self.step(p_des, load_quat, np.zeros(3), p_des, dt, load_accel=a_k)
+                    # Predicted steps must not charge the load trim (there is no
+                    # measurement here -- passing p_des as load_pos would freeze the
+                    # error at zero anyway, but be explicit): integrate_trim=False.
+                    self.step(p_des, load_quat, np.zeros(3), p_des, dt, load_accel=a_k,
+                              integrate_trim=False)
+                Tk = (self._solve_tensions(self._frame_rot(load_quat), p_des, a_k)
+                      if self.p.balanced_tensions else None)
                 for i in range(self.n):
                     out[i].append(self.reference(i, load_quat, p_des,
-                                                 taut_gate=gates[i], load_accel=a_k))
+                                                 taut_gate=gates[i], load_accel=a_k,
+                                                 tensions=Tk))
         finally:
             self.q, self.qd, self.handout = q0, qd0, ho0
         return out
@@ -691,7 +802,7 @@ class DissipativeNetwork:
         R = self._frame_rot(load_quat)
         azi = self._azimuth(i, R)
         cone_dir = np.array([azi[0] * self._cos_e, azi[1] * self._cos_e, self._sin_e])
-        return p_des + self.cable_len * cone_dir
+        return p_des + R @ self.rho[i] + self.cable_len * cone_dir
 
 
 # ─────────────────────────────────────────────────────────────────────────────

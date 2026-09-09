@@ -15,9 +15,14 @@ CABLE_LEN     = 0.5            # matches every world in simulation_assets/ (rod
                                # any node run WITHOUT a launch silently got a 20%
                                # cable-length error. Verified by
                                # tools/check_geometry.py, which is in the gate.
-ATTACH_RADIUS = 0.08
+ATTACH_RADIUS = 0.25   # rim of the 500 mm disc payload (2026-09-09)
 ATTACH_Z      = 0.025          # attach height above load CoG, load frame
 LOAD_MASS     = 0.4
+# 500 mm x 50 mm solid disc about its CoG: Ixx = m(3r^2+h^2)/12, Izz = m r^2/2.
+# The planner's OCP bakes these into the compiled solver (planner_solver._ocp_signature)
+# and tools/check_geometry.py checks them against the world SDF.
+LOAD_IXX      = 6.333e-3
+LOAD_IZZ      = 1.25e-2
 TARGET_Z      = 0.6            # load hover height
 LIFT_RAMP_VEL = 0.05           # m/s load lift rate after handover
 LAND_VEL      = 0.20           # m/s descent rate, faster than the gentle lift

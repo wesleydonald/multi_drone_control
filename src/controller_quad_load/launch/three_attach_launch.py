@@ -65,7 +65,10 @@ def _args():
         DeclareLaunchArgument('num_drones', default_value='3'),      # TETHERED fleet size
         DeclareLaunchArgument('reserved_attach', default_value='1'), # extra network capacity
         DeclareLaunchArgument('cable_len', default_value='0.5'),
-        DeclareLaunchArgument('start_taut', default_value='false'),
+        # true = skip the ground-creep phase, as dissipative_launch / mpc_quad_load do.
+        # Was false here alone, which is why the attach demo 'took ages to take off'
+        # (Wesley, 2026-09-09). false restores the creep for a genuinely slack start.
+        DeclareLaunchArgument('start_taut', default_value='true'),
         DeclareLaunchArgument('handover_elev_deg', default_value='45.0'),
         DeclareLaunchArgument('handover_settle_s', default_value='0.75'),
         DeclareLaunchArgument('load_mass', default_value='0.4'),
@@ -128,6 +131,11 @@ def _args():
         DeclareLaunchArgument('diss_node_mass', default_value='0.5'),
         DeclareLaunchArgument('diss_substeps', default_value='10'),
         DeclareLaunchArgument('diss_elev_deg', default_value='45.0'),
+        # COMMON-MODE LOAD TRIM (docs/design/velocity_loop.md §11): z-only integrator on
+        # the measured load error, added identically to every node's a_ff. 0.0 = off.
+        DeclareLaunchArgument('diss_handout_tension_blend', default_value='true'),
+        DeclareLaunchArgument('diss_ki_load', default_value='0.0'),
+        DeclareLaunchArgument('diss_a_i_load_max', default_value='2.0'),
         DeclareLaunchArgument('net_land_z', default_value='0.06'),
         # UNEQUAL (moment-balanced) force sharing. Under EQUAL sharing a balanced 4-ring is
         # geometrically impossible on a fixed 120deg tripod (the fleet diverges / the load
@@ -145,7 +153,7 @@ def _args():
         DeclareLaunchArgument('attach_y_offset', default_value='0.0'),
         # NB this is the magnet's WELD-PROXIMITY threshold (how close the tip must
         # get before the joint is created) -- NOT the payload's attach-ring radius,
-        # which is 0.08 and comes from params.py ATTACH_RADIUS. They were both called
+        # which is 0.25 (the disc rim) and comes from params.py ATTACH_RADIUS. They were both called
         # 'attach_radius' and the collision has caused real confusion before, so this
         # one is now weld_radius.
         DeclareLaunchArgument('weld_radius', default_value='0.15'),
@@ -304,6 +312,9 @@ def launch_setup(context, *args, **kwargs):
                      'diss_node_mass': f('diss_node_mass'),
                      'diss_substeps': i_('diss_substeps'),
                      'diss_elev_deg': f('diss_elev_deg'),
+                     'diss_handout_tension_blend': b('diss_handout_tension_blend'),
+                     'diss_ki_load': f('diss_ki_load'),
+                     'diss_a_i_load_max': f('diss_a_i_load_max'),
                      'net_land_z': f('net_land_z')}],
         output='screen'))
 

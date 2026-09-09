@@ -36,7 +36,7 @@ from .geometry import (quat_to_rot_np, attach_points, nominal_cable_dirs,
                        azimuth_slot_assignment, yaw_from_quat)
 from .load_trajectory import LoadTrajectory
 from .planner_solver import PlannerSolver
-from .params import PlannerConfig
+from .params import PlannerConfig, LOAD_IXX, LOAD_IZZ
 from .creep_controller import CreepController
 from .reference_builder import ReferenceBuilder
 from utility_objects.data_logger import run_log_dir, write_params, node_params
@@ -49,7 +49,7 @@ from utility_objects.run_context import log_base_dir
 # load_mass to 0.1 without scaling these leaves the model ~4x over-stiff in
 # rotation. Scale by (load_mass / 0.4) for a same-size lighter payload, or
 # recompute from the real payload's dimensions.
-LOAD_INERTIA  = [1.67e-3, 1.67e-3, 3.33e-3]
+LOAD_INERTIA  = [LOAD_IXX, LOAD_IXX, LOAD_IZZ]   # the disc; see params.py
 DRONE_MASS    = 0.6
 PLANNER_HZ    = 10.0
 

@@ -21,7 +21,7 @@ Publishes:
 
 Params:
     num_drones      (int)   fleet size
-    payload_size    (float[3]) payload box x,y,z in metres (world SDF: 0.2 0.2 0.05)
+    payload_size    (float[3]) payload disc dx,dy,thickness in metres (world SDF: 0.5 0.5 0.05)
     path_max_len    (int)   ring-buffer length for the payload track
 """
 
@@ -42,7 +42,7 @@ class FleetViz(Node):
         super().__init__('fleet_viz')
         self.n = int(self.declare_parameter('num_drones', 3).value)
         self.payload_size = [float(v) for v in self.declare_parameter(
-            'payload_size', [0.2, 0.2, 0.05]).value]
+            'payload_size', [0.5, 0.5, 0.05]).value]
         self.path_max_len = int(self.declare_parameter('path_max_len', 2000).value)
 
         self.id_label_z = float(self.declare_parameter('id_label_z', 0.15).value)
@@ -103,13 +103,13 @@ class FleetViz(Node):
     def _payload_cb(self, msg):
         self._send_tf(msg, 'payload_mocap')
 
-        # box marker, anchored to the payload frame so it moves with it
+        # disc marker, anchored to the payload frame so it moves with it
         m = Marker()
         m.header.frame_id = 'payload_mocap'
         m.header.stamp = self.get_clock().now().to_msg()
         m.ns = 'payload'
         m.id = 0
-        m.type = Marker.CUBE
+        m.type = Marker.CYLINDER
         m.action = Marker.ADD
         m.pose.orientation.w = 1.0
         m.scale.x, m.scale.y, m.scale.z = self.payload_size

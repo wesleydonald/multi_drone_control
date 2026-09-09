@@ -54,7 +54,7 @@ CABLE_LEN = 0.5
 LOAD_MASS = 0.4
 DRONE_MASS = 0.6
 G = 9.81
-ATTACH_RADIUS = 0.08
+ATTACH_RADIUS = 0.25
 ATTACH_Z = 0.025
 GROUND_Z = 0.025               # payload rest height on the floor (plant contact floor)
 START_LOAD_Z = 0.45            # airborne taut handover height (OCP already lifted here)
@@ -472,7 +472,9 @@ def main(args=None):
     g_unequal_ok = bool((tb.max() - tb.min()) > 0.02 * tb.mean() and np.all(tb >= 0.0))
     # the newcomer must settle at ITS OWN attach azimuth (no drift to an even ring) and every
     # node stays on the cone rim -- the fix for the sim drift/lever crash.
-    g_fixed_ok = bool(az_err < 5.0 and max(r_ref) < 0.45 and min(r_ref) > 0.25)
+    # every node's reference sits one cone leg outboard of ITS rim attach point
+    r_expect = ATTACH_RADIUS + CABLE_LEN * np.cos(np.radians(START_ELEV_DEG))
+    g_fixed_ok = bool(az_err < 5.0 and max(abs(r - r_expect) for r in r_ref) < 0.10)
     g_ok = g_level_ok and g_lift_ok and g_unequal_ok and g_fixed_ok
     results.append(('G unequal force sharing', g_ok,
                     f'asym attach: |moment| {np.linalg.norm(rMb):.3f} N.m (~0 -> level), '
@@ -599,7 +601,10 @@ def main(args=None):
     k_even_ok = bool(np.all(k_gaps > 70.0) and np.all(k_gaps < 110.0))
     # the RATIO is the real claim (eased respace is far gentler than the stepped one); the
     # absolute bound is a loose sanity cap, not the discriminator.
-    k_smooth_ok = bool(k_soft_rate < 0.5 * k_inst_rate and k_soft_rate < 4.0)
+    # (cap re-baselined 4.0 -> 5.0 for the 0.25 m rim: azimuths are measured about the
+    # load centre, and a node hanging off a rim point sweeps more centre-azimuth per
+    # unit of cable-direction change than one hanging off the centre did.)
+    k_smooth_ok = bool(k_soft_rate < 0.5 * k_inst_rate and k_soft_rate < 5.0)
     k_aloft_ok = bool(k_post.min() > TARGET_Z - 0.20 and np.all(np.isfinite(k_soft['load_z'])))
     k_handout_ok = bool(k_soft['handout3'][-1] > 0.999)
     k_ok = k_even_ok and k_smooth_ok and k_aloft_ok and k_handout_ok

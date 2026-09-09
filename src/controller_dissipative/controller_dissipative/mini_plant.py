@@ -32,7 +32,7 @@ def _skew(w):
 class MiniPlant:
     def __init__(self, n, rho, cable_len, drone_mass, load_mass, g, ground_z,
                  k_rod=3000.0, c_rod=25.0, k_ground=6000.0, c_ground=60.0,
-                 kp=30.0, kd=8.0, accel_max=22.0, load_inertia=0.004):
+                 kp=30.0, kd=8.0, accel_max=22.0, load_inertia=0.0063):
         self.n = n
         self.rho = [np.asarray(r, float) for r in rho]
         self.L = float(cable_len)
@@ -44,7 +44,7 @@ class MiniPlant:
         self.k_g, self.c_g = k_ground, c_ground
         self.kp, self.kd = kp, kd
         self.f_max = self.m_d * accel_max      # thrust magnitude cap (N)
-        # payload rigid-body inertia (diagonal, body frame) -- a small transported box.
+        # payload rigid-body inertia (diagonal, body frame) -- the 500 mm disc's Ixx.
         self.I = np.diag([float(load_inertia)] * 3)
         self.Iinv = np.linalg.inv(self.I)
         self.q = np.zeros((n, 3)); self.vd = np.zeros((n, 3))

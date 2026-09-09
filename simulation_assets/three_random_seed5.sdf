@@ -43,17 +43,17 @@
       <include>
         <uri>models/x3_drone0.sdf</uri>
         <name>x3_drone0</name>
-        <pose>0.194397 0.725213 0.100000 0 0 2.653546</pose>
+        <pose>0.316179 0.843825 0.100000 0 0 2.653546</pose>
       </include>
       <include>
         <uri>models/x3_drone1.sdf</uri>
         <name>x3_drone1</name>
-        <pose>-0.524292 0.550484 0.100000 0 0 2.785692</pose>
+        <pose>-0.687905 0.596645 0.100000 0 0 2.785692</pose>
       </include>
       <include>
         <uri>models/x3_drone2.sdf</uri>
         <name>x3_drone2</name>
-        <pose>0.141232 -0.326175 0.100000 0 0 -2.430299</pose>
+        <pose>0.183063 -0.490948 0.100000 0 0 -2.430299</pose>
       </include>
 
       <!-- ===== PAYLOAD ===== -->
@@ -62,10 +62,10 @@
         <link name="body">
           <gravity>1</gravity>
           <inertial><mass>0.4</mass>
-            <inertia><ixx>1.67e-03</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1.67e-03</iyy><iyz>0</iyz><izz>3.33e-03</izz></inertia>
+            <inertia><ixx>6.333e-03</ixx><ixy>0</ixy><ixz>0</ixz><iyy>6.333e-03</iyy><iyz>0</iyz><izz>1.250e-02</izz></inertia>
           </inertial>
-          <collision name="collision"><geometry><box><size>0.2 0.2 0.05</size></box></geometry></collision>
-          <visual name="visual"><geometry><box><size>0.2 0.2 0.05</size></box></geometry>
+          <collision name="collision"><geometry><cylinder><radius>0.25</radius><length>0.05</length></cylinder></geometry></collision>
+          <visual name="visual"><geometry><cylinder><radius>0.25</radius><length>0.05</length></cylinder></geometry>
             <material><ambient>0.8 0.4 0.0 1</ambient><diffuse>0.8 0.4 0.0 1</diffuse></material>
           </visual>
         </link>
@@ -79,7 +79,7 @@
 
       <!-- ===== TETHER 0: payload -> drone0 (rigid, len=0.5000, detach@payload) ===== -->
       <link name="stub_pay_0">
-        <pose>-0.005036 0.269442 0.050000 0 0 0</pose>
+        <pose>0.116746 0.388055 0.050000 0 0 0</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
@@ -94,7 +94,7 @@
       <model name="tether_0">
         <pose>0 0 0 0 0 0</pose>
         <link name="rod">
-        <pose>0.094680 0.497327 0.075000 0 1.470629 1.158325</pose>
+        <pose>0.216463 0.615940 0.075000 0 1.470629 1.158325</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia>
@@ -116,7 +116,7 @@
       </joint>
       <!-- ===== TETHER 1: payload -> drone1 (rigid, len=0.5000, detach@payload) ===== -->
       <link name="stub_pay_1">
-        <pose>-0.139340 0.235347 0.050000 0 0 0</pose>
+        <pose>-0.302953 0.281507 0.050000 0 0 0</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
@@ -131,7 +131,7 @@
       <model name="tether_1">
         <pose>0 0 0 0 0 0</pose>
         <link name="rod">
-        <pose>-0.331816 0.392916 0.075000 0 1.470629 2.455589</pose>
+        <pose>-0.495429 0.439076 0.075000 0 1.470629 2.455589</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia>
@@ -153,7 +153,7 @@
       </joint>
       <!-- ===== TETHER 2: payload -> drone2 (rigid, len=0.5000, detach@payload) ===== -->
       <link name="stub_pay_2">
-        <pose>-0.042660 0.136084 0.050000 0 0 0</pose>
+        <pose>-0.000830 -0.028689 0.050000 0 0 0</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
@@ -168,7 +168,7 @@
       <model name="tether_2">
         <pose>0 0 0 0 0 0</pose>
         <link name="rod">
-        <pose>0.049286 -0.095045 0.075000 0 1.470629 -1.192176</pose>
+        <pose>0.091117 -0.259819 0.075000 0 1.470629 -1.192176</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia>

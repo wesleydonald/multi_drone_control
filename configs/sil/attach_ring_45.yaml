@@ -1,7 +1,7 @@
 name: attach_ring_45
 description: >
   THE ACCEPTANCE SCENARIO (THESIS_PLAN §9.3). Reproduce the documented 2026-07-28
-  attach runaway: a gap-centre weld (azimuth 180, attach_x_offset -0.08) with balanced
+  attach runaway: a gap-centre weld (azimuth 180, attach_x_offset -0.25) with balanced
   tensions and the soft hand-out, settling to a full 45 deg rim slot. Gazebo record:
   briefly level (tilt 10.7 deg, load_z 0.578) then DIVERGES as the hand-out eases the
   newcomer fully out -- drone 3's error grows REF 0.30 -> ACT 1.06, |aCm| -> 20,
@@ -62,7 +62,7 @@ launch:
     diss_balanced_tensions: true
     attach_handout: true
     attach_t_handout: 12.0
-    attach_x_offset: -0.08
+    attach_x_offset: -0.25
     attach_y_offset: 0.0
     attach_elev_deg: 45.0
     enable_obstacle_avoidance: false
@@ -73,7 +73,7 @@ fleet:
 
 geometry:
   cable_len: 0.5
-  attach_radius: 0.08
+  attach_radius: 0.25
   attach_z: 0.025
   load_mass: 0.4
   drone_mass: 0.6
@@ -84,7 +84,7 @@ initial:
   stands: true          # take-off stands under the tethered drones (see Scenario.stands)
   load_z: 0.45          # airborne taut handover height
   elev_deg: 45.0        # tethers on the 45 deg cone
-  weld_x: -0.08         # gap centre between the 0/120/240 deg tethers
+  weld_x: -0.25         # gap centre between the 0/120/240 deg tethers
   weld_y: 0.0
   weld_z_offset: 0.05   # attach_target_publisher's z_offset
 

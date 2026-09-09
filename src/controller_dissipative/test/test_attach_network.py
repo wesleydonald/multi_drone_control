@@ -40,7 +40,7 @@ LEVEL = np.array([1.0, 0.0, 0.0, 0.0])
 def _net():
     """A network in the exact shape three_attach_launch flies: n_net nodes, the
     reserved slot detached (inert) until it welds on."""
-    rho = attach_points(N_NET, 0.08, 0.025)
+    rho = attach_points(N_NET, 0.25, 0.025)
     net = DissipativeNetwork(N_NET, rho, CABLE_LEN, DRONE_MASS, LOAD_MASS, G,
                              DissipativeParams())
     for k in range(N_TETHERED, N_NET):
@@ -61,7 +61,7 @@ def test_horizon_references_covers_every_node_after_a_ring_attach():
     """THE regression. After the reserved slot welds on, the horizon must produce a
     reference for all n_net nodes -- this is the call that killed the planner."""
     net, load = _net()
-    net.attach(3, load + np.array([-0.08, 0.0, 0.55]), handout=True)
+    net.attach(3, load + np.array([-0.25, 0.0, 0.55]), handout=True)
     assert net.n_attached() == 4
 
     p_seq = [load] * 5
@@ -80,7 +80,7 @@ def test_a_gate_list_sized_to_the_tethered_count_fails_by_name():
     """The exact mistake that crashed the planner: 3 gates for a 4-node network. It
     must say so, not die as an IndexError deep inside a comprehension."""
     net, load = _net()
-    net.attach(3, load + np.array([-0.08, 0.0, 0.55]), handout=True)
+    net.attach(3, load + np.array([-0.25, 0.0, 0.55]), handout=True)
     with pytest.raises(ValueError, match=r'3 entries but the network has 4'):
         net.horizon_references(LEVEL, [load] * 3, 0.1,
                                taut_gates=[1.0] * N_TETHERED)
@@ -89,7 +89,7 @@ def test_a_gate_list_sized_to_the_tethered_count_fails_by_name():
 def test_horizon_references_defaults_to_fully_taut_gates():
     """taut_gates=None must still cover every node (the default path)."""
     net, load = _net()
-    net.attach(3, load + np.array([-0.08, 0.0, 0.55]), handout=True)
+    net.attach(3, load + np.array([-0.25, 0.0, 0.55]), handout=True)
     out = net.horizon_references(LEVEL, [load] * 3, 0.1)
     assert len(out) == N_NET
 
@@ -98,7 +98,7 @@ def test_horizon_references_leaves_the_live_network_state_untouched():
     """It rolls a COPY forward. If it mutated the live state, the attach transient
     would be applied twice per tick -- once by step(), once by the preview."""
     net, load = _net()
-    net.attach(3, load + np.array([-0.08, 0.0, 0.55]), handout=True)
+    net.attach(3, load + np.array([-0.25, 0.0, 0.55]), handout=True)
     q0, qd0, ho0 = net.q.copy(), net.qd.copy(), net.handout.copy()
     net.horizon_references(LEVEL, [load + np.array([0.1 * k, 0.0, 0.0])
                                    for k in range(6)], 0.1,

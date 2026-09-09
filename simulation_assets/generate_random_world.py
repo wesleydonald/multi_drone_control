@@ -146,7 +146,7 @@ def main():
     ap.add_argument('--n', type=int, default=3)
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--cable-len', type=float, default=0.5)
-    ap.add_argument('--attach-radius', type=float, default=0.08)
+    ap.add_argument('--attach-radius', type=float, default=0.25)
     ap.add_argument('--attach-z', type=float, default=0.025)
     ap.add_argument('--payload-z', type=float, default=0.025)
     ap.add_argument('--elev', type=float, default=None,

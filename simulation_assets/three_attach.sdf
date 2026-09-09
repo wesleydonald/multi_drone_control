@@ -43,29 +43,29 @@
       <include>
         <uri>models/x3_drone0.sdf</uri>
         <name>x3_drone0</name>
-        <pose>0.577494 0.000000 0.100000 0 0 0</pose>
+        <pose>0.747494 0.000000 0.100000 0 0 0.000000</pose>
       </include>
       <include>
         <uri>models/x3_drone1.sdf</uri>
         <name>x3_drone1</name>
-        <pose>-0.288747 0.500124 0.100000 0 0 0</pose>
+        <pose>-0.373747 0.647349 0.100000 0 0 0.000000</pose>
       </include>
       <include>
         <uri>models/x3_drone2.sdf</uri>
         <name>x3_drone2</name>
-        <pose>-0.288747 -0.500124 0.100000 0 0 0</pose>
+        <pose>-0.373747 -0.647349 0.100000 0 0 0.000000</pose>
       </include>
 
       <!-- ===== PAYLOAD ===== -->
       <model name="payload">
-        <pose>0 0 0.025 0 0 0</pose>
+        <pose>0.000000 0.000000 0.025000 0 0 0.000000</pose>
         <link name="body">
           <gravity>1</gravity>
           <inertial><mass>0.4</mass>
-            <inertia><ixx>1.67e-03</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1.67e-03</iyy><iyz>0</iyz><izz>3.33e-03</izz></inertia>
+            <inertia><ixx>6.333e-03</ixx><ixy>0</ixy><ixz>0</ixz><iyy>6.333e-03</iyy><iyz>0</iyz><izz>1.250e-02</izz></inertia>
           </inertial>
-          <collision name="collision"><geometry><box><size>0.2 0.2 0.05</size></box></geometry></collision>
-          <visual name="visual"><geometry><box><size>0.2 0.2 0.05</size></box></geometry>
+          <collision name="collision"><geometry><cylinder><radius>0.25</radius><length>0.05</length></cylinder></geometry></collision>
+          <visual name="visual"><geometry><cylinder><radius>0.25</radius><length>0.05</length></cylinder></geometry>
             <material><ambient>0.8 0.4 0.0 1</ambient><diffuse>0.8 0.4 0.0 1</diffuse></material>
           </visual>
         </link>
@@ -79,7 +79,7 @@
 
       <!-- ===== TETHER 0: payload -> drone0 (rigid, len=0.5000, detach@payload) ===== -->
       <link name="stub_pay_0">
-        <pose>0.080000 0.000000 0.050000 0 0 0</pose>
+        <pose>0.250000 0.000000 0.050000 0 0 0</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
@@ -94,7 +94,7 @@
       <model name="tether_0">
         <pose>0 0 0 0 0 0</pose>
         <link name="rod">
-        <pose>0.328747 0.000000 0.075000 0 1.470629 0.000000</pose>
+        <pose>0.498747 0.000000 0.075000 0 1.470629 0.000000</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia>
@@ -116,7 +116,7 @@
       </joint>
       <!-- ===== TETHER 1: payload -> drone1 (rigid, len=0.5000, detach@payload) ===== -->
       <link name="stub_pay_1">
-        <pose>-0.040000 0.069282 0.050000 0 0 0</pose>
+        <pose>-0.125000 0.216506 0.050000 0 0 0</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
@@ -131,7 +131,7 @@
       <model name="tether_1">
         <pose>0 0 0 0 0 0</pose>
         <link name="rod">
-        <pose>-0.164373 0.284703 0.075000 0 1.470629 2.094395</pose>
+        <pose>-0.249373 0.431927 0.075000 0 1.470629 2.094395</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia>
@@ -153,7 +153,7 @@
       </joint>
       <!-- ===== TETHER 2: payload -> drone2 (rigid, len=0.5000, detach@payload) ===== -->
       <link name="stub_pay_2">
-        <pose>-0.040000 -0.069282 0.050000 0 0 0</pose>
+        <pose>-0.125000 -0.216506 0.050000 0 0 0</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
@@ -168,7 +168,7 @@
       <model name="tether_2">
         <pose>0 0 0 0 0 0</pose>
         <link name="rod">
-        <pose>-0.164373 -0.284703 0.075000 0 1.470629 -2.094395</pose>
+        <pose>-0.249373 -0.431927 0.075000 0 1.470629 -2.094395</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia>
@@ -228,8 +228,8 @@
          at spawn (magnet arm flops via its universal joint) and lifts on TAKEOFF.
 
          SPAWNED ON THE GAP BISECTOR (-x), NOT +x. The tethers sit at azimuth 0/120/240 and
-         the gap-centre weld target is at azimuth 180 (attach_x_offset -0.08), so a +x spawn
-         put drone 0 (azimuth 0, ~0.46 m out) directly on the straight line to the target.
+         the gap-centre weld target is at azimuth 180 (attach_x_offset -0.25), so a +x spawn
+         put drone 0 (azimuth 0, ~0.60 m out on the 500 mm disc) directly on the straight line to the target.
          Measured there (R0116): the approach closed to 0.137 m of drone 0 and STAYED there
          for 7 s, bulldozing it 0.9 m in -x, so the payload tilted 0 to 25 deg BEFORE the
          weld and the fleet aborted 1.2 s later. From -x the path descends the 120 deg gap

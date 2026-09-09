@@ -14,7 +14,7 @@ Geometry matches three_soft_paper.sdf by default (elevated & TAUT: cable_len=1.0
   - world `quadcopter` (keeps /world/quadcopter/* topics + mocap source)
   - lift_system model with a world-fixed `anchor` canonical link
   - N drones (models/x3_drone{i}.sdf) at equal angular intervals, ELEVATED
-  - rigid-body payload box with the pose publisher
+  - rigid-body payload DISC (500 mm, rim attachments) with the pose publisher
   - N rigid tethers (one cylinder link each), ball joint to payload::body at the
     bottom and to x3_drone{i}::base_link at the top
 
@@ -22,6 +22,16 @@ Usage:
     python3 generate_rigid_world.py --n 3 --out three_rigid.sdf
 """
 import argparse
+
+# The real payload (2026-09-09): a 500 mm diameter disc with the magnet/tether
+# attachments on its RIM. Attach ring radius therefore = disc radius. Thickness and
+# mass are the sim's standing values until the rig's are measured.
+PAYLOAD_RADIUS = 0.25
+PAYLOAD_THICKNESS = 0.05
+PAYLOAD_MASS = 0.4
+# solid-disc inertia about the CoG: Ixx = Iyy = m(3r^2 + h^2)/12, Izz = m r^2 / 2
+_IXX = PAYLOAD_MASS * (3 * PAYLOAD_RADIUS ** 2 + PAYLOAD_THICKNESS ** 2) / 12.0
+_IZZ = PAYLOAD_MASS * PAYLOAD_RADIUS ** 2 / 2.0
 import math
 
 
@@ -284,11 +294,11 @@ def build_world(n, placement, detachable=False):
         <pose>{_fmt(px)} {_fmt(py)} {_fmt(pz)} 0 0 {_fmt(pyaw)}</pose>
         <link name="body">
           <gravity>1</gravity>
-          <inertial><mass>0.4</mass>
-            <inertia><ixx>1.67e-03</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1.67e-03</iyy><iyz>0</iyz><izz>3.33e-03</izz></inertia>
+          <inertial><mass>{PAYLOAD_MASS}</mass>
+            <inertia><ixx>{_IXX:.3e}</ixx><ixy>0</ixy><ixz>0</ixz><iyy>{_IXX:.3e}</iyy><iyz>0</iyz><izz>{_IZZ:.3e}</izz></inertia>
           </inertial>
-          <collision name="collision"><geometry><box><size>0.2 0.2 0.05</size></box></geometry></collision>
-          <visual name="visual"><geometry><box><size>0.2 0.2 0.05</size></box></geometry>
+          <collision name="collision"><geometry><cylinder><radius>{PAYLOAD_RADIUS}</radius><length>{PAYLOAD_THICKNESS}</length></cylinder></geometry></collision>
+          <visual name="visual"><geometry><cylinder><radius>{PAYLOAD_RADIUS}</radius><length>{PAYLOAD_THICKNESS}</length></cylinder></geometry>
             <material><ambient>0.8 0.4 0.0 1</ambient><diffuse>0.8 0.4 0.0 1</diffuse></material>
           </visual>
         </link>
@@ -314,7 +324,7 @@ def main():
     ap.add_argument('--n', type=int, default=3)
     ap.add_argument('--cable-len', type=float, default=1.0)
     ap.add_argument('--elev', type=float, default=45.0, help='cable elevation deg')
-    ap.add_argument('--attach-radius', type=float, default=0.08)
+    ap.add_argument('--attach-radius', type=float, default=PAYLOAD_RADIUS)
     ap.add_argument('--attach-z', type=float, default=0.025)
     ap.add_argument('--payload-z', type=float, default=0.025)
     ap.add_argument('--out', type=str, default='three_rigid.sdf')

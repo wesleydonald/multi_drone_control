@@ -75,6 +75,16 @@ class DissipativeController(LoadPlanner):
             # reconfigures). Mutually exclusive in spirit with attach_central (a centre weld
             # still wants the pure vertical lifter). Off by default.
             balanced_tensions=bool(p('diss_balanced_tensions', False).value),
+            # COMMON-MODE LOAD TRIM (docs/design/velocity_loop.md §11): one z-only
+            # integrator on the measured load error, added identically to every node's
+            # a_ff, trimming the fixed-kT steady sag without the per-drone differential
+            # bias that tilts the load. 0.0 = off = every verified config byte-unchanged.
+            # SYMMETRIC HAND-OUT: ease the incumbents' tension solution with the
+            # newcomer's hand-out scalar (see DissipativeParams). Balanced+hand-out only.
+            handout_tension_blend=bool(p('diss_handout_tension_blend', True).value),
+            ki_load=float(p('diss_ki_load', 0.0).value),
+            a_i_load_max=float(p('diss_a_i_load_max', 2.0).value),
+            i_load_xyz=bool(p('diss_i_load_xyz', False).value),
             # SOFT HAND-OUT time constant: a welded newcomer joins as a central lifter and is
             # continuously handed out to its off-centre ring slot over this many seconds, so
             # its actual cable force tracks the modelled feedforward and the feedforward-
@@ -142,7 +152,17 @@ class DissipativeController(LoadPlanner):
         # How close (m, drone body to load centre) a reserved drone must be before its
         # tracker is warmed with a hold reference -- see _publish_pending_attach_refs.
         self._attach_warm_radius = float(p('attach_warm_radius', 1.0).value)
-        net_rho = attach_points(self.n_net, self.attach_radius, self.attach_z)
+        # The network's ring must be the PHYSICAL tether ring (the parent's rho, the n
+        # points the world SDF and the OCP use), NOT attach_points(n_net): with one
+        # reserved slot that put the three tethers at 0/90/180 deg while they sit at
+        # 0/120/240 -- an error the 0.08 m ring hid and the 0.25 m rim turned into a
+        # capsize within a second of every weld (R0166/R0168). Reserved slots get a
+        # gap-centre placeholder that the weld capture in _do_attach overwrites.
+        net_rho = [np.asarray(r, float) for r in self.rho]
+        for j in range(self.reserved_attach):
+            az = 2.0 * np.pi * (j + 0.5) / max(self.n, 1)
+            net_rho.append(np.array([self.attach_radius * np.cos(az),
+                                     self.attach_radius * np.sin(az), self.attach_z]))
         self.net = DissipativeNetwork(
             self.n_net, net_rho, self.cable_len, DRONE_MASS, self.load_mass,
             self.dyn.g, self.diss)
@@ -484,8 +504,9 @@ class DissipativeController(LoadPlanner):
         # attach ring radius: a genuinely off-centre weld is captured; a leaning drone over a
         # centre weld can no longer inject a large false lever. (A centre weld still cannot be
         # a load-bearing ring member at all -- use attach_central for that.)
-        if self.diss.balanced_tensions and not self._attach_central \
-                and self.load_state is not None:
+        # Captured in EVERY mode: the rim point is physical, and the central lifter's
+        # vertical target and the ring modes' azimuth homes all hang off it.
+        if self.load_state is not None:
             load_pos = np.asarray(self.load_state[0:3], float)
             R = quat_to_rot_np(self.load_state[3:7])
             rho_body = R.T @ (np.asarray(measured, float) - load_pos)
@@ -544,6 +565,7 @@ class DissipativeController(LoadPlanner):
             p = self._net_pos(i)
             seeds.append(load_p if p is None else p)
         self.net.seed(seeds)
+        self.net.reset_load_trim()   # fresh trim per flight; not reset on attach/detach
         self._net_p_des = self._current_load_des()
         self._net_hold_z = float(self._net_p_des[2])   # hold this height; traj_t keeps running
         self.phase_pub.publish(String(data='network'))
@@ -626,8 +648,12 @@ class DissipativeController(LoadPlanner):
         load_pos = self.load_state[0:3]
         load_quat = self.load_state[3:7]
         load_vel = self.load_state[7:10]
+        # Freeze (not zero) the common-mode load trim during LAND/touchdown: the target
+        # is ramping to the floor there, and integrating the descent error would wind
+        # the trim against a motion that is commanded, not a deficit.
         self.net.step(load_pos, load_quat, load_vel, p_des, 1.0 / PLANNER_HZ,
-                      load_accel=a_des)
+                      load_accel=a_des,
+                      integrate_trim=not (self._net_landing or self._landed))
         net_s2d = self._net_slot2drone()
 
         # HORIZON: roll the network forward along the load target's own future so every

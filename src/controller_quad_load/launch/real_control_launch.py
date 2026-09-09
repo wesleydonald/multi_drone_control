@@ -64,7 +64,7 @@ def _args():
         # hardware there is no SDF, so these two numbers are the planner's ONLY
         # description of the payload -- measure them. LOAD_INERTIA in
         # planner_node.py does not scale with attach_radius either.
-        DeclareLaunchArgument('attach_radius', default_value='0.08'),
+        DeclareLaunchArgument('attach_radius', default_value='0.25'),
         DeclareLaunchArgument('attach_z', default_value='0.025'),
         # Physical payload mass (kg). LOAD_INERTIA in planner_node.py is a
         # hardcoded constant and does NOT scale with this.

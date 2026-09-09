@@ -75,6 +75,12 @@ def world_geometry(sdf_path):
                 mass = body.find('inertial/mass')
                 if mass is not None:
                     g['load_mass'] = float(mass.text)
+                # the OCP bakes the load inertia into its compiled solver, so a world
+                # whose payload changed shape must change params.py too
+                for tag, key in (('ixx', 'load_ixx'), ('izz', 'load_izz')):
+                    el = body.find(f'inertial/inertia/{tag}')
+                    if el is not None:
+                        g[key] = float(el.text)
 
     # Attach ring: stub_pay_N links carry the body-frame attach points
     radii, zs = [], []
@@ -116,7 +122,8 @@ def planner_defaults():
     if not src.exists():
         return out
     names = {'CABLE_LEN': 'cable_len', 'ATTACH_RADIUS': 'attach_radius',
-             'ATTACH_Z': 'attach_z', 'LOAD_MASS': 'load_mass', 'N_DRONES': 'num_drones'}
+             'ATTACH_Z': 'attach_z', 'LOAD_MASS': 'load_mass', 'N_DRONES': 'num_drones',
+             'LOAD_IXX': 'load_ixx', 'LOAD_IZZ': 'load_izz'}
     tree = ast.parse(src.read_text())
     for node in tree.body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1:
@@ -145,7 +152,7 @@ def launch_defaults(launch_path):
     return out
 
 
-COMPARED = ['cable_len', 'attach_radius', 'load_mass', 'attach_z']
+COMPARED = ['cable_len', 'attach_radius', 'load_mass', 'attach_z', 'load_ixx', 'load_izz']
 INFO_ONLY = ['num_drones']   # passed per run (num_drones:=3), not a fixed default
 
 
@@ -204,7 +211,9 @@ def main():
         else:
             print(f"   {k:16s} world={wv:<9.4f} controller=<unknown>")
             continue
-        flag = '** MISMATCH **' if abs(cv - wv) > TOL else 'ok'
+        # inertias are ~1e-2, so they get a relative tolerance instead of TOL
+        tol = 0.05 * abs(wv) if k.startswith('load_i') else TOL
+        flag = '** MISMATCH **' if abs(cv - wv) > tol else 'ok'
         bad += flag != 'ok'
         print(f"   {k:16s} world={wv:<9.4f} {src:>9s}={cv:<9.4f} {flag}")
 

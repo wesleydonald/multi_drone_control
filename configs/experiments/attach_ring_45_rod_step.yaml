@@ -1,5 +1,8 @@
-name: attach_ring_45_rod
+name: attach_ring_45_rod_step
 description: >
+  A/B CONTROL for the symmetric hand-out (2026-09-09): identical to attach_ring_45_rod.yaml
+  except diss_handout_tension_blend false, i.e. the incumbents' balanced-tension solution
+  steps in one tick at the weld (the mechanism the weld ladder convicted).
   WELD-VARIANT LADDER, step 1 of 3 (tools/make_weld_variants.py). Identical to
   attach_ring_45_gz except the magnet arm is modelled as a proper slender rod: mass at the
   MIDPOINT with m*L^2/12 = 2.083e-05, matching the tether rods. The shipped arm puts its
@@ -31,6 +34,8 @@ launch:
     attach_x_offset: -0.25
     attach_y_offset: 0.0
     attach_elev_deg: 45.0
+    # A/B CONTROL: the old one-tick incumbent tension step at the weld
+    diss_handout_tension_blend: false
     enable_obstacle_avoidance: false
     load_traj: hover
     cable_len: 0.5

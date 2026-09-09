@@ -47,7 +47,7 @@ launch:
     diss_balanced_tensions: true
     attach_handout: true
     attach_t_handout: 12.0
-    attach_x_offset: -0.08
+    attach_x_offset: -0.25
     attach_y_offset: 0.0
     attach_elev_deg: 65.0
     enable_obstacle_avoidance: false
@@ -58,7 +58,7 @@ fleet:
 
 geometry:
   cable_len: 0.5
-  attach_radius: 0.08
+  attach_radius: 0.25
   attach_z: 0.025
   load_mass: 0.4
   drone_mass: 0.6
@@ -69,7 +69,7 @@ initial:
   stands: true          # take-off stands under the tethered drones (see Scenario.stands)
   load_z: 0.45
   elev_deg: 45.0
-  weld_x: -0.08
+  weld_x: -0.25
   weld_y: 0.0
   weld_z_offset: 0.05
 

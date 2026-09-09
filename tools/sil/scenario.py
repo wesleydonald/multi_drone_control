@@ -54,7 +54,7 @@ class Scenario:
     n_total: int = 4
 
     cable_len: float = 0.5
-    attach_radius: float = 0.08
+    attach_radius: float = 0.25
     attach_z: float = 0.025
     load_mass: float = 0.4
     drone_mass: float = 0.6

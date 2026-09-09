@@ -1,4 +1,175 @@
 ################################################################################
+# SESSION 2026-09-09 (late night)  --  RING ATTACH ON THE DISC: SURVIVES, SINKS
+################################################################################
+
+With the ring fix, Gazebo ring attach on the disc (attach_ring_45_rod, MPC trackers,
+  balanced + hand-out, weld at the rim gap centre) no longer capsizes: both welded
+  runs flew the full 70 s with no abort (R0172 blend on, R0173 blend off) -- vs an
+  abort ~2 s after the weld before the fix (R0166/R0168). SIL attach_ring_45 also
+  survives (R0170: tilt 12 -> 4.6 deg, z 0.597).
+BUT they settle TILTED (23-28 deg, load z ~0.45) because the NEWCOMER SINKS during
+  its out-and-down hand-out: d3 goes from (-0.48, 0, 1.06) at the weld to the FLOOR
+  (-1.09, 0, 0.10) by t=42 s, 0.5 m outboard of its reference, and stays there; the
+  load then hangs from three tethers plus a grounded arm. Same family as the July
+  "45 deg diverges as the hand-out eases it fully out": the MPC tracker (no integral
+  action, capped cable feedforward, fixed kT) under-thrusts through the transit.
+  The symmetric tension blend made little difference (23.1 vs 27.7 deg settled,
+  n=1 each) -- as expected once the failure is a DIFFERENTIAL deficit on one drone.
+NEXT EXPERIMENT (one launch arg family, untested): the attach under the P1
+  architecture -- control_mode velocity_after_handover + vel_ki 0 + diss_ki_load 1.0
+  -- the velocity loop tracks a drone's reference to ~1 cm where the MPC lets the
+  newcomer be dragged off it, and the SIL central-weld trim A/B (R0149-R0154) was
+  clean under exactly that stack.
+RUN-WASTER: 2 of 4 attach runs had NO weld -- approach_mpc_3 logs "DISARMED --
+  waiting for ARM" for the whole run (the ARM on /fleet/command is published once,
+  before the approach node is subscribed). Now the single largest cost per attach
+  batch; fix before the next matrix (re-publish ARM until every node reports armed,
+  or latch it TRANSIENT_LOCAL).
+
+################################################################################
+# SESSION 2026-09-09 (night)  --  THE NETWORK RING WAS THE WRONG RING
+################################################################################
+
+FOUND from the first disc attach runs (R0166 blend on / R0168 blend off): both
+  capsized within ~1-2 s of the weld, BEFORE any hand-out could act, and drone 3
+  was tracking fine (ERR 1 cm, |aCm| ~1.5) -- so the incumbents did it. run.csv at
+  the handover shows d1's and d2's references SWINGING from their tether azimuths
+  (120/240 deg) toward 90 and 180 deg (d2's ends straight over the newcomer's rim
+  point). ROOT CAUSE: dissipative_node built the network ring with
+  attach_points(n_net=4) -- a 0/90/180/270 ring -- while the physical tethers are
+  attach_points(n=3) at 0/120/240. The balanced-tension solve and every slot used
+  wrong rim points for two of three incumbents. At 0.08 m that was a small error;
+  at 0.25 m it is a standing moment. Almost certainly a contributor to the August
+  balanced-attach failures too (d0 elev 37->50 deg "at the weld").
+  FIX: network rho = the parent's physical ring (self.rho) + gap-centre placeholders
+  for reserved slots, and _do_attach now captures the weld rho in EVERY mode (the
+  rim point is physical; central lifters hang over it too).
+ALSO: 0.5 s "reference X s old" warnings on every drone at the handover -- the
+  network tick had grown to ~52 ms (4 nodes x 21 horizon nodes x 2 lstsq, the
+  tension solve being run once PER DRONE per horizon node). Now solved once per
+  horizon node and passed into reference(); 33 ms. 17 unit tests + A-K pass.
+The disc CIRCLE baseline under the OCP flies clean (R0165: 75 s, rr 0.828, tilt
+  settled 1.6 deg) -- the lift and carry are fine on the disc.
+
+################################################################################
+# SESSION 2026-09-09 (late)  --  SYMMETRIC HAND-OUT, ATTACH TAKEOFF, PREBUILD TRAP
+################################################################################
+
+SYMMETRIC HAND-OUT built (DissipativeParams.handout_tension_blend, node param
+  diss_handout_tension_blend, launch arg on three_attach_launch; default TRUE).
+  The soft hand-out eased only the newcomer; the incumbents' balanced-tension
+  solution stepped in one tick at the weld (the mechanism the Aug 9 weld ladder
+  convicted). Now _solve_tensions blends: incumbents go (1-s)*pre-weld solution +
+  s*full-fleet solution, newcomer s*full, s = newcomer hand-out scalar. Both
+  endpoints balance the same wrench, so every intermediate is level. Only the
+  balanced+hand-out path changes. 4 unit tests (test_symmetric_handout.py): no
+  step at the weld, old behaviour steps with the flag off, wrench-balanced through
+  the ramp, continuous and lands on the full solution. A-K still ALL PASS.
+  configs/experiments/attach_ring_45_rod_step.yaml is the one-arg A/B control.
+
+three_attach_launch start_taut default false -> TRUE (every other launch was true).
+  That creep phase is why the attach demo "took ages to take off" (Wesley's GUI run).
+
+PREBUILD TRAP RE-HIT: changing the disc inertia (now in params.py LOAD_IXX/LOAD_IZZ,
+  imported by planner_node) changes the OCP cache signature, and the SIL bench starts
+  its clock before the planner's solver is built -> two consecutive "no lift" SIL
+  runs (R0162/R0163: z 0.374, tilt exactly 0, no drone metrics) were the planner
+  still in `make`, SIGINT'd at scenario end so the .so was never written. Cure =
+  tools/prebuild_planner.py first (its docstring already says exactly this). With
+  the solver built, SIL smoke on the disc passes every bar (R0164: z 0.6001,
+  tilt 2.0/0.8 deg, spread 8e-5). tools/check_geometry.py now compares LOAD_IXX/IZZ
+  against the world SDF so shape and solver cannot silently disagree.
+
+################################################################################
+# SESSION 2026-09-09 (evening)  --  PAYLOAD IS NOW A 500 mm DISC, RIM ATTACHMENTS
+################################################################################
+
+WESLEY'S SPEC: the real payload is circular, 500 mm diameter, magnet attachments on
+  the EDGE, placeable anywhere on the rim. Mass and thickness not yet given -- sim
+  keeps 0.4 kg and 50 mm until the rig's are measured.
+
+CHANGED GLOBALLY (generator is the source of truth; worlds regenerated from it):
+  * simulation_assets/generate_rigid_world.py: cylinder r=0.25 h=0.05, solid-disc
+    inertia (Ixx=Iyy=6.33e-3, Izz=1.25e-2), --attach-radius default 0.25.
+    Regenerated two/three/four_rigid_ground, three_random_seed1/5, three_attach
+    (approach-drone block re-spliced), and the rod/seg2/rigid weld variants.
+  * params.py ATTACH_RADIUS 0.25; real_control_launch attach_radius 0.25;
+    verify_dissipative / SIL scenario defaults 0.25; SIL + mini_plant inertias;
+    fleet_viz draws a CYLINDER; every attach_x_offset / weld_x -0.08 -> -0.25 in
+    configs and CLAUDE.md (gap-centre weld is now on the rim).
+  * tools/check_geometry.py agrees on all five world/launch pairs.
+
+THE GEOMETRY BUG IT EXPOSED (real, would have bitten on the rig): the dissipative
+  network's DEFAULT (non-balanced) path built every spring, slot and reference from
+  the LOAD CENTRE -- payload spring rest cable_len from p_des, cone radius
+  cable_len*cos(e) about the axis, p_ref = p_des + cable_len*u. That is only right
+  when the attach ring is ~0. At 0.08 it was an 8 cm approximation nobody noticed;
+  at 0.25 the rods physically cannot reach the centre-based cone and the offline
+  load fell to the floor (Tests A/C/F/I/J/K all failed). Balanced mode already
+  hung each node off its OWN attach point (that is why G/H passed).
+  FIX (dissipative_network.py): every per-node spring and reference now hangs off
+  a_i = p_des + R@rho_i -- payload spring, central-lifter target, slot targets,
+  p_ref; the anchor spring's height/axis-distance come from the node's design point
+  (its slot, else rim point + cone leg); ring-spring rest = the neighbours' slot
+  separation (so the slot set is an exact force-free equilibrium of all four
+  springs); _ring_rest_for uses rim radius + cone leg. Reduces to the old cone
+  exactly as rho -> 0. Offline A-K ALL PASS on the disc (two stale bars
+  re-baselined: G's r_ref band was the 0.08 ring; K's 4.0 deg/tick sanity cap ->
+  5.0, the ratio claim it guards passes 4.43 vs 9.86).
+
+IMPLICATIONS
+  * Rim magnets mean a CENTRE weld is no longer physical: the central-lifter
+    fallback (attach_central:=true) is a sim-only stepping stone from here on; the
+    ring member at a rim point is THE attach configuration. The 0.25 m moment arm
+    also conditions the balanced-tension solve far better than 0.08 did.
+  * "Placeable anywhere" => uneven rim azimuths on the rig. attach_points() still
+    assumes even 2*pi*i/n spacing; the OCP-resize work already made rho a runtime
+    parameter, so a per-drone attach-azimuth list for the real launch is the
+    natural next step (not done).
+
+################################################################################
+# SESSION 2026-09-09 (later)  --  COMMON-MODE LOAD TRIM: BUILT, MEASURED, WINS
+################################################################################
+
+WHAT: docs/design/velocity_loop.md section 11. One z-only integrator on the measured
+  load error, in DissipativeNetwork.step(), its clamped output added identically to
+  every attached node's a_ff. Params diss_ki_load (0 = off = byte-inert, proven by
+  test), diss_a_i_load_max (2), diss_i_load_xyz (false). Frozen on LAND, reset on
+  network entry, NOT reset on attach/detach. 9 unit tests (test_load_trim.py, in the
+  gate). Full gate green.
+
+WHY THIS DESIGN (from re-reading both papers): Sun et al. absorb thrust-model error
+  with INDI; Quan et al. leave it to the autopilot's per-drone velocity PID. Our
+  stack deleted its adaptive layer (fixed kT) and the MPC has no integrator, so the
+  sag is structural; per-drone integrators were MEASURED to tilt the load (Aug 6).
+  The only remaining place for one integral term is the reference generator, where
+  it is common-mode by construction. Alternatives (leaky per-drone, INDI-lite,
+  spring stiffness, static apex offset) recorded with reject reasons in section 11.1.
+
+GAZEBO A/B (diss_circle_n3_V_noI vs _cmI, one arg apart, n=3 valid each):
+  radius ratio / lag / tilt UNCHANGED (inside the OFF ranges), payload height
+  0.498 m -> 0.600 m (on target, held from t=55 s). RMSE sweep 0.227 -> 0.215.
+  Exactly the z-only prediction. See velocity_loop.md section 11.5 for the table.
+
+SIL (carry_trim_n3 vs _off, central-lifter weld, n=3 each): trim OFF capsizes 3/3
+  at weld+8-11 s (under-thrust -> sag -> tilt); trim ON clean 3/3. Stronger than
+  predicted; SIL-only until seen in Gazebo with a weld.
+
+TWO THINGS FOUND ON THE WAY
+  * A 3->2 DETACH in the SIL bench capsizes in <0.5 s in BOTH tracker modes
+    (R0146-R0148): two support points leave the load CoG outside the support line.
+    Property of the 2-point scenario; not velocity mode, not the trim. Verified
+    Gazebo 3->2 detach survives because survivors respace first.
+  * LIFT FAILURE RATE on diss_circle_n3 is 4 of 10 runs (payload tilt >60 deg at
+    t~13 s in the OCP lift, before any network code runs: R0080, R0156-R0158).
+    The plan's "1 in 5" is now "4 in 10" and it is the biggest run-waster on this
+    config. Needs its own diagnosis before more batches.
+
+RECOMMENDATION FOR THE PART A GATE: velocity_after_handover + vel_ki 0 +
+  diss_ki_load 1.0 beats MPC on every tracking axis and matches its tilt. Launch
+  defaults NOT flipped (Wesley's call). Still open: n=2/4, fig-8, V-f, hardware.
+
+################################################################################
 # SESSION 2026-09-09  --  TERM 3 RE-BASELINE (branch: term3, off attach-week9)
 # (This block closes the documentation gap for the 2026-08-05..14 work, whose
 #  full write-up lives in update.txt sections 10-12 -- read that for the detach

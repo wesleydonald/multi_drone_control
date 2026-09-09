@@ -32,6 +32,14 @@ The plan's calendar says today is W6 with M3 (tracking architecture frozen) due 
 | Hardware (Part C) | **Not started. Zero rig runs. This is now the critical path.** |
 | Version control | A month of work (~1,150 lines + all the Aug configs/worlds/tools) is **uncommitted**; the pushed branch ends 2026-08-05. `update.txt` §10–§12 holds the only write-up of the Aug 6–9 campaigns; `THESIS_PLAN.md` and `learning.txt` stop earlier. |
 
+**Payload spec (Wesley, 2026-09-09 evening): a 500 mm diameter disc with magnet
+attachments on the rim, placeable anywhere.** Applied globally the same day (generator,
+worlds, defaults, configs, RViz). It exposed and fixed a centre-vs-rim geometry
+assumption in the network's default path (`learning.txt`). Consequences: a centre
+weld is no longer physical, so the ring member IS the attach configuration and the
+central lifter is sim-only; the rig's rim azimuths may be uneven, so a per-drone
+attach-azimuth parameter for the real launch is queued.
+
 **The framing that has not changed:** detach is the working stepping stone (now with a
 second, stronger mode), attach is the contribution and is mid-diagnosis with the
 blocking faults cleared, hardware evidence is the deliverable.
@@ -94,6 +102,15 @@ restorable.
 
 ### P1 — Close Part A: freeze the tracking architecture (~4 days)
 
+> **STATUS 2026-09-09 (same day): built and measured — see `docs/design/velocity_loop.md`
+> §11.5 and `learning.txt`.** Z-only common-mode trim in the network, one arg apart in
+> Gazebo (n=3 valid per arm): tracking and tilt unchanged, payload height 0.498 → 0.600 m
+> (on target). SIL: trim off capsizes 3/3 after a central-lifter weld, trim on clean 3/3.
+> Recommendation for the gate: `velocity_after_handover` + `vel_ki 0` + `diss_ki_load 1.0`
+> goes forward. Launch defaults not flipped pending Wesley. Open: n=2/4, fig-8, V-f,
+> hardware; and a 4-in-10 OCP-lift failure rate on this config that needs its own look.
+
+
 The E3 decision is one build away. The common-mode integrator is small, fully
 prescribed, and serves Part B (A2.1) as well.
 
@@ -131,6 +148,15 @@ The OCP-resize result is the strongest unclaimed evidence in the repo.
 both arms; runs archived on the day the figures are made.
 
 ### P3 — Attach ring: fix the hand-out, then characterise the boundary (W7–W9)
+
+> **STATUS 2026-09-09 night.** Disc payload applied; the network's ring-construction
+> bug (0/90/180 vs the physical 0/120/240 tethers) found and fixed — ring attach on the
+> rim now survives the full run in Gazebo (R0172/R0173, no abort) instead of capsizing
+> in 2 s. Symmetric hand-out (tension blend) built and unit-tested. Remaining failure:
+> the newcomer sinks to the floor during its transit under the MPC tracker (settled tilt
+> ~25°). Next: attach under velocity mode + common-mode trim; fix the approach ARM race
+> (2 of 4 attach runs wasted). See `learning.txt` 2026-09-09 blocks.
+
 
 The blocking faults are gone; the weld-mechanics question is answered; what remains is
 exactly the reference-side problem the user steered toward (fix geometry/references,

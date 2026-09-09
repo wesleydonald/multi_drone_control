@@ -28,7 +28,7 @@ fleet:
 
 geometry:
   cable_len: 0.5
-  attach_radius: 0.08
+  attach_radius: 0.25
   attach_z: 0.025
   load_mass: 0.4
 
