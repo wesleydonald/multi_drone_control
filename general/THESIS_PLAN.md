@@ -7,6 +7,14 @@ Assumed submission **Fri 27 Nov 2026** (17 weeks).
 Companion docs: `general/CLAUDE.md` (orientation) · `DISSIPATIVE_TRACKING_ISSUE.md` (open
 tracking problem) · `general/CABLE_LOAD_CONTROLLER_PROGRESS.md` (planner history).
 
+> **RE-BASELINED 2026-09-09 — read `general/TERM3_STRATEGY.md` first.** This plan's
+> inline updates stop at 2026-08-06; the 2026-08-06..09 campaigns (OCP-resize detach
+> A/B R0111–R0114, the attach fault teardown, the weld-variant ladder that refuted the
+> compliance hypothesis) are written up in repo-root `update.txt` §10–§12. The strategy
+> doc re-baselines the schedule (results freeze Fri 7 Nov) and records the 2026-09-09
+> decisions: N3 restated around a ball-jointed post-weld attachment matching the rig,
+> ~2 rig days/week with Tejen likely, lit review already drafted in LaTeX.
+
 ---
 
 ## 0. Decisions locked (2026-08-04)
@@ -474,6 +482,23 @@ radius ratio and phase lag per stage) · `radius_ratio` · `phase_lag_s` · `loa
 Conventions fixed now: **steady window** = event + 5 s → end of sweep; **event time** from
 `events.csv`; **repeats** 5 sim / ≥3 real; report **median and full range**, never mean alone.
 
+> **Third convention added 2026-08-05: the SWEEP WINDOW**, `metrics.sweep_window` — the
+> part of a run where the *commanded* path is moving. Every trajectory metric (radius
+> ratio, phase lag, stage split, `payload_rmse_sweep_m`) is measured inside it.
+>
+> This was not a refinement, it was a correctness fix. `load_traj: circle` is **one
+> eased sweep**, not continuous laps: `LoadTrajectory._circle_theta` stretches the
+> duration so *peak* tangential speed equals `traj_speed`, giving T = 1.875·2π·r/v ≈
+> 9.8 s at r=0.5, v=0.6. On the 75 s baseline run R0054 the sweep is ~9 s — 2% of the
+> record. Measured over the whole run, the mean of the desired path is the **hover
+> point**, not the circle's centre, and `radius_ratio` reads **0.956** on a run whose
+> true sweep ratio is **0.811**. It looks like a good number and means nothing.
+>
+> The mask is contiguous by construction, because the reference is published at 10 Hz
+> and logged at 50 Hz: four of every five per-sample steps are exactly zero, so a
+> sample-wise test keeps a fifth of the sweep and inflates the apparent commanded speed
+> fivefold (measured 2.99 m/s against a commanded 0.6).
+
 ### 9.3 Software-in-the-loop bench — `tools/sil_bench.py` ← highest-leverage item
 
 Closes the loop around the **real controller nodes** against a fast numerical plant, over
@@ -542,6 +567,10 @@ comparison capability.
 5. **Formation view**: per-drone tension share and azimuth over time — how reconfiguration
    actually looks.
 6. **Stage split** (moving trajectories): the four-stage radius/phase table as a figure.
+7. **3D trajectory** (added at Wesley's request, 2026-08-05): desired vs actual for the
+   payload and every drone, with formation snapshots. Figures 1 and 3 each hide an axis;
+   this is the one that shows the shape of the manoeuvre. Drawn on a true-aspect cube so
+   cable elevation angles — a quantity this project tunes against — read correctly.
 
 **`tools/compare_runs.py R0031 R0032 ...`** overlays N runs on the same axes with a metric
 table — the ablation and head-to-head workhorse. **`tools/thesis_figures.py`** regenerates
@@ -552,7 +581,7 @@ Shared style module: one colour per drone ID (matching RViz, §6.2), consistent 
 fonts, vector output. Set this up once in W2 and every figure for the next four months is
 publication-ready by default.
 
-> **BUILT 2026-08-05.** `tools/plot_style.py`, `tools/plot_run.py`,
+> **BUILT 2026-08-05.** `tools/plot_style.py`, `tools/plot_run.py` (7 figures),
 > `tools/compare_runs.py`, `tools/thesis_figures.py` (+ `configs/thesis_figures.yaml`),
 > tested in `tools/test/test_plot_pipeline.py` against a synthetic circle with a known
 > radius deficit and lag. Auto-plotting is wired into both harnesses on completion, and
@@ -610,7 +639,9 @@ baseline, not guessed.
       exercised on are in `results/`, not yet promoted to `results_archive/`*
 - [x] Gate green and wired to a pre-push hook — *6 stages, ~2.5 min, green as of
       2026-08-05; the 2 headless Gazebo runs are deliberately left out (see §9.5)*
-- [ ] F1–F6, F12 closed; backup restore drill passed once
+- [x] F1–F6, F12 closed; backup restore drill passed once — *all 13 findings closed
+      (§2); drill re-run 2026-08-05, R0043 restored byte-identical from
+      `~/thesis_backups/multi_drone_control`*
 
 ---
 
@@ -674,6 +705,54 @@ against the baseline; never bundled.
 | **T3** | Velocity cost weight 2.0 → {8, 20, 40} | `acados.py:88` | Radius ratio rises; watch noise sensitivity |
 | **T4** | `CABLE_ACCEL_CAP` 6.0 → {10, 15} | `controller_mpc.py:78` | Little effect on steady tracking; large effect on attach transients (also Part B) |
 
+> **STAGE T SCAFFOLDING BUILT, ONE BASELINE RUN FLOWN (2026-08-05).**
+> `configs/experiments/diss_circle_n3.yaml` (baseline) and `diss_circle_n3_T1.yaml`
+> differ in exactly one launch arg — asserted, not assumed. Both use
+> `dissipative_only_launch.py` on `three_rigid_ground.sdf`, circle r=0.5, v=0.6 peak,
+> which is the configuration `DISSIPATIVE_TRACKING_ISSUE.md §2` recorded from. The pair
+> was added to `gate.sh` stage 4 so its geometry stays checked.
+>
+> **Baseline R0054** (1 run, so no range yet — §9.2 wants 5):
+>
+> | stage | radius ratio | phase lag |
+> |---|---|---|
+> | desired → reference centroid | 0.939 | +0.302 s |
+> | **reference → actual centroid (tracker)** | **0.869** | **+0.538 s** |
+> | actual centroid → payload | 0.996 | −0.117 s |
+> | desired → payload (cumulative) | 0.811 | +0.684 s |
+>
+> This **independently reproduces the attribution** in `DISSIPATIVE_TRACKING_ISSUE.md`:
+> the tracker stage carries most of the loss and most of the lag (0.538 s here against
+> the documented 0.589 s). It is **not** the §9.2 exit criterion — that asks for the
+> archived numbers to within 2%, this is a different run on a different plant, and the
+> cumulative figures (0.811 / 0.684) sit ~8% off the recorded 0.75 / 0.72. It does give
+> Stage T the baseline it needs.
+>
+> Not yet run: the 5-repeat baseline and the 5-repeat T1 arm (~4 min/run in Gazebo,
+> ~40 min for the pair). T2–T4 have no configs yet.
+
+> **T1 MEASURED AND KILLED (2026-08-06).** Baseline R0054/R0056–R0059 vs T1
+> R0061–R0065, 5 repeats each, one launch arg apart. Medians [min–max]:
+>
+> | | baseline | T1 |
+> |---|---|---|
+> | payload radius ratio | 0.816 [0.803–0.821] | 0.810 [0.799–0.816] |
+> | payload phase lag | 0.676 s [0.664–0.690] | 0.705 s [0.687–0.719] |
+> | tracker-stage phase lag | 0.538 s [0.537–0.550] | 0.566 s [0.547–0.574] |
+> | payload RMSE (sweep) | 0.272 m | 0.277 m |
+>
+> The leading suspect from `DISSIPATIVE_TRACKING_ISSUE.md §4.1` **does not help, and is
+> consistently slightly worse on all four metrics**. Ranges are tight and the sign is
+> the same every time, so this is not noise. Setting `yref_N[3:6] = ref_vel[N]` was a
+> genuine mis-specification, but it was not the cause of the lag — keep the flag
+> (default off), strike it as a candidate, and record it as a measured negative.
+>
+> One baseline repeat (R0060) aborted during the lift — drone 1 disarmed at t=12.4 s,
+> before the sweep. Excluded from the comparison and noted: **1 in 5 lift failures on
+> this config**, worth its own look.
+>
+> T2–T4 not run.
+
 **Stage V — the velocity architecture (W4–W5).**
 
 ```
@@ -699,6 +778,65 @@ stick  = betaflight_rates_inv(w_cmd)                   [NEW: invert dynamics.py:
 **Validation ladder:** V-a unit tests → V-b SIL free drone (lag < 0.1 s) → V-c SIL 3-drone
 carry → V-d Gazebo hover+LAND → V-e Gazebo full trajectory set n=2,3,4 (**the decision
 number**) → V-f detach under velocity mode → V-g hardware n=2.
+
+> **BUILT AND WIRED 2026-08-06.** `velocity_loop.py` (pure class), 21 tests,
+> `control_mode: 'mpc' | 'velocity'` defaulting to `mpc`. Design note
+> `docs/design/velocity_loop.md`.
+>
+> - **V-a PASS** — including the rate curve pinned against `dynamics.py`'s CasADi
+>   expression and the accel→(throttle, quat) map against `acados.py`.
+> - **V-b PASS** — free drone on the SIL plant: ratio 1.008, lag −0.014 s, RMSE 0.029 m
+>   against a bar of 0.1 s. The integrator cuts RMSE 4–5×.
+> - **V-c FAILS THROUGH THE LIFT** — an airborne taut 3-drone carry tracks cleanly
+>   (ratio 1.022, lag −0.011 s), but from the stands the payload capsizes every time.
+>   Adding a 30° tilt limit and softening the gains fixed the *drone* oscillation
+>   (39.8° → 13.4°) and the **load still flips** (74.5°), so it is not gain tuning. The
+>   loop has no cable term in its feedback path, so three independent position servos
+>   tilt the load as the cone opens. See `velocity_loop.md` §8.
+>
+> **This is the same boundary the network already has** — `dissipative_only_launch.py`
+> already documents that the OCP owns creep + lift and the network owns everything
+> after. So a third mode, `velocity_after_handover`, follows the existing handover via
+> a new `/fleet/control_phase` announcement.
+>
+> **V-d/V-e first result (Gazebo, one launch arg apart, medians [min–max]):**
+>
+> | metric | MPC (n=5) | velocity (n=3) |
+> |---|---|---|
+> | tracker-stage radius ratio | 0.878 [0.865–0.883] | **1.042** |
+> | tracker-stage phase lag | 0.538 s [0.537–0.550] | **0.305 s** |
+> | payload radius ratio | 0.816 | **1.001** |
+> | payload phase lag | 0.676 s | **0.514 s** |
+> | payload RMSE (sweep) | 0.272 m | **0.215 m** |
+> | per-drone settled error | 0.121 m | **0.045 m** |
+> | payload tilt peak / settled | **16.0° / 1.4°** | 60.6° / 5.7° |
+> | runs ending in an abort | 1 of 6 | 2 of 3 |
+>
+> **The tracking claim is confirmed and it is not marginal** — the radius contraction
+> this whole issue is named for is gone, and no range overlaps. **It costs load
+> attitude**: peak tilt 16° → 61°, and two of three runs tripped the 60° envelope
+> (both *after* the sweep, so the tracking numbers are on complete data). Same root
+> cause as V-c in milder form — no cable term in the feedback path, so each drone
+> tracks its own reference beautifully while nothing coordinates the load's attitude.
+>
+> **ROOT-CAUSED 2026-08-06: the per-drone INTEGRATORS cause the tilt.** One-variable
+> A/B (`vel_ki` 1.0 → 0.0): 2 of 3 `ki=1` runs tripped the 60° envelope; **2 of 2 valid
+> `ki=0` runs flew the full 75 s**, post-sweep tilt 60.6° → **5.4°**, while keeping the
+> tracking win — tracker stage 0.997/+0.322 s against the MPC's 0.878/+0.538 s. Hover
+> for 75 s never diverged under either (R0077, 6.7° peak) because hover has no
+> sustained error to charge the integrators on.
+>
+> Each drone integrates its OWN error with nothing coupling the three; on a shared
+> rigid load a differential integral bias is a differential cable tension, i.e. a
+> moment on the payload. The fix is a **fleet-symmetric (common-mode) integrator**, not
+> removal — which is also the A2.1 term Part B needs, where the same differential-tension
+> mechanism is suspected for the attach ring.
+>
+> This is the E3 head-to-head, with each architecture winning a different axis. **Not
+> a reason to switch the default yet.** The next question is whether a load-attitude or
+> tension-sharing term keeps the tracking win without the tilt — A2.1/A2.2 territory,
+> which also serves Part B. n=3 against §9.2's 5; no n=2/n=4, no fig-8, no V-f, no
+> hardware.
 
 **Gate — Fri 12 Sep.** Velocity wins ⇒ it becomes the network-phase default. Velocity loses
 or ties ⇒ keep MPC+T-fixes, and **report the comparison as E3** — a measured answer to
