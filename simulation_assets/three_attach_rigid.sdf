@@ -1,5 +1,6 @@
 <?xml version="1.0" ?>
 <sdf version="1.6">
+  <!-- GENERATED from three_attach.sdf by tools/make_weld_variants.py (weld variant: rigid). Do not edit. -->
   <world name="quadcopter">
     <physics name="1ms" type="ignored">
       <max_step_size>0.001</max_step_size>
@@ -235,7 +236,7 @@
          weld and the fleet aborted 1.2 s later. From -x the path descends the 120 deg gap
          between drones 1 and 2, clearing both by ~0.40 m. -->
     <include>
-      <uri>models/x3_drone3_magnet.sdf</uri>
+      <uri>models/x3_drone3_magnet_rigid.sdf</uri>
       <name>x3_drone3</name>
       <pose>-1.2 0.0 0.12 0 0 0</pose>
     </include>

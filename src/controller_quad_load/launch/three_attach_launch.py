@@ -85,6 +85,10 @@ def _args():
         # pops the drones off their stands. Battery derate is OFF (0.0).
         # See mpc_quad_load_launch.py for the full explanation of all four.
         DeclareLaunchArgument('thrust_ratio', default_value='32.9'),
+        # Mocap watchdog budget, WALL seconds (controller_mpc._setup_safety). Gazebo
+        # runs at ~0.3x realtime, so the hardware 0.25 s is under four mocap periods
+        # here and scheduling jitter disarms a healthy drone ~1 s after ARM.
+        DeclareLaunchArgument('pose_timeout_s', default_value='1.0'),
         DeclareLaunchArgument('takeoff_thrust_ratio', default_value='30.0'),
         DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
         DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),
@@ -95,6 +99,13 @@ def _args():
         # of commanding a stop at the end of the horizon. Default false =
         # historical behaviour, so this only changes a run you asked it to.
         DeclareLaunchArgument('terminal_vel_ref', default_value='false'),
+        # Stage V (docs/design/velocity_loop.md): 'mpc' | 'velocity'. Defaults to the
+        # verified MPC path, so this launch is byte-unchanged until it is thrown.
+        DeclareLaunchArgument('control_mode', default_value='mpc'),
+        DeclareLaunchArgument('vel_kp_pos', default_value='2.0'),
+        DeclareLaunchArgument('vel_kv', default_value='4.0'),
+        DeclareLaunchArgument('vel_ki', default_value='1.0'),
+        DeclareLaunchArgument('vel_k_att', default_value='8.0'),
         DeclareLaunchArgument('load_traj', default_value='hover'),
         DeclareLaunchArgument('traj_speed', default_value='0.6'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
@@ -161,7 +172,7 @@ def _args():
         # as a stable 4th ring member. Default = diss_elev_deg (unchanged 45deg rim).
         DeclareLaunchArgument('attach_elev_deg', default_value='65.0'),
         # approach drone's mocap PoseArray index (drone body). With publish_model_pose=true on
-        # the standalone x3_drone3, the model WORLD pose (frame_id=world, ~1.2,0,0.12 and rising)
+        # the standalone x3_drone3, the model WORLD pose (frame_id=world, ~-1.2,0,0.12 and rising)
         # is published LAST -- verified via `gz topic -e -t /model/x3_drone3/pose`: entries are
         # [magnet_tip, rotor_3..0, magnet_arm, base_link, MODEL]. So the body is index -1; the
         # link poses ahead of it are model-relative (frozen) and must NOT be used as the body.
@@ -234,6 +245,11 @@ def launch_setup(context, *args, **kwargs):
             package='controller_quad_load', executable='controller', name=f'controller_{i}',
             parameters=[{'drone_id': i,
                          'terminal_vel_ref': b('terminal_vel_ref'),
+                         'control_mode': LaunchConfiguration('control_mode'),
+                         'vel_kp_pos': f('vel_kp_pos'),
+                         'vel_kv': f('vel_kv'),
+                         'vel_ki': f('vel_ki'),
+                         'vel_k_att': f('vel_k_att'),
                          'cable_ff_scale': f('cable_ff_scale'),
                          'attitude_ff': b('attitude_ff'),
                          'cable_source': LaunchConfiguration('cable_source'),
@@ -244,7 +260,8 @@ def launch_setup(context, *args, **kwargs):
                          'kt_batt_sag_frac': f('kt_batt_sag_frac'),
                          'kt_batt_v_full': f('kt_batt_v_full'),
                          'kt_batt_v_empty': f('kt_batt_v_empty'),
-                         'kt_print_period_s': f('kt_print_period_s')}],
+                         'kt_print_period_s': f('kt_print_period_s'),
+                         'pose_timeout_s': f('pose_timeout_s')}],
             output='screen'))
 
     # ── Central fleet manager (tethered fleet only) ─────────────────────────
@@ -393,6 +410,7 @@ def launch_setup(context, *args, **kwargs):
                      'kt_batt_v_empty': f('kt_batt_v_empty'),
                      # one-line ~2 Hz health log for the newcomer, to trace why it sinks/falls
                      # after the weld (z vs ref, xy error, throttle saturation, cable FF).
+                     'pose_timeout_s': f('pose_timeout_s'),
                      'enable_diag_log': True}],
         # In SIL there is no mux, so this tracker publishes straight onto
         # /drone_3/ELRSCommand, which the bench plant consumes. Everything else about

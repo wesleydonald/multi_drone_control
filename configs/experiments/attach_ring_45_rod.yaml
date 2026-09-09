@@ -1,0 +1,65 @@
+name: attach_ring_45_rod
+description: >
+  WELD-VARIANT LADDER, step 1 of 3 (tools/make_weld_variants.py). Identical to
+  attach_ring_45_gz except the magnet arm is modelled as a proper slender rod: mass at the
+  MIDPOINT with m*L^2/12 = 2.083e-05, matching the tether rods. The shipped arm puts its
+  whole 1 g at the link origin (the TOP) with an isotropic 2e-6.
+
+  This is the CONTROL for the other two variants -- seg2 and rigid are both built on it,
+  so comparing either against the shipped baseline alone would confound the joint change
+  with this inertia correction.
+
+  What to read: the hand-out phase, t+2 to t+10 after the weld. Faults A/B/C (update.txt
+  §12) are fixed, so runs now reach ~10 s post-weld and die when the NEWCOMER diverges at
+  ~75%% of the 12 s hand-out. That is the only window where arm dynamics can matter.
+
+  NO ACCEPTANCE CRITERIA beyond "this run is evidence": the question is what the plant
+  does, and asserting a number would decide it in advance.
+
+world: three_attach_rod.sdf
+
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 1
+    attach_central: false
+    diss_balanced_tensions: true
+    attach_handout: true
+    attach_t_handout: 12.0
+    attach_x_offset: -0.08
+    attach_y_offset: 0.0
+    attach_elev_deg: 45.0
+    enable_obstacle_avoidance: false
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.4
+    target_z: 0.6
+
+fleet:
+  num_drones: 3
+  n_total: 4
+
+timing:
+  duration_s: 70.0
+  # WALL seconds, and generous: this is the only wall-clock deadline in the runner,
+  # and acados compiles four solvers behind it on a cold build.
+  ready_timeout_s: 420.0
+  pose_timeout_s: 2.0
+
+events:
+  - {t: 3.0,  do: ARM}
+  - {t: 6.0,  do: TAKEOFF}
+  # Let the tethered fleet settle into a taut hover at target_z before the newcomer is
+  # allowed to approach. Welding into a formation that is still rising confounds the
+  # takeoff transient with the attach transient, which is the whole quantity of interest.
+  - {t: 25.0, do: MAGNET, arg: 'ON'}
+  - {t: 65.0, do: LAND}
+
+criteria:
+  require_weld: true
+  min_payload_z: 0.02
+  # A fleet abort is expected to be INFORMATIVE here rather than disqualifying: if the
+  # fixed-kT capsize reproduces in Gazebo, the fleet disarms and that IS the result.
+  forbid_abort: false

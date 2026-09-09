@@ -1,0 +1,61 @@
+name: attach_ring_45_seg2
+description: >
+  WELD-VARIANT LADDER, step 2 of 3. `rod` plus a THIRD ball joint mid-span, so the arm can
+  bend in the middle instead of only pivoting at its two ends. Total length, mass and
+  damping unchanged.
+
+  This is Wesley's hypothesis -- that the weld connection is too stiff and an extra
+  compliant segment would help. Compare against attach_ring_45_rod, NOT against the
+  shipped baseline.
+
+  Prior: little room to help. The shipped chain is payload=FIXED=tip-BALL-arm-BALL-drone
+  with the ball AT the weld point, so it already transmits tension only and is
+  kinematically the same as a tether. But it has never been measured.
+
+world: three_attach_seg2.sdf
+
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 1
+    attach_central: false
+    diss_balanced_tensions: true
+    attach_handout: true
+    attach_t_handout: 12.0
+    attach_x_offset: -0.08
+    attach_y_offset: 0.0
+    attach_elev_deg: 45.0
+    enable_obstacle_avoidance: false
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.4
+    target_z: 0.6
+
+fleet:
+  num_drones: 3
+  n_total: 4
+
+timing:
+  duration_s: 70.0
+  # WALL seconds, and generous: this is the only wall-clock deadline in the runner,
+  # and acados compiles four solvers behind it on a cold build.
+  ready_timeout_s: 420.0
+  pose_timeout_s: 2.0
+
+events:
+  - {t: 3.0,  do: ARM}
+  - {t: 6.0,  do: TAKEOFF}
+  # Let the tethered fleet settle into a taut hover at target_z before the newcomer is
+  # allowed to approach. Welding into a formation that is still rising confounds the
+  # takeoff transient with the attach transient, which is the whole quantity of interest.
+  - {t: 25.0, do: MAGNET, arg: 'ON'}
+  - {t: 65.0, do: LAND}
+
+criteria:
+  require_weld: true
+  min_payload_z: 0.02
+  # A fleet abort is expected to be INFORMATIVE here rather than disqualifying: if the
+  # fixed-kT capsize reproduces in Gazebo, the fleet disarms and that IS the result.
+  forbid_abort: false
