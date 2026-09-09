@@ -1,0 +1,75 @@
+name: carry_trim_n3_off
+description: >
+  COMMON-MODE LOAD TRIM, SIL arm B (trim OFF) (docs/design/velocity_loop.md §11.4 ladder, SIL
+  rung). Three tethered drones lift; a CENTRAL-LIFTER weld at t=10 (the stable,
+  verified attach configuration) engages the dissipative network + the velocity loop
+  (vel_ki 0, the §10 conclusion); the 4-drone fleet hovers to t=27 with the z-only
+  load trim ON (diss_ki_load 1.0).
+
+  Its partner carry_trim_n3_off.yaml differs in EXACTLY diss_ki_load (1.0 vs 0.0).
+  Claim to read from the pair: settled payload z error shrinks with the trim on while
+  tilt and the drones' relative geometry stay put (the trim is common-mode by
+  construction).
+
+  Why a WELD and not a DETACH engages the network here: the first version of this
+  scenario used DETACH 3->2 and capsized in <0.5 s in BOTH tracker modes (R0146-R0148,
+  2026-09-09) — two support points leave the load CoG outside the support line
+  (metrics.cog_margin: the 240 deg gap is past the 180 deg boundary), so the load tips
+  before the survivors can respace. That is a property of the 2-point scenario, not of
+  the trim or of velocity mode. The central-lifter weld is the stable network-phase
+  configuration this bench has (3 ring + 1 vertical), so the trim can actually be read
+  off a settled hover.
+
+  SIL is the necessary-not-sufficient rung: the decisive numbers are the Gazebo
+  5-repeat A/B (diss_circle_n3_V_noI vs _cmI).
+
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 1
+    start_taut: true
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.4
+    target_z: 0.6
+    attach_central: true
+    enable_obstacle_avoidance: false
+    control_mode: velocity_after_handover
+    vel_ki: 0.0
+    diss_ki_load: 0.0
+
+fleet:
+  n_tethered: 3
+  n_total: 4
+
+geometry:
+  cable_len: 0.5
+  attach_radius: 0.25
+  attach_z: 0.025
+  load_mass: 0.4
+  drone_mass: 0.6
+  thrust_c: 88.6
+  magnet_arm_len: 0.5
+
+initial:
+  stands: true
+  load_z: 0.45
+  elev_deg: 45.0
+  weld_x: 0.0           # centre weld = the central-lifter configuration
+  weld_y: 0.0
+  weld_z_offset: 0.05
+
+timing:
+  dt: 0.02
+  substeps: 20
+  duration_s: 33.0
+  step_timeout_s: 0.5
+  ready_timeout_s: 300.0
+
+events:
+  - {t: 1.0,  do: ARM}
+  - {t: 3.0,  do: TAKEOFF}
+  - {t: 10.0, do: WELD}
+  - {t: 27.0, do: LAND}

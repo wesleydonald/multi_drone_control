@@ -145,6 +145,10 @@ def _args():
         DeclareLaunchArgument('diss_node_mass', default_value='0.5'),
         DeclareLaunchArgument('diss_substeps', default_value='10'),
         DeclareLaunchArgument('diss_elev_deg', default_value='45.0'),
+        # COMMON-MODE LOAD TRIM (docs/design/velocity_loop.md §11): z-only integrator on
+        # the measured load error, added identically to every node's a_ff. 0.0 = off.
+        DeclareLaunchArgument('diss_ki_load', default_value='0.0'),
+        DeclareLaunchArgument('diss_a_i_load_max', default_value='2.0'),
         # floor the network descends the held load to on a network-phase LAND.
         DeclareLaunchArgument('net_land_z', default_value='0.06'),
     ]
@@ -249,6 +253,8 @@ def launch_setup(context, *args, **kwargs):
                      'reconfig_mode': LaunchConfiguration('reconfig_mode'),
                      'reconfig_hold_s': f('reconfig_hold_s'),
                      'diss_elev_deg': f('diss_elev_deg'),
+                     'diss_ki_load': f('diss_ki_load'),
+                     'diss_a_i_load_max': f('diss_a_i_load_max'),
                      'net_land_z': f('net_land_z')}],
         output='screen'))
 

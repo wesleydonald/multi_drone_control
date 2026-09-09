@@ -1,0 +1,62 @@
+name: diss_circle_n3_V_cmI
+description: >
+  PART A STAGE V — THE COMMON-MODE INTEGRATOR ARM (docs/design/velocity_loop.md §11).
+  ONE VARIABLE against diss_circle_n3_V_noI.yaml: diss_ki_load 0.0 -> 1.0. Everything
+  else, including vel_ki 0.0 (the §10 conclusion), is identical.
+
+  What §11's z-only design PREDICTS for this A/B (5 repeats each, §9.2 rules):
+    * radius ratio, phase lag, post-sweep tilt: statistically UNCHANGED from the noI
+      arm — the trim integrates only the vertical load error and shifts every drone's
+      a_ff by the same vector, so it cannot couple to the horizontal sweep and cannot
+      apply a differential moment. Any shift outside the noI ranges FALSIFIES the
+      decoupling claim, not just the tuning.
+    * settled payload height error: drops toward zero (the 5-7 cm fixed-kT sag is the
+      thing being trimmed). Trim authority is capped at diss_a_i_load_max = 2 m/s^2.
+
+  If tilt grows with the trim on, the ring-centroid residual moment matters after all:
+  the next (and last) step is tension-share weighting of the trim, else vel_ki=0 with
+  no trim is the final Part A answer.
+
+  Phase-lag caveat and sweep semantics: see diss_circle_n3_V_noI.yaml — one eased
+  sweep, peak speed 0.6, report with repeat ranges only.
+
+world: three_rigid_ground.sdf
+
+launch:
+  package: controller_quad_load
+  file: dissipative_only_launch.py
+  args:
+    num_drones: 3
+    load_traj: circle
+    traj_speed: 0.6
+    traj_radius: 0.5
+    cable_len: 0.5
+    load_mass: 0.4
+    target_z: 0.6
+    terminal_vel_ref: false
+    control_mode: velocity_after_handover
+    vel_ki: 0.0
+    diss_ki_load: 1.0
+
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+
+fleet:
+  num_drones: 3
+  n_total: 3
+
+timing:
+  duration_s: 75.0
+  stop_after_abort_s: 8.0
+
+events:
+  - {t: 3.0,  do: ARM}
+  - {t: 6.0,  do: TAKEOFF}
+  - {t: 68.0, do: LAND}
+
+criteria:
+  min_payload_z: 0.02
+  min_peak_payload_z: 0.35
+  forbid_abort: true
