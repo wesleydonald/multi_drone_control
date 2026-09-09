@@ -57,7 +57,7 @@ class Scenario:
     attach_radius: float = 0.25
     attach_azimuths_deg: str = ''      # '' = even ring; '0,90,180' = 3/12/9 o'clock
     attach_z: float = 0.025
-    load_mass: float = 0.4
+    load_mass: float = 0.6
     drone_mass: float = 0.6
     thrust_c: float = 88.6
     magnet_arm_len: float = 0.5

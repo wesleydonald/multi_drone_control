@@ -40,7 +40,7 @@ launch:
     traj_speed: 0.6
     traj_radius: 0.5
     cable_len: 0.5
-    load_mass: 0.4
+    load_mass: 0.6
     target_z: 0.6
     terminal_vel_ref: false
     control_mode: velocity_after_handover

@@ -27,11 +27,14 @@ import argparse
 # attachments on its RIM. Attach ring radius therefore = disc radius. Thickness and
 # mass are the sim's standing values until the rig's are measured.
 PAYLOAD_RADIUS = 0.25
+PAYLOAD_INNER_RADIUS = 0.20    # the real payload is a RING (mass at the rim), 2026-09-10
 PAYLOAD_THICKNESS = 0.05
-PAYLOAD_MASS = 0.4
-# solid-disc inertia about the CoG: Ixx = Iyy = m(3r^2 + h^2)/12, Izz = m r^2 / 2
-_IXX = PAYLOAD_MASS * (3 * PAYLOAD_RADIUS ** 2 + PAYLOAD_THICKNESS ** 2) / 12.0
-_IZZ = PAYLOAD_MASS * PAYLOAD_RADIUS ** 2 / 2.0
+PAYLOAD_MASS = 0.6             # raised from 0.4 at Wesley's request; rig value still unknown
+# annulus inertia about the CoG: Ixx = Iyy = m(3(R^2 + r^2) + h^2)/12, Izz = m(R^2 + r^2)/2.
+# Collision/visual stay a solid cylinder (contact geometry is irrelevant to the carry);
+# the inertia is what the physics and the OCP see.
+_IXX = PAYLOAD_MASS * (3 * (PAYLOAD_RADIUS ** 2 + PAYLOAD_INNER_RADIUS ** 2) + PAYLOAD_THICKNESS ** 2) / 12.0
+_IZZ = PAYLOAD_MASS * (PAYLOAD_RADIUS ** 2 + PAYLOAD_INNER_RADIUS ** 2) / 2.0
 import math
 
 

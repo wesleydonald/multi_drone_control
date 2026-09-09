@@ -51,7 +51,7 @@ from controller_dissipative.mini_plant import MiniPlant
 # geometry / physics matching the 4-drone rigid world (four_rigid_ground.sdf).
 N = 4
 CABLE_LEN = 0.5
-LOAD_MASS = 0.4
+LOAD_MASS = 0.6
 DRONE_MASS = 0.6
 G = 9.81
 ATTACH_RADIUS = 0.25

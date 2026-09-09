@@ -57,7 +57,7 @@ def _args():
         DeclareLaunchArgument('start_taut', default_value='true'),
         DeclareLaunchArgument('handover_elev_deg', default_value='45.0'),
         DeclareLaunchArgument('handover_settle_s', default_value='0.75'),
-        DeclareLaunchArgument('load_mass', default_value='0.4'),
+        DeclareLaunchArgument('load_mass', default_value='0.6'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         DeclareLaunchArgument('lift_ramp_vel', default_value='0.22'),
         DeclareLaunchArgument('land_vel', default_value='0.20'),

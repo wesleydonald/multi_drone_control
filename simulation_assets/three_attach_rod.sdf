@@ -62,8 +62,8 @@
         <pose>0.000000 0.000000 0.025000 0 0 0.000000</pose>
         <link name="body">
           <gravity>1</gravity>
-          <inertial><mass>0.4</mass>
-            <inertia><ixx>6.333e-03</ixx><ixy>0</ixy><ixz>0</ixz><iyy>6.333e-03</iyy><iyz>0</iyz><izz>1.250e-02</izz></inertia>
+          <inertial><mass>0.6</mass>
+            <inertia><ixx>1.550e-02</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1.550e-02</iyy><iyz>0</iyz><izz>3.075e-02</izz></inertia>
           </inertial>
           <collision name="collision"><geometry><cylinder><radius>0.25</radius><length>0.05</length></cylinder></geometry></collision>
           <visual name="visual"><geometry><cylinder><radius>0.25</radius><length>0.05</length></cylinder></geometry>

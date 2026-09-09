@@ -19,12 +19,12 @@ CABLE_LEN     = 0.5            # matches every world in simulation_assets/ (rod
 ATTACH_RADIUS = 0.25   # rim of the 500 mm disc payload (2026-09-09)
 ATTACH_Z      = 0.025          # attach height above load CoG, load frame
 ATTACH_AZIMUTHS_DEG = ''       # '' = even ring; e.g. '0,90,180' = 3/12/9 o'clock (rig)
-LOAD_MASS     = 0.4
-# 500 mm x 50 mm solid disc about its CoG: Ixx = m(3r^2+h^2)/12, Izz = m r^2/2.
+LOAD_MASS     = 0.6            # ring payload (2026-09-10); rig value still unmeasured
+# 500 mm ring (inner 400 mm, 50 mm thick) about its CoG: Ixx = m(3(R^2+r^2)+h^2)/12, Izz = m(R^2+r^2)/2.
 # The planner's OCP bakes these into the compiled solver (planner_solver._ocp_signature)
 # and tools/check_geometry.py checks them against the world SDF.
-LOAD_IXX      = 6.333e-3
-LOAD_IZZ      = 1.25e-2
+LOAD_IXX      = 1.550e-02
+LOAD_IZZ      = 3.075e-02
 TARGET_Z      = 0.6            # load hover height
 LIFT_RAMP_VEL = 0.05           # m/s load lift rate after handover
 LAND_VEL      = 0.20           # m/s descent rate, faster than the gentle lift

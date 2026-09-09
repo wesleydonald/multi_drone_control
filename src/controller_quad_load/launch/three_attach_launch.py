@@ -74,7 +74,7 @@ def _args():
         DeclareLaunchArgument('start_taut', default_value='true'),
         DeclareLaunchArgument('handover_elev_deg', default_value='45.0'),
         DeclareLaunchArgument('handover_settle_s', default_value='0.75'),
-        DeclareLaunchArgument('load_mass', default_value='0.4'),
+        DeclareLaunchArgument('load_mass', default_value='0.6'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         DeclareLaunchArgument('lift_ramp_vel', default_value='0.22'),
         DeclareLaunchArgument('land_vel', default_value='0.20'),
@@ -141,6 +141,7 @@ def _args():
         # the measured load error, added identically to every node's a_ff. 0.0 = off.
         DeclareLaunchArgument('diss_handout_tension_blend', default_value='true'),
         DeclareLaunchArgument('attach_traj_hold_s', default_value='10.0'),   # hold until the weld, then this long
+        DeclareLaunchArgument('handover_blend_s', default_value='3.0'),      # bumpless tension handover at the weld
         DeclareLaunchArgument('diss_ki_load', default_value='1.0'),
         DeclareLaunchArgument('diss_a_i_load_max', default_value='2.0'),
         DeclareLaunchArgument('net_land_z', default_value='0.06'),
@@ -326,6 +327,7 @@ def launch_setup(context, *args, **kwargs):
                      'diss_elev_deg': f('diss_elev_deg'),
                      'diss_handout_tension_blend': b('diss_handout_tension_blend'),
                      'attach_traj_hold_s': f('attach_traj_hold_s'),
+                     'handover_blend_s': f('handover_blend_s'),
                      'diss_ki_load': f('diss_ki_load'),
                      'diss_a_i_load_max': f('diss_a_i_load_max'),
                      'net_land_z': f('net_land_z')}],

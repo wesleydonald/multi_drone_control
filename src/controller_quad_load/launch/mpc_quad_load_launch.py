@@ -116,7 +116,7 @@ def _args():
         # takeoff); 0 = off.
         DeclareLaunchArgument('handover_settle_s', default_value='0.75'),
         # payload mass in the world SDF.
-        DeclareLaunchArgument('load_mass', default_value='0.4'),
+        DeclareLaunchArgument('load_mass', default_value='0.6'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         # HOLD test: lift_ramp_vel:=0.0 (no lift, just hold the taut config).
         # 0.22 is a brisk-but-trackable climb rate; drop toward 0.12 for a gentler lift.

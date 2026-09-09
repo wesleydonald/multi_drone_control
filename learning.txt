@@ -1,4 +1,36 @@
 ################################################################################
+# SESSION 2026-09-10 (cont.)  --  RING PAYLOAD 0.6 kg; BUMPLESS TENSION HANDOVER
+################################################################################
+
+PAYLOAD -> RING, 0.6 kg (Wesley): mass 0.4 -> 0.6, inertia of an annulus (outer 0.25,
+  inner 0.20, 50 mm): Ixx = Iyy = 1.55e-2, Izz = 3.08e-2 (was 6.3e-3 / 1.25e-2).
+  Collision/visual stay a solid cylinder; the inertia is what the physics and the
+  OCP see. Applied to generator (all worlds regenerated), params.py, four launches,
+  27 configs, SIL plant/scenario, harness, mini_plant. Solvers prebuilt (m, J are in
+  the cache signature). A-K + 36 unit tests pass. Rig mass still unmeasured.
+  SIL smoke configs stay at 0.4 kg on purpose: the gate's smoke is a STACK check
+  against the bars set from R0047-R0050, not a physics check of the new mass.
+
+OPEN FINDING (SIL, OCP phase): the OCP hover parks the load ABOVE its target by an
+  amount that scales with mass -- +3.5 cm at 0.4 kg (R0206), +18 cm at 0.6 kg
+  (R0207) -- with the drones tracking the OCP's references to the mm, i.e. the OCP
+  SOLUTION deviates from its own load-z AND drone-position references. Not the
+  tension/thrust bounds (25 N / 15 N, far from binding). Same family as the
+  documented 5-7 cm sag (Gazebo trackers under-track, so the sign differs there).
+  The network-phase trim absorbs it after handover. To investigate on
+  claude-experimentation (OCP cost weights vs mass), not tuned blind here.
+
+THE WELD TRANSIENT (Wesley: "the payload tilts a lot when it attaches, unphysical"):
+  from R0203 -- at the weld drone 1 (12 o'clock) drops 17 cm in 0.5 s with its
+  reference unchanged and the tilt goes 25 -> 47 deg, recovering over ~6 s. That is
+  the OCP -> network handover stepping the incumbents' cable feedforward from the
+  OCP's actual solution to the network's balanced solve (which models the tilted
+  hover as level). New: handover_blend_s (node param, three_attach_launch default
+  3.0; 0 elsewhere = verified detach paths unchanged) -- each incumbent's published
+  a_cable blends from the last OCP value to the network's, a_ff shifted to match.
+  First flown with the ring payload in the runs below.
+
+################################################################################
 # SESSION 2026-09-10 (cont.)  --  FASTER DEMO WORKS x2; HOLD IS NOW EVENT-DRIVEN
 ################################################################################
 

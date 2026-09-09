@@ -146,9 +146,9 @@ class QuadParams:
 
 @dataclass
 class PayloadParams:
-    """Defaults are three_attach.sdf's payload link: 0.4 kg, 500 mm x 50 mm disc."""
-    mass: float = 0.4
-    inertia: tuple = (6.33e-3, 6.33e-3, 1.25e-2)
+    """Defaults are three_attach.sdf's payload link: 0.6 kg, 500 mm ring (inner 400 mm)."""
+    mass: float = 0.6
+    inertia: tuple = (1.550e-02, 1.550e-02, 3.075e-02)
     ground_z: float = 0.025
 
 

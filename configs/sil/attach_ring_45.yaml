@@ -55,7 +55,7 @@ launch:
     start_taut: true
     load_traj: hover
     cable_len: 0.5
-    load_mass: 0.4
+    load_mass: 0.6
     target_z: 0.6
     # the ring-reconfiguration configuration (general/CLAUDE.md §6, "the open work")
     attach_central: false
@@ -77,7 +77,7 @@ geometry:
   attach_radius: 0.25
   attach_azimuths_deg: '0,90,180'
   attach_z: 0.025
-  load_mass: 0.4
+  load_mass: 0.6
   drone_mass: 0.6
   thrust_c: 88.6
   magnet_arm_len: 0.5

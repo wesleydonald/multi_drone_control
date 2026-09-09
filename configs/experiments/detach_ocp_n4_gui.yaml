@@ -35,7 +35,7 @@ launch:
     traj_speed: 0.6
     traj_radius: 0.5
     cable_len: 0.5
-    load_mass: 0.4
+    load_mass: 0.6
     target_z: 0.6
     # start_taut skips the creep phase, exactly as mpc_quad_load_launch.py does.
     # dissipative_launch.py defaults it FALSE while both other launches default TRUE,

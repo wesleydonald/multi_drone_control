@@ -33,7 +33,7 @@ launch:
     load_traj: hover
     cable_len: 0.5
     attach_azimuths_deg: even      # even ring: a 3-drone carry at 3/12/9 hangs tilted
-    load_mass: 0.4
+    load_mass: 0.6
     target_z: 0.6
     attach_central: true
     enable_obstacle_avoidance: false
@@ -49,7 +49,7 @@ geometry:
   cable_len: 0.5
   attach_radius: 0.25
   attach_z: 0.025
-  load_mass: 0.4
+  load_mass: 0.6
   drone_mass: 0.6
   thrust_c: 88.6
   magnet_arm_len: 0.5

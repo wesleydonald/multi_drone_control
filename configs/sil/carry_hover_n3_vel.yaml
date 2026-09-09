@@ -29,7 +29,7 @@ launch:
     load_traj: hover
     cable_len: 0.5
     attach_azimuths_deg: even      # even ring: a 3-drone carry at 3/12/9 hangs tilted
-    load_mass: 0.4
+    load_mass: 0.6
     target_z: 0.6
     control_mode: velocity_after_handover
 
@@ -41,7 +41,7 @@ geometry:
   cable_len: 0.5
   attach_radius: 0.25
   attach_z: 0.025
-  load_mass: 0.4
+  load_mass: 0.6
 
 initial:
   stands: true          # take-off stands under the tethered drones (see Scenario.stands)

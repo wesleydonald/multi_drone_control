@@ -34,7 +34,7 @@ launch:
     enable_obstacle_avoidance: false
     load_traj: hover
     cable_len: 0.5
-    load_mass: 0.4
+    load_mass: 0.6
     target_z: 0.6
 
 fleet:

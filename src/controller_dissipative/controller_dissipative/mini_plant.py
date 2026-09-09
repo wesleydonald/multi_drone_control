@@ -32,7 +32,7 @@ def _skew(w):
 class MiniPlant:
     def __init__(self, n, rho, cable_len, drone_mass, load_mass, g, ground_z,
                  k_rod=3000.0, c_rod=25.0, k_ground=6000.0, c_ground=60.0,
-                 kp=30.0, kd=8.0, accel_max=22.0, load_inertia=0.0063):
+                 kp=30.0, kd=8.0, accel_max=22.0, load_inertia=0.0155):
         self.n = n
         self.rho = [np.asarray(r, float) for r in rho]
         self.L = float(cable_len)

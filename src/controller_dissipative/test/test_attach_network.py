@@ -32,7 +32,7 @@ N_TETHERED = 3
 N_NET = 4                      # 3 tethered + 1 reserved attach slot
 CABLE_LEN = 0.5
 DRONE_MASS = 0.6
-LOAD_MASS = 0.4
+LOAD_MASS = 0.6
 G = 9.81
 LEVEL = np.array([1.0, 0.0, 0.0, 0.0])
 

@@ -156,6 +156,16 @@ class DissipativeController(LoadPlanner):
         # so the fleet reconfigures in place instead of chasing a moving target while the
         # newcomer hands out; the trajectory then resumes with the full fleet. 0 = off.
         self._attach_traj_hold_s = float(p('attach_traj_hold_s', 0.0).value)
+        # BUMPLESS TENSION HANDOVER (s). At OCP -> network the incumbents' cable
+        # feedforward steps from the OCP's actual solution to the network's (which also
+        # models the tilted three-drone hover as level); measured at the weld: the 12
+        # o'clock drone dropped 17 cm in 0.5 s and the load tilted 25 -> 47 deg (R0203).
+        # Blend each incumbent's a_cable from the last OCP value to the network's over
+        # this long. 0 = off (the verified detach paths are unchanged).
+        self._handover_blend_s = float(p('handover_blend_s', 0.0).value)
+        self._last_ocp_ac = {}
+        self._ho_ac = {}
+        self._ho_t0 = None
         # The hold starts when the APPROACH starts (the operator's ATTACH = /magnet/command
         # ON), not at the weld: a payload that keeps moving during the descent makes the
         # tip weld wherever it happens to be inside the trigger radius (R0178 welded at
@@ -611,6 +621,8 @@ class DissipativeController(LoadPlanner):
             seeds.append(load_p if p is None else p)
         self.net.seed(seeds)
         self.net.reset_load_trim()   # fresh trim per flight; not reset on attach/detach
+        self._ho_ac = {i: v.copy() for i, v in self._last_ocp_ac.items()}
+        self._ho_t0 = self.get_clock().now()
         self._net_p_des = self._current_load_des()
         # BUMPLESS in xy: the OCP hover parks the load with a standing offset from its
         # target (19 cm at 3/12/9 o'clock, R0191), and handing the network the target
@@ -768,6 +780,28 @@ class DissipativeController(LoadPlanner):
                                           load_accel=a_des)
                 self._publish_ref(drone, [node] * (self.N + 1))
         self._net_diag(load_pos, load_quat, p_des)
+
+    def _publish_ref(self, i, nodes):
+        """Wraps the parent's publisher: remembers the OCP's last cable feedforward per
+        drone, and blends an incumbent's network feedforward from it after the handover
+        (see handover_blend_s). Wire format untouched."""
+        if self.phase != 'network':
+            self._last_ocp_ac[i] = np.asarray(nodes[0][3], float).copy()
+        elif (self._handover_blend_s > 0.0 and self._ho_t0 is not None
+              and i < self.n and i in self._ho_ac and not self.detached[i]):
+            el = (self.get_clock().now() - self._ho_t0).nanoseconds * 1e-9
+            sblend = float(np.clip(el / self._handover_blend_s, 0.0, 1.0))
+            if sblend < 1.0:
+                ac0 = self._ho_ac[i]
+                blended = []
+                for p_, v_, a_, ac_ in nodes:
+                    ac_net = np.asarray(ac_, float)
+                    ac_b = (1.0 - sblend) * ac0 + sblend * ac_net
+                    # a_ff = g + a_des - a_cable, so shift a_ff by the same amount
+                    a_b = np.asarray(a_, float) + (ac_net - ac_b)
+                    blended.append((p_, v_, a_b, ac_b))
+                nodes = blended
+        super()._publish_ref(i, nodes)
 
     def _detached_reference(self, i):
         """Reference for a DETACHED drone: normally fly up and hold (fly_away_reference); on
