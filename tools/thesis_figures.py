@@ -42,8 +42,8 @@ def load_registry(path=REGISTRY):
         reg = yaml.safe_load(fh) or {}
     figs = reg.get('figures') or []
     for f in figs:
-        if not f.get('id') or f.get('kind') not in ('run', 'compare'):
-            raise SystemExit(f'bad figure entry (needs id and kind run|compare): {f}')
+        if not f.get('id') or f.get('kind') not in ('run', 'compare', 'storyboard'):
+            raise SystemExit(f'bad figure entry (needs id and kind run|compare|storyboard): {f}')
     return reg.get('output', 'docs/figures'), figs
 
 
@@ -76,6 +76,13 @@ def build(fig, out_root, check=False):
         return records
 
     os.makedirs(out_dir, exist_ok=True)
+    if fig['kind'] == 'storyboard':
+        # the attach-during-trajectory demo as one figure (tools/attach_storyboard.py)
+        import subprocess, sys as _sys
+        for s in specs:
+            subprocess.run([_sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            'attach_storyboard.py'), s.split('_')[0], '--out', out_dir], check=True)
+        return records
     if fig['kind'] == 'compare':
         compare(specs, out_dir=out_dir, labels=fig.get('labels'),
                 align=fig.get('align', 'auto'), quiet=True)

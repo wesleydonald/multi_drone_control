@@ -34,3 +34,16 @@ Findings land in `learning.txt` as usual; this file tracks status.
 - Item 4: four mis-seed configs (mass ±25 %, cable ±10 % as controller beliefs) queued.
 - Item 6: `/fleet/status` banner (phase / hold / drones on load / tilt) above the payload in
   RViz, colour-coded by tilt; structural test added.
+- Item 2 DECIDED (negative): the tilt-aware wrench drove the weld transient to 68° and an
+  abort in 2/2 runs (R0212/R0213) vs +8° yaw-only. Flag stays off; recorded in learning.txt.
+- Item 5: `tools/preflight.py` verified live against a running stack: mocap rates, rod
+  length from mocap at each rim point (0.500 ±0.001 m), per-node parameter read-back
+  (planner geometry, every tracker's kT and control_mode), banner, ground check; writes a
+  flight-card section under results/preflight/.
+- Item 3: `F_attach_demo_storyboard` is a registry figure (`kind: storyboard`), regenerated
+  by `tools/thesis_figures.py`.
+- Item 7: `attach_then_detach_n3` (attach, resume, then detach the newcomer) and
+  `attach_fig8_n3` queued behind the robustness sweep.
+- Gate: stage 6 now prebuilds the planner solvers before the SIL smoke — the cache goes
+  stale on any planner-source or mass/inertia edit and the bench starts its clock before
+  the build finishes; this cost three separate false "no lift" failures today.

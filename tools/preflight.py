@@ -68,7 +68,8 @@ class Preflight(Node):
             return None
         fut = cli.call_async(GetParameters.Request(names=names))
         rclpy.spin_until_future_complete(self, fut, timeout_sec=timeout)
-        if fut.result() is None:
+        if fut.result() is None or not fut.result().values:
+            # rclpy answers an EMPTY list if any requested name is undeclared on that node
             return None
         out = {}
         for name, pv in zip(names, fut.result().values):
@@ -110,13 +111,22 @@ def main():
     check(bool(pf.payload) and prate > 20, 'mocap payload', f'{prate:.0f} Hz')
 
     # 3. controller parameters, read back
-    names = ['cable_len', 'load_mass', 'attach_radius', 'attach_azimuths_deg', 'thrust_ratio', 'attach_z']
+    names = ['cable_len', 'load_mass', 'attach_radius', 'attach_azimuths_deg', 'attach_z']
     prm = pf.read_params(a.planner, names)
     if prm is None:
-        check(False, 'planner parameters', f'node {a.planner!r} not reachable')
+        check(False, 'planner parameters', f'node {a.planner!r} not reachable or a name undeclared')
         cable_len, rho = None, None
     else:
         lines.append('  planner read-back: ' + ', '.join(f'{k}={v}' for k, v in prm.items()))
+    # per-tracker read-back: kT and the control architecture actually running
+    for i in range(a.drones + (1 if a.attach else 0)):
+        tp = pf.read_params(f'controller_{i}', ['thrust_ratio', 'control_mode'])
+        if tp is None:
+            check(False, f'tracker {i} parameters', 'not reachable')
+        else:
+            lines.append(f'  tracker {i} read-back: thrust_ratio={tp["thrust_ratio"]} control_mode={tp["control_mode"]}')
+            check(tp['thrust_ratio'] > 0, f'tracker {i} kT set', f'{tp["thrust_ratio"]}')
+    if prm is not None:
         cable_len = float(prm['cable_len'])
         from controller_load_mpc.geometry import attach_points
         rho = attach_points(a.drones, float(prm['attach_radius']), float(prm['attach_z']),
@@ -154,9 +164,11 @@ def main():
                 check(tm.battery_voltage >= a.battery_min, f'battery drone {i}',
                       f'{tm.battery_voltage:.2f} V (bar {a.battery_min}), RSSI {tm.rssi} dBm')
 
-    # 5. not armed
-    check('ARM' not in pf.status.upper() or 'PLANNER' in pf.status.upper() or pf.status == '',
-          'fleet not yet flying', f'status: {pf.status or "(none)"}')
+    # 5. not flying yet: every drone on the ground and no network phase announced
+    zs = [pf.pose[i][-1][1].pose.position.z for i in pf.pose if pf.pose[i]]
+    on_ground = bool(zs) and max(zs) < 0.30
+    check(on_ground and not pf.status.upper().startswith('NETWORK'),
+          'fleet not yet flying', f'max drone z {max(zs):.2f} m; status: {pf.status or "(none)"}' if zs else 'no poses')
 
     rclpy.shutdown()
     stamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')

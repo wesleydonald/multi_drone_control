@@ -11,6 +11,7 @@
 #
 # kind: run      -> the six per-run figures (tools/plot_run.py); `keep` selects which
 # kind: compare  -> an overlay + metric table (tools/compare_runs.py)
+# kind: storyboard -> the attach-during-trajectory demo as one figure (tools/attach_storyboard.py)
 
 output: docs/figures
 
@@ -36,3 +37,14 @@ figures:
       One 45 deg ring-attach run in detail. The fleet tracks to within a few
       centimetres until the weld at t=37.4 s, after which every drone's error steps to
       ~1 m and the fleet aborts 3.9 s later.
+
+  - id: F_attach_demo_storyboard
+    kind: storyboard
+    runs: [R0209]
+    caption: >
+      Attach during a circle, in Gazebo (R0209, 0.4 kg disc; R0208/R0209 at 0.6 kg ring
+      are the same sequence). Three drones at 3/12/9 o'clock fly the circle 35 deg tilted
+      (the CoG sits on the 3-9 chord); ATTACH freezes the load target; the newcomer welds
+      the stationary payload at the 6 o'clock rim; the reconfiguration levels the load to
+      under 10 deg within ~8 s; the trajectory resumes and the four-drone fleet completes
+      the circle. Bands: hold for the approach, hold for the reconfiguration.
