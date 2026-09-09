@@ -44,7 +44,14 @@ def _args():
     return [
         DeclareLaunchArgument('num_drones', default_value='4'),
         DeclareLaunchArgument('cable_len', default_value='0.5'),
-        DeclareLaunchArgument('start_taut', default_value='false'),
+        # true = SKIP THE CREEP PHASE: the planner hands straight to the coupled OCP
+        # instead of arc-sweeping the rods up to handover_elev_deg. Takeoff is the
+        # same LoadPlanner OCP in every launch, so this is the same skip-the-creep
+        # decision mpc_quad_load_launch.py and dissipative_only_launch.py already
+        # make. It defaulted FALSE here alone, which is why takeoff on this launch was
+        # visibly slower than running the MPC by itself (Wesley, 2026-08-06) — the
+        # extra time was the creep sweep, not the lift.
+        DeclareLaunchArgument('start_taut', default_value='true'),
         DeclareLaunchArgument('handover_elev_deg', default_value='45.0'),
         DeclareLaunchArgument('handover_settle_s', default_value='0.75'),
         DeclareLaunchArgument('load_mass', default_value='0.4'),
@@ -85,6 +92,14 @@ def _args():
         #     deficit it targets. Fly it as an A/B against the logs.
         DeclareLaunchArgument('net_horizon_preview', default_value='true'),
         DeclareLaunchArgument('net_traj_lean', default_value='false'),
+        # ── How a fleet-size change is handled (THESIS_PLAN §12.2) ──────────
+        # 'network' (default, verified): the dissipative network takes the fleet on a
+        #     detach, redistributes, and carries the trajectory on itself.
+        # 'ocp': the OCP is RESIZED in place to the new fleet size and keeps flying.
+        #     The cables do not move when a drone leaves, so the survivors are just a
+        #     smaller (uneven) ring the OCP can solve for directly.
+        DeclareLaunchArgument('reconfig_mode', default_value='network'),
+        DeclareLaunchArgument('reconfig_hold_s', default_value='1.5'),
         DeclareLaunchArgument('diss_k_pay', default_value='40.0'),
         DeclareLaunchArgument('diss_k_anchor', default_value='40.0'),
         DeclareLaunchArgument('diss_c', default_value='6.0'),
@@ -185,6 +200,8 @@ def launch_setup(context, *args, **kwargs):
                      'diss_node_mass': f('diss_node_mass'),
                      'diss_substeps': i_('diss_substeps'),
                      'diss_elev_deg': f('diss_elev_deg'),
+                     'reconfig_mode': LaunchConfiguration('reconfig_mode'),
+                     'reconfig_hold_s': f('reconfig_hold_s'),
                      'net_land_z': f('net_land_z')}],
         output='screen'))
 

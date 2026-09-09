@@ -67,7 +67,10 @@ def generate_load_ocp(dyn: LoadCableDynamics, N=20, tf=2.0,
     model.x = dyn.x
     model.u = dyn.u
     q_ref = ca.MX.sym('q_ref', 4)                 # load reference attitude (param)
-    model.p = q_ref
+    # Geometry is a RUNTIME parameter too (rho_i, l_i), so one compiled solver per
+    # fleet size covers any attachment layout -- including a newcomer welded wherever
+    # its magnet landed. See LoadCableDynamics.
+    model.p = ca.vertcat(q_ref, dyn.p_geom)
     model.f_expl_expr = dyn.f_expl
     xdot = ca.MX.sym('xdot', dyn.nx)
     model.xdot = xdot
@@ -144,7 +147,9 @@ def generate_load_ocp(dyn: LoadCableDynamics, N=20, tf=2.0,
     ocp.constraints.lbx_0 = x0[obs]
     ocp.constraints.ubx_0 = x0[obs]
     ocp.constraints.idxbxe_0 = np.arange(obs.shape[0])
-    ocp.parameter_values = np.array([1.0, 0.0, 0.0, 0.0])   # q_ref = identity
+    # q_ref = identity, geometry = the nominal ring this dyn was built with, so a
+    # solver that is never told otherwise reproduces the old baked-constant model.
+    ocp.parameter_values = np.concatenate([[1.0, 0.0, 0.0, 0.0], dyn.geom_values()])
 
     # ── tautness: state bounds on each t_i ─────────────────────────────────
     t_idx = [LOAD_DIM + CABLE_DIM * i + 12 for i in range(n)]
