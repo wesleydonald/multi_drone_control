@@ -1,0 +1,94 @@
+name: detach_ocp_n4_gui
+description: >
+  THE DETACH HAND-BACK SEQUENCE (THESIS_PLAN §12.1, supervisor's architecture).
+
+  Four drones carry the payload along a circle under the CENTRALIZED OCP. Mid-flight
+  one drone detaches. The dissipative network takes the fleet, HOLDS the trajectory
+  clock, and redistributes the three survivors onto their new ring. Once they have
+  settled — every drone slower than handback_speed and the load within
+  handback_pos_tol of its target, sustained for handback_settle_s — the fleet is
+  handed BACK to the OCP, now solving for n=3, and the trajectory resumes from
+  exactly where it was held.
+
+  Each controller does the thing it is good at: the OCP tracks trajectories (0.816
+  radius ratio, 5/5 clean runs) and the network handles the reconfiguration event,
+  which is its native operating mode and the part that is verified.
+
+  What to look for in the log, in order:
+      [dissipative] DETACH drone 3 ...
+      [dissipative] reconfiguring — trajectory HELD at t=...
+      [planner] FLEET RESIZED to n=3; slot->drone [...]
+      [dissipative] HAND-BACK: OCP now flies n=3, trajectory resumes at t=...
+
+  The hand-back is behind ocp_handback (default false), so every previously verified
+  detach run is unchanged. It requires an OCP pre-built for n=3, which the node does
+  at startup; run tools/prebuild_planner.py first if the model sources changed.
+
+world: four_rigid_ground.sdf
+
+launch:
+  package: controller_quad_load
+  file: dissipative_launch.py
+  args:
+    num_drones: 4
+    load_traj: circle
+    traj_speed: 0.6
+    traj_radius: 0.5
+    cable_len: 0.5
+    load_mass: 0.4
+    target_z: 0.6
+    # start_taut skips the creep phase, exactly as mpc_quad_load_launch.py does.
+    # dissipative_launch.py defaults it FALSE while both other launches default TRUE,
+    # which is why takeoff here was visibly slower than running the MPC alone.
+    start_taut: true
+    reconfig_mode: ocp
+
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 4
+    detach: true
+    # RViz ON. Batch runs force it off; this variant exists to be WATCHED, with the
+    # events still fired on the sim clock so the detach lands mid-sweep every time
+    # rather than depending on how fast you can hit the button.
+    #
+    # Pair it with --gui for the Gazebo window. Both windows cost real-time factor,
+    # and the startup pose timeouts that lose ~1 run in 5 are real-time starvation,
+    # so expect this variant to be FLAKIER than the headless one, not less.
+    rviz: true
+
+fleet:
+  num_drones: 4
+  n_total: 4
+
+timing:
+  # DETACH AT 16 s = genuinely mid-sweep. The sweep runs t=11.1-20.4 (measured on
+  # R0106 from when the published reference xy is actually moving), so 16 s leaves
+  # ~4.5 s of sweep to resume.
+  #
+  # Getting this wrong is SILENT, and it fooled me three times. Detach after the sweep
+  # ends and traj_t is already past its 9.82 s duration: the hold, the resize and the
+  # hand-back all log success and the trajectory "resumes" with nothing left to fly.
+  # Watch for traj_t in the HELD line -- if it is ~9.9, the detach was too late.
+  #
+  # Note metrics.sweep_window is NOT the tool for finding this: it returns a
+  # CONTIGUOUS span, so it swallowed the later auto-descent motion and reported
+  # 11.4-30.6. Right for windowing a metric, wrong for locating the sweep's end.
+  #
+  # Do not push it much earlier either. The n=4 lift transient is BIMODAL -- R0096
+  # held 0-4 deg payload tilt through it, R0098 hit 43-51 deg -- and detaching from an
+  # already half-capsized payload tests nothing. That variance belongs to the n=4
+  # circle config, not to the hand-back; the n=3 circle peaks at 16 deg over a run.
+  duration_s: 100.0
+  stop_after_abort_s: 8.0
+
+events:
+  - {t: 3.0,  do: ARM}
+  - {t: 6.0,  do: TAKEOFF}
+  - {t: 16.0, do: DETACH, arg: 3}
+  - {t: 92.0, do: LAND}
+
+criteria:
+  min_payload_z: 0.02
+  min_peak_payload_z: 0.35
+  forbid_abort: true

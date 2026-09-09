@@ -45,12 +45,14 @@ SRC_FILES = [_planner_ocp.__file__, _lcd.__file__]
 # the current geometry (else the CasADi model's compile-time constants are stale).
 
 def _ocp_signature(dyn, plan_n, plan_tf):
-    """Hash of everything baked into the compiled OCP (geometry + horizon), so a
-    cached .so from a different cable_len / load_mass / fleet size is never reused."""
+    """Hash of everything STILL baked into the compiled OCP, so a cached .so from a
+    different load_mass / inertia / fleet size is never reused.
+
+    rho_i and l_i are deliberately absent: they are runtime parameters now, so a
+    cached solver is valid across attachment layouts and cable lengths, and changing
+    attach_radius no longer costs a ~50 s rebuild."""
     d = dyn
     parts = (d.n, round(float(d.m), 6),
-             tuple(round(float(v), 6) for v in d.l),
-             tuple(tuple(round(float(c), 6) for c in r) for r in d.rho),
              tuple(round(float(v), 6) for v in np.asarray(d.J).ravel()),
              tuple(round(float(v), 6) for v in d.mi),
              plan_n, round(float(plan_tf), 6))
@@ -106,24 +108,31 @@ class PlannerSolver:
             write_solver_signature(CODE_DIR, n, dyn, PLAN_N, PLAN_TF, logger)
         self.N = self.ocp.solver_options.N_horizon
         self.dt = self.ocp.solver_options.tf / self.N
+        # Current attachment geometry, sent with every solve. Starts at the nominal
+        # ring this dyn was built with, so behaviour is unchanged until something
+        # calls set_geometry().
+        self._geom = self.dyn.geom_values()
 
         # states pinned at OCP node 0 (observed): load pose/twist + cable dirs s_i.
         # Must match idxbx_0 in generate_load_ocp. r_i/tensions stay free.
         self._obs_idx = observed_state_indices(n)
 
-        # reference-extraction functions from a solved horizon state
-        self.pos_fun = [ca.Function(f'p{i}', [dyn.x], [dyn.quad_position(i)])
-                        for i in range(n)]
-        self.vel_fun = [ca.Function(f'v{i}', [dyn.x], [dyn.quad_velocity(i)])
-                        for i in range(n)]
+        # Reference-extraction functions from a solved horizon state. They take the
+        # geometry parameter as a second input for the same reason the model does:
+        # quad_position and friends are functions OF rho and l, so a drone's extracted
+        # reference has to be computed against the layout the fleet actually has.
+        self.pos_fun = [ca.Function(f'p{i}', [dyn.x, dyn.p_geom],
+                                    [dyn.quad_position(i)]) for i in range(n)]
+        self.vel_fun = [ca.Function(f'v{i}', [dyn.x, dyn.p_geom],
+                                    [dyn.quad_velocity(i)]) for i in range(n)]
         # required specific thrust acceleration a_i = f_i / m_i (feedforward)
-        self.acc_fun = [ca.Function(f'a{i}', [dyn.x],
+        self.acc_fun = [ca.Function(f'a{i}', [dyn.x, dyn.p_geom],
                                     [dyn.thrust_vec(i) / dyn.mi[i]])
                         for i in range(n)]
         # cable tension acceleration a_cable_i = t_i s_i / m_i (world frame) — the
         # known external pull the cable-aware tracker adds to its drone model
-        self.cable_fun = [ca.Function(f'ac{i}', [dyn.x], [dyn.cable_accel(i)])
-                          for i in range(n)]
+        self.cable_fun = [ca.Function(f'ac{i}', [dyn.x, dyn.p_geom],
+                                      [dyn.cable_accel(i)]) for i in range(n)]
 
         # warm-start state. last_X is None => no valid warm start => reseed.
         self.last_X = None
@@ -158,6 +167,23 @@ class PlannerSolver:
                 x[b:b + 3] = d / nrm
         return x
 
+    def set_geometry(self, rho=None, cable_lengths=None):
+        """Change the attachment layout the solver plans against, without rebuilding.
+
+        This is the point of parameterising the geometry: a welded newcomer attaches
+        wherever its magnet landed, and after a detach the survivors sit on a
+        different ring. Both are a parameter change now, not a ~50 s acados rebuild
+        that cannot happen mid-flight.
+
+        `dyn.rho` / `dyn.l` are updated to match, because the reference extraction
+        below reads them numerically to place each drone's attach point."""
+        if rho is not None:
+            self.dyn.rho = [np.asarray(r, float).reshape(3) for r in rho]
+        if cable_lengths is not None:
+            self.dyn.l = [float(v) for v in cable_lengths]
+        self._geom = self.dyn.geom_values()
+        return self._geom
+
     def solve_horizon(self, yref_at, q_ref_at, x_init, reseed):
         """Set the per-node references + the pinned node-0 observed state, run the
         SQP iterations, and return (X, status): the converged horizon X (nx, N+1), or
@@ -167,9 +193,9 @@ class PlannerSolver:
         stage-k tracking reference and the load-attitude parameter."""
         for k in range(self.N):
             self.solver.set(k, 'yref', yref_at(k))
-            self.solver.set(k, 'p', q_ref_at(k))
+            self.solver.set(k, 'p', np.concatenate([q_ref_at(k), self._geom]))
         self.solver.set(self.N, 'yref', yref_at(self.N)[:-self.dyn.nu])
-        self.solver.set(self.N, 'p', q_ref_at(self.N))
+        self.solver.set(self.N, 'p', np.concatenate([q_ref_at(self.N), self._geom]))
         # Reseed all nodes from x_init when there is no trustworthy warm start; a
         # NaN/garbage warm start would otherwise poison the solve.
         if reseed:
@@ -193,7 +219,8 @@ class PlannerSolver:
     def drone_kinematics(self, xk, i):
         """(pos, vel, thrust_accel, cable_accel) for the drone in OCP slot i at
         horizon-node state xk, extracted from the solved horizon."""
-        return (np.array(self.pos_fun[i](xk)).flatten(),
-                np.array(self.vel_fun[i](xk)).flatten(),
-                np.array(self.acc_fun[i](xk)).flatten(),
-                np.array(self.cable_fun[i](xk)).flatten())
+        g = self._geom
+        return (np.array(self.pos_fun[i](xk, g)).flatten(),
+                np.array(self.vel_fun[i](xk, g)).flatten(),
+                np.array(self.acc_fun[i](xk, g)).flatten(),
+                np.array(self.cable_fun[i](xk, g)).flatten())

@@ -74,8 +74,23 @@ def quat_mul(q1, q2):
 class LoadCableDynamics:
     """Symbolic CasADi model for n cable-suspended quadrotors carrying a load.
 
-    Geometry/inertia (attachment points rho_i, cable lengths l_i, masses) are
-    baked in as constants from the world; they are known and fixed per-world.
+    ATTACHMENT POINTS rho_i AND CABLE LENGTHS l_i ARE RUNTIME PARAMETERS, not baked
+    constants. Only the fleet size n sets the problem dimensions, so ONE compiled
+    solver per n covers any attachment geometry.
+
+    That matters for two things this project needs (THESIS_PLAN §12.2):
+      * a welded newcomer attaches WHEREVER ITS MAGNET LANDS, not at a nominal ring
+        point, and a baked rho cannot describe that without a ~50 s rebuild you
+        cannot do mid-flight;
+      * handing the fleet back to the OCP after a reconfiguration needs the solver to
+        accept the geometry the fleet actually has now.
+
+    Masses and inertia stay baked: they do not change during a flight, and leaving
+    them constant keeps the parameter vector small.
+
+    `self.rho` / `self.l` remain the NOMINAL numeric values. They are the default
+    parameter values and are what build-time constructs (the hover seed, the cache
+    signature) read; the equations use the symbolic ones.
     """
 
     def __init__(self, n_drones, load_mass, load_inertia, cable_lengths,
@@ -97,6 +112,10 @@ class LoadCableDynamics:
 
         self.x = cs.MX.sym('x', self.nx)
         self.u = cs.MX.sym('u', self.nu)
+        # Runtime geometry: rho (3 per drone) then l (1 per drone).
+        self.p_geom = cs.MX.sym('p_geom', 4 * self.n)
+        self.rho_p = [self.p_geom[3 * i:3 * i + 3] for i in range(self.n)]
+        self.l_p = [self.p_geom[3 * self.n + i] for i in range(self.n)]
         self._unpack()
         # load translational/rotational accelerations are shared by the load
         # dynamics and the quadrotor thrust constraint, so compute them once
@@ -140,7 +159,7 @@ class LoadCableDynamics:
     def _load_accel(self):
         v_dot = -sum((self.t[i] * self.s[i] for i in range(self.n)),
                      cs.MX.zeros(3)) / self.m + GRAVITY
-        torque = sum((self.t[i] * cs.cross(self.R.T @ self.s[i], self.rho[i])
+        torque = sum((self.t[i] * cs.cross(self.R.T @ self.s[i], self.rho_p[i])
                       for i in range(self.n)), cs.MX.zeros(3))
         w_dot = self.Jinv @ (-cs.cross(self.w, self.J @ self.w) + torque)
         return v_dot, w_dot
@@ -173,29 +192,40 @@ class LoadCableDynamics:
             self.p_dynamics(), self.v_dynamics(), self.q_dynamics(), self.w_dynamics(),
             *[self.cable_dynamics(i) for i in range(self.n)])
 
+    def geom_values(self, rho=None, l=None):
+        """Numeric p_geom vector -- rho (3 per drone) then l (1 per drone).
+
+        Defaults to the nominal geometry, so a solver created with these values
+        behaves exactly as the old baked-constant model did."""
+        r = self.rho if rho is None else [np.asarray(v, float).reshape(3)
+                                          for v in rho]
+        ln = self.l if l is None else [float(v) for v in l]
+        assert len(r) == self.n and len(ln) == self.n
+        return np.concatenate([np.concatenate(r), np.asarray(ln, float)])
+
     def load_cable_dynamics(self):
         """Full state derivative x_dot as a CasADi Function (analogue of
-        QuadDynamics.quad_dynamics)."""
-        return cs.Function('x_dot', [self.x, self.u], [self.f_expl],
-                           ['x', 'u'], ['x_dot'])
+        QuadDynamics.quad_dynamics). Takes the geometry parameter vector."""
+        return cs.Function('x_dot', [self.x, self.u, self.p_geom], [self.f_expl],
+                           ['x', 'u', 'p_geom'], ['x_dot'])
 
     # ---- quadrotor kinematics (Eq 5 and derivatives) -----------------------
     def quad_position(self, i):
-        return self.p + self.R @ self.rho[i] - self.l[i] * self.s[i]
+        return self.p + self.R @ self.rho_p[i] - self.l_p[i] * self.s[i]
 
     def quad_velocity(self, i):
         # d/dt(R rho_i) = R (w x rho_i);  d/dt(s_i) = r_i x s_i
-        return (self.v + self.R @ cs.cross(self.w, self.rho[i])
-                - self.l[i] * cs.cross(self.r[i], self.s[i]))
+        return (self.v + self.R @ cs.cross(self.w, self.rho_p[i])
+                - self.l_p[i] * cs.cross(self.r[i], self.s[i]))
 
     def quad_accel(self, i):
         # d/dt[R(w x rho)] = R[ w_dot x rho + w x (w x rho) ]
-        rot_term = self.R @ (cs.cross(self.w_dot, self.rho[i])
-                             + cs.cross(self.w, cs.cross(self.w, self.rho[i])))
+        rot_term = self.R @ (cs.cross(self.w_dot, self.rho_p[i])
+                             + cs.cross(self.w, cs.cross(self.w, self.rho_p[i])))
         # d/dt[r x s] = rd x s + r x (r x s)
         cab_term = (cs.cross(self.rd[i], self.s[i])
                     + cs.cross(self.r[i], cs.cross(self.r[i], self.s[i])))
-        return self.v_dot + rot_term - self.l[i] * cab_term
+        return self.v_dot + rot_term - self.l_p[i] * cab_term
 
     def thrust_vec(self, i):
         """Collective thrust force VECTOR of drone i, world frame (Eq 9, drag

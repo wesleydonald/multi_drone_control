@@ -1,0 +1,87 @@
+name: detach_ocp_n4
+description: >
+  OCP-ONLY FLEET RESIZE ON DETACH (THESIS_PLAN §12.2).
+
+  Four drones carry the payload along a circle under the centralized OCP. Mid-flight
+  one detaches, and the OCP is simply RESIZED to n=3 and keeps flying — no dissipative
+  network, no phase machine, no settle detection. The cables do not move when a drone
+  leaves, so the survivors are just a smaller (uneven) ring, and the OCP can solve for
+  that directly now that attachment geometry is a runtime parameter.
+
+  reconfig_mode defaults to 'network' (the verified behaviour), so this file opting
+  into 'ocp' is the only thing that changes. Run tools/prebuild_planner.py first if
+  the planner model sources changed — the n=3 OCP must already be compiled.
+
+  What to look for in the log, in order:
+      [planner] FLEET RESIZED to n=3; slot->drone [...]; attach azimuths [...] deg
+      [dissipative] DETACH drone 3 (OCP resize): n=3, trajectory held 1.5 s;
+                    surviving ring spans a 180 deg gap (...)
+      [dissipative] reconfiguration hold over — trajectory resumes at t=...
+
+  EXPECT A RESIDUAL PAYLOAD TILT, and do not read it as a control failure. Removing
+  one cable from a symmetric 4-ring leaves the surviving attach points spanning a
+  180 deg gap, which puts the load's centre of mass exactly ON the boundary of their
+  polygon — the marginal case where it can no longer hang level. That is geometry, not
+  tuning: metrics.cog_margin reports it, and n>=5 is the first ring that survives a
+  detach with margin to spare.
+
+world: four_rigid_ground.sdf
+
+launch:
+  package: controller_quad_load
+  file: dissipative_launch.py
+  args:
+    num_drones: 4
+    load_traj: circle
+    traj_speed: 0.6
+    traj_radius: 0.5
+    cable_len: 0.5
+    load_mass: 0.4
+    target_z: 0.6
+    # start_taut skips the creep phase, exactly as mpc_quad_load_launch.py does.
+    # dissipative_launch.py defaults it FALSE while both other launches default TRUE,
+    # which is why takeoff here was visibly slower than running the MPC alone.
+    start_taut: true
+    reconfig_mode: ocp
+
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 4
+    detach: true
+
+fleet:
+  num_drones: 4
+  n_total: 4
+
+timing:
+  # DETACH AT 16 s = genuinely mid-sweep. The sweep runs t=11.1-20.4 (measured on
+  # R0106 from when the published reference xy is actually moving), so 16 s leaves
+  # ~4.5 s of sweep to resume.
+  #
+  # Getting this wrong is SILENT, and it fooled me three times. Detach after the sweep
+  # ends and traj_t is already past its 9.82 s duration: the hold, the resize and the
+  # hand-back all log success and the trajectory "resumes" with nothing left to fly.
+  # Watch for traj_t in the HELD line -- if it is ~9.9, the detach was too late.
+  #
+  # Note metrics.sweep_window is NOT the tool for finding this: it returns a
+  # CONTIGUOUS span, so it swallowed the later auto-descent motion and reported
+  # 11.4-30.6. Right for windowing a metric, wrong for locating the sweep's end.
+  #
+  # Do not push it much earlier either. The n=4 lift transient is BIMODAL -- R0096
+  # held 0-4 deg payload tilt through it, R0098 hit 43-51 deg -- and detaching from an
+  # already half-capsized payload tests nothing. That variance belongs to the n=4
+  # circle config, not to the hand-back; the n=3 circle peaks at 16 deg over a run.
+  duration_s: 100.0
+  stop_after_abort_s: 8.0
+
+events:
+  - {t: 3.0,  do: ARM}
+  - {t: 6.0,  do: TAKEOFF}
+  - {t: 16.0, do: DETACH, arg: 3}
+  - {t: 92.0, do: LAND}
+
+criteria:
+  min_payload_z: 0.02
+  min_peak_payload_z: 0.35
+  forbid_abort: true

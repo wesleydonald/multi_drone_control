@@ -152,6 +152,10 @@ class LoadPlanner(Node):
         # The OCP wrapper builds (or loads a cached) acados solver for this geometry
         # and owns the reference-extraction functions + warm-start state (last_X).
         self.solver = PlannerSolver(self.dyn, self.get_logger())
+        # Pre-built OCPs by fleet size, for handing back after a reconfiguration.
+        # Populated by prebuild_solvers(); the current size is registered here so a
+        # hand-back to the original n is a swap like any other.
+        self._solvers = {self.n: (self.dyn, self.solver, self.rho)}
         self.N = self.solver.N
         self.dt = self.solver.dt
         # Phase-1 takeoff (soft/arc creep + handover decision), owns its own creep
@@ -598,6 +602,75 @@ class LoadPlanner(Node):
             ps.pose.orientation.w = 1.0
             path.poses.append(ps)
         self.load_plan_pub.publish(path)
+
+    def prebuild_solvers(self, sizes):
+        """Compile/load a planner OCP for each fleet size we might hand back to.
+
+        Only n sets the OCP dimensions (attachment geometry is a runtime parameter --
+        see LoadCableDynamics), so one solver per size covers any layout. They are
+        built at STARTUP because an acados build is 9-40 s and cannot happen in
+        flight; with a warm cache each is ~0.1 s. `tools/prebuild_planner.py` warms
+        that cache after a model change.
+        """
+        for m in sorted({int(v) for v in sizes} | {self.n}):
+            if m in self._solvers or m < 2:
+                continue
+            rho = attach_points(m, self.attach_radius, self.attach_z)
+            dyn = LoadCableDynamics(m, self.load_mass, LOAD_INERTIA,
+                                    [self.cable_len] * m, rho, DRONE_MASS)
+            self._solvers[m] = (dyn, PlannerSolver(dyn, self.get_logger()), rho)
+            self.get_logger().info(f'[planner] OCP ready for n={m}')
+
+    def resize_fleet(self, new_n, drone_ids, rho=None):
+        """Re-point the planner at a fleet of `new_n` drones, listed in slot order.
+
+        Swaps the OCP (and its dynamics, ring and reference builder) for the
+        pre-built one of that size, and rebuilds the slot->drone map from the
+        surviving physical ids. The solver's warm start is dropped: the previous
+        solution describes a different fleet, and reusing it would seed the first
+        solve of the new size with a state vector of the wrong meaning.
+
+        `rho` IS THE IMPORTANT ARGUMENT. The pre-built solver for new_n carries a
+        nominal EVEN ring, and after a detach that is physically wrong: the cables
+        that remain are still bolted to their original attach points, so three
+        survivors of a four-ring sit at 0/90/180 deg, not at 0/120/240. Handing the
+        OCP an even 3-gon makes it solve for a payload whose cables are somewhere
+        they are not, and the moment balance it computes tips the load over -- seen
+        on R0093, payload tilt 62 deg about 9 s after the hand-back. Pass the
+        surviving subset of the ORIGINAL ring instead. This is only expressible
+        because attachment geometry is a runtime parameter (LoadCableDynamics).
+
+        Returns False (and changes nothing) if no solver was pre-built for new_n.
+        """
+        entry = self._solvers.get(int(new_n))
+        if entry is None:
+            self.get_logger().error(
+                f'[planner] cannot resize to n={new_n}: no OCP built for that size. '
+                f'Add it to handback_sizes.')
+            return False
+        if len(drone_ids) != int(new_n):
+            self.get_logger().error(
+                f'[planner] resize to n={new_n} got {len(drone_ids)} drone ids')
+            return False
+        self.dyn, self.solver, self.rho = entry
+        self.n = int(new_n)
+        if rho is not None:
+            self.rho = [np.asarray(r, float).reshape(3) for r in rho]
+            self.solver.set_geometry(rho=self.rho)
+        else:
+            self.solver.set_geometry(rho=self.rho)
+        self._s_nom = nominal_cable_dirs(self.rho, 45.0)
+        self.refs = ReferenceBuilder(self.dyn, self.n, self._s_nom, self.dt,
+                                     self.traj)
+        self.slot2drone = [int(d) for d in drone_ids]
+        self.solver.last_X = None            # different fleet: no valid warm start
+        self.N = self.solver.N
+        self.dt = self.solver.dt
+        self.get_logger().warn(
+            f'[planner] FLEET RESIZED to n={self.n}; slot->drone {self.slot2drone}; '
+            f'attach azimuths '
+            f'{[round(float(np.degrees(np.arctan2(r[1], r[0]))), 1) for r in self.rho]} deg')
+        return True
 
     def _enter_planner_phase(self, reason):
         """Transition creep -> coupled planner: latch the lift-ramp start height.
