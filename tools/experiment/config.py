@@ -80,6 +80,12 @@ class Criteria:
         self.max_drone_tilt_deg = kw.pop('max_drone_tilt_deg', None)
         self.max_track_err_m = kw.pop('max_track_err_m', None)
         self.min_payload_z = kw.pop('min_payload_z', None)
+        # Peak, not floor. min_payload_z only says the load never fell through the
+        # world; it is satisfied by a fleet that never took off at all. R0073 had all
+        # three drones disarm on a pose timeout at ARM, sat on the ground for 75 s, and
+        # scored PASS on every criterion it had. Require the load to have actually
+        # risen, or the run is not evidence about flight.
+        self.min_peak_payload_z = kw.pop('min_peak_payload_z', None)
         self.max_payload_z = kw.pop('max_payload_z', None)
         self.require_weld = bool(kw.pop('require_weld', False))
         self.forbid_abort = bool(kw.pop('forbid_abort', True))

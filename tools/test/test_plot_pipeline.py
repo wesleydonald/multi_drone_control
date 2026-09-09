@@ -35,14 +35,18 @@ R_DES, SHRINK, LAG_S, PERIOD = 0.5, 0.75, 0.4, 6.0
 DT = 0.02
 
 
-def synth_rows(n=3, duration=48.0, gazebo=False):
-    """A circle-tracking carry run with a known radius deficit and a known lag."""
-    t = np.arange(0.0, duration, DT)
+def synth_rows(n=3, duration=48.0, gazebo=False, hover_s=0.0):
+    """A circle-tracking carry run with a known radius deficit and a known lag.
+
+    `hover_s` pads a stationary hover onto both ends, which is what a real
+    `load_traj: circle` run looks like: lift, hover, one eased sweep, hover, land."""
+    t = np.arange(0.0, duration + 2 * hover_s, DT)
     w = 2 * np.pi / PERIOD
-    des = np.column_stack([R_DES * np.cos(w * t), R_DES * np.sin(w * t),
+    th = np.clip(t - hover_s, 0.0, duration) * w
+    des = np.column_stack([R_DES * np.cos(th), R_DES * np.sin(th),
                            np.full(t.size, 0.6)])
-    act = np.column_stack([SHRINK * R_DES * np.cos(w * (t - LAG_S)),
-                           SHRINK * R_DES * np.sin(w * (t - LAG_S)),
+    act = np.column_stack([SHRINK * R_DES * np.cos(w * (np.clip(t - hover_s, 0.0, duration) - LAG_S)),
+                           SHRINK * R_DES * np.sin(w * (np.clip(t - hover_s, 0.0, duration) - LAG_S)),
                            np.full(t.size, 0.6)])
     rows = []
     for k, tk in enumerate(t):
@@ -71,11 +75,11 @@ def synth_rows(n=3, duration=48.0, gazebo=False):
     return rows
 
 
-def write_run(tmp, name, gazebo=False, n=3, events=(('ARM', 1.0), ('TAKEOFF', 3.0),
-                                                    ('DETACH', 20.0))):
+def write_run(tmp, name, gazebo=False, n=3, hover_s=0.0,
+              events=(('ARM', 1.0), ('TAKEOFF', 3.0), ('DETACH', 20.0))):
     path = os.path.join(str(tmp), name)
     os.makedirs(os.path.join(path, 'logs'), exist_ok=True)
-    rows = synth_rows(n=n, gazebo=gazebo)
+    rows = synth_rows(n=n, gazebo=gazebo, hover_s=hover_s)
     with open(os.path.join(path, 'logs', 'run.csv' if gazebo else 'sil.csv'), 'w',
               newline='') as fh:
         w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
@@ -142,6 +146,37 @@ def test_steady_window_starts_five_seconds_after_the_run_event(tmp_path):
     assert m['steady_window_s'][0] == pytest.approx(25.0, abs=DT)
 
 
+def test_trajectory_metrics_ignore_the_hover_either_side_of_the_sweep(tmp_path):
+    """THE convention that makes a circle number mean anything. A real circle run is
+    mostly hover -- lift, hover, one eased sweep, hover, land -- and measured over the
+    whole record the mean of the desired path is the hover point, not the circle's
+    centre. Whole-run radius ratio then reads ~1.0 on a run whose sweep ratio is 0.75."""
+    m = M.summarise_run(write_run(tmp_path, 'R9040_sil', hover_s=60.0))
+    assert m['payload_radius_ratio'] == pytest.approx(SHRINK, rel=0.03)
+    assert m['payload_phase_lag_s'] == pytest.approx(LAG_S, abs=0.06)
+    lo, hi = m['sweep_window_s']
+    assert lo == pytest.approx(60.0, abs=0.5) and hi == pytest.approx(108.0, abs=0.5)
+    # and prove the guard is load-bearing: over the whole record the same run flatters
+    # itself by more than 0.1, which is larger than every effect Part A is chasing
+    d = M.load_run(os.path.join(str(tmp_path), 'R9040_sil'))['data']
+    des = np.column_stack([d['payload_ref_x'], d['payload_ref_y']])
+    act = np.column_stack([d['payload_x'], d['payload_y']])
+    assert M.radius_ratio(act, des) > SHRINK + 0.1
+
+
+def test_sweep_window_is_contiguous_despite_a_staircase_reference(tmp_path):
+    """The reference is published at 10 Hz and logged at 50 Hz, so four of every five
+    steps are exactly zero. A per-sample test would keep a fifth of the sweep."""
+    t = np.arange(0.0, 30.0, 0.02)
+    des = np.zeros((t.size, 2))
+    moving = (t >= 10.0) & (t < 20.0)
+    des[moving, 0] = np.floor((t[moving] - 10.0) * 10.0) / 10.0     # 10 Hz staircase
+    des[t >= 20.0, 0] = des[moving, 0][-1]
+    m = M.sweep_window(t, des)
+    assert m.sum() > 0.9 * moving.sum()
+    assert np.all(m[np.argmax(m):m.size - np.argmax(m[::-1])])      # one contiguous run
+
+
 # ── the palette promise (§6.2) ───────────────────────────────────────────────
 
 def test_the_plot_palette_is_the_rviz_palette():
@@ -164,16 +199,18 @@ def test_run_colours_are_not_the_drone_colours():
 
 # ── the figures themselves ───────────────────────────────────────────────────
 
+FIGURE_STEMS = ('01_xy_path', '02_error', '03_axes', '04_health', '05_formation',
+                '06_stage_split', '07_trajectory_3d')
+
+
 @pytest.mark.parametrize('gazebo', [False, True])
-def test_all_six_figures_are_written_as_vector_and_raster(tmp_path, gazebo):
+def test_every_figure_is_written_as_vector_and_raster(tmp_path, gazebo):
     """Including the Gazebo shape, where two panels have nothing to draw -- those must
     annotate themselves rather than raising or coming out blank."""
     path = write_run(tmp_path, 'R9010_x', gazebo=gazebo)
     written = P.plot_run(path, quiet=True)
-    names = sorted(os.path.basename(w) for w in written)
-    assert len(names) == 12
-    for stem in ('01_xy_path', '02_error', '03_axes', '04_health', '05_formation',
-                 '06_stage_split'):
+    assert len(written) == 2 * len(FIGURE_STEMS)
+    for stem in FIGURE_STEMS:
         for ext in ('pdf', 'png'):
             f = os.path.join(path, 'plots', f'{stem}.{ext}')
             assert os.path.getsize(f) > 1000, f'{f} is suspiciously small'

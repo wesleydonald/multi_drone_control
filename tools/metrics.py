@@ -44,6 +44,33 @@ def summarise(values):
             'min': float(np.min(v)), 'max': float(np.max(v))}
 
 
+def sweep_window(t, desired_xy, frac=0.01):
+    """Boolean mask for the part of the run where the COMMANDED path is moving.
+
+    The companion convention to `steady_window`, and mandatory for every trajectory
+    metric. A `load_traj: circle` run is one eased sweep inside a much longer flight --
+    lift, hover, sweep, hover, land -- so on a 75 s run the circle occupies about 8 s.
+    Measured over the whole record, the mean of the desired path is the hover point
+    rather than the circle's centre, and `radius_ratio` reads 0.96 on a run whose sweep
+    ratio is 0.80 (R0054). It looks like a good number and means nothing.
+
+    The mask is CONTIGUOUS, from the first moving sample to the last, because the
+    reference is published at 10 Hz and logged at 50 Hz: sample-wise, four of every five
+    steps are exactly zero, and a per-sample test would keep a fifth of the sweep and
+    inflate the apparent commanded speed fivefold."""
+    d = np.asarray(desired_xy, float)
+    step = np.zeros(d.shape[0])
+    good = np.all(np.isfinite(d), axis=1)
+    step[1:] = np.where(good[1:] & good[:-1],
+                        np.linalg.norm(np.diff(d, axis=0), axis=1), 0.0)
+    peak = float(np.max(step)) if step.size else 0.0
+    moving = np.where(step > max(frac * peak, 1e-9))[0]
+    mask = np.zeros(d.shape[0], bool)
+    if moving.size:
+        mask[moving[0] - 1 if moving[0] else 0:moving[-1] + 1] = True
+    return mask
+
+
 def steady_window(t, t_event=None, settle_s=SETTLE_S):
     """Boolean mask for the steady window: event + settle_s to the end (§9.2).
 
@@ -500,6 +527,49 @@ def centroid(data, n, prefix='', drones=None):
         return np.nanmean(xs, axis=2)
 
 
+def cog_margin(rho):
+    """Can the load hang LEVEL on this set of attach points? (margin_m, gap_deg, ok)
+
+    The load's weight acts at its centre of mass and each cable can only PULL, upward,
+    at its own attach point. For the vertical components to balance with every tension
+    non-negative AND produce no net moment, the centre of mass must lie strictly inside
+    the polygon of attach points -- the classic support-polygon condition. Equivalently,
+    for points on a ring: the largest angular gap between consecutive attach points must
+    be < 180 deg.
+
+    This is GEOMETRY, not control, and the cables are bolted to the payload, so no
+    controller can move the polygon. Removing one cable from a symmetric n-ring leaves a
+    largest gap of 4*pi/n, so a ring survives one detach only for n >= 5:
+
+        3 -> 2   360 deg   outside   (cannot hang level at all)
+        4 -> 3   180 deg   ON THE BOUNDARY   (marginal)
+        5 -> 4   144 deg   inside
+        6 -> 5   120 deg   inside
+
+    which is why a 4->3 detach parks the load at a persistent tilt however well it is
+    flown. `margin_m` is the distance from the centre of mass to the nearest polygon
+    edge, negative when outside."""
+    p = np.asarray([[float(r[0]), float(r[1])] for r in rho], float)
+    if p.shape[0] < 3:
+        return -float(np.max(np.linalg.norm(p, axis=1))), 360.0, False
+    ang = np.sort(np.mod(np.arctan2(p[:, 1], p[:, 0]), 2 * np.pi))
+    gap = float(np.degrees(np.max(np.diff(np.r_[ang, ang[0] + 2 * np.pi]))))
+    order = np.argsort(np.mod(np.arctan2(p[:, 1], p[:, 0]), 2 * np.pi))
+    q = p[order]
+    d = []
+    for i in range(q.shape[0]):
+        a, b = q[i], q[(i + 1) % q.shape[0]]
+        e = b - a
+        n = np.array([-e[1], e[0]])
+        ln = float(np.linalg.norm(n))
+        if ln < 1e-12:
+            continue
+        d.append(float(np.dot(n / ln, -a)))
+    ok = gap < 180.0 - 1e-9
+    margin = float(np.min(np.abs(d))) if d else 0.0
+    return (margin if ok else -margin), gap, ok
+
+
 def azimuth_deg(drone_xy, payload_xy):
     """Bearing of each drone from the payload, degrees in [0, 360).
 
@@ -510,16 +580,21 @@ def azimuth_deg(drone_xy, payload_xy):
     return np.degrees(np.arctan2(d[:, 1], d[:, 0])) % 360.0
 
 
-def stage_split_run(t, data, n):
+def stage_split_run(t, data, n, mask=None):
     """`stage_split` applied to a loaded run table: desired -> reference centroid ->
-    actual centroid -> payload. Returns [] if the run has no payload reference."""
+    actual centroid -> payload. Returns [] if the run has no payload reference.
+
+    `mask` should be the sweep window -- the diagnostic is about a trajectory, and the
+    hover either side of it has no radius and no phase."""
     if not has(data, 'payload_ref_x'):
         return []
+    keep = slice(None) if mask is None else mask
     desired = np.column_stack([data['payload_ref_x'], data['payload_ref_y']])
-    return stage_split(t, desired,
-                       centroid(data, n, 'ref_')[:, :2],
-                       centroid(data, n)[:, :2],
-                       np.column_stack([data['payload_x'], data['payload_y']]))
+    return stage_split(np.asarray(t, float)[keep], desired[keep],
+                       centroid(data, n, 'ref_')[keep, :2],
+                       centroid(data, n)[keep, :2],
+                       np.column_stack([data['payload_x'],
+                                        data['payload_y']])[keep])
 
 
 EVENT_PRIORITY = ('WELD', 'DETACH', 'MAGNET', 'TAKEOFF')
@@ -595,9 +670,18 @@ def summarise_run(run_path):
         des = np.column_stack([d['payload_ref_x'], d['payload_ref_y'],
                                d['payload_ref_z']])
         out['payload_rmse_m'] = payload_rmse(payload, des, mask)
-        out['payload_radius_ratio'] = radius_ratio(payload[:, :2], des[:, :2], mask)
-        out['payload_phase_lag_s'] = phase_lag_s(t, des[:, 0], payload[:, 0])
-        out['stage_split'] = stage_split_run(t, d, n)
+        # Trajectory metrics come from the SWEEP window, never the whole record --
+        # see sweep_window. Reported with the window so a number can be checked
+        # against the manoeuvre it claims to describe.
+        sweep = sweep_window(t, des[:, :2])
+        if np.any(sweep):
+            out['sweep_window_s'] = [float(t[sweep][0]), float(t[sweep][-1])]
+            out['payload_rmse_sweep_m'] = payload_rmse(payload, des, sweep)
+            out['payload_radius_ratio'] = radius_ratio(payload[:, :2], des[:, :2],
+                                                       sweep)
+            out['payload_phase_lag_s'] = phase_lag_s(t[sweep], des[sweep, 0],
+                                                     payload[sweep, 0])
+            out['stage_split'] = stage_split_run(t, d, n, sweep)
     per_drone = []
     for i in range(n):
         err = d[f'd{i}_track_err']
