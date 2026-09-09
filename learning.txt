@@ -1,4 +1,30 @@
 ################################################################################
+# BRANCH claude-experimentation, 2026-09-10  --  FIRST FINDINGS
+################################################################################
+
+1. OCP hover offset: NOT the OCP. Standalone PlannerSolver at 0.6 kg holds the target
+   from the target and plans a clean descent from 0.78 (0.78 -> 0.605 over the
+   horizon, drone-0 node-1 reference 6 mm below current). The live planner diag
+   shows z_tgt 0.60 with load_z 0.78. So the closed loop is not executing the
+   horizon; the logged tracker "ref" is node 0 = the drone's own position, which is
+   why "tracks to the mm" was vacuous. Planner diag now logs zN (planned load z at
+   the end of the horizon) and d0N so tracker-vs-planner can be split from a log.
+2. Tilt-aware wrench (diss_wrench_true_attitude): NEGATIVE. Solving the balanced
+   tensions at the load's true 34 deg attitude drove the weld transient to 68 deg
+   and a fleet abort in 2/2 runs (R0212/R0213) vs +8 deg with yaw-only
+   (R0208/R0209). The July "true attitude self-amplifies tilt" finding, reconfirmed
+   at the rim. Flag stays default-off; not worth further runs.
+   Also: the offline rigid-body harness holds a 3/12/9 hover LEVEL (1.6 deg; its PD
+   proxies are stiff position servos) where Gazebo tilts 34 deg, so it cannot judge
+   this family of questions at all -- Gazebo only.
+3. tools/attach_storyboard.py: the demo as one figure (plan view with ATTACH/WELD/
+   RESUME, tilt+height with hold bands, the newcomer's descent/weld/hand-out).
+4. /fleet/status banner in RViz (phase / hold / drones on load / tilt), red above
+   20 deg tilt. tools/preflight.py: mocap freshness, rod length from mocap vs the
+   controller's cable_len (nearest-rim-point assignment), parameter read-back from
+   the planner, telemetry/battery bars on --real, writes a flight-card section.
+
+################################################################################
 # SESSION 2026-09-10 (cont.)  --  RING PAYLOAD 0.6 kg; BUMPLESS TENSION HANDOVER
 ################################################################################
 

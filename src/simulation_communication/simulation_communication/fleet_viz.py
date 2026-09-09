@@ -25,11 +25,14 @@ Params:
     path_max_len    (int)   ring-buffer length for the payload track
 """
 
+import re
+
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import TransformStamped, PoseStamped
 from nav_msgs.msg import Path
 from visualization_msgs.msg import Marker, MarkerArray
+from std_msgs.msg import String
 from tf2_ros import TransformBroadcaster
 
 from interfaces.msg import MotionCaptureState
@@ -52,6 +55,9 @@ class FleetViz(Node):
         self.marker_pub = self.create_publisher(Marker, '/payload/marker', 1)
         self.id_pub = self.create_publisher(MarkerArray, '/fleet/id_markers', 1)
         self.path_pub = self.create_publisher(Path, '/payload/actual_path', 5)
+        self.status_marker_pub = self.create_publisher(Marker, '/fleet/status_marker', 1)
+        self._status = ''
+        self.create_subscription(String, '/fleet/status', self._status_cb, 1)
         self._payload_path = []
 
         for i in range(self.n):
@@ -100,8 +106,29 @@ class FleetViz(Node):
         m.color.r, m.color.g, m.color.b, m.color.a = 1.0, 1.0, 1.0, 1.0
         self.id_pub.publish(MarkerArray(markers=[m]))
 
+    def _status_cb(self, msg):
+        self._status = msg.data
+
     def _payload_cb(self, msg):
         self._send_tf(msg, 'payload_mocap')
+        # status banner above the payload, colour-coded by the tilt it reports
+        if self._status:
+            b = Marker()
+            b.header.frame_id = 'payload_mocap'
+            b.header.stamp = self.get_clock().now().to_msg()
+            b.ns = 'fleet_status'
+            b.id = 0
+            b.type = Marker.TEXT_VIEW_FACING
+            b.action = Marker.ADD
+            b.text = self._status
+            b.pose.position.z = 0.45
+            b.pose.orientation.w = 1.0
+            b.scale.z = 0.12
+            m_t = re.search(r'tilt (\d+)', self._status)
+            tilt = float(m_t.group(1)) if m_t else 0.0
+            warn = tilt > 20.0
+            b.color.r, b.color.g, b.color.b, b.color.a = (1.0, 0.3, 0.2, 1.0) if warn else (0.9, 1.0, 0.9, 1.0)
+            self.status_marker_pub.publish(b)
 
         # disc marker, anchored to the payload frame so it moves with it
         m = Marker()

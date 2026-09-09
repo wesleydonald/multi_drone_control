@@ -70,7 +70,7 @@ class DissipativeParams:
                  node_mass=0.5, substeps=10, elev_deg=45.0, k_slot=18.0,
                  balanced_tensions=False, T_handout=12.0,
                  ki_load=0.0, a_i_load_max=2.0, i_load_xyz=False,
-                 handout_tension_blend=True):
+                 handout_tension_blend=True, wrench_true_attitude=False):
         self.k_pay = k_pay          # N/m spring to the payload node (rest cable_len)
         self.k_anchor = k_anchor    # N/m spring to the anchor node (rest cone radius)
         self.k_ring = k_ring        # N/m spring to each ring neighbour (rest chord)
@@ -110,6 +110,12 @@ class DissipativeParams:
         # so every intermediate is level. Only the balanced+hand-out path is affected
         # (the config that had never worked); False reproduces the old step for an A/B.
         self.handout_tension_blend = bool(handout_tension_blend)
+        # EXPERIMENT (claude-experimentation, 2026-09-10): solve the balanced-tension
+        # wrench at the load's TRUE attitude (moment arms and cable directions from the
+        # measured roll/pitch) while the formation itself stays yaw-only. A three-drone
+        # hover at 3/12/9 o'clock hangs 34 deg tilted; modelling that as level mis-sizes
+        # every tension at the weld. Off = byte-identical to the flown behaviour.
+        self.wrench_true_attitude = bool(wrench_true_attitude)
         # COMMON-MODE LOAD TRIM (docs/design/velocity_loop.md §11). One integrator on the
         # measured load error, its output added IDENTICALLY to every attached node's a_ff,
         # so the fixed-kT / capped-feedforward thrust deficit (the steady sag) is trimmed
@@ -671,11 +677,12 @@ class DissipativeNetwork:
             R = self._frame_rot(load_quat)
             a_i, _, u = self._attach_frame(i, R, p_des)
             p_ref = a_i + self.cable_len_i[i] * u
+            R_w = quat_to_rot_np(load_quat) if self.p.wrench_true_attitude else R
             # `tensions` lets a caller that reads every node at one tick (horizon_references)
             # solve the fleet wrench once instead of once per drone: the solve is the whole
             # cost of a network tick (4 nodes x 21 horizon nodes x 2 lstsq = ~50 ms, half the
             # 10 Hz budget, measured as 0.5 s reference staleness at the R0166 handover).
-            Tsol = tensions if tensions is not None else self._solve_tensions(R, p_des, load_accel)
+            Tsol = tensions if tensions is not None else self._solve_tensions(R_w, p_des, load_accel)
             t_i = Tsol.get(
                 i, self.load_mass * self.g / max(self.n_attached(), 1))
             a_cable = taut_gate * (t_i / self.drone_mass) * (-u)
@@ -754,7 +761,9 @@ class DissipativeNetwork:
                     # error at zero anyway, but be explicit): integrate_trim=False.
                     self.step(p_des, load_quat, np.zeros(3), p_des, dt, load_accel=a_k,
                               integrate_trim=False)
-                Tk = (self._solve_tensions(self._frame_rot(load_quat), p_des, a_k)
+                Rk = (quat_to_rot_np(load_quat) if self.p.wrench_true_attitude
+                      else self._frame_rot(load_quat))
+                Tk = (self._solve_tensions(Rk, p_des, a_k)
                       if self.p.balanced_tensions else None)
                 for i in range(self.n):
                     out[i].append(self.reference(i, load_quat, p_des,

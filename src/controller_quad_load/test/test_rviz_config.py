@@ -113,3 +113,12 @@ def test_colours_are_stable_and_wrap():
     assert drone_colour(0) != drone_colour(1)
     assert drone_colour(0) == drone_colour(5)          # palette of 5, wraps
     assert drone_mesh_colour(0).count(' ') == 3        # "r g b a"
+
+
+def test_fleet_status_banner_is_shown():
+    """The operator banner (phase / hold / drones on load / tilt) from fleet_viz is in
+    every config, sim and real: the attach signature should be readable off RViz."""
+    from controller_quad_load.rviz_config import build_config
+    cfg = build_config(3)
+    assert '/fleet/status_marker' in cfg
+    assert 'fleet_status: true' in cfg

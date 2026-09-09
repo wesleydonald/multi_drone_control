@@ -140,6 +140,7 @@ def _args():
         # COMMON-MODE LOAD TRIM (docs/design/velocity_loop.md §11): z-only integrator on
         # the measured load error, added identically to every node's a_ff. 0.0 = off.
         DeclareLaunchArgument('diss_handout_tension_blend', default_value='true'),
+        DeclareLaunchArgument('diss_wrench_true_attitude', default_value='false'),
         DeclareLaunchArgument('attach_traj_hold_s', default_value='10.0'),   # hold until the weld, then this long
         DeclareLaunchArgument('handover_blend_s', default_value='3.0'),      # bumpless tension handover at the weld
         DeclareLaunchArgument('diss_ki_load', default_value='1.0'),
@@ -326,6 +327,7 @@ def launch_setup(context, *args, **kwargs):
                      'diss_substeps': i_('diss_substeps'),
                      'diss_elev_deg': f('diss_elev_deg'),
                      'diss_handout_tension_blend': b('diss_handout_tension_blend'),
+                     'diss_wrench_true_attitude': b('diss_wrench_true_attitude'),
                      'attach_traj_hold_s': f('attach_traj_hold_s'),
                      'handover_blend_s': f('handover_blend_s'),
                      'diss_ki_load': f('diss_ki_load'),

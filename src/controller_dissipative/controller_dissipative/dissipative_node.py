@@ -82,6 +82,8 @@ class DissipativeController(LoadPlanner):
             # SYMMETRIC HAND-OUT: ease the incumbents' tension solution with the
             # newcomer's hand-out scalar (see DissipativeParams). Balanced+hand-out only.
             handout_tension_blend=bool(p('diss_handout_tension_blend', True).value),
+            # EXPERIMENT: wrench solve at the load's true attitude (see DissipativeParams)
+            wrench_true_attitude=bool(p('diss_wrench_true_attitude', False).value),
             ki_load=float(p('diss_ki_load', 0.0).value),
             a_i_load_max=float(p('diss_a_i_load_max', 2.0).value),
             i_load_xyz=bool(p('diss_i_load_xyz', False).value),
@@ -166,6 +168,9 @@ class DissipativeController(LoadPlanner):
         self._last_ocp_ac = {}
         self._ho_ac = {}
         self._ho_t0 = None
+        # operator status line for RViz (fleet_viz renders it above the payload)
+        self.status_pub = self.create_publisher(String, '/fleet/status', 1)
+        self.create_timer(0.5, self._publish_status)
         # The hold starts when the APPROACH starts (the operator's ATTACH = /magnet/command
         # ON), not at the weld: a payload that keeps moving during the descent makes the
         # tip weld wherever it happens to be inside the trigger radius (R0178 welded at
@@ -780,6 +785,22 @@ class DissipativeController(LoadPlanner):
                                           load_accel=a_des)
                 self._publish_ref(drone, [node] * (self.N + 1))
         self._net_diag(load_pos, load_quat, p_des)
+
+    def _publish_status(self):
+        """One line the operator can read off RViz: phase, what is holding the trajectory,
+        how many drones carry the load, and the load tilt -- the attach signature that
+        used to be found in logs after the fact."""
+        tilt = float('nan')
+        if self.load_state is not None:
+            R = quat_to_rot_np(self.load_state[3:7])
+            tilt = float(np.degrees(np.arccos(np.clip(R[2, 2], -1.0, 1.0))))
+        hold = ''
+        if self._reconfig_hold_left > 0.0:
+            hold = (' | HOLD (approach)' if getattr(self, '_approach_hold_armed', False)
+                    else f' | HOLD {self._reconfig_hold_left:.0f}s')
+        n_on = self.net.n_attached() if self.phase == 'network' else self.n
+        self.status_pub.publish(String(
+            data=f'{self.phase.upper()}{hold} | {n_on} on load | tilt {tilt:.0f} deg'))
 
     def _publish_ref(self, i, nodes):
         """Wraps the parent's publisher: remembers the OCP's last cable feedforward per

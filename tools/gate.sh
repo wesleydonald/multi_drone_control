@@ -121,6 +121,12 @@ if [ "$QUICK" -eq 0 ]; then
     FAILED+=("sil_smoke (not run)")
   else
     SMOKE_LOG="$(mktemp)"
+    # The bench starts its clock before the planner's acados build finishes, so a stale
+    # solver cache (any edit to the planner sources, or a mass/inertia change) makes the
+    # smoke fail as "no lift". Build first; instant when the cache is fresh.
+    ./tools/clean_slate.sh >/dev/null 2>&1
+    python3 tools/prebuild_planner.py >/dev/null 2>&1 || echo "!! prebuild_planner failed (see tools/prebuild_planner.py)"
+    ./tools/clean_slate.sh >/dev/null 2>&1
     ./tools/sil_bench.py configs/sil/carry_hover_n3.yaml >"$SMOKE_LOG" 2>&1
     SMOKE_DIR="$(grep -m1 -oP '(?<=out:\s{4})\S+' "$SMOKE_LOG" || true)"
     grep -E "^\s+(ran|exit:)" "$SMOKE_LOG" || true

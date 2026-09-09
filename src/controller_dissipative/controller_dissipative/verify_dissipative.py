@@ -165,7 +165,7 @@ def run_closed_loop(detach_slot=None, detach_t=None, sim_t=16.0, detaches=None,
     return hist
 
 
-def run_attach(attach_t=6.0, sim_t=16.0, params=None, rho4=None, loiter4=None,
+def run_attach(attach_t=6.0, sim_t=16.0, params=None, rho4=None, loiter4=None, rho_all=None,
                handout=False, plant_kwargs=None):
     """Drive the network + plant closed loop through a mid-hover 3->4 ATTACH. Node 3 begins
     OFF the network -- a free drone that has flown its approach and is loitering just inboard
@@ -174,7 +174,8 @@ def run_attach(attach_t=6.0, sim_t=16.0, params=None, rho4=None, loiter4=None,
     engages. `rho4` overrides node 3's body attach point (an OFF-CENTRE weld); `loiter4`
     overrides where the newcomer hovers pre-weld. The payload is a rigid body here, so the
     logged `tilt` reveals whether the attach keeps the load LEVEL. Returns (hist, attach_tick)."""
-    rho = attach_points(N, ATTACH_RADIUS, ATTACH_Z)
+    rho = ([np.asarray(r, float) for r in rho_all] if rho_all is not None
+           else attach_points(N, ATTACH_RADIUS, ATTACH_Z))
     if rho4 is not None:
         rho[3] = np.asarray(rho4, float)
     net = DissipativeNetwork(N, rho, CABLE_LEN, DRONE_MASS, LOAD_MASS, G,

@@ -760,9 +760,16 @@ class LoadPlanner(Node):
                 nd = np.linalg.norm(d)
                 elevs.append(np.degrees(np.arcsin(np.clip(-d[2] / max(nd, 1e-6), -1, 1))))
             e = ' '.join(f"{x:.0f}" for x in elevs)
+            # planned load height at the END of the horizon and drone 0's planned height
+            # there: if these sit at the target while the measured load does not, the
+            # trackers are not executing the horizon; if they sit at the measured load,
+            # the OCP is not planning the move (claude-experimentation, 2026-09-10).
+            zN = float(X[2, -1])
+            d0N = float(self.solver.drone_kinematics(X[:, -1], 0)[0][2])
             self.get_logger().info(
                 f"[planner cable] L={self.cable_len:.2f} load_z={self.load_state[2]:.2f} "
-                f"z_tgt={z_tgt:.2f} ff={ff:.2f} tilt={tilt:.1f}deg elev=[{e}]  {s}")
+                f"z_tgt={z_tgt:.2f} zN={zN:.2f} d0N={d0N:.2f} ff={ff:.2f} tilt={tilt:.1f}deg "
+                f"elev=[{e}]  {s}")
 
 
 def main(args=None):
