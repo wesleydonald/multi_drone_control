@@ -168,7 +168,8 @@ def detachable_joint_block(idx):
       </plugin>"""
 
 
-def nominal_placement(n, cable_len, elev_deg, attach_radius, attach_z, payload_z):
+def nominal_placement(n, cable_len, elev_deg, attach_radius, attach_z, payload_z,
+                      azimuths_deg=None):
     """The default world-aligned layout: payload at the origin with zero yaw, drone
     i out along attach azimuth 2*pi*i/n at elev_deg, every drone facing world +x.
 
@@ -184,7 +185,7 @@ def nominal_placement(n, cable_len, elev_deg, attach_radius, attach_z, payload_z
     vert = cable_len * math.sin(phi)
     drones, attaches = [], []
     for i in range(n):
-        th = 2.0 * math.pi * i / n
+        th = (math.radians(azimuths_deg[i]) if azimuths_deg else 2.0 * math.pi * i / n)
         ax = attach_radius * math.cos(th)
         ay = attach_radius * math.sin(th)
         az = payload_z + attach_z
@@ -196,9 +197,9 @@ def nominal_placement(n, cable_len, elev_deg, attach_radius, attach_z, payload_z
 
 
 def build(n, cable_len, elev_deg, attach_radius, attach_z, payload_z,
-          detachable=False):
+          detachable=False, azimuths_deg=None):
     return build_world(n, nominal_placement(n, cable_len, elev_deg, attach_radius,
-                                            attach_z, payload_z),
+                                            attach_z, payload_z, azimuths_deg),
                        detachable=detachable)
 
 
@@ -327,6 +328,8 @@ def main():
     ap.add_argument('--attach-radius', type=float, default=PAYLOAD_RADIUS)
     ap.add_argument('--attach-z', type=float, default=0.025)
     ap.add_argument('--payload-z', type=float, default=0.025)
+    ap.add_argument('--azimuths', type=str, default='',
+                    help="attach azimuths deg, e.g. '0,90,180' (3/12/9 o'clock); '' = even")
     ap.add_argument('--out', type=str, default='three_rigid.sdf')
     ap.add_argument('--detachable', action='store_true',
                     help='make each cable releasable at the PAYLOAD end, keyed to '
@@ -348,8 +351,11 @@ def main():
         elev = math.degrees(math.asin(max(-1.0, min(1.0, need))))
         print(f'ground start: elev overridden to {elev:.2f} deg '
               f'(drone z = {DRONE_GROUND_Z}, payload z = {a.payload_z})')
+    az = [float(v) for v in a.azimuths.split(',') if v.strip()] or None
+    if az and len(az) != a.n:
+        ap.error(f'--azimuths has {len(az)} entries for --n {a.n}')
     sdf = build(a.n, a.cable_len, elev, a.attach_radius, a.attach_z, a.payload_z,
-                detachable=a.detachable)
+                detachable=a.detachable, azimuths_deg=az)
     with open(a.out, 'w') as f:
         f.write(sdf)
     print(f"wrote {a.out}: n={a.n} cable_len={a.cable_len} elev={a.elev}deg "

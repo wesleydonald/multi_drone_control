@@ -55,6 +55,7 @@ class Scenario:
 
     cable_len: float = 0.5
     attach_radius: float = 0.25
+    attach_azimuths_deg: str = ''      # '' = even ring; '0,90,180' = 3/12/9 o'clock
     attach_z: float = 0.025
     load_mass: float = 0.4
     drone_mass: float = 0.6
@@ -108,7 +109,7 @@ class Scenario:
         for k, v in (raw.get('geometry') or {}).items():
             if not hasattr(s, k):
                 raise ValueError(f"{path}: unknown geometry key '{k}'")
-            setattr(s, k, float(v))
+            setattr(s, k, str(v) if k == 'attach_azimuths_deg' else float(v))
         init = raw.get('initial') or {}
         s.load_z0 = float(init.get('load_z', s.load_z0))
         s.elev_deg = float(init.get('elev_deg', s.elev_deg))
@@ -144,6 +145,12 @@ class Scenario:
                 theirs = float(self.launch_args[arg])
                 if abs(theirs - mine) > 1e-9:
                     bad.append(f'{arg}: launch {theirs} vs plant {mine}')
+        if 'attach_azimuths_deg' in self.launch_args:
+            from controller_load_mpc.geometry import parse_azimuths_deg
+            la = parse_azimuths_deg(str(self.launch_args['attach_azimuths_deg']))
+            mine = parse_azimuths_deg(self.attach_azimuths_deg)
+            if la != mine:
+                bad.append(f"attach_azimuths_deg: launch {la} vs plant {mine}")
         if int(self.launch_args.get('num_drones', self.n_tethered)) != self.n_tethered:
             bad.append(f"num_drones: launch {self.launch_args['num_drones']} vs "
                        f'plant n_tethered {self.n_tethered}')
@@ -164,9 +171,9 @@ class Scenario:
         .attach_points(n_tethered, ...). Note it is built for the TETHERED count, not
         n_total: the newcomer does not get a nominal ring point, it welds where its
         magnet lands (see weld_point)."""
-        return [np.array([self.attach_radius * np.cos(2 * np.pi * k / self.n_tethered),
-                          self.attach_radius * np.sin(2 * np.pi * k / self.n_tethered),
-                          self.attach_z]) for k in range(self.n_tethered)]
+        from controller_load_mpc.geometry import attach_points
+        return attach_points(self.n_tethered, self.attach_radius, self.attach_z,
+                             self.attach_azimuths_deg or None)
 
     def initial_state(self):
         """(drone positions, load position) for a taut AIRBORNE start.

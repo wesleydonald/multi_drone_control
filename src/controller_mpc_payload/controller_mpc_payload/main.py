@@ -1,4 +1,5 @@
 import rclpy
+from std_msgs.msg import String
 import signal
 import sys
 import numpy as np
@@ -53,6 +54,13 @@ class Controller(Node):
         # approach drone's id when this controller flies one member of a larger fleet.
         drone_id = int(self.declare_parameter('drone_id', 0).value)
         self.cb = CallbackManager(self, drone_id=drone_id)
+        # ATTACH implies ARM. The fleet's one-shot ARM on /fleet/command is routinely
+        # published before this node has finished its acados build and subscribed, and
+        # the node then waits DISARMED for the whole run (2 of 4 attach runs on
+        # 2026-09-09 never welded for this reason). The operator cannot press ATTACH on
+        # an unarmed fleet, so a /magnet/command ON while disarmed is taken as the ARM
+        # this node missed.
+        self.create_subscription(String, '/magnet/command', self._attach_implies_arm, 10)
         # DEBUG: print the RESOLVED topic names (after launch remaps) so it is obvious what
         # this node listens to for ARM and pose, and where it emits ELRSCommand. If
         # cmd_in is not the topic your ARM button publishes to, the remap did not take.
@@ -506,6 +514,17 @@ class Controller(Node):
         self.pendulum_state = np.zeros(4)
         self.last_pendulum_update_time = None
 
+
+    def _attach_implies_arm(self, msg):
+        # ...and TAKEOFF: a node that missed ARM missed TAKEOFF too (R0195 sat on the
+        # ground for the whole run, armed but never lifting).
+        if msg.data.strip().upper() == 'ON' and self.current_pose is not None:
+            if not self.armed:
+                self.armed = True
+                self.get_logger().warn('[approach] armed by ATTACH (the fleet ARM was missed)')
+            if not self.takeoff_requested:
+                self.takeoff_requested = True
+                self.get_logger().warn('[approach] takeoff by ATTACH (the fleet TAKEOFF was missed)')
 
     def external_reference_callback(self, msg: MultiDOFJointTrajectory):
         """Convert a rolling MultiDOFJointTrajectory into the existing 17-row trajectory format."""

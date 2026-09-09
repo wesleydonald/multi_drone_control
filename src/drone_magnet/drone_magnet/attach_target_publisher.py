@@ -20,6 +20,19 @@ from geometry_msgs.msg import PoseStamped, TwistStamped
 from interfaces.msg import MotionCaptureState
 
 
+
+def _quat_rot(q, v):
+    """Rotate vector v by unit quaternion q = [w, x, y, z] (plain math, no tf)."""
+    w, x, y, z = q
+    n = (w * w + x * x + y * y + z * z) ** 0.5 or 1.0
+    w, x, y, z = w / n, x / n, y / n, z / n
+    vx, vy, vz = v
+    # v' = v + 2*w*(u x v) + 2*(u x (u x v)),  u = (x, y, z)
+    cx, cy, cz = y * vz - z * vy, z * vx - x * vz, x * vy - y * vx
+    ccx, ccy, ccz = y * cz - z * cy, z * cx - x * cz, x * cy - y * cx
+    return [vx + 2.0 * (w * cx + ccx), vy + 2.0 * (w * cy + ccy), vz + 2.0 * (w * cz + ccz)]
+
+
 class AttachTargetPublisher(Node):
     def __init__(self):
         super().__init__('attach_target_publisher')
@@ -52,9 +65,14 @@ class AttachTargetPublisher(Node):
         ps = PoseStamped()
         ps.header = msg.header
         ps.pose = msg.pose
-        ps.pose.position.x += self.x_offset
-        ps.pose.position.y += self.y_offset
-        ps.pose.position.z += self.z_offset
+        # The offsets name a point on the PAYLOAD (a rim magnet), so rotate them by the
+        # payload's attitude before adding: on a tilted disc a world-frame offset lands the
+        # tip short of the rim (R0176 welded at r=0.12 with the disc at 27 deg).
+        q = msg.pose.orientation
+        off = _quat_rot([q.w, q.x, q.y, q.z], [self.x_offset, self.y_offset, self.z_offset])
+        ps.pose.position.x += off[0]
+        ps.pose.position.y += off[1]
+        ps.pose.position.z += off[2]
         self.pose_pub.publish(ps)
 
         ts = TwistStamped()

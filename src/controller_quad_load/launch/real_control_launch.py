@@ -59,6 +59,9 @@ def _args():
         DeclareLaunchArgument('num_drones', default_value='2'),
         # MUST match the physical cables.
         DeclareLaunchArgument('cable_len', default_value='0.5'),
+        # where the rim attachments are (deg, load frame, sized by num_drones); '' = even
+        # ring. Clock face: 3 o'clock = 0, 12 = 90, 9 = 180, 6 = 270.
+        DeclareLaunchArgument('attach_azimuths_deg', default_value=''),
         # Where the cables attach on the payload, LOAD frame: a ring of radius
         # attach_radius at height attach_z above the CoM, azimuth 2*pi*i/n. On
         # hardware there is no SDF, so these two numbers are the planner's ONLY
@@ -177,6 +180,7 @@ def launch_setup(context, *args, **kwargs):
         package='controller_load_mpc', executable='planner', name='load_planner',
         parameters=[{'num_drones': n,
                      'cable_len': f('cable_len'),
+                     'attach_azimuths_deg': LaunchConfiguration('attach_azimuths_deg'),
                      'attach_radius': f('attach_radius'),
                      'attach_z': f('attach_z'),
                      'start_taut': b('start_taut'),

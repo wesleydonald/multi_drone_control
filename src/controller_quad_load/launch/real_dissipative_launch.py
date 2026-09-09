@@ -61,6 +61,9 @@ def _args():
         DeclareLaunchArgument('num_drones', default_value='2'),
         # MUST match the physical rig, not the sim SDF.
         DeclareLaunchArgument('cable_len', default_value='0.5'),
+        # where the rim attachments are (deg, load frame, sized by num_drones); '' = even
+        # ring. Clock face: 3 o'clock = 0, 12 = 90, 9 = 180, 6 = 270.
+        DeclareLaunchArgument('attach_azimuths_deg', default_value=''),
         DeclareLaunchArgument('load_mass', default_value='0.1'),
         # Real rig starts taut and level: no creep phase, no handover arc.
         DeclareLaunchArgument('start_taut', default_value='true'),
@@ -182,6 +185,7 @@ def launch_setup(context, *args, **kwargs):
         name='dissipative_controller',
         parameters=[{'num_drones': n,
                      'cable_len': f('cable_len'),
+                     'attach_azimuths_deg': LaunchConfiguration('attach_azimuths_deg'),
                      'start_taut': b('start_taut'),
                      'load_mass': f('load_mass'),
                      'target_z': f('target_z'),

@@ -41,6 +41,19 @@ from std_msgs.msg import Bool, Empty, String
 from interfaces.msg import ELRSCommand
 
 
+
+def _quat_rot(q, v):
+    """Rotate vector v by unit quaternion q = [w, x, y, z] (plain math, no tf)."""
+    w, x, y, z = q
+    n = (w * w + x * x + y * y + z * z) ** 0.5 or 1.0
+    w, x, y, z = w / n, x / n, y / n, z / n
+    vx, vy, vz = v
+    # v' = v + 2*w*(u x v) + 2*(u x (u x v)),  u = (x, y, z)
+    cx, cy, cz = y * vz - z * vy, z * vx - x * vz, x * vy - y * vx
+    ccx, ccy, ccz = y * cz - z * cy, z * cx - x * cz, x * cy - y * cx
+    return [vx + 2.0 * (w * cx + ccx), vy + 2.0 * (w * cy + ccy), vz + 2.0 * (w * cz + ccz)]
+
+
 class MagnetAttachmentManager(Node):
     def __init__(self) -> None:
         super().__init__('magnet_attachment_manager')
@@ -256,8 +269,13 @@ class MagnetAttachmentManager(Node):
             return
         now = time.time()
         new_pos = self._pose_to_position(pose)
-        new_pos[0] += self.object_x_offset          # off-centre weld reference (see __init__)
-        new_pos[1] += self.object_y_offset
+        # off-centre weld reference (see __init__), rotated into the payload's attitude so
+        # the trigger point is the physical rim magnet even when the disc is tilted
+        q = pose.orientation
+        off = _quat_rot([q.w, q.x, q.y, q.z], [self.object_x_offset, self.object_y_offset, 0.0])
+        new_pos[0] += off[0]
+        new_pos[1] += off[1]
+        new_pos[2] += off[2]
         self.prev_object_position = self.object_position
         self.object_position, self.object_velocity = self._update_position_and_velocity(
             new_pos, now, self.object_position, self.last_object_time

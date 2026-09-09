@@ -49,12 +49,12 @@
       <include>
         <uri>models/x3_drone1.sdf</uri>
         <name>x3_drone1</name>
-        <pose>-0.373747 0.647349 0.100000 0 0 0.000000</pose>
+        <pose>0.000000 0.747494 0.100000 0 0 0.000000</pose>
       </include>
       <include>
         <uri>models/x3_drone2.sdf</uri>
         <name>x3_drone2</name>
-        <pose>-0.373747 -0.647349 0.100000 0 0 0.000000</pose>
+        <pose>-0.747494 0.000000 0.100000 0 0 0.000000</pose>
       </include>
 
       <!-- ===== PAYLOAD ===== -->
@@ -117,7 +117,7 @@
       </joint>
       <!-- ===== TETHER 1: payload -> drone1 (rigid, len=0.5000, detach@payload) ===== -->
       <link name="stub_pay_1">
-        <pose>-0.125000 0.216506 0.050000 0 0 0</pose>
+        <pose>0.000000 0.250000 0.050000 0 0 0</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
@@ -132,7 +132,7 @@
       <model name="tether_1">
         <pose>0 0 0 0 0 0</pose>
         <link name="rod">
-        <pose>-0.249373 0.431927 0.075000 0 1.470629 2.094395</pose>
+        <pose>0.000000 0.498747 0.075000 0 1.470629 1.570796</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia>
@@ -154,7 +154,7 @@
       </joint>
       <!-- ===== TETHER 2: payload -> drone2 (rigid, len=0.5000, detach@payload) ===== -->
       <link name="stub_pay_2">
-        <pose>-0.125000 -0.216506 0.050000 0 0 0</pose>
+        <pose>-0.250000 0.000000 0.050000 0 0 0</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
@@ -169,7 +169,7 @@
       <model name="tether_2">
         <pose>0 0 0 0 0 0</pose>
         <link name="rod">
-        <pose>-0.249373 -0.431927 0.075000 0 1.470629 -2.094395</pose>
+        <pose>-0.498747 0.000000 0.075000 0 1.470629 3.141593</pose>
         <inertial>
           <mass>0.001</mass>
           <inertia>
@@ -228,17 +228,14 @@
          becomes the 4th load-bearing member of the dissipative fleet. It rests on the ground
          at spawn (magnet arm flops via its universal joint) and lifts on TAKEOFF.
 
-         SPAWNED ON THE GAP BISECTOR (-x), NOT +x. The tethers sit at azimuth 0/120/240 and
-         the gap-centre weld target is at azimuth 180 (attach_x_offset -0.25), so a +x spawn
-         put drone 0 (azimuth 0, ~0.60 m out on the 500 mm disc) directly on the straight line to the target.
-         Measured there (R0116): the approach closed to 0.137 m of drone 0 and STAYED there
-         for 7 s, bulldozing it 0.9 m in -x, so the payload tilted 0 to 25 deg BEFORE the
-         weld and the fleet aborted 1.2 s later. From -x the path descends the 120 deg gap
-         between drones 1 and 2, clearing both by ~0.40 m. -->
+         SPAWNED ON THE 6 O'CLOCK BISECTOR (-y). The tethers sit at 3/12/9 o'clock (azimuth
+         0/90/180 deg, Wesley's rig layout, 2026-09-09) and the newcomer welds at 6 o'clock
+         (attach_y_offset -0.25), so the free 180 deg gap is centred on -y and the approach
+         descends it clear of every tether. -->
     <include>
       <uri>models/x3_drone3_magnet_rod.sdf</uri>
       <name>x3_drone3</name>
-      <pose>-1.2 0.0 0.12 0 0 0</pose>
+      <pose>0.0 -1.2 0.12 0 0 0</pose>
     </include>
 
   </world>

@@ -1,0 +1,72 @@
+name: attach_circle_n3
+description: >
+  ATTACH DURING A TRAJECTORY (Wesley, 2026-09-09): three drones at 3/12/9 o'clock fly
+  a circle; the 4th drone rendezvouses with the MOVING payload, welds at 6 o'clock,
+  the load target is HELD for attach_traj_hold_s while the fleet reconfigures to the
+  square, and the circle then resumes with four drones. The demo of the contribution.
+
+  traj_speed 0.2 stretches the single eased sweep to T = 1.875*2*pi*0.5/0.2 ~ 29 s
+  (starts ~5 s after TAKEOFF), so MAGNET ON at t=20 gives a weld mid-sweep (~26-30 s
+  from the ~6 s approach), a 15 s hold, and ~10 s of four-drone sweep before it
+  completes. Canonical ball-jointed attachment (three_attach_rod.sdf).
+
+  Exploratory: forbid_abort false. Read the events.csv WELD time, the hold window in
+  the launch log, and the payload path in 07_trajectory_3d.
+
+world: three_attach_rod.sdf
+
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 1
+    start_taut: true
+    load_traj: circle
+    traj_speed: 0.2
+    traj_radius: 0.5
+    cable_len: 0.5
+    load_mass: 0.4
+    target_z: 0.6
+    attach_azimuths_deg: '0,90,180'
+    attach_central: false
+    diss_balanced_tensions: true
+    attach_handout: true
+    attach_t_handout: 12.0
+    attach_x_offset: 0.0
+    attach_y_offset: -0.25
+    attach_elev_deg: 65.0     # steep settle: the config that survived (R0192)
+    attach_traj_hold_s: 15.0
+    # the architecture that survives the newcomer's transit (attach_ring_45_rod_vel)
+    control_mode: velocity_after_handover
+    vel_ki: 0.0
+    diss_ki_load: 1.0
+    enable_obstacle_avoidance: false
+
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+    attach: true
+
+fleet:
+  num_drones: 3
+  n_total: 4
+
+timing:
+  duration_s: 85.0
+  stop_after_abort_s: 8.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 2.0
+
+events:
+  - {t: 3.0,  do: ARM}
+  - {t: 6.0,  do: TAKEOFF}
+  - {t: 20.0, do: MAGNET, arg: 'ON'}
+  - {t: 78.0, do: LAND}
+
+criteria:
+  require_weld: true
+  min_payload_z: 0.02
+  min_peak_payload_z: 0.35
+  forbid_abort: false

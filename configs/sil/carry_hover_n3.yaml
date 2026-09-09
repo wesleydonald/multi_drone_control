@@ -19,6 +19,7 @@ launch:
     start_taut: true
     load_traj: hover
     cable_len: 0.5
+    attach_azimuths_deg: even      # even ring: a 3-drone carry at 3/12/9 hangs tilted
     load_mass: 0.4
     target_z: 0.6
 

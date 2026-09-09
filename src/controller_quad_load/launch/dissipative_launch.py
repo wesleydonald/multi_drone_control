@@ -44,6 +44,9 @@ def _args():
     return [
         DeclareLaunchArgument('num_drones', default_value='4'),
         DeclareLaunchArgument('cable_len', default_value='0.5'),
+        # where the rim attachments are (deg, load frame, sized by num_drones); '' = even
+        # ring. Clock face: 3 o'clock = 0, 12 = 90, 9 = 180, 6 = 270.
+        DeclareLaunchArgument('attach_azimuths_deg', default_value=''),
         # true = SKIP THE CREEP PHASE: the planner hands straight to the coupled OCP
         # instead of arc-sweeping the rods up to handover_elev_deg. Takeoff is the
         # same LoadPlanner OCP in every launch, so this is the same skip-the-creep
@@ -178,6 +181,7 @@ def launch_setup(context, *args, **kwargs):
         package='controller_dissipative', executable='dissipative', name='dissipative_controller',
         parameters=[{'num_drones': n,
                      'cable_len': f('cable_len'),
+                     'attach_azimuths_deg': LaunchConfiguration('attach_azimuths_deg'),
                      'start_taut': b('start_taut'),
                      'load_mass': f('load_mass'),
                      'target_z': f('target_z'),

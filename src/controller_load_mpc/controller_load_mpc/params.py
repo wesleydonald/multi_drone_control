@@ -1,3 +1,4 @@
+from .geometry import parse_azimuths_deg
 """
 params.py
 ---------
@@ -17,6 +18,7 @@ CABLE_LEN     = 0.5            # matches every world in simulation_assets/ (rod
                                # tools/check_geometry.py, which is in the gate.
 ATTACH_RADIUS = 0.25   # rim of the 500 mm disc payload (2026-09-09)
 ATTACH_Z      = 0.025          # attach height above load CoG, load frame
+ATTACH_AZIMUTHS_DEG = ''       # '' = even ring; e.g. '0,90,180' = 3/12/9 o'clock (rig)
 LOAD_MASS     = 0.4
 # 500 mm x 50 mm solid disc about its CoG: Ixx = m(3r^2+h^2)/12, Izz = m r^2/2.
 # The planner's OCP bakes these into the compiled solver (planner_solver._ocp_signature)
@@ -42,6 +44,10 @@ class PlannerConfig:
         self.cable_len = float(p('cable_len', CABLE_LEN).value)
         self.attach_radius = float(p('attach_radius', ATTACH_RADIUS).value)
         self.attach_z = float(p('attach_z', ATTACH_Z).value)
+        # Where the rim attachments actually are (deg, load frame), or '' for the even
+        # ring. Sized by num_drones; the world SDF must agree (tools/check_geometry.py).
+        self.attach_azimuths = parse_azimuths_deg(
+            str(p('attach_azimuths_deg', ATTACH_AZIMUTHS_DEG).value))
         # Must match the payload mass in the world SDF: cable tension is sized
         # off this, so a mismatch scales every drone's tension FF.
         self.load_mass = float(p('load_mass', LOAD_MASS).value)

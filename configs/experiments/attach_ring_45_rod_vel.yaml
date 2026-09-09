@@ -1,8 +1,9 @@
-name: attach_ring_45_rod_step
+name: attach_ring_45_rod_vel
 description: >
-  A/B CONTROL for the symmetric hand-out (2026-09-09): identical to attach_ring_45_rod.yaml
-  except diss_handout_tension_blend false, i.e. the incumbents' balanced-tension solution
-  steps in one tick at the weld (the mechanism the weld ladder convicted).
+  VELOCITY ARM (2026-09-09): identical to attach_ring_45_rod.yaml plus control_mode
+  velocity_after_handover, vel_ki 0, diss_ki_load 1.0 -- the transit-end flip of the
+  newcomer under the MPC tracker (R0176/R0177, weld+10 s) is the drag-off-reference
+  failure the velocity loop does not have.
   WELD-VARIANT LADDER, step 1 of 3 (tools/make_weld_variants.py). Identical to
   attach_ring_45_gz except the magnet arm is modelled as a proper slender rod: mass at the
   MIDPOINT with m*L^2/12 = 2.083e-05, matching the tether rods. The shipped arm puts its
@@ -34,8 +35,10 @@ launch:
     attach_x_offset: 0.0
     attach_y_offset: -0.25      # 6 o'clock rim point
     attach_elev_deg: 45.0
-    # A/B CONTROL: the old one-tick incumbent tension step at the weld
-    diss_handout_tension_blend: false
+    # the P1 architecture: velocity loop after handover + common-mode load trim
+    control_mode: velocity_after_handover
+    vel_ki: 0.0
+    diss_ki_load: 1.0
     enable_obstacle_avoidance: false
     load_traj: hover
     cable_len: 0.5

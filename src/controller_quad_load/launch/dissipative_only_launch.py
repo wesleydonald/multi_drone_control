@@ -57,6 +57,9 @@ def _args():
         # Fleet size. MUST match the world SDF.
         DeclareLaunchArgument('num_drones', default_value='3'),
         DeclareLaunchArgument('cable_len', default_value='0.5'),
+        # where the rim attachments are (deg, load frame, sized by num_drones); '' = even
+        # ring. Clock face: 3 o'clock = 0, 12 = 90, 9 = 180, 6 = 270.
+        DeclareLaunchArgument('attach_azimuths_deg', default_value=''),
         # true = SKIP THE CREEP PHASE: the planner hands straight to the coupled OCP
         # on its first tick instead of arc-sweeping the rods up to handover_elev_deg.
         # The lift ramp and handover_settle_s still run; only the creep is removed.
@@ -227,6 +230,7 @@ def launch_setup(context, *args, **kwargs):
         name='dissipative_controller',
         parameters=[{'num_drones': n,
                      'cable_len': f('cable_len'),
+                     'attach_azimuths_deg': LaunchConfiguration('attach_azimuths_deg'),
                      'start_taut': b('start_taut'),
                      'load_mass': f('load_mass'),
                      'target_z': f('target_z'),

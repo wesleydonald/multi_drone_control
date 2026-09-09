@@ -143,7 +143,9 @@ class LoadPlanner(Node):
         # Attach ring on the payload body + nominal 45 deg cable directions (the
         # flatness s_i reference at hover, tilted per node by the load accel in
         # _yref_at). Both derived from the fleet size and attach geometry.
-        self.rho = attach_points(self.n, self.attach_radius, self.attach_z)
+        self.attach_azimuths = cfg.attach_azimuths
+        self.rho = attach_points(self.n, self.attach_radius, self.attach_z,
+                                 self.attach_azimuths)
         self._s_nom = nominal_cable_dirs(self.rho, 45.0)
 
         self.dyn = LoadCableDynamics(
@@ -364,7 +366,8 @@ class LoadPlanner(Node):
         neighbouring attach point as soon as the payload was placed past half a slot
         pitch, which made the first solve QP-infeasible (see the function's docstring)."""
         self.slot2drone = azimuth_slot_assignment(
-            self.drone_pos, self.load_state[0:2], self.n, load_yaw=self.psi0)
+            self.drone_pos, self.load_state[0:2], self.n, load_yaw=self.psi0,
+            slot_az=[np.arctan2(r[1], r[0]) for r in self.rho])
         self._slots_assigned = True
         self.get_logger().info(
             f'[planner] auto slot assignment (slot->drone): {self.slot2drone} '

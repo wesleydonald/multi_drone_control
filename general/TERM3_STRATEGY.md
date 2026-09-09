@@ -156,6 +156,19 @@ both arms; runs archived on the day the figures are made.
 > the newcomer sinks to the floor during its transit under the MPC tracker (settled tilt
 > ~25°). Next: attach under velocity mode + common-mode trim; fix the approach ARM race
 > (2 of 4 attach runs wasted). See `learning.txt` 2026-09-09 blocks.
+>
+> **LATER THE SAME NIGHT — first surviving rim reconfiguration (R0192).** Wesley's layout
+> (tethers at 3/12/9 o'clock, newcomer at 6) implemented end to end. With the newcomer's
+> tracker actually in velocity mode, the weld captured from the magnet tip, the approach
+> arming on ATTACH, and a 65° settle elevation: weld at 34 s, load 27° → 4° in 10 s, then
+> level (5–14°) at z 0.60 with all four drones airborne until LAND. The three-drone hover at
+> 3/12/9 hangs ~27° tilted by geometry (CoG on the 3–9 chord) — the fourth drone is what
+> makes level flight possible. n=1; repeats and the attach-during-circle run are next.
+>
+> **2026-09-10 early — attach DURING a circle, twice (R0196/R0197):** three drones fly the
+> circle, ATTACH holds the target, the newcomer welds the stationary payload at 6 o'clock,
+> the load levels 39° → 4° in 11 s, the trajectory resumes and the four-drone fleet completes
+> the circle at 4–15° tilt to LAND. Wesley's item 2, in sim. See `learning.txt`.
 
 
 The blocking faults are gone; the weld-mechanics question is answered; what remains is

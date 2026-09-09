@@ -7,6 +7,9 @@ ring / nominal cable directions built from the fleet size, and the azimuth-based
 drone<->slot assignment. All pure functions of their arguments (numpy only), so
 they carry no ROS or solver state and are trivially testable.
 """
+import itertools
+import re
+
 import numpy as np
 
 
@@ -54,12 +57,35 @@ def rot_align(a, b):
     return np.eye(3) + vx + vx @ vx * ((1.0 - c) / (s * s))
 
 
-def attach_points(n, attach_radius, attach_z):
-    """The n cable attach points on the payload body, a ring of radius attach_radius
-    at height attach_z above the load CoG, azimuth 2*pi*k/n (load frame)."""
-    return [np.array([attach_radius * np.cos(2 * np.pi * k / n),
-                      attach_radius * np.sin(2 * np.pi * k / n),
-                      attach_z]) for k in range(n)]
+def parse_azimuths_deg(spec):
+    """'0,90,180' / [0, 90, 180] / '' -> list of azimuths (deg) or None (= even ring).
+    The rig's rim magnets sit where they were placed, not on an even ring; this is how
+    a launch says where (clock face: 3 o'clock = 0, 12 = 90, 9 = 180, 6 = 270)."""
+    if spec is None:
+        return None
+    if isinstance(spec, str):
+        # 'even' / 'none' are explicit spellings of the even ring, for launch args and
+        # configs where an empty string cannot be passed (ros2 launch k:= with no value).
+        if spec.strip().lower() in ('even', 'none', 'auto'):
+            return None
+        spec = [t for t in re.split(r'[,\s]+', spec.strip()) if t]
+    vals = [float(v) for v in spec]
+    return vals or None
+
+
+def attach_points(n, attach_radius, attach_z, azimuths_deg=None):
+    """The n cable attach points on the payload body: a ring of radius attach_radius
+    at height attach_z above the load CoG. Azimuths (load frame) are the given list
+    (deg, must have n entries) or the even ring 2*pi*k/n."""
+    az = parse_azimuths_deg(azimuths_deg)
+    if az is not None:
+        if len(az) != n:
+            raise ValueError(f'attach azimuths {az} do not match n={n}')
+        th = [np.deg2rad(a) for a in az]
+    else:
+        th = [2 * np.pi * k / n for k in range(n)]
+    return [np.array([attach_radius * np.cos(t), attach_radius * np.sin(t), attach_z])
+            for t in th]
 
 
 def nominal_cable_dirs(rho, elev_deg=45.0):
@@ -76,7 +102,7 @@ def nominal_cable_dirs(rho, elev_deg=45.0):
     return dirs
 
 
-def azimuth_slot_assignment(drone_pos, load_xy, n, load_yaw=0.0):
+def azimuth_slot_assignment(drone_pos, load_xy, n, load_yaw=0.0, slot_az=None):
     """Match each physical drone to the nearest nominal azimuth slot around the load,
     so the drones can be placed in the ring in any order. The slots are equally
     spaced (slot i at 2*pi*i/n), so the optimal assignment is a cyclic rotation of
@@ -98,14 +124,21 @@ def azimuth_slot_assignment(drone_pos, load_xy, n, load_yaw=0.0):
                    for j in range(n)])
     az = (az + np.pi) % (2.0 * np.pi) - np.pi        # keep the sort well defined
     order = list(np.argsort(az))                       # drones CCW by azimuth
-    slot_az = np.array([2.0 * np.pi * i / n for i in range(n)])
+    if slot_az is None:
+        slot_az = np.array([2.0 * np.pi * i / n for i in range(n)])
+    slot_az = np.asarray(slot_az, float)
+
+    def _cost(perm):
+        return sum(((az[perm[i]] - slot_az[i] + np.pi) % (2.0 * np.pi) - np.pi) ** 2
+                   for i in range(n))
+    # Uneven slots (rim magnets placed by hand) break the cyclic-rotation shortcut, so
+    # for the fleet sizes we fly just try every permutation.
+    cands = (itertools.permutations(range(n)) if n <= 6
+             else [[order[(k + s) % n] for k in range(n)] for s in range(n)])
     best, best_cost = list(range(n)), np.inf
-    for shift in range(n):
-        perm = [order[(k + shift) % n] for k in range(n)]
-        cost = 0.0
-        for i in range(n):
-            d = (az[perm[i]] - slot_az[i] + np.pi) % (2.0 * np.pi) - np.pi
-            cost += d * d
-        if cost < best_cost:
-            best_cost, best = cost, perm
+    for perm in cands:
+        perm = list(perm)
+        c = _cost(perm)
+        if c < best_cost:
+            best_cost, best = c, perm
     return best

@@ -1,4 +1,164 @@
 ################################################################################
+# SESSION 2026-09-10 (cont.)  --  FASTER DEMO WORKS x2; HOLD IS NOW EVENT-DRIVEN
+################################################################################
+
+attach_circle_n3_fast (hand-out 8 s, post-weld hold 10 s, traj_speed 0.2): R0203 /
+  R0204 both clean -- weld ~29 s, level in ~8 s, resume at weld+10 s, four-drone
+  circle completed, LAND 68 s. ~50 s takeoff-to-finished-circle (was ~75).
+The first fast attempt (R0201/R0202, hold 10 s from ATTACH) failed because the
+  approach takes ~11 s and the timed hold expired mid-descent: the payload moved
+  again under the tip. The hold now lasts UNTIL THE WELD (capped 60 s) and the
+  timed hold starts at the weld. traj_speed 0.3 pre-weld lost the load once to a
+  1.14 s reference stall (R0202) -- planner staleness faults are rare (2 of ~45
+  runs today) but fatal; keep 0.2 until that is understood.
+three_attach_launch defaults now = the working demo: control_mode
+  velocity_after_handover, vel_ki 0, diss_ki_load 1.0, attach_elev_deg 65,
+  attach_traj_hold_s 10, enable_obstacle_avoidance false, tethers 3/12/9, weld
+  at 6 o'clock. A bare `three_attach_launch.py load_traj:=circle traj_speed:=0.2`
+  is the demo.
+
+################################################################################
+# SESSION 2026-09-10  --  WESLEY'S GUI RUN: THE ARGS DID NOT REACH THE NODES
+################################################################################
+
+Wesley flew the circle-attach demo in the GUI: newcomer "stays vertical for a while"
+  (= the 12 s hand-out, by design), then "tilts too far away from the payload and
+  falls" (= the MPC-mode transit-end collapse, R0189 signature), trajectory never
+  resumed (fleet had aborted). READ-BACK (results/logs/controller_quad_load/*_0626*/
+  params.json) shows control_mode 'mpc' on every tracker and diss_ki_load 0.0 --
+  the velocity-mode and trim args never reached the nodes (attach_elev_deg 65 and
+  the circle args did), i.e. the command line was cut. Install == source and
+  --show-args lists them, so the launch is fine. F9 lesson again: always read the
+  params back. Drone 3 hovered 13 cm under its reference (0.99 vs 1.12) -- the
+  no-integrator signature.
+DECISION: three_attach_launch now DEFAULTS to the architecture that survives the
+  attach (control_mode velocity_after_handover, vel_ki 0, diss_ki_load 1.0) and
+  enable_obstacle_avoidance false (every flown config). dissipative_only /
+  dissipative launches unchanged (Part A default decision still Wesley's).
+"Quite slow": configs/experiments/attach_circle_n3_fast.yaml (traj_speed 0.3,
+  hand-out 8 s, hold 10 s) under test.
+
+################################################################################
+# SESSION 2026-09-10 (early)  --  ATTACH DURING A CIRCLE: THE DEMO, IN SIM, TWICE
+################################################################################
+
+R0196 / R0197 (configs/experiments/attach_circle_n3.yaml, all-velocity trackers +
+  common-mode trim, tethers 3/12/9, newcomer 6 o'clock, settle 65 deg, hold 15 s):
+  three drones fly the circle (0.2 m/s, ~27 deg tilt by geometry) -> ATTACH at 20 s
+  freezes the load target -> approach welds the STATIONARY payload at the 6 o'clock
+  rim at ~30.5 s -> bumpless handover -> load levels 39 -> 4 deg in ~11 s -> trajectory
+  resumes at weld+15 s -> the FOUR-drone fleet completes the circle at 4-15 deg tilt,
+  z 0.60, drone 3 airborne at ~0.98 m throughout -> LAND at 78 s. n=2, both clean.
+  This is Wesley's item 2, end to end, in Gazebo.
+
+FIXES THAT GOT IT THERE (all today, each from a run): newcomer tracker in velocity
+  mode; weld point from the magnet tip; ATTACH implies ARM and TAKEOFF in the approach
+  node (R0193/R0195 armed but never took off); hold arms once per approach; bumpless
+  xy handover; settle elevation 65 (45 collapses at hand-out end, R0189/R0190/R0194).
+
+STILL TRUE: the 45 deg settle is a wall (newcomer collapses when its hand-out
+  completes); 65 deg is the working settle. Three drones at 3/12/9 hang ~25 deg
+  tilted before the 4th arrives (geometry). MPC-mode attach still sinks the newcomer.
+  n=2; no fig-8, no n=2/4 base, nothing on hardware.
+
+################################################################################
+# SESSION 2026-09-09 (very late)  --  FOUR PLUMBING BUGS, ONE WALL LEFT
+################################################################################
+
+FIXED (each found from a run, each with its number):
+  * The newcomer's tracker never received control_mode/vel_* (three_attach_launch
+    built controller_3 without them), so every "velocity" attach arm flew drone 3 on
+    the no-integrator MPC. Now all four trackers log STAGE V (R0189+).
+  * Approach ARM race: /magnet/command ON while disarmed now arms the approach node
+    ("ATTACH implies ARM", controller_mpc_payload/main.py). Welds 3/3 since (was
+    ~50 %: R0171/R0174/R0181/R0184/R0188 all wasted on it).
+  * Weld point captured from the magnet TIP (body minus arm length), not the body:
+    rho is now (0, -0.24) at the 6 o'clock rim (was r=0.03-0.07 on the tilted disc).
+  * Trajectory hold arms ONCE per approach: /magnet/command ON is republished ~10 Hz
+    (767 lines in R0183) and was restarting the hold timer forever.
+  * Bumpless xy handover: the OCP hover at 3/12/9 parks the load ~19 cm off its
+    target; handing the network the target instead of the load yanked the fleet at
+    the weld (R0191: tilt 24 -> 61 deg in 1.6 s). The datum now shifts to the
+    measured load at network entry. Unflown.
+
+THE WALL (R0189/R0190, hover attach, all-velocity, correct rim capture): the load
+  levels 27 -> 4 deg by weld+10 s, and drone 3 collapses at weld+12-15 s -- exactly
+  when the 12 s hand-out COMPLETES and the newcomer takes its full share at the 45
+  deg rim slot. Not the tracker (velocity mode made no difference), not the ring
+  (correct now): the END STATE at 45 deg is what the newcomer cannot hold. July
+  found 65 deg stable-but-tilted; with the 6 o'clock geometry supplying the level,
+  attach_ring_45_rod_vel_e65 is the arm being flown as this is written.
+
+ITEM 2 STATUS: the approach rendezvoused with a MOVING payload (R0178, 0.2 m/s) and
+  with a HELD one (R0183/R0191, hold from ATTACH); three drones at 27 deg tracked
+  the circle to ~2 cm before the weld. Still to see: a post-weld reconfiguration
+  that survives (the wall above) and the resumed four-drone circle.
+
+################################################################################
+# SESSION 2026-09-09 (end, cont.)  --  VELOCITY MODE SURVIVES THE ATTACH; TIP CAPTURE
+################################################################################
+
+ARMS at 3/12/9 + 6 o'clock (n=2 each, Gazebo):
+  * VELOCITY MODE + TRIM (attach_ring_45_rod_vel, R0179/R0180): NO abort, drone 3
+    airborne for the whole 70 s (z ~0.9), load held at z 0.60 by the trim. The
+    transit-end flip/sink of the MPC arms is GONE. Load settles ~32 deg tilted --
+    see the capture bug below, not the controller.
+  * STEEP SETTLE 60 deg (attach_ring_45_rod_e60, R0182): levels to 7-8 deg by
+    weld+10 s (the geometry CAN level it), then the MPC sink at the transit end
+    (d3 on the floor by weld+20). R0181 no weld (ARM race, again).
+CAPTURE BUG: _do_attach projected the DRONE BODY into the load frame; the body is
+  one arm-length (0.5 m) above the tip, so on a 27 deg-tilted disc the 6 o'clock
+  rim was captured as r = 0.03-0.07 (R0179/R0180), the wrench solve gave the
+  newcomer ~no moment arm, and the load could not be levelled. Now projects the
+  TIP (body minus arm length along gravity) for reserved newcomers.
+ALSO (item 2): the trajectory hold now starts at ATTACH (/magnet/command ON), not
+  at the weld, and weld_radius default 0.15 -> 0.08: R0178 welded a MOVING payload
+  at 11 o'clock r=0.13 because the tip lagged the target and the 15 cm trigger let
+  it. Three drones at 27 deg tracked the moving circle to ~2 cm before the weld.
+
+################################################################################
+# SESSION 2026-09-09 (end)  --  3/12/9 O'CLOCK TETHERS, 6 O'CLOCK NEWCOMER
+################################################################################
+
+WESLEY'S LAYOUT: three tethers at 9/12/3 o'clock, the 4th joins at 6. Implemented as
+  a per-drone attach-azimuth parameter threaded everywhere the ring was assumed
+  even: geometry.attach_points(..., azimuths_deg) + parse_azimuths_deg; the planner
+  (params attach_azimuths_deg, slot assignment now tries every permutation for
+  uneven slots); the network (rho from the planner; reserved placeholder = centre
+  of the largest gap); all six launches (arg attach_azimuths_deg, '' = even;
+  three_attach_launch defaults '0,90,180' + ring member at 6 o'clock:
+  attach_central false, diss_balanced_tensions true, attach_y_offset -0.25);
+  generate_rigid_world --azimuths; three_attach.sdf regenerated (approach spawns
+  on the 6 o'clock bisector); tools/check_geometry.py compares stub azimuths vs
+  the launch (in the gate); SIL scenario geometry key. 6 unit tests. Clock face:
+  3 o'clock = 0 deg, 12 = 90, 9 = 180, 6 = 270 (load frame).
+
+GAZEBO (R0176/R0177, attach_ring_45_rod, MPC trackers):
+  * PRE-WELD the three-drone hover hangs at a steady 26.6 deg tilt. Physics, not a
+    bug: with tethers at 3/12/9 the CoG sits ON the chord between 3 and 9, so the
+    12 o'clock cable cannot be balanced (metrics.cog_margin = 0). Expect the same
+    on the rig. The 4th at 6 o'clock is what makes a level carry possible.
+  * The weld kicks the tilt to ~48 deg, then the reconfiguration LEVELS the load
+    48 -> 39 -> 29 -> 18 -> 5 deg over 8 s while drone 3 transits out to its slot.
+    That is the contribution working, at the rim, for the first time.
+  * At weld+10 s (hand-out ~80 %) drone 3 is dragged outboard past its reference
+    and flips (drone tilt 69 deg) -> fleet abort. Same transit-end failure as the
+    0/120/240 runs; the reconfiguration is not the problem, the newcomer's tracker
+    through the last part of the transit is. Arms queued: velocity mode + trim
+    (attach_ring_45_rod_vel), steeper settle 60 deg (attach_ring_45_rod_e60).
+  * The weld landed at r=0.12, not the 0.25 rim: the target/trigger offsets were
+    WORLD-frame and the disc was tilted 27 deg. attach_target_publisher and the
+    magnet manager now rotate the offsets by the payload attitude (load-frame rim
+    point). Not yet flown.
+  * SIL attach_ring_45 at this layout capsizes (R0175) where Gazebo does not --
+    SIL sags the tilted three-drone hover to z 0.32 pre-weld; bench limit noted.
+
+ITEM 2 (attach during a circle) built: dissipative_node attach_traj_hold_s (freezes
+  the load target after a weld, resumes with the full fleet; reuses the resize hold),
+  launch arg on three_attach_launch, configs/experiments/attach_circle_n3.yaml
+  (traj_speed 0.2 -> a 29 s sweep, MAGNET ON at 20 s, 15 s hold). First run pending.
+
+################################################################################
 # SESSION 2026-09-09 (late night)  --  RING ATTACH ON THE DISC: SURVIVES, SINKS
 ################################################################################
 

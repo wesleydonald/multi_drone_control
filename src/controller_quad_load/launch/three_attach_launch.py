@@ -65,6 +65,9 @@ def _args():
         DeclareLaunchArgument('num_drones', default_value='3'),      # TETHERED fleet size
         DeclareLaunchArgument('reserved_attach', default_value='1'), # extra network capacity
         DeclareLaunchArgument('cable_len', default_value='0.5'),
+        # where the rim attachments are (deg, load frame, sized by num_drones); '' = even
+        # ring. Clock face: 3 o'clock = 0, 12 = 90, 9 = 180, 6 = 270.
+        DeclareLaunchArgument('attach_azimuths_deg', default_value='0,90,180'),
         # true = skip the ground-creep phase, as dissipative_launch / mpc_quad_load do.
         # Was false here alone, which is why the attach demo 'took ages to take off'
         # (Wesley, 2026-09-09). false restores the creep for a genuinely slack start.
@@ -104,10 +107,13 @@ def _args():
         DeclareLaunchArgument('terminal_vel_ref', default_value='false'),
         # Stage V (docs/design/velocity_loop.md): 'mpc' | 'velocity'. Defaults to the
         # verified MPC path, so this launch is byte-unchanged until it is thrown.
-        DeclareLaunchArgument('control_mode', default_value='mpc'),
+        # velocity_after_handover + vel_ki 0 + diss_ki_load 1.0 is the only architecture
+        # that has survived a rim attach (R0192, R0196/7); a GUI run on the MPC defaults
+        # collapsed the newcomer (2026-09-10). Attach launch defaults follow the result.
+        DeclareLaunchArgument('control_mode', default_value='velocity_after_handover'),
         DeclareLaunchArgument('vel_kp_pos', default_value='2.0'),
         DeclareLaunchArgument('vel_kv', default_value='4.0'),
-        DeclareLaunchArgument('vel_ki', default_value='1.0'),
+        DeclareLaunchArgument('vel_ki', default_value='0.0'),
         DeclareLaunchArgument('vel_k_att', default_value='8.0'),
         DeclareLaunchArgument('load_traj', default_value='hover'),
         DeclareLaunchArgument('traj_speed', default_value='0.6'),
@@ -134,7 +140,8 @@ def _args():
         # COMMON-MODE LOAD TRIM (docs/design/velocity_loop.md §11): z-only integrator on
         # the measured load error, added identically to every node's a_ff. 0.0 = off.
         DeclareLaunchArgument('diss_handout_tension_blend', default_value='true'),
-        DeclareLaunchArgument('diss_ki_load', default_value='0.0'),
+        DeclareLaunchArgument('attach_traj_hold_s', default_value='10.0'),   # hold until the weld, then this long
+        DeclareLaunchArgument('diss_ki_load', default_value='1.0'),
         DeclareLaunchArgument('diss_a_i_load_max', default_value='2.0'),
         DeclareLaunchArgument('net_land_z', default_value='0.06'),
         # UNEQUAL (moment-balanced) force sharing. Under EQUAL sharing a balanced 4-ring is
@@ -144,23 +151,26 @@ def _args():
         # then solves per-drone tensions from a 6-DOF wrench balance so an asymmetric attach set
         # holds the load LEVEL and the fleet visibly reconfigures (offline-gated, Test G). A
         # CENTRE weld still wants the central lifter -- its moment arm is ~0.
-        DeclareLaunchArgument('diss_balanced_tensions', default_value='false'),
+        DeclareLaunchArgument('diss_balanced_tensions', default_value='true'),
         # OFF-CENTRE weld point (world-frame metres) for the magnet tip -- see
         # attach_target_publisher. Non-zero => the newcomer welds at a ring point so
         # balanced-tension mode can reconfigure the fleet level. Must stay within the magnet
         # manager's weld_radius (0.15). Ignored/harmless with the central-lifter default.
         DeclareLaunchArgument('attach_x_offset', default_value='0.0'),
-        DeclareLaunchArgument('attach_y_offset', default_value='0.0'),
+        DeclareLaunchArgument('attach_y_offset', default_value='-0.25'),   # 6 o'clock rim point
         # NB this is the magnet's WELD-PROXIMITY threshold (how close the tip must
         # get before the joint is created) -- NOT the payload's attach-ring radius,
         # which is 0.25 (the disc rim) and comes from params.py ATTACH_RADIUS. They were both called
         # 'attach_radius' and the collision has caused real confusion before, so this
         # one is now weld_radius.
-        DeclareLaunchArgument('weld_radius', default_value='0.15'),
+        # 0.08 (was 0.15): on a 0.25 m rim a 15 cm trigger circle is the difference between
+        # the 6 o'clock magnet and near-centre (R0178). The descent target sits z_offset
+        # 0.05 above the face, so 0.08 still triggers on contact.
+        DeclareLaunchArgument('weld_radius', default_value='0.08'),
         # how the welded newcomer joins the network. true = CENTRAL lifter (tilt-free, stable,
         # the WORKING config for a centre weld). false = RING member (fleet reconfigures) --
         # only stable together with diss_balanced_tensions:=true and an OFF-CENTRE weld.
-        DeclareLaunchArgument('attach_central', default_value='true'),
+        DeclareLaunchArgument('attach_central', default_value='false'),   # ring member (rim magnets)
         # SOFT HAND-OUT (the robust ring-attach fix). A welded RING newcomer joins as a central
         # lifter and is handed out to its off-centre ring slot over attach_t_handout seconds --
         # every intermediate is near-equilibrium so the feedforward-trusting, no-integrator
@@ -177,7 +187,8 @@ def _args():
         # over its ring point (0.5 m arm + payload height), so a full 45deg rim target makes it
         # transit far out-and-down -- the transit that drove the runaway. A steeper target (e.g.
         # 65-70) keeps it near its weld pose (small transit, mostly-vertical pull) so it settles
-        # as a stable 4th ring member. Default = diss_elev_deg (unchanged 45deg rim).
+        # as a stable 4th ring member. Default 65 (2026-09-10): 45 collapses the newcomer
+        # when its hand-out completes (R0189/R0190/R0194); 65 flew clean (R0192, R0196+).
         DeclareLaunchArgument('attach_elev_deg', default_value='65.0'),
         # approach drone's mocap PoseArray index (drone body). With publish_model_pose=true on
         # the standalone x3_drone3, the model WORLD pose (frame_id=world, ~-1.2,0,0.12 and rising)
@@ -205,7 +216,7 @@ def _args():
         # routes around drones 0..n-1 (needs a SMALL safety radius, below, or it seals the
         # corridor to the payload and never welds). false = ignore the fleet and weld
         # directly (they are teammates, not obstacles) -- use this for a guaranteed attach.
-        DeclareLaunchArgument('enable_obstacle_avoidance', default_value='true'),
+        DeclareLaunchArgument('enable_obstacle_avoidance', default_value='false'),   # every flown config
         # Per-drone safety-sphere radius (m). The tethered drones sit ~0.38 m from the
         # payload, so keep this well under that (default 0.15) to leave a descent corridor
         # through the 120deg gap; raise it only if the approach clips a drone.
@@ -290,6 +301,7 @@ def launch_setup(context, *args, **kwargs):
                      'attach_elev_deg': f('attach_elev_deg'),
                      'diss_balanced_tensions': b('diss_balanced_tensions'),
                      'cable_len': f('cable_len'),
+                     'attach_azimuths_deg': LaunchConfiguration('attach_azimuths_deg'),
                      'start_taut': b('start_taut'),
                      'load_mass': f('load_mass'),
                      'target_z': f('target_z'),
@@ -313,6 +325,7 @@ def launch_setup(context, *args, **kwargs):
                      'diss_substeps': i_('diss_substeps'),
                      'diss_elev_deg': f('diss_elev_deg'),
                      'diss_handout_tension_blend': b('diss_handout_tension_blend'),
+                     'attach_traj_hold_s': f('attach_traj_hold_s'),
                      'diss_ki_load': f('diss_ki_load'),
                      'diss_a_i_load_max': f('diss_a_i_load_max'),
                      'net_land_z': f('net_land_z')}],
@@ -409,6 +422,15 @@ def launch_setup(context, *args, **kwargs):
     nodes.append(Node(
         package='controller_quad_load', executable='controller', name=f'controller_{d}',
         parameters=[{'drone_id': d,
+                     # the newcomer's tracker follows the SAME control architecture as the
+                     # tethered ones. It did not (2026-09-09): control_mode never reached
+                     # this node, so every "velocity" attach arm flew the newcomer on the
+                     # no-integrator MPC and it hovered 13 cm under its reference (R0185).
+                     'control_mode': LaunchConfiguration('control_mode'),
+                     'vel_kp_pos': f('vel_kp_pos'),
+                     'vel_kv': f('vel_kv'),
+                     'vel_ki': f('vel_ki'),
+                     'vel_k_att': f('vel_k_att'),
                      'cable_ff_scale': f('cable_ff_scale'),
                      'attitude_ff': b('attitude_ff'),
                      'cable_source': LaunchConfiguration('cable_source'),

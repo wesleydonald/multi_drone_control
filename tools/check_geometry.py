@@ -83,14 +83,18 @@ def world_geometry(sdf_path):
                         g[key] = float(el.text)
 
     # Attach ring: stub_pay_N links carry the body-frame attach points
-    radii, zs = [], []
+    radii, zs, xs, ys = [], [], [], []
     for m in _iter_models(world):
         for link in m.findall('link'):
             if (link.get('name') or '').startswith('stub_pay_'):
                 x, y, z = _pose(link)[:3]
                 radii.append(math.hypot(x, y))
                 zs.append(z)
+                xs.append(x)
+                ys.append(y)
     if radii:
+        g['attach_azimuths'] = sorted(round(math.degrees(math.atan2(y, x)) % 360.0, 1)
+                                      for x, y in zip(xs, ys))
         g['attach_radius'] = sum(radii) / len(radii)
         g['attach_z'] = sum(zs) / len(zs) - payload_z   # above the load CoG
         g['attach_points'] = len(radii)
@@ -216,6 +220,21 @@ def main():
         flag = '** MISMATCH **' if abs(cv - wv) > tol else 'ok'
         bad += flag != 'ok'
         print(f"   {k:16s} world={wv:<9.4f} {src:>9s}={cv:<9.4f} {flag}")
+
+    # attach azimuths: the launch's attach_azimuths_deg ('' = even ring) vs the stubs
+    if 'attach_azimuths' in g:
+        spec = d.get('attach_azimuths_deg')
+        n_w = len(g['attach_azimuths'])
+        if spec:
+            want = sorted(round(float(v) % 360.0, 1) for v in str(spec).split(',') if v.strip())
+        else:
+            want = sorted(round(360.0 * k / n_w, 1) for k in range(n_w))
+        have = g['attach_azimuths']
+        ok = (len(want) == len(have)
+              and all(abs(((a - b + 180) % 360) - 180) <= 1.0 for a, b in zip(want, have)))
+        flag = 'ok' if ok else '** MISMATCH **'
+        bad += flag != 'ok'
+        print(f"   {'attach_azimuths':16s} world={have} launch={want} {flag}")
 
     for k in INFO_ONLY:
         if k in g:

@@ -37,8 +37,8 @@ launch:
     diss_balanced_tensions: true
     attach_handout: true
     attach_t_handout: 12.0
-    attach_x_offset: -0.25
-    attach_y_offset: 0.0
+    attach_x_offset: 0.0
+    attach_y_offset: -0.25      # 6 o'clock rim point
     attach_elev_deg: 45.0
     enable_obstacle_avoidance: false
     load_traj: hover
