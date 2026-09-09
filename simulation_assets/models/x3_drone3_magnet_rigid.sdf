@@ -1,0 +1,421 @@
+<sdf version="1.6">
+    <model name="x3_drone3">
+        <pose>0 0 0.0 0 0 0</pose>
+        
+        <link name="base_link">
+            <enable_wind>true</enable_wind>
+            <pose frame="">0 0 0 0 0 0</pose>
+            <inertial>
+                <pose frame="">0.0 0.0 0 0 -0 0</pose>
+                <mass>0.6</mass>
+                <inertia>
+                    <ixx>0.001744744189</ixx>
+                    <ixy>0</ixy>
+                    <ixz>0</ixz>
+                    <iyy>0.001400539551</iyy>
+                    <iyz>0</iyz>
+                    <izz>0.002782410904</izz>
+                </inertia>
+            </inertial>
+            <collision name="base_link_inertia_collision">
+                <pose frame="">0 0 0 0 0.0 0</pose>
+                <geometry>
+                    <box>
+                        <size>0.12 0.05 0.2</size>
+                    </box>
+                </geometry>
+            </collision>
+            <!-- Wide, low landing skid so the FREE approach drone rests flat & stable on the
+                 ground (it has no tether to hold it up, unlike the 3 lifting drones). Contact
+                 only -- it adds no mass/inertia, so it does not affect flight. -->
+            <collision name="landing_skid_collision">
+                <pose frame="">0 0 -0.1 0 0 0</pose>
+                <geometry>
+                    <box>
+                        <size>0.3 0.3 0.04</size>
+                    </box>
+                </geometry>
+            </collision>
+
+            <visual name="base_link_inertia_visual">
+                <pose frame="">0 0 -0.025 0 0.0 1.57</pose>
+                <geometry>
+                    <mesh>
+                        <uri>file://tbs_sourceone_v5.stl</uri>
+                        <scale>0.001 0.001 0.001</scale>
+                    </mesh>
+                </geometry>
+                <material>
+                    <ambient>0.15 0.15 0.15 1.0</ambient>
+                    <diffuse>0.15 0.15 0.15 1.0</diffuse>
+                    <specular>0.1 0.1 0.1 1.0</specular>
+                </material>
+            </visual>
+            <sensor name="x3_drone3_imu_sensor" type="imu">
+                <always_on>true</always_on>
+                <update_rate>1000</update_rate>
+                <pose>0 0 0 0 0 0</pose>
+                <topic>x3_drone3/imu</topic>
+                <imu>
+                    <angular_velocity>
+                        <x>true</x>
+                        <y>true</y>
+                        <z>true</z>
+                    </angular_velocity>
+                    <linear_acceleration>
+                        <x>true</x>
+                        <y>true</y>
+                        <z>true</z>
+                    </linear_acceleration>
+                </imu>
+            </sensor>
+        </link>
+
+        <link name="rotor_0">
+            <pose frame="base_link">-0.0765 -0.083 0 0 0 0</pose>
+            <inertial>
+                <pose frame="">0 0 0 0 -0 0</pose>
+                <mass>0.01</mass>
+                <inertia>
+                    <ixx>9.75e-08</ixx>
+                    <ixy>0</ixy>
+                    <ixz>0</ixz>
+                    <iyy>4.17041e-06</iyy>
+                    <iyz>0</iyz>
+                    <izz>4.26041e-06</izz>
+                </inertia>
+            </inertial>
+        
+            <visual name="rotor_0_visual">
+                <pose frame="">0 0 0 0 -0 0</pose>
+                <geometry>
+                    <mesh>
+                        <scale>0.05 0.05 0.05</scale>
+                        <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/x3 uav/4/files/meshes/propeller_ccw.dae</uri>
+                    </mesh>
+                </geometry>
+                <material>
+                    <ambient>0 0 1 1</ambient>
+                    <diffuse>0 0 1 1</diffuse>
+                </material>
+            </visual>
+            <gravity>1</gravity>
+            <velocity_decay/>
+        </link>
+        <joint name="rotor_0_joint" type="revolute">
+            <child>rotor_0</child>
+            <parent>base_link</parent>
+            <axis>
+                <xyz>0 0 1</xyz>
+                <limit>
+                    <lower>-1e+16</lower>
+                    <upper>1e+16</upper>
+                </limit>
+                <dynamics>
+                    <spring_reference>0</spring_reference>
+                    <spring_stiffness>0</spring_stiffness>
+                </dynamics>
+                <use_parent_model_frame>1</use_parent_model_frame>
+            </axis>
+        </joint>
+
+        <link name="rotor_1">
+            <pose frame="base_link">0.0765 -0.083 0 0 0 0</pose>
+            <inertial>
+                <pose frame="">0 0 0 0 -0 0</pose>
+                <mass>0.01</mass>
+                <inertia>
+                    <ixx>9.75e-08</ixx>
+                    <ixy>0</ixy>
+                    <ixz>0</ixz>
+                    <iyy>4.17041e-06</iyy>
+                    <iyz>0</iyz>
+                    <izz>4.26041e-06</izz>
+                </inertia>
+            </inertial>
+           
+            <visual name="rotor_1_visual">
+                <pose frame="">0 0 0 0 -0 0</pose>
+                <geometry>
+                    <mesh>
+                        <scale>0.05 0.05 0.05</scale>
+                        <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/x3 uav/4/files/meshes/propeller_ccw.dae</uri>
+                    </mesh>
+                </geometry>
+                <material>
+                    <ambient>1 0 0 1</ambient>
+                    <diffuse>1 0 0 1</diffuse>
+                </material>
+            </visual>
+            <gravity>1</gravity>
+            <velocity_decay/>
+        </link>
+        <joint name="rotor_1_joint" type="revolute">
+            <child>rotor_1</child>
+            <parent>base_link</parent>
+            <axis>
+                <xyz>0 0 1</xyz>
+                <limit>
+                    <lower>-1e+16</lower>
+                    <upper>1e+16</upper>
+                </limit>
+                <dynamics>
+                    <spring_reference>0</spring_reference>
+                    <spring_stiffness>0</spring_stiffness>
+                </dynamics>
+                <use_parent_model_frame>1</use_parent_model_frame>
+            </axis>
+        </joint>
+
+        <link name="rotor_2">
+            <pose frame="base_link">-0.0765 0.083 0 0 0 0</pose>
+            <inertial>
+                <pose frame="">0 0 0 0 -0 0</pose>
+                <mass>0.01</mass>
+                <inertia>
+                    <ixx>9.75e-08</ixx>
+                    <ixy>0</ixy>
+                    <ixz>0</ixz>
+                    <iyy>4.17041e-06</iyy>
+                    <iyz>0</iyz>
+                    <izz>4.26041e-06</izz>
+                </inertia>
+            </inertial>
+            
+            <visual name="rotor_2_visual">
+                <pose frame="">0 0 0 0 -0 0</pose>
+                <geometry>
+                    <mesh>
+                        <scale>0.05 0.05 0.05</scale>
+                        <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/x3 uav/4/files/meshes/propeller_cw.dae</uri>
+                    </mesh>
+                </geometry>
+                <material>
+                    <ambient>0 0 1 1</ambient>
+                    <diffuse>0 0 1 1</diffuse>
+                </material>
+            </visual>
+            <gravity>1</gravity>
+            <velocity_decay/>
+        </link>
+        <joint name="rotor_2_joint" type="revolute">
+            <child>rotor_2</child>
+            <parent>base_link</parent>
+            <axis>
+                <xyz>0 0 1</xyz>
+                <limit>
+                    <lower>-1e+16</lower>
+                    <upper>1e+16</upper>
+                </limit>
+                <dynamics>
+                    <spring_reference>0</spring_reference>
+                    <spring_stiffness>0</spring_stiffness>
+                </dynamics>
+                <use_parent_model_frame>1</use_parent_model_frame>
+            </axis>
+        </joint>
+
+        <link name="rotor_3">
+            <pose frame="base_link">0.0765 0.083 0 0 0 0</pose>
+            <inertial>
+                <pose frame="">0 0 0 0 -0 0</pose>
+                <mass>0.01</mass>
+                <inertia>
+                    <ixx>9.75e-08</ixx>
+                    <ixy>0</ixy>
+                    <ixz>0</ixz>
+                    <iyy>4.17041e-06</iyy>
+                    <iyz>0</iyz>
+                    <izz>4.26041e-06</izz>
+                </inertia>
+            </inertial>
+            
+            <visual name="rotor_3_visual">
+                <pose frame="">0 0 0 0 -0 0</pose>
+                <geometry>
+                    <mesh>
+                        <scale>0.05 0.05 0.05</scale>
+                        <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/x3 uav/4/files/meshes/propeller_cw.dae</uri>
+                    </mesh>
+                </geometry>
+                <material>
+                    <ambient>1 0 0 1</ambient>
+                    <diffuse>1 0 0 1</diffuse>
+                </material>
+            </visual>
+            <gravity>1</gravity>
+            <velocity_decay/>
+        </link>
+        <joint name="rotor_3_joint" type="revolute">
+            <child>rotor_3</child>
+            <parent>base_link</parent>
+            <axis>
+                <xyz>0 0 1</xyz>
+                <limit>
+                    <lower>-1e+16</lower>
+                    <upper>1e+16</upper>
+                </limit>
+                <dynamics>
+                    <spring_reference>0</spring_reference>
+                    <spring_stiffness>0</spring_stiffness>
+                </dynamics>
+                <use_parent_model_frame>1</use_parent_model_frame>
+            </axis>
+        </joint>
+        <plugin
+            filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+            <robotNamespace>x3_drone3</robotNamespace>
+            <jointName>rotor_0_joint</jointName>
+            <linkName>rotor_0</linkName>
+            <turningDirection>cw</turningDirection>
+            <timeConstantUp>0.02</timeConstantUp>
+            <timeConstantDown>0.02</timeConstantDown>
+            <maxRotVelocity>4631.0</maxRotVelocity>
+            <motorConstant>0.62e-06</motorConstant>
+            <momentConstant>0.2</momentConstant>
+            <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+            <actuator_number>0</actuator_number>
+            <rotorDragCoefficient>0.0</rotorDragCoefficient>
+            <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+            <motorSpeedPubTopic>motor_speed/0</motorSpeedPubTopic>
+            <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+            <motorType>velocity</motorType>
+        </plugin>
+        <plugin
+            filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+            <robotNamespace>x3_drone3</robotNamespace>
+            <jointName>rotor_1_joint</jointName>
+            <linkName>rotor_1</linkName>
+            <turningDirection>ccw</turningDirection>
+            <timeConstantUp>0.02</timeConstantUp>
+            <timeConstantDown>0.02</timeConstantDown>
+            <maxRotVelocity>4631.0</maxRotVelocity>
+            <motorConstant>0.62e-06</motorConstant>
+            <momentConstant>0.2</momentConstant>
+            <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+            <actuator_number>1</actuator_number>
+            <rotorDragCoefficient>0.0</rotorDragCoefficient>
+            <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+            <motorSpeedPubTopic>motor_speed/1</motorSpeedPubTopic>
+            <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+            <motorType>velocity</motorType>
+        </plugin>
+        <plugin
+            filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+            <robotNamespace>x3_drone3</robotNamespace>
+            <jointName>rotor_2_joint</jointName>
+            <linkName>rotor_2</linkName>
+            <turningDirection>ccw</turningDirection>
+            <timeConstantUp>0.02</timeConstantUp>
+            <timeConstantDown>0.02</timeConstantDown>
+            <maxRotVelocity>4631.0</maxRotVelocity>
+            <motorConstant>0.62e-06</motorConstant>
+            <momentConstant>0.2</momentConstant>
+            <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+            <actuator_number>2</actuator_number>
+            <rotorDragCoefficient>0.0</rotorDragCoefficient>
+            <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+            <motorSpeedPubTopic>motor_speed/2</motorSpeedPubTopic>
+            <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+            <motorType>velocity</motorType>
+        </plugin>
+        <plugin
+            filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+            <robotNamespace>x3_drone3</robotNamespace>
+            <jointName>rotor_3_joint</jointName>
+            <linkName>rotor_3</linkName>
+            <turningDirection>cw</turningDirection>
+            <timeConstantUp>0.02</timeConstantUp>
+            <timeConstantDown>0.02</timeConstantDown>
+            <maxRotVelocity>4631.0</maxRotVelocity>
+            <motorConstant>0.62e-06</motorConstant>
+            <momentConstant>0.2</momentConstant>
+            <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+            <actuator_number>3</actuator_number>
+            <rotorDragCoefficient>0.0</rotorDragCoefficient>
+            <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+            <motorSpeedPubTopic>motor_speed/3</motorSpeedPubTopic>
+            <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+            <motorType>velocity</motorType>
+        </plugin>
+
+        <plugin filename="libignition-gazebo-imu-system.so"
+            name="ignition::gazebo::systems::Imu">
+        </plugin>
+
+        <!-- ===== MAGNET ARM (variant 'rigid', GENERATED by tools/make_weld_variants.py)
+             'rod' with arm_to_magnet_tip FIXED. The tip is already welded rigidly to the
+             payload, so making this joint fixed too means the arm transmits a MOMENT into
+             the load: the moment-transmitting attachment sub-claim N3 describes, and
+             which no shipped world currently contains. Expected to be the hard case. ===== -->
+        <link name="magnet_arm">
+            <pose relative_to="base_link">0 0 0.01 0 0 0</pose>
+            <inertial>
+                <pose>0 0 -0.2500 0 0 0</pose>
+                <mass>0.001</mass>
+                <inertia><ixx>2.0833e-05</ixx><ixy>0</ixy><ixz>0</ixz><iyy>2.0833e-05</iyy><iyz>0</iyz><izz>8.0000e-09</izz></inertia>
+            </inertial>
+            <visual name="magnet_arm_visual">
+                <pose>0 0 -0.2500 0 0 0</pose>
+                <geometry><cylinder><radius>0.002</radius><length>0.5000</length></cylinder></geometry>
+                <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.4 0.4 0.4 1</diffuse></material>
+            </visual>
+        </link>
+        <link name="magnet_tip_link">
+            <pose relative_to="magnet_arm">0 0 -0.5000 0 0 0</pose>
+            <inertial>
+                <mass>0.002</mass>
+                <inertia><ixx>1e-6</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-6</iyy><iyz>0</iyz><izz>1e-6</izz></inertia>
+            </inertial>
+            <visual name="magnet_tip_visual">
+                <geometry><sphere><radius>0.025</radius></sphere></geometry>
+                <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse><specular>0.2 0.2 0.2 1</specular></material>
+            </visual>
+        </link>
+        <joint name="arm_to_magnet_tip" type="fixed">
+            <parent>magnet_arm</parent>
+            <child>magnet_tip_link</child>
+        </joint>
+        <joint name="base_to_magnet_arm" type="ball">
+            <parent>base_link</parent>
+            <child>magnet_arm</child>
+            <pose>0 0 -0.05 0 0 0</pose>
+            <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
+            <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+        </joint>
+        <!-- Publish this drone's poses so the mocap emulator can read its state (standalone
+             model -> topic /model/x3_drone3/pose). CRITICAL: this is a TOP-LEVEL model with no
+             world-fixed anchor, so publish_link_pose alone gives link poses RELATIVE to the
+             model frame (base_link frozen at origin, magnet tip a near-constant offset) -- the
+             MPC would see a frozen pose and command max thrust forever (straight up, out of the
+             map). publish_model_pose adds the model's WORLD pose so the controller has a real,
+             moving body pose. VERIFIED PoseArray order (`gz topic -e -t /model/x3_drone3/pose`):
+             [0]=magnet_tip_link, [1..4]=rotor_3..0, [5]=magnet_arm, [6]=base_link (all
+             model-relative/frozen), [7 / -1]=model WORLD pose (frame_id=world) = the drone body.
+             So consumers use index -1 for the body and 0 for the (relative) magnet tip. -->
+        <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+            <publish_model_pose>true</publish_model_pose>
+            <publish_link_pose>true</publish_link_pose>
+            <publish_nested_model_pose>false</publish_nested_model_pose>
+            <use_pose_vector_msg>true</use_pose_vector_msg>
+            <update_frequency>500</update_frequency>
+        </plugin>
+
+        <!-- MAGNET WELD: on /payload/attach, rigidly join the magnet tip to the shared
+             lift_system payload (the same body the 3 tethered drones lift). This makes the
+             approach drone the 4th load-bearing member. child_model uses the scoped nested
+             name -- VERIFY IN SIM that gz-sim resolves it (see gz topic notes in launch). -->
+        <plugin filename="gz-sim-detachable-joint-system" name="gz::sim::systems::DetachableJoint">
+            <parent_link>magnet_tip_link</parent_link>
+            <child_model>lift_system::payload</child_model>
+            <child_link>body</child_link>
+            <detach_topic>/payload/detach</detach_topic>
+            <attach_topic>/payload/attach</attach_topic>
+            <output_topic>/payload/detachable_joint_state</output_topic>
+        </plugin>
+    </model>
+</sdf>

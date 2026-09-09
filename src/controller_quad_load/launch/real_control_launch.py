@@ -59,6 +59,13 @@ def _args():
         DeclareLaunchArgument('num_drones', default_value='2'),
         # MUST match the physical cables.
         DeclareLaunchArgument('cable_len', default_value='0.5'),
+        # Where the cables attach on the payload, LOAD frame: a ring of radius
+        # attach_radius at height attach_z above the CoM, azimuth 2*pi*i/n. On
+        # hardware there is no SDF, so these two numbers are the planner's ONLY
+        # description of the payload -- measure them. LOAD_INERTIA in
+        # planner_node.py does not scale with attach_radius either.
+        DeclareLaunchArgument('attach_radius', default_value='0.08'),
+        DeclareLaunchArgument('attach_z', default_value='0.025'),
         # Physical payload mass (kg). LOAD_INERTIA in planner_node.py is a
         # hardcoded constant and does NOT scale with this.
         DeclareLaunchArgument('load_mass', default_value='0.1'),
@@ -170,6 +177,8 @@ def launch_setup(context, *args, **kwargs):
         package='controller_load_mpc', executable='planner', name='load_planner',
         parameters=[{'num_drones': n,
                      'cable_len': f('cable_len'),
+                     'attach_radius': f('attach_radius'),
+                     'attach_z': f('attach_z'),
                      'start_taut': b('start_taut'),
                      'load_mass': f('load_mass'),
                      'target_z': f('target_z'),
