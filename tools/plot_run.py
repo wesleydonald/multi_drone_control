@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-tools/plot_run.py — the six auto-generated figures for one run (THESIS_PLAN §9.4)
+tools/plot_run.py — the auto-generated figures for one run (THESIS_PLAN §9.4)
 
     ./tools/plot_run.py R0034                 # by run id, from results/ or results_archive/
     ./tools/plot_run.py results/2026-08-05/R0034_sim_gz_attach_ring_45_gz
@@ -16,15 +16,17 @@ run is already readable and there is no command to remember. Writes into the run
     04_health         throttle (with the saturation band), tilt, |aCm|, armed state
     05_formation      per-drone tension share and azimuth -- reconfiguration, seen
     06_stage_split    the four-stage radius/phase table (moving trajectories only)
+    07_trajectory_3d  the whole flight in 3D, desired vs actual, with formation
+                      snapshots -- true equal aspect, so cable elevation angles read
+                      correctly off the figure
 
-WHAT THIS FILE MAY AND MAY NOT COMPUTE. It draws logged columns and it draws numbers
-that came out of tools/metrics.py. It does not derive a reported quantity of its own --
-§9.2 is that every number in the thesis comes from metrics.py, and a plot annotation is
-a number in the thesis.
+This file draws logged columns and numbers that came out of tools/metrics.py. It
+derives no reported quantity of its own: a plot annotation is a number in the thesis,
+and §9.2 says those come from one place.
 
-Panels whose columns a harness does not observe say so on the axes instead of coming
-out blank: a Gazebo run has no cable tension, elevation or |aCm| (they are internal to
-the tracker), and neither harness logs acados solver status at all.
+Panels a harness cannot fill say so on the axes rather than coming out blank -- a
+Gazebo run has no cable tension, elevation or |aCm|, and neither harness logs solver
+status.
 """
 import argparse
 import json
@@ -47,7 +49,7 @@ AUTHORITY_MS2 = 13.0     # thrust acceleration left after gravity (CLAUDE.md §8
 
 
 class Run:
-    """One loaded run: the wide table, its events, and its metrics. Both harnesses."""
+    """One loaded run -- wide table, events, metrics -- from either harness."""
 
     def __init__(self, path):
         self.path = os.path.abspath(path)
@@ -84,7 +86,7 @@ class Run:
         ax.set_title(text, loc='left')
 
     def decorate(self, ax, steady=True, events=True):
-        """Events and the steady window, on every time axis, identically."""
+        """Events and the steady window, identically on every time axis."""
         if events:
             S.mark_events(ax, self.events, t_max=float(self.t[-1]))
         win = self.metrics.get('steady_window_s') if steady else None
@@ -96,10 +98,10 @@ class Run:
         return S.save(fig, out_dir, name)
 
 
-# ── the six figures ──────────────────────────────────────────────────────────
+# ── the figures ──────────────────────────────────────────────────────────
 
 def fig_xy_path(r, out_dir):
-    """1. Where everything actually went, in plan view."""
+    """1. Where everything went, in plan view."""
     fig, (ax, axd) = plt.subplots(1, 2, figsize=(10, 4.6))
 
     p = r.xyz('payload_')
@@ -110,10 +112,8 @@ def fig_xy_path(r, out_dir):
     ax.plot(p[:, 0], p[:, 1], color=S.PAYLOAD_LINE, label='payload actual', **S.ACTUAL)
     ax.plot(p[0, 0], p[0, 1], 'o', color=S.PAYLOAD_LINE, ms=4, mfc='white')
 
-    # Events as a marker ON the payload path: "where was the load when this happened"
-    # is the question a reader asks of a plan view, and a vertical line cannot answer it.
-    # Labels are stepped vertically because a hovering payload puts ARM, TAKEOFF and
-    # MAGNET at the same point and their labels then print on top of each other.
+    # Events marked ON the path, since a plan view has no time axis. Labels are stepped
+    # because a hovering payload puts ARM, TAKEOFF and MAGNET at the same point.
     for j, (name, t_ev) in enumerate(sorted(r.events.items(), key=lambda kv: kv[1])):
         k = int(np.argmin(np.abs(r.t - t_ev)))
         if abs(r.t[k] - t_ev) > 1.0:
@@ -152,7 +152,7 @@ def fig_xy_path(r, out_dir):
 
 
 def fig_error(r, out_dir):
-    """2. How far off, against time -- the figure most questions actually reduce to."""
+    """2. How far off, against time -- what most questions reduce to."""
     fig, (ax, axp) = plt.subplots(2, 1, figsize=(9.5, 6), sharex=True,
                                   gridspec_kw={'height_ratios': [2, 1]})
     for i in range(r.n):
@@ -186,8 +186,8 @@ def fig_error(r, out_dir):
 
 
 def fig_axes(r, out_dir):
-    """3. Per-axis desired vs actual. Which axis a failure lives on is often the answer
-    (a z collapse and an xy phase lag look identical in a norm)."""
+    """3. Per-axis desired vs actual: a z collapse and an xy phase lag look identical
+    in a norm."""
     fig, axes = plt.subplots(3, 2, figsize=(11, 7), sharex=True)
     p, pr = r.xyz('payload_'), r.xyz('payload_ref_')
     for k, ax_name in enumerate('xyz'):
@@ -219,7 +219,7 @@ def fig_axes(r, out_dir):
 
 
 def fig_health(r, out_dir):
-    """4. The health strip: is the aircraft physically able to do what it is being told."""
+    """4. Is the aircraft physically able to do what it is being told."""
     has_acm = any(r.has(f'd{i}_acm') for i in range(r.n))
     # A panel that can only say "not observable here" gets a sliver, not a quarter of
     # the figure.
@@ -269,8 +269,8 @@ def fig_health(r, out_dir):
         S.busy_legend(ax, ncol=2)
         r.decorate(ax)
     else:
-        # Not a gap in the run: the tracker's measured cable acceleration is internal
-        # to it, and the Gazebo runner observes the fleet from outside over ROS topics.
+        # Not a gap in the run: |aCm| is internal to the tracker, and the Gazebo runner
+        # watches from outside over ROS topics.
         S.note(ax, 'measured cable acceleration |aCm| is not observable in a Gazebo\n'
                    'run — the column exists for schema parity and is NaN')
     r.title(ax, 'Measured cable acceleration')
@@ -284,7 +284,7 @@ def fig_health(r, out_dir):
     ax.set_ylim(-0.15, 1.25)
     ax.set_xlabel('sim time [s]')
     ax.legend(loc='center left', ncol=r.n)
-    # §9.4 asks for solver status here. Neither harness logs it -- say so rather than
+    # §9.4 asks for solver status here; neither harness logs it. Say so rather than
     # leave a reader wondering whether the solver was healthy.
     r.title(ax, 'Armed state (acados solver status is not logged by either harness)')
     r.decorate(ax)
@@ -305,7 +305,7 @@ def branch_cut(angles, bins=72):
 
 
 def fig_formation(r, out_dir):
-    """5. What reconfiguration actually looks like: who is carrying, and from where."""
+    """5. Who is carrying, and from where -- reconfiguration, seen."""
     fig, (ax, axa) = plt.subplots(2, 1, figsize=(9.5, 6.5), sharex=True)
 
     if 'tension_share' in r.metrics:
@@ -357,15 +357,14 @@ def fig_formation(r, out_dir):
 
 
 def fig_stage_split(r, out_dir):
-    """6. The DISSIPATIVE_TRACKING_ISSUE §2 diagnostic as a figure: which stage of
-    desired -> reference -> drones -> payload actually loses the trajectory."""
+    """6. The DISSIPATIVE_TRACKING_ISSUE §2 diagnostic: which stage of desired ->
+    reference -> drones -> payload loses the trajectory."""
     fig, (ax, axt) = plt.subplots(1, 2, figsize=(11, 4.4),
                                   gridspec_kw={'width_ratios': [1, 1.25]})
     rows = r.metrics.get('stage_split') or []
-    # The first stage is measured against the COMMANDED path, so its radius ratio is
-    # nan exactly when that path has no radius -- a hover or a straight line. The later
-    # stages still produce numbers there (the drones move even when the load should
-    # not), and reporting those as a stage split would be meaningless.
+    # Stage 1 is measured against the COMMANDED path, so its radius ratio is nan exactly
+    # when that path has no radius -- a hover. The later stages still produce numbers
+    # there (the drones move regardless), and reporting those would be meaningless.
     moving = bool(rows) and math.isfinite(rows[0].get('radius_ratio', float('nan')))
     if not moving:
         why = ('this run has no payload reference' if not rows else
@@ -377,18 +376,24 @@ def fig_stage_split(r, out_dir):
         fig.tight_layout()
         return r.finish(fig, '06_stage_split', out_dir)
 
-    stages = [('desired', r.xyz('payload_ref_')[:, :2], S.PAYLOAD_LINE, S.DESIRED),
-              ('reference centroid', M.centroid(r.d, r.n, 'ref_')[:, :2],
+    # Drawn over the SWEEP WINDOW only, matching the numbers in the table. On a 75 s
+    # run the sweep is ~8 s of it, and the hover either side would dominate the plan
+    # view while contributing nothing to either column.
+    win = r.metrics.get('sweep_window_s')
+    m = M.sweep_window(r.t, r.xyz('payload_ref_')[:, :2])
+    stages = [('desired', r.xyz('payload_ref_')[m, :2], S.PAYLOAD_LINE, S.DESIRED),
+              ('reference centroid', M.centroid(r.d, r.n, 'ref_')[m, :2],
                '#377eb8', S.REFERENCE),
-              ('actual centroid', M.centroid(r.d, r.n)[:, :2], '#4daf4a', S.ACTUAL),
-              ('payload', r.xyz('payload_')[:, :2], S.PAYLOAD_LINE, S.ACTUAL)]
+              ('actual centroid', M.centroid(r.d, r.n)[m, :2], '#4daf4a', S.ACTUAL),
+              ('payload', r.xyz('payload_')[m, :2], S.PAYLOAD_LINE, S.ACTUAL)]
     for name, xy, colour, style in stages:
         ax.plot(xy[:, 0], xy[:, 1], color=colour, label=name, **style)
     ax.set_xlabel('x [m]')
     ax.set_ylabel('y [m]')
     ax.set_aspect('equal', adjustable='datalim')
     ax.legend(loc='best')
-    r.title(ax, 'The four stages, in plan view')
+    r.title(ax, 'The four stages, in plan view'
+            + (f'  (sweep {win[0]:.1f}–{win[1]:.1f} s)' if win else ''))
 
     axt.axis('off')
     cells = [[s['stage'],
@@ -411,15 +416,117 @@ def fig_stage_split(r, out_dir):
     return r.finish(fig, '06_stage_split', out_dir)
 
 
+def equal_aspect_3d(ax, pts, pad=0.05):
+    """A true cube around the data. Not cosmetic: this project reads CABLE ELEVATION
+    ANGLES off its geometry, and axes with independent scales quietly change every
+    angle in the picture."""
+    p = np.asarray(pts, float)
+    p = p[np.all(np.isfinite(p), axis=1)]
+    if p.size == 0:
+        return
+    lo, hi = p.min(axis=0), p.max(axis=0)
+    c = 0.5 * (lo + hi)
+    r = max(0.5 * float(np.max(hi - lo)), 0.15) * (1.0 + pad)
+    ax.set_xlim(c[0] - r, c[0] + r)
+    ax.set_ylim(c[1] - r, c[1] + r)
+    ax.set_zlim(c[2] - r, c[2] + r)
+    ax.set_box_aspect((1, 1, 1))
+
+
+def snapshot_times(r, n=6):
+    """Instants to draw the formation at: every event -- the weld and the abort are the
+    reason to look at all -- plus an even spread over the airborne part."""
+    t0, t1 = float(r.t[0]), float(r.t[-1])
+    z = r.col('payload_z')
+    airborne = np.isfinite(z) & (z > np.nanmin(z) + 0.05)
+    if np.any(airborne):
+        t0, t1 = float(r.t[airborne][0]), float(r.t[airborne][-1])
+    times = [t for t in r.events.values() if t0 <= t <= t1]
+    times += list(np.linspace(t0, t1, n))
+    return sorted(set(round(t, 2) for t in times))
+
+
+def fig_trajectory_3d(r, out_dir):
+    """7. The flight in 3D. Figures 1 and 3 each hide an axis; this shows the shape of
+    the manoeuvre, and whether the drones stayed above and around the load."""
+    fig = plt.figure(figsize=(9.5, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    payload = r.xyz('payload_')
+    pts = [payload]
+
+    # Formation snapshots first, so the trajectories draw over them.
+    for j, t_snap in enumerate(snapshot_times(r)):
+        k = int(np.argmin(np.abs(r.t - t_snap)))
+        for i in range(r.n):
+            q = r.xyz(f'd{i}_')[k]
+            if not np.all(np.isfinite(q)) or not np.all(np.isfinite(payload[k])):
+                continue
+            # A spoke from each drone to the load. NOT drawn as a cable: whether a
+            # given drone is tethered at a given instant is not reliably logged
+            # (dN_attached means different things in the two harnesses), so this is
+            # the formation's shape, not a claim about what is attached to what.
+            ax.plot(*zip(q, payload[k]), color='#999999', lw=0.6, alpha=0.45,
+                    zorder=1, label='formation snapshot' if j == 0 and i == 0 else None)
+
+    if r.has('payload_ref_x'):
+        pr = r.xyz('payload_ref_')
+        ax.plot(pr[:, 0], pr[:, 1], pr[:, 2], color=S.PAYLOAD_LINE,
+                label='payload desired', zorder=3, **S.DESIRED)
+        pts.append(pr)
+    ax.plot(payload[:, 0], payload[:, 1], payload[:, 2], color=S.PAYLOAD_LINE,
+            label='payload actual', zorder=4, **S.ACTUAL)
+
+    for i in range(r.n):
+        c = S.drone_colour(i)
+        q = r.xyz(f'd{i}_')
+        ax.plot(q[:, 0], q[:, 1], q[:, 2], color=c, label=f'drone {i}', zorder=3,
+                **S.ACTUAL)
+        pts.append(q)
+        if r.has(f'd{i}_ref_x'):
+            ref = r.xyz(f'd{i}_ref_')
+            ax.plot(ref[:, 0], ref[:, 1], ref[:, 2], color=c, zorder=2, **S.DESIRED)
+            pts.append(ref)
+        # Without start/end markers a 3D path does not say which way it was travelled.
+        good = np.where(np.all(np.isfinite(q), axis=1))[0]
+        if good.size:
+            ax.plot(*q[good[0]], marker='o', ms=5, mfc='white', color=c, zorder=5)
+            ax.plot(*q[good[-1]], marker='X', ms=6, color=c, zorder=5)
+
+    equal_aspect_3d(ax, np.vstack(pts))
+    # Label offset in DATA units, stepped per event: 3D text takes no offset in points,
+    # and a payload that hovers puts ARM, TAKEOFF and MAGNET at the same point.
+    dz = 0.045 * float(np.diff(ax.get_zlim()))
+    for j, (name, t_ev) in enumerate(sorted(r.events.items(), key=lambda kv: kv[1])):
+        k = int(np.argmin(np.abs(r.t - t_ev)))
+        if abs(r.t[k] - t_ev) > 1.0 or not np.all(np.isfinite(payload[k])):
+            continue
+        ax.plot(*payload[k], marker='x', ms=8, mew=1.8, color=S.event_colour(name),
+                linestyle='none', zorder=6)
+        x, y, z = payload[k]
+        ax.text(x, y, z + dz * (j % 4 - 1.5), f'  {name} {t_ev:.1f}s', fontsize=6.5,
+                color=S.event_colour(name), zorder=6)
+
+    ax.set_xlabel('x [m]')
+    ax.set_ylabel('y [m]')
+    ax.set_zlabel('z [m]')
+    ax.view_init(elev=24, azim=-58)
+    ax.legend(loc='upper left', fontsize=8, framealpha=0.85)
+    ax.set_title('Trajectory in 3D — actual (solid) vs desired (dashed);  '
+                 '○ start, ✕ end.  Equal aspect: angles are true.', loc='left')
+    fig.tight_layout()
+    return r.finish(fig, '07_trajectory_3d', out_dir)
+
+
 FIGURES = (fig_xy_path, fig_error, fig_axes, fig_health, fig_formation,
-           fig_stage_split)
+           fig_stage_split, fig_trajectory_3d)
 
 
 def plot_run(path, out_dir=None, quiet=False, write_metrics=False):
-    """Draw all six figures for one run. Returns the list of files written.
+    """Draw every figure for one run; returns the files written.
 
-    Never raises for a single bad figure: this runs at the end of an experiment, and a
-    plotting bug must not be able to destroy a run that has already flown."""
+    One bad figure never stops the rest: this runs at the end of an experiment, and a
+    plotting bug must not destroy a run that has already flown."""
     S.use()
     r = Run(path)
     out_dir = out_dir or os.path.join(r.path, 'plots')
@@ -439,15 +546,13 @@ def plot_run(path, out_dir=None, quiet=False, write_metrics=False):
 
 
 def finish_run(run_dir, quiet=False):
-    """Metrics + the six figures for a run that has just finished, returning the
-    metrics dict for the manifest. Both harnesses call this on completion (§9.1).
+    """Metrics + figures for a run that has just finished, returning the metrics dict
+    for the manifest. Both harnesses call this on completion (§9.1).
 
-    NEVER RAISES. It runs after the aircraft has flown and the logs are already on
-    disk; an analysis bug must not be able to turn a completed run into a failed one."""
-    # SystemExit is caught alongside Exception on purpose: `Run` raises it for a run
-    # with no log, which is the right behaviour for the CLI and exactly the wrong
-    # behaviour here -- it is not an Exception subclass, so it would sail through an
-    # `except Exception` and abort the harness that called this.
+    NEVER RAISES: it runs after the aircraft has flown, and an analysis bug must not
+    turn a completed run into a failed one."""
+    # SystemExit is caught alongside Exception on purpose: `Run` raises it for a
+    # log-less run -- right for the CLI, fatal here, and not an Exception subclass.
     try:
         with open(os.path.join(run_dir, 'metrics.json'), 'w') as fh:
             mtr = M.summarise_run(run_dir)

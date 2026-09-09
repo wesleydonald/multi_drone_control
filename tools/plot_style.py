@@ -1,22 +1,16 @@
 """
 tools/plot_style.py — the one figure style (THESIS_PLAN §9.4, §6.2)
 
-Every figure in the thesis is drawn through this module, so the four months of results
-that follow are publication-ready by default rather than retro-fitted at the end.
+Every figure in the thesis is drawn through this module. It enforces two things:
 
-Two rules it exists to enforce:
+  * ONE COLOUR PER DRONE ID, the same colour RViz uses. The palette is IMPORTED from
+    `controller_quad_load/rviz_config.py`, never copied -- a copy drifts silently, and
+    then drone 2 is green on screen and red in the figure describing it.
+  * ONE VISUAL GRAMMAR: reference dashed, actual solid, events vertical dotted, steady
+    window shaded.
 
-  * ONE COLOUR PER DRONE ID, and it is the SAME colour RViz uses. The palette is
-    IMPORTED from `controller_quad_load/rviz_config.py` rather than copied, because a
-    copied palette drifts silently and then drone 2 is green on screen and red in the
-    figure you are describing in the same sentence.
-  * ONE VISUAL GRAMMAR: desired/reference is always dashed and pale, actual is always
-    solid, events are always vertical dotted lines, the steady window is always the
-    shaded band. Consistency across figures is what makes a reader able to skim them.
-
-Vector output (PDF) is the deliverable; a PNG is written alongside for quick viewing
-and for pasting into a message. Fonts are embedded as TrueType (type 42) so the PDF
-survives a journal's font check.
+PDF is the deliverable; a PNG is written alongside for quick viewing. Fonts embed as
+TrueType (type 42) so the PDF survives a journal's font check.
 """
 import math
 import os
@@ -42,18 +36,16 @@ def _hex(rviz_colour):
 DRONE_HEX = [_hex(c) for c, _ in _RVIZ_DRONE_COLOURS]
 PAYLOAD_HEX = _hex(_RVIZ_PAYLOAD_COLOUR)
 
-# Gold-on-white is unreadable, and the payload is on almost every figure. RViz needs the
-# bright value against a dark viewport; print needs a dark one. Same identity, adjusted
-# for the medium -- this is the only deliberate divergence from the RViz palette.
+# The one deliberate divergence from the RViz palette: RViz's gold reads against a dark
+# viewport, not against white paper.
 PAYLOAD_LINE = '#b8860b'
 
-# Runs, for cross-run overlays. DELIBERATELY NOT the drone palette: on a compare_runs
-# figure colour means "which run", and reusing the per-drone colours there would make
-# the same blue mean drone 0 on one page and R0034 on the next.
+# For cross-run overlays, and deliberately NOT the drone palette: there colour means
+# "which run", and sharing would make the same blue mean drone 0 on the facing page.
 RUN_HEX = ['#000000', '#e41a1c', '#377eb8', '#4daf4a',
            '#984ea3', '#ff7f00', '#a65628', '#999999']
 
-# The grammar. Passed as **kwargs so a caller cannot half-apply it.
+# Passed as **kwargs so a caller cannot half-apply the grammar.
 DESIRED = dict(linestyle='--', linewidth=1.4, alpha=0.85)
 ACTUAL = dict(linestyle='-', linewidth=1.6)
 REFERENCE = dict(linestyle=':', linewidth=1.2, alpha=0.9)

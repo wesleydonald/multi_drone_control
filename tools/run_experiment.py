@@ -277,6 +277,10 @@ def evaluate(cfg, rows, t_weld, aborts):
         v = max(float(np.nanmax(col(f'd{i}_track_err'))) for i in range(cfg.n_total))
         out.append(('tracking error bounded', v < c.max_track_err_m,
                     f'peak {v:.2f} m (<{c.max_track_err_m:.2f})'))
+    if c.min_peak_payload_z is not None:
+        v = float(np.nanmax(col('payload_z')))
+        out.append(('payload actually lifted', v > c.min_peak_payload_z,
+                    f'peak {v:.3f} m (>{c.min_peak_payload_z:.3f})'))
     if c.min_payload_z is not None:
         v = float(np.nanmin(col('payload_z')))
         out.append(('payload stayed up', v > c.min_payload_z,

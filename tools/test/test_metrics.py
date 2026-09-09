@@ -273,3 +273,33 @@ def test_summarise_reports_median_and_full_range_not_a_bare_mean():
 def test_summarise_ignores_nans_but_reports_the_count():
     out = M.summarise([0.1, math.nan, 0.3])
     assert out['n'] == 2 and out['median'] == pytest.approx(0.2)
+
+
+# ── reconfiguration feasibility ──────────────────────────────────────────────
+
+def test_cog_margin_matches_the_closed_form_for_a_symmetric_ring():
+    """Removing one cable from a symmetric n-ring leaves a largest angular gap of
+    4*pi/n, so the load's centre of mass stays inside the surviving attach polygon --
+    the condition for it to hang level at all -- only for n >= 5. This is the result
+    that explains the persistent tilt after a 4->3 detach without appealing to any
+    controller tuning."""
+    def ring(n, r=0.08):
+        return [[r * math.cos(2 * math.pi * k / n), r * math.sin(2 * math.pi * k / n),
+                 0.025] for k in range(n)]
+    for n in (4, 5, 6, 7):
+        _, gap, ok = M.cog_margin(ring(n)[1:])          # drop one cable
+        assert gap == pytest.approx(math.degrees(4 * math.pi / n), abs=1e-9)
+        assert ok == (n > 4)
+    assert M.cog_margin(ring(4)[1:])[1] == pytest.approx(180.0, abs=1e-9)
+
+
+def test_cog_margin_sign_says_inside_or_outside():
+    """Negative margin means the centre of mass is on or outside the polygon, i.e. the
+    load cannot hang level however the tensions are chosen."""
+    def ring(n, r=0.08):
+        return [[r * math.cos(2 * math.pi * k / n), r * math.sin(2 * math.pi * k / n),
+                 0.0] for k in range(n)]
+    assert M.cog_margin(ring(6))[0] > 0
+    assert M.cog_margin(ring(6)[1:])[0] > 0             # 5 of 6 -> still inside
+    assert M.cog_margin(ring(4)[1:])[0] <= 0            # 3 of 4 -> on the boundary
+    assert M.cog_margin(ring(3)[1:])[0] < 0             # 2 cables -> no polygon
