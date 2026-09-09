@@ -1,0 +1,9 @@
+{
+  "archived_utc": "2026-09-09T22:35:31.439307Z",
+  "file_count": 76,
+  "git_sha": "3fa4ab249d31bacdcf01185d4c8437bf2fd460c2",
+  "reason": "attach-during-circle demo, 0.6 kg ring, cited by F_attach_demo_storyboard",
+  "sha256_of_contents": "ded3e52ca9f4df945e11598d53b8d9932c788d2f915b36f45f0cd5c3cd03b2e0",
+  "source_path": "results/2026-09-10/R0209_sim_gz_attach_circle_n3_fast",
+  "working_tree_dirty_files": 1
+}

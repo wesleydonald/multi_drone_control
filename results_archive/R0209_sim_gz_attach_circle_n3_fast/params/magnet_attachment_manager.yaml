@@ -1,0 +1,45 @@
+/magnet_attachment_manager:
+  ros__parameters:
+    attach_dwell_time_s: 0.15
+    attach_radius: 0.08
+    attach_speed_threshold: 0.35
+    attachment_mode: fixed_joint
+    attachment_state_topic: /magnet/attachment_state
+    command_backend: ros_topic
+    command_timeout_s: 0.0
+    detach_on_start: true
+    detach_on_start_delay_s: 1.0
+    detach_on_start_period_s: 1.0
+    detach_when_magnet_off: true
+    elrs_magnet_channel: 10
+    elrs_magnet_command_topic: /magnet/ELRSCommand
+    elrs_magnet_off_value: -1.0
+    elrs_magnet_on_value: 1.0
+    elrs_magnet_repeat_rate_hz: 2.0
+    enable_elrs_magnet_output: true
+    fallback_object_x: 0.0
+    fallback_object_y: 0.0
+    fallback_object_z: 0.08
+    gz_attach_topic: /payload/attach
+    gz_command_timeout_s: 1.0
+    gz_detach_topic: /payload/detach
+    kinematic_object_name: payload_model
+    kinematic_set_pose_timeout_s: 0.2
+    kinematic_update_rate_hz: 30.0
+    kinematic_z_offset: 0.0
+    magnet_command_topic: /magnet/command
+    magnet_tip_pose_index: -1
+    magnet_tip_pose_msg_type: pose_stamped
+    magnet_tip_pose_topic: /magnet_tip_pose
+    object_attached_topic: /magnet/object_attached
+    object_pose_index: 1
+    object_pose_topic: /model/lift_system/model/payload/pose
+    object_x_offset: 0.0
+    object_y_offset: -0.25
+    pose_timeout_s: 1.0
+    ros_attach_topic: /payload/attach
+    ros_detach_topic: /payload/detach
+    use_fallback_object_pose: false
+    use_sim_time: true
+    world_name: quadcopter
+

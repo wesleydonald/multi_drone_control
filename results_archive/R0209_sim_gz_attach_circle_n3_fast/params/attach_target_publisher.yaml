@@ -1,0 +1,10 @@
+/attach_target_publisher:
+  ros__parameters:
+    payload_state_topic: /payload/motion_capture_state
+    pose_topic: /attach_target/pose
+    twist_topic: /attach_target/twist
+    use_sim_time: true
+    x_offset: 0.0
+    y_offset: -0.25
+    z_offset: 0.05
+

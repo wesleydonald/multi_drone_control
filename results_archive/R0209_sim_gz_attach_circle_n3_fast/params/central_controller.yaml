@@ -1,0 +1,5 @@
+/central_controller:
+  ros__parameters:
+    num_drones: 3
+    use_sim_time: true
+

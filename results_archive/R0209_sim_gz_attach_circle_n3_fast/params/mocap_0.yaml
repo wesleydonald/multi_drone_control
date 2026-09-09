@@ -1,0 +1,10 @@
+/mocap_0:
+  ros__parameters:
+    drone_id: 0
+    drone_name: x3_drone0
+    parent_model: lift_system
+    pose_index: -1
+    pose_topic: ''
+    publish_payload: true
+    use_sim_time: true
+

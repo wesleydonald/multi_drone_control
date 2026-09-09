@@ -1,0 +1,33 @@
+/controller_2:
+  ros__parameters:
+    attitude_ff: true
+    cable_ff_scale: 1.0
+    cable_source: model
+    control_mode: velocity_after_handover
+    drone_id: 2
+    enable_diag_log: false
+    kt_batt_sag_frac: 0.0
+    kt_batt_v_empty: 14.0
+    kt_batt_v_full: 16.8
+    kt_print_period_s: 1.0
+    max_payload_tilt_deg: 60.0
+    max_speed: 3.0
+    max_tilt_deg: 60.0
+    payload_rest_z: -0.1
+    pose_timeout_s: 1.0
+    safety_enabled: true
+    safety_ref_timeout_s: 1.0
+    takeoff_spool_s: 0.5
+    takeoff_thrust_ratio: 30.0
+    terminal_vel_ref: false
+    thrust_ratio: 32.9
+    use_sim_time: true
+    vel_a_i_max: 2.0
+    vel_k_att: 8.0
+    vel_ki: 0.0
+    vel_kp_pos: 2.0
+    vel_kv: 4.0
+    vel_v_max: 2.0
+    warn_battery_v: 15.0
+    warn_tilt_deg: 40.0
+

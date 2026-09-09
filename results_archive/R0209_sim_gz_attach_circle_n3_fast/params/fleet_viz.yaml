@@ -1,0 +1,12 @@
+/fleet_viz:
+  ros__parameters:
+    id_label_size: 0.15
+    id_label_z: 0.15
+    num_drones: 4
+    path_max_len: 2000
+    payload_size:
+    - 0.5
+    - 0.5
+    - 0.05
+    use_sim_time: true
+

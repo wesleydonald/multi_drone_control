@@ -1,0 +1,26 @@
+/payload_pose_bridge:
+  ros__parameters:
+    config_file: ''
+    lazy: false
+    qos_overrides:
+      /clock:
+        subscription:
+          depth: 1
+          durability: volatile
+          history: keep_last
+          reliability: best_effort
+      /model/lift_system/model/payload/pose:
+        publisher:
+          depth: 10
+          durability: volatile
+          history: keep_last
+          reliability: reliable
+      /parameter_events:
+        publisher:
+          depth: 1000
+          durability: volatile
+          history: keep_last
+          reliability: reliable
+    subscription_heartbeat: 1000
+    use_sim_time: true
+

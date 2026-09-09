@@ -1,0 +1,99 @@
+{
+  "control_effort": {
+    "mean": [
+      0.3554974373092045,
+      0.33531342939817865,
+      0.3553203487227447,
+      0.3744794980554566
+    ],
+    "saturated_fraction": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "duration_s": 75.016,
+  "events": {
+    "ARM": 3.01,
+    "LAND": 68.0,
+    "MAGNET": 18.0,
+    "TAKEOFF": 6.0,
+    "WELD": 28.028
+  },
+  "kind": "sim",
+  "n_drones": 4,
+  "n_rows": 3468,
+  "payload_phase_lag_s": 0.608749435276412,
+  "payload_radius_ratio": 0.9803030218937494,
+  "payload_rmse_m": 0.1779260834734581,
+  "payload_rmse_sweep_m": 0.17070602212550115,
+  "payload_tilt_peak_deg": 42.859700617943645,
+  "payload_tilt_settled_deg": 4.679616292018804,
+  "payload_z_settled_m": 0.5289316095079256,
+  "per_drone": [
+    {
+      "drone": 0,
+      "event_peak_err_m": 0.10371484514216178,
+      "event_settling_s": 26.275,
+      "peak_track_err_m": 0.4660943375205632,
+      "settled_track_err_m": 0.12438486358817631
+    },
+    {
+      "drone": 1,
+      "event_peak_err_m": 0.18324571721795563,
+      "event_settling_s": Infinity,
+      "peak_track_err_m": 0.5084578521049806,
+      "settled_track_err_m": 0.15800196976343933
+    },
+    {
+      "drone": 2,
+      "event_peak_err_m": 0.08954035995702475,
+      "event_settling_s": 26.379000000000005,
+      "peak_track_err_m": 0.43178041722281446,
+      "settled_track_err_m": 0.11758565686591929
+    },
+    {
+      "drone": 3,
+      "event_peak_err_m": 0.3607148863580852,
+      "event_settling_s": Infinity,
+      "peak_track_err_m": 0.7328188366024736,
+      "settled_track_err_m": 0.3541750582513704
+    }
+  ],
+  "primary_event": "WELD",
+  "primary_event_s": 28.028,
+  "run": "R0209_sim_gz_attach_circle_n3_fast",
+  "run_id": "R0209",
+  "source": "gazebo",
+  "stage_split": [
+    {
+      "phase_lag_s": 0.3392522381714437,
+      "radius_ratio": 0.9714179940522174,
+      "stage": "desired -> ref_centroid"
+    },
+    {
+      "phase_lag_s": 0.49717306772663655,
+      "radius_ratio": 1.1279407887545376,
+      "stage": "ref_centroid -> actual_centroid"
+    },
+    {
+      "phase_lag_s": -0.24692686243168985,
+      "radius_ratio": 0.8999871292791282,
+      "stage": "actual_centroid -> payload"
+    },
+    {
+      "phase_lag_s": 0.608749435276412,
+      "radius_ratio": 0.9803030218937494,
+      "stage": "desired -> payload (cumulative)"
+    }
+  ],
+  "steady_window_s": [
+    33.036,
+    75.024
+  ],
+  "sweep_window_s": [
+    13.141000000000002,
+    58.196000000000005
+  ]
+}
