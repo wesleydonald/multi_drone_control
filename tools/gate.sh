@@ -49,6 +49,9 @@ if python3 -m pytest src/utility_objects/test/test_safety.py \
                     src/controller_quad_load/test/test_config_tools.py \
                     src/controller_dissipative/test/test_attach_network.py \
                     src/controller_load_mpc/test/test_creep_controller.py \
+                    src/controller_quad_load/test/test_velocity_loop.py \
+                    src/controller_load_mpc/test/test_load_geometry_params.py \
+                    src/drone_magnet/test/test_handover_policy.py \
                     tools/test -q 2>&1 | tail -3; then
   :
 else
@@ -70,7 +73,8 @@ GEO_BAD=0
 for pair in \
   "simulation_assets/three_rigid_ground.sdf:mpc_quad_load_launch.py" \
   "simulation_assets/four_rigid_ground.sdf:dissipative_launch.py" \
-  "simulation_assets/three_attach.sdf:three_attach_launch.py" ; do
+  "simulation_assets/three_attach.sdf:three_attach_launch.py" \
+  "simulation_assets/three_rigid_ground.sdf:dissipative_only_launch.py" ; do
   world="${pair%%:*}"; launch="src/controller_quad_load/launch/${pair##*:}"
   [ -f "$world" ] && [ -f "$launch" ] || continue
   if ! python3 tools/check_geometry.py "$world" --launch "$launch" >/dev/null 2>&1; then
@@ -81,6 +85,14 @@ for pair in \
     echo "   ok   $(basename "$world")"
   fi
 done
+# The rod/seg2/rigid weld-variant worlds are generated from three_attach.sdf; a
+# hand edit to the base that skips the generator leaves them silently stale.
+if python3 tools/make_weld_variants.py --check >/dev/null 2>&1; then
+  echo "   ok   weld variants up to date"
+else
+  echo "!! weld variants stale: rerun tools/make_weld_variants.py"
+  GEO_BAD=1
+fi
 [ "$GEO_BAD" -eq 0 ] || FAILED+=("geometry")
 
 if [ "$QUICK" -eq 0 ]; then

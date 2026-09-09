@@ -1,0 +1,867 @@
+UPDATE — session of 2026-08-05
+==============================
+Part 0 §9.4 (analysis + plotting pipeline), gate stage 6, the pre-push hook, and
+the start of Part A Stage T.
+
+Nothing here is committed beyond the two commits already on `attach-week9`
+(5b10019, a9bcfc6 — both re-authored to you alone, no Claude attribution).
+Everything after those is uncommitted working tree.
+
+READ SECTION 7 FIRST if you are short of time: a metric was wrong, it is fixed,
+and it changes what a circle run reports.
+
+
+1. WHAT WAS ADDED
+-----------------
+
+tools/plot_style.py          One figure style for the whole thesis.
+tools/plot_run.py            7 figures for one run, into its plots/.
+tools/compare_runs.py        N runs on shared axes + a metric table.
+tools/thesis_figures.py      Regenerates every thesis figure in one command.
+configs/thesis_figures.yaml  The figure registry those figures come from.
+tools/check_thresholds.py    Holds a finished run to the gate's bars.
+configs/gate_thresholds.yaml The bars, measured from R0047-R0050.
+tools/hooks/pre-push         Runs the full gate on `git push`.
+tools/install_hooks.sh       Enables that hook (one command, once).
+tools/test/test_plot_pipeline.py   21 tests for all of the above.
+
+configs/experiments/diss_circle_n3.yaml      Part A Stage T baseline (§12.1).
+configs/experiments/diss_circle_n3_T1.yaml   Same, terminal_vel_ref: true.
+update.txt                                   This file.
+
+Modified: tools/metrics.py (one loader for both harnesses + summarise_run),
+tools/run_dir.py (resolve a run id to a directory), tools/run_experiment.py and
+tools/sil_bench.py (auto-plot on completion), tools/gate.sh (stage 6, tools/test),
+.gitignore (docs/figures/), general/CLAUDE.md, general/THESIS_PLAN.md.
+
+
+2. WHY
+------
+
+* ONE SOURCE OF NUMBERS. §9.2 says every number in the thesis comes from
+  tools/metrics.py. run_experiment.py had its own inline metric code, so there
+  were two implementations of the same quantities. Its metrics now come from
+  metrics.summarise_run. plot_run.py computes no reported number of its own —
+  a plot annotation is a number in the thesis.
+
+* ONE LOADER, BOTH HARNESSES. metrics.load_run now reads the Gazebo run.csv as
+  well as the bench sil.csv. They share a column schema, so one loader means
+  compare_runs.py can put a bench run and a Gazebo run on the same axis — which
+  is the entire reason the bench exists.
+
+* THE PALETTE IS IMPORTED, NOT COPIED. plot_style pulls the per-drone colours
+  straight out of controller_quad_load/rviz_config.py, and a test locks them
+  together. A copied palette drifts, and then drone 2 is green in RViz and red
+  in the figure you are describing in the same sentence (§6.2).
+
+* MISSING IS NOT ZERO. Columns a Gazebo run cannot observe from outside the
+  tracker (dN_acm, dN_tension, dN_elev_deg) are NaN by design. Those metrics are
+  OMITTED rather than reported as nan, and those panels say so on the axes. A
+  missing key means "this harness does not observe that"; a nan reads as "it was
+  measured and came out undefined".
+
+* REPEATS KEEP THEIR SPREAD. compare_runs groups repeats of a scenario and
+  reports median [min-max], never a bare mean — a mean over five runs hides the
+  one that diverged, and that one is usually the finding (§9.2).
+
+* THE GATE NEEDED A STAGE THAT ACTUALLY RUNS THE NODES. Stages 1-5 are all
+  offline; none of them can see a launch file that no longer comes up or a topic
+  renamed on one side. Stage 6 flies carry_hover_n3 through the real launch.
+
+
+3. HOW TO RUN IT
+----------------
+
+Source first (both, in this order):
+    source ~/ros2_humble/install/setup.bash
+    source install/setup.bash
+
+Plots for one run — by run id, or by path:
+    ./tools/plot_run.py R0047
+    ./tools/plot_run.py R0034 R0047 --out /tmp/somewhere
+    ./tools/plot_run.py R0047 --metrics        # also rewrite its metrics.json
+
+  Writes into <run>/plots/, as .pdf (thesis) and .png (quick look):
+    01_xy_path        payload desired vs actual, per-drone reference vs actual
+    02_error          error against time, events + steady window shaded
+    03_axes           x / y / z against time
+    04_health         throttle + saturation band, tilt, |aCm|, armed state
+    05_formation      tension share and formation azimuth
+    06_stage_split    the four-stage radius/phase table (moving trajectories)
+    07_trajectory_3d  the flight in 3D, true equal aspect
+
+Compare runs — the ablation workhorse:
+    ./tools/compare_runs.py R0034-R0038 R0039-R0043 --label 45deg 65deg
+    ./tools/compare_runs.py R0022 R0044 --label bench gazebo
+    ./tools/compare_runs.py R0047 R0048 R0049 R0050 --no-group
+    ./tools/compare_runs.py R0034 R0039 --align none --out /tmp/cmp
+
+  R0034-R0038 expands to the five ids. Repeats of one scenario collapse into a
+  single series. Aligns t=0 on the weld/detach by default (--align none for
+  absolute sim time). Writes c1_paths, c2_error, c3_tilt_effort, c4_per_drone,
+  c5_metrics and metrics.csv into results/compare/<key>/ unless you pass --out.
+
+Thesis figures:
+    ./tools/thesis_figures.py --check     # resolve runs, report provenance, draw nothing
+    ./tools/thesis_figures.py             # regenerate all into docs/figures/
+    ./tools/thesis_figures.py F_attach_elevation_45_v_65
+
+  Edit configs/thesis_figures.yaml to add one. It writes docs/figures/PROVENANCE.md
+  listing each figure's runs, their git SHAs, and whether the data is archived.
+  docs/figures/ is gitignored until its runs are promoted to results_archive/.
+
+Thresholds on any finished run:
+    ./tools/check_thresholds.py R0047 --profile sil_smoke
+
+Gate and hook:
+    ./tools/gate.sh              # 6 stages, ~2.5 min
+    ./tools/gate.sh --quick      # skips 5 and 6
+    ./tools/install_hooks.sh     # once: gate runs on git push
+    git push --no-verify         # deliberate bypass
+
+Plots now generate automatically at the end of every run_experiment.py and
+sil_bench.py run, so none of the above is needed for a fresh run.
+
+
+4. VERIFIED
+-----------
+
+* R0054: a fresh GAZEBO run through run_experiment.py auto-wrote metrics.json and
+  all 7 figures from inside the harness — the one path listed as unverified in the
+  first draft of this file is now verified.
+* R0047 / R0051 / R0052: fresh SIL carry_hover_n3 runs through the real harness
+  auto-wrote metrics.json and all 7 figures. Even tension share (0.333 each,
+  spread 3e-4), payload settled 0.596-0.598 m against a 0.600 m command.
+* Replaying R0034-R0043 through compare_runs independently reproduces the §9.3
+  finding: drone-3 peak error 1.11 m at 45 deg vs 1.17 m at 65 deg, medians over
+  5 repeats each.
+* Cross-harness comparison works (R0020 bench vs R0034 Gazebo, one axis).
+* Backup restore drill re-run: R0043 restored byte-identical.
+* Full gate green, run through the actual pre-push hook.
+* 63 tests in tools/test; 116 in the gate's pytest stage (was 78).
+
+Everything claimed above has been run, not just imported.
+
+
+5. THINGS THE PLAN ASKS FOR THAT NOTHING LOGS
+---------------------------------------------
+
+Stated on the figures themselves rather than quietly dropped:
+
+* Modelled |aC|. Only the measured |aCm| is logged, so figure 4 shows one trace
+  and metrics.cable_accel_gap has no input from a run directory. Fixing it needs
+  a column added to both loggers.
+* acados solver status. Not logged by either harness. Figure 4's fourth panel
+  shows armed state instead and says so.
+* Cable tension / elevation / |aCm| in a Gazebo run — internal to the tracker.
+  Those panels are bench-only.
+
+Separate trap: dN_attached means DIFFERENT THINGS in the two harnesses. The bench
+marks every cable-linked drone; the Gazebo runner marks only the welded newcomer.
+Nothing in the pipeline keys off it. Don't add anything that does without fixing
+the logger first.
+
+
+6. PART A STAGE T — SCAFFOLDING + ONE BASELINE RUN
+--------------------------------------------------
+
+§12.1's T-stage needs a circle run to measure against, and no scenario existed for
+one. Two configs now do, differing in exactly ONE launch arg (asserted, not
+assumed — §12.1 says the candidates are measured separately and never bundled):
+
+    ./tools/run_experiment.py configs/experiments/diss_circle_n3.yaml --repeats 5
+    ./tools/run_experiment.py configs/experiments/diss_circle_n3_T1.yaml --repeats 5
+    ./tools/compare_runs.py <baseline ids> <T1 ids> --label baseline T1
+
+Both fly dissipative_only_launch.py on three_rigid_ground.sdf, circle r=0.5 at
+0.6 m/s peak — the configuration DISSIPATIVE_TRACKING_ISSUE.md §2 recorded from.
+The world/launch pair was added to gate.sh stage 4 so its geometry stays checked.
+
+ONE baseline run flown (R0054, ~5 min wall). Stage split:
+
+    desired -> reference centroid          0.939    +0.302 s
+    reference -> actual centroid (TRACKER) 0.869    +0.538 s
+    actual centroid -> payload             0.996    -0.117 s
+    desired -> payload (cumulative)        0.811    +0.684 s
+
+That independently reproduces the ATTRIBUTION in DISSIPATIVE_TRACKING_ISSUE.md —
+the tracker stage carries most of the loss and most of the lag (0.538 s here vs
+the documented 0.589 s).
+
+It is NOT the blocked §9.2 exit criterion. That asks for the archived numbers to
+within 2%; this is a fresh run on a different plant, and the cumulative figures
+sit ~8% off the recorded 0.75 / 0.72. It gives Stage T a baseline, nothing more.
+
+NOT run: the 5-repeat baseline and 5-repeat T1 arm (~4 min/run, ~40 min for the
+pair). T2-T4 have no configs yet. Your call whether to spend the time.
+
+
+7. A METRIC WAS WRONG — SWEEP WINDOW  ** read this one **
+---------------------------------------------------------
+
+Flying R0054 exposed a real defect in the metrics, not a cosmetic one.
+
+`load_traj: circle` is ONE EASED SWEEP, not continuous laps. LoadTrajectory
+._circle_theta stretches the duration so PEAK tangential speed equals traj_speed:
+T = 1.875*2*pi*r/v, so ~9.8 s at r=0.5, v=0.6. On a 75 s run that is 2% of the
+record; the other 98% is lift, hover and land.
+
+Measured over the WHOLE run, the mean of the desired path is the HOVER POINT
+rather than the circle's centre. radius_ratio then read 0.956 on R0054, whose
+true sweep ratio is 0.811. A good-looking number that means nothing — and it
+would have gone straight into a T1-vs-baseline comparison.
+
+Fixed by adding a third §9.2 convention alongside the steady window:
+
+    metrics.sweep_window(t, desired_xy)   the part of a run where the COMMANDED
+                                          path is moving
+
+Every trajectory metric now uses it — radius_ratio, phase_lag_s, stage_split, and
+a new payload_rmse_sweep_m reported alongside the whole-run payload_rmse_m.
+summarise_run reports sweep_window_s so a number can be checked against the
+manoeuvre it claims to describe, and figure 06 draws and labels that window.
+
+The mask is CONTIGUOUS by construction because the reference is published at
+10 Hz and logged at 50 Hz: four of every five per-sample steps are exactly zero,
+so a sample-wise test keeps a fifth of the sweep and inflates the apparent
+commanded speed fivefold (2.99 m/s measured against a commanded 0.6).
+
+Two tests pin it: one proves the numbers survive 60 s of hover padding either
+side of a synthetic sweep, and that the whole-run figure flatters itself by more
+than 0.1 without the guard; the other proves the staircase does not fragment the
+window. Recorded in THESIS_PLAN §9.2.
+
+Consequence: any circle number produced before this change is wrong. Nothing in
+the thesis depends on one yet.
+
+
+8. PART A STAGE V — THE PAPER'S ARCHITECTURE (velocity loop)
+------------------------------------------------------------
+
+WHY. Quan et al.'s Fig. 2 sends the dissipative controller's output as a VELOCITY
+COMMAND straight to the autopilot. This repo instead makes it a position setpoint
+for a 2 s horizon MPC — and R0054 measures that inserted stage as where the error
+lives: the tracker stage alone is 0.869 radius ratio and +0.538 s of the +0.684 s
+total lag. So the restructure removes a stage the reference architecture never had.
+It is an experiment, not a bet: the paper asserts its architecture and never
+compares it against an MPC-tracked alternative, so either result is a contribution.
+
+THE ADAPTATION. Their autopilot accepts velocity natively. Betaflight accepts body
+rates + throttle. The velocity->attitude->rate layer theirs provides internally is
+ours to supply — document as an adaptation, not a deviation.
+
+ADDED (design note first, per D11):
+    docs/design/velocity_loop.md                        the design note
+    src/controller_quad_load/.../velocity_loop.py       pure class, no ROS
+    src/controller_quad_load/test/test_velocity_loop.py 17 tests (ladder step V-a)
+
+    v_sp  = v_ref + kp_pos*(p_ref - p)     clamped to v_max
+    e_v   = v_sp - v
+    I    += e_v*dt                         clamped so |ki*I| <= a_i_max
+    a_sp  = a_ff + kv*e_v + ki*I
+    thr,q = tilt_quat_from_accel(a_sp, kT)
+    w_cmd = k_att * quat_error(q_sp, q)    clamped
+    stick = betaflight_rates_inv(w_cmd)
+
+Two tests matter more than the rest, because velocity_loop.py REIMPLEMENTS code
+rather than importing it (it has to stay importable without a compiled acados
+solver, so the bench and the tests can drive it):
+
+  * the rate curve is pinned against the CasADi expression in dynamics.py
+  * the accel -> (throttle, quaternion) map is pinned against acados.py's version
+
+A reimplementation that drifts from its original is exactly how thrust_quad_c went
+stale at 203 and CABLE_LEN at 0.6.
+
+ONE REAL DISCREPANCY, measured rather than assumed. dynamics.py, the SIL plant and
+the Gazebo betaflight emulator all smooth the absolute value as sqrt(x*x + 1e-6)
+because the solver needs a differentiable |x|. Real Betaflight does not, and nor
+does this module. Measured over the full stick range the gap peaks at 9.0e-4 deg/s
+(1.5e-4 relative) against a 670 deg/s span, and the centre-rate term is exact
+everywhere because sgn*ax == x. A test feeds the stick this module produces into
+the PLANT's curve and pins the round trip to 1e-3 deg/s.
+
+V-b DONE, OFFLINE (tools/velocity_probe.py — new). Closes the velocity loop around
+the SIL plant with no ROS and no acados: one free drone, the planner's own eased
+circle r=0.5 v=0.6. Ladder bar is lag < 0.1 s.
+
+    kp_pos  kv  ki | radius ratio  phase lag    rmse   max thr
+       2.0 4.0 1.0 |       1.008     -0.014 s  0.029 m   0.339   <- defaults
+       2.0 4.0 0.0 |       1.011     -0.009 s  0.142 m   0.338
+       4.0 8.0 1.0 |       3.924     +2.252 s  3.128 m   0.600   UNSTABLE
+
+Three things worth having: lag is ESSENTIALLY ZERO everywhere in the stable region
+(the loop has no structural lag, where the MPC has 0.538 s); the integrator cuts
+RMSE 4-5x (0.142 -> 0.029 m), which is direct support for the plan's claim that the
+missing integral action is the problem; and there IS a stability boundary at high
+gain (kp_pos=4, kv=8 blows the orbit out to 2-4x radius with throttle pinned at the
+clamp). The probe flags saturated/blown-out rows as UNSTABLE so one is never read
+as a good radius ratio.
+
+  DO NOT over-read this. It is a FREE drone — no cable, no payload, no fleet — in a
+  plant with no contact physics, and the MPC's 0.538 s was measured on a tethered
+  3-drone carry in Gazebo. It shows the loop tracks; it does NOT show it beats the
+  MPC. The control experiment (same plant, real tracker nodes) is V-c and has not
+  been run.
+
+WIRED (2026-08-06). `control_mode: 'mpc' | 'velocity'` on controller_mpc, plumbed
+through dissipative_only_launch.py and three_attach_launch.py, DEFAULTING TO 'mpc'
+so every verified path is byte-unchanged. The MPC path was touched in exactly one
+way: the publish tail (takeoff spool, applied-throttle bookkeeping, last-good-command
+fallback) was extracted into _publish_channels() and is now shared by both, so a mode
+change cannot also change takeoff behaviour. Gate green after the refactor, including
+the SIL smoke — that is the regression check that the MPC path still flies.
+
+V-c RESULT: IT FLIES THE CARRY, IT CANNOT FLY THE LIFT.
+
+  offline tethered probe (airborne taut start, control at the real 50 Hz):
+      ratio 1.022, lag -0.011 s, rmse 0.036 m, peak drone tilt 33 deg   CLEAN
+
+  SIL bench (starts on the stands, ARM -> TAKEOFF -> lift):
+      R0067  kp2 kv4 ki1, no tilt limit   drone tilt 69 deg   envelope fault
+      R0068  + 30 deg tilt limit          drone tilt 39.8, LOAD tilt 80.6  fault
+      R0069  kp1 kv1.5 ki0.5              drone tilt 13.4, LOAD tilt 74.5  fault
+
+Read that carefully. Adding the tilt limit and softening the gains fixed the DRONE
+oscillation almost entirely (39.8 -> 13.4 deg, throttle peak 0.60 -> 0.44). The
+PAYLOAD still capsizes. So it is not gain tuning and it is not the drone loop ringing.
+
+Mechanism: the velocity loop has NO cable term anywhere in its feedback path. Each
+drone independently servos its own position and nothing coordinates the three cable
+tensions; the MPC path feeds a_cable into its model for exactly this reason. Through
+the lift, where tension is large, changing and unevenly shared as the cone opens,
+three independent position servos tilt the load over.
+
+This is the SAME boundary the dissipative network already has, documented as
+deliberate in dissipative_only_launch.py: "the pure decentralized network cannot break
+the load off the ground ... OCP does creep + lift, the network does everything after."
+The velocity loop inherits that limit rather than discovering a new one, which is
+consistent with the architecture being replicated — Quan et al.'s is a transport
+controller, not a takeoff controller.
+
+So V-c is NOT "the velocity loop fails". It is "the velocity loop cannot own the
+lift", and the fair test is the one the network already gets: engage it AFTER the
+handover. That needs a mode that follows the network handover instead of being set for
+the whole flight. Until that exists no Gazebo comparison is meaningful, so none was
+run — a velocity-mode number measured through a lift it was never meant to fly would
+be worse than no number.
+
+ONE HARNESS LESSON. The first offline probe recomputed the command every 2 ms (500 Hz)
+and reported the free-drone gains as comfortably stable. The real tracker runs at
+50 Hz. That was fixed (control_hz, plant integrated separately) and it turned out NOT
+to be the cause here — but the probe still does not model takeoff at all, which is
+where the failure is. Same class of blind spot as the documented mini_plant one:
+necessary, not sufficient.
+
+STATUS: V-a and V-b PASS. V-c fails through the lift, diagnosed. V-d to V-g not run. NOT WIRED INTO THE TRACKER YET — the
+Stage T Gazebo batch was in flight and colcon --symlink-install means editing
+controller_mpc.py would have changed the code mid-batch and silently split the
+experiment across two versions. velocity_loop.py is a new file nothing imports, so
+adding it changed no running node.
+
+
+9. STEP 1 OF THE OCP-HANDBACK PLAN: GEOMETRY AS A RUNTIME PARAMETER
+-------------------------------------------------------------------
+
+Supervisor's plan: use the dissipative network ONLY for the reconfiguration event,
+then hand back to the OCP for the new fleet size, pre-compiling the OCP for n=2,3,4.
+This is step 1 of that — and it is the enabling change, not the plumbing.
+
+WHAT CHANGED. rho_i (attach points) and l_i (cable lengths) were BAKED into the
+CasADi model, so any change of attachment layout meant a ~50 s acados rebuild. They
+are now RUNTIME PARAMETERS (model.p = [q_ref(4), rho(3n), l(n)]). Masses and inertia
+stay baked — they do not change in flight and keeping them out keeps p small.
+
+WHY IT IS THE ENABLING CHANGE. A welded newcomer attaches WHEREVER ITS MAGNET LANDED,
+not at a nominal ring point, and you cannot rebuild mid-flight. With geometry baked,
+handing the fleet back to the OCP after an attach was impossible in principle. It is
+now a parameter write: PlannerSolver.set_geometry(rho=..., cable_lengths=...).
+
+Only n sets the problem dimensions, so ONE compiled solver per fleet size covers any
+layout. Verified: n=2/3/4 all build and coexist (8.6 / 17.1 / 38.3 s), p = 12 / 16 / 20.
+
+  src/controller_load_mpc/.../load_cable_dynamics.py   rho_p, l_p, geom_values()
+  src/controller_load_mpc/.../planner_ocp.py           model.p, parameter_values
+  src/controller_load_mpc/.../planner_solver.py        set_geometry(), per-solve p,
+                                                       reference fns take p_geom
+  src/controller_load_mpc/test/test_load_geometry_params.py   9 tests
+  tools/prebuild_planner.py                            NEW, see the trap below
+
+THE TEST THAT MATTERS. A model built on ring A, evaluated with ring B's parameters,
+must equal a model built on ring B — any residual compile-time dependence shows up
+there. Without it, a stale baked rho would make the solver plan against a fleet that
+no longer exists while reporting perfectly healthy solves. A complement test proves
+the geometry actually changes the dynamics, so the first cannot pass trivially.
+
+A SIDE BENEFIT WORTH KNOWING: the solver cache signature no longer includes rho or
+cable_len, so changing attach_radius or cable_len no longer costs a rebuild.
+
+THE TRAP THIS TRIPPED, AND WHY tools/prebuild_planner.py EXISTS. The acados build
+runs inside the planner node's __init__ (9-40 s). The SIL bench starts its scenario
+clock on "poses are flowing", not on "the planner is ready", so after a model source
+change it runs the whole run and SIGINTs the node mid-`make`. The interrupted build
+has already DELETED the old .so and never writes the signature, so the next run
+rebuilds too — forever. It presents as "the planner publishes no references"
+(payload_rmse and track errors 'not present in this run'), not as "still compiling",
+and it cost a gate cycle to spot. The gate's stage 6 caught it, which is exactly what
+stage 6 is for.
+
+  ./tools/prebuild_planner.py        # after touching the planner model, before benching
+
+It builds the dynamics EXACTLY as planner_node does, because the cache signature
+covers load mass / inertia / drone mass — a prebuild with guessed constants writes a
+signature the node will not match, rebuilds anyway, and looks like it did nothing.
+That happened once here too.
+
+STATUS: step 1 done, gate green (146 tests). NOT done: n-keying the code dir so the
+three solvers survive each other's rebuilds, the network -> OCP(n') hand-back, and
+any flight test of a hand-back.
+
+
+10. STEPS 2-4: DETACH -> HOLD -> RECONFIGURE -> OCP HAND-BACK
+--------------------------------------------------------------
+
+The sequence you asked for: MPC flies the trajectory, a drone detaches, the
+trajectory HOLDS while the dissipative network redistributes, then the fleet goes
+back to the MPC at the new size and the trajectory continues.
+
+HOW TO RUN IT
+
+    ./tools/prebuild_planner.py          # once, after any planner-model change
+    ./tools/run_experiment.py configs/experiments/detach_handback_n4.yaml
+
+  or by hand:
+    cd simulation_assets && gz sim four_rigid_ground.sdf -v4 -r
+    ros2 launch controller_quad_load rviz_quad_load_launch.py num_drones:=4 detach:=true
+    ros2 launch controller_quad_load dissipative_launch.py num_drones:=4 \
+         load_traj:=circle traj_speed:=0.6 traj_radius:=0.5 ocp_handback:=true
+    #  ARM -> TAKEOFF -> (mid-sweep) DETACH button / ros2 topic pub /fleet/detach 3
+
+  ocp_handback DEFAULTS FALSE, so every previously verified detach run is unchanged.
+
+WHAT TO WATCH FOR, in order:
+    [dissipative] DETACH drone 3 (slot 3); 3 drones remain on the load
+    [dissipative] reconfiguring — trajectory HELD at t=... s
+    [planner]     FLEET RESIZED to n=3; slot->drone [1, 2, 0]; attach azimuths
+                  [90.0, 180.0, 0.0] deg
+    [dissipative] HAND-BACK: OCP now flies n=3, trajectory resumes at t=...
+
+NEW PARAMETERS (dissipative_launch.py and dissipative_only_launch.py)
+    ocp_handback        false   master switch
+    handback_settle_s   2.0     how long the fleet must be still
+    handback_speed      0.12    m/s bar for every drone AND the load
+    handback_pos_tol    0.35    gross sanity bound on load-vs-target
+    handback_timeout_s  20.0    give up, resume on the network, say so
+
+THREE BUGS FOUND BY FLYING IT, each with a specific cause:
+
+1. THE DETACHED DRONE KILLED THE FLEET. After resize_fleet the OCP plans only for
+   the drones still on the load, so drone 3 got no reference at all. A tracker with
+   no reference is not silent -- it trips its own ref_stale envelope and disarms,
+   which the manager reads as an unexpected disarm and aborts everyone. R0089:
+   "ENVELOPE FAULT: reference stale by 1.15 s", 4 s after the hand-back. Departed
+   drones are now parked on a hold reference at their pose.
+
+2. THE ATTACH POINTS DO NOT MOVE — this is what step 1 was for. The pre-built OCP
+   for n=3 carries a nominal EVEN 3-gon, but three survivors of a four-ring sit at
+   0/90/180 deg, not 0/120/240. Handing it an even ring makes it solve for a payload
+   whose cables are somewhere they are not, and the moment balance tips the load:
+   R0093, payload tilt 62 deg about 9 s after the hand-back. Now the surviving subset
+   of the ORIGINAL ring is passed through, which is only expressible because
+   attachment geometry is a runtime parameter.
+
+3. IT LATCHED THE WRONG TARGET HEIGHT. target_z was taken from the load's z at
+   hand-back — i.e. mid-transient, after the reconfiguration dip. It latched 0.29 m
+   instead of 0.60 and the OCP held that for the rest of the run (R0096). The
+   commanded height does not change because a drone left.
+
+AND ONE ABOUT THE TEST ITSELF: the first configs detached at t=30, which is AFTER
+the eased sweep finishes (traj_t 9.90 of 9.82 s) — so there was nothing left to
+resume and the hold/resume was invisible. Then t=24 landed in the lift transient.
+Now t=27: mid-sweep, ~2.8 s left to resume, clear of the lift.
+
+TWO THINGS THAT ARE NOT MINE BUT WILL BITE YOU
+
+* THE n=4 CIRCLE LIFT TRANSIENT IS BIMODAL. Same config, same code: R0096 held
+  0-4 deg payload tilt through the whole sweep; R0098 hit 43-51 deg at t=19-20 as
+  the lift completed. The n=3 circle peaks at 16 deg over a whole run. Detaching
+  from an already half-capsized payload tests nothing, so this variance sets a floor
+  on how repeatable the demo can be until it is understood.
+
+* THE RECONFIGURATION TRANSIENT IS SEVERE. While the network redistributes 4->3 the
+  load dips from 0.50 m to as low as 0.07 m and tilts 24-30 deg. Pre-existing network
+  behaviour, not introduced by the hand-back, but it is the thing most likely to be
+  unacceptable on hardware.
+
+* STARTUP POSE TIMEOUTS: now 8 of ~52 Gazebo runs. Every batch needs a spare repeat.
+
+CURRENT STATUS (after R0108/R0109, both fixes in) — 19 runs, R0088-R0109:
+
+    11 reached the full sequence (hold -> resize -> hand-back)
+     7 lost to startup POSE TIMEOUTS before anything was tested
+     1 settle-timeout (R0088, the too-tight position tolerance, since fixed)
+
+  So of the 12 runs whose sim started cleanly, 11 completed the sequence.
+
+  THE DEFINITIVE RUNS ARE R0108 AND R0109: held mid-sweep (traj_t 5.1 / 5.3 of
+  9.82 s), resized to n=3 on azimuths [90, 180, 0], handed back, and the trajectory
+  visibly resumed -- the published reference xy freezes t=17-21 and moves again
+  21.3-25.6. Minimum payload height after the detach 0.464 / 0.452 m, against 0.07 m
+  (i.e. on the floor) before the two fixes. Worst per-drone error 0.32 m during the
+  reconfiguration, 0.001 m once the OCP has it back.
+
+  Earlier "full sequence" runs are weaker evidence: most held at traj_t ~9.9, i.e.
+  after the sweep had already finished, so they never exercised the resume.
+
+  THE TWO FIXES THAT MADE IT WORK, both found from Wesley watching it in the GUI:
+    * _enter_planner_phase re-zeroes _ff_t, restarting the cable-tension feedforward
+      soft-start. For FF_EASE_S the fleet is told to carry NO payload weight, so it
+      under-thrusts and the load drops -- that was the payload hitting the ground on
+      resume. Correct for a grounded creep start, wrong for an airborne hand-back.
+    * The new solver had no warm start, so its first live solve was a cold
+      reconverge -- _prime_solver's docstring already records that as "a jump and a
+      scrambled MPC path". It is now primed twice from the measured state before the
+      fleet is handed over, and the hand-back is ABORTED if priming does not converge.
+
+RESULT OF THE EARLIER 3-REPEAT BATCH AT detach=27 s (R0100-R0102):
+
+  R0100  FULL SEQUENCE. Held at traj_t=5.70, resized to n=3 on azimuths
+         [90, 180, 0], handed back, TRAJECTORY RESUMED AND COMPLETED. Payload
+         tracked its reference to ~0.02 m, drone errors settled to 0.001-0.016 m,
+         flew to LAND at 92 s.
+  R0101  Hand-back TIMED OUT (fleet not still within 20 s) -> stayed on the network
+         and resumed the trajectory there. That is the designed fallback and it also
+         flew to LAND.
+  R0102  Lost at t=8 s to a startup pose timeout, before takeoff finished.
+
+So: 1 clean full sequence, 1 safe fallback, 1 lost to the harness. The capability
+works; the repeatability is limited by things listed below, not by the mechanism.
+
+TWO RESIDUALS WORTH CHASING NEXT
+
+* ~18 deg STEADY PAYLOAD TILT after the hand-back, and ~12 cm of height sag. This is
+  probably not a bug: three cables at 0/90/180 deg are NOT symmetric about the load's
+  centre of mass, so a level payload needs unequal (moment-balanced) tensions -- the
+  same geometric fact CLAUDE.md §8 records for the attach case. The OCP does solve
+  for tensions, so the question is whether it is finding a tilted equilibrium it
+  should not, or the only one that exists for that ring. Worth answering before
+  quoting any tracking number from after a detach.
+
+* LANDING WITH A DETACHED DRONE ABORTS. Both surviving runs aborted at or just after
+  LAND (t=97.9 and 92.5), R0100 with 'drone tilt 71.4 deg'. The trajectory phase was
+  already over, so it does not affect the result above, but the LAND path clearly
+  does not expect a parked detached drone.
+
+NOT done: hand-back after an ATTACH (needs the weld point as rho -- the
+parameterisation allows it, nothing wires it yet), and multi-step 4->3->2.
+
+
+11. PART 0 STATUS
+----------------
+
+  [x] One command runs a headless experiment, self-describing result directory
+  [ ] Metrics reproduce the four DISSIPATIVE_TRACKING_ISSUE §2 stage numbers
+      within 2%   — BLOCKED, no archived run has the 0.5 m desired radius
+  [ ] SIL bench reproduces the attach runaway
+      — BLOCKED on the fixed-kT decision; 45 and 65 deg both diverge now, so the
+        pair no longer discriminates
+  [x] Plots auto-generate; compare_runs works across two runs (and across a bench
+      run and a Gazebo run)
+  [x] Gate green and wired to a pre-push hook
+  [x] F1-F6, F12 closed; backup restore drill passed
+
+The two open items are the ones you said are yours to decide. Everything else in
+Part 0 is done.
+
+Deliberately NOT done: the §9.5 "2 headless Gazebo runs" in the gate. At ~235 s
+each the gate would reach ~10 minutes and stop being run, and on the current
+plant every Gazebo attach scenario diverges, so there is no run yet whose passing
+would mean anything. The mechanism is ready — check_thresholds.py reads a Gazebo
+run's metrics identically. Recorded in THESIS_PLAN §9.5.
+
+
+================================================================================
+12. WHY THE ATTACH WAS NOT WORKING (2026-08-09)
+================================================================================
+
+Question asked: is the weld joint too rigid, and would an extra compliant segment
+help? Answer: no -- the weld was never the problem, and the SDF weld is already
+fully articulated. Three separate faults were stacked on top of each other, each
+one hidden by the one before it.
+
+Evidence base: R0031-R0046 (the 2026-08-05 re-flights, 12 welds) and R0116-R0118
+(2026-08-09). Every number below is measured, not inferred.
+
+
+12.1 FAULT A -- the handover cut the newcomer's motors  [FIXED]
+---------------------------------------------------------------
+
+12 welds in 12 runs, the same signature within 0.05 s of every weld:
+
+    d3_thr  0.36 -> 0.000        (channel_2 = -1.0 exactly: armed-idle)
+    d3_tilt 6 deg -> 89 deg      in 0.35 s
+    ENVELOPE FAULT: drone tilt > 60 -> fleet abort
+    the newcomer falls 1.1 m -> 0.10 m and lies on the floor
+
+Mechanism. elrs_mux switches control authority to our tracker on the first
+/magnet/object_attached. dissipative_node deliberately published NOTHING for a
+reserved drone before the weld ("owned by the collaborator's approach
+controller"), and it clears attach_pending on that SAME message, so its first
+reference for the newcomer only goes out on the next 10 Hz plan tick. In that
+window controller_mpc takes its `planner_ref_pos is None` branch and publishes
+armed-idle -- throttle ZERO -- at 50 Hz. The mux had just switched a flying drone
+onto that stream.
+
+The tilt is a CONSEQUENCE, not a cause: payload_betaflight_comm mixes
+`speeds = throttle +/- rate offsets` clipped at 0, so at throttle 0 only the
+positive-offset motors spin. The drone loses lift and attitude authority in the
+same instant.
+
+This was already known to the SIL bench -- tools/sil/bench_node.py `_handed_over`
+models the gap away as an explicit counterfactual and says in its docstring that
+the shipped stack has the dead window. Nobody had closed it in the stack.
+
+Fix, three parts:
+  * dissipative_node._publish_pending_attach_refs() -- publish a hold-at-measured
+    reference for every pending reserved drone, every plan tick, in every phase.
+    The mux drops that stream until the weld, so it costs the approach controller
+    nothing and makes the switch bumpless.
+  * controller_mpc -- the no-reference branch now holds the last solved command
+    when airborne instead of commanding motors off. Armed-idle is still correct
+    on the ground.
+  * elrs_mux / drone_magnet/handover_policy.py -- never hand authority to a stream
+    that is not commanding thrust. Pure module, 13 tests, in the gate.
+
+Measured after the fix (R0116): d3_thr stays 0.29-0.41 straight through the weld,
+d3 tilt peaks at 10 deg, the newcomer holds 1.09 -> 1.02 m and tracks its
+reference. The instant failure is gone.
+
+
+12.2 FAULT B -- the approach drone rams tethered drone 0  [FIXED, unverified]
+-----------------------------------------------------------------------------
+
+With A fixed, R0116 still aborted -- but 7 seconds EARLIER than anyone had been
+looking, and before the weld.
+
+    t=29.2  |d3 - d0| closes to 0.137 m
+    t=29-36 it STAYS at 0.135-0.138 m while both drones translate 0.9 m in -x
+    payload tilt   0 deg (t=29) -> 25 deg (t=35), all of it BEFORE the weld
+    payload x      0.000 -> -0.53 m against a hover reference of x = 0
+
+That is a sustained contact, not a near miss. The approach drone bulldozes drone 0
+across the arena and the payload follows on its cable.
+
+Geometry, and it is forced: the tethers sit at azimuth 0/120/240 and the gap-centre
+weld target is at azimuth 180 (attach_x_offset -0.08), but three_attach.sdf spawned
+the approach drone at x = +1.2 -- azimuth 0, directly behind drone 0. The straight
+line from spawn to target passes through drone 0 by construction, and the config
+runs with enable_obstacle_avoidance:=false (the launch default is true; it was
+turned off because a large safety sphere seals the corridor and the weld never
+happens).
+
+Fix: spawn the approach drone at x = -1.2, on the gap bisector. It now descends the
+120 deg gap between drones 1 and 2, clearing both by ~0.40 m, so the corridor is
+clear with avoidance either on or off. One line in three_attach.sdf.
+
+The post-weld payload capsize in R0116 (tilt 3 -> 62 deg in 0.85 s, abort at
+weld+1.24 s) is downstream of this: the OCP had drifted 0.53 m by weld time, so the
+OCP -> network handover snapped every drone's reference 0.3 m at once. Whether any
+of that survives on a clean approach is the open question.
+
+
+12.3 THE JOINT HYPOTHESIS -- what the SDF actually contains
+------------------------------------------------------------
+
+The shipped weld chain is
+
+    payload =FIXED(DetachableJoint)= magnet_tip_link =BALL= magnet_arm =BALL= drone
+
+and the ball is AT the weld point, so the connection transmits tension only. It is
+kinematically identical to a tether
+
+    payload =BALL= stub =FIXED= rod =BALL= drone
+
+so there is very little rigidity left to remove. Two things follow, and the second
+matters for the thesis:
+
+  * "add a compliant segment" has little room to help. It is still worth measuring
+    -- it never has been. git shows x3_drone3_magnet.sdf was created with
+    arm_to_magnet_tip already a ball joint and touched exactly once since, to change
+    motorConstant.
+  * sub-claim N3 claims reconfiguration under a RIGID, MOMENT-TRANSMITTING joint.
+    No world in the repo contains one. As it stands the simulator evidences the
+    tension-only case that both reference papers already cover.
+
+tools/make_weld_variants.py generates the one-factor ladder (each step changes one
+thing, so a difference is attributable):
+
+    rod    baseline topology, arm modelled as a proper slender rod. The shipped arm
+           puts its whole 1 g at the link origin (the TOP) with an isotropic 2e-6,
+           where the tether rods use m*L^2/12 = 2.083e-05 about their midpoint.
+    seg2   'rod' plus a third ball joint mid-span (the extra-compliance hypothesis).
+    rigid  'rod' with arm_to_magnet_tip FIXED -- the moment-transmitting weld N3
+           describes. Expected to be the hard case.
+
+Run:  python3 tools/make_weld_variants.py        # writes models + worlds
+      python3 tools/make_weld_variants.py --check  # fails if stale
+then point an experiment config at simulation_assets/three_attach_<variant>.sdf.
+
+
+12.4 FAULT C -- the mocap watchdog is a wall clock in a 0.3x sim  [FIXED]
+------------------------------------------------------------------------
+
+Pose-timeout disarms went from 0 in 17 runs (2026-08-05) to 6 in 5 runs, every one
+of them ~1 s after ARM, and they destroyed a whole batch: in R0120 drones 1 and 2
+disarmed at t=4.5 and never re-armed, so the run "welded" onto a payload already
+lying at 57 deg on the ground.
+
+Two causes, both fixed:
+
+  * POSE_TIMEOUT_THRESHOLD is 0.25 s measured on the WALL clock (deliberately -- it
+    is about real comms latency). Gazebo runs at ~0.3x realtime, so 0.25 s of wall
+    is under four mocap periods and ordinary scheduling jitter reads as a dead link.
+    Now `pose_timeout_s`, default 0.25 (hardware unchanged), 1.0 in
+    three_attach_launch.py.
+  * The warm reference of 12.1 made drone 3's tracker run a full acados solve for
+    the whole 35 s approach, where before it returned early and never solved. It is
+    now gated on the newcomer being within `attach_warm_radius` (1.0 m) of the load:
+    the tracker only has to be live when the mux switches, and the weld needs 0.15 m
+    proximity, so this leaves seconds of warm-up at a fraction of the cost.
+
+Result: 0 pose timeouts in the next 4 runs, 3 of which reached the weld with a
+healthy fleet. (One run still died on `reference stale by 1.17 s` -- the PLANNER
+stalling, a different CPU-contention symptom. Do not run analysis while a batch
+flies.)
+
+
+12.5 WHAT IS ACTUALLY LEFT: the hand-out runaway
+------------------------------------------------
+
+With A, B and C fixed, three of four runs weld onto a clean, level payload
+(pre-weld tilt 0.13-0.15 deg, payload x,y = 0.000, no drone within 0.43 m) and the
+fleet then flies for TEN SECONDS. R0126 and R0128 are near-identical, one second
+per row, t relative to the weld:
+
+    t     payload_tilt  payload_z   d3_tilt   d3_err   d0_err
+   -1        0.15         0.570       1.1     0.02     0.000
+    0       38.3          0.555       1.5     0.10     0.131     <- weld step
+    1       53.6          0.549       1.2     0.11     0.094
+    2       54.2          0.560       0.9     0.12     0.065
+    4       47.4          0.563       1.1     0.13     0.063     <- recovering
+    6       41.0          0.562       2.3     0.17     0.058
+    8       30.7          0.566      12.4     0.36     0.043
+    9       55.5          0.556     135.1     1.14     0.534     <- newcomer tumbles
+   10      180.0          0.214     125.8     1.25     1.055
+
+Two distinct things, in this order:
+
+  (1) A STEP AT THE WELD. Payload tilt goes 0.15 -> 38 deg in under a second. The
+      cause is measured: the balanced-tension solve re-solves for four attach points
+      the instant the newcomer joins, and the incumbent OPPOSITE the weld is asked
+      to move in one tick --
+
+          pre-weld  (OCP)      d0/d1/d2   horiz 0.460 m   elev 37.2-37.3 deg
+          post-weld (network)  d0         horiz 0.343 m   elev 49.7 deg
+                               d1/d2      horiz 0.476 m   elev 40 deg
+
+      0.12 m inward and up for d0, in a step. `attach_handout` eases the NEWCOMER
+      out to its slot over 12 s and `attach_ff_ramp_s` fades its cable FF over 1.5 s,
+      but NOTHING eases the three incumbents. The soft hand-out is one-sided.
+
+  (2) THE HAND-OUT RUNAWAY, at ~75% of the 12 s ramp. The payload is recovering
+      steadily (54 -> 31 deg) and d0 is re-converging (0.13 -> 0.043) when the
+      NEWCOMER loses it: d3_err creeps 0.10 -> 0.13 -> 0.17 -> 0.36 as it is eased
+      out-and-down from its near-vertical weld pose toward the 45 deg rim, then
+      tilts past 60 deg and tumbles.
+
+  (2) is the failure the 2026-07-28 record describes ("drone 3's error grows REF
+  0.30 -> ACT 1.06, |aCm| -> 20, tilt 10 -> 33 -> 72 deg"). It has been the stated
+  open problem all along; it was simply never reachable, because faults A, B and C
+  killed every run before the hand-out got past 25%.
+
+Three candidate next steps, in the order I would try them:
+
+  a. Ease the INCUMBENTS too -- ramp the whole network reference from the pre-weld
+     geometry to the 4-drone balanced solution over the hand-out time, instead of
+     stepping it. Removes (1) and gives (2) a level payload to start from.
+  b. Slow or shorten the hand-out (attach_t_handout, attach_elev_deg). A steeper
+     settle elevation keeps the newcomer near its weld pose -- the launch already
+     documents this as the transit-runaway mitigation.
+  c. Run the weld-variant ladder (12.3) against the HAND-OUT phase, which is where
+     arm dynamics could plausibly matter and where they have never been measured.
+
+(a) and (b) are design decisions, not bug fixes, so they are Wesley's call.
+
+
+12.6 THE WELD-VARIANT LADDER, MEASURED (R0125-R0137)
+----------------------------------------------------
+
+Configs: configs/experiments/attach_ring_45_{rod,seg2,rigid}.yaml, worlds generated by
+tools/make_weld_variants.py. Welded runs only; payload tilt in deg at t+ seconds after
+the weld; `surv` = seconds from weld to fleet abort.
+
+  variant   run    surv  |  +0.5    +2     +4     +6     +8  | d3_err@+8  d3_tilt@+8
+  baseline  R0125   1.26 |  18.9  155.1  162.9  162.9  162.9 |     1.018       124.8
+  baseline  R0126  10.15 |  17.3   45.7   48.4   41.8   33.6 |     0.187         3.4
+  baseline  R0128  10.08 |  16.2   48.6   47.3   41.0   30.9 |     0.193         4.0
+  rod       R0129  10.39 |  16.4   46.7   48.5   44.2   35.5 |     0.179         3.3
+  seg2      R0132  10.01 |   2.1   39.5   45.0   37.4   26.1 |     0.243         4.9
+  seg2      R0133  10.30 |   5.5   44.1   48.9   41.8   34.5 |     0.191         3.5
+  rigid     R0135   1.76 |   7.9   89.8   72.1   72.1   72.1 |     1.090       124.8
+
+WHAT THIS SAYS
+
+  * seg2 -- an extra compliant mid-span joint -- does NOT help. Survival 10.01 and
+    10.30 s against rod's 10.39 and baseline's 10.08/10.15; steady tilt, d3 tracking
+    error and d3 tilt all inside the run-to-run scatter. The hypothesis that the weld
+    connection is too stiff is not supported.
+
+  * seg2 DOES soften the immediate weld impulse: payload tilt at t+0.5 s falls from
+    16-19 deg (baseline, rod) to 2-6 deg. Real, repeatable, and irrelevant to the
+    outcome -- by t+2 s every variant is at the same 40-49 deg, because the dominant
+    driver is the REFERENCE STEP of 12.5(1), not the joint.
+
+  * THE FAILURE IS INVARIANT TO THE WELD MECHANICS. Four joint configurations produce
+    the same trajectory: a step to ~45 deg, a slow recovery to ~30 deg, and the
+    newcomer tumbling at t+9 s as the hand-out reaches ~75%%. That is the strongest
+    available evidence that the joint is not the lever -- which is what the SDF already
+    implied, since the shipped weld is a ball AT the weld point and so transmits
+    tension only.
+
+  * rigid (arm_to_magnet_tip FIXED, the configuration sub-claim N3 describes) is
+    DECISIVELY WORSE, and this is the most thesis-relevant number in the section.
+    Five welded runs (R0135, R0138-R0141):
+
+        survival   1.76  1.87  1.68  1.91  1.84 s   -> median 1.84, spread 0.09
+        tilt @+2s  89.8  97.3  83.0  97.2 106.4 deg -> median 97
+
+    against 10.01-10.39 s and 40-49 deg for every ball-jointed variant. With a
+    genuinely moment-transmitting weld the payload capsizes past 90 deg within two
+    seconds, 5 times out of 5, and the newcomer is gone (d3 tracking error 1.09-1.17 m).
+
+    So sub-claim N3 -- "reconfiguration under a rigid, moment-transmitting attachment"
+    -- is NOT currently evidenced by anything in this repo, and it is not a tuning gap:
+    the shipped worlds all model the weld as a ball AT the attach point, i.e. the
+    tension-only case both reference papers already cover, and the moment-transmitting
+    case defeats the current controller reproducibly. This needs a decision before
+    examination: either restate N3 around what the rig physically does, or treat the
+    rigid weld as the open control problem and solve it.
+
+WHAT THIS COST, AND THE REMAINING LOSS MODES
+
+  Weld rate was 4 of 9. Every non-welding run failed the same way and it is NOT the
+  approach corridor: the approach drone never left the ground, logging
+  `[approach] DISARMED - waiting for ARM on this node's command topic` for the whole
+  run with `pose=ok` and a live external reference commanding z=1.0. The ARM on
+  /fleet/command never reached approach_mpc_3. A startup message race, same family as
+  the pose timeouts and the planner stall, and now the largest single source of wasted
+  runs.
+
+
+12.7 A HEADWIND, unrelated to any of this
+------------------------------------------
+
+A drone that disarms BEFORE takeoff does not trigger the fleet abort:
+main._arming_feedback_callback gates on `self.flying`. R0119 and R0120 flew on with
+two drones dead and produced junk that looked like attach data. Worth closing -- it
+turns an obvious failure into a misleading one.
