@@ -1,4 +1,16 @@
 ################################################################################
+# BRANCH claude-experimentation, 2026-09-10 (cont.)  --  MIS-SEED ROBUSTNESS (E10)
+################################################################################
+
+Attach-during-circle demo with the controller BELIEVING a wrong parameter (world true):
+  mass -25 % clean 2/2; mass +25 % ABORT 2/2 (load over-lifted to 0.96 m, 30 deg);
+  cable -10 % clean 2/2; cable +10 % ABORT 2/2 (load dropped to 0.17 m). The envelope
+  is asymmetric: under-estimates are absorbed (the common-mode trim supplies the
+  missing lift; short-cable references stay inside the rods' reach), over-estimates
+  are fatal within ~10 s of the weld. Table + rig rule: docs/experimentation/
+  robustness_table.md. Runs R0215-R0222.
+
+################################################################################
 # BRANCH claude-experimentation, 2026-09-10  --  FIRST FINDINGS
 ################################################################################
 
