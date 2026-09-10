@@ -77,15 +77,15 @@ def test_non_uniform_attach_ring_is_flagged():
 def test_launch_args_are_parsed_without_executing_the_launch():
     a = launch_args(LAUNCHES / 'mpc_quad_load_launch.py')
     assert 'thrust_ratio' in a and 'load_mass' in a
-    assert a['thrust_ratio'] == '32.9'
+    assert a['thrust_ratio'] == 'auto'
 
 
 def test_sim_and_real_thrust_settings_still_differ():
-    """thrust_ratio 32.9 in sim vs 24.0 on hardware. If these ever converge by
-    accident, one of them is wrong — Gazebo's motor model is QUADRATIC
-    (a = 88.6*u^2), so a linear kT there must be the secant gain at hover
-    (88.6 * the 0.371 measured hover throttle = 32.9); the real airframe
-    measures 24 at full battery health."""
+    """thrust_ratio 'auto' in sim vs 24.0 on hardware. Gazebo's motor model is
+    QUADRATIC (a = 88.6*u^2), so a linear kT there is the secant gain at the hover
+    operating point, derived per launch by thrust_model.py (32.9 at 0.4 kg, 34.6 at
+    0.6 kg); the real airframe measures 24 at full battery health and is never
+    derived."""
     sim = launch_args(LAUNCHES / 'mpc_quad_load_launch.py')
     real = launch_args(LAUNCHES / 'real_control_launch.py')
     assert sim['thrust_ratio'] != real['thrust_ratio']

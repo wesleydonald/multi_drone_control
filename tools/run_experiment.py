@@ -71,7 +71,7 @@ def clean_slate(strict=True):
     return out
 
 
-def start_gazebo(cfg, log_path, gui=False):
+def start_gazebo(cfg, log_path, gui=False, nice=10):
     """`gz sim -s -r <world>` -- server only, running immediately.
 
     `-s` (server, no GUI) is what makes a batch possible; `-r` starts the world
@@ -86,6 +86,13 @@ def start_gazebo(cfg, log_path, gui=False):
         raise SystemExit(f'world not found: {world}')
     cmd = ['gz', 'sim', '-r', '-v', '2', world] if gui else \
           ['gz', 'sim', '-s', '-r', '-v', '2', world]
+    # Gazebo below the controllers in scheduling priority: a 12-core box sat at load
+    # ~25 during these runs and the dissipative node's planner tick stretched to
+    # 0.3-0.7 s WALL (never in SIL, which has no Gazebo), tripping the trackers'
+    # 1 s wall-clock reference watchdog (R0169, R0225). Slowing the physics costs
+    # only wall time; starving a controller costs the run.
+    if nice and not gui:
+        cmd = ['nice', '-n', str(int(nice))] + cmd
     fh = open(log_path, 'w')
     fh.write('$ ' + ' '.join(cmd) + '\n\n')
     fh.flush()
@@ -334,11 +341,12 @@ def write_metrics_and_plots(run_dir):
 
 # ── one run ──────────────────────────────────────────────────────────────────
 
-def run_once(cfg, cfg_path, gui=False, repeat=0):
+def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10):
     import rclpy
     from experiment.runner_node import ExperimentRunner
 
     run_dir, rid = allocate(f'gz_{cfg.name}', kind='sim')
+    readback = None            # the manifest is written on the startup-failure path too
     print(f'\n=== Gazebo experiment: {cfg.name}  ({rid}, repeat {repeat}) ===')
     print('   ' + cfg.summary().replace('\n', '\n   '))
     print(f'    out:    {run_dir}')
@@ -359,7 +367,7 @@ def run_once(cfg, cfg_path, gui=False, repeat=0):
     reason, failures = 'unknown', []
     try:
         gz_proc, gz_fh = start_gazebo(
-            cfg, os.path.join(run_dir, 'logs', 'gazebo.log'), gui=gui)
+            cfg, os.path.join(run_dir, 'logs', 'gazebo.log'), gui=gui, nice=gz_nice)
         # ORDER MATTERS, and the docstring at the top of three_attach_launch.py says so:
         # the sim-interface launch owns the /clock bridge, the pose bridges and the
         # mocap emulators, and it must be publishing BEFORE any controller starts.
@@ -523,6 +531,8 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('config', nargs='+', help='experiment YAML (configs/experiments/)')
     ap.add_argument('--repeats', type=int, default=1)
+    ap.add_argument('--gz-nice', type=int, default=10,
+                    help='nice level for the headless Gazebo process (0 = none)')
     ap.add_argument('--gui', action='store_true',
                     help='run Gazebo with its GUI (debugging; not for batches)')
     args = ap.parse_args()
@@ -531,7 +541,8 @@ def main():
     for path in args.config:
         cfg = ExperimentConfig.from_yaml(path)
         for rep in range(args.repeats):
-            results.append((cfg, rep, run_once(cfg, path, gui=args.gui, repeat=rep)))
+            results.append((cfg, rep, run_once(cfg, path, gui=args.gui, repeat=rep,
+                                               gz_nice=args.gz_nice)))
 
     print('\n=== experiment summary ===')
     ok_all = True

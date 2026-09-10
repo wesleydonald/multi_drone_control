@@ -106,3 +106,22 @@ def test_horizon_references_leaves_the_live_network_state_untouched():
     assert np.allclose(net.q, q0)
     assert np.allclose(net.qd, qd0)
     assert np.allclose(net.handout, ho0)
+
+
+def test_a_newcomer_can_leave_again_after_joining():
+    """Round trip on the reserved slot: attach, then detach the SAME slot. R0223/R0224
+    died on the node-side slot lookup for a reserved drone; the network side must
+    return to the three-drone shape with the reserved slot inert and the tension
+    feedforward back on three drones."""
+    net, load = _net()
+    k = N_TETHERED
+    net.attach(k, load + np.array([0.0, -0.25, 0.45]), handout=True)
+    assert net.n_attached() == N_NET
+    net.detach(k)
+    assert net.n_attached() == N_TETHERED
+    assert not net.attached[k]
+    # a stepped network with the slot inert must not move it or count it
+    q0 = net.q[k].copy()
+    net.step(load, LEVEL, np.zeros(3), load, 0.02)
+    assert np.allclose(net.q[k], q0)
+    assert net.n_attached() == N_TETHERED

@@ -9,7 +9,7 @@ run IDs that justify it, and the gate stays green.
 
 | # | Item | Why | How verified |
 |---|---|---|---|
-| 1 | **Mass-scaled OCP hover offset** (+3.5 cm @0.4 kg, +18 cm @0.6 kg, SIL; +12 cm Gazebo) | Every flight starts high; feeds the weld transient; a planner correctness question | Standalone `PlannerSolver` hover test at 0.4/0.6 kg (no ROS), then SIL smoke height |
+| 1 | **Mass-scaled OCP hover offset** (+3.5 cm @0.4 kg, +18 cm @0.6 kg, SIL; +12 cm Gazebo) — RESOLVED: sim kT operating point | Every flight started high; feeds the weld transient | SIL A/B on kT (R0228–R0230), gate smoke R0232 |
 | 2 | **Tilt-aware network wrench** — attach points at the *true* load attitude for the tension solve, yaw-only kept for the formation build | The remaining weld transient (+8°) is the network modelling a 34°-tilted three-drone hover as level | Harness H/J (rigid-body tilt), then the circle-attach A/B |
 | 3 | **Thesis figure set for the attach demo** — storyboard (3D path + events), tilt/height vs time with weld/hold/resume bands, tension share, newcomer transit | Chapter 7's evidence, regenerable from the registry | `tools/thesis_figures.py` entries pointing at R0208/R0209 |
 | 4 | **Robustness sweep the paper reports** (Quan et al.: payload ±25 %, cable length ±40 %) on the attach demo | E10 for chapter 8, cheap headless | 5 configs × 2 repeats, one table |
@@ -42,8 +42,16 @@ Findings land in `learning.txt` as usual; this file tracks status.
   flight-card section under results/preflight/.
 - Item 3: `F_attach_demo_storyboard` is a registry figure (`kind: storyboard`), regenerated
   by `tools/thesis_figures.py`.
-- Item 7: `attach_then_detach_n3` (attach, resume, then detach the newcomer) and
-  `attach_fig8_n3` queued behind the robustness sweep.
+- Item 7: fig-8 attach clean (R0226); round trip attach → resume → detach the newcomer
+  clean (R0231) after fixing the detach-path crash on a reserved drone (R0223/R0224).
+- Item 1 RESOLVED: the offset is the fixed sim thrust ratio at the wrong operating
+  point (SIL A/B R0228–R0230). Sim launches now derive kT from load_mass and fleet
+  size (`thrust_model.py`, `thrust_ratio:=auto`); gate smoke settles on target (R0232).
+- Item 5: `docs/experimentation/real_attach_gap.md` — the 31 sim-only attach arguments the
+  hardware launch lacks, sorted into must-add / must-not-copy / decide-per-flight.
+- Stale-reference aborts (R0169, R0225) traced to CPU contention in Gazebo runs (tick
+  watchdog: 86 slow ticks in R0231, none in SIL): headless Gazebo now runs niced, and
+  the attach launch carries a 2 s sim reference budget.
 - Gate: stage 6 now prebuilds the planner solvers before the SIL smoke — the cache goes
   stale on any planner-source or mass/inertia edit and the bench starts its clock before
   the build finishes; this cost three separate false "no lift" failures today.

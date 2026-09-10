@@ -33,15 +33,15 @@ profiles:
         baseline: 18.54 – 18.70          # a run that dies early never reaches LAND
 
       - metric: payload_z_settled_m
-        min: 0.60
-        max: 0.80
-        # commanded 0.60. At 0.4 kg the bench settled 0.596-0.598; at 0.6 kg it settles
-        # 0.707 (R0207) with every drone ON its reference -- the OCP's hover solution
-        # sits above its own target by an amount that scales with mass (+3.5 cm at
-        # 0.4 kg, +18 cm at 0.6 kg). An OPEN FINDING (learning.txt 2026-09-10), tracked
-        # there, not hidden here: this band is a regression bar around the measured
-        # value so the stack check still fails on a real drop or a runaway.
-        baseline: 0.707 (R0207, 0.6 kg)
+        min: 0.55
+        max: 0.66
+        # commanded 0.60. The +18 cm the bench showed at 0.6 kg with kT 32.9 (R0207,
+        # 0.707; R0230, 0.782 over the settled window) was the fixed thrust ratio
+        # still at its 0.4 kg operating point: kT lands in POSITION on this tracker.
+        # The sim launches now derive kT from load_mass and fleet size
+        # (thrust_model.py, 34.6 here) and the bench settles on the target again.
+        # Resolved 2026-09-10 (learning.txt); the band is +-5 cm around it.
+        baseline: 0.598 (R0232, 0.6 kg, kT auto 34.6); 0.596-0.598 at 0.4 kg (R0047-R0050)
 
       - metric: payload_tilt_peak_deg
         max: 15.0

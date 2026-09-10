@@ -178,6 +178,8 @@ class DissipativeController(LoadPlanner):
         # the reconfiguration also happens on a still target, then the trajectory resumes.
         if self._attach_traj_hold_s > 0.0:
             self.create_subscription(String, '/magnet/command', self._magnet_cmd_cb, 10)
+        # detach of a magnet-attached newcomer releases the weld through the magnet manager
+        self._magnet_cmd_pub = self.create_publisher(String, '/magnet/command', 1)
         # The network's ring must be the PHYSICAL tether ring (the parent's rho, the n
         # points the world SDF and the OCP use), NOT attach_points(n_net): with one
         # reserved slot that put the three tethers at 0/90/180 deg while they sit at
@@ -313,6 +315,21 @@ class DissipativeController(LoadPlanner):
 
     # ── control tick: dispatch on phase (no parent modification) ─────────────
     def _plan(self):
+        """Timed wrapper: a planner tick over ~0.5 s is a reference-staleness fault in the
+        making (the trackers disarm at 1.0 s). Log what was going on when it happens."""
+        import time as _time
+        _t0 = _time.perf_counter()
+        try:
+            return self._plan_inner()
+        finally:
+            _dt = _time.perf_counter() - _t0
+            if _dt > 0.50:
+                self.get_logger().warn(
+                    f'[dissipative] SLOW TICK {_dt:.2f} s in phase {self.phase} '
+                    f'(hold {self._reconfig_hold_left:.1f} s, n_att '
+                    f'{self.net.n_attached() if hasattr(self, "net") else "?"})')
+
+    def _plan_inner(self):
         """The inherited timer calls this. In the network phase we run the spring-damper
         network; otherwise the inherited OCP planner flies (creep -> lift -> hover)."""
         if self._departed_hold:
@@ -434,10 +451,20 @@ class DissipativeController(LoadPlanner):
         # first detach also performs the OCP -> network handover (seeds bumplessly).
         if self.phase == 'planner':
             self._enter_network_phase()
-        slot = self.slot2drone.index(d)          # network slot of physical drone d
+        # network slot of physical drone d -- via the n_net mapping, so a drone that
+        # JOINED mid-flight (reserved id >= n) can leave again (R0223/R0224 crashed here).
+        slot = self._drone_to_net_slot(d)
+        if slot is None or not self.net.attached[slot]:
+            self.get_logger().warn(f'[dissipative] detach: drone {d} is not on the load')
+            return
         self.net.detach(slot)
         self.detached[d] = True
-        self.detach_pub[d].publish(Empty())
+        if d < self.n:
+            self.detach_pub[d].publish(Empty())
+        else:
+            # a magnet-attached newcomer has no DetachableJoint trigger of its own: the
+            # magnet manager releases the weld on OFF (detach_when_magnet_off).
+            self._magnet_cmd_pub.publish(String(data='OFF'))
         self.get_logger().info(
             f'[dissipative] DETACH drone {d} (slot {slot}); '
             f'{self.net.n_attached()} drones remain on the load')

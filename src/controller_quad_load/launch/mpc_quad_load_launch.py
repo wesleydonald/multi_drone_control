@@ -63,7 +63,8 @@ a DOF no drone arrangement can control (see two_rigid_short.sdf notes).
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
+from controller_quad_load.thrust_model import resolve_thrust_ratio
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
 from launch_ros.parameter_descriptions import ParameterValue
@@ -153,32 +154,32 @@ def _args():
         # Supervisor-approved (2026-08-05): a fixed kT, optionally derated linearly
         # with battery, is sufficient for this rig.
         #
-        # 32.9, NOT the hardware 24.0. This is a SIM launch, and Gazebo's motor model
+        # 'auto', NOT the hardware 24.0. This is a SIM launch, and Gazebo's motor model
         # is QUADRATIC: a(u) = c*u^2 with c = 4*motorConstant*maxRotVelocity^2/mass
         # = 4*0.62e-06*4631^2/0.6 = 88.6. A linear model therefore has to use the
         # SECANT gain at the operating point, a/u = c*u_hover, not the real airframe's
         # 24. Setting 24 here under-assumes thrust by ~25% and the drones shoot up.
         #
-        #     32.9 = 88.6 * 0.371, where 0.371 is the MEASURED hover throttle
-        #     (SIL bench R0004/R0013, 3 drones, load_mass 0.4, cable_len 0.5).
-        #
-        # This number is an OPERATING POINT, so RE-DERIVE it whenever motorConstant,
-        # drone mass, load_mass or the cable geometry changes: fly a hover, read the
-        # settled throttle u, and set c*u. Getting it wrong shows up as a steady
+        # u_hover moves with load_mass, the fleet size and the cable elevation, so the
+        # number is an OPERATING POINT: 'auto' derives it per launch in
+        # controller_quad_load/thrust_model.py (32.9 at 0.4 kg / 3 drones, the value
+        # measured in SIL R0004/R0013; 34.6 at 0.6 kg / 3 drones, measured R0228).
+        # A number here is used verbatim. Getting it wrong shows up as a steady
         # PAYLOAD HEIGHT OFFSET, not as a throttle offset -- at equilibrium the plant
         # must produce the same thrust regardless of what the MPC assumes, so the kT
-        # error lands entirely in position. 31.0 floated the load +0.181 m above its
-        # reference (vs +0.031 m at 32.9); this tracker has no integrator to absorb it.
-        # The hardware launches (real_*.py) keep their own 24.
-        DeclareLaunchArgument('thrust_ratio', default_value='32.9'),
+        # error lands entirely in position and this tracker has no integrator to absorb
+        # it (32.9 at 0.6 kg floated the load +0.18 m; 34.6 leaves +0.03 m).
+        # The hardware launches (real_*.py) keep their own measured 24.
+        DeclareLaunchArgument('thrust_ratio', default_value='auto'),
         # kT used BEFORE the drones are off their stands. Deliberately BELOW
         # thrust_ratio: on a taut air-start the stands mask the drones' weight-support
         # need, and the over-thrust from an under-assumed kT is exactly what pops them
         # off and tensions the cables so the load lifts. Raise it toward thrust_ratio
         # to soften the takeoff surge; lower it if the drones fail to break free.
+        # 'auto' = 0.91 x thrust_ratio (the 30.0/32.9 ratio that worked at 0.4 kg);
         # 0 = same as thrust_ratio (correct for a ground takeoff, i.e. hardware).
         # See AIRBORNE_MARGIN in controller_mpc.py for why this switch exists.
-        DeclareLaunchArgument('takeoff_thrust_ratio', default_value='30.0'),
+        DeclareLaunchArgument('takeoff_thrust_ratio', default_value='auto'),
         # BATTERY DERATE. kT falls as the pack sags:
         #     kT = thrust_ratio * (1 - kt_batt_sag_frac * depletion)
         #     depletion = clip((v_full - v)/(v_full - v_empty), 0, 1)
@@ -223,11 +224,18 @@ def launch_setup(context, *args, **kwargs):
     if n < 1:
         raise RuntimeError(f'num_drones must be >= 1, got {n}')
     drone_names = [f'x3_drone{i}' for i in range(n)]
+    # kT is an operating point of the sim's quadratic motor model (thrust_model.py):
+    # 'auto' derives it from load_mass and the fleet size, a number is used verbatim.
+    kt, kt_to, kt_note = resolve_thrust_ratio(
+        LaunchConfiguration('thrust_ratio').perform(context),
+        LaunchConfiguration('takeoff_thrust_ratio').perform(context),
+        LaunchConfiguration('load_mass').perform(context), n)
 
     f = lambda name: ParameterValue(LaunchConfiguration(name), value_type=float)
     b = lambda name: ParameterValue(LaunchConfiguration(name), value_type=bool)
 
-    nodes = [SetParameter(name='use_sim_time', value=True)]
+    nodes = [SetParameter(name='use_sim_time', value=True),
+             LogInfo(msg=f'[launch] {kt_note}; takeoff {kt_to:.2f}')]
 
     # NOTE: the clock bridge, the drone/payload POSE bridges and the mocap
     # emulators are NOT here -- they belong to rviz_quad_load_launch.py, which
@@ -262,8 +270,8 @@ def launch_setup(context, *args, **kwargs):
                          'cable_source': LaunchConfiguration('cable_source'),
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
-                         'thrust_ratio': f('thrust_ratio'),
-                         'takeoff_thrust_ratio': f('takeoff_thrust_ratio'),
+                         'thrust_ratio': kt,
+                         'takeoff_thrust_ratio': kt_to,
                          'kt_batt_sag_frac': f('kt_batt_sag_frac'),
                          'kt_batt_v_full': f('kt_batt_v_full'),
                          'kt_batt_v_empty': f('kt_batt_v_empty'),

@@ -38,7 +38,8 @@ mux to our tracker AND folds drone 3 into the dissipative network (4th member).
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
+from controller_quad_load.thrust_model import resolve_thrust_ratio
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
 from launch_ros.parameter_descriptions import ParameterValue
@@ -85,17 +86,24 @@ def _args():
         DeclareLaunchArgument('takeoff_spool_s', default_value='0.5'),
         # ── kT (thrust ratio) -- kept in step with mpc_quad_load_launch.py ──
         # ONE fixed number: the tracker assumes a = kT*throttle and nothing moves it
-        # in flight. 31.0, not the hardware 24.0, because Gazebo's motor model is
-        # quadratic (a = 88.6*u^2) so the linear secant gain at loaded hover is 32.9.
+        # in flight. 'auto' (not the hardware 24.0) derives the secant gain of Gazebo's
+        # quadratic motor model at THIS launch's load_mass / fleet size
+        # (thrust_model.py: 32.9 at 0.4 kg, 34.6 at 0.6 kg); a number is used verbatim.
         # takeoff_thrust_ratio sits below it on purpose -- that over-thrust is what
         # pops the drones off their stands. Battery derate is OFF (0.0).
         # See mpc_quad_load_launch.py for the full explanation of all four.
-        DeclareLaunchArgument('thrust_ratio', default_value='32.9'),
+        DeclareLaunchArgument('thrust_ratio', default_value='auto'),
         # Mocap watchdog budget, WALL seconds (controller_mpc._setup_safety). Gazebo
         # runs at ~0.3x realtime, so the hardware 0.25 s is under four mocap periods
         # here and scheduling jitter disarms a healthy drone ~1 s after ARM.
         DeclareLaunchArgument('pose_timeout_s', default_value='1.0'),
-        DeclareLaunchArgument('takeoff_thrust_ratio', default_value='30.0'),
+        # Reference-staleness fault budget, WALL seconds (utility_objects.safety). Same
+        # argument as pose_timeout_s: headless Gazebo runs load this machine to ~2x its
+        # cores and the planner tick stretches to 0.3-0.7 s wall (never in SIL), so the
+        # hardware 1.0 s disarmed healthy fleets mid-lift (R0169, R0225). Hardware
+        # launches do not plumb this and keep the node default of 1.0 s.
+        DeclareLaunchArgument('safety_ref_timeout_s', default_value='2.0'),
+        DeclareLaunchArgument('takeoff_thrust_ratio', default_value='auto'),
         DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
         DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),
         DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),
@@ -231,12 +239,21 @@ def launch_setup(context, *args, **kwargs):
     if n < 1:
         raise RuntimeError(f'num_drones must be >= 1, got {n}')
     drone_names = [f'x3_drone{i}' for i in range(n)]
+    # kT is an operating point of the sim's quadratic motor model (thrust_model.py):
+    # 'auto' derives it from load_mass and the fleet size, a number is used verbatim.
+    kt, kt_to, kt_note = resolve_thrust_ratio(
+        LaunchConfiguration('thrust_ratio').perform(context),
+        LaunchConfiguration('takeoff_thrust_ratio').perform(context),
+        LaunchConfiguration('load_mass').perform(context), n)
+    kt_solo = resolve_thrust_ratio(LaunchConfiguration('thrust_ratio').perform(context),
+                                   '0', 0.0, 1)[0]
 
     f = lambda name: ParameterValue(LaunchConfiguration(name), value_type=float)
     b = lambda name: ParameterValue(LaunchConfiguration(name), value_type=bool)
     i_ = lambda name: ParameterValue(LaunchConfiguration(name), value_type=int)
 
-    nodes = [SetParameter(name='use_sim_time', value=True)]
+    nodes = [SetParameter(name='use_sim_time', value=True),
+             LogInfo(msg=f'[launch] {kt_note}; takeoff {kt_to:.2f}')]
 
     # SIL: controllers only. The bench is the simulator, so every Gazebo-facing node
     # below is skipped. See the `sil` launch argument.
@@ -276,13 +293,14 @@ def launch_setup(context, *args, **kwargs):
                          'cable_source': LaunchConfiguration('cable_source'),
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
-                         'thrust_ratio': f('thrust_ratio'),
-                         'takeoff_thrust_ratio': f('takeoff_thrust_ratio'),
+                         'thrust_ratio': kt,
+                         'takeoff_thrust_ratio': kt_to,
                          'kt_batt_sag_frac': f('kt_batt_sag_frac'),
                          'kt_batt_v_full': f('kt_batt_v_full'),
                          'kt_batt_v_empty': f('kt_batt_v_empty'),
                          'kt_print_period_s': f('kt_print_period_s'),
-                         'pose_timeout_s': f('pose_timeout_s')}],
+                         'pose_timeout_s': f('pose_timeout_s'),
+                         'safety_ref_timeout_s': f('safety_ref_timeout_s')}],
             output='screen'))
 
     # ── Central fleet manager (tethered fleet only) ─────────────────────────
@@ -399,8 +417,10 @@ def launch_setup(context, *args, **kwargs):
             parameters=[{'drone_id': d,
                          'use_external_reference': True,
                          'external_reference_topic': '/join_planner/reference',
-                         # kT: same fixed value the tethered trackers use.
-                         'mpc_thrust_ratio': f('thrust_ratio'),
+                         # kT for the SOLO approach: the secant gain of an unloaded
+                         # hover (no load share, no cable pull), derived like the
+                         # fleet's; an explicit thrust_ratio is used verbatim.
+                         'mpc_thrust_ratio': kt_solo,
                          'enable_thrust_ratio_ukf': b('approach_kt_ukf'),
                          'enable_thrust_ratio_feedback': b('approach_kt_feedback'),
                          'thrust_ratio_estimator_backend': 'full_model_kt_ukf'}],
@@ -440,14 +460,15 @@ def launch_setup(context, *args, **kwargs):
                      'cable_source': LaunchConfiguration('cable_source'),
                      'payload_rest_z': f('payload_rest_z'),
                      'takeoff_spool_s': 0.0,
-                     'thrust_ratio': f('thrust_ratio'),
-                     'takeoff_thrust_ratio': f('takeoff_thrust_ratio'),
+                     'thrust_ratio': kt,
+                     'takeoff_thrust_ratio': kt_to,
                      'kt_batt_sag_frac': f('kt_batt_sag_frac'),
                      'kt_batt_v_full': f('kt_batt_v_full'),
                      'kt_batt_v_empty': f('kt_batt_v_empty'),
                      # one-line ~2 Hz health log for the newcomer, to trace why it sinks/falls
                      # after the weld (z vs ref, xy error, throttle saturation, cable FF).
                      'pose_timeout_s': f('pose_timeout_s'),
+                         'safety_ref_timeout_s': f('safety_ref_timeout_s'),
                      'enable_diag_log': True}],
         # In SIL there is no mux, so this tracker publishes straight onto
         # /drone_3/ELRSCommand, which the bench plant consumes. Everything else about

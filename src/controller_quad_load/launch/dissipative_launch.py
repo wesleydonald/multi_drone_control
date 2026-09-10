@@ -32,7 +32,8 @@ fleet manager, the dissipative node, and the per-drone /drone_k/detach bridges.
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
+from controller_quad_load.thrust_model import resolve_thrust_ratio
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
 from launch_ros.parameter_descriptions import ParameterValue
@@ -68,8 +69,8 @@ def _args():
         DeclareLaunchArgument('takeoff_spool_s', default_value='0.5'),
         # ── kT (thrust ratio) -- kept in step with mpc_quad_load_launch.py ──
         # See mpc_quad_load_launch.py for the full explanation of these four.
-        DeclareLaunchArgument('thrust_ratio', default_value='32.9'),
-        DeclareLaunchArgument('takeoff_thrust_ratio', default_value='30.0'),
+        DeclareLaunchArgument('thrust_ratio', default_value='auto'),
+        DeclareLaunchArgument('takeoff_thrust_ratio', default_value='auto'),
         DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
         DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),
         DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),
@@ -121,12 +122,19 @@ def launch_setup(context, *args, **kwargs):
     if n < 1:
         raise RuntimeError(f'num_drones must be >= 1, got {n}')
     drone_names = [f'x3_drone{i}' for i in range(n)]
+    # kT is an operating point of the sim's quadratic motor model (thrust_model.py):
+    # 'auto' derives it from load_mass and the fleet size, a number is used verbatim.
+    kt, kt_to, kt_note = resolve_thrust_ratio(
+        LaunchConfiguration('thrust_ratio').perform(context),
+        LaunchConfiguration('takeoff_thrust_ratio').perform(context),
+        LaunchConfiguration('load_mass').perform(context), n)
 
     f = lambda name: ParameterValue(LaunchConfiguration(name), value_type=float)
     b = lambda name: ParameterValue(LaunchConfiguration(name), value_type=bool)
     i_ = lambda name: ParameterValue(LaunchConfiguration(name), value_type=int)
 
-    nodes = [SetParameter(name='use_sim_time', value=True)]
+    nodes = [SetParameter(name='use_sim_time', value=True),
+             LogInfo(msg=f'[launch] {kt_note}; takeoff {kt_to:.2f}')]
 
     for i, drone_name in enumerate(drone_names):
         nodes.append(Node(
@@ -163,8 +171,8 @@ def launch_setup(context, *args, **kwargs):
                          'cable_source': LaunchConfiguration('cable_source'),
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
-                         'thrust_ratio': f('thrust_ratio'),
-                         'takeoff_thrust_ratio': f('takeoff_thrust_ratio'),
+                         'thrust_ratio': kt,
+                         'takeoff_thrust_ratio': kt_to,
                          'kt_batt_sag_frac': f('kt_batt_sag_frac'),
                          'kt_batt_v_full': f('kt_batt_v_full'),
                          'kt_batt_v_empty': f('kt_batt_v_empty'),

@@ -1,4 +1,60 @@
 ################################################################################
+# BRANCH claude-experimentation, 2026-09-10 (cont.)  --  kT OPERATING POINT, ROUND TRIP,
+# SLOW TICKS
+################################################################################
+
+1. THE MASS-SCALED OCP HOVER OFFSET IS THE FIXED THRUST RATIO. The zN diag settled
+   it: the planner plans load z 0.60 at the end of every horizon (zN=0.60, drone-0
+   at 0.98) while the load sits at 0.78 with the drones 14 cm above the planned
+   drone height -- a tracker equilibrium error, and the one the 2026-08-05 memory
+   predicted: a wrong kT lands entirely in POSITION on an integrator-free tracker.
+   32.9 = 88.6 x 0.371 was the secant of Gazebo's quadratic motor model at the 0.4 kg
+   hover; at 0.6 kg the settled throttle is 0.391 (SIL) / 0.40 (Gazebo), i.e. kT*
+   34.6 / 35.5. SIL A/B on carry_hover_n3, identical throttle 0.391 in all three:
+       kT 32.9 -> load 0.782 (R0230)   kT 33.0 -> 0.773 (R0229)   kT 34.6 -> 0.632 (R0228)
+   The elevation term matters: thrust must also cancel the horizontal cable pull, so
+   F = sqrt((m_d g + m_l g/n)^2 + (m_l g/(n tan(elev)))^2); with it the formula
+   reproduces BOTH measured points (0.371 @0.4 kg, 0.391 @0.6 kg) to 1e-3.
+   -> controller_quad_load/thrust_model.py; the four SIM launches now default
+   thrust_ratio:=auto (takeoff 'auto' = 0.91x), derived per launch from load_mass
+   and num_drones and logged at launch. Hardware launches keep the measured 24 --
+   the real thrust curve is not the sim's parabola. Gate SIL smoke now settles at
+   0.598 (R0232, target 0.60); bar re-baselined 0.55-0.66. test_thrust_model ties
+   c=88.6 to the drone SDF so an airframe edit cannot leave kT behind.
+   Consequence for the attach demo: the three-drone OCP hover was 12 cm high in
+   every R01xx/R02xx Gazebo run; the network trim hid it after the handover.
+   Attach-during-circle re-flown with kT auto (R0234 vs R0209): pre-weld 3-drone
+   hover 0.569 (was 0.719, target 0.60; the 33 deg hang lowers the centre), weld
+   transient 47 deg peak / 24 deg mean over the reconfiguration (was 43 / 20, one
+   run each), 4-drone circle z 0.601 (was 0.505) at 3.7 deg mean tilt. The approach
+   controller's kT is the SOLO secant (29.5, no load share) by the same formula.
+
+2. ROUND TRIP (attach, resume, detach the newcomer) WORKS: R0231 clean. The R0223/
+   R0224 "planner stall on detach" was a CRASH, not a stall: _fleet_detach_cb looked
+   the drone up in slot2drone (the n tethered drones only), so DETACH 3 raised
+   ValueError, the dissipative node died, and 1.18 s later the trackers disarmed on
+   the stale reference. Fixed: lookup through the n_net mapping, and a reserved
+   drone's release goes through /magnet/command OFF (the magnet manager frees the
+   weld; there is no /drone_3/detach bridge). R0231: 4-drone circle 4.4 deg mean tilt,
+   z 0.61; after DETACH drone 3 climbs to 1.44 m and leaves, the three survivors
+   re-hang the load at the 3/12/9 geometry (25 deg, z 0.64) and finish the circle.
+
+3. "REFERENCE STALE" ABORTS ARE MACHINE LOAD, NOT THE PLANNER. A tick watchdog in the
+   dissipative node (SLOW TICK > 0.3 s wall, now logged above 0.5 s) fired 86 times in R0231 (planner phase
+   max 0.66 s, network phase max 0.55 s) and ZERO times across three SIL runs of the
+   same nodes -- the 12-core box sat at load ~25 with Gazebo + 4 trackers. The
+   trackers' staleness watchdog is WALL clock (matching the pose watchdog), so at
+   RTF ~0.3 a 1.0 s budget is a hair-trigger: R0169, R0225 died mid-lift on healthy
+   fleets. Two changes: run_experiment.py runs headless Gazebo under nice 10
+   (--gz-nice), and three_attach_launch plumbs safety_ref_timeout_s (2.0 s in sim;
+   hardware launches keep the node default 1.0). Same reasoning pose_timeout_s got
+   in August.
+
+4. fig-8 attach (attach_fig8_n3): R0226 clean (tilt 7.2 deg, z 0.62); R0225 was the
+   item-3 fault at 8.4 s, pre-weld. Generality of the attach demo holds on a
+   non-circular path.
+
+################################################################################
 # BRANCH claude-experimentation, 2026-09-10 (cont.)  --  MIS-SEED ROBUSTNESS (E10)
 ################################################################################
 
