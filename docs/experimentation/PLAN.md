@@ -65,3 +65,8 @@ Findings land in `learning.txt` as usual; this file tracks status.
 - Gate: stage 6 now prebuilds the planner solvers before the SIL smoke — the cache goes
   stale on any planner-source or mass/inertia edit and the bench starts its clock before
   the build finishes; this cost three separate false "no lift" failures today.
+
+## Branch `measured-force-velocity-loop` (2026-09-10)
+Survey `control_methods_survey.md` → R1 (measured-force throttle, `docs/design/measured_force_loop.md`)
+and R4 (hybrid dwell, `hybrid_dwell.md`, `attach_traj_hold_mode: settle`) implemented; results in
+learning.txt under the branch heading.

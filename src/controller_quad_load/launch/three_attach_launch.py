@@ -123,6 +123,12 @@ def _args():
         DeclareLaunchArgument('vel_kv', default_value='4.0'),
         DeclareLaunchArgument('vel_ki', default_value='0.0'),
         DeclareLaunchArgument('vel_k_att', default_value='8.0'),
+        # measured-force (INDI) throttle in velocity mode: 0 = off (classic loop)
+        DeclareLaunchArgument('vel_indi_gain', default_value='0.0'),
+        DeclareLaunchArgument('vel_indi_tau', default_value='0.05'),
+        # SIM: Gazebo's thrust is quadratic in throttle, so the local slope is 2x the
+        # secant kT the launch derives; hardware launches keep 1.0 until measured.
+        DeclareLaunchArgument('vel_indi_slope_ratio', default_value='2.0'),
         DeclareLaunchArgument('load_traj', default_value='hover'),
         DeclareLaunchArgument('traj_speed', default_value='0.6'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
@@ -150,6 +156,11 @@ def _args():
         DeclareLaunchArgument('diss_handout_tension_blend', default_value='true'),
         DeclareLaunchArgument('diss_wrench_true_attitude', default_value='false'),
         DeclareLaunchArgument('attach_traj_hold_s', default_value='10.0'),   # hold until the weld, then this long
+        # 'timed' = the hold above; 'settle' = end the post-weld hold when the load tilt has
+        # settled (tools/hybrid_dwell.py: a computed dwell instead of a tuned one)
+        DeclareLaunchArgument('attach_traj_hold_mode', default_value='timed'),
+        DeclareLaunchArgument('hold_resume_tilt_deg', default_value='12.0'),
+        DeclareLaunchArgument('hold_max_s', default_value='30.0'),
         DeclareLaunchArgument('handover_blend_s', default_value='3.0'),      # bumpless tension handover at the weld
         DeclareLaunchArgument('diss_ki_load', default_value='1.0'),
         DeclareLaunchArgument('diss_a_i_load_max', default_value='2.0'),
@@ -288,6 +299,9 @@ def launch_setup(context, *args, **kwargs):
                          'vel_kv': f('vel_kv'),
                          'vel_ki': f('vel_ki'),
                          'vel_k_att': f('vel_k_att'),
+                         'vel_indi_gain': f('vel_indi_gain'),
+                         'vel_indi_tau': f('vel_indi_tau'),
+                         'vel_indi_slope_ratio': f('vel_indi_slope_ratio'),
                          'cable_ff_scale': f('cable_ff_scale'),
                          'attitude_ff': b('attitude_ff'),
                          'cable_source': LaunchConfiguration('cable_source'),
@@ -347,6 +361,9 @@ def launch_setup(context, *args, **kwargs):
                      'diss_handout_tension_blend': b('diss_handout_tension_blend'),
                      'diss_wrench_true_attitude': b('diss_wrench_true_attitude'),
                      'attach_traj_hold_s': f('attach_traj_hold_s'),
+                     'attach_traj_hold_mode': LaunchConfiguration('attach_traj_hold_mode'),
+                     'hold_resume_tilt_deg': f('hold_resume_tilt_deg'),
+                     'hold_max_s': f('hold_max_s'),
                      'handover_blend_s': f('handover_blend_s'),
                      'diss_ki_load': f('diss_ki_load'),
                      'diss_a_i_load_max': f('diss_a_i_load_max'),
@@ -455,6 +472,9 @@ def launch_setup(context, *args, **kwargs):
                      'vel_kv': f('vel_kv'),
                      'vel_ki': f('vel_ki'),
                      'vel_k_att': f('vel_k_att'),
+                         'vel_indi_gain': f('vel_indi_gain'),
+                         'vel_indi_tau': f('vel_indi_tau'),
+                         'vel_indi_slope_ratio': f('vel_indi_slope_ratio'),
                      'cable_ff_scale': f('cable_ff_scale'),
                      'attitude_ff': b('attitude_ff'),
                      'cable_source': LaunchConfiguration('cable_source'),

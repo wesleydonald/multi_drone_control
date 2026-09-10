@@ -1,4 +1,151 @@
 ################################################################################
+# BRANCH measured-force-velocity-loop, 2026-09-10  --  R1 (INDI THROTTLE) + R4 (DWELL)
+################################################################################
+
+R1. Measured-force throttle in the velocity loop (vel_indi_gain, velocity_loop.py
+   module doc): throttle becomes incremental on the IMU, xdd_des - xdd_meas along the
+   body axis, applied throttle and IMU through the same first-order filter (indi_tau
+   0.05 s), increment capped (indi_a_max 3 m/s^2), gain 0 byte-identical to the
+   classic loop (test). Point-mass hover tests: a 15 % kT over-estimate or a 25 %
+   heavier-than-believed cable pull is a permanent offset without it and < 1 cm with it.
+
+   SIL, central-weld scenario with the z-trim OFF (carry_trim_n3_off R0236 vs
+   carry_indi_n3 R0237): INDI puts every drone back ON its reference after the weld
+   (dz -4.6/-7.0 cm -> +0.3/-0.5 cm, 10-20 s) -- and the load STILL capsizes at
+   +10-16 s in both (tilt 64 / 37 deg mean, 170 / 160 peak). So the trim-off capsize
+   is not a tracking failure: the drones are where the network put them and the load
+   goes over anyway. The network's own references with a central lifter taking full
+   share leave the ring cables slack -- a tension-ALLOCATION problem (survey R2:
+   t_min bounds), which the common-mode trim masks by lifting everything. INDI fixes
+   the tracker's part of F1 exactly and cannot touch F2's geometry. Claim in
+   carry_indi_n3.yaml corrected accordingly.
+
+R1 (cont.) Wrong kT told (28 vs the true secant 34.6), central weld, SIL:
+   OCP phase (MPC tracker, no INDI) parks the load at 1.19 m for a 0.60 target -- the
+   kT-in-position mechanism at full size. After the handover, INDI off (R0238 trim off,
+   R0240 trim on): drones +0.21 / +0.16 m above their references; INDI on (R0239,
+   R0241): on reference within 2.5 s (dz 0.004 / -0.016 m), load 0.64 / 0.62 m in the
+   first 4 s. ALL FOUR then capsize at 16-20 s: a load-tilt oscillation (~1.5 Hz) grows
+   from the handover identically with and without INDI, i.e. it is excited by the
+   0.6 m descent transient and lives in the NETWORK (measured-attitude attach points
+   feeding the references), not in the trackers. R1 does what it claims at the drone
+   and exposes the next limit (survey F3 / R3). Also seen: throttle chatter with INDI
+   on (plot, R0241) -- the increment used the secant kT as control effectiveness while
+   the sim's a = c*u^2 has a tangent 2x the secant, so the increment loop ran at twice
+   its design gain; vel_indi_slope_ratio (2.0 in the sim launches, 1.0 = linear)
+   fixes the gain, not the capsize.
+
+R1 GAZEBO, the mis-seed that was FATAL (controller told 0.75 kg, true 0.6; R0217/R0218
+   aborted within 1-2 s of the weld, load to 0.30 m): with INDI (R0242, slope ratio
+   still 1) the weld is the CLEANEST reconfiguration on record -- load tilt 27 -> 15
+   -> 0-5 deg by +6 s with no overshoot (the healthy INDI-off R0234 rose to 47 deg
+   first and needed 12 s), load z 0.60-0.65 throughout, drones on their references.
+   Then drone 3 (the newcomer) flipped at +12 s: the increment had driven its throttle
+   to the 0.05 clip -- its rigid rod momentarily pushed it (the measured acceleration
+   exceeded the command), INDI cut the thrust to match, and a quadrotor at 5 %
+   throttle has no rate authority. Fleet abort on drone tilt at +21 s. Fix:
+   vel_indi_thr_min 0.2 (hover ~0.39; half the attitude authority kept in the worst
+   case). Re-run queued with the slope ratio 2 as well.
+
+R1 GAZEBO DEMO (healthy mass, ratio 2, floor 0.2; R0244 vs R0234): the weld transient
+   with INDI is 33 -> 3 deg within ONE second and stays at 3-8 deg through the hold
+   (mean 7.1, peak 36.5 at the weld itself) where the classic loop peaks at 47 deg and
+   needs 12 s; load z 0.61 vs 0.57. Then, from ~2 s after the circle resumes, a ~1 Hz
+   load-tilt oscillation grows (10 -> 50 deg over 6 s) and the newcomer flips at
+   +18 s (fleet abort on its 64 deg). The classic run shows the same drone xy lag at
+   the resume (0.45 m) with NO tilt growth. Same signature as SIL R0240/R0241, and
+   the SIL rod tensions say what it is: SLACK. In R0240/R0241 the ring rods hit
+   0.00 N repeatedly from 14 s on (min tension 0 in every 2 s window) while the tilt
+   grows 9 -> 39 -> 136 deg; in R0237 (INDI, trim off) the newcomer's rod carries
+   0.15 / 0.62 / 1.20 N at 12-18 s where INDI-off R0236 hands it 1.83 N by 12 s. The
+   network's references are yaw-only, open-loop in load attitude, so this is not an
+   attitude feedback loop: INDI turns each drone into a stiff position servo, the
+   load then hangs from four fixed points on rods whose lengths the network only
+   approximates, and the inconsistency is resolved by rods going slack -- a slack rod
+   is a drone with no authority over the load, and a load on intermittently slack
+   rods is a pendulum. The compliant MPC tracker used to sag INTO the load and keep
+   every rod taut by accident. The compliance has to be put back on purpose, at the
+   cable: an admittance on measured tension per node (survey: admittance-based
+   tension regulation, Wahba-Hoenig / SQP bounds t_min) -- the R2 step. Cheap probes
+   queued first: half gain (attach_circle_n3_indi05), INDI + settle dwell.
+
+R1 REPEATS AND HALF GAIN. With the floor and the slope ratio in: mis-seed +25 % (R0245)
+   and demo (R0246) reproduce R0242/R0244 -- clean weld (tilt max 12 / 7 deg at +4-10 s),
+   then the post-resume growth and an abort ~20 s after the weld. Half gain
+   (attach_circle_n3_indi05, R0247): completes the whole run. Weld +0-4 s 32.8 mean /
+   38 max (classic R0234: 28.8 / 47), +4-10 s 17.4 mean (classic 28.8, full INDI 7.1),
+   four-drone circle 8.5 mean / 16 max (classic 3.7 / 9.4). So the gain buys weld
+   transient and costs circle tilt, monotonically -- consistent with the slack
+   mechanism (more stiffness, more slack). The measured-force loop is the right
+   tracker; it needs the cable-side compliance (tension admittance) before it can run
+   at full gain on a moving load.
+
+   SUMMARY OF THE BRANCH SO FAR (numbers above):
+     tracker model-error offset .... fixed exactly (SIL dz 0.21 -> 0.00, mis-seed weld
+                                     from fatal to the cleanest transient on record)
+     weld transient ................ 47 -> 36 deg peak, 12 s -> 1 s to settle (gain 1)
+     moving-load carry ............. gain 1 aborts ~20 s after the resume (slack);
+                                     gain 0.5 completes at 8.5 deg (classic 3.7)
+     dwell ......................... measured (settle mode), 13.6 s at 1.0 deg
+     next .......................... per-node tension admittance in the network (R2)
+
+R2. TENSION ADMITTANCE (diss_k_adm; design note §6): each node's reference cable length
+   follows its measured tension deficit (IMU-derived cable accel from the tracker on
+   /drone_i/cable_meas vs the wrench-solved tension), bounded 5 cm, 2 s leak. SIL,
+   the wrong-kT central-weld stress case (R0249 vs R0241, both INDI gain 1, trim on):
+   ring rods stay loaded longer (min tension 1.5 N at 14-16 s vs 0.4-1.2; 0.2-1.5 N at
+   16-18 s vs 0.00), load z holds 0.60 through 12-18 s (vs 0.55-0.57), tilt growth
+   halves (26 deg mean at 18-22 s vs 44) -- and it still capsizes by 22-27 s. The
+   newcomer's central rod never loads (min 0.00 N in every window in both runs): a
+   0.5 m rod hung straight above the weld point is taut only if the drone sits
+   exactly 0.5 m up, and the 5 cm correction cap is the binding limit. Delays, does
+   not prevent, in this scenario; the Gazebo demo/mis-seed decide.
+
+R2 GAZEBO (attach_circle_n3_indi_adm, R0250 vs R0244/R0246 without admittance):
+   WORSE. Weld +4-10 s tilt 22.7 mean / 40 max (7.1 / 9.6 without), load sinking
+   from +10 s, abort at +14 s (vs ~+20 s). The admittance is only as good as the
+   tension it measures, and the tracker's cable estimate is R f_imu - kT*u with kT
+   the linear secant of a quadratic motor: away from the hover throttle the thrust
+   estimate is off by up to ~10 %, i.e. ~0.6 N on 2-3 N tensions, and the IMU carries
+   rotor vibration Gazebo adds and the SIL plant does not. A biased deficit is an
+   integrator with a bias: the references walk. SIL (exact quadratic plant, clean
+   IMU) improved because there the estimate is right. Verdict: measured-tension
+   admittance needs a tension MEASUREMENT (or a thrust model the estimate can
+   trust), not an IMU residual through a secant gain. Left in, default off
+   (diss_k_adm 0); not recommended in this form.
+   Mis-seed +25 % with INDI + admittance (R0251): same as without it (weld clean, tilt
+   5.7 mean at +4-10 s; abort +19 s after the weld) -- no help, no harm there.
+
+   WHERE THIS LEAVES THE BRANCH (2026-09-10 evening):
+     adopt now ......... settle dwell (attach_traj_hold_mode: settle)
+     keep as opt-in .... measured-force throttle: exact at the drone, best weld
+                         transient on record, aborts on the moving load at gain 1;
+                         gain 0.5 completes with a worse circle than the classic loop
+     negative .......... IMU-residual tension admittance (needs a real tension signal)
+     open .............. the slack mechanism on a moving load with stiff trackers:
+                         candidates are a slack-aware tension solve (t_min bound with
+                         the newcomer's rod geometry, survey R2 proper) or restoring
+                         compliance in the tracker itself (a softer position gain
+                         with INDI, i.e. kp_pos/kv down while the thrust stays exact)
+
+R4. tools/hybrid_dwell.py measures the weld as a hybrid event on the archived runs:
+   jump 6-14 deg (peak 42-47 deg at +3.5 s), decay lambda 0.07-0.16 /s (tau 6.5-13.5
+   s, r^2 0.25-0.67 -- the resume at 10 s is inside the decay), settled 3-7 deg.
+   Minimum dwell to a 3 deg excess is 17-33 s; the 10 s hold used ends with rho =
+   0.21-0.48 of the excess remaining. The fast configs (R0203/R0204) jump 22 deg from
+   a 25 deg pre-weld hang. DETACH (R0231) is not a transient at all: it is a change of
+   equilibrium (3.9 -> 27 deg, the 3/12/9 hang), so a dwell argument does not apply.
+   -> attach_traj_hold_mode: settle in the dissipative node ends the hold when the
+   tilt is below hold_resume_tilt_deg and quiet for hold_settle_s (cap hold_max_s):
+   a measured dwell instead of a tuned one. docs/experimentation/hybrid_dwell.md.
+   GAZEBO (attach_circle_n3_settle, R0243): the hold ended by itself at 13.6 s with
+   the tilt settled at 1.0 deg (fit: jump 15.8, lambda 0.150, T_dwell(3 deg) 18 s, rho
+   over the 13.6 s actually used 0.13 vs 0.21-0.48 for the timed 10 s). Resume window
+   tilt 1.2 deg mean / 3.4 max (timed hold R0234: 2.5 / 5.2); the four-drone circle
+   after it is identical (3.6 deg, z 0.602). The dwell is now a measured quantity with
+   a log line, not a number in a YAML.
+
+################################################################################
 # BRANCH claude-experimentation, 2026-09-10 (cont.)  --  HARDWARE ATTACH LAUNCH, RVIZ
 ################################################################################
 

@@ -3,7 +3,8 @@
 `real_attach_launch.py` is the hardware twin of `three_attach_launch.py` (same 69
 arguments; `tools/param_diff.py three_attach_launch.py real_attach_launch.py` shows only
 the intended differences: measured kT 24 / takeoff 0, real-rig takeoff pace, the sim-only
-watchdog budgets and `sil`/`attach_pose_index` absent, the magnet radio args added).
+watchdog budgets and `sil`/`attach_pose_index` absent, the magnet radio args added). The measured-force throttle (`vel_indi_*`, branch
+`measured-force-velocity-loop`) is sim-only until its IMU filter is checked on the airframe.
 Brought up whole on a desk on 2026-09-10 against `tools/fake_mocap.py --num-drones 3
 --attach` (static poses): all four trackers at kT 24, the dissipative node, mux, approach
 MPC, join planner, target publisher and magnet manager come up, and the mux forwards the

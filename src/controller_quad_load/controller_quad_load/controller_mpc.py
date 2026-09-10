@@ -169,6 +169,7 @@ class Controller(Node):
         # ema smoothing of the raw imu (alpha per sample). raw is too noisy to
         # feed back; 0.03 ~= 30 ms time constant
         self.imu_alpha = 0.03
+        self.imu_raw = None
         # slew-limited cable accel actually fed to the model + solve-fail counters
         self._applied_cable_vec = None   # (3,) last applied cable accel (for slew)
         self._last_good_msg = None       # last successfully-solved ELRS command
@@ -376,10 +377,16 @@ class Controller(Node):
         if self.control_mode != 'mpc':
             for name, default in (('vel_kp_pos', 2.0), ('vel_kv', 4.0),
                                   ('vel_ki', 1.0), ('vel_k_att', 8.0),
-                                  ('vel_v_max', 2.0), ('vel_a_i_max', 2.0)):
+                                  ('vel_v_max', 2.0), ('vel_a_i_max', 2.0),
+                                  # measured-force thrust (velocity_loop.py module doc)
+                                  ('vel_indi_gain', 0.0), ('vel_indi_tau', 0.05),
+                                  ('vel_indi_a_max', 3.0), ('vel_indi_slope_ratio', 1.0),
+                                  ('vel_indi_thr_min', 0.2)):
                 self.declare_parameter(name, default)
             gains = {n: float(self.get_parameter(f'vel_{n}').value) for n in
-                     ('kp_pos', 'kv', 'ki', 'k_att', 'v_max', 'a_i_max')}
+                     ('kp_pos', 'kv', 'ki', 'k_att', 'v_max', 'a_i_max',
+                      'indi_gain', 'indi_tau', 'indi_a_max', 'indi_slope_ratio',
+                      'indi_thr_min')}
             self.velocity_loop = VelocityLoop(**gains)
             self.get_logger().warn(
                 f"[Drone {self.drone_id}] STAGE V: control_mode={self.control_mode} "
@@ -494,6 +501,7 @@ class Controller(Node):
         a = np.array([msg.linear_acceleration.x,
                       msg.linear_acceleration.y,
                       msg.linear_acceleration.z])
+        self.imu_raw = a
         if self.imu_lin_acc is None:
             self.imu_lin_acc = a
         else:
@@ -733,10 +741,15 @@ class Controller(Node):
         # cannot move toward it and the integrator would wind up against the platform,
         # then dump that trim in as a lurch the moment thrust is applied.
         integrate = bool(self.takeoff_requested and not self.payload_resting)
+        # the reference's own cable model (a_ff = g + a_des - a_cable) and the raw IMU
+        # for the measured-force throttle; both ignored when vel_indi_gain is 0.
+        a_cable0 = (np.asarray(self.planner_ref_cable[0], float)
+                    if self.planner_ref_cable is not None else None)
         u = self.velocity_loop.step(
             p, v, q, p_ref, v_ref, a_ff, 1.0 / FREQUENCY_HZ,
             self._effective_kT(), heading=self._heading_datum,
-            integrate=integrate)
+            integrate=integrate,
+            f_imu=(self.imu_raw if integrate else None), a_cable=a_cable0)
         self._current_ref_pos = p_ref
         self._applied_cable0 = 0.0      # no cable model in this path
         self._publish_channels(u, np.zeros(4))

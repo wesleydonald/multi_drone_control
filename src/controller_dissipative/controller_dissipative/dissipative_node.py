@@ -158,6 +158,19 @@ class DissipativeController(LoadPlanner):
         # so the fleet reconfigures in place instead of chasing a moving target while the
         # newcomer hands out; the trajectory then resumes with the full fleet. 0 = off.
         self._attach_traj_hold_s = float(p('attach_traj_hold_s', 0.0).value)
+        # 'timed': the hold above. 'settle': the post-weld hold ends once the load tilt
+        # has settled (below hold_resume_tilt_deg and quiet for hold_settle_s), capped at
+        # hold_max_s -- a measured dwell instead of a tuned one (tools/hybrid_dwell.py:
+        # the 10 s hold ended with 26-48 % of the weld's tilt excess still to decay).
+        self._hold_mode = str(p('attach_traj_hold_mode', 'timed').value).lower()
+        self._hold_resume_tilt = float(p('hold_resume_tilt_deg', 12.0).value)
+        self._hold_resume_rate = float(p('hold_resume_rate_dps', 5.0).value)
+        self._hold_settle_s = float(p('hold_settle_s', 1.5).value)
+        self._hold_max_s = float(p('hold_max_s', 30.0).value)
+        self._settle_hold = False           # a settle-mode post-weld hold is running
+        self._settle_for = 0.0
+        self._settle_elapsed = 0.0
+        self._settle_prev_tilt = None
         # BUMPLESS TENSION HANDOVER (s). At OCP -> network the incumbents' cable
         # feedforward steps from the OCP's actual solution to the network's (which also
         # models the tilted three-drone hover as level); measured at the weld: the 12
@@ -617,11 +630,20 @@ class DissipativeController(LoadPlanner):
             f'[dissipative] ATTACH drone {d} (slot {slot}) as {mode}; '
             f'{self.net.n_attached()} drones now on the load')
         if self._attach_traj_hold_s > 0.0:
-            self._reconfig_hold_left = self._attach_traj_hold_s     # replaces the approach hold
             self._approach_hold_armed = False                       # ready for another approach
-            self.get_logger().info(
-                f'[dissipative] trajectory held {self._attach_traj_hold_s:.1f} s for the '
-                f'reconfiguration, then resumes')
+            if self._hold_mode == 'settle':
+                self._reconfig_hold_left = self._hold_max_s         # cap; settling ends it
+                self._settle_hold, self._settle_for, self._settle_elapsed = True, 0.0, 0.0
+                self._settle_prev_tilt = None
+                self.get_logger().info(
+                    f'[dissipative] trajectory held until the load tilt settles '
+                    f'(< {self._hold_resume_tilt:.0f} deg, quiet {self._hold_settle_s:.1f} s; '
+                    f'cap {self._hold_max_s:.0f} s), then resumes')
+            else:
+                self._reconfig_hold_left = self._attach_traj_hold_s     # replaces the approach hold
+                self.get_logger().info(
+                    f'[dissipative] trajectory held {self._attach_traj_hold_s:.1f} s for the '
+                    f'reconfiguration, then resumes')
 
     def _net_slot2drone(self):
         """Network slot -> physical drone for ALL n_net nodes: the parent's (possibly
@@ -701,6 +723,26 @@ class DissipativeController(LoadPlanner):
         dx, dy, _, _ = self.traj.offset_at(self.traj_t)
         return np.array([self.hover_xy[0] + dx, self.hover_xy[1] + dy, z])
 
+    def _settle_dwell_tick(self):
+        """Settle-mode hold: end it once the tilt is low and quiet for hold_settle_s."""
+        dt = 1.0 / PLANNER_HZ
+        self._settle_elapsed += dt
+        R = quat_to_rot_np(self.load_state[3:7])
+        tilt = float(np.degrees(np.arccos(np.clip(R[2, 2], -1.0, 1.0))))
+        rate = (abs(tilt - self._settle_prev_tilt) / dt
+                if self._settle_prev_tilt is not None else float('inf'))
+        self._settle_prev_tilt = tilt
+        quiet = tilt < self._hold_resume_tilt and rate < self._hold_resume_rate
+        self._settle_for = self._settle_for + dt if quiet else 0.0
+        done = self._settle_for >= self._hold_settle_s
+        if done or self._reconfig_hold_left <= 0.0:
+            self._reconfig_hold_left = 0.0
+            self._settle_hold = False
+            self.get_logger().info(
+                f'[dissipative] settle hold over after {self._settle_elapsed:.1f} s '
+                f'({"tilt settled at " + format(tilt, ".1f") + " deg" if done else "cap reached"}); '
+                f'trajectory resumes at t={self.traj_t:.2f} s')
+
     # ── network flight: hold the reduced fleet + fly the detached drones away ─
     def _network_plan(self):
         if self.load_state is None or any(d is None for d in self.drone_pos):
@@ -712,6 +754,8 @@ class DissipativeController(LoadPlanner):
         if self._reconfig_hold_left > 0.0:
             # attach / resize hold: the target stays where it is (see _do_attach)
             self._reconfig_hold_left -= 1.0 / PLANNER_HZ
+            if self._settle_hold:
+                self._settle_dwell_tick()
         elif not self._net_landing:
             self.traj_t += 1.0 / PLANNER_HZ
         dx, dy, _, _ = self.traj.offset_at(self.traj_t)

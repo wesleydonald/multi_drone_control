@@ -252,3 +252,109 @@ def test_the_loop_respects_its_tilt_limit_under_a_huge_error():
         loop.step(**hover_args(p=[-50.0, 0.0, 1.0]))
     a = loop.last['a_sp']
     assert math.degrees(math.atan2(math.hypot(a[0], a[1]), a[2])) <= 25.0 + 1e-6
+
+
+# ── measured-force (INDI) throttle ───────────────────────────────────────────
+
+def test_indi_off_is_byte_identical_to_the_classic_loop():
+    """indi_gain 0 must not touch the output even when an IMU sample is supplied: every
+    verified velocity-mode result was flown without it."""
+    a = hover_args(p=[0.1, -0.2, 0.9], v=[0.1, 0, 0])
+    ref = VelocityLoop().step(**a)
+    got = VelocityLoop(indi_gain=0.0).step(**a, f_imu=[0, 0, 12.0], a_cable=[0, 0, -2.0])
+    assert got == ref
+
+
+def _hover_sim(kt_assumed, kt_true, indi_gain, seconds=8.0, dt=0.02, a_cable_true=-3.0):
+    """Point-mass vertical hover on a cable with a WRONG thrust gain: the loop believes
+    kt_assumed, the plant flies kt_true. Attitude is taken as perfect (level), so only
+    the throttle path is under test. Returns the final height error (m)."""
+    loop = VelocityLoop(ki=0.0, indi_gain=indi_gain, indi_tau=0.05)
+    z, vz = 1.0, 0.0
+    a_cable_model = -3.0                      # the reference's cable model (exact here)
+    a_ff = [0.0, 0.0, G - a_cable_model]      # a_ff = g + 0 - a_cable
+    f_imu = [0.0, 0.0, G]                     # at rest: thrust + cable = g
+    for _ in range(int(seconds / dt)):
+        _, _, thr, _ = loop.step([0, 0, z], [0, 0, vz], LEVEL, [0, 0, 1.0], [0, 0, 0],
+                                 a_ff, dt, kt_assumed, f_imu=f_imu,
+                                 a_cable=[0, 0, a_cable_model])
+        a_thrust = kt_true * thr
+        zdd = a_thrust + a_cable_true - G
+        vz += zdd * dt
+        z += vz * dt
+        f_imu = [0.0, 0.0, a_thrust + a_cable_true]
+    return z - 1.0
+
+
+def test_a_wrong_thrust_gain_is_a_steady_offset_without_indi():
+    """The classic loop has no integrator here (vel_ki 0, the §10 conclusion): a 15 %
+    over-estimated kT parks the drone below its reference for good."""
+    err = _hover_sim(kt_assumed=1.15 * KT, kt_true=KT, indi_gain=0.0)
+    assert err < -0.05
+
+
+def test_indi_removes_the_steady_offset_from_a_wrong_thrust_gain():
+    err = _hover_sim(kt_assumed=1.15 * KT, kt_true=KT, indi_gain=1.0)
+    assert abs(err) < 0.01
+
+
+def test_indi_removes_the_offset_from_a_wrong_cable_model_too():
+    """The reference believes the cable pulls 3 m/s^2, the plant's cable pulls 4 (a
+    25 % heavier load than the controller was told -- the fatal mis-seed direction)."""
+    loop_err = _hover_sim(kt_assumed=KT, kt_true=KT, indi_gain=1.0, a_cable_true=-4.0)
+    assert abs(loop_err) < 0.01
+    classic = _hover_sim(kt_assumed=KT, kt_true=KT, indi_gain=0.0, a_cable_true=-4.0)
+    assert classic < -0.05
+
+
+def test_indi_increment_is_bounded():
+    loop = VelocityLoop(indi_gain=1.0, indi_a_max=1.0)
+    a = hover_args()
+    loop.step(**a, f_imu=[0, 0, 30.0])       # absurd IMU sample
+    assert abs(loop.last['indi_inc']) <= 1.0 + 1e-9
+
+
+def _hover_sim_quadratic(indi_slope_ratio, seconds=8.0, dt=0.02):
+    """Same hover on a QUADRATIC plant a = c*u^2 (the sim's motor model), with the loop's
+    kT the secant at hover and the increment's control effectiveness set by
+    indi_slope_ratio. Returns (final height error, throttle std over the last 2 s)."""
+    a_cable = -3.0
+    a_hover = G - a_cable                      # specific thrust at hover
+    u_hover = 0.4
+    c = a_hover / u_hover ** 2
+    kt_secant = c * u_hover
+    loop = VelocityLoop(ki=0.0, indi_gain=1.0, indi_tau=0.05, indi_slope_ratio=indi_slope_ratio)
+    z, vz = 0.9, 0.0                            # start 10 cm low
+    f_imu = [0.0, 0.0, G]
+    thr_hist = []
+    for k in range(int(seconds / dt)):
+        _, _, thr, _ = loop.step([0, 0, z], [0, 0, vz], LEVEL, [0, 0, 1.0], [0, 0, 0],
+                                 [0, 0, a_hover], dt, kt_secant, f_imu=f_imu,
+                                 a_cable=[0, 0, a_cable])
+        a_thrust = c * thr ** 2
+        vz += (a_thrust + a_cable - G) * dt
+        z += vz * dt
+        f_imu = [0.0, 0.0, a_thrust + a_cable]
+        thr_hist.append(thr)
+    tail = np.array(thr_hist[-int(2.0 / dt):])
+    return z - 1.0, float(tail.std())
+
+
+def test_slope_ratio_two_is_calm_on_the_quadratic_plant():
+    """With the increment scaled by the tangent (2x the secant for a = c*u^2) the hover
+    settles without throttle chatter; with the secant (ratio 1) the increment loop runs
+    at twice its design gain and the throttle is visibly noisier (SIL R0241)."""
+    err2, std2 = _hover_sim_quadratic(2.0)
+    err1, std1 = _hover_sim_quadratic(1.0)
+    assert abs(err2) < 0.01 and std2 < 0.002
+    assert std1 > std2
+
+
+def test_indi_never_cuts_thrust_below_its_floor():
+    """A rod that pushes the drone up reads as a large upward measured acceleration; the
+    increment wants zero thrust, the floor keeps rate authority (Gazebo R0242)."""
+    loop = VelocityLoop(indi_gain=1.0, indi_thr_min=0.2)
+    thr = None
+    for _ in range(20):
+        _, _, thr, _ = loop.step(**hover_args(), f_imu=[0, 0, 40.0])
+    assert thr == 0.2

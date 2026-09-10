@@ -125,3 +125,4 @@ def test_a_newcomer_can_leave_again_after_joining():
     net.step(load, LEVEL, np.zeros(3), load, 0.02)
     assert np.allclose(net.q[k], q0)
     assert net.n_attached() == N_TETHERED
+

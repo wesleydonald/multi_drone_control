@@ -146,3 +146,12 @@ approach MPC is not ours to rewrite. Low priority; R1 covers the post-weld half 
    4th drone the load is level anyway).
 
 Sources: [arXiv 2605.05339](https://arxiv.org/pdf/2605.05339) · [arXiv 2607.00024](https://arxiv.org/pdf/2607.00024) · [arXiv 2602.04801](https://arxiv.org/pdf/2602.04801) · [arXiv 2304.02359](https://arxiv.org/pdf/2304.02359) · [arXiv 2503.09441](https://arxiv.org/pdf/2503.09441) · [Science Robotics 2025](https://www.science.org/doi/10.1126/scirobotics.adu8015) · [arXiv 2410.23929](https://arxiv.org/pdf/2410.23929) · [ScienceDirect 2025 CBF+DE](https://www.sciencedirect.com/science/article/abs/pii/S0967066125003260) · [ScienceDirect 2025 PPC](https://www.sciencedirect.com/science/article/abs/pii/S0921889025002817) · [IEEE 2015 hybrid lift](https://ieeexplore.ieee.org/document/7171008/) · [Springer 2024 tube MPC](https://link.springer.com/article/10.1007/s40313-024-01129-2) · [Sci. Rep. 2026 perching](https://www.nature.com/articles/s41598-026-36857-9)
+
+## 5. Status (branch `measured-force-velocity-loop`, 2026-09-10)
+
+R1 implemented (`vel_indi_gain`, design note `docs/design/measured_force_loop.md`) and R4
+measured (`tools/hybrid_dwell.py`, `attach_traj_hold_mode: settle`). SIL: R1 removes the
+tracker's model-error offset exactly (wrong kT: drone z error 0.21 m → 0.00), and shows
+that the remaining capsizes in the wrong-model scenarios are network-level (allocation,
+attitude feedback), which is where R2/R3 pick up. Gazebo mis-seed and settle-dwell runs:
+see learning.txt for the run ids.
