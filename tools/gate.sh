@@ -55,6 +55,8 @@ if python3 -m pytest src/utility_objects/test/test_safety.py \
                     src/controller_load_mpc/test/test_attach_azimuths.py \
                     src/controller_dissipative/test/test_symmetric_handout.py \
                     src/drone_magnet/test/test_handover_policy.py \
+                    src/drone_magnet/test/test_elrs_mux_magnet.py \
+                    src/controller_quad_load/test/test_thrust_model.py \
                     tools/test -q 2>&1 | tail -3; then
   :
 else

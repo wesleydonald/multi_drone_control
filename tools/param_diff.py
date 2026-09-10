@@ -34,6 +34,7 @@ LAUNCH_DIR = REPO / 'src/controller_quad_load/launch'
 SIM_VS_REAL = [
     ('mpc_quad_load_launch.py', 'real_control_launch.py'),
     ('dissipative_launch.py', 'real_dissipative_launch.py'),
+    ('three_attach_launch.py', 'real_attach_launch.py'),
 ]
 
 

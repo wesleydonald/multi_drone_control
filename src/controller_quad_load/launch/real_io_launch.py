@@ -72,6 +72,10 @@ def _args():
         # Flown/travelled trails. Off by default: they grow for the whole run and
         # clutter the view. The planned paths (MPC plan / payload desired) stay on.
         DeclareLaunchArgument('show_actual', default_value='false'),
+        # Mid-flight attach campaign (real_attach_launch.py): shows the ATTACH/DETACH
+        # panel buttons. num_drones must already INCLUDE the newcomer here (its radio,
+        # mocap body and model), unlike the control launch's tethered count.
+        DeclareLaunchArgument('attach', default_value='false'),
     ]
 
 
@@ -83,6 +87,8 @@ def launch_setup(context, *args, **kwargs):
     scale = float(LaunchConfiguration('mesh_scale').perform(context))
     show_actual = (LaunchConfiguration('show_actual').perform(context).lower()
                    in ('1', 'true', 'yes'))
+    attach = (LaunchConfiguration('attach').perform(context).lower()
+              in ('1', 'true', 'yes'))
 
     vis_share = get_package_share_directory('drone_visualisation')
     with open(os.path.join(vis_share, 'urdf', 'frame.urdf')) as fh:
@@ -147,7 +153,7 @@ def launch_setup(context, *args, **kwargs):
     cfg = os.path.join(cfg_dir, f'real_io_{n}drone.rviz')
     with open(cfg, 'w') as fh:
         fh.write(build_config(n, show_actual=show_actual,
-                              detach=False, attach=False))
+                              detach=attach, attach=attach))
 
     nodes.append(Node(
         package='rviz2', executable='rviz2', name='rviz2',

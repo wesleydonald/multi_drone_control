@@ -826,8 +826,20 @@ class DissipativeController(LoadPlanner):
             hold = (' | HOLD (approach)' if getattr(self, '_approach_hold_armed', False)
                     else f' | HOLD {self._reconfig_hold_left:.0f}s')
         n_on = self.net.n_attached() if self.phase == 'network' else self.n
+        # per-drone role letters, in physical id order: T tethered, N newcomer (welded),
+        # W waiting (reserved, not yet on the load), D detached. RViz colours by these.
+        roles = []
+        for d in range(self.n_net):
+            if self.detached[d]:
+                roles.append('D')
+            elif d < self.n:
+                roles.append('T')
+            else:
+                slot = self._drone_to_net_slot(d)
+                roles.append('N' if slot is not None and self.net.attached[slot] else 'W')
         self.status_pub.publish(String(
-            data=f'{self.phase.upper()}{hold} | {n_on} on load | tilt {tilt:.0f} deg'))
+            data=f'{self.phase.upper()}{hold} | {n_on} on load | tilt {tilt:.0f} deg'
+                 f' | roles {"".join(roles)}'))
 
     def _publish_ref(self, i, nodes):
         """Wraps the parent's publisher: remembers the OCP's last cable feedforward per

@@ -22,6 +22,19 @@ from interfaces.msg import ELRSCommand
 from drone_magnet.handover_policy import HandoverPolicy
 
 
+def merge_magnet_channel(msg, channel, value):
+    """Write the magnet aux channel into a command about to be forwarded. On hardware the
+    magnet manager publishes its ON/OFF on a separate ELRSCommand topic that never reaches
+    the radio by itself; the mux is the one place every forwarded command passes through.
+    None = no magnet command seen yet, leave the field alone."""
+    if value is None:
+        return msg
+    field = f'channel_{int(channel)}'
+    if hasattr(msg, field):
+        setattr(msg, field, float(max(-1.0, min(1.0, value))))
+    return msg
+
+
 class ElrsMux(Node):
     def __init__(self):
         super().__init__('elrs_mux')
@@ -41,6 +54,12 @@ class ElrsMux(Node):
         self.create_subscription(ELRSCommand, f'/drone_{drone_id}/ELRSCommand_diss',
                                  self._diss_cb, 1)
         self.create_subscription(Bool, '/magnet/object_attached', self._attached_cb, 10)
+        # magnet aux channel merge ('' = off, the sim has no magnet radio)
+        self._magnet_channel = int(self.declare_parameter('magnet_channel', 10).value)
+        self._magnet_value = None
+        magnet_topic = str(self.declare_parameter('magnet_command_topic', '').value)
+        if magnet_topic:
+            self.create_subscription(ELRSCommand, magnet_topic, self._magnet_cb, 5)
         self.get_logger().info(
             f'[elrs_mux] drone {drone_id}: forwarding APPROACH until /magnet/object_attached'
             f' (latch={self.policy.latch}, require_live={self.policy.require_live})')
@@ -63,9 +82,15 @@ class ElrsMux(Node):
     def _attached_cb(self, msg: Bool):
         self._apply(self.policy.weld(bool(msg.data), self._now()))
 
+    def _magnet_cb(self, msg: ELRSCommand):
+        self._magnet_value = float(getattr(msg, f'channel_{self._magnet_channel}', 0.0))
+
+    def _forward(self, msg):
+        self.pub.publish(merge_magnet_channel(msg, self._magnet_channel, self._magnet_value))
+
     def _tejen_cb(self, msg: ELRSCommand):
         if not self._attached:
-            self.pub.publish(msg)
+            self._forward(msg)
 
     def _diss_cb(self, msg: ELRSCommand):
         # Evaluated on the incoming stream, so authority transfers on the first flying
@@ -73,7 +98,7 @@ class ElrsMux(Node):
         self._apply(self.policy.tracker_command(
             bool(msg.armed), float(msg.channel_2), self._now()))
         if self._attached:
-            self.pub.publish(msg)
+            self._forward(msg)
 
 
 def main(args=None):

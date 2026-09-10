@@ -1,4 +1,41 @@
 ################################################################################
+# BRANCH claude-experimentation, 2026-09-10 (cont.)  --  HARDWARE ATTACH LAUNCH, RVIZ
+################################################################################
+
+1. real_attach_launch.py: hardware twin of three_attach_launch.py, same 69 arguments
+   (param_diff shows only the intended deltas: kT 24/0, rig takeoff pace, no sim
+   watchdog budgets, magnet radio args added). Brought up without hardware: all 4
+   trackers, the dissipative node, mux, approach MPC, join planner, target publisher
+   and magnet manager start and wait for mocap. Three things the sim never needed:
+   (a) the magnet TIP is a mocap rigid body (MAGNET_TIP_RIGID_BODY_ID -> /magnet_tip_pose
+   PoseStamped, None until the rig has one); (b) the magnet manager reads the payload
+   as MotionCaptureState (object_pose_msg_type: mocap_state); (c) the manager's
+   magnet aux channel was published on its own ELRSCommand topic that nothing on the
+   radio path consumed -- elrs_mux now merges channel_<k> into every command it
+   forwards (magnet_command_topic '' keeps the sim untouched). Rig checklist and the
+   order of proof: docs/experimentation/real_attach_gap.md.
+   Bring-up trap (pre-existing, real_dissipative_launch does it too): with NO mocap
+   only ONE tracker ever logs. controller_mpc takes the acados compile flock at
+   import and releases it only after its solver is up, which is AFTER its
+   "Waiting for initial mocap pose" loop -- so the first tracker holds the lock
+   until mocap streams and the others sit silently at import. Harmless when
+   terminal 1 (mocap) is up first, as the run order demands, and it is why sim
+   trackers come up 2.5 s apart. tools/fake_mocap.py feeds static poses so a
+   hardware launch can be brought up whole on a desk.
+
+2. RViz: drone id labels take their colour from a new 'roles TTTN' field in
+   /fleet/status (T tethered, N newcomer on the load, W waiting, D detached), and
+   fleet_viz draws a line from each drone to node 0 of its reference trajectory
+   (/fleet/error_markers; green < 5 cm, amber < 15 cm, red). In the OCP phase node 0
+   is the drone itself (zero line); after the handover it is the network node, so the
+   attach transient's tracking error is visible live.
+
+3. n=2+1 rim attach: not flown, by geometry. A disc on two rim cables is a pendulum
+   about their chord -- 9/3 o'clock puts the centre of mass ON the chord (indifferent
+   attitude), any other pair swings it edge-on. The third cable is what makes the
+   3/12/9 hover an equilibrium at all (34 deg). Recorded in PLAN.md item 7.
+
+################################################################################
 # BRANCH claude-experimentation, 2026-09-10 (cont.)  --  kT OPERATING POINT, ROUND TRIP,
 # SLOW TICKS
 ################################################################################

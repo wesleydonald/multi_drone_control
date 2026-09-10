@@ -38,7 +38,7 @@ from rclpy.node import Node
 
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped
 from std_msgs.msg import Bool, Empty, String
-from interfaces.msg import ELRSCommand
+from interfaces.msg import ELRSCommand, MotionCaptureState
 
 
 
@@ -69,6 +69,10 @@ class MagnetAttachmentManager(Node):
         self.object_pose_topic = self.declare_parameter('object_pose_topic', '/model/payload_model/pose').value
         self.magnet_tip_pose_index = int(self.declare_parameter('magnet_tip_pose_index', -1).value)
         self.object_pose_index = int(self.declare_parameter('object_pose_index', 0).value)
+        # 'pose_array' (Gazebo model pose bridge) or 'mocap_state' (interfaces/MotionCaptureState,
+        # the hardware payload rigid body on /payload/motion_capture_state).
+        self.object_pose_msg_type = str(
+            self.declare_parameter('object_pose_msg_type', 'pose_array').value).strip().lower()
         # OFF-CENTRE weld: shift the weld-reference point off the payload centre by this
         # world-frame XY (MUST match attach_target_publisher's x/y offset). The weld triggers
         # on tip-distance to THIS point, so with the offset the tip welds at a ring point
@@ -167,7 +171,11 @@ class MagnetAttachmentManager(Node):
                 "defaulting to PoseStamped."
             )
             self.create_subscription(PoseStamped, self.magnet_tip_pose_topic, self.magnet_tip_pose_stamped_callback, 10)
-        self.create_subscription(PoseArray, self.object_pose_topic, self.object_pose_callback, 10)
+        if self.object_pose_msg_type in ('mocap_state', 'motion_capture_state', 'mocap'):
+            self.create_subscription(MotionCaptureState, self.object_pose_topic,
+                                     self.object_state_callback, 10)
+        else:
+            self.create_subscription(PoseArray, self.object_pose_topic, self.object_pose_callback, 10)
 
         self.attach_pub = self.create_publisher(Empty, self.ros_attach_topic, 5)
         self.detach_pub = self.create_publisher(Empty, self.ros_detach_topic, 5)
@@ -267,6 +275,12 @@ class MagnetAttachmentManager(Node):
                 throttle_duration_sec=2.0,
             )
             return
+        self._update_object_pose(pose)
+
+    def object_state_callback(self, msg: MotionCaptureState) -> None:
+        self._update_object_pose(msg.pose)
+
+    def _update_object_pose(self, pose: Pose) -> None:
         now = time.time()
         new_pos = self._pose_to_position(pose)
         # off-centre weld reference (see __init__), rotated into the payload's attitude so

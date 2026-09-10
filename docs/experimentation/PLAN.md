@@ -47,8 +47,18 @@ Findings land in `learning.txt` as usual; this file tracks status.
 - Item 1 RESOLVED: the offset is the fixed sim thrust ratio at the wrong operating
   point (SIL A/B R0228–R0230). Sim launches now derive kT from load_mass and fleet
   size (`thrust_model.py`, `thrust_ratio:=auto`); gate smoke settles on target (R0232).
-- Item 5: `docs/experimentation/real_attach_gap.md` — the 31 sim-only attach arguments the
-  hardware launch lacks, sorted into must-add / must-not-copy / decide-per-flight.
+- Item 5 DONE: `real_attach_launch.py` (hardware twin of the sim attach launch, brought up
+  node-for-node without hardware), magnet-tip rigid body in the mocap publisher, mocap-state
+  payload input for the magnet manager, magnet aux channel merged in `elrs_mux`, `attach:=`
+  on `real_io_launch.py`; `docs/experimentation/real_attach_gap.md` is now the rig checklist.
+- Item 6 DONE: drone id labels coloured by role (T/N/W/D from `/fleet/status`) and a
+  reference→actual error line per drone (`/fleet/error_markers`), structural tests added.
+- Item 7, n=2+1: NOT RUN, by geometry. A disc hung from two rim points is a pendulum about
+  their chord: with the tethers at 9 and 3 o'clock the chord passes through the centre and
+  the attitude is indifferent (any tilt is an equilibrium); any other pair leaves the
+  centre of mass off the chord and the disc swings edge-on. The third cable is what gives
+  the 3/12/9 hover its (34°) equilibrium at all. Two-drone rim carry needs a payload whose
+  attach points straddle the centre of mass in both axes, not this ring.
 - Stale-reference aborts (R0169, R0225) traced to CPU contention in Gazebo runs (tick
   watchdog: 86 slow ticks in R0231, none in SIL): headless Gazebo now runs niced, and
   the attach launch carries a 2 s sim reference budget.

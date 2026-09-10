@@ -24,6 +24,10 @@ import re
 # /drone_<drone_id>/motion_capture_state (the topic the MPC controllers read).
 # Add/rename entries to match the rigid-body IDs right now its 10 and 20.
 RIGID_BODY_TO_DRONE = {10: 0, 20: 1, 30: 2}
+# Rigid body on the ATTACH drone's magnet tip, published as PoseStamped on
+# /magnet_tip_pose for the magnet manager (weld trigger, tip-based weld capture).
+# None until the rig has one; the attach drone itself is a RIGID_BODY_TO_DRONE entry.
+MAGNET_TIP_RIGID_BODY_ID = None
 # Rigid-body ID routed to /payload/motion_capture_state instead of a drone (the
 # cable-suspended load; set to None if there is no payload body).
 PAYLOAD_RIGID_BODY_ID = 8
@@ -320,6 +324,8 @@ class MotionCapturePublisher(Node):
                 MotionCaptureState, f'/drone_{drone_id}/motion_capture_state', 10)
             for drone_id in RIGID_BODY_TO_DRONE.values()}
         self.pose_publisher = self.create_publisher(PoseStamped, '/rviz_pose', 10)
+        self.magnet_tip_publisher = self.create_publisher(PoseStamped, '/magnet_tip_pose', 10)
+        self.magnet_tip_parser = ParseData()
         self.payload_publisher = self.create_publisher(
             MotionCaptureState, '/payload/motion_capture_state', 10)
         # TF broadcaster so RViz can render each drone live (map -> drone_<id>).
@@ -370,6 +376,13 @@ class MotionCapturePublisher(Node):
         
         return msg
 
+
+    def create_pose_stamped_msg(self, obj_data: ObjectData) -> PoseStamped:
+        msg = PoseStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'map'
+        msg.pose = self.create_motion_capture_state_msg(obj_data).pose
+        return msg
 
     def broadcast_drone_tf(self, drone_id, obj_data):
         """Broadcast map -> drone_<id> from the MoCap pose so RViz shows it live."""
@@ -437,6 +450,10 @@ class MotionCapturePublisher(Node):
                     if obj_data is not None:
                         self.payload_publisher.publish(
                             self.create_motion_capture_state_msg(obj_data))
+                elif rb_id is not None and rb_id == MAGNET_TIP_RIGID_BODY_ID:
+                    obj_data = self.magnet_tip_parser.parse_packet(data)
+                    if obj_data is not None:
+                        self.magnet_tip_publisher.publish(self.create_pose_stamped_msg(obj_data))
                 elif rb_id in RIGID_BODY_TO_DRONE:
                     drone_id = RIGID_BODY_TO_DRONE[rb_id]
                     obj_data = self.drone_parsers[drone_id].parse_packet(data)
