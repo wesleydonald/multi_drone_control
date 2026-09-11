@@ -107,3 +107,67 @@ estimate (SIL R0249, Gazebo R0250/R0251; learning.txt R2 entries). Delayed the s
 SIL, made Gazebo worse: the estimate is biased by the secant thrust model and rotor
 vibration, and an admittance integrates the bias. Removed from the code; the prerequisite
 is a real tension signal.
+
+## 7. Anti-swing (`vel_swing_k`) — the open problem's candidate
+
+Why the stiff tracker loses the load: a compliant tracker is dragged along by the rod
+when the load swings, and that motion of the pivot is what damps a pendulum. A
+measured-force tracker rejects the rod force, so the swing is no longer damped and grows
+on the moving load (R0244/R0246, SIL R0240/R0241). The cascade in arXiv 2605.05339 has an
+explicit anti-swing stage for the same reason. Here it is one term in the velocity loop:
+
+```
+v_sp += swing_k · (v_load_measured − v_ref)_xy
+```
+
+the drone moves with the load's lateral velocity error, the crane operator's rule. The
+planar pendulum test shows a stability window: 0.3 damps a 0.25 rad swing to 3 % in 12 s,
+0.7 and above makes it grow (the pivot overshoots the bob), so the gain is a window at
+kp 2 / kv 4, not a knob. Configs: `attach_circle_n3_indi_sw` (INDI + swing),
+`attach_circle_n3_sw` (classic + swing), `attach_circle_n3_fast_m075_indi_sw`,
+SIL `carry_indi_n3_kt28_trim_sw`.
+
+## 8. Horizontal leash — tried and removed (2026-09-10)
+
+Building the network geometry on the measured load plus a bounded pull toward the target
+(`net_pull_max` 0.10) closed a position feedback loop the yaw-only design deliberately
+avoids: the classic loop, which never aborted on this demo, aborted 20 s after the weld
+(R0259), and with INDI + anti-swing the target followed the load through the approach hold
+and the newcomer never welded (R0258). Removed; the record stays in learning.txt.
+
+## 9. Where the open problem stands (2026-09-10, end of day)
+
+| Config (attach-during-circle demo) | Weld +4–10 s tilt mean | Circle tilt mean / max | Outcome |
+|---|---|---|---|
+| classic (R0234) | 28.8° | 3.7° / 9.4° | completes |
+| classic + anti-swing 0.3 (R0256) | 23.5° | 5.7° / 13.5° | completes, no gain |
+| INDI 1 (R0244/R0246) | 7.1° | — | abort +20 s |
+| INDI 1 + anti-swing 0.3 (R0254) | 6.8° | — | abort +27 s |
+| INDI 0.5 (R0247) | 17.4° | 8.5° / 16.1° | completes |
+| **INDI 0.5 + anti-swing 0.3 (R0257)** | 18.2° | 5.7° / 11.1° | completes |
+| mis-seed +25 %, INDI 1 + anti-swing (R0255) | 21.4° | 22.3° / 49.9° | **first full run of this mis-seed** |
+
+The anti-swing term is the right diagnosis (it is what a compliant tracker did by accident)
+and is enough at half gain; at full gain the newcomer's reference still leads its rod by
+0.4 m once the circle moves, and the two attempts to close that from the network side
+(admittance §6, leash §8) both broke the yaw-only, open-loop-in-pose property the network
+relies on. The measured-rod idea was then tested and falsified: the rod is 0.49 m at the weld (the
+0.53–0.56 m figure was drone-to-rim including the tip stand-off), and using the tip as the
+weld point made the classic loop worse (R0261–R0263, removed). What is left is the
+network's own slot and hand-out dynamics for the newcomer once the load is under way.
+
+## 10. The 4/12/8 layout and the share-weighted trim (2026-09-10 evening)
+
+Wesley moved the tethers to 4/12/8 o'clock with the newcomer at 6. The three-drone hover
+is now level (2° vs 33°, R0266) because the centre of mass sits inside the attach
+triangle. The four-point rim 12/4/6/8 is uneven, though: the moment balance loads the
+12 o'clock drone about 3.2 N against 1.85 / 1.85 / 1.4 N for the others (network solve),
+and a no-integrator tracker sags in proportion to its force error, so the load rolls
+toward 12 o'clock (R0266: 20–37°, low side at 90°). Two answers, both under test:
+
+- `diss_trim_share_weighted`: the single common-mode load-z integral is distributed per
+  node in proportion to its solved tension share (no per-drone wind-up); the drone that
+  carries twice the load gets twice the correction. Unit test on the four-point rim.
+- the measured-force throttle, which removes the force-proportional sag at the source.
+
+A 0.4 m/s circle flipped the load at the weld (R0267); the attach stays at 0.2 m/s.

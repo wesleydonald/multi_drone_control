@@ -29,20 +29,15 @@ import re
 
 import rclpy
 from rclpy.node import Node
-import math
-
-from geometry_msgs.msg import TransformStamped, PoseStamped, Point
+from geometry_msgs.msg import TransformStamped, PoseStamped
 from nav_msgs.msg import Path
 from visualization_msgs.msg import Marker, MarkerArray
-from std_msgs.msg import String, Float64MultiArray
+from std_msgs.msg import String
 from tf2_ros import TransformBroadcaster
 
 from interfaces.msg import MotionCaptureState
 
 FRAME = 'map'
-# id-label colour by the role letter in /fleet/status (dissipative node): tethered white,
-# newcomer orange, waiting reserved yellow, detached grey.
-ROLE_RGB = {'T': (1.0, 1.0, 1.0), 'N': (1.0, 0.55, 0.1), 'W': (1.0, 0.9, 0.2), 'D': (0.6, 0.6, 0.6)}
 
 
 class FleetViz(Node):
@@ -62,16 +57,7 @@ class FleetViz(Node):
         self.path_pub = self.create_publisher(Path, '/payload/actual_path', 5)
         self.status_marker_pub = self.create_publisher(Marker, '/fleet/status_marker', 1)
         self._status = ''
-        self._roles = ''
         self.create_subscription(String, '/fleet/status', self._status_cb, 1)
-        # reference -> actual error lines: node 0 of each drone's reference trajectory
-        # (the network node it tracks after the handover; the drone itself before it).
-        self.error_pub = self.create_publisher(MarkerArray, '/fleet/error_markers', 1)
-        self._ref0 = [None] * self.n
-        for i in range(self.n):
-            self.create_subscription(
-                Float64MultiArray, f'/drone_{i}/reference_trajectory',
-                lambda m, k=i: self._ref_cb(m, k), 5)
         self._payload_path = []
 
         for i in range(self.n):
@@ -117,48 +103,11 @@ class FleetViz(Node):
         m.pose.position.z = self.id_label_z
         m.pose.orientation.w = 1.0
         m.scale.z = self.id_label_size
-        role = self._roles[i] if i < len(self._roles) else 'T'
-        m.color.r, m.color.g, m.color.b = ROLE_RGB.get(role, ROLE_RGB['T'])
-        m.color.a = 1.0
+        m.color.r, m.color.g, m.color.b, m.color.a = 1.0, 1.0, 1.0, 1.0
         self.id_pub.publish(MarkerArray(markers=[m]))
-        self._publish_error_line(msg, i)
-
-    def _ref_cb(self, msg, i):
-        d = msg.data
-        if len(d) >= 5 and int(d[0]) >= 1:
-            self._ref0[i] = (float(d[2]), float(d[3]), float(d[4]))
-
-    def _publish_error_line(self, msg, i):
-        """Line from the measured drone to its reference node 0, coloured by the error
-        (green < 5 cm, amber < 15 cm, red beyond) -- the tracking picture the attach
-        transient used to need a plot for."""
-        r = self._ref0[i]
-        if r is None:
-            return
-        p = msg.pose.position
-        e = math.dist((p.x, p.y, p.z), r)
-        m = Marker()
-        m.header.frame_id = FRAME
-        m.header.stamp = self.get_clock().now().to_msg()
-        m.ns = 'ref_error'
-        m.id = i
-        m.type = Marker.LINE_LIST
-        m.action = Marker.ADD
-        m.pose.orientation.w = 1.0
-        m.scale.x = 0.01
-        a, b = Point(), Point()
-        a.x, a.y, a.z = float(p.x), float(p.y), float(p.z)
-        b.x, b.y, b.z = r
-        m.points = [a, b]
-        m.color.r, m.color.g, m.color.b = ((0.2, 0.9, 0.2) if e < 0.05 else
-                                           (1.0, 0.7, 0.1) if e < 0.15 else (1.0, 0.2, 0.2))
-        m.color.a = 0.9
-        self.error_pub.publish(MarkerArray(markers=[m]))
 
     def _status_cb(self, msg):
         self._status = msg.data
-        m_r = re.search(r'roles ([TNWD]+)', msg.data)
-        self._roles = m_r.group(1) if m_r else ''
 
     def _payload_cb(self, msg):
         self._send_tf(msg, 'payload_mocap')

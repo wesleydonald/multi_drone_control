@@ -166,3 +166,33 @@ def test_fly_away_reference_gets_no_trim():
 if __name__ == '__main__':
     import sys
     sys.exit(pytest.main([__file__, '-q']))
+
+
+def test_share_weighted_trim_scales_with_the_solved_tension():
+    """On the uneven four-point rim (4/12/8 o'clock plus the newcomer at 6) the moment
+    balance loads the 12 o'clock drone about twice as much as each of the others; with
+    trim_share_weighted its trim is larger in that ratio, and with the flag off every
+    node gets the same trim. (Three drones at 4/12/8 alone are symmetric: equal shares.)"""
+    from controller_load_mpc.geometry import attach_points
+    import math
+    az = [330.0, 90.0, 210.0, 270.0]
+    rho = attach_points(4, 0.25, 0.025, azimuths_deg=az)
+    out, shares = {}, None
+    for flag, ki in ((None, 0.0), (False, 1.0), (True, 1.0)):
+        net = DissipativeNetwork(4, rho, cable_len=0.5, drone_mass=0.6, load_mass=0.6, g=9.81,
+                                 params=DissipativeParams(balanced_tensions=True, ki_load=ki,
+                                                          trim_share_weighted=bool(flag)))
+        load = np.array([0.0, 0.0, 0.6]); el = math.radians(45.0)
+        net.seed([load + rho[k] + 0.5 * np.array([math.cos(el) * math.cos(math.radians(a)),
+                                                  math.cos(el) * math.sin(math.radians(a)),
+                                                  math.sin(el)]) for k, a in enumerate(az)])
+        for _ in range(20):                      # load 10 cm low -> the trim winds up
+            net.step(load - [0, 0, 0.1], LOAD_Q, np.zeros(3), load, 0.1)
+        out[flag] = [float(net.reference(k, LOAD_Q, load)[2][2]) for k in range(4)]
+        shares = net._solve_tensions(np.eye(3), load)
+    assert shares[1] > 1.6 * shares[0] and abs(shares[0] - shares[2]) < 1e-6
+    # the trim is what the integrator ADDS over the ki_load=0 network
+    off = [out[False][k] - out[None][k] for k in range(4)]
+    on = [out[True][k] - out[None][k] for k in range(4)]
+    assert max(off) - min(off) < 1e-9 and off[0] > 0.05
+    assert on[1] > 1.5 * on[0] and on[1] > 1.5 * on[3] and abs(on[0] - on[2]) < 1e-6

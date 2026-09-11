@@ -31,7 +31,7 @@ launch:
     cable_len: 0.5
     load_mass: 0.6
     target_z: 0.6
-    attach_azimuths_deg: '0,90,180'
+    attach_azimuths_deg: '330,90,210'
     attach_central: false
     diss_balanced_tensions: true
     attach_handout: true

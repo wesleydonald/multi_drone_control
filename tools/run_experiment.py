@@ -437,6 +437,10 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10):
         last_report = time.time()
         wall_cap = 20.0 * cfg.duration_s + 300.0     # only a hang guard, not a deadline
         wall0 = time.time()
+        # a frozen /clock after LAND left R0256 spinning for 17 min inside the cap above:
+        # if sim time stops advancing for this long (wall), the run is over.
+        STALL_S = 60.0
+        last_sim_t, last_sim_wall = node._rel(), time.time()
         while not node.finished():
             rclpy.spin_once(node, timeout_sec=0.05)
             node.fire_due_events()
@@ -452,6 +456,12 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10):
             if stack.poll() is not None:
                 failures.append('the controller stack exited mid-run')
                 reason = 'stack exited'
+                break
+            if node._rel() != last_sim_t:
+                last_sim_t, last_sim_wall = node._rel(), time.time()
+            elif time.time() - last_sim_wall > STALL_S:
+                failures.append(f'sim time frozen at t={node._rel():.2f} for {STALL_S:.0f} s wall')
+                reason = 'sim time stalled'
                 break
             if time.time() - wall0 > wall_cap:
                 failures.append(

@@ -123,11 +123,3 @@ def test_fleet_status_banner_is_shown():
     assert '/fleet/status_marker' in cfg
     assert 'fleet_status: true' in cfg
 
-
-def test_reference_error_lines_are_shown():
-    """fleet_viz draws a line from each drone to its reference node 0, coloured by the
-    error; the display must be in every config so the attach transient is visible live."""
-    from controller_quad_load.rviz_config import build_config
-    cfg = build_config(3)
-    assert '/fleet/error_markers' in cfg
-    assert 'ref_error: true' in cfg

@@ -47,7 +47,7 @@ launch:
     diss_balanced_tensions: true
     attach_handout: true
     attach_t_handout: 12.0
-    attach_azimuths_deg: '0,90,180'
+    attach_azimuths_deg: '330,90,210'
     attach_x_offset: 0.0
     attach_y_offset: -0.25
     attach_elev_deg: 65.0
@@ -60,7 +60,7 @@ fleet:
 geometry:
   cable_len: 0.5
   attach_radius: 0.25
-  attach_azimuths_deg: '0,90,180'
+  attach_azimuths_deg: '330,90,210'
   attach_z: 0.025
   load_mass: 0.6
   drone_mass: 0.6

@@ -1,4 +1,4 @@
-name: attach_circle_n3_indi05
+name: attach_circle_n3_sw
 description: >
   ATTACH DURING A TRAJECTORY (Wesley, 2026-09-09): three drones at 3/12/9 o'clock fly
   a circle; the 4th drone rendezvouses with the MOVING payload, welds at 6 o'clock,
@@ -40,7 +40,7 @@ launch:
     # the architecture that survives the newcomer's transit (attach_ring_45_rod_vel)
     control_mode: velocity_after_handover
     vel_ki: 0.0
-    vel_indi_gain: 0.5
+    vel_swing_k: 0.3
     diss_ki_load: 1.0
     enable_obstacle_avoidance: false
 

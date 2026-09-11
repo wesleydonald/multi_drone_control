@@ -148,8 +148,6 @@ def build_config(n: int, *, show_actual: bool = False, detach: bool = False,
     # Previously sim-only; on hardware it is arguably MORE useful, because you
     # cannot tell the airframes apart by eye across the cage.
     displays.append(_marker_array('Drone IDs', '/fleet/id_markers', 'drone_id'))
-    # reference -> actual error lines per drone (fleet_viz /fleet/error_markers).
-    displays.append(_marker_array('Ref error', '/fleet/error_markers', 'ref_error'))
     # operator status banner (phase / hold / drones on load / tilt) above the payload
     displays.append("""    - Class: rviz_default_plugins/Marker
       Name: Fleet status

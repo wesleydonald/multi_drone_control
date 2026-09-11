@@ -1,0 +1,5 @@
+run,date,config,card,variable,baseline,metric,value,repeat_of,verdict,reviewer,notes
+R0234,2026-09-10,attach_circle_n3,,baseline,,circle_tilt_mean_deg,3.7,,baseline,,3/12/9 layout classic loop
+R0243,2026-09-10,attach_circle_n3_settle,,attach_traj_hold_mode=settle,R0234,resume_tilt_mean_deg,1.2,,supported (1 run),,hold ended 13.6 s at 1.0 deg
+R0257,2026-09-10,attach_circle_n3_indi05_sw,,vel_indi_gain=0.5+vel_swing_k=0.3,R0234,circle_tilt_mean_deg,5.7,,weak (1 run),,softer weld (18 vs 29)
+R0266,2026-09-10,attach_circle_n3_settle,,layout 4/12/8,R0243,post_weld_tilt_mean_deg,29,,not supported,,rolls toward 12 o'clock

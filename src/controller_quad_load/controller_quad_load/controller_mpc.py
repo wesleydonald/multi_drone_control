@@ -237,6 +237,7 @@ class Controller(Node):
         # resting on the ground (cable slack, no tension) or suspended. drone 0
         # also logs the payload actual + desired.
         self.payload_pos = None
+        self.payload_vel = None
         self.payload_ref = None
         self.payload_resting = True       # assume grounded until told otherwise
         # payload counts as resting while its z is at/below this. set per world
@@ -381,12 +382,12 @@ class Controller(Node):
                                   # measured-force thrust (velocity_loop.py module doc)
                                   ('vel_indi_gain', 0.0), ('vel_indi_tau', 0.05),
                                   ('vel_indi_a_max', 3.0), ('vel_indi_slope_ratio', 1.0),
-                                  ('vel_indi_thr_min', 0.2)):
+                                  ('vel_indi_thr_min', 0.2), ('vel_swing_k', 0.0)):
                 self.declare_parameter(name, default)
             gains = {n: float(self.get_parameter(f'vel_{n}').value) for n in
                      ('kp_pos', 'kv', 'ki', 'k_att', 'v_max', 'a_i_max',
                       'indi_gain', 'indi_tau', 'indi_a_max', 'indi_slope_ratio',
-                      'indi_thr_min')}
+                      'indi_thr_min', 'swing_k')}
             self.velocity_loop = VelocityLoop(**gains)
             self.get_logger().warn(
                 f"[Drone {self.drone_id}] STAGE V: control_mode={self.control_mode} "
@@ -510,6 +511,8 @@ class Controller(Node):
     def _payload_state_cb(self, msg: MotionCaptureState):
         p = msg.pose.position
         self.payload_pos = np.array([p.x, p.y, p.z])
+        tl = msg.twist.linear
+        self.payload_vel = np.array([tl.x, tl.y, tl.z])
         self.payload_resting = (p.z <= self.payload_rest_z + 0.05)
         # Payload attitude is the attach-failure signature (it ran past 90 deg in
         # the ring-attach runaway), so the envelope check needs it.
@@ -749,7 +752,8 @@ class Controller(Node):
             p, v, q, p_ref, v_ref, a_ff, 1.0 / FREQUENCY_HZ,
             self._effective_kT(), heading=self._heading_datum,
             integrate=integrate,
-            f_imu=(self.imu_raw if integrate else None), a_cable=a_cable0)
+            f_imu=(self.imu_raw if integrate else None), a_cable=a_cable0,
+            v_load=(self.payload_vel if integrate else None))
         self._current_ref_pos = p_ref
         self._applied_cable0 = 0.0      # no cable model in this path
         self._publish_channels(u, np.zeros(4))

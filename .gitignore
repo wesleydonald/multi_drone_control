@@ -29,9 +29,13 @@ logs/
 #   results_archive/ curated datasets behind thesis figures -- TRACKED, never cleaned
 # Logs used to be written inside c_generated_code*/ (ignored, and deleted on every
 # acados rebuild). They now live in results/, which no build step ever touches.
-results/
+results/*
+!results/registry.csv     # the run registry is the tracked index of the untracked runs
 
 # Regenerated thesis figures (tools/thesis_figures.py). Output, not source -- the source
 # is configs/thesis_figures.yaml plus the runs it cites. Track these only once those runs
 # are promoted to results_archive/, so a committed figure always has committed data.
 docs/figures/
+
+# per-session Gazebo run counter written by .claude/hooks
+.claude/.gz_runs_this_session

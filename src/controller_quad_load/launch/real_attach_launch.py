@@ -56,7 +56,7 @@ def _args():
         DeclareLaunchArgument('reserved_attach', default_value='1'),
         # ── rig geometry / payload: MEASURED, never the sim defaults ─────────
         DeclareLaunchArgument('cable_len', default_value='0.5'),
-        DeclareLaunchArgument('attach_azimuths_deg', default_value='0,90,180'),
+        DeclareLaunchArgument('attach_azimuths_deg', default_value='330,90,210'),
         DeclareLaunchArgument('load_mass', default_value='0.6'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         DeclareLaunchArgument('start_taut', default_value='true'),

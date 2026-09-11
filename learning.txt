@@ -1,4 +1,53 @@
 ################################################################################
+# BRANCH measured-force-velocity-loop, 2026-09-10 evening  --  4/12/8 LAYOUT (Wesley)
+################################################################################
+
+Wesley's GUI read of the 3/12/9 demo: the drones attach but the trajectory takes
+unreasonably long, and the drone opposite the newcomer (12 o'clock) ends up almost
+under the load. His proposal: tethers at 4/12/8 o'clock, newcomer at 6. Physics agrees:
+with the three attach points 120 deg apart the centre of mass is INSIDE their triangle,
+so the three-drone hover hangs level (R0266: 2.0 deg, was 33), and the newcomer joins in
+the 120 deg gap between 4 and 8. Done globally: three_attach.sdf regenerated
+(generate_rigid_world --azimuths 330,90,210 --detachable --ground-start, newcomer block
+kept), weld variants, launch defaults, every attach config, CLAUDE.md. RViz role colours
+and error lines removed at his request (banner kept).
+
+RESULT on the classic loop (R0266, settle hold): the three-drone hover is level and the
+weld itself is gentle (10 deg mean in the first 4 s), but the load then rolls over to
+20-37 deg with its LOW side at 12 o'clock and never settles (the 30 s cap ends the
+hold; the circle runs at 35 deg). Geometry of the 4-point layout 12/4/6/8: moment
+balance about the 4-8 chord makes the 12 o'clock drone carry 40 % of the load and the
+other three 20 % each. A no-integrator tracker sags in proportion to its force error,
+so the drone with double the share sags double, and the z-trim is common-mode and
+cannot level that. The 3/12/9 + 6 layout hid this because its four shares were
+nearly equal. This is exactly the tracker error the measured-force throttle removes
+-- INDI variants on the new layout queued (indi05_sw, indi_sw) plus a SIL run for the
+tension shares.
+
+INDI on the 4/12/8 layout: INDI 0.5 + swing (R0268) holds the load LEVEL through the
+weld and the hold (7.0 deg in the first 4 s, 3.2 deg at +4-10 -- the differential sag
+gone, as predicted) and then loses it on the moving circle (16 -> 22 deg mean, abort
+at +30 s), the same post-resume problem as on the old layout. Full gain + swing
+(R0269) capsizes right after the weld (81 deg at +4-10). 0.4 m/s circle on the
+classic loop (R0267) flips the load at the weld: attach at 0.2 m/s. Share-weighted
+trim runs (settle_tsw, indi05_sw_tsw) queued as the non-INDI answer to the sag.
+
+SHARE-WEIGHTED TRIM (diss_trim_share_weighted, one load-z integral distributed by
+solved tension share): classic loop (R0271) halves the roll after the weld (12-17 deg
+vs 20-32) but does not level it, and the circle still aborts (+37 s). INDI 0.5 + swing
++ share trim (R0272): the FIRST completed run on the 4/12/8 layout -- level through
+the hold (4.9 deg at +10-16) but the circle rides at 21-23 deg.
+
+WHERE THE LAYOUT QUESTION STANDS (for Wesley): 4/12/8 buys a level three-drone hover
+and a gentle weld, and costs an uneven four-point rim (12 o'clock carries ~40 %) that
+the classic tracker cannot level and the measured-force tracker levels only while the
+load is still. 3/12/9 hangs at 33 deg before the weld but gives a level, stable
+four-drone circle afterwards (3.7 deg). The 12 o'clock drone "under the load" he saw on
+3/12/9 is the 47 deg weld transient swinging it, not a steady state. Neither layout
+gives both today; the moving-load stability of the stiff tracker is the same open
+problem in both.
+
+################################################################################
 # BRANCH measured-force-velocity-loop, 2026-09-10  --  R1 (INDI THROTTLE) + R4 (DWELL)
 ################################################################################
 
@@ -127,6 +176,68 @@ R2 GAZEBO (attach_circle_n3_indi_adm, R0250 vs R0244/R0246 without admittance):
                          the newcomer's rod geometry, survey R2 proper) or restoring
                          compliance in the tracker itself (a softer position gain
                          with INDI, i.e. kp_pos/kv down while the thrust stays exact)
+
+OPEN PROBLEM, LOCALISED (R0234 / R0254 geometry): after the circle resumes, the NEWCOMER's
+   reference error grows 0.01 -> 0.40 m over +4..+16 s in every run (classic too; the
+   incumbents 0.1-0.2 m) while its rod stays taut at 0.53-0.56 m from its attach point
+   and its reference sits 0.47 m from it. The network pins its payload node to the
+   DESIRED load position, so once the target moves every reference leads the physical
+   load by the tracking lag and the rods, not the references, decide where the drones
+   can be. The compliant tracker gave up on that error; INDI pulls through it and the
+   load tips. Anti-swing (vel_swing_k 0.3, R0254) calms the resume window (6 deg mean
+   to +16 s vs the 1 Hz growth from +12 s in R0244) and delays the abort to +27 s, but
+   the reference lead is untouched. Fix under test: a horizontal LEASH -- build the
+   network geometry on the measured load plus a bounded pull toward the target
+   (net_pull_max), so the references stay consistent with the rods and the load is
+   towed by a bounded offset, the way the z-trim already tows it vertically.
+
+ANTI-SWING RESULTS. Mis-seed +25 % mass, INDI gain 1 + vel_swing_k 0.3 (R0255): the
+   FIRST full run of this mis-seed -- weld, hold, resume, circle and LAND with no abort
+   (R0217/R0218 fatal at the weld; R0242/R0245 INDI alone aborted ~20 s after the
+   resume). The load rides at 21-22 deg mean tilt throughout (max 50 in the circle),
+   so it is carried, not carried well: the over-estimated mass is in the balanced
+   tension solve too. Healthy demo, INDI + swing (R0254): resume window calm (6 deg
+   mean to +16 s) then a slower divergence and an abort at +27 s (vs +20 s) -- the
+   newcomer's 0.4 m reference lead is untouched (see the localised-cause entry).
+
+   Classic loop + anti-swing (R0256): no benefit -- weld 38.8 / 48.7 (classic alone
+   28.8 / 47), circle 5.7 / 13.5 (3.7 / 9.4). The compliant tracker already has the
+   damping; the term only pays where INDI took it away. (R0256 also exposed a runner
+   hang: /clock froze after LAND and the wall guard is 32 min; a 60 s frozen-clock
+   exit is now in run_experiment.py.)
+
+   Half gain + anti-swing (R0257, INDI 0.5, swing 0.3): completes; circle 5.7 / 11.1
+   (INDI 0.5 alone 8.5 / 16.1, classic 3.7 / 9.4), weld +4-10 s 18.2 mean (classic
+   28.8). The best compromise seen so far.
+
+LEASH (net_pull_max 0.10): NEGATIVE, removed. Building the network geometry on the
+   measured load closes the position feedback loop the yaw-only design avoids: the
+   classic loop, which never aborted on this demo, aborted at +20 s (R0259: fine to
+   +16 s, then load down to 0.39 m); with INDI + swing the target followed the load
+   through the approach hold and the newcomer never welded (R0258). Same lesson as
+   the true-attitude wrench (R0212/R0213): the network must stay open-loop in the
+   load's pose except through the bounded common-mode trim.
+
+STATUS, END OF 2026-09-10 (design note §9 has the table): recommended sim config for
+   the demo if the measured-force loop is wanted at all is INDI 0.5 + vel_swing_k 0.3
+   (R0257: completes, circle 5.7 deg vs classic 3.7, weld +4-10 s 18 deg vs 29). Full
+   gain needs the newcomer's reference built from its MEASURED rod length / attach
+   point (0.53-0.56 m vs the nominal 0.50) -- the last untried, and cheapest, step.
+
+MEASURED ROD (attach_measure_rod): FALSIFIED the 0.53-0.56 m reading. Measured from
+   the magnet tip at the weld the rod is 0.490 m (nominal 0.50); the longer figure was
+   the drone-to-RIM distance with the tip's 5 cm stand-off in it. With the measured
+   value and the tip as the weld point (R0261, INDI 1 + swing) the run is the same as
+   without: clean weld, newcomer error 0.30 m from +10 s, abort +19 s. So the
+   newcomer's post-resume reference lead is not a length inconsistency; it is the
+   network's slot for the newcomer moving faster than a welded drone on a loaded rim
+   can follow once the load is under way. Feature removed (no benefit); the
+   remaining lever is the network's slot/hand-out dynamics for the newcomer after
+   the resume, which is the dissipative law itself.
+   (R0262 half gain + swing + measured rod: completes but at 45 deg in the circle; R0263
+   classic + measured rod: aborts at +12 s -- using the tip as the weld point moves
+   the captured rim point by the 5 cm stand-off and the wrench balance gets a worse
+   moment arm. Confirms: nominal length and the below-the-drone weld point stay.)
 
 R4. tools/hybrid_dwell.py measures the weld as a hybrid event on the archived runs:
    jump 6-14 deg (peak 42-47 deg at +3.5 s), decay lambda 0.07-0.16 /s (tau 6.5-13.5

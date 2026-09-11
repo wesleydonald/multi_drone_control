@@ -188,7 +188,14 @@ class VelocityLoop:
                  centre_rate_deg=CENTRE_RATE_DEG, max_rate_deg=MAX_RATE_DEG,
                  rate_expo=RATE_EXPO,
                  indi_gain=0.0, indi_tau=0.05, indi_a_max=3.0, indi_slope_ratio=1.0,
-                 indi_thr_min=0.2):
+                 indi_thr_min=0.2, swing_k=0.0):
+        # ANTI-SWING (the "anti-swing" stage of the tension-to-thrust cascade, arXiv
+        # 2605.05339; a crane operator's rule): move the pivot WITH the load's lateral
+        # velocity error, v_sp += swing_k * (v_load - v_ref)_xy. A compliant tracker did
+        # this by accident -- the rod dragged the drone along -- and a measured-force
+        # tracker undoes it by rejecting the rod force, which is why the load's swing
+        # stopped being damped once INDI was on (Gazebo R0244/R0246, SIL R0240/R0241).
+        self.swing_k = float(swing_k)
         # floor on the INDI-modified throttle. The increment will cut thrust to whatever
         # makes the measured acceleration match the command -- on a newcomer whose rigid
         # rod momentarily PUSHES, that is ~zero, and a quadrotor at zero throttle has no
@@ -229,7 +236,7 @@ class VelocityLoop:
     # ── the loop ─────────────────────────────────────────────────────────────
 
     def step(self, p, v, q, p_ref, v_ref, a_ff, dt, thrust_ratio,
-             heading=0.0, integrate=True, f_imu=None, a_cable=None):
+             heading=0.0, integrate=True, f_imu=None, a_cable=None, v_load=None):
         """One control tick. Returns (roll, pitch, throttle, yaw) with sticks in
         [-1, 1] and throttle in [0, 1].
 
@@ -240,7 +247,8 @@ class VelocityLoop:
         `f_imu` is the body-frame specific force from the IMU (thrust + cable, no
         gravity) and `a_cable` the modelled world-frame cable acceleration the reference
         was built with (zeros if absent). Both are only used when indi_gain > 0; with
-        indi_gain == 0 the output is exactly the classic loop's.
+        indi_gain == 0 the output is exactly the classic loop's. `v_load` is the measured
+        load velocity (world) for the anti-swing term, used only when swing_k > 0.
         """
         p = np.asarray(p, float)
         v = np.asarray(v, float)
@@ -251,6 +259,9 @@ class VelocityLoop:
         # Position-servo'd velocity command: this is the paper's v_d. v_ref alone would
         # integrate its own error and drift off the formation.
         v_sp = v_ref + self.kp_pos * (p_ref - p)
+        if self.swing_k > 0.0 and v_load is not None:
+            sw = self.swing_k * (np.asarray(v_load, float) - v_ref)
+            v_sp = v_sp + np.array([sw[0], sw[1], 0.0])
         n = float(np.linalg.norm(v_sp))
         if n > self.v_max:
             v_sp = v_sp * (self.v_max / n)

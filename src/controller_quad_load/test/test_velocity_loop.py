@@ -358,3 +358,53 @@ def test_indi_never_cuts_thrust_below_its_floor():
     for _ in range(20):
         _, _, thr, _ = loop.step(**hover_args(), f_imu=[0, 0, 40.0])
     assert thr == 0.2
+
+
+# ── anti-swing ───────────────────────────────────────────────────────────────
+
+def _pendulum_sim(indi_gain, swing_k, seconds=12.0, dt=0.02, l=0.5):
+    """Planar pendulum (load) under a drone the loop positions in x. The drone's thrust
+    is taken as exact (the INDI claim), so its acceleration IS the loop's a_sp; the rod
+    force on the drone is what INDI rejects. Returns (initial, final) swing amplitude."""
+    loop = VelocityLoop(ki=0.0, indi_gain=indi_gain, swing_k=swing_k)
+    px, vx = 0.0, 0.0                    # drone
+    th, dth = 0.25, 0.0                  # load angle from vertical, rad
+    amp0, amp = 0.25, 0.0
+    peaks = []
+    for k in range(int(seconds / dt)):
+        # load position/velocity from the pendulum geometry
+        lx, lvx = px + l * math.sin(th), vx + l * dth * math.cos(th)
+        r, pch, thr, y = loop.step([px, 0, 1.0], [vx, 0, 0], LEVEL, [0, 0, 1.0], [0, 0, 0],
+                                   [0, 0, G], dt, KT, v_load=[lvx, 0.0, 0.0])
+        ax = float(loop.last['a_sp'][0])        # exact thrust: drone accel = command
+        # pendulum driven by the pivot acceleration
+        ddth = -(G / l) * math.sin(th) - (ax / l) * math.cos(th) - 0.02 * dth
+        dth += ddth * dt; th += dth * dt
+        vx += ax * dt; px += vx * dt
+        if k > int(seconds / dt) - int(2.0 / dt):
+            peaks.append(abs(th))
+    return amp0, max(peaks)
+
+
+def test_a_stiff_pivot_leaves_the_load_swinging():
+    """Exact thrust + no anti-swing = an undamped pendulum: the amplitude survives."""
+    a0, a = _pendulum_sim(indi_gain=1.0, swing_k=0.0)
+    assert a > 0.6 * a0
+
+
+def test_anti_swing_damps_the_load():
+    a0, a = _pendulum_sim(indi_gain=1.0, swing_k=0.3)
+    assert a < 0.15 * a0
+
+
+def test_anti_swing_has_a_stability_window():
+    """Too much of it and the pivot overshoots the bob: the swing GROWS. The gain is a
+    window (0.3 with kp 2 / kv 4 here), not a knob to turn up."""
+    a0, a_hi = _pendulum_sim(indi_gain=1.0, swing_k=1.0)
+    _, a_ok = _pendulum_sim(indi_gain=1.0, swing_k=0.3)
+    assert a_hi > a0 and a_ok < 0.15 * a0
+
+
+def test_swing_term_off_is_byte_identical():
+    a = hover_args(p=[0.1, -0.2, 0.9], v=[0.1, 0, 0])
+    assert VelocityLoop().step(**a) == VelocityLoop(swing_k=0.0).step(**a, v_load=[1.0, 0, 0])

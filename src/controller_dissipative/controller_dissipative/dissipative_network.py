@@ -69,7 +69,7 @@ class DissipativeParams:
     def __init__(self, k_pay=40.0, k_anchor=40.0, k_ring=20.0, c=6.0,
                  node_mass=0.5, substeps=10, elev_deg=45.0, k_slot=18.0,
                  balanced_tensions=False, T_handout=12.0,
-                 ki_load=0.0, a_i_load_max=2.0, i_load_xyz=False,
+                 ki_load=0.0, a_i_load_max=2.0, i_load_xyz=False, trim_share_weighted=False,
                  handout_tension_blend=True, wrench_true_attitude=False):
         self.k_pay = k_pay          # N/m spring to the payload node (rest cable_len)
         self.k_anchor = k_anchor    # N/m spring to the anchor node (rest cone radius)
@@ -126,6 +126,13 @@ class DissipativeParams:
         self.ki_load = float(ki_load)          # 1/s^2: accel per metre-second of error
         self.a_i_load_max = float(a_i_load_max)  # m/s^2 cap on the trim CONTRIBUTION
         self.i_load_xyz = bool(i_load_xyz)     # False = integrate z only
+        # SHARE-WEIGHTED TRIM: scale the common-mode trim per node by its solved tension
+        # share (t_i / mean t). A no-integrator tracker sags in proportion to its force
+        # error, so on an uneven layout (4/12/8 + 6: the 12 o'clock drone carries 40 %)
+        # the heavily loaded drone sags most and the load rolls toward it (R0266). One
+        # load-z integral still drives everything -- no per-drone wind-up -- it is only
+        # distributed the way the load itself is.
+        self.trim_share_weighted = bool(trim_share_weighted)
 
 
 class DissipativeNetwork:
@@ -686,7 +693,11 @@ class DissipativeNetwork:
             t_i = Tsol.get(
                 i, self.load_mass * self.g / max(self.n_attached(), 1))
             a_cable = taut_gate * (t_i / self.drone_mass) * (-u)
-            a_ff = np.array([0.0, 0.0, self.g]) + a_des - a_cable + self._a_trim
+            w_trim = 1.0
+            if self.p.trim_share_weighted and Tsol:
+                t_mean = float(np.mean([Tsol[k] for k in Tsol if self.attached[k]] or [t_i]))
+                w_trim = float(np.clip(t_i / max(t_mean, 1e-6), 0.25, 3.0))
+            a_ff = np.array([0.0, 0.0, self.g]) + a_des - a_cable + w_trim * self._a_trim
             return p_ref, v_ref, a_ff, a_cable
 
         a_i = p_des + self._frame_rot(load_quat) @ self.rho[i]

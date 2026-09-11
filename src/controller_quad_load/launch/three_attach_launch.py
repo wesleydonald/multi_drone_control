@@ -68,7 +68,7 @@ def _args():
         DeclareLaunchArgument('cable_len', default_value='0.5'),
         # where the rim attachments are (deg, load frame, sized by num_drones); '' = even
         # ring. Clock face: 3 o'clock = 0, 12 = 90, 9 = 180, 6 = 270.
-        DeclareLaunchArgument('attach_azimuths_deg', default_value='0,90,180'),
+        DeclareLaunchArgument('attach_azimuths_deg', default_value='330,90,210'),
         # true = skip the ground-creep phase, as dissipative_launch / mpc_quad_load do.
         # Was false here alone, which is why the attach demo 'took ages to take off'
         # (Wesley, 2026-09-09). false restores the creep for a genuinely slack start.
@@ -129,6 +129,8 @@ def _args():
         # SIM: Gazebo's thrust is quadratic in throttle, so the local slope is 2x the
         # secant kT the launch derives; hardware launches keep 1.0 until measured.
         DeclareLaunchArgument('vel_indi_slope_ratio', default_value='2.0'),
+        # anti-swing: drones move with the load's lateral velocity error (0 = off)
+        DeclareLaunchArgument('vel_swing_k', default_value='0.0'),
         DeclareLaunchArgument('load_traj', default_value='hover'),
         DeclareLaunchArgument('traj_speed', default_value='0.6'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
@@ -164,6 +166,8 @@ def _args():
         DeclareLaunchArgument('handover_blend_s', default_value='3.0'),      # bumpless tension handover at the weld
         DeclareLaunchArgument('diss_ki_load', default_value='1.0'),
         DeclareLaunchArgument('diss_a_i_load_max', default_value='2.0'),
+        # scale the common-mode trim per drone by its solved tension share (uneven rims)
+        DeclareLaunchArgument('diss_trim_share_weighted', default_value='false'),
         DeclareLaunchArgument('net_land_z', default_value='0.06'),
         # UNEQUAL (moment-balanced) force sharing. Under EQUAL sharing a balanced 4-ring is
         # geometrically impossible on a fixed 120deg tripod (the fleet diverges / the load
@@ -302,6 +306,7 @@ def launch_setup(context, *args, **kwargs):
                          'vel_indi_gain': f('vel_indi_gain'),
                          'vel_indi_tau': f('vel_indi_tau'),
                          'vel_indi_slope_ratio': f('vel_indi_slope_ratio'),
+                         'vel_swing_k': f('vel_swing_k'),
                          'cable_ff_scale': f('cable_ff_scale'),
                          'attitude_ff': b('attitude_ff'),
                          'cable_source': LaunchConfiguration('cable_source'),
@@ -367,6 +372,7 @@ def launch_setup(context, *args, **kwargs):
                      'handover_blend_s': f('handover_blend_s'),
                      'diss_ki_load': f('diss_ki_load'),
                      'diss_a_i_load_max': f('diss_a_i_load_max'),
+                     'diss_trim_share_weighted': b('diss_trim_share_weighted'),
                      'net_land_z': f('net_land_z')}],
         output='screen'))
 
@@ -475,6 +481,7 @@ def launch_setup(context, *args, **kwargs):
                          'vel_indi_gain': f('vel_indi_gain'),
                          'vel_indi_tau': f('vel_indi_tau'),
                          'vel_indi_slope_ratio': f('vel_indi_slope_ratio'),
+                         'vel_swing_k': f('vel_swing_k'),
                      'cable_ff_scale': f('cable_ff_scale'),
                      'attitude_ff': b('attitude_ff'),
                      'cable_source': LaunchConfiguration('cable_source'),
