@@ -24,23 +24,19 @@ __pycache__/
 # Run logs
 logs/
 
-# Flight data (see general/THESIS_PLAN.md §4).
-#   results/         live runs -- large, untracked, backed up by tools/backup_results.sh
-#   results_archive/ curated datasets behind thesis figures -- TRACKED, never cleaned
-# Logs used to be written inside c_generated_code*/ (ignored, and deleted on every
-# acados rebuild). They now live in results/, which no build step ever touches.
-results/*
-!results/registry.csv     # the run registry is the tracked index of the untracked runs
+# Flight data, archived datasets, notes and write-ups: local only (2026-09-16)
+results/
+results_archive/
+general/
+docs/
+CURRENT_STATE.md
+DISSIPATIVE_TRACKING_ISSUE.md
 
 # Generated solver output for the approach MPC and the offline harness's PNGs
 c_generated_code_approach_mpc/
 acados_ocp_approach_mpc.json
 dissipative_verify/
 
-# Regenerated thesis figures (tools/thesis_figures.py). Output, not source -- the source
-# is configs/thesis_figures.yaml plus the runs it cites. Track these only once those runs
-# are promoted to results_archive/, so a committed figure always has committed data.
-docs/figures/
 CLAUDE.md
 **/CLAUDE.md
 .claude/

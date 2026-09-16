@@ -1,8 +1,0 @@
-/elrs_mux_3:
-  ros__parameters:
-    drone_id: 3
-    latch: true
-    live_timeout_s: 0.5
-    require_live_takeover: true
-    use_sim_time: true
-

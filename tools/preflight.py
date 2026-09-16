@@ -85,6 +85,8 @@ def main():
     ap.add_argument('--real', action='store_true', help='require telemetry and battery bars')
     ap.add_argument('--listen', type=float, default=4.0)
     ap.add_argument('--battery-min', type=float, default=15.2, help='V, 4S pack')
+    ap.add_argument('--max-ground-z', type=float, default=0.30,
+                    help='m; a drone above this counts as already flying (taut rods from the floor sit ~0.38)')
     ap.add_argument('--planner', default='dissipative_controller')
     a = ap.parse_args()
     rclpy.init()
@@ -166,7 +168,7 @@ def main():
 
     # 5. not flying yet: every drone on the ground and no network phase announced
     zs = [pf.pose[i][-1][1].pose.position.z for i in pf.pose if pf.pose[i]]
-    on_ground = bool(zs) and max(zs) < 0.30
+    on_ground = bool(zs) and max(zs) < a.max_ground_z
     check(on_ground and not pf.status.upper().startswith('NETWORK'),
           'fleet not yet flying', f'max drone z {max(zs):.2f} m; status: {pf.status or "(none)"}' if zs else 'no poses')
 
