@@ -40,7 +40,7 @@ profiles:
         # still at its 0.4 kg operating point: kT lands in POSITION on this tracker.
         # The sim launches now derive kT from load_mass and fleet size
         # (thrust_model.py, 34.6 here) and the bench settles on the target again.
-        # Resolved 2026-09-10 (learning.txt); the band is +-5 cm around it.
+        # Resolved 2026-09-10 (CURRENT_STATE.md §4.5); the band is +-5 cm around it.
         baseline: 0.598 (R0232, 0.6 kg, kT auto 34.6); 0.596-0.598 at 0.4 kg (R0047-R0050)
 
       - metric: payload_tilt_peak_deg

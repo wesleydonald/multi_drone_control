@@ -151,7 +151,7 @@ carries `pose_*` and `ref_*`. That is everything the stage split in §2 needs.
 ## 7. Architectural note worth weighing
 
 The paper being replicated (*Self-Organizing Aerial Swarm Robotics: A
-Table-Mechanics-Inspired Approach*, in the repo root) shows in its **Fig. 2**
+Table-Mechanics-Inspired Approach*, in `docs/papers/`) shows in its **Fig. 2**
 block diagram (not Fig. 3 — corrected 2026-08-04) a dissipative controller whose
 output is **`vd`, a velocity command straight to the autopilot**:
 

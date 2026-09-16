@@ -1,6 +1,6 @@
 name: attach_circle_n3_fast_l045
 description: >
-  ROBUSTNESS (E10, claude-experimentation 2026-09-10): the controller is told cable_len = 0.45
+  ROBUSTNESS (E10, experimentation 2026-09-10): the controller is told cable_len = 0.45
   while the world is the true 0.6 kg ring on 0.5 m rods -- cable -10 % belief (the paper reports 40 %; 10 % is the rig's plausible error). Everything else is
   attach_circle_n3_fast.
   FASTER VARIANT (Wesley: 'quite slow'): hand-out 8 s, hold 10 s after the weld (the

@@ -30,12 +30,12 @@ The plan's calendar says today is W6 with M3 (tracking architecture frozen) due 
 | Attach (Part B — the contribution) | Three stacked faults found and fixed in the Aug 9 campaign (handover motor-cut, approach corridor through drone 0, wall-clock pose watchdog). The **weld-compliance hypothesis is refuted** by the rigid/rod/seg2 ladder — failure is invariant to joint mechanics; rigid is decisively worst (capsize <2 s, 5/5). The real remaining problem: the **hand-out is one-sided** — the newcomer eases in over 12 s but the incumbents' balanced-tension targets step in one tick (d0 elev 37→50° instantly, tilt 0.15→38°), and the ramp runs away at ~75%. Fix candidates identified, untouched. |
 | Novelty claim N3 | **Currently unevidenced and needs a decision.** Every flying config welds through a ball joint = tension-only, which the reference papers already cover; the genuinely moment-transmitting `rigid` variant capsizes 5/5. Either restate N3 around what the rig physically does, or treat the rigid weld as the open control problem. Supervisor conversation, not a code fix. |
 | Hardware (Part C) | **Not started. Zero rig runs. This is now the critical path.** |
-| Version control | A month of work (~1,150 lines + all the Aug configs/worlds/tools) is **uncommitted**; the pushed branch ends 2026-08-05. `update.txt` §10–§12 holds the only write-up of the Aug 6–9 campaigns; `THESIS_PLAN.md` and `learning.txt` stop earlier. |
+| Version control | A month of work (~1,150 lines + all the Aug configs/worlds/tools) is **uncommitted**; the pushed branch ends 2026-08-05. The Aug 6–9 campaigns are condensed in `CURRENT_STATE.md` §4.6 (2026-09-16). |
 
 **Payload spec (Wesley, 2026-09-09 evening): a 500 mm diameter disc with magnet
 attachments on the rim, placeable anywhere.** Applied globally the same day (generator,
 worlds, defaults, configs, RViz). It exposed and fixed a centre-vs-rim geometry
-assumption in the network's default path (`learning.txt`). Consequences: a centre
+assumption in the network's default path (`CURRENT_STATE.md` §4.2). Consequences: a centre
 weld is no longer physical, so the ring member IS the attach configuration and the
 central lifter is sim-only; the rig's rim azimuths may be uneven, so a per-drone
 attach-azimuth parameter for the real launch is queued.
@@ -87,15 +87,14 @@ exists on one disk with no commit.
 - **Commit the August work on `term3`** in themed commits (velocity loop; OCP-resize
   detach + runtime geometry; attach handover safety; weld-variant ladder; tooling), and
   push. *(Requires Wesley's go-ahead — no commits without asking.)*
-- Port `update.txt` §10–§12 conclusions into `learning.txt` (newest block on top) and
-  the relevant `THESIS_PLAN.md` sections, so the plan stops contradicting the code.
+- Done 2026-09-16: the logs were consolidated into `CURRENT_STATE.md`.
 - Wire `tools/make_weld_variants.py --check` into `gate.sh` stage 4 (generated worlds
   can currently go stale silently).
 - Run archival **deferred**: real run directories are 2–10 MB each (the ladder day is
   152 MB), not the plan's ~0.5 MB estimate, so promoting raw August runs to the
   tracked `results_archive/` is off the table. The P2/P3 re-flights that produce the
   actual thesis figures are what get archived; until then the August numbers trace to
-  `results/` + `update.txt`.
+  `results/` + `CURRENT_STATE.md`.
 
 **Reality check:** full gate green after the commits; `git push` succeeds; archived runs
 restorable.
@@ -103,7 +102,7 @@ restorable.
 ### P1 — Close Part A: freeze the tracking architecture (~4 days)
 
 > **STATUS 2026-09-09 (same day): built and measured — see `docs/design/velocity_loop.md`
-> §11.5 and `learning.txt`.** Z-only common-mode trim in the network, one arg apart in
+> §11.5 and `CURRENT_STATE.md` §4.4.** Z-only common-mode trim in the network, one arg apart in
 > Gazebo (n=3 valid per arm): tracking and tilt unchanged, payload height 0.498 → 0.600 m
 > (on target). SIL: trim off capsizes 3/3 after a central-lifter weld, trim on clean 3/3.
 > Recommendation for the gate: `velocity_after_handover` + `vel_ki 0` + `diss_ki_load 1.0`
@@ -155,7 +154,7 @@ both arms; runs archived on the day the figures are made.
 > in 2 s. Symmetric hand-out (tension blend) built and unit-tested. Remaining failure:
 > the newcomer sinks to the floor during its transit under the MPC tracker (settled tilt
 > ~25°). Next: attach under velocity mode + common-mode trim; fix the approach ARM race
-> (2 of 4 attach runs wasted). See `learning.txt` 2026-09-09 blocks.
+> (2 of 4 attach runs wasted). See `CURRENT_STATE.md` §4.2.
 >
 > **LATER THE SAME NIGHT — first surviving rim reconfiguration (R0192).** Wesley's layout
 > (tethers at 3/12/9 o'clock, newcomer at 6) implemented end to end. With the newcomer's
@@ -168,7 +167,7 @@ both arms; runs archived on the day the figures are made.
 > **2026-09-10 early — attach DURING a circle, twice (R0196/R0197):** three drones fly the
 > circle, ATTACH holds the target, the newcomer welds the stationary payload at 6 o'clock,
 > the load levels 39° → 4° in 11 s, the trajectory resumes and the four-drone fleet completes
-> the circle at 4–15° tilt to LAND. Wesley's item 2, in sim. See `learning.txt`.
+> the circle at 4–15° tilt to LAND. Wesley's item 2, in sim. See `CURRENT_STATE.md` §4.2.
 
 
 The blocking faults are gone; the weld-mechanics question is answered; what remains is
@@ -243,7 +242,7 @@ Rules already earned by this project, restated as the operating contract:
    read-back, not launch args; sweep-window metrics only; medians + full range, n=5
    sim (with a pre-stated abort-exclusion rule).
 4. Every finding — especially negatives (T1, the weld ladder) — lands in
-   `learning.txt` the same day. The August gap between code and documentation is the
+   `CURRENT_STATE.md` the same day. The August gap between code and documentation is the
    anti-pattern this rule exists for.
 5. `tools/clean_slate.sh` between runs; RViz launch first; `/dev/shm` cleared.
 6. New behaviour behind a default-off parameter; wire format frozen; tracker MPC

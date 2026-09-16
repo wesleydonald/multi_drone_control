@@ -1,6 +1,6 @@
 name: attach_then_detach_n3
 description: >
-  ROUND TRIP (claude-experimentation): attach_circle_n3_fast, then the newcomer is
+  ROUND TRIP (experimentation): attach_circle_n3_fast, then the newcomer is
   DETACHED at t=54 (after the four-drone circle resumes) and flies away while the
   remaining three continue. Attach and detach in one flight -- chapter 6 + 7 evidence
   for a fleet that reconfigures both ways under one controller.

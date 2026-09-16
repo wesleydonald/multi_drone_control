@@ -1,6 +1,6 @@
 name: attach_fig8_n3
 description: >
-  FIG-8 (claude-experimentation): attach_circle_n3_fast on the Gerono lemniscate
+  FIG-8 (experimentation): attach_circle_n3_fast on the Gerono lemniscate
   instead of the circle -- generality of the attach-during-trajectory result.
   FASTER VARIANT (Wesley: 'quite slow'): hand-out 8 s, hold 10 s after the weld (the
   hold before the weld lasts until the weld). traj_speed stays 0.2: at 0.3 the tilted

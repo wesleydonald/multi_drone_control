@@ -113,7 +113,7 @@ The packages that matter for this project:
 
 Both reference generators (the OCP planner and the dissipative network) publish the **same message format**, so the trackers don't care which one is driving.
 
-Arm and takeoff from the RViz panel, or by topic — see `AA_Learnings.txt` for the raw commands.
+Arm and takeoff from the RViz panel, or by topic — see `CURRENT_STATE.md` §9 for the raw commands.
 
 **Two things that will waste your time if you get them wrong:**
 1. **Start Gazebo from inside `simulation_assets/`.** The worlds include their drone models by *relative* path (`models/x3_drone0.sdf`), so running `gz sim simulation_assets/foo.sdf` from the repo root fails with `FrameAttachedToGraph unable to find ... x3_drone0::base_link` and the world comes up empty.
@@ -176,6 +176,6 @@ Promote anything you care about as soon as it exists:
 git add results_archive && git commit -m "Archive R0142" && git push
 ```
 
-Plot a run with `python3 plot_run.py` (`--list` to see what's available).
+Plot a run with `tools/plot_run.py R0234`; compare runs with `tools/compare_runs.py`. Start with `CURRENT_STATE.md`.
 
 ---

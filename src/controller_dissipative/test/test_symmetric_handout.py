@@ -1,5 +1,5 @@
 """Symmetric hand-out: the incumbents' balanced-tension solution must not STEP at a
-weld (docs: DissipativeParams.handout_tension_blend; learning.txt 2026-09-09).
+weld (docs: DissipativeParams.handout_tension_blend; CURRENT_STATE.md §4.2).
 
 Setup mirrors the sim: three tethers on the 0.25 m rim at 0/120/240 deg, a newcomer
 welded at the gap centre (180 deg), balanced tensions, soft hand-out. Each test names

@@ -1,6 +1,6 @@
 name: attach_circle_n3_fast_m075
 description: >
-  ROBUSTNESS (E10, claude-experimentation 2026-09-10): the controller is told load_mass = 0.75
+  ROBUSTNESS (E10, experimentation 2026-09-10): the controller is told load_mass = 0.75
   while the world is the true 0.6 kg ring on 0.5 m rods -- payload +25 % belief. Everything else is
   attach_circle_n3_fast.
   FASTER VARIANT (Wesley: 'quite slow'): hand-out 8 s, hold 10 s after the weld (the

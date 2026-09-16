@@ -763,7 +763,7 @@ class LoadPlanner(Node):
             # planned load height at the END of the horizon and drone 0's planned height
             # there: if these sit at the target while the measured load does not, the
             # trackers are not executing the horizon; if they sit at the measured load,
-            # the OCP is not planning the move (claude-experimentation, 2026-09-10).
+            # the OCP is not planning the move (experimentation, 2026-09-10).
             zN = float(X[2, -1])
             d0N = float(self.solver.drone_kinematics(X[:, -1], 0)[0][2])
             self.get_logger().info(

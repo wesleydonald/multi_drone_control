@@ -17,7 +17,7 @@ human at the RViz buttons. That is the documented dominant failure mode: **itera
 blind**.
 
 The offline harness (`verify_dissipative` + `mini_plant`) is fast but drives a **PD
-tracker proxy**, and `CLAUDE.md §8` and the harness's own Test I/J comments record,
+tracker proxy**, and `CURRENT_STATE.md §10` and the harness's own Test I/J comments record,
 with evidence, that it *cannot reproduce the Gazebo divergences*. Fixes have shipped on
 its evidence and been walked back.
 
@@ -268,7 +268,7 @@ without them:
 - The payload inertia is a guess (`0.004 kg·m²` diagonal, inherited from `mini_plant`),
   and payload rotation is central to the attach failure. This number should be
   measured against the SDF before Bar 1 is trusted — it is on the implementation list.
-- Bench agreement is **necessary, not sufficient**, in exactly the way `CLAUDE.md §8`
+- Bench agreement is **necessary, not sufficient**, in exactly the way `CURRENT_STATE.md §10`
   says of `mini_plant`. Nothing ships to the rig on bench evidence alone.
 
 ## 8. Deliverables and how it is verified

@@ -1,7 +1,7 @@
 # Measured-force throttle (INDI-lite) and the settle dwell — branch `measured-force-velocity-loop`
 
 Survey and rationale: `docs/experimentation/control_methods_survey.md` (R1, R4). Run
-evidence: `learning.txt` 2026-09-10 blocks for this branch.
+evidence: `CURRENT_STATE.md` §4.4.
 
 ## 1. The law (`controller_quad_load/velocity_loop.py`, `indi_gain > 0`)
 
@@ -103,7 +103,7 @@ keeps every rod taut while the trackers stay exact.
 ## 6. Tension admittance — tried and removed (2026-09-10)
 
 A per-node reference-length correction driven by the tracker's IMU-residual tension
-estimate (SIL R0249, Gazebo R0250/R0251; learning.txt R2 entries). Delayed the slack in
+estimate (SIL R0249, Gazebo R0250/R0251; CURRENT_STATE.md §6). Delayed the slack in
 SIL, made Gazebo worse: the estimate is biased by the secant thrust model and rotor
 vibration, and an admittance integrates the bias. Removed from the code; the prerequisite
 is a real tension signal.
@@ -133,7 +133,7 @@ Building the network geometry on the measured load plus a bounded pull toward th
 (`net_pull_max` 0.10) closed a position feedback loop the yaw-only design deliberately
 avoids: the classic loop, which never aborted on this demo, aborted 20 s after the weld
 (R0259), and with INDI + anti-swing the target followed the load through the approach hold
-and the newcomer never welded (R0258). Removed; the record stays in learning.txt.
+and the newcomer never welded (R0258). Removed; the record stays in CURRENT_STATE.md §6.
 
 ## 9. Where the open problem stands (2026-09-10, end of day)
 

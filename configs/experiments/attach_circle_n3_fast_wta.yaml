@@ -1,6 +1,6 @@
 name: attach_circle_n3_fast_wta
 description: >
-  EXPERIMENT (claude-experimentation): identical to attach_circle_n3_fast plus
+  EXPERIMENT (experimentation): identical to attach_circle_n3_fast plus
   diss_wrench_true_attitude true -- the balanced-tension wrench solved at the load's
   measured attitude instead of yaw-only. Compare the weld transient with R0208/R0209.
   FASTER VARIANT (Wesley: 'quite slow'): hand-out 8 s, hold 10 s after the weld (the

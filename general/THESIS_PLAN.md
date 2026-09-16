@@ -4,13 +4,13 @@
 v2 written 2026-08-04 after a full codebase audit. Branch `attach-week9`.
 Assumed submission **Fri 27 Nov 2026** (17 weeks).
 
-Companion docs: `general/CLAUDE.md` (orientation) · `DISSIPATIVE_TRACKING_ISSUE.md` (open
-tracking problem) · `general/CABLE_LOAD_CONTROLLER_PROGRESS.md` (planner history).
+Companion docs: `CURRENT_STATE.md` (orientation, read first) · `DISSIPATIVE_TRACKING_ISSUE.md` (open
+tracking problem).
 
 > **RE-BASELINED 2026-09-09 — read `general/TERM3_STRATEGY.md` first.** This plan's
 > inline updates stop at 2026-08-06; the 2026-08-06..09 campaigns (OCP-resize detach
 > A/B R0111–R0114, the attach fault teardown, the weld-variant ladder that refuted the
-> compliance hypothesis) are written up in repo-root `update.txt` §10–§12. The strategy
+> compliance hypothesis) are condensed in `CURRENT_STATE.md` §4. The strategy
 > doc re-baselines the schedule (results freeze Fri 7 Nov) and records the 2026-09-09
 > decisions: N3 restated around a ball-jointed post-weld attachment matching the rig,
 > ~2 rig days/week with Tejen likely, lit review already drafted in LaTeX.
@@ -169,7 +169,7 @@ Housekeeping done alongside: `log/` 642 MB → 12 MB (291 stale colcon build-log
 93 of this project's own runs moved out of `logs/` into `results/legacy/` (including 44
 `join_planner` attach-development runs); the remaining 87 MB of inherited tracked data
 in `logs/` removed at Wesley's request; shared-repo governance language stripped from
-`README.md` and `CLAUDE.md` now that the repo is an isolated fork; README rewritten to
+`README.md` now that the repo is an isolated fork; README rewritten to
 describe this project.
 
 `plot_run.py` was updated to search the new location, the migrated legacy copy, and
@@ -655,7 +655,7 @@ Do this in W2, once, so nothing later is built on a duplicate.
 | Two `thrust_ratio_ukf.py` (two packages) | **RESOLVED (2026-08-05): the `controller_quad_load` copy is DELETED**, together with `thrust_ratio_node.py` and the `kt_estimator` entry point — kT is now a fixed launch parameter (supervisor-approved). Only `controller_mpc_payload`'s three-backend original remains, and it now defaults OFF (`approach_kt_ukf:=false`). The earlier note stands as history: these were never duplicates (417 vs 277 lines, 669 diff lines) and unifying them would have broken one; the hazard was the shared filename + class name `ThrustRatioUKF` and the deadlock if both were imported into one process. Deletion removed the hazard rather than documenting it. |
 | 3 lineage copies of `acados.py` / `dynamics.py` (`controller_ukf` → `controller_mpc_payload` → `controller_quad_load`) | **Leave `controller_ukf` alone** (Mitchell's). Document the lineage and the intentional differences in the package walkthrough. Do not unify — divergence here is deliberate and unification would risk the working trackers. |
 | `plot_run.py`, `plot_xy.py`, `plot_takeoff.py` at repo root | Superseded by §9.4. Move to `tools/legacy/` rather than deleting, in case a figure depends on one. |
-| `tejen/` duplicate tree (COLCON_IGNORE'd) | Keep for reference until integration completes (D5); note in `CLAUDE.md` that `src/` is authoritative. |
+| `tejen/` duplicate tree (COLCON_IGNORE'd) | Deleted 2026-09-16; `src/` is authoritative. |
 | `skip_steps = 3` (F12) | Delete the line; strike `DISSIPATIVE_TRACKING_ISSUE.md §4.3`. |
 | `solver_probe.py`, `ref_dump.py`, `rate_probe.py` | Keep — genuine diagnostics. Move to `tools/`. |
 
@@ -961,7 +961,7 @@ in W15. The background chapter's novelty positioning (§1.2) is written in **W1*
 
 **Weekly cadence:** Mon plan + queue the sim batch + prepare flight cards · Tue/Thu lab ·
 Wed/Fri development against the SIL bench, analyse lab data same-day · Fri run the gate,
-append to `learning.txt`, update this plan, commit, **verify the backup ran**.
+update `CURRENT_STATE.md` and this plan, commit, **verify the backup ran**.
 
 ---
 

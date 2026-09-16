@@ -45,7 +45,7 @@ import metrics as M                    # noqa: E402
 import plot_style as S                 # noqa: E402
 from run_dir import resolve            # noqa: E402
 
-AUTHORITY_MS2 = 13.0     # thrust acceleration left after gravity (CLAUDE.md §8)
+AUTHORITY_MS2 = 13.0     # thrust acceleration left after gravity (CURRENT_STATE.md §10)
 
 
 class Run:

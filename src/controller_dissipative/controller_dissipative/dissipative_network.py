@@ -3,13 +3,13 @@ dissipative_network.py
 -----------------------
 Decentralized dissipative virtual-node spring-damper network for a cable-suspended
 load -- a faithful port of the method in Quan et al., "Self-Organizing Aerial Swarm
-Robotics: A Table-Mechanics-Inspired Approach" (MATLAB in matlab_dissipative_method/).
+Robotics: A Table-Mechanics-Inspired Approach" (the authors' MATLAB; not kept in the repo).
 It replaces the centralized load-cable OCP as the flight-reference generator: a robot
 can detach mid-flight (n -> n-1) and the remaining fleet re-settles with the load
 suspended, with no solver switch and no hand-designed redistribution transient -- a
 member leaving is the network's native operating mode.
 
-The paper's structure (matlab_dissipative_method/Failure/{init,caldata}.m), adapted:
+The paper's structure (their init.m / caldata.m), adapted:
   * NODES  [anchor, robot_1..n, payload]. The paper couples them by springs (adjacency
     W, stiffness K, rest lengths L0) and a graph-Laplacian relative-velocity damper
     (the dissipation), drives the payload node toward the desired trajectory, and puts
@@ -110,7 +110,7 @@ class DissipativeParams:
         # so every intermediate is level. Only the balanced+hand-out path is affected
         # (the config that had never worked); False reproduces the old step for an A/B.
         self.handout_tension_blend = bool(handout_tension_blend)
-        # EXPERIMENT (claude-experimentation, 2026-09-10): solve the balanced-tension
+        # EXPERIMENT (experimentation, 2026-09-10): solve the balanced-tension
         # wrench at the load's TRUE attitude (moment arms and cable directions from the
         # measured roll/pitch) while the formation itself stays yaw-only. A three-drone
         # hover at 3/12/9 o'clock hangs 34 deg tilted; modelling that as level mis-sizes

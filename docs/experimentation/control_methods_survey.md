@@ -1,7 +1,7 @@
 # Control methods that could make the carry, attach and detach more robust (2026-09-10)
 
 Scope: what the literature offers against the failure modes THIS stack has actually shown
-(learning.txt, results R01xx–R02xx), ranked by evidence and by what can be proven on the
+(CURRENT_STATE.md, results R01xx–R02xx), ranked by evidence and by what can be proven on the
 existing ladder (offline harness → SIL → Gazebo → rig) before 27 Nov. Not a general review;
 the lit review already exists.
 
@@ -42,7 +42,7 @@ paper's whole point.
 
 **What went wrong before, and why this is different.** The August attempt fed IMU f_ext
 into the *MPC* held constant over the horizon and the short-horizon RTI could not hold
-the mismatch (learning.txt 2026-08). The velocity loop has no horizon; INDI is designed
+the mismatch (CURRENT_STATE.md §10). The velocity loop has no horizon; INDI is designed
 for exactly this one-step incremental form. The known INDI risks are IMU noise and the
 actuator-lag synchronisation of a_meas with u_prev; the learned-INDI paper
 ([arXiv 2503.09441](https://arxiv.org/pdf/2503.09441)) exists because rotor-RPM sensing is
@@ -154,4 +154,4 @@ measured (`tools/hybrid_dwell.py`, `attach_traj_hold_mode: settle`). SIL: R1 rem
 tracker's model-error offset exactly (wrong kT: drone z error 0.21 m → 0.00), and shows
 that the remaining capsizes in the wrong-model scenarios are network-level (allocation,
 attitude feedback), which is where R2/R3 pick up. Gazebo mis-seed and settle-dwell runs:
-see learning.txt for the run ids.
+see CURRENT_STATE.md for the run ids.

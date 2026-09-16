@@ -32,10 +32,20 @@ logs/
 results/*
 !results/registry.csv     # the run registry is the tracked index of the untracked runs
 
+# Generated solver output for the approach MPC and the offline harness's PNGs
+c_generated_code_approach_mpc/
+acados_ocp_approach_mpc.json
+dissipative_verify/
+
 # Regenerated thesis figures (tools/thesis_figures.py). Output, not source -- the source
 # is configs/thesis_figures.yaml plus the runs it cites. Track these only once those runs
 # are promoted to results_archive/, so a committed figure always has committed data.
 docs/figures/
 
-# per-session Gazebo run counter written by .claude/hooks
-.claude/.gz_runs_this_session
+# Claude Code assistant files -- local tooling only, never published
+CLAUDE.md
+**/CLAUDE.md
+.claude/
+**/.claude/
+docs/claude-setup-proposal/
+.mcp.json

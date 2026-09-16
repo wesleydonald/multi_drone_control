@@ -27,7 +27,7 @@ description: >
 
   The network is engaged for the whole flight by dissipative_only_launch.py's
   auto_network_handover — dissipative_launch.py alone would fly the OCP and never
-  enter the network phase, which is the mistake documented in CLAUDE.md §8.
+  enter the network phase, which is the mistake documented in CURRENT_STATE.md §10.
 
 world: three_rigid_ground.sdf
 

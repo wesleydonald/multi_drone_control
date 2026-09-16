@@ -57,7 +57,7 @@ launch:
     cable_len: 0.5
     load_mass: 0.6
     target_z: 0.6
-    # the ring-reconfiguration configuration (general/CLAUDE.md §6, "the open work")
+    # the ring-reconfiguration configuration (CURRENT_STATE.md §4.2)
     attach_central: false
     diss_balanced_tensions: true
     attach_handout: true

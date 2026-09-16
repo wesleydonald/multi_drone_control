@@ -1,4 +1,4 @@
-# claude-experimentation — agenda (branched from term3 @ 3aed55b, 2026-09-10)
+# experimentation — agenda (branched from term3 @ 3aed55b, 2026-09-10)
 
 Wesley's brief: a sandbox for new methodology and new deliverables — experiments from the
 literature, how results are displayed in the thesis, setup improvements, real-world
@@ -17,7 +17,7 @@ run IDs that justify it, and the gate stays green.
 | 6 | **RViz**: phase/hold/tilt banner, newcomer role colour, reference→actual error lines (plan §6) | The attach signature was found from logs, not RViz | Structural tests in `test_rviz_config.py` |
 | 7 | fig-8 attach; n=2+1 attach; detach-then-attach round trip | Generality claims for chapter 8 | Headless matrix |
 
-Findings land in `learning.txt` as usual; this file tracks status.
+Findings are condensed in `CURRENT_STATE.md`; this file tracks status.
 
 ## Status
 - 2026-09-10: branch created; items 1–3 started.
@@ -35,7 +35,7 @@ Findings land in `learning.txt` as usual; this file tracks status.
 - Item 6: `/fleet/status` banner (phase / hold / drones on load / tilt) above the payload in
   RViz, colour-coded by tilt; structural test added.
 - Item 2 DECIDED (negative): the tilt-aware wrench drove the weld transient to 68° and an
-  abort in 2/2 runs (R0212/R0213) vs +8° yaw-only. Flag stays off; recorded in learning.txt.
+  abort in 2/2 runs (R0212/R0213) vs +8° yaw-only. Flag stays off; recorded in CURRENT_STATE.md §6.
 - Item 5: `tools/preflight.py` verified live against a running stack: mocap rates, rod
   length from mocap at each rim point (0.500 ±0.001 m), per-node parameter read-back
   (planner geometry, every tracker's kT and control_mode), banner, ground check; writes a
@@ -69,4 +69,4 @@ Findings land in `learning.txt` as usual; this file tracks status.
 ## Branch `measured-force-velocity-loop` (2026-09-10)
 Survey `control_methods_survey.md` → R1 (measured-force throttle, `docs/design/measured_force_loop.md`)
 and R4 (hybrid dwell, `hybrid_dwell.md`, `attach_traj_hold_mode: settle`) implemented; results in
-learning.txt under the branch heading.
+CURRENT_STATE.md §4.4.
