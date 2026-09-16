@@ -41,11 +41,10 @@ dissipative_verify/
 # is configs/thesis_figures.yaml plus the runs it cites. Track these only once those runs
 # are promoted to results_archive/, so a committed figure always has committed data.
 docs/figures/
-
-# Claude Code assistant files -- local tooling only, never published
 CLAUDE.md
 **/CLAUDE.md
 .claude/
 **/.claude/
 docs/claude-setup-proposal/
 .mcp.json
+thesis/

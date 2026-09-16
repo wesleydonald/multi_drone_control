@@ -1,4 +1,4 @@
-# Robust Collective Quadcopter Payload Transport
+# Mid-Flight Reconfiguration for Cooperative Quadcopter Payload Transport
 **Thesis project** (forked from Mitch's repo). This repository provides a complete framework for controlling multiple UAVs tethered to a payload within the UNSW Motion Capture system. It includes a simulator to support at-home development and features an efficient transfer pipeline for transitioning controllers from simulation to real-world deployment.
 
 ## What this project is about
