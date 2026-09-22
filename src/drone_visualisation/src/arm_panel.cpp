@@ -7,7 +7,7 @@ namespace drone_visualisation
 {
 
 ArmPanel::ArmPanel(QWidget* parent)
-: rviz_common::Panel(parent), is_armed_(false), show_detach_(true), show_attach_(true), num_drones_(1), status_message_("Waiting for controller...")
+: rviz_common::Panel(parent), is_armed_(false), show_detach_(true), show_attach_(true), show_magnets_(false), magnet_initial_on_(false), num_drones_(1), status_message_("Waiting for controller...")
 {
   auto layout = new QVBoxLayout;
 
@@ -25,6 +25,12 @@ ArmPanel::ArmPanel(QWidget* parent)
   drone_rows_layout_ = new QVBoxLayout;
   drone_rows_layout_->setContentsMargins(0, 0, 0, 0);
   layout->addLayout(drone_rows_layout_);
+
+  // Per-drone tether magnet toggles, stacked. Populated by rebuild(); hidden unless
+  // the launch sets ShowMagnets (hardware only -- the sim has no magnet radio).
+  magnet_rows_layout_ = new QVBoxLayout;
+  magnet_rows_layout_->setContentsMargins(0, 0, 0, 0);
+  layout->addLayout(magnet_rows_layout_);
 
   // ARM/DISARM button
   arm_button_ = new QPushButton("ARM");
@@ -125,6 +131,11 @@ void ArmPanel::rebuild()
     delete label;
   }
   drone_labels_.clear();
+  for (auto* btn : magnet_buttons_) {
+    magnet_rows_layout_->removeWidget(btn);
+    delete btn;
+  }
+  magnet_buttons_.clear();
 
   drone_armed_.assign(num_drones_, false);
   drone_voltage_.assign(num_drones_, 0.0f);
@@ -139,16 +150,29 @@ void ArmPanel::rebuild()
     drone_rows_layout_->addWidget(label);
     updateDroneLabel(i);
   }
+  for (int i = 0; i < num_drones_; ++i) {
+    auto* btn = new QPushButton;
+    btn->setCheckable(true);
+    btn->setChecked(magnet_initial_on_);
+    btn->setFixedHeight(36);
+    btn->setVisible(show_magnets_);
+    connect(btn, &QPushButton::toggled, this, [this, i](bool on) { this->onMagnetToggled(i, on); });
+    magnet_buttons_.push_back(btn);
+    magnet_rows_layout_->addWidget(btn);
+    updateMagnetButton(i);
+  }
 
   // ── ROS subscriptions ─────────────────────────────────────────────────────
   // Dropping the old handles unsubscribes; recreate for the new fleet size.
   arming_state_subs_.clear();
   telemetry_subs_.clear();
+  magnet_pubs_.clear();
   if (!node_) {
     return;   // onInitialize() will call us again once node_ exists
   }
   for (int i = 0; i < num_drones_; ++i) {
     const std::string ns = "/drone_" + std::to_string(i);
+    magnet_pubs_.push_back(node_->create_publisher<std_msgs::msg::String>(ns + "/magnet", 10));
     arming_state_subs_.push_back(node_->create_subscription<std_msgs::msg::Bool>(
       ns + "/arming_state_feedback", 10,
       [this, i](const std_msgs::msg::Bool::SharedPtr msg) {
@@ -288,6 +312,41 @@ void ArmPanel::onAttachPressed()
   RCLCPP_INFO(node_->get_logger(), "ATTACH: magnet armed (/magnet/command ON)");
 }
 
+void ArmPanel::updateMagnetButton(int i)
+{
+  if (i < 0 || i >= static_cast<int>(magnet_buttons_.size())) {
+    return;
+  }
+  const bool on = magnet_buttons_[i]->isChecked();
+  magnet_buttons_[i]->setText(QString("MAGNET D%1   %2").arg(i).arg(on ? "ON" : "OFF"));
+  magnet_buttons_[i]->setStyleSheet(on
+    ? "background-color: #20c997; color: white; font-weight: bold;"
+    : "background-color: #adb5bd; color: white; font-weight: bold;");
+}
+
+void ArmPanel::onMagnetToggled(int i, bool on)
+{
+  updateMagnetButton(i);
+  if (!node_ || i >= static_cast<int>(magnet_pubs_.size())) {
+    return;
+  }
+  if (magnet_pubs_[i]->get_subscription_count() == 0) {
+    status_message_ = "No /drone_" + std::to_string(i) + "/magnet subscriber (radio not running)";
+    updateStatusLabel();
+  }
+  std_msgs::msg::String msg;
+  msg.data = on ? "ON" : "OFF";
+  magnet_pubs_[i]->publish(msg);
+  RCLCPP_INFO(node_->get_logger(), "magnet D%d %s", i, msg.data.c_str());
+}
+
+void ArmPanel::applyShowMagnets()
+{
+  for (auto* btn : magnet_buttons_) {
+    btn->setVisible(show_magnets_);
+  }
+}
+
 void ArmPanel::applyShowDetach()
 {
   if (detach_row_) {
@@ -315,6 +374,14 @@ void ArmPanel::load(const rviz_common::Config& config)
     show_attach_ = show_a;
   }
   applyShowAttach();
+  bool show_m = false;
+  if (config.mapGetBool("ShowMagnets", &show_m)) {
+    show_magnets_ = show_m;
+  }
+  bool m_on = false;
+  if (config.mapGetBool("MagnetInitialOn", &m_on)) {
+    magnet_initial_on_ = m_on;
+  }
 
   // Fleet size for the per-drone rows. The launch files write this; absent or
   // nonsensical values fall back to a single drone.
@@ -323,6 +390,7 @@ void ArmPanel::load(const rviz_common::Config& config)
     num_drones_ = n;
   }
   rebuild();
+  applyShowMagnets();
 }
 
 void ArmPanel::save(rviz_common::Config config) const
@@ -330,6 +398,8 @@ void ArmPanel::save(rviz_common::Config config) const
   rviz_common::Panel::save(config);
   config.mapSetValue("ShowDetach", show_detach_);
   config.mapSetValue("ShowAttach", show_attach_);
+  config.mapSetValue("ShowMagnets", show_magnets_);
+  config.mapSetValue("MagnetInitialOn", magnet_initial_on_);
   config.mapSetValue("NumDrones", num_drones_);
 }
 

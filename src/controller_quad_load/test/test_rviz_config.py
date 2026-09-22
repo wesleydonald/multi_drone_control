@@ -115,11 +115,24 @@ def test_colours_are_stable_and_wrap():
     assert drone_mesh_colour(0).count(' ') == 3        # "r g b a"
 
 
-def test_fleet_status_banner_is_shown():
-    """The operator banner (phase / hold / drones on load / tilt) from fleet_viz is in
-    every config, sim and real: the attach signature should be readable off RViz."""
+def test_fleet_status_banner_is_not_shown():
+    """The text banner over the payload was removed at Wesley's request (2026-09-16);
+    /fleet/status stays a plain topic for tools, nothing draws it in RViz."""
     from controller_quad_load.rviz_config import build_config
     cfg = build_config(3)
-    assert '/fleet/status_marker' in cfg
-    assert 'fleet_status: true' in cfg
+    assert '/fleet/status_marker' not in cfg
+    assert 'fleet_status' not in cfg
 
+
+
+def test_magnet_toggles_are_declared_only_when_asked():
+    """The per-drone MAGNET buttons are a hardware-only row: hidden by default, shown
+    with their initial state when the real I/O launch asks for them."""
+    from controller_quad_load.rviz_config import build_config
+    default = parse(3)['Panels']
+    arm = next(p for p in default if p['Class'].endswith('ArmPanel'))
+    assert arm['ShowMagnets'] is False and arm['MagnetInitialOn'] is False
+    import yaml
+    real = yaml.safe_load(build_config(3, magnets=True, magnet_on=True))['Panels']
+    arm = next(p for p in real if p['Class'].endswith('ArmPanel'))
+    assert arm['ShowMagnets'] is True and arm['MagnetInitialOn'] is True

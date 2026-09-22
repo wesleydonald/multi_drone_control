@@ -136,6 +136,19 @@ def main():
         check(0.3 <= cable_len <= 1.5, 'cable_len plausible', f'{cable_len:.3f} m')
         check(float(prm['load_mass']) > 0.05, 'load_mass plausible', f'{prm["load_mass"]} kg')
 
+    # 1b. each drone's RESTING attitude from mocap. A rigid body defined while the airframe
+    # was tilted (or with Z not up) reports a large tilt on the ground; the tracker steers
+    # with that same quaternion, and the envelope trips the instant it counts as airborne
+    # (drone 1 read 123.6 deg on 2026-09-16). Fix the body in the mocap software, not here.
+    for i in range(a.drones):
+        if not pf.pose[i]:
+            continue
+        q = pf.pose[i][-1][1].pose.orientation
+        Rd = quat_to_rot([q.w, q.x, q.y, q.z])
+        tilt_d = math.degrees(math.acos(max(-1.0, min(1.0, Rd[2, 2]))))
+        check(tilt_d < 15.0, f'drone {i} resting level',
+              f'{tilt_d:.1f} deg (mocap body orientation; >15 = re-create the rigid body level)')
+
     # 2. geometry from mocap: drone-to-rim-point distance vs cable_len (slot by nearest rim point)
     if pf.payload and rho is not None and cable_len is not None:
         _, pm = pf.payload[-1]

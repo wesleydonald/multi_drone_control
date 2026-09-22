@@ -1,0 +1,136 @@
+HARDWARE SETUP
+==============
+
+rio drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 num_drones:=2
+ros2 topic hz /drone_0/motion_capture_state        
+ros2 topic echo /drone_0/telemetry --once
+
+then control terminal: 
+rctl load_mass:=0.6 cable_len:=0.5 thrust_ratio:=24 lift_ramp_vel:=0.15 load_traj:=circle traj_speed:=0.4 traj_radius:=0.4 num_drones:=2
+
+mdc && tools/preflight.py --drones 3 --real --planner load_planner --max-ground-z 0.5
+
+magnets (per drone, aux channel_10 via elrs_interface):
+rio ... magnet_initial:=ON                                    # hold every tether magnet from boot (magnet_channel defaults to 6 = AUX4 since 2026-09-16)
+RViz panel: MAGNET Di ON/OFF toggle per drone, or:
+ros2 topic pub -t 3 /drone_1/magnet std_msgs/msg/String "{data: OFF}"
+
+
+SIM
+===
+
+A. Centralized OCP baseline (the reference controller) (n = 2,3,4)
+
+cd simulation_assets && gz sim three_rigid_ground.sdf -v4 -r
+ros2 launch controller_quad_load rviz_quad_load_launch.py num_drones:=3
+ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=3 load_traj:=circle traj_speed:=0.7
+
+B. Dissipative network for the whole flight, current best tracking config (Part A winner)
+
+cd simulation_assets && gz sim three_rigid_ground.sdf -v4 -r
+ros2 launch controller_quad_load rviz_quad_load_launch.py num_drones:=3
+ros2 launch controller_quad_load dissipative_only_launch.py num_drones:=3 control_mode:=velocity_after_handover vel_ki:=0 diss_ki_load:=1.0 load_traj:=circle traj_speed:=0.4 traj_radius:=0.5
+   
+Takeoff on the OCP, automatic handover to the network when the lift settles, then the circle.
+
+
+
+REAL-WORLD
+==========
+
+Rviz: rio drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 drone2_serial:=/dev/QUAD3
+
+A-real:
+   Recipe checked in sim 2026-09-16 (R0284/R0285, 1.0 kg disc, rods resting near flat): the launch DEFAULTS lift and
+   hover level -- start_taut true (no creep), lift_ramp_vel 0.15-0.22, thrust_ratio 24 on the rig. Expect the load to
+   settle ~5-6 cm LOW (0.537 for a 0.60 target in sim): that is the PLANNER's reference, drones sit on theirs exactly.
+   kT rule: in the tracker log compare pose_z with ref_z during the hover. Drones ON reference + load low = planner
+   offset, leave kT. Drones BELOW their reference = kT too low, raise thrust_ratio 5 %.
+   Do NOT use lift_ramp_vel:=0.0 from the floor (16:28: references walk sideways, drones bunch). First launch with a
+   new load_mass compiles the planner for 9-40 s: wait for the planner's "ready" line before ARM.
+rctl load_mass:=0.6 cable_len:=0.5 thrust_ratio:=24 lift_ramp_vel:=0.15 load_traj:=circle traj_speed:=0.4 traj_radius:=0.4
+
+
+B-real.
+rdiss load_mass:=0.6 cable_len:=0.5 thrust_ratio:=24 lift_ramp_vel:=0.15 auto_network_handover:=true control_mode:=velocity_after_handover vel_ki:=0 diss_ki_load:=1.0 load_traj:=circle traj_speed:=0.2 traj_radius:=0.4
+   
+Log shows the OCP lift, then "[dissipative] ... network" at the handover, then STAGE V on every tracker.
+Velocity-loop gains (vel_kp_pos 2, vel_kv 4, vel_k_att 8) are sim values, never measured on the airframe:
+if a drone oscillates after the handover, halve vel_kp_pos and vel_kv.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+DETACH
+======
+
+How it works in simulation
+- Trigger: RViz DETACH button or   ros2 topic pub -t 3 /fleet/detach std_msgs/msg/Int32 "{data: k}"   (k = physical drone id)
+- Controller (dissipative node), two modes:
+    reconfig_mode:=ocp      (best, R0111-R0114): re-solve with a pre-built n-1 OCP, survivors keep their true rim azimuths
+                            (attach geometry is a runtime parameter). Settled tilt ~1 deg, survivor error ~1 mm.
+    reconfig_mode:=network  (node default): hand over to the spring-damper network, it re-spaces the survivors and
+                            raises their tension share, then hands back to the n-1 OCP once still. Tilt 26-48 deg.
+- Physical release: the node publishes /drone_k/detach -> gz bridge -> the Gazebo DetachableJoint breaks. Simultaneous
+  with the controller change, which is why the transient is clean.
+- Freed drone: reference = rise 0.6 m straight up from where it is, hold there, no cable term. LAND descends it with the fleet.
+
+
+
+Steps to fly it on the rig (magnets already on the tethers; a helper switches them)
+1. Code, before the rig:
+   a. Expose reconfig_mode on real_dissipative_launch.py and fly ocp (today the hardware would use the network default).
+   b. Fix the known LAND abort with a parked detached drone (a fleet abort at LAND is a mid-air disarm on hardware).
+      Prove in sim: detach_ocp_n4 x2, both LAND clean. Then real_io_launch detach:=true for the button (topic works anyway).
+2. Which drone: 4 -> 3 with four airframes (the safe case). With three, 3 -> 2 leaves the disc hanging from two rim points
+   = a pendulum about their chord; only defensible if the two survivors are at 3 and 9 o'clock, in hover, low.
+3. Protocol, in hover first, ~0.6 m load height, freed drone parks at ~1.6 m (check cage ceiling):
+   operator counts down, publishes /fleet/detach k on "go", helper switches magnet k OFF on the same word (within 1 s).
+   Command FIRST if they cannot be simultaneous: survivors take the load at once and the still-attached drone only tugs
+   its rim for a moment. Release first is worse: the freed drone's tracker still models a cable pull it no longer feels
+   (~3 m/s^2 outward-up) and the load loses a third of its lift with nobody compensating.
+4. Then LAND with all drones; then detach during a circle at 0.2 m/s.
+5. Read back after: survivor tilt, load height dip, freed-drone climb; compare with R0111-R0114 (~1 deg, ~1 mm).
+
+
+
+
+
+WORK DONE
+=========
+
+Detach
+- Attach geometry is a runtime OCP parameter pre-built solvers for n=2/3/4
+- Detach by OCP fleet resize beats network hand-off: settled tilt ~1 deg vs 26-48, survivor error ~1 mm vs up to 0.9 m (R0111-R0114)
+- Network hold -> resize -> OCP hand-back sequence works (R0108/R0109); LAND with a parked detached drone still aborts
+
+Attach
+- Three stacked faults found and fixed (mux cut the newcomer's motors, approach corridor through drone 0, wall-clock watchdog)
+- Weld-mechanics ladder: compliance irrelevant, rigid weld capsizes 5/5 -> N3 restated as ball-jointed attachment (supervisor decision 9 Sep)
+- Payload = 500 mm disc, 0.6 kg, rim magnets; network hangs every node off its own rim point (centre-cone bug fixed)
+- Per-drone attach azimuths; tethers 3/12/9 + newcomer at 6; symmetric hand-out; tip-based weld capture; bumpless handover
+- ATTACH DURING A CIRCLE works in sim, repeatable: weld, level 39 -> 4 deg, resume, 4-drone circle at 3.7 deg (R0196/R0197, R0234)
+- Round trip attach -> resume -> detach clean (R0231); fig-8 attach clean (R0226); robustness table (mass/cable +-, R0215-R0222)
+- Settle-based hold (measured dwell, R0243); measured-force throttle (INDI) opt-in: best weld transient, unstable on moving load at full gain
+- 4/12/8 layout: level 3-drone hover but uneven 4-point rim rolls the circle -> layout decision OPEN
+
+Tracking architecture (Part A, done)
+- Per-drone integrators tilt the load -> vel_ki 0; z-only common-mode load trim in the network (diss_ki_load)
+- Measured negatives: terminal velocity ref (T1), cone lean, per-drone integrators
+
+Hardware prep
+- Real launches incl. real_attach_launch (twin of the sim demo), tools/preflight.py (mocap, geometry, param read-back, battery), fake mocap desk test
+- Rig takeoff bugs fixed 3 Aug (yaw datum, load-frame slot assignment, heading latch); zero carry runs yet
+
+

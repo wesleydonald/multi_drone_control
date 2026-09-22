@@ -1,0 +1,39 @@
+name: ocp_hover_ground_m10
+description: >
+  TOMORROW'S RIG TAKEOFF RECIPE, IN SIM, AT THE RIG'S MASS
+  (docs/experiments/2026-09-16_rig_recipe_m10.md). Three drones on the floor with the rods
+  near flat (5.7 deg, the sim ground world; the rig rests at ~3 deg), a 1.0 kg disc in
+  BOTH the world and the planner, the OCP launch at its defaults: start_taut true (no
+  creep), lift_ramp_vel 0.22, thrust_ratio auto. This is what R0276-R0279 flew at 0.6 kg
+  and lifted cleanly; the rig's 16:28 attempt at 1.6 kg told / lift_ramp_vel 0 bunched
+  and never lifted. One variable against the 0.6 kg sim runs: the mass (world + planner).
+  What to read: payload peak/settled z (bar 0.55-0.66), per-drone yaw excursion
+  (tools/yaw_excursion.py, < 15 deg), no fleet abort before LAND.
+world: three_rigid_ground_m10.sdf
+launch:
+  package: controller_quad_load
+  file: mpc_quad_load_launch.py
+  args:
+    num_drones: 3
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 1.0
+    target_z: 0.6
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+fleet:
+  num_drones: 3
+  n_total: 3
+timing:
+  duration_s: 40.0
+  stop_after_abort_s: 8.0
+events:
+  - {t: 3.0,  do: ARM}
+  - {t: 6.0,  do: TAKEOFF}
+  - {t: 30.0, do: LAND}
+criteria:
+  min_payload_z: 0.02
+  min_peak_payload_z: 0.35
+  forbid_abort: true

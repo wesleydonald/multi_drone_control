@@ -92,6 +92,21 @@ def channelsCrsfToChannelsPacket(channels) -> bytes:
 
 import serial.tools.list_ports  # Import to list available serial ports
 
+def magnet_packet_index(channel):
+    """CRSF packet slot for ELRSCommand.channel_<channel>: channels 0-3 map 1:1, packet[4]
+    is the arm switch, so channel k >= 4 lands in packet[k + 1] (channel_10 -> packet[11])."""
+    channel = int(channel)
+    if not 0 <= channel <= 10:
+        raise ValueError(f'magnet channel {channel} outside 0..10')
+    return channel if channel <= 3 else channel + 1
+
+
+def apply_magnet(packet, channel, value, idle, rng):
+    """Overwrite one aux slot with a latched magnet value in [-1, 1]. Returns packet."""
+    packet[magnet_packet_index(channel)] = idle + int(max(-1.0, min(1.0, float(value))) * rng)
+    return packet
+
+
 class ELRSInterface(Node):
     def __init__(self):
         super().__init__('elrs_interface')
@@ -124,6 +139,23 @@ class ELRSInterface(Node):
         self.mode = "UNKNOWN"
 
         self.telemetry_publisher = self.create_publisher(Telemetry, 'telemetry', 10)  # Telemetry publisher
+
+        # Per-drone electromagnet on a Betaflight aux mode. `magnet` (String ON|OFF, relative
+        # -> /drone_<i>/magnet) latches the aux value into every packet sent, including the
+        # idle packet after a command timeout, so a tether magnet cannot drop because the
+        # tracker went quiet. magnet_initial '' = pass the commanded channel through
+        # untouched (the historical behaviour); 'ON' holds tethers from boot.
+        self.magnet_channel = int(self.declare_parameter('magnet_channel', 6).value)
+        self.magnet_on_value = float(self.declare_parameter('magnet_on_value', 1.0).value)
+        self.magnet_off_value = float(self.declare_parameter('magnet_off_value', -1.0).value)
+        magnet_packet_index(self.magnet_channel)          # validate early
+        self.magnet_value = None
+        initial = str(self.declare_parameter('magnet_initial', '').value).strip().upper()
+        if initial in ('ON', 'OFF'):
+            self.magnet_value = self.magnet_on_value if initial == 'ON' else self.magnet_off_value
+            self.get_logger().info(f'magnet {initial} from boot (channel_{self.magnet_channel})')
+        self.create_subscription(String, 'magnet', self.magnet_callback, 10)
+
 
         from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 
@@ -160,6 +192,14 @@ class ELRSInterface(Node):
             except serial.SerialException as e:
                 self.get_logger().error(f'Error while connecting to serial port: {e}')
                 time.sleep(1)  # Wait before retrying
+
+    def magnet_callback(self, msg):
+        state = msg.data.strip().upper()
+        if state not in ('ON', 'OFF'):
+            self.get_logger().warn(f"magnet: ignoring '{msg.data}' (want ON or OFF)")
+            return
+        self.magnet_value = self.magnet_on_value if state == 'ON' else self.magnet_off_value
+        self.get_logger().info(f'magnet {state}: channel_{self.magnet_channel} = {self.magnet_value:+.1f}')
 
     def controller_commands_callback(self, msg):
         self.last_message_time = time.time()  # Update the timestamp of the most recent message
@@ -268,6 +308,9 @@ class ELRSInterface(Node):
             if self.ser and self.ser.in_waiting > 0:
                 self.input.extend(self.ser.read(self.ser.in_waiting))
             elif self.ser:
+                if self.magnet_value is not None:
+                    apply_magnet(self.packet, self.magnet_channel, self.magnet_value,
+                                 self.idle, self.range)
                 self.ser.write(channelsCrsfToChannelsPacket(self.packet))
 
             while len(self.input) > 2:

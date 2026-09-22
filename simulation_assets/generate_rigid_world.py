@@ -338,6 +338,9 @@ def main():
                     help='make each cable releasable at the PAYLOAD end, keyed to '
                          '/drone_k/detach, so a drone flies away WITH its cable mid-flight '
                          '(payload left clean). Used by the dissipative detach controller.')
+    ap.add_argument('--payload-mass', type=float, default=None,
+                    help='payload mass kg (default: the module PAYLOAD_MASS, 0.6); the annulus '
+                         'inertia scales with it. Match the launch load_mass.')
     ap.add_argument('--ground-start', action='store_true',
                     help='place the drones ON THE FLOOR: overrides --elev so the '
                          'rod runs from the payload attach point out to a drone '
@@ -345,6 +348,11 @@ def main():
                          "planner's handover_elev_deg so it creeps up to a "
                          'liftable angle before taking over.')
     a = ap.parse_args()
+    if a.payload_mass is not None:
+        global PAYLOAD_MASS, _IXX, _IZZ
+        PAYLOAD_MASS = float(a.payload_mass)
+        _IXX = PAYLOAD_MASS * (3 * (PAYLOAD_RADIUS ** 2 + PAYLOAD_INNER_RADIUS ** 2) + PAYLOAD_THICKNESS ** 2) / 12.0
+        _IZZ = PAYLOAD_MASS * (PAYLOAD_RADIUS ** 2 + PAYLOAD_INNER_RADIUS ** 2) / 2.0
     elev = a.elev
     if a.ground_start:
         # drone_z = payload_z + attach_z + cable_len*sin(elev); solve for the

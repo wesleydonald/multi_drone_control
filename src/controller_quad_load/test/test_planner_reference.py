@@ -120,3 +120,4 @@ def test_every_stage_gets_a_reference():
     s, _ = run(terminal_vel_ref=True)
     assert set(s.yref) == set(range(N + 1))
     assert set(s.p) == set(range(N + 1))
+

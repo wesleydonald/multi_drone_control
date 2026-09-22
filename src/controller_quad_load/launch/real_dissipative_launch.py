@@ -109,6 +109,15 @@ def _args():
         # of commanding a stop at the end of the horizon. Default false =
         # historical behaviour, so this only changes a run you asked it to.
         DeclareLaunchArgument('terminal_vel_ref', default_value='false'),
+        # Tracker architecture (docs/design/velocity_loop.md): 'mpc' | 'velocity' |
+        # 'velocity_after_handover'. Default 'mpc' = the historical hardware path; the
+        # sim's Part A winner is velocity_after_handover + vel_ki 0 + diss_ki_load 1.0.
+        # Gains are the sim values, unmeasured on the airframe. INDI stays sim-only.
+        DeclareLaunchArgument('control_mode', default_value='mpc'),
+        DeclareLaunchArgument('vel_kp_pos', default_value='2.0'),
+        DeclareLaunchArgument('vel_kv', default_value='4.0'),
+        DeclareLaunchArgument('vel_ki', default_value='1.0'),
+        DeclareLaunchArgument('vel_k_att', default_value='8.0'),
         DeclareLaunchArgument('load_traj', default_value='hover'),
         DeclareLaunchArgument('traj_speed', default_value='0.4'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
@@ -123,6 +132,14 @@ def _args():
         #     formation leads the load into the maneuver (the OCP's flatness relation).
         #     OFF by default: unvalidated, mini_plant cannot reproduce the radius
         #     deficit it targets. Fly it as an A/B against the logs.
+        # Hand the fleet to the network once the OCP lift tops out (the sim's
+        # dissipative_only behaviour). Default false = network only on a detach.
+        DeclareLaunchArgument('auto_network_handover', default_value='false'),
+        DeclareLaunchArgument('auto_handover_settle_s', default_value='1.5'),
+        # Common-mode load trim (z-only integrator in the network); 0.0 = off.
+        DeclareLaunchArgument('diss_ki_load', default_value='0.0'),
+        DeclareLaunchArgument('diss_a_i_load_max', default_value='2.0'),
+        DeclareLaunchArgument('diss_trim_share_weighted', default_value='false'),
         DeclareLaunchArgument('net_horizon_preview', default_value='true'),
         DeclareLaunchArgument('net_traj_lean', default_value='false'),
         DeclareLaunchArgument('diss_k_pay', default_value='40.0'),
@@ -158,6 +175,11 @@ def launch_setup(context, *args, **kwargs):
             name=f'controller_{i}',
             parameters=[{'drone_id': i,
                          'terminal_vel_ref': b('terminal_vel_ref'),
+                         'control_mode': LaunchConfiguration('control_mode'),
+                         'vel_kp_pos': f('vel_kp_pos'),
+                         'vel_kv': f('vel_kv'),
+                         'vel_ki': f('vel_ki'),
+                         'vel_k_att': f('vel_k_att'),
                          'cable_ff_scale': f('cable_ff_scale'),
                          'attitude_ff': b('attitude_ff'),
                          'cable_source': LaunchConfiguration('cable_source'),
@@ -198,6 +220,11 @@ def launch_setup(context, *args, **kwargs):
                      'traj_speed': f('traj_speed'),
                      'traj_distance': f('traj_distance'),
                      'traj_radius': f('traj_radius'),
+                     'auto_network_handover': b('auto_network_handover'),
+                     'auto_handover_settle_s': f('auto_handover_settle_s'),
+                     'diss_ki_load': f('diss_ki_load'),
+                     'diss_a_i_load_max': f('diss_a_i_load_max'),
+                     'diss_trim_share_weighted': b('diss_trim_share_weighted'),
                      'net_horizon_preview': b('net_horizon_preview'),
                      'net_traj_lean': b('net_traj_lean'),
                      'diss_k_pay': f('diss_k_pay'),

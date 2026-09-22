@@ -130,6 +130,7 @@ class LoadPlanner(Node):
         self._land_to_ground = False # LAND command: descend all the way to ground
         self._landed = False         # descent finished, load back at start height
         self._lift_vel = 0.0         # signed vertical velocity of the lift target
+        self._traj_t_drawn = 0.0     # traj_t at the last RViz horizon publish
         # touchdown detector state (see _touchdown_stalled)
         self._land_prev_max_z = None
         self._land_stall_ct = 0
@@ -592,8 +593,16 @@ class LoadPlanner(Node):
         z_cap = self.target_z if self.lift_z0 is not None else z_des
         p_now = self.load_state[0:3]
         dx0, dy0, _, _ = self.traj.offset_at(self.traj_t)
+        # Lateral motion only while the trajectory clock is actually running, the same
+        # gate reference_builder.yref_at applies to the OCP reference. During the lift
+        # (traj_t still 0) and a trajectory hold the clock is frozen, and evaluating the
+        # shape at traj_t + dt*k anyway drew the next 2 s of circle bending off a load
+        # that is commanded to climb straight up.
+        advancing = self.traj_t > self._traj_t_drawn
+        self._traj_t_drawn = self.traj_t
         for k in range(self.N + 1):
-            kx, ky, _, _ = self.traj.offset_at(self.traj_t + self.dt * k)
+            t_k = self.traj_t + self.dt * k if advancing else self.traj_t
+            kx, ky, _, _ = self.traj.offset_at(t_k)
             ps = PoseStamped()
             ps.header = path.header
             ps.pose.position.x = float(p_now[0]) + (kx - dx0)

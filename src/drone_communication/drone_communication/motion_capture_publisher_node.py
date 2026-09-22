@@ -22,8 +22,8 @@ import re
 # ─────────────────────────────────────────────────────────────────────────────
 # Map each MoCap rigid-body ID to a drone_id. This node publishes each body to
 # /drone_<drone_id>/motion_capture_state (the topic the MPC controllers read).
-# Add/rename entries to match the rigid-body IDs right now its 10 and 20.
-RIGID_BODY_TO_DRONE = {10: 0, 20: 1, 30: 2}
+RIGID_BODY_TO_DRONE = {7: 0, 12: 1, 13: 2}
+
 # Rigid body on the ATTACH drone's magnet tip, published as PoseStamped on
 # /magnet_tip_pose for the magnet manager (weld trigger, tip-based weld capture).
 # None until the rig has one; the attach drone itself is a RIGID_BODY_TO_DRONE entry.

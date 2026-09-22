@@ -54,6 +54,7 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 from controller_quad_load.rviz_config import build_config, drone_mesh_colour
 
@@ -76,6 +77,12 @@ def _args():
         # panel buttons. num_drones must already INCLUDE the newcomer here (its radio,
         # mocap body and model), unlike the control launch's tethered count.
         DeclareLaunchArgument('attach', default_value='false'),
+        # Per-drone tether electromagnets on a Betaflight aux mode (see elrs_interface).
+        # magnet_initial '' = radio channel passed through as today; 'ON' holds every tether
+        # magnet from boot, and /drone_<i>/magnet (String ON|OFF) switches one drone's.
+        # 6 = Betaflight AUX4, where these airframes' magnet mode sits (tools/aux_sweep.py, 2026-09-16).
+        DeclareLaunchArgument('magnet_channel', default_value='6'),
+        DeclareLaunchArgument('magnet_initial', default_value=''),
     ]
 
 
@@ -130,7 +137,9 @@ def launch_setup(context, *args, **kwargs):
             executable='elrs_interface',
             name='elrs_interface',
             namespace=f'/drone_{i}',
-            parameters=[{'serial_port': LaunchConfiguration(arg)}],
+            parameters=[{'serial_port': LaunchConfiguration(arg),
+                         'magnet_channel': ParameterValue(LaunchConfiguration('magnet_channel'), value_type=int),
+                         'magnet_initial': ParameterValue(LaunchConfiguration('magnet_initial'), value_type=str)}],
             output='screen',
         ))
 
@@ -152,8 +161,10 @@ def launch_setup(context, *args, **kwargs):
     os.makedirs(cfg_dir, exist_ok=True)
     cfg = os.path.join(cfg_dir, f'real_io_{n}drone.rviz')
     with open(cfg, 'w') as fh:
+        magnet_on = LaunchConfiguration('magnet_initial').perform(context).strip().upper() == 'ON'
         fh.write(build_config(n, show_actual=show_actual,
-                              detach=attach, attach=attach))
+                              detach=attach, attach=attach,
+                              magnets=True, magnet_on=magnet_on))
 
     nodes.append(Node(
         package='rviz2', executable='rviz2', name='rviz2',

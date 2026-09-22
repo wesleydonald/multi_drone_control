@@ -25,14 +25,13 @@ Params:
     path_max_len    (int)   ring-buffer length for the payload track
 """
 
-import re
 
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import TransformStamped, PoseStamped
 from nav_msgs.msg import Path
-from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import String
+from visualization_msgs.msg import Marker, MarkerArray
 from tf2_ros import TransformBroadcaster
 
 from interfaces.msg import MotionCaptureState
@@ -46,7 +45,11 @@ class FleetViz(Node):
         self.n = int(self.declare_parameter('num_drones', 3).value)
         self.payload_size = [float(v) for v in self.declare_parameter(
             'payload_size', [0.5, 0.5, 0.05]).value]
-        self.path_max_len = int(self.declare_parameter('path_max_len', 2000).value)
+        # The track is thinned to one point per path_dt (10 Hz) so a whole flight fits:
+        # 12000 points is 20 min. Cleared on ARM so each flight starts a fresh track.
+        self.path_max_len = int(self.declare_parameter('path_max_len', 12000).value)
+        self.path_dt = float(self.declare_parameter('path_dt', 0.10).value)
+        self._path_last_t = None
 
         self.id_label_z = float(self.declare_parameter('id_label_z', 0.15).value)
         self.id_label_size = float(self.declare_parameter('id_label_size', 0.15).value)
@@ -55,10 +58,8 @@ class FleetViz(Node):
         self.marker_pub = self.create_publisher(Marker, '/payload/marker', 1)
         self.id_pub = self.create_publisher(MarkerArray, '/fleet/id_markers', 1)
         self.path_pub = self.create_publisher(Path, '/payload/actual_path', 5)
-        self.status_marker_pub = self.create_publisher(Marker, '/fleet/status_marker', 1)
-        self._status = ''
-        self.create_subscription(String, '/fleet/status', self._status_cb, 1)
         self._payload_path = []
+        self.create_subscription(String, '/fleet/command', self._command_cb, 5)
 
         for i in range(self.n):
             self.create_subscription(
@@ -106,30 +107,13 @@ class FleetViz(Node):
         m.color.r, m.color.g, m.color.b, m.color.a = 1.0, 1.0, 1.0, 1.0
         self.id_pub.publish(MarkerArray(markers=[m]))
 
-    def _status_cb(self, msg):
-        self._status = msg.data
+    def _command_cb(self, msg):
+        if msg.data.strip().upper() == 'ARM':
+            self._payload_path = []
+            self._path_last_t = None
 
     def _payload_cb(self, msg):
         self._send_tf(msg, 'payload_mocap')
-        # status banner above the payload, colour-coded by the tilt it reports
-        if self._status:
-            b = Marker()
-            b.header.frame_id = 'payload_mocap'
-            b.header.stamp = self.get_clock().now().to_msg()
-            b.ns = 'fleet_status'
-            b.id = 0
-            b.type = Marker.TEXT_VIEW_FACING
-            b.action = Marker.ADD
-            b.text = self._status
-            b.pose.position.z = 0.45
-            b.pose.orientation.w = 1.0
-            b.scale.z = 0.12
-            m_t = re.search(r'tilt (\d+)', self._status)
-            tilt = float(m_t.group(1)) if m_t else 0.0
-            warn = tilt > 20.0
-            b.color.r, b.color.g, b.color.b, b.color.a = (1.0, 0.3, 0.2, 1.0) if warn else (0.9, 1.0, 0.9, 1.0)
-            self.status_marker_pub.publish(b)
-
         # disc marker, anchored to the payload frame so it moves with it
         m = Marker()
         m.header.frame_id = 'payload_mocap'
@@ -143,7 +127,11 @@ class FleetViz(Node):
         m.color.r, m.color.g, m.color.b, m.color.a = 0.8, 0.4, 0.0, 0.9
         self.marker_pub.publish(m)
 
-        # actual track
+        # actual track, thinned to one point per path_dt
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if self._path_last_t is not None and now - self._path_last_t < self.path_dt:
+            return
+        self._path_last_t = now
         ps = PoseStamped()
         ps.header.frame_id = FRAME
         ps.header.stamp = m.header.stamp

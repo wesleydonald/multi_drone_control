@@ -343,3 +343,5 @@ def set_planner_reference(ocp_solver, ref_pos: np.ndarray, ref_vel: np.ndarray,
     ocp_solver.set(N_horizon, "yref", yref_N)
     ocp_solver.set(N_horizon, "p", np.concatenate(
         [dyn_par, np.asarray(ref_cable[N_horizon], dtype=float), qrefs[N_horizon]]))
+    return qrefs[0]
+

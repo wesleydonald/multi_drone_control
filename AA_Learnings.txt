@@ -395,3 +395,27 @@ Testing next week we have the elrs transmitters new drones coming in so we can t
 test on friday maybe come in before as well.
 Dissipative can restabilize then switch back to mpc need to compile for 2,3,4 on startup, or just improve the dissipative method
 Attach, new drone does not need to take any weight initially and can reoganise a bit first before taking the tension
+
+
+
+
+
+Magnets ->
+
+
+Need to switch to my controller in hover state, goes out 15degrees, hovering, lifted
+
+Would be better to have drones at 12,3,6,9 (so initally bad but good in future)
+
+
+TESTS WE WANT TO RUN TO SUCCEED
+WESLEY:
+4 drones takeoff from ground (attached at 12,4,8,6) and can detach (6) to get down to 3 and
+
+
+COMBINED:
+
+4 drones start on ground, attach to the payload with tejens controller then switch to mine,
+then takeoff, perform a trajectory, one drone detaches (now on tejens controller) does something
+like throw a ball into the payload basket, then reattaches, switches back to my controller and keeps going around, then land.
+

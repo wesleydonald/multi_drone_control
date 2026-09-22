@@ -98,6 +98,7 @@ def _marker_array(name, topic, namespace):
 
 def build_config(n: int, *, show_actual: bool = False, detach: bool = False,
                  attach: bool = False, show_plan: bool = True,
+                 magnets: bool = False, magnet_on: bool = False,
                  width: int = 1400, height: int = 900) -> str:
     """Return a complete .rviz config for exactly `n` drones.
 
@@ -148,17 +149,6 @@ def build_config(n: int, *, show_actual: bool = False, detach: bool = False,
     # Previously sim-only; on hardware it is arguably MORE useful, because you
     # cannot tell the airframes apart by eye across the cage.
     displays.append(_marker_array('Drone IDs', '/fleet/id_markers', 'drone_id'))
-    # operator status banner (phase / hold / drones on load / tilt) above the payload
-    displays.append("""    - Class: rviz_default_plugins/Marker
-      Name: Fleet status
-      Enabled: true
-      Topic:
-        Value: /fleet/status_marker
-        Depth: 5
-        Durability Policy: Volatile
-        Reliability Policy: Reliable
-      Namespaces:
-        fleet_status: true""")
 
     for i in range(n):
         c = drone_colour(i)
@@ -184,6 +174,8 @@ def build_config(n: int, *, show_actual: bool = False, detach: bool = False,
     Name: ArmPanel
     ShowDetach: {str(detach).lower()}
     ShowAttach: {str(attach).lower()}
+    ShowMagnets: {str(magnets).lower()}
+    MagnetInitialOn: {str(magnet_on).lower()}
     NumDrones: {n}
 Visualization Manager:
   Class: ""

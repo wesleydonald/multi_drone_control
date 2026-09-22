@@ -1,0 +1,69 @@
+{
+  "seed": 19,
+  "n": 3,
+  "cable_len": 0.5,
+  "ground_start": true,
+  "detachable": false,
+  "payload": {
+    "x": 0.2335291856157601,
+    "y": 0.03019676783938178,
+    "z": 0.025,
+    "yaw_deg": 63.765297648097324
+  },
+  "drones": [
+    {
+      "index": 0,
+      "x": 0.5594720661728023,
+      "y": 0.7028746921855278,
+      "z": 0.1,
+      "attach_azimuth_deg": 63.76529764809731,
+      "spawn_azimuth_deg": 64.33988277276035,
+      "azimuth_jitter_deg": 0.5745851246629884,
+      "rod_length_m": 0.5,
+      "heading_deg": 180.0
+    },
+    {
+      "index": 1,
+      "x": -0.5099596763143922,
+      "y": 0.072395382325249,
+      "z": 0.1,
+      "attach_azimuth_deg": -176.23470235190268,
+      "spawn_azimuth_deg": 173.23354493682584,
+      "azimuth_jitter_deg": -10.531752711271476,
+      "rod_length_m": 0.5,
+      "heading_deg": -86.01171315639903
+    },
+    {
+      "index": 2,
+      "x": 0.5571268621421461,
+      "y": -0.6395908111883173,
+      "z": 0.1,
+      "attach_azimuth_deg": -56.234702351902705,
+      "spawn_azimuth_deg": -68.21284267183623,
+      "azimuth_jitter_deg": -11.978140319933564,
+      "rod_length_m": 0.5,
+      "heading_deg": -83.55209603590323
+    }
+  ],
+  "prediction": {
+    "payload_yaw_deg": 63.765297648097324,
+    "formation_rotation_demanded_deg": 56.23470235190267,
+    "heading_unwind_deg": [
+      178.85409735524365,
+      86.01171315639903,
+      83.55209603590323
+    ],
+    "planner_slot_to_drone": [
+      0,
+      1,
+      2
+    ],
+    "correct_slot_to_drone": [
+      0,
+      1,
+      2
+    ],
+    "slot_mapping_wrong": false
+  },
+  "note": "drone 0 heading set to exactly 180 deg by hand (2026-09-16) so the mocap hemisphere flip is deterministic at takeoff"
+}

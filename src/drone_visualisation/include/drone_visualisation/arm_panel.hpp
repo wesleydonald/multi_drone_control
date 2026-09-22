@@ -50,6 +50,9 @@ private:
   void updateStatusLabel();
   void applyShowDetach();
   void applyShowAttach();
+  void applyShowMagnets();
+  void onMagnetToggled(int i, bool on);
+  void updateMagnetButton(int i);
   // (Re)build the per-drone rows and their subscriptions for num_drones_.
   // Safe to call repeatedly and before node_ exists.
   void rebuild();
@@ -83,10 +86,18 @@ private:
   // Per-drone "Dn  ARMED  15.82 V" rows live here, one QLabel each.
   QVBoxLayout* drone_rows_layout_;
   std::vector<QLabel*> drone_labels_;
+  // Per-drone tether magnet toggles (MAGNET Di ON/OFF), one checkable button each,
+  // publishing String ON|OFF to /drone_<i>/magnet (elrs_interface latches the aux
+  // channel). Shown when the launch sets ShowMagnets; usable armed or not.
+  QVBoxLayout* magnet_rows_layout_;
+  std::vector<QPushButton*> magnet_buttons_;
+  std::vector<rclcpp::Publisher<std_msgs::msg::String>::SharedPtr> magnet_pubs_;
 
   bool is_armed_;          // fleet-level: true if ANY drone reports armed
   bool show_detach_;
   bool show_attach_;
+  bool show_magnets_;
+  bool magnet_initial_on_;
   int num_drones_;
   std::vector<bool> drone_armed_;
   std::vector<float> drone_voltage_;

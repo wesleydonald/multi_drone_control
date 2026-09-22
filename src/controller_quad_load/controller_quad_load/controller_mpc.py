@@ -248,6 +248,8 @@ class Controller(Node):
         # over this many seconds so the drones ease off the platforms instead of
         # popping up the instant TAKEOFF fires. 0 = off (instant, old behaviour).
         self.declare_parameter("takeoff_spool_s", 2.0)
+        self._last_qref0 = None
+        self._last_solve_status = None
         self.takeoff_spool_s = float(self.get_parameter("takeoff_spool_s").value)
         # ── Thrust gain kT ────────────────────────────────────────────────
         # thrust_ratio (kT): accel per unit throttle the MPC assumes, i.e. the linear
@@ -438,6 +440,11 @@ class Controller(Node):
             # unless kt_batt_sag_frac is on, so kt_mpc is flat by design -- a step in
             # it means the takeoff/airborne switch, nothing else.
             'kt_mpc', 'battery_v',
+            # body rates from mocap, the node-0 attitude reference the MPC was given,
+            # and the acados status: the three things the 2026-09-16 rig yaw spins
+            # (cause still unknown, R0276-R0279 refuted the hemisphere theory) could
+            # not be diagnosed without.
+            'wx', 'wy', 'wz', 'qref_w', 'qref_x', 'qref_y', 'qref_z', 'solve_status',
         ]
         # drone 0 also logs the payload actual + desired so plot_run.py can
         # overlay the load track alongside the drones.
@@ -999,7 +1006,7 @@ class Controller(Node):
             # reflects the applied value under either cable_source.
             self._applied_cable0 = (float(np.linalg.norm(ref_cable[0]))
                                     if ref_cable is not None else 0.0)
-            set_planner_reference(
+            self._last_qref0 = set_planner_reference(
                 self.ocp, self.planner_ref_pos, self.planner_ref_vel,
                 ref_acc, self.N, self.est_params,
                 ref_cable=ref_cable, heading=self._heading_datum,
@@ -1041,6 +1048,7 @@ class Controller(Node):
             # ── Solve ─────────────────────────────────────────────────────
             t0 = time.perf_counter()
             status = self.ocp.solve()
+            self._last_solve_status = int(status)
             solve_ms = (time.perf_counter() - t0) * 1000
             #self.get_logger().info(f"Solve time: {solve_ms:.2f}ms")
             if status != 0:
@@ -1165,6 +1173,11 @@ class Controller(Node):
                 float(self.est_params[0]),
                 float(self.battery_voltage
                       if self.battery_voltage is not None else np.nan),
+                float(self.current_pose[10]), float(self.current_pose[11]),
+                float(self.current_pose[12]),
+                *([float(v) for v in self._last_qref0] if self._last_qref0 is not None
+                  else [np.nan] * 4),
+                float(self._last_solve_status if self._last_solve_status is not None else np.nan),
             ]
             if self._log_payload:
                 pa = (self.payload_pos if self.payload_pos is not None

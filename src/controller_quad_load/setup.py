@@ -23,6 +23,7 @@ setup(
         'console_scripts': [
             'main = controller_quad_load.main:main',
             'controller = controller_quad_load.controller_mpc:main',
+            'free_hover = controller_quad_load.free_hover:main',
         ],
     },
 )
