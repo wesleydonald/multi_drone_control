@@ -57,7 +57,7 @@ def _args():
         # ── rig geometry / payload: MEASURED, never the sim defaults ─────────
         DeclareLaunchArgument('cable_len', default_value='0.5'),
         DeclareLaunchArgument('attach_azimuths_deg', default_value='330,90,210'),
-        DeclareLaunchArgument('load_mass', default_value='0.6'),
+        DeclareLaunchArgument('load_mass', default_value='0.86'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         DeclareLaunchArgument('start_taut', default_value='true'),
         DeclareLaunchArgument('payload_rest_z', default_value='0.05'),
@@ -87,6 +87,8 @@ def _args():
         DeclareLaunchArgument('vel_k_att', default_value='8.0'),
         # ── trajectory ───────────────────────────────────────────────────────
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
+        # measure each rod from mocap at handover instead of trusting cable_len (2026-09-23)
+        DeclareLaunchArgument('measure_rod_len', default_value='false'),
         DeclareLaunchArgument('load_traj', default_value='hover'),
         DeclareLaunchArgument('traj_speed', default_value='0.2'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
@@ -195,6 +197,7 @@ def launch_setup(context, *args, **kwargs):
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
                      'auto_slot_assign': b('auto_slot_assign'),
+                     'measure_rod_len': b('measure_rod_len'),
                      'load_traj': LaunchConfiguration('load_traj'),
                      'traj_speed': f('traj_speed'),
                      'traj_distance': f('traj_distance'),

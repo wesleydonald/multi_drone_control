@@ -419,3 +419,12 @@ COMBINED:
 then takeoff, perform a trajectory, one drone detaches (now on tejens controller) does something
 like throw a ball into the payload basket, then reattaches, switches back to my controller and keeps going around, then land.
 
+
+TODO:
+
+Effective payload force is adaptavely tuned - could add to the state vector and take the error between where we want to be and where we are as an input 
+which gives an idea of how much extra mass is pulling us down. Ideally we do not need to adaptavely tune the thrust ratio as we go.
+
+Start from a position where the drones have already taken off
+
+Axis aligned magnet

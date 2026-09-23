@@ -36,7 +36,7 @@ from .geometry import (quat_to_rot_np, attach_points, nominal_cable_dirs,
                        azimuth_slot_assignment, yaw_from_quat)
 from .load_trajectory import LoadTrajectory
 from .planner_solver import PlannerSolver
-from .params import PlannerConfig, LOAD_IXX, LOAD_IZZ
+from .params import PlannerConfig, load_inertia
 from .creep_controller import CreepController
 from .reference_builder import ReferenceBuilder
 from utility_objects.data_logger import run_log_dir, write_params, node_params
@@ -49,7 +49,6 @@ from utility_objects.run_context import log_base_dir
 # load_mass to 0.1 without scaling these leaves the model ~4x over-stiff in
 # rotation. Scale by (load_mass / 0.4) for a same-size lighter payload, or
 # recompute from the real payload's dimensions.
-LOAD_INERTIA  = [LOAD_IXX, LOAD_IXX, LOAD_IZZ]   # the disc; see params.py
 DRONE_MASS    = 0.6
 PLANNER_HZ    = 10.0
 
@@ -98,6 +97,25 @@ CABLE_TAUT_LO_FRAC = 0.85
 CABLE_TAUT_HI_FRAC = 1.00
 
 
+def measured_rod_lengths(nominal, dists, tol_frac=0.15, spread_m=0.03):
+    """Per-drone rod lengths from the measured drone-to-rim distances at the moment the
+    rods are known taut (creep handover / taut air start). Returns (lengths, None) or
+    (None, reason) when the measurement is not trusted: any rod outside +-tol_frac of the
+    typed cable_len, or the rods disagreeing by more than spread_m (equal rods on this rig).
+    Why: a typed length 4 cm off costs ~20 cm of hover (SIL R0286/R0287, 2026-09-23) --
+    the tautness gate ramps the tension feedforward on the typed value and the OCP's
+    references are placed at it. Measured, both errors disappear."""
+    nominal = float(nominal); d = [float(v) for v in dists]
+    if not d:
+        return None, 'no drones'
+    for i, v in enumerate(d):
+        if abs(v - nominal) > tol_frac * nominal:
+            return None, f'rod {i} measured {v:.3f} m vs typed {nominal:.3f} (outside +-{tol_frac * 100:.0f}%)'
+    if max(d) - min(d) > spread_m:
+        return None, f'rods disagree by {(max(d) - min(d)) * 100:.1f} cm (> {spread_m * 100:.0f} cm)'
+    return d, None
+
+
 class LoadPlanner(Node):
     def __init__(self):
         super().__init__('load_planner')
@@ -108,9 +126,15 @@ class LoadPlanner(Node):
         cfg.log(self.get_logger())
         self.n = cfg.n
         self.cable_len = cfg.cable_len
+        # Per-drone rod lengths the OCP and the tautness gate use. Typed value until
+        # measure_rod_len replaces them with the taut measurement at handover.
+        self.cable_len_i = [float(cfg.cable_len)] * cfg.n
+        self.measure_rod_len = bool(self.declare_parameter('measure_rod_len', False).value)
+        self.declare_parameter('measured_rod_len', [0.0] * cfg.n)   # read-back of what was applied
         self.attach_radius = cfg.attach_radius
         self.attach_z = cfg.attach_z
         self.load_mass = cfg.load_mass
+        self.load_inertia = cfg.load_inertia
         self.handover_elev_deg = cfg.handover_elev_deg
         self.handover_settle_s = cfg.handover_settle_s
         self.start_taut = cfg.start_taut
@@ -150,7 +174,7 @@ class LoadPlanner(Node):
         self._s_nom = nominal_cable_dirs(self.rho, 45.0)
 
         self.dyn = LoadCableDynamics(
-            self.n, self.load_mass, LOAD_INERTIA, [self.cable_len] * self.n,
+            self.n, self.load_mass, self.load_inertia, [self.cable_len] * self.n,
             self.rho, DRONE_MASS)
         # The OCP wrapper builds (or loads a cached) acados solver for this geometry
         # and owns the reference-extraction functions + warm-start state (last_X).
@@ -628,7 +652,7 @@ class LoadPlanner(Node):
             if m in self._solvers or m < 2:
                 continue
             rho = attach_points(m, self.attach_radius, self.attach_z)
-            dyn = LoadCableDynamics(m, self.load_mass, LOAD_INERTIA,
+            dyn = LoadCableDynamics(m, self.load_mass, self.load_inertia,
                                     [self.cable_len] * m, rho, DRONE_MASS)
             self._solvers[m] = (dyn, PlannerSolver(dyn, self.get_logger()), rho)
             self.get_logger().info(f'[planner] OCP ready for n={m}')
@@ -696,9 +720,32 @@ class LoadPlanner(Node):
         self._lift_t = 0.0                         # restart the lift easing
         self._ff_t = 0.0                           # restart the cable-FF soft-start
         self._settle_left = self.handover_settle_s
+        if self.measure_rod_len:
+            self._apply_measured_rod_lengths()
         self.get_logger().info(
             f'[planner] {reason} — coupled planner active '
             f'(lift from z={self.lift_z0:.2f})')
+
+    def _apply_measured_rod_lengths(self):
+        """At handover the rods are taut, so |drone - rim| is the rod length. Replace the
+        typed cable_len per drone (OCP geometry + tautness gate) when the guard passes."""
+        from rclpy.parameter import Parameter
+        ls = self.load_state
+        R = quat_to_rot_np(ls[3:7])
+        dists = [float(np.linalg.norm(ls[0:3] + R @ self.rho[i] - self._drone_at(i)))
+                 for i in range(self.n)]
+        lens, why = measured_rod_lengths(self.cable_len, dists)
+        if lens is None:
+            self.get_logger().warn(
+                f'[planner] measure_rod_len: keeping typed cable_len {self.cable_len:.3f} -- {why} '
+                f'(measured {[round(v, 3) for v in dists]})')
+            return
+        self.cable_len_i = lens
+        self.solver.set_geometry(cable_lengths=lens)
+        self.set_parameters([Parameter('measured_rod_len', Parameter.Type.DOUBLE_ARRAY, lens)])
+        self.get_logger().info(
+            f'[planner] measure_rod_len: rods {[round(v, 3) for v in lens]} m from mocap at '
+            f'handover (typed {self.cable_len:.3f}); OCP geometry and tautness gate updated')
 
     def _publish_ref(self, i, nodes):
         """Publish one drone's reference trajectory. nodes is a sequence of
@@ -725,8 +772,8 @@ class LoadPlanner(Node):
         R = quat_to_rot_np(ls[3:7])
         attach = ls[0:3] + R @ self.rho[i]
         dist = float(np.linalg.norm(attach - self._drone_at(i)))
-        d_lo = CABLE_TAUT_LO_FRAC * self.cable_len
-        d_hi = CABLE_TAUT_HI_FRAC * self.cable_len
+        d_lo = CABLE_TAUT_LO_FRAC * self.cable_len_i[i]
+        d_hi = CABLE_TAUT_HI_FRAC * self.cable_len_i[i]
         len_gate = float(np.clip((dist - d_lo) / max(d_hi - d_lo, 1e-6), 0.0, 1.0))
         return len_gate, dist
 

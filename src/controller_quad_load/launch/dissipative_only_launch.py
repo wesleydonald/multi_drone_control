@@ -72,7 +72,7 @@ def _args():
         DeclareLaunchArgument('start_taut', default_value='true'),
         DeclareLaunchArgument('handover_elev_deg', default_value='45.0'),
         DeclareLaunchArgument('handover_settle_s', default_value='0.75'),
-        DeclareLaunchArgument('load_mass', default_value='0.6'),
+        DeclareLaunchArgument('load_mass', default_value='0.86'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         DeclareLaunchArgument('lift_ramp_vel', default_value='0.22'),
         DeclareLaunchArgument('land_vel', default_value='0.20'),
@@ -96,6 +96,8 @@ def _args():
         DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),
         DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
+        # measure each rod from mocap at handover instead of trusting cable_len (2026-09-23)
+        DeclareLaunchArgument('measure_rod_len', default_value='false'),
         # LOAD reference the NETWORK flies after handover: 'hover', 'line_x', 'circle',
         # 'fig_8', 'spin'. The network keeps its trajectory clock running post-handover, so
         # these behave as they do under the OCP stack.
@@ -262,6 +264,7 @@ def launch_setup(context, *args, **kwargs):
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
                      'auto_slot_assign': b('auto_slot_assign'),
+                     'measure_rod_len': b('measure_rod_len'),
                      'load_traj': LaunchConfiguration('load_traj'),
                      'traj_speed': f('traj_speed'),
                      'traj_distance': f('traj_distance'),

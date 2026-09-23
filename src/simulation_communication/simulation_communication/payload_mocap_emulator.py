@@ -39,12 +39,20 @@ class PayloadMocapEmulator(Node):
         #               index -- inspect `gz topic -e -t <pose_topic>` to pick base_link.
         self.declare_parameter('pose_topic', '')
         self.declare_parameter('pose_index', -1)
+        # Publish ceiling (Hz) per body, 0 = every Gazebo pose (~300-500 Hz). The trackers
+        # run at 50 Hz and every message costs a Python callback in each subscriber; the
+        # real mocap node throttles the same way (MOCAP_MAX_PUBLISH_HZ).
+        self.declare_parameter('max_publish_hz', 0.0)
 
         drone_id = self.get_parameter('drone_id').value
         drone_name = self.get_parameter('drone_name').value
         parent = self.get_parameter('parent_model').value
         publish_payload = self.get_parameter('publish_payload').value
         self._pose_index = int(self.get_parameter('pose_index').value)
+        hz = float(self.get_parameter('max_publish_hz').value)
+        self._min_dt = (1.0 / hz) if hz > 0 else 0.0
+        self._drone_last_pub = None
+        self._payload_last_pub = None
 
         pose_topic_override = str(self.get_parameter('pose_topic').value)
         drone_pose_topic = (pose_topic_override if pose_topic_override
@@ -128,8 +136,19 @@ class PayloadMocapEmulator(Node):
         return mcs, pos, ori, now
 
     # ------------------------------------------------------------------
+    def _due(self, last_pub):
+        """(due, now_s): rate ceiling on the node clock (sim time)."""
+        n = self.get_clock().now().to_msg()
+        now = n.sec + n.nanosec * 1e-9
+        if self._min_dt and last_pub is not None and 0.0 <= now - last_pub < self._min_dt:
+            return False, last_pub
+        return True, now
+
     def _drone_cb(self, msg: PoseArray):
         if not msg.poses:
+            return
+        due, self._drone_last_pub = self._due(self._drone_last_pub)
+        if not due:
             return
         idx = self._pose_index if -len(msg.poses) <= self._pose_index < len(msg.poses) else -1
         pos = msg.poses[idx].position
@@ -144,6 +163,9 @@ class PayloadMocapEmulator(Node):
 
     def _payload_cb(self, msg: PoseArray):
         if not msg.poses or self._payload_pub is None:
+            return
+        due, self._payload_last_pub = self._due(self._payload_last_pub)
+        if not due:
             return
         # payload sub-model: index 0 is the model pose, index 1 is the 'body' link
         idx = 1 if len(msg.poses) > 1 else 0

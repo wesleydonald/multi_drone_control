@@ -16,15 +16,24 @@ CABLE_LEN     = 0.5            # matches every world in simulation_assets/ (rod
                                # any node run WITHOUT a launch silently got a 20%
                                # cable-length error. Verified by
                                # tools/check_geometry.py, which is in the gate.
-ATTACH_RADIUS = 0.25   # rim of the 500 mm disc payload (2026-09-09)
+ATTACH_RADIUS = 0.25   # magnet-plate ring of the 500 mm M2A ring payload (2026-09-23)
 ATTACH_Z      = 0.025          # attach height above load CoG, load frame
 ATTACH_AZIMUTHS_DEG = ''       # '' = even ring; e.g. '0,90,180' = 3/12/9 o'clock (rig)
-LOAD_MASS     = 0.6            # ring payload (2026-09-10); rig value still unmeasured
-# 500 mm ring (inner 400 mm, 50 mm thick) about its CoG: Ixx = m(3(R^2+r^2)+h^2)/12, Izz = m(R^2+r^2)/2.
+LOAD_MASS     = 0.86           # official rig mass (Wesley, 2026-09-23)
+# M2A ring (outer 280 mm, inner 220 mm, 30 mm thick; generate_rigid_world.py) about its CoG:
+# Ixx = m(3(R^2+r^2)+h^2)/12, Izz = m(R^2+r^2)/2.
 # The planner's OCP bakes these into the compiled solver (planner_solver._ocp_signature)
 # and tools/check_geometry.py checks them against the world SDF.
-LOAD_IXX      = 1.550e-02
-LOAD_IZZ      = 3.075e-02
+LOAD_IXX      = 2.733e-02      # = load_inertia(LOAD_MASS); literals so tools/check_geometry.py can read them
+LOAD_IZZ      = 5.452e-02
+RING_IXX_PER_KG = LOAD_IXX / LOAD_MASS   # the same annulus per kg, so a load_mass arg carries its inertia
+RING_IZZ_PER_KG = LOAD_IZZ / LOAD_MASS
+
+
+def load_inertia(mass):
+    """[Ixx, Iyy, Izz] of the M2A ring at `mass` kg (tools/sil/plant.py uses the same
+    per-kg values)."""
+    return [RING_IXX_PER_KG * mass, RING_IXX_PER_KG * mass, RING_IZZ_PER_KG * mass]
 TARGET_Z      = 0.6            # load hover height
 LIFT_RAMP_VEL = 0.05           # m/s load lift rate after handover
 LAND_VEL      = 0.20           # m/s descent rate, faster than the gentle lift
@@ -51,6 +60,7 @@ class PlannerConfig:
         # Must match the payload mass in the world SDF: cable tension is sized
         # off this, so a mismatch scales every drone's tension FF.
         self.load_mass = float(p('load_mass', LOAD_MASS).value)
+        self.load_inertia = load_inertia(self.load_mass)
         # Hand over on cable ELEVATION (deg) instead of cable length. A rigid rod
         # is always exactly cable_len, so the length gate reads 1.0 from spawn and
         # hands over at ~0 deg, where tension mg/(n sin_elev) is effectively

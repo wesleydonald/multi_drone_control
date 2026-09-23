@@ -147,9 +147,17 @@ def generate_load_ocp(dyn: LoadCableDynamics, N=20, tf=2.0,
     ocp.constraints.lbx_0 = x0[obs]
     ocp.constraints.ubx_0 = x0[obs]
     ocp.constraints.idxbxe_0 = np.arange(obs.shape[0])
-    # q_ref = identity, geometry = the nominal ring this dyn was built with, so a
-    # solver that is never told otherwise reproduces the old baked-constant model.
-    ocp.parameter_values = np.concatenate([[1.0, 0.0, 0.0, 0.0], dyn.geom_values()])
+    # q_ref = identity, geometry = a CANONICAL ring (0.25 m radius, 0.5 m rods, even
+    # azimuths) that depends on n only. acados compares parameter_values when deciding
+    # whether the generated code can be reused, so a value that followed the launch's
+    # cable_len / ring made every different typed geometry a ~30 s rebuild -- which
+    # defeats geometry-as-a-runtime-parameter and, interrupted by a bench SIGINT,
+    # poisons every later run (SIL R0297-R0301, 2026-09-23). The real geometry is
+    # applied per solve through PlannerSolver.set_geometry, never from this vector.
+    canon_rho = [np.array([0.25 * np.cos(2 * np.pi * i / n), 0.25 * np.sin(2 * np.pi * i / n), 0.025])
+                 for i in range(n)]
+    ocp.parameter_values = np.concatenate([[1.0, 0.0, 0.0, 0.0],
+                                           dyn.geom_values(rho=canon_rho, l=[0.5] * n)])
 
     # ── tautness: state bounds on each t_i ─────────────────────────────────
     t_idx = [LOAD_DIM + CABLE_DIM * i + 12 for i in range(n)]

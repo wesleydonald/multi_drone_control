@@ -89,9 +89,22 @@ def launch_setup(context, *args, **kwargs):
     # ── Sim interface: clock + pose bridges + mocap emulators ──────────────
     # These live here rather than in the control launch so the fleet is visible
     # and publishing BEFORE any controller starts.
-    nodes.append(Node(
-        package='ros_gz_bridge', executable='parameter_bridge', name='clock_bridge',
-        arguments=['/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'], output='screen'))
+    clock_hz = float(LaunchConfiguration('clock_hz').perform(context))
+    mocap_hz = float(LaunchConfiguration('mocap_hz').perform(context))
+    viz_hz = float(LaunchConfiguration('viz_hz').perform(context))
+    if clock_hz > 0:
+        nodes.append(Node(
+            package='ros_gz_bridge', executable='parameter_bridge', name='clock_bridge',
+            arguments=['/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'],
+            remappings=[('/clock', '/clock_gz')], output='screen'))
+        nodes.append(Node(
+            package='simulation_communication', executable='clock_throttle',
+            name='clock_throttle', parameters=[{'use_sim_time': False, 'rate_hz': clock_hz}],
+            output='screen'))
+    else:
+        nodes.append(Node(
+            package='ros_gz_bridge', executable='parameter_bridge', name='clock_bridge',
+            arguments=['/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'], output='screen'))
     nodes.append(Node(
         package='ros_gz_bridge', executable='parameter_bridge',
         name='payload_pose_bridge',
@@ -107,12 +120,13 @@ def launch_setup(context, *args, **kwargs):
             package='simulation_communication', executable='payload_mocap_emulator',
             name=f'mocap_{i}',
             parameters=[{'drone_id': i, 'drone_name': f'x3_drone{i}',
-                         'parent_model': parent, 'publish_payload': (i == 0)}]))
+                         'parent_model': parent, 'publish_payload': (i == 0),
+                         'max_publish_hz': mocap_hz}]))
 
     # TF for every drone + the payload, plus the payload box and its track
     nodes.append(Node(
         package='simulation_communication', executable='fleet_viz',
-        name='fleet_viz', parameters=[{'num_drones': n_viz}], output='screen'))
+        name='fleet_viz', parameters=[{'num_drones': n_viz, 'viz_hz': viz_hz}], output='screen'))
 
     # Placeholder Telemetry so the ArmPanel's per-drone battery rows populate in
     # sim exactly as they do on hardware (finding F7). On the rig this comes from
@@ -181,5 +195,11 @@ def generate_launch_description():
         # emulators -- which this launch OWNS and no controller can run without --
         # and skips only the GUI, which is what a headless batch run needs.
         DeclareLaunchArgument('rviz', default_value='true'),
+        # CPU relief (2026-09-23): Gazebo's /clock arrives at ~700-1000 Hz and rclpy
+        # handles it in Python in EVERY node; the emulators republish every Gazebo pose
+        # (300-500 Hz) into every tracker; fleet_viz redraws per message. 0 = unthrottled.
+        DeclareLaunchArgument('clock_hz', default_value='0'),
+        DeclareLaunchArgument('mocap_hz', default_value='0'),
+        DeclareLaunchArgument('viz_hz', default_value='0'),
         OpaqueFunction(function=launch_setup),
     ])

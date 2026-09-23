@@ -117,7 +117,7 @@ def _args():
         # takeoff); 0 = off.
         DeclareLaunchArgument('handover_settle_s', default_value='0.75'),
         # payload mass in the world SDF.
-        DeclareLaunchArgument('load_mass', default_value='0.6'),
+        DeclareLaunchArgument('load_mass', default_value='0.86'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         # HOLD test: lift_ramp_vel:=0.0 (no lift, just hold the taut config).
         # 0.22 is a brisk-but-trackable climb rate; drop toward 0.12 for a gentler lift.
@@ -200,6 +200,8 @@ def _args():
         # normally-ordered sim world this resolves to the identity (a no-op) -- to
         # actually exercise the reorder, spawn the drones out of azimuth order.
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
+        # measure each rod from mocap at handover instead of trusting cable_len (2026-09-23)
+        DeclareLaunchArgument('measure_rod_len', default_value='false'),
         # LOAD reference after the lift tops out: 'hover', 'line_x' (continuous
         # back-and-forth shuttle), 'circle', 'fig_8' (figure-eight lemniscate),
         # 'spin' (circle + the load yaws one full turn, so the formation also
@@ -297,6 +299,7 @@ def launch_setup(context, *args, **kwargs):
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
                      'auto_slot_assign': b('auto_slot_assign'),
+                     'measure_rod_len': b('measure_rod_len'),
                      'load_traj': LaunchConfiguration('load_traj'),
                      'traj_speed': f('traj_speed'),
                      'traj_distance': f('traj_distance'),

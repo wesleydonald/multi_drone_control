@@ -14,7 +14,7 @@ Geometry matches three_soft_paper.sdf by default (elevated & TAUT: cable_len=1.0
   - world `quadcopter` (keeps /world/quadcopter/* topics + mocap source)
   - lift_system model with a world-fixed `anchor` canonical link
   - N drones (models/x3_drone{i}.sdf) at equal angular intervals, ELEVATED
-  - rigid-body payload DISC (500 mm, rim attachments) with the pose publisher
+  - rigid-body payload RING (500 mm, 12 magnet plates, rim attachments) with the pose publisher
   - N rigid tethers (one cylinder link each), ball joint to payload::body at the
     bottom and to x3_drone{i}::base_link at the top
 
@@ -23,18 +23,35 @@ Usage:
 """
 import argparse
 
-# The real payload (2026-09-09): a 500 mm diameter disc with the magnet/tether
-# attachments on its RIM. Attach ring radius therefore = disc radius. Thickness and
-# mass are the sim's standing values until the rig's are measured.
-PAYLOAD_RADIUS = 0.25
-PAYLOAD_INNER_RADIUS = 0.20    # the real payload is a RING (mass at the rim), 2026-09-10
-PAYLOAD_THICKNESS = 0.05
-PAYLOAD_MASS = 0.6             # raised from 0.4 at Wesley's request; rig value still unknown
-# annulus inertia about the CoG: Ixx = Iyy = m(3(R^2 + r^2) + h^2)/12, Izz = m(R^2 + r^2)/2.
-# Collision/visual stay a solid cylinder (contact geometry is irrelevant to the carry);
-# the inertia is what the physics and the OCP see.
-_IXX = PAYLOAD_MASS * (3 * (PAYLOAD_RADIUS ** 2 + PAYLOAD_INNER_RADIUS ** 2) + PAYLOAD_THICKNESS ** 2) / 12.0
-_IZZ = PAYLOAD_MASS * (PAYLOAD_RADIUS ** 2 + PAYLOAD_INNER_RADIUS ** 2) / 2.0
+# The real payload (2026-09-23, Te-Jen's M2A ring fixture, m2a_ring_fixture.sdf): a
+# 500 mm ring of 24 box segments (60 mm radial x 30 mm thick) carrying 12 magnet plates
+# (30 mm radius) every 30 deg on its top face, plate 0 on +x. The tethers attach on the
+# plates, so the attach ring radius = plate radius = 0.25 m and the attach plane is the
+# plate top. Official mass 0.86 kg (Wesley, 2026-09-23). The fixture's 8 bench legs are
+# NOT part of the flying payload (its mocap origin rests 5 cm off the floor, i.e. on the
+# ring, not on 6.5 cm legs); --legs adds them for a bench-fixture picture only.
+PAYLOAD_RADIUS = 0.25          # plate ring radius = attach radius
+RING_SEGMENTS = 24
+RING_SEG_LEN = 0.068067840828  # tangential box length (2*pi*R/24 with overlap)
+RING_SEG_RADIAL = 0.060
+RING_SEG_THICK = 0.030
+RING_OUTER = PAYLOAD_RADIUS + RING_SEG_RADIAL / 2.0
+RING_INNER = PAYLOAD_RADIUS - RING_SEG_RADIAL / 2.0
+PLATES = 12
+PLATE_RADIUS = 0.030
+PLATE_THICK = 0.005
+LEG_RADIUS = 0.010
+LEG_LEN = 0.065
+LEG_RING_RADIUS = 0.20
+ATTACH_PLANE_Z = 0.025         # plate top in the link frame (= the launches' attach_z)
+PAYLOAD_MASS = 0.86            # official rig mass, 2026-09-23 (was 0.6)
+# ring inertia about the CoG (annulus RING_OUTER/RING_INNER, RING_SEG_THICK thick; the
+# plates are 4 % of the volume and sit on the same radius, so they are folded in):
+# Ixx = Iyy = m(3(R^2 + r^2) + h^2)/12, Izz = m(R^2 + r^2)/2.
+def _inertia(mass):
+    rr = RING_OUTER ** 2 + RING_INNER ** 2
+    return (mass * (3 * rr + RING_SEG_THICK ** 2) / 12.0, mass * rr / 2.0)
+_IXX, _IZZ = _inertia(PAYLOAD_MASS)
 import math
 
 
@@ -171,6 +188,60 @@ def detachable_joint_block(idx):
       </plugin>"""
 
 
+def payload_geometry_block(legs=False):
+    """Visual + collision of the ring payload in the payload link frame: the plate top
+    (attach plane) at z = ATTACH_PLANE_Z, ring segments just below it, plate 0 orange.
+    Mirrors m2a_ring_fixture.sdf (Te-Jen) shifted so the launches' attach_z stays 0.025.
+
+    The ring and plates are VISUAL ONLY. The single collision is one cylinder the size
+    of the ring: 24 box collisions each touching the floor took the RTF from ~30 % to
+    7 % (2026-09-23); contact geometry is irrelevant to the carry."""
+    out = []
+    z_seg = ATTACH_PLANE_Z - PLATE_THICK - RING_SEG_THICK / 2.0
+    out.append(f"""          <collision name="collision"><pose>0 0 {_fmt(z_seg)} 0 0 0</pose>
+            <geometry><cylinder><radius>{RING_OUTER:.3f}</radius><length>{RING_SEG_THICK:.3f}</length></cylinder></geometry>
+          </collision>""")
+    for k in range(RING_SEGMENTS):
+        th = 2.0 * math.pi * k / RING_SEGMENTS
+        pose = (f"{_fmt(PAYLOAD_RADIUS * math.cos(th))} {_fmt(PAYLOAD_RADIUS * math.sin(th))} "
+                f"{_fmt(z_seg)} 0 0 {_fmt(th + math.pi / 2.0)}")
+        box = (f"<geometry><box><size>{RING_SEG_LEN:.6f} {RING_SEG_RADIAL:.3f} "
+               f"{RING_SEG_THICK:.3f}</size></box></geometry>")
+        out.append(f"""          <visual name="ring_{k}_visual"><pose>{pose}</pose>{box}
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>""")
+    z_plate = ATTACH_PLANE_Z - PLATE_THICK / 2.0
+    for k in range(PLATES):
+        th = 2.0 * math.pi * k / PLATES
+        pose = (f"{_fmt(PAYLOAD_RADIUS * math.cos(th))} {_fmt(PAYLOAD_RADIUS * math.sin(th))} "
+                f"{_fmt(z_plate)} 0 0 {_fmt(th)}")
+        colour = ("<ambient>0.90 0.25 0.10 1</ambient><diffuse>1.00 0.35 0.15 1</diffuse>" if k == 0
+                  else "<ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse>")
+        out.append(f"""          <visual name="plate_{k}_visual"><pose>{pose}</pose>
+            <geometry><cylinder><radius>{PLATE_RADIUS:.3f}</radius><length>{PLATE_THICK:.3f}</length></cylinder></geometry>
+            <material>{colour}</material>
+          </visual>""")
+    if legs:
+        z_leg = ATTACH_PLANE_Z - PLATE_THICK - RING_SEG_THICK - LEG_LEN / 2.0
+        for k in range(8):
+            th = 2.0 * math.pi * k / 8
+            pose = (f"{_fmt(LEG_RING_RADIUS * math.cos(th))} {_fmt(LEG_RING_RADIUS * math.sin(th))} "
+                    f"{_fmt(z_leg)} 0 0 0")
+            cyl = (f"<geometry><cylinder><radius>{LEG_RADIUS:.3f}</radius>"
+                   f"<length>{LEG_LEN:.3f}</length></cylinder></geometry>")
+            out.append(f"""          <visual name="leg_{k}_visual"><pose>{pose}</pose>{cyl}
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>""")
+    return "\n".join(out)
+
+
+def payload_rest_z(legs=False):
+    """Link-frame z of the payload's lowest point, negated: spawn the payload at this
+    height so it rests on the floor without a drop."""
+    bottom = ATTACH_PLANE_Z - PLATE_THICK - RING_SEG_THICK - (LEG_LEN if legs else 0.0)
+    return -bottom
+
+
 def nominal_placement(n, cable_len, elev_deg, attach_radius, attach_z, payload_z,
                       azimuths_deg=None):
     """The default world-aligned layout: payload at the origin with zero yaw, drone
@@ -200,13 +271,13 @@ def nominal_placement(n, cable_len, elev_deg, attach_radius, attach_z, payload_z
 
 
 def build(n, cable_len, elev_deg, attach_radius, attach_z, payload_z,
-          detachable=False, azimuths_deg=None):
+          detachable=False, azimuths_deg=None, legs=False):
     return build_world(n, nominal_placement(n, cable_len, elev_deg, attach_radius,
                                             attach_z, payload_z, azimuths_deg),
-                       detachable=detachable)
+                       detachable=detachable, legs=legs)
 
 
-def build_world(n, placement, detachable=False):
+def build_world(n, placement, detachable=False, legs=False):
     """Emit the world SDF for an explicit placement (see nominal_placement). Every
     tether is a rigid rod of exactly the spawn attach->drone distance, so a
     placement that keeps that distance constant keeps the planner's single
@@ -293,7 +364,7 @@ def build_world(n, placement, detachable=False):
       <!-- ===== DRONES (elevated, taut rigid cables) ===== -->
 {chr(10).join(includes)}
 
-      <!-- ===== PAYLOAD ===== -->
+      <!-- ===== PAYLOAD: 500 mm ring, 12 magnet plates every 30 deg on the top face, plate 0 on +x (m2a_ring_fixture.sdf) ===== -->
       <model name="payload">
         <pose>{_fmt(px)} {_fmt(py)} {_fmt(pz)} 0 0 {_fmt(pyaw)}</pose>
         <link name="body">
@@ -301,10 +372,7 @@ def build_world(n, placement, detachable=False):
           <inertial><mass>{PAYLOAD_MASS}</mass>
             <inertia><ixx>{_IXX:.3e}</ixx><ixy>0</ixy><ixz>0</ixz><iyy>{_IXX:.3e}</iyy><iyz>0</iyz><izz>{_IZZ:.3e}</izz></inertia>
           </inertial>
-          <collision name="collision"><geometry><cylinder><radius>{PAYLOAD_RADIUS}</radius><length>{PAYLOAD_THICKNESS}</length></cylinder></geometry></collision>
-          <visual name="visual"><geometry><cylinder><radius>{PAYLOAD_RADIUS}</radius><length>{PAYLOAD_THICKNESS}</length></cylinder></geometry>
-            <material><ambient>0.8 0.4 0.0 1</ambient><diffuse>0.8 0.4 0.0 1</diffuse></material>
-          </visual>
+{payload_geometry_block(legs)}
         </link>
         <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
           <publish_link_pose>true</publish_link_pose>
@@ -330,7 +398,9 @@ def main():
     ap.add_argument('--elev', type=float, default=45.0, help='cable elevation deg')
     ap.add_argument('--attach-radius', type=float, default=PAYLOAD_RADIUS)
     ap.add_argument('--attach-z', type=float, default=0.025)
-    ap.add_argument('--payload-z', type=float, default=0.025)
+    ap.add_argument('--payload-z', type=float, default=None,
+                    help='payload link z at spawn (default 0.025, the historical disc-centre height; '
+                         'the ring settles 1.5 cm onto the floor at t=0. With --legs: resting on the legs)')
     ap.add_argument('--azimuths', type=str, default='',
                     help="attach azimuths deg, e.g. '0,90,180' (3/12/9 o'clock); '' = even")
     ap.add_argument('--out', type=str, default='three_rigid.sdf')
@@ -339,8 +409,11 @@ def main():
                          '/drone_k/detach, so a drone flies away WITH its cable mid-flight '
                          '(payload left clean). Used by the dissipative detach controller.')
     ap.add_argument('--payload-mass', type=float, default=None,
-                    help='payload mass kg (default: the module PAYLOAD_MASS, 0.6); the annulus '
+                    help='payload mass kg (default: the module PAYLOAD_MASS, 0.86); the ring '
                          'inertia scales with it. Match the launch load_mass.')
+    ap.add_argument('--legs', action='store_true',
+                    help="add the fixture's 8 bench legs (bench picture only; the flying "
+                         'payload rests on its ring)')
     ap.add_argument('--ground-start', action='store_true',
                     help='place the drones ON THE FLOOR: overrides --elev so the '
                          'rod runs from the payload attach point out to a drone '
@@ -351,8 +424,9 @@ def main():
     if a.payload_mass is not None:
         global PAYLOAD_MASS, _IXX, _IZZ
         PAYLOAD_MASS = float(a.payload_mass)
-        _IXX = PAYLOAD_MASS * (3 * (PAYLOAD_RADIUS ** 2 + PAYLOAD_INNER_RADIUS ** 2) + PAYLOAD_THICKNESS ** 2) / 12.0
-        _IZZ = PAYLOAD_MASS * (PAYLOAD_RADIUS ** 2 + PAYLOAD_INNER_RADIUS ** 2) / 2.0
+        _IXX, _IZZ = _inertia(PAYLOAD_MASS)
+    if a.payload_z is None:
+        a.payload_z = payload_rest_z(True) if a.legs else 0.025
     elev = a.elev
     if a.ground_start:
         # drone_z = payload_z + attach_z + cable_len*sin(elev); solve for the
@@ -366,7 +440,7 @@ def main():
     if az and len(az) != a.n:
         ap.error(f'--azimuths has {len(az)} entries for --n {a.n}')
     sdf = build(a.n, a.cable_len, elev, a.attach_radius, a.attach_z, a.payload_z,
-                detachable=a.detachable, azimuths_deg=az)
+                detachable=a.detachable, azimuths_deg=az, legs=a.legs)
     with open(a.out, 'w') as f:
         f.write(sdf)
     print(f"wrote {a.out}: n={a.n} cable_len={a.cable_len} elev={a.elev}deg "

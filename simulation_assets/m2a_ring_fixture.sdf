@@ -1,0 +1,405 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="payload_model">
+    <static>true</static>
+    <link name="payload_link">
+      <!-- M2A static circular bench fixture. Ring attachment plane is local z=0. -->
+      <collision name="ring_segment_0_collision">
+        <pose>0.250000000000 0.000000000000 -0.020000000000 0 0 1.570796326795</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_0_visual">
+        <pose>0.250000000000 0.000000000000 -0.020000000000 0 0 1.570796326795</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_1_collision">
+        <pose>0.241481456572 0.064704761276 -0.020000000000 0 0 1.832595714594</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_1_visual">
+        <pose>0.241481456572 0.064704761276 -0.020000000000 0 0 1.832595714594</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_2_collision">
+        <pose>0.216506350946 0.125000000000 -0.020000000000 0 0 2.094395102393</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_2_visual">
+        <pose>0.216506350946 0.125000000000 -0.020000000000 0 0 2.094395102393</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_3_collision">
+        <pose>0.176776695297 0.176776695297 -0.020000000000 0 0 2.356194490192</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_3_visual">
+        <pose>0.176776695297 0.176776695297 -0.020000000000 0 0 2.356194490192</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_4_collision">
+        <pose>0.125000000000 0.216506350946 -0.020000000000 0 0 2.617993877991</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_4_visual">
+        <pose>0.125000000000 0.216506350946 -0.020000000000 0 0 2.617993877991</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_5_collision">
+        <pose>0.064704761276 0.241481456572 -0.020000000000 0 0 2.879793265791</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_5_visual">
+        <pose>0.064704761276 0.241481456572 -0.020000000000 0 0 2.879793265791</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_6_collision">
+        <pose>0.000000000000 0.250000000000 -0.020000000000 0 0 3.141592653590</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_6_visual">
+        <pose>0.000000000000 0.250000000000 -0.020000000000 0 0 3.141592653590</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_7_collision">
+        <pose>-0.064704761276 0.241481456572 -0.020000000000 0 0 3.403392041389</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_7_visual">
+        <pose>-0.064704761276 0.241481456572 -0.020000000000 0 0 3.403392041389</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_8_collision">
+        <pose>-0.125000000000 0.216506350946 -0.020000000000 0 0 3.665191429188</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_8_visual">
+        <pose>-0.125000000000 0.216506350946 -0.020000000000 0 0 3.665191429188</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_9_collision">
+        <pose>-0.176776695297 0.176776695297 -0.020000000000 0 0 3.926990816987</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_9_visual">
+        <pose>-0.176776695297 0.176776695297 -0.020000000000 0 0 3.926990816987</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_10_collision">
+        <pose>-0.216506350946 0.125000000000 -0.020000000000 0 0 4.188790204786</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_10_visual">
+        <pose>-0.216506350946 0.125000000000 -0.020000000000 0 0 4.188790204786</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_11_collision">
+        <pose>-0.241481456572 0.064704761276 -0.020000000000 0 0 4.450589592586</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_11_visual">
+        <pose>-0.241481456572 0.064704761276 -0.020000000000 0 0 4.450589592586</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_12_collision">
+        <pose>-0.250000000000 0.000000000000 -0.020000000000 0 0 4.712388980385</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_12_visual">
+        <pose>-0.250000000000 0.000000000000 -0.020000000000 0 0 4.712388980385</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_13_collision">
+        <pose>-0.241481456572 -0.064704761276 -0.020000000000 0 0 4.974188368184</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_13_visual">
+        <pose>-0.241481456572 -0.064704761276 -0.020000000000 0 0 4.974188368184</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_14_collision">
+        <pose>-0.216506350946 -0.125000000000 -0.020000000000 0 0 5.235987755983</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_14_visual">
+        <pose>-0.216506350946 -0.125000000000 -0.020000000000 0 0 5.235987755983</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_15_collision">
+        <pose>-0.176776695297 -0.176776695297 -0.020000000000 0 0 5.497787143782</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_15_visual">
+        <pose>-0.176776695297 -0.176776695297 -0.020000000000 0 0 5.497787143782</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_16_collision">
+        <pose>-0.125000000000 -0.216506350946 -0.020000000000 0 0 5.759586531581</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_16_visual">
+        <pose>-0.125000000000 -0.216506350946 -0.020000000000 0 0 5.759586531581</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_17_collision">
+        <pose>-0.064704761276 -0.241481456572 -0.020000000000 0 0 6.021385919380</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_17_visual">
+        <pose>-0.064704761276 -0.241481456572 -0.020000000000 0 0 6.021385919380</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_18_collision">
+        <pose>-0.000000000000 -0.250000000000 -0.020000000000 0 0 6.283185307180</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_18_visual">
+        <pose>-0.000000000000 -0.250000000000 -0.020000000000 0 0 6.283185307180</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_19_collision">
+        <pose>0.064704761276 -0.241481456572 -0.020000000000 0 0 6.544984694979</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_19_visual">
+        <pose>0.064704761276 -0.241481456572 -0.020000000000 0 0 6.544984694979</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_20_collision">
+        <pose>0.125000000000 -0.216506350946 -0.020000000000 0 0 6.806784082778</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_20_visual">
+        <pose>0.125000000000 -0.216506350946 -0.020000000000 0 0 6.806784082778</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_21_collision">
+        <pose>0.176776695297 -0.176776695297 -0.020000000000 0 0 7.068583470577</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_21_visual">
+        <pose>0.176776695297 -0.176776695297 -0.020000000000 0 0 7.068583470577</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_22_collision">
+        <pose>0.216506350946 -0.125000000000 -0.020000000000 0 0 7.330382858376</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_22_visual">
+        <pose>0.216506350946 -0.125000000000 -0.020000000000 0 0 7.330382858376</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ring_segment_23_collision">
+        <pose>0.241481456572 -0.064704761276 -0.020000000000 0 0 7.592182246175</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+      </collision>
+      <visual name="ring_segment_23_visual">
+        <pose>0.241481456572 -0.064704761276 -0.020000000000 0 0 7.592182246175</pose>
+        <geometry><box><size>0.068067840828 0.060000000000 0.030000000000</size></box></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="plate_0_collision">
+        <pose>0.250000000000 0.000000000000 -0.002500000000 0 0 0.000000000000</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+      </collision>
+      <visual name="plate_0_visual">
+        <pose>0.250000000000 0.000000000000 -0.002500000000 0 0 0.000000000000</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+        <material><ambient>0.90 0.25 0.10 1</ambient><diffuse>1.00 0.35 0.15 1</diffuse></material>
+      </visual>
+      <collision name="plate_1_collision">
+        <pose>0.216506350946 0.125000000000 -0.002500000000 0 0 0.523598775598</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+      </collision>
+      <visual name="plate_1_visual">
+        <pose>0.216506350946 0.125000000000 -0.002500000000 0 0 0.523598775598</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+        <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+      </visual>
+      <collision name="plate_2_collision">
+        <pose>0.125000000000 0.216506350946 -0.002500000000 0 0 1.047197551197</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+      </collision>
+      <visual name="plate_2_visual">
+        <pose>0.125000000000 0.216506350946 -0.002500000000 0 0 1.047197551197</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+        <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+      </visual>
+      <collision name="plate_3_collision">
+        <pose>0.000000000000 0.250000000000 -0.002500000000 0 0 1.570796326795</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+      </collision>
+      <visual name="plate_3_visual">
+        <pose>0.000000000000 0.250000000000 -0.002500000000 0 0 1.570796326795</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+        <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+      </visual>
+      <collision name="plate_4_collision">
+        <pose>-0.125000000000 0.216506350946 -0.002500000000 0 0 2.094395102393</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+      </collision>
+      <visual name="plate_4_visual">
+        <pose>-0.125000000000 0.216506350946 -0.002500000000 0 0 2.094395102393</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+        <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+      </visual>
+      <collision name="plate_5_collision">
+        <pose>-0.216506350946 0.125000000000 -0.002500000000 0 0 2.617993877991</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+      </collision>
+      <visual name="plate_5_visual">
+        <pose>-0.216506350946 0.125000000000 -0.002500000000 0 0 2.617993877991</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+        <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+      </visual>
+      <collision name="plate_6_collision">
+        <pose>-0.250000000000 0.000000000000 -0.002500000000 0 0 3.141592653590</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+      </collision>
+      <visual name="plate_6_visual">
+        <pose>-0.250000000000 0.000000000000 -0.002500000000 0 0 3.141592653590</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+        <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+      </visual>
+      <collision name="plate_7_collision">
+        <pose>-0.216506350946 -0.125000000000 -0.002500000000 0 0 3.665191429188</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+      </collision>
+      <visual name="plate_7_visual">
+        <pose>-0.216506350946 -0.125000000000 -0.002500000000 0 0 3.665191429188</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+        <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+      </visual>
+      <collision name="plate_8_collision">
+        <pose>-0.125000000000 -0.216506350946 -0.002500000000 0 0 4.188790204786</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+      </collision>
+      <visual name="plate_8_visual">
+        <pose>-0.125000000000 -0.216506350946 -0.002500000000 0 0 4.188790204786</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+        <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+      </visual>
+      <collision name="plate_9_collision">
+        <pose>-0.000000000000 -0.250000000000 -0.002500000000 0 0 4.712388980385</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+      </collision>
+      <visual name="plate_9_visual">
+        <pose>-0.000000000000 -0.250000000000 -0.002500000000 0 0 4.712388980385</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+        <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+      </visual>
+      <collision name="plate_10_collision">
+        <pose>0.125000000000 -0.216506350946 -0.002500000000 0 0 5.235987755983</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+      </collision>
+      <visual name="plate_10_visual">
+        <pose>0.125000000000 -0.216506350946 -0.002500000000 0 0 5.235987755983</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+        <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+      </visual>
+      <collision name="plate_11_collision">
+        <pose>0.216506350946 -0.125000000000 -0.002500000000 0 0 5.759586531581</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+      </collision>
+      <visual name="plate_11_visual">
+        <pose>0.216506350946 -0.125000000000 -0.002500000000 0 0 5.759586531581</pose>
+        <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+        <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+      </visual>
+      <collision name="ground_leg_0_collision">
+        <pose>0.200000000000 0.000000000000 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+      </collision>
+      <visual name="ground_leg_0_visual">
+        <pose>0.200000000000 0.000000000000 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ground_leg_1_collision">
+        <pose>0.141421356237 0.141421356237 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+      </collision>
+      <visual name="ground_leg_1_visual">
+        <pose>0.141421356237 0.141421356237 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ground_leg_2_collision">
+        <pose>0.000000000000 0.200000000000 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+      </collision>
+      <visual name="ground_leg_2_visual">
+        <pose>0.000000000000 0.200000000000 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ground_leg_3_collision">
+        <pose>-0.141421356237 0.141421356237 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+      </collision>
+      <visual name="ground_leg_3_visual">
+        <pose>-0.141421356237 0.141421356237 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ground_leg_4_collision">
+        <pose>-0.200000000000 0.000000000000 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+      </collision>
+      <visual name="ground_leg_4_visual">
+        <pose>-0.200000000000 0.000000000000 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ground_leg_5_collision">
+        <pose>-0.141421356237 -0.141421356237 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+      </collision>
+      <visual name="ground_leg_5_visual">
+        <pose>-0.141421356237 -0.141421356237 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ground_leg_6_collision">
+        <pose>-0.000000000000 -0.200000000000 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+      </collision>
+      <visual name="ground_leg_6_visual">
+        <pose>-0.000000000000 -0.200000000000 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+      <collision name="ground_leg_7_collision">
+        <pose>0.141421356237 -0.141421356237 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+      </collision>
+      <visual name="ground_leg_7_visual">
+        <pose>0.141421356237 -0.141421356237 -0.067500000000 0 0 0</pose>
+        <geometry><cylinder><radius>0.010</radius><length>0.065</length></cylinder></geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+</sdf>

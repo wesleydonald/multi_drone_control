@@ -6,7 +6,7 @@ ros2 topic hz /drone_0/motion_capture_state
 ros2 topic echo /drone_0/telemetry --once
 
 then control terminal: 
-rctl load_mass:=0.6 cable_len:=0.5 thrust_ratio:=24 lift_ramp_vel:=0.15 load_traj:=circle traj_speed:=0.4 traj_radius:=0.4 num_drones:=2
+rctl load_mass:=0.86 cable_len:=0.5 thrust_ratio:=24 lift_ramp_vel:=0.15 load_traj:=circle traj_speed:=0.4 traj_radius:=0.4 num_drones:=2
 
 mdc && tools/preflight.py --drones 3 --real --planner load_planner --max-ground-z 0.5
 
@@ -41,18 +41,11 @@ REAL-WORLD
 Rviz: rio drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 drone2_serial:=/dev/QUAD3
 
 A-real:
-   Recipe checked in sim 2026-09-16 (R0284/R0285, 1.0 kg disc, rods resting near flat): the launch DEFAULTS lift and
-   hover level -- start_taut true (no creep), lift_ramp_vel 0.15-0.22, thrust_ratio 24 on the rig. Expect the load to
-   settle ~5-6 cm LOW (0.537 for a 0.60 target in sim): that is the PLANNER's reference, drones sit on theirs exactly.
-   kT rule: in the tracker log compare pose_z with ref_z during the hover. Drones ON reference + load low = planner
-   offset, leave kT. Drones BELOW their reference = kT too low, raise thrust_ratio 5 %.
-   Do NOT use lift_ramp_vel:=0.0 from the floor (16:28: references walk sideways, drones bunch). First launch with a
-   new load_mass compiles the planner for 9-40 s: wait for the planner's "ready" line before ARM.
-rctl load_mass:=0.6 cable_len:=0.5 thrust_ratio:=24 lift_ramp_vel:=0.15 load_traj:=circle traj_speed:=0.4 traj_radius:=0.4
-
+rctl load_mass:=0.86 cable_len:=0.5 thrust_ratio:=24 lift_ramp_vel:=0.15 load_traj:=circle traj_speed:=0.4 measure_rod_len:=true
+tools/preflight.py --drones 3 --real --planner load_planner --max-ground-z 0.5
 
 B-real.
-rdiss load_mass:=0.6 cable_len:=0.5 thrust_ratio:=24 lift_ramp_vel:=0.15 auto_network_handover:=true control_mode:=velocity_after_handover vel_ki:=0 diss_ki_load:=1.0 load_traj:=circle traj_speed:=0.2 traj_radius:=0.4
+rdiss load_mass:=0.86 cable_len:=0.5 thrust_ratio:=24 lift_ramp_vel:=0.15 auto_network_handover:=true control_mode:=velocity_after_handover vel_ki:=0 diss_ki_load:=1.0 load_traj:=circle traj_speed:=0.2 traj_radius:=0.4
    
 Log shows the OCP lift, then "[dissipative] ... network" at the handover, then STAGE V on every tracker.
 Velocity-loop gains (vel_kp_pos 2, vel_kv 4, vel_k_att 8) are sim values, never measured on the airframe:

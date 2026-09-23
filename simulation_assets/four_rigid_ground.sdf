@@ -61,17 +61,136 @@
         <pose>-0.000000 -0.747494 0.100000 0 0 0.000000</pose>
       </include>
 
-      <!-- ===== PAYLOAD ===== -->
+      <!-- ===== PAYLOAD: 500 mm ring, 12 magnet plates every 30 deg on the top face, plate 0 on +x (m2a_ring_fixture.sdf) ===== -->
       <model name="payload">
         <pose>0.000000 0.000000 0.025000 0 0 0.000000</pose>
         <link name="body">
           <gravity>1</gravity>
-          <inertial><mass>0.6</mass>
-            <inertia><ixx>1.550e-02</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1.550e-02</iyy><iyz>0</iyz><izz>3.075e-02</izz></inertia>
+          <inertial><mass>0.86</mass>
+            <inertia><ixx>2.733e-02</ixx><ixy>0</ixy><ixz>0</ixz><iyy>2.733e-02</iyy><iyz>0</iyz><izz>5.452e-02</izz></inertia>
           </inertial>
-          <collision name="collision"><geometry><cylinder><radius>0.25</radius><length>0.05</length></cylinder></geometry></collision>
-          <visual name="visual"><geometry><cylinder><radius>0.25</radius><length>0.05</length></cylinder></geometry>
-            <material><ambient>0.8 0.4 0.0 1</ambient><diffuse>0.8 0.4 0.0 1</diffuse></material>
+          <collision name="collision"><pose>0 0 0.005000 0 0 0</pose>
+            <geometry><cylinder><radius>0.280</radius><length>0.030</length></cylinder></geometry>
+          </collision>
+          <visual name="ring_0_visual"><pose>0.250000 0.000000 0.005000 0 0 1.570796</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_1_visual"><pose>0.241481 0.064705 0.005000 0 0 1.832596</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_2_visual"><pose>0.216506 0.125000 0.005000 0 0 2.094395</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_3_visual"><pose>0.176777 0.176777 0.005000 0 0 2.356194</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_4_visual"><pose>0.125000 0.216506 0.005000 0 0 2.617994</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_5_visual"><pose>0.064705 0.241481 0.005000 0 0 2.879793</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_6_visual"><pose>0.000000 0.250000 0.005000 0 0 3.141593</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_7_visual"><pose>-0.064705 0.241481 0.005000 0 0 3.403392</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_8_visual"><pose>-0.125000 0.216506 0.005000 0 0 3.665191</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_9_visual"><pose>-0.176777 0.176777 0.005000 0 0 3.926991</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_10_visual"><pose>-0.216506 0.125000 0.005000 0 0 4.188790</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_11_visual"><pose>-0.241481 0.064705 0.005000 0 0 4.450590</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_12_visual"><pose>-0.250000 0.000000 0.005000 0 0 4.712389</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_13_visual"><pose>-0.241481 -0.064705 0.005000 0 0 4.974188</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_14_visual"><pose>-0.216506 -0.125000 0.005000 0 0 5.235988</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_15_visual"><pose>-0.176777 -0.176777 0.005000 0 0 5.497787</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_16_visual"><pose>-0.125000 -0.216506 0.005000 0 0 5.759587</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_17_visual"><pose>-0.064705 -0.241481 0.005000 0 0 6.021386</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_18_visual"><pose>-0.000000 -0.250000 0.005000 0 0 6.283185</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_19_visual"><pose>0.064705 -0.241481 0.005000 0 0 6.544985</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_20_visual"><pose>0.125000 -0.216506 0.005000 0 0 6.806784</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_21_visual"><pose>0.176777 -0.176777 0.005000 0 0 7.068583</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_22_visual"><pose>0.216506 -0.125000 0.005000 0 0 7.330383</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="ring_23_visual"><pose>0.241481 -0.064705 0.005000 0 0 7.592182</pose><geometry><box><size>0.068068 0.060 0.030</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>
+          <visual name="plate_0_visual"><pose>0.250000 0.000000 0.022500 0 0 0.000000</pose>
+            <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+            <material><ambient>0.90 0.25 0.10 1</ambient><diffuse>1.00 0.35 0.15 1</diffuse></material>
+          </visual>
+          <visual name="plate_1_visual"><pose>0.216506 0.125000 0.022500 0 0 0.523599</pose>
+            <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+            <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+          </visual>
+          <visual name="plate_2_visual"><pose>0.125000 0.216506 0.022500 0 0 1.047198</pose>
+            <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+            <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+          </visual>
+          <visual name="plate_3_visual"><pose>0.000000 0.250000 0.022500 0 0 1.570796</pose>
+            <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+            <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+          </visual>
+          <visual name="plate_4_visual"><pose>-0.125000 0.216506 0.022500 0 0 2.094395</pose>
+            <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+            <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+          </visual>
+          <visual name="plate_5_visual"><pose>-0.216506 0.125000 0.022500 0 0 2.617994</pose>
+            <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+            <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+          </visual>
+          <visual name="plate_6_visual"><pose>-0.250000 0.000000 0.022500 0 0 3.141593</pose>
+            <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+            <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+          </visual>
+          <visual name="plate_7_visual"><pose>-0.216506 -0.125000 0.022500 0 0 3.665191</pose>
+            <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+            <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+          </visual>
+          <visual name="plate_8_visual"><pose>-0.125000 -0.216506 0.022500 0 0 4.188790</pose>
+            <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+            <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+          </visual>
+          <visual name="plate_9_visual"><pose>-0.000000 -0.250000 0.022500 0 0 4.712389</pose>
+            <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+            <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+          </visual>
+          <visual name="plate_10_visual"><pose>0.125000 -0.216506 0.022500 0 0 5.235988</pose>
+            <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+            <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+          </visual>
+          <visual name="plate_11_visual"><pose>0.216506 -0.125000 0.022500 0 0 5.759587</pose>
+            <geometry><cylinder><radius>0.030</radius><length>0.005</length></cylinder></geometry>
+            <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
           </visual>
         </link>
         <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">

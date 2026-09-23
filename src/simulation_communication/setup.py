@@ -35,6 +35,8 @@ setup(
             # Placeholder Telemetry so the RViz battery rows populate in sim, and
             # the low-battery warning path can be exercised off-hardware (F7).
             'sim_telemetry = simulation_communication.sim_telemetry:main',
+            # /clock_gz -> /clock at a bounded rate (rclpy handles /clock in Python)
+            'clock_throttle = simulation_communication.clock_throttle:main',
         ],
     },
 )

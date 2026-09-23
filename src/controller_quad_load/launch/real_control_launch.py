@@ -71,7 +71,7 @@ def _args():
         DeclareLaunchArgument('attach_z', default_value='0.025'),
         # Physical payload mass (kg). LOAD_INERTIA in planner_node.py is a
         # hardcoded constant and does NOT scale with this.
-        DeclareLaunchArgument('load_mass', default_value='0.1'),
+        DeclareLaunchArgument('load_mass', default_value='0.86'),
         DeclareLaunchArgument('start_taut', default_value='true'),
         DeclareLaunchArgument('handover_elev_deg', default_value='0.0'),
         # Frozen hold after handover, before the lift ramp starts. Shorter = faster
@@ -123,6 +123,8 @@ def _args():
         # so you can place the drones ~cable_len out in ANY order (no need to line
         # drone 0 up with +x). Relabels I/O only -- no OCP recompile.
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
+        # measure each rod from mocap at handover instead of trusting cable_len (2026-09-23)
+        DeclareLaunchArgument('measure_rod_len', default_value='false'),
         # LOAD reference after the lift tops out: 'hover', 'line_x', 'circle',
         # 'fig_8', 'spin' (circle + one full load yaw). circle/fig_8/spin use
         # traj_radius; line_x uses traj_distance; all use traj_speed. Prove hover
@@ -191,6 +193,7 @@ def launch_setup(context, *args, **kwargs):
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
                      'auto_slot_assign': b('auto_slot_assign'),
+                     'measure_rod_len': b('measure_rod_len'),
                      'load_traj': LaunchConfiguration('load_traj'),
                      'traj_speed': f('traj_speed'),
                      'traj_distance': f('traj_distance'),

@@ -172,7 +172,31 @@ def main():
                     help='releasable cables (/drone_k/detach), as the dissipative '
                          'stack expects')
     ap.add_argument('--out', type=str, default='three_random.sdf')
+    ap.add_argument('--from-json', type=str, default=None,
+                    help='rebuild the world from an existing manifest (same placement, current '
+                         'payload model); --out defaults to the manifest name with .sdf')
     a = ap.parse_args()
+    if a.from_json:
+        with open(a.from_json) as f:
+            man = json.load(f)
+        pl = man['payload']
+        pyaw = math.radians(pl['yaw_deg'])
+        attaches, drones, yaws = [], [], []
+        for d in man['drones']:
+            th = math.radians(d['attach_azimuth_deg'])
+            attaches.append((pl['x'] + a.attach_radius * math.cos(th),
+                             pl['y'] + a.attach_radius * math.sin(th),
+                             pl['z'] + a.attach_z))
+            drones.append((d['x'], d['y'], d['z']))
+            yaws.append(math.radians(d['heading_deg']))
+        placement = {'payload': (pl['x'], pl['y'], pl['z'], pyaw), 'attaches': attaches,
+                     'drones': drones, 'drone_yaws': yaws}
+        sdf = build_world(man['n'], placement, detachable=man['detachable'])
+        out = a.out if a.out != 'three_random.sdf' else os.path.splitext(a.from_json)[0] + '.sdf'
+        with open(out, 'w') as f:
+            f.write(sdf)
+        print(f'rebuilt {out} from {a.from_json} (placement unchanged, payload model current)')
+        return
 
     if not a.ground_start and a.elev is None:
         a.elev = 45.0
