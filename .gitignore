@@ -44,3 +44,5 @@ CLAUDE.md
 docs/claude-setup-proposal/
 .mcp.json
 thesis/
+
+configs/
