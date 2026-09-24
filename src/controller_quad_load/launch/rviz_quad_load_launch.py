@@ -197,9 +197,9 @@ def generate_launch_description():
         DeclareLaunchArgument('rviz', default_value='true'),
         # CPU relief (2026-09-23): Gazebo's /clock arrives at ~700-1000 Hz and rclpy
         # handles it in Python in EVERY node; the emulators republish every Gazebo pose
-        # (300-500 Hz) into every tracker; fleet_viz redraws per message. 0 = unthrottled.
-        DeclareLaunchArgument('clock_hz', default_value='0'),
-        DeclareLaunchArgument('mocap_hz', default_value='0'),
-        DeclareLaunchArgument('viz_hz', default_value='0'),
+        # (300-500 Hz) into every tracker; fleet_viz redraws per message. Defaults (Wesley, 2026-09-23) measured on R0329 vs R0330: RTF 0.29 -> 0.45 in flight, hover unchanged. 0 = unthrottled.
+        DeclareLaunchArgument('clock_hz', default_value='100'),
+        DeclareLaunchArgument('mocap_hz', default_value='120'),
+        DeclareLaunchArgument('viz_hz', default_value='30'),
         OpaqueFunction(function=launch_setup),
     ])

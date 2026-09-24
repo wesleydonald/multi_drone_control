@@ -28,3 +28,13 @@ def test_disagreeing_rods_keep_the_typed_value():
 
 def test_no_drones():
     assert measured_rod_lengths(0.50, [])[0] is None
+
+
+def test_static_cable_share_normalises_to_the_weight():
+    from controller_load_mpc.planner_node import static_cable_z
+    # planner planning a descent: planned pull 10 % below the weight, uneven split
+    planned = [-4.0, -4.2, -4.4]
+    out = static_cable_z(planned, load_mass=0.86, drone_mass=0.6)
+    assert abs(sum(out) - (-0.86 * 9.81 / 0.6)) < 1e-9          # sums to the weight
+    assert abs(out[2] / out[0] - 4.4 / 4.0) < 1e-9               # distribution kept
+    assert static_cable_z([-0.1, -0.1, -0.1], 0.86, 0.6) is None  # slack / grounded

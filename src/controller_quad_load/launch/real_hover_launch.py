@@ -35,6 +35,10 @@ def _args():
         # tracker args, identical to real_control_launch.py
         DeclareLaunchArgument('takeoff_spool_s', default_value='0.5'),
         DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
+        # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
+        DeclareLaunchArgument('kt_trim', default_value='false'),
+        DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
+        DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
         DeclareLaunchArgument('takeoff_thrust_ratio', default_value='0.0'),
         DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
         DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),
@@ -72,6 +76,9 @@ def launch_setup(context, *args, **kwargs):
                          'pose_timeout_s': f('pose_timeout_s'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': f('thrust_ratio'),
+                         'kt_trim': ParameterValue(LaunchConfiguration('kt_trim'), value_type=bool),
+                         'kt_trim_max': ParameterValue(LaunchConfiguration('kt_trim_max'), value_type=float),
+                         'kt_trim_tau': ParameterValue(LaunchConfiguration('kt_trim_tau'), value_type=float),
                          'takeoff_thrust_ratio': f('takeoff_thrust_ratio'),
                          'kt_batt_sag_frac': f('kt_batt_sag_frac'),
                          'kt_batt_v_full': f('kt_batt_v_full'),

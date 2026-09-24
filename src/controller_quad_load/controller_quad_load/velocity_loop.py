@@ -28,20 +28,6 @@ The loop, per drone per tick:
 `a_ff` is the planner's required SPECIFIC THRUST acceleration and already contains
 gravity and cable tension, so the feedback terms are corrections on top of it and hover
 needs no separate gravity term.
-
-MEASURED-FORCE THRUST (indi_gain > 0, docs/experimentation/control_methods_survey.md R1):
-the throttle magnitude becomes INCREMENTAL on the IMU. With b the body thrust axis,
-
-    xdd_des  = a_sp - g*z + a_cable            (what the loop wants the drone to DO)
-    xdd_meas = R f_imu - g*z                   (what it is doing; f_imu = thrust+cable)
-    T_next   = T_applied_filtered + clip((xdd_des - xdd_meas) . b, +-indi_a_max)
-    throttle = throttle_nominal + indi_gain * (T_next / kT - throttle_nominal)
-
-so a wrong kT, a wrong load mass or a wrong cable model shows up as a transient the
-increment removes, not as a steady position offset -- the mechanism Sun et al.'s INDI
-low level and the tension-to-thrust feed-forward of arXiv 2605.05339 rely on. The
-applied throttle and the IMU pass through the SAME first-order filter (indi_tau); that
-synchronisation is what keeps the increment from fighting actuator lag.
 """
 import math
 
@@ -186,30 +172,14 @@ class VelocityLoop:
                  v_max=2.0, a_i_max=2.0, w_max_deg=300.0, yaw_k=2.0,
                  tilt_max_deg=30.0,
                  centre_rate_deg=CENTRE_RATE_DEG, max_rate_deg=MAX_RATE_DEG,
-                 rate_expo=RATE_EXPO,
-                 indi_gain=0.0, indi_tau=0.05, indi_a_max=3.0, indi_slope_ratio=1.0,
-                 indi_thr_min=0.2, swing_k=0.0):
+                 rate_expo=RATE_EXPO, swing_k=0.0):
         # ANTI-SWING (the "anti-swing" stage of the tension-to-thrust cascade, arXiv
         # 2605.05339; a crane operator's rule): move the pivot WITH the load's lateral
         # velocity error, v_sp += swing_k * (v_load - v_ref)_xy. A compliant tracker did
         # this by accident -- the rod dragged the drone along -- and a measured-force
-        # tracker undoes it by rejecting the rod force, which is why the load's swing
-        # stopped being damped once INDI was on (Gazebo R0244/R0246, SIL R0240/R0241).
+        # tracker undoes it by rejecting the rod force (Gazebo R0244/R0246, SIL R0240/R0241;
+        # the measured-force throttle was removed 2026-09-23).
         self.swing_k = float(swing_k)
-        # floor on the INDI-modified throttle. The increment will cut thrust to whatever
-        # makes the measured acceleration match the command -- on a newcomer whose rigid
-        # rod momentarily PUSHES, that is ~zero, and a quadrotor at zero throttle has no
-        # rate authority (Gazebo R0242: drone 3 to the 0.05 clip, flipped 2 s later).
-        # Hover is ~0.39 here; 0.2 keeps half the attitude authority in the worst case.
-        self.indi_thr_min = float(indi_thr_min)
-        self.indi_gain = float(np.clip(indi_gain, 0.0, 1.0))
-        self.indi_tau = float(indi_tau)
-        self.indi_a_max = float(indi_a_max)
-        # control effectiveness da/du divided by kT. The increment must use the LOCAL
-        # slope of the thrust curve, not the secant the nominal throttle uses: for the
-        # sim's a = c*u^2 the tangent is exactly 2x the secant at any operating point, so
-        # a ratio of 1 doubles the increment loop gain (SIL R0241). 1.0 = linear curve.
-        self.indi_slope_ratio = max(float(indi_slope_ratio), 0.1)
         self.kp_pos = float(kp_pos)
         self.kv = float(kv)
         self.ki = float(ki)
@@ -227,16 +197,12 @@ class VelocityLoop:
         the drone sat on its stand is a lurch the moment thrust is applied."""
         self.integral = np.zeros(3)
         self.last = {}
-        # measured-force path: filtered applied thrust (specific, m/s^2) and filtered
-        # measured acceleration; None until the first tick with an IMU sample.
-        self._T_filt = None
-        self._xdd_filt = None
-        self._u_applied = None
+
 
     # ── the loop ─────────────────────────────────────────────────────────────
 
     def step(self, p, v, q, p_ref, v_ref, a_ff, dt, thrust_ratio,
-             heading=0.0, integrate=True, f_imu=None, a_cable=None, v_load=None):
+             heading=0.0, integrate=True, v_load=None):
         """One control tick. Returns (roll, pitch, throttle, yaw) with sticks in
         [-1, 1] and throttle in [0, 1].
 
@@ -244,11 +210,8 @@ class VelocityLoop:
         the ground, or landing, where the position error is not the loop's to correct
         and winding up on it produces a kick at the next takeoff.
 
-        `f_imu` is the body-frame specific force from the IMU (thrust + cable, no
-        gravity) and `a_cable` the modelled world-frame cable acceleration the reference
-        was built with (zeros if absent). Both are only used when indi_gain > 0; with
-        indi_gain == 0 the output is exactly the classic loop's. `v_load` is the measured
-        load velocity (world) for the anti-swing term, used only when swing_k > 0.
+        `v_load` is the measured load velocity (world) for the anti-swing term, used
+        only when swing_k > 0.
         """
         p = np.asarray(p, float)
         v = np.asarray(v, float)
@@ -279,11 +242,6 @@ class VelocityLoop:
         a_sp = limit_tilt(a_ff + self.kv * e_v + self.ki * self.integral,
                           self.tilt_max_deg)
         throttle, q_sp = tilt_quat_from_accel(a_sp, thrust_ratio, heading)
-        indi = {}
-        if self.indi_gain > 0.0 and f_imu is not None:
-            throttle, indi = self._indi_throttle(throttle, a_sp, q, f_imu, a_cable,
-                                                 float(dt), float(thrust_ratio))
-        self._u_applied = throttle
 
         # Attitude -> body rates. Roll/pitch come from the tilt error; yaw is driven
         # separately toward the held heading so a yaw disagreement never steals
@@ -300,29 +258,6 @@ class VelocityLoop:
 
         self.last = {'v_sp': v_sp, 'e_v': e_v, 'a_sp': a_sp, 'q_sp': q_sp,
                      'e_att': e_att, 'w_cmd_deg': w_cmd,
-                     'integral_accel': self.ki * self.integral, **indi}
+                     'integral_accel': self.ki * self.integral}
         return float(roll), float(pitch), float(throttle), float(yaw)
 
-    def _indi_throttle(self, throttle_nom, a_sp, q, f_imu, a_cable, dt, thrust_ratio):
-        """Incremental thrust magnitude from the measured acceleration (module doc)."""
-        R = _quat_to_rot(np.asarray(q, float))
-        b = R[:, 2]                                       # body thrust axis, world
-        g = np.array([0.0, 0.0, 9.81])
-        xdd_des = np.asarray(a_sp, float) - g + (np.zeros(3) if a_cable is None
-                                                 else np.asarray(a_cable, float))
-        xdd_meas = R @ np.asarray(f_imu, float) - g
-        alpha = dt / (self.indi_tau + dt) if self.indi_tau > 0.0 else 1.0
-        T_applied = thrust_ratio * (self._u_applied if self._u_applied is not None
-                                    else throttle_nom)
-        if self._T_filt is None:
-            self._T_filt, self._xdd_filt = T_applied, xdd_meas.copy()
-        else:
-            self._T_filt += alpha * (T_applied - self._T_filt)
-            self._xdd_filt += alpha * (xdd_meas - self._xdd_filt)
-        inc = float(np.clip(np.dot(xdd_des - self._xdd_filt, b),
-                            -self.indi_a_max, self.indi_a_max))
-        u_indi = self._T_filt / thrust_ratio + inc / (thrust_ratio * self.indi_slope_ratio)
-        u = throttle_nom + self.indi_gain * (u_indi - throttle_nom)
-        u = float(np.clip(u, self.indi_thr_min, 0.6))
-        return u, {'indi_inc': inc, 'indi_T_filt': float(self._T_filt),
-                   'indi_u_nom': float(throttle_nom)}

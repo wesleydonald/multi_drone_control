@@ -93,6 +93,10 @@ def _args():
         # pops the drones off their stands. Battery derate is OFF (0.0).
         # See mpc_quad_load_launch.py for the full explanation of all four.
         DeclareLaunchArgument('thrust_ratio', default_value='auto'),
+        # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
+        DeclareLaunchArgument('kt_trim', default_value='false'),
+        DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
+        DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
         # Mocap watchdog budget, WALL seconds (controller_mpc._setup_safety). Gazebo
         # runs at ~0.3x realtime, so the hardware 0.25 s is under four mocap periods
         # here and scheduling jitter disarms a healthy drone ~1 s after ARM.
@@ -110,7 +114,7 @@ def _args():
         DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
         # measure each rod from mocap at handover instead of trusting cable_len (2026-09-23)
-        DeclareLaunchArgument('measure_rod_len', default_value='false'),
+        DeclareLaunchArgument('measure_rod_len', default_value='true'),
         # Experiment T1 (finding F10): terminal cost tracks ref_vel instead
         # of commanding a stop at the end of the horizon. Default false =
         # historical behaviour, so this only changes a run you asked it to.
@@ -126,11 +130,8 @@ def _args():
         DeclareLaunchArgument('vel_ki', default_value='0.0'),
         DeclareLaunchArgument('vel_k_att', default_value='8.0'),
         # measured-force (INDI) throttle in velocity mode: 0 = off (classic loop)
-        DeclareLaunchArgument('vel_indi_gain', default_value='0.0'),
-        DeclareLaunchArgument('vel_indi_tau', default_value='0.05'),
         # SIM: Gazebo's thrust is quadratic in throttle, so the local slope is 2x the
         # secant kT the launch derives; hardware launches keep 1.0 until measured.
-        DeclareLaunchArgument('vel_indi_slope_ratio', default_value='2.0'),
         # anti-swing: drones move with the load's lateral velocity error (0 = off)
         DeclareLaunchArgument('vel_swing_k', default_value='0.0'),
         DeclareLaunchArgument('load_traj', default_value='hover'),
@@ -305,9 +306,6 @@ def launch_setup(context, *args, **kwargs):
                          'vel_kv': f('vel_kv'),
                          'vel_ki': f('vel_ki'),
                          'vel_k_att': f('vel_k_att'),
-                         'vel_indi_gain': f('vel_indi_gain'),
-                         'vel_indi_tau': f('vel_indi_tau'),
-                         'vel_indi_slope_ratio': f('vel_indi_slope_ratio'),
                          'vel_swing_k': f('vel_swing_k'),
                          'cable_ff_scale': f('cable_ff_scale'),
                          'attitude_ff': b('attitude_ff'),
@@ -315,6 +313,9 @@ def launch_setup(context, *args, **kwargs):
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': kt,
+                         'kt_trim': ParameterValue(LaunchConfiguration('kt_trim'), value_type=bool),
+                         'kt_trim_max': ParameterValue(LaunchConfiguration('kt_trim_max'), value_type=float),
+                         'kt_trim_tau': ParameterValue(LaunchConfiguration('kt_trim_tau'), value_type=float),
                          'takeoff_thrust_ratio': kt_to,
                          'kt_batt_sag_frac': f('kt_batt_sag_frac'),
                          'kt_batt_v_full': f('kt_batt_v_full'),
@@ -481,9 +482,6 @@ def launch_setup(context, *args, **kwargs):
                      'vel_kv': f('vel_kv'),
                      'vel_ki': f('vel_ki'),
                      'vel_k_att': f('vel_k_att'),
-                         'vel_indi_gain': f('vel_indi_gain'),
-                         'vel_indi_tau': f('vel_indi_tau'),
-                         'vel_indi_slope_ratio': f('vel_indi_slope_ratio'),
                          'vel_swing_k': f('vel_swing_k'),
                      'cable_ff_scale': f('cable_ff_scale'),
                      'attitude_ff': b('attitude_ff'),
@@ -491,6 +489,9 @@ def launch_setup(context, *args, **kwargs):
                      'payload_rest_z': f('payload_rest_z'),
                      'takeoff_spool_s': 0.0,
                      'thrust_ratio': kt,
+                     'kt_trim': ParameterValue(LaunchConfiguration('kt_trim'), value_type=bool),
+                     'kt_trim_max': ParameterValue(LaunchConfiguration('kt_trim_max'), value_type=float),
+                     'kt_trim_tau': ParameterValue(LaunchConfiguration('kt_trim_tau'), value_type=float),
                      'takeoff_thrust_ratio': kt_to,
                      'kt_batt_sag_frac': f('kt_batt_sag_frac'),
                      'kt_batt_v_full': f('kt_batt_v_full'),

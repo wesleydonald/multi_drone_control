@@ -38,6 +38,7 @@ from . import acados as _acados_mod
 from .acados import (generate_ocp_controller, set_initial_guess,
                      warm_start_from_previous_solution, set_planner_reference)
 from .velocity_loop import VelocityLoop
+from .kt_trim import KtTrim
 N_POSE = 13
 
 
@@ -69,7 +70,7 @@ from utility_objects.data_logger import DataLogger, node_params, write_params
 from utility_objects.safety import EnvelopeChecker, EnvelopeLimits
 from utility_objects.callback_manager_multi import CallbackManagerMulti
 from interfaces.msg import MotionCaptureState, ELRSCommand, Telemetry
-from std_msgs.msg import Int32, Float64MultiArray, String
+from std_msgs.msg import Int32, Float64, Float64MultiArray, String
 from sensor_msgs.msg import Imu
 
 
@@ -310,6 +311,38 @@ class Controller(Node):
         # Seconds between the one-line kT reports. 0 = silent.
         self.declare_parameter("kt_print_period_s", 1.0)
         self.kt_print_period_s = float(self.get_parameter("kt_print_period_s").value)
+        # Per-drone thrust-gain trim (kt_trim.py): the gain that makes the throttle being
+        # flown hold the force being held, filtered and bounded. Off = the typed kT only.
+        self.declare_parameter("kt_trim", False)
+        self.declare_parameter("kt_trim_max", 0.25)
+        self.declare_parameter("kt_trim_tau", 1.5)
+        # The estimate always runs (shadow mode: logged as kt_hat, printed when the drone
+        # leaves tethered flight); it is fed back to the model only with kt_trim true, and
+        # never with the measured cable source (there a_cable already contains kt_hat and
+        # every value is a fixed point).
+        self._kt_trim = KtTrim(self.thrust_ratio,
+                               max_frac=float(self.get_parameter("kt_trim_max").value),
+                               tau_s=float(self.get_parameter("kt_trim_tau").value), dt=DT)
+        self._kt_trim_apply = bool(self.get_parameter("kt_trim").value)
+        if self._kt_trim_apply and self.cable_source != "model":
+            self.get_logger().error(
+                f"[Drone {self.drone_id}] kt_trim needs cable_source=model (got "
+                f"{self.cable_source!r}): estimate logged only, NOT applied")
+            self._kt_trim_apply = False
+        self._applied_cable_z0 = 0.0
+        self._kt_tethered = False
+        # the planner's STATIC vertical cable share for this drone (kt_trim's cable term;
+        # the planned feedforward carries climb/descend intent and biased the estimate)
+        self._cable_static_z = None
+        self._cable_static_t = None
+        self._kt_landing = False          # latched on the LAND descent until the next ARM
+        self._kt_desc_ticks = 0
+        self.create_subscription(Float64, f'/drone_{self.drone_id}/cable_static_z',
+                                 self._cable_static_cb, 1)
+        if self._kt_trim_apply:
+            self.get_logger().info(
+                f"[Drone {self.drone_id}] kt_trim ON: typed {self.thrust_ratio:.2f}, bound "
+                f"[{self._kt_trim.lo:.2f}, {self._kt_trim.hi:.2f}], tau {self._kt_trim.tau:.0f} s")
         self.get_logger().info(
             f"[Drone {self.drone_id}] kT FIXED at {self.thrust_ratio:.2f} "
             f"(takeoff {self.takeoff_thrust_ratio:.2f}); battery derate "
@@ -381,15 +414,10 @@ class Controller(Node):
             for name, default in (('vel_kp_pos', 2.0), ('vel_kv', 4.0),
                                   ('vel_ki', 1.0), ('vel_k_att', 8.0),
                                   ('vel_v_max', 2.0), ('vel_a_i_max', 2.0),
-                                  # measured-force thrust (velocity_loop.py module doc)
-                                  ('vel_indi_gain', 0.0), ('vel_indi_tau', 0.05),
-                                  ('vel_indi_a_max', 3.0), ('vel_indi_slope_ratio', 1.0),
-                                  ('vel_indi_thr_min', 0.2), ('vel_swing_k', 0.0)):
+                                  ('vel_swing_k', 0.0)):
                 self.declare_parameter(name, default)
             gains = {n: float(self.get_parameter(f'vel_{n}').value) for n in
-                     ('kp_pos', 'kv', 'ki', 'k_att', 'v_max', 'a_i_max',
-                      'indi_gain', 'indi_tau', 'indi_a_max', 'indi_slope_ratio',
-                      'indi_thr_min', 'swing_k')}
+                     ('kp_pos', 'kv', 'ki', 'k_att', 'v_max', 'a_i_max', 'swing_k')}
             self.velocity_loop = VelocityLoop(**gains)
             self.get_logger().warn(
                 f"[Drone {self.drone_id}] STAGE V: control_mode={self.control_mode} "
@@ -445,6 +473,7 @@ class Controller(Node):
             # (cause still unknown, R0276-R0279 refuted the hemisphere theory) could
             # not be diagnosed without.
             'wx', 'wy', 'wz', 'qref_w', 'qref_x', 'qref_y', 'qref_z', 'solve_status',
+            'kt_hat',
         ]
         # drone 0 also logs the payload actual + desired so plot_run.py can
         # overlay the load track alongside the drones.
@@ -605,6 +634,11 @@ class Controller(Node):
         if self.armed and not self._was_armed:
             self.envelope.reset()
             self._aborted = False
+            self._kt_trim.reset()
+            self._kt_tethered = False
+            self._kt_landing = False
+            self._kt_desc_ticks = 0
+            self._kt_z_max = -1e9
             self.get_logger().info(
                 f"[Drone {self.drone_id}] envelope armed and reset.")
         self._was_armed = self.armed
@@ -751,15 +785,10 @@ class Controller(Node):
         # cannot move toward it and the integrator would wind up against the platform,
         # then dump that trim in as a lurch the moment thrust is applied.
         integrate = bool(self.takeoff_requested and not self.payload_resting)
-        # the reference's own cable model (a_ff = g + a_des - a_cable) and the raw IMU
-        # for the measured-force throttle; both ignored when vel_indi_gain is 0.
-        a_cable0 = (np.asarray(self.planner_ref_cable[0], float)
-                    if self.planner_ref_cable is not None else None)
         u = self.velocity_loop.step(
             p, v, q, p_ref, v_ref, a_ff, 1.0 / FREQUENCY_HZ,
             self._effective_kT(), heading=self._heading_datum,
             integrate=integrate,
-            f_imu=(self.imu_raw if integrate else None), a_cable=a_cable0,
             v_load=(self.payload_vel if integrate else None))
         self._current_ref_pos = p_ref
         self._applied_cable0 = 0.0      # no cable model in this path
@@ -820,6 +849,8 @@ class Controller(Node):
         with the flight controller in the loop. Fixing it belongs in the simulator's
         command -> motor mapping, not here.
         """
+        if self._kt_trim_apply and self._kt_spool_done():
+            return self._kt_trim.kt_hat      # the trim already carries any sag
         base = (self.thrust_ratio if self._kt_airborne()
                 else self.takeoff_thrust_ratio)
         return base * self._battery_derate()
@@ -832,6 +863,74 @@ class Controller(Node):
         if self.current_pose is None or self._kt_spawn_z is None:
             return False
         return float(self.current_pose[2]) >= self._kt_spawn_z + AIRBORNE_MARGIN
+
+    def _cable_static_cb(self, msg):
+        self._cable_static_z = float(msg.data)
+        self._cable_static_t = time.monotonic()
+
+    def _kt_spool_done(self):
+        """True once the takeoff spool has run its course (the applied throttle is the
+        commanded one). The trim is applied from here, not from the 4 cm airborne
+        margin: a drone sagging under a wrong gain may never clear that margin."""
+        if not self.takeoff_requested or self._takeoff_step is None:
+            return False
+        return self._takeoff_step >= max(1.0, self.takeoff_spool_s * FREQUENCY_HZ)
+
+    def _update_kt_trim(self):
+        """Feed the gain estimate (kt_trim.py). Updates only in steady tethered flight:
+        armed, spool complete, payload not resting (the rig's on-the-floor case), the
+        cable model actually pulling (a free-flying newcomer or a detached drone would
+        learn the free-flight gain and arrive at a weld 15 % low), throttle in a sane
+        band, no vertical transient. Leaving tethered flight resets the estimate to the
+        typed gain and prints the last tethered value with the pack voltage."""
+        t = self._kt_trim
+        if self.current_pose is None:
+            return
+        t.measure_accel(float(self.current_pose[9]))
+        static_fresh = (self._cable_static_t is not None
+                        and time.monotonic() - self._cable_static_t < 2.0)
+        tethered = (static_fresh and abs(self._cable_static_z) > 0.5
+                    and abs(self._applied_cable_z0) > 0.5 and not self.payload_resting)
+        if self._kt_tethered and not tethered:
+            if t.n_updates > 0:
+                v = self.battery_voltage
+                self.get_logger().info(
+                    f"[kT d{self.drone_id}] measured in tethered flight: {t.kt_hat:.2f} "
+                    f"(typed {self.thrust_ratio:.2f}, {t.kt_hat / self.thrust_ratio - 1:+.1%}, "
+                    f"pack {'--' if v is None else f'{float(v):.1f} V'}); reset to typed")
+            t.reset()
+        self._kt_tethered = tethered
+        u = float(self._applied_u[2]) if self._applied_u is not None else 0.0
+        q = self.current_pose[3:7]                       # w, x, y, z
+        r33 = 1.0 - 2.0 * (float(q[1]) ** 2 + float(q[2]) ** 2)
+        # hover only: a lift ramp or the LAND descent is a constant-velocity move where
+        # the 0.3 s acceleration filter lags the throttle, and the descent would pollute
+        # the value reported at touchdown
+        vz = float(self.current_pose[9])
+        # the tracker is not told about LAND; a sustained descent while airborne is the
+        # landing, and the estimate freezes there so touchdown cannot pollute it
+        z = float(self.current_pose[2])
+        if steady_prev := (t.n_updates > 0 and not self._kt_landing):
+            self._kt_z_max = max(getattr(self, '_kt_z_max', z), z)
+        # 5 cm below the hover peak and still going down: the descent from a 0.98 m hover
+        # to a 0.83 m stand lasts under a second, so no dwell (a 0.5 s dwell never fired)
+        descending = (t.n_updates > 0 and z < getattr(self, '_kt_z_max', z) - 0.05 and vz < -0.02)
+        self._kt_desc_ticks = self._kt_desc_ticks + 1 if descending else 0
+        if self._kt_desc_ticks >= 3 and not self._kt_landing:
+            self._kt_landing = True
+            if t.n_updates > 0:
+                v = self.battery_voltage
+                self.get_logger().info(
+                    f"[kT d{self.drone_id}] measured in hover: {t.kt_hat:.2f} (typed "
+                    f"{self.thrust_ratio:.2f}, {t.kt_hat / self.thrust_ratio - 1:+.1%}, pack "
+                    f"{'--' if v is None else f'{float(v):.1f} V'}); frozen for the landing")
+        # No "clear of the stand" gate: a drone sagging under a too-high typed gain never
+        # rises 1 cm off its stand until the estimate engages (R0445-R0448: the kT arms
+        # deadlocked at the typed value). The floor case on the rig is the payload_resting
+        # gate; a partly supported drone on the SIL stand only slows the lift (R0433).
+        steady = (self.armed and self._kt_spool_done() and tethered and not self._kt_landing
+                  and 0.15 <= u <= 0.6 and abs(t.a_meas_z) < 1.5 and abs(vz) < 0.08)
+        t.update(self._cable_static_z if tethered else 0.0, u, r33, steady)
 
     def report_thrust_ratio(self):
         """~1 Hz one-liner so the flown kT can be eyeballed against the throttle."""
@@ -850,7 +949,9 @@ class Controller(Node):
             f"[kT d{self.drone_id}] flying {float(self.est_params[0]):6.2f} "
             f"[{'airborne' if self._kt_airborne() else ' takeoff'}] | "
             f"fixed={self.thrust_ratio:5.2f} takeoff={self.takeoff_thrust_ratio:5.2f}"
-            f" | batt {batt} x{self._battery_derate():.3f} | thr={thr:.3f}")
+            f" | batt {batt} x{self._battery_derate():.3f} | thr={thr:.3f}"
+            + f" | kt_hat={self._kt_trim.kt_hat:.2f}{' RAILED' if self._kt_trim.railed else ''}"
+              f"{' applied' if self._kt_trim_apply else ' shadow'}")
 
     def _measured_heading(self):
         """Current yaw (rad, world frame) from the mocap quaternion. This is the
@@ -937,6 +1038,7 @@ class Controller(Node):
             # Assumed thrust gain for this cycle: the configured thrust_ratio, or
             # takeoff_thrust_ratio while still on the stand, times the battery
             # derate. Constant for the whole flight unless the derate is enabled.
+            self._update_kt_trim()
             self.est_params[0] = self._effective_kT()
 
             # ── Set MPC reference (external planner) ──────────────────────
@@ -1006,6 +1108,7 @@ class Controller(Node):
             # reflects the applied value under either cable_source.
             self._applied_cable0 = (float(np.linalg.norm(ref_cable[0]))
                                     if ref_cable is not None else 0.0)
+            self._applied_cable_z0 = float(ref_cable[0][2]) if ref_cable is not None else 0.0
             self._last_qref0 = set_planner_reference(
                 self.ocp, self.planner_ref_pos, self.planner_ref_vel,
                 ref_acc, self.N, self.est_params,
@@ -1178,6 +1281,7 @@ class Controller(Node):
                 *([float(v) for v in self._last_qref0] if self._last_qref0 is not None
                   else [np.nan] * 4),
                 float(self._last_solve_status if self._last_solve_status is not None else np.nan),
+                float(self._kt_trim.kt_hat),
             ]
             if self._log_payload:
                 pa = (self.payload_pos if self.payload_pos is not None

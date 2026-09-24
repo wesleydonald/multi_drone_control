@@ -19,10 +19,15 @@ class ClockThrottle(Node):
         self.rate_hz = float(self.declare_parameter('rate_hz', 100.0).value)
         self._period = 1.0 / max(self.rate_hz, 1e-3)
         self._last = None
-        qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT,
-                         history=HistoryPolicy.KEEP_LAST)
-        self._pub = self.create_publisher(Clock, '/clock', qos)
-        self.create_subscription(Clock, '/clock_gz', self._cb, qos)
+        # Publish RELIABLE like the ros_gz clock bridge does: a reliable subscriber (the
+        # experiment runner, C++ nodes) never matches a best-effort publisher and would
+        # see no sim time at all. Subscribe best-effort (compatible with the bridge).
+        pub_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                             history=HistoryPolicy.KEEP_LAST)
+        sub_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT,
+                             history=HistoryPolicy.KEEP_LAST)
+        self._pub = self.create_publisher(Clock, '/clock', pub_qos)
+        self.create_subscription(Clock, '/clock_gz', self._cb, sub_qos)
         self.get_logger().info(f'clock_throttle: /clock_gz -> /clock at {self.rate_hz:.0f} Hz')
 
     def _cb(self, msg):

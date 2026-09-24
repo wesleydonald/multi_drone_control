@@ -398,6 +398,55 @@ Attach, new drone does not need to take any weight initially and can reoganise a
 
 
 
+Where the gap to TU Delft comes from, in order of size:
+
+  1. What sits under the OCP. Their quadrotors run an onboard INDI controller at high rate with direct motor commands, and it compensates the cable force from the IMU every
+     millisecond. Any error in thrust model, mass or cable tension is removed at the drone. Ours is a 50 Hz Python tracker with no integrator, a fixed throttle-to-thrust gain,
+     sending attitude and throttle over a radio link into Betaflight's angle mode. Every force error becomes a steady position error, and the load hangs low or the drones sit
+     above their references. That is exactly what the rig did today and what the SIL matrix reproduced: the planner's own diagnostic shows it planning the load at the target
+     every cycle while the load sits 9 cm low. 
+  2. How the planned force reaches the drones. The OCP's tensions go out as an open-loop feedforward, scaled by the tautness gate and soft-start, then slew-limited in the
+     tracker. TU Delft never trusts a planned tension. They measure the cable force through the IMU and close on it. Our extra measurement, the payload pose, only enters the
+     planner. The tracker never sees it.
+  3. The actuation path itself. Betaflight angle mode has its own attitude loop we do not control, the stick-to-angle and throttle-to-thrust maps are approximations, the link
+     adds tens of milliseconds, and the sim plant is a secant fit of the motor model. Their platform has none of these layers between the OCP and the motors.
+  4. A planner-side offset we have not closed. Even in SIL with an exact plant and exact kT, the hover sits 3 cm high, and in Gazebo 5 to 9 cm low depending on mass. That is
+     inside the OCP formulation: the tension regulariser pulls toward a nominal tension at a nominal 45 degree geometry, and the real formation is not at that geometry. TU
+     Delft reports no such offset because their tracker would absorb it anyway.
+ 
+  What does not explain it: the OCP formulation itself is close to theirs, the 10 Hz solve rate is the same, and the payload measurement is better than what they had.
+
+  The consequence for the thesis story is that the comparison to TU Delft is fair only at the planner level. At the tracking level the honest statement is that a radio-linked
+  Betaflight airframe without onboard force feedback cannot match an onboard INDI loop, and everything we have done this week, the measured rod length, the mass defaults,
+  today's estimator, is compensation for that missing inner loop. The measured-force throttle was the one attempt to put that loop back at the drone, and it failed on the
+  moving load for reasons of rod slack, not of the idea.
+
+  The off arms of the estimator matrix are still running. When they land I bring the full table and the recommendation, which after today's results is going to be about
+  closing the force error at the drone rather than at the load.
+
+
+
+1. A bounded vertical integrator per drone. The tracker keeps its no-integrator design laterally, where the earlier per-drone integrators tilted the load by fighting each
+other, and gets a slow, clipped integrator on vertical force only. It removes the steady height error from kT, mass and sag exactly as INDI did, without needing any
+measurement we do not have. About 30 lines, a day including the SIL matrix. The known risk is the weld transient winding it up, which the clip and a freeze while the payload
+rests handle.
+
+2. Force feedback from mocap instead of the IMU. TU Delft's trick is comparing commanded acceleration with measured acceleration. The rig has no IMU stream, which is why the
+removed INDI throttle could only ever run in sim. Mocap at 120 Hz differentiated twice and filtered gives the same signal with about 50 ms of lag, enough for a slow force
+loop but not for their agility. This is the removed INDI code with a different input and a lower gain. Two to three days with tuning, and it inherits the rod-slack problem
+at high gain.
+
+3. Their actual method: put the loop on the flight controller. Betaflight cannot do it. PX4 can: it accepts attitude plus thrust setpoints, closes its velocity loop on the
+IMU, and has a hover-thrust estimator that is the effective-payload-force adaptation your supervisor described. That means reflashing four airframes, new radio and mocap
+plumbing, and re-doing the bring-up. Weeks, with nine left. Not for this thesis.
+
+What I would do: option 1 now, because it is the smallest change that makes the rig hover at its target with the wrong kT typed, and it can be written up honestly as the
+drone-level version of the supervisor's disturbance state. Keep the load-level Kalman filter in the thesis as the formal attempt and the measured reason it is only partial.
+Option 2 only if option 1 leaves a transient you cannot live with on the weld. 
+
+Both are new laws, so they go through a card and the critic first. The estimator matrix is finishing now, and I will put the numbers next to this so you can decide with the
+table in front of you.
+
 
 
 Magnets ->
@@ -428,3 +477,6 @@ which gives an idea of how much extra mass is pulling us down. Ideally we do not
 Start from a position where the drones have already taken off
 
 Axis aligned magnet
+
+
+

@@ -171,6 +171,10 @@ def _args():
         # it (32.9 at 0.6 kg floated the load +0.18 m; 34.6 leaves +0.03 m).
         # The hardware launches (real_*.py) keep their own measured 24.
         DeclareLaunchArgument('thrust_ratio', default_value='auto'),
+        # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
+        DeclareLaunchArgument('kt_trim', default_value='false'),
+        DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
+        DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
         # kT used BEFORE the drones are off their stands. Deliberately BELOW
         # thrust_ratio: on a taut air-start the stands mask the drones' weight-support
         # need, and the over-thrust from an under-assumed kT is exactly what pops them
@@ -201,7 +205,7 @@ def _args():
         # actually exercise the reorder, spawn the drones out of azimuth order.
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
         # measure each rod from mocap at handover instead of trusting cable_len (2026-09-23)
-        DeclareLaunchArgument('measure_rod_len', default_value='false'),
+        DeclareLaunchArgument('measure_rod_len', default_value='true'),
         # LOAD reference after the lift tops out: 'hover', 'line_x' (continuous
         # back-and-forth shuttle), 'circle', 'fig_8' (figure-eight lemniscate),
         # 'spin' (circle + the load yaws one full turn, so the formation also
@@ -273,6 +277,9 @@ def launch_setup(context, *args, **kwargs):
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': kt,
+                         'kt_trim': ParameterValue(LaunchConfiguration('kt_trim'), value_type=bool),
+                         'kt_trim_max': ParameterValue(LaunchConfiguration('kt_trim_max'), value_type=float),
+                         'kt_trim_tau': ParameterValue(LaunchConfiguration('kt_trim_tau'), value_type=float),
                          'takeoff_thrust_ratio': kt_to,
                          'kt_batt_sag_frac': f('kt_batt_sag_frac'),
                          'kt_batt_v_full': f('kt_batt_v_full'),

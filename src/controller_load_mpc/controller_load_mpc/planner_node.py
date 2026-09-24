@@ -26,7 +26,7 @@ Geometry must match the world SDF (see generate_rigid_world.py).
 import numpy as np
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float64MultiArray, Int32, String, Bool
+from std_msgs.msg import Float64, Float64MultiArray, Int32, String, Bool
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 from interfaces.msg import MotionCaptureState
@@ -95,6 +95,21 @@ LIFT_STEP     = 0.04          # m max commanded climb above current load z. Kept
 # distance vs cable length). Raise LO_FRAC toward 1.0 to feed tension in later.
 CABLE_TAUT_LO_FRAC = 0.85
 CABLE_TAUT_HI_FRAC = 1.00
+
+
+def static_cable_z(planned_a_z, load_mass, drone_mass):
+    """Per-drone STATIC vertical cable acceleration (m/s^2, negative = pull down) from the
+    OCP's planned node-0 cable terms: keep the planned DISTRIBUTION across drones, but
+    normalise the vertical sum to the load's weight. The planned magnitudes carry the
+    planner's climb/descend intent (a load 3 cm high is planned to descend, so planned
+    tension < weight); an estimator that took them as the true pull drifted (R0378:
+    kt_hat 36.75 -> 36.29 while the load rose 0.61 -> 0.67 m, 2026-09-23). Statics do
+    not. Returns None when the planned pull is not there (slack, grounded)."""
+    a = [float(v) for v in planned_a_z]
+    tot = sum(a)
+    if not a or tot > -0.5:
+        return None
+    return [v / tot * (-float(load_mass) * 9.81 / float(drone_mass)) for v in a]
 
 
 def measured_rod_lengths(nominal, dists, tol_frac=0.15, spread_m=0.03):
@@ -777,6 +792,21 @@ class LoadPlanner(Node):
         len_gate = float(np.clip((dist - d_lo) / max(d_hi - d_lo, 1e-6), 0.0, 1.0))
         return len_gate, dist
 
+    def _publish_static_cable(self, X):
+        """Static vertical cable share per physical drone (kt_trim's cable term)."""
+        planned = [float(X[LOAD_DIM + CABLE_DIM * i + 12, 0]) * float(X[LOAD_DIM + CABLE_DIM * i + 2, 0]) / DRONE_MASS
+                   for i in range(self.n)]
+        shares = static_cable_z(planned, self.load_mass, DRONE_MASS)
+        if shares is None:
+            return
+        if not hasattr(self, '_static_pub'):
+            self._static_pub = {}
+        for i, az in enumerate(shares):
+            k = self.slot2drone[i]
+            if k not in self._static_pub:
+                self._static_pub[k] = self.create_publisher(Float64, f'/drone_{k}/cable_static_z', 1)
+            self._static_pub[k].publish(Float64(data=float(az)))
+
     def _publish_refs(self, X):
         # Cable-FF soft-start: 0 through the grounded handover settle, easing to 1
         # over FF_EASE_S once the lift starts (clock advanced in _plan). Multiplied
@@ -794,6 +824,7 @@ class LoadPlanner(Node):
                 nodes.append((pos, vel, acc, gate * ff * cable))
             # slot i's planned trajectory belongs to the physical drone occupying it
             self._publish_ref(self.slot2drone[i], nodes)
+        self._publish_static_cable(X)
 
         # ~1 Hz: per-drone cable tautness so you can see when (and whether) the
         # cable term engages. dist -> CABLE_LEN means taut; gate is the applied

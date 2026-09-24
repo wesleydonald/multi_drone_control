@@ -86,6 +86,10 @@ def _args():
         # launches use ~31 instead: Gazebo's motor model is quadratic, so a linear
         # model there has to use the secant gain at hover. The two genuinely differ.)
         DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
+        # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
+        DeclareLaunchArgument('kt_trim', default_value='false'),
+        DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
+        DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
         # kT used before the drone is airborne. 0 = same as thrust_ratio, which is
         # right for a GROUND takeoff: the deliberate takeoff under-assumption exists
         # only to pop drones off the stands of a taut sim air-start. Set it below
@@ -106,7 +110,7 @@ def _args():
         DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
         # measure each rod from mocap at handover instead of trusting cable_len (2026-09-23)
-        DeclareLaunchArgument('measure_rod_len', default_value='false'),
+        DeclareLaunchArgument('measure_rod_len', default_value='true'),
         # Experiment T1 (finding F10): terminal cost tracks ref_vel instead
         # of commanding a stop at the end of the horizon. Default false =
         # historical behaviour, so this only changes a run you asked it to.
@@ -188,6 +192,9 @@ def launch_setup(context, *args, **kwargs):
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': f('thrust_ratio'),
+                         'kt_trim': ParameterValue(LaunchConfiguration('kt_trim'), value_type=bool),
+                         'kt_trim_max': ParameterValue(LaunchConfiguration('kt_trim_max'), value_type=float),
+                         'kt_trim_tau': ParameterValue(LaunchConfiguration('kt_trim_tau'), value_type=float),
                          'takeoff_thrust_ratio': f('takeoff_thrust_ratio'),
                          'kt_batt_sag_frac': f('kt_batt_sag_frac'),
                          'kt_batt_v_full': f('kt_batt_v_full'),
