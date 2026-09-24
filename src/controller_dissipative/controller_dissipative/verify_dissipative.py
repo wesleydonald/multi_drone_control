@@ -52,7 +52,7 @@ from controller_dissipative.mini_plant import MiniPlant
 N = 4
 CABLE_LEN = 0.5
 LOAD_MASS = 0.6
-DRONE_MASS = 0.6
+DRONE_MASS = 0.64
 G = 9.81
 ATTACH_RADIUS = 0.25
 ATTACH_Z = 0.025

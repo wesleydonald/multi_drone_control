@@ -35,7 +35,7 @@ from std_msgs.msg import Int32, Empty, Bool, Float64MultiArray, String
 
 from interfaces.msg import MotionCaptureState
 from controller_load_mpc.geometry import quat_to_rot_np, attach_points
-from controller_load_mpc.planner_node import LoadPlanner, DRONE_MASS, PLANNER_HZ
+from controller_load_mpc.planner_node import LoadPlanner, DRONE_MASS, PLANNER_HZ, TouchdownDetector
 
 from controller_dissipative.dissipative_network import (
     DissipativeNetwork, DissipativeParams)
@@ -211,7 +211,7 @@ class DissipativeController(LoadPlanner):
             net_rho.append(np.array([self.attach_radius * np.cos(az),
                                      self.attach_radius * np.sin(az), self.attach_z]))
         self.net = DissipativeNetwork(
-            self.n_net, net_rho, self.cable_len, DRONE_MASS, self.load_mass,
+            self.n_net, net_rho, self.cable_len, self.drone_mass, self.load_mass,
             self.dyn.g, self.diss)
         for k in range(self.n, self.n_net):
             self.net.detach(k)                 # reserved slots start off the load
@@ -267,6 +267,20 @@ class DissipativeController(LoadPlanner):
         # documented 5-7 cm steady sag it can never reach.
         self._reconfig_hold_s = float(p('reconfig_hold_s', 1.5).value)
         self._reconfig_hold_left = 0.0
+        # LAND gate: /fleet/landed disarms the whole fleet, so a drone that left the
+        # fleet must be this low before the survivors' touchdown is announced
+        self._departed_down_z = float(p('departed_down_z', 0.15).value)
+        # a freed drone carries no load: it descends faster than the fleet on LAND so
+        # it is down BEFORE the survivors stall (0.0 = twice land_vel)
+        self._departed_land_vel = float(p('departed_land_vel', 0.0).value)
+        self._departed_td = {}       # per departed drone: its own TouchdownDetector on LAND
+        # rig: release the tether magnet from here on a detach (aux channel via
+        # elrs_interface), so the command and the physical release are one tick apart
+        self._detach_magnet = bool(p('detach_magnet', False).value)
+        # fewest drones that may stay on the load after a detach. 3 -> 2 hangs the ring
+        # from two rim points (a pendulum about their chord; capsizes in SIL) and the
+        # RViz DETACH spinbox auto-increments, so a double press must not get there.
+        self._min_survivors = int(p('min_survivors', 3).value)
         # Where each departed drone was parked, so it keeps getting a reference after
         # an OCP resize (the resized OCP plans only for the drones still on the load,
         # and a tracker with no reference trips ref_stale and disarms the fleet).
@@ -294,6 +308,8 @@ class DissipativeController(LoadPlanner):
         # Gazebo DetachableJoint release triggers (bridged to gz.msgs.Empty in launch).
         self.detach_pub = [self.create_publisher(Empty, f'/drone_{i}/detach', 1)
                            for i in range(self.n)]
+        self._magnet_pubs = ([self.create_publisher(String, f'/drone_{i}/magnet', 1)
+                              for i in range(self.n_net)] if self._detach_magnet else [])
 
         # ATTACH wiring for each reserved drone (physical id self.n + j): its own mocap in,
         # its reference out (appended so ref_pub[d] is valid for d>=self.n), plus the two
@@ -370,6 +386,33 @@ class DissipativeController(LoadPlanner):
             return
         super()._plan()
 
+    def _release_magnet(self, d):
+        """Rig release for a detached drone: latch its tether magnet OFF through the
+        radio. Only reached after every refusal `return` of the detach paths, so a
+        refused detach never drops a magnet."""
+        if not self._detach_magnet or d >= len(self._magnet_pubs):
+            return
+        self._magnet_pubs[d].publish(String(data='OFF'))
+        self.get_logger().warn(f'[dissipative] magnet OFF -> /drone_{d}/magnet')
+
+    def _departed_down(self):
+        """Every drone that left on an OCP-mode detach is down: it has STALLED on its
+        own descent (the same touchdown test as the fleet, so no absolute height on
+        the rig, where the resting mocap z is not 0.10) or it is below departed_down_z.
+        A hold of None (no pose at the detach) counts as NOT down: that drone has no
+        reference and must not be disarmed on an assumption."""
+        for d, p_hold in self._departed_hold.items():
+            if p_hold is None:
+                return False
+            pos = self.drone_pos[d] if d < len(self.drone_pos) else None
+            if pos is None:
+                return False
+            td = self._departed_td.get(d)
+            stalled = td is not None and td.stalled
+            if not stalled and float(pos[2]) > self._departed_down_z:
+                return False
+        return True
+
     def _publish_departed_refs(self):
         """Keep every drone that has left the fleet on a reference of its own.
 
@@ -384,12 +427,24 @@ class DissipativeController(LoadPlanner):
         `ref_stale` and disarms the whole fleet."""
         g = np.array([0.0, 0.0, self.dyn.g])
         zero = np.zeros(3)
+        if not self._land_to_ground:
+            self._departed_td = {}
+        rate = self._departed_land_vel if self._departed_land_vel > 0.0 else 2.0 * self.land_vel
         for d, p_hold in self._departed_hold.items():
             if p_hold is None:
                 continue
             if self._land_to_ground:
-                # Follow the fleet down at the same rate the load is descending.
-                p_hold[2] = max(0.0, float(p_hold[2]) - self.land_vel / PLANNER_HZ)
+                # Descend faster than the fleet (no load on this drone) so it is down
+                # before the survivors stall, and run its own touchdown detector.
+                p_hold[2] = max(0.0, float(p_hold[2]) - rate / PLANNER_HZ)
+                td = self._departed_td.get(d)
+                if td is None:
+                    td = self._departed_td[d] = TouchdownDetector(rate, PLANNER_HZ)
+                    td.stalled = False
+                pos = self.drone_pos[d] if d < len(self.drone_pos) else None
+                if pos is not None and not td.stalled and td.update([float(pos[2])]):
+                    td.stalled = True
+                    self.get_logger().info(f'[dissipative] departed drone {d} is down')
             self._publish_ref(d, [(p_hold, zero, g, zero)] * (self.N + 1))
 
     def _publish_pending_attach_refs(self):
@@ -457,6 +512,9 @@ class DissipativeController(LoadPlanner):
         if self.phase not in ('planner', 'network'):
             self.get_logger().warn('[dissipative] detach ignored - not flying yet')
             return
+        if self._land_to_ground or getattr(self, '_net_landing', False):
+            self.get_logger().warn('[dissipative] detach ignored - LAND in progress')
+            return
         if self.detached[d]:
             return
         if self._reconfig_mode == 'ocp':
@@ -471,10 +529,16 @@ class DissipativeController(LoadPlanner):
         if slot is None or not self.net.attached[slot]:
             self.get_logger().warn(f'[dissipative] detach: drone {d} is not on the load')
             return
+        if self.net.n_attached() - 1 < max(2, self._min_survivors):
+            self.get_logger().error(
+                f'[dissipative] refusing to detach {d}: {self.net.n_attached() - 1} would '
+                f'remain (min_survivors {self._min_survivors})')
+            return
         self.net.detach(slot)
         self.detached[d] = True
         if d < self.n:
             self.detach_pub[d].publish(Empty())
+            self._release_magnet(d)
         else:
             # a magnet-attached newcomer has no DetachableJoint trigger of its own: the
             # magnet manager releases the weld on OFF (detach_when_magnet_off).
@@ -499,9 +563,10 @@ class DissipativeController(LoadPlanner):
         marginal configuration is a result worth having, not an error."""
         survivors = [x for x in range(self._n_carry0)
                      if x != d and not self.detached[x]]
-        if len(survivors) < 2:
+        if len(survivors) < max(2, self._min_survivors):
             self.get_logger().error(
-                f'[dissipative] refusing to detach {d}: {len(survivors)} would remain')
+                f'[dissipative] refusing to detach {d}: {len(survivors)} would remain '
+                f'(min_survivors {self._min_survivors})')
             return
         # Each survivor keeps its OWN attach point. Captured BEFORE the resize, while
         # self.rho and self.slot2drone still describe the current fleet.
@@ -524,6 +589,7 @@ class DissipativeController(LoadPlanner):
                 f'current state. The fleet is resized but the first solves may jump.')
         self.detached[d] = True
         self.detach_pub[d].publish(Empty())
+        self._release_magnet(d)
         self._departed_hold[d] = np.asarray(self.drone_pos[d], float).copy() \
             if self.drone_pos[d] is not None else None
         self._reconfig_hold_left = self._reconfig_hold_s
@@ -714,6 +780,12 @@ class DissipativeController(LoadPlanner):
             else:
                 self.get_logger().info('[dissipative] LAND (network) already in progress')
             return
+        if msg.data.strip().upper() == 'ARM' and self._detach_magnet:
+            # the radio latches the last magnet value across flights: re-arm every
+            # tether at ARM so a drone released last flight does not lift without the load
+            for pub in self._magnet_pubs:
+                pub.publish(String(data='ON'))
+            self.get_logger().info('[dissipative] ARM: magnets ON on every tether')
         super()._fleet_command_cb(msg)
 
     def _current_load_des(self):

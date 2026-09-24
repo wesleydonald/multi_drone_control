@@ -214,12 +214,12 @@ void ArmPanel::updateDroneLabel(int i)
     return;
   }
 
-  // Colour by battery (4S LiPo: 16.8 V full, 14.8 V nominal, 12.0 V empty), so
+  // Colour by battery (6S LiPo: 25.2 V full, 22.2 V nominal, 18.0 V empty), so
   // the weakest pack in the fleet is obvious at a glance.
   QString bg, fg = "white";
-  if (v >= 15.6f)      { bg = "#51cf66"; }
-  else if (v >= 14.4f) { bg = "#ffd43b"; fg = "#495057"; }
-  else if (v >= 13.2f) { bg = "#ff922b"; }
+  if (v >= 23.4f)      { bg = "#51cf66"; }
+  else if (v >= 21.6f) { bg = "#ffd43b"; fg = "#495057"; }
+  else if (v >= 19.8f) { bg = "#ff922b"; }
   else                 { bg = "#ff6b6b"; }
 
   drone_labels_[i]->setText(text);

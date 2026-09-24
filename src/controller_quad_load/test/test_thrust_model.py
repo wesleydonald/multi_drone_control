@@ -13,14 +13,15 @@ DRONE_SDF = REPO / 'simulation_assets' / 'models' / 'x3_drone0.sdf'
 
 
 def test_thrust_c_matches_the_launch_comments_and_the_sil_plant():
-    assert thrust_c() == pytest.approx(88.6, abs=0.1)
+    assert thrust_c() == pytest.approx(83.1, abs=0.1)          # 0.64 kg over all links (2026-09-24)
+    assert thrust_c(mass=0.6) == pytest.approx(88.6, abs=0.1)  # the pre-2026-09-24 base-link number
 
 
 def test_thrust_c_is_derived_from_the_drone_sdf():
     if not DRONE_SDF.exists():
         pytest.skip('drone model not present')
     s = DRONE_SDF.read_text()
-    mass = float(re.search(r'<mass>([\d.]+)</mass>', s).group(1))     # base link first
+    mass = sum(float(v) for v in re.findall(r'<mass>([\d.e-]+)</mass>', s))   # every link: the motors lift all of it
     mc = float(re.search(r'<motorConstant>([\d.e+-]+)</motorConstant>', s).group(1))
     w = float(re.search(r'<maxRotVelocity>([\d.]+)</maxRotVelocity>', s).group(1))
     assert thrust_c(mc, w, mass) == pytest.approx(thrust_c(), rel=1e-6)
@@ -28,15 +29,16 @@ def test_thrust_c_is_derived_from_the_drone_sdf():
 
 def test_secant_reproduces_the_measured_0p4kg_operating_point():
     # SIL R0004/R0013: u_hover 0.371 at load 0.4 kg, 3 drones -> the 32.9 the launches used
-    assert hover_throttle(0.4, 3) == pytest.approx(0.371, abs=0.003)
-    assert secant_kt(0.4, 3) == pytest.approx(32.9, abs=0.3)
+    # historical operating point of the quadratic 0.6 kg plant (pre-2026-09-24)
+    assert hover_throttle(0.4, 3, drone_mass=0.6, c=88.6) == pytest.approx(0.371, abs=0.003)
+    assert secant_kt(0.4, 3, drone_mass=0.6, c=88.6) == pytest.approx(32.9, abs=0.3)
 
 
 def test_secant_reproduces_the_measured_0p6kg_operating_point():
     # SIL R0228-R0230 (2026-09-10): u_hover 0.391 at 0.6 kg / 3 drones; kT 34.6 put the
     # load at 0.632 vs 0.782 with 32.9 (target 0.60)
-    assert hover_throttle(0.6, 3) == pytest.approx(0.391, abs=0.003)
-    assert secant_kt(0.6, 3) == pytest.approx(34.6, abs=0.3)
+    assert hover_throttle(0.6, 3, drone_mass=0.6, c=88.6) == pytest.approx(0.391, abs=0.003)
+    assert secant_kt(0.6, 3, drone_mass=0.6, c=88.6) == pytest.approx(34.6, abs=0.3)
 
 
 def test_kt_rises_with_load_and_falls_with_fleet_size():
@@ -46,7 +48,7 @@ def test_kt_rises_with_load_and_falls_with_fleet_size():
 
 def test_resolve_auto_and_explicit():
     kt, kt_to, note = resolve_thrust_ratio('auto', 'auto', 0.6, 3)
-    assert kt == pytest.approx(34.6, abs=0.3) and kt_to == pytest.approx(kt * TAKEOFF_POP_FRAC)
+    assert kt == pytest.approx(83.1, abs=0.1) and kt_to == pytest.approx(kt * TAKEOFF_POP_FRAC)   # linear sim since 2026-09-24
     assert 'auto' in note
     kt, kt_to, note = resolve_thrust_ratio('32.9', '30.0', 0.6, 3)
     assert (kt, kt_to) == (32.9, 30.0) and 'explicit' in note

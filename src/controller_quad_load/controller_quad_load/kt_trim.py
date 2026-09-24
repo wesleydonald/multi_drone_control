@@ -18,6 +18,16 @@ the force I am holding". First-order filtered (tau), bounded to typed*(1 +- max)
 only updated when the caller says the drone is in steady airborne flight; otherwise the
 last value is held. One scalar per drone, no coupling to the cable model's state: this
 is not the removed UKF (CURRENT_STATE §4.5), it is what PX4's hover-thrust estimator does.
+
+Two rules from the two-drone Gazebo crash (2026-09-24 16:28, card 2026-09-23_kt_trim):
+  * the throttle and attitude enter through the SAME 0.3 s filter as the acceleration.
+    The tracker's own position corrections step the throttle, and 1/u moved the estimate
+    at once while the mocap-differentiated acceleration answered 0.3 s later; in that
+    window the estimate confirmed its own move (unity positive feedback through
+    u = a_cmd/kT_hat) and a 2 Hz chatter never damped on a two-drone ring;
+  * once the estimate has stopped moving (< 0.5 % over 2 s) it FREEZES for the flight.
+    The gain of an airframe on a pack does not change on the time scale of one flight,
+    and a frozen number cannot chatter.
 """
 import numpy as np
 
@@ -33,20 +43,27 @@ def hover_thrust_gain(a_meas_z, a_cable_z, u, r33):
 
 
 class KtTrim:
-    def __init__(self, kt_typed, max_frac=0.25, tau_s=1.5, acc_tau_s=0.3, dt=0.02):
+    def __init__(self, kt_typed, max_frac=0.25, tau_s=1.5, acc_tau_s=0.3, dt=0.02,
+                 freeze_frac=0.005, freeze_window_s=2.0):
         self.kt_typed = float(kt_typed)
         self.lo = self.kt_typed * (1.0 - float(max_frac))
         self.hi = self.kt_typed * (1.0 + float(max_frac))
         self.tau = max(float(tau_s), dt)
         self.acc_tau = max(float(acc_tau_s), dt)
         self.dt = float(dt)
+        self.freeze_frac = float(freeze_frac)
+        self.freeze_n = max(int(round(float(freeze_window_s) / self.dt)), 1)
         self.reset()
 
     def reset(self):
         self.kt_hat = self.kt_typed
         self._vz_prev = None
         self.a_meas_z = 0.0
+        self.u_f = None                  # throttle and R33 through the acceleration's filter
+        self.r33_f = None
         self.n_updates = 0
+        self.frozen = False
+        self._hist = []                  # kt_hat at each update, last freeze_window_s
 
     @property
     def railed(self):
@@ -61,6 +78,18 @@ class KtTrim:
             self.a_meas_z += (self.dt / self.acc_tau) * (raw - self.a_meas_z)
         self._vz_prev = vz
         return self.a_meas_z
+
+    def filter_inputs(self, u, r33):
+        """Throttle and thrust-axis cosine through the same filter as the acceleration,
+        every tick, so a throttle step and the acceleration it causes reach the
+        estimate together."""
+        u, r33 = float(u), float(r33)
+        if self.u_f is None:
+            self.u_f, self.r33_f = u, r33
+        else:
+            self.u_f += (self.dt / self.acc_tau) * (u - self.u_f)
+            self.r33_f += (self.dt / self.acc_tau) * (r33 - self.r33_f)
+        return self.u_f, self.r33_f
 
     def in_contact(self, a_cable_z, u, r33, lo=-2.0, hi=5.0):
         """Something other than thrust and cable is carrying force. Judged with the TYPED
@@ -82,12 +111,18 @@ class KtTrim:
         self.kt_hat += (self.dt / max(tau_s, self.dt)) * (self.kt_typed - self.kt_hat)
         return self.kt_hat
 
-    def update(self, a_cable_z, u, r33, steady):
-        """One tick. `steady`: the caller's gate (armed, airborne, feedforward fully on,
-        no transient). Returns the current kt_hat either way."""
-        if not steady:
+    def update(self, a_cable_z, steady, contact_possible=True):
+        """One tick, on the FILTERED throttle and attitude (filter_inputs must have been
+        called this tick). `steady`: the caller's gate (armed, airborne, feedforward
+        fully on, no transient). `contact_possible`: the floor test is only meaningful
+        while the load has not left its rest height; once it is up, the drones are
+        airborne by geometry and a hover under a typed-low gain (residual below the
+        band, Gazebo 2026-09-24 15:06) must not be mistaken for the floor. Returns the
+        current kt_hat either way; once frozen it never moves until reset()."""
+        if not steady or self.frozen or self.u_f is None:
             return self.kt_hat
-        if self.in_contact(a_cable_z, u, r33):
+        u, r33 = self.u_f, self.r33_f
+        if contact_possible and self.in_contact(a_cable_z, u, r33):
             return self.leak_to_typed()
         inst = hover_thrust_gain(self.a_meas_z, a_cable_z, u, r33)
         if inst is None:
@@ -95,4 +130,10 @@ class KtTrim:
         self.kt_hat += (self.dt / self.tau) * (inst - self.kt_hat)
         self.kt_hat = float(np.clip(self.kt_hat, self.lo, self.hi))
         self.n_updates += 1
+        self._hist.append(self.kt_hat)
+        if len(self._hist) > self.freeze_n:
+            del self._hist[:-self.freeze_n]
+            span = max(self._hist) - min(self._hist)
+            if span < self.freeze_frac * self.kt_hat:
+                self.frozen = True
         return self.kt_hat

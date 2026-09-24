@@ -72,18 +72,23 @@ def _args():
         # Physical payload mass (kg). LOAD_INERTIA in planner_node.py is a
         # hardcoded constant and does NOT scale with this.
         DeclareLaunchArgument('load_mass', default_value='0.86'),
-        DeclareLaunchArgument('start_taut', default_value='true'),
-        DeclareLaunchArgument('handover_elev_deg', default_value='0.0'),
+        DeclareLaunchArgument('drone_mass', default_value='0.64'),   # WEIGH the airframe with its pack; 0.64 is the sim model
+        DeclareLaunchArgument('start_taut', default_value='false'),
+        DeclareLaunchArgument('handover_elev_deg', default_value='45.0'),
         # Frozen hold after handover, before the lift ramp starts. Shorter = faster
         # takeoff; too short and the fleet starts climbing before it has settled on
         # the latched config.
-        DeclareLaunchArgument('handover_settle_s', default_value='0.5'),
+        DeclareLaunchArgument('handover_settle_s', default_value='1.0'),
+        DeclareLaunchArgument('creep_vel', default_value='0.2'),   # m/s creep sweep rate before the handover
         DeclareLaunchArgument('target_z', default_value='0.6'),
         # Climb rate (m/s) -- the dominant term in takeoff duration. The ramp is
         # eased at both ends (LIFT_SOFT_* in planner_node.py), so peak accel stays
         # well under the raw rate. HOLD test: lift_ramp_vel:=0.0 (no lift, just
         # hold the taut config).
         DeclareLaunchArgument('lift_ramp_vel', default_value='0.20'),
+        DeclareLaunchArgument('z_ki', default_value='0.4'),      # planner height integral, 0 = off (card 2026-09-24_planner_offset)
+        DeclareLaunchArgument('z_i_max', default_value='0.15'),
+        DeclareLaunchArgument('z_taut_gate', default_value='0.9'),
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         # Cable compensation. ON is the correct flight config. Zero only for a
         # deliberate A/B (cable_ff_scale:=0.0 cable-blind; attitude_ff:=false level).
@@ -102,7 +107,7 @@ def _args():
         # model there has to use the secant gain at hover. The two genuinely differ.)
         DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
         # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
-        DeclareLaunchArgument('kt_trim', default_value='false'),
+        DeclareLaunchArgument('kt_trim', default_value='true'),
         DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
         DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
         # kT used before the drone is airborne. 0 = same as thrust_ratio, which is
@@ -119,8 +124,8 @@ def _args():
         # Voltage comes from /drone_N/telemetry (ELRS). With no telemetry the derate
         # is skipped and kT stays at thrust_ratio.
         DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
-        DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),   # 4S 4.20 V/cell
-        DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),  # 4S 3.50 V/cell
+        DeclareLaunchArgument('kt_batt_v_full', default_value='25.2'),   # 6S 4.20 V/cell
+        DeclareLaunchArgument('kt_batt_v_empty', default_value='21.0'),  # 6S 3.50 V/cell
         # Seconds between per-drone kT reports; 0 = silent.
         DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         # ON: match each drone to the nearest nominal ring slot at the first solve,
@@ -194,11 +199,16 @@ def launch_setup(context, *args, **kwargs):
                      'attach_z': f('attach_z'),
                      'start_taut': b('start_taut'),
                      'load_mass': f('load_mass'),
+                     'drone_mass': f('drone_mass'),
                      'target_z': f('target_z'),
                      'lift_ramp_vel': f('lift_ramp_vel'),
+                     'z_ki': f('z_ki'),
+                     'z_i_max': f('z_i_max'),
+                     'z_taut_gate': f('z_taut_gate'),
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
+                     'creep_vel': f('creep_vel'),
                      'auto_slot_assign': b('auto_slot_assign'),
                      'measure_rod_len': b('measure_rod_len'),
                      'load_traj': LaunchConfiguration('load_traj'),

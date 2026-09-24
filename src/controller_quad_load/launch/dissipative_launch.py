@@ -55,12 +55,17 @@ def _args():
         # make. It defaulted FALSE here alone, which is why takeoff on this launch was
         # visibly slower than running the MPC by itself (Wesley, 2026-08-06) — the
         # extra time was the creep sweep, not the lift.
-        DeclareLaunchArgument('start_taut', default_value='true'),
+        DeclareLaunchArgument('start_taut', default_value='false'),
         DeclareLaunchArgument('handover_elev_deg', default_value='45.0'),
-        DeclareLaunchArgument('handover_settle_s', default_value='0.75'),
+        DeclareLaunchArgument('handover_settle_s', default_value='1.0'),
+        DeclareLaunchArgument('creep_vel', default_value='0.2'),   # m/s creep sweep rate before the handover
         DeclareLaunchArgument('load_mass', default_value='0.86'),
+        DeclareLaunchArgument('drone_mass', default_value='0.64'),   # x3 model over all links
         DeclareLaunchArgument('target_z', default_value='0.6'),
         DeclareLaunchArgument('lift_ramp_vel', default_value='0.22'),
+        DeclareLaunchArgument('z_ki', default_value='0.4'),      # planner height integral, 0 = off (card 2026-09-24_planner_offset)
+        DeclareLaunchArgument('z_i_max', default_value='0.15'),
+        DeclareLaunchArgument('z_taut_gate', default_value='0.99'),
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         DeclareLaunchArgument('cable_ff_scale', default_value='1.0'),
         DeclareLaunchArgument('attitude_ff', default_value='true'),
@@ -71,13 +76,13 @@ def _args():
         # See mpc_quad_load_launch.py for the full explanation of these four.
         DeclareLaunchArgument('thrust_ratio', default_value='auto'),
         # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
-        DeclareLaunchArgument('kt_trim', default_value='false'),
+        DeclareLaunchArgument('kt_trim', default_value='true'),
         DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
         DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
         DeclareLaunchArgument('takeoff_thrust_ratio', default_value='auto'),
         DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
-        DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),
-        DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),
+        DeclareLaunchArgument('kt_batt_v_full', default_value='25.2'),   # 6S 4.20 V/cell
+        DeclareLaunchArgument('kt_batt_v_empty', default_value='21.0'),  # 6S 3.50 V/cell
         DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
         # measure each rod from mocap at handover instead of trusting cable_len (2026-09-23)
@@ -110,6 +115,7 @@ def _args():
         #     smaller (uneven) ring the OCP can solve for directly.
         DeclareLaunchArgument('reconfig_mode', default_value='network'),
         DeclareLaunchArgument('reconfig_hold_s', default_value='1.5'),
+        DeclareLaunchArgument('min_survivors', default_value='3'),   # 3 -> 2 capsizes in SIL; 2 only for a deliberate test
         DeclareLaunchArgument('diss_k_pay', default_value='40.0'),
         DeclareLaunchArgument('diss_k_anchor', default_value='40.0'),
         DeclareLaunchArgument('diss_c', default_value='6.0'),
@@ -201,11 +207,16 @@ def launch_setup(context, *args, **kwargs):
                      'attach_azimuths_deg': LaunchConfiguration('attach_azimuths_deg'),
                      'start_taut': b('start_taut'),
                      'load_mass': f('load_mass'),
+                     'drone_mass': f('drone_mass'),
                      'target_z': f('target_z'),
                      'lift_ramp_vel': f('lift_ramp_vel'),
+                     'z_ki': f('z_ki'),
+                     'z_i_max': f('z_i_max'),
+                     'z_taut_gate': f('z_taut_gate'),
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
+                     'creep_vel': f('creep_vel'),
                      'auto_slot_assign': b('auto_slot_assign'),
                      'measure_rod_len': b('measure_rod_len'),
                      'load_traj': LaunchConfiguration('load_traj'),
@@ -224,6 +235,7 @@ def launch_setup(context, *args, **kwargs):
                      'diss_elev_deg': f('diss_elev_deg'),
                      'reconfig_mode': LaunchConfiguration('reconfig_mode'),
                      'reconfig_hold_s': f('reconfig_hold_s'),
+                     'min_survivors': i_('min_survivors'),
                      'net_land_z': f('net_land_z')}],
         output='screen'))
 

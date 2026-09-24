@@ -36,13 +36,13 @@ def _args():
         DeclareLaunchArgument('takeoff_spool_s', default_value='0.5'),
         DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
         # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
-        DeclareLaunchArgument('kt_trim', default_value='false'),
+        DeclareLaunchArgument('kt_trim', default_value='true'),
         DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
         DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
         DeclareLaunchArgument('takeoff_thrust_ratio', default_value='0.0'),
         DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
-        DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),
-        DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),
+        DeclareLaunchArgument('kt_batt_v_full', default_value='25.2'),   # 6S 4.20 V/cell
+        DeclareLaunchArgument('kt_batt_v_empty', default_value='21.0'),  # 6S 3.50 V/cell
         DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         DeclareLaunchArgument('terminal_vel_ref', default_value='false'),
         DeclareLaunchArgument('payload_rest_z', default_value='0.05'),

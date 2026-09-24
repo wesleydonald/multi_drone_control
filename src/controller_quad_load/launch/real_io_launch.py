@@ -77,6 +77,9 @@ def _args():
         # panel buttons. num_drones must already INCLUDE the newcomer here (its radio,
         # mocap body and model), unlike the control launch's tethered count.
         DeclareLaunchArgument('attach', default_value='false'),
+        # Mid-flight detach (real_dissipative_launch.py /fleet/detach): shows the RViz
+        # DETACH row on its own; attach:=true shows both.
+        DeclareLaunchArgument('detach', default_value='false'),
         # Per-drone tether electromagnets on a Betaflight aux mode (see elrs_interface).
         # magnet_initial '' = radio channel passed through as today; 'ON' holds every tether
         # magnet from boot, and /drone_<i>/magnet (String ON|OFF) switches one drone's.
@@ -95,6 +98,8 @@ def launch_setup(context, *args, **kwargs):
     show_actual = (LaunchConfiguration('show_actual').perform(context).lower()
                    in ('1', 'true', 'yes'))
     attach = (LaunchConfiguration('attach').perform(context).lower()
+              in ('1', 'true', 'yes'))
+    detach = (LaunchConfiguration('detach').perform(context).lower()
               in ('1', 'true', 'yes'))
 
     vis_share = get_package_share_directory('drone_visualisation')
@@ -163,7 +168,7 @@ def launch_setup(context, *args, **kwargs):
     with open(cfg, 'w') as fh:
         magnet_on = LaunchConfiguration('magnet_initial').perform(context).strip().upper() == 'ON'
         fh.write(build_config(n, show_actual=show_actual,
-                              detach=attach, attach=attach,
+                              detach=(detach or attach), attach=attach,
                               magnets=True, magnet_on=magnet_on))
 
     nodes.append(Node(

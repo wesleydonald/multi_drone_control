@@ -1,7 +1,12 @@
-"""The sim thrust ratio (kT) as an OPERATING POINT, derived instead of hand-tuned.
+"""The sim thrust ratio (kT), derived instead of hand-tuned.
 
-The tracker flies a linear thrust model a = kT * u. Gazebo's motor model is quadratic,
-a = c * u^2 with c = 4 * motorConstant * maxRotVelocity^2 / mass (88.6 for the x3
+SINCE 2026-09-24 the sim command path is LINEAR (motor speed = 4631*sqrt(u) in the sim
+betaflight nodes), so a = c*u with c = 88.6 at every throttle and 'auto' is simply c.
+The secant machinery below is kept for the record of how the pre-linearisation sim
+numbers (kT 32.9 / 36.75 / 40.22 ...) were obtained.
+
+History: the tracker flies a linear thrust model a = kT * u. Gazebo's motor model was quadratic,
+a = c * u^2 with c = 4 * motorConstant * maxRotVelocity^2 / mass (83.1 for the x3
 airframe), so the kT a linear model must use is the SECANT gain at the hover throttle,
 kT* = c * u_hover -- and u_hover moves with everything that changes the thrust a drone
 needs at hover: its load share, and the cable angle (the horizontal cable pull has to
@@ -18,7 +23,7 @@ import math
 G = 9.81
 # x3 drone model (simulation_assets/models/x3_drone*.sdf): test_thrust_model ties these
 # to the SDF so an airframe edit cannot silently leave the derived kT behind.
-SIM_DRONE_MASS = 0.6
+SIM_DRONE_MASS = 0.64          # ALL links: base 0.6 + four 0.01 kg rotors (was 0.6 until 2026-09-24)
 SIM_MOTOR_CONSTANT = 0.62e-06
 SIM_MAX_ROT_VELOCITY = 4631.0
 # takeoff_thrust_ratio sits below kT on purpose (the over-thrust pops the drones off
@@ -59,9 +64,11 @@ def resolve_thrust_ratio(thrust_ratio, takeoff_thrust_ratio, load_mass, n_drones
     kept verbatim). Returns (kT, takeoff_kT, note)."""
     spec = str(thrust_ratio).strip().lower()
     if spec == 'auto':
-        kt = secant_kt(float(load_mass), int(n_drones), elev_deg=elev_deg)
-        note = (f'kT auto {kt:.2f} = secant of a=c*u^2 at load {float(load_mass):.2f} kg '
-                f'/ {int(n_drones)} drones, cable elev {elev_deg:.0f} deg')
+        # The sim command path is linear since 2026-09-24 (betaflight_communication maps
+        # motor speed = 4631*sqrt(u), so a = c*u): one gain at every throttle, no secant.
+        kt = thrust_c()
+        note = (f'kT auto {kt:.2f} = c of the linearised sim plant a=c*u '
+                f'(load {float(load_mass):.2f} kg / {int(n_drones)} drones do not enter)')
     else:
         kt = float(spec)
         note = f'kT explicit {kt:.2f}'

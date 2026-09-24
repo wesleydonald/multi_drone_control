@@ -75,9 +75,14 @@ def _args():
         DeclareLaunchArgument('start_taut', default_value='true'),
         DeclareLaunchArgument('handover_elev_deg', default_value='45.0'),
         DeclareLaunchArgument('handover_settle_s', default_value='0.75'),
+        DeclareLaunchArgument('creep_vel', default_value='0.10'),   # m/s creep sweep rate before the handover
         DeclareLaunchArgument('load_mass', default_value='0.86'),
+        DeclareLaunchArgument('drone_mass', default_value='0.64'),   # x3 model over all links
         DeclareLaunchArgument('target_z', default_value='0.6'),
         DeclareLaunchArgument('lift_ramp_vel', default_value='0.22'),
+        DeclareLaunchArgument('z_ki', default_value='0.4'),      # planner height integral, 0 = off (card 2026-09-24_planner_offset)
+        DeclareLaunchArgument('z_i_max', default_value='0.15'),
+        DeclareLaunchArgument('z_taut_gate', default_value='0.99'),
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         DeclareLaunchArgument('cable_ff_scale', default_value='1.0'),
         DeclareLaunchArgument('attitude_ff', default_value='true'),
@@ -94,7 +99,11 @@ def _args():
         # See mpc_quad_load_launch.py for the full explanation of all four.
         DeclareLaunchArgument('thrust_ratio', default_value='auto'),
         # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
-        DeclareLaunchArgument('kt_trim', default_value='false'),
+        DeclareLaunchArgument('kt_trim', default_value='true'),
+        # fleet-size change handling (see dissipative_launch): 'network' default, 'ocp' resizes in place
+        DeclareLaunchArgument('reconfig_mode', default_value='network'),
+        DeclareLaunchArgument('reconfig_hold_s', default_value='1.5'),
+        DeclareLaunchArgument('min_survivors', default_value='3'),
         DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
         DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
         # Mocap watchdog budget, WALL seconds (controller_mpc._setup_safety). Gazebo
@@ -109,8 +118,8 @@ def _args():
         DeclareLaunchArgument('safety_ref_timeout_s', default_value='2.0'),
         DeclareLaunchArgument('takeoff_thrust_ratio', default_value='auto'),
         DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
-        DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),
-        DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),
+        DeclareLaunchArgument('kt_batt_v_full', default_value='25.2'),   # 6S 4.20 V/cell
+        DeclareLaunchArgument('kt_batt_v_empty', default_value='21.0'),  # 6S 3.50 V/cell
         DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
         # measure each rod from mocap at handover instead of trusting cable_len (2026-09-23)
@@ -119,6 +128,7 @@ def _args():
         # of commanding a stop at the end of the horizon. Default false =
         # historical behaviour, so this only changes a run you asked it to.
         DeclareLaunchArgument('terminal_vel_ref', default_value='false'),
+        DeclareLaunchArgument('x0_relax_symmetric', default_value='false'),   # diagnostic, see controller_mpc
         # Stage V (docs/design/velocity_loop.md): 'mpc' | 'velocity'. Defaults to the
         # verified MPC path, so this launch is byte-unchanged until it is thrown.
         # velocity_after_handover + vel_ki 0 + diss_ki_load 1.0 is the only architecture
@@ -301,6 +311,7 @@ def launch_setup(context, *args, **kwargs):
             package='controller_quad_load', executable='controller', name=f'controller_{i}',
             parameters=[{'drone_id': i,
                          'terminal_vel_ref': b('terminal_vel_ref'),
+                         'x0_relax_symmetric': b('x0_relax_symmetric'),
                          'control_mode': LaunchConfiguration('control_mode'),
                          'vel_kp_pos': f('vel_kp_pos'),
                          'vel_kv': f('vel_kv'),
@@ -346,11 +357,16 @@ def launch_setup(context, *args, **kwargs):
                      'attach_azimuths_deg': LaunchConfiguration('attach_azimuths_deg'),
                      'start_taut': b('start_taut'),
                      'load_mass': f('load_mass'),
+                     'drone_mass': f('drone_mass'),
                      'target_z': f('target_z'),
                      'lift_ramp_vel': f('lift_ramp_vel'),
+                     'z_ki': f('z_ki'),
+                     'z_i_max': f('z_i_max'),
+                     'z_taut_gate': f('z_taut_gate'),
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
+                     'creep_vel': f('creep_vel'),
                      'auto_slot_assign': b('auto_slot_assign'),
                      'measure_rod_len': b('measure_rod_len'),
                      'load_traj': LaunchConfiguration('load_traj'),
@@ -367,6 +383,9 @@ def launch_setup(context, *args, **kwargs):
                      'diss_node_mass': f('diss_node_mass'),
                      'diss_substeps': i_('diss_substeps'),
                      'diss_elev_deg': f('diss_elev_deg'),
+                     'reconfig_mode': LaunchConfiguration('reconfig_mode'),
+                     'reconfig_hold_s': f('reconfig_hold_s'),
+                     'min_survivors': i_('min_survivors'),
                      'diss_handout_tension_blend': b('diss_handout_tension_blend'),
                      'diss_wrench_true_attitude': b('diss_wrench_true_attitude'),
                      'attach_traj_hold_s': f('attach_traj_hold_s'),

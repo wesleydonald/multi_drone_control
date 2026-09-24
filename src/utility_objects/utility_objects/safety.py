@@ -58,7 +58,7 @@ class EnvelopeLimits:
     ref_timeout_s: float = 1.0            # reference staleness before it is a fault
     ref_warn_s: float = 0.5
 
-    warn_battery_v: float = 15.0          # WARN ONLY -- never faults
+    warn_battery_v: float = 22.5          # 6S 3.75 V/cell; WARN ONLY -- never faults
 
     # Faults are only meaningful once the drone is actually flying: on the stands a
     # drone can sit tilted, and the reference is legitimately absent before takeoff.

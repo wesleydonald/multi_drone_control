@@ -41,7 +41,8 @@ HANDOVER_TIMEOUT_S = 3.0       # s after the sweep ends, latch regardless (the O
 
 class CreepController:
     def __init__(self, n, rho, cable_len, N, dt, g, handover_elev_deg, hz,
-                 drone_at, publish_ref, logger):
+                 drone_at, publish_ref, logger, creep_vel=CREEP_VEL):
+        self.creep_vel = float(creep_vel)   # m/s along the arc / straight up (param creep_vel)
         self.n = n
         self.rho = rho
         self.cable_len = cable_len
@@ -156,7 +157,7 @@ class CreepController:
                 f'points (rod {self.cable_len:.2f} m)')
 
         target = np.deg2rad(self.handover_elev_deg)
-        dtheta = CREEP_VEL / max(self.cable_len, 1e-6) / self.hz
+        dtheta = self.creep_vel / max(self.cable_len, 1e-6) / self.hz
         if not self.lifted_off:
             for i in range(self.n):
                 z_spawn = (self.arc_anchor[i][0][2]
@@ -255,15 +256,15 @@ class CreepController:
                    for i in range(self.n)):
                 self.lifted_off = True
         else:
-            self.creep_climb += CREEP_VEL / self.hz
+            self.creep_climb += self.creep_vel / self.hz
 
         for i in range(self.n):
             ax, ay, az = self.creep_anchor[i]
             nodes = []
             for k in range(self.N + 1):
-                z = az + self.creep_climb + CREEP_VEL * self.dt * k
+                z = az + self.creep_climb + self.creep_vel * self.dt * k
                 # level hover thrust, no cable term: cables still slack
-                nodes.append(((ax, ay, z), (0.0, 0.0, CREEP_VEL),
+                nodes.append(((ax, ay, z), (0.0, 0.0, self.creep_vel),
                               (0.0, 0.0, self.g), (0.0, 0.0, 0.0)))
             self._publish_ref(i, nodes)
 
@@ -277,4 +278,4 @@ class CreepController:
             else:
                 s = '  '.join(f"d{i}:dist={d:.2f} gate={g:.2f}"
                               for i, (g, d) in enumerate(gates))
-            self._log.info(f"[planner creep] vz={CREEP_VEL:.2f}  {s}")
+            self._log.info(f"[planner creep] vz={self.creep_vel:.2f}  {s}")

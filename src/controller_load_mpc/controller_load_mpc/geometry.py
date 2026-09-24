@@ -102,6 +102,30 @@ def nominal_cable_dirs(rho, elev_deg=45.0):
     return dirs
 
 
+def balanced_tensions(rho, s_dirs, load_mass, g=9.81, t_min=0.1):
+    """Nominal cable tensions that hold the load LEVEL at hover for this attach layout.
+
+    Equal tensions balance an even ring only. On an uneven ring (30/90/150/270: the layout
+    that leaves a level triple after a detach) equal references carry a net moment, and
+    the OCP either flies the load tilted (SIL R0498, 12-27 deg) or flips between vertex
+    tension solutions and never lifts (R0497). Solve the static balance
+        sum_i t_i s_i = -m g z_hat,   sum_i rho_i x (t_i s_i) = 0
+    for the tensions closest (least squares) to the equal split, then floor at t_min.
+    Even rings return the equal split unchanged."""
+    n = len(rho)
+    s = [np.asarray(v, float).reshape(3) for v in s_dirs]
+    r = [np.asarray(v, float).reshape(3) for v in rho]
+    A = np.zeros((6, n))
+    for i in range(n):
+        A[0:3, i] = s[i]
+        A[3:6, i] = np.cross(r[i], s[i])
+    b = np.array([0.0, 0.0, -float(load_mass) * g, 0.0, 0.0, 0.0])
+    sz = -np.mean([v[2] for v in s])
+    t_eq = np.full(n, float(load_mass) * g / max(n * sz, 1e-9))
+    t = t_eq + np.linalg.pinv(A) @ (b - A @ t_eq)
+    return [float(max(v, t_min)) for v in t]
+
+
 def azimuth_slot_assignment(drone_pos, load_xy, n, load_yaw=0.0, slot_az=None):
     """Match each physical drone to the nearest nominal azimuth slot around the load,
     so the drones can be placed in the ring in any order. The slots are equally

@@ -17,7 +17,7 @@ check that path without waiting for a real pack to sag.
 
     ros2 run simulation_communication sim_telemetry --ros-args -p num_drones:=3
     # prove the low-battery warning is visible:
-    ros2 param set /sim_telemetry voltage_drone_1 13.2
+    ros2 param set /sim_telemetry voltage_drone_1 19.8
 """
 import rclpy
 from rclpy.node import Node
@@ -33,7 +33,7 @@ class SimTelemetry(Node):
         self.rate_hz = float(self.declare_parameter('rate_hz', 2.0).value)
         # One nominal voltage for the fleet, overridable per drone so a single
         # drone can be driven low to exercise the warning path.
-        self.default_v = float(self.declare_parameter('battery_voltage', 16.4).value)
+        self.default_v = float(self.declare_parameter('battery_voltage', 24.6).value)
         self.mah = int(self.declare_parameter('battery_mah_used', 0).value)
         self.rssi = int(self.declare_parameter('rssi', -55).value)
         self.mode = str(self.declare_parameter('mode', 'SIM').value)

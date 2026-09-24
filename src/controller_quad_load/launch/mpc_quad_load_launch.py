@@ -102,7 +102,7 @@ def _args():
         # DEFAULT TRUE: verified in sim on three_rigid_ground (run 20260803_115853),
         # which flew clean -- 3 mm steady-state payload tracking. Set false to get
         # the arc creep back if a different world or geometry needs it.
-        DeclareLaunchArgument('start_taut', default_value='true'),
+        DeclareLaunchArgument('start_taut', default_value='false'),
         # GROUND-START rigid worlds only (three_rigid_ground.sdf). Degrees of
         # cable elevation the drones must sweep up to -- along the rod's arc,
         # pivoting about the grounded attach points -- before the planner takes
@@ -115,13 +115,18 @@ def _args():
         # ground don't land in the same cycle. 1.0 lets the coupled taut-air-start
         # solver converge on the taut hover before the climb ramp begins (smoother
         # takeoff); 0 = off.
-        DeclareLaunchArgument('handover_settle_s', default_value='0.75'),
+        DeclareLaunchArgument('handover_settle_s', default_value='1.0'),
+        DeclareLaunchArgument('creep_vel', default_value='0.2'),   # m/s creep sweep rate before the handover
         # payload mass in the world SDF.
         DeclareLaunchArgument('load_mass', default_value='0.86'),
+        DeclareLaunchArgument('drone_mass', default_value='0.64'),   # x3 model over all links
         DeclareLaunchArgument('target_z', default_value='0.6'),
         # HOLD test: lift_ramp_vel:=0.0 (no lift, just hold the taut config).
         # 0.22 is a brisk-but-trackable climb rate; drop toward 0.12 for a gentler lift.
         DeclareLaunchArgument('lift_ramp_vel', default_value='0.22'),
+        DeclareLaunchArgument('z_ki', default_value='0.4'),      # planner height integral, 0 = off (card 2026-09-24_planner_offset)
+        DeclareLaunchArgument('z_i_max', default_value='0.15'),
+        DeclareLaunchArgument('z_taut_gate', default_value='0.99'),
         # LAND descent rate (separate from the slow takeoff lift_ramp_vel).
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         # Cable compensation. ON is the correct flight config: the cable pulls
@@ -172,7 +177,7 @@ def _args():
         # The hardware launches (real_*.py) keep their own measured 24.
         DeclareLaunchArgument('thrust_ratio', default_value='auto'),
         # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
-        DeclareLaunchArgument('kt_trim', default_value='false'),
+        DeclareLaunchArgument('kt_trim', default_value='true'),
         DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
         DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
         # kT used BEFORE the drones are off their stands. Deliberately BELOW
@@ -193,8 +198,8 @@ def _args():
         # (sim_telemetry's placeholder in sim, ELRS on hardware); with no telemetry
         # the derate is skipped and kT stays at thrust_ratio.
         DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
-        DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),   # 4S 4.20 V/cell
-        DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),  # 4S 3.50 V/cell
+        DeclareLaunchArgument('kt_batt_v_full', default_value='25.2'),   # 6S 4.20 V/cell
+        DeclareLaunchArgument('kt_batt_v_empty', default_value='21.0'),  # 6S 3.50 V/cell
         # seconds between the per-drone kT reports; 0 = silent.
         DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         # Auto slot assignment (coupled mode). OFF by default so the sim behaves as
@@ -216,6 +221,7 @@ def _args():
         # of commanding a stop at the end of the horizon. Default false =
         # historical behaviour, so this only changes a run you asked it to.
         DeclareLaunchArgument('terminal_vel_ref', default_value='false'),
+        DeclareLaunchArgument('x0_relax_symmetric', default_value='false'),   # diagnostic, see controller_mpc
         DeclareLaunchArgument('load_traj', default_value='hover'),
         DeclareLaunchArgument('traj_speed', default_value='0.6'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
@@ -271,6 +277,7 @@ def launch_setup(context, *args, **kwargs):
             name=f'controller_{i}',
             parameters=[{'drone_id': i,
                          'terminal_vel_ref': b('terminal_vel_ref'),
+                         'x0_relax_symmetric': b('x0_relax_symmetric'),
                          'cable_ff_scale': f('cable_ff_scale'),
                          'attitude_ff': b('attitude_ff'),
                          'cable_source': LaunchConfiguration('cable_source'),
@@ -300,11 +307,16 @@ def launch_setup(context, *args, **kwargs):
                      'attach_azimuths_deg': LaunchConfiguration('attach_azimuths_deg'),
                      'start_taut': b('start_taut'),
                      'load_mass': f('load_mass'),
+                     'drone_mass': f('drone_mass'),
                      'target_z': f('target_z'),
                      'lift_ramp_vel': f('lift_ramp_vel'),
+                     'z_ki': f('z_ki'),
+                     'z_i_max': f('z_i_max'),
+                     'z_taut_gate': f('z_taut_gate'),
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
+                     'creep_vel': f('creep_vel'),
                      'auto_slot_assign': b('auto_slot_assign'),
                      'measure_rod_len': b('measure_rod_len'),
                      'load_traj': LaunchConfiguration('load_traj'),

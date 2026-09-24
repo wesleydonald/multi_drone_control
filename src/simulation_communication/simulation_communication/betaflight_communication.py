@@ -167,7 +167,14 @@ class BetaflightInterfaceNode(Node):
         pitch_rate = self.betaflight_rates(msg.channel_1)
         yaw_rate = self.betaflight_rates(-msg.channel_3)
         
-        throttle = (msg.channel_2 + 1) / 2 * 4631
+        # Linear command -> THRUST (2026-09-24, Wesley's word). Gazebo's rotor thrust is
+        # motor-speed squared, so a speed proportional to the command gave a = 88.6 u^2
+        # and the tracker's fixed linear gain could only match one operating point
+        # (secant/tangent split: hover height moved with mass, free drones on the floor
+        # could not follow the creep arc, R0466/R0468). sqrt(u) makes a = 88.6 u, one
+        # gain at every throttle, which is what the rig's Betaflight throttle gives.
+        u = max(0.0, min(1.0, (msg.channel_2 + 1.0) * 0.5))
+        throttle = (u ** 0.5) * 4631.0
         
         if msg.armed and throttle < (0.05 * 4631):
             throttle = 0.05 * 4631

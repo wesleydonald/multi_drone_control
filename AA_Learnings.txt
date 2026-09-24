@@ -480,3 +480,9 @@ Axis aligned magnet
 
 
 
+
+
+
+LOOKED REALLY GOOD IN SIM:
+
+ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=3 load_traj:=hover thrust_ratio:=auto start_taut:=false handover_elev_deg:=45 handover_settle_s:=2.0 kt_trim:=true

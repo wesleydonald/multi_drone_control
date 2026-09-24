@@ -294,9 +294,9 @@ class Controller(Node):
         # then never make the tracker assume MORE thrust than it was configured with.
         self.declare_parameter("kt_batt_sag_frac", 0.0)
         self.kt_batt_sag_frac = float(self.get_parameter("kt_batt_sag_frac").value)
-        self.declare_parameter("kt_batt_v_full", 16.8)     # 4S at 4.20 V/cell
+        self.declare_parameter("kt_batt_v_full", 25.2)     # 6S at 4.20 V/cell
         self.kt_batt_v_full = float(self.get_parameter("kt_batt_v_full").value)
-        self.declare_parameter("kt_batt_v_empty", 14.0)    # 4S at 3.50 V/cell
+        self.declare_parameter("kt_batt_v_empty", 21.0)    # 6S at 3.50 V/cell
         self.kt_batt_v_empty = float(self.get_parameter("kt_batt_v_empty").value)
         if (self.kt_batt_sag_frac > 0.0
                 and self.kt_batt_v_full <= self.kt_batt_v_empty):
@@ -337,6 +337,8 @@ class Controller(Node):
         self._cable_static_t = None
         self._kt_landing = False          # latched on the LAND descent until the next ARM
         self._kt_desc_ticks = 0
+        self._kt_payload_z0 = None        # load height at ARM: the floor test applies until it lifts 5 cm
+        self._kt_frozen_said = False
         self.create_subscription(Float64, f'/drone_{self.drone_id}/cable_static_z',
                                  self._cable_static_cb, 1)
         if self._kt_trim_apply:
@@ -375,6 +377,13 @@ class Controller(Node):
         # is measured; flip it to run the A/B:
         #   ros2 launch ... mpc_quad_load_launch.py load_traj:=circle terminal_vel_ref:=true
         self.declare_parameter('terminal_vel_ref', False)
+        # Node-0 box relaxation: the historical form scales the state by (1 -+ 2.5 %),
+        # which INVERTS the bounds for every negative component (lbx > ubx for a drone
+        # at negative x, any negative velocity, quaternion parts) and gives +-2.5 cm of
+        # free height at 1 m. True: symmetric +-2.5 %|x| about the measurement instead.
+        # Diagnostic for the planner height offset (critic, 2026-09-24_planner_offset).
+        self.declare_parameter('x0_relax_symmetric', False)
+        self.x0_relax_symmetric = bool(self.get_parameter('x0_relax_symmetric').value)
         self.terminal_vel_ref = bool(
             self.get_parameter('terminal_vel_ref').value)
         if self.terminal_vel_ref:
@@ -579,7 +588,7 @@ class Controller(Node):
             warn_tilt_deg=float(p('warn_tilt_deg', 40.0).value),
             max_speed=float(p('max_speed', 3.0).value),
             ref_timeout_s=float(p('safety_ref_timeout_s', 1.0).value),
-            warn_battery_v=float(p('warn_battery_v', 15.0).value),
+            warn_battery_v=float(p('warn_battery_v', 22.5).value),
         )
         self.envelope = EnvelopeChecker(lim)
         self.payload_quat = None
@@ -639,6 +648,9 @@ class Controller(Node):
             self._kt_landing = False
             self._kt_desc_ticks = 0
             self._kt_z_max = -1e9
+            self._kt_payload_z0 = (float(self.payload_pos[2])
+                                   if self.payload_pos is not None else None)
+            self._kt_frozen_said = False
             self.get_logger().info(
                 f"[Drone {self.drone_id}] envelope armed and reset.")
         self._was_armed = self.armed
@@ -849,7 +861,10 @@ class Controller(Node):
         with the flight controller in the loop. Fixing it belongs in the simulator's
         command -> motor mapping, not here.
         """
-        if self._kt_trim_apply and self._kt_spool_done():
+        # The trim replaces the AIRBORNE gain only: the takeoff gain still breaks the
+        # drone off its stand exactly as on the fixed path (applying the trim from the
+        # spool end made the two-drone lift later and rougher, Gazebo 2026-09-24 16:28).
+        if self._kt_trim_apply and self._kt_spool_done() and self._kt_airborne():
             return self._kt_trim.kt_hat      # the trim already carries any sag
         base = (self.thrust_ratio if self._kt_airborne()
                 else self.takeoff_thrust_ratio)
@@ -870,8 +885,8 @@ class Controller(Node):
 
     def _kt_spool_done(self):
         """True once the takeoff spool has run its course (the applied throttle is the
-        commanded one). The trim is applied from here, not from the 4 cm airborne
-        margin: a drone sagging under a wrong gain may never clear that margin."""
+        commanded one); the estimate UPDATES from here (a drone sagging under a wrong
+        gain may never clear the airborne margin), it is APPLIED once airborne."""
         if not self.takeoff_requested or self._takeoff_step is None:
             return False
         return self._takeoff_step >= max(1.0, self.takeoff_spool_s * FREQUENCY_HZ)
@@ -903,6 +918,11 @@ class Controller(Node):
         u = float(self._applied_u[2]) if self._applied_u is not None else 0.0
         q = self.current_pose[3:7]                       # w, x, y, z
         r33 = 1.0 - 2.0 * (float(q[1]) ** 2 + float(q[2]) ** 2)
+        t.filter_inputs(u, r33)
+        if self._kt_payload_z0 is None and self.payload_pos is not None and not self.takeoff_requested:
+            self._kt_payload_z0 = float(self.payload_pos[2])
+        load_at_rest = (self._kt_payload_z0 is None or self.payload_pos is None
+                        or float(self.payload_pos[2]) < self._kt_payload_z0 + 0.05)
         # hover only: a lift ramp or the LAND descent is a constant-velocity move where
         # the 0.3 s acceleration filter lags the throttle, and the descent would pollute
         # the value reported at touchdown
@@ -912,11 +932,12 @@ class Controller(Node):
         z = float(self.current_pose[2])
         if steady_prev := (t.n_updates > 0 and not self._kt_landing):
             self._kt_z_max = max(getattr(self, '_kt_z_max', z), z)
-        # 5 cm below the hover peak and still going down: the descent from a 0.98 m hover
-        # to a 0.83 m stand lasts under a second, so no dwell (a 0.5 s dwell never fired)
-        descending = (t.n_updates > 0 and z < getattr(self, '_kt_z_max', z) - 0.05 and vz < -0.02)
+        # 10 cm below the hover peak and going down at 5 cm/s for 0.2 s: a 7 cm bob at
+        # hover froze the estimate mid-flight at 5 cm / 3 ticks (Gazebo 2026-09-24 16:28);
+        # the SIL descent from 0.98 m to the 0.83 m stand still fires before touchdown
+        descending = (t.n_updates > 0 and z < getattr(self, '_kt_z_max', z) - 0.10 and vz < -0.05)
         self._kt_desc_ticks = self._kt_desc_ticks + 1 if descending else 0
-        if self._kt_desc_ticks >= 3 and not self._kt_landing:
+        if self._kt_desc_ticks >= 10 and not self._kt_landing:
             self._kt_landing = True
             if t.n_updates > 0:
                 v = self.battery_voltage
@@ -930,7 +951,14 @@ class Controller(Node):
         # gate; a partly supported drone on the SIL stand only slows the lift (R0433).
         steady = (self.armed and self._kt_spool_done() and tethered and not self._kt_landing
                   and 0.15 <= u <= 0.6 and abs(t.a_meas_z) < 1.5 and abs(vz) < 0.08)
-        t.update(self._cable_static_z if tethered else 0.0, u, r33, steady)
+        t.update(self._cable_static_z if tethered else 0.0, steady, contact_possible=load_at_rest)
+        if t.frozen and not self._kt_frozen_said:
+            self._kt_frozen_said = True
+            v = self.battery_voltage
+            self.get_logger().info(
+                f"[kT d{self.drone_id}] converged: {t.kt_hat:.2f} (typed {self.thrust_ratio:.2f}, "
+                f"{t.kt_hat / self.thrust_ratio - 1:+.1%}, pack "
+                f"{'--' if v is None else f'{float(v):.1f} V'}); frozen for the flight")
 
     def report_thrust_ratio(self):
         """~1 Hz one-liner so the flown kT can be eyeballed against the throttle."""
@@ -951,6 +979,7 @@ class Controller(Node):
             f"fixed={self.thrust_ratio:5.2f} takeoff={self.takeoff_thrust_ratio:5.2f}"
             f" | batt {batt} x{self._battery_derate():.3f} | thr={thr:.3f}"
             + f" | kt_hat={self._kt_trim.kt_hat:.2f}{' RAILED' if self._kt_trim.railed else ''}"
+              f"{' frozen' if self._kt_trim.frozen else ''}"
               f"{' applied' if self._kt_trim_apply else ' shadow'}")
 
     def _measured_heading(self):
@@ -1136,8 +1165,13 @@ class Controller(Node):
                 (estimated_state, self._applied_u))
 
             relaxation_factor = 0.025
-            relaxed_lbx = estimated_state_with_control * (1 - relaxation_factor)
-            relaxed_ubx = estimated_state_with_control * (1 + relaxation_factor)
+            if self.x0_relax_symmetric:
+                span = relaxation_factor * np.abs(estimated_state_with_control)
+                relaxed_lbx = estimated_state_with_control - span
+                relaxed_ubx = estimated_state_with_control + span
+            else:
+                relaxed_lbx = estimated_state_with_control * (1 - relaxation_factor)
+                relaxed_ubx = estimated_state_with_control * (1 + relaxation_factor)
             self.ocp.set(0, "lbx", relaxed_lbx)
             self.ocp.set(0, "ubx", relaxed_ubx)
 

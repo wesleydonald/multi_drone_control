@@ -14,7 +14,7 @@ reference used to prime the solver warm during creep.
 """
 import numpy as np
 
-from .geometry import rot_align, rot_z, yaw_quat
+from .geometry import balanced_tensions, rot_align, rot_z, yaw_quat
 
 
 class ReferenceBuilder:
@@ -22,6 +22,8 @@ class ReferenceBuilder:
         self.dyn = dyn
         self.n = n
         self._s_nom = s_nom
+        # per-drone nominal tensions that hold THIS layout level (equal on an even ring)
+        self._t_nom = balanced_tensions(dyn.rho, s_nom, dyn.m)
         self.dt = dt
         self.traj = traj
         # Load YAW DATUM: the payload's measured yaw, latched once by the node
@@ -45,8 +47,12 @@ class ReferenceBuilder:
         """Latch the payload's starting yaw as the reference datum (see psi0)."""
         self.psi0 = float(psi0)
 
-    def update(self, hover_xy, lift_z0, lift_progress, target_z, lift_vel, traj_t):
-        """Refresh the lift schedule for this planner tick (call before solving)."""
+    def update(self, hover_xy, lift_z0, lift_progress, target_z, lift_vel, traj_t,
+               z_bias=0.0):
+        """Refresh the lift schedule for this planner tick (call before solving).
+        `z_bias`: the planner's bounded height integral (ZBias), added to the height
+        reference AFTER the lift cap so it corrects a low hover as well as a high one."""
+        self.z_bias = float(z_bias)
         self.hover_xy = hover_xy
         self.lift_z0 = lift_z0
         self.lift_progress = lift_progress
@@ -67,12 +73,11 @@ class ReferenceBuilder:
         target and become positive feedback.
         """
         x0, y0 = self.hover_xy
-        t_nom = self.dyn.m * 9.81 / (self.n * np.sin(np.deg2rad(45.0)))
-        z_base = min(self.target_z, self.lift_z0 + self.lift_progress)
+        z_base = min(self.target_z, self.lift_z0 + self.lift_progress) + getattr(self, 'z_bias', 0.0)
         vz = float(self._lift_vel)                 # signed lift rate this cycle
         z_k = z_base + vz * self.dt * k            # ramp the height along the horizon
         if vz >= 0.0:
-            z_k = min(z_k, self.target_z)
+            z_k = min(z_k, self.target_z + getattr(self, 'z_bias', 0.0))
             vz_k = 0.0 if z_k >= self.target_z - 1e-6 else vz
         else:
             vz_k = vz                              # descending (LAND): keep the rate
@@ -108,9 +113,9 @@ class ReferenceBuilder:
         s_ref = []
         for i in range(self.n):
             s_ref.extend((R_form @ self._s_nom[i]).tolist())
-        t_ref = t_nom * g_eff_mag / self.dyn.g
+        t_ref = [ti * g_eff_mag / self.dyn.g for ti in self._t_nom]
         return np.array(pose + s_ref              # cable directions (flatness)
-                        + [t_ref] * self.n        # cable tensions (flatness)
+                        + t_ref                   # cable tensions (flatness), layout-balanced
                         + [0.0] * (3 * self.n)    # r_vec ref (no cable swing)
                         + [0.0] * self.dyn.nu)
 
@@ -130,12 +135,11 @@ class ReferenceBuilder:
         the placement yaw datum, as in yref_at) and nominal tension. Same field layout
         as yref_at."""
         p = load_state[0:3]
-        t_nom = self.dyn.m * 9.81 / (self.n * np.sin(np.deg2rad(45.0)))
         pose = [float(p[0]), float(p[1]), float(p[2]),
                 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         R_yaw = rot_z(self.psi0)
         s_ref = []
         for i in range(self.n):
             s_ref.extend((R_yaw @ self._s_nom[i]).tolist())
-        return np.array(pose + s_ref + [t_nom] * self.n
+        return np.array(pose + s_ref + list(self._t_nom)
                         + [0.0] * (3 * self.n) + [0.0] * self.dyn.nu)

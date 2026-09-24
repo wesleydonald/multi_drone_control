@@ -20,6 +20,10 @@ ATTACH_RADIUS = 0.25   # magnet-plate ring of the 500 mm M2A ring payload (2026-
 ATTACH_Z      = 0.025          # attach height above load CoG, load frame
 ATTACH_AZIMUTHS_DEG = ''       # '' = even ring; e.g. '0,90,180' = 3/12/9 o'clock (rig)
 LOAD_MASS     = 0.86           # official rig mass (Wesley, 2026-09-23)
+DRONE_MASS    = 0.64           # sim x3 airframe over ALL its links (base 0.6 + four 0.01
+                               # rotors, simulation_assets/models/x3_drone*.sdf); was 0.6
+                               # until 2026-09-24 (both drones measured 3.6 % under the
+                               # nominal gain). The rig flies drone_mass:=<weighed with pack>.
 # M2A ring (outer 280 mm, inner 220 mm, 30 mm thick; generate_rigid_world.py) about its CoG:
 # Ixx = m(3(R^2+r^2)+h^2)/12, Izz = m(R^2+r^2)/2.
 # The planner's OCP bakes these into the compiled solver (planner_solver._ocp_signature)
@@ -61,6 +65,9 @@ class PlannerConfig:
         # off this, so a mismatch scales every drone's tension FF.
         self.load_mass = float(p('load_mass', LOAD_MASS).value)
         self.load_inertia = load_inertia(self.load_mass)
+        # Per-drone mass (with pack): the OCP's tension -> drone-acceleration relation
+        # and the static cable share the trackers' kt_trim uses both divide by it.
+        self.drone_mass = float(p('drone_mass', DRONE_MASS).value)
         # Hand over on cable ELEVATION (deg) instead of cable length. A rigid rod
         # is always exactly cable_len, so the length gate reads 1.0 from spawn and
         # hands over at ~0 deg, where tension mg/(n sin_elev) is effectively
@@ -73,12 +80,19 @@ class PlannerConfig:
         # fighting vanishes and it must unwind), and the lift starts pulling the
         # payload off the ground. Ground starts want ~2 s; 0 = off.
         self.handover_settle_s = float(p('handover_settle_s', 0.0).value)
+        # creep sweep / rise rate before the handover (m/s); 0.10 since the creep was written
+        self.creep_vel = float(p('creep_vel', 0.10).value)
         # Cables already taut at spawn (elevated world): skip the creep phase.
         self.start_taut = bool(p('start_taut', False).value)
         # Load target rises from the handover height at lift_ramp_vel to
         # target_z. Params, so lift_ramp_vel:=0.0 gives a hold test.
         self.target_z = float(p('target_z', TARGET_Z).value)
         self.lift_ramp_vel = float(p('lift_ramp_vel', LIFT_RAMP_VEL).value)
+        # Bounded load-height integral on the height target (card 2026-09-24_planner_offset):
+        # 0 = off; 0.2 = tau 5 s. z_i_max bounds it (0.15 m > the 13 cm a 10 % gain error costs).
+        self.z_ki = float(p('z_ki', 0.0).value)
+        self.z_i_max = float(p('z_i_max', 0.15).value)
+        self.z_taut_gate = float(p('z_taut_gate', 0.99).value)   # ~0.9 on the rig with a typed rod length
         # Auto slot assignment. OFF: OCP slot i is physical drone i, so the drones
         # must spawn in the nominal ring order (drone 0 at +x, CCW). ON: at the first
         # solve each physical drone is matched to the nearest nominal azimuth slot

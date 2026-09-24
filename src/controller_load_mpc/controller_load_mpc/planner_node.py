@@ -23,6 +23,7 @@ start_taut world skips the creep and hands over immediately.
 
 Geometry must match the world SDF (see generate_rigid_world.py).
 """
+import time
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -49,7 +50,7 @@ from utility_objects.run_context import log_base_dir
 # load_mass to 0.1 without scaling these leaves the model ~4x over-stiff in
 # rotation. Scale by (load_mass / 0.4) for a same-size lighter payload, or
 # recompute from the real payload's dimensions.
-DRONE_MASS    = 0.6
+from .params import DRONE_MASS   # sim airframe 0.64 kg; the node reads the drone_mass param
 PLANNER_HZ    = 10.0
 
 # logs/<LOG_PKG>/<node>_<ts>/params.json -- the same tree the per-drone trackers log
@@ -83,6 +84,92 @@ LAND_MAX_DROP = 1.50          # m safety floor below the handover height
 # planner's own lift schedule, not the measured load height, so unlike the old
 # airborne height-gate it can never deadlock (the lift clock advances regardless).
 FF_EASE_S = 1.0
+
+LAND_DEPARTED_WAIT_S = 15.0   # s to wait for a departed (detached) drone to come
+                              # down before /fleet/landed disarms the whole fleet
+
+
+class ZBias:
+    """Bounded load-height integral on the planner's height target (card
+    2026-09-24_planner_offset). Node 0 of the OCP is re-pinned to the measured state
+    every cycle, so the load height is held only by the trackers' weak position
+    stiffness against the node-0 force budget: any static error (feedforward at the
+    wrong elevation, rods, mass, gain) becomes a fixed height miss with DC gain 1 on the
+    target (R0473-R0477). This integrates the measured miss into the reference height,
+    only while the caller says the fleet is in a gated hover; frozen otherwise, zeroed
+    when the planner phase is entered. `near_bound` is the fault-masking guard: a real
+    fault rails it and the node warns."""
+
+    def __init__(self, ki, i_max, hz):
+        self.ki = float(ki)
+        self.i_max = abs(float(i_max))
+        self.hz = float(hz)
+        self.reset()
+
+    def reset(self):
+        self.value = 0.0
+        self.n_updates = 0
+
+    @property
+    def near_bound(self):
+        return abs(self.value) > 0.7 * self.i_max
+
+    def update(self, err, gated):
+        """err = target_z - measured load z. Returns the bias to ADD to the reference."""
+        if gated and self.ki > 0.0:
+            self.value += self.ki * float(err) / self.hz
+            self.value = float(np.clip(self.value, -self.i_max, self.i_max))
+            self.n_updates += 1
+        return self.value
+
+
+class TouchdownDetector:
+    """Touchdown by STALL of the drones a LAND descent is driving down.
+
+    The reference descends at land_vel; a drone no longer following it has hit
+    something solid, which is the only landing test that holds when the fleet is not
+    above its takeoff points. Armed only after LAND_GRACE_S and a real descent of
+    LAND_MIN_DESCENT (a tracker lagging longer than the grace would otherwise read
+    "not moving yet" as landed at altitude); the stall must persist LAND_STALL_S so
+    tracking lag or a swinging load does not read as touchdown. Pure so it can be unit
+    tested; fed ONLY the drones still on the load (R0113/R0114: a detached drone still
+    descending kept the max moving and the survivors were ground into the floor)."""
+
+    def __init__(self, land_vel, hz):
+        self.land_vel = float(land_vel)
+        self.hz = float(hz)
+        self.reset()
+
+    def reset(self):
+        self._start_z = None
+        self._prev_max_z = None
+        self._stall_ct = 0
+        self._cycles = 0
+
+    def update(self, zs):
+        """One planner tick with the heights of the drones being landed. True once
+        they have all stopped descending."""
+        if not zs or any(z is None for z in zs):
+            return False
+        max_dz = max(float(z) for z in zs)
+        if self._start_z is None:
+            self._start_z = max_dz
+        self._cycles += 1
+        if (self._cycles < int(LAND_GRACE_S * self.hz)
+                or max_dz > self._start_z - LAND_MIN_DESCENT):
+            self._prev_max_z = max_dz
+            return False
+        prev = self._prev_max_z
+        self._prev_max_z = max_dz
+        if prev is None:
+            return False
+        expected = self.land_vel / self.hz      # drop per tick if tracking the reference
+        if (prev - max_dz) < expected * LAND_STALL_FRAC:
+            self._stall_ct += 1
+        else:
+            self._stall_ct = 0
+        return self._stall_ct >= int(LAND_STALL_S * self.hz)
+
 
 LIFT_STEP     = 0.04          # m max commanded climb above current load z. Kept
                               # small: a large lead builds climb speed and
@@ -155,6 +242,10 @@ class LoadPlanner(Node):
         self.start_taut = cfg.start_taut
         self.target_z = cfg.target_z
         self.lift_ramp_vel = cfg.lift_ramp_vel
+        self._zbias = ZBias(cfg.z_ki, cfg.z_i_max, PLANNER_HZ)
+        self._z_taut_gate = cfg.z_taut_gate
+        self._zbias_warned = False
+        self._load_t = None                    # monotonic time of the last payload pose
         self.auto_slot_assign = cfg.auto_slot_assign
         self.load_traj = cfg.load_traj
         self.traj_speed = cfg.traj_speed
@@ -170,10 +261,13 @@ class LoadPlanner(Node):
         self._landed = False         # descent finished, load back at start height
         self._lift_vel = 0.0         # signed vertical velocity of the lift target
         self._traj_t_drawn = 0.0     # traj_t at the last RViz horizon publish
-        # touchdown detector state (see _touchdown_stalled)
-        self._land_prev_max_z = None
-        self._land_stall_ct = 0
-        self._land_cycles = 0
+        # touchdown detector (see TouchdownDetector / _touchdown_stalled)
+        self._touchdown = TouchdownDetector(self.land_vel, PLANNER_HZ)
+        self._touched_down = False   # survivors stalled on the floor; reference frozen
+        self._land_wait_ct = 0       # ticks spent waiting for departed drones to land
+        self._land_ff_off_said = False
+        self._land_anchor = None     # per-slot (x, y, z) latched when the load is down on LAND
+        self._land_drop = 0.0
 
         # Lateral load-reference trajectory generator (line_x / circle / fig_8 /
         # spin). The trajectory CLOCK traj_t stays here and is advanced in _plan.
@@ -188,9 +282,10 @@ class LoadPlanner(Node):
                                  self.attach_azimuths)
         self._s_nom = nominal_cable_dirs(self.rho, 45.0)
 
+        self.drone_mass = cfg.drone_mass
         self.dyn = LoadCableDynamics(
             self.n, self.load_mass, self.load_inertia, [self.cable_len] * self.n,
-            self.rho, DRONE_MASS)
+            self.rho, self.drone_mass)
         # The OCP wrapper builds (or loads a cached) acados solver for this geometry
         # and owns the reference-extraction functions + warm-start state (last_X).
         self.solver = PlannerSolver(self.dyn, self.get_logger())
@@ -206,7 +301,7 @@ class LoadPlanner(Node):
         self.creep = CreepController(
             self.n, self.rho, self.cable_len, self.N, self.dt, self.dyn.g,
             self.handover_elev_deg, PLANNER_HZ, self._drone_at, self._publish_ref,
-            self.get_logger())
+            self.get_logger(), creep_vel=cfg.creep_vel)
         # Builds the per-node OCP tracking reference from the lift schedule + load
         # trajectory (fed the schedule via refs.update() before each planner solve).
         self.refs = ReferenceBuilder(self.dyn, self.n, self._s_nom, self.dt, self.traj)
@@ -305,6 +400,7 @@ class LoadPlanner(Node):
         self.load_state = np.array([
             p.x, p.y, p.z, o.w, o.x, o.y, o.z,
             lv.x, lv.y, lv.z, av.x, av.y, av.z])
+        self._load_t = time.monotonic()
         if self.hover_xy is None:
             self.hover_xy = (p.x, p.y)
 
@@ -350,46 +446,65 @@ class LoadPlanner(Node):
         self._landed = False
         # Arm the touchdown detector fresh: this may be upgrading a descent
         # already in progress, so stale stall state must not carry over.
-        self._land_prev_max_z = None
-        self._land_stall_ct = 0
-        self._land_cycles = 0
-        self._land_start_z = None
+        self._touchdown.reset()
+        self._touched_down = False
+        self._land_wait_ct = 0
+        self._land_ff_off_said = False
+        self._land_anchor = None
+        self._land_drop = 0.0
         self.get_logger().info('[planner] LAND - descending to the floor')
 
     def _touchdown_stalled(self):
-        """True once every drone has stopped descending, i.e. touched down.
+        """True once every drone STILL ON THE LOAD has stopped descending (see
+        TouchdownDetector). Slots, not physical ids: after a resize the departed drones
+        are not in slot2drone and must not hold the test open."""
+        zs = []
+        for i in range(self.n):
+            d = self._drone_at(i)
+            if d is None:
+                return False
+            zs.append(float(d[2]))
+        return self._touchdown.update(zs)
 
-        Called only while a LAND descent drives the reference down at land_vel.
-        A drone no longer following that command has hit something solid, which
-        is the only landing test that holds when the fleet is not above its
-        takeoff points. The stall must persist LAND_STALL_S so tracking lag or a
-        swinging load doesn't read as touchdown.
-        """
-        if any(d is None for d in self.drone_pos):
-            return False
-        max_dz = max(d[2] for d in self.drone_pos)
-        # Arm the stall test only after the fleet has actually descended a real
-        # distance. The grace period alone isn't enough: if the tracker lagged
-        # longer than LAND_GRACE_S the drones would still be stationary when the
-        # test armed, misreading "not moving yet" as "landed" at altitude.
-        if self._land_start_z is None:
-            self._land_start_z = max_dz
-        self._land_cycles += 1
-        if (self._land_cycles < int(LAND_GRACE_S * PLANNER_HZ)
-                or max_dz > self._land_start_z - LAND_MIN_DESCENT):
-            self._land_prev_max_z = max_dz
-            return False
-        prev = self._land_prev_max_z
-        self._land_prev_max_z = max_dz
-        if prev is None:
-            return False
-        # expected drop this cycle if the drones were tracking the reference
-        expected = self.land_vel / PLANNER_HZ
-        if (prev - max_dz) < expected * LAND_STALL_FRAC:
-            self._land_stall_ct += 1
-        else:
-            self._land_stall_ct = 0
-        return self._land_stall_ct >= int(LAND_STALL_S * PLANNER_HZ)
+    def _land_hold_refs(self):
+        """LAND with the load already resting: the rods are slack and the OCP has no
+        business planning. Its 45-degree cable references pull grounded drones inward
+        (R0113: drone 0 slid and tipped; R0490: drone 2 touched down with 21 degrees of
+        tilt and went over 0.3 s later, before any stall could be seen). Instead each
+        survivor descends STRAIGHT DOWN from where it is, level, at hover thrust with no
+        cable term, at land_vel, until the stall detector sees it on the floor. The
+        creep in reverse. Frozen once the survivors have touched down."""
+        if self._land_anchor is None:
+            self._land_anchor = {}
+            for i in range(self.n):
+                p = self._drone_at(i)
+                self._land_anchor[i] = (float(p[0]), float(p[1]), float(p[2]))
+            self._land_drop = 0.0
+            self.get_logger().info(
+                '[planner] load down — survivors descend straight down, level, rods slack')
+        if not self._touched_down:
+            self._land_drop += self.land_vel / PLANNER_HZ
+        g = self.dyn.g
+        for i in range(self.n):
+            ax, ay, az = self._land_anchor[i]
+            nodes = []
+            for k in range(self.N + 1):
+                z = max(0.0, az - self._land_drop - self.land_vel * self.dt * k)
+                vz = -self.land_vel if (z > 0.0 and not self._touched_down) else 0.0
+                nodes.append(((ax, ay, z), (0.0, 0.0, vz), (0.0, 0.0, g), (0.0, 0.0, 0.0)))
+            self._publish_ref(self.slot2drone[i], nodes)
+
+    def _load_down(self):
+        """The load is back at its rest height (within 5 cm of where the lift started):
+        the rods are slack from here on."""
+        return (self.load_state is not None and self.lift_z0 is not None
+                and float(self.load_state[2]) <= self.lift_z0 + 0.05)
+
+    def _departed_down(self):
+        """True when every drone that left the fleet mid-flight is on the floor, so
+        /fleet/landed (a fleet-wide disarm) cannot catch one airborne. The plain
+        planner has no departed drones; the dissipative node overrides this."""
+        return True
 
     def _drone_at(self, i):
         """Measured position of the physical drone occupying OCP slot i (identity
@@ -489,15 +604,33 @@ class LoadPlanner(Node):
                 # above its reference and the descent goes unstable.
                 floor = -LAND_MAX_DROP if self._land_to_ground else 0.0
                 rate = self.land_vel if self._land_to_ground else self.lift_ramp_vel
-                self.lift_progress = max(
-                    floor, self.lift_progress - rate / PLANNER_HZ)
+                if not self._touched_down:
+                    # frozen at the stall point once down: a reference that keeps
+                    # sinking while /fleet/landed waits (for a departed drone) grinds
+                    # the survivors into the floor and trips the tilt envelope
+                    self.lift_progress = max(
+                        floor, self.lift_progress - rate / PLANNER_HZ)
                 if self._land_to_ground:
                     # Touchdown by stall, not absolute height: over a takeoff
                     # platform a fixed threshold is unreachable, so the descent
                     # would only end when lift_progress bottoms out, grinding the
                     # drones into the platform for ~10 s. Works either way.
-                    done = self._touchdown_stalled() \
-                        or self.lift_progress <= floor + 1e-6
+                    if not self._touched_down:
+                        self._touched_down = (self._touchdown_stalled()
+                                              or self.lift_progress <= floor + 1e-6)
+                        if self._touched_down and not self._departed_down():
+                            self.get_logger().info(
+                                '[planner] survivors down — reference held, waiting '
+                                'for the departed drone(s) to land')
+                    done = False
+                    if self._touched_down:
+                        self._land_wait_ct += 1
+                        done = self._departed_down()
+                        if not done and self._land_wait_ct >= int(LAND_DEPARTED_WAIT_S * PLANNER_HZ):
+                            self.get_logger().warn(
+                                f'[planner] departed drone(s) not down after '
+                                f'{LAND_DEPARTED_WAIT_S:.0f} s; announcing landed anyway')
+                            done = True
                 else:
                     done = self.lift_progress <= 1e-6
                 if done and not self._landed:
@@ -552,8 +685,13 @@ class LoadPlanner(Node):
         # warm on the live config all through creep (_prime_solver), so last_X is
         # already populated here and this first post-handover solve is a warm
         # refinement, not a cold reconverge.
+        if self._land_to_ground and self._load_down():
+            self._land_hold_refs()
+            return
+        self._update_zbias()
         self.refs.update(self.hover_xy, self.lift_z0, self.lift_progress,
-                         self.target_z, self._lift_vel, self.traj_t)
+                         self.target_z, self._lift_vel, self.traj_t,
+                         z_bias=self._zbias.value)
         drone_slot_pos = [self._drone_at(i) for i in range(self.n)]
         x_init = self.solver.build_x_init(self.load_state, drone_slot_pos)
         X, status = self.solver.solve_horizon(
@@ -668,7 +806,7 @@ class LoadPlanner(Node):
                 continue
             rho = attach_points(m, self.attach_radius, self.attach_z)
             dyn = LoadCableDynamics(m, self.load_mass, self.load_inertia,
-                                    [self.cable_len] * m, rho, DRONE_MASS)
+                                    [self.cable_len] * m, rho, self.drone_mass)
             self._solvers[m] = (dyn, PlannerSolver(dyn, self.get_logger()), rho)
             self.get_logger().info(f'[planner] OCP ready for n={m}')
 
@@ -731,6 +869,8 @@ class LoadPlanner(Node):
         point, so that first solve reseeds anyway."""
         self.phase = 'planner'
         self.lift_z0 = float(self.load_state[2])   # ramp lift from here
+        self._zbias.reset()                         # fresh per flight
+        self._zbias_warned = False
         self.lift_progress = 0.0
         self._lift_t = 0.0                         # restart the lift easing
         self._ff_t = 0.0                           # restart the cable-FF soft-start
@@ -777,6 +917,41 @@ class LoadPlanner(Node):
         msg.data = data
         self.ref_pub[i].publish(msg)
 
+    def _zbias_gated(self):
+        """Steady tethered hover, and nothing else moving the height: lift complete, no
+        descent or LAND, no lateral trajectory (frozen through a circle by design),
+        load vertical speed under 0.05 m/s, every rod taut (z_taut_gate, 0.99 in sim
+        where rigid rods read 0.9999; ~0.9 on the rig when the rod length is typed, or
+        the gate never opens), the miss under 0.25 m (else it is not a static offset) and the payload
+        pose fresher than 0.2 s (a stale pose must not be integrated)."""
+        if self.lift_z0 is None or self.load_state is None or self._load_t is None:
+            return False
+        lift_complete = self.lift_progress >= (self.target_z - self.lift_z0) - 1e-6
+        if not lift_complete or self.descending or self._land_to_ground or self.traj_t > 0.0:
+            return False
+        if abs(float(self.load_state[9])) >= 0.05:
+            return False
+        if time.monotonic() - self._load_t > 0.2:
+            return False
+        if abs(self.target_z - float(self.load_state[2])) >= 0.25:
+            return False
+        for i in range(self.n):
+            if self._drone_at(i) is None or self._cable_taut_gate(i)[0] < self._z_taut_gate:
+                return False
+        return True
+
+    def _update_zbias(self):
+        if self._zbias.ki <= 0.0 or self.load_state is None:
+            return
+        err = self.target_z - float(self.load_state[2])
+        self._zbias.update(err, self._zbias_gated())
+        if self._zbias.near_bound and not self._zbias_warned:
+            self._zbias_warned = True
+            self.get_logger().warn(
+                f'[planner] height integral {self._zbias.value:+.3f} m is near its bound '
+                f'(+-{self._zbias.i_max:.2f}): a real static error is being covered; check '
+                f'feedforward / rods / mass / gain')
+
     def _cable_taut_gate(self, i):
         """(gate, dist): `gate` in [0, 1] scales the cable-tension feedforward we
         publish to the tracker by how LENGTH-taut the cable measures right now —
@@ -794,9 +969,9 @@ class LoadPlanner(Node):
 
     def _publish_static_cable(self, X):
         """Static vertical cable share per physical drone (kt_trim's cable term)."""
-        planned = [float(X[LOAD_DIM + CABLE_DIM * i + 12, 0]) * float(X[LOAD_DIM + CABLE_DIM * i + 2, 0]) / DRONE_MASS
+        planned = [float(X[LOAD_DIM + CABLE_DIM * i + 12, 0]) * float(X[LOAD_DIM + CABLE_DIM * i + 2, 0]) / self.drone_mass
                    for i in range(self.n)]
-        shares = static_cable_z(planned, self.load_mass, DRONE_MASS)
+        shares = static_cable_z(planned, self.load_mass, self.drone_mass)
         if shares is None:
             return
         if not hasattr(self, '_static_pub'):
@@ -813,6 +988,17 @@ class LoadPlanner(Node):
         # into the published tension FF so it is never stepped onto the still-
         # grounded load -- that step made the drones lurch and scrambled the horizon.
         ff = float(np.clip(self._ff_t / FF_EASE_S, 0.0, 1.0))
+        if self._land_to_ground and self._load_down():
+            # LAND with the load already resting: the rods are slack, but the OCP still
+            # pins 45 deg cable directions and nominal tension, and that feedforward
+            # (3.8 m/s^2 sideways per drone) is what slid R0113's drone 0 across the
+            # floor until it tipped (critic, 2026-09-24_detach_land_fix). No pull to
+            # feed forward once the load is down.
+            ff = 0.0
+            if not self._land_ff_off_said:
+                self._land_ff_off_said = True
+                self.get_logger().info(
+                    '[planner] load down — cable feedforward off, rods slack')
         diag = []
         for i in range(self.n):
             gate, dist = self._cable_taut_gate(i)
@@ -855,7 +1041,7 @@ class LoadPlanner(Node):
             d0N = float(self.solver.drone_kinematics(X[:, -1], 0)[0][2])
             self.get_logger().info(
                 f"[planner cable] L={self.cable_len:.2f} load_z={self.load_state[2]:.2f} "
-                f"z_tgt={z_tgt:.2f} zN={zN:.2f} d0N={d0N:.2f} ff={ff:.2f} tilt={tilt:.1f}deg "
+                f"z_tgt={z_tgt:.2f} zI={self._zbias.value:+.3f} zN={zN:.2f} d0N={d0N:.2f} ff={ff:.2f} tilt={tilt:.1f}deg "
                 f"elev=[{e}]  {s}")
 
 

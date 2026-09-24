@@ -19,9 +19,11 @@ LoadPlanner: it flies the identical centralized OCP until the first
 published it behaves like real_control_launch.py throughout -- which is exactly
 what you want for a first hardware bring-up of this stack.
 
-NO DETACH: simply never publish /fleet/detach. reserved_attach defaults to 0, so
-no attach topics are subscribed either, and real_io_launch.py already hides the
-RViz DETACH/ATTACH buttons. Nothing further is needed to disable them.
+DETACH on the rig: /fleet/detach <k> (RViz button with real_io_launch detach:=true,
+or a topic pub). reconfig_mode:=ocp resizes the OCP in place (the verified-best sim
+path); detach_magnet:=true releases /drone_<k>/magnet on the same tick. With
+neither published nothing changes: reserved_attach defaults to 0, so no attach
+topics are subscribed either.
 
 Start this AFTER real_io_launch.py (terminal 1) is up and MoCap is streaming --
 the trackers and the dissipative node block waiting for the first
@@ -65,12 +67,17 @@ def _args():
         # ring. Clock face: 3 o'clock = 0, 12 = 90, 9 = 180, 6 = 270.
         DeclareLaunchArgument('attach_azimuths_deg', default_value=''),
         DeclareLaunchArgument('load_mass', default_value='0.86'),
+        DeclareLaunchArgument('drone_mass', default_value='0.64'),   # WEIGH the airframe with its pack; 0.64 is the sim model
         # Real rig starts taut and level: no creep phase, no handover arc.
-        DeclareLaunchArgument('start_taut', default_value='true'),
-        DeclareLaunchArgument('handover_elev_deg', default_value='0.0'),
-        DeclareLaunchArgument('handover_settle_s', default_value='0.5'),
+        DeclareLaunchArgument('start_taut', default_value='false'),
+        DeclareLaunchArgument('handover_elev_deg', default_value='45.0'),
+        DeclareLaunchArgument('handover_settle_s', default_value='1.0'),
+        DeclareLaunchArgument('creep_vel', default_value='0.2'),   # m/s creep sweep rate before the handover
         DeclareLaunchArgument('target_z', default_value='0.6'),
         DeclareLaunchArgument('lift_ramp_vel', default_value='0.20'),
+        DeclareLaunchArgument('z_ki', default_value='0.4'),      # planner height integral, 0 = off (card 2026-09-24_planner_offset)
+        DeclareLaunchArgument('z_i_max', default_value='0.15'),
+        DeclareLaunchArgument('z_taut_gate', default_value='0.9'),
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         DeclareLaunchArgument('cable_ff_scale', default_value='1.0'),
         DeclareLaunchArgument('attitude_ff', default_value='true'),
@@ -87,7 +94,7 @@ def _args():
         # model there has to use the secant gain at hover. The two genuinely differ.)
         DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
         # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
-        DeclareLaunchArgument('kt_trim', default_value='false'),
+        DeclareLaunchArgument('kt_trim', default_value='true'),
         DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
         DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
         # kT used before the drone is airborne. 0 = same as thrust_ratio, which is
@@ -104,8 +111,8 @@ def _args():
         # Voltage comes from /drone_N/telemetry (ELRS). With no telemetry the derate
         # is skipped and kT stays at thrust_ratio.
         DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
-        DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),   # 4S 4.20 V/cell
-        DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),  # 4S 3.50 V/cell
+        DeclareLaunchArgument('kt_batt_v_full', default_value='25.2'),   # 6S 4.20 V/cell
+        DeclareLaunchArgument('kt_batt_v_empty', default_value='21.0'),  # 6S 3.50 V/cell
         # Seconds between per-drone kT reports; 0 = silent.
         DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         DeclareLaunchArgument('auto_slot_assign', default_value='true'),
@@ -158,6 +165,21 @@ def _args():
         DeclareLaunchArgument('diss_elev_deg', default_value='45.0'),
         # Floor the network descends the held load to on a network-phase LAND.
         DeclareLaunchArgument('net_land_z', default_value='0.06'),
+        # ── How a fleet-size change is handled (THESIS_PLAN §12.2) ──────────
+        # 'network' (default, verified): the dissipative network takes the fleet on a
+        #     detach, redistributes, and carries the trajectory on itself.
+        # 'ocp': the OCP is RESIZED in place to the new fleet size and keeps flying
+        #     (R0111-R0114: ~1 deg settled tilt vs 26-48 deg on the network). Builds
+        #     the n-1 solver at start: run tools/prebuild_planner.py first.
+        DeclareLaunchArgument('reconfig_mode', default_value='network'),
+        DeclareLaunchArgument('reconfig_hold_s', default_value='1.5'),
+        # On the rig the physical release is the tether magnet (aux channel via
+        # elrs_interface). true: the node publishes /drone_<k>/magnet OFF at the
+        # detach so command and release are simultaneous (needs real_io_launch
+        # magnet_initial:=ON). false (default): a helper toggles the magnet by hand.
+        DeclareLaunchArgument('detach_magnet', default_value='false'),
+        # fewest drones that may stay on the load after a detach (3 -> 2 capsizes in SIL)
+        DeclareLaunchArgument('min_survivors', default_value='3'),
     ]
 
 
@@ -219,11 +241,16 @@ def launch_setup(context, *args, **kwargs):
                      'attach_azimuths_deg': LaunchConfiguration('attach_azimuths_deg'),
                      'start_taut': b('start_taut'),
                      'load_mass': f('load_mass'),
+                     'drone_mass': f('drone_mass'),
                      'target_z': f('target_z'),
                      'lift_ramp_vel': f('lift_ramp_vel'),
+                     'z_ki': f('z_ki'),
+                     'z_i_max': f('z_i_max'),
+                     'z_taut_gate': f('z_taut_gate'),
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
+                     'creep_vel': f('creep_vel'),
                      'auto_slot_assign': b('auto_slot_assign'),
                      'measure_rod_len': b('measure_rod_len'),
                      'load_traj': LaunchConfiguration('load_traj'),
@@ -245,6 +272,10 @@ def launch_setup(context, *args, **kwargs):
                      'diss_node_mass': f('diss_node_mass'),
                      'diss_substeps': i_('diss_substeps'),
                      'diss_elev_deg': f('diss_elev_deg'),
+                     'reconfig_mode': LaunchConfiguration('reconfig_mode'),
+                     'reconfig_hold_s': f('reconfig_hold_s'),
+                     'detach_magnet': b('detach_magnet'),
+                     'min_survivors': i_('min_survivors'),
                      'net_land_z': f('net_land_z')}],
         output='screen'))
 

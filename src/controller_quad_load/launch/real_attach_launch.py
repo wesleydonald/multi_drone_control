@@ -58,13 +58,18 @@ def _args():
         DeclareLaunchArgument('cable_len', default_value='0.5'),
         DeclareLaunchArgument('attach_azimuths_deg', default_value='330,90,210'),
         DeclareLaunchArgument('load_mass', default_value='0.86'),
+        DeclareLaunchArgument('drone_mass', default_value='0.64'),   # WEIGH the airframe with its pack; 0.64 is the sim model
         DeclareLaunchArgument('target_z', default_value='0.6'),
-        DeclareLaunchArgument('start_taut', default_value='true'),
+        DeclareLaunchArgument('start_taut', default_value='false'),
         DeclareLaunchArgument('payload_rest_z', default_value='0.05'),
         # ── takeoff pace (real_control_launch defaults) ──────────────────────
-        DeclareLaunchArgument('handover_elev_deg', default_value='0.0'),
-        DeclareLaunchArgument('handover_settle_s', default_value='0.5'),
+        DeclareLaunchArgument('handover_elev_deg', default_value='45.0'),
+        DeclareLaunchArgument('handover_settle_s', default_value='1.0'),
+        DeclareLaunchArgument('creep_vel', default_value='0.2'),   # m/s creep sweep rate before the handover
         DeclareLaunchArgument('lift_ramp_vel', default_value='0.20'),
+        DeclareLaunchArgument('z_ki', default_value='0.4'),      # planner height integral, 0 = off (card 2026-09-24_planner_offset)
+        DeclareLaunchArgument('z_i_max', default_value='0.15'),
+        DeclareLaunchArgument('z_taut_gate', default_value='0.9'),
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         DeclareLaunchArgument('takeoff_spool_s', default_value='0.5'),
         # ── tracker ──────────────────────────────────────────────────────────
@@ -73,13 +78,13 @@ def _args():
         DeclareLaunchArgument('cable_source', default_value='model'),
         DeclareLaunchArgument('thrust_ratio', default_value='24.0'),      # measured airframe kT
         # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
-        DeclareLaunchArgument('kt_trim', default_value='false'),
+        DeclareLaunchArgument('kt_trim', default_value='true'),
         DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
         DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
         DeclareLaunchArgument('takeoff_thrust_ratio', default_value='0.0'),  # = thrust_ratio (ground takeoff)
         DeclareLaunchArgument('kt_batt_sag_frac', default_value='0.0'),
-        DeclareLaunchArgument('kt_batt_v_full', default_value='16.8'),
-        DeclareLaunchArgument('kt_batt_v_empty', default_value='14.0'),
+        DeclareLaunchArgument('kt_batt_v_full', default_value='25.2'),   # 6S 4.20 V/cell
+        DeclareLaunchArgument('kt_batt_v_empty', default_value='21.0'),  # 6S 3.50 V/cell
         DeclareLaunchArgument('kt_print_period_s', default_value='1.0'),
         DeclareLaunchArgument('terminal_vel_ref', default_value='false'),
         # velocity-command mode after the handover: the configuration every sim attach
@@ -198,11 +203,16 @@ def launch_setup(context, *args, **kwargs):
                      'attach_azimuths_deg': LaunchConfiguration('attach_azimuths_deg'),
                      'start_taut': b('start_taut'),
                      'load_mass': f('load_mass'),
+                     'drone_mass': f('drone_mass'),
                      'target_z': f('target_z'),
                      'lift_ramp_vel': f('lift_ramp_vel'),
+                     'z_ki': f('z_ki'),
+                     'z_i_max': f('z_i_max'),
+                     'z_taut_gate': f('z_taut_gate'),
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
+                     'creep_vel': f('creep_vel'),
                      'auto_slot_assign': b('auto_slot_assign'),
                      'measure_rod_len': b('measure_rod_len'),
                      'load_traj': LaunchConfiguration('load_traj'),

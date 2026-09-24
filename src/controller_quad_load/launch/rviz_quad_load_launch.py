@@ -132,7 +132,7 @@ def launch_setup(context, *args, **kwargs):
     # sim exactly as they do on hardware (finding F7). On the rig this comes from
     # elrs_interface, so real_io_launch.py must NOT start this node. Drive one
     # drone low to check the warning is visible:
-    #   ros2 param set /sim_telemetry voltage_drone_1 13.2
+    #   ros2 param set /sim_telemetry voltage_drone_1 19.8
     nodes.append(Node(
         package='simulation_communication', executable='sim_telemetry',
         name='sim_telemetry', parameters=[{'num_drones': n_viz}],
