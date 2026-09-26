@@ -98,10 +98,10 @@ class MagnetAttachmentManager(Node):
         # pendulum swing of the 3 g magnet arm averages out, a real approach speed does not
         # (sim DART ignores ball-joint damping; the arm swung ~80 s before the gate passed, R0660)
         self.rel_vel_filter_tau_s = float(self.declare_parameter('rel_vel_filter_tau_s', 0.0).value)
-        # 'wall' (historical) differences poses over time.time(): at RTF 0.25 every speed
-        # reads 4x low and the 0.05 m/s at-rest gate passed a drone still descending at
-        # 0.12 m/s (R0668, 23.5 deg weld). 'sim' uses the message stamps (sim time).
-        self.velocity_clock = str(self.declare_parameter('velocity_clock', 'wall').value)
+        # 'sim' (default) differences poses over the message stamps; 'wall' (historical) used
+        # time.time(): at RTF 0.25 every speed read 4x low and the 0.05 m/s at-rest gate passed
+        # a drone still descending at 0.12 m/s (R0668, 23.5 deg weld).
+        self.velocity_clock = str(self.declare_parameter('velocity_clock', 'sim').value)
         self._vel_t = {}
         self._rel_vel_f = None
         self._rel_vel_t = None

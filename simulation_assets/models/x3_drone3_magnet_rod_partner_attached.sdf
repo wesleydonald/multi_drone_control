@@ -377,18 +377,22 @@
                 <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse><specular>0.2 0.2 0.2 1</specular></material>
             </visual>
         </link>
-        <joint name="arm_to_magnet_tip" type="ball">
+        <!-- rod joints (Wesley 2026-09-27, M1 claim R0685/R0686): universal joints at both ends. DART ignores ball-joint
+             damping: the arm swung ~80 s before the at-rest weld gate passed (R0660) and the 2 g tip kept the spin left by
+             the object carry, which the gz weld copied onto the ring (R0668-R0680). Rod twist is blocked (drone 3's
+             yaw is coupled to the ring while welded). -->
+        <joint name="arm_to_magnet_tip" type="universal">
             <parent>magnet_arm</parent>
             <child>magnet_tip_link</child>
-            <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
-            <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+            <axis><xyz>1 0 0</xyz><dynamics><damping>1e-4</damping></dynamics></axis>
+            <axis2><xyz>0 1 0</xyz><dynamics><damping>1e-4</damping></dynamics></axis2>
         </joint>
-        <joint name="base_to_magnet_arm" type="ball">
+        <joint name="base_to_magnet_arm" type="universal">
             <parent>base_link</parent>
             <child>magnet_arm</child>
             <pose>0 0 0 0 0 0</pose><!-- at the body centre like the tethered drones (Wesley 2026-09-25; R0552) -->
-            <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
-            <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
+            <axis><xyz>1 0 0</xyz><dynamics><damping>0.002</damping></dynamics></axis>
+            <axis2><xyz>0 1 0</xyz><dynamics><damping>0.002</damping></dynamics></axis2>
         </joint>
         <!-- Publish this drone's poses so the mocap emulator can read its state (standalone
              model -> topic /model/x3_drone3/pose). CRITICAL: this is a TOP-LEVEL model with no

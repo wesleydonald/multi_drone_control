@@ -183,9 +183,9 @@ class DissipativeController(LoadPlanner):
         # newcomer hands out; the trajectory then resumes with the full fleet. 0 = off.
         self._attach_traj_hold_s = float(p('attach_traj_hold_s', 0.0).value)
         self._attach_seek_m = float(p('attach_seek_m', 0.0).value)
-        self._attach_t_start_new = float(p('attach_t_start_new', 1.0).value)
-        self._attach_blend_balanced = bool(p('attach_blend_balanced', False).value)
-        self._attach_datum_shift = bool(p('attach_datum_shift', False).value)
+        self._attach_t_start_new = float(p('attach_t_start_new', 0.1).value)
+        self._attach_blend_balanced = bool(p('attach_blend_balanced', True).value)
+        self._attach_datum_shift = bool(p('attach_datum_shift', True).value)
         # 'timed': the hold above. 'settle': the post-weld hold ends once the load tilt
         # has settled (below hold_resume_tilt_deg and quiet for hold_settle_s), capped at
         # hold_max_s -- a measured dwell instead of a tuned one (tools/hybrid_dwell.py:
