@@ -6,8 +6,15 @@ A tether pivoting 0.04 m below the body loaded at 45 deg needs ~0.08 N m, i.e. ~
 error, so the drone spins (T0008). A real Betaflight holds that with its I-term. rate_ki adds
 one (per second; clamped to 200 motor rad/s ~ 0.13 N m, reset below ~75 % of hover throttle so it
 cannot wind up on the floor, T0011).
-Defaults reproduce the old loop exactly."""
+Class defaults reproduce the old loop exactly; the bridges default rate_ki to SIM_RATE_KI: 5 on our X3
+(10 put it in a 3 Hz limit cycle, R0647), 10 on Tejen's (steady in T0015)."""
 import numpy as np
+
+
+def integrate_active(armed, u, u_min):
+    """The I-term runs only armed and above u_min throttle: armed on the floor the drone
+    cannot rotate, the error persists and the integral winds up (T0011)."""
+    return bool(armed) and u > u_min
 
 
 class RatePid:

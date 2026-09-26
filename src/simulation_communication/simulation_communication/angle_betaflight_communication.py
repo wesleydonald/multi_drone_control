@@ -1,8 +1,10 @@
+import os
 import socket
 import struct
 import rclpy
 import numpy as np
 from rclpy.node import Node
+from simulation_communication.rate_pid import RatePid, integrate_active
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import Imu
 from actuator_msgs.msg import Actuators
@@ -27,11 +29,15 @@ class BetaflightInterfaceNode(Node):
         self.last_time = None
 
         # --- inner RATE PID (deg/s tracking of p,q,r) ---
-        self.kp = 1.0
-        self.ki = 0.0
-        self.kd = 0.0
-        self.integral_error = np.zeros(3, dtype=float)
-        self.previous_error = np.zeros(3, dtype=float)
+        self._pid = RatePid(
+            kp=float(self.declare_parameter('rate_kp', 1.0).value),
+            ki=float(self.declare_parameter(
+                'rate_ki', float(os.environ.get('SIM_RATE_KI', '5.0'))).value),
+            kd=float(self.declare_parameter('rate_kd', 0.0).value),
+            i_limit=float(self.declare_parameter('rate_i_limit', 200.0).value))
+        self._i_min_u = float(self.declare_parameter('rate_i_min_u', 0.09).value)
+        self.add_on_set_parameters_callback(self._on_rate_params)
+        self._active = False
 
         # --- outer ANGLE PI (deg tracking of roll, pitch) → desired rate (deg/s) ---
         self.declare_parameter('angle_max_deg', 55.0)   # Betaflight default is ~55°
@@ -76,6 +82,19 @@ class BetaflightInterfaceNode(Node):
         h_abs = ax * (pow(ax, 5) * self.rates_g_val + ax * (1.0 - self.rates_g_val))
         j_abs = self.rates_d_val * ax + (self.rates_f_val - self.rates_d_val) * h_abs
         return sgn * j_abs  # deg/s
+
+    def _on_rate_params(self, params):
+        """rate_kp / rate_ki settable live; the integral restarts from zero."""
+        from rcl_interfaces.msg import SetParametersResult
+        for prm in params:
+            if prm.name == 'rate_ki':
+                self._pid.ki = float(prm.value)
+                self._pid.integral[:] = 0.0
+                self.get_logger().info(f'rate_ki -> {self._pid.ki}')
+            elif prm.name == 'rate_kp':
+                self._pid.kp = float(prm.value)
+                self.get_logger().info(f'rate_kp -> {self._pid.kp}')
+        return SetParametersResult(successful=True)
 
     def normalize_quaternion_positive_w(self, x, y, z, w):
         if w < 0.0:
@@ -153,7 +172,7 @@ class BetaflightInterfaceNode(Node):
             desired_rates_body_deg = np.array([roll_rate_sp, pitch_rate_sp, self.set_point[3]], dtype=float)
 
             # ---- INNER RATE PID (track desired p,q,r) ----
-            motor_speeds = self.calculate_motor_speeds(ang_vel_body_deg, desired_rates_body_deg)
+            motor_speeds = self.calculate_motor_speeds(ang_vel_body_deg, desired_rates_body_deg, dt)
 
             # publish
             actuator_msg = Actuators()
@@ -166,20 +185,14 @@ class BetaflightInterfaceNode(Node):
         self.last_orientation = q
         self.last_time = now
 
-    def calculate_motor_speeds(self, measured_rates_deg, desired_rates_deg):
+    def calculate_motor_speeds(self, measured_rates_deg, desired_rates_deg, dt):
         """
         Inner rate PID on body rates: error = desired - measured  (deg/s)
         Mixer: +roll/-roll, +pitch/-pitch, +yaw/-yaw, plus common throttle.
         """
         error = np.array(desired_rates_deg, dtype=float) - np.array(measured_rates_deg, dtype=float)
 
-        # PID terms
-        self.integral_error += error
-        proportional = self.kp * error
-        integral = self.ki * self.integral_error
-        derivative = self.kd * (error - self.previous_error)
-        self.previous_error = error
-        offset = proportional + integral + derivative  # [roll,pitch,yaw] contributions
+        offset = self._pid.step(error, dt, self._active)  # [roll,pitch,yaw] contributions
 
         throttle = float(self.set_point[2])  # already scaled to 0..4631
 
@@ -229,6 +242,7 @@ class BetaflightInterfaceNode(Node):
         # set_point shape (we keep same layout): [roll_rate_sp, pitch_rate_sp, throttle, yaw_rate_sp]
         # roll_rate_sp / pitch_rate_sp are *produced in pose_callback* by angle loop; set dummy here.
         self.set_point = [0.0, 0.0, throttle, yaw_rate_sp]
+        self._active = integrate_active(msg.armed, u, self._i_min_u)
 
 def main(args=None):
     rclpy.init(args=args)

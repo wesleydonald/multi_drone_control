@@ -182,6 +182,9 @@ class DissipativeController(LoadPlanner):
         # so the fleet reconfigures in place instead of chasing a moving target while the
         # newcomer hands out; the trajectory then resumes with the full fleet. 0 = off.
         self._attach_traj_hold_s = float(p('attach_traj_hold_s', 0.0).value)
+        self._attach_seek_m = float(p('attach_seek_m', 0.0).value)
+        self._attach_t_start_new = float(p('attach_t_start_new', 1.0).value)
+        self._attach_blend_balanced = bool(p('attach_blend_balanced', False).value)
         # 'timed': the hold above. 'settle': the post-weld hold ends once the load tilt
         # has settled (below hold_resume_tilt_deg and quiet for hold_settle_s), capped at
         # hold_max_s -- a measured dwell instead of a tuned one (tools/hybrid_dwell.py:
@@ -556,7 +559,8 @@ class DissipativeController(LoadPlanner):
         for j in range(self.reserved_attach):
             if self.attach_pending[j] and self.attach_pos[j] is not None and j not in self._approach:
                 self._approach[j] = ApproachProfile(self.attach_pos[j], self._attach_cable_len,
-                                                    1.0 / PLANNER_HZ)
+                                                    1.0 / PLANNER_HZ,
+                                                    seek_m=self._attach_seek_m)
                 self.get_logger().info(
                     f'[dissipative] approach: drone {self._n_carry0 + j} flies to the weld '
                     f'target on its own tracker from {np.round(self.attach_pos[j], 2)}')
@@ -1018,7 +1022,9 @@ class DissipativeController(LoadPlanner):
         dvec = rim - np.asarray(measured, float)
         s_new = dvec / max(float(np.linalg.norm(dvec)), 1e-6)
         s_from = list(self._s_nom[:-1]) + [rot_z(-self.psi0) @ s_new]
-        t_from = t_before + [1.0]                      # keep the new rod taut while it swings
+        # the newcomer's start tension acts off the incumbents' apex: a moment on the ring
+        t_from = t_before + [self._attach_t_start_new]
+        self.refs.balanced_blend = self._attach_blend_balanced
         self.refs.start_blend(s_from, t_from, blend_s)
         for _ in range(2):
             self._prime_solver()

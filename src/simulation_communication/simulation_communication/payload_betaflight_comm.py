@@ -18,9 +18,10 @@ Parameters (ROS):
 """
 
 import math
+import os
 import numpy as np
 
-from simulation_communication.rate_pid import RatePid
+from simulation_communication.rate_pid import RatePid, integrate_active
 import rclpy
 from rclpy.node import Node
 from actuator_msgs.msg import Actuators
@@ -71,11 +72,10 @@ class PayloadBetaflightComm(Node):
 
         self._pid = RatePid(
             kp=float(self.declare_parameter('rate_kp', 0.5).value),
-            ki=float(self.declare_parameter('rate_ki', 0.0).value),
+            ki=float(self.declare_parameter(
+                'rate_ki', float(os.environ.get('SIM_RATE_KI', '5.0'))).value),
             kd=float(self.declare_parameter('rate_kd', 0.0).value),
             i_limit=float(self.declare_parameter('rate_i_limit', 200.0).value))
-        # integrate only in the air: armed on the floor the drone cannot rotate, the error
-        # persists and the I-term winds up (T0011: his drones then could not climb)
         self._i_min_u = float(self.declare_parameter('rate_i_min_u', 0.09).value)
         self.add_on_set_parameters_callback(self._on_rate_params)
         self._active = False
@@ -198,7 +198,7 @@ class PayloadBetaflightComm(Node):
             throttle = 0.05 * 4631
 
         self.set_point = [roll_rate, pitch_rate, throttle, yaw_rate]
-        self._active = bool(msg.armed) and u > self._i_min_u
+        self._active = integrate_active(msg.armed, u, self._i_min_u)
 
 
 def main(args=None):

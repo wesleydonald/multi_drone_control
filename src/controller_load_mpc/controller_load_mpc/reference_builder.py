@@ -31,6 +31,32 @@ def blend_refs(s_from, s_nom, t_from, t_nom, a):
     return s_out, t_out
 
 
+def rebalance_incumbents(rho, s_dirs, t, load_mass, fixed=(-1,), g=9.81, t_min=0.1):
+    """Keep the `fixed` slots' tensions and re-solve the others (least squares, closest to
+    the given values) so the blended references still hold the load up and level:
+        sum_i t_i s_iz = -m g,   (sum_i rho_i x (t_i s_i))_{x,y} = 0.
+    The horizontal force and yaw rows are left out: three incumbents cannot also zero
+    them, and weighting them in leaves a roll moment (0.13 N m midway on 1/3/5/9).
+    A linear blend is balanced at both ends but not in between when a slot's direction
+    rotates while its tension ramps (the attach newcomer: vertical -> apex)."""
+    n = len(rho)
+    fixed = {i % n for i in fixed}
+    free = [i for i in range(n) if i not in fixed]
+    s = [np.asarray(v, float).reshape(3) for v in s_dirs]
+    r = [np.asarray(v, float).reshape(3) for v in rho]
+    col = lambda i: np.concatenate([s[i][2:3], np.cross(r[i], s[i])[0:2]])
+    b = np.array([-float(load_mass) * g, 0.0, 0.0])
+    for i in fixed:
+        b = b - col(i) * float(t[i])
+    A = np.stack([col(i) for i in free], axis=1)
+    t0 = np.array([float(t[i]) for i in free])
+    tf = t0 + np.linalg.pinv(A) @ (b - A @ t0)
+    out = [float(v) for v in t]
+    for k, i in enumerate(free):
+        out[i] = float(max(tf[k], t_min))
+    return out
+
+
 class ReferenceBuilder:
     def __init__(self, dyn, n, s_nom, dt, traj):
         self.dyn = dyn
@@ -63,6 +89,7 @@ class ReferenceBuilder:
         # incumbents' tension shares included (the OCP form of the network's
         # symmetric hand-out). Inactive (None) for every other flight.
         self._blend = None            # (s_from, t_from, T_s, elapsed_s)
+        self.balanced_blend = False   # re-solve the incumbents' tensions along the slew
 
     def start_blend(self, s_from, t_from, blend_s):
         """Slew the cable references from (s_from, t_from) -- per slot, s in the same
@@ -81,7 +108,10 @@ class ReferenceBuilder:
         if self._blend is None:
             return self._s_nom, self._t_nom
         s_from, t_from, T, el = self._blend
-        return blend_refs(s_from, self._s_nom, t_from, self._t_nom, (el + self.dt * k) / T)
+        s_b, t_b = blend_refs(s_from, self._s_nom, t_from, self._t_nom, (el + self.dt * k) / T)
+        if self.balanced_blend:
+            t_b = rebalance_incumbents(self.dyn.rho, s_b, t_b, self.dyn.m)
+        return s_b, t_b
 
     def set_yaw_datum(self, psi0):
         """Latch the payload's starting yaw as the reference datum (see psi0)."""

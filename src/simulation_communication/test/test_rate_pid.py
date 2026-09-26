@@ -1,6 +1,6 @@
 import numpy as np
 
-from simulation_communication.rate_pid import RatePid
+from simulation_communication.rate_pid import RatePid, integrate_active
 
 
 def test_defaults_are_the_old_p_only_loop():
@@ -26,3 +26,10 @@ def test_integral_resets_when_inactive():
     for _ in range(100):
         pid.step([5.0, 5.0, 5.0], 0.01)
     assert np.allclose(pid.step([5.0, 5.0, 5.0], 0.01, active=False), 0.0)
+
+
+def test_integrate_active_needs_armed_and_throttle_above_gate():
+    assert integrate_active(True, 0.5, 0.09)
+    assert not integrate_active(False, 0.5, 0.09)
+    assert not integrate_active(True, 0.09, 0.09)
+    assert not integrate_active(True, 0.0, 0.09)

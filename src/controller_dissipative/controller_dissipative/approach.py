@@ -20,6 +20,7 @@ TIP_STANDOFF_M = -0.01   # m, relative to /attach_target/pose (rim point + 0.05 
                          # ~0.05 of the ring plane: here 0.04 above it, 0.02 clear of the
                          # plate top (R0540: a 0.04 standoff on the +0.05 point left the tip
                          # 0.12 from the manager's point, no weld)
+SEEK_VEL = 0.02          # m/s: below-target seek once the carrot sits on the target
 
 
 def carrot_step(p_ref, goal, v_max, dt):
@@ -38,11 +39,16 @@ class ApproachProfile:
     """State of one approach: 'climb' (to the clearance altitude), 'transit' (level, over
     the target), then 'descend'."""
 
-    def __init__(self, p_start, arm_len, dt, clearance=CLEARANCE_M):
+    def __init__(self, p_start, arm_len, dt, clearance=CLEARANCE_M, seek_m=0.0):
         self.p_ref = np.asarray(p_start, float).copy()
         self.arm_len = float(arm_len)
         self.dt = float(dt)
         self.clearance = float(clearance)
+        # a drone hovering a few cm above its reference parks the tip just outside the
+        # weld radius (R0653: 2.8 cm high for 135 s); seek_m lets the reference creep
+        # this far below the tip-on-target height until the weld ends the approach
+        self.seek_m = max(0.0, float(seek_m))
+        self._seek = 0.0
         self.phase = 'climb'
 
     def step(self, target):
@@ -65,6 +71,10 @@ class ApproachProfile:
             goal_xy = body_on_target.copy()
             goal_xy[2] = self.p_ref[2]
             self.p_ref, v_xy = carrot_step(self.p_ref, goal_xy, APPROACH_VEL, self.dt)
-            self.p_ref, v_z = carrot_step(self.p_ref, body_on_target, DESCENT_VEL, self.dt)
+            goal = body_on_target.copy()
+            if self.seek_m > 0.0 and float(self.p_ref[2]) - (goal[2] - self._seek) < 0.005:
+                self._seek = min(self.seek_m, self._seek + SEEK_VEL * self.dt)
+            goal[2] -= self._seek
+            self.p_ref, v_z = carrot_step(self.p_ref, goal, DESCENT_VEL, self.dt)
             v = v_xy + v_z
         return self.p_ref.copy(), v, self.phase

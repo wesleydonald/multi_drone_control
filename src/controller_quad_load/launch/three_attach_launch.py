@@ -177,6 +177,9 @@ def _args():
         # the measured load error, added identically to every node's a_ff. 0.0 = off.
         DeclareLaunchArgument('diss_handout_tension_blend', default_value='true'),
         DeclareLaunchArgument('diss_wrench_true_attitude', default_value='false'),
+        DeclareLaunchArgument('attach_seek_m', default_value='0.0'),   # approach: seek below the weld height
+        DeclareLaunchArgument('attach_t_start_new', default_value='1.0'),   # newcomer rod tension at the weld (N)
+        DeclareLaunchArgument('attach_blend_balanced', default_value='false'),   # keep the post-weld slew statically balanced
         DeclareLaunchArgument('attach_traj_hold_s', default_value='10.0'),   # hold until the weld, then this long
         # 'timed' = the hold above; 'settle' = end the post-weld hold when the load tilt has
         # settled (tools/hybrid_dwell.py: a computed dwell instead of a tuned one)
@@ -420,6 +423,9 @@ def launch_setup(context, *args, **kwargs):
                      'diss_handout_tension_blend': b('diss_handout_tension_blend'),
                      'diss_wrench_true_attitude': b('diss_wrench_true_attitude'),
                      'attach_traj_hold_s': f('attach_traj_hold_s'),
+                     'attach_seek_m': f('attach_seek_m'),
+                     'attach_t_start_new': f('attach_t_start_new'),
+                     'attach_blend_balanced': b('attach_blend_balanced'),
                      'attach_traj_hold_mode': LaunchConfiguration('attach_traj_hold_mode'),
                      'hold_resume_tilt_deg': f('hold_resume_tilt_deg'),
                      'hold_max_s': f('hold_max_s'),

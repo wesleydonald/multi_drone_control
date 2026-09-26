@@ -1,8 +1,10 @@
+import os
 import socket
 import struct
 import rclpy
 import numpy as np
 from rclpy.node import Node
+from simulation_communication.rate_pid import RatePid, integrate_active
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import Imu
 from actuator_msgs.msg import Actuators
@@ -36,9 +38,15 @@ class BetaflightInterfaceNode(Node):
         self.set_point = None
         self.current_pose = None
 
-        self.kp = 0.5
-        self.ki = 0.0
-        self.kd = 0.0
+        self._pid = RatePid(
+            kp=float(self.declare_parameter('rate_kp', 0.5).value),
+            ki=float(self.declare_parameter(
+                'rate_ki', float(os.environ.get('SIM_RATE_KI', '5.0'))).value),
+            kd=float(self.declare_parameter('rate_kd', 0.0).value),
+            i_limit=float(self.declare_parameter('rate_i_limit', 200.0).value))
+        self._i_min_u = float(self.declare_parameter('rate_i_min_u', 0.09).value)
+        self.add_on_set_parameters_callback(self._on_rate_params)
+        self._active = False
         
         self.last_pose = None
         self.last_orientation = None
@@ -72,6 +80,19 @@ class BetaflightInterfaceNode(Node):
         
         return j
         
+    def _on_rate_params(self, params):
+        """rate_kp / rate_ki settable live; the integral restarts from zero."""
+        from rcl_interfaces.msg import SetParametersResult
+        for prm in params:
+            if prm.name == 'rate_ki':
+                self._pid.ki = float(prm.value)
+                self._pid.integral[:] = 0.0
+                self.get_logger().info(f'rate_ki -> {self._pid.ki}')
+            elif prm.name == 'rate_kp':
+                self._pid.kp = float(prm.value)
+                self.get_logger().info(f'rate_kp -> {self._pid.kp}')
+        return SetParametersResult(successful=True)
+
     def normalize_quaternion_positive_w(self, x, y, z, w):
         if w < 0:
             return -x, -y, -z, -w
@@ -132,7 +153,7 @@ class BetaflightInterfaceNode(Node):
 
         angular_velocity_body_deg = np.degrees(angular_velocity_body)
         if self.set_point is not None:
-            motor_speeds = self.calculate_motor_speeds(angular_velocity_body_deg)
+            motor_speeds = self.calculate_motor_speeds(angular_velocity_body_deg, dt)
 
             actuator_msg = Actuators()
             actuator_msg.header.stamp = self.get_clock().now().to_msg()
@@ -145,21 +166,9 @@ class BetaflightInterfaceNode(Node):
 
 
 
-    def calculate_motor_speeds(self, angular_velocity_body_deg):
-        error = [self.set_point[0],self.set_point[1],self.set_point[3]] - angular_velocity_body_deg
-        proportional = self.kp * error
-
-        if not hasattr(self, 'integral_error'):
-            self.integral_error = np.zeros_like(error)  
-        self.integral_error += error 
-        integral = self.ki * self.integral_error
-
-        if not hasattr(self, 'previous_error'):
-            self.previous_error = np.zeros_like(error)
-        derivative = self.kd * (error - self.previous_error)
-        self.previous_error = error 
-
-        offset = proportional + integral + derivative
+    def calculate_motor_speeds(self, angular_velocity_body_deg, dt):
+        error = np.array([self.set_point[0], self.set_point[1], self.set_point[3]]) - angular_velocity_body_deg
+        offset = self._pid.step(error, dt, self._active)
 
         throttle = self.set_point[2]  
 
@@ -192,6 +201,7 @@ class BetaflightInterfaceNode(Node):
             throttle = 0.05 * 4631
         
         self.set_point = [roll_rate, pitch_rate, throttle, yaw_rate]
+        self._active = integrate_active(msg.armed, u, self._i_min_u)
 
 
 

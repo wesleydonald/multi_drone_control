@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from controller_dissipative.approach import ApproachProfile, carrot_step, APPROACH_VEL, DESCENT_VEL, TIP_STANDOFF_M
 
 
@@ -32,3 +33,32 @@ def test_profile_climbs_before_moving_sideways():
         p, v, _ = prof.step(target)
         assert abs(p[0]) < 1e-9 and abs(p[1] + 1.2) < 1e-9        # no xy motion yet
     assert p[2] > target[2] + 0.5 + 0.25 - 0.06                   # at the clearance altitude
+
+
+def test_seek_lowers_the_reference_below_the_weld_height_bounded():
+    target = np.array([0.0, 0.0, 0.5])
+    body = target[2] + 0.49 + TIP_STANDOFF_M
+    prof = ApproachProfile(np.array([0.0, 0.0, body + 0.3]), 0.49, 0.1, seek_m=0.05)
+    prof.phase = 'descend'
+    for _ in range(200):
+        p, v, _ = prof.step(target)
+    assert p[2] == pytest.approx(body - 0.05, abs=1e-6)
+
+
+def test_no_seek_by_default():
+    target = np.array([0.0, 0.0, 0.5])
+    body = target[2] + 0.49 + TIP_STANDOFF_M
+    prof = ApproachProfile(np.array([0.0, 0.0, body + 0.3]), 0.49, 0.1)
+    prof.phase = 'descend'
+    for _ in range(200):
+        p, v, _ = prof.step(target)
+    assert p[2] == pytest.approx(body, abs=1e-6)
+
+
+def test_seek_engages_on_a_jittering_target():
+    body0 = 0.5 + 0.49 + TIP_STANDOFF_M
+    prof = ApproachProfile(np.array([0.0, 0.0, body0 + 0.3]), 0.49, 0.1, seek_m=0.05)
+    prof.phase = 'descend'
+    for k in range(300):
+        p, v, _ = prof.step(np.array([0.0, 0.0, 0.5 + 0.002 * (-1) ** k]))
+    assert p[2] < body0 - 0.045
