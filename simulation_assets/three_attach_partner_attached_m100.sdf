@@ -408,7 +408,7 @@
          6 o'clock (attach_y_offset -0.25) in the 120 deg gap between 4 and 8, which is
          centred on -y so the approach descends it clear of every tether. -->
     <include>
-      <uri>models/x3_drone3_magnet_rod_partner_attached_u.sdf</uri>
+      <uri>models/x3_drone3_magnet_rod_partner_attached.sdf</uri>
       <name>x3_drone3</name>
       <pose>0.000000 0.747494 0.100000 0 0 0</pose>
     </include>

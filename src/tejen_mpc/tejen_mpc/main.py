@@ -561,6 +561,20 @@ class Controller(Node):
         )
 
         self.initial_mpc_thrust_ratio = float(self.est_params[0])
+        # Carried-object gain schedule (multi_drone_control fork, 2026-09-27): the models have
+        # no mass term, so an attached object of m_obj on a vehicle of m_d reads as a thrust
+        # ratio kT*m_d/(m_d+m_obj). Switched on the object-attached flag, exact at the attach
+        # and at the drop (the UKF needs ~20-30 s to recover after a drop). 0 kg = off.
+        self.object_mass_kg = float(self.declare_parameter('object_mass_kg', 0.0).value)
+        self.object_vehicle_mass_kg = float(
+            self.declare_parameter('object_vehicle_mass_kg', 0.64).value)
+        object_topic = str(self.declare_parameter('object_attached_topic', '').value)
+        if self.object_mass_kg > 0.0 and object_topic:
+            if self.enable_thrust_ratio_feedback:
+                self.get_logger().warn(
+                    'object_mass_kg ignored: thrust-ratio feedback owns the model gain')
+            else:
+                self.create_subscription(Bool, object_topic, self.object_attached_callback, 5)
         self.thrust_ratio_feedback_last_time = None
         self.thrust_ratio_feedback_applied = False
         self.thrust_ratio_feedback_target = self.initial_mpc_thrust_ratio
@@ -1656,6 +1670,15 @@ class Controller(Node):
             return 1.0
         _, qx, qy, _ = quaternion / norm
         return float(1.0 - 2.0 * (qx * qx + qy * qy))
+
+    def object_attached_callback(self, msg: Bool):
+        m_d = self.object_vehicle_mass_kg
+        target = self.initial_mpc_thrust_ratio * (
+            m_d / (m_d + self.object_mass_kg) if msg.data else 1.0)
+        if abs(float(self.est_params[0]) - target) > 1e-9:
+            self.est_params[0] = target
+            self.get_logger().info(
+                f'object {"attached" if msg.data else "released"}: MPC thrust ratio {target:.3f}')
 
     def reset_thrust_ratio_ukf(self):
         if self.thrust_ratio_ukf is not None:
