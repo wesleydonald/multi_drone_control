@@ -463,6 +463,19 @@ class DissipativeController(LoadPlanner):
             self._network_plan()
             return
         super()._plan()
+        if getattr(self, '_resize_log_ticks', 0) > 0:
+            self._resize_log_ticks -= 1
+            try:
+                import json
+                r = lambda a: [round(float(v), 4) for v in np.asarray(a, float).ravel()]
+                X = self.solver.last_X
+                self.get_logger().info('[dissipative] RESIZE_TICK ' + json.dumps({
+                    'traj_t': float(self.traj_t), 'hold': float(self._reconfig_hold_left),
+                    'load': r(self.load_state[0:10]),
+                    'yref0': r(self.refs.yref_at(0)[0:6]), 'yrefN': r(self.refs.yref_at(self.N)[0:6]),
+                    'plan_load': None if X is None else [r(X[0:3, k]) for k in (0, 1, 3, 10, X.shape[1] - 1)]}))
+            except Exception as e:
+                self.get_logger().warn(f'[dissipative] resize tick log failed: {e}')
 
     def _release_magnet(self, d):
         """Rig release for a detached drone: latch its tether magnet OFF through the
@@ -760,6 +773,24 @@ class DissipativeController(LoadPlanner):
             f'trajectory held {self._reconfig_hold_s:.1f} s; surviving ring spans a '
             f'{gap:.0f} deg gap ({"CoG inside" if gap < 180.0 - 1e-6 else "CoG ON/OUTSIDE the hull — the load cannot hang level"})')
 
+    def _log_resize_inputs(self, what, d, t_before, s_from, t_from):
+        """One JSON line with what the resized OCP starts from (M1 weld yank vs the bench,
+        GOALS Parked). Never raises."""
+        try:
+            import json
+            r = lambda a: [round(float(v), 4) for v in np.asarray(a, float).ravel()]
+            X = self.solver.last_X
+            load_nodes = None if X is None else [r(X[0:3, k]) for k in (0, 5, 10, X.shape[1] - 1)]
+            self.get_logger().info('[dissipative] RESIZE_INPUTS ' + json.dumps({
+                'what': what, 'drone': int(d), 'n': int(self.n),
+                'load': r(self.load_state), 'hover_xy': r(self.hover_xy), 'traj_t': float(self.traj_t),
+                'drone_pos': [None if p is None else r(p) for p in self.drone_pos],
+                'drone_vel': [None if v is None else r(v) for v in self.drone_vel],
+                't_before': r(t_before), 't_from': r(t_from), 's_from': [r(v) for v in s_from],
+                't_nom': r(self.refs._t_nom), 'load_nodes': load_nodes}))
+        except Exception as e:
+            self.get_logger().warn(f'[dissipative] resize input log failed: {e}')
+
     # ── attach: weld a reserved drone in and fold it into the network ─────────
     def _fleet_attach_cb(self, msg: Int32):
         """Manual/offline-symmetry trigger: attach physical drone id msg.data."""
@@ -1038,6 +1069,8 @@ class DissipativeController(LoadPlanner):
         self.refs.start_blend(s_from, t_from, blend_s)
         for _ in range(2):
             self._prime_solver()
+        self._log_resize_inputs('attach', d, t_before, s_from, t_from)
+        self._resize_log_ticks = 3
         if self.solver.last_X is None:
             self.get_logger().error(
                 f'[dissipative] attach {d}: the n={self.n} OCP did not converge on the '

@@ -94,7 +94,9 @@ def generate_launch_description() -> LaunchDescription:
             'use_sim_time': True,
             'enable_elrs_magnet_output': False,
             'attachment_mode': 'fixed_joint',
-            'command_backend': 'gz_cli',
+            # one-shot gz CLI publishes drop: the object stayed welded after DROP (R0678) and
+            # missed the net; the ROS topics go through the bridges below as well
+            'command_backend': 'both',
             'magnet_command_topic': f'/{NS}/magnet/command',   # his object magnet; /magnet/command is our ring magnet (ours from the handoff)
             'magnet_tip_pose_topic': f'/{NS}/magnet_tip_pose',
             'magnet_tip_pose_msg_type': 'pose_stamped',
@@ -251,6 +253,10 @@ def generate_launch_description() -> LaunchDescription:
                     ('/payload_world_state', f'/{NS}/payload_world_state')])
     # no shutdown-on-supervisor-exit: his MPC must keep flying until our weld takes over
 
+    pickup_bridges = [Node(
+        package='ros_gz_bridge', executable='parameter_bridge', name=f'pickup_{w}_bridge',
+        arguments=[f'/pickup/{w}@std_msgs/msg/Empty]gz.msgs.Empty']) for w in ('attach', 'detach')]
+
     # gz DetachableJoint may weld the object to the tip at spawn: free it before the mission
     release = ExecuteProcess(
         cmd=['gz', 'topic', '-t', '/pickup/detach', '-m', 'gz.msgs.Empty', '-p', ''],
@@ -276,5 +282,5 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('bag_path', default_value=os.path.join(
             os.environ.get('MDC_RUN_DIR', '/tmp'), 'partner_bag')),
         DeclareLaunchArgument('result_path', default_value='/tmp/partner_mission_result.json'),
-        bag, release, object_bridge, ring, pendulum, magnet, planner, backend, controller, supervisor,
+        bag, release, object_bridge, *pickup_bridges, ring, pendulum, magnet, planner, backend, controller, supervisor,
     ])
