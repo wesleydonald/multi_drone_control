@@ -343,7 +343,7 @@ def generate_launch_description() -> LaunchDescription:
                     # multi_drone_control rate-loop I-term (T0011); 0 = the old P-only loop.
                     # Falls back to SIM_RATE_KI so that one env var reverts every sim bridge.
                     "rate_ki": float(os.environ.get(
-                        "M2_RATE_KI", os.environ.get("SIM_RATE_KI", "10.0"))),
+                        "M2_RATE_KI", os.environ.get("SIM_RATE_KI", "5.0"))),
                 }],
             ),
             Node(

@@ -55,7 +55,7 @@ class BetaflightInterfaceNode(Node):
         self._pid = RatePid(
             kp=float(self.declare_parameter('rate_kp', 0.5).value),
             ki=float(self.declare_parameter(
-                'rate_ki', float(os.environ.get('SIM_RATE_KI', '10.0'))).value),
+                'rate_ki', float(os.environ.get('SIM_RATE_KI', '5.0'))).value),
             kd=float(self.declare_parameter('rate_kd', 0.0).value),
             i_limit=float(self.declare_parameter('rate_i_limit', 200.0).value))
         self._i_min_u = float(self.declare_parameter('rate_i_min_u', 0.09).value)

@@ -6,8 +6,8 @@ A tether pivoting 0.04 m below the body loaded at 45 deg needs ~0.08 N m, i.e. ~
 error, so the drone spins (T0008). A real Betaflight holds that with its I-term. rate_ki adds
 one (per second; clamped to 200 motor rad/s ~ 0.13 N m, reset below ~75 % of hover throttle so it
 cannot wind up on the floor, T0011).
-Class defaults reproduce the old loop exactly; the bridges default rate_ki to SIM_RATE_KI: 5 on our X3
-(10 put it in a 3 Hz limit cycle, R0647), 10 on Tejen's (steady in T0015)."""
+Class defaults reproduce the old loop exactly; every bridge defaults rate_ki to SIM_RATE_KI or 5: 10 sits
+on the 3.2 Hz PI zero (ki/kp = 20 rad/s) and limit-cycled our X3 (R0647) and rocked Tejen's ring (T0017)."""
 import numpy as np
 
 
