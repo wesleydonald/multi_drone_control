@@ -463,7 +463,14 @@ class Controller(Node):
             self.get_logger().info("[acados] compiling quad_load_dynamics solver (sources changed)...")
         self.ocp = generate_ocp_controller(generate=not fresh, build=not fresh)
         fcntl.flock(_lock_file, fcntl.LOCK_UN)
-        self.est_params = np.array([self.thrust_ratio, 0.0, 0.12, 70.0, 670.0, 0.5])
+        # Betaflight rate curve of the flight controllers (Wesley 2026-09-25: Tejen's profile,
+        # centre 100 / max 100 deg/s, i.e. linear 100 deg/s at full stick; was 70/670/0.5)
+        self.rates = (float(self.declare_parameter('rates_centre_deg', 100.0).value),
+                      float(self.declare_parameter('rates_max_deg', 100.0).value),
+                      float(self.declare_parameter('rates_expo', 0.5).value))
+        self.est_params = np.array([self.thrust_ratio, 0.0, 0.12, *self.rates])
+        if getattr(self, 'velocity_loop', None) is not None:
+            self.velocity_loop.rates = self.rates     # one rate curve for both control paths
 
         # ── Logging ───────────────────────────────────────────────────────
         log_headers = [

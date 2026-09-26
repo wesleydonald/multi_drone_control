@@ -1,0 +1,3 @@
+Forked from /home/wesley/tejen/drone_cage_control (branch SwungPayload2026_Collaborative, commit a7524bae, author Te-Jen Yu) on 2026-09-25.
+Renamed: tejen_mission->tejen_mission, tejen_mpc->tejen_mpc,
+tejen_utility_objects->tejen_utility_objects, tejen_dynamic_planner->tejen_dynamic_planner (standalone C++ planner vendored in standalone/).

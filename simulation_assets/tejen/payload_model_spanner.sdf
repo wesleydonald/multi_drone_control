@@ -1,0 +1,25 @@
+<sdf version="1.6">
+  <!-- The partner world's pickup object: his planner's 8 mm spanner profile
+       (100 x 20 x 6 mm). His sim used a 0.08 m ball, which rolled off our flat ring
+       after the drop (R0625). Same model/link names so the DetachableJoint and the
+       pose topics are unchanged. Mass ~ a small spanner. -->
+  <model name="payload_model">
+    <pose>0 0 0 0 0 0</pose>
+    <link name="payload_link">
+      <inertial>
+        <mass>0.03</mass>
+        <inertia>
+          <ixx>1.1e-6</ixx><iyy>2.5e-5</iyy><izz>2.6e-5</izz>
+        </inertia>
+      </inertial>
+      <visual name="payload_visual">
+        <geometry><box><size>0.100 0.020 0.006</size></box></geometry>
+        <material><ambient>0.8 0.2 0.2 1</ambient><diffuse>0.8 0.2 0.2 1</diffuse></material>
+      </visual>
+      <collision name="payload_collision">
+        <geometry><box><size>0.100 0.020 0.006</size></box></geometry>
+        <surface><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>
+      </collision>
+    </link>
+  </model>
+</sdf>

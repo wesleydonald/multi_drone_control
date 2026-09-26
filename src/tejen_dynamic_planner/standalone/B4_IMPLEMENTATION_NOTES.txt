@@ -1,0 +1,173 @@
+R6.3B.4 - whole suspended-system collision geometry
+===================================================
+31 AUG 2026
+
+STATUS
+------
+Implementation candidate ready for native user-side GLPK + qpOASES validation.
+B.3 planner/search/refinement mathematics are intentionally not redesigned here.
+
+APPROVED COMMISSIONING GEOMETRY
+-------------------------------
+Planning state remains the planning-drone centre p_q(t) in R^3.
+
+Planning drone and fixed/shared other drones may each contain separate components:
+  body
+  cable
+  magnet / mocap disk assembly
+  optional attached payload
+
+Hardware-informed commissioning values:
+  cable length                 0.50 m
+  cable physical radius        0.0025 m  (~5 mm diameter)
+  bounded swing envelope       10 degrees (provisional operating assumption)
+  magnet/mocap footprint       0.10 m diameter (~0.05 m horizontal half extent)
+  magnet vertical half extent  0.025 m provisional standalone approximation
+
+The approximately 1.5 cm magnetic contact face is deliberately NOT the obstacle-
+avoidance collision size. It belongs to later pickup/contact geometry. Likewise,
+the marker-centre-to-contact-face offset belongs primarily to pickup/attachment
+geometry; B.4 uses a provisional 2.5 cm centre-below-cable-end offset for its simple
+10 x 10 x 5 cm standalone collision prism.
+
+CABLE MODEL
+-----------
+The cable is NOT discretised into 5 cm spheres/bins in the new planner.
+It is represented as one conservative convex square-pyramid envelope. Lateral
+half-width increases with vertical depth approximately as
+
+  r(z) = cable_radius + depth * tan(theta_max).
+
+The base is extended to the nominal full cable length. This slightly over-approximates
+the exact finite-length swing cone and therefore stays conservative.
+
+MAGNET / PAYLOAD
+----------------
+The terminal swing position is enclosed by an asymmetric AABB:
+  lateral uncertainty = L sin(theta_max)
+  vertical uncertainty is one-sided upward = L (1 - cos(theta_max)).
+
+The magnet/mocap assembly is a 10 cm x 10 cm x 5 cm commissioning prism.
+An attached payload is an independent box with configurable half extents and centre
+offset. Standalone defaults are deliberately simple; final ROS integration should
+reuse the existing payload-profile YAML geometry rather than hard-code the object.
+
+STATIC PHYSICAL OBSTACLES
+-------------------------
+WorldSnapshot now has physical_static_obstacles in addition to the old B.1/B.3
+static_obstacles field. The old field remains pre-inflated legacy C-space geometry
+so existing regressions retain their exact meaning.
+
+For a physical obstacle O and ego relative component C_j, planning constructs
+
+  F_j = O (+) (-C_j)
+
+with explicit Minkowski-sum vertices. This keeps the cable pyramid rather than
+replacing the complete assembly with one giant vertical extrusion.
+
+COOPERATIVE / OTHER DRONES
+--------------------------
+Other drones remain fixed/shared committed trajectories during this commissioning
+architecture. Their exact cubic centre-trajectory convex hull is retained for every
+local time interval.
+
+When suspended geometry is enabled, every other-drone component is paired with every
+ego component. To avoid a large Minkowski vertex explosion, each relative component
+is bounded by its AABB for these inter-assembly pair constraints. The pair keeps a
+separate name such as
+
+  other_drone::cable_vs_ego_body
+  other_drone::body_vs_ego_cable
+  other_drone::cable_vs_ego_cable
+  other_drone::magnet_vs_ego_magnet
+
+and includes the existing bounded other-drone tracking-error AABB.
+
+This means the planning drone cannot fly through the hanging cables of fixed airborne
+other drones even when their drone bodies themselves are well separated.
+
+INDEPENDENT FINAL CHECK
+-----------------------
+The final TrajectorySafetyChecker does NOT simply call the planner's static C-space
+builder. For physical static obstacles it sweeps each actual ego component with the
+exact cubic centre hull and checks the physical component hull directly against the
+physical obstacle. This provides an independent physical-space code path.
+
+For cooperative suspended assemblies, the checker independently constructs both
+component swept hulls over the same time interval and tests them directly. It uses
+the same conservative per-component AABB bounds as the efficient cooperative planner
+representation, but not the planner-side C-space transform.
+
+ATTACHMENT / CHECK-RECHECK
+--------------------------
+SuspendedGeometry is part of WorldSnapshot. VersionedWorld::setEgoSuspendedGeometry()
+advances the world version. Therefore an unattached candidate cannot be committed if
+attachment occurs before authority and the newly attached payload makes the candidate
+unsafe: the existing B.2 one-retry Check/Recheck transaction sees the new geometry.
+
+'test_recheck_commit' now includes this explicit attachment-race regression.
+
+SUSPENDED-MODE DYNAMICS
+-----------------------
+The ordinary B.3 default remains unchanged. The B.4 suspended_system_demo uses
+
+  a_max = [1.0, 1.0, 1.5] m/s^2
+
+so the lateral commissioning trajectory is gentler while the 10-degree swing envelope
+is being treated as an operating assumption. This is NOT a proof of pendulum swing
+boundedness. Later real-system validation should measure actual swing and/or introduce
+more of the suspended-load dynamics before pushing the flight envelope.
+
+NEW TESTS / DEMOS
+-----------------
+  test_ego_collision_model
+    Eigen-only unit test for cable/magnet/payload geometry and C-space sign.
+
+  test_suspended_world
+    physical overflight trap, fixed-other-drone cable collision, planner-side C-space
+    relation presence, and attachment/version snapshot semantics.
+
+  test_recheck_commit (extended)
+    payload attachment between first recheck and atomic commit must reject a stale
+    candidate if the attached payload collides.
+
+  suspended_system_demo --scenario static_overflight
+    self-certifies that direct body-only flight is safe but the direct suspended
+    assembly collides, then requires the B.4 planner to reach the goal safely.
+
+  suspended_system_demo --scenario other_cable
+    self-certifies that drone bodies are safe but a fixed other-drone cable blocks the
+    direct path, then requires whole-body avoidance and goal liveness.
+
+CTest count after B.4: 16.
+
+UNCHANGED CORE
+--------------
+No B.4 algorithmic changes are made to:
+  bspline.cpp
+  minvo.cpp
+  octopus_search.cpp
+  trajectory_refinement.cpp
+  separator.cpp
+  minimum_time.cpp
+  committed_trajectory.cpp
+  local_planner.cpp
+
+B.4 changes the world/collision representation surrounding the validated planner.
+
+B.4.1 SUSPENDED SEARCH RESOLUTION FOLLOW-UP
+-------------------------------------------
+Native B.4 v1 testing showed both purpose-built suspended-system scenes failed at the
+historical 7x7x7 Octopus velocity lattice but passed unchanged at 9x9x9. B.4.1 therefore
+uses 9x9x9 as the suspended_system_demo/regression default only. Body-only B.3 remains
+7x7x7. See B4_1_OCTOPUS_9_RUNTIME.txt for the evidence and runtime-validation plan.
+
+
+B.4.2 SUSPENDED REPLAN CADENCE FOLLOW-UP
+-----------------------------------------
+Native B.4.1 timing showed suspended 9x9x9 Octopus p95 near 52 ms and total-replan
+p95 near 54-57 ms, with qpOASES below approximately 1 ms p95. B.4.2 therefore keeps
+the existing 30 Hz control/reference tick and future-splice timing unchanged, but makes
+the suspended commissioning harness request replans at 10 Hz by default. Requests that
+would arrive while the synchronous harness is still solving are coalesced rather than
+queued. See B4_2_REPLAN_10HZ.txt. No include/ or src/ files change in B.4.2.

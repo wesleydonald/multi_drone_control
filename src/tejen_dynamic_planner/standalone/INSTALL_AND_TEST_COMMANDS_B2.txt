@@ -1,0 +1,71 @@
+R6.3B.2 native install and final verification commands
+======================================================
+
+Repository root:
+  $HOME/Documents/Thesis git/drone_cage_control
+
+1. Replace the standalone tool with this cumulative package
+
+  cd "$HOME/Documents/Thesis git/drone_cage_control"
+  rm -rf tools/standalone_dynamic_planner_cpp
+  unzip "$HOME/Downloads/R6_3B_2_check_recheck_aug31_v1.zip" -d tools/
+
+2. Configure and build
+
+  cd "$HOME/Documents/Thesis git/drone_cage_control/tools/standalone_dynamic_planner_cpp"
+  rm -rf build
+  cmake -S . -B build \
+    -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_PREFIX_PATH="$HOME/.local"
+  cmake --build build -j
+
+3. Run the complete cumulative suite
+
+  ctest --test-dir build --output-on-failure
+
+Expected: 11 tests total
+  test_bspline
+  test_minvo
+  test_separator
+  test_octopus
+  test_refinement
+  test_minimum_time
+  test_committed_trajectory
+  test_receding_horizon
+  test_world_snapshot
+  test_trajectory_safety_checker
+  test_recheck_commit
+
+4. Run the dedicated B.2 native transaction demo
+
+  ./build/recheck_demo
+
+Expected high-level statuses:
+  irrelevant update:
+    ACCEPTED_AFTER_RECHECK
+  candidate-blocking update:
+    LATEST_CANDIDATE_UNSAFE_AFTER_RETRY
+  final line:
+    recheck_demo: PASS
+
+5. Re-run the already validated B.1 straight mission as a non-regression check
+
+  ./build/receding_horizon_demo \
+    --scene straight \
+    --samples 7 \
+    --csv-prefix /tmp/r6_3b2_straight
+
+Expected:
+  reached: true
+  goal seen: true
+  failed replans: 0 (or report complete output if this differs)
+  max C2 residue remains far below 1e-7
+
+Send ChatGPT:
+  - ctest summary / any failure output
+  - complete ./build/recheck_demo output
+  - straight mission final "mission summary" block
+
+After B.2 validation, make/update a detailed handoff and move to a fresh chat before
+the next substantial planner increment.

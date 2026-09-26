@@ -52,8 +52,8 @@ class BetaflightInterfaceNode(Node):
         self.fc_pitch_offset_deg = float(self.get_parameter('fc_pitch_offset_deg').value)
 
         # --- Betaflight rates params (we keep for YAW; roll/pitch now angle-mode) ---
-        self.declare_parameter('rates_d_val', 70.0)
-        self.declare_parameter('rates_f_val', 670.0)
+        self.declare_parameter('rates_d_val', 100.0)
+        self.declare_parameter('rates_f_val', 100.0)
         self.declare_parameter('rates_g_val', 0.5)
         self.rates_d_val = float(self.get_parameter('rates_d_val').value)
         self.rates_f_val = float(self.get_parameter('rates_f_val').value)
@@ -84,13 +84,25 @@ class BetaflightInterfaceNode(Node):
 
     # ------------------------ Callbacks ------------------------
 
+    def _pose_time(self, msg):
+        """Time of a pose sample for the body-rate difference: the message stamp (the
+        bridge's Gazebo time, one per sample) when present, else the node clock. The
+        node clock is /clock, throttled to 100 Hz since 2026-09-23 while poses arrive at
+        500 Hz: differencing against it skipped 4 of 5 pairs (dt = 0) and under-estimated
+        the rate ~5x. Cables damped the tethered drones; a free drone tipped at 1.4 Hz
+        under every outer controller (R0522-R0534, fixed R0535)."""
+        st = msg.header.stamp
+        if int(st.sec) > 0 or int(st.nanosec) > 0:
+            return st
+        return self.get_clock().now().to_msg()
+
     def pose_callback(self, msg: PoseArray):
         # Pick your body link index; you used 5 previously
         current_position = msg.poses[5].position
         q = msg.poses[5].orientation
         q.x, q.y, q.z, q.w = self.normalize_quaternion_positive_w(q.x, q.y, q.z, q.w)
 
-        now = self.get_clock().now().to_msg()
+        now = self._pose_time(msg)
         if self.last_pose is None:
             self.last_pose = current_position
             self.last_orientation = q

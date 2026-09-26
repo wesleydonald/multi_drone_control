@@ -1,0 +1,93 @@
+R6.3B.2 design notes - approved proposal after RMADER/MADER cross-check
+=====================================================================
+
+Transaction
+-----------
+  W_plan = immutable snapshot
+      |
+      v
+  build local 4-segment candidate
+      |
+      v
+  B.1 late-candidate check
+      |
+      v
+  W_latest = newest snapshot
+      |
+      +--> certify old incumbent [finish_time, A]
+      |
+      +--> certify candidate [A, candidate_end]
+      |
+      v
+  atomic runIfVersionCurrent(W_latest.version, replaceSuffix)
+      |
+      +--> current: commit
+      |
+      +--> changed: take ONE newer snapshot, recheck, retry commit once
+                    second version race => reject
+
+Continuous convex checking
+--------------------------
+For a cubic polynomial subinterval [ta,tb], dt=tb-ta:
+
+  B0 = p(ta)
+  B1 = p(ta) + dt/3 * v(ta)
+  B2 = p(tb) - dt/3 * v(tb)
+  B3 = p(tb)
+
+These are the exact cubic Bezier control points of the same subcurve. Split at
+B-spline knots / committed-piece boundaries before applying the formula.
+The entire continuous subcurve lies inside conv{B0,B1,B2,B3}.
+
+Cooperative obstacle tube
+-------------------------
+  O(t) = p_committed(t)
+         (+) physical obstacle AABB
+         (+) tracking-error AABB
+         (+) ego AABB
+
+Initial tracking-error half-extents:
+  [0.05, 0.05, 0.05] m
+
+Physical and tracking extents remain separate in the data model so the 5 cm
+commissioning assumption can later be replaced by measured data.
+
+Failure semantics
+-----------------
+LATEST_CANDIDATE_UNSAFE:
+  candidate rejected; incumbent has separately been certified safe up to A.
+
+INCUMBENT_PREFIX_UNSAFE:
+  newest world invalidates the already-committed interval before A. B.2 reports
+  the condition and does not claim normal incumbent continuation is safe.
+  Emergency shortening/stop/hover behavior is deliberately deferred to a later
+  approved execution-supervisor increment.
+
+WORLD_CHANGED_DURING_FINAL_RECHECK:
+  the one permitted bounded retry also lost the version race. Reject without
+  authority mutation; do not loop.
+
+Atomicity
+---------
+VersionedWorld::runIfVersionCurrent() holds the world mutex while comparing the
+version and executing the short replaceSuffix() action. Therefore an update
+cannot land between the final version comparison and authority mutation.
+
+Scope limitation
+----------------
+This local version transaction protects against newly arrived world information.
+It does not prove safety against messages/trajectory changes that have not yet
+arrived due to network delay. That stronger problem is the purpose of RMADER's
+Delay Check and is outside B.2 under the present one-active-replanner assumption.
+
+Authority-time validity after recheck
+-------------------------------------
+B.1 rejects a candidate if optimization itself finishes after A. B.2 adds a
+second timing gate inside the final atomic commit action because collision
+rechecking also consumes time:
+
+  authority_decision_time >= A
+    => LATE_CANDIDATE_REJECTED_AFTER_RECHECK
+
+Therefore a candidate is never committed to a splice epoch that has passed while
+Check/Recheck was running.

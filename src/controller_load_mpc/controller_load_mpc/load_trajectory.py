@@ -8,11 +8,16 @@ shape params (kind, speed, distance, radius) -- it holds no node/solver state (t
 trajectory CLOCK traj_t stays in the node) so it is testable in isolation.
 
 Supported kinds: 'hover' (no motion), 'line_x' (sinusoidal shuttle along +x),
-'circle', 'fig_8' (Gerono lemniscate), 'spin' (circle + one full load yaw). All use
+'circle', 'fig_8' (Gerono lemniscate), 'spin' (circle + one full load yaw), 'orbit'
+(the same circle flown continuously at constant speed until LAND, after a smooth
+ORBIT_RAMP_S spin-up: the ring keeps moving through a partner drone's whole mission). All use
 an eased (smootherstep) angle sweep so the maneuver starts and ends at rest -- no
 velocity/accel step that a non-fed-forward payload would take as a pendulum kick.
 """
 import numpy as np
+
+
+ORBIT_RAMP_S = 4.0     # s, smootherstep spin-up of an 'orbit' to its constant speed
 
 
 class LoadTrajectory:
@@ -44,6 +49,22 @@ class LoadTrajectory:
         T = 1.875 * 2.0 * np.pi * r / max(self.speed, 1e-6)
         th, dth, ddth = self._eased_sweep(t, T)
         return th, dth, ddth, T
+
+    def _orbit_theta(self, t):
+        """Continuous circle: angular speed w = speed/r reached through a smootherstep
+        ramp over ORBIT_RAMP_S (dtheta = w*s(u)), constant after. theta is the exact
+        integral, so position, velocity and acceleration are all continuous.
+        Returns (theta, dtheta/dt, d2theta/dt2)."""
+        r = max(self.radius, 1e-6)
+        w = max(self.speed, 1e-6) / r
+        Tr = ORBIT_RAMP_S
+        if t < Tr:
+            u = max(t / Tr, 0.0)
+            s = u * u * u * (u * (6.0 * u - 15.0) + 10.0)
+            ds = 30.0 * u * u * (u - 1.0) * (u - 1.0)
+            th = w * Tr * (u ** 6 - 3.0 * u ** 5 + 2.5 * u ** 4)
+            return th, w * s, w * ds / Tr
+        return w * (0.5 * Tr + (t - Tr)), w, 0.0
 
     def _fig8_theta(self, t):
         """Eased figure-eight angle (see _eased_sweep). The lemniscate's peak speed
@@ -91,6 +112,11 @@ class LoadTrajectory:
             dx = 0.5 * d * (1.0 - np.cos(w * t))
             vx = 0.5 * d * w * np.sin(w * t)
             return dx, 0.0, vx, 0.0
+        if self.kind == 'orbit':
+            r = max(self.radius, 1e-6)
+            th, dth, _ = self._orbit_theta(t)
+            return (r * np.sin(th), r * (1.0 - np.cos(th)),
+                    r * np.cos(th) * dth, r * np.sin(th) * dth)
         if self.kind in ('circle', 'spin'):
             # 'spin' has the SAME circular load path as 'circle'; it additionally
             # yaws the load (formation rotates about the payload, see yaw_at).
@@ -129,6 +155,11 @@ class LoadTrajectory:
             d = max(self.distance, 1e-6)
             w = 2.0 * self.speed / d
             return 0.5 * d * w * w * np.cos(w * t), 0.0
+        if self.kind == 'orbit':
+            r = max(self.radius, 1e-6)
+            th, dth, ddth = self._orbit_theta(t)
+            return (r * (-np.sin(th) * dth * dth + np.cos(th) * ddth),
+                    r * (np.cos(th) * dth * dth + np.sin(th) * ddth))
         if self.kind in ('circle', 'spin'):
             r = max(self.radius, 1e-6)
             th, dth, ddth, T = self._circle_theta(t)

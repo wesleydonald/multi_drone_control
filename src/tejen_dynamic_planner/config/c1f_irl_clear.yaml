@@ -1,0 +1,63 @@
+dynamic_planner_transfer_backend:
+  ros__parameters:
+    use_sim_time: false
+    state_topic: /motion_capture_state
+    target_topic: /dynamic_planner/transfer_target
+    target_velocity_topic: /dynamic_planner/transfer_target_velocity
+    object_attached_topic: /magnet/object_attached
+    enable_topic: /dynamic_planner/transfer_enable
+    authority_topic: /dynamic_planner/transfer_authority
+    authority_ack_topic: /dynamic_planner/transfer_authority_ack
+    shadow_reference_topic: /dynamic_planner/transfer_reference
+    diagnostics_topic: /dynamic_planner/transfer_status
+    marker_topic: /dynamic_planner/markers
+    frame_id: map
+    vehicle_id: drone_0
+
+    state_timeout_s: 0.25
+    object_attached_timeout_s: 0.25
+    acceleration_filter_tau_s: 0.15
+    planner_rate_hz: 5.0
+    marker_rate_hz: 5.0
+    minimum_search_z_m: 0.20
+    initial_splice_timing_s: 0.16
+
+    spline_time_factor: 3.0
+    enable_octopus_useful_deadline: true
+    # MUST remain strictly below 0.05; exactly 0.05 fails backend validation.
+    octopus_post_search_reserve_s: 0.049
+
+    require_stationary_activation: true
+    activation_speed_tolerance_mps: 0.10
+    activation_accel_tolerance_mps2: 0.50
+    seed_stationary_on_activation: false
+
+    fixed_target_change_tolerance_m: 0.0001
+    allow_live_target_updates: true
+    live_target_replan_threshold_m: 0.01
+    require_target_velocity: true
+    target_lead_enabled: true
+    target_lead_nominal_speed_mps: 0.35
+    target_lead_min_s: 0.0
+    target_lead_max_s: 2.0
+    target_lead_initial_solve_runtime_s: 0.50
+    target_lead_solve_runtime_scale: 1.0
+    target_lead_solve_runtime_ema_alpha: 0.35
+
+    # Placeholder C1F.3a spanner/rig geometry. MEASURE BEFORE PHYSICAL OBSTACLE TEST.
+    max_swing_angle_rad: 0.2617993877991494
+    payload_collision_enabled: true
+    require_payload_attached_for_enable: true
+    payload_half_x_m: 0.050
+    payload_half_y_m: 0.010
+    payload_half_z_m: 0.003
+    payload_center_from_magnet_x_m: 0.0
+    payload_center_from_magnet_y_m: 0.0
+    payload_center_from_magnet_z_m: -0.028
+
+    static_scene_enabled: false
+    require_scene_witness: false
+    cooperative_scene_enabled: false
+
+    csv_path: ''
+    replan_csv_path: ''

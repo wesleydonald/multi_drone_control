@@ -1,0 +1,96 @@
+R6.3B.4.2 - provisional 10 Hz suspended-planner cadence
+========================================================
+31 AUG 2026
+
+WHY THIS FOLLOW-UP EXISTS
+-------------------------
+B.4.1 established that 9 x 9 x 9 Octopus sampling is needed for the two approved
+suspended-system commissioning witnesses. Native timing supplied by the user was:
+
+  static_overflight @ 9^3
+    replan mean / median / p95 / max = 25.58 / 23.45 / 53.69 / 84.25 ms
+    Octopus mean / median / p95 / max = 23.31 / 21.15 / 51.22 / 82.03 ms
+    qpOASES mean / median / p95 / max = 0.664 / 0.650 / 0.783 / 1.005 ms
+
+  other_cable @ 9^3
+    replan mean / median / p95 / max = 31.71 / 28.74 / 57.43 / 134.73 ms
+    Octopus mean / median / p95 / max = 27.42 / 23.68 / 51.94 / 129.96 ms
+    qpOASES mean / median / p95 / max = 0.807 / 0.798 / 0.983 / 2.153 ms
+
+Both missions remained SAFE, reached the goal, had zero late candidates and satisfied
+B.4's regression contract. The timing bottleneck is therefore Octopus, not qpOASES.
+The roughly 54-57 ms p95 makes a strict 30 Hz planner cadence unnecessarily tight,
+especially before adding Gazebo/ROS/MPC load.
+
+PROVISIONAL OPERATING CADENCE
+-----------------------------
+The suspended_system_demo now defaults to:
+
+  controller/reference cadence: 30 Hz (unchanged)
+  suspended planner request rate: 10 Hz
+  suspended Octopus resolution: 9 x 9 x 9
+  planning radius: 2.0 m
+
+This does NOT change RecedingHorizonConfig::dc_s. The 30 Hz control/reference tick
+remains the time quantum used by the existing future-splice lookahead logic. The new
+10 Hz value is only the rate at which the commissioning harness requests another
+suspended-system replan.
+
+ONE-SOLVE-IN-FLIGHT EMULATION
+-----------------------------
+The standalone demo is synchronous, not a ROS threading implementation. It therefore
+emulates the intended integration contract:
+
+  - at most one suspended-planner solve is in flight;
+  - the committed trajectory remains authoritative while that solve runs;
+  - if a periodic 10 Hz request would arrive before the active solve completes, that
+    request is coalesced/skipped rather than queued;
+  - the next solve uses the next current state/world snapshot.
+
+The mission summary reports the number of coalesced triggers. This is diagnostic and
+is not currently a CTest failure criterion.
+
+CLI
+---
+The rate remains configurable for later sweeps:
+
+  --replan-rate-hz 10
+
+The harness accepts finite positive rates up to 30 Hz. The default is 10 Hz.
+
+WHAT IS UNCHANGED
+-----------------
+No changes to include/ or src/. In particular, no changes to:
+  ego_collision_model.cpp
+  world_snapshot.cpp
+  trajectory_safety_checker.cpp
+  octopus_search.cpp
+  trajectory_refinement.cpp
+  minvo.cpp
+  separator.cpp
+  bspline.cpp
+  minimum_time.cpp
+  committed_trajectory.cpp
+  receding_horizon_planner.cpp
+  local_planner.cpp
+
+B.3/body-only remains 7 x 7 x 7. Suspended mode remains 9 x 9 x 9. B.4 geometry,
+10-degree swing assumption and suspended-mode acceleration bounds are unchanged.
+
+VALIDATION TARGET
+-----------------
+Run the full 16-test native suite, then run static_overflight and other_cable using
+both defaults (9^3 and 10 Hz). For each mission preserve:
+  safety, goal reach, accepted/failed replans, late candidates, final time,
+  final goal distance, C2 splice error, coalesced triggers and runtime statistics.
+
+If 10 Hz preserves the B.4 contract and trajectory quality, it becomes the provisional
+commissioning cadence for simulation integration. This is an engineering baseline,
+not a theoretical minimum or final hardware tuning result.
+
+SIMULATION INTEGRATION REMINDER
+-------------------------------
+During Gazebo/ROS integration, keep the planner cadence independent from the MPC/control
+cadence and explicitly inspect how the MPC consumes the committed/replanned reference.
+Do not assume observed discontinuities originate in the MPC or in the planner without
+checking the actual supplied reference, splice continuity and controller interpolation.

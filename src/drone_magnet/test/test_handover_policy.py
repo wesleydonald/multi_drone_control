@@ -50,8 +50,9 @@ def test_a_warm_tracker_hands_over_on_the_weld_itself():
     assert p.weld(True, 0.01) is True
 
 
-def test_liveness_expires():
-    p = HandoverPolicy(live_timeout_s=0.5)
+def test_liveness_expires_when_not_latched():
+    # latched (the default) keeps a handed-over drone ours: see the R0624 test below
+    p = HandoverPolicy(latch=False, live_timeout_s=0.5)
     p.tracker_command(True, FLYING, 0.0)
     assert p.weld(True, 0.4) is True
     assert p.attached(0.6) is False             # stream went quiet
@@ -92,3 +93,14 @@ def test_idle_throttles_never_count_as_flying(throttle):
     p = HandoverPolicy()
     p.tracker_command(True, throttle, 0.0)
     assert p.tracker_live(0.0) is False
+
+
+def test_latched_handover_never_returns_to_the_approach_controller():
+    # R0624: a 0.52 s slow planner tick after the weld made the tracker 'not live' and the
+    # mux handed the welded drone back to the approach MPC
+    from drone_magnet.handover_policy import HandoverPolicy
+    p = HandoverPolicy(latch=True, require_live=True, live_timeout_s=0.5)
+    assert p.weld(True, now=0.0) is False            # tracker not yet live
+    assert p.tracker_command(True, 0.1, now=0.1) is True
+    assert p.attached(now=5.0) is True                # silent for 4.9 s: still ours
+    assert p.tracker_command(True, -1.0, now=6.0) is True

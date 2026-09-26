@@ -1,0 +1,19 @@
+Assistant-side B.1 validation note
+==================================
+
+The production package remains native GLPK + native qpOASES, matching the user's
+validated R6.3A.4 environment.
+
+The assistant container did not have those standalone development installations,
+so production-source validation here was split:
+- C++ syntax checks passed for receding_horizon_planner.cpp,
+  test_receding_horizon.cpp, and receding_horizon_demo.cpp.
+- native solver-independent test_minimum_time passed.
+- native solver-independent test_committed_trajectory passed.
+- earlier assistant-only full simulations used a substitute separator and CasADi's
+  embedded qpOASES. Those simulations established long-mission/replanning behavior,
+  time-factor sensitivity, and late-candidate behavior, but are not a substitute for
+  the user's final native GLPK/qpOASES ctest run.
+- the assistant QP shim accumulates larger C2 numerical residuals than the user's
+  native qpOASES results (~1e-15 in R6.3A.4), so the production C2 tolerance remains
+  1e-9 and was not weakened to accommodate the assistant environment.

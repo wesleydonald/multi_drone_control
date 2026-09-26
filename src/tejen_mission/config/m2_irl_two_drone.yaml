@@ -1,0 +1,32 @@
+m2_irl:
+  mocap:
+    bind_address: 0.0.0.0
+    bind_port: 1511
+    max_rate_hz: 120.0
+    ring_rigid_body_id: 8
+  vehicles:
+    drone_0:
+      physical_quad: 2
+      body_id: 12
+      magnet_id: 22
+      ftdi_serial: FTF0AROT
+      serial_port: /dev/QUAD2
+      magnet_channel: 6
+      props_off_verified: true
+    drone_1:
+      physical_quad: 4
+      body_id: 14
+      magnet_id: 24
+      ftdi_serial: FTF09R63
+      serial_port: /dev/QUAD4
+      magnet_channel: 6
+      props_off_verified: true
+  geometry:
+    tether_length_m: 0.475
+    tether_anchor_body: [0.0, 0.0, -0.04]
+    ring_marker_translation_m: [0.0, 0.0, 0.0]
+    ring_marker_quaternion_xyzw: [0.0, 0.0, 0.0, 1.0]
+  attachment_detector:
+    magnet_contact_translation_m: [0.0, 0.0, 0.0]
+    magnet_contact_quaternion_xyzw: [0.0, 0.0, 0.0, 1.0]
+    magnet_off_counts_as_loss: false

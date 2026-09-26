@@ -1,0 +1,37 @@
+R6.3C.1a assistant-side validation
+==================================
+
+Completed in the assistant environment:
+
+1. Exact message-neutral reference-window unit test compiled natively with
+   g++ -std=c++17 -Wall -Wextra -Wpedantic against the actual C.1a sources and
+   Eigen headers.
+
+   Result:
+     C.1a reference-window contract: PASS
+     samples: 61
+     reference rate: 30 Hz
+     MPC horizon: 2 s
+     artificial solve delay: 150 ms; future splice preserved: true
+
+2. ROS message encoder and test compiled against minimal structural stand-ins for
+   the ROS message headers because this environment does not contain a ROS 2
+   installation. This checks C++ syntax and exact field mapping, but is NOT a
+   substitute for the user's real colcon build.
+
+   Result:
+     C.1a ROS reference-message contract: PASS
+     points: 61
+     stage spacing: 0.1 s; terminal: 2.0 s
+     p/v/a copied without resmoothing: true
+
+3. Existing B.4 include/src files were retained from the frozen v3 source tree;
+   C.1a adds reference_window.hpp/.cpp and changes CMake only. No planner search,
+   optimisation, collision, or safety source file was edited.
+
+Not claimed here:
+- a real ROS/ament build
+- Gazebo integration
+- active MPC authority
+- full legacy 17/17 native CTest suite in the assistant environment (GLPK and
+  qpOASES production development installs are not available here)

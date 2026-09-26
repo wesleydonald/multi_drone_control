@@ -1,0 +1,75 @@
+R6.3B.4.2 native install and validation commands
+=================================================
+
+Repository root:
+  $HOME/Documents/Thesis git/drone_cage_control
+
+1. Replace the standalone tool with this cumulative B.4.2 package
+
+  cd "$HOME/Documents/Thesis git/drone_cage_control"
+  rm -rf tools/standalone_dynamic_planner_cpp
+  unzip "$HOME/Downloads/R6_3B_4_suspended_system_aug31_v3.zip" -d tools/
+
+2. Configure and build
+
+  cd "$HOME/Documents/Thesis git/drone_cage_control/tools/standalone_dynamic_planner_cpp"
+  rm -rf build
+  cmake -S . -B build \
+    -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_PREFIX_PATH="$HOME/.local"
+  cmake --build build -j
+
+3. Full regression suite
+
+  ctest --test-dir build --output-on-failure
+
+Expected test count: 16.
+The B.4 end-to-end test exercises both current suspended-mode defaults:
+  Octopus: 9 x 9 x 9
+  planner request rate: 10 Hz
+Runtime statistics remain diagnostic only and do not make CTest fail.
+
+4. Run the two B.4 commissioning scenes explicitly using both defaults
+
+  ./build/suspended_system_demo \
+    --scenario static_overflight \
+    --csv-prefix /tmp/r6_3b4_static_overflight_s9_10hz
+
+  ./build/suspended_system_demo \
+    --scenario other_cable \
+    --csv-prefix /tmp/r6_3b4_other_cable_s9_10hz
+
+Both should report:
+  suspended Octopus samples: 9 x 9 x 9
+  suspended replan rate: 10 Hz
+  whole-body witness: true
+  reached: true
+  continuous suspended-system safety: SAFE
+  late candidates: 0
+  B.4 regression contract: true
+
+Please preserve both complete mission summaries. New cadence diagnostics include:
+  control/reference cadence
+  suspended replan rate
+  nominal replan period
+  coalesced replan triggers
+  replan / Octopus / qpOASES mean-median-p95-max runtime
+
+5. Optional cadence comparisons, only if the 10 Hz result motivates them
+
+  ./build/suspended_system_demo --scenario static_overflight --replan-rate-hz 15
+  ./build/suspended_system_demo --scenario other_cable       --replan-rate-hz 15
+  ./build/suspended_system_demo --scenario static_overflight --replan-rate-hz 20
+  ./build/suspended_system_demo --scenario other_cable       --replan-rate-hz 20
+
+Do not change the controller/reference cadence or RecedingHorizonConfig::dc_s for
+this sweep. --replan-rate-hz changes only how often a new suspended replan is requested.
+
+6. Optional historical search-resolution comparison only
+
+  ./build/suspended_system_demo --scenario static_overflight --samples 7
+  ./build/suspended_system_demo --scenario other_cable --samples 7
+
+The 7x7x7 suspended runs are diagnostic only and are not the B.4 operating setup.
+Frozen B.3/body-only remains 7x7x7.

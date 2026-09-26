@@ -124,9 +124,10 @@ def launch_setup(context, *args, **kwargs):
                          'max_publish_hz': mocap_hz}]))
 
     # TF for every drone + the payload, plus the payload box and its track
-    nodes.append(Node(
-        package='simulation_communication', executable='fleet_viz',
-        name='fleet_viz', parameters=[{'num_drones': n_viz, 'viz_hz': viz_hz}], output='screen'))
+    if LaunchConfiguration('fleet_viz').perform(context).lower() in ('1', 'true', 'yes'):
+        nodes.append(Node(
+            package='simulation_communication', executable='fleet_viz',
+            name='fleet_viz', parameters=[{'num_drones': n_viz, 'viz_hz': viz_hz}], output='screen'))
 
     # Placeholder Telemetry so the ArmPanel's per-drone battery rows populate in
     # sim exactly as they do on hardware (finding F7). On the rig this comes from
@@ -198,8 +199,10 @@ def generate_launch_description():
         # CPU relief (2026-09-23): Gazebo's /clock arrives at ~700-1000 Hz and rclpy
         # handles it in Python in EVERY node; the emulators republish every Gazebo pose
         # (300-500 Hz) into every tracker; fleet_viz redraws per message. Defaults (Wesley, 2026-09-23) measured on R0329 vs R0330: RTF 0.29 -> 0.45 in flight, hover unchanged. 0 = unthrottled.
-        DeclareLaunchArgument('clock_hz', default_value='100'),
+        DeclareLaunchArgument('clock_hz', default_value='500'),
         DeclareLaunchArgument('mocap_hz', default_value='120'),
         DeclareLaunchArgument('viz_hz', default_value='30'),
+        # RViz-only TF/markers; off for headless batches (26 % of a core, 2026-09-26)
+        DeclareLaunchArgument('fleet_viz', default_value='true'),
         OpaqueFunction(function=launch_setup),
     ])

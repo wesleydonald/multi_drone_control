@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <world name="quadcopter">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>500</real_time_update_rate>
+    </physics>
+    <plugin filename="ignition-gazebo-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-user-commands-system" name="gz::sim::systems::UserCommands"/>
+
+    <scene><background>0.60 0.80 1.00 1</background><ambient>0.50 0.50 0.50 1</ambient></scene>
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows><pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse><specular>0.2 0.2 0.2 1</specular>
+      <attenuation><range>1000</range><constant>0.9</constant><linear>0.01</linear><quadratic>0.001</quadratic></attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision"><geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry></collision>
+        <visual name="visual"><geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry>
+          <material><ambient>0.28 0.48 0.28 1</ambient><diffuse>0.35 0.55 0.35 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <!--
+      IMPORTANT: use the existing M2 X3 model unchanged. The world does not
+      provide an alternate drone visual/model. Base z=0.855 gives the current
+      0.5 m tether + 25 mm magnet about 0.18 m clearance above the z=0.10 ring
+      plane at the staging point x=0.55.
+    -->
+    <include>
+      <uri>modelLargeM2BallMagnet.sdf</uri>
+      <pose>0.55 0 0.855 0 0 0</pose>
+      <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+        <publish_link_pose>true</publish_link_pose>
+        <publish_model_pose>true</publish_model_pose>
+        <publish_nested_model_pose>true</publish_nested_model_pose>
+        <use_pose_vector_msg>true</use_pose_vector_msg>
+        <update_frequency>100</update_frequency>
+      </plugin>
+    </include>
+
+    <!-- Invisible external M2A support, colocated with the real X3 base. -->
+    <include>
+      <uri>m2a_x3_support.sdf</uri>
+      <pose>0.55 0 0.855 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>m2a_ring_fixture.sdf</uri>
+      <pose>0 0 0.10 0 0 0</pose>
+    </include>
+  </world>
+</sdf>

@@ -1,0 +1,27 @@
+R6.3B.4.1 changed files relative to R6_3B_4_suspended_system_aug31_v1
+========================================================================
+MOD  apps/suspended_system_demo.cpp
+     - suspended-mode default 7 -> 9 samples per velocity axis
+     - prints 9x9x9 / 729-candidate configuration
+     - adds replan / Octopus / qpOASES mean-median-p95-max runtime statistics
+     - prints 30 Hz benchmark period
+
+MOD  tests/run_suspended_system_tests.cmake
+     - exercises the suspended_system_demo default instead of forcing 7
+     - asserts that default output is 9 x 9 x 9
+     - runtime remains diagnostic only
+
+MOD  CMakeLists.txt
+     - package version 0.9.0 -> 0.9.1
+
+MOD  README_FIRST.txt
+MOD  INSTALL_AND_TEST_COMMANDS_B4.txt
+MOD  B4_ASSISTANT_VALIDATION.txt
+MOD  B4_IMPLEMENTATION_NOTES.txt
+MOD  MANIFEST_B4.txt
+NEW  B4_1_OCTOPUS_9_RUNTIME.txt
+NEW  MANIFEST_B4_1.txt
+
+No B.4.1 changes to include/, src/, geometry, world snapshots, continuous safety,
+Octopus algorithm, qpOASES refinement, MINVO, separator, B-spline, timing allocation,
+committed trajectory, or B.3 cooperative mission logic.

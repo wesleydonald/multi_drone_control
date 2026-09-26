@@ -1,0 +1,16 @@
+R6.3C.1b/C.1c integration note
+==============================
+This cumulative standalone core is version 0.11.0.
+
+C.1b/C.1c adds only the narrow integration timing hooks needed for Gazebo:
+- optional external trajectory/world time source;
+- separate trajectory_elapsed_s versus steady-clock replan_runtime_s;
+- future-splice timing uses trajectory elapsed, so Gazebo RTF != 1 does not make
+  wall runtime masquerade as simulation-time delay;
+- initial stationary committed trajectory injection for first-plan safety;
+- initial_splice_timing_s for fresh passive shadow planners;
+- test_integration_timing.
+
+All old overloads retain their wall/trajectory-time equivalence and should remain
+covered by the full native CTest suite. See the package-level README_FIRST.txt and
+INSTALL_AND_TEST_C1BC.txt for the ROS commissioning sequence.

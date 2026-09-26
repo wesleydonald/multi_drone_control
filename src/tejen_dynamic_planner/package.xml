@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>tejen_dynamic_planner</name>
+  <version>0.5.0</version>
+  <description>ROS 2 commissioning bridge through C.1e static-obstacle integration of the validated suspended-system dynamic planner.</description>
+  <maintainer email="thesis@example.com">Thesis Project</maintainer>
+  <license>UNLICENSED</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>eigen</depend>
+  <depend>rclcpp</depend>
+  <depend>interfaces</depend>
+  <depend>std_msgs</depend>
+  <depend>builtin_interfaces</depend>
+  <depend>geometry_msgs</depend>
+  <depend>trajectory_msgs</depend>
+  <depend>visualization_msgs</depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>tejen_mpc</exec_depend>
+  <exec_depend>tejen_mission</exec_depend>
+  <exec_depend>simulation_communication</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

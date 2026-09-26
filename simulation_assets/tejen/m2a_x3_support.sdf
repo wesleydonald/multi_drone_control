@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="m2a_x3_support">
+    <!--
+      M2A-only external support scaffold.
+
+      This model does NOT replace or modify the thesis X3 model. It is an
+      invisible kinematic anchor whose DetachableJoint starts attached to the
+      existing x3/X3/base_link. Moving this scaffold moves the unchanged X3
+      during the bench experiment while leaving the X3 tether / magnet dynamics
+      inside modelLargeM2BallMagnet.sdf.
+    -->
+    <link name="support_link">
+      <kinematic>true</kinematic>
+      <gravity>false</gravity>
+      <inertial>
+        <mass>1.0</mass>
+        <inertia>
+          <ixx>0.01</ixx><iyy>0.01</iyy><izz>0.01</izz>
+        </inertia>
+      </inertial>
+    </link>
+
+    <plugin filename="gz-sim-detachable-joint-system" name="gz::sim::systems::DetachableJoint">
+      <parent_link>support_link</parent_link>
+      <child_model>x3</child_model>
+      <child_link>X3/base_link</child_link>
+      <detach_topic>/m2a/support/detach</detach_topic>
+      <attach_topic>/m2a/support/attach</attach_topic>
+      <output_topic>/m2a/support/state</output_topic>
+    </plugin>
+  </model>
+</sdf>

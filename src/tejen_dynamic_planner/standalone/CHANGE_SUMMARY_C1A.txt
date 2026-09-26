@@ -1,0 +1,33 @@
+R6.3C.1a file/change summary
+============================
+
+Standalone tree, based cumulatively on R6_3B_4_suspended_system_aug31_v3:
+
+NEW
+  tools/standalone_dynamic_planner_cpp/include/dynamic_planner/reference_window.hpp
+  tools/standalone_dynamic_planner_cpp/src/reference_window.cpp
+  tools/standalone_dynamic_planner_cpp/tests/test_reference_window.cpp
+
+MODIFIED
+  tools/standalone_dynamic_planner_cpp/CMakeLists.txt
+    version 0.9.2 -> 0.10.0
+    adds dynamic_planner_reference library
+    adds test_reference_window
+
+UNCHANGED planner/safety implementation
+  all pre-existing include/dynamic_planner/*.hpp
+  all pre-existing src/*.cpp
+  all pre-existing apps/*.cpp
+  all pre-existing tests/*.cpp
+
+New ROS package
+  src/dynamic_planner_ros/CMakeLists.txt
+  src/dynamic_planner_ros/package.xml
+  src/dynamic_planner_ros/README.md
+  src/dynamic_planner_ros/include/dynamic_planner_ros/reference_message.hpp
+  src/dynamic_planner_ros/src/reference_message.cpp
+  src/dynamic_planner_ros/test/test_reference_message.cpp
+
+The ROS package compiles the exact C.1a core source files from
+  tools/standalone_dynamic_planner_cpp
+through a relative source path. It does not contain copied planner source.

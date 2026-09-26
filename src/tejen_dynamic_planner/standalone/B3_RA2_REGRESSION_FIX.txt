@@ -1,0 +1,21 @@
+R6.3B.3 R_a=2.0 regression-harness correction
+=============================================
+31 AUG 2026
+
+Observed on native Ubuntu after changing the engineering default to R_a=2.0 m:
+- test_cooperative_stress: PASS at default R_a=2.0 m
+- legacy test_cooperative_mission/crossing: initial local plan failed at R_a=2.0 m
+  with LOCAL_PLAN_FAILED:SOLVER_FAILED
+
+Interpretation:
+The original crossing/same_direction/two_drones scenarios were authored and timed as B.3
+temporal-awareness regressions under R_a=1.0 m. Radius sensitivity is scene-dependent, so
+changing their radius changes the test problem rather than merely changing a harmless default.
+
+Correction:
+- Keep project/default RecedingHorizonConfig planning radius = 2.0 m.
+- Keep cooperative_mission_demo default = 2.0 m and retain --planning-radius override.
+- Run legacy test_cooperative_mission explicitly with --planning-radius 1.0.
+- Run test_cooperative_stress without an override, so it exercises the 2.0 m default.
+
+No core planner source or algorithm is changed by this correction.

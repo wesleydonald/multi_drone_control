@@ -1,0 +1,31 @@
+R6.3B.2 assistant-side validation note
+======================================
+
+This development container does not have the same native GLPK + standalone
+qpOASES development installation as the user's validated machine. The production
+package therefore remains unchanged in solver choice and must be finally verified
+on the user's machine.
+
+Checks performed here
+---------------------
+- all new/modified B.2 C++ source and test files pass C++17 warning-enabled
+  syntax checks using Eigen headers available in the container
+- solver-independent test_world_snapshot: PASS
+- existing solver-independent test_committed_trajectory: PASS
+- test_trajectory_safety_checker: PASS using an assistant-only AABB separator
+  stub for control-flow/geometry development
+- test_recheck_commit: PASS using assistant-only separator/local-planner stubs
+- recheck_demo: PASS using those same assistant-only development stubs
+
+Observed deterministic development-demo statuses
+-------------------------------------------------
+irrelevant update:
+  ACCEPTED_AFTER_RECHECK
+  planning version 0 -> first recheck 0 -> final recheck 1
+
+candidate-blocking update:
+  LATEST_CANDIDATE_UNSAFE_AFTER_RETRY
+  updated obstacle correctly reported as the collision source
+
+The shims are NOT included in this package. Native GLPK and qpOASES are the only
+production/test backends in the delivered CMake project.

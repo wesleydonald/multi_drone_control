@@ -1,0 +1,271 @@
+# M1 IRL + moving virtual ring lab configuration.
+#
+# LOCKED OptiTrack convention (2026-09-15):
+#   6 = physical pickup object
+#   7 = controlled drone body
+#   8 = electromagnet marker
+#   9 = physical ring/basket (reserved; NOT used by tomorrow's M1)
+#
+# IMPORTANT:
+# - The normal full-M1 runner REFUSES to launch while lab_config_ready=false.
+# - Props-off mocap/magnet state checks may still use irl_state_pipeline.launch.py.
+# - Fill the TODO geometry / virtual-ring placement below in the lab, validate it in
+#   RViz, then set lab_config_ready=true only when the values have been reviewed.
+
+m1_irl_operator:
+  ros__parameters:
+    # Keep false until the moving virtual-target placement / final cage setup are
+    # reviewed. Pickup-object geometry and the drone-to-magnet offset are populated.
+    lab_config_ready: true
+    pickup_object_geometry_ready: true
+    pickup_object_mass_kg: 0.060
+    pickup_object_diameter_m: 0.086
+    pickup_object_thickness_m: 0.022
+    pickup_plate_diameter_m: 0.052
+    pickup_plate_recess_from_top_m: 0.002
+    pickup_marker_centroid_above_top_m: 0.006
+    pickup_reported_position_below_marker_centroid_m: 0.020
+    rigid_body_id_note: "pickup=6 quad=12 magnet=22 ring=9_reserved"
+    physical_ring_used_for_m1: false
+
+motion_capture_publisher_irl:
+  ros__parameters:
+    udp_host: "192.168.0.87"
+    udp_port: 1511
+    pickup_rigid_body_id: "6"
+    quad_rigid_body_id: "12"
+    magnet_rigid_body_id: "22"
+    ring_rigid_body_id: "9"
+    pickup_object_pose_topic: /irl/pickup_object/pose
+
+    # Quad rigid-body origin -> cable attachment/anchor, expressed in quad body frame.
+    # Retained from the previous lab commissioning setup. Verify before flight.
+    attachment_offset_x: 0.000
+    attachment_offset_y: 0.000
+    attachment_offset_z: -0.030
+    max_pair_age_s: 0.20
+
+magnet_attachment_manager_irl:
+  ros__parameters:
+    magnet_command_topic: /magnet/command
+    object_attached_topic: /magnet/object_attached
+    attachment_state_topic: /magnet/attachment_state
+    magnet_tip_pose_topic: /magnet_tip_pose
+    pickup_object_pose_topic: /irl/pickup_object/pose
+    pickup_object_index: 0
+
+    # Measured 2026-09-16. The reported rigid-body position is 14 mm below the
+    # object top surface; the steel contact surface is recessed 2 mm from the top.
+    # Therefore reported origin -> steel contact centre = +12 mm in object +Z.
+    # Keep these identical to online_join_planner.payload_pickup_point_* below.
+    pickup_point_offset_x: 0.000
+    pickup_point_offset_y: 0.000
+    pickup_point_offset_z: 0.012
+
+    # Vector from tracked magnet marker centroid to physical magnet contact face.
+    # Existing planner contract treats this vector in WORLD axes (normally vertical).
+    # Keep these identical to online_join_planner.magnet_marker_to_contact_face_*.
+    magnet_marker_to_contact_face_x: 0.000
+    magnet_marker_to_contact_face_y: 0.000
+    magnet_marker_to_contact_face_z: -0.030
+
+    attach_radius_m: 0.12
+    attach_speed_threshold_mps: 0.25
+    attach_dwell_s: 0.8
+    detach_dwell_s: 0.20
+    pose_timeout_s: 0.25
+
+    enable_elrs_magnet_output: true
+    elrs_magnet_command_topic: /magnet/ELRSCommand
+    # Diagnostic/commissioning fan-out while the real Betaflight magnet AUX is
+    # not yet positively identified. Restricted in code to logical channels 5..10.
+    elrs_magnet_channel: 10  # legacy single-channel fallback
+    elrs_magnet_channels: [5, 6, 7, 8, 9, 10]
+    elrs_magnet_on_value: 1.0
+    elrs_magnet_off_value: -1.0
+    elrs_repeat_rate_hz: 2.0
+
+# The same measured real pickup geometry is consumed by M1. The object is roughly
+# circular, so the collision model uses a conservative 86 x 86 x 22 mm box.
+online_join_planner:
+  ros__parameters:
+    vehicle_id: drone_0
+    assigned_attachment_id: attachment_0
+    mission_mode: pickup_delivery
+
+    use_static_pickup_object: false
+    pickup_object_pose_topic: /irl/pickup_object/pose
+    pickup_object_index: 0
+    use_measured_magnet_tip: true
+    magnet_tip_pose_topic: /magnet_tip_pose
+    object_attached_topic: /magnet/object_attached
+    magnet_command_topic: /magnet/command
+
+    # IRL drone rigid-body origin -> magnet marker vertical separation [m].
+    # Earlier physical commissioning and the 2026-09-17 flight both place this
+    # around 0.53-0.54 m. This is intentionally separate from the MPC effective
+    # pendulum-length parameter.
+    magnet_drop_below_quad: 0.53
+
+    # Measured physical pickup object dimensions [m].
+    payload_name: "irl_60g_round_pickup_object"
+    payload_collision_enabled: true
+    payload_collision_size_x: 0.086
+    payload_collision_size_y: 0.086
+    payload_collision_size_z: 0.022
+    payload_collision_margin: 0.050
+
+    # Reported origin is 14 mm below top; object centre is 11 mm below top, so
+    # reported origin -> collision-box centre = +3 mm in object +Z.
+    payload_pose_reference: "mocap_rigid_body_origin"
+    payload_geometry_origin_from_pose_x: 0.000
+    payload_geometry_origin_from_pose_y: 0.000
+    payload_geometry_origin_from_pose_z: 0.003
+    payload_assume_level: true
+    payload_pose_timeout_s: 0.25
+
+    # Mocap origin -> recessed steel pickup/contact surface centre [m]. Must match
+    # magnet_attachment_manager_irl pickup_point_offset_* above.
+    payload_pickup_point_x: 0.000
+    payload_pickup_point_y: 0.000
+    payload_pickup_point_z: 0.012
+
+    # Same physical magnet-marker -> contact-face convention used by attachment gate.
+    magnet_marker_to_contact_face_x: 0.000
+    magnet_marker_to_contact_face_y: 0.000
+    magnet_marker_to_contact_face_z: -0.030
+
+    use_geometry_aware_pickup: true
+    pickup_contact_gap: 0.000
+    pickup_overtravel: 0.017
+    pickup_max_overtravel: 0.02
+    # TODO LAB if the OptiTrack world floor is not z=0.
+    support_surface_z: 0.000
+
+    # Final frozen M1 mission thresholds.
+    auto_descend: true
+    pickup_xy_tolerance: 0.10
+    pickup_tip_speed_tolerance: 0.60
+    pickup_approach_clearance: 0.35
+    pickup_attach_clearance: 0.03
+    pickup_lift_height: 0.40
+    pickup_lift_speed: 0.12
+    pickup_z_tolerance: 0.20
+    # Stronger contract used only for declaring the loaded lift physically
+    # complete before C++ transfer preparation. The broad 0.20 m pickup
+    # commissioning tolerance remains unchanged for approach/pickup phases.
+    loaded_lift_z_tolerance: 0.05
+    max_reference_speed: 2.0
+    lift_complete_object_clearance: 0.08
+    match_xy_threshold: 0.18
+    match_xy_velocity_threshold: 0.20
+    reattach_transit_xy_threshold: 0.40
+    attach_ready_target_lead_time: 0.30
+    reference_nominal_speed: 0.25
+
+    # Moving VIRTUAL ring. Real pickup object is released into free air at the
+    # normal M1 drop point; there is intentionally no physical basket tomorrow.
+    drop_point_source: payload
+    payload_pose_topic: /fake_payload/pose
+    payload_twist_topic: /fake_payload/twist
+    attachment_pose_topic: /fake_attachment_point/pose
+    attachment_twist_topic: /fake_attachment_point/twist
+    commissioning_hold_after_lift: false
+    commissioning_hold_before_drop: false
+
+    # Hardware handoff retains the stricter physical settle requirement.
+    c1f2_prepare_settle_speed_mps: 0.08
+    c1f2_prepare_settle_dwell_s: 0.30
+    c1f2_nav_capture_xy_threshold_m: 0.12
+    c1f2_nav_capture_z_threshold_m: 0.15
+    static_obstacle_count: 0
+
+# Virtual moving ring only. No fake companion drones are present in tomorrow's M1 IRL.
+fake_cooperative_transport_world:
+  ros__parameters:
+    frame_id: map
+    trajectory_type: circle
+    obstacle_scenario: custom
+    # TODO LAB: choose a fully visible/safe virtual-ring motion inside the cage.
+    center_x: -0.80
+    center_y: 0.00
+    center_z: 0.30
+    radius: 0.30
+    omega: 0.20
+    z_amplitude: 0.00
+    payload_yaw_mode: fixed
+    payload_yaw0: 0.00
+
+    payload_pose_topic: /fake_payload/pose
+    payload_twist_topic: /fake_payload/twist
+    attachment_pose_topic: /fake_attachment_point/pose
+    attachment_twist_topic: /fake_attachment_point/twist
+    payload_committed_trajectory_topic: /fake_payload/committed_trajectory
+
+    ring_plate_count: 12
+    ring_plate_pitch_diameter_m: 0.50
+    ring_plate_diameter_m: 0.06
+    ring_attachment_plate_index: 0
+    ring_collision_outer_diameter_m: 0.56
+    ring_collision_top_offset_m: 0.0
+    ring_collision_bottom_offset_m: -0.27
+    ring_structure_height_m: 0.07
+    ring_plate_visual_thickness_m: 0.006
+
+    enable_fake_obstacles: false
+    fake_drone_count: 0
+    publish_shared_trajectories: true
+    # Match the intended cooperative-agent contract: advertise a finite rolling
+    # future rather than one enormous one-shot trajectory.
+    shared_trajectory_duration_s: 10.0
+    shared_trajectory_control_interval_s: 0.50
+    shared_trajectory_refresh_period_s: 1.0
+
+# Explicit controller settings for the lab run. Keep the proven legacy integral
+# selected until the new lateral-disturbance path has passed the pre-Wednesday
+# closed-loop simulation plan. The modes are mutually exclusive in controller code.
+tejen_mpc:
+  ros__parameters:
+    use_external_reference: true
+    xy_bias_mode: lateral_disturbance  # legacy_integral | lateral_disturbance | lateral_disturbance_shadow | none
+    enable_xy_integral_action: true  # backward-compatible fallback only when xy_bias_mode is omitted
+    xy_integral_weight: 15.0
+    xy_integral_terminal_weight: 30.0
+    xy_integral_limit: 0.30
+    xy_integral_reference_jump_reset_m: 0.25
+    lateral_disturbance_observer_bandwidth_rad_s: 0.30
+    lateral_disturbance_max_abs_mps2: 2.0
+    lateral_disturbance_airborne_height_m: 0.20
+    lateral_disturbance_max_dt_s: 0.15
+    enable_thrust_ratio_ukf: true
+    enable_thrust_ratio_feedback: true
+    thrust_ratio_feedback_min_updates: 15
+    thrust_ratio_feedback_max_std: 1.5
+    thrust_ratio_feedback_rate_per_s: 0.5
+    thrust_ratio_feedback_max_fractional_change: 0.25
+    thrust_ratio_feedback_deadband: 0.20
+
+elrs_interface_irl:
+  ros__parameters:
+    magnet_command_topic: /magnet/ELRSCommand
+    magnet_channel: 10  # legacy single-channel fallback
+    magnet_channels: [5, 6, 7, 8, 9, 10]
+
+# Current C1F.8d/M2D-era backend geometry override for the real carried object.
+# Half-extents equal one half of the conservative planner collision-box dimensions.
+dynamic_planner_transfer_backend:
+  ros__parameters:
+    # IRL keeps the previous 15 degree swing envelope until real data justifies change.
+    max_swing_angle_rad: 0.2617993877991494
+    payload_collision_enabled: true
+    require_payload_attached_for_enable: true
+    payload_half_x_m: 0.043
+    payload_half_y_m: 0.043
+    payload_half_z_m: 0.011
+
+    # Magnet marker -> contact face is -30 mm world Z. The object collision centre
+    # is 9 mm below its pickup surface, so attached object centre is 39 mm below
+    # the tracked magnet-marker centre.
+    payload_center_from_magnet_x_m: 0.000
+    payload_center_from_magnet_y_m: 0.000
+    payload_center_from_magnet_z_m: -0.039

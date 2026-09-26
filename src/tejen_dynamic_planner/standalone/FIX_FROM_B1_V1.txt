@@ -1,0 +1,25 @@
+R6.3B.1 v2 - terminal stopped-hold liveness fix
+================================================
+
+Observed native regression in v1:
+  test_receding_horizon: FAIL: committed trajectory exhausted before goal was seen
+
+Root cause:
+  The local spline deliberately ends at a certified stop (v=0, a=0), but v1
+  treated the last explicit spline time as the end of the committed command.
+  Future splice A was clamped to that endpoint. Once now reached the endpoint,
+  A==now, so every nonzero-duration solve was necessarily rejected by the
+  correct late-candidate gate.
+
+Fix:
+  * A stopped endpoint now extends as an exact stationary committed hold:
+        p(t)=p_end, v(t)=0, a(t)=0  for t > explicit spline end.
+  * Future splice A is no longer clamped to the finite spline endpoint.
+  * replaceSuffix() may splice inside the stopped hold. On successful commit it
+    materializes only the finite hold interval that actually executed, then
+    appends the new candidate.
+  * The late-candidate rule is unchanged.
+  * Octopus, MINVO, GLPK, qpOASES, time allocation, local goal projection and
+    dynamic limits are unchanged.
+
+This is a B.1 liveness correction, not B.2 Check/Recheck.

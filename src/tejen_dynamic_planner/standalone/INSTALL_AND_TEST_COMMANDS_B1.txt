@@ -1,0 +1,2 @@
+This cumulative tree is now R6.3B.2.
+Use INSTALL_AND_TEST_COMMANDS_B2.txt.

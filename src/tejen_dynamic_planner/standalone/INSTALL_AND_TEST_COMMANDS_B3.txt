@@ -1,0 +1,113 @@
+R6.3B.3 R_a=2.0 m finalization - native install/test commands
+=================================================================
+
+Repository root:
+  $HOME/Documents/Thesis git/drone_cage_control
+
+1. Replace the standalone tool with this cumulative B.3 R_a=2.0 m package
+
+  cd "$HOME/Documents/Thesis git/drone_cage_control"
+  rm -rf tools/standalone_dynamic_planner_cpp
+  unzip "$HOME/Downloads/R6_3B_3_Ra2_final_aug31_v1.zip" -d tools/
+
+2. Configure and build
+
+  cd "$HOME/Documents/Thesis git/drone_cage_control/tools/standalone_dynamic_planner_cpp"
+  rm -rf build
+  cmake -S . -B build \
+    -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_PREFIX_PATH="$HOME/.local"
+  cmake --build build -j
+
+3. Run the complete cumulative suite
+
+  ctest --test-dir build --output-on-failure
+
+Expected test count: 13
+New B.3 tests at the end:
+  test_cooperative_mission
+  test_cooperative_stress
+
+test_cooperative_mission preserves crossing, same_direction and two_drones.
+test_cooperative_stress runs crossing_stress, same_direction_stress and
+two_drones_stress. Every stress scenario first proves that the same planner's
+unobstructed mission has negative sampled simultaneous clearance against the
+configured other-drone tube. It then requires the obstacle-aware mission to reach
+the goal with the normal continuous safety/C2/authority contracts.
+
+Default planning radius in this package is 2.0 m. cooperative_mission_demo also
+accepts --planning-radius <metres> for explicit sensitivity runs.
+
+4. Generate the three stronger stress CSV sets
+
+  ./build/cooperative_mission_demo \
+    --scenario crossing_stress \
+    --samples 7 \
+    --csv-prefix /tmp/r6_3b3_crossing_stress
+
+  ./build/cooperative_mission_demo \
+    --scenario same_direction_stress \
+    --samples 7 \
+    --csv-prefix /tmp/r6_3b3_same_direction_stress
+
+  ./build/cooperative_mission_demo \
+    --scenario two_drones_stress \
+    --samples 7 \
+    --csv-prefix /tmp/r6_3b3_two_drones_stress
+
+Each successful stress summary should include:
+  stress unobstructed-conflict witness: true (nominal min clearance=<negative> m)
+  continuous executed-path safety: SAFE
+  accepted-authority contract: true
+  incumbent-prefix unsafe seen: false
+  C2 regression contract: true
+  fixed-world/no-retry contract: true
+  B.3 regression contract: true
+
+5. Open the native interactive Matplotlib 3D plots
+
+Crossing stress:
+  python3 plot_receding_horizon_3d.py \
+    --trajectory /tmp/r6_3b3_crossing_stress_trajectory.csv \
+    --replans /tmp/r6_3b3_crossing_stress_replans.csv \
+    --other-drones /tmp/r6_3b3_crossing_stress_other_drones.csv \
+    --scene crossing_stress \
+    --time-markers 12 \
+    --other-boxes \
+    --output /tmp/r6_3b3_crossing_stress_3d.png
+
+Same-direction stress:
+  python3 plot_receding_horizon_3d.py \
+    --trajectory /tmp/r6_3b3_same_direction_stress_trajectory.csv \
+    --replans /tmp/r6_3b3_same_direction_stress_replans.csv \
+    --other-drones /tmp/r6_3b3_same_direction_stress_other_drones.csv \
+    --scene same_direction_stress \
+    --time-markers 12 \
+    --other-boxes \
+    --output /tmp/r6_3b3_same_direction_stress_3d.png
+
+Two-drone stress:
+  python3 plot_receding_horizon_3d.py \
+    --trajectory /tmp/r6_3b3_two_drones_stress_trajectory.csv \
+    --replans /tmp/r6_3b3_two_drones_stress_replans.csv \
+    --other-drones /tmp/r6_3b3_two_drones_stress_other_drones.csv \
+    --scene two_drones_stress \
+    --time-markers 14 \
+    --other-boxes \
+    --output /tmp/r6_3b3_two_drones_stress_3d.png
+
+The normal Matplotlib desktop window should open and remain rotatable/pannable.
+The PNG is saved at the same time.
+
+6. Send ChatGPT
+
+Please send:
+- complete ctest output
+- the three stress-scenario final mission summary blocks
+- the three stress 3D plot images
+- complete failure output instead if any test or mission exits non-zero
+
+Do NOT tune planner parameters merely because a route looks non-optimal. B.3 pass/fail
+is safety + liveness. The stress witness only proves the scenario really challenges the
+unobstructed trajectory; the continuous B.2 checker remains the executed-path safety gate.

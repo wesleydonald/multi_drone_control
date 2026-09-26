@@ -44,6 +44,16 @@ PARENT_MODEL = 'lift_system'
 def _args():
     return [
         DeclareLaunchArgument('num_drones', default_value='4'),
+        # our Gazebo bridges + Betaflight nodes; false when another stack owns the sim
+        DeclareLaunchArgument('sim_interface', default_value='true'),
+        # our stack on top of Tejen's M2 (see launch_setup)
+        DeclareLaunchArgument('partner_m2', default_value='false'),
+        # partner_m2 only: 'all' | 'muxes' (before his fleet flies) | 'controllers' (at his
+        # success hold; our trackers idle through his whole join otherwise, ~150 % CPU)
+        DeclareLaunchArgument('partner_m2_part', default_value='all'),
+        DeclareLaunchArgument('airborne_start', default_value='false'),
+        DeclareLaunchArgument('cable_elev_deg', default_value='45.0'),
+        DeclareLaunchArgument('attach_z', default_value='0.025'),
         DeclareLaunchArgument('cable_len', default_value='0.5'),
         # where the rim attachments are (deg, load frame, sized by num_drones); '' = even
         # ring. Clock face: 3 o'clock = 0, 12 = 90, 9 = 180, 6 = 270.
@@ -76,6 +86,12 @@ def _args():
         # See mpc_quad_load_launch.py for the full explanation of these four.
         DeclareLaunchArgument('thrust_ratio', default_value='auto'),
         # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
+        # tracker pose watchdog (wall clock); 0.25 is the node default and the rig value.
+        # Headless sim runs under CPU load trip it before liftoff (R0493/R0511/R0551/R0555).
+        DeclareLaunchArgument('pose_timeout_s', default_value='0.25'),
+        # tracker reference-staleness gate (wall clock). 1.0 s = the rig; Gazebo runs at ~0.1
+        # RTF (GUI) may pass 3.0 (Wesley 2026-09-26: planner slow ticks of 0.8 s tripped it)
+        DeclareLaunchArgument('safety_ref_timeout_s', default_value='1.0'),
         DeclareLaunchArgument('kt_trim', default_value='true'),
         DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
         DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
@@ -148,7 +164,54 @@ def launch_setup(context, *args, **kwargs):
     nodes = [SetParameter(name='use_sim_time', value=True),
              LogInfo(msg=f'[launch] {kt_note}; takeoff {kt_to:.2f}')]
 
+    # partner_m2 (multi_drone_control 2026-09-26): our stack on top of Tejen's M2 world
+    # after his four drones have joined the ring. His per-drone stacks own the /drone_i
+    # command/arming names, so ours move under /ours; each drone gets an ELRS mux that
+    # forwards his MPC (/drone_i/ELRSCommand_tejen) until /fleet/handover, then ours.
+    sim_interface = LaunchConfiguration('sim_interface').perform(context).lower() in ('1', 'true', 'yes')
+    partner_m2 = LaunchConfiguration('partner_m2').perform(context).lower() in ('1', 'true', 'yes')
+    part = LaunchConfiguration('partner_m2_part').perform(context) if partner_m2 else 'all'
+    want_muxes = part in ('all', 'muxes')
+    want_ctrl = part in ('all', 'controllers')
+
+    def ours(i):
+        return [(f'/drone_{i}/arming_service', f'/ours/drone_{i}/arming_service'),
+                (f'/drone_{i}/arming_state_feedback', f'/ours/drone_{i}/arming_state_feedback'),
+                (f'/drone_{i}/command', f'/ours/drone_{i}/command'),
+                (f'/drone_{i}/ELRSCommand', f'/drone_{i}/ELRSCommand_diss')] if partner_m2 else []
+
     for i, drone_name in enumerate(drone_names):
+        if partner_m2 and want_muxes:
+            nodes.append(Node(
+                package='drone_magnet', executable='elrs_mux', name=f'elrs_mux_{i}',
+                parameters=[{'drone_id': i, 'latch': True, 'approach_stream': True,
+                             'handoff_topic': '/fleet/handover'}], output='screen'))
+        if not want_ctrl:
+            continue
+        if not sim_interface:
+            nodes.append(Node(
+                package='controller_quad_load', executable='controller',
+                name=f'controller_{i}', remappings=ours(i),
+                parameters=[{'drone_id': i,
+                             'terminal_vel_ref': b('terminal_vel_ref'),
+                             'cable_ff_scale': f('cable_ff_scale'),
+                             'attitude_ff': b('attitude_ff'),
+                             'cable_source': LaunchConfiguration('cable_source'),
+                             'payload_rest_z': f('payload_rest_z'),
+                             'takeoff_spool_s': f('takeoff_spool_s'),
+                             'pose_timeout_s': ParameterValue(LaunchConfiguration('pose_timeout_s'), value_type=float),
+                             'safety_ref_timeout_s': f('safety_ref_timeout_s'),
+                             'thrust_ratio': kt,
+                             'kt_trim': ParameterValue(LaunchConfiguration('kt_trim'), value_type=bool),
+                             'kt_trim_max': ParameterValue(LaunchConfiguration('kt_trim_max'), value_type=float),
+                             'kt_trim_tau': ParameterValue(LaunchConfiguration('kt_trim_tau'), value_type=float),
+                             'takeoff_thrust_ratio': kt_to,
+                             'kt_batt_sag_frac': f('kt_batt_sag_frac'),
+                             'kt_batt_v_full': f('kt_batt_v_full'),
+                             'kt_batt_v_empty': f('kt_batt_v_empty'),
+                             'kt_print_period_s': f('kt_print_period_s')}],
+                output='screen'))
+            continue
         nodes.append(Node(
             package='ros_gz_bridge', executable='parameter_bridge',
             name=f'motor_bridge_{i}',
@@ -183,6 +246,8 @@ def launch_setup(context, *args, **kwargs):
                          'cable_source': LaunchConfiguration('cable_source'),
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
+                         'pose_timeout_s': ParameterValue(LaunchConfiguration('pose_timeout_s'), value_type=float),
+                             'safety_ref_timeout_s': f('safety_ref_timeout_s'),
                          'thrust_ratio': kt,
                          'kt_trim': ParameterValue(LaunchConfiguration('kt_trim'), value_type=bool),
                          'kt_trim_max': ParameterValue(LaunchConfiguration('kt_trim_max'), value_type=float),
@@ -194,10 +259,22 @@ def launch_setup(context, *args, **kwargs):
                          'kt_print_period_s': f('kt_print_period_s')}],
             output='screen'))
 
+    if not want_ctrl:
+        return nodes
+
     # ── Central fleet manager ──────────────────────────────────────────────
+    if partner_m2:
+        # his ring (M2A fixture, made dynamic) -> our payload mocap
+        nodes.append(Node(
+            package='simulation_communication', executable='tejen_motion_capture_emulator',
+            name='payload_mocap', parameters=[{
+                'pose_topic': '/model/payload_model/pose', 'target_object_id': 1,
+                'motion_capture_state_topic': '/payload/motion_capture_state',
+                'rviz_pose_topic': '/payload/rviz_pose'}], output='screen'))
+    fleet_remaps = [r for i in range(n) for r in ours(i)]
     nodes.append(Node(
         package='controller_quad_load', executable='main', name='central_controller',
-        parameters=[{'num_drones': n}], output='screen'))
+        remappings=fleet_remaps, parameters=[{'num_drones': n}], output='screen'))
 
     # ── Decentralized dissipative reference generator ──────────────────────
     nodes.append(Node(
@@ -236,7 +313,10 @@ def launch_setup(context, *args, **kwargs):
                      'reconfig_mode': LaunchConfiguration('reconfig_mode'),
                      'reconfig_hold_s': f('reconfig_hold_s'),
                      'min_survivors': i_('min_survivors'),
-                     'net_land_z': f('net_land_z')}],
+                     'net_land_z': f('net_land_z'),
+                     'attach_z': f('attach_z'),
+                     'airborne_start': b('airborne_start'),
+                     'cable_elev_deg': f('cable_elev_deg')}],
         output='screen'))
 
     return nodes

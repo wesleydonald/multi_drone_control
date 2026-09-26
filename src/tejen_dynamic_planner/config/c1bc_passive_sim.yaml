@@ -1,0 +1,44 @@
+dynamic_planner_passive_commissioning:
+  ros__parameters:
+    # IMPORTANT: the existing commandsForPayloadSimClean workflow does not
+    # publish /clock. Keep this false unless the actual current stack is first
+    # inspected and /clock is confirmed live.
+    use_sim_time: false
+
+    state_topic: /motion_capture_state
+    shadow_reference_topic: /dynamic_planner/shadow_reference
+    diagnostics_topic: /dynamic_planner/c1bc_status
+    frame_id: map
+    vehicle_id: drone_0
+
+    # Clear-space shadow goal only. C.1b/C.1c does not connect the pickup/drop
+    # mission state machine and never grants MPC authority.
+    goal_x: 3.0
+    goal_y: 0.0
+    goal_z: 1.5
+
+    state_timeout_s: 0.25
+    acceleration_filter_tau_s: 0.15
+    hover_speed_tolerance_mps: 0.10
+    hover_accel_tolerance_mps2: 0.50
+
+    # C.1b/C.1c v3 is intentionally STATIONARY + DISARMED. The planner still
+    # consumes the measured position, but zeroes v/a in its private shadow
+    # starting state after the stationary gate passes. This avoids turning a
+    # ROS/timing commissioning test into an airborne controller test.
+    stationary_shadow_state: true
+
+    # Ground/spawn commissioning must not inherit the old airborne-only 0.20 m
+    # Octopus lower-z clamp. This is a passive search bound, not a flight floor.
+    minimum_search_z_m: -0.05
+
+    # The first real ROS run measured accepted 9^3 suspended solves around
+    # 118-169 ms, so 10 Hz had almost no scheduling margin. Use 5 Hz for C.1b/c
+    # until optimization or stronger timing evidence justifies increasing it.
+    planner_rate_hz: 5.0
+
+    # C.1b normal passive run: 0.0.
+    # C.1c delayed-first-plan run: override on command line, initially 150 ms.
+    artificial_planning_delay_ms: 0.0
+
+    csv_path: /tmp/r6_3c1bc_passive.csv

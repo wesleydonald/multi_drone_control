@@ -197,6 +197,13 @@ class MagnetAttachmentManager(Node):
         self._start_time = time.time()
         self._last_start_detach = 0.0
         self._ever_magnet_on = False
+        # the drone starts WELDED to the payload (the partner demo's fourth carrier): keep
+        # the joint gz created at spawn and report attached from t=0; magnet OFF releases it
+        if bool(self.declare_parameter('attached_at_start', False).value):
+            self.detach_on_start = False
+            self.attached = True
+            self.magnet_on = True
+            self._ever_magnet_on = True
 
         self.timer = self.create_timer(1.0 / 30.0, self.timer_callback)
 

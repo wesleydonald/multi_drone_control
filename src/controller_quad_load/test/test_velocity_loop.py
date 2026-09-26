@@ -25,7 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 from controller_quad_load.velocity_loop import (          # noqa: E402
-    VelocityLoop, attitude_error, betaflight_rates, betaflight_rates_inv,
+    CENTRE_RATE_DEG, MAX_RATE_DEG, VelocityLoop, attitude_error, betaflight_rates, betaflight_rates_inv,
     limit_tilt, tilt_quat_from_accel)
 
 G = 9.81
@@ -54,7 +54,7 @@ def test_rate_curve_matches_the_casadi_model_in_dynamics_py():
     f = cs.Function('f', [x, d.centre_rate_deg, d.max_rate_deg, d.rate_expo],
                     [d.betaflight_rates(x)])
     for stick in np.linspace(-1.0, 1.0, 401):
-        assert float(f(stick, 70.0, 670.0, 0.5)) == pytest.approx(
+        assert float(f(stick, CENTRE_RATE_DEG, MAX_RATE_DEG, 0.5)) == pytest.approx(
             betaflight_rates(stick), abs=1e-3)
 
 
@@ -218,7 +218,7 @@ def test_the_stick_this_produces_lands_the_rate_the_PLANT_actually_flies():
         os.path.dirname(os.path.dirname(os.path.dirname(HERE))), 'tools'))
     from sil.plant import betaflight_rates as plant_rates
 
-    for asked in np.linspace(-660.0, 660.0, 265):
+    for asked in np.linspace(-0.98 * MAX_RATE_DEG, 0.98 * MAX_RATE_DEG, 265):
         stick = betaflight_rates_inv(asked)
         assert plant_rates(stick) == pytest.approx(asked, abs=1e-3)
 

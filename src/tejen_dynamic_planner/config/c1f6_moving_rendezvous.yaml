@@ -1,0 +1,178 @@
+dynamic_planner_transfer_backend:
+  ros__parameters:
+    use_sim_time: false
+
+    # Frozen C1F.2b authority/reference interface.
+    state_topic: /motion_capture_state
+    target_topic: /dynamic_planner/transfer_target
+    target_velocity_topic: /dynamic_planner/transfer_target_velocity
+    object_attached_topic: /magnet/object_attached
+    enable_topic: /dynamic_planner/transfer_enable
+    authority_topic: /dynamic_planner/transfer_authority
+    authority_ack_topic: /dynamic_planner/transfer_authority_ack
+    shadow_reference_topic: /dynamic_planner/transfer_reference
+    diagnostics_topic: /dynamic_planner/transfer_status
+    marker_topic: /dynamic_planner/markers
+    frame_id: map
+    vehicle_id: drone_0
+
+    state_timeout_s: 0.25
+    object_attached_timeout_s: 0.25
+    acceleration_filter_tau_s: 0.15
+    planner_rate_hz: 5.0
+    marker_rate_hz: 5.0
+    minimum_search_z_m: 0.20
+    # C1F.8c: the optimised planner no longer scales splice lead from the
+    # previous solve time. Keep a fixed three-reference-tick (100 ms) future
+    # splice and reject any candidate that actually arrives too late.
+    initial_splice_timing_s: 0.0
+    fixed_splice_lookahead_s: 0.10
+    # Independent wall-clock backstop for the Octopus search. This is a solver
+    # budget, not a trajectory-time reserve.
+    octopus_max_runtime_s: 0.05
+
+    # C1F.6 / M2D commissioned timing. Hard-line M2D validation on 2026-09-13
+    # showed that 2.5 produced repeated execution tracking-tube fallback on
+    # certified multi-partial detours, while 3.0 completed the mission end-to-end
+    # without weakening the 5 cm execution certificate or collision margins.
+    spline_time_factor: 3.0
+    factor_alloc: 1.0
+    factor_alloc_close: 2.5
+    close_to_goal_m: 0.20
+
+    # Exposed but unchanged smoother objective. In MOVING_RENDEZVOUS mode
+    # terminal position and velocity are hard constraints, while terminal
+    # acceleration is deliberately not hard-matched.
+    smoother_jerk_weight: 1.0
+    smoother_goal_weight: 10.0
+
+    # Retire the pre-C1F.8 trajectory-clock useful-deadline scheme. At the old
+    # 200 ms reserve it became larger than the entire fast-planner splice and
+    # forced every search into an immediate PARTIAL.
+    enable_octopus_useful_deadline: false
+    octopus_post_search_reserve_s: 0.0
+    incumbent_failure_recheck_horizon_s: 2.0
+
+    # C1F.8c retires the arbitrary 3 s stopped-hold veto. Moving-target nominal
+    # segments instead carry a separately constructed, short brake-to-stop
+    # contingency that must itself be collision-safe. The measured-state
+    # brake/hover remains the emergency layer for an unresolved incumbent.
+    terminal_hold_guard_s: 0.0
+    terminal_hold_guard_interval_s: 0.50
+    planning_policy_profile: simulation_cage
+    require_terminal_hold_for_nominal: false
+    # Nominal moving-target segments may end with nonzero target-frame velocity.
+    # Their separate velocity-continuous brake tail is the stopped contingency.
+    # C1F.8c certifies that short brake itself, but the old arbitrary 3 s hold is
+    # gone, so the nominal trajectory is no longer forced to behave like a stop.
+    require_rendezvous_backup_for_nominal: true
+    defer_incumbent_conflict_until_reaction_horizon: true
+    emergency_panic_horizon_s: 0.50
+
+    # Passed stationary physical-state handoff.
+    require_stationary_activation: true
+    activation_speed_tolerance_mps: 0.10
+    activation_accel_tolerance_mps2: 0.50
+    seed_stationary_on_activation: false
+
+    # C1F.8c moving-target terminal condition. The backend publishes the live
+    # target state, while the core evaluates x_T(t_f) at the candidate's actual
+    # absolute terminal time t_f = t_splice + T. This removes the separate
+    # pre-led point and solve-runtime lead used by C1F.6/C1F.7.
+    fixed_target_change_tolerance_m: 0.0001
+    allow_live_target_updates: true
+    live_target_replan_threshold_m: 0.01
+    # The committed basket future supplies terminal velocity directly. The live
+    # velocity topic remains available for diagnostics/legacy predictor profiles
+    # but is not an independent authority prerequisite in C1F.8c.
+    require_target_velocity: false
+    target_lead_enabled: false
+    target_lead_nominal_speed_mps: 0.35
+    target_lead_min_s: 0.0
+    # Low-confidence predictors (e.g. future IRL CV fallback) keep the short
+    # 2 s / 0.15 m safeguards. The simulation target is high-confidence because
+    # it is taken from the same advertised /fake_payload/committed_trajectory
+    # that C++ already uses for moving-basket collision geometry.
+    target_lead_max_s: 2.0
+    target_lead_high_confidence_max_s: 10.0
+    target_lead_max_distance_m: 0.15
+    target_predictor_type: committed_trajectory
+    target_lead_initial_solve_runtime_s: 0.0
+    target_lead_solve_runtime_scale: 0.0
+    target_lead_solve_runtime_ema_alpha: 0.35
+    arrival_time_target_lead_enabled: false
+    target_lead_fixed_point_iterations: 3
+    terminal_time_target_prediction_enabled: true
+    target_time_fixed_point_iterations: 6
+    target_time_fixed_point_tolerance_s: 0.01
+    moving_rendezvous_enabled: true
+    live_target_velocity_replan_threshold_mps: 0.01
+
+    # M1 simulation swing bound. Reduced from 15 deg after repeated successful
+    # simulation evidence showed only small actual swing; IRL defaults remain unchanged.
+    max_swing_angle_rad: 0.17
+    payload_collision_enabled: true
+    require_payload_attached_for_enable: true
+    payload_half_x_m: 0.050
+    payload_half_y_m: 0.010
+    payload_half_z_m: 0.003
+    payload_center_from_magnet_x_m: 0.0
+    payload_center_from_magnet_y_m: 0.0
+    payload_center_from_magnet_z_m: -0.028
+
+    static_scene_enabled: false
+    require_scene_witness: false
+
+    # C1F.5 cooperative future contract: live state verifies execution, while
+    # the advertised committed cubic B-spline is the authoritative future.
+    cooperative_scene_enabled: true
+    cooperative_drone_state_topics:
+      - /fake_obstacles/drone_0/state
+      - /fake_obstacles/drone_1/state
+    cooperative_prediction_mode: shared_trajectory
+    cooperative_committed_trajectory_topics:
+      - /fake_obstacles/drone_0/committed_trajectory
+      - /fake_obstacles/drone_1/committed_trajectory
+    cooperative_state_timeout_s: 0.30
+    # Retained only for explicit constant_velocity degraded/test mode.
+    cooperative_prediction_horizon_s: 20.0
+    cooperative_body_half_x_m: 0.105
+    cooperative_body_half_y_m: 0.105
+    cooperative_body_half_z_m: 0.060
+    # C1F.7 changes only companion prediction/tracking uncertainty; the ego
+    # execution certificate below remains ±0.10 m.
+    cooperative_tracking_half_x_m: 0.05
+    cooperative_tracking_half_y_m: 0.05
+    cooperative_tracking_half_z_m: 0.05
+
+    # M1 ring/net: the commitment is the true attachment-plane ring centre.
+    # Collision geometry is a conservative 0.56 m square footprint spanning
+    # z=[-0.27, 0] relative to that plane. The backend translates only the
+    # collision copy downward, so target prediction still uses the true centre.
+    moving_basket_scene_enabled: true
+    moving_basket_committed_trajectory_topic: /fake_payload/committed_trajectory
+    moving_basket_collision_outer_diameter_m: 0.56
+    moving_basket_collision_top_offset_m: 0.0
+    moving_basket_collision_bottom_offset_m: -0.27
+    moving_basket_tracking_half_x_m: 0.03
+    moving_basket_tracking_half_y_m: 0.03
+    moving_basket_tracking_half_z_m: 0.03
+
+    # C1F.4 ego execution certificate. The same 10 cm axis-wise allowance is
+    # included in planned collision geometry and monitored against measured
+    # closed-loop tracking. Three consecutive 30 Hz violations (~0.1 s) trigger
+    # a checked brake-to-hover fallback. Velocity error is logged but does not
+    # independently trip the gate while this limit is zero.
+    execution_tracking_safety_enabled: true
+    ego_tracking_half_x_m: 0.05
+    ego_tracking_half_y_m: 0.05
+    ego_tracking_half_z_m: 0.05
+    execution_tracking_violation_samples: 3
+    execution_velocity_error_limit_mps: 0.0
+    execution_brake_accel_x_mps2: 1.0
+    execution_brake_accel_y_mps2: 1.0
+    execution_brake_accel_z_mps2: 1.5
+    execution_brake_min_duration_s: 0.25
+
+    csv_path: ''
+    replan_csv_path: ''

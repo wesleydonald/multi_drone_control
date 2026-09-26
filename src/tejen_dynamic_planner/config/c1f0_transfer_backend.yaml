@@ -1,0 +1,59 @@
+dynamic_planner_transfer_backend:
+  ros__parameters:
+    # The inspected SimClean stack has no /clock publisher.
+    use_sim_time: false
+
+    # C1F.0 interface. The target is a BODY target, not a magnet-tip target.
+    # online_join_planner will compute that body target in C1F.1.
+    state_topic: /motion_capture_state
+    target_topic: /dynamic_planner/transfer_target
+    enable_topic: /dynamic_planner/transfer_enable
+    shadow_reference_topic: /dynamic_planner/transfer_reference
+    diagnostics_topic: /dynamic_planner/transfer_status
+    frame_id: map
+    vehicle_id: drone_0
+
+    state_timeout_s: 0.25
+    acceleration_filter_tau_s: 0.15
+    planner_rate_hz: 5.0
+    minimum_search_z_m: 0.20
+    initial_splice_timing_s: 0.16
+
+    # Preserve the C1E static-obstacle commissioning settings exactly.
+    spline_time_factor: 3.0
+    enable_octopus_useful_deadline: true
+    octopus_post_search_reserve_s: 0.03333333333333333
+
+    # C1F.0 deliberately seeds the persistent planner from a certified stationary
+    # incumbent. This restriction is for the passive commissioning increment only;
+    # C1F.2 will need an explicit authority-handoff seed before switching sources
+    # while the vehicle is moving.
+    require_stationary_activation: true
+    activation_speed_tolerance_mps: 0.10
+    activation_accel_tolerance_mps2: 0.50
+
+    # Fixed-target-only contract. A meaningful target change while enabled disables
+    # the backend and requires an explicit re-enable rather than silently changing
+    # the planner's global goal.
+    fixed_target_change_tolerance_m: 0.0001
+
+    # Same magnet-only suspended-system envelope as the passed C1E flight.
+    max_swing_angle_rad: 0.2617993877991494       # 15 deg
+
+    # Same physical C1E obstacle. C1F.0 supports this one commissioning obstacle;
+    # multiple static obstacles are intentionally deferred to C1F.3.
+    static_scene_enabled: true
+    require_scene_witness: true
+    obstacle_name: c1e_commissioning_obstacle
+    obstacle_center_x_m: 0.50
+    obstacle_center_y_m: 0.06
+    obstacle_center_z_m: 0.68
+    obstacle_half_x_m: 0.12
+    obstacle_half_y_m: 0.25
+    obstacle_half_z_m: 0.10
+    obstacle_yaw_rad: 0.3490658503988659         # 20 deg
+
+    # launch/c1f0_transfer_backend.launch.py overrides these into the repository's
+    # logs/tejen_dynamic_planner/c1f0_transfer_<timestamp>/ directory.
+    csv_path: ''
+    replan_csv_path: ''

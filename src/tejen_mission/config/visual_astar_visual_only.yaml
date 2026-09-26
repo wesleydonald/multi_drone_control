@@ -1,0 +1,33 @@
+online_join_planner:
+  ros__parameters:
+    # Passive only: the nominal mission reference is still published unchanged.
+    visual_astar_enabled: true
+
+    # Recommended experiment range for the current cage/drone scale: 0.05-0.12 m.
+    visual_astar_resolution: 0.08
+
+    # Search is submitted asynchronously at this rate, not at the 30 Hz reference rate.
+    visual_astar_replan_rate_hz: 2.0
+    visual_astar_max_expansions: 150000
+    visual_astar_max_planning_time_s: 0.25
+    visual_astar_nearest_free_radius_m: 0.40
+
+    # Local search box around the blocked nominal prefix and selected rejoin point.
+    visual_astar_local_margin_xy_m: 1.25
+    visual_astar_local_margin_z_m: 0.75
+
+    # Hard workspace guardrails. Adjust these to match the motion-capture cage.
+    visual_astar_bounds_min_x: -5.0
+    visual_astar_bounds_min_y: -5.0
+    visual_astar_bounds_min_z: 0.0
+    visual_astar_bounds_max_x: 5.0
+    visual_astar_bounds_max_y: 5.0
+    visual_astar_bounds_max_z: 4.0
+
+    # Nominal-first detour and rejoin policy.
+    visual_astar_rejoin_min_lookahead_s: 0.35
+    visual_astar_rejoin_preferred_lookahead_s: 1.0
+    visual_astar_rejoin_min_separation_m: 0.20
+
+    # Used only to render a time-sampled candidate for whole-body diagnostics.
+    visual_astar_candidate_speed_mps: 0.35

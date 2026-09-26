@@ -129,6 +129,13 @@ def _args():
         # historical behaviour, so this only changes a run you asked it to.
         DeclareLaunchArgument('terminal_vel_ref', default_value='false'),
         DeclareLaunchArgument('x0_relax_symmetric', default_value='false'),   # diagnostic, see controller_mpc
+        # the newcomer's tracker mode ('' = the fleet's control_mode); 'velocity' flies the
+        # free approach on the PD velocity loop (R0526-R0528: the MPC rolls a free x3 over)
+        DeclareLaunchArgument('attach_control_mode', default_value=''),
+        # the newcomer's rod as the OCP sees it: BODY CENTRE to magnet tip ('' = cable_len).
+        # The magnet arm pivots 0.05 m below the body centre, so it is 0.55 on the sim
+        # model (R0547-R0549: planned as 0.50, the node-0 pin was 5 cm off every tick)
+        DeclareLaunchArgument('attach_cable_len', default_value=''),
         # Stage V (docs/design/velocity_loop.md): 'mpc' | 'velocity'. Defaults to the
         # verified MPC path, so this launch is byte-unchanged until it is thrown.
         # velocity_after_handover + vel_ki 0 + diss_ki_load 1.0 is the only architecture
@@ -238,6 +245,11 @@ def _args():
         DeclareLaunchArgument('enable_approach', default_value='true'),
         # the heavy approach MPC (acados) alone; set false to run the chain without it.
         DeclareLaunchArgument('enable_approach_mpc', default_value='true'),
+        # Tejen's mission flies the newcomer (start tejen_mission partner_mission.launch.py)
+        DeclareLaunchArgument('partner', default_value='false'),
+        # ...and drone 3 starts welded as the fourth carrier (then leaves and rejoins)
+        DeclareLaunchArgument('partner_attached', default_value='false'),
+        DeclareLaunchArgument('mocap_hz', default_value='120'),   # drone 3's emulator cap
         # Online thrust-ratio (kT) estimation for the approach MPC. The scalar full-model UKF
         # seeds from thrust_ratio (24.0) and re-estimates kT in flight, so a battery-sag /
         # payload-mass mismatch does not leave the approach flying on a stale hover gain.
@@ -287,6 +299,21 @@ def launch_setup(context, *args, **kwargs):
     # below is skipped. See the `sil` launch argument.
     sil = (LaunchConfiguration('sil').perform(context).lower()
            in ('1', 'true', 'yes'))
+    # the collaborator's approach MPC flies the newcomer to the weld; without it the
+    # dissipative node flies the approach on the newcomer's own tracker (approach.py)
+    enable_approach_mpc = (not sil) and (
+        LaunchConfiguration('enable_approach_mpc').perform(context).lower()
+        in ('1', 'true', 'yes'))
+    # partner: Tejen's mission (tejen_mission partner_mission.launch.py) flies the newcomer;
+    # the mux forwards his stream on /drone_3/ELRSCommand_tejen until the ring weld
+    partner = (not sil) and (
+        LaunchConfiguration('partner').perform(context).lower() in ('1', 'true', 'yes'))
+    if partner:
+        enable_approach_mpc = False
+    # partner demo start: drone 3 starts WELDED as the fourth carrier, detaches, is
+    # stepped out and released to the partner's mission, then rejoins
+    partner_attached = partner and (
+        LaunchConfiguration('partner_attached').perform(context).lower() in ('1', 'true', 'yes'))
 
     # ── 3 TETHERED drones: bridges + betaflight comm + our tracker (as dissipative_launch) ──
     for i, drone_name in enumerate(drone_names):
@@ -339,14 +366,18 @@ def launch_setup(context, *args, **kwargs):
     # ── Central fleet manager (tethered fleet only) ─────────────────────────
     nodes.append(Node(
         package='controller_quad_load', executable='main', name='central_controller',
-        parameters=[{'num_drones': n}], output='screen'))
+        # manage the newcomer too: it must disarm on LAND and on an abort like the others
+        # (R0575/R0577: left armed on the floor after LAND; an abort never reached it)
+        parameters=[{'num_drones': n + int(LaunchConfiguration('reserved_attach').perform(context))}],
+        output='screen'))
 
     # ── Dissipative reference generator with 1 reserved ATTACH node ─────────
     nodes.append(Node(
         package='controller_dissipative', executable='dissipative', name='dissipative_controller',
         parameters=[{'num_drones': n,
                      'reserved_attach': i_('reserved_attach'),
-                     'attach_cable_len': f('cable_len'),
+                     'attach_cable_len': float(LaunchConfiguration('attach_cable_len').perform(context).strip()
+                                               or LaunchConfiguration('cable_len').perform(context)),
                      'attach_central': b('attach_central'),
                      'attach_handout': b('attach_handout'),
                      'diss_t_handout': f('attach_t_handout'),
@@ -396,7 +427,15 @@ def launch_setup(context, *args, **kwargs):
                      'diss_ki_load': f('diss_ki_load'),
                      'diss_a_i_load_max': f('diss_a_i_load_max'),
                      'diss_trim_share_weighted': b('diss_trim_share_weighted'),
-                     'net_land_z': f('net_land_z')}],
+                     'net_land_z': f('net_land_z'),
+                     'attach_approach': (not sil) and (not enable_approach_mpc) and (not partner),
+                     'approach_hold': not partner,
+                     'partner_handoff_topic': '/join_planner/handoff_ready' if partner else '',
+                     'start_attached': partner_attached,
+                     'partner_release': partner_attached,
+                     'attach_velocity_newcomer': (
+                         LaunchConfiguration('attach_control_mode').perform(context).strip()
+                         == 'velocity')}],
         output='screen'))
 
     # ════════════════ APPROACH DRONE (x3_drone3) CHAIN ════════════════
@@ -434,7 +473,11 @@ def launch_setup(context, *args, **kwargs):
             parameters=[{'drone_id': d, 'drone_name': dn,
                          'pose_topic': f'/model/{dn}/pose',
                          'pose_index': i_('attach_pose_index'),
-                         'publish_payload': False}]))
+                         'publish_payload': False,
+                         # same cap as the carriers' emulators (rviz launch mocap_hz, 120):
+                         # unthrottled, drone 3's 500 Hz state fed every consumer (profile
+                         # 2026-09-26)
+                         'max_publish_hz': f('mocap_hz')}]))
 
         # betaflight inner loop: /drone_3/ELRSCommand -> /x3_drone3/.../motor_speed. Its pose sub
         # is remapped from the nested default to the standalone pose topic.
@@ -447,16 +490,17 @@ def launch_setup(context, *args, **kwargs):
         # ELRSCommand MUX: forwards APPROACH (_tejen) until the weld, then OURS (_diss).
         nodes.append(Node(
             package='drone_magnet', executable='elrs_mux', name=f'elrs_mux_{d}',
-            parameters=[{'drone_id': d, 'latch': True}], output='screen'))
+            parameters=[{'drone_id': d, 'latch': True,
+                         'approach_stream': enable_approach_mpc or partner,
+                         'handoff_topic': '/join_planner/handoff_ready' if partner else '',
+                         'release_topic': '/partner/release' if partner_attached else ''}],
+            output='screen'))
 
     # (a) collaborator's approach MPC -> pre-mux _tejen. Follows /join_planner/reference.
     # Gated separately (enable_approach_mpc:=false) since it is the one heavy node (acados
     # codegen at startup) -- lets you run the rest of the approach chain without it.
     # In SIL the whole approach chain is replaced by the bench's stand-in controller +
     # deterministic weld (decision D5, docs/design/sil_bench.md §4).
-    enable_approach_mpc = (not sil) and (
-        LaunchConfiguration('enable_approach_mpc').perform(context).lower()
-        in ('1', 'true', 'yes'))
     if enable_approach_mpc:
         nodes.append(Node(
             package='controller_mpc_payload', executable='main', name=f'approach_mpc_{d}',
@@ -496,7 +540,8 @@ def launch_setup(context, *args, **kwargs):
                      # tethered ones. It did not (2026-09-09): control_mode never reached
                      # this node, so every "velocity" attach arm flew the newcomer on the
                      # no-integrator MPC and it hovered 13 cm under its reference (R0185).
-                     'control_mode': LaunchConfiguration('control_mode'),
+                     'control_mode': (LaunchConfiguration('attach_control_mode').perform(context).strip()
+                                      or LaunchConfiguration('control_mode').perform(context)),
                      'vel_kp_pos': f('vel_kp_pos'),
                      'vel_kv': f('vel_kv'),
                      'vel_ki': f('vel_ki'),
@@ -519,6 +564,9 @@ def launch_setup(context, *args, **kwargs):
                      # after the weld (z vs ref, xy error, throttle saturation, cable FF).
                      'pose_timeout_s': f('pose_timeout_s'),
                          'safety_ref_timeout_s': f('safety_ref_timeout_s'),
+                     # a free drone 1.2 m from the origin: the default node-0 box
+                     # (x*(1-eps), x*(1+eps)) inverts on its negative y, R0523/R0526
+                     'x0_relax_symmetric': b('x0_relax_symmetric'),
                      'enable_diag_log': True}],
         # In SIL there is no mux, so this tracker publishes straight onto
         # /drone_3/ELRSCommand, which the bench plant consumes. Everything else about
@@ -535,8 +583,10 @@ def launch_setup(context, *args, **kwargs):
 
     # attach target: republish the shared payload's mocap as the join planner's magnet-tip
     # target (PoseStamped + TwistStamped). Without this the planner never publishes a
-    # reference and the approach MPC never arms.
-    nodes.append(Node(
+    # reference and the approach MPC never arms. Partner mode needs it too: our tracker
+    # flies the last descent after the handoff.
+    if True:
+      nodes.append(Node(
         package='drone_magnet', executable='attach_target_publisher', name='attach_target_publisher',
         parameters=[{'payload_state_topic': '/payload/motion_capture_state',
                      'pose_topic': '/attach_target/pose',
@@ -551,7 +601,8 @@ def launch_setup(context, *args, **kwargs):
 
     # approach planner: emits /join_planner/reference toward the payload attach target with
     # obstacle avoidance; watches /magnet/object_attached to stop once welded.
-    nodes.append(Node(
+    if not partner:
+      nodes.append(Node(
         package='drone_magnet', executable='online_join_planner', name='online_join_planner',
         parameters=[{'mission_mode': 'join',
                      'drone_state_topic': f'/drone_{d}/motion_capture_state',
@@ -613,6 +664,7 @@ def launch_setup(context, *args, **kwargs):
     nodes.append(Node(
         package='drone_magnet', executable='magnet_attachment_manager', name='magnet_attachment_manager',
         parameters=[{'magnet_tip_pose_topic': '/magnet_tip_pose',
+                     'attached_at_start': partner_attached,
                      'object_pose_topic': f'/model/{PARENT_MODEL}/model/payload/pose',
                      # payload PoseArray: index 1 is the body's WORLD pose (same entry the mocap
                      # uses), index 0 is the frozen/relative model-frame pose. Reading 0 put the
@@ -630,6 +682,11 @@ def launch_setup(context, *args, **kwargs):
                      # offset off-centre by object_x/y_offset, so the horizontal term drops
                      # out). 0.15 gives margin without welding mid-descent. Launch arg.
                      'attach_radius': f('weld_radius'),   # magnet manager's threshold
+                     # partner rejoin: weld only once the tip has stopped (the approach
+                     # ends in a hold 4 cm above the plate). Welding mid-descent let the
+                     # still-descending drone push the now-rigid rod into the ring: carriers
+                     # dropped 0.25 m and the ring tipped 25-35 deg (R0640, R0642)
+                     **({'attach_speed_threshold': 0.05} if partner else {}),
                      'object_attached_topic': '/magnet/object_attached',
                      'command_backend': 'ros_topic',
                      'ros_attach_topic': '/payload/attach',

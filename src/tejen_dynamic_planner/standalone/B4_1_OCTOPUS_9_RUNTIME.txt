@@ -1,0 +1,107 @@
+R6.3B.4.1 - suspended-mode Octopus resolution + runtime instrumentation
+======================================================================
+31 AUG 2026
+
+WHY THIS FOLLOW-UP EXISTS
+-------------------------
+The first B.4 package used the historical body-only Octopus setting of 7 samples
+per velocity axis (7 x 7 x 7 = 343 candidate velocity vectors per expansion).
+Native testing showed that the new suspended-system witnesses were geometrically
+valid but too restrictive for that discrete seed lattice:
+
+  static_overflight @ 7^3 -> PADDED_CLOSEST_PARTIAL_FINAL_CHECK_FAILED
+  other_cable       @ 7^3 -> PADDED_CLOSEST_PARTIAL_FINAL_CHECK_FAILED
+
+The user then ran both unchanged B.4 scenes with 9 samples per axis:
+
+  static_overflight @ 9^3
+    whole-body witness true
+    reached true
+    continuous suspended-system safety SAFE
+    accepted/failed replans 144 / 12
+    late candidates 0
+    final goal distance 0.0488701885 m
+    max splice error 1.75e-14
+    B.4 regression contract true
+
+  other_cable @ 9^3
+    whole-body witness true
+    reached true
+    continuous suspended-system safety SAFE
+    accepted/failed replans 156 / 15
+    late candidates 0
+    final goal distance 0.0490619263 m
+    max splice error 1.12e-14
+    B.4 regression contract true
+
+INTERPRETATION
+--------------
+This is treated as a suspended-mode search-resolution issue, not evidence that the
+B.4 cable/magnet/other-cable geometry should be weakened. The safety geometry and
+continuous final checker are unchanged in B.4.1.
+
+SUSPENDED-MODE SETTING
+----------------------
+The B.4 suspended_system_demo now defaults to:
+
+  9 x 9 x 9 = 729 candidate velocity vectors per Octopus expansion.
+
+The ordinary/body-only B.3 cooperative planner remains at:
+
+  7 x 7 x 7 = 343 candidate velocity vectors per expansion.
+
+The global Octopus implementation/defaults are NOT changed. This distinction is an
+operating-mode choice around the same Octopus algorithm.
+
+The candidate count ratio is:
+
+  729 / 343 = 2.12536...
+
+This does not imply the complete solve is exactly 2.13x slower because the number
+of expansions and the branch found by the search can also change.
+
+RUNTIME INSTRUMENTATION
+-----------------------
+The B.4 mission summary now reports mean / median / p95 / max for:
+
+  total replan runtime
+  Octopus runtime
+  qpOASES runtime
+
+and prints the 30 Hz benchmark period (33.333... ms).
+
+Runtime is intentionally NOT part of the CTest pass/fail contract yet. Native laptop
+load can perturb a single run, and the existing authority logic already rejects late
+candidates. The immediate goal is to measure the 9^3 cost honestly before choosing
+whether the final planner should replan at 30, 20, 15 or 10 Hz.
+
+LOWER-FREQUENCY FALLBACK
+------------------------
+No planner-frequency redesign is implemented in this increment. If native 9^3 p95
+runtime is marginal at a nominal 30 Hz benchmark, the next experiment should sweep
+planner cadence while leaving controller/reference tracking at its normal rate.
+Candidate cadences are 30, 20, 15 and 10 Hz. The committed trajectory remains the
+authoritative reference between replans.
+
+The later simulation/MPC integration must explicitly inspect how the MPC consumes
+replanned references and whether any observed discontinuity originates in planner
+output/splicing or controller/reference handling. Do not assume the MPC is the weak
+link merely because replanning is being introduced.
+
+UNCHANGED IN B.4.1
+------------------
+No changes to:
+  ego_collision_model.cpp
+  world_snapshot.cpp
+  trajectory_safety_checker.cpp
+  octopus_search.cpp
+  trajectory_refinement.cpp
+  minvo.cpp
+  separator.cpp
+  bspline.cpp
+  minimum_time.cpp
+  committed_trajectory.cpp
+  local_planner.cpp
+
+B.4.1 changes only the suspended commissioning harness/test configuration,
+runtime diagnostics, package metadata and documentation.

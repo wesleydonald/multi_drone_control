@@ -1,0 +1,27 @@
+R6.3B.3 planning-radius engineering choice
+===========================================
+31 AUG 2026
+
+Selected next-baseline default: R_a = 2.0 m.
+
+Reason:
+- 1.0 m: safe in tested stress cases but comparatively reactive/snappy.
+- 1.5 m: initial two_drones_stress local plan failed final collision checking after
+  padded closest-partial Octopus completion.
+- 2.0 m: safe/lively in the tested crossing and two-drone stress sweep and visibly more
+  anticipatory while still operating as a rolling/receding-horizon planner.
+- 3.0 m: on the 3 m test mission, effectively became one-shot full-mission planning.
+
+This is a pragmatic fixed project value, not a universal optimum. Environment geometry and
+other-drone timing can change which radius is easiest/most efficient. The commissioning
+harness therefore retains --planning-radius <metres> for future sensitivity checks.
+
+Regression-harness note:
+- test_cooperative_mission is a legacy temporal-awareness regression and explicitly runs at
+  its original R_a=1.0 m. The synthetic crossing case is not feasible at R_a=2.0 and should not
+  be redefined merely to make a historical regression follow the new default.
+- test_cooperative_stress runs at the current default R_a=2.0 m and is the end-to-end dynamic
+  commissioning test for the selected baseline.
+
+The exact final R_a=2.0 package still requires the user's native 13/13 CTest run before
+being called frozen/validated.

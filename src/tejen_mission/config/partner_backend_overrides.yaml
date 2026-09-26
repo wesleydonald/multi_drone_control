@@ -1,0 +1,19 @@
+# multi_drone_control partner mode (Tejen's M1 flown by drone 3 around our carried ring).
+# His backend avoids the carriers as small boxes and does not see the partner drone's
+# 0.49 m rod or the carriers' tethers; R0629's transit swung the rod into carrier 0
+# (27 cm body-to-body). Tall columns around each carrier cover the tethers down to the
+# ring and keep the partner's quad AND payload out of them, so the rod between cannot
+# cross one either. Gaps between carriers (r 0.6, 120 deg) stay ~0.6 m wide.
+dynamic_planner_transfer_backend:
+  ros__parameters:
+    # R0630-R0632: 0.20 x 0.20 x 0.60 made the drop approach near-infeasible (the hanging
+    # ball sits inside every column's height; >60 % padded final-check failures)
+    cooperative_body_half_x_m: 0.15
+    cooperative_body_half_y_m: 0.15
+    cooperative_body_half_z_m: 0.30
+    # his ball (0.08 m radius), welded on contact under the magnet; his commissioned
+    # box was the 8 mm spanner (0.05 x 0.01 x 0.003 half-extents)
+    payload_half_x_m: 0.08
+    payload_half_y_m: 0.08
+    payload_half_z_m: 0.08
+    payload_center_from_magnet_z_m: -0.08

@@ -17,6 +17,20 @@ import numpy as np
 from .geometry import balanced_tensions, rot_align, rot_z, yaw_quat
 
 
+def blend_refs(s_from, s_nom, t_from, t_nom, a):
+    """Per-slot cable-direction and tension references a fraction `a` of the way from
+    a starting state to nominal: directions are normalised after the linear blend,
+    tensions blend linearly. a <= 0 gives the start, a >= 1 the nominal."""
+    a = float(min(1.0, max(0.0, a)))
+    s_out, t_out = [], []
+    for sf, sn, tf, tn in zip(s_from, s_nom, t_from, t_nom):
+        v = (1.0 - a) * np.asarray(sf, float) + a * np.asarray(sn, float)
+        nv = float(np.linalg.norm(v))
+        s_out.append(v / nv if nv > 1e-9 else np.asarray(sn, float))
+        t_out.append((1.0 - a) * float(tf) + a * float(tn))
+    return s_out, t_out
+
+
 class ReferenceBuilder:
     def __init__(self, dyn, n, s_nom, dt, traj):
         self.dyn = dyn
@@ -42,6 +56,32 @@ class ReferenceBuilder:
         self.target_z = 0.0
         self._lift_vel = 0.0
         self.traj_t = 0.0
+        # Post-attach slew (2026-09-25): a welded newcomer's rod starts vertical and
+        # unloaded; re-planning it straight to the 45 deg slot yanked the Gazebo
+        # newcomer over (R0541). From start_blend() the per-slot direction and
+        # tension references slew from the weld state to nominal over blend_s, the
+        # incumbents' tension shares included (the OCP form of the network's
+        # symmetric hand-out). Inactive (None) for every other flight.
+        self._blend = None            # (s_from, t_from, T_s, elapsed_s)
+
+    def start_blend(self, s_from, t_from, blend_s):
+        """Slew the cable references from (s_from, t_from) -- per slot, s in the same
+        frame as s_nom -- to nominal over blend_s seconds, advancing per update()."""
+        if blend_s <= 0.0:
+            self._blend = None
+            return
+        self._blend = ([np.asarray(v, float) for v in s_from],
+                       [float(v) for v in t_from], float(blend_s), 0.0)
+
+    def blend_active(self):
+        return self._blend is not None
+
+    def _refs_at(self, k):
+        """(s_nom-frame directions, tensions) for stage k, blended if a slew is on."""
+        if self._blend is None:
+            return self._s_nom, self._t_nom
+        s_from, t_from, T, el = self._blend
+        return blend_refs(s_from, self._s_nom, t_from, self._t_nom, (el + self.dt * k) / T)
 
     def set_yaw_datum(self, psi0):
         """Latch the payload's starting yaw as the reference datum (see psi0)."""
@@ -53,6 +93,10 @@ class ReferenceBuilder:
         `z_bias`: the planner's bounded height integral (ZBias), added to the height
         reference AFTER the lift cap so it corrects a low hover as well as a high one."""
         self.z_bias = float(z_bias)
+        if self._blend is not None:
+            s_from, t_from, T, el = self._blend
+            el += self.dt
+            self._blend = None if el >= T else (s_from, t_from, T, el)
         self.hover_xy = hover_xy
         self.lift_z0 = lift_z0
         self.lift_progress = lift_progress
@@ -110,10 +154,11 @@ class ReferenceBuilder:
         # The yaw is the latched placement datum psi0 plus, for 'spin', the commanded
         # load rotation (0 for every other trajectory).
         R_form = R_tilt @ rot_z(self.psi0 + yaw)
+        s_k, t_k = self._refs_at(k)
         s_ref = []
         for i in range(self.n):
-            s_ref.extend((R_form @ self._s_nom[i]).tolist())
-        t_ref = [ti * g_eff_mag / self.dyn.g for ti in self._t_nom]
+            s_ref.extend((R_form @ s_k[i]).tolist())
+        t_ref = [ti * g_eff_mag / self.dyn.g for ti in t_k]
         return np.array(pose + s_ref              # cable directions (flatness)
                         + t_ref                   # cable tensions (flatness), layout-balanced
                         + [0.0] * (3 * self.n)    # r_vec ref (no cable swing)
@@ -138,8 +183,9 @@ class ReferenceBuilder:
         pose = [float(p[0]), float(p[1]), float(p[2]),
                 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         R_yaw = rot_z(self.psi0)
+        s_0, t_0 = self._refs_at(0)
         s_ref = []
         for i in range(self.n):
-            s_ref.extend((R_yaw @ self._s_nom[i]).tolist())
-        return np.array(pose + s_ref + list(self._t_nom)
+            s_ref.extend((R_yaw @ s_0[i]).tolist())
+        return np.array(pose + s_ref + list(t_0)
                         + [0.0] * (3 * self.n) + [0.0] * self.dyn.nu)

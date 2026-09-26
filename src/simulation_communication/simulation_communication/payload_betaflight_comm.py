@@ -12,13 +12,15 @@ Parameters (ROS):
   drone_id      int   0-3
   drone_name    str   x3_drone0  (model name inside parent)
   parent_model  str   lift_system
-  rates_d_val   float 70.0
-  rates_f_val   float 670.0
+  rates_d_val   float 100.0
+  rates_f_val   float 100.0
   rates_g_val   float 0.5
 """
 
 import math
 import numpy as np
+
+from simulation_communication.rate_pid import RatePid
 import rclpy
 from rclpy.node import Node
 from actuator_msgs.msg import Actuators
@@ -34,8 +36,8 @@ class PayloadBetaflightComm(Node):
         self.declare_parameter('drone_id', 0)
         self.declare_parameter('drone_name', 'x3_drone0')
         self.declare_parameter('parent_model', 'lift_system')
-        self.declare_parameter('rates_d_val', 70.0)
-        self.declare_parameter('rates_f_val', 670.0)
+        self.declare_parameter('rates_d_val', 100.0)
+        self.declare_parameter('rates_f_val', 100.0)
         self.declare_parameter('rates_g_val', 0.5)
 
         self.drone_id = self.get_parameter('drone_id').value
@@ -64,14 +66,35 @@ class PayloadBetaflightComm(Node):
         self.last_pose = None
         self.last_orientation = None
         self.last_time = None
+        self._last_stamp_t = None
+        self._win_t0, self._win_n, self._period = None, 0, None
 
-        self.kp = 0.5
-        self.ki = 0.0
-        self.kd = 0.0
-        self.integral_error = None
-        self.previous_error = None
+        self._pid = RatePid(
+            kp=float(self.declare_parameter('rate_kp', 0.5).value),
+            ki=float(self.declare_parameter('rate_ki', 0.0).value),
+            kd=float(self.declare_parameter('rate_kd', 0.0).value),
+            i_limit=float(self.declare_parameter('rate_i_limit', 200.0).value))
+        # integrate only in the air: armed on the floor the drone cannot rotate, the error
+        # persists and the I-term winds up (T0011: his drones then could not climb)
+        self._i_min_u = float(self.declare_parameter('rate_i_min_u', 0.09).value)
+        self.add_on_set_parameters_callback(self._on_rate_params)
+        self._active = False
 
     # ------------------------------------------------------------------
+    def _on_rate_params(self, params):
+        """rate_kp / rate_ki settable live (M2 hand-over: his join flies the old loop, the
+        I-term comes on just before our takeover); the integral restarts from zero."""
+        from rcl_interfaces.msg import SetParametersResult
+        for prm in params:
+            if prm.name == 'rate_ki':
+                self._pid.ki = float(prm.value)
+                self._pid.integral[:] = 0.0
+                self.get_logger().info(f'rate_ki -> {self._pid.ki}')
+            elif prm.name == 'rate_kp':
+                self._pid.kp = float(prm.value)
+                self.get_logger().info(f'rate_kp -> {self._pid.kp}')
+        return SetParametersResult(successful=True)
+
     def _betaflight_rates(self, x):
         x = max(-1.0, min(1.0, x))
         ax = math.sqrt(x * x + 1e-6)
@@ -87,6 +110,31 @@ class PayloadBetaflightComm(Node):
         return x, y, z, w
 
     # ------------------------------------------------------------------
+    def _pose_dt(self, msg):
+        """dt between this pose sample and the previous one, for the body-rate difference.
+
+        The ROS clock is /clock, throttled to 100 Hz since 2026-09-23, while poses arrive
+        at 500 Hz: differencing against it gave dt = 0 for four of five pairs (skipped)
+        and a rate ~5x too low on the fifth. Cables damped the tethered drones; a free
+        drone tipped at 1.4 Hz under every outer controller (R0522-R0534; R0535 flew with
+        the clock unthrottled). The bridged PoseArray carries no stamp (R0536), so the
+        sample period is estimated from the clock over a window and every sample gets it.
+        Returns None until the first period estimate exists."""
+        st = msg.header.stamp
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if int(st.sec) > 0 or int(st.nanosec) > 0:
+            t = st.sec + st.nanosec * 1e-9
+            dt = (t - self._last_stamp_t) if self._last_stamp_t is not None else None
+            self._last_stamp_t = t
+            return dt if (dt is not None and dt > 0.0) else None
+        if self._win_t0 is None:
+            self._win_t0, self._win_n = now, 0
+        self._win_n += 1
+        if now - self._win_t0 >= 0.25 and self._win_n >= 2:
+            self._period = (now - self._win_t0) / self._win_n
+            self._win_t0, self._win_n = now, 0
+        return self._period
+
     def _pose_cb(self, msg: PoseArray):
         if not msg.poses:
             return
@@ -94,17 +142,11 @@ class PayloadBetaflightComm(Node):
         ori = msg.poses[-1].orientation
         ori.x, ori.y, ori.z, ori.w = self._normalize_quat(ori.x, ori.y, ori.z, ori.w)
 
-        now = self.get_clock().now().to_msg()
+        dt = self._pose_dt(msg)
 
-        if self.last_pose is None:
+        if self.last_pose is None or dt is None:
             self.last_pose = pos
             self.last_orientation = ori
-            self.last_time = now
-            return
-
-        dt = (now.sec + now.nanosec * 1e-9) - (self.last_time.sec + self.last_time.nanosec * 1e-9)
-        if dt <= 0:
-            self.last_pose, self.last_orientation, self.last_time = pos, ori, now
             return
 
         q1 = [self.last_orientation.x, self.last_orientation.y,
@@ -116,28 +158,18 @@ class PayloadBetaflightComm(Node):
         ang_vel_body = R.T @ ang_vel
         ang_vel_body_deg = np.degrees(ang_vel_body)
 
-        self.last_pose, self.last_orientation, self.last_time = pos, ori, now
+        self.last_pose, self.last_orientation = pos, ori
 
         if self.set_point is not None:
-            speeds = self._compute_motor_speeds(ang_vel_body_deg)
+            speeds = self._compute_motor_speeds(ang_vel_body_deg, dt)
             msg_out = Actuators()
             msg_out.header.stamp = self.get_clock().now().to_msg()
             msg_out.velocity = speeds.tolist()
             self.motor_pub.publish(msg_out)
 
-    def _compute_motor_speeds(self, ang_vel_deg):
+    def _compute_motor_speeds(self, ang_vel_deg, dt):
         error = np.array([self.set_point[0], self.set_point[1], self.set_point[3]]) - ang_vel_deg
-
-        if self.integral_error is None:
-            self.integral_error = np.zeros(3)
-        self.integral_error += error
-
-        if self.previous_error is None:
-            self.previous_error = np.zeros(3)
-        derivative = self.kd * (error - self.previous_error)
-        self.previous_error = error
-
-        offset = self.kp * error + self.ki * self.integral_error + derivative
+        offset = self._pid.step(error, dt, self._active)
         throttle = self.set_point[2]
 
         speeds = np.array([
@@ -166,6 +198,7 @@ class PayloadBetaflightComm(Node):
             throttle = 0.05 * 4631
 
         self.set_point = [roll_rate, pitch_rate, throttle, yaw_rate]
+        self._active = bool(msg.armed) and u > self._i_min_u
 
 
 def main(args=None):

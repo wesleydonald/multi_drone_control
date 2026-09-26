@@ -1,0 +1,56 @@
+R6.3C.1a install/build/test commands
+====================================
+
+A. Apply package into the thesis repo
+-------------------------------------
+cd "$HOME/Downloads"
+unzip -o R6_3C_1a_reference_interface_aug31_v1.zip
+
+bash "$HOME/Downloads/R6_3C_1a_reference_interface_aug31_v1/apply_c1a.sh"
+
+B. Rebuild/test the standalone planner
+--------------------------------------
+cd "$HOME/Documents/Thesis git/drone_cage_control/tools/standalone_dynamic_planner_cpp"
+rm -rf build
+cmake -S . -B build \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH="$HOME/.local"
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+
+The frozen B.4 package had 16 CTests. C.1a adds test_reference_window, so if the
+existing baseline remains healthy the native result should now be 17/17.
+
+You can also run the new test directly:
+./build/test_reference_window
+
+Expected C.1a lines:
+  C.1a reference-window contract: PASS
+  samples: 61
+  reference rate: 30 Hz
+  MPC horizon: 2 s
+  artificial solve delay: 150 ms; future splice preserved: true
+
+C. Build/test only the new ROS interface package
+------------------------------------------------
+Open a terminal with the same ROS 2 environment you normally use for this repo.
+Then:
+
+cd "$HOME/Documents/Thesis git/drone_cage_control"
+rm -rf build/dynamic_planner_ros install/dynamic_planner_ros
+colcon build --packages-select dynamic_planner_ros --symlink-install
+source install/setup.bash
+colcon test --packages-select dynamic_planner_ros --event-handlers console_direct+
+colcon test-result --verbose
+
+The new ROS test is:
+  test_reference_message
+
+Expected output when run directly from the CTest build tree is:
+  C.1a ROS reference-message contract: PASS
+  points: 61
+  stage spacing: 0.1 s; terminal: 2.0 s
+  p/v/a copied without resmoothing: true
+
+STOP after these C.1a results and review them before starting C.1b passive Gazebo.

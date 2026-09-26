@@ -170,3 +170,46 @@ REAL
   rio drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 num_drones:=2 magnet_initial:=ON
   rctl num_drones:=2 load_mass:=0.86 cable_len:=0.47 thrust_ratio:=24 lift_ramp_vel:=0.15 load_traj:=hover
   mdc && tools/preflight.py --drones 2 --real --planner load_planner --max-ground-z 0.5
+
+
+
+TONIGHT 2026-09-25: DETACH and REJOIN, current layout (plates 1/3/5/9) vs one plate shift
+===========================================================================================
+Three terminals each, `mdc` sourced in every one. Start them in order, wait for RViz before
+the control launch. Buttons: ARM, TAKEOFF, DETACH / ATTACH, LAND in the RViz panel.
+Nothing else running on the laptop (the pose watchdog is wall-clock).
+
+1. DETACH, plates 1/3/5/9 (drone 1 at 90 deg leaves, neighbours 60/60 deg away)
+   cd ~/multi_drone_control/simulation_assets && gz sim -s -r four_rigid_ground_3915.sdf
+   ros2 launch controller_quad_load rviz_quad_load_launch.py num_drones:=4 detach:=true
+   ros2 launch controller_quad_load dissipative_launch.py num_drones:=4 reconfig_mode:=ocp attach_azimuths_deg:=30,90,150,270 pose_timeout_s:=1.0
+   ARM, TAKEOFF, wait ~10 s after the ring reaches 0.60, DETACH drone 1
+     (or: ros2 topic pub -t 3 /fleet/detach std_msgs/msg/Int32 "{data: 1}")
+   hover ~30 s on three, then LAND. Expect (R0571/R0572): peak ~3 deg, settled ~0.1 deg at 0.60;
+   on LAND drone 1 first steps OUT to 1.2 m from the ring, then comes down; all disarm together.
+   Circle instead: add load_traj:=circle traj_speed:=0.4, detach ~8 s after the lift (R0556: ~7 deg peak).
+
+2. DETACH, one shift, plates 1/3/6/9 (neighbours 60/90 deg: 0.82 m on the 180-deg side)
+   cd ~/multi_drone_control/simulation_assets && gz sim -s -r four_rigid_ground_3969.sdf
+   ros2 launch controller_quad_load rviz_quad_load_launch.py num_drones:=4 detach:=true
+   ros2 launch controller_quad_load dissipative_launch.py num_drones:=4 reconfig_mode:=ocp attach_azimuths_deg:=30,90,180,270 pose_timeout_s:=1.0
+   same buttons. Expect (R0582/R0584): peak ~5.7 deg, settled ~0.55 deg at 0.60.
+
+3. REJOIN during the circle, current layout (tethers 330/90/210, newcomer welds at 270, 60/60 deg)
+   cd ~/multi_drone_control/simulation_assets && gz sim -s -r three_attach_rod.sdf
+   ros2 launch controller_quad_load rviz_quad_load_launch.py num_drones:=3 attach:=true
+   ros2 launch controller_quad_load three_attach_launch.py num_drones:=3 reserved_attach:=1 start_taut:=true load_traj:=circle traj_speed:=0.2 attach_azimuths_deg:=330,90,210 attach_y_offset:=-0.25 attach_elev_deg:=65.0 attach_traj_hold_s:=10.0 attach_traj_hold_mode:=timed control_mode:=velocity_after_handover vel_ki:=0.0 diss_ki_load:=1.0 reconfig_mode:=ocp enable_approach_mpc:=false safety_ref_timeout_s:=4.0 pose_timeout_s:=1.0 attach_cable_len:=0.49
+   ARM, TAKEOFF, press ATTACH (= magnet ON) once the circle is going (~14 s after TAKEOFF).
+   Drone 3 climbs, crosses above the ring, descends; weld ~16 s later; circle holds 10 s then
+   resumes with four; LAND. Expect (R0580/R0581): weld peak ~11 deg, <1-3 deg with four on the
+   circle, drone 3's throttle rises (it carries ~2 N), all four disarm at LAND.
+
+4. REJOIN, one shift (tethers 330/90/180, newcomer at 270: gaps 60/90 deg)
+   same as 3 but:  gz sim -s -r three_attach_rod_3969.sdf   and   attach_azimuths_deg:=330,90,180
+   ros2 launch controller_quad_load three_attach_launch.py num_drones:=3 reserved_attach:=1 start_taut:=true load_traj:=circle traj_speed:=0.2 attach_azimuths_deg:=330,90,180 attach_y_offset:=-0.25 attach_elev_deg:=65.0 attach_traj_hold_s:=10.0 attach_traj_hold_mode:=timed control_mode:=velocity_after_handover vel_ki:=0.0 diss_ki_load:=1.0 reconfig_mode:=ocp enable_approach_mpc:=false safety_ref_timeout_s:=4.0 pose_timeout_s:=1.0 attach_cable_len:=0.49
+   Verified headless R0586: weld peak ~11 deg, ~4 deg with four on the circle (vs 1-3 deg on the
+   current layout); the three-drone circle BEFORE the weld is uneven too (one tether carries more).
+
+Logs to send me after each: nothing to copy, the planner now writes
+results/logs/controller_quad_load/dissipative_controller_<time>/log.csv (payload height and tilt at
+10 Hz) and the trackers their planner_drone*_<time>/log.csv. Just tell me which run was which.

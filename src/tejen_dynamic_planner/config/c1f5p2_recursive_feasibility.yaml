@@ -1,0 +1,125 @@
+dynamic_planner_transfer_backend:
+  ros__parameters:
+    use_sim_time: false
+
+    # Frozen C1F.2b authority/reference interface.
+    state_topic: /motion_capture_state
+    target_topic: /dynamic_planner/transfer_target
+    target_velocity_topic: /dynamic_planner/transfer_target_velocity
+    object_attached_topic: /magnet/object_attached
+    enable_topic: /dynamic_planner/transfer_enable
+    authority_topic: /dynamic_planner/transfer_authority
+    authority_ack_topic: /dynamic_planner/transfer_authority_ack
+    shadow_reference_topic: /dynamic_planner/transfer_reference
+    diagnostics_topic: /dynamic_planner/transfer_status
+    marker_topic: /dynamic_planner/markers
+    frame_id: map
+    vehicle_id: drone_0
+
+    state_timeout_s: 0.25
+    object_attached_timeout_s: 0.25
+    acceleration_filter_tau_s: 0.15
+    planner_rate_hz: 5.0
+    marker_rate_hz: 5.0
+    minimum_search_z_m: 0.20
+    initial_splice_timing_s: 0.16
+
+    # C1F.5p2 timing/tuning knobs (frozen from C1F.4 while validating shared-future safety). 2.5 restores the older validated allocation
+    # factor for a less sluggish reference while retaining the 2.5 close regime.
+    spline_time_factor: 2.5
+    factor_alloc: 1.0
+    factor_alloc_close: 2.5
+    close_to_goal_m: 0.20
+
+    # Exposed but unchanged smoother objective. Terminal velocity/acceleration
+    # remain hard stopped-endpoint constraints; these are position-vs-jerk weights.
+    smoother_jerk_weight: 1.0
+    smoother_goal_weight: 10.0
+
+    # C1F.5p2 reserves measured trajectory-time for refinement, newest-world
+    # certification, terminal-hold checking and atomic authority installation.
+    # The 1.0 s maximum splice lookahead is unchanged.
+    enable_octopus_useful_deadline: true
+    octopus_post_search_reserve_s: 0.200
+    incumbent_failure_recheck_horizon_s: 2.0
+
+    # C1F.5 finite-horizon viability guard. This is deliberately separate from
+    # the incumbent-failure recheck horizon: it rejects candidate endpoints that
+    # a cooperative drone will sweep through shortly after the local spline stops.
+    terminal_hold_guard_s: 3.0
+    terminal_hold_guard_interval_s: 0.50
+
+    # Passed stationary physical-state handoff.
+    require_stationary_activation: true
+    activation_speed_tolerance_mps: 0.10
+    activation_accel_tolerance_mps2: 0.50
+    seed_stationary_on_activation: false
+
+    # Live moving-target lead. Keep the existing time calculation, but cap the
+    # actual positional shift so target velocity cannot drag the planning goal
+    # arbitrarily far ahead. 0 disables this additional distance cap.
+    fixed_target_change_tolerance_m: 0.0001
+    allow_live_target_updates: true
+    live_target_replan_threshold_m: 0.01
+    require_target_velocity: true
+    target_lead_enabled: true
+    target_lead_nominal_speed_mps: 0.35
+    target_lead_min_s: 0.0
+    target_lead_max_s: 2.0
+    target_lead_max_distance_m: 0.15
+    target_lead_initial_solve_runtime_s: 0.50
+    target_lead_solve_runtime_scale: 1.0
+    target_lead_solve_runtime_ema_alpha: 0.35
+
+    # Loaded 15-degree suspended assembly from C1F.3a.
+    max_swing_angle_rad: 0.2617993877991494
+    payload_collision_enabled: true
+    require_payload_attached_for_enable: true
+    payload_half_x_m: 0.050
+    payload_half_y_m: 0.010
+    payload_half_z_m: 0.003
+    payload_center_from_magnet_x_m: 0.0
+    payload_center_from_magnet_y_m: 0.0
+    payload_center_from_magnet_z_m: -0.028
+
+    static_scene_enabled: false
+    require_scene_witness: false
+
+    # C1F.5 cooperative future contract: live state verifies execution, while
+    # the advertised committed cubic B-spline is the authoritative future.
+    cooperative_scene_enabled: true
+    cooperative_drone_state_topics:
+      - /fake_obstacles/drone_0/state
+      - /fake_obstacles/drone_1/state
+    cooperative_prediction_mode: shared_trajectory
+    cooperative_committed_trajectory_topics:
+      - /fake_obstacles/drone_0/committed_trajectory
+      - /fake_obstacles/drone_1/committed_trajectory
+    cooperative_state_timeout_s: 0.30
+    # Retained only for explicit constant_velocity degraded/test mode.
+    cooperative_prediction_horizon_s: 20.0
+    cooperative_body_half_x_m: 0.105
+    cooperative_body_half_y_m: 0.105
+    cooperative_body_half_z_m: 0.060
+    cooperative_tracking_half_x_m: 0.10
+    cooperative_tracking_half_y_m: 0.10
+    cooperative_tracking_half_z_m: 0.10
+
+    # C1F.4 ego execution certificate. The same 10 cm axis-wise allowance is
+    # included in planned collision geometry and monitored against measured
+    # closed-loop tracking. Three consecutive 30 Hz violations (~0.1 s) trigger
+    # a checked brake-to-hover fallback. Velocity error is logged but does not
+    # independently trip the gate while this limit is zero.
+    execution_tracking_safety_enabled: true
+    ego_tracking_half_x_m: 0.10
+    ego_tracking_half_y_m: 0.10
+    ego_tracking_half_z_m: 0.10
+    execution_tracking_violation_samples: 3
+    execution_velocity_error_limit_mps: 0.0
+    execution_brake_accel_x_mps2: 1.0
+    execution_brake_accel_y_mps2: 1.0
+    execution_brake_accel_z_mps2: 1.5
+    execution_brake_min_duration_s: 0.25
+
+    csv_path: ''
+    replan_csv_path: ''

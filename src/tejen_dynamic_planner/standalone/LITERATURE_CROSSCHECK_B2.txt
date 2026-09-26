@@ -1,0 +1,31 @@
+R6.3B.2 literature cross-check summary
+======================================
+
+Decisions retained after the separate critique pass
+----------------------------------------------------
+- plan against a frozen/immutable snapshot
+- post-optimization newest-world collision recheck before authority
+- candidate is never authoritative merely because the optimizer returned success
+- continuous convex-hull collision checking rather than sampled-only checking
+- committed-prefix check is retained as a project-specific consequence of the
+  future-A splice architecture
+- bounded cooperative tracking tube retained as a project robustness extension
+
+Decisions changed during the critique pass
+-------------------------------------------
+1. Unsafe incumbent prefix no longer means "reject candidate and continue old
+   trajectory". It returns INCUMBENT_PREFIX_UNSAFE because normal continuation
+   has just been disproved safe.
+
+2. Any world-version change no longer causes automatic immediate rejection.
+   One bounded newest-snapshot recheck is allowed. If the world changes again,
+   the transaction terminates without authority mutation.
+
+Explicit non-equivalence to RMADER
+----------------------------------
+The local version/recheck transaction is not full RMADER Delay Check. It protects
+against information that has arrived locally during planning/rechecking. It does
+not solve general simultaneous decentralized replanning with communication delay.
+
+The current simplification is justified only while carrier trajectories are true
+shared commitments and only the pickup drone is actively changing its plan.

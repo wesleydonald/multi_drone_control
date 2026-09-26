@@ -41,6 +41,7 @@ class HandoverPolicy:
         self.live_timeout_s = float(live_timeout_s)
         self.welded = False
         self._last_live_t = None
+        self._switched = False
 
     def weld(self, attached, now=None):
         """Feed /magnet/object_attached."""
@@ -66,5 +67,13 @@ class HandoverPolicy:
         return (float(now) - self._last_live_t) <= self.live_timeout_s
 
     def attached(self, now=None):
-        """True when our tracker should be flying the drone."""
-        return self.welded and self.tracker_live(now)
+        """True when our tracker should be flying the drone. Once handed over it stays
+        handed over (latch): a tracker that went quiet for one slow planner tick after
+        the weld used to hand the welded drone BACK to the approach controller, which
+        yanked the ring to 46 deg (R0624)."""
+        if self.latch and self._switched:
+            return True
+        if self.welded and self.tracker_live(now):
+            self._switched = True
+            return True
+        return False

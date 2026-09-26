@@ -23,6 +23,7 @@ start_taut world skips the creep and hands over immediately.
 
 Geometry must match the world SDF (see generate_rigid_world.py).
 """
+import os
 import time
 import numpy as np
 import rclpy
@@ -52,6 +53,8 @@ from utility_objects.run_context import log_base_dir
 # recompute from the real payload's dimensions.
 from .params import DRONE_MASS   # sim airframe 0.64 kg; the node reads the drone_mass param
 PLANNER_HZ    = 10.0
+LAND_BLEND_S  = 1.0     # s, flight feedforward -> hover when the load touches down
+LAND_FOLLOW_XY_Z = 0.25  # m, below this a landing drone's xy reference follows its measured xy
 
 # logs/<LOG_PKG>/<node>_<ts>/params.json -- the same tree the per-drone trackers log
 # into, so a run's planner configuration sits alongside its per-drone CSVs.
@@ -267,6 +270,7 @@ class LoadPlanner(Node):
         self._land_wait_ct = 0       # ticks spent waiting for departed drones to land
         self._land_ff_off_said = False
         self._land_anchor = None     # per-slot (x, y, z) latched when the load is down on LAND
+        self._last_air_ref = {}      # physical drone -> (thrust accel, cable accel) of its last flight reference
         self._land_drop = 0.0
 
         # Lateral load-reference trajectory generator (line_x / circle / fig_8 /
@@ -280,7 +284,8 @@ class LoadPlanner(Node):
         self.attach_azimuths = cfg.attach_azimuths
         self.rho = attach_points(self.n, self.attach_radius, self.attach_z,
                                  self.attach_azimuths)
-        self._s_nom = nominal_cable_dirs(self.rho, 45.0)
+        self.cable_elev_deg = 45.0             # the dissipative node may override it
+        self._s_nom = nominal_cable_dirs(self.rho, self.cable_elev_deg)
 
         self.drone_mass = cfg.drone_mass
         self.dyn = LoadCableDynamics(
@@ -356,6 +361,7 @@ class LoadPlanner(Node):
         self.landed_pub = self.create_publisher(Bool, '/fleet/landed', 1)
         # Desired load position [x, y, z] at node 0. Logged by the drone-0
         # tracker so plot_run.py can overlay payload desired vs actual.
+        self._traj_state_pub = self.create_publisher(String, '/payload/trajectory_state', 5)
         self.load_ref_pub = self.create_publisher(
             Float64MultiArray, '/payload/desired_position', 5)
         # Same reference as a full horizon Path, for RViz alongside each drone's
@@ -390,6 +396,65 @@ class LoadPlanner(Node):
                 'phase_at_start': self.phase}))
         except Exception as e:                      # never break the flight for a log
             self.get_logger().warn(f'[planner] could not write params.json: {e}')
+
+    def _publish_traj_state(self):
+        """The load trajectory's parameters and clock (JSON on /payload/trajectory_state),
+        so a partner's planner can predict the ring exactly (mission bridge,
+        authority.md). hold_s: seconds the trajectory clock stays frozen (reconfig hold)."""
+        if self.hover_xy is None:
+            return
+        import json
+        z = (min(self.target_z, self.lift_z0 + self.lift_progress)
+             if self.lift_z0 is not None else float(self.load_state[2]))
+        msg = String()
+        msg.data = json.dumps({
+            'kind': self.traj.kind, 'speed': self.traj.speed, 'radius': self.traj.radius,
+            'distance': self.traj.distance,
+            'hover_x': float(self.hover_xy[0]), 'hover_y': float(self.hover_xy[1]),
+            'z': float(z), 'traj_t': float(self.traj_t),
+            'hold_s': float(max(0.0, getattr(self, '_reconfig_hold_left', 0.0))),
+            'descending': bool(self.descending), 'landing': bool(self._land_to_ground),
+            # the trajectory clock advances only once the lift has topped out
+            'running': bool(self.phase == 'planner' and self.lift_z0 is not None
+                            and self.lift_progress >= (self.target_z - self.lift_z0) - 1e-6
+                            and not self.descending and not self._land_to_ground),
+            'stamp': self.get_clock().now().nanoseconds * 1e-9})
+        self._traj_state_pub.publish(msg)
+
+    def _log_tick(self):
+        """10 Hz log.csv beside params.json: load pose, tilt, the planner's height
+        target and integral, phase, every physical drone's z. Interactive Gazebo runs
+        (Wesley flies, the logs are read afterwards) had no payload record at all: the trackers log
+        only their own pose and the tilt print goes to the terminal. Never raises."""
+        try:
+            if self._run_log_dir is None:
+                return
+            if getattr(self, '_tick_log', None) is None:
+                import csv
+                f = open(os.path.join(self._run_log_dir, 'log.csv'), 'w', newline='')
+                w = csv.writer(f)
+                w.writerow(['sim_time', 'phase', 'n', 'load_x', 'load_y', 'load_z',
+                            'load_vz', 'tilt_deg', 'z_tgt', 'z_bias', 'lift_progress',
+                            'traj_t', 'land'] + [f'd{k}_z' for k in range(len(self.drone_pos))])
+                self._tick_log = (f, w)
+            f, w = self._tick_log
+            ls = self.load_state
+            R = quat_to_rot_np(ls[3:7])
+            tilt = float(np.degrees(np.arccos(np.clip(R[2, 2], -1.0, 1.0))))
+            z_tgt = (min(self.target_z, self.lift_z0 + self.lift_progress)
+                     if self.lift_z0 is not None else float('nan'))
+            t = self.get_clock().now().nanoseconds * 1e-9
+            w.writerow([f'{t:.3f}', self.phase, self.n,
+                        f'{ls[0]:.4f}', f'{ls[1]:.4f}', f'{ls[2]:.4f}', f'{ls[9]:.4f}',
+                        f'{tilt:.2f}', f'{z_tgt:.4f}', f'{self._zbias.value:+.4f}',
+                        f'{self.lift_progress:.4f}', f'{self.traj_t:.2f}',
+                        int(bool(self._land_to_ground))]
+                       + [f'{d[2]:.4f}' if d is not None else '' for d in self.drone_pos])
+            f.flush()
+        except Exception as e:
+            if not getattr(self, '_tick_log_warned', False):
+                self._tick_log_warned = True
+                self.get_logger().warn(f'[planner] tick log off: {e}')
 
     # Mocap callbacks
     def _payload_cb(self, msg: MotionCaptureState):
@@ -480,19 +545,38 @@ class LoadPlanner(Node):
                 p = self._drone_at(i)
                 self._land_anchor[i] = (float(p[0]), float(p[1]), float(p[2]))
             self._land_drop = 0.0
+            self._land_blend_t = 0.0
             self.get_logger().info(
                 '[planner] load down — survivors descend straight down, level, rods slack')
         if not self._touched_down:
             self._land_drop += self.land_vel / PLANNER_HZ
+        # Blend each drone's thrust and cable feedforward from its last in-flight values
+        # to plain hover over LAND_BLEND_S. Stepping them (18 deg lean and throttle 0.18 ->
+        # level and 0.06 in one tick) dropped the gap's neighbours 0.3 m and slid them
+        # 12 cm while they levelled at the flight controllers' 100 deg/s (R0588, R0590,
+        # R0591: tipped on the floor).
+        self._land_blend_t += 1.0 / PLANNER_HZ
+        s = float(np.clip(self._land_blend_t / LAND_BLEND_S, 0.0, 1.0))
         g = self.dyn.g
+        hover = np.array([0.0, 0.0, g])
         for i in range(self.n):
+            drone = self.slot2drone[i]
             ax, ay, az = self._land_anchor[i]
+            p = self._drone_at(i)
+            if p is not None and float(p[2]) < LAND_FOLLOW_XY_Z:
+                # near the floor, stop correcting sideways: a drone chasing its anchor
+                # across the floor tips over (R0590)
+                ax, ay = float(p[0]), float(p[1])
+                self._land_anchor[i] = (ax, ay, az)
+            a0, c0 = self._last_air_ref.get(drone, (hover, np.zeros(3)))
+            a_ff = (1.0 - s) * a0 + s * hover
+            c_ff = (1.0 - s) * c0
             nodes = []
             for k in range(self.N + 1):
                 z = max(0.0, az - self._land_drop - self.land_vel * self.dt * k)
                 vz = -self.land_vel if (z > 0.0 and not self._touched_down) else 0.0
-                nodes.append(((ax, ay, z), (0.0, 0.0, vz), (0.0, 0.0, g), (0.0, 0.0, 0.0)))
-            self._publish_ref(self.slot2drone[i], nodes)
+                nodes.append(((ax, ay, z), (0.0, 0.0, vz), tuple(a_ff), tuple(c_ff)))
+            self._publish_ref(drone, nodes)
 
     def _load_down(self):
         """The load is back at its rest height (within 5 cm of where the lift started):
@@ -555,6 +639,8 @@ class LoadPlanner(Node):
             self._assign_slots()
 
         self._publish_load_desired()
+        self._publish_traj_state()
+        self._log_tick()
 
         # Phase 1: creep takeoff. The planner assumes taut cables, but running the
         # lift through the ~0.4 m of slack makes the drones overshoot and snap the
@@ -810,7 +896,7 @@ class LoadPlanner(Node):
             self._solvers[m] = (dyn, PlannerSolver(dyn, self.get_logger()), rho)
             self.get_logger().info(f'[planner] OCP ready for n={m}')
 
-    def resize_fleet(self, new_n, drone_ids, rho=None):
+    def resize_fleet(self, new_n, drone_ids, rho=None, cable_lengths=None):
         """Re-point the planner at a fleet of `new_n` drones, listed in slot order.
 
         Swaps the OCP (and its dynamics, ring and reference builder) for the
@@ -845,10 +931,12 @@ class LoadPlanner(Node):
         self.n = int(new_n)
         if rho is not None:
             self.rho = [np.asarray(r, float).reshape(3) for r in rho]
-            self.solver.set_geometry(rho=self.rho)
-        else:
-            self.solver.set_geometry(rho=self.rho)
-        self._s_nom = nominal_cable_dirs(self.rho, 45.0)
+        if cable_lengths is not None:
+            self.cable_len_i = [float(v) for v in cable_lengths]
+        elif len(self.cable_len_i) < self.n:
+            self.cable_len_i = self.cable_len_i + [float(self.cable_len)] * (self.n - len(self.cable_len_i))
+        self.solver.set_geometry(rho=self.rho, cable_lengths=list(self.cable_len_i[:self.n]))
+        self._s_nom = nominal_cable_dirs(self.rho, self.cable_elev_deg)
         self.refs = ReferenceBuilder(self.dyn, self.n, self._s_nom, self.dt,
                                      self.traj)
         self.slot2drone = [int(d) for d in drone_ids]
@@ -1010,6 +1098,9 @@ class LoadPlanner(Node):
                 nodes.append((pos, vel, acc, gate * ff * cable))
             # slot i's planned trajectory belongs to the physical drone occupying it
             self._publish_ref(self.slot2drone[i], nodes)
+            # remembered for a smooth hand-over into the landing hold (_land_hold_refs)
+            self._last_air_ref[self.slot2drone[i]] = (np.asarray(nodes[0][2], float),
+                                                      np.asarray(nodes[0][3], float))
         self._publish_static_cable(X)
 
         # ~1 Hz: per-drone cable tautness so you can see when (and whether) the

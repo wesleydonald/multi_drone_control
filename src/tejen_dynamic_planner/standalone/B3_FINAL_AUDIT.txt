@@ -1,0 +1,84 @@
+R6.3B.3 - finalization audit for R_a = 2.0 m default
+=====================================================
+31 AUG 2026
+
+STATUS ENTERING THIS PACKAGE
+----------------------------
+- Validated B.2 core remains the implementation base.
+- B.3 commissioning/stress harness is implemented.
+- User native B.3 stress missions demonstrated safe/lively avoidance for the fixed shared
+  other-drone trajectory assumption.
+- Radius sweep motivated the engineering choice R_a = 2.0 m.
+- This cumulative package makes 2.0 m the default. Full native 13/13 regression on this
+  exact package is still required before freezing it as the next baseline.
+
+APPROVED CHANGE
+---------------
+Only the planning-radius default is intentionally changed:
+  RecedingHorizonConfig::planning_radius_m: 1.0 -> 2.0 m
+
+cooperative_mission_demo additionally exposes:
+  --planning-radius <metres>
+with default 2.0 m, so later sensitivity experiments do not require source edits.
+receding_horizon_demo explicitly uses the same 2.0 m engineering value.
+
+WHAT IS NOT CHANGED
+-------------------
+- src/ planner implementation files
+- cubic B-spline degree and 4 local intervals
+- 7x7x7 default Octopus sampling in the B-series harness
+- MINVO collision representation
+- GLPK separating-plane construction
+- qpOASES continuous refinement objective/constraints
+- jerk max 4.0 per axis
+- v_max 1.0 m/s and a_max 1.5 m/s^2 per axis
+- future-A splice logic and C2 gate
+- 2.5 spline/search time floor
+- newest-world Check/Recheck and atomic commit
+- continuous trajectory safety checker
+- body AABB and +/-0.05 m other-drone tracking tube
+- B.3 scenario geometry
+
+INTENTIONAL FILE CHANGES FROM B.3 STRESS V2
+--------------------------------------------
+- include/dynamic_planner/receding_horizon_planner.hpp
+    default planning_radius_m 1.0 -> 2.0
+- apps/receding_horizon_demo.cpp
+    B-series standalone demo radius 1.0 -> 2.0
+- apps/cooperative_mission_demo.cpp
+    default 2.0 m + --planning-radius CLI override + explicit logging
+- CMakeLists.txt
+    package version 0.8.1 -> 0.8.2
+- B.3 documentation updated for the radius decision
+
+TEST POLICY
+-----------
+Existing unit test test_receding_horizon.cpp deliberately keeps its explicit 1.0 m test
+configuration. This preserves regression coverage of the previously validated local setup.
+The B.3 end-to-end CTests invoke cooperative_mission_demo without an override, so they
+exercise the new 2.0 m default.
+
+RADIUS-SWEEP INTERPRETATION
+---------------------------
+The selected 2.0 m value is an engineering compromise, not a universal optimum. The sweep
+showed that local feasibility and trajectory quality can depend on environment/time geometry.
+R_a=1.5 m specifically failed the initial two_drones_stress plan with
+PADDED_CLOSEST_PARTIAL_FINAL_CHECK_FAILED, while 2.0 m succeeded in that tested geometry.
+R_a=3.0 m effectively covered the complete 3 m mission and therefore ceased to be a useful
+representative rolling-horizon setting.
+
+NATIVE CHECK REQUIRED NOW
+-------------------------
+Run:
+  ctest --test-dir build --output-on-failure
+Expected count: 13.
+
+If 13/13 passes, rerun crossing_stress and two_drones_stress at the default and confirm
+SAFE + B.3 regression contract true. Then freeze this package as the B.3 baseline.
+
+NEXT SUBSTANTIAL INCREMENT
+--------------------------
+B.4 suspended-system whole-body configuration-space collision reasoning:
+planning-drone body + cable + electromagnet + attached object when present.
+Begin with proposal math/code/questions, then a separate literature/source critique, then
+explicit approval before implementation.

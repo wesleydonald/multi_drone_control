@@ -1,0 +1,18 @@
+R6.3C.1a v2 - ROS Humble CMake signature fix
+=============================================
+
+User-native colcon configure exposed one ROS-package-only CMake integration bug in v1:
+`dynamic_planner_reference_message` used the keyword form of target_link_libraries
+(`PUBLIC ...`), while ROS Humble's `ament_target_dependencies()` subsequently uses the
+plain form internally. CMake forbids mixing the two signatures for one target.
+
+Fix:
+- changed only tejen_dynamic_planner/CMakeLists.txt linkage for
+  dynamic_planner_reference_message to the plain target_link_libraries signature;
+- bumped tejen_dynamic_planner project/package version 0.1.0 -> 0.1.1;
+- no planner algorithm, reference-window math, ROS message mapping, MPC, tests, or
+  frozen B.4 source behaviour was changed.
+
+The stale EGO/cmake_utils/pose_utils prefix warnings in the user's shell are unrelated
+to this failure. They can be cleaned later; they are not the reason C.1a failed to
+configure.

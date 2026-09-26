@@ -196,6 +196,7 @@ class CentralController(Node):
 
     def _arm_fleet_thread(self):
         self.get_logger().info("Arming all drones...")
+        self.fleet_armed = False          # a repeat ARM must re-earn it
 
         # Wait for all arming services to become available
         for i in range(self.num_drones):
@@ -203,6 +204,8 @@ class CentralController(Node):
             if not client.wait_for_service(timeout_sec=5.0):
                 self.get_logger().error(
                     f"Arming service for drone {i} not available - aborting ARM.")
+                self.get_logger().error(
+                    f"ARM FAILED for drone(s) [{i}]: nothing armed; TAKEOFF refused.")
                 return
 
         # Send arm requests in parallel
@@ -214,6 +217,7 @@ class CentralController(Node):
 
         # Wait for all responses
         deadline = time.time() + 5.0
+        failed = []
         for i, future in futures.items():
             remaining = max(0.0, deadline - time.time())
             # Spin until the future is done or timeout
@@ -223,12 +227,25 @@ class CentralController(Node):
                 if result.success:
                     self.get_logger().info(f"Drone {i} armed: {result.message}")
                 else:
+                    failed.append(i)
                     self.get_logger().error(
                         f"Drone {i} arming failed: {result.message}")
             else:
+                failed.append(i)
                 self.get_logger().error(
                     f"Drone {i} arming service timed out.")
 
+        if failed:
+            # A fleet missing a drone must not take off: the others would lift and
+            # drag the payload (R0560: drone 0's tracker died before ARM, the manager
+            # declared the ARM complete and three drones hauled the ring to 44 deg).
+            self.get_logger().error(
+                f"ARM FAILED for drone(s) {failed}: disarming the fleet; TAKEOFF refused. "
+                f"The disarm shuts the trackers down: RELAUNCH the stack to retry. (A "
+                f"tracker blocked > 5 s, e.g. a first solver build, also lands here.)")
+            self._disarm_fleet(emergency=True,
+                               reason=f"ARM failed for drone(s) {failed}")
+            return
         self.fleet_armed = True
         self.get_logger().info("ARM sequence complete.")
 

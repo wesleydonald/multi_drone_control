@@ -1,0 +1,27 @@
+R6.3B.4.2 changed files relative to R6_3B_4_suspended_system_aug31_v2
+========================================================================
+MOD  apps/suspended_system_demo.cpp
+     - adds --replan-rate-hz, default 10 Hz, valid >0 and <=30 Hz
+     - keeps 30 Hz RecedingHorizonConfig::dc_s/control-reference cadence unchanged
+     - schedules suspended replans at the independent configured rate
+     - coalesces periodic requests that would arrive while a solve is still in flight
+     - reports planner cadence/period and coalesced-trigger count
+     - retains 9x9x9 suspended Octopus default and all B.4 geometry/dynamics
+
+MOD  tests/run_suspended_system_tests.cmake
+     - continues exercising defaults
+     - additionally asserts the 10 Hz suspended-planner default
+
+MOD  CMakeLists.txt
+     - package version 0.9.1 -> 0.9.2
+
+MOD  README_FIRST.txt
+MOD  INSTALL_AND_TEST_COMMANDS_B4.txt
+MOD  B4_ASSISTANT_VALIDATION.txt
+MOD  B4_IMPLEMENTATION_NOTES.txt
+MOD  MANIFEST_B4.txt
+NEW  B4_2_REPLAN_10HZ.txt
+NEW  MANIFEST_B4_2.txt
+
+No B.4.2 changes to include/ or src/. No search, optimization, collision-geometry,
+Check/Recheck, dynamic-limit, spline, MINVO or separator changes.

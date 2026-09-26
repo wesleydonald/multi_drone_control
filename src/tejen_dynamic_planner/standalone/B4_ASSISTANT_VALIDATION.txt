@@ -1,0 +1,87 @@
+R6.3B.4 assistant-side validation record
+========================================
+31 AUG 2026
+
+PASS - all modified/new C++ translation units compile with -std=c++17 -Wall -Wextra
+       -Wpedantic against the available Eigen headers:
+       src/ego_collision_model.cpp
+       src/world_snapshot.cpp
+       src/trajectory_safety_checker.cpp
+       apps/suspended_system_demo.cpp
+       tests/test_ego_collision_model.cpp
+       tests/test_suspended_world.cpp
+       tests/test_recheck_commit.cpp
+
+PASS - test_ego_collision_model built and ran directly: PASS.
+
+PASS - CMake parses/configures with local dependency-location shims and discovers
+       16 tests. test_ego_collision_model builds/runs through the CMake target.
+
+PASS - test_suspended_world built and ran with an assistant-only AABB separator stub
+       to exercise B.4 world wiring and independent checker orchestration without
+       claiming production GLPK equivalence: PASS.
+
+PASS - diff audit against R6_3B_3_Ra2_final_aug31_v2 confirms no changes to
+       bspline/minvo/octopus/refinement/separator/minimum_time/committed_trajectory/
+       local_planner source files.
+
+NOT CLAIMED HERE
+----------------
+The assistant environment does not contain the user's production GLPK or qpOASES
+installation. Therefore the following still require native execution on the user's
+machine before B.4 is called validated:
+
+- full 16/16 CTest suite;
+- test_suspended_world with the real GLPK separator;
+- extended attachment-race test_recheck_commit with real Octopus + qpOASES;
+- static_overflight suspended_system_demo mission;
+- other_cable suspended_system_demo mission;
+- B.3 crossing_stress and two_drones_stress regression after B.4.
+
+Do not tune planner parameters merely to force a failed B.4 test. Analyse any failure
+first; the B.4 increment is intended to be a geometry/world-model addition around the
+already validated planner core.
+
+
+B.4.1 FOLLOW-UP - 31 AUG 2026
+------------------------------
+Native evidence supplied by the user after B.4 v1:
+- tests 1-15 passed; test 16 failed because the end-to-end B.4 runner still forced
+  the historical 7x7x7 Octopus lattice.
+- static_overflight then passed manually at 9x9x9 with whole-body witness true,
+  continuous suspended-system safety SAFE, zero late candidates and contract true.
+- other_cable likewise passed manually at 9x9x9 with the same safety/liveness contract.
+
+B.4.1 therefore changes only the suspended demo/test default to 9x9x9 and adds
+B.3-style runtime statistics. No runtime threshold is a CTest failure criterion.
+The assistant environment still cannot execute the production GLPK + qpOASES suite,
+so the cumulative v2 package requires one native 16/16 run and collection of the two
+new runtime summaries.
+
+B.4.1 assistant-side checks completed before packaging:
+- apps/suspended_system_demo.cpp passes g++ -std=c++17 -Wall -Wextra -Wpedantic
+  syntax checking using the available CasADi-bundled Eigen headers.
+- run_suspended_system_tests.cmake parses/runs successfully against a fake demo and
+  checks the 9x9x9 default plus the B.4 regression-contract marker.
+- hash/diff audit confirms include/ and src/ are byte-for-byte unchanged from B.4 v1.
+
+
+B.4.2 FOLLOW-UP - 31 AUG 2026
+------------------------------
+Native B.4.1 mission summaries supplied by the user showed both approved 9x9x9
+witnesses SAFE/reached/contract-true with zero late candidates. Total-replan p95 was
+53.69 ms (static_overflight) and 57.43 ms (other_cable); Octopus dominated those
+figures, while qpOASES remained below approximately 1 ms p95.
+
+B.4.2 changes only the suspended commissioning cadence/harness and documentation.
+Assistant-side checks completed before packaging:
+- apps/suspended_system_demo.cpp passes g++ -std=c++17 -Wall -Wextra -Wpedantic
+  syntax checking using the available CasADi-bundled Eigen headers.
+- run_suspended_system_tests.cmake parses/runs against a fake demo and checks both
+  the 9x9x9 default and 10 Hz suspended-planner default.
+- manual event-scheduler sanity check confirms a solve longer than 100 ms coalesces
+  intermediate 10 Hz triggers instead of queueing them.
+- diff/hash audit confirms include/ and src/ are unchanged from B.4.1 v2.
+
+Production GLPK + qpOASES native execution is still required for the B.4.2 10 Hz
+mission results and full 16-test suite.

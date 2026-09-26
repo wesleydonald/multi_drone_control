@@ -1,0 +1,62 @@
+online_join_planner:
+  ros__parameters:
+    # R6.3C.1F.2b stationary ownership handshake + sustained C++ loaded transfer.
+    # Python remains the sole /join_planner/reference publisher/arbiter.
+    c1f1_shadow_transfer_enabled: true
+    c1f2_cpp_authority_enabled: true
+
+    c1f1_shadow_target_topic: /dynamic_planner/transfer_target
+    c1f1_shadow_enable_topic: /dynamic_planner/transfer_enable
+    c1f1_shadow_reference_topic: /dynamic_planner/transfer_reference
+    c1f1_shadow_status_topic: /dynamic_planner/transfer_status
+    c1f1_shadow_reference_timeout_s: 0.20
+    c1f2_target_velocity_topic: /dynamic_planner/transfer_target_velocity
+    c1f2_authority_topic: /dynamic_planner/transfer_authority
+    c1f2_authority_ack_topic: /dynamic_planner/transfer_authority_ack
+
+    # C1F.2b can wait indefinitely in the completed loaded-lift hold, so the
+    # one-time Python-hold -> C++ handoff can be tighter than C1F.2/C1F.2a.
+    c1f2_handoff_position_tolerance_m: 0.03
+    c1f2_handoff_velocity_tolerance_mps: 0.10
+    c1f2_handoff_acceleration_tolerance_mps2: 0.50
+
+    # The completed lift endpoint is only a loose mission-validity anchor.
+    # Hold there, wait for a low-speed dwell, then re-latch the actual measured
+    # position as the precise Python/C++ handoff origin.
+    c1f2_prepare_max_lift_drift_m: 0.15
+    c1f2_prepare_settle_speed_mps: 0.08
+    c1f2_prepare_settle_dwell_s: 0.30
+
+    # C1F.8b: C++ now targets the moving platform state at the candidate's
+    # actual terminal time, so hand off from a tighter rendezvous region before
+    # the existing C2 target-frame bridge removes the remaining relative error.
+    c1f2_nav_capture_xy_threshold_m: 0.12
+    c1f2_nav_capture_z_threshold_m: 0.15
+
+    # C++ -> Python moving-frame authority bridge after coarse navigation.
+    # A C2 quintic decays relative p/v/a error to ordinary target-relative
+    # tracking while preserving the outgoing C++ state at bridge sample 0.
+    c1f2_exit_bridge_duration_s: 1.50
+
+    # C1F.6 moving-rendezvous handoff: do not require an arbitrary tight
+    # relative-velocity threshold before starting the bridge.  Instead, build
+    # the same 1.5 s target-relative quintic bridge that would actually be
+    # executed and require its absolute v/a and relative-error jerk to remain
+    # inside these commissioning limits.  The later settling/drop phases keep
+    # their existing match_xy_velocity_threshold gate.
+    c1f2_bridge_feasibility_enabled: true
+    c1f2_bridge_max_velocity_x_mps: 1.0
+    c1f2_bridge_max_velocity_y_mps: 1.0
+    c1f2_bridge_max_velocity_z_mps: 1.0
+    c1f2_bridge_max_acceleration_x_mps2: 1.0
+    c1f2_bridge_max_acceleration_y_mps2: 1.0
+    c1f2_bridge_max_acceleration_z_mps2: 1.5
+    c1f2_bridge_max_jerk_x_mps3: 4.0
+    c1f2_bridge_max_jerk_y_mps3: 4.0
+    c1f2_bridge_max_jerk_z_mps3: 4.0
+    c1f2_bridge_feasibility_sample_dt_s: 0.02
+
+    # Keep join-planner CSVs directly here: the existing analysis script uses
+    # a non-recursive logs/join_planner/*.csv discovery glob.
+    log_directory: logs/join_planner
+    log_run_label: ""

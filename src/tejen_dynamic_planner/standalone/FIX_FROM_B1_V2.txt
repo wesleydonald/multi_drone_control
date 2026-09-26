@@ -1,0 +1,29 @@
+R6.3B.1 v3 - numerical C2 gate correction
+
+Observed failure in v2:
+  test_receding_horizon: 3 m receding-horizon mission did not reach goal
+
+Diagnosis:
+  The terminal-hold restart fix in v2 removed the finite-endpoint deadlock.
+  Repeated exact-state spline reparameterization plus QP solution residue can
+  nevertheless produce p/v/a splice discrepancies of order 1e-9 to 1e-8.
+  The v2 continuity gate was 1e-9 for position, velocity and acceleration,
+  so numerically equivalent C2 candidates were rejected and the mission stalled.
+
+Correction:
+  continuity_tolerance = 1e-7 (SI units for the corresponding p/v/a checks).
+  No spline boundary condition, dynamics limit, collision condition, late-result
+  rule, or optimizer constraint is relaxed. The candidate still starts from the
+  incumbent state at the exact future splice epoch A.
+
+Assistant substitute-backend evidence on the v2 architecture with this tolerance:
+  3 m receding-horizon regression PASS
+  accepted replans: 186
+  maximum observed splice residues:
+    position     2.20e-9 m
+    velocity     3.38e-9 m/s
+    acceleration 9.59e-9 m/s^2
+
+The 1e-7 threshold therefore retains roughly an order of magnitude numerical
+headroom while remaining physically negligible. Native GLPK + qpOASES ctest on
+the user's machine remains authoritative.

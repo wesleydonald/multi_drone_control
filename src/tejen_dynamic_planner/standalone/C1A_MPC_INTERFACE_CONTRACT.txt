@@ -1,0 +1,43 @@
+R6.3C.1a MPC interface contract
+===============================
+
+Findings from the pre-integration MPC inspection that future work MUST preserve:
+
+- Controller/reference loop: 30 Hz.
+- acados horizon: N=20 over 2.0 s.
+- controller skip_steps=3, so MPC stages are 0.1 s apart.
+- A rolling external reference therefore needs samples 0..60 inclusive: 61
+  samples at 30 Hz, spanning exactly 2.0 s.
+- For an external reference, the inspected MPC sets ref_step=0. Therefore sample
+  0 of every newly published rolling message means the reference at "now".
+- The authoritative CommittedTrajectory must be evaluated directly at
+      t_now + k/30, k=0..60.
+  Do not re-smooth or fit another trajectory in ROS.
+- Position and velocity are actively used by the current MPC cost/reference
+  setter. Acceleration is carried in trajectory rows / ROS messages, but is not
+  currently converted to direct acceleration/attitude/thrust feed-forward.
+  Do not add acceleration feed-forward in C.1a/C.1b without a separate decision.
+- The current publisher/consumer convention uses identity quaternion for planner
+  references. Do not invent an attitude planner during early integration.
+- The inspected external-reference timeout is about 0.5 s; stale input currently
+  causes the control loop to return rather than providing the final desired
+  controlled-stop/hover behaviour. Active authority must not be commissioned
+  until stale-reference behaviour is explicitly safe.
+- The MPC XY integral action has a large stage-0 reference-jump reset (~0.25 m).
+  Unexpected resets during ordinary replans are a useful timing/indexing red flag.
+- Keep the existing MPC cable-length model around 0.531-0.533 m. The planner's
+  0.50 m physical collision cable and the MPC effective pendulum length are not
+  to be silently forced equal.
+- Before writing future planner/MPC integration code, explicitly inspect the
+  ACTUAL CURRENT MPC node/controller files in the working repo. Do not assume
+  the trajectory format, timing/indexing, timeout, or reference-consumption
+  behaviour from an older handoff.
+
+Compatibility check required before C.1b:
+The current MPC external-reference callback must accept 61 samples for N=20,
+skip_steps=3. A previously identified off-by-one form used
+    if traj.shape[1] <= required_samples
+which incorrectly rejected 61 and demanded 62. The intended form is
+    if traj.shape[1] < required_samples
+Verify the actual current MPC source before live integration. C.1a does not edit
+that controller file.

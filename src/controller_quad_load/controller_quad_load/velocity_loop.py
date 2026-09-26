@@ -36,8 +36,8 @@ import numpy as np
 # Betaflight rate curve constants, matching dynamics.py's model parameters (the values
 # controller_mpc.py passes as est_params). Kept here as defaults only -- the caller
 # passes whatever the drone is actually configured with.
-CENTRE_RATE_DEG = 70.0
-MAX_RATE_DEG = 670.0
+CENTRE_RATE_DEG = 100.0
+MAX_RATE_DEG = 100.0
 RATE_EXPO = 0.5
 
 

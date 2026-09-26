@@ -102,6 +102,28 @@ def nominal_cable_dirs(rho, elev_deg=45.0):
     return dirs
 
 
+def apex_direction(rho_ring, s_ring, rho_new):
+    """Nominal cable direction for a cable joining an existing ring at rho_new.
+
+    With every cable fixed in direction, a static balance can load a cable only if its
+    line of action passes through the point where the others' lines meet (their apex;
+    for 45-deg cables on a 0.25 m ring it sits 0.25 m below the attach plane). A newcomer
+    given "45 deg from its own attach point" misses it whenever it welds off the ring
+    radius, and the balance then assigns it zero tension (R0575/R0577: welded at r 0.28,
+    planned tension 0.1 N, incumbents kept the three-drone split). Returns the unit
+    drone->load direction whose line passes through the least-squares apex of the ring."""
+    A = np.zeros((3, 3))
+    b = np.zeros(3)
+    for r, d in zip(rho_ring, s_ring):
+        d = np.asarray(d, float) / np.linalg.norm(d)
+        P = np.eye(3) - np.outer(d, d)
+        A += P
+        b += P @ np.asarray(r, float)
+    apex = np.linalg.solve(A, b)
+    v = apex - np.asarray(rho_new, float)
+    return v / np.linalg.norm(v)
+
+
 def balanced_tensions(rho, s_dirs, load_mass, g=9.81, t_min=0.1):
     """Nominal cable tensions that hold the load LEVEL at hover for this attach layout.
 

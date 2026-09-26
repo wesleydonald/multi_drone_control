@@ -1,0 +1,48 @@
+R6.3B.1 design notes
+====================
+
+Fixed/previously approved decisions
+-----------------------------------
+- four cubic local intervals
+- 7 samples/axis for Octopus parity
+- 1.0 m local planning radius
+- dc = 1/30 s
+- factor_alpha = 2.5 for future splice lookahead
+- lookahead clamp = [0.05, 1.0] s
+- global goal tolerance = 0.05 m
+- close-to-goal zone = 0.20 m
+- factor_alloc = 1.0, factor_alloc_close = 2.5
+- exact future state A = committed p/v/a at splice time
+- C2 splice contract, numerical acceptance tolerance 1e-7
+- local terminal stop retained; ordinary replanning normally splices before it
+- failed candidate never overwrites the committed trajectory
+
+Newly approved after B.1 simulation
+-----------------------------------
+1. spline_time_factor = 2.5
+   RMADER's minimum-time double integrator is kept as the lower bound, but the
+   four-segment cubic stopping spline + 7^3 discrete search needs extra duration.
+   The allocation is:
+
+       T_local = max(f_RMADER, 2.5) * T_DI
+
+2. late-candidate rejection
+   For a non-bootstrap plan:
+
+       candidate_finish_time >= splice_time
+         => LATE_CANDIDATE_REJECTED
+
+   Rejection occurs before committed-trajectory mutation.
+
+Standalone simulation semantics
+-------------------------------
+- perfect tracking: measured state is the exact committed spline state
+- world is frozen for each B.1 run
+- the vehicle advances while planning by max(dc, measured replan runtime)
+- candidates are local; the full mission emerges from repeated future splices
+
+Next increment
+--------------
+R6.3B.2 should add the already-approved simplified latest-world Check/Recheck
+around candidate commitment. Keep timing validity (B.1) distinct from world
+validity (B.2) so failures remain diagnosable.

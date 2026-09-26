@@ -1,0 +1,32 @@
+R6.3B.3 v2 - stronger dynamic commissioning scenarios
+======================================================
+31 AUG 2026
+
+Why v2 exists
+-------------
+The user's native B.3 v1 suite passed 12/12, but visual inspection showed nearly
+straight planning-drone paths. That can be correct time-aware behaviour, especially
+when the planner safely waits or passes through the same space at another time, but the
+first scenarios were not strong enough by themselves to prove meaningful conflict
+resolution.
+
+No planner algorithm or parameter is changed in v2.
+
+New stress contract
+-------------------
+Each stress scenario first runs the same planner in an empty world. Its sampled
+unobstructed trajectory is checked against the fixed shared other-drone trajectory/tube.
+The scenario is considered valid only if that nominal minimum simultaneous clearance is
+strictly negative (< -1e-4 m). The obstacle-aware run must then reach the goal while
+satisfying the existing continuous safety, C2 and authority contracts.
+
+New cases
+---------
+- crossing_stress: slow perpendicular crossing at x=1.5. Direct y=0 C-space overlap
+  from approximately 4.50 to 7.80 s.
+- same_direction_stress: other drone starts 0.55 m ahead on the same centreline and
+  moves slowly to x=3.65 over 16 s.
+- two_drones_stress: slow opposing crossings at x=1 and x=2; both direct-path C-space
+  overlaps are approximately 3.26 to 7.97 s.
+
+The original three cases remain as useful time-awareness regressions.

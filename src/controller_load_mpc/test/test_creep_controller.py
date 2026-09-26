@@ -149,3 +149,56 @@ def test_the_sweep_reaches_the_target_and_then_hands_over():
     assert c.arc_theta == pytest.approx(np.deg2rad(45.0), abs=1e-6), (
         f'sweep stopped at {np.degrees(c.arc_theta):.1f} deg')
     assert handover, 'sweep completed but the phase never handed over'
+
+
+def _at_elev(rho, elevs_deg):
+    ls = load_state()
+    out = []
+    for i, e in enumerate(elevs_deg):
+        attach = ls[0:3] + rho[i]
+        radial = np.array([attach[0], attach[1], 0.0])
+        radial /= np.linalg.norm(radial)
+        a = np.deg2rad(e)
+        out.append(attach + CABLE * (np.cos(a) * radial + np.array([0.0, 0.0, np.sin(a)])))
+    return out
+
+
+def test_airborne_start_holds_live_until_takeoff_then_sweeps_down_to_target():
+    """M2 hand-over (T0007): drones already flying near-vertical on the grounded ring.
+    Before TAKEOFF the reference is the live pose (no anchor latched); after it each rod
+    sweeps from its own elevation to the target, from above."""
+    refs = {}
+    rho = [np.array([0.25 * np.cos(a), 0.25 * np.sin(a), 0.0])
+           for a in np.linspace(0, 2 * np.pi, 3, endpoint=False)]
+    state = {'pos': None}
+    c = CreepController(n=3, rho=rho, cable_len=CABLE, N=5, dt=0.1, g=9.81,
+                        handover_elev_deg=45.0, hz=HZ, drone_at=lambda i: state['pos'][i],
+                        publish_ref=lambda i, nodes: refs.__setitem__(i, nodes),
+                        logger=_Log())
+    c.airborne_start = True
+    state['pos'] = _at_elev(rho, [80.0, 70.0, 75.0])
+    for _ in range(20):                               # his controller moves them
+        state['pos'] = [p + np.array([0.01, 0.0, 0.0]) for p in state['pos']]
+        assert c.step(load_state(), state['pos'], [(1.0, 0.0)] * 3, False) == (False, None)
+    assert c.arc_anchor is None
+    assert np.allclose(refs[0][0][0], state['pos'][0])
+    assert np.allclose(refs[0][-1][1], 0.0)
+
+    state['pos'] = _at_elev(rho, [80.0, 70.0, 75.0])
+    c.step(load_state(), state['pos'], [(1.0, 0.0)] * 3, True)
+    th = [np.degrees(t) for t in c._arc_th]
+    assert 78.5 < th[0] < 80.0 and 68.5 < th[1] < 70.0     # moved down, from its own
+    for _ in range(200):
+        handover, _ = c.step(load_state(), _at_elev(rho, [45.0] * 3),
+                             [(1.0, 0.0)] * 3, True)
+        if handover:
+            break
+    assert handover and c._arc_done
+    p = refs[1][-1][0]
+    attach = load_state()[0:3] + rho[1]
+    assert abs(np.degrees(np.arcsin((p - attach)[2] / CABLE)) - 45.0) < 1e-6
+
+
+def test_airborne_start_off_keeps_the_ground_sweep():
+    c, state, log, rho = build()
+    assert c.airborne_start is False

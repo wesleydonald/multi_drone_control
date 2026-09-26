@@ -63,6 +63,12 @@ class CreepController:
         self.arc_theta = 0.0               # swept elevation reference (rad)
         self._arc_wait = 0.0               # s since the arc sweep finished
         self._arc_hold = 0.0               # s measured elev held in tolerance
+        # airborne start (a partner controller hands over drones already flying on
+        # the grounded load): hold them where they are until TAKEOFF, then sweep
+        # each rod from its own measured elevation to the target, up or down
+        self.airborne_start = False
+        self._arc_th = None                # per-drone swept elevation (rad)
+        self._arc_done = False
         self.lifted_off = False            # gate the creep climb on real liftoff
         self._liftoff_wait = 0.0           # s since TAKEOFF without liftoff
         self._diag_ctr = 0
@@ -95,7 +101,8 @@ class CreepController:
             # Rigid ground start: wait for the rod to rotate up to a liftable angle
             # (the length gate would hand over at ~0 deg). Only test once the swept
             # reference is done; before that the drones are still on their way up.
-            ref_done = self.arc_theta >= np.deg2rad(self.handover_elev_deg) - 1e-9
+            ref_done = (self._arc_done if self.airborne_start else
+                        self.arc_theta >= np.deg2rad(self.handover_elev_deg) - 1e-9)
             sins = [self.sin_elev(i, load_state) for i in range(self.n)]
             lo = np.degrees(np.arcsin(np.clip(min(sins), -1.0, 1.0)))
             if ref_done:
@@ -138,6 +145,9 @@ class CreepController:
         on the ground throughout, so there is no tension to fight, and at handover
         the geometry is the same liftable ~45 deg the elevated worlds spawn with.
         """
+        if self.airborne_start:
+            self._arc_creep_airborne(load_state, drone_pos, takeoff_seen)
+            return
         if self.arc_anchor is None:
             ls = load_state
             R = quat_to_rot_np(ls[3:7])
@@ -232,6 +242,63 @@ class CreepController:
                 f"(latch >= {self.handover_elev_deg - HANDOVER_ELEV_TOL:.0f}deg "
                 f"for {HANDOVER_SETTLE_S:.0f}s; held {self._arc_hold:.1f}s)  "
                 f"measured: {meas}")
+
+    def _arc_creep_airborne(self, load_state, drone_pos, takeoff_seen):
+        level = (0.0, 0.0, self.g)
+        if not takeoff_seen:
+            # someone else is flying them: a live hold keeps our tracker warm, so its
+            # first command after the switch asks for no motion
+            for i in range(self.n):
+                p = np.asarray(drone_pos[i], dtype=float)
+                self._publish_ref(i, [(p, np.zeros(3), level, (0.0, 0.0, 0.0))]
+                                  * (self.N + 1))
+            return
+        if self.arc_anchor is None:
+            R = quat_to_rot_np(load_state[3:7])
+            self.arc_anchor, self.arc_theta0 = [], []
+            for i in range(self.n):
+                attach = load_state[0:3] + R @ self.rho[i]
+                d = drone_pos[i] - attach
+                horiz = np.array([d[0], d[1], 0.0])
+                hn = float(np.linalg.norm(horiz))
+                radial = horiz / hn if hn > 1e-6 else np.array([1.0, 0.0, 0.0])
+                self.arc_anchor.append((attach.copy(), radial))
+                self.arc_theta0.append(float(np.arctan2(d[2], hn)))
+            self._arc_th = list(self.arc_theta0)
+            self.lifted_off = True
+            self._log.info(
+                '[planner] airborne arc creep: '
+                + ' '.join(f'd{i}:{np.degrees(t):.1f}' for i, t in enumerate(self._arc_th))
+                + f' -> {self.handover_elev_deg:.1f} deg (rod {self.cable_len:.2f} m)')
+        target = np.deg2rad(self.handover_elev_deg)
+        dtheta = self.creep_vel / max(self.cable_len, 1e-6) / self.hz
+        L = self.cable_len
+        for i in range(self.n):
+            th = self._arc_th[i]
+            th = th + float(np.clip(target - th, -dtheta, dtheta))
+            self._arc_th[i] = th
+            sgn = float(np.sign(target - th))
+            attach, radial = self.arc_anchor[i]
+            nodes = []
+            for k in range(self.N + 1):
+                a = th + float(np.clip(target - th, -dtheta * self.hz * self.dt * k,
+                                       dtheta * self.hz * self.dt * k))
+                w = sgn * dtheta * self.hz if abs(target - a) > 1e-9 else 0.0
+                p_i = attach + L * (np.cos(a) * radial + np.array([0.0, 0.0, np.sin(a)]))
+                v_i = L * w * (-np.sin(a) * radial + np.array([0.0, 0.0, np.cos(a)]))
+                nodes.append((p_i, v_i, level, (0.0, 0.0, 0.0)))
+            self._publish_ref(i, nodes)
+        self._arc_done = all(abs(t - target) < 1e-9 for t in self._arc_th)
+        self.arc_theta = target if self._arc_done else min(self._arc_th)
+        self._diag_ctr += 1
+        if self._diag_ctr % int(max(self.hz, 1)) == 0:
+            meas = '  '.join(
+                f"d{i}:{np.degrees(np.arcsin(np.clip(self.sin_elev(i, load_state),-1,1))):.1f}"
+                for i in range(self.n))
+            self._log.info(
+                '[planner arc-creep] ref=' + ' '.join(f'{np.degrees(t):.0f}' for t in self._arc_th)
+                + f' target={self.handover_elev_deg:.0f}deg held {self._arc_hold:.1f}s'
+                f'  measured: {meas}')
 
     def _soft_creep(self, load_state, drone_pos, gates):
         """Phase-1 takeoff: command each drone to rise straight up at CREEP_VEL,

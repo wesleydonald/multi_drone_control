@@ -32,13 +32,22 @@ import numpy as np
 import rclpy
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Int32, Empty, Bool, Float64MultiArray, String
+from geometry_msgs.msg import PoseStamped
+from controller_dissipative.approach import ApproachProfile, carrot_step
 
 from interfaces.msg import MotionCaptureState
-from controller_load_mpc.geometry import quat_to_rot_np, attach_points
+from controller_load_mpc.geometry import (quat_to_rot_np, attach_points, rot_z,
+                                          apex_direction, balanced_tensions,
+                                          nominal_cable_dirs)
 from controller_load_mpc.planner_node import LoadPlanner, DRONE_MASS, PLANNER_HZ, TouchdownDetector
+from controller_load_mpc.reference_builder import ReferenceBuilder
 
 from controller_dissipative.dissipative_network import (
     DissipativeNetwork, DissipativeParams)
+
+
+# a freed drone lands at least this far from the ring centre (ring 0.28 + cable 0.5 + margin)
+DEPARTED_CLEAR_R = 1.2
 
 
 def _largest_gap_deg(rho):
@@ -148,6 +157,7 @@ class DissipativeController(LoadPlanner):
         # <=0 restores the instant gate=1.
         self._attach_ff_ramp_s = float(p('attach_ff_ramp_s', 1.5).value)
         self._weld_time = {}                    # physical drone id -> weld Time (for the FF ramp)
+        self._ocp_attached = {}                 # physical drone id -> True once an OCP-resize attach
         # SETTLE elevation for a welded newcomer (deg). Steeper than the fleet's diss_elev_deg
         # keeps it close to its high near-vertical weld pose (small out-and-down transit ->
         # avoids the transit-driven runaway); default = the fleet elevation (full 45deg rim).
@@ -155,6 +165,19 @@ class DissipativeController(LoadPlanner):
         # How close (m, drone body to load centre) a reserved drone must be before its
         # tracker is warmed with a hold reference -- see _publish_pending_attach_refs.
         self._attach_warm_radius = float(p('attach_warm_radius', 1.0).value)
+        # TRACKER-FLOWN APPROACH (2026-09-25): with no approach MPC in the loop, this
+        # node flies the reserved drone to the live magnet-tip target on its own tracker
+        # (see approach.py) from the ATTACH command until the weld.
+        self._attach_approach = bool(p('attach_approach', False).value)
+        # the newcomer's tracker runs the PD velocity loop (no cable model): fold the
+        # OCP's cable term into its thrust feedforward, as the network does for every
+        # velocity tracker (a_ff = g + a_des - a_cable)
+        self._attach_velocity_newcomer = bool(p('attach_velocity_newcomer', False).value)
+        self._attach_target = None
+        self._approach = {}                     # reserved index j -> ApproachProfile
+        # always: a partner handoff enables the approach mid-flight
+        self.create_subscription(PoseStamped, '/attach_target/pose',
+                                 self._attach_target_cb, 5)
         # TRAJECTORY HOLD ON ATTACH (s): freeze the load target for this long after a weld
         # so the fleet reconfigures in place instead of chasing a moving target while the
         # newcomer hands out; the trajectory then resumes with the full fleet. 0 = off.
@@ -190,10 +213,41 @@ class DissipativeController(LoadPlanner):
         # tip weld wherever it happens to be inside the trigger radius (R0178 welded at
         # 11 o'clock, r=0.13, instead of the 6 o'clock rim). It is re-armed at the weld so
         # the reconfiguration also happens on a still target, then the trajectory resumes.
-        if self._attach_traj_hold_s > 0.0:
+        # partner mode: the partner's mission also commands the magnet for its object pickup,
+        # and it rejoins a MOVING ring, so no approach hold (the weld hold is kept)
+        if self._attach_traj_hold_s > 0.0 and bool(p('approach_hold', True).value):
             self.create_subscription(String, '/magnet/command', self._magnet_cmd_cb, 10)
         # detach of a magnet-attached newcomer releases the weld through the magnet manager
         self._magnet_cmd_pub = self.create_publisher(String, '/magnet/command', 1)
+        # partner handover: the partner's mission hovers the newcomer ~0.18 m above the
+        # plate (its ATTACH_READY is a handover point, R0623); on its handoff flag our
+        # tracker flies the last descent (the validated approach, trajectory held) and
+        # this node owns the ring magnet (ON, re-sent until the weld)
+        self._partner_handed = False
+        # partner demo start (Wesley 2026-09-26): the magnet drone starts WELDED as the
+        # fourth carrier; after its detach our tracker steps it out and up, then it is
+        # released to the partner's mission (/partner/release) and becomes a pending
+        # rejoiner again (the handoff/weld below then work unchanged)
+        self._start_attached = bool(p('start_attached', False).value)
+        # M2 hand-over: the partner's fleet is already flying on the grounded ring
+        self.creep.airborne_start = bool(p('airborne_start', False).value)
+        # nominal cable elevation of the OCP hover (45 by default). Steeper rods for
+        # the partner's X3, whose tether pivots 0.04 m below the body: the sideways
+        # rod force times that lever out-torques the sim rate loop at 45 (T0008)
+        elev = float(p('cable_elev_deg', 45.0).value)
+        if elev != self.cable_elev_deg:
+            self.cable_elev_deg = elev
+            self._s_nom = nominal_cable_dirs(self.rho, elev)
+            self.refs = ReferenceBuilder(self.dyn, self.n, self._s_nom, self.dt, self.traj)
+            self.get_logger().info(f'[dissipative] nominal cable elevation {elev:.1f} deg')
+        self._partner_release = bool(p('partner_release', False).value)
+        self._release_out = float(p('partner_release_out_m', 0.5).value)
+        self._release_up = float(p('partner_release_up_m', 0.3).value)
+        self._release_state = {}
+        self._release_pub = self.create_publisher(String, '/partner/release', 1)
+        handoff_topic = str(p('partner_handoff_topic', '').value)
+        if handoff_topic:
+            self.create_subscription(Bool, handoff_topic, self._partner_handoff_cb, 5)
         # The network's ring must be the PHYSICAL tether ring (the parent's rho, the n
         # points the world SDF and the OCP use), NOT attach_points(n_net): with one
         # reserved slot that put the three tethers at 0/90/180 deg while they sit at
@@ -285,6 +339,7 @@ class DissipativeController(LoadPlanner):
         # an OCP resize (the resized OCP plans only for the drones still on the load,
         # and a tracker with no reference trips ref_stale and disarms the fleet).
         self._departed_hold = {}
+        self._departed_clear = {}       # d -> True once stepped clear of the ring on LAND
         if self._reconfig_mode == 'ocp':
             # Every size this flight could end up at. Built now because an acados
             # build is 9-40 s and cannot happen mid-flight; warm cache makes it ~0.1 s
@@ -341,7 +396,20 @@ class DissipativeController(LoadPlanner):
     # ── attach-drone mocap ───────────────────────────────────────────────────
     def _attach_drone_cb(self, msg: MotionCaptureState, j):
         p = msg.pose.position
+        lv = msg.twist.linear
         self.attach_pos[j] = np.array([p.x, p.y, p.z])
+        d = self._n_carry0 + j
+        if d < len(self.drone_pos) and self._ocp_attached.get(d, False):
+            # an OCP-attached newcomer is a planner slot now: the parent reads it
+            # from drone_pos like any tethered drone
+            self.drone_pos[d] = self.attach_pos[j]
+            self.drone_vel[d] = np.array([lv.x, lv.y, lv.z])
+
+    def _reserved_index(self, d):
+        """j for a reserved (magnet) drone id d, else None. Reserved ids are counted
+        from the fleet size at construction: self.n shrinks/grows with OCP resizes."""
+        j = d - self._n_carry0
+        return j if 0 <= j < self.reserved_attach else None
 
     # ── control tick: dispatch on phase (no parent modification) ─────────────
     def _plan(self):
@@ -364,7 +432,9 @@ class DissipativeController(LoadPlanner):
         network; otherwise the inherited OCP planner flies (creep -> lift -> hover)."""
         if self._departed_hold:
             self._publish_departed_refs()
+        self._partner_release_tick()
         self._publish_pending_attach_refs()
+        self._partner_magnet_keepalive()
         if self.phase == 'network':
             self._network_plan()
             return
@@ -372,8 +442,12 @@ class DissipativeController(LoadPlanner):
         # settling into its new ring is not also asked to chase a moving target.
         if self._reconfig_hold_left > 0.0:
             self._reconfig_hold_left -= 1.0 / PLANNER_HZ
-            self.traj_t -= 1.0 / PLANNER_HZ      # cancel the advance super()._plan() makes
-            if self._reconfig_hold_left <= 0.0:
+            # cancel the advance super()._plan() makes; in hover it makes none (R0518 drifted
+            # to -10 s), so never below zero
+            self.traj_t = max(0.0, self.traj_t - 1.0 / PLANNER_HZ)
+            if self._settle_hold:
+                self._settle_dwell_tick()
+            elif self._reconfig_hold_left <= 0.0:
                 self.get_logger().info(
                     f'[dissipative] reconfiguration hold over — trajectory resumes at '
                     f't={self.traj_t:.2f} s')
@@ -429,14 +503,36 @@ class DissipativeController(LoadPlanner):
         zero = np.zeros(3)
         if not self._land_to_ground:
             self._departed_td = {}
+            self._departed_clear = {}
         rate = self._departed_land_vel if self._departed_land_vel > 0.0 else 2.0 * self.land_vel
         for d, p_hold in self._departed_hold.items():
             if p_hold is None:
                 continue
-            if self._land_to_ground:
+            if self._land_to_ground and not self._departed_clear.get(d, False) \
+                    and self.load_state is not None:
+                # Step OUT before descending: the freed drone still trails its released
+                # cable, and straight down from a hover detach it lands 0.63 m from the
+                # ring centre with the cable across the ring's landing spot; the ring
+                # pinned it and tipped the drone at touchdown (R0567).
+                c = np.asarray(self.load_state[0:2], float)
+                v = np.asarray(p_hold[0:2], float) - c
+                r = float(np.linalg.norm(v))
+                if r >= DEPARTED_CLEAR_R - 0.03:
+                    self._departed_clear[d] = True
+                else:
+                    u = v / r if r > 1e-6 else np.array([1.0, 0.0])
+                    goal = np.array([*(c + u * DEPARTED_CLEAR_R), float(p_hold[2])])
+                    p_new, _ = carrot_step(p_hold, goal, rate, 1.0 / PLANNER_HZ)
+                    p_hold[:] = p_new
+            if self._land_to_ground and self._departed_clear.get(d, False):
                 # Descend faster than the fleet (no load on this drone) so it is down
-                # before the survivors stall, and run its own touchdown detector.
-                p_hold[2] = max(0.0, float(p_hold[2]) - rate / PLANNER_HZ)
+                # before the survivors stall, and run its own touchdown detector. Once
+                # stalled the reference freezes at the floor (as the survivors' does): a
+                # reference sinking into the floor pressed the drone onto its trailing
+                # cable and tipped it while it waited for the fleet (R0570)
+                td0 = self._departed_td.get(d)
+                if td0 is None or not td0.stalled:
+                    p_hold[2] = max(0.0, float(p_hold[2]) - rate / PLANNER_HZ)
                 td = self._departed_td.get(d)
                 if td is None:
                     td = self._departed_td[d] = TouchdownDetector(rate, PLANNER_HZ)
@@ -444,8 +540,26 @@ class DissipativeController(LoadPlanner):
                 pos = self.drone_pos[d] if d < len(self.drone_pos) else None
                 if pos is not None and not td.stalled and td.update([float(pos[2])]):
                     td.stalled = True
+                    p_hold[2] = float(pos[2])
                     self.get_logger().info(f'[dissipative] departed drone {d} is down')
             self._publish_ref(d, [(p_hold, zero, g, zero)] * (self.N + 1))
+
+    def _attach_target_cb(self, msg: PoseStamped):
+        q = msg.pose.position
+        self._attach_target = np.array([q.x, q.y, q.z])
+
+    def _start_approach(self):
+        """ATTACH commanded: every pending reserved drone with a pose starts its approach
+        from where it is (bumpless first reference)."""
+        if not self._attach_approach:
+            return
+        for j in range(self.reserved_attach):
+            if self.attach_pending[j] and self.attach_pos[j] is not None and j not in self._approach:
+                self._approach[j] = ApproachProfile(self.attach_pos[j], self._attach_cable_len,
+                                                    1.0 / PLANNER_HZ)
+                self.get_logger().info(
+                    f'[dissipative] approach: drone {self._n_carry0 + j} flies to the weld '
+                    f'target on its own tracker from {np.round(self.attach_pos[j], 2)}')
 
     def _publish_pending_attach_refs(self):
         """Keep a reserved drone's tracker WARM while the approach controller still flies it.
@@ -476,10 +590,39 @@ class DissipativeController(LoadPlanner):
         for j in range(self.reserved_attach):
             if not self.attach_pending[j] or self.attach_pos[j] is None:
                 continue
-            p_hold = np.asarray(self.attach_pos[j], float).copy()
-            if float(np.linalg.norm(p_hold - load_p)) > self._attach_warm_radius:
+            if (self._n_carry0 + j) in self._departed_hold:
+                continue                  # released partner drone: its fixed hold flies it
+            prof = self._approach.get(j)
+            if prof is not None and self._attach_target is not None:
+                p_ref, v_ff, phase = prof.step(self._attach_target)
+                if phase != getattr(prof, '_logged', None):
+                    prof._logged = phase
+                    self.get_logger().info(
+                        f'[dissipative] approach: drone {self._n_carry0 + j} {phase}')
+                # a horizon that advances with the feedforward velocity, as the creep and
+                # landing references do (a hold-shaped horizon with v != 0 is inconsistent)
+                nodes = [(p_ref + v_ff * (self.dt * k), v_ff, g, zero) for k in range(self.N + 1)]
+                self._publish_ref(self._n_carry0 + j, nodes)
                 continue
-            self._publish_ref(self.n + j, [(p_hold, zero, g, zero)] * (self.N + 1))
+            if self._attach_approach:
+                # the tracker-flown approach: no reference at all before the approach.
+                # A tracker with no reference idles armed at zero throttle on the
+                # floor; every pre-approach hold tried today failed (a gated hold
+                # stops when the load lifts away and trips ref_stale, R0529; a hold
+                # that follows the pose drifts 2 m, R0530; a fixed anchor at the spawn
+                # height makes the drone hover against the floor and tip, R0531/R0532)
+                continue
+            p_hold = np.asarray(self.attach_pos[j], float).copy()
+            # latched once warm: a partner mission comes close (the drop) and leaves again
+            # before the rejoin, and a started tracker whose references stop faults on
+            # ref_stale and disarms the fleet (R0618)
+            warm = getattr(self, '_warm_latched', set())
+            if j not in warm:
+                if float(np.linalg.norm(p_hold - load_p)) > self._attach_warm_radius:
+                    continue
+                warm.add(j)
+                self._warm_latched = warm
+            self._publish_ref(self._n_carry0 + j, [(p_hold, zero, g, zero)] * (self.N + 1))
 
     def _auto_handover_due(self):
         """True on the tick the OCP lift has topped out and held for the settle time.
@@ -561,8 +704,10 @@ class DissipativeController(LoadPlanner):
         4*pi/n, so that holds only for n >= 5; n=4 sits exactly on the boundary. The
         resize is allowed either way and the margin is logged, because flying a
         marginal configuration is a result worth having, not an error."""
-        survivors = [x for x in range(self._n_carry0)
-                     if x != d and not self.detached[x]]
+        if d not in self.slot2drone:
+            self.get_logger().warn(f'[dissipative] detach: drone {d} is not on the load')
+            return
+        survivors = [x for x in self.slot2drone if x != d and not self.detached[x]]
         if len(survivors) < max(2, self._min_survivors):
             self.get_logger().error(
                 f'[dissipative] refusing to detach {d}: {len(survivors)} would remain '
@@ -588,10 +733,22 @@ class DissipativeController(LoadPlanner):
                 f'[dissipative] detach {d}: the n={self.n} OCP did not converge on the '
                 f'current state. The fleet is resized but the first solves may jump.')
         self.detached[d] = True
-        self.detach_pub[d].publish(Empty())
-        self._release_magnet(d)
+        if d < len(self.detach_pub):
+            self.detach_pub[d].publish(Empty())
+            self._release_magnet(d)
+        else:
+            self._magnet_cmd_pub.publish(String(data='OFF'))   # magnet-welded newcomer
         self._departed_hold[d] = np.asarray(self.drone_pos[d], float).copy() \
             if self.drone_pos[d] is not None else None
+        if self._partner_release and self._reserved_index(d) is not None \
+                and self._departed_hold[d] is not None and self.load_state is not None:
+            hold = self._departed_hold[d]
+            out = hold[:2] - np.asarray(self.load_state[0:2], float)
+            out = out / max(float(np.linalg.norm(out)), 1e-6)
+            target = hold + np.array([self._release_out * out[0], self._release_out * out[1],
+                                      self._release_up])
+            self._release_state[d] = {'target': target, 'released': False, 'quiet': 0.0,
+                                      'sent': None}
         self._reconfig_hold_left = self._reconfig_hold_s
         self.get_logger().warn(
             f'[dissipative] DETACH drone {d} (OCP resize): n={self.n}, '
@@ -610,7 +767,66 @@ class DissipativeController(LoadPlanner):
             return
         for j in range(self.reserved_attach):
             if self.attach_pending[j]:
-                self._do_attach(self.n + j)
+                self._do_attach(self._n_carry0 + j)
+
+    def _partner_handoff_cb(self, msg):
+        if not msg.data or self._partner_handed or not any(self.attach_pending):
+            return
+        self._partner_handed = True
+        self._attach_approach = True
+        for j in range(self.reserved_attach):
+            self._departed_hold.pop(self._n_carry0 + j, None)
+        self.get_logger().warn('[dissipative] PARTNER HANDOFF: our tracker flies the last '
+                               'descent; ring magnet ON')
+        self._magnet_cmd_cb(String(data='ON'))
+        self._partner_magnet_sent = None
+
+    def _partner_release_tick(self):
+        """Step a detached partner drone out and up at 0.15 m/s, wait until it is still
+        there, then release it (announced every 1 s: his supervisor and our mux)."""
+        now = self.get_clock().now().nanoseconds * 1e-9
+        for d, st in self._release_state.items():
+            if st['released']:
+                if st['sent'] is None or now - st['sent'] >= 1.0:
+                    self._release_pub.publish(String(data='{"running": true}'))
+                    st['sent'] = now
+                continue
+            hold = self._departed_hold.get(d)
+            if hold is None:
+                continue
+            step = 0.15 / PLANNER_HZ
+            delta = st['target'] - hold
+            dist = float(np.linalg.norm(delta))
+            if dist > step:
+                self._departed_hold[d] = hold + delta / dist * step
+                continue
+            self._departed_hold[d] = st['target'].copy()
+            pos = self.drone_pos[d] if d < len(self.drone_pos) else None
+            vel = self.drone_vel[d] if d < len(self.drone_vel) else None
+            still = (pos is not None and vel is not None
+                     and float(np.linalg.norm(np.asarray(pos) - st['target'])) < 0.12
+                     and float(np.linalg.norm(vel)) < 0.10)
+            st['quiet'] = st['quiet'] + 1.0 / PLANNER_HZ if still else 0.0
+            if st['quiet'] >= 2.0:
+                st['released'] = True
+                j = self._reserved_index(d)
+                self.attach_pending[j] = True
+                self._warm_latched = getattr(self, '_warm_latched', set()) | {j}
+                self._partner_handed = False
+                # the fixed step-out hold stays until the rejoin handoff: if the partner
+                # never takes over, a hold that follows the measured pose drifts
+                # (R0530, R0638 3.15 m/s)
+                self.get_logger().warn(
+                    f'[dissipative] PARTNER RELEASE: drone {d} stepped out to '
+                    f'{np.round(st["target"], 2)}; its mission takes it from here')
+
+    def _partner_magnet_keepalive(self):
+        if not self._partner_handed or not any(self.attach_pending):
+            return
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if self._partner_magnet_sent is None or now - self._partner_magnet_sent >= 1.0:
+            self._magnet_cmd_pub.publish(String(data='ON'))
+            self._partner_magnet_sent = now
 
     def _magnet_cmd_cb(self, msg):
         # ON is republished by the operator tools; arm the hold once per approach so a
@@ -626,6 +842,7 @@ class DissipativeController(LoadPlanner):
             self.get_logger().info(
                 f'[dissipative] ATTACH commanded: trajectory held {self._attach_traj_hold_s:.0f} s '
                 f'for the approach (re-armed at the weld)')
+            self._start_approach()
 
     def _do_attach(self, d):
         """Add physical drone d to the dissipative network (mirror of _fleet_detach_cb).
@@ -636,6 +853,9 @@ class DissipativeController(LoadPlanner):
             return
         if self.phase not in ('planner', 'network'):
             self.get_logger().warn('[dissipative] attach ignored - not flying yet')
+            return
+        if self._reconfig_mode == 'ocp' and self.phase == 'planner':
+            self._attach_ocp(d)
             return
         if self.phase == 'planner':
             self._enter_network_phase()
@@ -667,13 +887,7 @@ class DissipativeController(LoadPlanner):
             # projection lands ~0.5*sin(tilt) inboard of the real weld (R0179/R0180: the 6
             # o'clock rim captured as r=0.03-0.07 with the disc at 27 deg, so the wrench
             # solve gave the newcomer no moment arm and the load never levelled).
-            weld_pt = np.asarray(measured, float)
-            if d >= self.n:
-                weld_pt = weld_pt - np.array([0.0, 0.0, float(self._attach_cable_len)])
-            rho_body = R.T @ (weld_pt - load_pos)
-            r_xy = float(np.hypot(rho_body[0], rho_body[1]))
-            if r_xy > self.attach_radius and r_xy > 1e-6:      # clamp the phantom lever
-                rho_body[:2] *= self.attach_radius / r_xy
+            rho_body = self._capture_weld_rho(measured, d)
             self.net.set_attach_rho(slot, [float(rho_body[0]), float(rho_body[1]),
                                            self.attach_z])
             self.get_logger().info(
@@ -686,8 +900,10 @@ class DissipativeController(LoadPlanner):
         self.net.attach(slot, measured, cable_len_k=self._attach_cable_len,
                         central=self._attach_central, handout=self._attach_handout,
                         elev_deg_k=self._attach_elev_deg)
-        if d >= self.n:
-            self.attach_pending[d - self.n] = False
+        if self._reserved_index(d) is not None:
+            self.attach_pending[self._reserved_index(d)] = False
+            getattr(self, '_warm_latched', set()).discard(self._reserved_index(d))
+            self._approach.pop(self._reserved_index(d), None)
         self._weld_time[d] = self.get_clock().now()   # start the FF gate ramp for this newcomer
         self.detached[d] = False
         mode = ('central lifter' if self._attach_central
@@ -712,10 +928,125 @@ class DissipativeController(LoadPlanner):
                     f'[dissipative] trajectory held {self._attach_traj_hold_s:.1f} s for the '
                     f'reconfiguration, then resumes')
 
+    def _capture_weld_rho(self, measured, d, clamp=True, keep_z=False):
+        """Load-frame attach point of a drone that just welded: the magnet TIP (one arm
+        length below the body for a reserved newcomer), projected into the load frame
+        and clamped to the attach ring radius (a leaning body over a rim weld must not
+        become a phantom lever, R0179/R0180)."""
+        load_pos = np.asarray(self.load_state[0:3], float)
+        R = quat_to_rot_np(self.load_state[3:7])
+        weld_pt = np.asarray(measured, float)
+        if d >= self._n_carry0:
+            weld_pt = weld_pt - np.array([0.0, 0.0, float(self._attach_cable_len)])
+        rho_body = R.T @ (weld_pt - load_pos)
+        r_xy = float(np.hypot(rho_body[0], rho_body[1]))
+        if clamp and r_xy > self.attach_radius and r_xy > 1e-6:
+            rho_body[:2] *= self.attach_radius / r_xy
+        if not keep_z:
+            rho_body[2] = float(self.attach_z)
+        return rho_body
+
+    def _attach_ocp(self, d):
+        """Attach WITHOUT handing the fleet to the network: grow the OCP in place, the
+        mirror of _detach_ocp. The newcomer's weld point becomes one more attach point of
+        the (generally uneven) ring, its magnet arm one more rod, and the pre-built n+1
+        OCP takes over on the next tick with node 0 pinned to the measured state. The
+        trajectory is held (timed or settle) exactly as the network attach holds it."""
+        if d in self.slot2drone:
+            return                                            # already on the load
+        j = self._reserved_index(d)
+        measured = self.attach_pos[j] if j is not None else (
+            self.drone_pos[d] if d < len(self.drone_pos) else None)
+        if measured is None or self.load_state is None:
+            self.get_logger().warn(f'[dissipative] attach drone {d}: no mocap yet')
+            return
+        # the OCP's attach point for the newcomer is where its rod actually pivots: the
+        # welded TIP (r up to 0.10 outside the ring, its true height), not the rim point
+        # (R0547: the 7 cm between them made the planned 45-deg swing unreachable and
+        # the rod yanked the newcomer over 3 s after the weld)
+        rho_new = self._capture_weld_rho(measured, d, clamp=False, keep_z=True)
+        if self._start_attached and not getattr(self, 'takeoff_seen', False):
+            # welded on the ground with its rod laid out like a carrier's: the body-minus-
+            # arm estimate would put the weld 0.4 m under the ring. Use the plate.
+            R = quat_to_rot_np(self.load_state[3:7])
+            rel = R.T @ (np.asarray(measured, float) - np.asarray(self.load_state[0:3], float))
+            a = float(np.arctan2(rel[1], rel[0]))
+            rho_new = np.array([self.attach_radius * np.cos(a),
+                                self.attach_radius * np.sin(a), float(self.attach_z)])
+            self.get_logger().info(
+                f'[dissipative] drone {d} welded at start: plate at {np.degrees(a):.0f} deg')
+        r_xy = float(np.hypot(rho_new[0], rho_new[1]))
+        if r_xy > self.attach_radius + 0.10:
+            rho_new[:2] *= (self.attach_radius + 0.10) / r_xy
+        rho_new = np.array([float(rho_new[0]), float(rho_new[1]), float(rho_new[2])])
+        rho_all = [np.asarray(self.rho[sl], float) for sl in range(len(self.slot2drone))]
+        rho_all.append(rho_new)
+        lens = [float(v) for v in self.cable_len_i[:len(self.slot2drone)]]
+        lens.append(float(self._attach_cable_len) if j is not None else float(self.cable_len))
+        ids = list(self.slot2drone) + [int(d)]
+        t_before = list(self.refs._t_nom)                    # incumbents' shares pre-resize
+        if not self.resize_fleet(len(ids), ids, rho=rho_all, cable_lengths=lens):
+            self.get_logger().error(
+                f'[dissipative] attach {d} ABORTED: no OCP for n={len(ids)}; the newcomer '
+                f'keeps its hold reference')
+            return
+        # the newcomer's nominal cable must point at the incumbents' common apex, or the
+        # static balance gives it no load (see geometry.apex_direction)
+        self._s_nom[-1] = apex_direction(self.rho[:-1], self._s_nom[:-1], self.rho[-1])
+        self.refs._s_nom = self._s_nom
+        self.refs._t_nom = balanced_tensions(self.dyn.rho, self._s_nom, self.dyn.m)
+        # the parent reads every slot from drone_pos: give the newcomer a slot there
+        while len(self.drone_pos) <= d:
+            self.drone_pos.append(None)
+            self.drone_vel.append(np.zeros(3))
+        self.drone_pos[d] = np.asarray(measured, float).copy()
+        self.drone_vel[d] = np.zeros(3)
+        self._ocp_attached[d] = True
+        if j is not None:
+            self.attach_pending[j] = False
+            getattr(self, '_warm_latched', set()).discard(j)
+            self._approach.pop(j, None)
+        self.detached[d] = False
+        self._weld_time[d] = self.get_clock().now()          # cable-FF ramp for the newcomer
+        # slew the cable references from the weld state: the newcomer's rod as measured
+        # (drone -> rim, ~vertical) carrying nothing, the incumbents at their pre-resize
+        # shares, to the new balanced split over the hold (R0541: the immediate 45-deg
+        # re-plan rolled the Gazebo newcomer over 2 s after the weld)
+        blend_s = self._attach_traj_hold_s if self._attach_traj_hold_s > 0.0 else self._reconfig_hold_s
+        R = quat_to_rot_np(self.load_state[3:7])
+        rim = np.asarray(self.load_state[0:3], float) + R @ rho_new
+        dvec = rim - np.asarray(measured, float)
+        s_new = dvec / max(float(np.linalg.norm(dvec)), 1e-6)
+        s_from = list(self._s_nom[:-1]) + [rot_z(-self.psi0) @ s_new]
+        t_from = t_before + [1.0]                      # keep the new rod taut while it swings
+        self.refs.start_blend(s_from, t_from, blend_s)
+        for _ in range(2):
+            self._prime_solver()
+        if self.solver.last_X is None:
+            self.get_logger().error(
+                f'[dissipative] attach {d}: the n={self.n} OCP did not converge on the '
+                f'current state. The fleet is resized but the first solves may jump.')
+        gap = _largest_gap_deg(self.rho)
+        az = float(np.degrees(np.arctan2(rho_new[1], rho_new[0])))
+        self._approach_hold_armed = False
+        if self._attach_traj_hold_s > 0.0 and self._hold_mode == 'settle':
+            self._reconfig_hold_left = self._hold_max_s
+            self._settle_hold, self._settle_for, self._settle_elapsed = True, 0.0, 0.0
+            self._settle_prev_tilt = None
+            hold = f'held until the load settles (cap {self._hold_max_s:.0f} s)'
+        else:
+            self._reconfig_hold_left = max(self._attach_traj_hold_s, self._reconfig_hold_s)
+            hold = f'held {self._reconfig_hold_left:.1f} s'
+        self.get_logger().warn(
+            f'[dissipative] ATTACH drone {d} (OCP resize): n={self.n}, weld at azimuth '
+            f'{az:.0f} deg (r={float(np.hypot(rho_new[0], rho_new[1])):.2f}), rod {lens[-1]:.2f} m, '
+            f'tensions {[round(v, 2) for v in self.refs._t_nom]}; '
+            f'trajectory {hold}; ring gap {gap:.0f} deg')
+
     def _net_slot2drone(self):
         """Network slot -> physical drone for ALL n_net nodes: the parent's (possibly
         azimuth-reassigned) tethered mapping, then identity for the reserved drones."""
-        return list(self.slot2drone) + list(range(self.n, self.n_net))
+        return list(self.slot2drone) + list(range(self._n_carry0, self.n_net))
 
     def _drone_to_net_slot(self, d):
         s2d = self._net_slot2drone()
@@ -725,7 +1056,7 @@ class DissipativeController(LoadPlanner):
         """Measured position of the drone in network slot `slot`: drone_pos for a tethered
         slot, attach_pos for a reserved one. None if that mocap has not arrived yet."""
         d = self._net_slot2drone()[slot]
-        return self.drone_pos[d] if d < self.n else self.attach_pos[d - self.n]
+        return self.drone_pos[d] if d < self._n_carry0 else self.attach_pos[d - self._n_carry0]
 
     def _enter_network_phase(self):
         """planner -> network: seed the spring-damper network from the current (airborne,
@@ -912,7 +1243,7 @@ class DissipativeController(LoadPlanner):
             # a reserved drone that has not yet welded on is owned by the collaborator's
             # approach controller -- publish nothing for it (the motor mux forwards their
             # stream until /magnet/object_attached flips us in).
-            if drone >= self.n and self.attach_pending[drone - self.n]:
+            if drone >= self._n_carry0 and self.attach_pending[drone - self._n_carry0]:
                 continue
             if self.detached[drone]:
                 node = self._detached_reference(i)
@@ -952,6 +1283,14 @@ class DissipativeController(LoadPlanner):
         (see handover_blend_s). Wire format untouched."""
         if self.phase != 'network':
             self._last_ocp_ac[i] = np.asarray(nodes[0][3], float).copy()
+            if i in self._weld_time and self._ocp_attached.get(i, False):
+                gate = self._attach_ff_gate(i)
+                if gate < 1.0:
+                    nodes = [(p_, v_, a_, np.asarray(ac_, float) * gate)
+                             for p_, v_, a_, ac_ in nodes]
+                if self._attach_velocity_newcomer:
+                    nodes = [(p_, v_, np.asarray(a_, float) - np.asarray(ac_, float), ac_)
+                             for p_, v_, a_, ac_ in nodes]
         elif (self._handover_blend_s > 0.0 and self._ho_t0 is not None
               and i < self.n and i in self._ho_ac and not self.detached[i]):
             el = (self.get_clock().now() - self._ho_t0).nanoseconds * 1e-9
@@ -1007,12 +1346,12 @@ class DissipativeController(LoadPlanner):
             drone = net_s2d[i]
             if self.detached[drone]:
                 continue
-            if drone >= self.n and self.attach_pending[drone - self.n]:
+            if drone >= self._n_carry0 and self.attach_pending[drone - self._n_carry0]:
                 continue
             pos = self._net_pos(i)
             if pos is None:
                 continue
-            gate = 1.0 if drone >= self.n else self._cable_taut_gate(i)[0]
+            gate = 1.0 if drone >= self._n_carry0 else self._cable_taut_gate(i)[0]
             p_ref, _, a_ff, a_cable = self.net.reference(
                 i, load_quat, p_des, taut_gate=gate)
             perr = float(np.linalg.norm(p_ref - pos))

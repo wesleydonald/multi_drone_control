@@ -177,6 +177,9 @@ def _args():
         # The hardware launches (real_*.py) keep their own measured 24.
         DeclareLaunchArgument('thrust_ratio', default_value='auto'),
         # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
+        # tracker pose watchdog (wall clock); 0.25 is the node default and the rig value.
+        # Headless sim runs under CPU load trip it before liftoff (R0493/R0511/R0551/R0555).
+        DeclareLaunchArgument('pose_timeout_s', default_value='0.25'),
         DeclareLaunchArgument('kt_trim', default_value='true'),
         DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
         DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
@@ -283,6 +286,7 @@ def launch_setup(context, *args, **kwargs):
                          'cable_source': LaunchConfiguration('cable_source'),
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
+                         'pose_timeout_s': ParameterValue(LaunchConfiguration('pose_timeout_s'), value_type=float),
                          'thrust_ratio': kt,
                          'kt_trim': ParameterValue(LaunchConfiguration('kt_trim'), value_type=bool),
                          'kt_trim_max': ParameterValue(LaunchConfiguration('kt_trim_max'), value_type=float),

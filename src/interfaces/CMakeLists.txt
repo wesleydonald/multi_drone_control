@@ -29,7 +29,10 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Telemetry.msg"
   "msg/InvertedPendulumStates.msg"
   "msg/ControlApplied.msg"
+  "msg/CubicTrajectoryPiece.msg"
+  "msg/CommittedTrajectory.msg"
   "srv/SetArming.srv"
+  "srv/PlanPath.srv"
   DEPENDENCIES std_msgs geometry_msgs  # Specify dependencies here
 )
 

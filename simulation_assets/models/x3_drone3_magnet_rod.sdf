@@ -386,7 +386,7 @@
         <joint name="base_to_magnet_arm" type="ball">
             <parent>base_link</parent>
             <child>magnet_arm</child>
-            <pose>0 0 -0.05 0 0 0</pose>
+            <pose>0 0 0 0 0 0</pose><!-- at the body centre like the tethered drones (Wesley 2026-09-25; R0552) -->
             <axis><xyz>1 0 0</xyz><dynamics><damping>0.1</damping></dynamics></axis>
             <axis2><xyz>0 1 0</xyz><dynamics><damping>0.1</damping></dynamics></axis2>
         </joint>

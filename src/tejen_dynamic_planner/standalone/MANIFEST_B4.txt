@@ -1,0 +1,43 @@
+R6.3B.4 changed/new files relative to R6_3B_3_Ra2_final_aug31_v2
+================================================================
+NEW  include/dynamic_planner/ego_collision_model.hpp
+NEW  src/ego_collision_model.cpp
+MOD  include/dynamic_planner/world_snapshot.hpp
+MOD  src/world_snapshot.cpp
+MOD  src/trajectory_safety_checker.cpp
+MOD  tests/test_recheck_commit.cpp
+NEW  tests/test_ego_collision_model.cpp
+NEW  tests/test_suspended_world.cpp
+NEW  tests/run_suspended_system_tests.cmake
+NEW  apps/suspended_system_demo.cpp
+MOD  CMakeLists.txt
+MOD  README_FIRST.txt
+NEW  B4_IMPLEMENTATION_NOTES.txt
+NEW  B4_ASSISTANT_VALIDATION.txt
+NEW  INSTALL_AND_TEST_COMMANDS_B4.txt
+NEW  MANIFEST_B4.txt
+
+No changes to the core search/refinement source files listed in B4_IMPLEMENTATION_NOTES.txt.
+
+B.4.1 cumulative follow-up additionally modifies:
+MOD  apps/suspended_system_demo.cpp
+MOD  tests/run_suspended_system_tests.cmake
+MOD  CMakeLists.txt
+MOD  README_FIRST.txt
+MOD  INSTALL_AND_TEST_COMMANDS_B4.txt
+MOD  B4_ASSISTANT_VALIDATION.txt
+MOD  B4_IMPLEMENTATION_NOTES.txt
+NEW  B4_1_OCTOPUS_9_RUNTIME.txt
+NEW  MANIFEST_B4_1.txt
+
+
+B.4.2 cumulative follow-up additionally modifies:
+MOD  apps/suspended_system_demo.cpp
+MOD  tests/run_suspended_system_tests.cmake
+MOD  CMakeLists.txt
+MOD  README_FIRST.txt
+MOD  INSTALL_AND_TEST_COMMANDS_B4.txt
+MOD  B4_ASSISTANT_VALIDATION.txt
+MOD  B4_IMPLEMENTATION_NOTES.txt
+NEW  B4_2_REPLAN_10HZ.txt
+NEW  MANIFEST_B4_2.txt
