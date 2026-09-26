@@ -83,7 +83,6 @@ def _args():
         DeclareLaunchArgument('z_ki', default_value='0.4'),      # planner height integral, 0 = off (card 2026-09-24_planner_offset)
         DeclareLaunchArgument('z_i_max', default_value='0.15'),
         DeclareLaunchArgument('z_taut_gate', default_value='0.99'),
-        DeclareLaunchArgument('z_ki_in_orbit', default_value='false'),   # height integral also during a level orbit
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         DeclareLaunchArgument('cable_ff_scale', default_value='1.0'),
         DeclareLaunchArgument('attitude_ff', default_value='true'),
@@ -401,7 +400,6 @@ def launch_setup(context, *args, **kwargs):
                      'z_ki': f('z_ki'),
                      'z_i_max': f('z_i_max'),
                      'z_taut_gate': f('z_taut_gate'),
-                     'z_ki_in_orbit': b('z_ki_in_orbit'),
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),

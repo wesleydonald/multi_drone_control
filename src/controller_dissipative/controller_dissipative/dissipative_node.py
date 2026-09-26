@@ -319,11 +319,6 @@ class DissipativeController(LoadPlanner):
         if self._reconfig_mode not in ('network', 'ocp'):
             raise ValueError("reconfig_mode must be 'network' or 'ocp', got "
                              f'{self._reconfig_mode!r}')
-        if getattr(self, '_z_ki_in_orbit', False) and self._reconfig_mode != 'ocp':
-            # the network keeps the unshifted target height: an orbit-grown integral would
-            # step it at network entry (card 2026-09-27_zki_orbit, critic)
-            self._z_ki_in_orbit = False
-            self.get_logger().warn('[dissipative] z_ki_in_orbit needs reconfig_mode ocp: off')
         # Seconds to freeze the trajectory clock across a resize. A plain timer, not a
         # settle detector: the settle detector this replaced timed out on a fleet that
         # was already still, because it tested "load reached its target" against a
