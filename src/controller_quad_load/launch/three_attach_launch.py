@@ -177,9 +177,12 @@ def _args():
         # the measured load error, added identically to every node's a_ff. 0.0 = off.
         DeclareLaunchArgument('diss_handout_tension_blend', default_value='true'),
         DeclareLaunchArgument('diss_wrench_true_attitude', default_value='false'),
+        DeclareLaunchArgument('weld_velocity_clock', default_value='wall'),   # weld speed gate clock: wall (historical) | sim
+        DeclareLaunchArgument('weld_vel_filter_s', default_value='0.0'),   # weld speed gate: low-pass on the relative velocity (s)
         DeclareLaunchArgument('attach_seek_m', default_value='0.0'),   # approach: seek below the weld height
         DeclareLaunchArgument('attach_t_start_new', default_value='1.0'),   # newcomer rod tension at the weld (N)
-        DeclareLaunchArgument('attach_blend_balanced', default_value='false'),   # keep the post-weld slew statically balanced
+        DeclareLaunchArgument('attach_blend_balanced', default_value='false'),
+        DeclareLaunchArgument('attach_datum_shift', default_value='false'),   # carry the ring's xy offset through the attach resize   # keep the post-weld slew statically balanced
         DeclareLaunchArgument('attach_traj_hold_s', default_value='10.0'),   # hold until the weld, then this long
         # 'timed' = the hold above; 'settle' = end the post-weld hold when the load tilt has
         # settled (tools/hybrid_dwell.py: a computed dwell instead of a tuned one)
@@ -426,6 +429,7 @@ def launch_setup(context, *args, **kwargs):
                      'attach_seek_m': f('attach_seek_m'),
                      'attach_t_start_new': f('attach_t_start_new'),
                      'attach_blend_balanced': b('attach_blend_balanced'),
+                     'attach_datum_shift': b('attach_datum_shift'),
                      'attach_traj_hold_mode': LaunchConfiguration('attach_traj_hold_mode'),
                      'hold_resume_tilt_deg': f('hold_resume_tilt_deg'),
                      'hold_max_s': f('hold_max_s'),
@@ -693,6 +697,8 @@ def launch_setup(context, *args, **kwargs):
                      # still-descending drone push the now-rigid rod into the ring: carriers
                      # dropped 0.25 m and the ring tipped 25-35 deg (R0640, R0642)
                      **({'attach_speed_threshold': 0.05} if partner else {}),
+                     'rel_vel_filter_tau_s': f('weld_vel_filter_s'),
+                     'velocity_clock': LaunchConfiguration('weld_velocity_clock'),
                      'object_attached_topic': '/magnet/object_attached',
                      'command_backend': 'ros_topic',
                      'ros_attach_topic': '/payload/attach',

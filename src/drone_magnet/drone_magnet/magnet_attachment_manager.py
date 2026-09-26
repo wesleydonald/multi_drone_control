@@ -94,6 +94,17 @@ class MagnetAttachmentManager(Node):
         # Attachment conditions.
         self.attach_radius = float(self.declare_parameter('attach_radius', 0.12).value)
         self.attach_speed_threshold = float(self.declare_parameter('attach_speed_threshold', 0.35).value)
+        # low-pass on the relative VELOCITY vector before the speed gate (0 = off): a free
+        # pendulum swing of the 3 g magnet arm averages out, a real approach speed does not
+        # (sim DART ignores ball-joint damping; the arm swung ~80 s before the gate passed, R0660)
+        self.rel_vel_filter_tau_s = float(self.declare_parameter('rel_vel_filter_tau_s', 0.0).value)
+        # 'wall' (historical) differences poses over time.time(): at RTF 0.25 every speed
+        # reads 4x low and the 0.05 m/s at-rest gate passed a drone still descending at
+        # 0.12 m/s (R0668, 23.5 deg weld). 'sim' uses the message stamps (sim time).
+        self.velocity_clock = str(self.declare_parameter('velocity_clock', 'wall').value)
+        self._vel_t = {}
+        self._rel_vel_f = None
+        self._rel_vel_t = None
         self.attach_dwell_time_s = float(self.declare_parameter('attach_dwell_time_s', 0.15).value)
         self.pose_timeout_s = float(self.declare_parameter('pose_timeout_s', 1.0).value)
         self.command_timeout_s = float(self.declare_parameter('command_timeout_s', 0.0).value)  # 0 disables timeout
@@ -240,11 +251,30 @@ class MagnetAttachmentManager(Node):
         now: float,
         old_position: Optional[np.ndarray],
         old_time: Optional[float],
+        key: Optional[str] = None,
+        stamp: Optional[float] = None,
+        old_velocity: Optional[np.ndarray] = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
+        if key is not None and self.velocity_clock == 'sim' and stamp is not None:
+            t_old = self._vel_t.get(key)
+            if old_position is None or t_old is None:
+                self._vel_t[key] = stamp
+                return new_position, np.zeros(3, dtype=float)
+            dt = stamp - t_old
+            if dt < 1e-4:          # same sim tick (or out of order): keep the last estimate
+                return new_position, (np.zeros(3) if old_velocity is None else old_velocity)
+            self._vel_t[key] = stamp
+            return new_position, (new_position - old_position) / dt
         if old_position is None or old_time is None:
             return new_position, np.zeros(3, dtype=float)
         dt = max(1e-6, now - old_time)
         return new_position, (new_position - old_position) / dt
+
+    def _stamp(self, msg) -> Optional[float]:
+        h = getattr(msg, 'header', None)
+        if h is not None and (h.stamp.sec or h.stamp.nanosec):
+            return h.stamp.sec + h.stamp.nanosec * 1e-9
+        return self.get_clock().now().nanoseconds * 1e-9
 
     def magnet_tip_pose_callback(self, msg: PoseArray) -> None:
         pose = self._select_pose(msg, self.magnet_tip_pose_index)
@@ -259,7 +289,8 @@ class MagnetAttachmentManager(Node):
         new_pos = self._pose_to_position(pose)
         self.prev_magnet_tip_position = self.magnet_tip_position
         self.magnet_tip_position, self.magnet_tip_velocity = self._update_position_and_velocity(
-            new_pos, now, self.magnet_tip_position, self.last_magnet_tip_time
+            new_pos, now, self.magnet_tip_position, self.last_magnet_tip_time,
+            'tip', self._stamp(msg), self.magnet_tip_velocity
         )
         self.last_magnet_tip_time = now
 
@@ -269,7 +300,8 @@ class MagnetAttachmentManager(Node):
         new_pos = self._pose_to_position(msg.pose)
         self.prev_magnet_tip_position = self.magnet_tip_position
         self.magnet_tip_position, self.magnet_tip_velocity = self._update_position_and_velocity(
-            new_pos, now, self.magnet_tip_position, self.last_magnet_tip_time
+            new_pos, now, self.magnet_tip_position, self.last_magnet_tip_time,
+            'tip', self._stamp(msg), self.magnet_tip_velocity
         )
         self.last_magnet_tip_time = now
 
@@ -282,12 +314,12 @@ class MagnetAttachmentManager(Node):
                 throttle_duration_sec=2.0,
             )
             return
-        self._update_object_pose(pose)
+        self._update_object_pose(pose, self._stamp(msg))
 
     def object_state_callback(self, msg: MotionCaptureState) -> None:
-        self._update_object_pose(msg.pose)
+        self._update_object_pose(msg.pose, self._stamp(msg))
 
-    def _update_object_pose(self, pose: Pose) -> None:
+    def _update_object_pose(self, pose: Pose, stamp: Optional[float] = None) -> None:
         now = time.time()
         new_pos = self._pose_to_position(pose)
         # off-centre weld reference (see __init__), rotated into the payload's attitude so
@@ -299,7 +331,8 @@ class MagnetAttachmentManager(Node):
         new_pos[2] += off[2]
         self.prev_object_position = self.object_position
         self.object_position, self.object_velocity = self._update_position_and_velocity(
-            new_pos, now, self.object_position, self.last_object_time
+            new_pos, now, self.object_position, self.last_object_time,
+            'object', stamp, self.object_velocity
         )
         self.last_object_time = now
 
@@ -549,6 +582,15 @@ class MagnetAttachmentManager(Node):
         rel = self.magnet_tip_position - object_pos
         distance = float(np.linalg.norm(rel))
         rel_vel = self.magnet_tip_velocity - self.object_velocity
+        if self.rel_vel_filter_tau_s > 0.0:
+            t_sim = self.get_clock().now().nanoseconds * 1e-9     # the wall clock runs 4x at RTF 0.25
+            if self._rel_vel_f is None:
+                self._rel_vel_f = rel_vel.copy()
+            else:
+                a = min(1.0, max(0.0, t_sim - self._rel_vel_t) / self.rel_vel_filter_tau_s)
+                self._rel_vel_f = self._rel_vel_f + a * (rel_vel - self._rel_vel_f)
+            self._rel_vel_t = t_sim
+            rel_vel = self._rel_vel_f
         relative_speed = float(np.linalg.norm(rel_vel))
         self.last_distance = distance
         self.last_relative_speed = relative_speed

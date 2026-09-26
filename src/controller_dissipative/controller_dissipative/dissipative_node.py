@@ -185,6 +185,7 @@ class DissipativeController(LoadPlanner):
         self._attach_seek_m = float(p('attach_seek_m', 0.0).value)
         self._attach_t_start_new = float(p('attach_t_start_new', 1.0).value)
         self._attach_blend_balanced = bool(p('attach_blend_balanced', False).value)
+        self._attach_datum_shift = bool(p('attach_datum_shift', False).value)
         # 'timed': the hold above. 'settle': the post-weld hold ends once the load tilt
         # has settled (below hold_resume_tilt_deg and quiet for hold_settle_s), capped at
         # hold_max_s -- a measured dwell instead of a tuned one (tools/hybrid_dwell.py:
@@ -1024,6 +1025,15 @@ class DissipativeController(LoadPlanner):
         s_from = list(self._s_nom[:-1]) + [rot_z(-self.psi0) @ s_new]
         # the newcomer's start tension acts off the incumbents' apex: a moment on the ring
         t_from = t_before + [self._attach_t_start_new]
+        if self._attach_datum_shift and self.load_state is not None:
+            # BUMPLESS in xy, as the network handover: the approach hold froze the orbit
+            # reference while the ring coasted on (0.13 m off at the weld, R0669) and the
+            # fresh n+1 plan pulled it back in 0.7 s (32 deg). Carry the offset instead.
+            off = np.asarray(self.load_state[0:2], float) - self._current_load_des()[:2]
+            if float(np.linalg.norm(off)) > 1e-3:
+                self.hover_xy = (float(self.hover_xy[0] + off[0]), float(self.hover_xy[1] + off[1]))
+                self.get_logger().info(
+                    f'[dissipative] attach datum shifted ({off[0]:+.3f},{off[1]:+.3f}) m onto the measured load')
         self.refs.balanced_blend = self._attach_blend_balanced
         self.refs.start_blend(s_from, t_from, blend_s)
         for _ in range(2):
