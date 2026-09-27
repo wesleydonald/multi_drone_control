@@ -36,7 +36,7 @@ from interfaces.msg import MotionCaptureState
 from .load_cable_dynamics import LoadCableDynamics, LOAD_DIM, CABLE_DIM
 from .geometry import (quat_to_rot_np, attach_points, nominal_cable_dirs,
                        azimuth_slot_assignment, yaw_from_quat)
-from .load_trajectory import LoadTrajectory
+from .load_trajectory import LoadTrajectory, ORBIT_RAMP_S
 from .planner_solver import PlannerSolver
 from .params import PlannerConfig, load_inertia
 from .creep_controller import CreepController
@@ -53,6 +53,7 @@ from utility_objects.run_context import log_base_dir
 # recompute from the real payload's dimensions.
 from .params import DRONE_MASS   # sim airframe 0.64 kg; the node reads the drone_mass param
 PLANNER_HZ    = 10.0
+Z_KI_ORBIT_MAX_ACC = 0.05  # m/s^2 centripetal: M1 orbits at 0.031; 0.4 m/s circles sag 15 cm (R0484)
 LAND_BLEND_S  = 1.0     # s, flight feedforward -> hover when the load touches down
 LAND_FOLLOW_XY_Z = 0.25  # m, below this a landing drone's xy reference follows its measured xy
 
@@ -247,6 +248,9 @@ class LoadPlanner(Node):
         self.lift_ramp_vel = cfg.lift_ramp_vel
         self._zbias = ZBias(cfg.z_ki, cfg.z_i_max, PLANNER_HZ)
         self._z_taut_gate = cfg.z_taut_gate
+        # opt-in: keep integrating through a constant-speed level orbit (M1 orbits from the
+        # end of the lift, so the gated hover never happens and the ring flies 6 cm high, R0653)
+        self._z_ki_in_orbit = bool(self.declare_parameter('z_ki_in_orbit', False).value)
         self._zbias_warned = False
         self._load_t = None                    # monotonic time of the last payload pose
         self.auto_slot_assign = cfg.auto_slot_assign
@@ -1015,7 +1019,9 @@ class LoadPlanner(Node):
         if self.lift_z0 is None or self.load_state is None or self._load_t is None:
             return False
         lift_complete = self.lift_progress >= (self.target_z - self.lift_z0) - 1e-6
-        if not lift_complete or self.descending or self._land_to_ground or self.traj_t > 0.0:
+        if not lift_complete or self.descending or self._land_to_ground:
+            return False
+        if self.traj_t > 0.0 and not self._zbias_orbit_ok():
             return False
         if abs(float(self.load_state[9])) >= 0.05:
             return False
@@ -1027,6 +1033,19 @@ class LoadPlanner(Node):
             if self._drone_at(i) is None or self._cable_taut_gate(i)[0] < self._z_taut_gate:
                 return False
         return True
+
+    def _zbias_orbit_ok(self):
+        """The opt-in orbit window (card 2026-09-27_zki_orbit): a level `orbit` past its
+        spin-up, on ticks where its clock actually advanced (reconfiguration and approach
+        holds freeze traj_t above the ramp while the ring sits off its reference), and slow
+        enough that the centripetal sag is not integrated as a static offset."""
+        advanced = self.traj_t > getattr(self, '_zbias_traj_t_prev', 0.0)
+        self._zbias_traj_t_prev = self.traj_t
+        if not (self._z_ki_in_orbit and self.traj.kind == 'orbit' and advanced
+                and self.traj_t > ORBIT_RAMP_S):
+            return False
+        r = max(float(self.traj.radius), 1e-6)
+        return float(self.traj.speed) ** 2 / r <= Z_KI_ORBIT_MAX_ACC
 
     def _update_zbias(self):
         if self._zbias.ki <= 0.0 or self.load_state is None:

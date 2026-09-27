@@ -51,9 +51,13 @@ class ApproachProfile:
         self._seek = 0.0
         self.phase = 'climb'
 
-    def step(self, target):
-        """target: live magnet-tip target (world). Returns (p_ref, v_ff, phase)."""
+    def step(self, target, target_vel=None):
+        """target: live magnet-tip target (world); target_vel: its velocity (a moving ring),
+        carried by the reference and fed forward after the climb. Returns (p_ref, v_ff, phase)."""
         t = np.asarray(target, float)
+        v_t = np.zeros(3) if target_vel is None else np.asarray(target_vel, float)
+        if self.phase != 'climb':
+            self.p_ref = self.p_ref + v_t * self.dt
         body_on_target = t + np.array([0.0, 0.0, self.arm_len + TIP_STANDOFF_M])
         z_clear = float(body_on_target[2] + self.clearance)
         if self.phase == 'climb':
@@ -77,4 +81,6 @@ class ApproachProfile:
             goal[2] -= self._seek
             self.p_ref, v_z = carrot_step(self.p_ref, goal, DESCENT_VEL, self.dt)
             v = v_xy + v_z
+        if self.phase != 'climb':
+            v = v + v_t
         return self.p_ref.copy(), v, self.phase

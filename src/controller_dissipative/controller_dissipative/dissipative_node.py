@@ -32,7 +32,7 @@ import numpy as np
 import rclpy
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Int32, Empty, Bool, Float64MultiArray, String
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped
 from controller_dissipative.approach import ApproachProfile, carrot_step
 
 from interfaces.msg import MotionCaptureState
@@ -176,6 +176,8 @@ class DissipativeController(LoadPlanner):
         self._attach_target = None
         self._approach = {}                     # reserved index j -> ApproachProfile
         # always: a partner handoff enables the approach mid-flight
+        self._attach_target_vel = np.zeros(3)
+        self.create_subscription(TwistStamped, '/attach_target/twist', self._attach_twist_cb, 10)
         self.create_subscription(PoseStamped, '/attach_target/pose',
                                  self._attach_target_cb, 5)
         # TRAJECTORY HOLD ON ATTACH (s): freeze the load target for this long after a weld
@@ -186,6 +188,10 @@ class DissipativeController(LoadPlanner):
         self._attach_t_start_new = float(p('attach_t_start_new', 0.1).value)
         self._attach_blend_balanced = bool(p('attach_blend_balanced', True).value)
         self._attach_datum_shift = bool(p('attach_datum_shift', True).value)
+        # opt-in: the trajectory keeps running through the rejoin (Tejen's request): no approach
+        # hold, only the plain reconfiguration hold at the weld, the approach tracks the moving
+        # plate with its velocity fed forward; the tension blend still spans attach_traj_hold_s
+        self._attach_moving = bool(p('attach_moving', False).value)
         # 'timed': the hold above. 'settle': the post-weld hold ends once the load tilt
         # has settled (below hold_resume_tilt_deg and quiet for hold_settle_s), capped at
         # hold_max_s -- a measured dwell instead of a tuned one (tools/hybrid_dwell.py:
@@ -319,6 +325,11 @@ class DissipativeController(LoadPlanner):
         if self._reconfig_mode not in ('network', 'ocp'):
             raise ValueError("reconfig_mode must be 'network' or 'ocp', got "
                              f'{self._reconfig_mode!r}')
+        if getattr(self, '_z_ki_in_orbit', False) and self._reconfig_mode != 'ocp':
+            # the network keeps the unshifted target height: an orbit-grown integral would
+            # step it at network entry (card 2026-09-27_zki_orbit, critic)
+            self._z_ki_in_orbit = False
+            self.get_logger().warn('[dissipative] z_ki_in_orbit needs reconfig_mode ocp: off')
         # Seconds to freeze the trajectory clock across a resize. A plain timer, not a
         # settle detector: the settle detector this replaced timed out on a fleet that
         # was already still, because it tested "load reached its target" against a
@@ -565,6 +576,10 @@ class DissipativeController(LoadPlanner):
         q = msg.pose.position
         self._attach_target = np.array([q.x, q.y, q.z])
 
+    def _attach_twist_cb(self, msg: TwistStamped):
+        v = msg.twist.linear
+        self._attach_target_vel = np.array([v.x, v.y, v.z])
+
     def _start_approach(self):
         """ATTACH commanded: every pending reserved drone with a pose starts its approach
         from where it is (bumpless first reference)."""
@@ -612,7 +627,9 @@ class DissipativeController(LoadPlanner):
                 continue                  # released partner drone: its fixed hold flies it
             prof = self._approach.get(j)
             if prof is not None and self._attach_target is not None:
-                p_ref, v_ff, phase = prof.step(self._attach_target)
+                p_ref, v_ff, phase = prof.step(
+                    self._attach_target,
+                    self._attach_target_vel if self._attach_moving else None)
                 if phase != getattr(prof, '_logged', None):
                     prof._logged = phase
                     self.get_logger().info(
@@ -870,6 +887,11 @@ class DissipativeController(LoadPlanner):
         if msg.data.strip().upper() == 'ON' and self.phase in ('planner', 'network') \
                 and not getattr(self, '_approach_hold_armed', False):
             self._approach_hold_armed = True
+            if self._attach_moving:
+                self.get_logger().info('[dissipative] ATTACH commanded: trajectory keeps running '
+                                       '(attach_moving)')
+                self._start_approach()
+                return
             # Hold for as long as the approach takes (it is ~11 s and a timed hold that
             # expires first hands the descending tip a moving target: R0201/R0202). The
             # weld replaces this with the timed reconfiguration hold. Capped so a failed
@@ -1084,7 +1106,8 @@ class DissipativeController(LoadPlanner):
             self._settle_prev_tilt = None
             hold = f'held until the load settles (cap {self._hold_max_s:.0f} s)'
         else:
-            self._reconfig_hold_left = max(self._attach_traj_hold_s, self._reconfig_hold_s)
+            self._reconfig_hold_left = (self._reconfig_hold_s if self._attach_moving
+                                        else max(self._attach_traj_hold_s, self._reconfig_hold_s))
             hold = f'held {self._reconfig_hold_left:.1f} s'
         self.get_logger().warn(
             f'[dissipative] ATTACH drone {d} (OCP resize): n={self.n}, weld at azimuth '

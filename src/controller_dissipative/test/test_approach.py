@@ -62,3 +62,16 @@ def test_seek_engages_on_a_jittering_target():
     for k in range(300):
         p, v, _ = prof.step(np.array([0.0, 0.0, 0.5 + 0.002 * (-1) ** k]))
     assert p[2] < body0 - 0.045
+
+
+def test_moving_target_is_tracked_with_its_velocity_fed_forward():
+    v_t = np.array([0.1, -0.05, 0.0])
+    target = np.array([0.0, 0.0, 0.5])
+    body = 0.5 + 0.49 + TIP_STANDOFF_M
+    prof = ApproachProfile(np.array([0.0, 0.0, body + 0.1]), 0.49, 0.1)
+    prof.phase = 'descend'
+    for _ in range(300):
+        target = target + v_t * 0.1
+        p, v, _ = prof.step(target, v_t)
+    assert np.allclose(p[:2], target[:2], atol=0.02)
+    assert np.allclose(v, v_t, atol=1e-6)

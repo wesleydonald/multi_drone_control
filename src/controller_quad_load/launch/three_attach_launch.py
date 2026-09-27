@@ -83,6 +83,7 @@ def _args():
         DeclareLaunchArgument('z_ki', default_value='0.4'),      # planner height integral, 0 = off (card 2026-09-24_planner_offset)
         DeclareLaunchArgument('z_i_max', default_value='0.15'),
         DeclareLaunchArgument('z_taut_gate', default_value='0.99'),
+        DeclareLaunchArgument('z_ki_in_orbit', default_value='false'),   # height integral also during a level orbit
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         DeclareLaunchArgument('cable_ff_scale', default_value='1.0'),
         DeclareLaunchArgument('attitude_ff', default_value='true'),
@@ -182,7 +183,8 @@ def _args():
         DeclareLaunchArgument('attach_seek_m', default_value='0.0'),   # approach: seek below the weld height
         DeclareLaunchArgument('attach_t_start_new', default_value='0.1'),   # newcomer rod tension at the weld (N)
         DeclareLaunchArgument('attach_blend_balanced', default_value='true'),
-        DeclareLaunchArgument('attach_datum_shift', default_value='true'),   # carry the ring's xy offset through the attach resize   # keep the post-weld slew statically balanced
+        DeclareLaunchArgument('attach_datum_shift', default_value='true'),
+        DeclareLaunchArgument('attach_moving', default_value='false'),   # trajectory keeps running through the rejoin   # carry the ring's xy offset through the attach resize   # keep the post-weld slew statically balanced
         DeclareLaunchArgument('attach_traj_hold_s', default_value='10.0'),   # hold until the weld, then this long
         # 'timed' = the hold above; 'settle' = end the post-weld hold when the load tilt has
         # settled (tools/hybrid_dwell.py: a computed dwell instead of a tuned one)
@@ -400,6 +402,7 @@ def launch_setup(context, *args, **kwargs):
                      'z_ki': f('z_ki'),
                      'z_i_max': f('z_i_max'),
                      'z_taut_gate': f('z_taut_gate'),
+                     'z_ki_in_orbit': b('z_ki_in_orbit'),
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
@@ -430,6 +433,7 @@ def launch_setup(context, *args, **kwargs):
                      'attach_t_start_new': f('attach_t_start_new'),
                      'attach_blend_balanced': b('attach_blend_balanced'),
                      'attach_datum_shift': b('attach_datum_shift'),
+                     'attach_moving': b('attach_moving'),
                      'attach_traj_hold_mode': LaunchConfiguration('attach_traj_hold_mode'),
                      'hold_resume_tilt_deg': f('hold_resume_tilt_deg'),
                      'hold_max_s': f('hold_max_s'),
