@@ -217,7 +217,7 @@ def generate_launch_description() -> LaunchDescription:
             # periodic ARM state heartbeat: a single startup message can be lost, and his
             # supervisor then never arms (R0638, R0641 'arming_feedback_received': False)
             'arming_state_feedback_period_s': 0.5,        # body centre to tip on x3_drone3_magnet_rod_partner
-            # carried-object gain schedule (G1b; 0 = off): kT*m_d/(m_d+m_obj) while the object is on
+            # carried-object gain schedule (G1b; 0 = off; default 0.1 kg = payload_model.sdf): kT*m_d/(m_d+m_obj) while the object is on
             'object_mass_kg': ParameterValue(L('object_mass_kg'), value_type=float),
             'object_vehicle_mass_kg': 0.643,
             'object_attached_topic': f'/{NS}/object_attached',
@@ -276,7 +276,7 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription([
         DeclareLaunchArgument('plate', default_value='9'),
-        DeclareLaunchArgument('object_mass_kg', default_value='0.0'),
+        DeclareLaunchArgument('object_mass_kg', default_value='0.1'),   # the 0.1 kg object (payload_model.sdf)
         # the all-attached start: '[150.0, 270.0, 30.0]', plate 3, gate /partner/release
         DeclareLaunchArgument('carrier_azimuths_deg', default_value='[330.0, 90.0, 210.0]'),
         DeclareLaunchArgument('pickup_lift_height', default_value='1.40'),   # lift ends ~1.9 m, above the 1.8 m search floor (R0639 ended at 1.75)

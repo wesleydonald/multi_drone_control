@@ -1,14 +1,16 @@
 <sdf version="1.6">
+  <!-- 0.1 kg object (Wesley 2026-09-27; the real ~0.1 kg steel ball is ~0.029 m across, the 0.08 m sim geometry is kept);
+       solid-sphere inertia 2/5 m r^2 (the shipped 0.002 at 0.01 kg was 78x too large) -->
   <model name="payload_model">
     <pose>0 0 0 0 0 0</pose>
 
     <link name="payload_link">
       <inertial>
-        <mass>0.01</mass>
+        <mass>0.1</mass>
         <inertia>
-          <ixx>0.002</ixx>
-          <iyy>0.002</iyy>
-          <izz>0.002</izz>
+          <ixx>2.56e-4</ixx>
+          <iyy>2.56e-4</iyy>
+          <izz>2.56e-4</izz>
         </inertia>
       </inertial>
 
