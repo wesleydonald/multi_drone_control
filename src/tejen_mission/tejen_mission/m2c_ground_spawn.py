@@ -328,8 +328,14 @@ def generate_m2c_assets(
     ring_yaw_deg: float = M2C_RING_YAW_DEG,
     manifest_path: Path | None = None,
     stage_layout: str = STAGE_LAYOUT_NOMINAL,
+    imu_system: bool = False,
 ) -> dict:
-    """Generate four X3 copies, a four-joint ring, and an M2C world."""
+    """Generate four X3 copies, a four-joint ring, and an M2C world.
+
+    ``imu_system`` (multi_drone_control opt-in for the gyro rate loop) adds one
+    world-level Imu system so each X3's inert imu_sensor publishes; entities are
+    unchanged, so the legacy PoseArray indices are too.
+    """
 
     source_x3 = Path(source_x3).resolve()
     source_ring = Path(source_ring).resolve()
@@ -425,6 +431,16 @@ def generate_m2c_assets(
     for plugin in list(generic_sensor_plugins):
         x3_include.remove(plugin)
 
+    if imu_system:
+        if ET.parse(source_x3).getroot().find(".//sensor[@type='imu']") is None:
+            raise RuntimeError("imu_system requested but the source X3 has no imu sensor")
+        last = max(k for k, el in enumerate(world) if el.tag == "plugin")
+        imu_plugin = ET.Element(
+            "plugin", filename="gz-sim-imu-system", name="gz::sim::systems::Imu"
+        )
+        imu_plugin.tail = world[last].tail
+        world.insert(last + 1, imu_plugin)
+
     def _set_pose_update_rate(include: ET.Element, update_hz: float) -> None:
         matched = 0
         for plugin in include.findall("plugin"):
@@ -480,7 +496,7 @@ def generate_m2c_assets(
         "mission_stage": "M2C",
         "ground_only": True,
         "run_local_camera_sensors_enabled": False,
-        "run_local_imu_sensors_enabled": False,
+        "run_local_imu_sensors_enabled": bool(imu_system),
         "run_local_pose_update_hz": float(M2C_POSE_UPDATE_HZ),
         "ring_yaw_deg": float(ring_yaw_deg),
         "ring_position_world_m": [0.0, 0.0, 0.035],
@@ -532,6 +548,11 @@ def _parser() -> argparse.ArgumentParser:
         default=STAGE_LAYOUT_NOMINAL,
         help="four-X3 ground staging geometry; nominal preserves commissioned M2C/M2D",
     )
+    generate.add_argument(
+        "--imu-system",
+        action="store_true",
+        help="add a world-level Imu system so the X3 gyros publish (rate_source imu)",
+    )
     return parser
 
 
@@ -546,6 +567,7 @@ def main(argv=None) -> int:
             manifest_path=args.manifest,
             ring_yaw_deg=args.ring_yaw_deg,
             stage_layout=args.stage_layout,
+            imu_system=args.imu_system,
         )
         print(
             json.dumps(

@@ -14,7 +14,7 @@ import yaml
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, TimerAction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction, TimerAction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -34,6 +34,8 @@ M2D_RING_SEGMENT_HEIGHT_M = 0.030
 M2D_RING_SEGMENT_CENTER_Z_OFFSET_M = -0.020
 M2D_RING_SEGMENT_PADDING_M = 0.005
 VEHICLE_IDS = tuple(f"drone_{i}" for i in DRONE_IDS)
+# multi_drone_control: the X3 imu_sensor sets no <topic>, so gz publishes on the scoped name
+GZ_IMU_TOPIC = "/world/quadcopter/model/x3_{i}/link/X3/base_link/sensor/imu_sensor/imu"
 
 
 def _load_commissioned_backend_params(dynamic_share: Path) -> dict:
@@ -240,6 +242,23 @@ def _backend_params(drone_id: int, log_root, pre_authority_octopus_runtime_s):
     }
 
 
+def _rate_source() -> str:
+    """M2_RATE_SOURCE: 'pose' (his differenced poses, default) or 'imu' (the X3 gyro)."""
+    value = os.environ.get("M2_RATE_SOURCE") or "pose"
+    if value not in ("pose", "imu"):
+        raise RuntimeError(f"M2_RATE_SOURCE must be 'pose' or 'imu', got {value!r}")
+    return value
+
+
+def _require_imu_world(context):
+    # without the world Imu system the gyros never publish and his bridges send no motor command
+    path = LaunchConfiguration("world_path").perform(context)
+    if "gz-sim-imu-system" not in Path(path).read_text():
+        raise RuntimeError(
+            f"M2_RATE_SOURCE=imu but {path} has no Imu system (generate it with --imu-system)")
+    return []
+
+
 def generate_launch_description() -> LaunchDescription:
     drone_share = Path(get_package_share_directory("tejen_mission"))
     dynamic_share = Path(get_package_share_directory("tejen_dynamic_planner"))
@@ -252,6 +271,7 @@ def generate_launch_description() -> LaunchDescription:
     )
     target_attachment_count = LaunchConfiguration("target_attachment_count")
     operator_hold_after_goal = LaunchConfiguration("operator_hold_after_goal")
+    rate_source = _rate_source()
 
     actions = [
         DeclareLaunchArgument("gui", default_value="true"),
@@ -264,6 +284,7 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("operator_hold_after_goal", default_value="false"),
         # all four vehicles hold mission permission at once (testing; multi_drone_control)
         DeclareLaunchArgument("simultaneous", default_value="false"),
+        *([OpaqueFunction(function=_require_imu_world)] if rate_source == "imu" else []),
         ExecuteProcess(
             cmd=["gz", "sim", "-v", "2", world_path],
             name="m2d_gazebo_gui", output="screen", condition=IfCondition(gui),
@@ -344,6 +365,8 @@ def generate_launch_description() -> LaunchDescription:
                     # Falls back to SIM_RATE_KI so that one env var reverts every sim bridge.
                     "rate_ki": float(os.environ.get(
                         "M2_RATE_KI", os.environ.get("SIM_RATE_KI", "5.0"))),
+                    "rate_source": rate_source,
+                    "imu_topic": f"/{ns}/imu",
                 }],
             ),
             Node(
@@ -368,6 +391,13 @@ def generate_launch_description() -> LaunchDescription:
                 }],
             ),
         ])
+        if rate_source == "imu":
+            platform_nodes.append(Node(
+                package="ros_gz_bridge", executable="parameter_bridge",
+                name=f"m2d_imu_bridge_{drone_id}", output="screen",
+                arguments=[GZ_IMU_TOPIC.format(i=drone_id) + "@sensor_msgs/msg/Imu[gz.msgs.IMU"],
+                remappings=[(GZ_IMU_TOPIC.format(i=drone_id), f"/{ns}/imu")],
+            ))
 
         truth_nodes.append(Node(
             package="tejen_mission", executable="m2a_gazebo_joint_truth_bridge",
