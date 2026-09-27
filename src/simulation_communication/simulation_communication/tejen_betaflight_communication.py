@@ -4,7 +4,7 @@ import struct
 import rclpy
 import numpy as np
 
-from simulation_communication.rate_pid import RatePid, integrate_active
+from simulation_communication.rate_pid import RatePid, gyro_sample, integrate_active
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import Imu
@@ -35,7 +35,22 @@ class BetaflightInterfaceNode(Node):
         self.telemetry_topic = str(self.get_parameter('telemetry_topic').value)
         self.sim_battery_voltage = float(self.get_parameter('sim_battery_voltage').value)
 
-        self.subscription_motion_capture = self.create_subscription(PoseArray, self.pose_topic, self.pose_callback, 10)
+        # 'imu' runs the rate loop on the gyro, as a real Betaflight does; the pose path
+        # differences unstamped poses, so bunched samples under load become rate spikes
+        # (multi_drone_control 2026-09-27, the load-dependent M2 ring rock).
+        self.rate_source = str(self.declare_parameter('rate_source', 'pose').value)
+        if self.rate_source not in ('pose', 'imu'):
+            raise ValueError(f"rate_source must be 'pose' or 'imu', got {self.rate_source!r}")
+        self.imu_topic = str(self.declare_parameter('imu_topic', 'imu').value)
+        self._imu_t_prev = None
+        self._imu_n = 0
+        self._imu_time_base = None
+        self._warned_no_imu = False
+        if self.rate_source == 'imu':
+            self.get_logger().info(f'rate loop on the gyro: {self.imu_topic}')
+            self.subscription_imu = self.create_subscription(Imu, self.imu_topic, self._imu_cb, 10)
+        else:
+            self.subscription_motion_capture = self.create_subscription(PoseArray, self.pose_topic, self.pose_callback, 10)
         self.subscription_control = self.create_subscription(ELRSCommand, self.elrs_command_topic, self.controller_commands_callback, 10)
         self.publisher = self.create_publisher(Actuators, self.motor_command_topic, 10)
         self.telemetry_publisher = (
@@ -198,6 +213,34 @@ class BetaflightInterfaceNode(Node):
 
 
 
+    def _imu_cb(self, msg):
+        """
+        One rate-loop step per gyro sample, dt from the sensor stamps (sim time).
+
+        The sensor sits on X3/base_link at identity, so its angular_velocity is the body FLU
+        rate the pose path computes as R^T * world rate: same axes, no sign flips.
+        """
+        st = msg.header.stamp
+        if int(st.sec) > 0 or int(st.nanosec) > 0:
+            t, base = st.sec + st.nanosec * 1e-9, 'IMU header stamps'
+        else:
+            t, base = self.get_clock().now().nanoseconds * 1e-9, 'node clock (IMU stamps are zero)'
+        if base != self._imu_time_base:
+            self._imu_time_base = base
+            self.get_logger().info(f'gyro dt from {base}')
+        w = msg.angular_velocity
+        dt, angular_velocity_body_deg, self._imu_t_prev = gyro_sample(
+            t, self._imu_t_prev, (w.x, w.y, w.z))
+        self._imu_n += 1
+        if dt is None or self.set_point is None:
+            return
+        self._dt = dt
+        motor_speeds = self.calculate_motor_speeds(angular_velocity_body_deg)
+        actuator_msg = Actuators()
+        actuator_msg.header.stamp = self.get_clock().now().to_msg()
+        actuator_msg.velocity = motor_speeds.tolist()
+        self.publisher.publish(actuator_msg)
+
     def calculate_motor_speeds(self, angular_velocity_body_deg):
         error = np.array([self.set_point[0], self.set_point[1], self.set_point[3]]) - angular_velocity_body_deg
         offset = self._pid.step(error, self._dt, self._active)
@@ -229,6 +272,12 @@ class BetaflightInterfaceNode(Node):
         
         self.set_point = [roll_rate, pitch_rate, throttle, yaw_rate]
         self._active = integrate_active(msg.armed, u, self._i_min_u)
+        if (self.rate_source == 'imu' and msg.armed and self._imu_n == 0
+                and not self._warned_no_imu):
+            self._warned_no_imu = True
+            self.get_logger().warn(
+                f'armed with rate_source imu but no gyro sample on {self.imu_topic} yet: '
+                'no motor command is sent until one arrives (is the IMU bridged?)')
 
 
 

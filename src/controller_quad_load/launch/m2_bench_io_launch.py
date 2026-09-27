@@ -14,6 +14,11 @@ pendulum_state_publisher (nothing of ours reads it).
     ros2 launch controller_quad_load m2_bench_io_launch.py                # starts gz too
     ros2 launch controller_quad_load m2_bench_io_launch.py start_gz:=false  # run_experiment owns gz
 
+rate_source:=imu runs his four bridges' rate loops on the X3 gyro instead of differenced poses
+(the ring rock grew with CPU load, R0707-R0709): it bridges each imu_sensor to /drone_i/imu
+and needs the world with the Imu system (m2_bench_world_imu.sdf, used here when start_gz and
+the world is the default; configs/experiments/m2_bench_imu.yaml for run_experiment).
+
 Then dissipative_launch.py partner_m2:=true sim_interface:=false ... (configs/experiments/
 m2_bench.yaml has the args), ARM, /fleet/handover, TAKEOFF, release the hangers:
     ros2 topic pub --once /bench/hanger_0/detach std_msgs/msg/Empty '{}'   # (0..3)
@@ -29,6 +34,9 @@ from launch_ros.actions import Node
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.realpath(__file__)))))
 BENCH_WORLD = os.path.join(REPO, 'simulation_assets', 'tejen', 'bench_m2', 'm2_bench_world.sdf')
+BENCH_WORLD_IMU = os.path.join(REPO, 'simulation_assets', 'tejen', 'bench_m2', 'm2_bench_world_imu.sdf')
+# his X3's imu_sensor sets no <topic>, so gz publishes it on the scoped name
+GZ_IMU_TOPIC = '/world/quadcopter/model/x3_{i}/link/X3/base_link/sensor/imu_sensor/imu'
 N_DRONES = 4
 
 
@@ -42,6 +50,11 @@ def launch_setup(context, *args, **kwargs):
         raise RuntimeError(f'the M2 bench world has {N_DRONES} drones, got num_drones:={n}')
     world = LaunchConfiguration('world').perform(context)
     rate_ki = float(LaunchConfiguration('rate_ki').perform(context))
+    rate_source = LaunchConfiguration('rate_source').perform(context)
+    if rate_source not in ('pose', 'imu'):
+        raise RuntimeError(f"rate_source must be 'pose' or 'imu', got {rate_source!r}")
+    if rate_source == 'imu' and world == BENCH_WORLD:
+        world = BENCH_WORLD_IMU
     actions = []
 
     if _truthy(context, 'start_gz'):
@@ -98,8 +111,14 @@ def launch_setup(context, *args, **kwargs):
                               'motor_command_topic': motor_topic,
                               'publish_telemetry': True, 'telemetry_topic': 'telemetry',
                               'rates_d_val': 100.0, 'rates_f_val': 100.0, 'rates_g_val': 0.0,
-                              'rate_ki': rate_ki}]),
+                              'rate_ki': rate_ki, 'rate_source': rate_source,
+                              'imu_topic': f'/{ns}/imu'}]),
         ]
+        if rate_source == 'imu':
+            platform.append(Node(
+                package='ros_gz_bridge', executable='parameter_bridge', name=f'm2_bench_imu_bridge_{i}',
+                output='screen', arguments=[GZ_IMU_TOPIC.format(i=i) + '@sensor_msgs/msg/Imu[gz.msgs.IMU'],
+                remappings=[(GZ_IMU_TOPIC.format(i=i), f'/{ns}/imu')]))
     actions.append(TimerAction(period=1.00, actions=platform))
     return actions
 
@@ -116,5 +135,7 @@ def generate_launch_description():
         # his launch's default: M2_RATE_KI, else SIM_RATE_KI, else 5.0
         DeclareLaunchArgument('rate_ki', default_value=os.environ.get(
             'M2_RATE_KI', os.environ.get('SIM_RATE_KI', '5.0'))),
+        # his bridges' rate loop: 'pose' (difference the mocap poses, his default) or 'imu' (gyro)
+        DeclareLaunchArgument('rate_source', default_value='pose'),
         OpaqueFunction(function=launch_setup),
     ])

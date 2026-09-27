@@ -34,6 +34,7 @@
   "ring_mass_kg": 0.86,
   "weld_gap_m": 0.0,
   "hanger": "world",
+  "imu_world": "m2_bench_world_imu.sdf",
   "hanger_topics": {
     "drone_0": {
       "detach": "/bench/hanger_0/detach",
