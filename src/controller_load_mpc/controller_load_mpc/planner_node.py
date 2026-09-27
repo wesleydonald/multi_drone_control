@@ -250,7 +250,7 @@ class LoadPlanner(Node):
         self._z_taut_gate = cfg.z_taut_gate
         # opt-in: keep integrating through a constant-speed level orbit (M1 orbits from the
         # end of the lift, so the gated hover never happens and the ring flies 6 cm high, R0653)
-        self._z_ki_in_orbit = bool(self.declare_parameter('z_ki_in_orbit', False).value)
+        self._z_ki_in_orbit = bool(self.declare_parameter('z_ki_in_orbit', True).value)
         self._zbias_warned = False
         self._load_t = None                    # monotonic time of the last payload pose
         self.auto_slot_assign = cfg.auto_slot_assign

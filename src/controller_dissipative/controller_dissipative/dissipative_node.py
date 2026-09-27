@@ -191,8 +191,8 @@ class DissipativeController(LoadPlanner):
         # opt-in: the trajectory keeps running through the rejoin (Tejen's request): no approach
         # hold, only the plain reconfiguration hold at the weld, the approach tracks the moving
         # plate with its velocity fed forward; the tension blend still spans attach_traj_hold_s
-        self._attach_moving = bool(p('attach_moving', False).value)
-        self._attach_approach_direct = bool(p('attach_approach_direct', False).value)
+        self._attach_moving = bool(p('attach_moving', True).value)
+        self._attach_approach_direct = bool(p('attach_approach_direct', True).value)
         # 'timed': the hold above. 'settle': the post-weld hold ends once the load tilt
         # has settled (below hold_resume_tilt_deg and quiet for hold_settle_s), capped at
         # hold_max_s -- a measured dwell instead of a tuned one (tools/hybrid_dwell.py:

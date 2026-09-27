@@ -83,7 +83,7 @@ def _args():
         DeclareLaunchArgument('z_ki', default_value='0.4'),      # planner height integral, 0 = off (card 2026-09-24_planner_offset)
         DeclareLaunchArgument('z_i_max', default_value='0.15'),
         DeclareLaunchArgument('z_taut_gate', default_value='0.99'),
-        DeclareLaunchArgument('z_ki_in_orbit', default_value='false'),   # height integral also during a level orbit
+        DeclareLaunchArgument('z_ki_in_orbit', default_value='true'),   # height integral also during a level orbit
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         DeclareLaunchArgument('cable_ff_scale', default_value='1.0'),
         DeclareLaunchArgument('attitude_ff', default_value='true'),
@@ -182,10 +182,10 @@ def _args():
         DeclareLaunchArgument('weld_vel_filter_s', default_value='0.0'),   # weld speed gate: low-pass on the relative velocity (s)
         DeclareLaunchArgument('attach_seek_m', default_value='0.0'),   # approach: seek below the weld height
         DeclareLaunchArgument('attach_t_start_new', default_value='0.1'),   # newcomer rod tension at the weld (N)
-        DeclareLaunchArgument('attach_blend_balanced', default_value='true'),
-        DeclareLaunchArgument('attach_datum_shift', default_value='true'),
-        DeclareLaunchArgument('attach_moving', default_value='false'),
-        DeclareLaunchArgument('attach_approach_direct', default_value='false'),   # handed over above the plate: descend directly   # trajectory keeps running through the rejoin   # carry the ring's xy offset through the attach resize   # keep the post-weld slew statically balanced
+        DeclareLaunchArgument('attach_blend_balanced', default_value='true'),   # keep the post-weld slew statically balanced
+        DeclareLaunchArgument('attach_datum_shift', default_value='true'),   # carry the ring's xy offset through the attach resize
+        DeclareLaunchArgument('attach_moving', default_value='true'),   # trajectory keeps running through the rejoin
+        DeclareLaunchArgument('attach_approach_direct', default_value='true'),   # handed over above the plate: descend directly
         DeclareLaunchArgument('attach_traj_hold_s', default_value='10.0'),   # hold until the weld, then this long
         # 'timed' = the hold above; 'settle' = end the post-weld hold when the load tilt has
         # settled (tools/hybrid_dwell.py: a computed dwell instead of a tuned one)
