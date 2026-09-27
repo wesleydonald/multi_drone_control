@@ -184,7 +184,8 @@ def _args():
         DeclareLaunchArgument('attach_t_start_new', default_value='0.1'),   # newcomer rod tension at the weld (N)
         DeclareLaunchArgument('attach_blend_balanced', default_value='true'),
         DeclareLaunchArgument('attach_datum_shift', default_value='true'),
-        DeclareLaunchArgument('attach_moving', default_value='false'),   # trajectory keeps running through the rejoin   # carry the ring's xy offset through the attach resize   # keep the post-weld slew statically balanced
+        DeclareLaunchArgument('attach_moving', default_value='false'),
+        DeclareLaunchArgument('attach_approach_direct', default_value='false'),   # handed over above the plate: descend directly   # trajectory keeps running through the rejoin   # carry the ring's xy offset through the attach resize   # keep the post-weld slew statically balanced
         DeclareLaunchArgument('attach_traj_hold_s', default_value='10.0'),   # hold until the weld, then this long
         # 'timed' = the hold above; 'settle' = end the post-weld hold when the load tilt has
         # settled (tools/hybrid_dwell.py: a computed dwell instead of a tuned one)
@@ -434,6 +435,7 @@ def launch_setup(context, *args, **kwargs):
                      'attach_blend_balanced': b('attach_blend_balanced'),
                      'attach_datum_shift': b('attach_datum_shift'),
                      'attach_moving': b('attach_moving'),
+                     'attach_approach_direct': b('attach_approach_direct'),
                      'attach_traj_hold_mode': LaunchConfiguration('attach_traj_hold_mode'),
                      'hold_resume_tilt_deg': f('hold_resume_tilt_deg'),
                      'hold_max_s': f('hold_max_s'),

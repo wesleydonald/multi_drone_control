@@ -192,6 +192,7 @@ class DissipativeController(LoadPlanner):
         # hold, only the plain reconfiguration hold at the weld, the approach tracks the moving
         # plate with its velocity fed forward; the tension blend still spans attach_traj_hold_s
         self._attach_moving = bool(p('attach_moving', False).value)
+        self._attach_approach_direct = bool(p('attach_approach_direct', False).value)
         # 'timed': the hold above. 'settle': the post-weld hold ends once the load tilt
         # has settled (below hold_resume_tilt_deg and quiet for hold_settle_s), capped at
         # hold_max_s -- a measured dwell instead of a tuned one (tools/hybrid_dwell.py:
@@ -589,7 +590,8 @@ class DissipativeController(LoadPlanner):
             if self.attach_pending[j] and self.attach_pos[j] is not None and j not in self._approach:
                 self._approach[j] = ApproachProfile(self.attach_pos[j], self._attach_cable_len,
                                                     1.0 / PLANNER_HZ,
-                                                    seek_m=self._attach_seek_m)
+                                                    seek_m=self._attach_seek_m,
+                                                    direct=self._attach_approach_direct)
                 self.get_logger().info(
                     f'[dissipative] approach: drone {self._n_carry0 + j} flies to the weld '
                     f'target on its own tracker from {np.round(self.attach_pos[j], 2)}')

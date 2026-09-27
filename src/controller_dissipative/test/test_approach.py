@@ -75,3 +75,20 @@ def test_moving_target_is_tracked_with_its_velocity_fed_forward():
         p, v, _ = prof.step(target, v_t)
     assert np.allclose(p[:2], target[:2], atol=0.02)
     assert np.allclose(v, v_t, atol=1e-6)
+
+
+def test_direct_descends_from_the_handover_without_climbing():
+    target = np.array([0.0, 0.0, 0.5])
+    body = 0.5 + 0.49 + TIP_STANDOFF_M
+    start = np.array([0.02, 0.0, body + 0.15])
+    prof = ApproachProfile(start, 0.49, 0.1, direct=True)
+    p, v, phase = prof.step(target)
+    assert phase == 'descend' and p[2] <= start[2] + 1e-9 and v[2] <= 0.0
+
+
+def test_direct_still_climbs_when_not_over_the_plate():
+    target = np.array([0.0, 0.0, 0.5])
+    body = 0.5 + 0.49 + TIP_STANDOFF_M
+    prof = ApproachProfile(np.array([0.6, 0.0, body + 0.15]), 0.49, 0.1, direct=True)
+    _, _, phase = prof.step(target)
+    assert phase == 'climb'

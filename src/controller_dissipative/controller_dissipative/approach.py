@@ -20,6 +20,7 @@ TIP_STANDOFF_M = -0.01   # m, relative to /attach_target/pose (rim point + 0.05 
                          # ~0.05 of the ring plane: here 0.04 above it, 0.02 clear of the
                          # plate top (R0540: a 0.04 standoff on the +0.05 point left the tip
                          # 0.12 from the manager's point, no weld)
+DIRECT_XY_M = 0.10       # m: 'already over the plate' for a direct descent
 SEEK_VEL = 0.02          # m/s: below-target seek once the carrot sits on the target
 
 
@@ -39,7 +40,7 @@ class ApproachProfile:
     """State of one approach: 'climb' (to the clearance altitude), 'transit' (level, over
     the target), then 'descend'."""
 
-    def __init__(self, p_start, arm_len, dt, clearance=CLEARANCE_M, seek_m=0.0):
+    def __init__(self, p_start, arm_len, dt, clearance=CLEARANCE_M, seek_m=0.0, direct=False):
         self.p_ref = np.asarray(p_start, float).copy()
         self.arm_len = float(arm_len)
         self.dt = float(dt)
@@ -50,6 +51,10 @@ class ApproachProfile:
         self.seek_m = max(0.0, float(seek_m))
         self._seek = 0.0
         self.phase = 'climb'
+        # a partner hands the drone over hovering above the plate (ATTACH_READY): 'climb' to
+        # the clearance height first kicked its reference up 7.5 cm (R0687, Tejen). direct=True
+        # descends from where it is when it is already over the plate, within the clearance.
+        self._direct = bool(direct)
 
     def step(self, target, target_vel=None):
         """target: live magnet-tip target (world); target_vel: its velocity (a moving ring),
@@ -60,6 +65,12 @@ class ApproachProfile:
             self.p_ref = self.p_ref + v_t * self.dt
         body_on_target = t + np.array([0.0, 0.0, self.arm_len + TIP_STANDOFF_M])
         z_clear = float(body_on_target[2] + self.clearance)
+        if self._direct:
+            self._direct = False            # decided on the first target only
+            above = float(self.p_ref[2] - body_on_target[2])
+            if (float(np.linalg.norm((self.p_ref - body_on_target)[:2])) < DIRECT_XY_M
+                    and 0.0 <= above <= self.clearance + 0.05):
+                self.phase = 'descend'
         if self.phase == 'climb':
             goal = np.array([self.p_ref[0], self.p_ref[1], z_clear])
             self.p_ref, v = carrot_step(self.p_ref, goal, APPROACH_VEL, self.dt)
