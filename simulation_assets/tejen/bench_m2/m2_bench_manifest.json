@@ -1,0 +1,171 @@
+{
+  "bench": "M2 hand-over (GOALS G5 step 3)",
+  "hold_source": "T0019 m2d_sequential_20260927_052404 t=104.50",
+  "hold": {
+    "drone_0": [
+      3,
+      74.39,
+      -1.06
+    ],
+    "drone_1": [
+      0,
+      74.29,
+      0.7
+    ],
+    "drone_2": [
+      6,
+      73.88,
+      0.35
+    ],
+    "drone_3": [
+      9,
+      73.51,
+      0.4
+    ]
+  },
+  "ring_pose": [
+    0.0,
+    0.0,
+    0.1,
+    0.0,
+    0.0,
+    20.0
+  ],
+  "ring_mass_kg": 0.86,
+  "weld_gap_m": 0.0,
+  "hanger": "world",
+  "hanger_topics": {
+    "drone_0": {
+      "detach": "/bench/hanger_0/detach",
+      "attach": "/bench/hanger_0/attach",
+      "state": "/bench/hanger_0/state"
+    },
+    "drone_1": {
+      "detach": "/bench/hanger_1/detach",
+      "attach": "/bench/hanger_1/attach",
+      "state": "/bench/hanger_1/state"
+    },
+    "drone_2": {
+      "detach": "/bench/hanger_2/detach",
+      "attach": "/bench/hanger_2/attach",
+      "state": "/bench/hanger_2/state"
+    },
+    "drone_3": {
+      "detach": "/bench/hanger_3/detach",
+      "attach": "/bench/hanger_3/attach",
+      "state": "/bench/hanger_3/state"
+    }
+  },
+  "magnet_joint_topics": {
+    "drone_0": {
+      "detach": "/drone_0/magnet/detach",
+      "attach": "/drone_0/magnet/attach",
+      "state": "/drone_0/magnet/joint_detached_truth"
+    },
+    "drone_1": {
+      "detach": "/drone_1/magnet/detach",
+      "attach": "/drone_1/magnet/attach",
+      "state": "/drone_1/magnet/joint_detached_truth"
+    },
+    "drone_2": {
+      "detach": "/drone_2/magnet/detach",
+      "attach": "/drone_2/magnet/attach",
+      "state": "/drone_2/magnet/joint_detached_truth"
+    },
+    "drone_3": {
+      "detach": "/drone_3/magnet/detach",
+      "attach": "/drone_3/magnet/attach",
+      "state": "/drone_3/magnet/joint_detached_truth"
+    }
+  },
+  "checks": {
+    "drone_0": {
+      "magnet_world": [
+        -0.085505,
+        0.234923,
+        0.125
+      ],
+      "gap_m": 3.490263633665336e-15,
+      "plate_xy_err_m": 5.6216218839138196e-14,
+      "pivot_err_m": 4.939627166109092e-14,
+      "rod_len_m": 0.45000000000000007,
+      "plate": 3,
+      "rod_elev_deg": 74.39,
+      "rod_daz_deg": -1.06,
+      "body": [
+        -0.124808,
+        0.349457,
+        0.598402
+      ],
+      "body_yaw_deg": 12.0
+    },
+    "drone_1": {
+      "magnet_world": [
+        0.234923,
+        0.085505,
+        0.125
+      ],
+      "gap_m": 4.445749324233361e-14,
+      "plate_xy_err_m": 2.1384307730148203e-13,
+      "pivot_err_m": 4.203880410241146e-14,
+      "rod_len_m": 0.45,
+      "plate": 0,
+      "rod_elev_deg": 74.29,
+      "rod_daz_deg": 0.7,
+      "body": [
+        0.348903,
+        0.128574,
+        0.59819
+      ],
+      "body_yaw_deg": -18.0
+    },
+    "drone_2": {
+      "magnet_world": [
+        -0.234923,
+        -0.085505,
+        0.125
+      ],
+      "gap_m": -3.7088387916384136e-14,
+      "plate_xy_err_m": 2.7785670768533694e-13,
+      "pivot_err_m": 2.832831459404817e-14,
+      "rod_len_m": 0.45,
+      "plate": 6,
+      "rod_elev_deg": 73.88,
+      "rod_daz_deg": 0.35,
+      "body": [
+        -0.352067,
+        -0.128954,
+        0.597307
+      ],
+      "body_yaw_deg": 33.0
+    },
+    "drone_3": {
+      "magnet_world": [
+        0.085505,
+        -0.234923,
+        0.125
+      ],
+      "gap_m": -2.859518177800169e-14,
+      "plate_xy_err_m": 1.0519274178990909e-13,
+      "pivot_err_m": 1.770033359180443e-14,
+      "rod_len_m": 0.45000000000000007,
+      "plate": 9,
+      "rod_elev_deg": 73.51,
+      "rod_daz_deg": 0.4,
+      "body": [
+        0.130029,
+        -0.354644,
+        0.596491
+      ],
+      "body_yaw_deg": -41.0
+    }
+  },
+  "gap_limit_m": 0.005,
+  "gz_sdf_check": "Valid.",
+  "sources": {
+    "/home/wesley/multi_drone_control/simulation_assets/tejen/modelLargeM2BallMagnet.sdf": "bcedfe919122a3a4e1f4e51947713565c32830226e4b916bcae6d5fa04342871",
+    "/home/wesley/multi_drone_control/simulation_assets/tejen/m2a_ring_fixture.sdf": "018a024db9a45bb9c8b7d7de7fe8ddd3bd1ab93a11d38ca5f3571bc3551fb08c",
+    "/home/wesley/multi_drone_control/simulation_assets/tejen/world_m2b_single_attachment.sdf": "e7ec5f542a36d7e10e587f0690f791513e2aa19bfe22121329c27b85d33dca22"
+  },
+  "generator": "tools/sim_test/make_m2_bench_world.py"
+}

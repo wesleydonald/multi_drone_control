@@ -1,0 +1,551 @@
+<?xml version='1.0' encoding='utf-8'?>
+<sdf version="1.6">
+  <world name="quadcopter">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>500</real_time_update_rate>
+    </physics>
+    <plugin filename="ignition-gazebo-physics-system" name="gz::sim::systems::Physics">
+    </plugin>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+    <plugin filename="ignition-gazebo-user-commands-system" name="gz::sim::systems::UserCommands">
+    </plugin>
+
+
+  <scene>
+    <background>0.6 0.8 1.0 1</background>  
+    <ambient>0.5 0.5 0.5 1</ambient>
+  </scene>
+
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+
+
+
+
+
+
+
+
+    
+  <include>
+    <uri>/home/wesley/multi_drone_control/simulation_assets/tejen/bench_m2/m2_bench_ring.sdf</uri>
+    <pose>0 0 0.1 0 0 0.349065850399</pose>
+
+    <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+      <publish_link_pose>true</publish_link_pose>
+      <publish_model_pose>true</publish_model_pose>
+      <publish_nested_model_pose>true</publish_nested_model_pose>
+      <use_pose_vector_msg>true</use_pose_vector_msg>
+      <update_frequency>120</update_frequency>
+    </plugin>
+  </include>
+
+    
+    <include>
+      <uri>/home/wesley/multi_drone_control/simulation_assets/tejen/bench_m2/m2_bench_x3_0.sdf</uri>
+      <name>x3_0</name><pose>-0.124808023933 0.349456808097 0.598402027544 0 0 0.209439510239</pose>
+
+
+      <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+            <publish_link_pose>true</publish_link_pose>
+            <publish_nested_model_pose>true</publish_nested_model_pose>
+            <use_pose_vector_msg>true</use_pose_vector_msg>
+            <update_frequency>120</update_frequency>
+          </plugin>
+
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_0</robotNamespace>
+        <jointName>X3/rotor_0_joint</jointName>
+        <linkName>X3/rotor_0</linkName>
+        <turningDirection>cw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>0</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/0</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_0</robotNamespace>
+        <jointName>X3/rotor_1_joint</jointName>
+        <linkName>X3/rotor_1</linkName>
+        <turningDirection>ccw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>1</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/1</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_0</robotNamespace>
+        <jointName>X3/rotor_2_joint</jointName>
+        <linkName>X3/rotor_2</linkName>
+        <turningDirection>ccw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>2</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/2</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_0</robotNamespace>
+        <jointName>X3/rotor_3_joint</jointName>
+        <linkName>X3/rotor_3</linkName>
+        <turningDirection>cw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>3</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/3</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+
+      </include>
+
+  <include>
+      <uri>/home/wesley/multi_drone_control/simulation_assets/tejen/bench_m2/m2_bench_x3_1.sdf</uri>
+      <name>x3_1</name><pose>0.348903089409 0.128574463944 0.598190026385 0 0 -0.314159265359</pose>
+
+
+      <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+            <publish_link_pose>true</publish_link_pose>
+            <publish_nested_model_pose>true</publish_nested_model_pose>
+            <use_pose_vector_msg>true</use_pose_vector_msg>
+            <update_frequency>120</update_frequency>
+          </plugin>
+
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_1</robotNamespace>
+        <jointName>X3/rotor_0_joint</jointName>
+        <linkName>X3/rotor_0</linkName>
+        <turningDirection>cw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>0</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/0</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_1</robotNamespace>
+        <jointName>X3/rotor_1_joint</jointName>
+        <linkName>X3/rotor_1</linkName>
+        <turningDirection>ccw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>1</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/1</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_1</robotNamespace>
+        <jointName>X3/rotor_2_joint</jointName>
+        <linkName>X3/rotor_2</linkName>
+        <turningDirection>ccw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>2</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/2</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_1</robotNamespace>
+        <jointName>X3/rotor_3_joint</jointName>
+        <linkName>X3/rotor_3</linkName>
+        <turningDirection>cw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>3</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/3</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+
+      </include>
+
+  <include>
+      <uri>/home/wesley/multi_drone_control/simulation_assets/tejen/bench_m2/m2_bench_x3_2.sdf</uri>
+      <name>x3_2</name><pose>-0.352067476285 -0.128954289524 0.597307032548 0 0 0.575958653158</pose>
+
+
+      <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+            <publish_link_pose>true</publish_link_pose>
+            <publish_nested_model_pose>true</publish_nested_model_pose>
+            <use_pose_vector_msg>true</use_pose_vector_msg>
+            <update_frequency>120</update_frequency>
+          </plugin>
+
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_2</robotNamespace>
+        <jointName>X3/rotor_0_joint</jointName>
+        <linkName>X3/rotor_0</linkName>
+        <turningDirection>cw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>0</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/0</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_2</robotNamespace>
+        <jointName>X3/rotor_1_joint</jointName>
+        <linkName>X3/rotor_1</linkName>
+        <turningDirection>ccw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>1</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/1</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_2</robotNamespace>
+        <jointName>X3/rotor_2_joint</jointName>
+        <linkName>X3/rotor_2</linkName>
+        <turningDirection>ccw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>2</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/2</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_2</robotNamespace>
+        <jointName>X3/rotor_3_joint</jointName>
+        <linkName>X3/rotor_3</linkName>
+        <turningDirection>cw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>3</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/3</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+
+      </include>
+
+  <include>
+      <uri>/home/wesley/multi_drone_control/simulation_assets/tejen/bench_m2/m2_bench_x3_3.sdf</uri>
+      <name>x3_3</name><pose>0.13002870033 -0.354643681158 0.596491180632 0 0 -0.715584993318</pose>
+
+
+      <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+            <publish_link_pose>true</publish_link_pose>
+            <publish_nested_model_pose>true</publish_nested_model_pose>
+            <use_pose_vector_msg>true</use_pose_vector_msg>
+            <update_frequency>120</update_frequency>
+          </plugin>
+
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_3</robotNamespace>
+        <jointName>X3/rotor_0_joint</jointName>
+        <linkName>X3/rotor_0</linkName>
+        <turningDirection>cw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>0</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/0</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_3</robotNamespace>
+        <jointName>X3/rotor_1_joint</jointName>
+        <linkName>X3/rotor_1</linkName>
+        <turningDirection>ccw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>1</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/1</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_3</robotNamespace>
+        <jointName>X3/rotor_2_joint</jointName>
+        <linkName>X3/rotor_2</linkName>
+        <turningDirection>ccw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>2</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/2</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+      <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+        <robotNamespace>drone_3</robotNamespace>
+        <jointName>X3/rotor_3_joint</jointName>
+        <linkName>X3/rotor_3</linkName>
+        <turningDirection>cw</turningDirection>
+        <timeConstantUp>0.0</timeConstantUp>
+        <timeConstantDown>0.0</timeConstantDown>
+        <maxRotVelocity>4631.0</maxRotVelocity>
+        <motorConstant>0.62e-06</motorConstant>
+        <momentConstant>0.2</momentConstant>
+        <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
+        <actuator_number>3</actuator_number>
+        <rotorDragCoefficient>0.0</rotorDragCoefficient>
+        <rollingMomentCoefficient>0.0</rollingMomentCoefficient>
+        <motorSpeedPubTopic>motor_speed/3</motorSpeedPubTopic>
+        <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+        <motorType>velocity</motorType>
+      </plugin>
+
+      </include>
+
+  <model name="floor">
+    <static>true</static>
+    <pose>0 0 0 0 0 0</pose>
+    <link name="link">
+      <collision name="col">
+        <geometry>
+          <plane>
+            <normal>0 0 1</normal>
+            <size>100 100</size>
+          </plane>
+        </geometry>
+      <surface><contact><collide_bitmask>0x0003</collide_bitmask></contact></surface></collision>
+      <visual name="vis">
+        <geometry>
+          <plane>
+            <normal>0 0 1</normal>
+            <size>100 100</size>
+          </plane>
+        </geometry>
+        <material>
+          
+          <ambient>0.2 0.5 0.2 1</ambient>
+          <diffuse>0.3 0.6 0.3 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+        </material>
+      </visual>
+    </link>
+  </model>
+
+
+
+
+    
+
+
+
+
+    
+  <model name="bench_hanger_0">
+    <pose>-0.124808023933 0.349456808097 0.598402027544 0 0 0.209439510239</pose>
+    <link name="hanger_link">
+      <gravity>false</gravity>
+      <inertial>
+        <mass>1.0</mass>
+        <inertia>
+          <ixx>0.01</ixx>
+          <iyy>0.01</iyy>
+          <izz>0.01</izz>
+        </inertia>
+      </inertial>
+    </link>
+    <joint name="hanger_to_world" type="fixed">
+      <parent>world</parent>
+      <child>hanger_link</child>
+    </joint>
+    <plugin filename="gz-sim-detachable-joint-system" name="gz::sim::systems::DetachableJoint">
+      <parent_link>hanger_link</parent_link>
+      <child_model>x3_0</child_model>
+      <child_link>X3/base_link</child_link>
+      <detach_topic>/bench/hanger_0/detach</detach_topic>
+      <attach_topic>/bench/hanger_0/attach</attach_topic>
+      <output_topic>/bench/hanger_0/state</output_topic>
+    </plugin>
+  </model>
+  <model name="bench_hanger_1">
+    <pose>0.348903089409 0.128574463944 0.598190026385 0 0 -0.314159265359</pose>
+    <link name="hanger_link">
+      <gravity>false</gravity>
+      <inertial>
+        <mass>1.0</mass>
+        <inertia>
+          <ixx>0.01</ixx>
+          <iyy>0.01</iyy>
+          <izz>0.01</izz>
+        </inertia>
+      </inertial>
+    </link>
+    <joint name="hanger_to_world" type="fixed">
+      <parent>world</parent>
+      <child>hanger_link</child>
+    </joint>
+    <plugin filename="gz-sim-detachable-joint-system" name="gz::sim::systems::DetachableJoint">
+      <parent_link>hanger_link</parent_link>
+      <child_model>x3_1</child_model>
+      <child_link>X3/base_link</child_link>
+      <detach_topic>/bench/hanger_1/detach</detach_topic>
+      <attach_topic>/bench/hanger_1/attach</attach_topic>
+      <output_topic>/bench/hanger_1/state</output_topic>
+    </plugin>
+  </model>
+  <model name="bench_hanger_2">
+    <pose>-0.352067476285 -0.128954289524 0.597307032548 0 0 0.575958653158</pose>
+    <link name="hanger_link">
+      <gravity>false</gravity>
+      <inertial>
+        <mass>1.0</mass>
+        <inertia>
+          <ixx>0.01</ixx>
+          <iyy>0.01</iyy>
+          <izz>0.01</izz>
+        </inertia>
+      </inertial>
+    </link>
+    <joint name="hanger_to_world" type="fixed">
+      <parent>world</parent>
+      <child>hanger_link</child>
+    </joint>
+    <plugin filename="gz-sim-detachable-joint-system" name="gz::sim::systems::DetachableJoint">
+      <parent_link>hanger_link</parent_link>
+      <child_model>x3_2</child_model>
+      <child_link>X3/base_link</child_link>
+      <detach_topic>/bench/hanger_2/detach</detach_topic>
+      <attach_topic>/bench/hanger_2/attach</attach_topic>
+      <output_topic>/bench/hanger_2/state</output_topic>
+    </plugin>
+  </model>
+  <model name="bench_hanger_3">
+    <pose>0.13002870033 -0.354643681158 0.596491180632 0 0 -0.715584993318</pose>
+    <link name="hanger_link">
+      <gravity>false</gravity>
+      <inertial>
+        <mass>1.0</mass>
+        <inertia>
+          <ixx>0.01</ixx>
+          <iyy>0.01</iyy>
+          <izz>0.01</izz>
+        </inertia>
+      </inertial>
+    </link>
+    <joint name="hanger_to_world" type="fixed">
+      <parent>world</parent>
+      <child>hanger_link</child>
+    </joint>
+    <plugin filename="gz-sim-detachable-joint-system" name="gz::sim::systems::DetachableJoint">
+      <parent_link>hanger_link</parent_link>
+      <child_model>x3_3</child_model>
+      <child_link>X3/base_link</child_link>
+      <detach_topic>/bench/hanger_3/detach</detach_topic>
+      <attach_topic>/bench/hanger_3/attach</attach_topic>
+      <output_topic>/bench/hanger_3/state</output_topic>
+    </plugin>
+  </model>
+  </world>
+</sdf>
