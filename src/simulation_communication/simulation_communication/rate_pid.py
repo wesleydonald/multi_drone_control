@@ -33,3 +33,18 @@ class RatePid:
         derivative = self.kd * (error - self.previous_error)
         self.previous_error = error
         return self.kp * error + self.integral + derivative
+
+
+def gyro_sample(t, t_prev, w_rad, reset_s=0.5):
+    """(dt, rate in deg/s, next t_prev) for one gyro sample stamped t (s).
+
+    dt is None for the first sample, a repeated stamp (the same sample from a second
+    publisher) and a stale stamp (delivered out of order); the caller skips the PID step
+    then. t_prev only moves forward, so a stale sample cannot make the next dt count an
+    interval twice; a jump back by more than reset_s is a clock reset and restarts at t."""
+    w_deg = np.degrees(np.asarray(w_rad, dtype=float))
+    if t_prev is None or t < t_prev - reset_s:
+        return None, w_deg, t
+    if t <= t_prev:
+        return None, w_deg, t_prev
+    return t - t_prev, w_deg, t

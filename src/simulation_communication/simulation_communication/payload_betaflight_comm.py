@@ -15,17 +15,20 @@ Parameters (ROS):
   rates_d_val   float 100.0
   rates_f_val   float 100.0
   rates_g_val   float 0.5
+  rate_source   str   'pose' (difference the gz poses) | 'imu' (the IMU gyro)
+  imu_topic     str   /drone_{drone_id}/imu (sensor_msgs/Imu), used when rate_source is imu
 """
 
 import math
 import os
 import numpy as np
 
-from simulation_communication.rate_pid import RatePid, integrate_active
+from simulation_communication.rate_pid import RatePid, gyro_sample, integrate_active
 import rclpy
 from rclpy.node import Node
 from actuator_msgs.msg import Actuators
 from geometry_msgs.msg import PoseArray
+from sensor_msgs.msg import Imu
 from interfaces.msg import ELRSCommand
 from tf_transformations import quaternion_multiply, quaternion_inverse, quaternion_matrix
 
@@ -58,7 +61,22 @@ class PayloadBetaflightComm(Node):
         self.get_logger().info(
             f'[BF{self.drone_id}] motor = {motor_topic}')
 
-        self.create_subscription(PoseArray, pose_topic, self._pose_cb, 10)
+        # 'imu' runs the rate loop on the gyro, as a real Betaflight does; the pose path
+        # differences unstamped poses, so bunched samples under load become rate spikes (G4).
+        self.rate_source = str(self.declare_parameter('rate_source', 'pose').value)
+        if self.rate_source not in ('pose', 'imu'):
+            raise ValueError(f"rate_source must be 'pose' or 'imu', got {self.rate_source!r}")
+        imu_topic = str(self.declare_parameter(
+            'imu_topic', f'/drone_{self.drone_id}/imu').value)
+        self._imu_t_prev = None
+        self._imu_n = 0
+        self._imu_time_base = None
+        self._warned_no_imu = False
+        if self.rate_source == 'imu':
+            self.get_logger().info(f'[BF{self.drone_id}] rate  = gyro {imu_topic}')
+            self.create_subscription(Imu, imu_topic, self._imu_cb, 10)
+        else:
+            self.create_subscription(PoseArray, pose_topic, self._pose_cb, 10)
         self.create_subscription(
             ELRSCommand, f'/drone_{self.drone_id}/ELRSCommand', self._cmd_cb, 10)
         self.motor_pub = self.create_publisher(Actuators, motor_topic, 10)
@@ -167,6 +185,31 @@ class PayloadBetaflightComm(Node):
             msg_out.velocity = speeds.tolist()
             self.motor_pub.publish(msg_out)
 
+    def _imu_cb(self, msg: Imu):
+        """One rate-loop step per gyro sample, dt from the sensor stamps (sim time).
+
+        Axes: gz gives angular_velocity in the sensor frame, which sits on base_link at
+        identity, i.e. body FLU (the same IMU reads +9.81 on z at rest). The pose path's
+        R^T * world rate is that frame too, so the axes map one to one, no sign flips."""
+        st = msg.header.stamp
+        if int(st.sec) > 0 or int(st.nanosec) > 0:
+            t, base = st.sec + st.nanosec * 1e-9, 'IMU header stamps'
+        else:
+            t, base = self.get_clock().now().nanoseconds * 1e-9, 'node clock (IMU stamps are zero)'
+        if base != self._imu_time_base:
+            self._imu_time_base = base
+            self.get_logger().info(f'[BF{self.drone_id}] gyro dt from {base}')
+        w = msg.angular_velocity
+        dt, ang_vel_deg, self._imu_t_prev = gyro_sample(t, self._imu_t_prev, (w.x, w.y, w.z))
+        self._imu_n += 1
+        if dt is None or self.set_point is None:
+            return
+        speeds = self._compute_motor_speeds(ang_vel_deg, dt)
+        msg_out = Actuators()
+        msg_out.header.stamp = self.get_clock().now().to_msg()
+        msg_out.velocity = speeds.tolist()
+        self.motor_pub.publish(msg_out)
+
     def _compute_motor_speeds(self, ang_vel_deg, dt):
         error = np.array([self.set_point[0], self.set_point[1], self.set_point[3]]) - ang_vel_deg
         offset = self._pid.step(error, dt, self._active)
@@ -199,6 +242,12 @@ class PayloadBetaflightComm(Node):
 
         self.set_point = [roll_rate, pitch_rate, throttle, yaw_rate]
         self._active = integrate_active(msg.armed, u, self._i_min_u)
+        if (self.rate_source == 'imu' and msg.armed and self._imu_n == 0
+                and not self._warned_no_imu):
+            self._warned_no_imu = True
+            self.get_logger().warn(
+                f'[BF{self.drone_id}] armed with rate_source imu but no gyro sample yet: '
+                'no motor command is sent until one arrives (is the IMU bridged?)')
 
 
 def main(args=None):

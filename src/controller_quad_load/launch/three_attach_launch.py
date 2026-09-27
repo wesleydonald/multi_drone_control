@@ -259,6 +259,9 @@ def _args():
         # ...and drone 3 starts welded as the fourth carrier (then leaves and rejoins)
         DeclareLaunchArgument('partner_attached', default_value='false'),
         DeclareLaunchArgument('mocap_hz', default_value='120'),   # drone 3's emulator cap
+        # sim Betaflight rate loop source for every bf_comm: 'pose' (difference the gz poses)
+        # or 'imu' (the gyro on /drone_i/imu, already bridged below; 500 Hz in *_imu.sdf worlds)
+        DeclareLaunchArgument('rate_source', default_value='pose'),
         # Online thrust-ratio (kT) estimation for the approach MPC. The scalar full-model UKF
         # seeds from thrust_ratio (24.0) and re-estimates kT in flight, so a battery-sag /
         # payload-mass mismatch does not leave the approach flying on a stale hover gain.
@@ -342,7 +345,9 @@ def launch_setup(context, *args, **kwargs):
                 package='simulation_communication', executable='payload_betaflight_comm',
                 name=f'bf_comm_{i}',
                 parameters=[{'drone_id': i, 'drone_name': drone_name,
-                             'parent_model': PARENT_MODEL}]))
+                             'parent_model': PARENT_MODEL,
+                             'rate_source': LaunchConfiguration('rate_source'),
+                             'imu_topic': f'/drone_{i}/imu'}]))
         nodes.append(Node(
             package='controller_quad_load', executable='controller', name=f'controller_{i}',
             parameters=[{'drone_id': i,
@@ -500,7 +505,9 @@ def launch_setup(context, *args, **kwargs):
         nodes.append(Node(
             package='simulation_communication', executable='payload_betaflight_comm',
             name=f'bf_comm_{d}',
-            parameters=[{'drone_id': d, 'drone_name': dn, 'parent_model': PARENT_MODEL}],
+            parameters=[{'drone_id': d, 'drone_name': dn, 'parent_model': PARENT_MODEL,
+                         'rate_source': LaunchConfiguration('rate_source'),
+                         'imu_topic': f'/drone_{d}/imu'}],
             remappings=[(f'/model/{PARENT_MODEL}/model/{dn}/pose', f'/model/{dn}/pose')]))
 
         # ELRSCommand MUX: forwards APPROACH (_tejen) until the weld, then OURS (_diss).
