@@ -15,17 +15,12 @@ Topics produced:
   /payload/motion_capture_state            — for the planner (drone 0 only)
 """
 
-import os
-
 import numpy as np
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseArray, Pose, Twist, PoseStamped
 from interfaces.msg import MotionCaptureState
 from tf_transformations import quaternion_multiply, quaternion_inverse, quaternion_matrix
-
-
-STAMP_DT = os.environ.get('MOCAP_STAMP_DT', '0') == '1'
 
 
 class PayloadMocapEmulator(Node):
@@ -95,16 +90,9 @@ class PayloadMocapEmulator(Node):
             return -x, -y, -z, -w
         return x, y, z, w
 
-    def _compute_mcs(self, pos, ori, last_pos, last_ori, last_time, stamp=None):
-        """Return (MotionCaptureState, pos, ori, time) or (None,...) on first call.
-
-        MOCAP_STAMP_DT=1 differences over the pose messages' own (sim) stamps instead of the
-        node clock at callback time: under CPU load poses arrive in bursts, and two poses
-        10-20 ms apart in sim processed within one clock tick read as a rate spike (the
-        carrier 'kicks', GOALS G4)."""
+    def _compute_mcs(self, pos, ori, last_pos, last_ori, last_time):
+        """Return (MotionCaptureState, pos, ori, time) or (None,...) on first call."""
         now = self.get_clock().now().to_msg()
-        if STAMP_DT and stamp is not None and (stamp.sec or stamp.nanosec):
-            now = stamp
         if last_pos is None:
             return None, pos, ori, now
 
@@ -169,8 +157,7 @@ class PayloadMocapEmulator(Node):
 
         mcs, self._drone_last_pos, self._drone_last_ori, self._drone_last_time = \
             self._compute_mcs(pos, ori,
-                              self._drone_last_pos, self._drone_last_ori, self._drone_last_time,
-                              msg.header.stamp)
+                              self._drone_last_pos, self._drone_last_ori, self._drone_last_time)
         if mcs is not None:
             self._drone_pub.publish(mcs)
 
@@ -188,8 +175,7 @@ class PayloadMocapEmulator(Node):
 
         mcs, self._payload_last_pos, self._payload_last_ori, self._payload_last_time = \
             self._compute_mcs(pos, ori,
-                              self._payload_last_pos, self._payload_last_ori, self._payload_last_time,
-                              msg.header.stamp)
+                              self._payload_last_pos, self._payload_last_ori, self._payload_last_time)
         if mcs is not None:
             self._payload_pub.publish(mcs)
 
