@@ -202,3 +202,91 @@ def test_airborne_start_holds_live_until_takeoff_then_sweeps_down_to_target():
 def test_airborne_start_off_keeps_the_ground_sweep():
     c, state, log, rho = build()
     assert c.airborne_start is False
+
+
+# Q9 (floor-start M1): a drone welded on at the start joins the creep as a 4th carrier.
+def _four_on_plates(rods, elevs_deg, azs_deg=(150.0, 270.0, 30.0, 90.0), r=0.25):
+    rho = [np.array([r * np.cos(np.deg2rad(a)), r * np.sin(np.deg2rad(a)), 0.025])
+           for a in azs_deg]
+    ls = load_state()
+    pos = []
+    for i, e in enumerate(elevs_deg):
+        attach = ls[0:3] + rho[i]
+        radial = np.array([attach[0], attach[1], 0.0]) / np.hypot(attach[0], attach[1])
+        a = np.deg2rad(e)
+        pos.append(attach + rods[i] * (np.cos(a) * radial + np.array([0.0, 0.0, np.sin(a)])))
+    return rho, pos
+
+
+def test_resize_to_four_relatches_every_drone_with_its_own_rod_and_rest_elevation():
+    rods = [CABLE, CABLE, CABLE, 0.49]
+    rho4, rest = _four_on_plates(rods, [7.5, 7.6, 7.5, 9.0])
+    state = {'pos': rest[:3]}
+    refs = {}
+    c = CreepController(n=3, rho=rho4[:3], cable_len=CABLE, N=5, dt=0.1, g=9.81,
+                        handover_elev_deg=45.0, hz=HZ, drone_at=lambda i: state['pos'][i],
+                        publish_ref=lambda i, nodes: refs.__setitem__(i, nodes), logger=_Log())
+    c.step(load_state(), state['pos'], [(0.0, 0.0)] * 3, False)
+    assert c.arc_anchor is not None and len(c.arc_anchor) == 3
+
+    assert c.resize(4, rho4, rods)
+    assert c.n == 4 and c.arc_anchor is None
+    state['pos'] = rest
+    c.step(load_state(), state['pos'], [(0.0, 0.0)] * 4, False)
+    assert len(c.arc_anchor) == 4
+    assert np.degrees(c.arc_theta0[3]) == pytest.approx(9.0, abs=1e-6)
+    assert np.degrees(c.arc_theta) == pytest.approx(np.mean([7.5, 7.6, 7.5, 9.0]), abs=1e-6)
+    # drone 3's reference lies on ITS rod's arc about ITS plate (plus the grounded lead)
+    p3 = refs[3][0][0] - np.array([0.0, 0.0, 0.10])
+    assert np.linalg.norm(p3 - c.arc_anchor[3][0]) == pytest.approx(0.49, abs=1e-9)
+
+
+def test_four_carriers_sweep_to_target_and_the_handover_waits_for_the_fourth():
+    rods = [CABLE, CABLE, CABLE, 0.49]
+    rho4, rest = _four_on_plates(rods, [7.5] * 4)
+    state = {'pos': rest}
+    refs = {}
+    c = CreepController(n=3, rho=rho4[:3], cable_len=CABLE, N=5, dt=0.1, g=9.81,
+                        handover_elev_deg=45.0, hz=HZ, drone_at=lambda i: state['pos'][i],
+                        publish_ref=lambda i, nodes: refs.__setitem__(i, nodes), logger=_Log())
+    assert c.resize(4, rho4, rods)
+    c.step(load_state(), rest, [(0.0, 0.0)] * 4, True)
+    _, up = _four_on_plates(rods, [7.5 + 5.0] * 4)          # a real liftoff
+    state['pos'] = up
+    for _ in range(int(40 * HZ)):
+        c.step(load_state(), up, [(0.0, 0.0)] * 4, True)
+    assert c.arc_theta == pytest.approx(np.deg2rad(45.0), abs=1e-6)
+    for i in range(4):
+        p = refs[i][-1][0]
+        attach = c.arc_anchor[i][0]
+        assert np.degrees(np.arcsin((p - attach)[2] / rods[i])) == pytest.approx(45.0, abs=1e-6)
+
+    # three at 45, the fourth lagging at 25: no hold accumulates, no hand-over
+    _, lag = _four_on_plates(rods, [45.0, 45.0, 45.0, 25.0])
+    state['pos'] = lag
+    c._arc_wait = 0.0
+    for _ in range(int(2 * HZ)):
+        h, _ = c.step(load_state(), lag, [(1.0, 0.0)] * 4, True)
+        assert not h and c._arc_hold == 0.0
+    _, at = _four_on_plates(rods, [45.0] * 4)
+    state['pos'] = at
+    c._arc_wait = 0.0
+    handover = False
+    for _ in range(int(2 * HZ)):
+        handover, reason = c.step(load_state(), at, [(1.0, 0.0)] * 4, True)
+        if handover:
+            break
+    assert handover and 'reached' in reason
+
+
+def test_resize_is_refused_once_the_sweep_has_started():
+    c, state, log, rho = build()
+    run(c, state, rho, seconds=1.0, rise=LIFTOFF_MARGIN + 0.02)
+    assert c.lifted_off
+    assert not c.resize(4, rho + [rho[0]], [CABLE] * 4)
+    assert c.n == 3
+
+
+def test_three_drone_creep_is_unchanged_without_a_resize():
+    c, state, log, rho = build()
+    assert c.cable_lens is None and all(c._rod(i) == CABLE for i in range(3))

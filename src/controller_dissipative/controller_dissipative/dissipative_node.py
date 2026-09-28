@@ -913,6 +913,9 @@ class DissipativeController(LoadPlanner):
         if not (0 <= d < self.n_net):
             self.get_logger().warn(f'[dissipative] /fleet/attach {d} out of range')
             return
+        if self.phase == 'creep' and self._start_weld_joins_creep(d):
+            self._attach_ocp(d, start_creep=True)
+            return
         if self.phase not in ('planner', 'network'):
             self.get_logger().warn('[dissipative] attach ignored - not flying yet')
             return
@@ -1008,14 +1011,30 @@ class DissipativeController(LoadPlanner):
             rho_body[2] = float(self.attach_z)
         return rho_body
 
-    def _attach_ocp(self, d):
+    def _start_weld_joins_creep(self, d):
+        """Floor start with a drone welded on at the start (Q9): it joins the creep as one
+        more carrier, so the OCP and the creep are sized for it before TAKEOFF. The air
+        start never gets here (its first tick leaves the creep phase)."""
+        return (self._start_attached and not self.start_taut
+                and self._reconfig_mode == 'ocp' and not self.takeoff_seen
+                and self._reserved_index(d) is not None)
+
+    def _attach_ocp(self, d, start_creep=False):
         """Attach WITHOUT handing the fleet to the network: grow the OCP in place, the
         mirror of _detach_ocp. The newcomer's weld point becomes one more attach point of
         the (generally uneven) ring, its magnet arm one more rod, and the pre-built n+1
         OCP takes over on the next tick with node 0 pinned to the measured state. The
-        trajectory is held (timed or settle) exactly as the network attach holds it."""
+        trajectory is held (timed or settle) exactly as the network attach holds it.
+
+        start_creep: the floor-start weld folded in before TAKEOFF. The creep is resized
+        to sweep the newcomer with the carriers, and there is no weld transient to slew
+        or hold: at the hand-over its rod is at the creep elevation like the others."""
         if d in self.slot2drone:
             return                                            # already on the load
+        if start_creep and self.creep.sweep_started():
+            self.get_logger().warn(f'[dissipative] start weld of drone {d} not folded into '
+                                   f'the creep: the sweep has already started')
+            return
         j = self._reserved_index(d)
         measured = self.attach_pos[j] if j is not None else (
             self.drone_pos[d] if d < len(self.drone_pos) else None)
@@ -1070,6 +1089,15 @@ class DissipativeController(LoadPlanner):
             self._approach.pop(j, None)
         self.detached[d] = False
         self._weld_time[d] = self.get_clock().now()          # cable-FF ramp for the newcomer
+        if start_creep:
+            self.creep.resize(self.n, self.rho, self.cable_len_i[:self.n])
+            self.get_logger().warn(
+                f'[dissipative] ATTACH drone {d} (start weld, joins the creep as carrier '
+                f'{self.n}): n={self.n}, '
+                f'plate at {np.degrees(np.arctan2(rho_new[1], rho_new[0])):.0f} deg, '
+                f'rods {[round(v, 2) for v in lens]} m, '
+                f'tensions {[round(v, 2) for v in self.refs._t_nom]}')
+            return
         # slew the cable references from the weld state: the newcomer's rod as measured
         # (drone -> rim, ~vertical) carrying nothing, the incumbents at their pre-resize
         # shares, to the new balanced split over the hold (R0541: the immediate 45-deg

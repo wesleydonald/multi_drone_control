@@ -46,6 +46,7 @@ class CreepController:
         self.n = n
         self.rho = rho
         self.cable_len = cable_len
+        self.cable_lens = None             # per-drone rods once resize() gave them
         self.N = N
         self.dt = dt                       # horizon node spacing (s)
         self.g = g                         # gravity magnitude (level-hover thrust)
@@ -72,6 +73,33 @@ class CreepController:
         self.lifted_off = False            # gate the creep climb on real liftoff
         self._liftoff_wait = 0.0           # s since TAKEOFF without liftoff
         self._diag_ctr = 0
+
+    def _rod(self, i):
+        return self.cable_len if self.cable_lens is None else self.cable_lens[i]
+
+    def sweep_started(self):
+        return bool(self.lifted_off)
+
+    def resize(self, n, rho, cable_lens):
+        """Take a fleet that changed before the sweep started (a drone welded on at the
+        start joins the creep as one more carrier). The latched anchors are dropped so
+        the next step re-latches every drone from its measured resting pose."""
+        if self.sweep_started():
+            return False
+        self.n = int(n)
+        self.rho = [np.asarray(r, float).reshape(3) for r in rho]
+        self.cable_lens = [float(v) for v in cable_lens]
+        self.creep_anchor = None
+        self.creep_climb = 0.0
+        self.arc_anchor = None
+        self.arc_theta0 = None
+        self.arc_theta = 0.0
+        self._arc_wait = 0.0
+        self._arc_hold = 0.0
+        self._arc_th = None
+        self._arc_done = False
+        self._liftoff_wait = 0.0
+        return True
 
     def sin_elev(self, i, load_state):
         """sin of the cable's elevation above horizontal, from the measured
@@ -161,17 +189,19 @@ class CreepController:
                 self.arc_anchor.append((attach.copy(), radial))
                 self.arc_theta0.append(float(np.arctan2(d[2], hn)))
             self.arc_theta = float(np.mean(self.arc_theta0))
+            rods = (f'{self.cable_len:.2f}' if self.cable_lens is None
+                    else '/'.join(f'{v:.2f}' for v in self.cable_lens))
             self._log.info(
                 f'[planner] rigid arc creep: sweeping {np.degrees(self.arc_theta):.1f}'
                 f' -> {self.handover_elev_deg:.1f} deg about the grounded attach '
-                f'points (rod {self.cable_len:.2f} m)')
+                f'points (n={self.n}, rod {rods} m)')
 
         target = np.deg2rad(self.handover_elev_deg)
         dtheta = self.creep_vel / max(self.cable_len, 1e-6) / self.hz
         if not self.lifted_off:
             for i in range(self.n):
                 z_spawn = (self.arc_anchor[i][0][2]
-                           + self.cable_len * np.sin(self.arc_theta0[i]))
+                           + self._rod(i) * np.sin(self.arc_theta0[i]))
                 if drone_pos[i][2] > z_spawn + LIFTOFF_MARGIN:
                     self.lifted_off = True
                     break
@@ -198,7 +228,7 @@ class CreepController:
             if takeoff_seen and not self.lifted_off:
                 self._liftoff_wait += 1.0 / self.hz
                 if self._liftoff_wait >= LIFTOFF_TIMEOUT_S:
-                    zs = [drone_pos[i][2] - (self.arc_anchor[i][0][2] + self.cable_len
+                    zs = [drone_pos[i][2] - (self.arc_anchor[i][0][2] + self._rod(i)
                                              * np.sin(self.arc_theta0[i]))
                           for i in range(self.n)]
                     self._log.warn(
@@ -215,7 +245,7 @@ class CreepController:
         thd = dtheta * self.hz if th < target else 0.0
         for i in range(self.n):
             attach, radial = self.arc_anchor[i]
-            L = self.cable_len
+            L = self._rod(i)
             nodes = []
             for k in range(self.N + 1):
                 a = min(target, th + thd * self.dt * k)
@@ -272,8 +302,8 @@ class CreepController:
                 + f' -> {self.handover_elev_deg:.1f} deg (rod {self.cable_len:.2f} m)')
         target = np.deg2rad(self.handover_elev_deg)
         dtheta = self.creep_vel / max(self.cable_len, 1e-6) / self.hz
-        L = self.cable_len
         for i in range(self.n):
+            L = self._rod(i)
             th = self._arc_th[i]
             th = th + float(np.clip(target - th, -dtheta, dtheta))
             self._arc_th[i] = th
