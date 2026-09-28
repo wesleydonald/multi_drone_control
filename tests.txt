@@ -14,7 +14,7 @@ RULES
 - Fleet commands (or the RViz panel buttons):
     ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: ARM}"        # TAKEOFF, LAND the same way
     ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: ESTOP}"
-- GLOBAL ABORT = ESTOP (and the hand kill, TODO(lab) Q4: is there one, who holds it) on any of: a drone past 35 deg
+- GLOBAL ABORT = ESTOP (and the hand kill: the DISARM button, Wesley 2026-09-28; name who holds it before props on) on any of: a drone past 35 deg
   tilt; yaw turning more than 45 deg; a drone not leaving the floor within 5 s of the others; ring tilt past 15 deg;
   anyone inside the cage. The envelope faults on its own at 60 deg / 3 m/s; act before it.
 
@@ -29,10 +29,10 @@ LAYOUT AND IDS
   and preflight prints the same slot->drone. Anything else = a drone on the wrong plate or Motive +x not on plate 0.
   (The M1 partner configs list 150,270,30 for drones 0-2 + drone 3 at 90: the same plates 1/3/5/9 in another slot order.)
 - drone i = /dev/QUAD(i+1) = Motive body 11+i; payload body 8 (motion_capture_publisher_node.py:25,33).
-  TODO(lab) Q2: are drones 0-3 Tejen's quad1-4 (bodies 11-14)? Which airframe is M1's 4th? Is the 4th flight-ready?
+  Q2 (Wesley 2026-09-28): drones 0-3 are Tejen's quad1-4 (drone i = quad i+1, /dev/QUAD<i+1>, bodies 11-14), all four ready.
   TODO(lab) Q3: ring body 8 or 9 in the current Motive project? tip bodies 21-24? which program forwards to UDP 1511,
                Z-up, can it send the frame timestamp?
-  TODO(lab) Q5: cage radius/height (R5 orbit needs ~1.1 m radius; not today).
+  Q5 (Wesley 2026-09-28): cage about 4 x 4 x 3 m: the R5 orbit (~1.1 m footprint radius) and Tejen's 1.8 m transit fit.
 - ls -l /dev/QUAD*      all four symlinks. NEVER run Tejen's udev install here (overwrites 99-elrs-quad.rules).
 
 SETUP (~1 h, before anything is powered)
