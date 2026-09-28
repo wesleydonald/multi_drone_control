@@ -943,6 +943,10 @@ class LoadPlanner(Node):
         self._s_nom = nominal_cable_dirs(self.rho, self.cable_elev_deg)
         self.refs = ReferenceBuilder(self.dyn, self.n, self._s_nom, self.dt,
                                      self.traj)
+        # The new builder starts at yaw 0; keep the placement datum or a ring placed
+        # rotated is pulled toward world yaw 0 at every detach and attach.
+        if self._yaw_datum_latched:
+            self.refs.set_yaw_datum(self.psi0)
         self.slot2drone = [int(d) for d in drone_ids]
         self.solver.last_X = None            # different fleet: no valid warm start
         self.N = self.solver.N
