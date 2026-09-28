@@ -17,6 +17,9 @@ RULES
 - GLOBAL ABORT = ESTOP (and the hand kill: the DISARM button, Wesley 2026-09-28; name who holds it before props on) on any of: a drone past 35 deg
   tilt; yaw turning more than 45 deg; a drone not leaving the floor within 5 s of the others; ring tilt past 15 deg;
   anyone inside the cage. The envelope faults on its own at 60 deg / 3 m/s; act before it.
+- BETWEEN ARM AND TAKEOFF (no gate yet, R0749c / GOALS Q11): read T2 before TAKEOFF. Every tracker must print
+  "Armed - waiting for TAKEOFF" and NONE "Pose timeout", "Disarm triggered" or "Cannot takeoff". If any did: DISARM,
+  Ctrl-C T2, clean_slate, relaunch. A TAKEOFF sent then would lift the ring with the other drones only.
 
 LAYOUT AND IDS
 - Plate k of the M2A ring sits at 30*k deg CCW from the payload +x, plate 0 on +x (m2a_ring_fixture.sdf plate poses,
