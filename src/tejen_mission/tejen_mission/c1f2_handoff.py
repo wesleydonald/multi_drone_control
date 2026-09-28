@@ -453,9 +453,12 @@ def advance_reference_window(
     """Advance an already-committed sampled window without inventing a new path.
 
     Linear interpolation is used between committed samples. Queries after the
-    explicit window are padded with its terminal state. The C++ transfer window
-    ends in a stopped hold, so padding preserves the committed fallback rather
-    than switching to an unrelated Python trajectory.
+    explicit window are padded with its terminal position as a stopped hold (zero
+    velocity and acceleration), so padding preserves the committed fallback rather
+    than switching to an unrelated Python trajectory. A window cut mid-transit does
+    not end stopped: padding its terminal velocity froze the position while still
+    commanding ~0.2 m/s, and the C1F.2b recovery check rejected every fresh
+    reference against that phantom velocity (M2 join stall, T0023/T0025/T0032/T0033).
     """
     if not np.isfinite(elapsed_s) or elapsed_s < 0.0:
         raise ValueError("elapsed_s must be finite and non-negative")
@@ -486,11 +489,12 @@ def advance_reference_window(
             )
         return result
 
-    return TrajectoryReference(
-        _resample(reference.positions),
-        _resample(reference.velocities),
-        _resample(reference.accelerations),
-    )
+    past_end = query_times > source_times[-1]
+    velocities = _resample(reference.velocities)
+    accelerations = _resample(reference.accelerations)
+    velocities[past_end] = 0.0
+    accelerations[past_end] = 0.0
+    return TrajectoryReference(_resample(reference.positions), velocities, accelerations)
 
 
 def post_grant_reference_is_fresh(
