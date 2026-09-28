@@ -408,6 +408,30 @@ def test_m2_real_graph():
     assert '/payload_mocap' not in g
 
 
+@pytest.mark.parametrize('mode', ['sim', 'sil', 'real'])
+def test_m1_drone3_takes_commands_from_the_manager_only(mode):
+    """One command path (Wesley 2026-09-29): drone 3's tracker is armed and sent TAKEOFF by
+    the fleet manager like the carriers, never straight from the /fleet/command broadcast
+    (which let it take off when the manager refused)."""
+    args = {'num_drones': 3, 'sil': True} if mode == 'sil' else dict(PARTNER_ATTACHED_ORBIT)
+    if mode == 'real':
+        args.update(real=True, thrust_ratio=24.0, pose_timeout_s=0.25, safety_ref_timeout_s=1.0)
+    g = _by_name(evaluate('three_attach_launch.py', **args))
+    assert not [r for r in g['/controller_3']['remappings'] if r[1] == '/fleet/command']
+    assert g['/central_controller']['params']['num_drones'] == 4
+
+
+def test_superseded_rig_attach_launch_refuses():
+    with pytest.raises(RuntimeError, match='superseded'):
+        evaluate('real_attach_launch.py', num_drones=3)
+
+
+def test_m1_manager_counts_only_launched_trackers():
+    g = _by_name(evaluate('three_attach_launch.py', num_drones=3, enable_approach=False))
+    assert '/controller_3' not in g
+    assert g['/central_controller']['params']['num_drones'] == 3
+
+
 @pytest.mark.parametrize('real', [False, True])
 def test_m2_manager_feedback_stays_under_ours(real):
     """His MPC publishes a 2 Hz armed heartbeat on /drone_i/arming_state_feedback in M2

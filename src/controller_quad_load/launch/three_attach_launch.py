@@ -468,8 +468,9 @@ def launch_setup(context, *args, **kwargs):
     nodes.append(Node(
         package='controller_quad_load', executable='main', name='central_controller',
         # manage the newcomer too: it must disarm on LAND and on an abort like the others
-        # (R0575/R0577: left armed on the floor after LAND; an abort never reached it)
-        parameters=[{'num_drones': n + int(LaunchConfiguration('reserved_attach').perform(context))}],
+        # (R0575/R0577: left armed on the floor after LAND; an abort never reached it).
+        # It exists only with the approach chain: a managed drone with no tracker fails ARM.
+        parameters=[{'num_drones': n + (1 if truthy(context, 'enable_approach') else 0)}],
         output='screen'))
 
     # ── Dissipative reference generator with 1 reserved ATTACH node ─────────
@@ -667,12 +668,15 @@ def launch_setup(context, *args, **kwargs):
                          'thrust_ratio_estimator_backend': 'full_model_kt_ukf'}],
             # ELRSCommand out -> pre-mux _tejen. Command IN <- /fleet/command so the fleet
             # ARM/TAKEOFF (RViz ARM button) arms this drone too -- CallbackManager listens on
-            # 'drone_command', which we point at the fleet command stream.
+            # 'drone_command', which we point at the fleet command stream. So it bypasses the
+            # manager's TAKEOFF gate: sim attach demo only (real:=true, partner and SIL run
+            # without it; card 2026-09-29_pre_takeoff_disarm_gate.md, residue).
             remappings=[(elrs, f'{elrs}_tejen'),
                         ('drone_command', '/fleet/command')], output='screen'))
 
-    # (b) our dissipative tracker for drone 3 -> pre-mux _diss. It ARMS + TAKEOFF with the fleet
-    # (its /drone_3/command is remapped to /fleet/command), so it is already flying-ready when the
+    # (b) our dissipative tracker for drone 3 -> pre-mux _diss. The fleet manager arms it and
+    # sends it TAKEOFF like the carriers (one command path, Wesley 2026-09-29: a broadcast
+    # remap let it take off when the manager refused), so it is already flying-ready when the
     # weld hands it authority. Pre-weld it has no reference (dissipative streams drone 3's ref only
     # after attach) so it just publishes an armed-idle command on _diss, which the mux does NOT
     # forward -- the real drone stays on the approach MPC until the weld. takeoff_spool_s=0 so the
@@ -721,11 +725,8 @@ def launch_setup(context, *args, **kwargs):
                      'enable_diag_log': True}],
         # In SIL there is no mux, so this tracker publishes straight onto
         # /drone_3/ELRSCommand, which the bench plant consumes. Everything else about
-        # the node -- parameters, the /fleet/command remap that arms it with the fleet
-        # -- is unchanged, so it is the same tracker the Gazebo run flies.
-        remappings=([(f'/drone_{d}/command', '/fleet/command')] if sil else
-                    [(elrs, f'{elrs}_diss'),
-                     (f'/drone_{d}/command', '/fleet/command')]), output='screen'))
+        # the node is unchanged, so it is the same tracker the Gazebo run flies.
+        remappings=([] if sil else [(elrs, f'{elrs}_diss')]), output='screen'))
 
     # SIL stops here: the bench replaces the magnet/approach chain below with a
     # scripted weld and a /magnet/object_attached publish (decision D5).

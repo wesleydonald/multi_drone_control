@@ -10,8 +10,9 @@ Responsibilities
    LAND: planner lowers the load back down, then we disarm once it reports done.
 3. Broadcasts /fleet/step at FREQUENCY_HZ using Gazebo sim time.
 4. Arms / disarms individual drones via /drone_N/arming_service.
-5. Monitors /drone_N/arming_state_feedback - any unexpected disarm
-   triggers an emergency stop of the whole fleet.
+5. Monitors /drone_N/arming_state_feedback - any unexpected disarm in flight
+   triggers an emergency stop of the whole fleet; one between ARM and TAKEOFF
+   disarms the fleet through the services and refuses TAKEOFF, like a failed ARM.
 
 Usage
 ─────
@@ -199,6 +200,17 @@ class CentralController(Node):
         was_armed = self.drone_armed[drone_id]
         self.drone_armed[drone_id] = msg.data
 
+        # Between ARM and TAKEOFF (R0749: every tracker pose-timed-out and TAKEOFF was still
+        # accepted): nothing of ours flies yet, so ground our fleet like a failed ARM (Q11)
+        # rather than abort, which would latch the partner's drones behind the muxes.
+        if self.fleet_armed and not self.flying and was_armed and not msg.data:
+            self.get_logger().error(
+                f"Drone {drone_id} disarmed before TAKEOFF: disarming the fleet; TAKEOFF "
+                f"refused. RELAUNCH the stack to retry.")
+            self._disarm_fleet(emergency=False,
+                               reason=f"drone {drone_id} disarmed before TAKEOFF")
+            return
+
         # If a drone disarmed unexpectedly while the fleet is flying,
         # trigger an emergency stop for the entire fleet.
         if self.flying and was_armed and not msg.data:
@@ -246,7 +258,9 @@ class CentralController(Node):
                 self.get_logger().error(
                     f"Arming service for drone {i} not available - aborting ARM.")
                 self.get_logger().error(
-                    f"ARM FAILED for drone(s) [{i}]: nothing armed; TAKEOFF refused.")
+                    f"ARM FAILED for drone(s) [{i}]: disarming the fleet; TAKEOFF refused.")
+                self._disarm_fleet(emergency=False,
+                                   reason=f"arming service for drone {i} not available")
                 return
 
         # Send arm requests in parallel
@@ -297,6 +311,16 @@ class CentralController(Node):
         if not self.fleet_armed:
             self.get_logger().warn(
                 "Cannot TAKEOFF: fleet is not armed. Send ARM first.")
+            return
+        # the feedback path can miss a disarm that raced the ARM thread (a False handled
+        # before fleet_armed was set): check every managed drone's last reported state
+        not_armed = [i for i in range(self.num_drones) if not self.drone_armed.get(i)]
+        if not_armed:
+            self.get_logger().error(
+                f"TAKEOFF REFUSED: drone(s) {not_armed} not armed: disarming the fleet. "
+                f"RELAUNCH the stack to retry.")
+            self._disarm_fleet(emergency=False,
+                               reason=f"drone(s) {not_armed} not armed at TAKEOFF")
             return
         self.master_step = 0
         self.flying = True

@@ -149,6 +149,10 @@ def _args():
 
 
 def launch_setup(context, *args, **kwargs):
+    # Its newcomer takes ARM/TAKEOFF straight from the /fleet/command broadcast (tracker and
+    # approach MPC), so it lifts even when the manager refuses TAKEOFF (Wesley 2026-09-29:
+    # one command path per drone). The rig flies three_attach_launch.py real:=true.
+    raise RuntimeError('real_attach_launch.py is superseded: fly three_attach_launch.py real:=true')
     n = int(LaunchConfiguration('num_drones').perform(context))
     if n < 1:
         raise RuntimeError(f'num_drones must be >= 1, got {n}')
