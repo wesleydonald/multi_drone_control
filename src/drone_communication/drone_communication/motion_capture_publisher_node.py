@@ -316,13 +316,28 @@ class ParseData():
 class MotionCapturePublisher(Node):
     def __init__(self):
         super().__init__('udp_to_pose_node')
-        
+        # Motive rigid-body ids as parameters so a different project can be typed at the
+        # rig (defaults = the constants above; -1 = no such body). drone i = drone_body_ids[i].
+        ids = [int(v) for v in self.declare_parameter(
+            'drone_body_ids', list(RIGID_BODY_TO_DRONE.keys())).value]
+        self.body_to_drone = {rb: i for i, rb in enumerate(ids)}
+        payload = int(self.declare_parameter(
+            'payload_body_id', -1 if PAYLOAD_RIGID_BODY_ID is None else PAYLOAD_RIGID_BODY_ID).value)
+        tip = int(self.declare_parameter(
+            'magnet_tip_body_id',
+            -1 if MAGNET_TIP_RIGID_BODY_ID is None else MAGNET_TIP_RIGID_BODY_ID).value)
+        self.payload_body_id = None if payload < 0 else payload
+        self.magnet_tip_body_id = None if tip < 0 else tip
+        self.get_logger().info(
+            f'MoCap bodies: drones {self.body_to_drone} (id -> drone), payload '
+            f'{self.payload_body_id}, magnet tip {self.magnet_tip_body_id}')
+
         # ROS2 Publishers: one per drone, keyed by drone_id, publishing to
         # /drone_<drone_id>/motion_capture_state (see RIGID_BODY_TO_DRONE above).
         self.drone_publishers = {
             drone_id: self.create_publisher(
                 MotionCaptureState, f'/drone_{drone_id}/motion_capture_state', 10)
-            for drone_id in RIGID_BODY_TO_DRONE.values()}
+            for drone_id in self.body_to_drone.values()}
         self.pose_publisher = self.create_publisher(PoseStamped, '/rviz_pose', 10)
         self.magnet_tip_publisher = self.create_publisher(PoseStamped, '/magnet_tip_pose', 10)
         self.magnet_tip_parser = ParseData()
@@ -404,7 +419,7 @@ class MotionCapturePublisher(Node):
         # filter state, so sharing one across drones would corrupt their twists.
         self.payloadParseData = ParseData()
         self.drone_parsers = {drone_id: ParseData()
-                              for drone_id in RIGID_BODY_TO_DRONE.values()}
+                              for drone_id in self.body_to_drone.values()}
         # Per-rigid-body publish throttle. Keyed by rb_id; the decimation happens
         # before parse_packet so the velocity dt widens with the actual spacing.
         min_period = (1.0 / MOCAP_MAX_PUBLISH_HZ) if MOCAP_MAX_PUBLISH_HZ > 0 else 0.0
@@ -450,17 +465,17 @@ class MotionCapturePublisher(Node):
                         continue
                     last_pub[rb_id] = now_t
 
-                if rb_id is not None and rb_id == PAYLOAD_RIGID_BODY_ID:
+                if rb_id is not None and rb_id == self.payload_body_id:
                     obj_data = self.payloadParseData.parse_packet(data)
                     if obj_data is not None:
                         self.payload_publisher.publish(
                             self.create_motion_capture_state_msg(obj_data))
-                elif rb_id is not None and rb_id == MAGNET_TIP_RIGID_BODY_ID:
+                elif rb_id is not None and rb_id == self.magnet_tip_body_id:
                     obj_data = self.magnet_tip_parser.parse_packet(data)
                     if obj_data is not None:
                         self.magnet_tip_publisher.publish(self.create_pose_stamped_msg(obj_data))
-                elif rb_id in RIGID_BODY_TO_DRONE:
-                    drone_id = RIGID_BODY_TO_DRONE[rb_id]
+                elif rb_id in self.body_to_drone:
+                    drone_id = self.body_to_drone[rb_id]
                     obj_data = self.drone_parsers[drone_id].parse_packet(data)
                     if obj_data is not None:
                         self.drone_publishers[drone_id].publish(

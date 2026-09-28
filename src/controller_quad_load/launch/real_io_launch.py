@@ -12,11 +12,11 @@ draws the scene straight from the mocap topics.
   * MoCap: ONE motion_capture_publisher_node routes each rigid body to its topic:
       - each drone body  -> /drone_<id>/motion_capture_state  (the trackers read)
       - the payload body -> /payload/motion_capture_state      (planner + trackers)
-    The routing table lives at the top of
-    drone_communication/motion_capture_publisher_node.py:
-      RIGID_BODY_TO_DRONE = {10: 0, 11: 1, ...}   # add a row per drone
-      PAYLOAD_RIGID_BODY_ID = 8                    # the payload's rigid body
-      MOCAP_UDP_HOST / MOCAP_UDP_PORT              # your mocap stream endpoint
+    Body ids are launch args (defaults in drone_communication/motion_capture_publisher_node.py):
+      mocap_drone_body_ids:=11,12,13,14    # drone i = the i-th id
+      mocap_payload_body_id:=8             # the ring
+      mocap_magnet_tip_body_id:=<id>       # drone 3's magnet tip (weld detection); none by default
+      MOCAP_UDP_HOST / MOCAP_UDP_PORT stay constants in the node
     num_drones controls how many ELRS links, drone models and RViz displays
     spin up; the
     rigid-body map must be edited to match (the node routes bodies by ID).
@@ -69,6 +69,12 @@ def _args():
         # the publisher node) must be edited to match -- the node routes bodies by
         # ID, not by this count.
         DeclareLaunchArgument('num_drones', default_value='2'),
+        DeclareLaunchArgument('mocap_drone_body_ids', default_value='',
+                              description="Motive drone body ids, comma list (drone i = i-th); '' = node default 11,12,13,14"),
+        DeclareLaunchArgument('mocap_payload_body_id', default_value='',
+                              description="Motive ring body id; '' = node default 8"),
+        DeclareLaunchArgument('mocap_magnet_tip_body_id', default_value='',
+                              description="Motive body on drone 3's magnet tip (weld detection); '' = none"),
         DeclareLaunchArgument('rviz', default_value='true',
                               description='open RViz2 (drone models + payload + ArmPanel)'),
         # The STL is the real TBS frame in mm; 0.001 renders it at its true 209 mm
@@ -116,10 +122,21 @@ def launch_setup(context, *args, **kwargs):
     #    /drone_<id>/motion_capture_state and the payload body
     #    (PAYLOAD_RIGID_BODY_ID) to /payload/motion_capture_state -- the topics the
     #    trackers and the load planner read directly.
+    # Motive rigid-body ids ('' = the node's defaults: drones 11.., payload 8, no tip).
+    mocap_params = {}
+    ids = LaunchConfiguration('mocap_drone_body_ids').perform(context).strip()
+    if ids:
+        mocap_params['drone_body_ids'] = [int(v) for v in ids.split(',')]
+    for arg, key in (('mocap_payload_body_id', 'payload_body_id'),
+                     ('mocap_magnet_tip_body_id', 'magnet_tip_body_id')):
+        v = LaunchConfiguration(arg).perform(context).strip()
+        if v:
+            mocap_params[key] = int(v)
     nodes.append(Node(
         package='drone_communication',
         executable='motion_capture_publisher_node',
         name='motion_capture_publisher',
+        parameters=[mocap_params] if mocap_params else [],
         output='screen',
     ))
 
@@ -139,8 +156,9 @@ def launch_setup(context, *args, **kwargs):
         nodes.append(DeclareLaunchArgument(
             arg, default_value=f'/dev/QUAD{i}',
             description=f'drone {i} ELRS TX serial device (udev symlink)'))
-        # one drone's radio latch, default magnet_initial (the attach newcomer's magnet is
-        # driven by the magnet manager through its mux, so its latch must stay '')
+        # one drone's radio latch, default magnet_initial (real_attach_launch.py drives the
+        # newcomer's magnet through its mux merge, so its latch must stay '' there; the M1/M2
+        # real modes pass ON|OFF for every drone and drive the latch itself, ladder P10)
         mag = f'drone{i}_magnet_initial'
         nodes.append(DeclareLaunchArgument(
             mag, default_value=LaunchConfiguration('magnet_initial')))
