@@ -61,6 +61,11 @@ class Controller(Node):
         # an unarmed fleet, so a /magnet/command ON while disarmed is taken as the ARM
         # this node missed.
         self.create_subscription(String, '/magnet/command', self._attach_implies_arm, 10)
+        # On a drone the fleet manager commands (three_attach: drone 3), ARM comes as the
+        # manager's service call to our tracker, never to this node; its TAKEOFF on the drone's
+        # own command topic is sent only once the manager has accepted it, so it arms this node.
+        if bool(self.declare_parameter('takeoff_implies_arm', False).value):
+            self.create_subscription(String, 'drone_command', self._takeoff_implies_arm, 5)
         # DEBUG: print the RESOLVED topic names (after launch remaps) so it is obvious what
         # this node listens to for ARM and pose, and where it emits ELRSCommand. If
         # cmd_in is not the topic your ARM button publishes to, the remap did not take.
@@ -514,6 +519,13 @@ class Controller(Node):
         self.pendulum_state = np.zeros(4)
         self.last_pendulum_update_time = None
 
+
+    def _takeoff_implies_arm(self, msg):
+        if msg.data.strip().upper() == 'TAKEOFF' and self.current_pose is not None:
+            if not self.armed:
+                self.armed = True
+                self.get_logger().info('[approach] armed by the fleet manager\'s TAKEOFF')
+            self.takeoff_requested = True
 
     def _attach_implies_arm(self, msg):
         # ...and TAKEOFF: a node that missed ARM missed TAKEOFF too (R0195 sat on the

@@ -421,6 +421,17 @@ def test_m1_drone3_takes_commands_from_the_manager_only(mode):
     assert g['/central_controller']['params']['num_drones'] == 4
 
 
+def test_sim_approach_mpc_takes_commands_from_the_manager_only():
+    """The collaborator's approach MPC (sim attach demo) hears the manager's accepted TAKEOFF
+    on /drone_3/command, which arms it; never the /fleet/command broadcast."""
+    g = _by_name(evaluate('three_attach_launch.py', num_drones=3))
+    approach = [n for k, n in g.items() if n['executable'] != 'controller'
+                and ('drone_command', '/drone_3/command') in n['remappings']]
+    assert len(approach) == 1 and approach[0]['params']['takeoff_implies_arm'] is True
+    assert not [k for k, n in g.items() if ('drone_command', '/fleet/command') in n['remappings']
+                or (k == '/controller_3' and any(r[1] == '/fleet/command' for r in n['remappings']))]
+
+
 def test_superseded_rig_attach_launch_refuses():
     with pytest.raises(RuntimeError, match='superseded'):
         evaluate('real_attach_launch.py', num_drones=3)

@@ -665,14 +665,15 @@ def launch_setup(context, *args, **kwargs):
                          'mpc_thrust_ratio': kt_solo,
                          'enable_thrust_ratio_ukf': b('approach_kt_ukf'),
                          'enable_thrust_ratio_feedback': b('approach_kt_feedback'),
-                         'thrust_ratio_estimator_backend': 'full_model_kt_ukf'}],
-            # ELRSCommand out -> pre-mux _tejen. Command IN <- /fleet/command so the fleet
-            # ARM/TAKEOFF (RViz ARM button) arms this drone too -- CallbackManager listens on
-            # 'drone_command', which we point at the fleet command stream. So it bypasses the
-            # manager's TAKEOFF gate: sim attach demo only (real:=true, partner and SIL run
-            # without it; card 2026-09-29_pre_takeoff_disarm_gate.md, residue).
+                         'thrust_ratio_estimator_backend': 'full_model_kt_ukf',
+                         # one command path (Wesley 2026-09-29): the manager's accepted
+                         # TAKEOFF on /drone_3/command arms and starts it; never the broadcast
+                         'takeoff_implies_arm': True}],
+            # ELRSCommand out -> pre-mux _tejen. Commands IN <- /drone_3/command, where the fleet
+            # manager publishes TAKEOFF once it has accepted it (a refused TAKEOFF never reaches
+            # it); emergencies reach the drone through the mux latch.
             remappings=[(elrs, f'{elrs}_tejen'),
-                        ('drone_command', '/fleet/command')], output='screen'))
+                        ('drone_command', f'/drone_{d}/command')], output='screen'))
 
     # (b) our dissipative tracker for drone 3 -> pre-mux _diss. The fleet manager arms it and
     # sends it TAKEOFF like the carriers (one command path, Wesley 2026-09-29: a broadcast
