@@ -633,18 +633,23 @@ class MotionCapturePublisher(Node):
         try:
             while rclpy.ok():
                 data, _ = self.sock.recvfrom(255)
-                message = data.decode().strip()
-                
+                # A bad packet must skip, never leave this loop (multi_drone_control
+                # 2026-09-28: every pose would go stale mid-flight).
+                try:
+                    message = data.decode().strip()
+                except UnicodeDecodeError:
+                    continue
+
                 data = self.clean_message(message)
                 try:
                     if not data or '|' not in data:
                         print("Invalid data format, skipping packet.")
-                        return None
+                        continue
 
                     parts = [p.strip() for p in data.split('|') if p.strip()]
                     if len(parts) != 3:
                         print("Invalid parts length.")
-                        return None
+                        continue
 
                     obj_id, pos_str, rot_str = parts
                 except Exception:
