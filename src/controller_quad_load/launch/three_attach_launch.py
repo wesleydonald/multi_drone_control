@@ -35,10 +35,36 @@ mux to our tracker AND folds drone 3 into the dissipative network (4th member).
     magnet_tip_publisher `magnet_index`/`drone_index` after `gz topic -e -t /model/x3_drone3/pose`.
   * online_join_planner targeting (payload/attachment pose topics) -- defaults + fallback are
     a starting point for a hover approach; refine once the drone is flying.
+
+=== RIG: real:=true (Wesley 2026-09-28: the rig flies THIS launch, not real_attach_launch) ===
+One launch, no Gazebo, no RViz launch: it includes real_io_launch.py itself (the mocap node,
+one elrs_interface per drone incl. the newcomer, fleet_viz from mocap, RViz). Every
+Gazebo-facing node is dropped (bridges, sim Betaflight, mocap emulator, magnet_tip_publisher,
+the gz weld bridges); the rest of the graph and its parameters are the sim ones, except
+(controller_quad_load/real_mode.py): use_sim_time false; thrust_ratio typed (no 'auto');
+takeoff kT = kT; pose_timeout_s 0.25 / safety_ref_timeout_s 1.0 / payload_rest_z 0.05 /
+z_taut_gate 0.9 in place of the sim defaults; the newcomer's magnet on ELRS channel
+magnet_channel (6 = AUX4) merged by its mux from the magnet manager, which welds on the
+mocap tip body (/magnet_tip_pose) with no gz backend (speed gate 0.05 m/s, dwell 0.15 s).
+Tether radios latch magnet_initial (ON); the newcomer's latch is attach_magnet_initial ('').
+
+    ros2 launch controller_quad_load three_attach_launch.py real:=true thrust_ratio:=<kT> \
+        drone_mass:=<weighed> load_mass:=<weighed> start_taut:=false \
+        attach_azimuths_deg:=30,150,270 attach_x_offset:=0.0 attach_y_offset:=0.25 \
+        reconfig_mode:=ocp enable_approach_mpc:=false weld_radius:=<R2 capture gap>
+    # drone<i>_serial:=/dev/QUAD<i+1> (defaults), rviz:=false, real_io:=false (another stack
+    # owns mocap and radios)
+
+Needs on the rig, not in this file: the tip body in the mocap map (MAGNET_TIP_RIGID_BODY_ID
+is None today, so /magnet_tip_pose never publishes and nothing welds), the body ids of the
+four drones and the ring, the prebuilt solver for the weighed masses.
 """
+import os
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
+from controller_quad_load.real_mode import (apply_rig_values, declared_defaults,
+                                            rig_io, rig_thrust_ratio, truthy)
 from controller_quad_load.thrust_model import resolve_thrust_ratio
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
@@ -63,6 +89,18 @@ def _args():
         # a change here lands in the bench automatically. Default false, so a normal
         # Gazebo run is byte-identical to before.
         DeclareLaunchArgument('sil', default_value='false'),
+        # RIG mode (see the docstring, RIG): no Gazebo-facing node, the wall clock, a typed
+        # kT, the rig watchdogs and real_io_launch.py included. Default false = the sim graph.
+        DeclareLaunchArgument('real', default_value='false'),
+        # real only: include real_io_launch.py (false when another stack owns mocap + radios)
+        DeclareLaunchArgument('real_io', default_value='true'),
+        DeclareLaunchArgument('rviz', default_value='true'),        # real only: real_io's RViz
+        # real only: ELRS aux channel of every magnet (6 = Betaflight AUX4, tools/aux_sweep.py)
+        DeclareLaunchArgument('magnet_channel', default_value='6'),
+        # real only: the tether radios' magnet latch from boot
+        DeclareLaunchArgument('magnet_initial', default_value='ON'),
+        # real only: the newcomer's radio latch; '' = the magnet manager drives it via the mux
+        DeclareLaunchArgument('attach_magnet_initial', default_value=''),
         DeclareLaunchArgument('num_drones', default_value='3'),      # TETHERED fleet size
         DeclareLaunchArgument('reserved_attach', default_value='1'), # extra network capacity
         DeclareLaunchArgument('cable_len', default_value='0.5'),
@@ -292,26 +330,41 @@ def launch_setup(context, *args, **kwargs):
     if n < 1:
         raise RuntimeError(f'num_drones must be >= 1, got {n}')
     drone_names = [f'x3_drone{i}' for i in range(n)]
-    # kT is an operating point of the sim's quadratic motor model (thrust_model.py):
-    # 'auto' derives it from load_mass and the fleet size, a number is used verbatim.
-    kt, kt_to, kt_note = resolve_thrust_ratio(
-        LaunchConfiguration('thrust_ratio').perform(context),
-        LaunchConfiguration('takeoff_thrust_ratio').perform(context),
-        LaunchConfiguration('load_mass').perform(context), n)
-    kt_solo = resolve_thrust_ratio(LaunchConfiguration('thrust_ratio').perform(context),
-                                   '0', 0.0, 1)[0]
+    sil = truthy(context, 'sil')
+    real = truthy(context, 'real')
+    if real and sil:
+        raise RuntimeError('real:=true and sil:=true are exclusive')
+    if real:
+        kt, kt_to, kt_note = rig_thrust_ratio(
+            LaunchConfiguration('thrust_ratio').perform(context),
+            LaunchConfiguration('takeoff_thrust_ratio').perform(context))
+        kt_solo = kt
+        rig_note = apply_rig_values(context, declared_defaults(context, _args()))
+    else:
+        # kT is an operating point of the sim's quadratic motor model (thrust_model.py):
+        # 'auto' derives it from load_mass and the fleet size, a number is used verbatim.
+        kt, kt_to, kt_note = resolve_thrust_ratio(
+            LaunchConfiguration('thrust_ratio').perform(context),
+            LaunchConfiguration('takeoff_thrust_ratio').perform(context),
+            LaunchConfiguration('load_mass').perform(context), n)
+        kt_solo = resolve_thrust_ratio(LaunchConfiguration('thrust_ratio').perform(context),
+                                       '0', 0.0, 1)[0]
 
     f = lambda name: ParameterValue(LaunchConfiguration(name), value_type=float)
     b = lambda name: ParameterValue(LaunchConfiguration(name), value_type=bool)
     i_ = lambda name: ParameterValue(LaunchConfiguration(name), value_type=int)
 
-    nodes = [SetParameter(name='use_sim_time', value=True),
+    nodes = [SetParameter(name='use_sim_time', value=not real),
              LogInfo(msg=f'[launch] {kt_note}; takeoff {kt_to:.2f}')]
+    if real:
+        nodes.append(LogInfo(msg=rig_note))
+        if truthy(context, 'start_taut'):
+            nodes.append(LogInfo(msg='[launch] REAL: start_taut is true (the sim air start); the '
+                                     'rig floor start is start_taut:=false (decisions 09-24)'))
 
     # SIL: controllers only. The bench is the simulator, so every Gazebo-facing node
-    # below is skipped. See the `sil` launch argument.
-    sil = (LaunchConfiguration('sil').perform(context).lower()
-           in ('1', 'true', 'yes'))
+    # below is skipped. See the `sil` launch argument. The rig has none of them either.
+    sim_io = not sil and not real
     # the collaborator's approach MPC flies the newcomer to the weld; without it the
     # dissipative node flies the approach on the newcomer's own tracker (approach.py)
     enable_approach_mpc = (not sil) and (
@@ -330,7 +383,7 @@ def launch_setup(context, *args, **kwargs):
 
     # ── 3 TETHERED drones: bridges + betaflight comm + our tracker (as dissipative_launch) ──
     for i, drone_name in enumerate(drone_names):
-        if not sil:
+        if sim_io:
             nodes.append(Node(
                 package='ros_gz_bridge', executable='parameter_bridge', name=f'motor_bridge_{i}',
                 arguments=[f'/{drone_name}/gazebo/command/motor_speed'
@@ -466,6 +519,26 @@ def launch_setup(context, *args, **kwargs):
     # debugging). Default true.
     enable_approach = (LaunchConfiguration('enable_approach').perform(context).lower()
                        in ('1', 'true', 'yes'))
+    if real and enable_approach:
+        # the newcomer is hardwired as drone ATTACH_DRONE_ID: any other n puts a carrier and
+        # the newcomer's mux on the same radio
+        if n != ATTACH_DRONE_ID:
+            raise RuntimeError(f'real:=true with the approach chain needs num_drones:='
+                               f'{ATTACH_DRONE_ID} (the newcomer is drone {ATTACH_DRONE_ID}), '
+                               f'got {n}; or enable_approach:=false')
+        # the collaborator's approach MPC is unflown on hardware and unstable on the linear
+        # plant (decisions 2026-09-25, R0522), and a /magnet/command ON arms it (ATTACH)
+        if enable_approach_mpc:
+            raise RuntimeError('real:=true: the approach MPC is not for the rig; add '
+                               'enable_approach_mpc:=false (our tracker flies the approach) '
+                               'or partner:=true')
+    if real and truthy(context, 'real_io'):
+        # the newcomer has a radio too; its latch stays '' so the manager's mux merge works
+        n_radio = n + (1 if enable_approach else 0)
+        nodes += rig_io(os.path.dirname(os.path.abspath(__file__)), n_radio,
+                        [LaunchConfiguration('magnet_initial')] * n
+                        + [LaunchConfiguration('attach_magnet_initial')] * (n_radio - n),
+                        attach=enable_approach)
     if not enable_approach:
         return nodes
 
@@ -474,7 +547,7 @@ def launch_setup(context, *args, **kwargs):
     elrs = f'/drone_{d}/ELRSCommand'
 
     # sim interface for the STANDALONE drone (not covered by the rviz/num_drones launch).
-    if not sil:
+    if sim_io:
         nodes.append(Node(
             package='ros_gz_bridge', executable='parameter_bridge', name=f'motor_bridge_{d}',
             arguments=[f'/{dn}/gazebo/command/motor_speed'
@@ -511,13 +584,18 @@ def launch_setup(context, *args, **kwargs):
                          'imu_topic': f'/drone_{d}/imu'}],
             remappings=[(f'/model/{PARENT_MODEL}/model/{dn}/pose', f'/model/{dn}/pose')]))
 
+    if not sil:
         # ELRSCommand MUX: forwards APPROACH (_tejen) until the weld, then OURS (_diss).
+        # Rig: it also merges the magnet manager's aux channel into what it forwards.
+        rig_magnet = ({'magnet_command_topic': '/magnet/ELRSCommand',
+                       'magnet_channel': i_('magnet_channel')} if real else {})
         nodes.append(Node(
             package='drone_magnet', executable='elrs_mux', name=f'elrs_mux_{d}',
             parameters=[{'drone_id': d, 'latch': True,
                          'approach_stream': enable_approach_mpc or partner,
                          'handoff_topic': '/join_planner/handoff_ready' if partner else '',
-                         'release_topic': '/partner/release' if partner_attached else ''}],
+                         'release_topic': '/partner/release' if partner_attached else '',
+                         **rig_magnet}],
             output='screen'))
 
     # (a) collaborator's approach MPC -> pre-mux _tejen. Follows /join_planner/reference.
@@ -657,6 +735,34 @@ def launch_setup(context, *args, **kwargs):
                      # never welds. Safe here because the whole approach is ATTACH-gated already.
                      'auto_descend': True}],
         output='screen'))
+
+    # RIG: the weld is declared from mocap alone (the tip body on /magnet_tip_pose, the ring
+    # body on /payload/motion_capture_state); no joint to command, the magnet is the radio.
+    if real:
+        nodes.append(Node(
+            package='drone_magnet', executable='magnet_attachment_manager',
+            name='magnet_attachment_manager',
+            parameters=[{'magnet_tip_pose_topic': '/magnet_tip_pose',
+                         'magnet_tip_pose_msg_type': 'pose_stamped',
+                         'attached_at_start': partner_attached,
+                         'object_pose_topic': '/payload/motion_capture_state',
+                         'object_pose_msg_type': 'mocap_state',
+                         'object_x_offset': f('attach_x_offset'),
+                         'object_y_offset': f('attach_y_offset'),
+                         'use_fallback_object_pose': False,
+                         'attach_radius': f('weld_radius'),
+                         'attach_speed_threshold': 0.05,
+                         'attach_dwell_time_s': 0.15,
+                         'rel_vel_filter_tau_s': f('weld_vel_filter_s'),
+                         'velocity_clock': LaunchConfiguration('weld_velocity_clock'),
+                         'object_attached_topic': '/magnet/object_attached',
+                         'command_backend': 'none',
+                         'detach_on_start': False,
+                         'enable_elrs_magnet_output': True,
+                         'elrs_magnet_command_topic': '/magnet/ELRSCommand',
+                         'elrs_magnet_channel': i_('magnet_channel')}],
+            output='screen'))
+        return nodes
 
     # magnet tip pose (world) from the drone's poses -> /magnet_tip_pose. Verified array order:
     # the magnet_tip_link (model-relative) is index 0 and the body WORLD pose is index -1, so we

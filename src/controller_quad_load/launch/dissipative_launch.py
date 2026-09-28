@@ -29,10 +29,28 @@ Then, mid-hover, detach a drone (physical id):
 RUN ORDER: rviz_quad_load_launch.py owns the clock/pose bridges, mocap emulators and
 fleet_viz -- bring it up first, then this. This launch adds only the trackers, the
 fleet manager, the dissipative node, and the per-drone /drone_k/detach bridges.
+
+=== RIG: real:=true (Wesley 2026-09-28: the rig flies THIS launch for M2, partner_m2:=true) ===
+One launch: it includes real_io_launch.py itself (the mocap node, one elrs_interface per drone
+on /dev/QUAD<i+1>, fleet_viz from mocap, RViz). No Gazebo bridge, no sim Betaflight, no ring
+mocap emulator; sim_interface is ignored. The graph and its parameters are the sim ones except
+(controller_quad_load/real_mode.py): use_sim_time false; thrust_ratio typed (no 'auto');
+takeoff kT = kT; pose_timeout_s 0.25 / safety_ref_timeout_s 1.0 / payload_rest_z 0.05 /
+z_taut_gate 0.9 in place of the sim defaults; the tether radios latch magnet_initial (ON) on
+ELRS channel magnet_channel (6 = AUX4), also given to the partner_m2 muxes.
+
+    ros2 launch controller_quad_load dissipative_launch.py real:=true partner_m2:=true \
+        num_drones:=4 thrust_ratio:=<kT> drone_mass:=<weighed> load_mass:=<weighed> \
+        attach_azimuths_deg:=30,90,150,270 start_taut:=false reconfig_mode:=ocp
+    # drone<i>_serial:=/dev/QUAD<i+1> (defaults), rviz:=false, real_io:=false when Tejen's
+    # IRL stack owns the radios and the mocap socket (one radio node per drone, one UDP 1511)
 """
+import os
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
+from controller_quad_load.real_mode import (apply_rig_values, declared_defaults,
+                                            rig_io, rig_thrust_ratio, truthy)
 from controller_quad_load.thrust_model import resolve_thrust_ratio
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
@@ -44,6 +62,16 @@ PARENT_MODEL = 'lift_system'
 def _args():
     return [
         DeclareLaunchArgument('num_drones', default_value='4'),
+        # RIG mode (see the docstring, RIG): no Gazebo-facing node, the wall clock, a typed
+        # kT, the rig watchdogs and real_io_launch.py included. Default false = the sim graph.
+        DeclareLaunchArgument('real', default_value='false'),
+        # real only: include real_io_launch.py (false when another stack owns mocap + radios)
+        DeclareLaunchArgument('real_io', default_value='true'),
+        DeclareLaunchArgument('rviz', default_value='true'),        # real only: real_io's RViz
+        # real only: ELRS aux channel of every magnet (6 = Betaflight AUX4, tools/aux_sweep.py)
+        DeclareLaunchArgument('magnet_channel', default_value='6'),
+        # real only: the tether radios' magnet latch from boot
+        DeclareLaunchArgument('magnet_initial', default_value='ON'),
         # sim Betaflight rate loop source for every bf_comm: 'imu' (the gyro on /drone_i/imu,
         # bridged below; default since 2026-09-28) or 'pose' (difference the gz poses)
         DeclareLaunchArgument('rate_source', default_value='imu'),
@@ -153,29 +181,44 @@ def launch_setup(context, *args, **kwargs):
     if n < 1:
         raise RuntimeError(f'num_drones must be >= 1, got {n}')
     drone_names = [f'x3_drone{i}' for i in range(n)]
-    # kT is an operating point of the sim's quadratic motor model (thrust_model.py):
-    # 'auto' derives it from load_mass and the fleet size, a number is used verbatim.
-    kt, kt_to, kt_note = resolve_thrust_ratio(
-        LaunchConfiguration('thrust_ratio').perform(context),
-        LaunchConfiguration('takeoff_thrust_ratio').perform(context),
-        LaunchConfiguration('load_mass').perform(context), n)
+    real = truthy(context, 'real')
+    if real:
+        kt, kt_to, kt_note = rig_thrust_ratio(
+            LaunchConfiguration('thrust_ratio').perform(context),
+            LaunchConfiguration('takeoff_thrust_ratio').perform(context))
+        rig_note = apply_rig_values(context, declared_defaults(context, _args()))
+    else:
+        # kT is an operating point of the sim's quadratic motor model (thrust_model.py):
+        # 'auto' derives it from load_mass and the fleet size, a number is used verbatim.
+        kt, kt_to, kt_note = resolve_thrust_ratio(
+            LaunchConfiguration('thrust_ratio').perform(context),
+            LaunchConfiguration('takeoff_thrust_ratio').perform(context),
+            LaunchConfiguration('load_mass').perform(context), n)
 
     f = lambda name: ParameterValue(LaunchConfiguration(name), value_type=float)
     b = lambda name: ParameterValue(LaunchConfiguration(name), value_type=bool)
     i_ = lambda name: ParameterValue(LaunchConfiguration(name), value_type=int)
 
-    nodes = [SetParameter(name='use_sim_time', value=True),
+    nodes = [SetParameter(name='use_sim_time', value=not real),
              LogInfo(msg=f'[launch] {kt_note}; takeoff {kt_to:.2f}')]
+    if real:
+        nodes.append(LogInfo(msg=rig_note))
 
     # partner_m2 (multi_drone_control 2026-09-26): our stack on top of Tejen's M2 world
     # after his four drones have joined the ring. His per-drone stacks own the /drone_i
     # command/arming names, so ours move under /ours; each drone gets an ELRS mux that
     # forwards his MPC (/drone_i/ELRSCommand_tejen) until /fleet/handover, then ours.
-    sim_interface = LaunchConfiguration('sim_interface').perform(context).lower() in ('1', 'true', 'yes')
+    # the rig has no sim interface: its controllers take the no-bridge branch below
+    sim_interface = (not real) and truthy(context, 'sim_interface')
     partner_m2 = LaunchConfiguration('partner_m2').perform(context).lower() in ('1', 'true', 'yes')
     part = LaunchConfiguration('partner_m2_part').perform(context) if partner_m2 else 'all'
     want_muxes = part in ('all', 'muxes')
     want_ctrl = part in ('all', 'controllers')
+    if real and truthy(context, 'real_io') and want_muxes:
+        # radios with the muxes: they carry whichever stream the mux forwards. No DETACH
+        # row: /fleet/detach here does not release the tether magnet (no detach_magnet)
+        nodes += rig_io(os.path.dirname(os.path.abspath(__file__)), n,
+                        [LaunchConfiguration('magnet_initial')] * n)
 
     def ours(i):
         return [(f'/drone_{i}/arming_service', f'/ours/drone_{i}/arming_service'),
@@ -188,7 +231,9 @@ def launch_setup(context, *args, **kwargs):
             nodes.append(Node(
                 package='drone_magnet', executable='elrs_mux', name=f'elrs_mux_{i}',
                 parameters=[{'drone_id': i, 'latch': True, 'approach_stream': True,
-                             'handoff_topic': '/fleet/handover'}], output='screen'))
+                             'handoff_topic': '/fleet/handover',
+                             **({'magnet_channel': i_('magnet_channel')} if real else {})}],
+                output='screen'))
         if not want_ctrl:
             continue
         if not sim_interface:
@@ -268,7 +313,7 @@ def launch_setup(context, *args, **kwargs):
         return nodes
 
     # ── Central fleet manager ──────────────────────────────────────────────
-    if partner_m2:
+    if partner_m2 and not real:
         # his ring (M2A fixture, made dynamic) -> our payload mocap
         nodes.append(Node(
             package='simulation_communication', executable='tejen_motion_capture_emulator',

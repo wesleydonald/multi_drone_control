@@ -39,6 +39,10 @@ draws the scene straight from the mocap topics.
 Run:
     ros2 launch controller_quad_load real_io_launch.py num_drones:=2
     #   drone0_serial:=/dev/QUAD0 drone1_serial:=/dev/QUAD1 ...   (defaults)
+    #   drone<i>_magnet_initial:=... overrides magnet_initial for one radio
+
+The M1/M2 rig launches (three_attach_launch.py / dissipative_launch.py real:=true) include
+this file themselves with drone i on /dev/QUAD<i+1>; do not start it next to them.
 
 Verify before starting the controllers (terminal 2):
     ros2 topic hz /drone_0/motion_capture_state          # drone pose streaming
@@ -135,6 +139,11 @@ def launch_setup(context, *args, **kwargs):
         nodes.append(DeclareLaunchArgument(
             arg, default_value=f'/dev/QUAD{i}',
             description=f'drone {i} ELRS TX serial device (udev symlink)'))
+        # one drone's radio latch, default magnet_initial (the attach newcomer's magnet is
+        # driven by the magnet manager through its mux, so its latch must stay '')
+        mag = f'drone{i}_magnet_initial'
+        nodes.append(DeclareLaunchArgument(
+            mag, default_value=LaunchConfiguration('magnet_initial')))
 
         # ── ELRS radio out: namespaced, own serial device ────────────────────
         nodes.append(Node(
@@ -144,7 +153,7 @@ def launch_setup(context, *args, **kwargs):
             namespace=f'/drone_{i}',
             parameters=[{'serial_port': LaunchConfiguration(arg),
                          'magnet_channel': ParameterValue(LaunchConfiguration('magnet_channel'), value_type=int),
-                         'magnet_initial': ParameterValue(LaunchConfiguration('magnet_initial'), value_type=str)}],
+                         'magnet_initial': ParameterValue(LaunchConfiguration(mag), value_type=str)}],
             output='screen',
         ))
 

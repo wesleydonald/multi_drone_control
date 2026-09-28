@@ -1,6 +1,10 @@
 """
 real_attach_launch.py  —  TERMINAL 2 (control, MID-FLIGHT ATTACH variant)
 ------------------------------------------------------------------------
+SUPERSEDED for M1 and the attach/rejoin rungs (Wesley 2026-09-28): the rig flies
+three_attach_launch.py real:=true, the graph the sim claims flew. This file lags it by
+~28 arguments (tools/param_diff.py) and manages only n drones in the fleet manager.
+
 Hardware twin of three_attach_launch.py: num_drones tethered drones carry the ring
 payload on the OCP / dissipative stack, and ONE extra drone (id num_drones, the
 "newcomer") flies in on the collaborator's approach MPC, welds its magnet to the

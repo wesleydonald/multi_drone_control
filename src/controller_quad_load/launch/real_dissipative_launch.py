@@ -1,6 +1,9 @@
 """
 real_dissipative_launch.py  —  TERMINAL 2 (control, DISSIPATIVE variant)
 ------------------------------------------------------------------------
+For M2 (partner_m2) the rig flies dissipative_launch.py real:=true instead (Wesley
+2026-09-28); this file stays the two-terminal carry/detach launch of the R1-R7 sheets.
+
 Real-world control layer using the DECENTRALIZED DISSIPATIVE reference generator
 instead of the centralized OCP planner. This is the hardware twin of
 dissipative_launch.py, exactly as real_control_launch.py is the hardware twin of
