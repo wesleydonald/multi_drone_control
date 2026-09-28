@@ -163,14 +163,15 @@ def test_m1_real_graph_partner_demo():
     g = _assert_rig_graph(nodes, n_radio=4, kt=24.0)
     assert g['/central_controller']['params']['num_drones'] == 4
     assert g['/dissipative_controller']['params']['z_taut_gate'] == 0.9
-    for i in range(3):
-        assert g[f'/drone_{i}/elrs_interface']['params']['magnet_initial'] == 'ON'
-    assert g['/drone_3/elrs_interface']['params']['magnet_initial'] == ''
+    # M1's welded start: every magnet ON from boot, drone 3's included (auto)
+    assert _latches(g, 4) == ['ON', 'ON', 'ON', 'ON']
     mux = g['/elrs_mux_3']['params']
-    assert mux['magnet_channel'] == 6 and mux['magnet_command_topic'] == '/magnet/ELRSCommand'
+    assert mux['magnet_channel'] == 6 and mux['magnet_command_topic'] == ''
     assert mux['handoff_topic'] == '/join_planner/handoff_ready'
     mgr = g['/magnet_attachment_manager']['params']
-    assert mgr['elrs_magnet_channel'] == 6 and mgr['enable_elrs_magnet_output'] is True
+    assert mgr['magnet_latch_topic'] == '/drone_3/magnet'
+    assert mgr['enable_elrs_magnet_output'] is False
+    assert g['/dissipative_controller']['params']['detach_magnet'] is True
     assert mgr['magnet_tip_pose_topic'] == '/magnet_tip_pose'
     assert mgr['magnet_tip_pose_msg_type'] == 'pose_stamped'
     assert mgr['object_pose_topic'] == '/payload/motion_capture_state'
@@ -262,7 +263,7 @@ def _rviz_panel(nodes):
 
 
 def test_rig_panel_rows():
-    # M1 needs ATTACH; the M2 graph releases no magnet on /fleet/detach, so no DETACH row
+    # M1 needs ATTACH; M2 has no detach step, so no DETACH row
     m1 = evaluate('three_attach_launch.py', real=True, thrust_ratio=24, enable_approach_mpc=False)
     assert 'ShowAttach: true' in _rviz_panel(m1)
     m2 = evaluate('dissipative_launch.py', real=True, thrust_ratio=24, partner_m2=True)
@@ -273,9 +274,122 @@ def test_rig_panel_rows():
 def test_magnet_channel_is_one_launch_arg():
     g = _by_name(evaluate('three_attach_launch.py', real=True, thrust_ratio=24,
                           enable_approach_mpc=False, magnet_channel=7))
-    assert g['/drone_0/elrs_interface']['params']['magnet_channel'] == 7
+    for i in range(4):
+        assert g[f'/drone_{i}/elrs_interface']['params']['magnet_channel'] == 7
     assert g['/elrs_mux_3']['params']['magnet_channel'] == 7
-    assert g['/magnet_attachment_manager']['params']['elrs_magnet_channel'] == 7
+    assert 'elrs_magnet_channel' not in g['/magnet_attachment_manager']['params']
+
+
+# ── P10: one magnet path per drone (the radio's String latch) ─────────────────────────
+
+def _latches(g, n_radio):
+    return [g[f'/drone_{i}/elrs_interface']['params']['magnet_initial'] for i in range(n_radio)]
+
+
+def _muxes(g):
+    return [v['params'] for k, v in g.items() if v['executable'] == 'elrs_mux']
+
+
+R8A = {'num_drones': 3, 'reserved_attach': 1, 'attach_azimuths_deg': '30,150,270',
+       'attach_x_offset': 0.0, 'attach_y_offset': 0.25, 'reconfig_mode': 'ocp',
+       'enable_approach_mpc': False, 'weld_radius': 0.0, 'start_taut': False}
+
+
+def test_p10_m1_partner_demo_magnet_paths():
+    args = {k: v for k, v in PARTNER_ATTACHED_ORBIT.items()
+            if k not in ('pose_timeout_s', 'safety_ref_timeout_s')}
+    g = _by_name(evaluate('three_attach_launch.py', real=True, thrust_ratio=24.0, **args))
+    assert all(m['magnet_command_topic'] == '' for m in _muxes(g)) and _muxes(g)
+    mgr = g['/magnet_attachment_manager']['params']
+    assert mgr['magnet_latch_topic'] == '/drone_3/magnet' and mgr['attached_at_start'] is True
+    assert g['/dissipative_controller']['params']['detach_magnet'] is True
+    assert g['/dissipative_controller']['params']['start_attached'] is True
+    assert _latches(g, 4) == ['ON'] * 4
+
+
+def test_p10_r8a_dry_approach_keeps_drone_3_off():
+    g = _by_name(evaluate('three_attach_launch.py', real=True, thrust_ratio=24.0, **R8A))
+    assert _latches(g, 4) == ['ON', 'ON', 'ON', 'OFF']
+    # weld blocked: the manager runs (tip distance in its state) but drives no radio
+    mgr = g['/magnet_attachment_manager']['params']
+    assert mgr['magnet_latch_topic'] == '' and mgr['enable_elrs_magnet_output'] is False
+    assert mgr['attach_radius'] == 0.0 and mgr['attached_at_start'] is False
+    assert all(m['magnet_command_topic'] == '' for m in _muxes(g))
+    assert g['/dissipative_controller']['params']['detach_magnet'] is True
+    assert g['/dissipative_controller']['params']['start_attached'] is False
+
+
+def test_p10_r8a_refuses_a_magnet_that_could_catch_without_a_weld():
+    with pytest.raises(RuntimeError, match='no weld'):
+        evaluate('three_attach_launch.py', real=True, thrust_ratio=24.0,
+                 **dict(R8A, attach_magnet_initial='ON'))
+    with pytest.raises(RuntimeError, match='no weld'):
+        evaluate('three_attach_launch.py', real=True, thrust_ratio=24.0,
+                 **dict(R8A, drone3_magnet_initial='ON'))
+    with pytest.raises(RuntimeError, match='partner_attached'):
+        evaluate('three_attach_launch.py', real=True, thrust_ratio=24.0, weld_radius=0.0,
+                 partner=True, partner_attached=True)
+
+
+def test_p10_r8b_newcomer_latch_is_the_managers():
+    g = _by_name(evaluate('three_attach_launch.py', real=True, thrust_ratio=24.0,
+                          **dict(R8A, weld_radius=0.03)))
+    assert _latches(g, 4) == ['ON', 'ON', 'ON', 'OFF']
+    assert g['/magnet_attachment_manager']['params']['magnet_latch_topic'] == '/drone_3/magnet'
+
+
+def test_p10_r8a_literal_no_approach_chain():
+    """enable_approach:=false: drone 3 has no radio, no mux and no manager at all."""
+    g = _by_name(evaluate('three_attach_launch.py', real=True, thrust_ratio=24.0,
+                          **dict(R8A, enable_approach=False)))
+    assert _latches(g, 3) == ['ON'] * 3 and '/drone_3/elrs_interface' not in g
+    assert not _muxes(g) and '/magnet_attachment_manager' not in g
+    assert g['/dissipative_controller']['params']['detach_magnet'] is True
+
+
+def test_p10_per_drone_latch_overrides_and_refusals():
+    g = _by_name(evaluate('three_attach_launch.py', real=True, thrust_ratio=24.0,
+                          **dict(R8A, weld_radius=0.03, drone1_magnet_initial='off',
+                                 attach_magnet_initial='ON')))
+    assert _latches(g, 4) == ['ON', 'OFF', 'ON', 'ON']
+    for bad in ('', 'maybe'):
+        with pytest.raises(RuntimeError, match='ON or OFF'):
+            evaluate('three_attach_launch.py', real=True, thrust_ratio=24.0,
+                     **dict(R8A, magnet_initial=bad))
+        with pytest.raises(RuntimeError, match='ON or OFF'):
+            evaluate('dissipative_launch.py', real=True, thrust_ratio=24.0, partner_m2=True,
+                     drone2_magnet_initial=bad)
+
+
+def test_p10_m2_magnet_paths():
+    args = dict(M2_DRIVER, pose_timeout_s=0.25, safety_ref_timeout_s=1.0)
+    g = _by_name(evaluate('dissipative_launch.py', real=True, thrust_ratio=24.0, **args))
+    muxes = _muxes(g)
+    assert len(muxes) == 4
+    assert all(m['magnet_command_topic'] == '' and m['magnet_channel'] == 6 for m in muxes)
+    assert _latches(g, 4) == ['ON'] * 4
+    assert g['/dissipative_controller']['params']['detach_magnet'] is True
+    assert '/magnet_attachment_manager' not in g
+    for part in ('muxes', 'controllers'):
+        g = _by_name(evaluate('dissipative_launch.py', real=True, thrust_ratio=24.0,
+                              **dict(args, partner_m2_part=part)))
+        if part == 'muxes':
+            assert all(m['magnet_command_topic'] == '' for m in _muxes(g)) and _muxes(g)
+            assert '/dissipative_controller' not in g
+        else:
+            assert not _muxes(g)
+            assert g['/dissipative_controller']['params']['detach_magnet'] is True
+
+
+def test_p10_sim_graphs_carry_no_rig_magnet_params():
+    for launch, args in (('three_attach_launch.py', PARTNER_ATTACHED_ORBIT),
+                         ('three_attach_launch.py', dict(R8A, pose_timeout_s=1.0)),
+                         ('dissipative_launch.py', M2_DRIVER)):
+        g = _by_name(evaluate(launch, **args))
+        assert 'detach_magnet' not in g['/dissipative_controller']['params']
+        assert all('magnet_command_topic' not in m for m in _muxes(g))
+        if '/magnet_attachment_manager' in g:
+            assert 'magnet_latch_topic' not in g['/magnet_attachment_manager']['params']
 
 
 # ── M2: dissipative_launch.py partner_m2 ──────────────────────────────────────────────

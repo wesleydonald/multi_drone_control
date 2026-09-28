@@ -31,3 +31,17 @@ def test_on_and_off_values_hit_the_ends_of_the_range():
     apply_magnet(p, 6, -1.0, idle, rng)
     assert p[7] == idle - rng
     assert p[4] == idle and p[2] == idle            # arm switch and throttle untouched
+
+
+def test_latch_logs_changes_only():
+    """The magnet manager re-sends the newcomer's latch at 2 Hz; only a change is logged."""
+    from types import SimpleNamespace
+    from std_msgs.msg import String
+    from drone_communication.elrs_interface import ELRSInterface
+    lines = []
+    log = SimpleNamespace(info=lines.append, warn=lines.append)
+    f = SimpleNamespace(magnet_on_value=1.0, magnet_off_value=-1.0, magnet_value=-1.0,
+                        magnet_channel=6, get_logger=lambda: log)
+    for word in ('OFF', 'OFF', 'ON', 'ON', 'OFF'):
+        ELRSInterface.magnet_callback(f, String(data=word))
+    assert f.magnet_value == -1.0 and len(lines) == 2

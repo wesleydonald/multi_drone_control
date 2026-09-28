@@ -36,8 +36,12 @@ on /dev/QUAD<i+1>, fleet_viz from mocap, RViz). No Gazebo bridge, no sim Betafli
 mocap emulator; sim_interface is ignored. The graph and its parameters are the sim ones except
 (controller_quad_load/real_mode.py): use_sim_time false; thrust_ratio typed (no 'auto');
 takeoff kT = kT; pose_timeout_s 0.25 / safety_ref_timeout_s 1.0 / payload_rest_z 0.05 /
-z_taut_gate 0.9 in place of the sim defaults; the tether radios latch magnet_initial (ON) on
-ELRS channel magnet_channel (6 = AUX4), also given to the partner_m2 muxes.
+z_taut_gate 0.9 in place of the sim defaults. Magnets (ladder P10: one path per drone): the
+radio's String latch /drone_<i>/magnet on ELRS channel magnet_channel (6 = AUX4), ON|OFF from
+boot by magnet_initial (ON; drone<i>_magnet_initial:=ON|OFF for one radio); the dissipative node
+(detach_magnet) re-latches every tether ON at ARM and OFF at its /fleet/detach. The partner_m2
+muxes merge no magnet channel: Tejen's forwarded channel 6 is left as sent and the latch
+overwrites it in every packet.
 
     ros2 launch controller_quad_load dissipative_launch.py real:=true partner_m2:=true \
         num_drones:=4 thrust_ratio:=<kT> drone_mass:=<weighed> load_mass:=<weighed> \
@@ -49,8 +53,8 @@ import os
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
-from controller_quad_load.real_mode import (apply_rig_values, declared_defaults,
-                                            rig_io, rig_thrust_ratio, truthy)
+from controller_quad_load.real_mode import (apply_rig_values, declared_defaults, rig_io,
+                                            rig_magnet_latches, rig_thrust_ratio, truthy)
 from controller_quad_load.thrust_model import resolve_thrust_ratio
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
@@ -216,9 +220,10 @@ def launch_setup(context, *args, **kwargs):
     want_ctrl = part in ('all', 'controllers')
     if real and truthy(context, 'real_io') and want_muxes:
         # radios with the muxes: they carry whichever stream the mux forwards. No DETACH
-        # row: /fleet/detach here does not release the tether magnet (no detach_magnet)
+        # row: M2 has no detach step (a /fleet/detach still releases that drone's magnet)
         nodes += rig_io(os.path.dirname(os.path.abspath(__file__)), n,
-                        [LaunchConfiguration('magnet_initial')] * n)
+                        rig_magnet_latches(
+                            context, [LaunchConfiguration('magnet_initial').perform(context)] * n))
 
     def ours(i):
         return [(f'/drone_{i}/arming_service', f'/ours/drone_{i}/arming_service'),
@@ -232,7 +237,8 @@ def launch_setup(context, *args, **kwargs):
                 package='drone_magnet', executable='elrs_mux', name=f'elrs_mux_{i}',
                 parameters=[{'drone_id': i, 'latch': True, 'approach_stream': True,
                              'handoff_topic': '/fleet/handover',
-                             **({'magnet_channel': i_('magnet_channel')} if real else {})}],
+                             **({'magnet_channel': i_('magnet_channel'),
+                                 'magnet_command_topic': ''} if real else {})}],
                 output='screen'))
         if not want_ctrl:
             continue
@@ -366,7 +372,9 @@ def launch_setup(context, *args, **kwargs):
                      'net_land_z': f('net_land_z'),
                      'attach_z': f('attach_z'),
                      'airborne_start': b('airborne_start'),
-                     'cable_elev_deg': f('cable_elev_deg')}],
+                     'cable_elev_deg': f('cable_elev_deg'),
+                     # rig: tether latches ON at ARM, OFF at their detach
+                     **({'detach_magnet': True} if real else {})}],
         output='screen'))
 
     return nodes

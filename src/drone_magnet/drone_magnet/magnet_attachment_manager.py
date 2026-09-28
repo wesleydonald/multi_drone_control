@@ -54,6 +54,11 @@ def _quat_rot(q, v):
     return [vx + 2.0 * (w * cx + ccx), vy + 2.0 * (w * cy + ccy), vz + 2.0 * (w * cz + ccz)]
 
 
+def latch_word(magnet_on: bool) -> str:
+    """The elrs_interface radio latch's word for a magnet state (String ON|OFF)."""
+    return 'ON' if magnet_on else 'OFF'
+
+
 class MagnetAttachmentManager(Node):
     def __init__(self) -> None:
         super().__init__('magnet_attachment_manager')
@@ -139,6 +144,9 @@ class MagnetAttachmentManager(Node):
         )
         self._last_elrs_magnet_state: Optional[bool] = None
         self._last_elrs_publish_time = 0.0
+        # Rig: the same ON/OFF decisions as the String radio latch of the newcomer's
+        # elrs_interface (/drone_<d>/magnet), its one magnet path ('' = off, the sim).
+        self.magnet_latch_topic = str(self.declare_parameter('magnet_latch_topic', '').value)
 
         # Optional debug-only kinematic fallback. This does not use the fixed
         # joint. It is useful only if the detachable joint plugin or bridge is
@@ -193,6 +201,8 @@ class MagnetAttachmentManager(Node):
         self.attached_pub = self.create_publisher(Bool, self.object_attached_topic, 5)
         self.state_pub = self.create_publisher(String, self.attachment_state_topic, 5)
         self.elrs_magnet_pub = self.create_publisher(ELRSCommand, self.elrs_magnet_command_topic, 5)
+        self.magnet_latch_pub = (self.create_publisher(String, self.magnet_latch_topic, 5)
+                                 if self.magnet_latch_topic else None)
 
         # Gazebo's DetachableJoint is created ATTACHED at spawn, which would rigidly weld the
         # magnet to the payload from t=0 (before any ATTACH) and drag the payload around. Send
@@ -228,7 +238,8 @@ class MagnetAttachmentManager(Node):
             f'attach_speed_threshold={self.attach_speed_threshold:.3f} m/s, '
             f'elrs_output={self.enable_elrs_magnet_output}, '
             f'elrs_topic={self.elrs_magnet_command_topic}, '
-            f'elrs_channel={self.elrs_magnet_channel}'
+            f'elrs_channel={self.elrs_magnet_channel}, '
+            f'latch_topic={self.magnet_latch_topic or "off"}'
         )
 
     @staticmethod
@@ -349,8 +360,10 @@ class MagnetAttachmentManager(Node):
         return True
 
     def publish_elrs_magnet_command(self, magnet_on: bool, reason: str = '', force: bool = False) -> None:
-        """Publish the magnet ON/OFF aux channel for the patched ELRS interface."""
-        if not self.enable_elrs_magnet_output:
+        """Publish the magnet ON/OFF: the aux channel for the patched ELRS interface and/or
+        the String radio latch (magnet_latch_topic)."""
+        latch = getattr(self, 'magnet_latch_pub', None)
+        if not self.enable_elrs_magnet_output and latch is None:
             return
 
         now = time.time()
@@ -362,28 +375,32 @@ class MagnetAttachmentManager(Node):
         ):
             return
 
-        msg = ELRSCommand()
-        # These fields are ignored by the patched elrs_interface magnet callback,
-        # but fill safe defaults so the message is still inspectable in ROS echo.
-        msg.armed = False
-        for idx in [0, 1, 3, 4, 5, 6, 7, 8, 9, 10]:
-            self._set_elrs_channel(msg, idx, 0.0)
-        self._set_elrs_channel(msg, 2, -1.0)
-
         value = self.elrs_magnet_on_value if magnet_on else self.elrs_magnet_off_value
-        if not all(self._set_elrs_channel(msg, ch, value) for ch in range(5, 11)):
-            return
+        if self.enable_elrs_magnet_output:
+            msg = ELRSCommand()
+            # These fields are ignored by the patched elrs_interface magnet callback,
+            # but fill safe defaults so the message is still inspectable in ROS echo.
+            msg.armed = False
+            for idx in [0, 1, 3, 4, 5, 6, 7, 8, 9, 10]:
+                self._set_elrs_channel(msg, idx, 0.0)
+            self._set_elrs_channel(msg, 2, -1.0)
+            if not all(self._set_elrs_channel(msg, ch, value) for ch in range(5, 11)):
+                return
+            self.elrs_magnet_pub.publish(msg)
+        if latch is not None:
+            latch.publish(String(data=latch_word(magnet_on)))
 
-        self.elrs_magnet_pub.publish(msg)
         self._last_elrs_publish_time = now
         changed = self._last_elrs_magnet_state is not magnet_on
         self._last_elrs_magnet_state = magnet_on
         if changed or force:
             state = 'ON' if magnet_on else 'OFF'
             suffix = f' ({reason})' if reason else ''
-            self.get_logger().info(
-                f'ELRS magnet {state}: channel_{self.elrs_magnet_channel}={value:+.2f}{suffix}'
-            )
+            where = (f'channel_{self.elrs_magnet_channel}={value:+.2f}'
+                     if self.enable_elrs_magnet_output else '')
+            if latch is not None:
+                where = (where + ' ' if where else '') + f'{self.magnet_latch_topic}={state}'
+            self.get_logger().info(f'ELRS magnet {state}: {where}{suffix}')
 
     def magnet_command_callback(self, msg: String) -> None:
         command = str(msg.data).strip().upper()

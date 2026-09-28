@@ -15,6 +15,12 @@ sim claim flew. What changes on the rig is here, shared by both launches:
     the sim defaults; a typed value is kept.
   * the rig I/O is real_io_launch.py: the mocap node, one elrs_interface per drone on
     /dev/QUAD<i+1> (drone i = quad i+1 = Motive body 11+i), fleet_viz from mocap, RViz.
+  * one magnet path per drone (ladder P10): the radio's String latch /drone_<i>/magnet,
+    defined from boot by magnet_initial (ON or OFF, never '' = whatever the forwarded
+    stream carries). Tethers: the dissipative node (detach_magnet: ON at ARM, OFF at their
+    detach). The newcomer: the magnet manager (ON for the capture, OFF on release). No
+    mux merges a magnet channel, so a forwarded stream's channel 6 is passed untouched
+    and the latch overwrites it in every packet.
 """
 import os
 
@@ -76,10 +82,29 @@ def apply_rig_values(context, sim_defaults):
     return '[launch] REAL: ' + ', '.join(notes)
 
 
+def rig_magnet_latches(context, defaults):
+    """Return each drone's radio latch at boot (ON or OFF).
+
+    Its role default (defaults[i]) unless drone<i>_magnet_initial is typed. '' is refused:
+    it would leave the magnet to whatever channel 6 the forwarded stream carries until the
+    first latch command.
+    """
+    out = []
+    for i, role in enumerate(defaults):
+        typed = context.launch_configurations.get(f'drone{i}_magnet_initial')
+        value = str(role if typed is None else typed).strip().upper()
+        if value not in ('ON', 'OFF'):
+            raise RuntimeError(
+                f'real:=true: drone {i} magnet latch at boot must be ON or OFF, got '
+                f'{value!r} (drone{i}_magnet_initial / magnet_initial / attach_magnet_initial)')
+        out.append(value)
+    return out
+
+
 def rig_io(launch_dir, n_radio, magnet_initial, attach=False, detach=False):
     """real_io_launch.py for drones 0..n_radio-1, scoped so its arguments do not leak.
 
-    magnet_initial: one value (str or substitution) per drone for its radio latch.
+    magnet_initial: one value per drone for its radio latch (rig_magnet_latches).
     Each drone's serial port is the launch argument drone<i>_serial (default
     /dev/QUAD<i+1>).
     """

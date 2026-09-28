@@ -379,8 +379,10 @@ class DissipativeController(LoadPlanner):
         # Gazebo DetachableJoint release triggers (bridged to gz.msgs.Empty in launch).
         self.detach_pub = [self.create_publisher(Empty, f'/drone_{i}/detach', 1)
                            for i in range(self.n)]
+        # the tethers at construction only: a reserved (magnet) drone's latch belongs to the
+        # magnet manager (weld ON, release OFF via /magnet/command), one path per radio
         self._magnet_pubs = ([self.create_publisher(String, f'/drone_{i}/magnet', 1)
-                              for i in range(self.n_net)] if self._detach_magnet else [])
+                              for i in range(self._n_carry0)] if self._detach_magnet else [])
 
         # ATTACH wiring for each reserved drone (physical id self.n + j): its own mocap in,
         # its reference out (appended so ref_pub[d] is valid for d>=self.n), plus the two
@@ -1185,13 +1187,20 @@ class DissipativeController(LoadPlanner):
             else:
                 self.get_logger().info('[dissipative] LAND (network) already in progress')
             return
-        if msg.data.strip().upper() == 'ARM' and self._detach_magnet:
-            # the radio latches the last magnet value across flights: re-arm every
-            # tether at ARM so a drone released last flight does not lift without the load
-            for pub in self._magnet_pubs:
-                pub.publish(String(data='ON'))
-            self.get_logger().info('[dissipative] ARM: magnets ON on every tether')
+        if msg.data.strip().upper() == 'ARM':
+            self._arm_magnets()
         super()._fleet_command_cb(msg)
+
+    def _arm_magnets(self):
+        """The radio latches the last magnet value across flights: re-arm every tether
+        at ARM so a drone released last flight does not lift without the load. Tethers
+        only (_magnet_pubs): a newcomer that must stay OFF is never turned on here."""
+        if not self._detach_magnet:
+            return
+        for pub in self._magnet_pubs:
+            pub.publish(String(data='ON'))
+        self.get_logger().info(f'[dissipative] ARM: magnets ON on tethers '
+                               f'0..{len(self._magnet_pubs) - 1}')
 
     def _current_load_des(self):
         """The load position the network holds after handover: the OCP's current lift

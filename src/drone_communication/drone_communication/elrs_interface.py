@@ -198,8 +198,11 @@ class ELRSInterface(Node):
         if state not in ('ON', 'OFF'):
             self.get_logger().warn(f"magnet: ignoring '{msg.data}' (want ON or OFF)")
             return
-        self.magnet_value = self.magnet_on_value if state == 'ON' else self.magnet_off_value
-        self.get_logger().info(f'magnet {state}: channel_{self.magnet_channel} = {self.magnet_value:+.1f}')
+        value = self.magnet_on_value if state == 'ON' else self.magnet_off_value
+        changed = value != self.magnet_value
+        self.magnet_value = value
+        if changed:     # the magnet manager re-sends its state at 2 Hz
+            self.get_logger().info(f'magnet {state}: channel_{self.magnet_channel} = {value:+.1f}')
 
     def controller_commands_callback(self, msg):
         self.last_message_time = time.time()  # Update the timestamp of the most recent message

@@ -43,17 +43,28 @@ Gazebo-facing node is dropped (bridges, sim Betaflight, mocap emulator, magnet_t
 the gz weld bridges); the rest of the graph and its parameters are the sim ones, except
 (controller_quad_load/real_mode.py): use_sim_time false; thrust_ratio typed (no 'auto');
 takeoff kT = kT; pose_timeout_s 0.25 / safety_ref_timeout_s 1.0 / payload_rest_z 0.05 /
-z_taut_gate 0.9 in place of the sim defaults; the newcomer's magnet on ELRS channel
-magnet_channel (6 = AUX4) merged by its mux from the magnet manager, which welds on the
-mocap tip body (/magnet_tip_pose) with no gz backend (speed gate 0.05 m/s, dwell 0.15 s).
-Tether radios latch magnet_initial (ON); the newcomer's latch is attach_magnet_initial ('').
+z_taut_gate 0.9 in place of the sim defaults; the magnet manager welds on the mocap tip body
+(/magnet_tip_pose) with no gz backend (speed gate 0.05 m/s, dwell 0.15 s).
+Magnets (ladder P10: one path per drone, the radio's String latch /drone_<i>/magnet on ELRS
+channel magnet_channel, 6 = AUX4; the mux merges nothing):
+  * tethers 0-2: latch magnet_initial (ON) from boot; the dissipative node (detach_magnet)
+    re-latches them ON at ARM and OFF at their /fleet/detach.
+  * newcomer 3: latch attach_magnet_initial from boot ('auto' = ON for the welded start
+    partner_attached, else OFF); then the magnet manager owns it: ON when it commands the
+    magnet on for the capture (ATTACH / the partner handoff), OFF on release (its detach).
+  * weld_radius:=0 (R8a, weld blocked) is a dry approach: the manager's latch output is off,
+    so drone 3's magnet stays OFF all flight (a typed ON is refused: it would catch the ring
+    with no weld declared).
+  * drone<i>_magnet_initial:=ON|OFF overrides one radio's boot latch.
 
+    # R8a: newcomer to the plate on our tracker, magnet OFF, no weld
     ros2 launch controller_quad_load three_attach_launch.py real:=true thrust_ratio:=<kT> \
         drone_mass:=<weighed> load_mass:=<weighed> start_taut:=false \
         attach_azimuths_deg:=30,150,270 attach_x_offset:=0.0 attach_y_offset:=0.25 \
-        reconfig_mode:=ocp enable_approach_mpc:=false weld_radius:=<R2 capture gap>
+        reconfig_mode:=ocp enable_approach_mpc:=false weld_radius:=0.0
+    # R8b: the same with weld_radius:=<R2 capture gap> (the manager latches drone 3 ON at ATTACH)
     # drone<i>_serial:=/dev/QUAD<i+1> (defaults), rviz:=false, real_io:=false (another stack
-    # owns mocap and radios)
+    # owns mocap and radios: then nothing here reaches a radio's magnet latch)
 
 Needs on the rig, not in this file: the tip body in the mocap map (MAGNET_TIP_RIGID_BODY_ID
 is None today, so /magnet_tip_pose never publishes and nothing welds), the body ids of the
@@ -63,8 +74,8 @@ import os
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
-from controller_quad_load.real_mode import (apply_rig_values, declared_defaults,
-                                            rig_io, rig_thrust_ratio, truthy)
+from controller_quad_load.real_mode import (apply_rig_values, declared_defaults, rig_io,
+                                            rig_magnet_latches, rig_thrust_ratio, truthy)
 from controller_quad_load.thrust_model import resolve_thrust_ratio
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
@@ -99,8 +110,9 @@ def _args():
         DeclareLaunchArgument('magnet_channel', default_value='6'),
         # real only: the tether radios' magnet latch from boot
         DeclareLaunchArgument('magnet_initial', default_value='ON'),
-        # real only: the newcomer's radio latch; '' = the magnet manager drives it via the mux
-        DeclareLaunchArgument('attach_magnet_initial', default_value=''),
+        # real only: the newcomer's radio latch from boot, ON|OFF; 'auto' = ON for the welded
+        # start (partner_attached), else OFF. The magnet manager drives it from then on.
+        DeclareLaunchArgument('attach_magnet_initial', default_value='auto'),
         DeclareLaunchArgument('num_drones', default_value='3'),      # TETHERED fleet size
         DeclareLaunchArgument('reserved_attach', default_value='1'), # extra network capacity
         DeclareLaunchArgument('cable_len', default_value='0.5'),
@@ -510,7 +522,9 @@ def launch_setup(context, *args, **kwargs):
                      'partner_release': partner_attached,
                      'attach_velocity_newcomer': (
                          LaunchConfiguration('attach_control_mode').perform(context).strip()
-                         == 'velocity')}],
+                         == 'velocity'),
+                     # rig: tether latches ON at ARM, OFF at their detach
+                     **({'detach_magnet': True} if real else {})}],
         output='screen'))
 
     # ════════════════ APPROACH DRONE (x3_drone3) CHAIN ════════════════
@@ -532,12 +546,25 @@ def launch_setup(context, *args, **kwargs):
             raise RuntimeError('real:=true: the approach MPC is not for the rig; add '
                                'enable_approach_mpc:=false (our tracker flies the approach) '
                                'or partner:=true')
+    # rig magnets (docstring, RIG): weld_radius 0 blocks the weld, so the newcomer's magnet
+    # must never come on (a physical catch with no weld declared is R8b's abort)
+    dry_approach = real and enable_approach and float(
+        LaunchConfiguration('weld_radius').perform(context)) <= 0.0
+    if dry_approach and partner_attached:
+        raise RuntimeError('real:=true weld_radius:=0 blocks the weld, but partner_attached '
+                           'starts drone 3 welded: its release needs the magnet manager')
     if real and truthy(context, 'real_io'):
-        # the newcomer has a radio too; its latch stays '' so the manager's mux merge works
         n_radio = n + (1 if enable_approach else 0)
-        nodes += rig_io(os.path.dirname(os.path.abspath(__file__)), n_radio,
-                        [LaunchConfiguration('magnet_initial')] * n
-                        + [LaunchConfiguration('attach_magnet_initial')] * (n_radio - n),
+        newcomer = LaunchConfiguration('attach_magnet_initial').perform(context).strip().upper()
+        if newcomer == 'AUTO':
+            newcomer = 'ON' if partner_attached else 'OFF'
+        latches = rig_magnet_latches(
+            context, [LaunchConfiguration('magnet_initial').perform(context)] * n
+            + [newcomer] * (n_radio - n))
+        if dry_approach and latches[ATTACH_DRONE_ID] != 'OFF':
+            raise RuntimeError('real:=true weld_radius:=0 (no weld) with drone 3\'s magnet ON '
+                               'would catch the ring with no weld declared; latch it OFF')
+        nodes += rig_io(os.path.dirname(os.path.abspath(__file__)), n_radio, latches,
                         attach=enable_approach)
     if not enable_approach:
         return nodes
@@ -586,8 +613,9 @@ def launch_setup(context, *args, **kwargs):
 
     if not sil:
         # ELRSCommand MUX: forwards APPROACH (_tejen) until the weld, then OURS (_diss).
-        # Rig: it also merges the magnet manager's aux channel into what it forwards.
-        rig_magnet = ({'magnet_command_topic': '/magnet/ELRSCommand',
+        # Rig: no magnet merge; the forwarded channel 6 is left as sent and the radio's
+        # latch (the magnet manager's) overwrites it
+        rig_magnet = ({'magnet_command_topic': '',
                        'magnet_channel': i_('magnet_channel')} if real else {})
         nodes.append(Node(
             package='drone_magnet', executable='elrs_mux', name=f'elrs_mux_{d}',
@@ -737,7 +765,8 @@ def launch_setup(context, *args, **kwargs):
         output='screen'))
 
     # RIG: the weld is declared from mocap alone (the tip body on /magnet_tip_pose, the ring
-    # body on /payload/motion_capture_state); no joint to command, the magnet is the radio.
+    # body on /payload/motion_capture_state); no joint to command, the magnet is drone 3's
+    # radio latch, which this node alone drives (none on a dry approach).
     if real:
         nodes.append(Node(
             package='drone_magnet', executable='magnet_attachment_manager',
@@ -758,9 +787,8 @@ def launch_setup(context, *args, **kwargs):
                          'object_attached_topic': '/magnet/object_attached',
                          'command_backend': 'none',
                          'detach_on_start': False,
-                         'enable_elrs_magnet_output': True,
-                         'elrs_magnet_command_topic': '/magnet/ELRSCommand',
-                         'elrs_magnet_channel': i_('magnet_channel')}],
+                         'enable_elrs_magnet_output': False,
+                         'magnet_latch_topic': '' if dry_approach else f'/drone_{d}/magnet'}],
             output='screen'))
         return nodes
 
