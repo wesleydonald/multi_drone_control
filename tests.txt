@@ -116,9 +116,10 @@ T3: python3 tools/preflight.py --drones 3 --real --planner load_planner --max-gr
   "rigid arc creep: sweeping ... -> 45.0 deg"; "[planner arc-creep] ref=... measured: ..." climbing to 45;
   "measure_rod_len: rods [...] m from mocap at handover" (each ~ROD); "handover settle complete";
   "[diag dN]" tilt and thr. WARN "arc creep timed out" or "liftoff gate timed out" = FAIL -> LAND.
-  PASS: handover within 15 s of TAKEOFF; every rod 45 +-5 deg at the hold; ring still on the floor (payload z < 0.07);
-  drone tilt < 25 deg (not the ladder's 15: sim drones lean 18.6 deg against 45-deg rods, R0648-R0650; the HOLD twin
-  run gives the expected value); no abort; LAND, all disarmed. Record the settled thr per drone.
+  PASS: handover within 15 s of TAKEOFF; every rod 45 +-5 deg at the hold; ring floats just off the floor, payload z < 0.15 (sim twin R0726: after the
+  hand-over the planner takes the full weight and lifts the ring 2 cm, 5.5 cm overshoot; it does NOT stay down);
+  drone tilt < 25 deg (not the ladder's 15: sim drones lean 18.6 deg against 45-deg rods, R0648-R0650 and the HOLD
+  twin R0726); no abort; LAND, all disarmed. Record the settled thr per drone.
   ABORT: global; a drone drifting radially while its reference is fixed (the tracker, not the planner).
 
 R3b  THREE ON 1/5/9 LIFT THE RING TO 0.60 AND HOVER (first lift ever; 45-60 min, CARD)
