@@ -72,6 +72,8 @@ T1: ros2 launch controller_quad_load real_io_launch.py num_drones:=4 drone0_seri
   1. ros2 topic hz -w 500 /drone_0/motion_capture_state     (drones 0-3 and /payload/...): ~120 Hz; write down the
      std dev of dt. 60 s at rest for the velocity-noise number (input to P9):
      timeout 60 ros2 bag record -o results/rig/2026-09-30/r0b_rest /drone_{0..3}/motion_capture_state /payload/motion_capture_state
+     python3 tools/r0b_mocap_report.py results/rig/2026-09-30/r0b_rest      the P9 numbers per body: dt jitter,
+     rest noise of v and w, glitches (|w| > 0.5 rad/s) per 100 s (the rig twin of the sim kicks), LSQ-slope candidate
   2. ros2 topic echo /drone_<i>/telemetry --once            each drone: battery >= 24.0 V and an RSSI (link up)
   3. magnets, each drone:  ros2 topic pub --once /drone_<i>/magnet std_msgs/msg/String "{data: ON}"   then "{data: OFF}"
      a steel plate sticks, then drops. No response: Ctrl-C T1, relaunch it WITHOUT magnet_initial and no T2, then
