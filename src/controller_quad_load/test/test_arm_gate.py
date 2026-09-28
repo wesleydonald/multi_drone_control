@@ -1,5 +1,6 @@
 """The fleet ARM gate (R0560): a drone that fails or never answers its arming call must
-leave the fleet unarmed, fire the emergency disarm, and make TAKEOFF refuse."""
+leave the fleet unarmed, disarm through the services (no fleet abort, Q6b), and make
+TAKEOFF refuse."""
 import types
 import pytest
 import controller_quad_load.main as m
@@ -37,7 +38,8 @@ class _Log:
 
 def _fake(clients):
     f = types.SimpleNamespace(arming_clients=clients, fleet_armed=True, flying=False,
-                              master_step=5, _log=_Log(), aborts=[], cmds=[])
+                              master_step=5, _log=_Log(), aborts=[], cmds=[],
+                              mux_state={})
     f.get_logger = lambda: f._log
     f._disarm_fleet = lambda emergency=False, reason='': f.aborts.append((emergency, reason))
     f._publish_drone_command = lambda c: f.cmds.append(c)
@@ -65,7 +67,7 @@ def test_one_drone_fails_blocks_takeoff(bad):
     f = _fake({0: _Client(bad), 1: _Client(True), 2: _Client(True)})
     _arm(f)
     assert not f.fleet_armed
-    assert f.aborts and f.aborts[0][0] is True and '[0]' in f.aborts[0][1]
+    assert f.aborts and f.aborts[0][0] is False and '[0]' in f.aborts[0][1]
     m.CentralController._takeoff_fleet(f)
     assert f.cmds == [] and not f.flying
 

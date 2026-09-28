@@ -13,13 +13,41 @@ to a pre-mux topic so they don't collide:
 This node forwards the selected stream to the real `/drone_{id}/ELRSCommand`, which the
 betaflight inner-loop (payload_betaflight_comm) turns into motor speeds. When to switch is
 `handover_policy.HandoverPolicy` -- read it, that is where the rule and its history live.
+
+Fleet abort (card docs/experiments/2026-09-28_mux_abort_latch.md): the partner's stream
+ignores /fleet/abort, so while it is selected its next command would re-arm a drone our
+abort just disarmed. On the first /fleet/abort the mux latches and forwards only disarmed
+idle commands, whichever input is selected, until the node restarts.
 """
 import rclpy
+from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, String
 from interfaces.msg import ELRSCommand
 
 from drone_magnet.handover_policy import HandoverPolicy, IDLE_THROTTLE
+
+# /drone_i/mux_state ('partner' | 'ours' | 'latched'): latched so a manager that starts
+# after the mux still reads it (the fleet manager's ARM gate and fault scoping)
+MUX_STATE_QOS = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                           durability=DurabilityPolicy.TRANSIENT_LOCAL)
+LATCH_REPUBLISH_S = 0.05
+
+
+def abort_latch_command(msg=None):
+    """What a latched mux forwards in place of `msg`: a copy disarmed, throttle idle and
+    zero rates. Aux channels (the magnet) are kept. Never mutates `msg`."""
+    out = ELRSCommand()
+    if msg is not None:
+        for name in out.get_fields_and_field_types():
+            setattr(out, name, getattr(msg, name))
+    out.armed = False
+    out.channel_0 = 0.0
+    out.channel_1 = 0.0
+    out.channel_2 = -1.0
+    out.channel_3 = 0.0
+    return out
 
 
 def merge_magnet_channel(msg, channel, value):
@@ -47,8 +75,20 @@ class ElrsMux(Node):
                 self.declare_parameter('require_live_takeover', True).value),
             live_timeout_s=float(self.declare_parameter('live_timeout_s', 0.5).value))
         self._attached = False
+        self.drone_id = drone_id
 
         self.pub = self.create_publisher(ELRSCommand, f'/drone_{drone_id}/ELRSCommand', 1)
+        self._state = None
+        self._state_pub = self.create_publisher(String, f'/drone_{drone_id}/mux_state',
+                                                MUX_STATE_QOS)
+        # read at the abort, so `ros2 param set` can switch it off for a latch-off arm
+        self.declare_parameter('abort_latch', True)
+        self._abort_latched = False
+        self._last_cmd = None
+        self._latch_timer = None
+        self.create_subscription(
+            String, str(self.declare_parameter('abort_topic', '/fleet/abort').value),
+            self._abort_cb, 5)
         self.create_subscription(ELRSCommand, f'/drone_{drone_id}/ELRSCommand_tejen',
                                  self._tejen_cb, 1)
         self.create_subscription(ELRSCommand, f'/drone_{drone_id}/ELRSCommand_diss',
@@ -76,12 +116,48 @@ class ElrsMux(Node):
         magnet_topic = str(self.declare_parameter('magnet_command_topic', '').value)
         if magnet_topic:
             self.create_subscription(ELRSCommand, magnet_topic, self._magnet_cb, 5)
+        self._publish_state()
         self.get_logger().info(
             f'[elrs_mux] drone {drone_id}: forwarding APPROACH until /magnet/object_attached'
             f' (latch={self.policy.latch}, require_live={self.policy.require_live})')
 
     def _now(self):
         return self.get_clock().now().nanoseconds * 1e-9
+
+    def _publish_state(self):
+        if self._abort_latched:
+            state = 'latched'
+        elif self._ours_only or self._attached:
+            state = 'ours'
+        else:
+            state = 'partner'
+        if state != self._state:
+            self._state = state
+            self._state_pub.publish(String(data=state))
+
+    def _abort_cb(self, msg: String):
+        if self._abort_latched:
+            return
+        if not bool(self.get_parameter('abort_latch').value):
+            self.get_logger().warn(
+                f'[elrs_mux] drone {self.drone_id}: /fleet/abort ({msg.data}) ignored: '
+                f'abort_latch is false')
+            return
+        self._abort_latched = True
+        self._publish_disarm()
+        self._publish_state()
+        # the sim bridges hold the last command, and a wedged input would send nothing
+        self._latch_timer = self.create_timer(
+            LATCH_REPUBLISH_S, self._publish_disarm,
+            clock=Clock(clock_type=ClockType.STEADY_TIME))
+        self.get_logger().error(
+            f'[elrs_mux] drone {self.drone_id}: FLEET ABORT LATCHED ({msg.data}) - '
+            f'forwarding DISARM only (armed false, throttle idle) from every input until '
+            f'this node is restarted')
+
+    def _publish_disarm(self):
+        self.pub.publish(merge_magnet_channel(abort_latch_command(self._last_cmd),
+                                              self._magnet_channel, self._magnet_value))
 
     def _apply(self, attached):
         if attached == self._attached:
@@ -92,6 +168,7 @@ class ElrsMux(Node):
                     throttle_duration_sec=1.0)
             return
         self._attached = attached
+        self._publish_state()
         self.get_logger().info(
             f"[elrs_mux] -> {'DISSIPATIVE tracker' if attached else 'APPROACH controller'}")
 
@@ -114,6 +191,9 @@ class ElrsMux(Node):
         self._magnet_value = float(getattr(msg, f'channel_{self._magnet_channel}', 0.0))
 
     def _forward(self, msg):
+        self._last_cmd = msg
+        if self._abort_latched:
+            msg = abort_latch_command(msg)
         self.pub.publish(merge_magnet_channel(msg, self._magnet_channel, self._magnet_value))
 
     def _tejen_cb(self, msg: ELRSCommand):
@@ -124,6 +204,7 @@ class ElrsMux(Node):
                                          require_live=self.policy.require_live,
                                          live_timeout_s=self.policy.live_timeout_s)
             self._attached = False
+            self._publish_state()
             self.get_logger().info('[elrs_mux] RELEASED -> APPROACH controller (partner mission)')
         if not self._attached and not self._ours_only:
             self._forward(msg)

@@ -30,6 +30,7 @@ import threading
 import time
 from rclpy.node import Node
 from rclpy.clock import Clock, ClockType
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String, Bool, Int32
 from interfaces.srv import SetArming
 from interfaces.msg import ELRSCommand
@@ -45,6 +46,12 @@ READY_TIMEOUT_SEC = 30.0
 
 # If a drone misses this many consecutive heartbeats we treat it as dropped
 ARMING_FEEDBACK_TIMEOUT_SEC = 1.0
+
+# elrs_mux's /drone_i/mux_state ('partner' | 'ours' | 'latched'), latched on both ends so
+# the state is read even when the manager starts after the mux. No publisher (no mux on
+# that drone) = ours and not latched.
+MUX_STATE_QOS = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                           durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
 
 class CentralController(Node):
@@ -100,6 +107,14 @@ class CentralController(Node):
                 f'/drone_{i}/arming_state_feedback',
                 lambda msg, drone_id=i: self._arming_feedback_callback(msg, drone_id),
                 5)
+
+        # ── Per-drone ELRS mux state (drones with a mux only) ─────────────
+        self.mux_state = {}
+        for i in range(self.num_drones):
+            self.create_subscription(
+                String, f'/drone_{i}/mux_state',
+                lambda msg, drone_id=i: self._mux_state_callback(msg, drone_id),
+                MUX_STATE_QOS)
 
         # ── Master step timer (sim time) ──────────────────────────────────
         self.timer = self.create_timer(DT, self._step_timer_callback)
@@ -159,6 +174,9 @@ class CentralController(Node):
         elif command == "LAND":
             self._land_fleet()
         elif command == "DISARM":
+            # The operator's disarm is the rig kill switch: latch every mux too, so drones
+            # still on the partner's stream are grounded (Wesley 2026-09-28).
+            self.abort_pub.publish(String(data='operator DISARM'))
             self._disarm_fleet(emergency=False)
         elif command == "ESTOP":
             self.get_logger().error("EMERGENCY STOP commanded!")
@@ -170,6 +188,12 @@ class CentralController(Node):
     # Arming feedback - safety monitor
     # ─────────────────────────────────────────────────────────────────────
 
+    def _mux_state_callback(self, msg: String, drone_id: int):
+        state = msg.data.strip().lower()
+        if self.mux_state.get(drone_id) != state:
+            self.get_logger().info(f"Drone {drone_id} mux: {state}")
+        self.mux_state[drone_id] = state
+
     def _arming_feedback_callback(self, msg: Bool, drone_id: int):
         self.drone_last_feedback[drone_id] = self._wall_clock.now()
         was_armed = self.drone_armed[drone_id]
@@ -178,6 +202,14 @@ class CentralController(Node):
         # If a drone disarmed unexpectedly while the fleet is flying,
         # trigger an emergency stop for the entire fleet.
         if self.flying and was_armed and not msg.data:
+            if self.mux_state.get(drone_id) == 'partner':
+                # Not under our command (its mux forwards the partner's stream): the
+                # tracker's own disarm does not reach the radio, and grounding everyone
+                # for it would drop a drone we do not fly (ruling F5, R0618).
+                self.get_logger().warn(
+                    f"Drone {drone_id} tracker disarmed while its mux forwards the "
+                    f"partner - not escalating to a fleet abort.")
+                return
             self.get_logger().error(
                 f"Drone {drone_id} disarmed unexpectedly during flight - "
                 f"triggering emergency stop for all drones!")
@@ -195,6 +227,15 @@ class CentralController(Node):
         thread.start()
 
     def _arm_fleet_thread(self):
+        # A latched mux holds its drone's motors off until the mux restarts: armed
+        # trackers behind it would wind up their integrators against dead motors.
+        latched = sorted(i for i, s in self.mux_state.items() if s == 'latched')
+        if latched:
+            self.fleet_armed = False
+            for i in latched:
+                self.get_logger().error(
+                    f"ARM REFUSED: mux latched on drone {i} (relaunch the muxes)")
+            return
         self.get_logger().info("Arming all drones...")
         self.fleet_armed = False          # a repeat ARM must re-earn it
 
@@ -239,11 +280,14 @@ class CentralController(Node):
             # A fleet missing a drone must not take off: the others would lift and
             # drag the payload (R0560: drone 0's tracker died before ARM, the manager
             # declared the ARM complete and three drones hauled the ring to 44 deg).
+            # Service disarm only, no /fleet/abort and no direct ELRS (Q6b): nothing of
+            # ours is flying yet, and in M2 the partner's drones hold the ring behind
+            # the muxes, which an abort would latch down.
             self.get_logger().error(
                 f"ARM FAILED for drone(s) {failed}: disarming the fleet; TAKEOFF refused. "
                 f"The disarm shuts the trackers down: RELAUNCH the stack to retry. (A "
                 f"tracker blocked > 5 s, e.g. a first solver build, also lands here.)")
-            self._disarm_fleet(emergency=True,
+            self._disarm_fleet(emergency=False,
                                reason=f"ARM failed for drone(s) {failed}")
             return
         self.fleet_armed = True
