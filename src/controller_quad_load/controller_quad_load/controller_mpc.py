@@ -39,6 +39,7 @@ from .acados import (generate_ocp_controller, set_initial_guess,
                      warm_start_from_previous_solution, set_planner_reference)
 from .velocity_loop import VelocityLoop
 from .kt_trim import KtTrim
+from .x0_rate import X0_RATE_SOURCES, x0_body_rate
 N_POSE = 13
 
 
@@ -384,6 +385,22 @@ class Controller(Node):
         # Diagnostic for the planner height offset (critic, 2026-09-24_planner_offset).
         self.declare_parameter('x0_relax_symmetric', False)
         self.x0_relax_symmetric = bool(self.get_parameter('x0_relax_symmetric').value)
+        # Body rate in x0: 'mocap' (default) or 'imu' = the mean stamped gyro since the last
+        # tick, a sim oracle (card 2026-09-28_mocap_diff_window v3). Logged wx/wy/wz stay mocap.
+        self.declare_parameter('x0_rate_source', 'mocap')
+        self.x0_rate_source = str(self.get_parameter('x0_rate_source').value).lower()
+        if self.x0_rate_source not in X0_RATE_SOURCES:
+            raise ValueError(f"x0_rate_source must be one of {X0_RATE_SOURCES}, "
+                             f"got {self.x0_rate_source!r}")
+        self._gyro_sum, self._gyro_n = np.zeros(3), 0      # since the last control tick
+        self._gyro_tick = (np.zeros(3), 0)                 # what the current tick uses
+        self._gyro_stamp = None                            # newest header stamp (s)
+        self._gyro_held = None
+        self._x0_w_fallbacks = 0
+        if self.x0_rate_source != 'mocap':
+            self.get_logger().warn(
+                f"[Drone {self.drone_id}] x0_rate_source={self.x0_rate_source} "
+                f"(non-default) - this is an experiment, record it.")
         self.terminal_vel_ref = bool(
             self.get_parameter('terminal_vel_ref').value)
         if self.terminal_vel_ref:
@@ -499,6 +516,8 @@ class Controller(Node):
         # the velocity in the MPC's initial state (mocap-differenced), last so column
         # positions of existing logs are unchanged
         log_headers += ['x0_vx', 'x0_vy', 'x0_vz']
+        # the body rate x0 actually used (x0_rate_source) and whether it fell back to mocap
+        log_headers += ['x0_wx', 'x0_wy', 'x0_wz', 'x0_w_fallback']
         self.data_logger = DataLogger(
             LOGGING_NAME, f"planner_drone{self.drone_id}", log_headers,
             base_dir=LOG_BASE_DIR)
@@ -562,6 +581,13 @@ class Controller(Node):
             self.imu_lin_acc = a
         else:
             self.imu_lin_acc += self.imu_alpha * (a - self.imu_lin_acc)
+        if self.x0_rate_source == 'imu':
+            w = msg.angular_velocity
+            self._gyro_sum += (w.x, w.y, w.z)
+            self._gyro_n += 1
+            t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+            if self._gyro_stamp is None or t > self._gyro_stamp:
+                self._gyro_stamp = t
 
     def _payload_state_cb(self, msg: MotionCaptureState):
         p = msg.pose.position
@@ -1037,6 +1063,11 @@ class Controller(Node):
     # ─────────────────────────────────────────────────────────────────────
 
     def control_loop(self):
+        if self.x0_rate_source == 'imu':
+            # the gyro samples of this tick, taken on every tick so the mean never spans a gap
+            self._gyro_tick = (self._gyro_sum, self._gyro_n)
+            self._gyro_sum, self._gyro_n = np.zeros(3), 0
+
         # ── Shutdown ──────────────────────────────────────────────────────
         if self.shutdown_requested:
             self.cb.request_shutdown()
@@ -1157,6 +1188,18 @@ class Controller(Node):
             self._current_ref_pos = np.asarray(self.planner_ref_pos[0], float)
 
             estimated_state = copy.deepcopy(self.current_pose[:13])
+            x0_w_fallback = 0.0
+            if self.x0_rate_source == 'imu':
+                w_x0, self._gyro_held, fell_back = x0_body_rate(
+                    *self._gyro_tick, self._gyro_held, self._gyro_stamp,
+                    self.get_clock().now().nanoseconds * 1e-9, estimated_state[10:13])
+                estimated_state[10:13] = w_x0
+                if fell_back:
+                    x0_w_fallback = 1.0
+                    self._x0_w_fallbacks += 1
+                    self.get_logger().warn(
+                        f"[Drone {self.drone_id}] x0 body rate: gyro stale, mocap w used "
+                        f"({self._x0_w_fallbacks} ticks)", throttle_duration_sec=1.0)
 
             # u_state is a MODEL STATE: it represents where the four channels
             # physically are right now. So pin it to what was actually SENT to
@@ -1336,6 +1379,8 @@ class Controller(Node):
                             float(pr[0]), float(pr[1]), float(pr[2])]
             log_row += [float(self.current_pose[7]), float(self.current_pose[8]),
                         float(self.current_pose[9])]
+            log_row += [float(estimated_state[10]), float(estimated_state[11]),
+                        float(estimated_state[12]), x0_w_fallback]
             self.data_logger.append_row(log_row)
 
             self.control_history.append(np.concatenate((u, u_rate)).tolist())

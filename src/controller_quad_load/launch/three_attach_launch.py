@@ -183,6 +183,9 @@ def _args():
         # historical behaviour, so this only changes a run you asked it to.
         DeclareLaunchArgument('terminal_vel_ref', default_value='false'),
         DeclareLaunchArgument('x0_relax_symmetric', default_value='false'),   # diagnostic, see controller_mpc
+        # sim oracle: tethered drone ids whose tracker takes the x0 body rate from the gyro
+        # (x0_rate_source imu, card 2026-09-28_mocap_diff_window), e.g. 0,1,2; '' = none
+        DeclareLaunchArgument('x0_rate_source_drones', default_value=''),
         # the newcomer's tracker mode ('' = the fleet's control_mode); 'velocity' flies the
         # free approach on the PD velocity loop (R0526-R0528: the MPC rolls a free x3 over)
         DeclareLaunchArgument('attach_control_mode', default_value=''),
@@ -340,6 +343,21 @@ def _args():
     ]
 
 
+def _x0_rate_imu_drones(context, n, real):
+    """Tethered drone ids whose tracker uses x0_rate_source imu (x0_rate_source_drones)."""
+    typed = LaunchConfiguration('x0_rate_source_drones').perform(context).strip()
+    if not typed:
+        return set()
+    if real:
+        raise RuntimeError('real:=true refuses x0_rate_source_drones: the gyro x0 rate is a '
+                           'sim oracle')
+    ids = {int(t) for t in typed.split(',') if t.strip()}
+    if not ids <= set(range(n)):
+        raise RuntimeError(f'x0_rate_source_drones {sorted(ids)}: only tethered drones '
+                           f'0..{n - 1}')
+    return ids
+
+
 def launch_setup(context, *args, **kwargs):
     n = int(LaunchConfiguration('num_drones').perform(context))
     if n < 1:
@@ -393,6 +411,8 @@ def launch_setup(context, *args, **kwargs):
     partner_attached = partner and (
         LaunchConfiguration('partner_attached').perform(context).lower() in ('1', 'true', 'yes'))
 
+    x0_imu = _x0_rate_imu_drones(context, n, real)
+
     # ── 3 TETHERED drones: bridges + betaflight comm + our tracker (as dissipative_launch) ──
     for i, drone_name in enumerate(drone_names):
         if sim_io:
@@ -419,6 +439,7 @@ def launch_setup(context, *args, **kwargs):
             parameters=[{'drone_id': i,
                          'terminal_vel_ref': b('terminal_vel_ref'),
                          'x0_relax_symmetric': b('x0_relax_symmetric'),
+                         **({'x0_rate_source': 'imu'} if i in x0_imu else {}),
                          'control_mode': LaunchConfiguration('control_mode'),
                          'vel_kp_pos': f('vel_kp_pos'),
                          'vel_kv': f('vel_kv'),
