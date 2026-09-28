@@ -41,7 +41,8 @@ Motive:
       That is what attach_z:=0.0 below assumes. TODO(lab) if the origin cannot go there: measure the plate-top height
       above the origin and type it as attach_z.
   [ ] each drone body re-created with the airframe LEVEL on the floor (preflight bar 15 deg; 09-23 read 15.9-18.3)
-  [ ] ids as above (else edit RIGID_BODY_TO_DRONE / PAYLOAD_RIGID_BODY_ID and `cb`), ~120 Hz to UDP 1511
+  [ ] ids as above, ~120 Hz to UDP 1511. Different ids: no edit, type them on every T1 (real_io) line, e.g.
+      mocap_drone_body_ids:=11,12,13,14 mocap_payload_body_id:=9 (drone i = i-th id; startup log prints the map)
 Weigh (write it down, then into wed.env):
   ring ______ kg (official 0.86)       d0 ____ d1 ____ d2 ____ d3 ____ kg (airframe WITH pack and rod)
   rod, magnet tip to drone CoG ______ m (0.47 = the 09-23 disc fit; preflight's fitted rod must agree within 4 cm)
