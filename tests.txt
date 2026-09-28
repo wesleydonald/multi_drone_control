@@ -1,3 +1,165 @@
+WED 30 SEP 2026 (G7 R0b-R4)
+===========================
+Plan: docs/g7_real_world_ladder.md §2-§5. Card (R3b/R4 claim, falsifier fixed before flying):
+docs/experiments/2026-09-30_rig_carry_hover.md. Every unknown is marked TODO(lab).
+
+RULES
+- NEVER run SIL, Gazebo or tools/run_experiment.py on this laptop while real_io is up (same topics). Tejen's runners
+  must not run either (same UDP 1511, same /dev/QUAD2).
+- Every terminal: mdc   (= source ~/ros2_humble/install/setup.bash && source ~/multi_drone_control/install/setup.bash)
+- rio/rctl/rdiss inject num_drones:=3 BEFORE your args; the lines below are full `ros2 launch` so nothing is implied.
+  Same num_drones in terminal 1 and terminal 2, always. After a launch: ros2 param get /central_controller num_drones
+- Terminals: T1 io, T2 control (tee'd), T3 preflight + commands, T4 bag.
+- Between flights: Ctrl-C T2, then tools/clean_slate.sh, then relaunch T2. T1 stays up.
+- Fleet commands (or the RViz panel buttons):
+    ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: ARM}"        # TAKEOFF, LAND the same way
+    ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: ESTOP}"
+- GLOBAL ABORT = ESTOP (and the hand kill, TODO(lab) Q4: is there one, who holds it) on any of: a drone past 35 deg
+  tilt; yaw turning more than 45 deg; a drone not leaving the floor within 5 s of the others; ring tilt past 15 deg;
+  anyone inside the cage. The envelope faults on its own at 60 deg / 3 m/s; act before it.
+
+LAYOUT AND IDS
+- Plate k of the M2A ring sits at 30*k deg CCW from the payload +x, plate 0 on +x (m2a_ring_fixture.sdf plate poses,
+  every world). attach_azimuths_deg uses the same load-frame angle (clock face: 3 o'clock = 0, 12 = 90).
+    three (R3): plates 1/5/9   -> attach_azimuths_deg:=30,150,270       drone0 plate 1, drone1 plate 5, drone2 plate 9
+    four  (R4): plates 1/3/5/9 -> attach_azimuths_deg:=30,90,150,270    drone0 plate 1, drone1 plate 3, drone2 plate 5,
+                                                                         drone3 plate 9 (= four_rigid_ground_3915.sdf)
+  The list is in SLOT order. auto_slot_assign (default on) matches airframes to slots by bearing, so another placement
+  also flies; with the placement above the planner prints "auto slot assignment (slot->drone): [0, 1, 2]" / "[0, 1, 2, 3]"
+  and preflight prints the same slot->drone. Anything else = a drone on the wrong plate or Motive +x not on plate 0.
+  (The M1 partner configs list 150,270,30 for drones 0-2 + drone 3 at 90: the same plates 1/3/5/9 in another slot order.)
+- drone i = /dev/QUAD(i+1) = Motive body 11+i; payload body 8 (motion_capture_publisher_node.py:25,33).
+  TODO(lab) Q2: are drones 0-3 Tejen's quad1-4 (bodies 11-14)? Which airframe is M1's 4th? Is the 4th flight-ready?
+  TODO(lab) Q3: ring body 8 or 9 in the current Motive project? tip bodies 21-24? which program forwards to UDP 1511,
+               Z-up, can it send the frame timestamp?
+  TODO(lab) Q5: cage radius/height (R5 orbit needs ~1.1 m radius; not today).
+- ls -l /dev/QUAD*      all four symlinks. NEVER run Tejen's udev install here (overwrites 99-elrs-quad.rules).
+
+SETUP (~1 h, before anything is powered)
+Motive:
+  [ ] payload rigid body: origin at the ring CENTRE on the ATTACH plane (plate tops), +x toward plate 0, Z up.
+      That is what attach_z:=0.0 below assumes. TODO(lab) if the origin cannot go there: measure the plate-top height
+      above the origin and type it as attach_z.
+  [ ] each drone body re-created with the airframe LEVEL on the floor (preflight bar 15 deg; 09-23 read 15.9-18.3)
+  [ ] ids as above (else edit RIGID_BODY_TO_DRONE / PAYLOAD_RIGID_BODY_ID and `cb`), ~120 Hz to UDP 1511
+Weigh (write it down, then into wed.env):
+  ring ______ kg (official 0.86)       d0 ____ d1 ____ d2 ____ d3 ____ kg (airframe WITH pack and rod)
+  rod, magnet tip to drone CoG ______ m (0.47 = the 09-23 disc fit; preflight's fitted rod must agree within 4 cm)
+Packs: fresh 6S, >= 24.0 V at rest before EVERY flight (preflight bar 22.8; land below 21.6).
+One file holds the numbers; `source` it in T2 and T3 and re-source after every edit:
+  (paste the block as is: the heredoc end marker ENV must stay at column 0; edit the file after, not before)
+mkdir -p results/rig/2026-09-30 && cat > results/rig/2026-09-30/wed.env <<'ENV'
+RING=0.86   # TODO(lab) weighed ring, kg
+DM3=0.64    # TODO(lab) mean of d0-d2 with pack+rod, kg (0.64 is the SIM airframe)
+DM4=0.64    # TODO(lab) mean of d0-d3, kg
+ROD=0.47    # TODO(lab) measured rod; must match preflight's fitted rod within 4 cm
+KT=24.0     # R1: median free-hover kT of d0-d2; after R3b flight 1: median printed tethered kT
+ENV
+source results/rig/2026-09-30/wed.env
+Solver cache (keys on both masses; a compile during ARM fails and disarms), after weighing, before the first T2:
+  python3 tools/prebuild_planner.py --load-mass $RING --drone-mass $DM3 3
+  python3 tools/prebuild_planner.py --load-mass $RING --drone-mass $DM4 4
+  (back home, before any sim: python3 tools/prebuild_planner.py   -- UNVERIFIED that the cache keeps both)
+Bag every flight (T4, Ctrl-C after LAND):
+  ros2 bag record -o results/rig/2026-09-30/<flight> /drone_{0..3}/motion_capture_state /payload/motion_capture_state /drone_{0..3}/ELRSCommand /drone_{0..3}/telemetry /fleet/command /fleet/abort /fleet/status /fleet/landed
+
+R0b  DESK AT THE LAB: props OFF, packs in, real mocap and radios (60-90 min)
+T1: ros2 launch controller_quad_load real_io_launch.py num_drones:=4 drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 drone2_serial:=/dev/QUAD3 drone3_serial:=/dev/QUAD4 magnet_channel:=6
+  1. ros2 topic hz -w 500 /drone_0/motion_capture_state     (drones 0-3 and /payload/...): ~120 Hz; write down the
+     std dev of dt. 60 s at rest for the velocity-noise number (input to P9):
+     timeout 60 ros2 bag record -o results/rig/2026-09-30/r0b_rest /drone_{0..3}/motion_capture_state /payload/motion_capture_state
+  2. ros2 topic echo /drone_<i>/telemetry --once            each drone: battery >= 24.0 V and an RSSI (link up)
+  3. magnets, each drone:  ros2 topic pub --once /drone_<i>/magnet std_msgs/msg/String "{data: ON}"   then "{data: OFF}"
+     a steel plate sticks, then drops. No response: Ctrl-C T1, relaunch it WITHOUT magnet_initial and no T2, then
+     python3 tools/aux_sweep.py --drone <i>     (closes Tejen's open items 1-2 on quad2/quad4 as well)
+  Then Ctrl-C T1 and relaunch it as the R3a T1 (three drones), start the R3a T2 line (props still OFF), and:
+  4. python3 tools/preflight.py --drones 3 --real --planner load_planner --max-ground-z 0.5      must be GO:
+       payload origin within 3 cm of the drones' circle centre; every drone resting < 15 deg; fitted rod = ROD +-4 cm;
+       every "drone i on typed azimuth" PASS (10 deg) with slot->drone [0, 1, 2]; magnet_channel identical (6);
+       read-back lines = what you typed (kt_trim False, lift_ramp_vel 0.0, start_taut False, handover_elev_deg 45.0,
+       creep_vel 0.2, z_ki 0.4, drone_mass $DM3, thrust_ratio $KT, magnet_initial 'ON').
+  5. abort path (card 2026-09-16_rig_h0_h1 T0.3): ARM, TAKEOFF (props off), cover one drone's markers for 2 s ->
+     ALL drones disarm within ~1 s; T2 shows the pose timeout and /fleet/abort. tools/clean_slate.sh, relaunch T2,
+     ARM, ESTOP -> all disarm at once.
+  PASS: all five.  ABORT: any drone stays armed in step 5 -> no flight today until the log is read.
+R2   MAGNETS AND CAPTURE (props off; in parallel with R0b, 20 min)
+  Each drone: magnet ON onto a ring plate, pull along the rod with a spring scale (TODO(lab) scale available?).
+  Share per rod m_L g/(n sin45): 4.0 N for three, 3.0 N for four. Holds >= 2x (8 N / 6 N); OFF releases < 0.2 s with
+  no residual stick; capture gap at which ON still grabs the plate: d0 __ d1 __ d2 __ d3 __ mm (-> weld_radius, R8).
+  ABORT: a magnet holding < 1.5x its share (6.0 N / 4.5 N) does not fly as a carrier.
+
+R1   FREE HOVER PER AIRFRAME; kT (props ON, 30-45 min)
+  No ring near. All four on the floor >= 1 m apart (free_hover latches each xy from its first pose).
+  TODO(lab): rods on or off for the free hover? (a 0.47 m rod hanging free swings; it is part of the weighed mass).
+T1: ros2 launch controller_quad_load real_io_launch.py num_drones:=4 drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 drone2_serial:=/dev/QUAD3 drone3_serial:=/dev/QUAD4 magnet_channel:=6
+T2: ros2 launch controller_quad_load real_hover_launch.py num_drones:=4 hover_z:=0.8 thrust_ratio:=24.0 2>&1 | tee results/rig/2026-09-30/r1_hover.log
+T3: python3 tools/preflight.py --drones 4 --real --planner free_hover --max-ground-z 0.5
+    (the planner read-back FAILs by design here, no cable geometry; every other line must PASS)
+  4th airframe not ready: num_drones:=3 on both and drop drone3_serial.
+  ARM, TAKEOFF, 30 s hover, LAND.
+  Watch: every drone climbs together; yaw holds (spin -> ESTOP, then python3 tools/yaw_excursion.py on its tracker log).
+  kT: the "[kT dN] measured in hover" line does NOT print in free flight (the estimate only runs tethered,
+  controller_mpc.py:912-915). Read it from the throttle, kT = 9.81 / settled throttle (09-16: 0.44-0.45 -> 22.4/21.7):
+    for d in 0 1 2 3; do python3 -c "import csv,sys,statistics as s; r=list(csv.DictReader(open(sys.argv[1]))); z=max(float(x['pose_z']) for x in r); u=[float(x['u2']) for x in r if float(x['pose_z'])>z-0.05]; print(sys.argv[1], 'zmax',round(z,2),'thr',round(s.median(u),3),'kT',round(9.81/s.median(u),1))" $(ls -d results/logs/controller_quad_load/planner_drone${d}_* | tail -1)/log.csv; done
+  KT in wed.env = median of d0-d2. Record kT per airframe and pack V before/after.
+  PASS: every drone settles (z steady; it may sit below 0.8 with a typed-high kT: that IS the measurement), yaw within
+  +-15 deg of its start, clean LAND, all disarmed. ABORT: global.
+
+R3a  THREE ON 1/5/9: CREEP TO 45 deg AND HOLD, NO LIFT (props ON, 2 flights, 30 min)
+  Sim twin: configs/experiments/ocp_hover_ground_creep_hold.yaml. Drones resting on the floor, rods flat, magnets on
+  plates 1/5/9 as in LAYOUT.
+T1: ros2 launch controller_quad_load real_io_launch.py num_drones:=3 drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 drone2_serial:=/dev/QUAD3 magnet_channel:=6 magnet_initial:=ON
+T2: ros2 launch controller_quad_load real_control_launch.py num_drones:=3 load_mass:=$RING drone_mass:=$DM3 cable_len:=$ROD attach_radius:=0.25 attach_z:=0.0 attach_azimuths_deg:=30,150,270 thrust_ratio:=$KT kt_trim:=false z_ki:=0.4 start_taut:=false handover_elev_deg:=45.0 handover_settle_s:=1.0 creep_vel:=0.2 target_z:=0.6 lift_ramp_vel:=0.0 load_traj:=hover 2>&1 | tee results/rig/2026-09-30/r3a_f1.log
+T3: python3 tools/preflight.py --drones 3 --real --planner load_planner --max-ground-z 0.5        GO, then
+  ARM, TAKEOFF; hold 15 s after "handover settle complete"; LAND.
+  Watch (T2): "load yaw datum latched at <deg>" (= the ring's Motive yaw); "auto slot assignment (slot->drone): [0, 1, 2]";
+  "rigid arc creep: sweeping ... -> 45.0 deg"; "[planner arc-creep] ref=... measured: ..." climbing to 45;
+  "measure_rod_len: rods [...] m from mocap at handover" (each ~ROD); "handover settle complete";
+  "[diag dN]" tilt and thr. WARN "arc creep timed out" or "liftoff gate timed out" = FAIL -> LAND.
+  PASS: handover within 15 s of TAKEOFF; every rod 45 +-5 deg at the hold; ring still on the floor (payload z < 0.07);
+  drone tilt < 25 deg (not the ladder's 15: sim drones lean 18.6 deg against 45-deg rods, R0648-R0650; the HOLD twin
+  run gives the expected value); no abort; LAND, all disarmed. Record the settled thr per drone.
+  ABORT: global; a drone drifting radially while its reference is fixed (the tracker, not the planner).
+
+R3b  THREE ON 1/5/9 LIFT THE RING TO 0.60 AND HOVER (first lift ever; 45-60 min, CARD)
+  Sim twins: ocp_hover_ground_creep_defaults.yaml (correct kT) and ocp_hover_ground_creep_kt110_kt.yaml (typed +10 %).
+  Flight 1, calibration (exploratory row): the R3a T2 line with lift_ramp_vel:=0.15, kt_trim still false:
+T2: ros2 launch controller_quad_load real_control_launch.py num_drones:=3 load_mass:=$RING drone_mass:=$DM3 cable_len:=$ROD attach_radius:=0.25 attach_z:=0.0 attach_azimuths_deg:=30,150,270 thrust_ratio:=$KT kt_trim:=false z_ki:=0.4 start_taut:=false handover_elev_deg:=45.0 handover_settle_s:=1.0 creep_vel:=0.2 target_z:=0.6 lift_ramp_vel:=0.15 load_traj:=hover 2>&1 | tee results/rig/2026-09-30/r3b_f1.log
+    ARM, TAKEOFF, 20 s hover after the ring reaches 0.60, LAND. At LAND each tracker prints
+    "[kT dN] measured in hover: X (typed ..., +x.x%, pack ..V)": KT in wed.env = median X; re-source.
+  Flights 2 and 3, THE CLAIM (card; same line, typed = measured, trim on):
+T2: ros2 launch controller_quad_load real_control_launch.py num_drones:=3 load_mass:=$RING drone_mass:=$DM3 cable_len:=$ROD attach_radius:=0.25 attach_z:=0.0 attach_azimuths_deg:=30,150,270 thrust_ratio:=$KT kt_trim:=true z_ki:=0.4 start_taut:=false handover_elev_deg:=45.0 handover_settle_s:=1.0 creep_vel:=0.2 target_z:=0.6 lift_ramp_vel:=0.15 load_traj:=hover 2>&1 | tee results/rig/2026-09-30/r3b_f2.log
+T3: python3 tools/preflight.py --drones 3 --real --planner load_planner --max-ground-z 0.5        before EVERY flight
+  Watch: as R3a, then the lift; "[kT dN] flying ... kt_hat=... applied" (1 Hz) moving < 10 % and not RAILED;
+  payload z in RViz/T2. Known hole: typed > ~14 % LOW reads as floor contact -> ring hovers well ABOVE 0.60 with
+  kt_hat stuck at the typed value: LAND, type a HIGHER kT (kt_trim card 2026-09-23: typed -16 % held the load at 1.19 m).
+  PASS (card): payload z over the last 10 s inside 0.55-0.66 (report whether it is 0.60 +-0.03: z_ki); ring tilt peak
+  < 15 deg, settled mean < 5 deg; drone tilt < 25 deg; lift (TAKEOFF to 0.55) < 40 s; no envelope fault; LAND, all
+  disarmed.  ABORT: global; pack under 21.6 V; ring tilt > 15 deg for > 1 s.
+
+R4   FOUR ON 1/3/5/9 LIFT AND HOVER (only if R3b passed and the 4th airframe passed R1 + R2; 45 min, CARD)
+  Sim twin: ocp_hover_ground_creep_n4_3915.yaml. Same graph as R3b (real_control_launch; one change: the fourth drone).
+  real_dissipative_launch (the R6 detach graph) has no attach_z arg (node default 0.025 against the plate-plane
+  origin), so it waits for R6 (next visit).
+T1: ros2 launch controller_quad_load real_io_launch.py num_drones:=4 drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 drone2_serial:=/dev/QUAD3 drone3_serial:=/dev/QUAD4 magnet_channel:=6 magnet_initial:=ON
+T2: ros2 launch controller_quad_load real_control_launch.py num_drones:=4 load_mass:=$RING drone_mass:=$DM4 cable_len:=$ROD attach_radius:=0.25 attach_z:=0.0 attach_azimuths_deg:=30,90,150,270 thrust_ratio:=$KT kt_trim:=true z_ki:=0.4 start_taut:=false handover_elev_deg:=45.0 handover_settle_s:=1.0 creep_vel:=0.2 target_z:=0.6 lift_ramp_vel:=0.15 load_traj:=hover 2>&1 | tee results/rig/2026-09-30/r4_f1.log
+T3: python3 tools/preflight.py --drones 4 --real --planner load_planner --max-ground-z 0.5        slot->drone [0, 1, 2, 3]
+  ARM, TAKEOFF, 20 s hover, LAND. Two claim flights.
+  PASS: as R3b, and settled ring tilt <= 5 deg (sim R0510 hovers this layout level).  ABORT: as R3b.
+
+AFTER (every flight, then at the end)
+- One line per flight into the card's table (flight, rung, KT typed, pack V start/end, settled z, ring tilt peak/settled,
+  drone tilt max, lift time, fault?, T2 log name). Registry rows afterwards, id prefix H, card column for R3b/R4 claim
+  flights, "exploratory" for the rest.
+- Logs (all local on this laptop; the tracker/planner dirs carry params.json):
+    ls -d results/logs/controller_quad_load/*_20260930_*          planner_drone<i>_* (tracker) and load_planner_* (planner
+                                                                    tick log: payload z, tilt at 10 Hz)
+    results/preflight/20260930_*.md
+    results/rig/2026-09-30/        (wed.env, tee'd T2 logs with the [kT dN] lines, bags)
+  then tools/backup_results.sh.
+
+
+
 HARDWARE SETUP
 ==============
 
@@ -48,8 +210,10 @@ A-real:
    payload_rest_z:=-0.1 runs the path Gazebo validated (R0462/R0463): cable feedforward on from the floor and the
    floor-contact test guarding the estimate. With the rig default 0.05 the trim is inert until the load is 10 cm up,
    which is the case being tested. Known hole (2026-09-24 15:06 Gazebo): a typed gain more than ~14 % LOW is classed
-   as floor contact; symptom = load hovers well ABOVE 0.60 with kt_hat stuck at 24.0. Then LAND and retype lower.
-rctl num_drones:=3 load_mass:=0.86 cable_len:=0.47 thrust_ratio:=24 lift_ramp_vel:=0.15 load_traj:=hover
+   as floor contact; symptom = load hovers well ABOVE 0.60 with kt_hat stuck at 24.0. Then LAND and retype HIGHER
+   (the typed gain is the low one; 'retype lower' here was wrong, fixed 2026-09-28).
+rctl num_drones:=3 load_mass:=0.86 cable_len:=0.47 thrust_ratio:=24 kt_trim:=false lift_ramp_vel:=0.15 load_traj:=hover
+   (flight 1 = trim OFF, as below; flight 2: thrust_ratio:=<measured> kt_trim:=true)
    (defaults since 2026-09-24 22:30: creep floor start start_taut:=false handover_elev_deg:=45 handover_settle_s:=1.0
    creep_vel:=0.2, kt_trim:=true, z_ki:=0.4. Add drone_mass:=<weighed>. kt_trim:=false z_ki:=0 for a fixed-gain baseline.)
    FLOOR START = the CREEP path (R0466, 2026-09-24): start_taut:=false handover_elev_deg:=45 anchors each drone where it
