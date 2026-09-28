@@ -36,7 +36,9 @@ on /dev/QUAD<i+1>, fleet_viz from mocap, RViz). No Gazebo bridge, no sim Betafli
 mocap emulator; sim_interface is ignored. The graph and its parameters are the sim ones except
 (controller_quad_load/real_mode.py): use_sim_time false; thrust_ratio typed (no 'auto');
 takeoff kT = kT; pose_timeout_s 0.25 / safety_ref_timeout_s 1.0 / payload_rest_z 0.05 /
-z_taut_gate 0.9 in place of the sim defaults. Magnets (ladder P10: one path per drone): the
+z_taut_gate 0.9, handover_settle_s 2.0 and reconfig_mode ocp in place of the sim defaults, a
+typed value kept (the creep floor start: start_taut false, handover_elev_deg 45, creep_vel
+0.2, the sim defaults here too). Magnets (ladder P10: one path per drone): the
 radio's String latch /drone_<i>/magnet on ELRS channel magnet_channel (6 = AUX4), ON|OFF from
 boot by magnet_initial (ON; drone<i>_magnet_initial:=ON|OFF for one radio); the dissipative node
 (detach_magnet) re-latches every tether ON at ARM and OFF at its /fleet/detach. The partner_m2
@@ -45,7 +47,7 @@ overwrites it in every packet.
 
     ros2 launch controller_quad_load dissipative_launch.py real:=true partner_m2:=true \
         num_drones:=4 thrust_ratio:=<kT> drone_mass:=<weighed> load_mass:=<weighed> \
-        attach_azimuths_deg:=30,90,150,270 start_taut:=false reconfig_mode:=ocp
+        attach_azimuths_deg:=30,90,150,270
     # drone<i>_serial:=/dev/QUAD<i+1> (defaults), rviz:=false, real_io:=false when Tejen's
     # IRL stack owns the radios and the mocap socket (one radio node per drone, one UDP 1511)
 """
@@ -53,8 +55,9 @@ import os
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
-from controller_quad_load.real_mode import (apply_rig_values, declared_defaults, rig_io,
-                                            rig_magnet_latches, rig_thrust_ratio, truthy)
+from controller_quad_load.real_mode import (apply_rig_values, declared_defaults,
+                                            record_typed_args, rig_io, rig_magnet_latches,
+                                            rig_thrust_ratio, truthy)
 from controller_quad_load.thrust_model import resolve_thrust_ratio
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
@@ -381,4 +384,6 @@ def launch_setup(context, *args, **kwargs):
 
 
 def generate_launch_description():
-    return LaunchDescription(_args() + [OpaqueFunction(function=launch_setup)])
+    # record_typed_args first: real:=true replaces only the defaults, never a typed value
+    return LaunchDescription([OpaqueFunction(function=record_typed_args)] + _args()
+                             + [OpaqueFunction(function=launch_setup)])

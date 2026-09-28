@@ -416,6 +416,59 @@ def test_m2_real_graph_plain_carry():
     assert not [n for n in nodes if n['remappings'] and n['executable'] == 'controller']
 
 
+# ── Q7: the rig defaults to the creep floor start and the OCP resize ──────────────────
+
+Q7_KEYS = ('start_taut', 'handover_elev_deg', 'handover_settle_s', 'creep_vel', 'reconfig_mode')
+Q7_RIG = (False, 45.0, 2.0, 0.2, 'ocp')
+Q7_SIM = {'three_attach_launch.py': (True, 45.0, 0.75, 0.10, 'network'),
+          'dissipative_launch.py': (False, 45.0, 1.0, 0.2, 'network')}
+# the minimal rig line of each launch (R8a shape for M1, the partner_m2 M2 line)
+Q7_RIG_LINE = {'three_attach_launch.py': dict(enable_approach_mpc=False, weld_radius=0.0),
+               'dissipative_launch.py': dict(partner_m2=True, num_drones=4)}
+
+
+def _q7(nodes):
+    p = _by_name(nodes)['/dissipative_controller']['params']
+    return tuple(p[k] for k in Q7_KEYS)
+
+
+@pytest.mark.parametrize('launch', sorted(Q7_SIM))
+def test_q7_real_defaults_to_the_creep_floor_start_and_ocp(launch):
+    nodes = evaluate(launch, real=True, thrust_ratio=24.0, **Q7_RIG_LINE[launch])
+    assert _q7(nodes) == Q7_RIG
+
+
+@pytest.mark.parametrize('launch', sorted(Q7_SIM))
+def test_q7_real_keeps_typed_values(launch):
+    typed = dict(start_taut=True, handover_elev_deg=65.0, handover_settle_s=0.5,
+                 creep_vel=0.15, reconfig_mode='network')
+    nodes = evaluate(launch, real=True, thrust_ratio=24.0, **Q7_RIG_LINE[launch], **typed)
+    assert _q7(nodes) == tuple(typed[k] for k in Q7_KEYS)
+    # a typed value equal to the sim default is typed too: kept, not swapped for the rig's
+    sim = dict(zip(Q7_KEYS, Q7_SIM[launch]))
+    nodes = evaluate(launch, real=True, thrust_ratio=24.0, **Q7_RIG_LINE[launch], **sim)
+    assert _q7(nodes) == Q7_SIM[launch]
+
+
+def test_q7_real_keeps_one_typed_value_and_defaults_the_rest():
+    nodes = evaluate('three_attach_launch.py', real=True, thrust_ratio=24.0,
+                     **Q7_RIG_LINE['three_attach_launch.py'], creep_vel=0.3)
+    assert _q7(nodes) == (False, 45.0, 2.0, 0.3, 'ocp')
+
+
+def test_q7_typed_watchdog_at_the_sim_default_is_refused():
+    # typed 1.0 (three_attach's sim default) is the operator's value, so it is checked
+    with pytest.raises(RuntimeError, match='pose_timeout_s'):
+        evaluate('three_attach_launch.py', real=True, thrust_ratio=24.0,
+                 **Q7_RIG_LINE['three_attach_launch.py'], pose_timeout_s=1.0)
+
+
+@pytest.mark.parametrize('launch', sorted(Q7_SIM))
+def test_q7_sim_defaults_unchanged(launch):
+    assert _q7(evaluate(launch)) == Q7_SIM[launch]
+    assert _q7(evaluate(launch, real=False)) == Q7_SIM[launch]
+
+
 # ── real:=false: the sim graphs M1 and M2 fly ─────────────────────────────────────────
 
 def test_sim_m1_graph_is_unchanged_in_shape():

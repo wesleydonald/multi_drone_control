@@ -13,6 +13,12 @@ sim claim flew. What changes on the rig is here, shared by both launches:
   * payload_rest_z 0.05 (the ring rests on the floor; every real launch and the node
     default) and z_taut_gate 0.9 (decisions.md 2026-09-25: 0.99 sim / 0.9 real) replace
     the sim defaults; a typed value is kept.
+  * the creep floor start and the OCP resize (decisions.md 2026-09-28, Q7): start_taut
+    false, handover_elev_deg 45, handover_settle_s 2.0, creep_vel 0.2, reconfig_mode ocp
+    replace the sim defaults; a typed value is kept.
+  * "typed" is an argument set before the launch file's declarations ran (the command
+    line, or an including launch), recorded by record_typed_args; a typed value equal to
+    the sim default is kept too.
   * the rig I/O is real_io_launch.py: the mocap node, one elrs_interface per drone on
     /dev/QUAD<i+1> (drone i = quad i+1 = Motive body 11+i), fleet_viz from mocap, RViz.
   * one magnet path per drone (ladder P10): the radio's String latch /drone_<i>/magnet,
@@ -30,7 +36,17 @@ from launch.substitutions import LaunchConfiguration
 from launch.utilities import perform_substitutions
 
 RIG_WATCHDOGS = {'pose_timeout_s': 0.25, 'safety_ref_timeout_s': 1.0}
-RIG_DEFAULTS = {'payload_rest_z': 0.05, 'z_taut_gate': 0.9}
+RIG_DEFAULTS = {'payload_rest_z': 0.05, 'z_taut_gate': 0.9,
+                'start_taut': 'false', 'handover_elev_deg': 45.0, 'handover_settle_s': 2.0,
+                'creep_vel': 0.2, 'reconfig_mode': 'ocp'}
+_TYPED_KEY = 'real_mode_typed_args'
+
+
+def record_typed_args(context):
+    """Note what was typed (an OpaqueFunction placed before the launch file's declarations)."""
+    context.launch_configurations[_TYPED_KEY] = ','.join(
+        sorted(k for k in context.launch_configurations if k != _TYPED_KEY))
+    return []
 
 
 def truthy(context, name):
@@ -67,18 +83,23 @@ def apply_rig_values(context, sim_defaults):
     Every node parameter reads these through LaunchConfiguration, so the node graph is the
     sim one with only these numbers changed. Returns a log line.
     """
+    if _TYPED_KEY not in context.launch_configurations:
+        raise RuntimeError('real_mode: the launch file must run record_typed_args before '
+                           'its DeclareLaunchArgument list')
+    typed = set(context.launch_configurations[_TYPED_KEY].split(','))
     notes = []
     for name, rig in {**RIG_WATCHDOGS, **RIG_DEFAULTS}.items():
         if name not in sim_defaults:
             continue
-        typed = float(context.launch_configurations.get(name, sim_defaults[name]))
-        value = rig if typed == float(sim_defaults[name]) else typed
+        value = context.launch_configurations[name] if name in typed else rig
+        if isinstance(rig, float):
+            value = float(value)
         if name in RIG_WATCHDOGS and value > rig:
             raise RuntimeError(
-                f'real:=true: {name}:={typed:g} is looser than the rig watchdog ({rig:g} s); '
+                f'real:=true: {name}:={value:g} is looser than the rig watchdog ({rig:g} s); '
                 f'the loose values are for Gazebo under CPU load. Drop it or type <= {rig:g}.')
         context.launch_configurations[name] = str(value)
-        notes.append(f'{name} {value:g}')
+        notes.append(f'{name} {value:g}' if isinstance(value, float) else f'{name} {value}')
     return '[launch] REAL: ' + ', '.join(notes)
 
 

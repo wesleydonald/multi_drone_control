@@ -43,7 +43,9 @@ Gazebo-facing node is dropped (bridges, sim Betaflight, mocap emulator, magnet_t
 the gz weld bridges); the rest of the graph and its parameters are the sim ones, except
 (controller_quad_load/real_mode.py): use_sim_time false; thrust_ratio typed (no 'auto');
 takeoff kT = kT; pose_timeout_s 0.25 / safety_ref_timeout_s 1.0 / payload_rest_z 0.05 /
-z_taut_gate 0.9 in place of the sim defaults; the magnet manager welds on the mocap tip body
+z_taut_gate 0.9, and the creep floor start with the OCP resize (start_taut false,
+handover_elev_deg 45, handover_settle_s 2.0, creep_vel 0.2, reconfig_mode ocp) in place of
+the sim defaults, a typed value kept; the magnet manager welds on the mocap tip body
 (/magnet_tip_pose) with no gz backend (speed gate 0.05 m/s, dwell 0.15 s).
 Magnets (ladder P10: one path per drone, the radio's String latch /drone_<i>/magnet on ELRS
 channel magnet_channel, 6 = AUX4; the mux merges nothing):
@@ -59,9 +61,9 @@ channel magnet_channel, 6 = AUX4; the mux merges nothing):
 
     # R8a: newcomer to the plate on our tracker, magnet OFF, no weld
     ros2 launch controller_quad_load three_attach_launch.py real:=true thrust_ratio:=<kT> \
-        drone_mass:=<weighed> load_mass:=<weighed> start_taut:=false \
+        drone_mass:=<weighed> load_mass:=<weighed> \
         attach_azimuths_deg:=30,150,270 attach_x_offset:=0.0 attach_y_offset:=0.25 \
-        reconfig_mode:=ocp enable_approach_mpc:=false weld_radius:=0.0
+        enable_approach_mpc:=false weld_radius:=0.0
     # R8b: the same with weld_radius:=<R2 capture gap> (the manager latches drone 3 ON at ATTACH)
     # drone<i>_serial:=/dev/QUAD<i+1> (defaults), rviz:=false, real_io:=false (another stack
     # owns mocap and radios: then nothing here reaches a radio's magnet latch)
@@ -74,8 +76,9 @@ import os
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
-from controller_quad_load.real_mode import (apply_rig_values, declared_defaults, rig_io,
-                                            rig_magnet_latches, rig_thrust_ratio, truthy)
+from controller_quad_load.real_mode import (apply_rig_values, declared_defaults,
+                                            record_typed_args, rig_io, rig_magnet_latches,
+                                            rig_thrust_ratio, truthy)
 from controller_quad_load.thrust_model import resolve_thrust_ratio
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
@@ -370,9 +373,6 @@ def launch_setup(context, *args, **kwargs):
              LogInfo(msg=f'[launch] {kt_note}; takeoff {kt_to:.2f}')]
     if real:
         nodes.append(LogInfo(msg=rig_note))
-        if truthy(context, 'start_taut'):
-            nodes.append(LogInfo(msg='[launch] REAL: start_taut is true (the sim air start); the '
-                                     'rig floor start is start_taut:=false (decisions 09-24)'))
 
     # SIL: controllers only. The bench is the simulator, so every Gazebo-facing node
     # below is skipped. See the `sil` launch argument. The rig has none of them either.
@@ -857,4 +857,6 @@ def launch_setup(context, *args, **kwargs):
 
 
 def generate_launch_description():
-    return LaunchDescription(_args() + [OpaqueFunction(function=launch_setup)])
+    # record_typed_args first: real:=true replaces only the defaults, never a typed value
+    return LaunchDescription([OpaqueFunction(function=record_typed_args)] + _args()
+                             + [OpaqueFunction(function=launch_setup)])
