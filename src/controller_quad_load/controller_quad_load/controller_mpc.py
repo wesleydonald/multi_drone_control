@@ -496,6 +496,9 @@ class Controller(Node):
         if self._log_payload:
             log_headers += ['payload_x', 'payload_y', 'payload_z',
                             'payload_ref_x', 'payload_ref_y', 'payload_ref_z']
+        # the velocity in the MPC's initial state (mocap-differenced), last so column
+        # positions of existing logs are unchanged
+        log_headers += ['x0_vx', 'x0_vy', 'x0_vz']
         self.data_logger = DataLogger(
             LOGGING_NAME, f"planner_drone{self.drone_id}", log_headers,
             base_dir=LOG_BASE_DIR)
@@ -1331,6 +1334,8 @@ class Controller(Node):
                       else np.full(3, np.nan))
                 log_row += [float(pa[0]), float(pa[1]), float(pa[2]),
                             float(pr[0]), float(pr[1]), float(pr[2])]
+            log_row += [float(self.current_pose[7]), float(self.current_pose[8]),
+                        float(self.current_pose[9])]
             self.data_logger.append_row(log_row)
 
             self.control_history.append(np.concatenate((u, u_rate)).tolist())
