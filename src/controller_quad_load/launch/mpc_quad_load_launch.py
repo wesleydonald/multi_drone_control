@@ -78,6 +78,9 @@ def _args():
         # and divides the load tension by this, so a mismatch mis-scales every
         # drone's feedforward.
         DeclareLaunchArgument('num_drones', default_value='2'),
+        # sim Betaflight rate loop source for every bf_comm: 'imu' (the gyro on /drone_i/imu,
+        # bridged below; default since 2026-09-28) or 'pose' (difference the gz poses)
+        DeclareLaunchArgument('rate_source', default_value='imu'),
         # must match the tether length in the world SDF -- the *_rigid_short
         # worlds use rigid 0.5 m rods, and a mismatch here commands a formation
         # radius the tethers physically can't reach (drones fight the rod).
@@ -273,7 +276,9 @@ def launch_setup(context, *args, **kwargs):
             package='simulation_communication', executable='payload_betaflight_comm',
             name=f'bf_comm_{i}',
             parameters=[{'drone_id': i, 'drone_name': drone_name,
-                         'parent_model': PARENT_MODEL}]))
+                         'parent_model': PARENT_MODEL,
+                         'rate_source': LaunchConfiguration('rate_source'),
+                         'imu_topic': f'/drone_{i}/imu'}]))
         # per-drone CABLE-AWARE MPC tracker — tracks the planner reference
         nodes.append(Node(
             package='controller_quad_load', executable='controller',

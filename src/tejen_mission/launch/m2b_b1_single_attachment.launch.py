@@ -15,6 +15,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from simulation_communication.imu_world import launch_guard
 
 
 def _workspace_root() -> Path:
@@ -333,6 +334,8 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("proof_min_excitation_m", default_value="0.012"),
         DeclareLaunchArgument("attached_hold_angle_deg", default_value="15.0"),
         DeclareLaunchArgument("world_path", default_value=str(root / "simulation_assets" / "tejen" / "world_m2b_single_attachment.sdf")),
+        # rate_source imu (the sim bridge default): refuse a world without the Imu system
+        launch_guard(world_config="world_path"),
         gazebo_gui, gazebo_headless,
         TimerAction(period=0.75, actions=[simulation_interfaces, joint_command_bridge]),
         TimerAction(period=1.00, actions=[pendulum, joint_truth, observer, telemetry]),

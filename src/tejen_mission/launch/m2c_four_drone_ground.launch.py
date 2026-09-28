@@ -5,11 +5,12 @@ identity-separated simulation/platform/mission stacks, a shared fleet manager,
 and the four startup DetachableJoint truth channels.  M2D owns motion.
 """
 
+import os
 from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, TimerAction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction, TimerAction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -18,17 +19,43 @@ from launch_ros.actions import Node
 M2C_DRONE_IDS = (0, 1, 2, 3)
 M2C_VEHICLE_NAMES = ("drone_0", "drone_1", "drone_2", "drone_3")
 M2C_RING_YAW_DEG = 20.0
+# multi_drone_control: the X3 imu_sensor sets no <topic>, so gz publishes on the scoped name
+GZ_IMU_TOPIC = "/world/quadcopter/model/x3_{i}/link/X3/base_link/sensor/imu_sensor/imu"
+
+
+def _rate_source() -> str:
+    """M2_RATE_SOURCE: 'imu' (the X3 gyro, default since 2026-09-28) or 'pose' (his
+    differenced poses), as in m2d_four_drone_sequential.launch.py."""
+    value = os.environ.get("M2_RATE_SOURCE") or "imu"
+    if value not in ("pose", "imu"):
+        raise RuntimeError(f"M2_RATE_SOURCE must be 'pose' or 'imu', got {value!r}")
+    return value
+
+
+def _require_imu_world(context):
+    # without the world Imu system the gyros never publish and his bridges send no motor command
+    from simulation_communication.imu_world import require_imu_world
+    path = LaunchConfiguration("world_path").perform(context)
+    try:
+        require_imu_world(path, why="M2_RATE_SOURCE=imu")
+    except RuntimeError as err:
+        raise RuntimeError(f"{err} (generate it with --imu-system)") from None
+    return []
+
+
 def generate_launch_description() -> LaunchDescription:
     drone_share = Path(get_package_share_directory("tejen_mission"))
 
     gui = LaunchConfiguration("gui")
     world_path = LaunchConfiguration("world_path")
+    rate_source = _rate_source()
 
     actions = [
         DeclareLaunchArgument("gui", default_value="true"),
         # M2C worlds are generated per commissioning run. Requiring this path avoids
         # a manual launch silently falling back to the historical single-X3 B1 world.
         DeclareLaunchArgument("world_path"),
+        *([OpaqueFunction(function=_require_imu_world)] if rate_source == "imu" else []),
         ExecuteProcess(
             cmd=["gz", "sim", "-v", "2", world_path],
             name="m2c_gazebo_gui",
@@ -133,6 +160,8 @@ def generate_launch_description() -> LaunchDescription:
                     "rates_d_val": 100.0,
                     "rates_f_val": 100.0,
                     "rates_g_val": 0.0,
+                    "rate_source": rate_source,
+                    "imu_topic": f"/{ns}/imu",
                 }],
             ),
             Node(
@@ -160,6 +189,13 @@ def generate_launch_description() -> LaunchDescription:
                 }],
             ),
         ])
+        if rate_source == "imu":
+            platform_actions.append(Node(
+                package="ros_gz_bridge", executable="parameter_bridge",
+                name=f"m2c_imu_bridge_{drone_id}", output="screen",
+                arguments=[GZ_IMU_TOPIC.format(i=drone_id) + "@sensor_msgs/msg/Imu[gz.msgs.IMU"],
+                remappings=[(GZ_IMU_TOPIC.format(i=drone_id), f"/{ns}/imu")],
+            ))
 
         truth_actions.append(
             Node(

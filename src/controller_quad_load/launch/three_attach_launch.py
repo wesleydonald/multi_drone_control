@@ -259,9 +259,10 @@ def _args():
         # ...and drone 3 starts welded as the fourth carrier (then leaves and rejoins)
         DeclareLaunchArgument('partner_attached', default_value='false'),
         DeclareLaunchArgument('mocap_hz', default_value='120'),   # drone 3's emulator cap
-        # sim Betaflight rate loop source for every bf_comm: 'pose' (difference the gz poses)
-        # or 'imu' (the gyro on /drone_i/imu, already bridged below; 500 Hz in *_imu.sdf worlds)
-        DeclareLaunchArgument('rate_source', default_value='pose'),
+        # sim Betaflight rate loop source for every bf_comm: 'imu' (the gyro on /drone_i/imu,
+        # bridged below; the X3 models load the Imu system; default since 2026-09-28) or
+        # 'pose' (difference the gz poses)
+        DeclareLaunchArgument('rate_source', default_value='imu'),
         # Online thrust-ratio (kT) estimation for the approach MPC. The scalar full-model UKF
         # seeds from thrust_ratio (24.0) and re-estimates kT in flight, so a battery-sag /
         # payload-mass mismatch does not leave the approach flying on a stale hover gain.

@@ -2,9 +2,14 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, LogInfo, TimerAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, TimerAction
+from launch.conditions import LaunchConfigurationEquals
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+# the X3 imu_sensor sets no <topic>, so gz publishes on the scoped name
+GZ_IMU_TOPIC = '/world/quadcopter/model/x3/link/X3/base_link/sensor/imu_sensor/imu'
 
 
 def generate_launch_description():
@@ -31,6 +36,17 @@ def generate_launch_description():
             '/X3/gazebo/command/motor_speed'
             '@actuator_msgs/msg/Actuators]ignition.msgs.Actuators'
         ],
+    )
+
+    # Betaflight rate loop on the X3 gyro (the sim default since 2026-09-28,
+    # multi_drone_control); rate_source:=pose keeps the differenced poses
+    imu_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        name='c1e_imu_bridge',
+        arguments=[GZ_IMU_TOPIC + '@sensor_msgs/msg/Imu[gz.msgs.IMU'],
+        remappings=[(GZ_IMU_TOPIC, '/imu')],
+        condition=LaunchConfigurationEquals('rate_source', 'imu'),
     )
 
     payload_pose_bridge = Node(
@@ -63,6 +79,8 @@ def generate_launch_description():
             'rates_d_val': 100.0,
             'rates_f_val': 100.0,
             'rates_g_val': 0.0,
+            'rate_source': LaunchConfiguration('rate_source'),
+            'imu_topic': '/imu',
         }],
     )
 
@@ -112,8 +130,10 @@ def generate_launch_description():
             msg='Do not run separate Betaflight, mocap, pendulum, magnet-manager, '
                 'or C1E planner processes at the same time.'
         ),
+        DeclareLaunchArgument('rate_source', default_value='imu'),
         x3_pose_bridge,
         motor_command_bridge,
+        imu_bridge,
         payload_pose_bridge,
         TimerAction(
             period=0.25,

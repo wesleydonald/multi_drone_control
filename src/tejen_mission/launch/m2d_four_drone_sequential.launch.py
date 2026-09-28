@@ -243,8 +243,9 @@ def _backend_params(drone_id: int, log_root, pre_authority_octopus_runtime_s):
 
 
 def _rate_source() -> str:
-    """M2_RATE_SOURCE: 'pose' (his differenced poses, default) or 'imu' (the X3 gyro)."""
-    value = os.environ.get("M2_RATE_SOURCE") or "pose"
+    """M2_RATE_SOURCE: 'imu' (the X3 gyro, default since 2026-09-28) or 'pose' (his
+    differenced poses)."""
+    value = os.environ.get("M2_RATE_SOURCE") or "imu"
     if value not in ("pose", "imu"):
         raise RuntimeError(f"M2_RATE_SOURCE must be 'pose' or 'imu', got {value!r}")
     return value
@@ -252,10 +253,12 @@ def _rate_source() -> str:
 
 def _require_imu_world(context):
     # without the world Imu system the gyros never publish and his bridges send no motor command
+    from simulation_communication.imu_world import require_imu_world
     path = LaunchConfiguration("world_path").perform(context)
-    if "gz-sim-imu-system" not in Path(path).read_text():
-        raise RuntimeError(
-            f"M2_RATE_SOURCE=imu but {path} has no Imu system (generate it with --imu-system)")
+    try:
+        require_imu_world(path, why="M2_RATE_SOURCE=imu")
+    except RuntimeError as err:
+        raise RuntimeError(f"{err} (generate it with --imu-system)") from None
     return []
 
 

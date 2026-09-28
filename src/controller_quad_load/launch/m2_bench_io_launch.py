@@ -14,10 +14,11 @@ pendulum_state_publisher (nothing of ours reads it).
     ros2 launch controller_quad_load m2_bench_io_launch.py                # starts gz too
     ros2 launch controller_quad_load m2_bench_io_launch.py start_gz:=false  # run_experiment owns gz
 
-rate_source:=imu runs his four bridges' rate loops on the X3 gyro instead of differenced poses
-(the ring rock grew with CPU load, R0707-R0709): it bridges each imu_sensor to /drone_i/imu
-and needs the world with the Imu system (m2_bench_world_imu.sdf, used here when start_gz and
-the world is the default; configs/experiments/m2_bench_imu.yaml for run_experiment).
+rate_source (default imu since 2026-09-28) runs his four bridges' rate loops on the X3 gyro
+instead of differenced poses (the ring rock grew with CPU load, R0707-R0720): it bridges each
+imu_sensor to /drone_i/imu and needs the world with the Imu system (m2_bench_world_imu.sdf,
+used here when start_gz and the world is the default; configs/experiments/m2_bench.yaml for
+run_experiment). rate_source:=pose keeps the old arm on m2_bench_world.sdf.
 
 Then dissipative_launch.py partner_m2:=true sim_interface:=false ... (configs/experiments/
 m2_bench.yaml has the args), ARM, /fleet/handover, TAKEOFF, release the hangers:
@@ -60,6 +61,9 @@ def launch_setup(context, *args, **kwargs):
     if _truthy(context, 'start_gz'):
         if not os.path.exists(world):
             raise RuntimeError(f'{world} missing: run tools/sim_test/make_m2_bench_world.py')
+        if rate_source == 'imu':
+            from simulation_communication.imu_world import require_imu_world
+            require_imu_world(world)
         gui = _truthy(context, 'gui')
         actions.append(ExecuteProcess(
             cmd=['gz', 'sim', '-r', '-v', '2', world] if gui else
@@ -135,7 +139,8 @@ def generate_launch_description():
         # his launch's default: M2_RATE_KI, else SIM_RATE_KI, else 5.0
         DeclareLaunchArgument('rate_ki', default_value=os.environ.get(
             'M2_RATE_KI', os.environ.get('SIM_RATE_KI', '5.0'))),
-        # his bridges' rate loop: 'pose' (difference the mocap poses, his default) or 'imu' (gyro)
-        DeclareLaunchArgument('rate_source', default_value='pose'),
+        # his bridges' rate loop: 'imu' (the X3 gyro, default since 2026-09-28) or 'pose'
+        # (difference the mocap poses)
+        DeclareLaunchArgument('rate_source', default_value='imu'),
         OpaqueFunction(function=launch_setup),
     ])

@@ -15,7 +15,8 @@ Parameters (ROS):
   rates_d_val   float 100.0
   rates_f_val   float 100.0
   rates_g_val   float 0.5
-  rate_source   str   'pose' (difference the gz poses) | 'imu' (the IMU gyro)
+  rate_source   str   'imu' (the IMU gyro, default since 2026-09-28) | 'pose' (difference
+                      the gz poses)
   imu_topic     str   /drone_{drone_id}/imu (sensor_msgs/Imu), used when rate_source is imu
 """
 
@@ -63,7 +64,8 @@ class PayloadBetaflightComm(Node):
 
         # 'imu' runs the rate loop on the gyro, as a real Betaflight does; the pose path
         # differences unstamped poses, so bunched samples under load become rate spikes (G4).
-        self.rate_source = str(self.declare_parameter('rate_source', 'pose').value)
+        # imu needs the world's Imu system (no gyro sample -> no motor command).
+        self.rate_source = str(self.declare_parameter('rate_source', 'imu').value)
         if self.rate_source not in ('pose', 'imu'):
             raise ValueError(f"rate_source must be 'pose' or 'imu', got {self.rate_source!r}")
         imu_topic = str(self.declare_parameter(

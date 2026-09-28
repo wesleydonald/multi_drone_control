@@ -57,6 +57,9 @@ def _args():
     return [
         # Fleet size. MUST match the world SDF.
         DeclareLaunchArgument('num_drones', default_value='3'),
+        # sim Betaflight rate loop source for every bf_comm: 'imu' (the gyro on /drone_i/imu,
+        # bridged below; default since 2026-09-28) or 'pose' (difference the gz poses)
+        DeclareLaunchArgument('rate_source', default_value='imu'),
         DeclareLaunchArgument('cable_len', default_value='0.5'),
         # where the rim attachments are (deg, load frame, sized by num_drones); '' = even
         # ring. Clock face: 3 o'clock = 0, 12 = 90, 9 = 180, 6 = 270.
@@ -219,7 +222,9 @@ def launch_setup(context, *args, **kwargs):
             package='simulation_communication', executable='payload_betaflight_comm',
             name=f'bf_comm_{i}',
             parameters=[{'drone_id': i, 'drone_name': drone_name,
-                         'parent_model': PARENT_MODEL}]))
+                         'parent_model': PARENT_MODEL,
+                         'rate_source': LaunchConfiguration('rate_source'),
+                         'imu_topic': f'/drone_{i}/imu'}]))
         # per-drone CABLE-AWARE MPC tracker. UNCHANGED from the other stacks: it consumes
         # the same reference wire format whether the OCP or the network produced it.
         nodes.append(Node(

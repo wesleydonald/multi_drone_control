@@ -15,6 +15,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from simulation_communication.imu_world import launch_guard
 
 
 def _workspace_root() -> Path:
@@ -191,6 +192,8 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("world_path",
             default_value=str(root / "simulation_assets" / "tejen" / "world_m2b_single_attachment.sdf"),
         ),
+        # rate_source imu (the sim bridge default): refuse a world without the Imu system
+        launch_guard(world_config="world_path"),
         gazebo_gui,
         gazebo_headless,
         TimerAction(period=0.75, actions=[simulation_interfaces]),

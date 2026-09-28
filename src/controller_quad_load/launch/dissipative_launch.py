@@ -44,6 +44,9 @@ PARENT_MODEL = 'lift_system'
 def _args():
     return [
         DeclareLaunchArgument('num_drones', default_value='4'),
+        # sim Betaflight rate loop source for every bf_comm: 'imu' (the gyro on /drone_i/imu,
+        # bridged below; default since 2026-09-28) or 'pose' (difference the gz poses)
+        DeclareLaunchArgument('rate_source', default_value='imu'),
         # our Gazebo bridges + Betaflight nodes; false when another stack owns the sim
         DeclareLaunchArgument('sim_interface', default_value='true'),
         # our stack on top of Tejen's M2 (see launch_setup)
@@ -235,7 +238,9 @@ def launch_setup(context, *args, **kwargs):
             package='simulation_communication', executable='payload_betaflight_comm',
             name=f'bf_comm_{i}',
             parameters=[{'drone_id': i, 'drone_name': drone_name,
-                         'parent_model': PARENT_MODEL}]))
+                         'parent_model': PARENT_MODEL,
+                         'rate_source': LaunchConfiguration('rate_source'),
+                         'imu_topic': f'/drone_{i}/imu'}]))
         nodes.append(Node(
             package='controller_quad_load', executable='controller',
             name=f'controller_{i}',

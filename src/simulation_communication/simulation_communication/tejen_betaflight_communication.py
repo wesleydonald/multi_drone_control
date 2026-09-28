@@ -37,8 +37,9 @@ class BetaflightInterfaceNode(Node):
 
         # 'imu' runs the rate loop on the gyro, as a real Betaflight does; the pose path
         # differences unstamped poses, so bunched samples under load become rate spikes
-        # (multi_drone_control 2026-09-27, the load-dependent M2 ring rock).
-        self.rate_source = str(self.declare_parameter('rate_source', 'pose').value)
+        # (multi_drone_control 2026-09-27, the load-dependent M2 ring rock; the default since
+        # 2026-09-28). imu needs the world's Imu system (no gyro sample -> no motor command).
+        self.rate_source = str(self.declare_parameter('rate_source', 'imu').value)
         if self.rate_source not in ('pose', 'imu'):
             raise ValueError(f"rate_source must be 'pose' or 'imu', got {self.rate_source!r}")
         self.imu_topic = str(self.declare_parameter('imu_topic', 'imu').value)

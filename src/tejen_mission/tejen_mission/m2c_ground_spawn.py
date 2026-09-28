@@ -550,8 +550,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     generate.add_argument(
         "--imu-system",
-        action="store_true",
-        help="add a world-level Imu system so the X3 gyros publish (rate_source imu)",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="add a world-level Imu system so the X3 gyros publish (rate_source imu, the "
+        "sim bridge default since 2026-09-28); --no-imu-system for rate_source pose",
     )
     return parser
 
