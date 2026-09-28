@@ -408,6 +408,20 @@ def test_m2_real_graph():
     assert '/payload_mocap' not in g
 
 
+@pytest.mark.parametrize('real', [False, True])
+def test_m2_manager_feedback_stays_under_ours(real):
+    """His MPC publishes a 2 Hz armed heartbeat on /drone_i/arming_state_feedback in M2
+    (m2c_vehicle_controller.launch.py): our manager and trackers must stay on /ours, or his
+    False before his ARM reaches our fault scoping and ARM gate."""
+    args = dict(M2_DRIVER, real=True, thrust_ratio=24.0, pose_timeout_s=0.25,
+                safety_ref_timeout_s=1.0) if real else dict(M2_DRIVER)
+    g = _by_name(evaluate('dissipative_launch.py', **args))
+    for i in range(4):
+        fb = (f'/drone_{i}/arming_state_feedback', f'/ours/drone_{i}/arming_state_feedback')
+        assert fb in g['/central_controller']['remappings']
+        assert fb in g[f'/controller_{i}']['remappings']
+
+
 def test_m2_real_graph_plain_carry():
     """dissipative_launch without partner_m2 (R3/R4 on the M2 planner): no muxes."""
     nodes = evaluate('dissipative_launch.py', real=True, thrust_ratio=24.0, num_drones=3)
