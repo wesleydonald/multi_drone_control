@@ -1,0 +1,105 @@
+# Rig commands, Wed 30 Sep 2026 (branch real-world-testing)
+
+Copy-paste order for the day. The full sheet (reasons, watch lines, bars) is the WED section of `tests.txt`.
+Every terminal first: `mdc` (sources ROS and this workspace). Laptop on a table outside the cage; nothing else runs on it.
+
+## 0. Setup (lab, before anything is powered)
+
+```bash
+mkdir -p results/rig/2026-09-30 && cd ~/multi_drone_control
+# weigh: each airframe with pack, rod and magnet (~1.2 kg expected), the ring; tape the rods
+cat > results/rig/2026-09-30/wed.env <<'ENV'
+RING=0.86          # weighed ring (kg)
+DM3=1.2            # mean of drones 0-2 (kg)
+DM4=1.2            # mean of drones 0-3 (kg)
+ROD=0.47           # measured rod (m)
+KT=24.0            # replaced by the R1 median later
+ENV
+source results/rig/2026-09-30/wed.env
+python3 tools/prebuild_planner.py --load-mass $RING --drone-mass $DM3 3
+python3 tools/prebuild_planner.py --load-mass $RING --drone-mass $DM4 4
+ls -l /dev/QUAD*                      # all four present (QUAD1..4 = drones 0..3)
+```
+Motive: ring body 8 (origin at the ring centre on the plate plane, +x toward plate 0), quads 11-14, pickup 6.
+
+## 1. R0b desk (props OFF, packs in)
+
+```bash
+# T1 (radios + mocap + RViz), stays up all day
+ros2 launch controller_quad_load real_io_launch.py num_drones:=4 drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 drone2_serial:=/dev/QUAD3 drone3_serial:=/dev/QUAD4 magnet_channel:=6 magnet_initial:=ON
+# T3
+ros2 topic hz -w 500 /drone_0/motion_capture_state            # ~120 Hz; repeat for 1-3 and /payload/...
+timeout 60 ros2 bag record -o results/rig/2026-09-30/r0b_rest /drone_{0..3}/motion_capture_state /payload/motion_capture_state
+python3 tools/r0b_mocap_report.py results/rig/2026-09-30/r0b_rest        # P9 numbers
+ros2 topic echo /drone_0/telemetry --once                     # each drone: >= 24.0 V, RSSI present
+ros2 topic pub --once /drone_0/magnet std_msgs/msg/String "{data: OFF}"   # then ON; each drone clicks
+```
+Then the abort checks, props OFF, R3a T2 up (section 3 line), preflight GO:
+1. ARM, wait for every "Armed - waiting for TAKEOFF", cover drone 1's markers for 1 s: expect
+   `Drone 1 disarmed before TAKEOFF ... TAKEOFF refused` in T2 (the pre-TAKEOFF gate). Ctrl-C T2, `tools/clean_slate.sh --rig`.
+2. Relaunch T2, ARM, press SPACE (with focus on the RViz 3D view, then again with focus in the DETACH box): all disarm.
+3. Relaunch T2, ARM, CLI kill: `ros2 topic pub -r 10 -t 10 /fleet/command std_msgs/msg/String "{data: ESTOP}"`: all disarm.
+4. Cover the RING's markers for 2 s with the fleet armed: note what T2 prints (the ring pose has no watchdog).
+
+## 2. R2 magnets (props OFF, T2 down)
+
+Each drone on its plate: magnet ON, pull along the rod with the spring scale: holds >= 8 N (three) / 6 N (four);
+lift the drone by hand: the ring rim rises (coupled); OFF releases < 0.2 s. Note the capture gap per magnet.
+
+## 3. R1 free hover, rods ON (props ON)
+
+```bash
+# T2
+export MDC_RUN_DIR=$PWD/results/rig/2026-09-30/r1_logs
+ros2 launch controller_quad_load real_hover_launch.py num_drones:=4 hover_z:=0.8 thrust_ratio:=24.0 2>&1 | tee results/rig/2026-09-30/r1_hover.log
+# T3
+python3 tools/preflight.py --drones 4 --real --planner free_hover --max-ground-z 0.5
+```
+ARM, TAKEOFF, 20 s, LAND. Record each drone's settled throttle (u_free) and pack V. Pass: tilt < 3 deg, xy < 0.12 m, yaw +-15 deg.
+Rods hanging, the drones may rest tilted: the new yaw hold (2633f68) then sends yaw 0 until each drone is airborne
+(log column `yaw_hold` = 1 during it). Watch the first 2 s after TAKEOFF: a drone turning > 15 deg = LAND; > 45 deg = ESTOP.
+Then set `KT` in wed.env to the median free-hover kT and re-source.
+
+## 4. Headroom go/no-go (before any tethered flight)
+
+```bash
+python3 tools/headroom.py --masses <d0,d1,d2> --az 30,150,270 --ring $RING --u-free <u0,u1,u2>          # three on 1/5/9
+python3 tools/headroom.py --masses <d0,d1,d2,d3> --az 0,90,180,270 --ring $RING --u-free <u0,u1,u2,u3>    # even four (R3e)
+```
+At 1.2 kg and u_free 0.45 the prediction is 0.568 (three), 0.537 (even four), 0.589 (1/3/5/9 plate 9); the cap is 0.60.
+OVER CAP: no tethered flight on that layout. Above your stop value: R3a hold as a measurement only.
+
+## 5. R3a creep and HOLD, three on plates 1/5/9 (or R3e: four on 0/3/6/9)
+
+```bash
+# T4 (bag), per flight
+ros2 bag record -o results/rig/2026-09-30/r3a_f1 /drone_{0..3}/motion_capture_state /payload/motion_capture_state /drone_{0..3}/ELRSCommand /drone_{0..3}/telemetry /fleet/command /fleet/abort /fleet/status /fleet/landed /drone_{0..3}/magnet /rosout
+# T1 relaunched for three drones
+ros2 launch controller_quad_load real_io_launch.py num_drones:=3 drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 drone2_serial:=/dev/QUAD3 magnet_channel:=6 magnet_initial:=ON
+# T2
+export MDC_RUN_DIR=$PWD/results/rig/2026-09-30/r3a_f1_logs
+git rev-parse HEAD > $MDC_RUN_DIR.code.txt; git status --short >> $MDC_RUN_DIR.code.txt
+ros2 launch controller_quad_load real_control_launch.py num_drones:=3 load_mass:=$RING drone_mass:=$DM3 cable_len:=$ROD attach_radius:=0.25 attach_z:=0.0 attach_azimuths_deg:=30,150,270 thrust_ratio:=$KT kt_trim:=false z_ki:=0.4 start_taut:=false handover_elev_deg:=45.0 handover_settle_s:=1.0 creep_vel:=0.2 target_z:=0.6 lift_ramp_vel:=0.0 load_traj:=hover 2>&1 | tee results/rig/2026-09-30/r3a_f1.log
+# T3, ~10 s after the trackers print "Controller ready"
+python3 tools/preflight.py --drones 3 --real --planner load_planner --max-ground-z 0.5
+```
+ARM, TAKEOFF, hold 15 s after "handover settle complete", LAND.
+Pass: hand-over within 15 s; rods 45 +-5 deg; ring z < 0.15; drone tilt < 25 deg; coupled (hold throttle above R1's,
+drone within rod + 3 cm of its plate); nobody at throttle 0.6 for 2 s. Record the settled throttle per drone.
+R3e: T1 with four drones, T2 `num_drones:=4 drone_mass:=$DM4 attach_azimuths_deg:=0,90,180,270`, preflight `--drones 4`.
+Yaw check (the 09-16 spins were on this creep start): every drone should log `yaw_hold` 1 from TAKEOFF until it leaves the
+floor and hold heading within 15 deg; if u3 swings to +-1 within 0.3 s of the release, note it (the remaining mechanism).
+
+## 6. R3b0 first lift (only if R3a coupled, no spin, hold throttle under your stop value)
+
+Same T2 line with `lift_ramp_vel:=0.15` (flight name r3b0_f1). ARM, TAKEOFF, 20 s at 0.60, LAND.
+At LAND each tracker prints `[kT dN] measured in hover: X`: that is the tethered kT for the claim flights.
+
+## After every flight
+
+```bash
+python3 tools/rig_to_run.py --out results/rig/2026-09-30/<flight>_run --trackers "$MDC_RUN_DIR/logs/controller_quad_load/planner_drone*" --bag results/rig/2026-09-30/<flight> --t2-log results/rig/2026-09-30/<flight>.log
+python3 tools/plot_run.py results/rig/2026-09-30/<flight>_run
+python3 tools/kick_events.py $MDC_RUN_DIR
+```
+Between flights: Ctrl-C T2 (and T4), `tools/clean_slate.sh --rig`, relaunch. After a drop or crash: see SAFETY AND RECOVERY in tests.txt.
