@@ -10,6 +10,10 @@ RULES
 - rio/rctl/rdiss inject num_drones:=3 BEFORE your args; the lines below are full `ros2 launch` so nothing is implied.
   Same num_drones in terminal 1 and terminal 2, always. After a launch: ros2 param get /central_controller num_drones
 - Terminals: T1 io, T2 control (tee'd), T3 preflight + commands, T4 bag.
+- Preflight ~10 s after the trackers print "Controller ready": the planner answers later ("load_planner not reachable" =
+  wait and re-run). A radio read-back of None = that radio node is stuck in its serial reconnect loop (unplugged or knocked
+  USB): it cannot pass commands either -> reseat the TX module, Ctrl-C T1 and relaunch it before anything is armed.
+  (Rehearsed at home 2026-09-29 against fake mocap, registry D0003: lines start, read-back = typed, pre-TAKEOFF gate, reset.)
 - Between flights: Ctrl-C T2, then tools/clean_slate.sh --rig, then relaunch T2. T1 and T4 stay up.
   (Plain clean_slate.sh kills T1's mocap and radio nodes, RViz with the DISARM panel and the bag, and deletes the DDS
   shared memory they use: after a plain one relaunch T1, then T4, then T2, and re-run preflight --real.)
