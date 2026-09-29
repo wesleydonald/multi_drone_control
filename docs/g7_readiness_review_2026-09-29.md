@@ -1,3 +1,10 @@
+> **Corrections from Wesley (2026-09-29), read with this review.** Tethered flights were flown on the rig (the claim below that
+> no rig flight put load on a tether is wrong; one drone may have detached itself after a fast climb). DISARM has been used on
+> the rig many times (it changed on 28 Sep: it now also latches the muxes). Drone 0 sometimes disarmed at takeoff (cause
+> unknown; the pre-TAKEOFF gate now grounds the fleet instead). Motive ids: quads 11-14, ring 8, pickup object 6. Airframes
+> about 1.2 kg. The combined stack is for later. Yaw spin: fixed in code, card docs/experiments/2026-09-29_rig_yaw_spin.md.
+> Short version: docs/rig_readiness_short_2026-09-29.md.
+
 # Real-world readiness report: from free hover to M1 and M2 (review of 29 Sep 2026)
 
 Nothing was edited or launched for this review. Anything marked **[inferred]** comes from arithmetic or a model and has not been measured. Everything else was read in code, logs, the registry or the docs. Numbers are from those sources.
