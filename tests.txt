@@ -301,7 +301,9 @@ Steps to fly it on the rig (magnets already on the tethers; a helper switches th
 3. Protocol, in hover first, ~0.6 m load height, freed drone holds where it is (~0.95 m):
    rio drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 drone2_serial:=/dev/QUAD3 drone3_serial:=/dev/QUAD4 num_drones:=4 detach:=true magnet_initial:=ON
    rdiss num_drones:=4 load_mass:=0.86 cable_len:=0.47 thrust_ratio:=24 lift_ramp_vel:=0.15 load_traj:=hover reconfig_mode:=ocp detach_magnet:=true
-   mdc && tools/preflight.py --drones 4 --real --planner dissipative_controller --max-ground-z 0.5
+   mdc && tools/preflight.py --drones 4 --real --planner dissipative_controller --max-ground-z 0.5 --detach
+   (--detach FAILs unless reconfig_mode ocp and detach_magnet true are read back: real_dissipative defaults to
+   network / false, and the network detach tilted the ring 26-48 deg in sim)
    operator counts down, publishes /fleet/detach k on "go", helper switches magnet k OFF on the same word (within 1 s).
    Command FIRST if they cannot be simultaneous: survivors take the load at once and the still-attached drone only tugs
    its rim for a moment. Release first is worse: the freed drone's tracker still models a cable pull it no longer feels
