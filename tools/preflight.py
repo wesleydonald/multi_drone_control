@@ -144,12 +144,23 @@ def main():
         check(bool(msgs) and fresh and rate > 20 and not nan, f'mocap drone {i}',
               f'{rate:.0f} Hz, {"fresh" if fresh else "STALE"}{", NaN" if nan else ""}')
     prate = len(pf.payload) / a.listen
-    check(bool(pf.payload) and prate > 20, 'mocap payload', f'{prate:.0f} Hz')
+    # R1 free hover flies without the ring: its mocap and the ring geometry below are not required
+    free = a.planner == 'free_hover'
+    if free:
+        lines.append(f'  mocap payload: {prate:.0f} Hz (free hover: not required; ring geometry checks skipped)')
+    else:
+        check(bool(pf.payload) and prate > 20, 'mocap payload', f'{prate:.0f} Hz')
 
     # 3. controller parameters, read back
     names = ['cable_len', 'load_mass', 'attach_radius', 'attach_azimuths_deg', 'attach_z']
-    prm = pf.read_params(a.planner, names)
-    if prm is None:
+    prm = None if free else pf.read_params(a.planner, names)
+    if free:
+        fh = pf.read_params_each(a.planner, ['hover_z', 'climb_vel', 'land_vel'])
+        check(fh is not None, 'free_hover parameters', 'reachable' if fh else 'node not reachable')
+        if fh is not None:
+            lines.append('  free_hover read-back: ' + _fmt(fh))
+        cable_len, rho = None, None
+    elif prm is None:
         check(False, 'planner parameters', f'node {a.planner!r} not reachable or a name undeclared')
         cable_len, rho = None, None
     else:
@@ -220,7 +231,7 @@ def main():
     # body's origin (its pivot is off the geometric centre), the fitted rod at 0.46 m against
     # the 0.50 told, and the magnets ~115/130/115 deg apart: every rim point the planner
     # used was wrong, which is what "two drones heading for one slot" was.
-    if a.drones >= 3 and all(pf.pose[i] for i in range(a.drones)) and pf.payload:
+    if not free and a.drones >= 3 and all(pf.pose[i] for i in range(a.drones)) and pf.payload:
         P = np.array([[pf.pose[i][-1][1].pose.position.x, pf.pose[i][-1][1].pose.position.y]
                       for i in range(a.drones)])
         fit = fit_circle(P)
