@@ -696,8 +696,8 @@ Pre-arm checklist: `tools/preflight.py --real`. Rig checklist for attach:
 `docs/experimentation/real_attach_gap.md`.
 
 Rig facts (updated 2026-09-29): our drones 0-3 = Tejen's quad1-4 = `/dev/QUAD1..4` (udev: four unique serials) =
-Motive bodies 11-14 (`mocap_drone_body_ids`, typed on the rig launch), payload body 8 (code default; tests.txt types 9:
-confirm in Motive, Q3); the magnet tip
+Motive bodies 11-14 (`mocap_drone_body_ids`), ring body 8, Tejen's pickup object 6 (Wesley 2026-09-29; the code defaults
+match); airframes about 1.2 kg each (Wesley, to be weighed 2026-09-30); the magnet tip
 needs its own rigid body; `thrust_ratio:=24`; floor start on the CREEP path,
 `start_taut:=false handover_elev_deg:=45 handover_settle_s:=2.0` (the launch default
 `start_taut:=true` runs the OCP from tick 1, whose references sit 18–22 cm inward of a
