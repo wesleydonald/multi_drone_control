@@ -75,6 +75,12 @@ HEADROOM before any tethered flight (readiness review 2026-09-29, K1; the tracke
   python3 tools/headroom.py --masses <d0,d1,d2 kg with pack+rod+magnet> --az 30,150,270 --ring $RING --u-free <R1 medians>
   (R4: four masses, --az 30,90,150,270; before R1 use --kt 22.) "OVER CAP" on any drone -> no tethered flight on that
   layout today; "above stop" -> R3a as a measurement only, LAND if a drone sits at 0.6 for 2 s.
+SCORE every flight like a sim run (tools/rig_to_run.py; nothing from the 09-16/09-23 flights could be, no bag or T2 log):
+  T2, before its launch:   export MDC_RUN_DIR=$PWD/results/rig/2026-09-30/<flight>_logs     (every node logs there)
+  after LAND:  python3 tools/rig_to_run.py --out results/rig/2026-09-30/<flight>_run \
+                 --trackers "$MDC_RUN_DIR/logs/controller_quad_load/planner_drone*" \
+                 --bag results/rig/2026-09-30/<flight> --t2-log results/rig/2026-09-30/<flight>.log
+               python3 tools/plot_run.py results/rig/2026-09-30/<flight>_run      (ring tilt needs the bag)
 Bag every flight (T4, Ctrl-C after LAND):
   ros2 bag record -o results/rig/2026-09-30/<flight> /drone_{0..3}/motion_capture_state /payload/motion_capture_state /drone_{0..3}/ELRSCommand /drone_{0..3}/telemetry /fleet/command /fleet/abort /fleet/status /fleet/landed /drone_{0..3}/magnet /rosout
 
