@@ -42,15 +42,19 @@ then drive the fleet:
     ros2 topic pub -t 3 /fleet/command std_msgs/msg/String "{data: LAND}"
 
 HARDWARE NOTES (same as real_control_launch.py, plus the network tuning):
-  * thrust_ratio 24 -- the measured prop/motor kT at full battery health, NOT
-    the sim's ~31. FIXED: nothing estimates or reschedules it in flight.
+  * thrust_ratio 24 -- the typed prop/motor kT at full battery health (the 09-16 free
+    hover measured ~22). kt_trim (default on) measures the rest within +-25 % once the
+    drone is in steady hover; it cannot learn above the tracker's 0.6 throttle cap.
   * cable_len / load_mass MUST match your physical rig.
   * The diss_* defaults are the tuned RIGID-SHORT values for cable_len=0.5,
     load_mass=0.4, drone_mass=0.6 (see dissipative_network.py). load_mass
-    defaults to 0.1 here, so the stiffnesses are NOT tuned for this payload --
-    they only matter after a detach, but retune before relying on them.
+    defaults to 0.86 here, so the stiffnesses are NOT tuned for this payload --
+    they only matter after a network detach, but retune before relying on them.
+  * reconfig_mode defaults to network and detach_magnet to false here: a rig DETACH
+    types reconfig_mode:=ocp detach_magnet:=true (the network detach tilted the ring
+    26-48 deg in sim).
   * diss_elev_deg is the network's nominal cable elevation and is independent of
-    handover_elev_deg (which is 0.0 on the taut real start).
+    handover_elev_deg (45.0 here: the creep floor start).
   * Prove a taut hover (load_traj:=hover) before any circle/fig_8/spin.
 """
 from launch import LaunchDescription

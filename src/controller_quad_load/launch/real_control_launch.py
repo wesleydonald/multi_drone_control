@@ -33,11 +33,12 @@ then drive the fleet:
 
 HARDWARE NOTES:
   * thrust_ratio defaults to 24 here -- the measured prop/motor kT of these
-    airframes on a pack at full health, NOT the sim's ~31. It is FIXED: nothing
-    estimates or reschedules it in flight. kt_batt_sag_frac:=0.10 turns on a
-    linear derate with pack voltage once you have measured the sag.
+    airframes on a pack at full health (the 09-16 free hover measured ~22). kt_trim
+    (default on) measures the rest within +-25 % in steady hover; it cannot learn above
+    the tracker's 0.6 throttle cap. kt_batt_sag_frac:=0.10 turns on a linear derate
+    with pack voltage once you have measured the sag.
   * cable_len / load_mass MUST match your physical rig (not the sim SDF).
-    load_mass defaults to 0.1 here. Changing it recompiles the acados .so on the
+    load_mass defaults to 0.86 here (the ring). Changing it recompiles the acados .so on the
     first launch (the solver cache keys on it), so expect a slower first start.
     LOAD_INERTIA in planner_node.py does NOT scale with load_mass -- scale it by
     hand if the payload's size changed too, not just its mass.
