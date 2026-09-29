@@ -5,7 +5,7 @@ docs/experiments/2026-09-30_rig_carry_hover.md. Every unknown is marked TODO(lab
 
 RULES
 - NEVER run SIL, Gazebo or tools/run_experiment.py on this laptop while real_io is up (same topics). Tejen's runners
-  must not run either (same UDP 1511, same /dev/QUAD2).
+  must not run either (same UDP 1511; his M1 radio node opens the first /dev/ttyUSB*, i.e. one of our radios).
 - Every terminal: mdc   (= source ~/ros2_humble/install/setup.bash && source ~/multi_drone_control/install/setup.bash)
 - rio/rctl/rdiss inject num_drones:=3 BEFORE your args; the lines below are full `ros2 launch` so nothing is implied.
   Same num_drones in terminal 1 and terminal 2, always. After a launch: ros2 param get /central_controller num_drones
@@ -154,8 +154,8 @@ T2: ros2 launch controller_quad_load real_control_launch.py num_drones:=3 load_m
 T2: ros2 launch controller_quad_load real_control_launch.py num_drones:=3 load_mass:=$RING drone_mass:=$DM3 cable_len:=$ROD attach_radius:=0.25 attach_z:=0.0 attach_azimuths_deg:=30,150,270 thrust_ratio:=$KT kt_trim:=true z_ki:=0.4 start_taut:=false handover_elev_deg:=45.0 handover_settle_s:=1.0 creep_vel:=0.2 target_z:=0.6 lift_ramp_vel:=0.15 load_traj:=hover 2>&1 | tee results/rig/2026-09-30/r3b_f2.log
 T3: python3 tools/preflight.py --drones 3 --real --planner load_planner --max-ground-z 0.5        before EVERY flight
   Watch: as R3a, then the lift; "[kT dN] flying ... kt_hat=... applied" (1 Hz) moving < 10 % and not RAILED;
-  payload z in RViz/T2. Known hole: typed > ~14 % LOW reads as floor contact -> ring hovers well ABOVE 0.60 with
-  kt_hat stuck at the typed value: LAND, type a HIGHER kT (kt_trim card 2026-09-23: typed -16 % held the load at 1.19 m).
+  payload z in RViz/T2. The typed-LOW floor-contact hole (card 2026-09-23) is CLOSED by kt_trim v2 (decisions.md:19),
+  but keep the rule: ring above 0.7 m -> LAND, type a HIGHER kT.
   PASS (card): payload z over the last 10 s inside 0.55-0.66 (report whether it is 0.60 +-0.03: z_ki); ring tilt peak
   < 15 deg, settled mean < 5 deg; drone tilt < 25 deg; lift (TAKEOFF to 0.55) < 40 s; no envelope fault; LAND, all
   disarmed.  ABORT: global; pack under 21.6 V; ring tilt > 15 deg for > 1 s.
