@@ -33,7 +33,7 @@ class _Log:
         self.lines = []
 
     def info(self, s): self.lines.append(s)
-    warn = error = info
+    warn = error = debug = info
 
 
 def _fake(clients):

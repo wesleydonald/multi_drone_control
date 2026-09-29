@@ -91,11 +91,12 @@ def _args():
         # DETACH row on its own; attach:=true shows both.
         DeclareLaunchArgument('detach', default_value='false'),
         # Per-drone tether electromagnets on a Betaflight aux mode (see elrs_interface).
-        # magnet_initial '' = radio channel passed through as today; 'ON' holds every tether
-        # magnet from boot, and /drone_<i>/magnet (String ON|OFF) switches one drone's.
+        # magnet_initial 'ON' (default since 2026-09-29, Wesley: the magnets stay on, it keeps the
+        # set-up between runs simple) holds every tether magnet from boot; /drone_<i>/magnet (String
+        # ON|OFF, the RViz toggles while disarmed) switches one drone's; '' passes the channel through.
         # 6 = Betaflight AUX4, where these airframes' magnet mode sits (tools/aux_sweep.py, 2026-09-16).
         DeclareLaunchArgument('magnet_channel', default_value='6'),
-        DeclareLaunchArgument('magnet_initial', default_value=''),
+        DeclareLaunchArgument('magnet_initial', default_value='ON'),
     ]
 
 

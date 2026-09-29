@@ -28,6 +28,7 @@ import time
 import numpy as np
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float64, Float64MultiArray, Int32, String, Bool
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
@@ -363,6 +364,11 @@ class LoadPlanner(Node):
             for i in range(self.n)]
         # True once the LAND descent finishes, so the central controller disarms.
         self.landed_pub = self.create_publisher(Bool, '/fleet/landed', 1)
+        # The phase in words for the RViz panel, latched and sent only on change
+        self._phase_text = None
+        self._phase_pub = self.create_publisher(String, '/fleet/phase', QoSProfile(
+            depth=1, reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL))
         # Desired load position [x, y, z] at node 0. Logged by the drone-0
         # tracker so plot_run.py can overlay payload desired vs actual.
         self._traj_state_pub = self.create_publisher(String, '/payload/trajectory_state', 5)
@@ -374,6 +380,7 @@ class LoadPlanner(Node):
             Path, '/payload/mpc_plan', 5)
 
         self.create_timer(1.0 / PLANNER_HZ, self._plan)
+        self.create_timer(0.2, self._publish_phase)
         # Record the run's configuration. Written here AND re-written at the end of a
         # subclass's __init__ (see _dump_run_params), so the file always reflects the
         # full parameter set of whichever node actually flew.
@@ -629,6 +636,29 @@ class LoadPlanner(Node):
             f'[planner] load yaw datum latched at {np.degrees(self.psi0):+.1f} deg')
 
     # Plan step
+    def phase_text(self):
+        """What the planner is doing, in the operator's words."""
+        if not self.takeoff_seen:
+            return 'waiting for TAKEOFF'
+        if self._land_to_ground or self.descending:
+            return 'landing'
+        if self.phase == 'creep':
+            return 'creep to the hand-over'
+        if self._settle_left > 0.0:
+            return 'hand-over settle'
+        if self.lift_z0 is not None and self.lift_progress < (self.target_z - self.lift_z0) - 1e-3:
+            return 'lifting'
+        return f'holding at {self.target_z:.2f} m'
+
+    def _publish_phase(self):
+        try:
+            text = self.phase_text()
+        except Exception:                    # never let the panel feed break the planner
+            return
+        if text != self._phase_text:
+            self._phase_text = text
+            self._phase_pub.publish(String(data=text))
+
     def _plan(self):
         if self.load_state is None or any(d is None for d in self.drone_pos):
             return

@@ -26,7 +26,7 @@ class _Log:
         self.lines = []
 
     def info(self, s): self.lines.append(s)
-    warn = error = info
+    warn = error = debug = info
 
 
 class _Fut:
@@ -121,6 +121,8 @@ def test_operator_disarm_latches_the_muxes_through_fleet_abort(sync):
     f.flying = True
     f._command_callback(String(data='disarm'))
     assert [x.data for x in f.abort_pub.msgs] == ['operator DISARM']
+    # the fast path too: a disarm straight to every radio (reaches a wedged tracker's drone)
+    assert _direct_elrs(f) == 4
     assert f.service_disarms == [True] and not f.flying
 
 
