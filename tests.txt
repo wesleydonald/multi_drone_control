@@ -15,8 +15,8 @@ RULES
   shared memory they use: after a plain one relaunch T1, then T4, then T2, and re-run preflight --real.)
 - Fleet commands (or the RViz panel buttons):
     ros2 topic pub --once /fleet/command std_msgs/msg/String "{data: ARM}"        # TAKEOFF, LAND the same way
-    ros2 topic pub -r 10 -t 10 /fleet/command std_msgs/msg/String "{data: DISARM}"   # a kill from the CLI: repeated,
-                                                    # a single --once can be lost; the primary kill is the panel/spacebar
+    ros2 topic pub -r 10 -t 10 /fleet/command std_msgs/msg/String "{data: ESTOP}"   # the CLI kill: repeated (a single
+                                                    # --once can be lost); the primary kill is the panel DISARM/spacebar
 - GLOBAL ABORT = ESTOP (and the hand kill: the DISARM button, Wesley 2026-09-28; name who holds it before props on) on any of: a drone past 35 deg
   tilt; yaw turning more than 45 deg; a drone not leaving the floor within 5 s of the others; ring tilt past 15 deg;
   anyone inside the cage. The envelope faults on its own at 60 deg / 3 m/s; act before it.
