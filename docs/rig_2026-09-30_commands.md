@@ -46,19 +46,47 @@ Then the abort checks, props OFF, R3a T2 up (section 3 line), preflight GO:
 Each drone on its plate: magnet ON, pull along the rod with the spring scale: holds >= 8 N (three) / 6 N (four);
 lift the drone by hand: the ring rim rises (coupled); OFF releases < 0.2 s. Note the capture gap per magnet.
 
-## 3. R1 free hover, rods ON (props ON)
+## 3. THRUST CHECK, first thing with props on (replaces R1; about 40 min)
 
+Question it answers: how much thrust the drones really have per unit of throttle, and so what throttle carrying the
+ring needs against the tracker's 0.6 cap. Two free hovers of all four drones, rods ON: plain, then with a known mass
+taped to each rod tip. Steady hover throttle = weight / full thrust, so the rise in throttle for a known added mass
+gives each drone's thrust and effective mass even without trusting the scale.
+
+Before props (5 min):
+- weigh each drone with pack, rod and magnet; weigh the hung mass (about 150 g each, e.g. a small bottle of water;
+  the same for all four) and write both down;
+- Betaflight CLI per quad: `diff all`, save as results/rig/2026-09-30/betaflight_quad<N>.txt (we need throttle_limit,
+  motor_output_limit, thrust_linear, tpa: if Betaflight itself caps throttle, raising our cap would do nothing).
+
+T1, plain hover (all four on the floor >= 1 m apart, rods on and hanging, magnets as they are):
 ```bash
 # T2
-export MDC_RUN_DIR=$PWD/results/rig/2026-09-30/r1_logs
-ros2 launch controller_quad_load real_hover_launch.py num_drones:=4 hover_z:=0.8 thrust_ratio:=24.0 2>&1 | tee results/rig/2026-09-30/r1_hover.log
-# T3
+export MDC_RUN_DIR=$PWD/results/rig/2026-09-30/t1_free_logs
+ros2 launch controller_quad_load real_hover_launch.py num_drones:=4 hover_z:=0.8 thrust_ratio:=24.0 2>&1 | tee results/rig/2026-09-30/t1_free.log
+# T3, ~10 s after "Controller ready" x4
 python3 tools/preflight.py --drones 4 --real --planner free_hover --max-ground-z 0.5
 ```
-ARM, TAKEOFF, 20 s, LAND. Record each drone's settled throttle (u_free) and pack V. Pass: tilt < 3 deg, xy < 0.12 m, yaw +-15 deg.
-Rods hanging, the drones may rest tilted: the new yaw hold (2633f68) then sends yaw 0 until each drone is airborne
-(log column `yaw_hold` = 1 during it). Watch the first 2 s after TAKEOFF: a drone turning > 15 deg = LAND; > 45 deg = ESTOP.
-Then set `KT` in wed.env to the median free-hover kT and re-source.
+ARM, TAKEOFF, hold 20 s at 0.8 m, LAND. Pass: tilt < 3 deg, xy < 0.12 m, no yaw turn > 15 deg (the new yaw hold keeps
+yaw 0 until each drone is airborne; `yaw_hold` column). Note each drone's throttle on the panel ("thr").
+
+T2, the same with the mass taped to each rod tip (the mass rests on the floor at takeoff and lifts as the rod goes taut):
+```bash
+# T2 (Ctrl-C the previous T2 first, then tools/clean_slate.sh --rig)
+export MDC_RUN_DIR=$PWD/results/rig/2026-09-30/t2_hung_logs
+ros2 launch controller_quad_load real_hover_launch.py num_drones:=4 hover_z:=0.8 thrust_ratio:=24.0 2>&1 | tee results/rig/2026-09-30/t2_hung.log
+```
+ARM, TAKEOFF, hold 20 s, LAND. Expected throttle: +10 to +25 % over T1. LAND at once if a drone shows "AT CAP" on the
+panel (throttle stuck at 0.6: that drone cannot lift the mass under the cap, which is itself the answer).
+
+Analysis (I can run it from these files; send me the four paths and the numbers you wrote down):
+```bash
+python3 tools/thrust_check.py --free results/rig/2026-09-30/t1_free_logs --loaded results/rig/2026-09-30/t2_hung_logs \
+    --hung-kg <mass kg> --masses <d0,d1,d2,d3 kg>
+```
+It prints per drone: hover throttle plain and loaded, kT, the mass implied by the throttle rise (vs the scale), full
+thrust, whether the thrust map is linear, and the throttle each layout needs to carry the ring (three on 1/5/9, even
+four, four on 1/3/5/9) against the 0.6 cap. Set KT in wed.env to the median kT it prints.
 
 ## 4. Headroom go/no-go (before any tethered flight)
 
