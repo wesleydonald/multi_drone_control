@@ -173,7 +173,10 @@ class ELRSInterface(Node):
         self.last_elrs_command_time_published = time.time()  # Initialize the last command timestamp
 
     def connect_serial(self):
+        last_said = 0.0
         while self.ser is None:
+            # the first failure explains itself, then one reminder every 10 s (it retries at 1 Hz)
+            say = time.time() - last_said >= 10.0
             try:
                 # Explicit device if the serial_port param is set; else auto-detect
                 # the first /dev/ttyUSB* (single-drone fallback, unchanged).
@@ -187,10 +190,17 @@ class ELRSInterface(Node):
                         self.ser = serial.Serial(port.device, 921600, timeout=0.1)  # Reduced timeout
                         self.get_logger().info(f'Serial port SINGLE {port.device} connected.')
                         return
-                self.get_logger().warn('No suitable serial port found. Retrying...')
+                if say:
+                    last_said = time.time()
+                    self.get_logger().warn('No /dev/ttyUSB* radio found. Plug in the TX module; retrying.')
                 time.sleep(1)  # Wait before retrying
             except serial.SerialException as e:
-                self.get_logger().error(f'Error while connecting to serial port: {e}')
+                if say:
+                    last_said = time.time()
+                    self.get_logger().error(
+                        f'Radio {self.serial_port or "/dev/ttyUSB*"} not available ({e}). This drone gets '
+                        f'no commands until it connects: plug in / reseat its TX module, check '
+                        f'ls -l /dev/QUAD*. Retrying every second.')
                 time.sleep(1)  # Wait before retrying
 
     def magnet_callback(self, msg):

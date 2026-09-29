@@ -168,7 +168,7 @@ class Controller(Node):
         # cable accel source: 'model' = planner t*s/m, 'measured' = from the imu
         self.declare_parameter("cable_source", "model")
         self.cable_source = self.get_parameter("cable_source").value
-        self.get_logger().warn(
+        self.get_logger().debug(
             f"[Drone {self.drone_id}] tracker FF toggles: "
             f"cable_ff_scale={self.cable_ff_scale} attitude_ff={self.attitude_ff} "
             f"cable_source={self.cable_source}")
@@ -215,7 +215,7 @@ class Controller(Node):
         self.get_logger().info(f"[Drone {self.drone_id}] Waiting for initial mocap pose...")
         while self.current_pose is None and rclpy.ok():
             rclpy.spin_once(self, timeout_sec=0.1)
-        self.get_logger().info(f"[Drone {self.drone_id}] Pose received.")
+        self.get_logger().debug(f"[Drone {self.drone_id}] Pose received.")
         # ── Visualizer ────────────────────────────────────────────────────
         # prefix the viz topics per drone (/drone_N/mpc_plan etc) so RViz can
         # show each drone's plan on its own display instead of N drones fighting
@@ -243,7 +243,7 @@ class Controller(Node):
             f'/drone_{self.drone_id}/reference_trajectory',
             self._planner_ref_callback,
             1)
-        self.get_logger().info(
+        self.get_logger().debug(
             f"[Drone {self.drone_id}] Tracking external planner reference.")
 
         # ── IMU subscription (measured specific force -> cable force) ──────
@@ -358,10 +358,10 @@ class Controller(Node):
         self.create_subscription(Float64, f'/drone_{self.drone_id}/cable_static_z',
                                  self._cable_static_cb, 1)
         if self._kt_trim_apply:
-            self.get_logger().info(
+            self.get_logger().debug(
                 f"[Drone {self.drone_id}] kt_trim ON: typed {self.thrust_ratio:.2f}, bound "
                 f"[{self._kt_trim.lo:.2f}, {self._kt_trim.hi:.2f}], tau {self._kt_trim.tau:.0f} s")
-        self.get_logger().info(
+        self.get_logger().debug(
             f"[Drone {self.drone_id}] kT FIXED at {self.thrust_ratio:.2f} "
             f"(takeoff {self.takeoff_thrust_ratio:.2f}); battery derate "
             + (f"{100 * self.kt_batt_sag_frac:.0f}% across "
@@ -460,7 +460,7 @@ class Controller(Node):
             gains = {n: float(self.get_parameter(f'vel_{n}').value) for n in
                      ('kp_pos', 'kv', 'ki', 'k_att', 'v_max', 'a_i_max', 'swing_k')}
             self.velocity_loop = VelocityLoop(**gains)
-            self.get_logger().warn(
+            self.get_logger().debug(
                 f"[Drone {self.drone_id}] STAGE V: control_mode={self.control_mode} "
                 f"({gains}). This is an experiment, record it.")
         if self.control_mode == 'velocity_after_handover':
@@ -492,7 +492,7 @@ class Controller(Node):
         self._yaw_hold_ticks = 0
         fresh = _solver_is_fresh()
         if fresh:
-            self.get_logger().info("[acados] loading cached quad_load_dynamics solver.")
+            self.get_logger().debug("[acados] loading cached quad_load_dynamics solver.")
         else:
             self.get_logger().info("[acados] compiling quad_load_dynamics solver (sources changed)...")
         self.ocp = generate_ocp_controller(generate=not fresh, build=not fresh)
@@ -552,8 +552,8 @@ class Controller(Node):
         # ── Control timer ─────────────────────────────────────────────────
         self.timer = self.create_timer(DT, self.control_loop)
         self.get_logger().info(
-            f"[Drone {self.drone_id}] Controller ready. "
-            f"Offset=({self.offset_x}, {self.offset_y}).")
+            f"[Drone {self.drone_id}] Controller ready: kT {self.thrust_ratio:.1f} "
+            f"({'trim on' if self._kt_trim_apply else 'fixed'}), mode {self.control_mode}.")
 
     # ─────────────────────────────────────────────────────────────────────
     # Fleet step callback
@@ -654,7 +654,7 @@ class Controller(Node):
         # Fleet-wide abort: the manager broadcasts here so a healthy drone stops
         # even when its own envelope is fine.
         self.create_subscription(String, '/fleet/abort', self._fleet_abort_cb, 5)
-        self.get_logger().info(
+        self.get_logger().debug(
             f"[Drone {self.drone_id}] envelope: no geofence (operator failsafe); "
             f"tilt<{lim.max_tilt_deg:.0f}/{lim.max_payload_tilt_deg:.0f} deg "
             f"speed<{lim.max_speed:.1f} m/s "
@@ -770,6 +770,7 @@ class Controller(Node):
         change cannot also change the takeoff spool, the applied-throttle bookkeeping
         that measured_cable_accel depends on, or the last-good-command fallback."""
         if self.takeoff_requested:
+            self._waiting_said = False
             thr = float(u[2])
             # takeoff spool-up: for the first takeoff_spool_s, scale the throttle up
             # from 0 to the commanded value so thrust rises smoothly and the drones
@@ -826,9 +827,10 @@ class Controller(Node):
             # drones); when that pipe backs up the write blocks the timer, which stalls
             # the single-threaded executor, so the node can't service the
             # /drone_N/command subscription that TAKEOFF arrives on.
-            self.get_logger().info(
-                f"[Drone {self.drone_id}] Armed - waiting for TAKEOFF command.",
-                throttle_duration_sec=2.0)
+            # once per ARM (it used to repeat every 2 s while waiting)
+            if not getattr(self, '_waiting_said', False):
+                self._waiting_said = True
+                self.get_logger().info(f"[Drone {self.drone_id}] Armed - waiting for TAKEOFF command.")
 
         self.cb.cmd_publisher_.publish(msg)
         # Remember this good command so a later failed solve can hold it.
@@ -1024,7 +1026,12 @@ class Controller(Node):
                 f"{'--' if v is None else f'{float(v):.1f} V'}); frozen for the flight")
 
     def report_thrust_ratio(self):
-        """~1 Hz one-liner so the flown kT can be eyeballed against the throttle."""
+        """~1 Hz kT one-liner at DEBUG (--log-level debug shows it); a railed trim is warned once."""
+        if self._kt_trim.railed and not getattr(self, '_kt_railed_said', False):
+            self._kt_railed_said = True
+            self.get_logger().warn(
+                f"[kT d{self.drone_id}] trim hit its bound ({self._kt_trim.lo:.1f}-{self._kt_trim.hi:.1f}): "
+                f"the typed kT {self.thrust_ratio:.1f} is far from this drone's thrust. LAND and type a closer kT.")
         if self.kt_print_period_s <= 0.0:
             return
         now = time.monotonic()
@@ -1036,7 +1043,7 @@ class Controller(Node):
                if self.last_cmd_throttle is not None else float('nan'))
         v = self.battery_voltage
         batt = ('   -- ' if v is None else f'{float(v):5.2f}V')
-        self.get_logger().info(
+        self.get_logger().debug(
             f"[kT d{self.drone_id}] flying {float(self.est_params[0]):6.2f} "
             f"[{'airborne' if self._kt_airborne() else ' takeoff'}] | "
             f"fixed={self.thrust_ratio:5.2f} takeoff={self.takeoff_thrust_ratio:5.2f}"

@@ -181,6 +181,9 @@ class CallbackManagerMulti:
         self.node.battery_voltage = msg.battery_voltage
 
     def request_shutdown(self):
+        if getattr(self, '_shutdown_said', False):
+            return
+        self._shutdown_said = True
         self.node.get_logger().info(
             f"[Drone {self.drone_id}] Shutdown requested — closing controller.")
 

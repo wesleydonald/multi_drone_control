@@ -62,7 +62,7 @@ class TrajectoryVisualizer:
         # Store actual path history
         self.actual_path_history = []
 
-        self.node.get_logger().info(
+        self.node.get_logger().debug(
             f"TrajectoryVisualizer initialized with TF broadcasting "
             f"(topic namespace: '{ns or '/'}')")
     

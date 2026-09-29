@@ -21,6 +21,8 @@ python3 tools/prebuild_planner.py --load-mass $RING --drone-mass $DM4 4
 ls -l /dev/QUAD*                      # all four present (QUAD1..4 = drones 0..3)
 ```
 Motive: ring body 8 (origin at the ring centre on the plate plane, +x toward plate 0), quads 11-14, pickup 6.
+Optional T5, a status window (manager decision, phase, per-drone armed / mocap age / throttle / battery, and every
+warning with what it means): `python3 tools/fleet_monitor.py --drones 4` (read-only; close it any time).
 
 ## 1. R0b desk (props OFF, packs in)
 

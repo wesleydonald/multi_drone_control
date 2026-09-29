@@ -1183,7 +1183,7 @@ class LoadPlanner(Node):
             # the OCP is not planning the move (experimentation, 2026-09-10).
             zN = float(X[2, -1])
             d0N = float(self.solver.drone_kinematics(X[:, -1], 0)[0][2])
-            self.get_logger().info(
+            self.get_logger().debug(
                 f"[planner cable] L={self.cable_len:.2f} load_z={self.load_state[2]:.2f} "
                 f"z_tgt={z_tgt:.2f} zI={self._zbias.value:+.3f} zN={zN:.2f} d0N={d0N:.2f} ff={ff:.2f} tilt={tilt:.1f}deg "
                 f"elev=[{e}]  {s}")
