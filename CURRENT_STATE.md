@@ -557,7 +557,9 @@ bridges (6e1606c, used by every M1 config); mocap stamp differencing tried and r
    grounds the fleet and refuses TAKEOFF (Wesley Q11); drone 3 on the manager's single command path; D0001/D0003.
 7. **~18° residual tilt after 4 → 3** on the uneven surviving ring. Possibly geometry
    (`metrics.cog_margin`), not a bug.
-8. **Rig yaw spins, unexplained.** 2026-09-16: one drone per flight spun a full turn at
+8. **Rig yaw spins: DIAGNOSED 2026-09-29, fix built, rig to confirm** (card 2026-09-29_rig_yaw_spin.md: the tracker commanded
+   the turn at zero heading error; tilted floor rest + command-ahead re-pin wind the yaw stick on the floor; old 670 deg/s
+   model locked it in airborne; fix = yaw hold on a tilted floor start until airborne / 1.5 s). History: 2026-09-16: one drone per flight spun a full turn at
    spool-up with the yaw stick pinned (16:40 drone 2 at +169°, 16:42 drone 0 at −109°,
    `tools/yaw_excursion.py`), the other two held heading to 2°. Ruled out: yaw actuator
    sign (consistent on all airframes), quaternion hemisphere (R0276–R0279), solver

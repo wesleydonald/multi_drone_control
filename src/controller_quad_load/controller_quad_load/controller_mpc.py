@@ -112,6 +112,21 @@ AIRBORNE_MARGIN = 0.04         # m above spawn z
 # there is no lurch). 0.0 recovers the old spool-from-zero (ground-takeoff) shape.
 TAKEOFF_SPOOL_FLOOR = 0.5
 
+# Yaw hold on a tilted floor start. Resting tilted on its rod, the free-flight OCP spends the
+# nearly free yaw stick while grounded, and the command-ahead re-pin winds it to full stick at
+# zero heading error (rig 2026-09-16 15:54/16:40/16:42: 44-58 deg turned before leaving the
+# floor, then locked in by the old 670 deg/s rate model). Send yaw 0 until airborne, or at most
+# YAW_HOLD_MAX_S after TAKEOFF (a drone tracking a low creep reference may stay under the gate).
+# Sim drones rest level (< 2.6 deg over 1222 logs), so it never engages there.
+YAW_HOLD_TILT_DEG = 5.0
+YAW_HOLD_MAX_S = 1.5
+
+
+def _rests_tilted(pose):
+    """True if pose [x, y, z, qw, qx, qy, qz, ...] tilts body z past YAW_HOLD_TILT_DEG."""
+    qx, qy = float(pose[4]), float(pose[5])
+    return 1.0 - 2.0 * (qx * qx + qy * qy) < math.cos(math.radians(YAW_HOLD_TILT_DEG))
+
 LOGGING_NAME = 'controller_quad_load'
 
 # Formation offsets (x, y) for each drone relative to drone 0
@@ -473,6 +488,8 @@ class Controller(Node):
         # Heading the tracker holds (rad). Re-latched from mocap while the drone
         # rests armed, then frozen at TAKEOFF -- see control_loop.
         self._heading_datum = 0.0
+        self._yaw_hold = False            # see YAW_HOLD_TILT_DEG
+        self._yaw_hold_ticks = 0
         fresh = _solver_is_fresh()
         if fresh:
             self.get_logger().info("[acados] loading cached quad_load_dynamics solver.")
@@ -518,6 +535,8 @@ class Controller(Node):
         log_headers += ['x0_vx', 'x0_vy', 'x0_vz']
         # the body rate x0 actually used (x0_rate_source) and whether it fell back to mocap
         log_headers += ['x0_wx', 'x0_wy', 'x0_wz', 'x0_w_fallback']
+        # 1 while the yaw channel is held at 0 (u3 above stays what the solver wanted)
+        log_headers += ['yaw_hold']
         self.data_logger = DataLogger(
             LOGGING_NAME, f"planner_drone{self.drone_id}", log_headers,
             base_dir=LOG_BASE_DIR)
@@ -770,6 +789,14 @@ class Controller(Node):
                     frac = TAKEOFF_SPOOL_FLOOR + (1.0 - TAKEOFF_SPOOL_FLOOR) * ease
                     thr *= frac
                     self._takeoff_step += 1
+            yaw = float(u[3])
+            if self._yaw_hold:
+                self._yaw_hold_ticks += 1
+                if self._kt_airborne() or self._yaw_hold_ticks > YAW_HOLD_MAX_S * FREQUENCY_HZ:
+                    self._yaw_hold = False    # once per takeoff, not re-armed on landing
+                else:
+                    # 0 is also what x0 sees next tick, so the stick cannot wind up
+                    yaw = 0.0
             # Record the throttle actually applied to the FC so the next IMU sample
             # can be decomposed into thrust + cable (measured_cable_accel).
             self.last_cmd_throttle = thr
@@ -778,9 +805,9 @@ class Controller(Node):
                 channel_0=round(float(u[0]), 3),
                 channel_1=round(float(u[1]), 3),
                 channel_2=round((thr * 2) - 1, 3),
-                channel_3=round(float(u[3]), 3))
+                channel_3=round(yaw, 3))
             self._applied_u = np.array(
-                [float(u[0]), float(u[1]), float(thr), float(u[3])])
+                [float(u[0]), float(u[1]), float(thr), yaw])
             self._applied_u_rate = np.asarray(u_rate, dtype=float).copy()
             self.get_logger().debug(
                 f"[Drone {self.drone_id}] r:{u[0]:.3f} p:{u[1]:.3f} "
@@ -1104,6 +1131,8 @@ class Controller(Node):
                 # degenerate and it can turn the long way round. Holding the resting
                 # heading also keeps a mocap yaw offset from becoming a takeoff spin.
                 self._heading_datum = self._measured_heading()
+                self._yaw_hold = _rests_tilted(self.current_pose)
+                self._yaw_hold_ticks = 0
 
             # Assumed thrust gain for this cycle: the configured thrust_ratio, or
             # takeoff_thrust_ratio while still on the stand, times the battery
@@ -1381,6 +1410,7 @@ class Controller(Node):
                         float(self.current_pose[9])]
             log_row += [float(estimated_state[10]), float(estimated_state[11]),
                         float(estimated_state[12]), x0_w_fallback]
+            log_row += [float(self._yaw_hold)]
             self.data_logger.append_row(log_row)
 
             self.control_history.append(np.concatenate((u, u_rate)).tolist())
