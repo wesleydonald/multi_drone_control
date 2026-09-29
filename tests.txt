@@ -138,6 +138,10 @@ T3: python3 tools/preflight.py --drones 3 --real --planner load_planner --max-gr
   hand-over the planner takes the full weight and lifts the ring 2 cm, 5.5 cm overshoot; it does NOT stay down);
   drone tilt < 25 deg (not the ladder's 15: sim drones lean 18.6 deg against 45-deg rods, R0648-R0650 and the HOLD
   twin R0726); no abort; LAND, all disarmed. Record the settled thr per drone.
+  COUPLED (readiness review 09-29): HOLD thr clearly above that drone's R1 free-hover thr, and each drone within ROD + 3 cm
+  of its plate (preflight rod lines / planner "measure_rod_len"). Not coupled after 2 flights -> stop and report.
+  CAP: LAND if any drone sits at thr 0.6 for 2 s ([diag dN]; the tracker cannot command more). Compare the settled HOLD
+  thr with tools/headroom.py; above Wesley's stop value -> no R3b0 today.
   ABORT: global; a drone drifting radially while its reference is fixed (the tracker, not the planner).
 
 R3b  THREE ON 1/5/9 LIFT THE RING TO 0.60 AND HOVER (first lift ever; 45-60 min, CARD)
