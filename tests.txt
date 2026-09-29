@@ -24,6 +24,22 @@ RULES
 - GLOBAL ABORT = ESTOP (and the hand kill: the DISARM button, Wesley 2026-09-28; name who holds it before props on) on any of: a drone past 35 deg
   tilt; yaw turning more than 45 deg; a drone not leaving the floor within 5 s of the others; ring tilt past 15 deg;
   anyone inside the cage. The envelope faults on its own at 60 deg / 3 m/s; act before it.
+- SAFETY AND RECOVERY (proposed by the readiness review 2026-09-29; Wesley confirms at the lab):
+  * Safe to enter the cage = T2 down, or every drone DISARMED on the panel AND in telemetry. Unplug packs before handling
+    a tethered drone (the magnet latch keeps T1 live). Props on last. ARM called aloud, door shut, nobody inside.
+    Never hand-catch a drone; eye protection within 2 m of the net.
+  * Roles, named before props on: KILL = panel DISARM / spacebar with RViz focused; T2 = reads T2 and Ctrl-C backup;
+    WATCH = eyes on the cage, calls the abort.
+  * ESTOP (drops everything) for FAST problems: tilt > 35 deg, yaw > 45 deg, a drone falling or not leaving the floor,
+    a collision, anyone entering. LAND (controlled) for SLOW ones: a drone pinned at thr 0.6 for 2 s, slow drift, pack
+    sag (thr creeping up at constant z), ring above 0.7 m.
+  * After a drop or crash: wait for DISARMED on every drone (panel + telemetry), unplug packs, free the rods, inspect
+    props, arms, magnets and rod joints, re-check the Motive bodies (hand-tilt test), one free hover for any drone that
+    hit before the next tethered flight; register the flight either way.
+  * Per flight, in T3 before ARM: pack ID and rest V per drone (>= 24.0 V, matched within 0.2 V) into the flight's row;
+    code state: git rev-parse HEAD > $MDC_RUN_DIR/code.txt && git status --short >> $MDC_RUN_DIR/code.txt &&
+    tar czf $MDC_RUN_DIR/tools_configs.tgz tools configs     (tools/ and configs/ are untracked)
+  * Kicks on the rig: python3 tools/kick_events.py $MDC_RUN_DIR   (the same detector as the sim runs)
 - BETWEEN ARM AND TAKEOFF (gate 189b6c6): a tracker that disarms after ARM makes the manager disarm the fleet and
   refuse TAKEOFF ("disarmed before TAKEOFF" / "TAKEOFF REFUSED" in T2). Then: Ctrl-C T2, clean_slate, relaunch; a
   re-ARM cannot recover it (the trackers shut down). Before TAKEOFF, read T2: every tracker "Armed - waiting for TAKEOFF".
