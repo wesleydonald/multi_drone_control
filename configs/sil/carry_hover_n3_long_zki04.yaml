@@ -1,0 +1,43 @@
+name: carry_hover_n3_long_zki04
+description: 'Planner offset card (2026-09-24_planner_offset): bounded load-height integral on the planner
+  target, z_ki 0.2 (tau 5 s), z_i_max 0.15. Correct mass and gain.'
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 0
+    enable_approach: false
+    start_taut: true
+    load_traj: hover
+    cable_len: 0.5
+    attach_azimuths_deg: even
+    load_mass: 0.86
+    target_z: 0.6
+    z_ki: 0.4
+    kt_trim: false
+fleet:
+  n_tethered: 3
+  n_total: 3
+geometry:
+  cable_len: 0.5
+  attach_radius: 0.25
+  attach_z: 0.025
+  load_mass: 0.86
+initial:
+  stands: true
+  load_z: 0.45
+  elev_deg: 45.0
+timing:
+  dt: 0.02
+  substeps: 20
+  duration_s: 50.0
+  step_timeout_s: 0.5
+  ready_timeout_s: 300.0
+events:
+- t: 1.0
+  do: ARM
+- t: 10.0
+  do: TAKEOFF
+- t: 46.0
+  do: LAND

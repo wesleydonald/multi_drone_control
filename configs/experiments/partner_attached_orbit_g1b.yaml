@@ -1,0 +1,84 @@
+name: partner_attached_orbit_g1b
+description: 'G1b: M1 on the adopted defaults (universal rod joints, rejoin flags) with the object at 0.1 kg (test
+  copy payload_model_m100.sdf) and his MPC gain scheduled on the object flag (object_mass_kg 0.1).'
+world: three_attach_partner_attached.sdf
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 1
+    start_taut: true
+    load_traj: orbit
+    traj_speed: 0.125
+    traj_radius: 0.5
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    attach_azimuths_deg: 150,270,30
+    attach_central: false
+    diss_balanced_tensions: true
+    attach_handout: true
+    attach_t_handout: 12.0
+    attach_x_offset: 0.0
+    attach_y_offset: 0.25
+    attach_elev_deg: 65.0
+    attach_traj_hold_s: 10.0
+    attach_traj_hold_mode: timed
+    control_mode: velocity_after_handover
+    vel_ki: 0.0
+    diss_ki_load: 1.0
+    enable_obstacle_avoidance: false
+    kt_trim: true
+    z_ki: 0.4
+    reconfig_mode: ocp
+    safety_ref_timeout_s: 4.0
+    pose_timeout_s: 3.0
+    attach_cable_len: 0.49
+    partner: true
+    partner_attached: true
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+    attach: true
+    clock_hz: 500
+    fleet_viz: false
+fleet:
+  num_drones: 3
+  n_total: 4
+timing:
+  duration_s: 400.0
+  stop_after_abort_s: 8.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 8.0
+  launch_expect_topics:
+  - /join_planner/phase
+  - /fake_payload/pose
+  dds_udp_only: true
+  bg_param_dump: false
+  gz_record: false
+  stop_after_landed_s: 5.0
+events:
+- t: 1.0
+  do: LAUNCH
+  arg: tejen_mission partner_mission.launch.py plate:=3 carrier_azimuths_deg:=[150.0,270.0,30.0] start_gate_topic:=/partner/release
+- t: 3.0
+  do: ARM
+- t: 5.0
+  do: TAKEOFF
+- t: 7.0
+  do: WAIT_LIFT
+  arg: 0.5
+- t: 17.0
+  do: DETACH
+  arg: 3
+- t: 20.0
+  do: WAIT_REWELD
+- t: 26.0
+  do: LAND
+criteria:
+  require_weld: false
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  forbid_abort: true

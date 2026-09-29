@@ -1,0 +1,56 @@
+name: demo_detach_circle
+description: 'Four drones on 30/90/150/270, creep floor start, OCP-resize detach of the 90-deg drone (index
+  1) DURING the 0.4 m/s circle at 22 s (the eased lap runs ~14-29 s on the creep start; R0512 detached
+  at 40 s on a grounded fleet), LAND fix v3. Falsifiers: detach peak tilt > 25 deg, settled > 5 deg, circle
+  not resumed in 5 s, any abort. 2026-09-25 (R0553): events keyed on the lift: WAIT_LIFT 0.5 m at 8 s
+  holds the schedule, DETACH 8 s after the payload passes 0.5 m (mid-lap), LAND 32 s after it.'
+world: four_rigid_ground_3915.sdf
+launch:
+  package: controller_quad_load
+  file: dissipative_launch.py
+  args:
+    num_drones: 4
+    load_traj: circle
+    traj_speed: 0.4
+    traj_radius: 0.5
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    start_taut: false
+    reconfig_mode: ocp
+    kt_trim: true
+    z_ki: 0.4
+    handover_settle_s: 1.0
+    creep_vel: 0.2
+    handover_elev_deg: 45.0
+    attach_azimuths_deg: 30,90,150,270
+    pose_timeout_s: 1.0
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 4
+    detach: true
+fleet:
+  num_drones: 4
+  n_total: 4
+timing:
+  gz_record: true
+  duration_s: 90.0
+  stop_after_abort_s: 8.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.5
+- t: 16.0
+  do: DETACH
+  arg: 1
+- t: 40.0
+  do: LAND
+criteria:
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  forbid_abort: true

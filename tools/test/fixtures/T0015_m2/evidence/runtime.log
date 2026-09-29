@@ -1,0 +1,8 @@
+[m2d_fleet_supervisor-43] [INFO] [1790414837.866071349] [m2d_fleet_supervisor]: M2D state=WAIT_ASSIGNMENT active=None attached=[] landing=none landed=[] abort=none
+[m2d_fleet_supervisor-43] [INFO] [1790414854.580867473] [m2d_fleet_supervisor]: M2D state=WAIT_M2C_READY active=None attached=[] landing=none landed=[] abort=none
+[m2d_fleet_supervisor-43] [INFO] [1790414921.169691034] [m2d_fleet_supervisor]: M2D state=ACTIVE_0 active=drone_0 attached=[] landing=none landed=[] abort=none
+[online_join_planner-33] [INFO] [1790415207.339170483] [drone_0.online_join_planner]: Planner phase: M2_ATTACH_PROOF -> M2_ATTACHED_HOLD. Reason: software attachment detector confirmed measured proof excitation
+[online_join_planner-34] [INFO] [1790415373.154592412] [drone_1.online_join_planner]: Planner phase: M2_ATTACH_PROOF -> M2_ATTACHED_HOLD. Reason: software attachment detector confirmed measured proof excitation
+[online_join_planner-35] [INFO] [1790415539.134212475] [drone_2.online_join_planner]: Planner phase: M2_ATTACH_PROOF -> M2_ATTACHED_HOLD. Reason: software attachment detector confirmed measured proof excitation
+[online_join_planner-36] [INFO] [1790415719.547190728] [drone_3.online_join_planner]: Planner phase: M2_ATTACH_PROOF -> M2_ATTACHED_HOLD. Reason: software attachment detector confirmed measured proof excitation
+[m2d_fleet_supervisor-43] [INFO] [1790415720.493135908] [m2d_fleet_supervisor]: M2D state=M2D_SUCCESS_HOLD active=None attached=['drone_0', 'drone_1', 'drone_2', 'drone_3'] landing=none landed=[] abort=none

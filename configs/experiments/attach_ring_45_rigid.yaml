@@ -1,0 +1,57 @@
+name: attach_ring_45_rigid
+description: '(2026-09-23: load_mass rescaled to the official 0.86 kg ring payload now in every world;
+  earlier runs of this config flew the 0.6 kg disc.) WELD-VARIANT LADDER, step 3 of 3. `rod` with arm_to_magnet_tip
+  FIXED. The tip is already welded rigidly to the payload, so making this joint fixed too means the arm
+  transmits a MOMENT into the load.
+
+  This is the configuration sub-claim N3 actually describes ("reconfiguration under a rigid, moment-transmitting
+  attachment, which the tension-only cable formulation of both reference papers does not cover") and which
+  NO world in the repo currently contains.
+
+  It brackets the hypothesis from the opposite side to seg2: if rigid is much worse than rod, joint stiffness
+  matters and N3 is a genuinely harder problem than what has been flown. If rigid ~= rod, the weld is
+  not the lever in either direction.
+
+  '
+world: three_attach_rigid.sdf
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 1
+    attach_central: false
+    diss_balanced_tensions: true
+    attach_handout: true
+    attach_t_handout: 12.0
+    attach_x_offset: 0.0
+    attach_y_offset: -0.25
+    attach_elev_deg: 45.0
+    enable_obstacle_avoidance: false
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    kt_trim: false
+    z_ki: 0.0
+fleet:
+  num_drones: 3
+  n_total: 4
+timing:
+  duration_s: 70.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 25.0
+  do: MAGNET
+  arg: 'ON'
+- t: 65.0
+  do: LAND
+criteria:
+  require_weld: true
+  min_payload_z: 0.005
+  forbid_abort: false

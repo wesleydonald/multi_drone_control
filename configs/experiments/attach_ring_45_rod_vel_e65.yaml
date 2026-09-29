@@ -1,0 +1,69 @@
+name: attach_ring_45_rod_vel_e65
+description: '(2026-09-23: load_mass rescaled to the official 0.86 kg ring payload now in every world;
+  earlier runs of this config flew the 0.6 kg disc.) STEEP + VELOCITY (2026-09-09 late): the hover attach
+  levels to 4 deg at weld+10 s and collapses when the 12 s hand-out completes at the 45 deg rim slot (R0189/R0190,
+  all four trackers in velocity mode). July: 65 deg was stable-but-tilted; the 6 o''clock geometry now
+  supplies the level, so steep may be stable AND level. VELOCITY ARM (2026-09-09): identical to attach_ring_45_rod.yaml
+  plus control_mode velocity_after_handover, vel_ki 0, diss_ki_load 1.0 -- the transit-end flip of the
+  newcomer under the MPC tracker (R0176/R0177, weld+10 s) is the drag-off-reference failure the velocity
+  loop does not have. WELD-VARIANT LADDER, step 1 of 3 (tools/make_weld_variants.py). Identical to attach_ring_45_gz
+  except the magnet arm is modelled as a proper slender rod: mass at the MIDPOINT with m*L^2/12 = 2.083e-05,
+  matching the tether rods. The shipped arm puts its whole 1 g at the link origin (the TOP) with an isotropic
+  2e-6.
+
+  This is the CONTROL for the other two variants -- seg2 and rigid are both built on it, so comparing
+  either against the shipped baseline alone would confound the joint change with this inertia correction.
+
+  What to read: the hand-out phase, t+2 to t+10 after the weld. Faults A/B/C (CURRENT_STATE.md §4.6) are
+  fixed, so runs now reach ~10 s post-weld and die when the NEWCOMER diverges at ~75%% of the 12 s hand-out.
+  That is the only window where arm dynamics can matter.
+
+  NO ACCEPTANCE CRITERIA beyond "this run is evidence": the question is what the plant does, and asserting
+  a number would decide it in advance.
+
+  '
+world: three_attach_rod.sdf
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 1
+    attach_central: false
+    diss_balanced_tensions: true
+    attach_handout: true
+    attach_t_handout: 12.0
+    attach_x_offset: 0.0
+    attach_y_offset: -0.25
+    attach_elev_deg: 65.0
+    control_mode: velocity_after_handover
+    vel_ki: 0.0
+    diss_ki_load: 1.0
+    enable_obstacle_avoidance: false
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    kt_trim: false
+    z_ki: 0.0
+fleet:
+  num_drones: 3
+  n_total: 4
+timing:
+  duration_s: 70.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 25.0
+  do: MAGNET
+  arg: 'ON'
+- t: 65.0
+  do: LAND
+criteria:
+  require_weld: true
+  min_payload_z: 0.005
+  forbid_abort: false

@@ -1,0 +1,20 @@
+fake_cooperative_transport_world:
+  ros__parameters:
+    trajectory_type: circle
+    # Positive combined stress case: one close companion plus one far companion.
+    # The former blocking_left preset used +0.25 m lateral offset, which made the
+    # final suspended rendezvous structurally infeasible. +0.45 m stays tighter
+    # than the commissioned narrow-gap +/-0.47 m case without blocking the target.
+    obstacle_scenario: custom
+    fake_drone_count: 2
+    fake_drone_offsets_x: [0.30, -1.20]
+    fake_drone_offsets_y: [0.45, -0.80]
+    fake_drone_offsets_z: [0.50, 0.50]
+online_join_planner:
+  ros__parameters:
+    static_obstacle_count: 1
+    static_obstacle_0_id: mixed_static
+    static_obstacle_0_x: 0.30
+    static_obstacle_0_y: -0.27
+    static_obstacle_0_z: 1.60
+    static_obstacle_0_radius: 0.25

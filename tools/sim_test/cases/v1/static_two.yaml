@@ -1,0 +1,17 @@
+fake_cooperative_transport_world:
+  ros__parameters:
+    trajectory_type: circle
+    obstacle_scenario: clear
+online_join_planner:
+  ros__parameters:
+    static_obstacle_count: 2
+    static_obstacle_0_id: static_a
+    static_obstacle_0_x: 0.30
+    static_obstacle_0_y: -0.27
+    static_obstacle_0_z: 1.60
+    static_obstacle_0_radius: 0.25
+    static_obstacle_1_id: static_b
+    static_obstacle_1_x: 1.00
+    static_obstacle_1_y: 0.00
+    static_obstacle_1_z: 1.60
+    static_obstacle_1_radius: 0.25

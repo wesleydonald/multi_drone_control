@@ -1,0 +1,69 @@
+name: attach_hover_n3_ocp_noarm
+description: 'Isolating run: the newcomer is a plain x3_drone3 (NO magnet arm, no ball joints, world three_attach_noarm_near.sdf
+  test copy) flown by our MPC tracker on the approach profile. No weld is possible. Falsifier for the
+  arm hypothesis: it still tips. R0535 flew it with clock_hz 0; now the default clock with the period-estimated
+  rate timing in the sim Betaflight node (regression of the fix). R0538 (clock 100, rate fix) wobbled
+  +-0.2 m in the hold: clock_hz 500 tests clock granularity (tracker timer jitter 11-23 ms at 100 Hz).'
+world: three_attach_noarm_near.sdf
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 1
+    start_taut: true
+    load_traj: hover
+    traj_speed: 0.2
+    traj_radius: 0.5
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    attach_azimuths_deg: 330,90,210
+    attach_central: false
+    diss_balanced_tensions: true
+    attach_handout: true
+    attach_t_handout: 12.0
+    attach_x_offset: 0.0
+    attach_y_offset: -0.25
+    attach_elev_deg: 65.0
+    attach_traj_hold_s: 10.0
+    attach_traj_hold_mode: timed
+    control_mode: velocity_after_handover
+    vel_ki: 0.0
+    diss_ki_load: 1.0
+    enable_obstacle_avoidance: false
+    kt_trim: true
+    z_ki: 0.4
+    reconfig_mode: ocp
+    enable_approach_mpc: false
+    safety_ref_timeout_s: 4.0
+    pose_timeout_s: 1.0
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+    attach: true
+    clock_hz: 500
+fleet:
+  num_drones: 3
+  n_total: 4
+timing:
+  duration_s: 85.0
+  stop_after_abort_s: 8.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 20.0
+  do: MAGNET
+  arg: 'ON'
+- t: 78.0
+  do: LAND
+criteria:
+  require_weld: false
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  forbid_abort: true

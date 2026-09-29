@@ -1,0 +1,43 @@
+name: ocp_hover_ground_creep_kt110_kt
+description: 'G7 R3b rig twin (card 2026-09-30_rig_carry_hover): ocp_hover_ground_creep_defaults (creep floor
+  start, kt_trim on, z_ki 0.4: the rig flight-2 stack) with thrust_ratio typed 91.41 = +10 % over the linear
+  83.1, the size of the rig''s typed 24 vs ~22 measured in free hover (09-16). Creep-path sibling of
+  ocp_hover_ground_kt110_kt (which starts taut). Exploratory. Falsifier: peak load below 0.35 m, payload z
+  off 0.60 by > 3 cm over the last 10 s of hover, payload tilt > 15 deg, or an abort.'
+world: three_rigid_ground.sdf
+launch:
+  package: controller_quad_load
+  file: mpc_quad_load_launch.py
+  args:
+    num_drones: 3
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    thrust_ratio: 91.41
+    start_taut: false
+    handover_elev_deg: 45.0
+    lift_ramp_vel: 0.15
+    pose_timeout_s: 1.0
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+fleet:
+  num_drones: 3
+  n_total: 3
+timing:
+  duration_s: 58.0
+  stop_after_abort_s: 8.0
+events:
+- t: 3.0
+  do: ARM
+- t: 8.0
+  do: TAKEOFF
+- t: 52.0
+  do: LAND
+criteria:
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  max_payload_tilt_deg: 15.0
+  forbid_abort: true

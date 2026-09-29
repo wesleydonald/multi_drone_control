@@ -1,0 +1,42 @@
+name: ocp_hover_ground_creep_defaults
+description: 'Hover pair arm B (card 2026-09-24_planner_offset): three drones, creep floor start, launch
+  DEFAULTS since 2026-09-24 (kt_trim on, z_ki 0.4, creep_vel 0.2, settle 1.0), fixed sim inner loop, clock
+  500. Arm A = ocp_hover_ground_creep_defaults_zki0 (identical but z_ki 0): the one-variable pair the
+  reviewer asked for (R0557/R0558 differed in four settings). LAND at 52 s for >= 30 s of hover. Falsifier:
+  load off 0.600 by > 1.5 cm over the last 15 s, or tilt > 2 deg.'
+world: three_rigid_ground.sdf
+launch:
+  package: controller_quad_load
+  file: mpc_quad_load_launch.py
+  args:
+    num_drones: 3
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    thrust_ratio: auto
+    start_taut: false
+    handover_elev_deg: 45.0
+    lift_ramp_vel: 0.15
+    pose_timeout_s: 1.0
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+fleet:
+  num_drones: 3
+  n_total: 3
+timing:
+  duration_s: 58.0
+  stop_after_abort_s: 8.0
+events:
+- t: 3.0
+  do: ARM
+- t: 8.0
+  do: TAKEOFF
+- t: 52.0
+  do: LAND
+criteria:
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  forbid_abort: true

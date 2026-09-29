@@ -1,0 +1,74 @@
+name: attach_circle_n3_ocp
+description: 'Card 2026-09-25_attach_ocp arm C: the attach-during-circle demo (three drones at 3/12/9,
+  newcomer welds at 6 o clock mid-sweep at 0.2 m/s) with the newcomer folded in by OCP RESIZE (reconfig_mode
+  ocp) instead of the network, current tree (0.86 kg ring, linear plant, trim on, z_ki 0.4). Falsifiers:
+  abort, settled tilt > 25 deg, load off 0.60 by > 5 cm, circle not resumed with four. 2026-09-25: enable_approach_mpc
+  false, the newcomer flies the approach on its own tracker (R0522: the approach MPC flipped on the linear
+  plant). R0526: the newcomer rolled unstable in a pure climb (no external force: its lateral accel matched
+  its own roll); x0_relax_symmetric true (node-0 box inverted at y=-1.2). R0527: x0_relax_symmetric made
+  no difference to the newcomer and tipped drone 0 on LAND; removed. attach_cable_len 0.49: body centre
+  to magnet tip on the sim model (R0550).'
+world: three_attach_rod.sdf
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 1
+    start_taut: true
+    load_traj: circle
+    traj_speed: 0.2
+    traj_radius: 0.5
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    attach_azimuths_deg: 330,90,210
+    attach_central: false
+    diss_balanced_tensions: true
+    attach_handout: true
+    attach_t_handout: 12.0
+    attach_x_offset: 0.0
+    attach_y_offset: -0.25
+    attach_elev_deg: 65.0
+    attach_traj_hold_s: 10.0
+    attach_traj_hold_mode: timed
+    control_mode: velocity_after_handover
+    vel_ki: 0.0
+    diss_ki_load: 1.0
+    enable_obstacle_avoidance: false
+    kt_trim: true
+    z_ki: 0.4
+    reconfig_mode: ocp
+    enable_approach_mpc: false
+    safety_ref_timeout_s: 4.0
+    pose_timeout_s: 1.0
+    attach_cable_len: 0.49
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+    attach: true
+    clock_hz: 500
+fleet:
+  num_drones: 3
+  n_total: 4
+timing:
+  duration_s: 85.0
+  stop_after_abort_s: 8.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 20.0
+  do: MAGNET
+  arg: 'ON'
+- t: 78.0
+  do: LAND
+criteria:
+  require_weld: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  forbid_abort: true

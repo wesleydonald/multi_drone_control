@@ -1,0 +1,47 @@
+name: ocp_hover_ground_creep
+description: 'Floor start on the CREEP path (plan 2026-09-24, item 1): three drones rest on the floor
+  with flat rods, start_taut false + handover_elev_deg 45 sweeps each rigid rod about its grounded attach
+  point to 45 deg from the drone''s MEASURED resting position, hands over to the OCP, then the lift ramp.
+  The rig launch has flown start_taut:=true, whose OCP references sit 18-22 cm inward of a resting drone
+  (2026-09-23 13:13, never lifted). Exploratory. Falsifier: peak load below 0.35 m, or a creep timeout
+  / abort.'
+world: three_rigid_ground.sdf
+launch:
+  package: controller_quad_load
+  file: mpc_quad_load_launch.py
+  args:
+    num_drones: 3
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    thrust_ratio: auto
+    kt_trim: false
+    start_taut: false
+    handover_elev_deg: 45.0
+    handover_settle_s: 2.0
+    lift_ramp_vel: 0.15
+    z_ki: 0.0
+    creep_vel: 0.1
+    pose_timeout_s: 1.0
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+fleet:
+  num_drones: 3
+  n_total: 3
+timing:
+  duration_s: 50.0
+  stop_after_abort_s: 8.0
+events:
+- t: 3.0
+  do: ARM
+- t: 8.0
+  do: TAKEOFF
+- t: 44.0
+  do: LAND
+criteria:
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  forbid_abort: true

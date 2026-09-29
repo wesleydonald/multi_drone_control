@@ -1,0 +1,14 @@
+fake_cooperative_transport_world:
+  ros__parameters:
+    trajectory_type: circle
+    # M2-preview only: ego is plate 0; the three fake companions use plates 3/6/9.
+    # Their body/upper-endpoint locations are derived from RingNetGeometry and an
+    # ideal 0.50 m cable pulled 45 deg radially outward from vertical.
+    # Cooperative diagonal-cable collision geometry remains intentionally deferred.
+    obstacle_scenario: three_attached
+    fake_drone_count: 3
+    three_attached_cable_length_m: 0.50
+    three_attached_cable_angle_deg: 45.0
+online_join_planner:
+  ros__parameters:
+    static_obstacle_count: 0

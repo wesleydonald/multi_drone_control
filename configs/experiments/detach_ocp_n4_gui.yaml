@@ -1,0 +1,60 @@
+name: detach_ocp_n4_gui
+description: "(2026-09-23: load_mass rescaled to the official 0.86 kg ring payload now in every world;\
+  \ earlier runs of this config flew the 0.6 kg disc.) THE DETACH HAND-BACK SEQUENCE (THESIS_PLAN §12.1,\
+  \ supervisor's architecture).\nFour drones carry the payload along a circle under the CENTRALIZED OCP.\
+  \ Mid-flight one drone detaches. The dissipative network takes the fleet, HOLDS the trajectory clock,\
+  \ and redistributes the three survivors onto their new ring. Once they have settled — every drone slower\
+  \ than handback_speed and the load within handback_pos_tol of its target, sustained for handback_settle_s\
+  \ — the fleet is handed BACK to the OCP, now solving for n=3, and the trajectory resumes from exactly\
+  \ where it was held.\nEach controller does the thing it is good at: the OCP tracks trajectories (0.816\
+  \ radius ratio, 5/5 clean runs) and the network handles the reconfiguration event, which is its native\
+  \ operating mode and the part that is verified.\nWhat to look for in the log, in order:\n    [dissipative]\
+  \ DETACH drone 3 ...\n    [dissipative] reconfiguring — trajectory HELD at t=...\n    [planner] FLEET\
+  \ RESIZED to n=3; slot->drone [...]\n    [dissipative] HAND-BACK: OCP now flies n=3, trajectory resumes\
+  \ at t=...\n\nThe hand-back is behind ocp_handback (default false), so every previously verified detach\
+  \ run is unchanged. It requires an OCP pre-built for n=3, which the node does at startup; run tools/prebuild_planner.py\
+  \ first if the model sources changed.\n"
+world: four_rigid_ground.sdf
+launch:
+  package: controller_quad_load
+  file: dissipative_launch.py
+  args:
+    num_drones: 4
+    load_traj: circle
+    traj_speed: 0.6
+    traj_radius: 0.5
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    start_taut: true
+    reconfig_mode: ocp
+    kt_trim: false
+    z_ki: 0.0
+    handover_settle_s: 0.75
+    creep_vel: 0.1
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 4
+    detach: true
+    rviz: true
+fleet:
+  num_drones: 4
+  n_total: 4
+timing:
+  duration_s: 100.0
+  stop_after_abort_s: 8.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 16.0
+  do: DETACH
+  arg: 3
+- t: 92.0
+  do: LAND
+criteria:
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  forbid_abort: true

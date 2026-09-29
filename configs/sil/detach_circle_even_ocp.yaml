@@ -1,0 +1,50 @@
+description: 'Arm C reference: even ring, detach during the circle, OCP resize.'
+events:
+- t: 1.0
+  do: ARM
+- t: 10.0
+  do: TAKEOFF
+- t: 30.0
+  do: DETACH
+  arg: 1
+- t: 60.0
+  do: LAND
+fleet:
+  n_tethered: 4
+  n_total: 4
+geometry:
+  attach_radius: 0.25
+  attach_z: 0.025
+  cable_len: 0.5
+  load_mass: 0.86
+  attach_azimuths_deg: 0,90,180,270
+initial:
+  elev_deg: 45.0
+  load_z: 0.45
+  stands: true
+launch:
+  args:
+    attach_azimuths_deg: 0,90,180,270
+    cable_len: 0.5
+    enable_approach: false
+    kt_trim: true
+    load_mass: 0.86
+    load_traj: circle
+    num_drones: 4
+    reserved_attach: 0
+    start_taut: true
+    target_z: 0.6
+    z_ki: 0.4
+    reconfig_mode: ocp
+    reconfig_hold_s: 1.5
+    traj_speed: 0.4
+    traj_radius: 0.5
+  file: three_attach_launch.py
+  package: controller_quad_load
+name: detach_circle_even_ocp
+timing:
+  dt: 0.02
+  duration_s: 50.0
+  ready_timeout_s: 300.0
+  step_timeout_s: 0.5
+  substeps: 20

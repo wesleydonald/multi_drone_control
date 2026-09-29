@@ -1,0 +1,18 @@
+fake_cooperative_transport_world:
+  ros__parameters:
+    # Geometry diagnostic: identical translational scenario to three_attached,
+    # with only a slow basket yaw added. The three attached companion previews
+    # remain fixed in the ring frame and therefore orbit the basket centre at
+    # exactly the basket yaw rate while the whole formation translates.
+    trajectory_type: circle
+    payload_yaw_mode: spin
+    payload_yaw0: 0.0
+    payload_yaw_rate: 0.20
+
+    obstacle_scenario: three_attached
+    fake_drone_count: 3
+    three_attached_cable_length_m: 0.50
+    three_attached_cable_angle_deg: 45.0
+online_join_planner:
+  ros__parameters:
+    static_obstacle_count: 0

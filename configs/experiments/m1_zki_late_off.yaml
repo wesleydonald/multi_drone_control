@@ -1,0 +1,88 @@
+criteria:
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  require_weld: false
+description: 'Card 2026-09-27_zki_orbit_v2 arm 1: late-detach orbit bench on the current defaults, z_ki_in_orbit
+  False.'
+events:
+- arg: /pickup/detach
+  do: GZ_PUB
+  t: 1.0
+- do: ARM
+  t: 3.0
+- do: TAKEOFF
+  t: 5.0
+- arg: 0.5
+  do: WAIT_LIFT
+  t: 7.0
+- arg: 3
+  do: DETACH
+  t: 87.0
+- do: WAIT_PARTNER_RELEASE
+  t: 88.0
+- do: HANDOFF
+  t: 89.0
+- do: WAIT_REWELD
+  t: 90.0
+- do: LAND
+  t: 98.0
+fleet:
+  n_total: 4
+  num_drones: 3
+io_launch:
+  args:
+    attach: true
+    clock_hz: 500
+    fleet_viz: false
+    num_drones: 3
+  file: rviz_quad_load_launch.py
+launch:
+  args:
+    attach_azimuths_deg: 150,270,30
+    attach_cable_len: 0.49
+    attach_central: false
+    attach_elev_deg: 65.0
+    attach_handout: true
+    attach_t_handout: 12.0
+    attach_traj_hold_mode: timed
+    attach_traj_hold_s: 10.0
+    attach_x_offset: 0.0
+    attach_y_offset: 0.25
+    cable_len: 0.5
+    control_mode: velocity_after_handover
+    diss_balanced_tensions: true
+    diss_ki_load: 1.0
+    enable_obstacle_avoidance: false
+    kt_trim: true
+    load_mass: 0.86
+    load_traj: orbit
+    num_drones: 3
+    partner: true
+    partner_attached: true
+    pose_timeout_s: 3.0
+    reconfig_mode: ocp
+    reserved_attach: 1
+    safety_ref_timeout_s: 4.0
+    start_taut: true
+    target_z: 0.6
+    traj_radius: 0.5
+    traj_speed: 0.125
+    vel_ki: 0.0
+    z_ki: 0.4
+    z_ki_in_orbit: false
+  file: three_attach_launch.py
+  package: controller_quad_load
+name: m1_zki_late_off
+timing:
+  bg_param_dump: false
+  dds_udp_only: true
+  duration_s: 300.0
+  gz_record: false
+  launch_expect_topics:
+  - /fake_payload/pose
+  pose_timeout_s: 8.0
+  ready_timeout_s: 420.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+world: three_attach_partner_attached.sdf

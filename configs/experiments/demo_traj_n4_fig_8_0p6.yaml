@@ -1,0 +1,49 @@
+name: demo_traj_n4_fig_8_0p6
+description: 'Meeting demo (gz_record): n4 fig_8 at 0.6 m/s, floor creep start, launch defaults otherwise.'
+world: four_rigid_ground_3915.sdf
+launch:
+  package: controller_quad_load
+  file: mpc_quad_load_launch.py
+  args:
+    load_traj: fig_8
+    traj_speed: 0.6
+    traj_radius: 0.5
+    num_drones: 4
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    thrust_ratio: auto
+    kt_trim: true
+    start_taut: false
+    handover_elev_deg: 45.0
+    handover_settle_s: 1.0
+    lift_ramp_vel: 0.15
+    z_ki: 0.4
+    creep_vel: 0.2
+    attach_azimuths_deg: 30,90,150,270
+    pose_timeout_s: 1.0
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 4
+fleet:
+  num_drones: 4
+  n_total: 4
+timing:
+  gz_record: true
+  duration_s: 75.0
+  stop_after_abort_s: 8.0
+events:
+- t: 3.0
+  do: ARM
+- t: 8.0
+  do: TAKEOFF
+- t: 10.0
+  do: WAIT_LIFT
+  arg: 0.5
+- t: 42.0
+  do: LAND
+criteria:
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  forbid_abort: true

@@ -1,0 +1,40 @@
+name: ocp_hover_ground_creep_defaults_zki0
+description: 'Hover pair arm A (one variable): launch defaults (kt_trim on, creep_vel 0.2, settle 1.0)
+  with z_ki 0. Arm B = ocp_hover_ground_creep_defaults. LAND at 52 s.'
+world: three_rigid_ground.sdf
+launch:
+  package: controller_quad_load
+  file: mpc_quad_load_launch.py
+  args:
+    num_drones: 3
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    thrust_ratio: auto
+    start_taut: false
+    handover_elev_deg: 45.0
+    lift_ramp_vel: 0.15
+    pose_timeout_s: 1.0
+    z_ki: 0.0
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+fleet:
+  num_drones: 3
+  n_total: 3
+timing:
+  duration_s: 58.0
+  stop_after_abort_s: 8.0
+events:
+- t: 3.0
+  do: ARM
+- t: 8.0
+  do: TAKEOFF
+- t: 52.0
+  do: LAND
+criteria:
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  forbid_abort: true

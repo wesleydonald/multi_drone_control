@@ -1,0 +1,43 @@
+name: ocp_hover_ground_creep_n4
+description: 'Floor start on the CREEP path with FOUR drones (plan 2026-09-24, item 1): start_taut false
+  + handover_elev_deg 45, even ring. The rig will fly four next visit. Exploratory. Falsifier: peak load
+  below 0.35 m, or a creep timeout / abort.'
+world: four_rigid_ground.sdf
+launch:
+  package: controller_quad_load
+  file: mpc_quad_load_launch.py
+  args:
+    num_drones: 4
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    thrust_ratio: auto
+    kt_trim: false
+    start_taut: false
+    handover_elev_deg: 45.0
+    handover_settle_s: 2.0
+    lift_ramp_vel: 0.15
+    z_ki: 0.0
+    creep_vel: 0.1
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 4
+fleet:
+  num_drones: 4
+  n_total: 4
+timing:
+  duration_s: 50.0
+  stop_after_abort_s: 8.0
+events:
+- t: 3.0
+  do: ARM
+- t: 8.0
+  do: TAKEOFF
+- t: 44.0
+  do: LAND
+criteria:
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  forbid_abort: true

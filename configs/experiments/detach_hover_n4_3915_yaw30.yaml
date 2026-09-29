@@ -1,0 +1,55 @@
+criteria:
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+description: 'Yaw-datum proof for 0aaeba1 (resize_fleet keeps the placement yaw psi0), before the
+  rig detach rung. Identical to detach_hover_n4_3915 except the world: the whole rig (ring, four
+  drones, stubs, rods) is placed rotated +30 deg about the ring centre (four_rigid_ground_3915_yaw30.sdf),
+  so the planner latches psi0 = +30 and attach_azimuths_deg stay in the ring frame. Falsifiers: after
+  the DETACH resize the payload yaw (payload_q* in run.csv) leaves 30 deg by more than 5 deg, peak tilt
+  > 8 deg, or abort. Baseline R0722 (same arm at yaw 0: detach peak 3.04, yaw within 0.12 deg).'
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.5
+- t: 20.0
+  do: DETACH
+  arg: 1
+- t: 52.0
+  do: LAND
+fleet:
+  n_total: 4
+  num_drones: 4
+io_launch:
+  args:
+    detach: true
+    num_drones: 4
+  file: rviz_quad_load_launch.py
+launch:
+  args:
+    attach_azimuths_deg: 30,90,150,270
+    cable_len: 0.5
+    creep_vel: 0.2
+    handover_elev_deg: 45.0
+    handover_settle_s: 1.0
+    kt_trim: true
+    load_mass: 0.86
+    load_traj: hover
+    num_drones: 4
+    pose_timeout_s: 1.0
+    reconfig_mode: ocp
+    start_taut: false
+    target_z: 0.6
+    traj_radius: 0.5
+    z_ki: 0.4
+  file: dissipative_launch.py
+  package: controller_quad_load
+name: detach_hover_n4_3915_yaw30
+timing:
+  duration_s: 100.0
+  stop_after_abort_s: 8.0
+world: four_rigid_ground_3915_yaw30.sdf

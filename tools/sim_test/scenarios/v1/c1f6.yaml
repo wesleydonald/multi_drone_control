@@ -1,0 +1,60 @@
+schema_version: 1
+scenario: c1f6
+iteration: C1F.6
+simulation_only: true
+launch:
+  package: tejen_mission
+  file: c1f6_system_test.launch.py
+timeouts:
+  startup_s: 60.0
+  manual_start_s: 300.0
+  mission_s: 120.0
+  success_dwell_s: 2.0
+  freshness_s: 1.0
+  planner_status_freshness_s: 2.5
+  sigint_s: 7.0
+  sigterm_s: 3.0
+success:
+  phase: ATTACH_READY
+  require_handoff_ready: true
+failure_phases:
+  - LANDED_DISARMED
+readiness:
+  topics:
+    - /motion_capture_state
+    - /pendulum_swing_state
+    - /payload_world_state
+    - /dynamic_planner/transfer_status
+    - /join_planner/phase
+    - /join_planner/handoff_ready
+    - /fake_obstacles/drone_0/committed_trajectory
+    - /fake_obstacles/drone_1/committed_trajectory
+  services:
+    - /drone_arming_service
+conflicting_process_tokens:
+  - gz sim
+  - rviz2
+  - c1f6_system_test.launch.py
+  - simulation_test_supervisor
+conflicting_nodes:
+  - /online_join_planner
+  - /dynamic_planner_transfer_backend
+  - /tejen_mpc
+  - /simulation_test_supervisor
+required_logs:
+  - raw/planner/*/backend.csv
+  - raw/planner/*/replans.csv
+  - raw/mpc/*/log.csv
+  - raw/join_planner/*.csv
+configuration_snapshots:
+  - tools/sim_test/scenarios/v1/c1f6.yaml
+  - src/tejen_dynamic_planner/config/c1f6_moving_rendezvous.yaml
+  - src/tejen_mission/config/c1f2b_cpp_authority.yaml
+  - src/tejen_mission/config/visual_astar_visual_only.yaml
+  - src/tejen_mission/config/payloads/spanner_8mm.yaml
+safety:
+  uncertified_prefix: UNCERTIFIED_
+  accepted_values: ["1", "true", "True"]
+  safe_values: ["1", "true", "True", "SAFE"]
+regression:
+  numerical_baseline: NOT_BASELINED

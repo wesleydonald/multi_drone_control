@@ -1,0 +1,13 @@
+sim_time,event,arg
+nan,WELD,magnet/object_attached
+1.002,LAUNCH,"tejen_mission partner_mission.launch.py plate:=3 carrier_azimuths_deg:=[150.0,270.0,30.0] start_gate_topic:=/partner/release"
+3.001,ARM,
+5.001,TAKEOFF,
+7.006,WAIT_LIFT,0.5
+8.511,LIFTED,1.50
+18.505,DETACH,3
+18.571,RELEASED,magnet/object_attached
+21.505,WAIT_REWELD,
+107.838,REWELD,magnet/object_attached
+113.838,LAND,
+119.737,LANDED,/fleet/landed

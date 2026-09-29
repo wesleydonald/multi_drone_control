@@ -1,0 +1,45 @@
+name: ocp_hover_ground_creep_hold
+description: 'G7 R3a rig twin (card 2026-09-30_rig_carry_hover): ocp_hover_ground_creep_defaults with
+  lift_ramp_vel 0.0 (creep sweep to 45 deg, then HOLD taut with the ring on the floor, no lift) and kt_trim
+  false, the rig''s first creep flight. The even ring here is the rig''s plates 1/5/9 (30/150/270) rotated
+  by 30 deg. Exploratory. Falsifier: no handover (creep timeout), ring leaves the floor (payload z above
+  0.045 = rest 0.025 + 2 cm, the rig bar of 0.07 on a 0.05 rest), drone tilt > 25 deg (a loaded sim
+  hover leans 18.6 deg, R0648-R0650), or an abort.'
+world: three_rigid_ground.sdf
+launch:
+  package: controller_quad_load
+  file: mpc_quad_load_launch.py
+  args:
+    num_drones: 3
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    thrust_ratio: auto
+    kt_trim: false
+    start_taut: false
+    handover_elev_deg: 45.0
+    lift_ramp_vel: 0.0
+    pose_timeout_s: 1.0
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+fleet:
+  num_drones: 3
+  n_total: 3
+timing:
+  duration_s: 50.0
+  stop_after_abort_s: 8.0
+events:
+- t: 3.0
+  do: ARM
+- t: 8.0
+  do: TAKEOFF
+- t: 40.0
+  do: LAND
+criteria:
+  min_payload_z: 0.005
+  max_payload_z: 0.10   # R0726: the OCP floats the ring 2-6 cm at full load after the hand-over
+  max_drone_tilt_deg: 25.0
+  forbid_abort: true

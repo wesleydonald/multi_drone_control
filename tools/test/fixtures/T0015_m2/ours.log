@@ -1,0 +1,7 @@
+[dissipative-11] [INFO] [1790414860.585386869] [dissipative_controller]: [dissipative] OCP-takeoff + dissipative-detach ready (n=4, reserved_attach=0, preview=True, lean=False); params.json -> /home/wesley/multi_drone_control/results/logs/controller_quad_load/dissipative_controller_20260926_192740
+[controller-6] [INFO] [1790415740.666974820] [controller_2]: [Drone 2] envelope armed and reset.
+[controller-8] [INFO] [1790415740.671011286] [controller_3]: [Drone 3] envelope armed and reset.
+[controller-2] [INFO] [1790415740.755756931] [controller_0]: [Drone 0] envelope armed and reset.
+[controller-2] [WARN] [1790415740.760821329] [controller_0]: [Drone 0] envelope warning: reference 0.90 s old
+[controller-4] [INFO] [1790415740.770615691] [controller_1]: [Drone 1] envelope armed and reset.
+[controller-4] [WARN] [1790415740.771426745] [controller_1]: [Drone 1] envelope warning: reference 0.92 s old

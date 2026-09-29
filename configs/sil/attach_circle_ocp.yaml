@@ -1,0 +1,66 @@
+name: attach_circle_ocp
+description: 'Card 2026-09-25_attach_ocp arm B: weld DURING the 0.4 m/s circle (hold 10 s at the weld,
+  then the circle resumes with four), OCP resize.'
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 1
+    start_taut: true
+    load_traj: circle
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    attach_central: false
+    diss_balanced_tensions: true
+    attach_handout: true
+    attach_t_handout: 12.0
+    attach_azimuths_deg: 330,90,210
+    attach_x_offset: 0.0
+    attach_y_offset: -0.25
+    attach_elev_deg: 65.0
+    enable_obstacle_avoidance: false
+    kt_trim: true
+    z_ki: 0.4
+    reconfig_mode: ocp
+    attach_traj_hold_s: 10.0
+    attach_traj_hold_mode: timed
+    control_mode: velocity_after_handover
+    vel_ki: 0.0
+    diss_ki_load: 1.0
+    traj_speed: 0.4
+    traj_radius: 0.5
+fleet:
+  n_tethered: 3
+  n_total: 4
+geometry:
+  cable_len: 0.5
+  attach_radius: 0.25
+  attach_azimuths_deg: 330,90,210
+  attach_z: 0.025
+  load_mass: 0.86
+  drone_mass: 0.64
+  thrust_c: 83.1
+  magnet_arm_len: 0.5
+initial:
+  stands: true
+  load_z: 0.45
+  elev_deg: 45.0
+  weld_x: 0.0
+  weld_y: -0.25
+  weld_z_offset: 0.05
+timing:
+  dt: 0.02
+  substeps: 20
+  duration_s: 60.0
+  step_timeout_s: 0.5
+  ready_timeout_s: 300.0
+events:
+- t: 1.0
+  do: ARM
+- t: 3.0
+  do: TAKEOFF
+- t: 14.0
+  do: WELD
+  arg: 3

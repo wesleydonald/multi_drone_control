@@ -1,0 +1,46 @@
+name: carry_hover_n3_settle_mass120_kt
+mis_seed: true
+description: 'docs/experiments/2026-09-23_effective_load_force.md: plant 1.032 kg, told 0.86 (+20 % unmodelled
+  mass), load_force_est off. kt_trim ON (card 2026-09-23_kt_trim.md). SETTLED variant: LAND at 76 s so
+  an 8 s gain estimate and the sag loop (35 s to within 2 cm, R0391) are fully converged before the last-8-s
+  window.'
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 3
+    reserved_attach: 0
+    enable_approach: false
+    start_taut: true
+    load_traj: hover
+    cable_len: 0.5
+    attach_azimuths_deg: even
+    load_mass: 0.86
+    target_z: 0.6
+    kt_trim: true
+    z_ki: 0.0
+fleet:
+  n_tethered: 3
+  n_total: 3
+geometry:
+  cable_len: 0.5
+  attach_radius: 0.25
+  attach_z: 0.025
+  load_mass: 1.032
+initial:
+  stands: true
+  load_z: 0.45
+  elev_deg: 45.0
+timing:
+  dt: 0.02
+  substeps: 20
+  duration_s: 80.0
+  step_timeout_s: 0.5
+  ready_timeout_s: 300.0
+events:
+- t: 1.0
+  do: ARM
+- t: 5.0
+  do: TAKEOFF
+- t: 76.0
+  do: LAND

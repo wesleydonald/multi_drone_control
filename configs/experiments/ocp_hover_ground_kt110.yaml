@@ -1,0 +1,42 @@
+name: ocp_hover_ground_kt110
+description: 'kt_trim Gazebo arm (card 2026-09-23_kt_trim.md): three drones lift the 0.86 kg ring from
+  the floor with thrust_ratio typed 91.41 (+10 % vs the linear 83.1), kt_trim off. Expect a ~10 cm sag
+  off; on, the lift at the typed gain then recovery to the correct-gain hover within ~10 s of the hover.'
+world: three_rigid_ground.sdf
+launch:
+  package: controller_quad_load
+  file: mpc_quad_load_launch.py
+  args:
+    num_drones: 3
+    load_traj: hover
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    thrust_ratio: 91.41
+    kt_trim: false
+    z_ki: 0.0
+    start_taut: true
+    handover_settle_s: 0.75
+    creep_vel: 0.1
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 3
+fleet:
+  num_drones: 3
+  n_total: 3
+timing:
+  duration_s: 45.0
+  stop_after_abort_s: 8.0
+events:
+- t: 3.0
+  do: ARM
+- t: 8.0
+  do: TAKEOFF
+- t: 40.0
+  do: LAND
+criteria:
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  forbid_abort: false
+mis_seed: true

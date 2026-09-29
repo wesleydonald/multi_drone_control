@@ -1,0 +1,11 @@
+fake_cooperative_transport_world:
+  ros__parameters:
+    trajectory_type: circle
+    obstacle_scenario: custom
+    fake_drone_count: 2
+    fake_drone_offsets_x: [0.30, 0.30]
+    fake_drone_offsets_y: [0.60, -0.60]
+    fake_drone_offsets_z: [0.50, 0.50]
+online_join_planner:
+  ros__parameters:
+    static_obstacle_count: 0

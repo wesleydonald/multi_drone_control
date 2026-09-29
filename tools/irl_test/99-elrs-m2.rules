@@ -1,0 +1,4 @@
+# Install manually as /etc/udev/rules.d/99-elrs-quad.rules.
+# Minimum M2 IRL adapters only; USB socket and ttyUSB numbering are irrelevant.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", ATTRS{serial}=="FTF0AROT", SYMLINK+="QUAD2", GROUP="dialout", MODE="0660"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", ATTRS{serial}=="FTF09R63", SYMLINK+="QUAD4", GROUP="dialout", MODE="0660"

@@ -1,0 +1,48 @@
+name: carry_hover_n4_3915_rigkt_m100
+description: 'R3e vs R4 at the RIG thrust gain (readiness review 2026-09-29, decision 3): four drones, plates 1/3/5/9 (the
+  M1 layout), drone 1.0 kg, plant thrust_c 21.8, typed kT 21.8, trim off. Predicted carry throttle: plate-9 drone 0.619, over
+  the 0.6 cap; the others 0.52-0.54. Exploratory.'
+launch:
+  package: controller_quad_load
+  file: three_attach_launch.py
+  args:
+    num_drones: 4
+    reserved_attach: 0
+    enable_approach: false
+    start_taut: true
+    load_traj: hover
+    cable_len: 0.5
+    attach_azimuths_deg: 30,90,150,270
+    load_mass: 0.86
+    target_z: 0.6
+    kt_trim: false
+    thrust_ratio: 21.8
+    drone_mass: 1.0
+fleet:
+  n_tethered: 4
+  n_total: 4
+geometry:
+  cable_len: 0.5
+  attach_radius: 0.25
+  attach_z: 0.025
+  load_mass: 0.86
+  drone_mass: 1.0
+  thrust_c: 21.8
+  attach_azimuths_deg: 30,90,150,270
+initial:
+  stands: true
+  load_z: 0.45
+  elev_deg: 45.0
+timing:
+  dt: 0.02
+  substeps: 20
+  duration_s: 50.0
+  step_timeout_s: 0.5
+  ready_timeout_s: 300.0
+events:
+- t: 1.0
+  do: ARM
+- t: 10.0
+  do: TAKEOFF
+- t: 46.0
+  do: LAND

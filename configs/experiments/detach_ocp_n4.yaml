@@ -1,0 +1,64 @@
+name: detach_ocp_n4
+description: "(2026-09-23: load_mass rescaled to the official 0.86 kg ring payload now in every world;\
+  \ earlier runs of this config flew the 0.6 kg disc.) OCP-ONLY FLEET RESIZE ON DETACH (THESIS_PLAN \xA7\
+  12.2).\nFour drones carry the payload along a circle under the centralized OCP. Mid-flight one detaches,\
+  \ and the OCP is simply RESIZED to n=3 and keeps flying \u2014 no dissipative network, no phase machine,\
+  \ no settle detection. The cables do not move when a drone leaves, so the survivors are just a smaller\
+  \ (uneven) ring, and the OCP can solve for that directly now that attachment geometry is a runtime parameter.\n\
+  reconfig_mode defaults to 'network' (the verified behaviour), so this file opting into 'ocp' is the\
+  \ only thing that changes. Run tools/prebuild_planner.py first if the planner model sources changed\
+  \ \u2014 the n=3 OCP must already be compiled.\nWhat to look for in the log, in order:\n    [planner]\
+  \ FLEET RESIZED to n=3; slot->drone [...]; attach azimuths [...] deg\n    [dissipative] DETACH drone\
+  \ 3 (OCP resize): n=3, trajectory held 1.5 s;\n                  surviving ring spans a 180 deg gap\
+  \ (...)\n    [dissipative] reconfiguration hold over \u2014 trajectory resumes at t=...\n\nEXPECT A\
+  \ RESIDUAL PAYLOAD TILT, and do not read it as a control failure. Removing one cable from a symmetric\
+  \ 4-ring leaves the surviving attach points spanning a 180 deg gap, which puts the load's centre of\
+  \ mass exactly ON the boundary of their polygon \u2014 the marginal case where it can no longer hang\
+  \ level. That is geometry, not tuning: metrics.cog_margin reports it, and n>=5 is the first ring that\
+  \ survives a detach with margin to spare.\n 2026-09-24: floor start switched to the creep path (start_taut\
+  \ false, handover 45, settle 1.0, creep_vel 0.2): the start_taut-true floor start aborts in the lift\
+  \ with four drones on the linear plant (R0491, R0468)."
+world: four_rigid_ground.sdf
+launch:
+  package: controller_quad_load
+  file: dissipative_launch.py
+  args:
+    num_drones: 4
+    load_traj: circle
+    traj_speed: 0.6
+    traj_radius: 0.5
+    cable_len: 0.5
+    load_mass: 0.86
+    target_z: 0.6
+    start_taut: false
+    reconfig_mode: ocp
+    kt_trim: false
+    z_ki: 0.0
+    handover_settle_s: 1.0
+    creep_vel: 0.2
+    handover_elev_deg: 45.0
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 4
+    detach: true
+fleet:
+  num_drones: 4
+  n_total: 4
+timing:
+  duration_s: 100.0
+  stop_after_abort_s: 8.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 16.0
+  do: DETACH
+  arg: 3
+- t: 92.0
+  do: LAND
+criteria:
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  forbid_abort: true

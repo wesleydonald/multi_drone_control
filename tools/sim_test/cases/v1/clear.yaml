@@ -1,0 +1,7 @@
+fake_cooperative_transport_world:
+  ros__parameters:
+    trajectory_type: circle
+    obstacle_scenario: clear
+online_join_planner:
+  ros__parameters:
+    static_obstacle_count: 0

@@ -1,0 +1,77 @@
+name: m2_bench_imu
+description: 'G5 M2 hand-over bench (GOALS step 3): Tejen''s four X3s start welded to the dynamic 0.86 kg ring on
+  plates 3/0/6/9 (ring yaw 20 deg, resting on the floor) at the T0019 success-hold pose, each on a detachable
+  hanger (world from tools/sim_test/make_m2_bench_world.py). His sim bridges only (m2_bench_io_launch.py, rate_ki
+  5), no join, no mission. Our stack as drive_m2_handover.py launches it (partner_m2, one launch with muxes and
+  controllers); ARM, /fleet/handover, TAKEOFF, hangers released once all four muxes forward our thrust, creep 76
+  -> 45 deg, lift to 0.6, hover 15 s, LAND. Falsifier (GOALS): drone tilt >25 deg or ring tilt >3 deg within 3 s
+  of the release -> the bench is used for lift, hover and LAND only. IMU arm: his bridges run the rate loop on the
+  X3 gyro (io rate_source imu, m2_bench_world_imu.sdf = the bench world + the Imu system) instead of differenced poses.'
+world: tejen/bench_m2/m2_bench_world_imu.sdf
+launch:
+  package: controller_quad_load
+  file: dissipative_launch.py
+  args:
+    num_drones: 4
+    sim_interface: false
+    partner_m2: true
+    partner_m2_part: all
+    cable_len: 0.515
+    attach_azimuths_deg: 90.0,0.0,180.0,270.0
+    attach_z: -0.005
+    start_taut: false
+    handover_elev_deg: 45.0
+    cable_elev_deg: 45.0
+    handover_settle_s: 1.0
+    creep_vel: 0.2
+    load_mass: 0.86
+    load_traj: hover
+    target_z: 0.6
+    reconfig_mode: ocp
+    pose_timeout_s: 3.0
+    safety_ref_timeout_s: 3.0
+    takeoff_spool_s: 0.0
+    airborne_start: true
+    auto_slot_assign: false
+io_launch:
+  file: m2_bench_io_launch.py
+  args:
+    num_drones: 4
+    start_gz: false
+    rate_ki: 5.0
+    rate_source: imu
+fleet:
+  num_drones: 4
+  n_total: 4
+cmd_ready_topic: /drone_{i}/ELRSCommand_diss
+timing:
+  duration_s: 120.0
+  stop_after_abort_s: 8.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 8.0
+  dds_udp_only: true
+  bg_param_dump: false
+  gz_record: false
+  stop_after_landed_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 5.0
+  do: FLEET_HANDOVER
+- t: 6.0
+  do: TAKEOFF
+- t: 6.0
+  do: WAIT_THRUST
+  arg: /drone_{i}/ELRSCommand
+- t: 6.05
+  do: HANGER_RELEASE
+- t: 6.5
+  do: WAIT_LIFT
+  arg: 0.3
+- t: 21.5
+  do: LAND
+criteria:
+  require_weld: false
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.35
+  forbid_abort: true

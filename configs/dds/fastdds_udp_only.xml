@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Sim-only (opt-in per experiment config, timing.dds_udp_only): Fast DDS without the
+     shared-memory transport. With ~60 participants starting together, SHM port locks
+     failed (open_and_lock_file) and matched topics silently lost samples (R0617/R0621:
+     one carrier's reference stream; R0602/R0612/R0619: one-shot commands and /clock). -->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>udp_only</transport_id>
+      <type>UDPv4</type>
+    </transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="udp_only_participant" is_default_profile="true">
+    <rtps>
+      <userTransports>
+        <transport_id>udp_only</transport_id>
+      </userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+    </rtps>
+  </participant>
+</profiles>
