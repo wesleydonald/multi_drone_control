@@ -15,8 +15,8 @@ balance depend on height or on the rod hanging in the downwash?
 | # | hypothesis | status after W2/W3 (offline) |
 |---|---|---|
 | H1 | Heave and tilt spikes come from stale, stepped references (blocked single-threaded planner, held refs) | open; f7 heaved with 0 failures and the rebuilt refs oppose the heave (W2 `--heave`), so H1 cannot be the only cause |
-| H2 | Solve failures come from an incomplete reseed (x only; u, slacks, multipliers survive) | **refuted as the trigger** by replay arm a (9/5 failures, unchanged). Replay trigger = ring quaternion sign flip at yaw 180 deg (mocap sends w >= 0) together with the 30 deg slot offset of model-f1; arm g (sign continuity) or arm h removes all failures |
-| H3 | Plant-side force deficit (ring lighter, ground effect, or the law under-reads when tethered) | open; masses trusted as measured (decisions 2026-09-30). W3: carried fraction 0.78-0.87 below 0.45 m, 0.99 at f11 (0.52 m), rising with height inside every flight |
+| H2 | Solve failures come from an incomplete reseed (x only; u, slacks, multipliers survive) | **refuted as the trigger** by replay arm a (9/5 failures, unchanged). Inferred replay trigger = ring quaternion sign flip at yaw 180 deg (mocap sends w >= 0) together with the 30 deg slot offset of model-f1 (the ring quaternion was not logged on the rig, so the trigger is inferred). The open-loop replay of the 155ee56 planner gives 14 failures (9 + 5; 4 within 0.15 s of a rig failure) and 0 with the sign kept continuous (arm g); the shipped A4 (`planner_solver.py`) was replayed on the current tree with 0 in the base arm |
+| H3 | Plant-side force deficit (ring lighter, ground effect, or the law under-reads when tethered) | open; masses trusted as measured (decisions 2026-09-30). W3: carried fraction rises with height across flights (f11 0.99 at 0.52 m vs 0.78-0.87 below 0.45 m); within flights the bands are not monotonic (f6 0.845/0.606/1.085/0.813/0.819; f7 0.723/0.879/0.807) |
 | H4 | The planner over-plans (t_nom at 45 deg against rods at 54-66 deg) | weak: static hold asks 1.000 / 1.053 / 1.078 x W at 45 / 53.6 / 65 deg (W2), not 14-25 % |
 | H5 | The 4 cm pivot is missing from the planner geometry (rods read 3-4 cm long, length gates 0.75-0.82) | code in (W9); replay arm c leaves failures at 9/5, so it is a geometry and gate fix, not a failure fix |
 | H6 | FF inconsistency while ff < 1 (acc carries the full pull, cable scaled by gate*ff) | open, low rank (W10, not in this card) |
@@ -51,7 +51,7 @@ W10 (pull model) and W11 (freeze removal) are later arms of this card, not built
 
 | # | test | launch args that differ from the rig defaults | pass / what we learn |
 |---|---|---|---|
-| D1 | one drone, free hover, rod and magnet removed (0.475 kg), 20 s | `drone_mass:=0.475`, `thrust_ratio:=40.7` (9.81 / (0.507 x 0.475); 35.2 is for 0.55 kg) | model throttle vs the law at 0.475 kg; tells whether the rod in the downwash biased the fit. Doubles as the A3 takeoff check |
+| D1 | one drone, free hover, rod and magnet removed (0.475 kg), 20 s | `thrust_ratio:=40.7` only (9.81 / (0.507 x 0.475); 35.2 is for 0.55 kg; real_hover_launch has no `drone_mass`) | model throttle vs the law at 0.475 kg; tells whether the rod in the downwash biased the fit. Doubles as the A3 takeoff check |
 | D2 | tethered hold at ring 0.3 m, then 0.7 m, 15 s steady each (\|vz\| < 0.03 m/s for >= 5 s) | `z_ki:=0.0` | rod-force sum / ring weight at each height (`thrust_fit.py --tethered`); height effect vs a fixed law error |
 | H1 | tethered hover 0.5 m, A1 + A2 + A3, 25 s | `z_ki:=0.0` | 0-1 solve failures; ref age > 0.3 s under 5 % of airborne time; heave p-p <= 6 cm; tilt mean <= 3, max <= 8 deg; hand-over 50-60 deg on the pivot reading (recorded, not a stop rule; was 45 +- 5, twin 55.5-55.7 with the creep fix, R0803-R0808); rods at hand-over 0.53-0.58 |
 | H2 | as H1 with the safety net | rig defaults (z_ki 0.4, bound 0.15, gate 0.25) | H1 bars, \|mean z - 0.5\| <= 2 cm, \|z_bias\| <= 0.10 throughout |
@@ -158,8 +158,8 @@ Must-fix:
    `_model_thr_max`, or refresh the cap every tick (set_throttle_max is N `constraints_set` calls).
    Add one test that drives `_publish_channels` with offset 0.185 through the spool, and checks
    `_applied_u[2]` and `last_cmd_throttle`.
-6. Card and rig sheet: D1 must launch with `thrust_ratio:=40.7`, `drone_mass:=0.475` (35.2 is the
-   0.55 kg gain); H1 and D2 with `z_ki:=0.0`. A3's pass bar is the D1 takeoff time against
+6. Card and rig sheet: D1 must launch with `thrust_ratio:=40.7` only (real_hover_launch has no
+   `drone_mass`; 35.2 is the 0.55 kg gain); H1 and D2 with `z_ki:=0.0`. A3's pass bar is the D1 takeoff time against
    RIG-0930-model-hover.
 
 Should-fix:
@@ -392,7 +392,8 @@ unless stated; Group 6 is laptop SIL. Registry rows R0772-R0800.
 
 Verdict: parity holds in Gazebo. SIL is no longer deterministic run to run (traces split 3.2-3.7 s
 after start), so the 0.5 deg tilt bar is below its own noise floor; the lab SIL sits inside the
-laptop spread.
+laptop spread. R0773 against R0767 changes the machine and the code together, so it is not a clean
+machine parity check; the lab's own parity is then the Group 2 regression rows.
 
 ### Group 2: regression on legacy worlds (pivot 0, linear plant)
 
@@ -400,7 +401,7 @@ laptop spread.
 |---|---|---|---|---|---|
 | R0773 | rig_lift_n4_even_floor | hold z / tilt peak / solve failures | 0.601 / 0.49 deg / 0 | R0767: 0.601 / 0.37 | PASS |
 | R0778 | ocp_hover_ground_creep_defaults | hold z / tilt peak / solve failures | 0.600 / 0.41 deg / 0 | R0721: 0.600 / 0.61 | PASS |
-| R0779 | ocp_hover_ground_creep_n4_3915 | hold z / tilt peak / settled tilt | 0.603 / 2.47 deg / 0.86 deg | R0729: 0.600 / 1.70 / 0.64 | PASS on criteria; tilt higher, not attributed (R0729 predates the 155ee56 pretension) |
+| R0779 | ocp_hover_ground_creep_n4_3915 | hold z / tilt peak / settled tilt | 0.603 / 2.47 deg / 0.98 deg | R0729: 0.600 / 1.70 / 0.64 | PASS on criteria; tilt higher, not attributed (R0729 predates the 155ee56 pretension) |
 
 ### Group 3: twin reproduction of RIG-0930-model-f1 (rig_twin_model_f1, pivot 0 in the planner)
 
@@ -453,9 +454,9 @@ pretension code path), so the freeze-off arms could not be flown. R0787 and R079
 Verdict: the rig plant and tracker agree in closed loop to 0.0004. A +-0.16 kg ring error moves
 the hold by -14.5 / +16.4 cm with z_ki 0 and nothing else (tilt 1.2-1.3 deg, heave 1.2 cm, 0
 failures), so z_ki carries it on the rig. In the light-ring arm the freeze fires at 97 %, too late
-to change anything. R0793 then aborted on LAND: after "load down, rods slack" drone 0, which hovered
-out at r 0.601 (baseline 0.577), tipped 8 -> 42 -> 76 deg at z 0.45-0.48 because the rigid rod
-reaches the ring before the drone reaches the floor. The envelope fault then disarmed the fleet with
+to change anything. R0793 then aborted on LAND: after "load down, rods slack" (all four drones had hovered wide,
+radii 0.595/0.601/0.603/0.604 vs R0783 0.572-0.580) drone 0 tipped 4 -> 22 -> 68 deg at
+49.25-49.75 s because the rigid rod reaches the ring before the drone reaches the floor. The envelope fault then disarmed the fleet with
 the ring already down.
 
 
@@ -509,7 +510,7 @@ Verified in sim (runs above):
 | item | evidence | value |
 |---|---|---|
 | A2 pivot model | R0783, R0784, R0786, R0788, R0789 | rods 0.550 (0.583 without), hold within 1.0 cm on z_ki 0 |
-| A1 + A2 + A3 together, 0 failures, ref age 0 | every twin run R0781-R0793 | 0 failures, ref_age_frac 0.0 |
+| A1 + A2 + A3 together, 0 failures, ref age 0 | twin runs R0781-R0793 | 0 failures; ref_age_frac 0.0 in R0782-R0789 and R0791; R0793 0.0028 (during the LAND abort); R0781 has no ref_age column |
 | A3 bookkeeping on the affine plant | R0792 | model throttle 0.2743 against 0.2747 |
 | net on (H2 twin) and circle (C1 twin) | R0788, R0789 | \|z_bias\| 0.013; lap tilt 1.22 deg, \|z err\| 1.3 cm, xy 3.1 cm |
 | ring mass +-0.16 kg, z_ki 0 | R0791, R0793 | height only: -14.5 / +16.4 cm, tilt 1.2-1.3 deg, 0 failures |
@@ -568,3 +569,23 @@ worlds still hand over at 45.5-45.7. Not iterated.
 ### Creep fix: removed (Wesley, 1 Oct)
 
 The sweep-start change did not move the hand-over angle (R0803-R0808: 55.5-55.7 deg, against 54.7-55.5 before). It was reverted the same session (house rule: code that does not beat its baseline is deleted). The lead comes from the lift-off pop (0.5-0.6 m/s off the 0.10 m vertical lead). After the visit, the options are: cap the climb rate at lift-off, or make the latch two-sided (a gate change).
+
+## Reviewer (30 Sep / 1 Oct)
+
+Verdict: WEAK.
+
+Supported: the twin numbers (recomputed from the run logs, all within 10 %); SIL bit-identity (R0796 /
+R0797); the rig-plant closed-loop check R0792; each arm changes one variable.
+
+Weak: single runs (H2/H3/C1 twins R0788, R0786, R0789); no twin run on the HEAD code (5006965 = a013220 +
+docs: R0783-R0789 predate the node-clock timer change and the planner tick marker, R0807-R0809 carried the
+removed creep fix); the scope is twin-only (fitted law, carried ~1.0 by construction), so nothing in sim
+predicts the rig's force shortfall.
+
+Not supported as first written (corrected above): replay "25 -> 0 failures" (it is 14 -> 0 for arm g on
+the 155ee56 planner, trigger inferred); carried fraction "rising with height inside every flight" (across
+flights only); "ref_age_frac 0.0 in every twin run R0781-R0793"; R0793 as drone 0 alone hovering wide
+(all four did) with tip angles 8 -> 42 -> 76; R0779 settled tilt 0.86 (0.98).
+
+Action before the rig: none blocking; the rig flights are exploratory data (D1/D2) plus hovers with stop
+rules.

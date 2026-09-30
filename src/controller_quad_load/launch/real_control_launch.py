@@ -32,11 +32,11 @@ then drive the fleet:
     ros2 topic pub -t 3 /fleet/command std_msgs/msg/String "{data: LAND}"
 
 HARDWARE NOTES:
-  * thrust_ratio defaults to 24 here -- the measured prop/motor kT of these
-    airframes on a pack at full health (the 09-16 free hover measured ~22). kt_trim
-    (default on) measures the rest within +-25 % in steady hover; it cannot learn above
-    the tracker's 0.6 throttle cap. kt_batt_sag_frac:=0.10 turns on a linear derate
-    with pack voltage once you have measured the sag.
+  * thrust_ratio defaults to 35.2 here -- the gain ABOVE the 0.185 throttle offset of
+    the affine map measured on 30 Sep (thrust_offset, thrust_offset_v_slope). kt_trim
+    is off by default (kt_trim:=true measures the rest within +-25 % in steady hover;
+    it cannot learn above the tracker's 0.8 throttle cap). kt_batt_sag_frac:=0.10 turns
+    on a linear derate with pack voltage once you have measured the sag.
   * cable_len / load_mass MUST match your physical rig (not the sim SDF).
     load_mass defaults to 0.86 here (the ring). Changing it recompiles the acados .so on the
     first launch (the solver cache keys on it), so expect a slower first start.
@@ -115,15 +115,15 @@ def _args():
         # and NOTHING estimates or reschedules it in flight. The adaptive UKF and the
         # thrust_quad_c airborne schedule were both removed on 2026-08-05.
         #
-        # 24.0 = the MEASURED kT of these airframes on a pack at full health. (The sim
-        # launches use ~31 instead: Gazebo's motor model is quadratic, so a linear
-        # model there has to use the secant gain at hover. The two genuinely differ.)
+        # 35.2 = the gain above the 0.185 offset of the affine map below (was 24 on the
+        # old linear map). The sim launches use their own secant gain: Gazebo's motor
+        # model is quadratic, so the two genuinely differ.
         DeclareLaunchArgument('thrust_ratio', default_value='35.2'),
         # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
         DeclareLaunchArgument('kt_trim', default_value='false'),
         DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
         DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
-        # tracker throttle ceiling; 0.6 unless typed (supervisor allows up to 1.0, 2026-09-30)
+        # tracker throttle ceiling; 0.8 unless typed (supervisor allows up to 1.0, 2026-09-30)
         DeclareLaunchArgument('throttle_max', default_value='0.8'),
         # affine thrust map, identified 30 Sep 2026 (RIG-0930-ladder4): throttle = offset
         # + 0.507*mass - 0.022*(V - 23.5). thrust_ratio is then the gain ABOVE the offset,
@@ -253,6 +253,7 @@ def launch_setup(context, *args, **kwargs):
 
 # Rig defaults = the 30 Sep 2026 lab values (Wesley's word): four drones on the even ring,
 # measured drone 0.55 kg, rod 0.55 m (pivot 4 cm below the drone centre: pivot_offset_z),
-# magnets at r 0.225 m, kT 21.7, cap 0.8, pretension, widened rod trust band and height integral.
+# magnets at r 0.225 m, affine thrust (kT 35.2 above the 0.185 offset, kt_trim off), cap 0.8,
+# pretension, widened rod trust band and height integral.
 def generate_launch_description():
     return LaunchDescription(_args() + [OpaqueFunction(function=launch_setup)])

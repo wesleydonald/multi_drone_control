@@ -15,8 +15,8 @@ The sum does not depend on how the rod and magnet weight is split between drone 
 drones' total thrust must carry 4 * 0.55 + 0.86 kg. A median below 1.0 while airborne therefore means the ladder law
 under-reads the thrust in tethered flight (or a mass is wrong), not that the ring is under-carried.
 
-The reading is not constant: the flights held below 0.45 m read 0.78-0.87, f11 (median ring z 0.52) reads 0.99, and
-inside every flight the fraction rises with ring height (by-height table). The D2 holds at 0.3 and 0.7 m separate
+The reading is not constant: it rises with height across flights (f11 0.99 at 0.52 m vs 0.78-0.87 below 0.45 m);
+within flights the bands are not monotonic (f6 0.845/0.606/1.085/0.813/0.819; f7 0.723/0.879/0.807; by-height table). The D2 holds at 0.3 and 0.7 m separate
 a height effect from a fixed law error.
 
 Launch 155815 in `lift_f11_logs` is an earlier lift in the same folder that has no registry row of its own;
