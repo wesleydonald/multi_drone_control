@@ -646,7 +646,7 @@ bridges (6e1606c, used by every M1 config); mocap stamp differencing tried and r
   parameter and launch arg; 'auto' gain 83.1; SIL plant 0.64 / 83.1. The rig must pass the
   weighed airframe-with-pack mass; the kT 24 measurement is per-airframe and unaffected.
 - **6S constants everywhere** (preflight 22.8 V bar, launches 25.2/21.0, warning 22.5,
-  panel bands 23.4/21.6/19.8).
+  panel bands 23.4/21.6/19.8; since 2026-09-29 the panel uses 24.0/22.8/21.0).
 - **Launch defaults changed 2026-09-24 22:30 (Wesley's word):** kt_trim on, z_ki 0.4,
   creep floor start (start_taut false, handover 45°, settle 1.0 s, creep_vel 0.2) on the
   six floor-start launches; existing configs pinned to their old semantics. Rig command
@@ -715,7 +715,9 @@ rods before takeoff. Since 2026-09-16 `real_dissipative_launch.py` takes `contro
 MPC tracker, network only on a detach), so the Part A configuration can be flown on the rig. Tether magnets: each drone's
 `elrs_interface` latches a magnet value into aux channel `magnet_channel` (6 = AUX4 on every launch; `/drone_<i>/magnet` String
 ON|OFF; `rio magnet_initial:=ON` holds them from boot), and the RViz panel shows one
-MAGNET toggle per drone on the real launch. The tethered airframes' magnet mode is on `channel_6` (Betaflight AUX4), found with
+MAGNET toggle per drone on both launches (sim, since 2026-09-29: `sim_magnet` releases the tether's
+DetachableJoint on OFF; ON cannot re-weld, restart Gazebo; the sim RViz config is byte-identical
+to the rig's, pinned by `test_sim_rviz_config_equals_the_rig`). The tethered airframes' magnet mode is on `channel_6` (Betaflight AUX4), found with
 `tools/aux_sweep.py` on 2026-09-16 (confirmed on drone 0 only: check the others at R0b), and is the launch default since
 2026-09-16; one magnet path per drone through the radio latch since 6b8e01c.
 

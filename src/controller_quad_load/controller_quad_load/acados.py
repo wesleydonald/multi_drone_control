@@ -248,7 +248,15 @@ def _quat_mul_np(q1, q2):
                      w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2])
 
 
-def _tilt_quat_from_accel(aT: np.ndarray, thrust_ratio: float, heading: float = 0.0):
+def set_throttle_max(ocp_solver, N_horizon: int, throttle_max: float):
+    """Move the throttle state's upper bound (built at 0.6) at run time, stages 1..N-1."""
+    ub = np.array([throttle_max, 1.0, 1.0, 1.0])
+    for k in range(1, N_horizon):
+        ocp_solver.constraints_set(k, 'ubx', ub)
+
+
+def _tilt_quat_from_accel(aT: np.ndarray, thrust_ratio: float, heading: float = 0.0,
+                          throttle_max: float = 0.6):
     """Map a required specific-thrust-acceleration vector (world frame) to a
     (throttle, quaternion) feedforward for the tracker.
 
@@ -269,7 +277,7 @@ def _tilt_quat_from_accel(aT: np.ndarray, thrust_ratio: float, heading: float = 
     q_head = np.array([np.cos(0.5 * heading), 0.0, 0.0, np.sin(0.5 * heading)])
     if nrm < 1e-3:                       # slack cable / freefall: hover, level
         return 9.81 / thrust_ratio, q_head
-    throttle = float(np.clip(nrm / thrust_ratio, 0.05, 0.6))
+    throttle = float(np.clip(nrm / thrust_ratio, 0.05, throttle_max))
     ax, ay, az = aT / nrm
     q = _normalize(np.array([1.0 + az, -ay, ax, 0.0]))
     return throttle, _normalize(_quat_mul_np(q, q_head))
@@ -278,7 +286,7 @@ def _tilt_quat_from_accel(aT: np.ndarray, thrust_ratio: float, heading: float = 
 def set_planner_reference(ocp_solver, ref_pos: np.ndarray, ref_vel: np.ndarray,
                           ref_acc: np.ndarray, N_horizon: int, est_params=None,
                           ref_cable: np.ndarray = None, heading: float = 0.0,
-                          terminal_vel_ref: bool = False):
+                          terminal_vel_ref: bool = False, throttle_max: float = 0.6):
     """Set the MPC reference from an external planner trajectory.
 
     ref_pos / ref_vel / ref_acc are (N_horizon+1, 3) world-frame nodes (the load
@@ -320,7 +328,7 @@ def set_planner_reference(ocp_solver, ref_pos: np.ndarray, ref_vel: np.ndarray,
     throttles, qrefs = [], []
     for j in range(N_horizon + 1):
         thr, q = _tilt_quat_from_accel(np.asarray(ref_acc[j], dtype=float),
-                                       thrust_ratio, heading)
+                                       thrust_ratio, heading, throttle_max)
         throttles.append(thr)
         qrefs.append(q)
     qrefs = _make_quat_sequence_continuous(qrefs)

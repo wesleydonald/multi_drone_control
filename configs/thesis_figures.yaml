@@ -41,10 +41,17 @@ figures:
   - id: F_attach_demo_storyboard
     kind: storyboard
     runs: [R0209]
+    # thesis caption: no run id (Wesley 2026-09-29); every number printed by the script
     caption: >
-      Attach during a circle, in Gazebo (R0209, 0.4 kg disc; R0208/R0209 at 0.6 kg ring
-      are the same sequence). Three drones at 3/12/9 o'clock fly the circle 35 deg tilted
-      (the CoG sits on the 3-9 chord); ATTACH freezes the load target; the newcomer welds
-      the stationary payload at the 6 o'clock rim; the reconfiguration levels the load to
-      under 10 deg within ~8 s; the trajectory resumes and the four-drone fleet completes
-      the circle. Bands: hold for the approach, hold for the reconfiguration.
+      Attach during a circle in Gazebo (0.6 kg ring of radius 0.25 m on 0.5 m rods).
+      (a) The fleet at the four numbered instants, rebuilt from the logged poses in one
+      orthographic view: carriers grey, newcomer red; thick: near half of the ring;
+      dotted: the ring if it were level; bar: 0.25 m. (b) Plan view of the ring centre
+      (gold; circle: start, square: end), the payload target (dashed; x: held from
+      ATTACH) and the newcomer's approach (red), with the ring and its rim anchors at the
+      weld. (c) Ring tilt; grey band: target held; dashed: 10 deg. Three drones at 3, 12
+      and 9 o'clock start the circle with the ring tilted by 34-37 deg. ATTACH holds the
+      target and the newcomer welds to the empty 6 o'clock rim. During the 8 s hand-out
+      the tilt first rises to 43 deg; from 9.3 s after the weld it stays under 10 deg
+      (mean 4.4 deg, peak 9.96 deg), and the four drones fly the rest of the circle,
+      0.20 m RMS from the target against 0.02 m with three.

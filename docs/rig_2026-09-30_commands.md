@@ -133,3 +133,32 @@ python3 tools/plot_run.py results/rig/2026-09-30/<flight>_run
 python3 tools/kick_events.py $MDC_RUN_DIR
 ```
 Between flights: Ctrl-C T2 (and T4), `tools/clean_slate.sh --rig`, relaunch. After a drop or crash: see SAFETY AND RECOVERY in tests.txt.
+
+## 7. Afternoon 30 Sep: lift with pretension (after the 12:49 failure)
+
+`wed.env`: `KT=21.7` for packs at about 23 V (a 25.0 typed on those packs stalls the creep: hold f1). Use `KT=25.0` only on fresh packs at 24 V or more. `ROD=0.47` (0.50 and 0.53 stalled the creep). `kt_trim` stays off: in f3/f4 it never changed the gain; the wobble was the gain mismatch.
+
+The planner now pretensions: every rod's pull ramps 0 -> share together over `pretension_s` (3 s), drones held, full for 0.5 s, then the height ramp. If the creep times out short of 37 deg it refuses to pull or lift ("creep timed out: LAND" in RViz): press LAND. The panel's AT CAP now uses each drone's own cap (0.8 here).
+
+```bash
+cd ~/multi_drone_control
+source ~/ros2_humble/install/setup.bash && source install/setup.bash
+source results/rig/2026-09-30/wed.env
+tools/clean_slate.sh --rig
+export MDC_RUN_DIR=$PWD/results/rig/2026-09-30/lift_f6_logs
+echo "KT=$KT ROD=$ROD"
+ros2 launch controller_quad_load real_control_launch.py num_drones:=4 load_mass:=$RING drone_mass:=$DM4 cable_len:=$ROD attach_radius:=0.25 attach_z:=0.0 attach_azimuths_deg:=0,90,180,270 thrust_ratio:=$KT kt_trim:=false z_ki:=0.4 start_taut:=false handover_elev_deg:=45.0 handover_settle_s:=1.0 creep_vel:=0.2 target_z:=0.35 lift_ramp_vel:=0.1 pretension_s:=3.0 load_traj:=hover throttle_max:=0.8 2>&1 | tee results/rig/2026-09-30/lift_f6.log
+```
+
+Log order to expect, in Terminal 2:
+1. `elevation ... reached`
+2. `starting pretension`
+3. `pretension done (ring z ..., lifted ...)`
+4. `starting lift ramp`
+
+During the 3 s pretension, all four "thr" rise together and the ring floats up level.
+
+- **LAND if:** one side lifts first, a magnet peels, or the creep times out.
+- **DISARM** if a drone tips.
+
+**If it holds level at 0.35 m for 15 s:** repeat once, then the same line with `target_z:=0.6`.

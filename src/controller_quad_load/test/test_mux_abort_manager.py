@@ -26,7 +26,7 @@ class _Log:
         self.lines = []
 
     def info(self, s): self.lines.append(s)
-    warn = error = debug = info
+    warn = warning = error = debug = info
 
 
 class _Fut:

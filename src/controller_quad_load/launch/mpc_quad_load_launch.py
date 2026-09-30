@@ -120,6 +120,8 @@ def _args():
         # takeoff); 0 = off.
         DeclareLaunchArgument('handover_settle_s', default_value='1.0'),
         DeclareLaunchArgument('creep_vel', default_value='0.2'),   # m/s creep sweep rate before the handover
+        # floor start: every rod's pull ramps in together over this long before the lift (0 = off)
+        DeclareLaunchArgument('pretension_s', default_value='3.0'),
         # payload mass in the world SDF.
         DeclareLaunchArgument('load_mass', default_value='0.86'),
         DeclareLaunchArgument('drone_mass', default_value='0.64'),   # x3 model over all links
@@ -326,6 +328,7 @@ def launch_setup(context, *args, **kwargs):
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
                      'creep_vel': f('creep_vel'),
+                     'pretension_s': f('pretension_s'),
                      'auto_slot_assign': b('auto_slot_assign'),
                      'measure_rod_len': b('measure_rod_len'),
                      'load_traj': LaunchConfiguration('load_traj'),

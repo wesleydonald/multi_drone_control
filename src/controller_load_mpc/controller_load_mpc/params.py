@@ -82,6 +82,16 @@ class PlannerConfig:
         self.handover_settle_s = float(p('handover_settle_s', 0.0).value)
         # creep sweep / rise rate before the handover (m/s); 0.10 since the creep was written
         self.creep_vel = float(p('creep_vel', 0.10).value)
+        # Floor start: after the settle, ramp every rod's pull 0 -> 1 together over this
+        # many seconds with the drones held, THEN start the height ramp (rig 2026-09-30:
+        # the pull arriving as a step launched the ring and pulled magnets off).
+        # 0 = the old 1 s ease during the ramp. Air starts (start_taut) never pretension.
+        self.pretension_s = float(p('pretension_s', 3.0).value)
+        # measure_rod_len trust band: rods within +-tol of the typed cable_len and within
+        # spread of each other. The rig's drone-centre-to-plate reads 0.53-0.57 at every
+        # hand-over against the creep's typed 0.47 (2026-09-30), so the rig widens both.
+        self.rod_tol_frac = float(p('rod_tol_frac', 0.15).value)
+        self.rod_spread_m = float(p('rod_spread_m', 0.03).value)
         # Cables already taut at spawn (elevated world): skip the creep phase.
         self.start_taut = bool(p('start_taut', False).value)
         # Load target rises from the handover height at lift_ramp_vel to
@@ -92,6 +102,9 @@ class PlannerConfig:
         # 0 = off; 0.2 = tau 5 s. z_i_max bounds it (0.15 m > the 13 cm a 10 % gain error costs).
         self.z_ki = float(p('z_ki', 0.0).value)
         self.z_i_max = float(p('z_i_max', 0.15).value)
+        # the integral only runs while the miss is under this (a bigger miss was taken to be a
+        # transient); the rig's capped pull left 0.3-0.4 m misses it never touched (2026-09-30)
+        self.z_i_gate = float(p('z_i_gate', 0.25).value)
         self.z_taut_gate = float(p('z_taut_gate', 0.99).value)   # ~0.9 on the rig with a typed rod length
         # Auto slot assignment. OFF: OCP slot i is physical drone i, so the drones
         # must spawn in the nominal ring order (drone 0 at +x, CCW). ON: at the first

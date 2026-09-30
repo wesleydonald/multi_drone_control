@@ -403,7 +403,14 @@ class CentralController(Node):
 def _announce(node, level, text):
     """Log text at level and repeat it on the latched /fleet/manager_status, which the RViz
     panel shows: the operator sees refusals and state changes without reading T2."""
-    getattr(node.get_logger(), level)(text)
+    # rclpy fixes the severity per calling line, so each level needs its own call
+    log = node.get_logger()
+    if level == 'error':
+        log.error(text)
+    elif level == 'warn':
+        log.warning(text)
+    else:
+        log.info(text)
     pub = getattr(node, 'status_pub', None)
     if pub is not None:
         pub.publish(String(data=text))

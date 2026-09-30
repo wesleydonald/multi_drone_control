@@ -12,8 +12,10 @@ namespace
 // DISARM is the rig kill switch: send it several times, a single message can be lost.
 constexpr int DISARM_REPEATS = 5;
 constexpr int DISARM_PERIOD_MS = 100;
-// The tracker caps throttle at 0.6: a drone pinned there cannot hold its share of the load.
-constexpr float THR_CAP_ALARM = 0.59f;
+// A drone pinned at its tracker's throttle cap cannot hold its share of the load. The cap
+// comes from each tracker (/drone_i/throttle_max, latched); 0.6 until one is heard.
+constexpr float THR_CAP_DEFAULT = 0.6f;
+constexpr float THR_CAP_MARGIN = 0.01f;
 constexpr double THR_CAP_HOLD_S = 2.0;
 
 double wallNow()
@@ -65,7 +67,7 @@ ArmPanel::ArmPanel(QWidget* parent)
   layout->addLayout(drone_rows_layout_);
 
   // Per-drone tether magnet toggles, stacked. Populated by rebuild(); hidden unless
-  // the launch sets ShowMagnets (hardware only -- the sim has no magnet radio).
+  // the launch sets ShowMagnets (both launches; rig: elrs_interface, sim: sim_magnet).
   magnet_rows_layout_ = new QVBoxLayout;
   magnet_rows_layout_->setContentsMargins(0, 0, 0, 0);
   layout->addLayout(magnet_rows_layout_);
@@ -199,6 +201,7 @@ void ArmPanel::rebuild()
   drone_thr_.assign(num_drones_, 0.0f);
   drone_thr_seen_.assign(num_drones_, false);
   drone_cap_since_.assign(num_drones_, -1.0);
+  drone_cap_.assign(num_drones_, THR_CAP_DEFAULT);
   drone_seen_.assign(num_drones_, false);
   drone_volt_seen_.assign(num_drones_, false);
 
@@ -228,6 +231,7 @@ void ArmPanel::rebuild()
   arming_state_subs_.clear();
   telemetry_subs_.clear();
   elrs_subs_.clear();
+  cap_subs_.clear();
   magnet_pubs_.clear();
   if (!node_) {
     return;   // onInitialize() will call us again once node_ exists
@@ -251,6 +255,13 @@ void ArmPanel::rebuild()
       ns + "/ELRSCommand", rclcpp::QoS(1).best_effort(),
       [this, i](const interfaces::msg::ELRSCommand::SharedPtr msg) {
         this->elrsCallback(msg, i);
+      }));
+    cap_subs_.push_back(node_->create_subscription<std_msgs::msg::Float64>(
+      ns + "/throttle_max", rclcpp::QoS(1).reliable().transient_local(),
+      [this, i](const std_msgs::msg::Float64::SharedPtr msg) {
+        if (i < static_cast<int>(drone_cap_.size())) {
+          drone_cap_[i] = static_cast<float>(msg->data);
+        }
       }));
   }
 }
@@ -619,7 +630,7 @@ void ArmPanel::elrsCallback(const interfaces::msg::ELRSCommand::SharedPtr msg, i
   const float thr = msg->armed ? 0.5f * (msg->channel_2 + 1.0f) : 0.0f;
   drone_thr_[i] = thr;
   drone_thr_seen_[i] = true;
-  if (thr >= THR_CAP_ALARM) {
+  if (thr >= drone_cap_[i] - THR_CAP_MARGIN) {
     if (drone_cap_since_[i] < 0.0) {
       drone_cap_since_[i] = wallNow();
     }

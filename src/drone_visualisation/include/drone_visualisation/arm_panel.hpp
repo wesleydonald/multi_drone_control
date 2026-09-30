@@ -14,6 +14,7 @@
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/int32.hpp>
+#include <std_msgs/msg/float64.hpp>
 #include <interfaces/msg/telemetry.hpp>
 #include <interfaces/msg/elrs_command.hpp>
 #include <chrono>
@@ -77,6 +78,7 @@ private:
   std::vector<rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr> arming_state_subs_;
   std::vector<rclcpp::Subscription<interfaces::msg::Telemetry>::SharedPtr> telemetry_subs_;
   std::vector<rclcpp::Subscription<interfaces::msg::ELRSCommand>::SharedPtr> elrs_subs_;
+  std::vector<rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr> cap_subs_;
   // The fleet manager's decisions and the planner's phase, both latched (the panel may
   // start after them).
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr manager_status_sub_;
@@ -122,6 +124,7 @@ private:
   std::vector<bool> drone_thr_seen_;
   // wall time since which the drone has sat at the throttle cap (-1 = not at the cap)
   std::vector<double> drone_cap_since_;
+  std::vector<float> drone_cap_;          // each tracker's throttle cap (latched topic)
   // Tracked separately: telemetry comes from elrs_interface (terminal 1) while
   // arming feedback comes from the controllers (terminal 2), so battery must be
   // able to display before any arming feedback exists.

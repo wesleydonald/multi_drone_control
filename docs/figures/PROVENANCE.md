@@ -5,7 +5,10 @@ ARCHIVED = the data lives in `results_archive/` and is pushed off this machine; 
 
 ## F_attach_demo_storyboard
 
-Attach during a circle, in Gazebo (R0209, 0.4 kg disc; R0208/R0209 at 0.6 kg ring are the same sequence). Three drones at 3/12/9 o'clock fly the circle 35 deg tilted (the CoG sits on the 3-9 chord); ATTACH freezes the load target; the newcomer welds the stationary payload at the 6 o'clock rim; the reconfiguration levels the load to under 10 deg within ~8 s; the trajectory resumes and the four-drone fleet completes the circle. Bands: hold for the approach, hold for the reconfiguration.
+Attach during a circle, in Gazebo (R0209, 0.6 kg ring, 2026-09-10 code). Rebuilt 2026-09-29 as a thesis figure with the
+thesis-figure skill (`tools/attach_storyboard.py`, print size 6.27 in, Computer Modern): four 3D snapshots, plan view,
+ring tilt with the 10 deg reference and the WELD + 9.3 s bracket. Caption in `configs/thesis_figures.yaml` (no run id).
+The blind test behind the style: `F_attach_demo_storyboard/skill_test_2026-09-29/`.
 
 | run | git SHA | dirty files | data |
 |---|---|---|---|

@@ -67,3 +67,8 @@ DECIDED 2026-09-29 (Wesley)  A tracker that disarms between ARM and TAKEOFF grou
 DECIDED 2026-09-29 (Wesley)  Carrier kicks: fixed from the R0b rest bag (P9 rate estimate, rig first, then the same fix in sim); until then the M2 claim is worded "met when no kick lands in the lift" (T0035; GOALS Q10).
 DECIDED 2026-09-29 (Wesley)  Drone 3 gets the same single command path as the carriers: its tracker no longer takes /fleet/command (the manager arms it and sends TAKEOFF), the manager manages n + 1 only with the approach chain, and the superseded real_attach_launch.py refuses to start (its newcomer took TAKEOFF from the broadcast). SIL R0753: drone 3 armed via service, TAKEOFF from the manager, weld and fold-in as R0578.
 
+2026-09-30  Sim plant matches the rig: affine thrust + voltage sag, drone 0.55 kg, rod 0.55 m pivoting 4 cm below the drone centre, magnets at r 0.225; key baselines re-flown once (Wesley, after the rig day; docs/rig_2026-09-30_review.md).
+2026-09-30  No pull freeze at breakaway: the tethered model is to be corrected so breakaway is near 100 % of the planned pull (Wesley).
+2026-09-30  Rig height integral = small safety net (z_ki 0.4, bound 0.15 m, gate 0.25 m); the model is judged with it off (Wesley; supervisor: the integral must not stand in for the model).
+2026-09-30  Rig thrust map: throttle = offset + 0.507*mass - 0.022*(V - 23.5), offsets 0.181/0.185/0.187/0.187 (RIG-0930-ladder4); thrust_ratio 35.2 above the offset, kt_trim off on the rig.
+2026-09-30  Rod joints: both ends close to free ball joints (pivot 4 cm under the drone centre, magnet on the plate); hardware unchanged for the next visit (Wesley).

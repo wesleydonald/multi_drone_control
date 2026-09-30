@@ -36,7 +36,8 @@ from scipy.spatial.transform import Rotation as R
 import time
 from . import acados as _acados_mod
 from .acados import (generate_ocp_controller, set_initial_guess,
-                     warm_start_from_previous_solution, set_planner_reference)
+                     warm_start_from_previous_solution, set_planner_reference,
+                     set_throttle_max)
 from .velocity_loop import VelocityLoop
 from .kt_trim import KtTrim
 from .x0_rate import X0_RATE_SOURCES, x0_body_rate
@@ -71,7 +72,7 @@ from utility_objects.data_logger import DataLogger, node_params, write_params
 from utility_objects.safety import EnvelopeChecker, EnvelopeLimits
 from utility_objects.callback_manager_multi import CallbackManagerMulti
 from interfaces.msg import MotionCaptureState, ELRSCommand, Telemetry
-from std_msgs.msg import Int32, Float64, Float64MultiArray, String
+from std_msgs.msg import Bool, Int32, Float64, Float64MultiArray, String
 from sensor_msgs.msg import Imu
 
 
@@ -383,6 +384,13 @@ class Controller(Node):
             self.create_subscription(
                 Float64MultiArray, '/payload/desired_position',
                 self._payload_ref_cb, 5)
+        # the planner's "I am pulling" flag, latched: every drone opens its cable
+        # feedforward on the same planner ramp
+        self._planner_ff_active = False
+        self.create_subscription(
+            Bool, '/fleet/cable_ff_active', self._ff_active_cb,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                       reliability=ReliabilityPolicy.RELIABLE))
 
         # ── Experiment T1: terminal velocity reference (finding F10) ──────
         # `set_planner_reference` has never set yref_N[3:6], so the terminal cost
@@ -497,6 +505,27 @@ class Controller(Node):
             self.get_logger().info("[acados] compiling quad_load_dynamics solver (sources changed)...")
         self.ocp = generate_ocp_controller(generate=not fresh, build=not fresh)
         fcntl.flock(_lock_file, fcntl.LOCK_UN)
+        # throttle ceiling (fraction of full): 0.6 historical; Wesley 2026-09-30, the
+        # supervisor allows up to 1.0 on the rig for the loaded carry
+        self.throttle_max = float(self.declare_parameter('throttle_max', 0.6).value)
+        if not 0.3 <= self.throttle_max <= 1.0:
+            raise ValueError(f'throttle_max {self.throttle_max} outside [0.3, 1.0]')
+        # Affine thrust map (rig identification 2026-09-30, RIG-0930-ladder4):
+        #   throttle = offset + 0.507 * mass - 0.022 * (V - 23.5)
+        # i.e. no lift below the offset, linear above it, and a weaker pack needs more.
+        # The model and thrust_ratio work in "throttle above the offset"; the offset is
+        # added at the output. 0 = the old proportional map (sim default).
+        self.thrust_offset = float(self.declare_parameter('thrust_offset', 0.0).value)
+        self.thrust_offset_v_slope = float(self.declare_parameter('thrust_offset_v_slope', 0.0).value)
+        self.thrust_v_ref = float(self.declare_parameter('thrust_v_ref', 23.5).value)
+        # the model's own ceiling leaves room for the offset under the real cap
+        self._model_thr_max = max(0.1, self.throttle_max - self.thrust_offset)
+        set_throttle_max(self.ocp, self.N, self._model_thr_max)
+        self._cap_pub = self.create_publisher(
+            Float64, f'/drone_{self.drone_id}/throttle_max',
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                       reliability=ReliabilityPolicy.RELIABLE))
+        self._cap_pub.publish(Float64(data=self.throttle_max))   # the panel's AT CAP threshold
         # Betaflight rate curve of the flight controllers (Wesley 2026-09-25: Tejen's profile,
         # centre 100 / max 100 deg/s, i.e. linear 100 deg/s at full stick; was 70/670/0.5)
         self.rates = (float(self.declare_parameter('rates_centre_deg', 100.0).value),
@@ -553,7 +582,10 @@ class Controller(Node):
         self.timer = self.create_timer(DT, self.control_loop)
         self.get_logger().info(
             f"[Drone {self.drone_id}] Controller ready: kT {self.thrust_ratio:.1f} "
-            f"({'trim on' if self._kt_trim_apply else 'fixed'}), mode {self.control_mode}.")
+            f"({'trim on' if self._kt_trim_apply else 'fixed'}), mode {self.control_mode}, "
+            f"throttle cap {self.throttle_max:.2f}"
+            + (f", thrust offset {self.thrust_offset:.3f} + {self.thrust_offset_v_slope:.3f}/V below "
+               f"{self.thrust_v_ref:.1f} V." if self.thrust_offset > 0.0 else "."))
 
     # ─────────────────────────────────────────────────────────────────────
     # Fleet step callback
@@ -763,6 +795,15 @@ class Controller(Node):
             f"{'VELOCITY LOOP' if want else 'MPC'} (/fleet/control_phase="
             f"{msg.data!r})")
 
+    def _output_throttle(self, thr, spool_frac=1.0):
+        """Model throttle (above the offset) -> the throttle the flight controller gets."""
+        if self.thrust_offset <= 0.0:
+            return thr
+        v = self.battery_voltage
+        dv = (self.thrust_v_ref - float(v)) if (v is not None and 18.0 < float(v) < 27.0) else 0.0
+        off = max(0.0, self.thrust_offset + self.thrust_offset_v_slope * dv)
+        return float(min(self.throttle_max, thr + off * spool_frac))
+
     def _publish_channels(self, u, u_rate):
         """Send [roll, pitch, throttle, yaw] to the FC, or armed-idle before TAKEOFF.
 
@@ -772,6 +813,7 @@ class Controller(Node):
         if self.takeoff_requested:
             self._waiting_said = False
             thr = float(u[2])
+            spool_frac = 1.0
             # takeoff spool-up: for the first takeoff_spool_s, scale the throttle up
             # from 0 to the commanded value so thrust rises smoothly and the drones
             # ease off the platforms. Raised-cosine (not linear): the applied throttle
@@ -789,6 +831,7 @@ class Controller(Node):
                     # the load taut from cycle 0, see TAKEOFF_SPOOL_FLOOR.
                     frac = TAKEOFF_SPOOL_FLOOR + (1.0 - TAKEOFF_SPOOL_FLOOR) * ease
                     thr *= frac
+                    spool_frac = frac
                     self._takeoff_step += 1
             yaw = float(u[3])
             if self._yaw_hold:
@@ -805,7 +848,7 @@ class Controller(Node):
                 armed=True,
                 channel_0=round(float(u[0]), 3),
                 channel_1=round(float(u[1]), 3),
-                channel_2=round((thr * 2) - 1, 3),
+                channel_2=round((self._output_throttle(thr, spool_frac) * 2) - 1, 3),
                 channel_3=round(yaw, 3))
             self._applied_u = np.array(
                 [float(u[0]), float(u[1]), float(thr), yaw])
@@ -878,6 +921,16 @@ class Controller(Node):
         self._aborted = True
         self.cb.disarm(ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0,
                                    channel_2=-1.0, channel_3=0.0))
+
+    def _load_grounded(self):
+        """True while the ring rests AND the planner is not pulling on it. The planner
+        eases the pull in on a floor start (pretension); blocking it until the ring left
+        the floor deadlocked the rig's first lift, and opening late stepped the full pull
+        on and launched the ring (2026-09-30)."""
+        return self.payload_resting and not self._planner_ff_active
+
+    def _ff_active_cb(self, msg):
+        self._planner_ff_active = bool(msg.data)
 
     def _payload_ref_cb(self, msg: Float64MultiArray):
         if len(msg.data) >= 3:
@@ -1015,7 +1068,7 @@ class Controller(Node):
         # deadlocked at the typed value). The floor case on the rig is the payload_resting
         # gate; a partly supported drone on the SIL stand only slows the lift (R0433).
         steady = (self.armed and self._kt_spool_done() and tethered and not self._kt_landing
-                  and 0.15 <= u <= 0.6 and abs(t.a_meas_z) < 1.5 and abs(vz) < 0.08)
+                  and 0.15 <= u <= self.throttle_max and abs(t.a_meas_z) < 1.5 and abs(vz) < 0.08)
         t.update(self._cable_static_z if tethered else 0.0, steady, contact_possible=load_at_rest)
         if t.frozen and not self._kt_frozen_said:
             self._kt_frozen_said = True
@@ -1205,7 +1258,7 @@ class Controller(Node):
             # so zero the cable term. a_cable=0 in the same model IS the
             # resting (free-flight) dynamics, so no separate solver is needed;
             # it switches back on by itself once the load lifts off.
-            if self.payload_resting and ref_cable is not None:
+            if self._load_grounded() and ref_cable is not None:
                 #self.get_logger().info("PAYLOAD RESTING")
                 ref_cable = np.zeros_like(ref_cable)
             #else:
@@ -1219,7 +1272,7 @@ class Controller(Node):
                 self.ocp, self.planner_ref_pos, self.planner_ref_vel,
                 ref_acc, self.N, self.est_params,
                 ref_cable=ref_cable, heading=self._heading_datum,
-                terminal_vel_ref=self.terminal_vel_ref)
+                terminal_vel_ref=self.terminal_vel_ref, throttle_max=self._model_thr_max)
             # desired reference position now (node 0) for the log / plot
             self._current_ref_pos = np.asarray(self.planner_ref_pos[0], float)
 

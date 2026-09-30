@@ -37,6 +37,10 @@ def _args():
         DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
         # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
         DeclareLaunchArgument('kt_trim', default_value='true'),
+        # affine thrust map (RIG-0930-ladder4); 0 = the old proportional map
+        DeclareLaunchArgument('thrust_offset', default_value='0.0'),
+        DeclareLaunchArgument('thrust_offset_v_slope', default_value='0.0'),
+        DeclareLaunchArgument('thrust_v_ref', default_value='23.5'),
         DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
         DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
         DeclareLaunchArgument('takeoff_thrust_ratio', default_value='0.0'),
@@ -77,6 +81,9 @@ def launch_setup(context, *args, **kwargs):
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': f('thrust_ratio'),
                          'kt_trim': ParameterValue(LaunchConfiguration('kt_trim'), value_type=bool),
+                         'thrust_offset': f('thrust_offset'),
+                         'thrust_offset_v_slope': f('thrust_offset_v_slope'),
+                         'thrust_v_ref': f('thrust_v_ref'),
                          'kt_trim_max': ParameterValue(LaunchConfiguration('kt_trim_max'), value_type=float),
                          'kt_trim_tau': ParameterValue(LaunchConfiguration('kt_trim_tau'), value_type=float),
                          'takeoff_thrust_ratio': f('takeoff_thrust_ratio'),

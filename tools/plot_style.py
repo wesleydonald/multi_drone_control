@@ -163,3 +163,75 @@ def note(ax, text):
     ax.set_xticks([])
     ax.set_yticks([])
     ax.grid(False)
+
+
+# ── print preset for the thesis (the dashboard style above is for reading runs) ──────
+# thesis/main.tex: article 12 pt, A4, 1 in margins -> \textwidth 452.97 pt; body font
+# Computer Modern. Figures are built at the size they print, so 9 pt here is 9 pt on paper.
+TEXTWIDTH_IN = 452.97 / 72.27
+HALF_GAP_IN = 0.2
+
+
+def size(width='full', aspect=0.62, height=None):
+    """(w, h) in inches: width 'full', 'half' or a fraction of \\textwidth."""
+    w = {'full': TEXTWIDTH_IN, 'half': (TEXTWIDTH_IN - HALF_GAP_IN) / 2}.get(width)
+    if w is None:
+        w = float(width) * TEXTWIDTH_IN
+    return (w, height if height is not None else w * aspect)
+
+
+def thesis():
+    """rcParams for a figure that goes into the thesis. Text is typeset by LaTeX in
+    Computer Modern so it matches the body; sizes are print sizes."""
+    plt.rcParams.update(plt.rcParamsDefault)
+    plt.rcParams.update({
+        'text.usetex': True,
+        'text.latex.preamble': r'\usepackage{amsmath}\usepackage{siunitx}',
+        'font.family': 'serif',
+        'font.size': 9,
+        'axes.labelsize': 9,
+        'axes.titlesize': 9,
+        'xtick.labelsize': 8,
+        'ytick.labelsize': 8,
+        'legend.fontsize': 8,
+        'legend.frameon': False,
+        'legend.handlelength': 1.8,
+        'axes.linewidth': 0.6,
+        'axes.spines.top': False,
+        'axes.spines.right': False,
+        'axes.grid': False,
+        'axes.labelpad': 3,
+        'xtick.direction': 'out',
+        'ytick.direction': 'out',
+        'xtick.major.width': 0.6,
+        'ytick.major.width': 0.6,
+        'xtick.major.size': 3,
+        'ytick.major.size': 3,
+        'xtick.major.pad': 2,
+        'ytick.major.pad': 2,
+        'lines.linewidth': 1.0,
+        'lines.markersize': 3,
+        'patch.linewidth': 0.6,
+        'figure.constrained_layout.use': True,
+        'figure.constrained_layout.h_pad': 0.02,
+        'figure.constrained_layout.w_pad': 0.02,
+        'savefig.bbox': None,
+        'savefig.dpi': 300,
+        'pdf.fonttype': 42,
+    })
+
+
+def panel_label(ax, letter, dx_pt=0, dy_pt=4):
+    """'(a)' just above the top-left corner of the axes, the same place on every panel."""
+    ax.annotate(f'({letter})', xy=(0, 1), xycoords='axes fraction', xytext=(dx_pt, dy_pt),
+                textcoords='offset points', ha='left', va='bottom', fontsize=9)
+
+
+def save_print(fig, stem):
+    """PDF (for LaTeX) and a 300 dpi PNG (for looking) at exactly the figure's size."""
+    os.makedirs(os.path.dirname(os.path.abspath(stem)), exist_ok=True)
+    paths = [stem + '.pdf', stem + '.png']
+    for p in paths:
+        fig.savefig(p)
+    plt.close(fig)
+    return paths

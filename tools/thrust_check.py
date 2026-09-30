@@ -13,7 +13,8 @@ thrust map is linear: predicted u_loaded = u_free (m + dm) / m against the measu
 needs to carry the 0.86 kg ring on 45 deg rods for the three layouts, against the tracker's 0.6 cap.
 
 Folders are MDC_RUN_DIR folders (logs/controller_quad_load/planner_droneN_*/log.csv) or the tracker log dirs themselves.
-Steady hover = the plateau of the reference height, drone within 8 cm of it, after 3 s there."""
+Steady hover = the plateau of the reference height after 3 s there, drone above 0.3 m and within
+5 cm of its own median height (it may sit below the reference when the typed kT is high)."""
 import argparse
 import glob
 import math
@@ -55,7 +56,14 @@ def hover_throttle(path):
     if len(plateau) < 50:
         return math.nan, 0, math.nan
     t0 = plateau.sim_time.iloc[0] + 3.0
-    steady = plateau[(plateau.sim_time > t0) & ((plateau.pose_z - plateau.ref_z).abs() < 0.08)]
+    plateau = plateau[plateau.sim_time > t0]
+    # steady = holding a height, not tracking the reference: with a typed kT above the real
+    # one the drones hover low (2026-09-30: 15 cm), and that throttle is still the hover
+    # throttle. A drone that never left the floor is not a hover.
+    z_med = plateau.pose_z.median()
+    if z_med < 0.3:
+        return math.nan, 0, math.nan
+    steady = plateau[(plateau.pose_z - z_med).abs() < 0.05]
     if len(steady) < 25:
         return math.nan, len(steady), math.nan
     return float(steady.u2.median()), len(steady), float((steady.u2 >= CAP - 0.001).mean())

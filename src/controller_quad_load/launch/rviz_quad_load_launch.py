@@ -26,7 +26,8 @@ Shows:
   * /payload/actual_path     where the payload has actually travelled (OFF by
                              default, same show_actual flag)
   * /payload/marker          the payload box itself
-  * the ArmPanel: ARM/DISARM, TAKEOFF and LAND buttons (drone_visualisation)
+  * the ArmPanel, as on the rig: ARM/DISARM, TAKEOFF, LAND, the MAGNET toggles (sim_magnet
+    releases the tether in Gazebo) and, with detach/attach, the DETACH and ATTACH rows
 
 HOW THE AIRFRAMES TRACK: fleet_viz broadcasts TF map -> drone_i_mocap (and
 map -> payload_mocap) straight from the mocap topics. Rather than the static
@@ -159,14 +160,29 @@ def launch_setup(context, *args, **kwargs):
     os.makedirs(cfg_dir, exist_ok=True)
     cfg = os.path.join(cfg_dir, f'quad_load_{n}drone.rviz')
     with open(cfg, 'w') as fh:
+        # the rig's panel (real_io_launch.py): MAGNET toggles ON, DETACH shown with attach
         fh.write(build_config(n_viz, show_actual=show_actual,
-                              detach=detach, attach=attach))
+                              detach=(detach or attach), attach=attach,
+                              magnets=True, magnet_on=True))
 
     # RViz itself is optional; everything above it is not. This launch owns the clock
     # and pose bridges and the mocap emulators, so a headless batch (§9.1,
     # tools/run_experiment.py) still has to run it -- it just must not also start a
     # GUI that needs a display and burns CPU for nobody. rviz:=false does that.
     if rviz:
+        # MAGNET toggles: OFF releases the tether's DetachableJoint, as the rig magnet
+        # drops the plate. The remap keeps the control launch's /drone_i/detach separate.
+        mag_args, mag_remaps = [], []
+        for i in range(n):
+            mag_args += [f'/drone_{i}/detach@std_msgs/msg/Empty]gz.msgs.Empty',
+                         f'/drone_{i}/detachable_joint_state@std_msgs/msg/String[gz.msgs.StringMsg']
+            mag_remaps.append((f'/drone_{i}/detach', f'/drone_{i}/magnet_release'))
+        nodes.append(Node(
+            package='ros_gz_bridge', executable='parameter_bridge', name='sim_magnet_bridge',
+            arguments=mag_args, remappings=mag_remaps))
+        nodes.append(Node(
+            package='simulation_communication', executable='sim_magnet', name='sim_magnet',
+            parameters=[{'num_drones': n_viz, 'num_tethers': n}], output='screen'))
         nodes.append(Node(
             package='rviz2', executable='rviz2', name='rviz2',
             arguments=['-d', cfg],
@@ -186,7 +202,8 @@ def generate_launch_description():
         # clutter the view. The planned paths (MPC plan / payload desired) stay on.
         DeclareLaunchArgument('show_actual', default_value='false'),
         # Show the DETACH drone-id selector + button in the ArmPanel (for the
-        # dissipative detach controller). Off by default; detach:=true shows the row.
+        # dissipative detach controller). Off by default; detach:=true shows the row,
+        # and attach:=true shows it too, as on the rig.
         DeclareLaunchArgument('detach', default_value='false'),
         # Show the ATTACH button in the ArmPanel (arms the approach drone's magnet for the
         # attach flow). Off by default; pass attach:=true with three_attach.sdf.

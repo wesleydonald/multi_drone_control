@@ -85,11 +85,11 @@ def test_sim_and_real_thrust_settings_still_differ():
     QUADRATIC (a = 88.6*u^2), so a linear kT there is the secant gain at the hover
     operating point, derived per launch by thrust_model.py (32.9 at 0.4 kg, 34.6 at
     0.6 kg); the real airframe measures 24 at full battery health and is never
-    derived."""
+    derived. The rig default is the free-hover measurement of 30 Sep 2026 (21.7)."""
     sim = launch_args(LAUNCHES / 'mpc_quad_load_launch.py')
     real = launch_args(LAUNCHES / 'real_control_launch.py')
     assert sim['thrust_ratio'] != real['thrust_ratio']
-    assert float(real['thrust_ratio']) == 24.0
+    assert float(real['thrust_ratio']) == 35.2    # gain above the identified 0.185 offset
 
 
 def test_the_adaptive_kt_machinery_stays_gone():

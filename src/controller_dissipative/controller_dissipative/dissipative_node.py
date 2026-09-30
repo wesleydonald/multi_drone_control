@@ -1167,6 +1167,9 @@ class DissipativeController(LoadPlanner):
         taut) measured drone positions so the handover is bumpless, and capture the hover
         target the network will hold. The OCP is no longer solved after this."""
         self.phase = 'network'
+        # the network publishes its own cable term and never eases it: hand the tracker's
+        # resting-ring gate back its old job (zero the pull once the ring is down)
+        self._set_ff_active(False)
         # seed all n_net nodes bumplessly. Reserved (not-yet-welded) nodes are inert, so a
         # finite placeholder (their mocap if present, else the load position) is enough --
         # attach() overwrites it with the measured pose at the weld.

@@ -55,7 +55,7 @@ def _gate_stub(traj_kind, traj_t, in_orbit, speed=0.125, advancing=True):
         descending=False, _land_to_ground=False, traj_t=traj_t,
         traj=SimpleNamespace(kind=traj_kind, speed=speed, radius=0.5), _z_ki_in_orbit=in_orbit, n=0,
         _zbias_traj_t_prev=traj_t - 0.1 if advancing else traj_t,
-        _drone_at=lambda i: None, _cable_taut_gate=lambda i: (1.0,), _z_taut_gate=0.99)
+        _drone_at=lambda i: None, _cable_taut_gate=lambda i: (1.0,), _z_taut_gate=0.99, _z_i_gate=0.25)
     st._zbias_orbit_ok = MethodType(LoadPlanner._zbias_orbit_ok, st)
     return st
 

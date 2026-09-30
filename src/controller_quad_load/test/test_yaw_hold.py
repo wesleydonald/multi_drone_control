@@ -27,6 +27,7 @@ def _node(tilt_deg):
         _yaw_hold=cm._rests_tilted(_pose(tilt_deg)), _yaw_hold_ticks=0,
         cb=types.SimpleNamespace(cmd_publisher_=types.SimpleNamespace(publish=sent.append)))
     n.get_logger = lambda: types.SimpleNamespace(debug=lambda *a, **k: None, info=lambda *a, **k: None)
+    n._output_throttle = lambda thr, spool_frac=1.0: thr
     cls = next(c for c in vars(cm).values() if isinstance(c, type) and hasattr(c, '_publish_channels'))
     n._kt_airborne = cls._kt_airborne.__get__(n)
     n.publish = lambda u: cls._publish_channels(n, np.asarray(u, float), np.zeros(4))

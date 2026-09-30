@@ -24,6 +24,7 @@ start_taut world skips the creep and hands over immediately.
 Geometry must match the world SDF (see generate_rigid_world.py).
 """
 import os
+import re
 import time
 import numpy as np
 import rclpy
@@ -89,6 +90,13 @@ LAND_MAX_DROP = 1.50          # m safety floor below the handover height
 # planner's own lift schedule, not the measured load height, so unlike the old
 # airborne height-gate it can never deadlock (the lift clock advances regardless).
 FF_EASE_S = 1.0
+PRETENSION_HOLD_S = 0.5         # full pull held this long before the height ramp starts
+REFUSE_BELOW_DEG = 30.0         # creep timeout below this: rods too flat to carry the ring
+# pretension breakaway: the ring is off the floor once it is this far above its rest height or
+# rising this fast; the pull is then frozen at the fraction reached (rig 2026-09-30 lift f6: the
+# ring broke free at ~2/3 of the planned pull and the ramp to full ran it up at 0.38 m/s)
+BREAKAWAY_DZ = 0.01
+BREAKAWAY_VZ = 0.03
 
 LAND_DEPARTED_WAIT_S = 15.0   # s to wait for a departed (detached) drone to come
                               # down before /fleet/landed disarms the whole fleet
@@ -310,7 +318,7 @@ class LoadPlanner(Node):
         # through _publish_ref (the trackers see these until the OCP takes over).
         self.creep = CreepController(
             self.n, self.rho, self.cable_len, self.N, self.dt, self.dyn.g,
-            self.handover_elev_deg, PLANNER_HZ, self._drone_at, self._publish_ref,
+            self.handover_elev_deg, PLANNER_HZ, self._drone_at, self._publish_slot_ref,
             self.get_logger(), creep_vel=cfg.creep_vel)
         # Builds the per-node OCP tracking reference from the lift schedule + load
         # trajectory (fed the schedule via refs.update() before each planner solve).
@@ -364,6 +372,20 @@ class LoadPlanner(Node):
             for i in range(self.n)]
         # True once the LAND descent finishes, so the central controller disarms.
         self.landed_pub = self.create_publisher(Bool, '/fleet/landed', 1)
+        # the trackers apply the cable feedforward on a resting ring only while this is
+        # true (the planner eases it; the tracker must not block or step it)
+        self._ff_active_pub = self.create_publisher(Bool, '/fleet/cable_ff_active', QoSProfile(
+            depth=1, reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self._ff_active = None
+        self.pretension_s = 0.0 if cfg.start_taut else max(0.0, cfg.pretension_s)
+        self._z_i_gate = cfg.z_i_gate
+        self.rod_tol_frac = cfg.rod_tol_frac
+        self.rod_spread_m = cfg.rod_spread_m
+        self._pretension_said = False
+        self._lift_refused = False
+        self._refuse_anchor = None
+        self._ff_cap = 1.0              # pull fraction frozen at the pretension breakaway
         # The phase in words for the RViz panel, latched and sent only on change
         self._phase_text = None
         self._phase_pub = self.create_publisher(String, '/fleet/phase', QoSProfile(
@@ -606,6 +628,9 @@ class LoadPlanner(Node):
         unless auto_slot_assign remapped it)."""
         return self.drone_pos[self.slot2drone[i]]
 
+    def _publish_slot_ref(self, i, nodes):
+        self._publish_ref(self.slot2drone[i], nodes)
+
     def _assign_slots(self):
         """Match each physical drone to the nearest nominal azimuth slot around the
         load (see geometry.azimuth_slot_assignment), so the drones can be placed in
@@ -646,6 +671,12 @@ class LoadPlanner(Node):
             return 'creep to the hand-over'
         if self._settle_left > 0.0:
             return 'hand-over settle'
+        if self._lift_refused:
+            return 'creep timed out: LAND'
+        if self._pretensioning():
+            return 'pretension'
+        if self.lift_ramp_vel <= 0.0:
+            return 'holding (no lift)'
         if self.lift_z0 is not None and self.lift_progress < (self.target_z - self.lift_z0) - 1e-3:
             return 'lifting'
         return f'holding at {self.target_z:.2f} m'
@@ -686,8 +717,12 @@ class LoadPlanner(Node):
 
         gates = [self._cable_taut_gate(i) for i in range(self.n)]
         if self.phase == 'creep':
-            handover, reason = self.creep.step(self.load_state, self.drone_pos, gates,
-                                               self.takeoff_seen)
+            # the creep works in slot order, like the OCP: with a non-identity slot map
+            # (rig 2026-09-30, [2, 3, 0, 1]) physical order anchored each drone on the
+            # opposite plate and flew the fleet into the middle of the ring
+            handover, reason = self.creep.step(
+                self.load_state, [self._drone_at(i) for i in range(self.n)], gates,
+                self.takeoff_seen)
             # Keep the OCP warm on the live measured config (discarding its horizon,
             # the trackers stay on the creep refs) so the handover has a warm start.
             self._prime_solver()
@@ -707,15 +742,46 @@ class LoadPlanner(Node):
             # post-handover hold: reference frozen at the latched config, load
             # still grounded so the FF gate stays at 0. Nothing accumulates.
             self._settle_left -= 1.0 / PLANNER_HZ
-            if self._settle_left <= 0.0:
+            if self._settle_left <= 0.0 and not self._lift_refused:
                 self.get_logger().info(
-                    '[planner] handover settle complete — starting lift ramp')
+                    '[planner] handover settle complete — '
+                    + ('starting pretension' if self.pretension_s > 0.0 else 'starting lift ramp'))
+        elif self.takeoff_seen and self._lift_refused and not self.descending:
+            pass            # creep never reached the hand-over angle: hold, no pull, no lift
         elif self.takeoff_seen:
             # Cable-FF soft-start clock: advances only once the lift is active (NOT
             # during the grounded settle above), so the tension FF eases in as the
             # load breaks ground instead of stepping on. Applied in _publish_refs.
+            was_pretensioning = self._pretensioning()
             self._ff_t += 1.0 / PLANNER_HZ
-            if self.descending:
+            if was_pretensioning and not self.descending:
+                # floor start: every rod's pull ramps together, drones held, no height ramp
+                if not self._pretension_said:
+                    self._pretension_said = True
+                    gates = [round(self._cable_taut_gate(i)[0], 2) for i in range(self.n)]
+                    self.get_logger().info(
+                        f'[planner] pretension: ramping every rod to its share over '
+                        f'{self.pretension_s:.1f} s before the lift (length gates {gates}, '
+                        f'overridden to 1: rods rigid after the hand-over)')
+                rose_now = float(self.load_state[2]) - self.lift_z0
+                if (self._ff_cap >= 1.0 and self._ff_t < self.pretension_s
+                        and (rose_now > BREAKAWAY_DZ or float(self.load_state[9]) > BREAKAWAY_VZ)):
+                    # the ring is off the floor: this fraction already carries it; freeze the
+                    # pull here and end the pretension (the hold then runs as usual)
+                    self._ff_cap = float(np.clip(self._ff_t / self.pretension_s, 0.0, 1.0))
+                    self._ff_t = self.pretension_s
+                    self.get_logger().info(
+                        f'[planner] pretension: ring broke free at {self._ff_cap:.0%} of the planned '
+                        f'pull (up {rose_now:+.3f} m, vz {float(self.load_state[9]):+.2f}); pull held there')
+                if not self._pretensioning():
+                    rose = float(self.load_state[2]) - self.lift_z0
+                    self.get_logger().info(
+                        f'[planner] pretension done (ring z {self.load_state[2]:.3f}, '
+                        f'lifted {rose:+.3f} m) — starting lift ramp')
+                    if rose > 0.0:
+                        # ramp from where the ring is, never pull it back to the floor
+                        self.lift_z0 = float(self.load_state[2])
+            elif self.descending:
                 # Auto-descent stops at the handover height (lift_progress -> 0).
                 # LAND keeps driving the reference below that until every drone
                 # is on the floor: the reference goes underground, the drones
@@ -806,7 +872,11 @@ class LoadPlanner(Node):
         # already populated here and this first post-handover solve is a warm
         # refinement, not a cold reconverge.
         if self._land_to_ground and self._load_down():
+            self._set_ff_active(False)      # the tracker zeroes the pull on the resting ring
             self._land_hold_refs()
+            return
+        if self._lift_refused and not self.descending:
+            self._refused_hold_refs()
             return
         self._update_zbias()
         self.refs.update(self.hover_xy, self.lift_z0, self.lift_progress,
@@ -987,6 +1057,36 @@ class LoadPlanner(Node):
             f'{[round(float(np.degrees(np.arctan2(r[1], r[0]))), 1) for r in self.rho]} deg')
         return True
 
+    def _set_ff_active(self, active):
+        if active != self._ff_active:
+            self._ff_active = active
+            self._ff_active_pub.publish(Bool(data=active))
+
+    def _airborne_start(self):
+        return bool(getattr(self.creep, 'airborne_start', False))
+
+    def _refused_hold_refs(self):
+        """Creep timed out short of the hand-over angle: hold every drone where it is,
+        level, hover thrust, no cable term and no OCP horizon (an OCP horizon at the
+        nominal 45 deg drags the rods up the arc and slid the fleet 0.6 m in hold-f1)."""
+        self._set_ff_active(False)
+        if self._refuse_anchor is None:
+            self._refuse_anchor = {i: tuple(float(v) for v in self._drone_at(i))
+                                   for i in range(self.n)}
+        hover = (0.0, 0.0, self.dyn.g)
+        for i in range(self.n):
+            ax, ay, az = self._refuse_anchor[i]
+            nodes = [((ax, ay, az), (0.0, 0.0, 0.0), hover, (0.0, 0.0, 0.0))
+                     for _ in range(self.N + 1)]
+            self._publish_ref(self.slot2drone[i], nodes)
+
+    def _pretensioning(self):
+        """Floor start, after the settle: the pull is still ramping (or being held full
+        for PRETENSION_HOLD_S) and the height ramp has not started."""
+        return (self.pretension_s > 0.0 and self.lift_ramp_vel > 0.0 and not self._airborne_start()
+                and self.phase == 'planner' and self._settle_left <= 0.0
+                and self._ff_t < self.pretension_s + PRETENSION_HOLD_S)
+
     def _enter_planner_phase(self, reason):
         """Transition creep -> coupled planner: latch the lift-ramp start height.
         No hard reconverge is forced here: the solver was kept warm on the live
@@ -1001,6 +1101,18 @@ class LoadPlanner(Node):
         self._lift_t = 0.0                         # restart the lift easing
         self._ff_t = 0.0                           # restart the cable-FF soft-start
         self._settle_left = self.handover_settle_s
+        self._pretension_said = False
+        self._ff_cap = 1.0
+        # a floor start that timed out short of the hand-over angle must not lift: from
+        # 18-26 deg the rods need 2-3x the tension, mostly sideways (rig 2026-09-30)
+        m = re.search(r'elevation timeout at ([-0-9.]+)', reason)
+        self._lift_refused = (not self.start_taut and not self._airborne_start()
+                              and m is not None and float(m.group(1)) < REFUSE_BELOW_DEG)
+        self._refuse_anchor = None
+        if self._lift_refused:
+            self.get_logger().error(
+                f'[planner] {reason}: NOT lifting (rods too flat to carry the ring). '
+                f'Holding with no rod pull -- press LAND.')
         if self.measure_rod_len:
             self._apply_measured_rod_lengths()
         self.get_logger().info(
@@ -1015,7 +1127,8 @@ class LoadPlanner(Node):
         R = quat_to_rot_np(ls[3:7])
         dists = [float(np.linalg.norm(ls[0:3] + R @ self.rho[i] - self._drone_at(i)))
                  for i in range(self.n)]
-        lens, why = measured_rod_lengths(self.cable_len, dists)
+        lens, why = measured_rod_lengths(self.cable_len, dists, tol_frac=self.rod_tol_frac,
+                                         spread_m=self.rod_spread_m)
         if lens is None:
             self.get_logger().warn(
                 f'[planner] measure_rod_len: keeping typed cable_len {self.cable_len:.3f} -- {why} '
@@ -1061,7 +1174,7 @@ class LoadPlanner(Node):
             return False
         if time.monotonic() - self._load_t > 0.2:
             return False
-        if abs(self.target_z - float(self.load_state[2])) >= 0.25:
+        if abs(self.target_z - float(self.load_state[2])) >= self._z_i_gate:
             return False
         for i in range(self.n):
             if self._drone_at(i) is None or self._cable_taut_gate(i)[0] < self._z_taut_gate:
@@ -1128,7 +1241,10 @@ class LoadPlanner(Node):
         # over FF_EASE_S once the lift starts (clock advanced in _plan). Multiplied
         # into the published tension FF so it is never stepped onto the still-
         # grounded load -- that step made the drones lurch and scrambled the horizon.
-        ff = float(np.clip(self._ff_t / FF_EASE_S, 0.0, 1.0))
+        ease = self.pretension_s if self.pretension_s > 0.0 else FF_EASE_S
+        ff = min(float(np.clip(self._ff_t / ease, 0.0, 1.0)), self._ff_cap)
+        if self._lift_refused or self.lift_ramp_vel <= 0.0:
+            ff = 0.0                   # refused, or a hold test: never pull on the ring
         if self._land_to_ground and self._load_down():
             # LAND with the load already resting: the rods are slack, but the OCP still
             # pins 45 deg cable directions and nominal tension, and that feedforward
@@ -1140,6 +1256,12 @@ class LoadPlanner(Node):
                 self._land_ff_off_said = True
                 self.get_logger().info(
                     '[planner] load down — cable feedforward off, rods slack')
+        self._set_ff_active(ff > 0.0)
+        # floor start after a hand-over at >= 37 deg: the rods are rigid and straight, so
+        # every rod gets the same fraction of its share (the length gate read 0.43 on a rig
+        # rod whose resting distance was 3 cm short, and would step to 1 at breakaway)
+        equal_pull = (self.pretension_s > 0.0 and not self._airborne_start()
+                      and self.phase == 'planner' and self._settle_left <= 0.0)
         diag = []
         for i in range(self.n):
             gate, dist = self._cable_taut_gate(i)
@@ -1148,7 +1270,7 @@ class LoadPlanner(Node):
             nodes = []
             for k in range(self.N + 1):
                 pos, vel, acc, cable = self.solver.drone_kinematics(X[:, k], i)
-                nodes.append((pos, vel, acc, gate * ff * cable))
+                nodes.append((pos, vel, acc, (1.0 if equal_pull else gate) * ff * cable))
             # slot i's planned trajectory belongs to the physical drone occupying it
             self._publish_ref(self.slot2drone[i], nodes)
             # remembered for a smooth hand-over into the landing hold (_land_hold_refs)

@@ -170,8 +170,10 @@ Loop status (2026-09-29 night, branch real-world-testing): sim closed ("EVERYTHI
 after a mention scrub at 639d20e). Wesley's corrections folded in (tethered flights did happen; DISARM used many times; drone-0
 takeoff disarms; ids 11-14 / ring 8 / pickup 6; airframes ~1.2 kg -> headroom 0.568 three / 0.537 even four / 0.589 plate 9).
 Yaw spin diagnosed + yaw hold built (2633f68, rig confirms). Short readiness page + docs/rig_2026-09-30_commands.md. Desk
-rehearsals R0a/R1/R3e pass (preflight free-hover mode fixed, 455638e). RViz suggestions await Wesley's pick. NEXT: combined
-stack (Tejen + ours) launch design, Wesley: "if you finish everything else".
+rehearsals R0a/R1/R3e pass (preflight free-hover mode fixed, 455638e). RViz changes built (de8e2a8), terminals quieter + fleet monitor (7393a5f). Combined stack (Tejen + ours):
+design + critic in docs/design/combined_stack_m1.md, NOT READY, 14 decisions (R10b free vs welded start, DDS domain, magnet
+gate, LAND during MISSION, his supervisor land_now); nothing built. NEXT: Wesley's thrust-check logs from 30 Sep
+(tools/thrust_check.py), then the cap decision.
 Readiness review (2026-09-29, Wesley: supervisors happy with sim; priority = the rig): docs/g7_readiness_review_2026-09-29.md
 (+ _corrections, _gaps; page shared separately). Headline: the ring has never been lifted on the
 rig and no tether has carried load; THROTTLE HEADROOM is the first question (rig free hover u 0.44-0.48, a 45 deg carry needs

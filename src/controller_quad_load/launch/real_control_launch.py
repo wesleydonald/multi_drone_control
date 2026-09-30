@@ -57,9 +57,9 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 def _args():
     return [
-        DeclareLaunchArgument('num_drones', default_value='2'),
+        DeclareLaunchArgument('num_drones', default_value='4'),
         # MUST match the physical cables.
-        DeclareLaunchArgument('cable_len', default_value='0.5'),
+        DeclareLaunchArgument('cable_len', default_value='0.55'),
         # where the rim attachments are (deg, load frame, sized by num_drones); '' = even
         # ring. Clock face: 3 o'clock = 0, 12 = 90, 9 = 180, 6 = 270.
         DeclareLaunchArgument('attach_azimuths_deg', default_value=''),
@@ -68,12 +68,12 @@ def _args():
         # hardware there is no SDF, so these two numbers are the planner's ONLY
         # description of the payload -- measure them. LOAD_INERTIA in
         # planner_node.py does not scale with attach_radius either.
-        DeclareLaunchArgument('attach_radius', default_value='0.25'),
-        DeclareLaunchArgument('attach_z', default_value='0.025'),
+        DeclareLaunchArgument('attach_radius', default_value='0.225'),
+        DeclareLaunchArgument('attach_z', default_value='0.0'),
         # Physical payload mass (kg). LOAD_INERTIA in planner_node.py is a
         # hardcoded constant and does NOT scale with this.
         DeclareLaunchArgument('load_mass', default_value='0.86'),
-        DeclareLaunchArgument('drone_mass', default_value='0.64'),   # WEIGH the airframe with its pack; 0.64 is the sim model
+        DeclareLaunchArgument('drone_mass', default_value='0.55'),   # WEIGH the airframe with its pack; 0.64 is the sim model
         DeclareLaunchArgument('start_taut', default_value='false'),
         DeclareLaunchArgument('handover_elev_deg', default_value='45.0'),
         # Frozen hold after handover, before the lift ramp starts. Shorter = faster
@@ -81,14 +81,20 @@ def _args():
         # the latched config.
         DeclareLaunchArgument('handover_settle_s', default_value='1.0'),
         DeclareLaunchArgument('creep_vel', default_value='0.2'),   # m/s creep sweep rate before the handover
+        # floor start: every rod's pull ramps in together over this long before the lift (0 = off)
+        DeclareLaunchArgument('pretension_s', default_value='3.0'),
+        # trust band for the rod lengths measured at the hand-over (typed cable_len +-tol, spread)
+        DeclareLaunchArgument('rod_tol_frac', default_value='0.25'),
+        DeclareLaunchArgument('rod_spread_m', default_value='0.08'),
         DeclareLaunchArgument('target_z', default_value='0.6'),
         # Climb rate (m/s) -- the dominant term in takeoff duration. The ramp is
         # eased at both ends (LIFT_SOFT_* in planner_node.py), so peak accel stays
         # well under the raw rate. HOLD test: lift_ramp_vel:=0.0 (no lift, just
         # hold the taut config).
-        DeclareLaunchArgument('lift_ramp_vel', default_value='0.20'),
+        DeclareLaunchArgument('lift_ramp_vel', default_value='0.1'),
         DeclareLaunchArgument('z_ki', default_value='0.4'),      # planner height integral, 0 = off (card 2026-09-24_planner_offset)
-        DeclareLaunchArgument('z_i_max', default_value='0.15'),
+        DeclareLaunchArgument('z_i_max', default_value='0.4'),
+        DeclareLaunchArgument('z_i_gate', default_value='0.6'),   # integral runs only while |miss| < this
         DeclareLaunchArgument('z_taut_gate', default_value='0.9'),
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         # Cable compensation. ON is the correct flight config. Zero only for a
@@ -106,11 +112,19 @@ def _args():
         # 24.0 = the MEASURED kT of these airframes on a pack at full health. (The sim
         # launches use ~31 instead: Gazebo's motor model is quadratic, so a linear
         # model there has to use the secant gain at hover. The two genuinely differ.)
-        DeclareLaunchArgument('thrust_ratio', default_value='24.0'),
+        DeclareLaunchArgument('thrust_ratio', default_value='35.2'),
         # per-drone thrust-gain trim (kt_trim.py, card 2026-09-23_kt_trim.md): off until the matrix passes
-        DeclareLaunchArgument('kt_trim', default_value='true'),
+        DeclareLaunchArgument('kt_trim', default_value='false'),
         DeclareLaunchArgument('kt_trim_max', default_value='0.25'),
         DeclareLaunchArgument('kt_trim_tau', default_value='1.5'),
+        # tracker throttle ceiling; 0.6 unless typed (supervisor allows up to 1.0, 2026-09-30)
+        DeclareLaunchArgument('throttle_max', default_value='0.8'),
+        # affine thrust map, identified 30 Sep 2026 (RIG-0930-ladder4): throttle = offset
+        # + 0.507*mass - 0.022*(V - 23.5). thrust_ratio is then the gain ABOVE the offset,
+        # g/(0.507*0.55 kg) = 35.2. thrust_offset:=0 thrust_ratio:=21.7 is the old map.
+        DeclareLaunchArgument('thrust_offset', default_value='0.185'),
+        DeclareLaunchArgument('thrust_offset_v_slope', default_value='0.022'),
+        DeclareLaunchArgument('thrust_v_ref', default_value='23.5'),
         # kT used before the drone is airborne. 0 = same as thrust_ratio, which is
         # right for a GROUND takeoff: the deliberate takeoff under-assumption exists
         # only to pop drones off the stands of a taut sim air-start. Set it below
@@ -178,6 +192,10 @@ def launch_setup(context, *args, **kwargs):
                          'kt_trim': ParameterValue(LaunchConfiguration('kt_trim'), value_type=bool),
                          'kt_trim_max': ParameterValue(LaunchConfiguration('kt_trim_max'), value_type=float),
                          'kt_trim_tau': ParameterValue(LaunchConfiguration('kt_trim_tau'), value_type=float),
+                         'throttle_max': ParameterValue(LaunchConfiguration('throttle_max'), value_type=float),
+                         'thrust_offset': ParameterValue(LaunchConfiguration('thrust_offset'), value_type=float),
+                         'thrust_offset_v_slope': ParameterValue(LaunchConfiguration('thrust_offset_v_slope'), value_type=float),
+                         'thrust_v_ref': ParameterValue(LaunchConfiguration('thrust_v_ref'), value_type=float),
                          'takeoff_thrust_ratio': f('takeoff_thrust_ratio'),
                          'kt_batt_sag_frac': f('kt_batt_sag_frac'),
                          'kt_batt_v_full': f('kt_batt_v_full'),
@@ -205,11 +223,15 @@ def launch_setup(context, *args, **kwargs):
                      'lift_ramp_vel': f('lift_ramp_vel'),
                      'z_ki': f('z_ki'),
                      'z_i_max': f('z_i_max'),
+                     'z_i_gate': f('z_i_gate'),
                      'z_taut_gate': f('z_taut_gate'),
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
                      'creep_vel': f('creep_vel'),
+                     'pretension_s': f('pretension_s'),
+                     'rod_tol_frac': f('rod_tol_frac'),
+                     'rod_spread_m': f('rod_spread_m'),
                      'auto_slot_assign': b('auto_slot_assign'),
                      'measure_rod_len': b('measure_rod_len'),
                      'load_traj': LaunchConfiguration('load_traj'),
@@ -221,5 +243,8 @@ def launch_setup(context, *args, **kwargs):
     return nodes
 
 
+# Rig defaults = the 30 Sep 2026 lab values (Wesley's word): four drones on the even ring,
+# measured drone 0.55 kg, rod 0.55 m (pivot 4 cm below the drone centre, not modelled),
+# magnets at r 0.225 m, kT 21.7, cap 0.8, pretension, widened rod trust band and height integral.
 def generate_launch_description():
     return LaunchDescription(_args() + [OpaqueFunction(function=launch_setup)])

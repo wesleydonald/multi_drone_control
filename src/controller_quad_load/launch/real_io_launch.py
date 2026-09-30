@@ -31,9 +31,9 @@ draws the scene straight from the mocap topics.
       - the payload box + its desired/actual track
       - each drone's MPC plan (once terminal 2 is up)
       - the fleet ArmPanel: ARM/DISARM, TAKEOFF, LAND buttons, plus one
-        armed-state + battery row per drone. DETACH/ATTACH are hidden here --
-        they drive the dissipative/magnet stacks, which this launch does not
-        run (see rviz_quad_load_launch.py detach:=/attach:= for those).
+        armed-state + battery + throttle row per drone, one MAGNET toggle per
+        drone, and the DETACH/ATTACH rows with detach:=/attach:=. The sim's
+        rviz_quad_load_launch.py builds the same config.
     The config is generated at launch time so it scales to any num_drones.
 
 Run:

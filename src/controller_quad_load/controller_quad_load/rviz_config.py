@@ -18,6 +18,8 @@ The differences that are real are parameters, not forks:
                     and magnet stacks, so a launch that does not run them hides them)
   show_actual       flown-path trails; noisy in sim, useful at the rig
   show_plan         per-drone MPC plan (only meaningful when a tracker is running)
+  magnets           the per-drone MAGNET toggles and their initial state (both launches
+                    pass them: rig elrs_interface latch, sim sim_magnet tether release)
 
 Everything else — colours, payload, drone models, panel, view — is shared by
 construction. A new display added here appears in both.

@@ -108,8 +108,10 @@ def tip_link(parent, drop):
 """
 
 
-def ball(name, parent, child, pose=None):
+def ball(name, parent, child, pose=None, note=None):
     pose_tag = f'\n            <pose>{pose}</pose>' if pose else ''
+    if note:
+        pose_tag += f'<!-- {note} -->'
     return f"""        <joint name="{name}" type="ball">
             <parent>{parent}</parent>
             <child>{child}</child>{pose_tag}
@@ -132,7 +134,8 @@ def block_rod(header):
             + arm_link('magnet_arm', 'base_link', '0 0 0.01 0 0 0', ARM_LEN, ARM_MASS)
             + tip_link('magnet_arm', ARM_LEN)
             + ball('arm_to_magnet_tip', 'magnet_arm', 'magnet_tip_link')
-            + ball('base_to_magnet_arm', 'base_link', 'magnet_arm', '0 0 -0.05 0 0 0'))
+            + ball('base_to_magnet_arm', 'base_link', 'magnet_arm', '0 0 0 0 0 0',
+                   note='at the body centre like the tethered drones (Wesley 2026-09-25; R0552)'))
 
 
 def block_seg2(header):

@@ -29,7 +29,8 @@ LAUNCH_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 # executables that only exist to talk to Gazebo (or stand in for the rig's mocap/radio)
 SIM_ONLY = {'parameter_bridge', 'payload_betaflight_comm', 'betaflight_communication',
             'tejen_betaflight_communication', 'payload_mocap_emulator',
-            'tejen_motion_capture_emulator', 'magnet_tip_publisher', 'clock_throttle'}
+            'tejen_motion_capture_emulator', 'magnet_tip_publisher', 'clock_throttle',
+            'sim_magnet'}
 
 # the M1 partner demo (configs/experiments/partner_attached_orbit.yaml, launch args)
 PARTNER_ATTACHED_ORBIT = {
@@ -543,3 +544,34 @@ def test_sim_m2_graph_is_unchanged_in_shape():
     assert not [n for n in nodes if n['executable'] in ('elrs_interface',
                                                         'motion_capture_publisher_node')]
     assert 'magnet_channel' not in g['/elrs_mux_0']['params']
+
+
+# ── sim RViz = rig RViz (Wesley 2026-09-29: rehearse in sim what the rig shows) ───────
+
+@pytest.mark.parametrize('sim_args, rig_args', [
+    ({'num_drones': 3}, {'num_drones': 3}),
+    ({'num_drones': 4, 'detach': True}, {'num_drones': 4, 'detach': True}),
+    # the rig count includes the newcomer, the sim's does not
+    ({'num_drones': 3, 'attach': True}, {'num_drones': 4, 'attach': True}),
+])
+def test_sim_rviz_config_equals_the_rig(sim_args, rig_args):
+    sim = _rviz_panel(evaluate('rviz_quad_load_launch.py', **sim_args))
+    rig = _rviz_panel(evaluate('real_io_launch.py', **rig_args))
+    assert 'ShowMagnets: true' in sim
+    assert sim == rig
+
+
+def test_sim_magnet_twin_only_with_the_gui():
+    g = _by_name(evaluate('rviz_quad_load_launch.py', num_drones=3, attach=True))
+    assert g['/sim_magnet']['params'] == {'num_drones': 4, 'num_tethers': 3}
+    bridge = g['/sim_magnet_bridge']
+    assert sorted(a.split('@')[0] for a in bridge['arguments']) == sorted(
+        [f'/drone_{i}/detach' for i in range(3)]
+        + [f'/drone_{i}/detachable_joint_state' for i in range(3)])
+    assert not any(a.startswith(f'/drone_{i}/attach') for a in bridge['arguments'] for i in range(4))
+    assert set(bridge['remappings']) == {(f'/drone_{i}/detach', f'/drone_{i}/magnet_release')
+                                         for i in range(3)}
+    headless = {n['name'] for n in evaluate('rviz_quad_load_launch.py', num_drones=3, rviz=False)}
+    assert headless == {'clock_bridge', 'clock_throttle', 'payload_pose_bridge', 'fleet_viz',
+                        'sim_telemetry', *(f'drone_pose_bridge_{i}' for i in range(3)),
+                        *(f'mocap_{i}' for i in range(3)), *(f'drone_model_{i}' for i in range(3))}

@@ -1,0 +1,46 @@
+criteria:
+  min_payload_z: 0.0
+  forbid_abort: true
+description: 'Pretension neighbour (critic 2026-09-30): the rig twin with the typed
+  rod 0.20 (the sim rods are 0.5): the creep arc tops out at z 0.14, a ~16 deg rod,
+  so it stalls below the 30 deg refusal line and times out, as rig f3/f4/hold-f1 did.
+  The planner must refuse the lift: hold in place, no pull, no drift; LAND then lands.
+  Falsifier: any pull, the ring moving, a drone drifting > 0.10 m during the refusal,
+  or an abort.'
+events:
+- do: ARM
+  t: 3.0
+- do: TAKEOFF
+  t: 8.0
+- do: LAND
+  t: 44.0
+fleet:
+  n_total: 4
+  num_drones: 4
+io_launch:
+  args:
+    num_drones: 4
+  file: rviz_quad_load_launch.py
+launch:
+  args:
+    cable_len: 0.2
+    creep_vel: 0.2
+    handover_elev_deg: 45.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.15
+    load_mass: 0.86
+    load_traj: hover
+    num_drones: 4
+    start_taut: false
+    target_z: 0.6
+    thrust_ratio: auto
+    z_ki: 0.4
+    measure_rod_len: false
+  file: mpc_quad_load_launch.py
+  package: controller_quad_load
+name: rig_lift_n4_even_floor_timeout
+timing:
+  duration_s: 50.0
+  stop_after_abort_s: 8.0
+world: four_rigid_ground.sdf

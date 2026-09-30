@@ -40,6 +40,8 @@ setup(
             'sim_telemetry = simulation_communication.sim_telemetry:main',
             # /clock_gz -> /clock at a bounded rate (rclpy handles /clock in Python)
             'clock_throttle = simulation_communication.clock_throttle:main',
+            # RViz MAGNET toggles -> tether DetachableJoint release (the rig's magnet latch)
+            'sim_magnet = simulation_communication.sim_magnet:main',
         ],
     },
 )

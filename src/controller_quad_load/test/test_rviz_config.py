@@ -126,8 +126,8 @@ def test_fleet_status_banner_is_not_shown():
 
 
 def test_magnet_toggles_are_declared_only_when_asked():
-    """The per-drone MAGNET buttons are a hardware-only row: hidden by default, shown
-    with their initial state when the real I/O launch asks for them."""
+    """The per-drone MAGNET buttons are hidden by the builder's default and shown with
+    their initial state when a launch asks for them (both the rig and sim launches do)."""
     from controller_quad_load.rviz_config import build_config
     default = parse(3)['Panels']
     arm = next(p for p in default if p['Class'].endswith('ArmPanel'))

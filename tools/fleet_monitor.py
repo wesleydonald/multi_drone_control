@@ -4,7 +4,7 @@
     python3 tools/fleet_monitor.py --drones 4
 
 Top: the fleet manager's latest decision (red when something was refused or stopped) and the planner phase.
-Table: per drone, armed, mocap age, height, tilt, throttle (red when pinned at the 0.6 cap), battery, mux.
+Table: per drone, armed, mocap age, height, tilt, throttle (red when pinned at that drone's cap, /drone_i/throttle_max, 0.6 until heard), battery, mux.
 Ring: height and tilt. Bottom: warnings and errors from every node (/rosout), newest first, each with a plain
 explanation of what it means and what to do. Read-only: it never publishes.
 """
@@ -88,12 +88,16 @@ class FleetState:
         with self.lock:
             self.ring.update(z=p.z, tilt=tilt_deg(q.w, q.x, q.y, q.z), t=time.time())
 
+    def on_cap(self, i, msg):
+        with self.lock:
+            self.drones[i]['cap'] = float(msg.data)
+
     def on_cmd(self, i, msg):
         thr = 0.5 * (msg.channel_2 + 1.0) if msg.armed else 0.0
         with self.lock:
             d = self.drones[i]
             d['thr'] = thr
-            if thr >= CAP - 0.01:
+            if thr >= d.get('cap', CAP) - 0.01:
                 d['cap_since'] = d['cap_since'] or time.time()
             else:
                 d['cap_since'] = None
@@ -129,7 +133,7 @@ def ros_thread(state, n):
     import rclpy
     from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
     from rcl_interfaces.msg import Log
-    from std_msgs.msg import Bool, String
+    from std_msgs.msg import Bool, Float64, String
     from interfaces.msg import ELRSCommand, MotionCaptureState, Telemetry
     rclpy.init()
     node = rclpy.create_node('fleet_monitor')
@@ -141,6 +145,7 @@ def ros_thread(state, n):
         node.create_subscription(Bool, f'{ns}/arming_state_feedback', lambda m, i=i: state.on_armed(i, m), 5)
         node.create_subscription(Telemetry, f'{ns}/telemetry', lambda m, i=i: state.on_telemetry(i, m), 5)
         node.create_subscription(String, f'{ns}/mux_state', lambda m, i=i: state.on_mux(i, m), latched)
+        node.create_subscription(Float64, f'{ns}/throttle_max', lambda m, i=i: state.on_cap(i, m), latched)
     node.create_subscription(MotionCaptureState, '/payload/motion_capture_state', state.on_ring, 5)
     node.create_subscription(String, '/fleet/manager_status', state.on_manager, latched)
     node.create_subscription(String, '/fleet/phase', state.on_phase, latched)
