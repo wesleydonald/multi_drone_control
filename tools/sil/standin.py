@@ -101,8 +101,9 @@ class ApproachStandin:
         self.rates = rates
         self.max_tilt = np.radians(max_tilt_deg)
 
-    def channels(self, p, v, q, p_ref, v_ref=None):
-        """Return (channel_0, channel_1, channel_2, channel_3) for one cycle."""
+    def channels(self, p, v, q, p_ref, v_ref=None, throttle_fn=None):
+        """Return (channel_0, channel_1, channel_2, channel_3) for one cycle.
+        `throttle_fn(a)` maps specific thrust to throttle when the plant is not linear."""
         v_ref = np.zeros(3) if v_ref is None else np.asarray(v_ref, float)
         a_des = (self.kp * (np.asarray(p_ref, float) - np.asarray(p, float))
                  + self.kd * (v_ref - np.asarray(v, float))
@@ -116,7 +117,9 @@ class ApproachStandin:
         thrust = float(np.linalg.norm(a_des))
         # linear plant since 2026-09-24 (a = thrust_c * u); the sqrt inversion of the
         # quadratic plant sent the newcomer to 2.5 m and out of the warm-ref radius (R0514)
-        throttle = float(np.clip(max(thrust, 0.0) / self.thrust_c, 0.0, 1.0))
+        throttle = (max(thrust, 0.0) / self.thrust_c if throttle_fn is None
+                    else throttle_fn(max(thrust, 0.0)))
+        throttle = float(np.clip(throttle, 0.0, 1.0))
 
         q_des = tilt_quat_from_accel(a_des)
         # body-frame attitude error -> proportional rate command

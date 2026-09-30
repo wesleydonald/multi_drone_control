@@ -32,7 +32,8 @@ EVENT_KINDS = {
     'DETACH',     # /fleet/detach <drone id>
     'WAIT_WELD',  # not published: block until /magnet/object_attached goes True
     'WAIT_LIFT',  # not published: block until the payload is above arg m (default 0.5), then
-                  # shift every later event by the wait (a creep lift varies by ~10 s, R0553)
+                  # shift every later event by the wait (a creep lift varies by ~10 s, R0553);
+                  # arg 'z timeout_s' gives up after timeout_s (event LIFT_TIMEOUT)
     'WAIT_REWELD',  # not published: block until the magnet welds AGAIN after a release
                     # (a drone that starts welded, leaves and rejoins), then shift later events
     'LAUNCH',     # not published: start a second launch mid-run, arg "pkg file [k:=v ...]"
@@ -51,6 +52,22 @@ EVENT_KINDS = {
                        # template (default cmd_ready_topic) is armed above idle throttle,
                        # then shift later events (M2 bench: hangers release only under thrust)
 }
+
+def wait_lift_arg(arg):
+    """WAIT_LIFT arg -> (payload z threshold, timeout SIM s or None): 'z' or 'z timeout'.
+    The timeout lets a run whose ring never reaches the height (the model-f1 twin held
+    0.3-0.4 m under a 0.5 target) still fly the rest of its schedule and land."""
+    if arg is None:
+        return 0.5, None
+    parts = str(arg).split()
+    if not 1 <= len(parts) <= 2:
+        raise ValueError(f"WAIT_LIFT arg {arg!r}: expected 'z' or 'z timeout_s'")
+    z = float(parts[0])
+    timeout = float(parts[1]) if len(parts) == 2 else None
+    if timeout is not None and timeout <= 0:
+        raise ValueError(f'WAIT_LIFT timeout must be > 0, got {timeout}')
+    return z, timeout
+
 
 # SIM seconds an ESTOP run must keep recording after /fleet/abort (drones staying down)
 ESTOP_STAY_DOWN_S = 5.0
@@ -87,6 +104,8 @@ class Event:
                 raise ValueError(f"MAGNET arg must be ON or OFF, got {self.arg!r}")
         if self.do == 'LAUNCH' and len(str(self.arg or '').split()) < 2:
             raise ValueError('LAUNCH needs "package launch_file [k:=v ...]" as its arg')
+        if self.do == 'WAIT_LIFT':
+            wait_lift_arg(self.arg)
         if self.do == 'WAIT_THRUST' and self.arg is not None and '{i}' not in str(self.arg):
             raise ValueError(f"WAIT_THRUST arg {self.arg!r} has no '{{i}}' for the drone id")
         if self.do in ('ATTACH', 'DETACH'):
@@ -124,6 +143,19 @@ class Criteria:
         self.forbid_abort = bool(kw.pop('forbid_abort', True))
         self.window_from = str(kw.pop('window_from', 'start')).lower()
         self.window_s = kw.pop('window_s', None)
+        # Tethered hold (plan 2026-10, W6), scored from the planner's tick log by
+        # metrics.tethered_run_metrics over the last hold_window_s before LAND.
+        self.max_planner_solve_fail = kw.pop('max_planner_solve_fail', None)
+        self.max_hold_z_err_m = kw.pop('max_hold_z_err_m', None)
+        self.hold_window_s = float(kw.pop('hold_window_s', 20.0))
+        self.max_heave_pp_m = kw.pop('max_heave_pp_m', None)
+        self.max_payload_vz_mps = kw.pop('max_payload_vz_mps', None)
+        self.min_carried_fraction = kw.pop('min_carried_fraction', None)
+        self.max_ref_age_frac = kw.pop('max_ref_age_frac', None)
+        self.max_hold_tilt_mean_deg = kw.pop('max_hold_tilt_mean_deg', None)
+        self.max_z_bias_abs = kw.pop('max_z_bias_abs', None)     # height integral, over the hold
+        # every check is computed and printed but none fails the run (a reproduction)
+        self.report_only = bool(kw.pop('report_only', False))
         if kw:
             raise ValueError(f'unknown criteria keys: {sorted(kw)}')
         if self.window_from not in ('start', 'weld'):
@@ -172,6 +204,8 @@ class ExperimentConfig:
         # True when the launch is DELIBERATELY told a different mass/geometry than the
         # world (a robustness arm); otherwise run_experiment refuses a mismatch.
         self.mis_seed = False
+        # {key: reason}: geometry values a config deliberately flies unlike its world
+        self.geometry_exempt = {}
         # the topic whose first message says drone i's tracker is commanding
         self.cmd_ready_topic = '/drone_{i}/ELRSCommand'
         # expected start of the partner's pickup object (/model/payload_model/pose[1]);
@@ -188,6 +222,7 @@ class ExperimentConfig:
                              os.path.splitext(os.path.basename(path))[0])
         c.description = raw.get('description', '')
         c.mis_seed = bool(raw.get('mis_seed', False))
+        c.geometry_exempt = dict(raw.get('geometry_exempt') or {})
         c.world = raw.get('world', c.world)
         lch = raw.get('launch') or {}
         c.launch_package = lch.get('package', c.launch_package)

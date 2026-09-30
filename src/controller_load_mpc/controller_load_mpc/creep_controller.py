@@ -14,7 +14,7 @@ per-drone references (via the injected publish_ref callback) and returns
 """
 import numpy as np
 
-from .geometry import quat_to_rot_np
+from .geometry import quat_to_rot_np, rot_z
 
 CREEP_VEL      = 0.10          # m/s rise
 CREEP_LEAD     = 0.10          # m z lead held while grounded, to initiate climb
@@ -41,7 +41,8 @@ HANDOVER_TIMEOUT_S = 3.0       # s after the sweep ends, latch regardless (the O
 
 class CreepController:
     def __init__(self, n, rho, cable_len, N, dt, g, handover_elev_deg, hz,
-                 drone_at, publish_ref, logger, creep_vel=CREEP_VEL):
+                 drone_at, publish_ref, logger, creep_vel=CREEP_VEL,
+                 pivot_offset=None, drone_yaw=None):
         self.creep_vel = float(creep_vel)   # m/s along the arc / straight up (param creep_vel)
         self.n = n
         self.rho = rho
@@ -52,8 +53,13 @@ class CreepController:
         self.g = g                         # gravity magnitude (level-hover thrust)
         self.handover_elev_deg = handover_elev_deg
         self.hz = hz                       # planner control rate (Hz)
-        self._drone_at = drone_at          # slot i -> measured drone position
+        self._drone_at = drone_at          # slot i -> measured rod pivot (drone centre if none)
         self._publish_ref = publish_ref    # (i, nodes) -> publish drone i's ref
+        # The arcs are swept for the rod PIVOT; the tracker flies the drone centre, which
+        # sits -R @ pivot_offset from it (R level at the drone's heading: creep refs are
+        # level hover thrust).
+        self.pivot_offset = np.zeros(3) if pivot_offset is None else np.asarray(pivot_offset, float)
+        self._drone_yaw = drone_yaw        # slot i -> measured heading (rad), or None
         self._log = logger
         # soft creep state
         self.creep_anchor = None           # latched spawn xy/z per drone
@@ -73,6 +79,13 @@ class CreepController:
         self.lifted_off = False            # gate the creep climb on real liftoff
         self._liftoff_wait = 0.0           # s since TAKEOFF without liftoff
         self._diag_ctr = 0
+
+    def _emit(self, i, nodes):
+        if self.pivot_offset.any():
+            yaw = float(self._drone_yaw(i)) if self._drone_yaw is not None else 0.0
+            dp = rot_z(yaw) @ self.pivot_offset
+            nodes = [(np.asarray(p, float) - dp, v, a, c) for (p, v, a, c) in nodes]
+        self._publish_ref(i, nodes)
 
     def _rod(self, i):
         return self.cable_len if self.cable_lens is None else self.cable_lens[i]
@@ -259,7 +272,7 @@ class CreepController:
                     v_i = np.zeros(3)
                 # level hover thrust, no cable term: the load is still grounded
                 nodes.append((p_i, v_i, (0.0, 0.0, self.g), (0.0, 0.0, 0.0)))
-            self._publish_ref(i, nodes)
+            self._emit(i, nodes)
 
         self._diag_ctr += 1
         if self._diag_ctr % int(max(self.hz, 1)) == 0:
@@ -280,7 +293,7 @@ class CreepController:
             # first command after the switch asks for no motion
             for i in range(self.n):
                 p = np.asarray(drone_pos[i], dtype=float)
-                self._publish_ref(i, [(p, np.zeros(3), level, (0.0, 0.0, 0.0))]
+                self._emit(i, [(p, np.zeros(3), level, (0.0, 0.0, 0.0))]
                                   * (self.N + 1))
             return
         if self.arc_anchor is None:
@@ -317,7 +330,7 @@ class CreepController:
                 p_i = attach + L * (np.cos(a) * radial + np.array([0.0, 0.0, np.sin(a)]))
                 v_i = L * w * (-np.sin(a) * radial + np.array([0.0, 0.0, np.cos(a)]))
                 nodes.append((p_i, v_i, level, (0.0, 0.0, 0.0)))
-            self._publish_ref(i, nodes)
+            self._emit(i, nodes)
         self._arc_done = all(abs(t - target) < 1e-9 for t in self._arc_th)
         self.arc_theta = target if self._arc_done else min(self._arc_th)
         self._diag_ctr += 1
@@ -363,7 +376,7 @@ class CreepController:
                 # level hover thrust, no cable term: cables still slack
                 nodes.append(((ax, ay, z), (0.0, 0.0, self.creep_vel),
                               (0.0, 0.0, self.g), (0.0, 0.0, 0.0)))
-            self._publish_ref(i, nodes)
+            self._emit(i, nodes)
 
         self._diag_ctr += 1
         if self._diag_ctr % int(max(self.hz, 1)) == 0:

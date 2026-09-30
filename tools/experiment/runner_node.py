@@ -32,6 +32,8 @@ from std_msgs.msg import Bool, Empty, Float64MultiArray, Int32, String
 
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
+from .config import wait_lift_arg
+
 ARM_FAIL = 'fleet manager ARM failed or refused'
 
 
@@ -360,15 +362,17 @@ class ExperimentRunner(Node):
             self._log_event('THRUST', f'{shift:.2f}')
             self.get_logger().warn(f'[exp] t={t:6.2f} all drones under thrust; later events shifted {shift:+.2f} s')
         if self._lift_wait is not None:
-            z_th, t0 = self._lift_wait
-            if self.payload is None or self.payload[2] < z_th:
+            z_th, t0, timeout = self._lift_wait
+            lifted = self.payload is not None and self.payload[2] >= z_th
+            if not lifted and not (timeout and t - t0 >= timeout):
                 return                      # WAIT_LIFT blocks the rest of the schedule
             shift = t - t0
             for e in self._pending:
                 e.t += shift
             self._lift_wait = None
-            self._log_event('LIFTED', f'{shift:.2f}')
-            self.get_logger().warn(f'[exp] t={t:6.2f} payload lifted; later events shifted {shift:+.2f} s')
+            self._log_event('LIFTED' if lifted else 'LIFT_TIMEOUT', f'{shift:.2f}')
+            self.get_logger().warn(f'[exp] t={t:6.2f} payload {"lifted" if lifted else "NOT lifted (timeout)"}; '
+                                   f'later events shifted {shift:+.2f} s')
         while self._pending and self._pending[0].t <= t:
             ev = self._pending.pop(0)
             self._fire(ev)
@@ -376,7 +380,8 @@ class ExperimentRunner(Node):
                 self._waiting_for_weld = True
                 return
             if ev.do == 'WAIT_LIFT':
-                self._lift_wait = (float(ev.arg) if ev.arg is not None else 0.5, t)
+                z_th, timeout = wait_lift_arg(ev.arg)
+                self._lift_wait = (z_th, t, timeout)
                 return
             if ev.do == 'WAIT_THRUST':
                 self._thrust_wait = (str(ev.arg) if ev.arg else self.cfg.cmd_ready_topic, t)

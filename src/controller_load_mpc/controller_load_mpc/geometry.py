@@ -32,6 +32,15 @@ def yaw_from_quat(q):
                             1.0 - 2.0 * (y * y + z * z)))
 
 
+def quat_same_hemisphere(q, q_prev):
+    """q, sign-flipped if needed so that q . q_prev >= 0. The rig mocap sends w >= 0,
+    so a yaw crossing 180 deg flips the sign of the whole quaternion (same rotation)."""
+    q = np.asarray(q, float)
+    if q_prev is not None and float(np.dot(q, q_prev)) < 0.0:
+        return -q
+    return q
+
+
 def yaw_quat(psi):
     """Quaternion [w, x, y, z] of a pure yaw about world z."""
     return np.array([np.cos(0.5 * psi), 0.0, 0.0, np.sin(0.5 * psi)])
@@ -55,6 +64,30 @@ def rot_align(a, b):
         return np.eye(3) if c > 0 else -np.eye(3)
     vx = np.array([[0.0, -v[2], v[1]], [v[2], 0.0, -v[0]], [-v[1], v[0], 0.0]])
     return np.eye(3) + vx + vx @ vx * ((1.0 - c) / (s * s))
+
+
+def thrust_attitude(acc, yaw=0.0):
+    """Rotation of a drone whose body z points along the thrust acceleration `acc`,
+    at heading `yaw` (the attitude a tracker flies to produce that thrust)."""
+    a = np.asarray(acc, float)
+    na = float(np.linalg.norm(a))
+    zb = a / na if na > 1e-9 else np.array([0.0, 0.0, 1.0])
+    xc = np.array([np.cos(yaw), np.sin(yaw), 0.0])
+    yb = np.cross(zb, xc)
+    ny = float(np.linalg.norm(yb))
+    if ny < 1e-9:                        # thrust horizontal along the heading
+        return rot_z(yaw)
+    yb /= ny
+    return np.column_stack([np.cross(yb, zb), yb, zb])
+
+
+def centre_from_pivot(pivot, acc, yaw, pivot_offset):
+    """Drone-centre position for a rod pivot at `pivot`: the pivot sits at
+    centre + R @ pivot_offset, with R the attitude that flies thrust `acc`."""
+    b = np.asarray(pivot_offset, float)
+    if not b.any():
+        return np.asarray(pivot, float)
+    return np.asarray(pivot, float) - thrust_attitude(acc, yaw) @ b
 
 
 def parse_azimuths_deg(spec):
@@ -188,3 +221,26 @@ def azimuth_slot_assignment(drone_pos, load_xy, n, load_yaw=0.0, slot_az=None):
         if c < best_cost:
             best_cost, best = c, perm
     return best
+
+
+PLATE_PITCH_DEG = 30.0      # M2A ring: 12 magnet plates, plate 0 on the ring body's +x
+SLOT_OFFSET_WARN_DEG = 10.0
+
+
+def slot_azimuth_errors(drone_pos, load_xy, load_yaw, slot2drone, slot_az):
+    """Per OCP slot i: (drone, error_deg, plate). error_deg is the drone's azimuth about
+    the load, in the load frame, minus slot i's modelled azimuth, wrapped to +-180."""
+    out = []
+    for i, d in enumerate(slot2drone):
+        az = np.arctan2(drone_pos[d][1] - load_xy[1], drone_pos[d][0] - load_xy[0]) - load_yaw
+        err = (np.degrees(az - slot_az[i]) + 180.0) % 360.0 - 180.0
+        plate = int(round(np.degrees(slot_az[i]) / PLATE_PITCH_DEG)) % int(360 / PLATE_PITCH_DEG)
+        out.append((int(d), float(err), plate))
+    return out
+
+
+def slot_offset_warnings(errors, tol_deg=SLOT_OFFSET_WARN_DEG):
+    """Operator lines for the slots whose |error| exceeds tol_deg (see slot_azimuth_errors)."""
+    return [f'drone {d} sits {err:+.0f} deg from plate {plate}: check the ring rigid body '
+            f'(+x toward plate 0) or the magnet plates'
+            for d, err, plate in errors if abs(err) > tol_deg]

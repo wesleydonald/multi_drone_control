@@ -72,3 +72,8 @@ DECIDED 2026-09-29 (Wesley)  Drone 3 gets the same single command path as the ca
 2026-09-30  Rig height integral = small safety net (z_ki 0.4, bound 0.15 m, gate 0.25 m); the model is judged with it off (Wesley; supervisor: the integral must not stand in for the model).
 2026-09-30  Rig thrust map: throttle = offset + 0.507*mass - 0.022*(V - 23.5), offsets 0.181/0.185/0.187/0.187 (RIG-0930-ladder4); thrust_ratio 35.2 above the offset, kt_trim off on the rig.
 2026-09-30  Rod joints: both ends close to free ball joints (pivot 4 cm under the drone centre, magnet on the plate); hardware unchanged for the next visit (Wesley).
+2026-09-30  Plan docs/plan_2026-10_tethered_model.md (Wesley, evening): rig keeps the breakaway freeze as its default until the airborne force deficit (~80 % of the ring weight) is explained; sim/flight logic can drop it behind a launch arg. Masses are trusted as measured (ring 0.86, drone 0.55, hung 98/196 g): no re-weighing.
+2026-09-30  Lab PC compute: Docker (Humble/Harmonic parity image) on the lab workstation, no headless run cap there (at most 4 in parallel, <= 16 of 24 cores for other users); the laptop keeps 10 per session (Wesley).
+2026-09-30  Attach/M1/M2/weld worlds and Tejen's sim drones stay on the legacy geometry and linear thrust map for now, pinned explicitly; only the carry/floor-start worlds become rig twins (Wesley).
+2026-09-30  z_taut_gate 0.6 on the rig is allowed as a fallback if the planner pivot fix is not in, so the height safety net can open (Wesley).
+2026-09-30  Lab PC parallelism: no fixed cap on parallel runs while nobody else uses the machine (about 6 slots on 24 cores); back off when other users are logged in or loading it (Wesley).

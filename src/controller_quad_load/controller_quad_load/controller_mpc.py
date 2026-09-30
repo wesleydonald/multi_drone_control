@@ -90,6 +90,13 @@ DT = 1.0 / FREQUENCY_HZ
 CABLE_ACCEL_CAP = 6.0          # m/s^2: clamp measured cable-accel magnitude (~2x taut)
 CABLE_SLEW = 25.0              # m/s^2 per second: max rate-of-change of applied cable
 MAX_CONSEC_SOLVE_FAILS = 15    # tolerate this many bad solves (hold) before disarming
+MODEL_CAP_PERIOD_S = 1.0       # the model throttle cap follows the pack voltage at most this often
+
+# Tracker log columns for the rig replay, appended after every older column:
+# thr_out = real throttle sent, thr_off = offset in use (voltage term included),
+# acx/acy/acz = node-0 cable accel the model was given, ref_age = s since the last reference.
+TRACKER_W1_COLS = ('thr_out', 'thr_off', 'acx', 'acy', 'acz',
+                   'ff_active', 'grounded', 'ref_age')
 
 # Height above spawn z at which the drone counts as AIRBORNE, which is when kT
 # switches from takeoff_thrust_ratio to thrust_ratio.
@@ -190,6 +197,9 @@ class Controller(Node):
         self.imu_raw = None
         # slew-limited cable accel actually fed to the model + solve-fail counters
         self._applied_cable_vec = None   # (3,) last applied cable accel (for slew)
+        self._applied_cable_xyz = np.zeros(3)   # node-0 cable accel the model got (log)
+        self._thr_out = float('nan')     # real throttle sent, offset included (log)
+        self._thr_off = 0.0              # offset in use at that publish (log)
         self._last_good_msg = None       # last successfully-solved ELRS command
         self._solve_fail_ct = 0
         # channel values ACTUALLY sent to the FC last cycle [roll, pitch, thr,
@@ -520,7 +530,13 @@ class Controller(Node):
         self.thrust_v_ref = float(self.declare_parameter('thrust_v_ref', 23.5).value)
         # the model's own ceiling leaves room for the offset under the real cap
         self._model_thr_max = max(0.1, self.throttle_max - self.thrust_offset)
+        self._model_cap_t = None
         set_throttle_max(self.ocp, self.N, self._model_thr_max)
+        if self.kt_batt_sag_frac != 0.0 and self.thrust_offset_v_slope != 0.0:
+            self.get_logger().warn(
+                f"[Drone {self.drone_id}] kt_batt_sag_frac {self.kt_batt_sag_frac} and "
+                f"thrust_offset_v_slope {self.thrust_offset_v_slope} both correct for pack "
+                f"voltage: the sag is counted twice. Set one of them to 0.")
         self._cap_pub = self.create_publisher(
             Float64, f'/drone_{self.drone_id}/throttle_max',
             QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
@@ -534,6 +550,7 @@ class Controller(Node):
         self.est_params = np.array([self.thrust_ratio, 0.0, 0.12, *self.rates])
         if getattr(self, 'velocity_loop', None) is not None:
             self.velocity_loop.rates = self.rates     # one rate curve for both control paths
+            self.velocity_loop.thr_max = self._model_thr_max
 
         # ── Logging ───────────────────────────────────────────────────────
         log_headers = [
@@ -566,6 +583,7 @@ class Controller(Node):
         log_headers += ['x0_wx', 'x0_wy', 'x0_wz', 'x0_w_fallback']
         # 1 while the yaw channel is held at 0 (u3 above stays what the solver wanted)
         log_headers += ['yaw_hold']
+        log_headers += list(TRACKER_W1_COLS)
         self.data_logger = DataLogger(
             LOGGING_NAME, f"planner_drone{self.drone_id}", log_headers,
             base_dir=LOG_BASE_DIR)
@@ -795,14 +813,59 @@ class Controller(Node):
             f"{'VELOCITY LOOP' if want else 'MPC'} (/fleet/control_phase="
             f"{msg.data!r})")
 
+    def _thrust_off(self):
+        """Throttle offset of the affine map at the current pack voltage (0 = proportional map)."""
+        if self.thrust_offset <= 0.0:
+            return 0.0
+        v = self.battery_voltage
+        dv = (self.thrust_v_ref - float(v)) if (v is not None and 18.0 < float(v) < 27.0) else 0.0
+        return max(0.0, self.thrust_offset + self.thrust_offset_v_slope * dv)
+
     def _output_throttle(self, thr, spool_frac=1.0):
         """Model throttle (above the offset) -> the throttle the flight controller gets."""
         if self.thrust_offset <= 0.0:
             return thr
-        v = self.battery_voltage
-        dv = (self.thrust_v_ref - float(v)) if (v is not None and 18.0 < float(v) < 27.0) else 0.0
-        off = max(0.0, self.thrust_offset + self.thrust_offset_v_slope * dv)
-        return float(min(self.throttle_max, thr + off * spool_frac))
+        return float(min(self.throttle_max, thr + self._thrust_off() * spool_frac))
+
+    def _realised_model_throttle(self, out):
+        """The model throttle a real output actually flies: no lift below the offset,
+        nothing above the real cap. What the pinned u-state, measured_cable_accel and
+        kt_trim must see, or they reason about thrust that was never produced."""
+        if self.thrust_offset <= 0.0:
+            return out
+        # the OCP cap refreshes at 1 Hz: a recovering pack would otherwise pin the state above it
+        return min(self._model_thr_max, max(0.0, float(out) - self._thrust_off()))
+
+    def _refresh_model_cap(self, now=None):
+        """Model cap = real cap - offset(V), so the OCP never plans throttle the cap cuts off."""
+        if self.thrust_offset <= 0.0:
+            return
+        # node clock: sim time in sim, so a SIL repeat refreshes on the same steps
+        now = self.get_clock().now().nanoseconds * 1e-9 if now is None else now
+        if self._model_cap_t is not None and now - self._model_cap_t < MODEL_CAP_PERIOD_S:
+            return
+        self._model_cap_t = now
+        cap = max(0.1, self.throttle_max - self._thrust_off())
+        if abs(cap - self._model_thr_max) < 1e-3:
+            return
+        self._model_thr_max = cap
+        set_throttle_max(self.ocp, self.N, cap)
+        if getattr(self, 'velocity_loop', None) is not None:
+            self.velocity_loop.thr_max = cap
+
+    def _w1_log_values(self):
+        """Values for TRACKER_W1_COLS; NaN for anything missing, so a gap never costs the row."""
+        def num(f):
+            try:
+                return float(f())
+            except (TypeError, ValueError, AttributeError, IndexError):
+                return float('nan')
+        ac = getattr(self, '_applied_cable_xyz', None)
+        last = getattr(self, '_last_ref_wall', None)
+        return [num(lambda: self._thr_out), num(lambda: self._thr_off),
+                num(lambda: ac[0]), num(lambda: ac[1]), num(lambda: ac[2]),
+                num(lambda: self._planner_ff_active), num(lambda: self._load_grounded()),
+                num(lambda: (self._wall_clock.now() - last).nanoseconds * 1e-9)]
 
     def _publish_channels(self, u, u_rate):
         """Send [roll, pitch, throttle, yaw] to the FC, or armed-idle before TAKEOFF.
@@ -841,14 +904,17 @@ class Controller(Node):
                 else:
                     # 0 is also what x0 sees next tick, so the stick cannot wind up
                     yaw = 0.0
-            # Record the throttle actually applied to the FC so the next IMU sample
-            # can be decomposed into thrust + cable (measured_cable_accel).
+            out = self._output_throttle(thr, spool_frac)
+            self._thr_out, self._thr_off = float(out), self._thrust_off()
+            # Record the throttle actually applied to the FC, in model units, so the next
+            # IMU sample can be decomposed into thrust + cable (measured_cable_accel).
+            thr = self._realised_model_throttle(out)
             self.last_cmd_throttle = thr
             msg = ELRSCommand(
                 armed=True,
                 channel_0=round(float(u[0]), 3),
                 channel_1=round(float(u[1]), 3),
-                channel_2=round((self._output_throttle(thr, spool_frac) * 2) - 1, 3),
+                channel_2=round((out * 2) - 1, 3),
                 channel_3=round(yaw, 3))
             self._applied_u = np.array(
                 [float(u[0]), float(u[1]), float(thr), yaw])
@@ -859,6 +925,7 @@ class Controller(Node):
         else:
             self._takeoff_step = None    # reset so the next takeoff spools again
             self.last_cmd_throttle = None
+            self._thr_out, self._thr_off = 0.0, self._thrust_off()
             msg = ELRSCommand(armed=True, channel_0=0.0, channel_1=0.0,
                               channel_2=-1.0, channel_3=0.0)
             # channel_2 = -1.0 maps to throttle 0, so every channel is at zero
@@ -912,6 +979,7 @@ class Controller(Node):
             v_load=(self.payload_vel if integrate else None))
         self._current_ref_pos = p_ref
         self._applied_cable0 = 0.0      # no cable model in this path
+        self._applied_cable_xyz = np.zeros(3)
         self._publish_channels(u, np.zeros(4))
 
     def _do_safety_disarm(self, reason=''):
@@ -999,7 +1067,7 @@ class Controller(Node):
 
     def _cable_static_cb(self, msg):
         self._cable_static_z = float(msg.data)
-        self._cable_static_t = time.monotonic()
+        self._cable_static_t = self.get_clock().now().nanoseconds * 1e-9
 
     def _kt_spool_done(self):
         """True once the takeoff spool has run its course (the applied throttle is the
@@ -1021,7 +1089,7 @@ class Controller(Node):
             return
         t.measure_accel(float(self.current_pose[9]))
         static_fresh = (self._cable_static_t is not None
-                        and time.monotonic() - self._cable_static_t < 2.0)
+                        and self.get_clock().now().nanoseconds * 1e-9 - self._cable_static_t < 2.0)
         tethered = (static_fresh and abs(self._cable_static_z) > 0.5
                     and abs(self._applied_cable_z0) > 0.5 and not self.payload_resting)
         if self._kt_tethered and not tethered:
@@ -1068,7 +1136,7 @@ class Controller(Node):
         # deadlocked at the typed value). The floor case on the rig is the payload_resting
         # gate; a partly supported drone on the SIL stand only slows the lift (R0433).
         steady = (self.armed and self._kt_spool_done() and tethered and not self._kt_landing
-                  and 0.15 <= u <= self.throttle_max and abs(t.a_meas_z) < 1.5 and abs(vz) < 0.08)
+                  and 0.15 <= u <= self._model_thr_max and abs(t.a_meas_z) < 1.5 and abs(vz) < 0.08)
         t.update(self._cable_static_z if tethered else 0.0, steady, contact_possible=load_at_rest)
         if t.frozen and not self._kt_frozen_said:
             self._kt_frozen_said = True
@@ -1199,6 +1267,7 @@ class Controller(Node):
             # derate. Constant for the whole flight unless the derate is enabled.
             self._update_kt_trim()
             self.est_params[0] = self._effective_kT()
+            self._refresh_model_cap()
 
             # ── Set MPC reference (external planner) ──────────────────────
             # Track the streamed receding-horizon reference. There is no fixed
@@ -1268,6 +1337,8 @@ class Controller(Node):
             self._applied_cable0 = (float(np.linalg.norm(ref_cable[0]))
                                     if ref_cable is not None else 0.0)
             self._applied_cable_z0 = float(ref_cable[0][2]) if ref_cable is not None else 0.0
+            self._applied_cable_xyz = (np.asarray(ref_cable[0], float).copy()
+                                       if ref_cable is not None else np.zeros(3))
             self._last_qref0 = set_planner_reference(
                 self.ocp, self.planner_ref_pos, self.planner_ref_vel,
                 ref_acc, self.N, self.est_params,
@@ -1471,6 +1542,7 @@ class Controller(Node):
             log_row += [float(estimated_state[10]), float(estimated_state[11]),
                         float(estimated_state[12]), x0_w_fallback]
             log_row += [float(self._yaw_hold)]
+            log_row += self._w1_log_values()
             self.data_logger.append_row(log_row)
 
             self.control_history.append(np.concatenate((u, u_rate)).tolist())

@@ -37,9 +37,10 @@ from interfaces.msg import MotionCaptureState
 
 from .load_cable_dynamics import LoadCableDynamics, LOAD_DIM, CABLE_DIM
 from .geometry import (quat_to_rot_np, attach_points, nominal_cable_dirs,
-                       azimuth_slot_assignment, yaw_from_quat)
+                       azimuth_slot_assignment, yaw_from_quat, slot_azimuth_errors,
+                       slot_offset_warnings)
 from .load_trajectory import LoadTrajectory, ORBIT_RAMP_S
-from .planner_solver import PlannerSolver
+from .planner_solver import PlannerSolver, HorizonFallback, PLAN_N, PLAN_TF
 from .params import PlannerConfig, load_inertia
 from .creep_controller import CreepController
 from .reference_builder import ReferenceBuilder
@@ -212,6 +213,29 @@ def static_cable_z(planned_a_z, load_mass, drone_mass):
     return [v / tot * (-float(load_mass) * 9.81 / float(drone_mass)) for v in a]
 
 
+def tick_log_header(n_drones, n_slots):
+    """Columns of the planner's log.csv. The first block is the original layout; later
+    columns are only ever appended, so readers by name or by position keep working.
+    Rod columns (t tsz gate len elev, then per rod) are per OCP SLOT (slot2drone maps
+    them to drones); d<k>_* are per physical drone. t is the node-0 planned tension of
+    the published horizon, len the pivot-to-attach distance, ref_age the time since the
+    last successful solve. published is what an OCP tick sent (solved / shifted / none;
+    blank on creep and hold ticks, whose solve_status is the priming solve), res_* the
+    residuals of the last solve."""
+    cols = (['sim_time', 'phase', 'n', 'load_x', 'load_y', 'load_z',
+             'load_vz', 'tilt_deg', 'z_tgt', 'z_bias', 'lift_progress',
+             'traj_t', 'land'] + [f'd{k}_z' for k in range(n_drones)])
+    cols += ['solve_status', 'solve_ms', 'qp_iter', 'sqp_calls']
+    for name in ('t', 'tsz', 'gate', 'len', 'elev'):
+        cols += [f'{name}{i}' for i in range(n_slots)]
+    cols += ['ff', 'ff_active', 'qw', 'qx', 'qy', 'qz', 'wx', 'wy', 'wz',
+             'ref_age', 'fail_streak', 'slot2drone']
+    cols += [f'd{k}_{a}' for k in range(n_drones) for a in ('x', 'y')]
+    cols += [f'd{k}_{a}' for k in range(n_drones) for a in ('qw', 'qx', 'qy', 'qz')]
+    cols += ['published', 'res_stat', 'res_eq']
+    return cols
+
+
 def measured_rod_lengths(nominal, dists, tol_frac=0.15, spread_m=0.03):
     """Per-drone rod lengths from the measured drone-to-rim distances at the moment the
     rods are known taut (creep handover / taut air start). Returns (lengths, None) or
@@ -257,6 +281,10 @@ class LoadPlanner(Node):
         self.lift_ramp_vel = cfg.lift_ramp_vel
         self._zbias = ZBias(cfg.z_ki, cfg.z_i_max, PLANNER_HZ)
         self._z_taut_gate = cfg.z_taut_gate
+        self.pivot_offset = np.asarray(cfg.pivot_offset, float)   # rod pivot, drone body frame
+        self._solve_budget_s = cfg.solve_budget_s
+        self._fallback = HorizonFallback(cfg.max_shift_publishes, PLAN_TF / PLAN_N)
+        self._published = ''                   # this tick's refs: solved / shifted / none
         # opt-in: keep integrating through a constant-speed level orbit (M1 orbits from the
         # end of the lift, so the gated hover never happens and the ring flies 6 cm high, R0653)
         self._z_ki_in_orbit = bool(self.declare_parameter('z_ki_in_orbit', True).value)
@@ -307,6 +335,7 @@ class LoadPlanner(Node):
         # The OCP wrapper builds (or loads a cached) acados solver for this geometry
         # and owns the reference-extraction functions + warm-start state (last_X).
         self.solver = PlannerSolver(self.dyn, self.get_logger())
+        self._configure_solver(self.solver)
         # Pre-built OCPs by fleet size, for handing back after a reconfiguration.
         # Populated by prebuild_solvers(); the current size is registered here so a
         # hand-back to the original n is a swap like any other.
@@ -318,8 +347,9 @@ class LoadPlanner(Node):
         # through _publish_ref (the trackers see these until the OCP takes over).
         self.creep = CreepController(
             self.n, self.rho, self.cable_len, self.N, self.dt, self.dyn.g,
-            self.handover_elev_deg, PLANNER_HZ, self._drone_at, self._publish_slot_ref,
-            self.get_logger(), creep_vel=cfg.creep_vel)
+            self.handover_elev_deg, PLANNER_HZ, self._pivot_at, self._publish_slot_ref,
+            self.get_logger(), creep_vel=cfg.creep_vel,
+            pivot_offset=self.pivot_offset, drone_yaw=self._slot_yaw)
         # Builds the per-node OCP tracking reference from the lift schedule + load
         # trajectory (fed the schedule via refs.update() before each planner solve).
         self.refs = ReferenceBuilder(self.dyn, self.n, self._s_nom, self.dt, self.traj)
@@ -328,6 +358,7 @@ class LoadPlanner(Node):
         self.load_state = None                 # [p(3), q(4 wxyz), v(3), w(3)]
         self.drone_pos = [None] * self.n
         self.drone_vel = [None] * self.n       # world velocity from mocap twist
+        self.drone_quat = {}                   # physical drone -> attitude [w, x, y, z]
         # OCP slot i -> physical drone slot2drone[i]. Identity until (optionally)
         # reassigned by azimuth on the first solve (see _assign_slots).
         self.slot2drone = list(range(self.n))
@@ -391,6 +422,11 @@ class LoadPlanner(Node):
         self._phase_pub = self.create_publisher(String, '/fleet/phase', QoSProfile(
             depth=1, reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        # pre-flight warnings on the fleet manager's latched status line (RViz panel)
+        self._status_pub = self.create_publisher(String, '/fleet/manager_status', QoSProfile(
+            depth=1, reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self._slot_offsets_checked = False
         # Desired load position [x, y, z] at node 0. Logged by the drone-0
         # tracker so plot_run.py can overlay payload desired vs actual.
         self._traj_state_pub = self.create_publisher(String, '/payload/trajectory_state', 5)
@@ -401,7 +437,11 @@ class LoadPlanner(Node):
         self.load_plan_pub = self.create_publisher(
             Path, '/payload/mpc_plan', 5)
 
-        self.create_timer(1.0 / PLANNER_HZ, self._plan)
+        # sim time only: the SIL bench holds its clock until this marker says the tick's
+        # refs are out, so the planner is inside the lockstep like the trackers
+        self._tick_pub = (self.create_publisher(Float64MultiArray, '/planner/tick', 10)
+                          if self.get_parameter('use_sim_time').value else None)
+        self.create_timer(1.0 / PLANNER_HZ, self._plan_timer)
         self.create_timer(0.2, self._publish_phase)
         # Record the run's configuration. Written here AND re-written at the end of a
         # subclass's __init__ (see _dump_run_params), so the file always reflects the
@@ -423,6 +463,8 @@ class LoadPlanner(Node):
                 # wherever the launch happened to be started from.
                 self._run_log_dir = run_log_dir(LOG_PKG, self.get_name(),
                                                 base_dir=log_base_dir())
+                for entry in self._solvers.values():
+                    self._configure_solver(entry[1])
             write_params(self._run_log_dir, node_params(self, {
                 'node': self.get_name(), 'planner_hz': PLANNER_HZ,
                 'num_drones': self.n, 'horizon_N': self.N, 'node_dt': self.dt,
@@ -456,38 +498,82 @@ class LoadPlanner(Node):
 
     def _log_tick(self):
         """10 Hz log.csv beside params.json: load pose, tilt, the planner's height
-        target and integral, phase, every physical drone's z. Interactive Gazebo runs
-        (Wesley flies, the logs are read afterwards) had no payload record at all: the trackers log
-        only their own pose and the tilt print goes to the terminal. Never raises."""
+        target and integral, phase, every physical drone's z, then (appended, 2026-10)
+        the solve, per-rod and ring-attitude columns an offline replay needs (see
+        tick_log_header). Interactive Gazebo runs (Wesley flies, the logs are read
+        afterwards) had no payload record at all. Never raises."""
         try:
             if self._run_log_dir is None:
                 return
             if getattr(self, '_tick_log', None) is None:
                 import csv
+                # widths latched here: a resize or a weld must not shift the columns
+                self._log_nd = len(self.drone_pos) + len(getattr(self, 'attach_pos', None) or [])
+                self._log_ns = max(self.n, self._log_nd)
                 f = open(os.path.join(self._run_log_dir, 'log.csv'), 'w', newline='')
                 w = csv.writer(f)
-                w.writerow(['sim_time', 'phase', 'n', 'load_x', 'load_y', 'load_z',
-                            'load_vz', 'tilt_deg', 'z_tgt', 'z_bias', 'lift_progress',
-                            'traj_t', 'land'] + [f'd{k}_z' for k in range(len(self.drone_pos))])
+                w.writerow(tick_log_header(self._log_nd, self._log_ns))
                 self._tick_log = (f, w)
             f, w = self._tick_log
-            ls = self.load_state
-            R = quat_to_rot_np(ls[3:7])
-            tilt = float(np.degrees(np.arccos(np.clip(R[2, 2], -1.0, 1.0))))
-            z_tgt = (min(self.target_z, self.lift_z0 + self.lift_progress)
-                     if self.lift_z0 is not None else float('nan'))
-            t = self.get_clock().now().nanoseconds * 1e-9
-            w.writerow([f'{t:.3f}', self.phase, self.n,
-                        f'{ls[0]:.4f}', f'{ls[1]:.4f}', f'{ls[2]:.4f}', f'{ls[9]:.4f}',
-                        f'{tilt:.2f}', f'{z_tgt:.4f}', f'{self._zbias.value:+.4f}',
-                        f'{self.lift_progress:.4f}', f'{self.traj_t:.2f}',
-                        int(bool(self._land_to_ground))]
-                       + [f'{d[2]:.4f}' if d is not None else '' for d in self.drone_pos])
+            w.writerow(self._tick_log_row())
             f.flush()
         except Exception as e:
             if not getattr(self, '_tick_log_warned', False):
                 self._tick_log_warned = True
                 self.get_logger().warn(f'[planner] tick log off: {e}')
+
+    def _tick_log_row(self):
+        nd, ns = self._log_nd, self._log_ns
+        fit = lambda xs, k: (list(xs) + [''] * k)[:k]
+        ls = self.load_state
+        R = quat_to_rot_np(ls[3:7])
+        tilt = float(np.degrees(np.arccos(np.clip(R[2, 2], -1.0, 1.0))))
+        z_tgt = (min(self.target_z, self.lift_z0 + self.lift_progress)
+                 if self.lift_z0 is not None else float('nan'))
+        t = self.get_clock().now().nanoseconds * 1e-9
+        drones = list(self.drone_pos)
+        row = ([f'{t:.3f}', self.phase, self.n,
+                f'{ls[0]:.4f}', f'{ls[1]:.4f}', f'{ls[2]:.4f}', f'{ls[9]:.4f}',
+                f'{tilt:.2f}', f'{z_tgt:.4f}', f'{self._zbias.value:+.4f}',
+                f'{self.lift_progress:.4f}', f'{self.traj_t:.2f}',
+                int(bool(self._land_to_ground))]
+               + fit([f'{d[2]:.4f}' if d is not None else '' for d in drones], nd))
+        sv = self.solver
+        st = getattr(sv, 'last_status', None)
+        row += ['' if st is None else st, f'{getattr(sv, "last_solve_ms", float("nan")):.1f}',
+                getattr(sv, 'last_qp_iter', -1), getattr(sv, 'last_iters', 0)]
+        X = getattr(self, '_pub_X', None)
+        per_rod = []
+        for i in range(self.n):
+            t_i = tsz = ''
+            if X is not None and X.shape[0] >= LOAD_DIM + CABLE_DIM * (i + 1):
+                b = LOAD_DIM + CABLE_DIM * i
+                t_i = f'{float(X[b + 12, 0]):.3f}'
+                tsz = f'{float(X[b + 12, 0]) * float(X[b + 2, 0]):.3f}'
+            gate = dist = elev = ''
+            pv = self._pivot_at(i)
+            if pv is not None:
+                d = ls[0:3] + R @ self.rho[i] - pv
+                nrm = float(np.linalg.norm(d))
+                dist = f'{nrm:.4f}'
+                gate = f'{self._cable_taut_gate(i)[0]:.3f}'
+                elev = f'{np.degrees(np.arcsin(np.clip(-d[2] / max(nrm, 1e-6), -1, 1))):.2f}'
+            per_rod.append((t_i, tsz, gate, dist, elev))
+        per_rod = fit(per_rod, ns)
+        for k in range(5):
+            row += [r[k] if r else '' for r in per_rod]
+        row += [f'{getattr(self, "_ff_last", 0.0):.3f}', '' if self._ff_active is None else int(self._ff_active)]
+        row += [f'{v:.5f}' for v in ls[3:7]] + [f'{v:.4f}' for v in ls[10:13]]
+        age = self._fallback.age(t)
+        row += [f'{age:.3f}', self._fallback.streak, ' '.join(str(d) for d in self.slot2drone)]
+        for d in fit(drones, nd):
+            row += [f'{d[0]:.4f}', f'{d[1]:.4f}'] if isinstance(d, np.ndarray) else ['', '']
+        for k in range(nd):
+            q = self.drone_quat.get(k)
+            row += [f'{v:.5f}' for v in q] if q is not None else [''] * 4
+        res = getattr(sv, 'last_res', None)
+        row += [self._published] + ([f'{res[0]:.3e}', f'{res[1]:.3e}'] if res is not None else ['', ''])
+        return row
 
     # Mocap callbacks
     def _payload_cb(self, msg: MotionCaptureState):
@@ -507,6 +593,8 @@ class LoadPlanner(Node):
         lv = msg.twist.linear
         self.drone_pos[i] = np.array([p.x, p.y, p.z])
         self.drone_vel[i] = np.array([lv.x, lv.y, lv.z])
+        o = msg.pose.orientation
+        self.drone_quat[i] = np.array([o.w, o.x, o.y, o.z])
 
     def _fleet_command_cb(self, msg: String):
         cmd = msg.data.strip().upper()
@@ -628,6 +716,47 @@ class LoadPlanner(Node):
         unless auto_slot_assign remapped it)."""
         return self.drone_pos[self.slot2drone[i]]
 
+    def _pivot_at(self, i):
+        """Measured rod pivot of the drone in OCP slot i: centre + R @ pivot_offset. The
+        OCP's drone is the rod end, so every rod geometry the planner measures (x_init,
+        rod lengths, tautness, elevation, creep) goes through here."""
+        p = self._drone_at(i)
+        if p is None or not self.pivot_offset.any():
+            return p
+        q = self.drone_quat.get(self.slot2drone[i])
+        if q is None and not getattr(self, '_pivot_level_warned', False):
+            self._pivot_level_warned = True
+            self.get_logger().warn(f'[planner] drone {self.slot2drone[i]} has no attitude: '
+                                   f'its rod pivot assumes a level drone')
+        R = quat_to_rot_np(q) if q is not None else np.eye(3)
+        return p + R @ self.pivot_offset
+
+    def _slot_yaw(self, i):
+        q = self.drone_quat.get(self.slot2drone[i])
+        return yaw_from_quat(q) if q is not None else 0.0
+
+    def _rim_dist(self, i):
+        """|pivot - attach point| of slot i: the rod length when the rod is taut."""
+        ls = self.load_state
+        attach = ls[0:3] + quat_to_rot_np(ls[3:7]) @ self.rho[i]
+        return float(np.linalg.norm(attach - self._pivot_at(i)))
+
+    def _configure_solver(self, solver):
+        solver.solve_budget_s = self._solve_budget_s
+        solver.pivot_offset = self.pivot_offset
+        solver.fail_dump_dir = getattr(self, '_run_log_dir', None)
+
+    def _solve_context(self):
+        """Poses a failed solve is dumped with (planner_fail_<n>.npz)."""
+        nan3, nan4 = [np.nan] * 3, [np.nan] * 4
+        return {'load_state': self.load_state,
+                'slot2drone': self.slot2drone,
+                'drone_pos': [self._drone_at(i) if self._drone_at(i) is not None else nan3
+                              for i in range(self.n)],
+                'drone_quat': [self.drone_quat.get(self.slot2drone[i], nan4) for i in range(self.n)],
+                'pivot_offset': self.pivot_offset,
+                'sim_time': self.get_clock().now().nanoseconds * 1e-9}
+
     def _publish_slot_ref(self, i, nodes):
         self._publish_ref(self.slot2drone[i], nodes)
 
@@ -647,6 +776,20 @@ class LoadPlanner(Node):
         self.get_logger().info(
             f'[planner] auto slot assignment (slot->drone): {self.slot2drone} '
             f'(load yaw datum {np.degrees(self.psi0):+.1f} deg)')
+
+    def _check_slot_offsets(self):
+        """Warn once when a drone sits more than 10 deg from its modelled slot: rig model-f1
+        had all four ~30 deg off (one plate), and every ring-quaternion flip then failed the solve."""
+        self._slot_offsets_checked = True
+        errs = slot_azimuth_errors(self.drone_pos, self.load_state[0:2], self.psi0, self.slot2drone,
+                                   [np.arctan2(r[1], r[0]) for r in self.rho])
+        self.get_logger().info('[planner] slot azimuth error (deg): '
+                               + ', '.join(f'd{d} {e:+.1f} (plate {p})' for d, e, p in errs))
+        warns = slot_offset_warnings(errs)
+        for text in warns:
+            self.get_logger().warn(f'[planner] SLOT OFFSET: {text}')
+        if warns:
+            self._status_pub.publish(String(data='SLOT OFFSET: ' + '; '.join(warns)))
 
     def _latch_yaw_datum(self):
         """Latch the payload's measured yaw as the reference datum, once, before the
@@ -690,10 +833,24 @@ class LoadPlanner(Node):
             self._phase_text = text
             self._phase_pub.publish(String(data=text))
 
+    def _plan_timer(self):
+        try:
+            self._plan()
+        finally:
+            if self._tick_pub is not None:
+                t = self.get_clock().now().nanoseconds * 1e-9
+                self._tick_pub.publish(Float64MultiArray(data=[t, 1.0 / PLANNER_HZ]))
+
     def _plan(self):
         if self.load_state is None or any(d is None for d in self.drone_pos):
             return
+        self._published = ''
+        try:
+            self._plan_tick()
+        finally:
+            self._log_tick()                # after the solve, so a row carries this tick's solve
 
+    def _plan_tick(self):
         # Latch the placement yaw datum first: the slot matching below is expressed
         # about it, as is every reference the builder produces.
         if not self._yaw_datum_latched:
@@ -702,10 +859,11 @@ class LoadPlanner(Node):
         # Match drones to nominal slots once, now that every pose is in.
         if self.auto_slot_assign and not self._slots_assigned:
             self._assign_slots()
+        if not self._slot_offsets_checked:
+            self._check_slot_offsets()
 
         self._publish_load_desired()
         self._publish_traj_state()
-        self._log_tick()
 
         # Phase 1: creep takeoff. The planner assumes taut cables, but running the
         # lift through the ~0.4 m of slack makes the drones overshoot and snap the
@@ -721,7 +879,7 @@ class LoadPlanner(Node):
             # (rig 2026-09-30, [2, 3, 0, 1]) physical order anchored each drone on the
             # opposite plate and flew the fleet into the middle of the ring
             handover, reason = self.creep.step(
-                self.load_state, [self._drone_at(i) for i in range(self.n)], gates,
+                self.load_state, [self._pivot_at(i) for i in range(self.n)], gates,
                 self.takeoff_seen)
             # Keep the OCP warm on the live measured config (discarding its horizon,
             # the trackers stay on the creep refs) so the handover has a warm start.
@@ -882,22 +1040,40 @@ class LoadPlanner(Node):
         self.refs.update(self.hover_xy, self.lift_z0, self.lift_progress,
                          self.target_z, self._lift_vel, self.traj_t,
                          z_bias=self._zbias.value)
-        drone_slot_pos = [self._drone_at(i) for i in range(self.n)]
+        self._solve_and_publish()
+
+    def _solve_and_publish(self):
+        # stamped at the measurement, so the fallback's shift matches the horizon's node 0
+        now = self.get_clock().now().nanoseconds * 1e-9
+        drone_slot_pos = [self._pivot_at(i) for i in range(self.n)]
         x_init = self.solver.build_x_init(self.load_state, drone_slot_pos)
         X, status = self.solver.solve_horizon(
             self.refs.yref_at, self.refs.q_ref_at, x_init,
-            reseed=self.solver.last_X is None or self.solver.recover)
+            reseed=self.solver.last_X is None or self.solver.recover,
+            context=self._solve_context())
         if X is None:
             # Don't publish a degenerate solution and don't let it warm-start the
-            # next cycle — drop the warm start and hold the last good reference.
-            self.solver.recover = True
-            self.solver.last_X = None
+            # next cycle: drop the warm start (the next solve fully resets the iterate)
+            # and bridge with the last good horizon shifted, for a bounded time. An
+            # unconverged but finite iterate is continued from instead of reset.
+            self.solver.last_X = self.solver.pending_X
+            self.solver.recover = self.solver.last_X is None
+            X_shift = self._fallback.failure(now)
             self.get_logger().warn(
-                f'[planner] solve status {status} — holding last reference, '
-                f'will reconverge from x_init next cycle')
+                f'[planner] solve status {status} ({self.solver.last_solve_ms:.0f} ms) — '
+                + (f'publishing the last horizon shifted ({self._fallback.age(now):.2f} s)'
+                   if X_shift is not None else 'holding, nothing published')
+                + ', reconverging from x_init next cycle')
+            if X_shift is not None:
+                self._published = 'shifted'
+                self._publish_refs(X_shift)
+            else:
+                self._published = 'none'
             return
         self.solver.recover = False
         self.solver.last_X = X
+        self._fallback.success(X, now)
+        self._published = 'solved'
         self._publish_refs(X)
 
     def _prime_solver(self):
@@ -908,13 +1084,14 @@ class LoadPlanner(Node):
         converged solution matching the current geometry, so the first planner cycle
         is a warm refinement rather than a cold reconverge (which showed up as a jump
         and a scrambled MPC path for a moment right after handover)."""
-        drone_slot_pos = [self._drone_at(i) for i in range(self.n)]
+        drone_slot_pos = [self._pivot_at(i) for i in range(self.n)]
         x_init = self.solver.build_x_init(self.load_state, drone_slot_pos)
         hold = self.refs.hold_yref(self.load_state)
         X, _status = self.solver.solve_horizon(
             lambda _k: hold, self.refs.q_ref_at, x_init,
-            reseed=self.solver.last_X is None)
-        self.solver.last_X = X          # None on a failed solve -> next tick reseeds
+            reseed=self.solver.last_X is None, context=self._solve_context())
+        # None on a failed solve -> next tick reseeds; an unconverged one is continued
+        self.solver.last_X = X if X is not None else self.solver.pending_X
 
     def _publish_load_desired(self, target=None):
         """Publish the desired LOAD position [x, y, z]: the captured hover xy and
@@ -997,7 +1174,9 @@ class LoadPlanner(Node):
             rho = attach_points(m, self.attach_radius, self.attach_z)
             dyn = LoadCableDynamics(m, self.load_mass, self.load_inertia,
                                     [self.cable_len] * m, rho, self.drone_mass)
-            self._solvers[m] = (dyn, PlannerSolver(dyn, self.get_logger()), rho)
+            solver = PlannerSolver(dyn, self.get_logger())
+            self._configure_solver(solver)
+            self._solvers[m] = (dyn, solver, rho)
             self.get_logger().info(f'[planner] OCP ready for n={m}')
 
     def resize_fleet(self, new_n, drone_ids, rho=None, cable_lengths=None):
@@ -1049,6 +1228,8 @@ class LoadPlanner(Node):
             self.refs.set_yaw_datum(self.psi0)
         self.slot2drone = [int(d) for d in drone_ids]
         self.solver.last_X = None            # different fleet: no valid warm start
+        if getattr(self, '_fallback', None) is not None:
+            self._fallback.reset()           # nor a horizon to shift
         self.N = self.solver.N
         self.dt = self.solver.dt
         self.get_logger().warn(
@@ -1123,10 +1304,7 @@ class LoadPlanner(Node):
         """At handover the rods are taut, so |drone - rim| is the rod length. Replace the
         typed cable_len per drone (OCP geometry + tautness gate) when the guard passes."""
         from rclpy.parameter import Parameter
-        ls = self.load_state
-        R = quat_to_rot_np(ls[3:7])
-        dists = [float(np.linalg.norm(ls[0:3] + R @ self.rho[i] - self._drone_at(i)))
-                 for i in range(self.n)]
+        dists = [self._rim_dist(i) for i in range(self.n)]
         lens, why = measured_rod_lengths(self.cable_len, dists, tol_frac=self.rod_tol_frac,
                                          spread_m=self.rod_spread_m)
         if lens is None:
@@ -1212,10 +1390,7 @@ class LoadPlanner(Node):
         0 while the cable is slack, 1 once straightened (the slack->taut
         transition). Rigid cables are taut from spawn, so this is ~1 immediately;
         soft cables ramp it in as they straighten."""
-        ls = self.load_state
-        R = quat_to_rot_np(ls[3:7])
-        attach = ls[0:3] + R @ self.rho[i]
-        dist = float(np.linalg.norm(attach - self._drone_at(i)))
+        dist = self._rim_dist(i)
         d_lo = CABLE_TAUT_LO_FRAC * self.cable_len_i[i]
         d_hi = CABLE_TAUT_HI_FRAC * self.cable_len_i[i]
         len_gate = float(np.clip((dist - d_lo) / max(d_hi - d_lo, 1e-6), 0.0, 1.0))
@@ -1257,6 +1432,8 @@ class LoadPlanner(Node):
                 self.get_logger().info(
                     '[planner] load down — cable feedforward off, rods slack')
         self._set_ff_active(ff > 0.0)
+        self._ff_last = ff
+        self._pub_X = X
         # floor start after a hand-over at >= 37 deg: the rods are rigid and straight, so
         # every rod gets the same fraction of its share (the length gate read 0.43 on a rig
         # rod whose resting distance was 3 cm short, and would step to 1 at breakaway)
@@ -1268,8 +1445,9 @@ class LoadPlanner(Node):
             t_i = float(X[LOAD_DIM + CABLE_DIM * i + 12, 0])   # planned tension, node 0
             diag.append((i, dist, gate, t_i))
             nodes = []
+            yaw = self._slot_yaw(i)
             for k in range(self.N + 1):
-                pos, vel, acc, cable = self.solver.drone_kinematics(X[:, k], i)
+                pos, vel, acc, cable = self.solver.drone_kinematics(X[:, k], i, yaw)
                 nodes.append((pos, vel, acc, (1.0 if equal_pull else gate) * ff * cable))
             # slot i's planned trajectory belongs to the physical drone occupying it
             self._publish_ref(self.slot2drone[i], nodes)
@@ -1295,7 +1473,7 @@ class LoadPlanner(Node):
             tilt = np.degrees(np.arccos(np.clip(R[2, 2], -1.0, 1.0)))
             elevs = []
             for i in range(self.n):
-                d = (ls[0:3] + R @ self.rho[i]) - self._drone_at(i)
+                d = (ls[0:3] + R @ self.rho[i]) - self._pivot_at(i)
                 nd = np.linalg.norm(d)
                 elevs.append(np.degrees(np.arcsin(np.clip(-d[2] / max(nd, 1e-6), -1, 1))))
             e = ' '.join(f"{x:.0f}" for x in elevs)

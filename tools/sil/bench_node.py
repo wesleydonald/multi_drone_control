@@ -33,11 +33,12 @@ from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Bool, Float64MultiArray, Int32, String
 
-from interfaces.msg import ELRSCommand, MotionCaptureState
+from interfaces.msg import ELRSCommand, MotionCaptureState, Telemetry
 
 from .plant import (Link, PayloadParams, QuadParams, SilPlant, quat_to_rot,
                     rot_to_quat)
 from .standin import ApproachStandin
+from .lockstep import PlannerLockstep
 
 
 def _time_msg(t):
@@ -65,7 +66,8 @@ class SilBench(Node):
         # ── plant ────────────────────────────────────────────────────────────
         rho = scn.attach_rho()
         pos, load = scn.initial_state()
-        quads = [QuadParams(mass=scn.drone_mass, thrust_c=scn.thrust_c)
+        quads = [QuadParams(mass=scn.drone_mass, thrust_c=scn.thrust_c,
+                            thrust_map=scn.thrust_map, thrust_offset=scn.thrust_offset)
                  for _ in range(self.n)]
         if scn.stands:
             # A stand under each TETHERED drone at its spawn height. The newcomer is a
@@ -78,8 +80,9 @@ class SilBench(Node):
             # newcomer: unattached until the scripted weld
             links.append(Link(np.zeros(3), scn.magnet_arm_len, attached=False))
         self.plant = SilPlant(quads, links,
-                              PayloadParams(mass=scn.load_mass))
-        self.plant.reset(pos, load)
+                              PayloadParams(mass=scn.load_mass),
+                              pack={'v0': scn.pack_v0})
+        self.plant.reset(pos, load, load_R=scn.load_R())
         self.standin = ApproachStandin(thrust_c=scn.thrust_c)
         self.welded = [False] * self.n
         # Pose the stand-in holds from the weld instant until the real tracker takes
@@ -122,6 +125,10 @@ class SilBench(Node):
         self.fleet_cmd_pub = self.create_publisher(String, '/fleet/command', 10)
         self.detach_pub = self.create_publisher(Int32, '/fleet/detach', 10)
         self.magnet_pub = self.create_publisher(Bool, '/magnet/object_attached', 10)
+        # the rig map's pack voltage, as sim_telemetry / the ELRS link publish it (10 Hz)
+        self.tel_pub = ([self.create_publisher(Telemetry, f'/drone_{i}/telemetry', 5)
+                         for i in range(self.n)] if scn.thrust_map == 'rig' else [])
+        self._tel_t = -1.0
         # the planner (dissipative node) announces its phase once built; the bench
         # must not start the scenario clock before it listens (R0516: WELD fired
         # 16 s of solver loading before the node's first tick, nothing attached)
@@ -130,6 +137,11 @@ class SilBench(Node):
             String, '/fleet/control_phase', self._phase_cb,
             QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
                        reliability=ReliabilityPolicy.RELIABLE))
+        # The planner is in the lockstep too: a step on which its 10 Hz tick is due
+        # waits for its /planner/tick marker. Without this its 20 ms solves landed on
+        # whichever 9 ms bench step was current, and repeats split (R0775 vs R0777).
+        self.planner = PlannerLockstep()
+        self.create_subscription(Float64MultiArray, '/planner/tick', self._plan_tick_cb, 10)
 
         for i in range(self.n):
             self.create_subscription(
@@ -205,9 +217,17 @@ class SilBench(Node):
             msg.linear_acceleration.y = float(a[1])
             msg.linear_acceleration.z = float(a[2])
             self.imu_pub[i].publish(msg)
-        ps = self.plant.payload_state()
-        self.payload_pub.publish(
-            self._mocap_msg(ps[0:3], ps[3:7], ps[7:10], ps[10:13]))
+        # no payload pose before the scenario clock starts: the planner does not solve
+        # without one, so its warm start does not depend on how long the trackers took to boot
+        if self.t_ready is not None:
+            ps = self.plant.payload_state()
+            self.payload_pub.publish(
+                self._mocap_msg(ps[0:3], ps[3:7], ps[7:10], ps[10:13]))
+        if self.tel_pub and self.sim_t - self._tel_t >= 0.1 - 1e-9:
+            self._tel_t = self.sim_t
+            for i, pub in enumerate(self.tel_pub):
+                pub.publish(Telemetry(battery_voltage=float(self.plant.pack_v_measured(i)),
+                                      mode='SIL'))
 
     # ── mission events ───────────────────────────────────────────────────────
 
@@ -298,7 +318,10 @@ class SilBench(Node):
                 s = self.plant.drone_state(i)
                 ref = self.hold_ref[i] if self.welded[i] else self._weld_hover_ref()
                 self.plant.set_command(
-                    i, *self.standin.channels(s[0:3], s[7:10], s[3:7], ref), armed=True)
+                    i, *self.standin.channels(
+                        s[0:3], s[7:10], s[3:7], ref,
+                        throttle_fn=lambda a, k=i: self.plant.throttle_for_accel(k, a)),
+                    armed=True)
                 continue
             if i >= self.n_teth and i not in self.handover_step:
                 self.handover_step[i] = self.step_i
@@ -314,6 +337,10 @@ class SilBench(Node):
     def _phase_cb(self, msg):
         self.planner_ready = True
 
+    def _plan_tick_cb(self, msg):
+        if len(msg.data) >= 2:
+            self.planner.on_marker(float(msg.data[0]), float(msg.data[1]))
+
     def _wait_for_commands(self):
         """Lockstep barrier: block until every drone we have EVER heard from has
         published a command for this step. A drone that has not booted yet is not
@@ -322,13 +349,23 @@ class SilBench(Node):
         loudly instead of being silently dropped."""
         for i in range(self.n):
             self.got_cmd[i] = False
+        plan_due = self.planner.due(self.sim_t)
         deadline = time.monotonic() + self.scn.step_timeout_s
         ok = False
         while time.monotonic() < deadline:
             rclpy.spin_once(self, timeout_sec=0.002)
-            if all(self.got_cmd[i] for i in self.alive):
+            if (all(self.got_cmd[i] for i in self.alive)
+                    and not (plan_due and not self.planner.ticked_at(self.sim_t))):
                 ok = True
                 break
+        if plan_due:
+            # the refs went out before the marker on other topics: take them now, or the
+            # logged ref0 / track_err lags a step in some repeats (the plant does not)
+            for _ in range(4 * self.n):
+                rclpy.spin_once(self, timeout_sec=0.0)
+            if self.planner.step_done(self.sim_t):
+                self.get_logger().warn(
+                    f'[sil] planner stopped ticking at t={self.sim_t:.2f} - no longer waited for')
         # A tracker that stops speaking has EXITED, not stalled -- the normal way that
         # happens is LAND -> /fleet/landed -> the manager disarms -> CallbackManagerMulti
         # .request_shutdown() kills the node. Waiting the full timeout for a dead process
@@ -380,6 +417,8 @@ class SilBench(Node):
                 f'd{i}_elev_deg': self.plant.cable_elev_deg(i),
                 f'd{i}_attached': int(self.plant.links[i].attached),
             })
+            if self.tel_pub:
+                row[f'd{i}_pack_v'] = self.plant.pack_v(i)
         self.rows.append(row)
 
     def run(self):
@@ -391,20 +430,28 @@ class SilBench(Node):
             f'(acados compile can take a while)...')
 
         while rclpy.ok():
-            self._publish_clock()
+            # start on a step where the planner's tick is due, so its 10 Hz phase against
+            # the events is fixed, and decide it before publishing so that tick sees the load
+            started_now = False
+            if (self.t_ready is None and len(self.alive) >= self.n and self.planner_ready
+                    and self.planner.can_start(self.sim_t)):
+                self.t_ready = self.sim_t
+                self.step_ready = self.step_i
+                started_now = True
+                self.get_logger().warn(
+                    f'[sil] all {self.n} trackers alive at sim t='
+                    f'{self.sim_t:.2f} ({time.monotonic()-t_wall0:.1f} s wall); '
+                    f'scenario clock starts now')
+            # state before clock: a node's timer fires on the clock, and must find this
+            # step's poses already delivered, not race them (planner d0_z split by a step)
             self._publish_state()
+            self._publish_clock()
             if self.weld_step is not None:
                 self.magnet_pub.publish(Bool(data=True))   # latched, as the magnet manager does
             ok = self._wait_for_commands()
 
-            if self.t_ready is None:
-                if len(self.alive) >= self.n and self.planner_ready:
-                    self.t_ready = self.sim_t
-                    self.get_logger().warn(
-                        f'[sil] all {self.n} trackers alive at sim t='
-                        f'{self.sim_t:.2f} ({time.monotonic()-t_wall0:.1f} s wall); '
-                        f'scenario clock starts now')
-                elif time.monotonic() > ready_deadline:
+            if self.t_ready is None or started_now:
+                if self.t_ready is None and time.monotonic() > ready_deadline:
                     self.finished_reason = (
                         f'timeout waiting for trackers: alive={sorted(self.alive)} '
                         f'of {self.n}, planner_ready={self.planner_ready} after '
@@ -414,9 +461,11 @@ class SilBench(Node):
                 if not ok:
                     self.stalls += 1
                     self.stall_steps.append(self.step_i)
-                rel = self.sim_t - self.t_ready
+                # by step count: sim_t - t_ready carries the float error of the absolute
+                # clock, which fired LAND a step apart in two repeats
+                rel = (self.step_i - self.step_ready) * scn.dt
                 for k, ev in enumerate(scn.events):
-                    if k not in self.events_done and rel >= ev.t:
+                    if k not in self.events_done and rel >= ev.t - 1e-9:
                         self.events_done.add(k)
                         self._fire(ev)
 
@@ -436,7 +485,7 @@ class SilBench(Node):
                 if not self.plant.is_finite():
                     self.finished_reason = 'plant state went non-finite (NaN/Inf)'
                     return False
-                if self.sim_t - self.t_ready >= scn.duration_s:
+                if (self.step_i - self.step_ready) * scn.dt >= scn.duration_s - 1e-9:
                     self.finished_reason = 'completed'
                     return True
                 if len(self.gone) >= self.n:
@@ -485,7 +534,7 @@ class SilBench(Node):
             for r in self.rows:
                 r = dict(r)
                 r['t_clock'] = r['t']
-                r['t'] = r['t'] - base
+                r['t'] = round(r['t'] - base, 9)      # same t column in every repeat
                 w.writerow(r)
         with open(os.path.join(logs, 'events.csv'), 'w', newline='') as fh:
             w = csv.writer(fh)

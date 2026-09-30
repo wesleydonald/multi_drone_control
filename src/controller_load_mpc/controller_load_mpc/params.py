@@ -41,6 +41,11 @@ def load_inertia(mass):
 TARGET_Z      = 0.6            # load hover height
 LIFT_RAMP_VEL = 0.05           # m/s load lift rate after handover
 LAND_VEL      = 0.20           # m/s descent rate, faster than the gentle lift
+# Rod pivot in the DRONE BODY frame (m). The OCP's drone is the rod end; the rig's rod
+# hangs from a joint 4 cm below the drone centre ([0, 0, -0.04]), the sim's from the centre.
+PIVOT_OFFSET  = (0.0, 0.0, 0.0)
+SOLVE_BUDGET_S = 0.0           # s wall cap on a solve's SQP iterations; 0 = off (sim), rig 0.06
+MAX_SHIFT_PUBLISHES = 3        # failed solves bridged by the shifted last horizon, then stale
 
 
 class PlannerConfig:
@@ -106,6 +111,15 @@ class PlannerConfig:
         # transient); the rig's capped pull left 0.3-0.4 m misses it never touched (2026-09-30)
         self.z_i_gate = float(p('z_i_gate', 0.25).value)
         self.z_taut_gate = float(p('z_taut_gate', 0.99).value)   # ~0.9 on the rig with a typed rod length
+        self.pivot_offset = [float(v) for v in p('pivot_offset', list(PIVOT_OFFSET)).value]
+        if len(self.pivot_offset) != 3:
+            raise ValueError(f'pivot_offset needs 3 values, got {self.pivot_offset}')
+        # off in sim: a wall-clock cut makes the iteration count depend on host load
+        self.solve_budget_s = float(p('solve_budget_s', SOLVE_BUDGET_S).value)
+        # failed solves are bridged by the shifted last horizon for this many node periods
+        # after the last good one, then nothing is published, so the trackers' reference
+        # watchdog still trips (0..4 at 10 Hz, checked by HorizonFallback)
+        self.max_shift_publishes = int(p('max_shift_publishes', MAX_SHIFT_PUBLISHES).value)
         # Auto slot assignment. OFF: OCP slot i is physical drone i, so the drones
         # must spawn in the nominal ring order (drone 0 at +x, CCW). ON: at the first
         # solve each physical drone is matched to the nearest nominal azimuth slot
@@ -134,6 +148,7 @@ class PlannerConfig:
             f'[planner] geometry: n={self.n} cable_len={self.cable_len:.3f} '
             f'attach_radius={self.attach_radius:.3f} attach_z={self.attach_z:.3f} '
             f'load_mass={self.load_mass:.3f} '
+            f'pivot_offset={[round(v, 3) for v in self.pivot_offset]} '
             f'start_taut={self.start_taut} target_z={self.target_z:.3f} '
             f'lift_ramp_vel={self.lift_ramp_vel:.3f} load_traj={self.load_traj} '
             f'traj_speed={self.traj_speed:.3f} traj_distance={self.traj_distance:.3f} '

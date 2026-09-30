@@ -1,0 +1,9 @@
+{
+ "drone_id": 2,
+ "kt_trim": false,
+ "throttle_max": 0.8,
+ "thrust_offset": 0.185,
+ "thrust_offset_v_slope": 0.022,
+ "thrust_ratio": 35.2,
+ "thrust_v_ref": 23.5
+}

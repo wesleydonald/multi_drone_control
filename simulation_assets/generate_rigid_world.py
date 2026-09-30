@@ -59,10 +59,40 @@ def _fmt(x):
     return f"{x:.6f}"
 
 
-def _rod_body(idx, radius, mass, L, cx, cy, cz, pitch, yaw):
+MAGNET_VIS_RADIUS = 0.012
+
+
+def _rod_body(idx, radius, mass, L, cx, cy, cz, pitch, yaw, magnet_mass=0.0):
     """The rigid tether cylinder's <inertial>+<visual> body (used both as a plain
     lift_system link and, when detachable, as the single link of a nested tether
-    model)."""
+    model). A magnet_mass is a point mass at the payload end (local -z) folded into
+    the same link, so it leaves with the rod on detach and adds no link to the pose
+    publisher's order."""
+    if magnet_mass > 0.0:
+        m = mass + magnet_mass
+        zc = -magnet_mass * (L / 2.0) / m
+        it = (mass * L * L / 12.0 + mass * zc * zc
+              + magnet_mass * (L / 2.0 + zc) ** 2)
+        ia = 0.5 * mass * radius * radius
+        return f"""
+        <pose>{_fmt(cx)} {_fmt(cy)} {_fmt(cz)} 0 {_fmt(pitch)} {_fmt(yaw)}</pose>
+        <inertial>
+          <pose>0 0 {_fmt(zc)} 0 0 0</pose>
+          <mass>{m:.6g}</mass>
+          <inertia>
+            <ixx>{it:.3e}</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>{it:.3e}</iyy><iyz>0</iyz><izz>{ia:.3e}</izz>
+          </inertia>
+        </inertial>
+        <visual name="tether_{idx}_visual">
+          <geometry><cylinder><radius>{radius}</radius><length>{L:.4f}</length></cylinder></geometry>
+          <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+        </visual>
+        <visual name="magnet_{idx}_visual">
+          <pose>0 0 {_fmt(-L / 2.0)} 0 0 0</pose>
+          <geometry><sphere><radius>{MAGNET_VIS_RADIUS}</radius></sphere></geometry>
+          <material><ambient>0.5 0.5 0.55 1</ambient><diffuse>0.6 0.6 0.65 1</diffuse></material>
+        </visual>"""
     it = mass * L * L / 12.0
     ia = 0.5 * mass * radius * radius
     return f"""
@@ -81,7 +111,8 @@ def _rod_body(idx, radius, mass, L, cx, cy, cz, pitch, yaw):
 
 
 def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
-                 damping=0.1, detachable=False):
+                 damping=0.1, detachable=False, pivot_dz=0.0, magnet_mass=0.0,
+                 stub_mass=None):
     """One rigid tether (payload bottom -> drone top). Both ends are ball joints (a
     two-force rigid link: the paper model), so the drone's ATTITUDE is decoupled from
     the rod at the top AND the rod swings freely at the payload -- the MPC tilts the
@@ -101,18 +132,25 @@ def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
       * the drone-end stays a ball joint straight to the drone.
     During flight this is identical to the plain two-ball rod (both ends pivot). On
     /drone_{idx}/detach the stub<->rod weld releases, so the rod + drone (still joined by
-    the drone-end ball) fly off together; only the tiny stub stays on the payload."""
-    dx = drone[0] - attach[0]
-    dy = drone[1] - attach[1]
-    dz = drone[2] - attach[2]
+    the drone-end ball) fly off together; only the tiny stub stays on the payload.
+
+    pivot_dz > 0 puts the drone-end ball that far below the drone centre (base_link -z,
+    the rig's hinge): the rod runs attach -> pivot and the joint is posed in base_link."""
+    top = (drone[0], drone[1], drone[2] - pivot_dz) if pivot_dz else drone
+    dx = top[0] - attach[0]
+    dy = top[1] - attach[1]
+    dz = top[2] - attach[2]
     L = math.sqrt(dx * dx + dy * dy + dz * dz)
     ux, uy, uz = dx / L, dy / L, dz / L
     pitch = math.acos(max(-1.0, min(1.0, uz)))   # cylinder local-z -> cable dir
     yaw = math.atan2(uy, ux)
-    cx, cy, cz = (attach[0] + drone[0]) / 2.0, (attach[1] + drone[1]) / 2.0, \
-                 (attach[2] + drone[2]) / 2.0
+    cx, cy, cz = (attach[0] + top[0]) / 2.0, (attach[1] + top[1]) / 2.0, \
+                 (attach[2] + top[2]) / 2.0
     half = L / 2.0
-    rod = _rod_body(idx, radius, mass, L, cx, cy, cz, pitch, yaw)
+    rod = _rod_body(idx, radius, mass, L, cx, cy, cz, pitch, yaw, magnet_mass)
+    stub_mass = mass if stub_mass is None else stub_mass
+    # joint pose defaults to the child (base_link) origin; the pivot moves it down
+    pivot_pose = (f"\n        <pose>0 0 {_fmt(-pivot_dz)} 0 0 0</pose>" if pivot_dz else "")
 
     if detachable:
         # Payload-side stub (stays on the payload after detach), rod as a nested model,
@@ -125,7 +163,7 @@ def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
       <link name="stub_pay_{idx}">
         <pose>{_fmt(attach[0])} {_fmt(attach[1])} {_fmt(attach[2])} 0 0 0</pose>
         <inertial>
-          <mass>{mass}</mass>
+          <mass>{stub_mass}</mass>
           <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
         </inertial>
       </link>
@@ -142,7 +180,7 @@ def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
       </model>
       <joint name="tether_{idx}_to_drone{idx}" type="ball">
         <parent>tether_{idx}::rod</parent>
-        <child>x3_drone{idx}::base_link</child>
+        <child>x3_drone{idx}::base_link</child>{pivot_pose}
         <axis><xyz>1 0 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis>
         <axis2><xyz>0 1 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis2>
       </joint>"""
@@ -242,8 +280,53 @@ def payload_rest_z(legs=False):
     return -bottom
 
 
+def ring_spec(outer_r, thickness, plate_r):
+    """The rig-twin ring (--ring-outer-r / --ring-thickness): link origin at the ring's
+    mid-plane (its CoG), plates flush with the top face, so the attach plane is
+    thickness/2 above the CoG. Radial width RING_SEG_RADIAL as the legacy ring."""
+    return {'outer_r': outer_r, 'inner_r': outer_r - RING_SEG_RADIAL,
+            'thickness': thickness, 'plate_r': plate_r, 'plane_z': thickness / 2.0}
+
+
+def ring_inertia(ring, mass):
+    rr = ring['outer_r'] ** 2 + ring['inner_r'] ** 2
+    return (mass * (3 * rr + ring['thickness'] ** 2) / 12.0, mass * rr / 2.0)
+
+
+def ring_geometry_block(ring):
+    """payload_geometry_block for a ring_spec: one collision cylinder, 24 segments
+    centred on the mid-plane, 12 plates (plate 0 orange) drawn 1 mm proud of the top."""
+    rc = ring['outer_r'] - RING_SEG_RADIAL / 2.0
+    seg_len = 2.0 * math.pi * rc / RING_SEGMENTS * (RING_SEG_LEN * RING_SEGMENTS
+                                                   / (2.0 * math.pi * PAYLOAD_RADIUS))
+    h = ring['thickness']
+    out = [f"""          <collision name="collision"><pose>0 0 0 0 0 0</pose>
+            <geometry><cylinder><radius>{ring['outer_r']:.3f}</radius><length>{h:.3f}</length></cylinder></geometry>
+          </collision>"""]
+    for k in range(RING_SEGMENTS):
+        th = 2.0 * math.pi * k / RING_SEGMENTS
+        pose = f"{_fmt(rc * math.cos(th))} {_fmt(rc * math.sin(th))} 0 0 0 {_fmt(th + math.pi / 2.0)}"
+        box = (f"<geometry><box><size>{seg_len:.6f} {RING_SEG_RADIAL:.3f} "
+               f"{h:.3f}</size></box></geometry>")
+        out.append(f"""          <visual name="ring_{k}_visual"><pose>{pose}</pose>{box}
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
+          </visual>""")
+    z_plate = ring['plane_z'] - PLATE_THICK / 2.0 + 0.001
+    pr = ring['plate_r']
+    for k in range(PLATES):
+        th = 2.0 * math.pi * k / PLATES
+        pose = f"{_fmt(pr * math.cos(th))} {_fmt(pr * math.sin(th))} {_fmt(z_plate)} 0 0 {_fmt(th)}"
+        colour = ("<ambient>0.90 0.25 0.10 1</ambient><diffuse>1.00 0.35 0.15 1</diffuse>" if k == 0
+                  else "<ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse>")
+        out.append(f"""          <visual name="plate_{k}_visual"><pose>{pose}</pose>
+            <geometry><cylinder><radius>{PLATE_RADIUS:.3f}</radius><length>{PLATE_THICK:.3f}</length></cylinder></geometry>
+            <material>{colour}</material>
+          </visual>""")
+    return "\n".join(out)
+
+
 def nominal_placement(n, cable_len, elev_deg, attach_radius, attach_z, payload_z,
-                      azimuths_deg=None):
+                      azimuths_deg=None, pivot_dz=0.0):
     """The default world-aligned layout: payload at the origin with zero yaw, drone
     i out along attach azimuth 2*pi*i/n at elev_deg, every drone facing world +x.
 
@@ -253,6 +336,8 @@ def nominal_placement(n, cable_len, elev_deg, attach_radius, attach_z, payload_z
         attaches    [(x, y, z)] world-frame cable attach points
         drones      [(x, y, z)] world-frame drone spawns
         drone_yaws  [rad] per-drone spawn heading
+    cable_len and elev_deg are measured to the rod's drone-end pivot, which sits
+    pivot_dz below the drone centre.
     """
     phi = math.radians(elev_deg)
     horiz = cable_len * math.cos(phi)
@@ -264,24 +349,39 @@ def nominal_placement(n, cable_len, elev_deg, attach_radius, attach_z, payload_z
         ay = attach_radius * math.sin(th)
         az = payload_z + attach_z
         attaches.append((ax, ay, az))
-        drones.append((ax + horiz * math.cos(th), ay + horiz * math.sin(th),
-                       az + vert))
+        dz = az + vert + pivot_dz if pivot_dz else az + vert
+        drones.append((ax + horiz * math.cos(th), ay + horiz * math.sin(th), dz))
     return {'payload': (0.0, 0.0, payload_z, 0.0), 'attaches': attaches,
             'drones': drones, 'drone_yaws': [0.0] * n}
 
 
 def build(n, cable_len, elev_deg, attach_radius, attach_z, payload_z,
-          detachable=False, azimuths_deg=None, legs=False):
+          detachable=False, azimuths_deg=None, legs=False, geom=None):
+    pivot_dz = (geom or {}).get('pivot_dz', 0.0)
     return build_world(n, nominal_placement(n, cable_len, elev_deg, attach_radius,
-                                            attach_z, payload_z, azimuths_deg),
-                       detachable=detachable, legs=legs)
+                                            attach_z, payload_z, azimuths_deg, pivot_dz),
+                       detachable=detachable, legs=legs, geom=geom)
 
 
-def build_world(n, placement, detachable=False, legs=False):
+def build_world(n, placement, detachable=False, legs=False, geom=None):
     """Emit the world SDF for an explicit placement (see nominal_placement). Every
-    tether is a rigid rod of exactly the spawn attach->drone distance, so a
+    tether is a rigid rod of exactly the spawn attach->pivot distance, so a
     placement that keeps that distance constant keeps the planner's single
-    cable_len valid."""
+    cable_len valid.
+
+    geom (None = legacy) is the rig-twin override: pivot_dz, rod_mass, magnet_mass,
+    drone_model ('x3' / 'x3_rig') and ring (a ring_spec, or None for the legacy ring)."""
+    geom = geom or {}
+    pivot_dz = geom.get('pivot_dz', 0.0)
+    model = {'x3': 'x3_drone', 'x3_rig': 'x3_rig_drone'}[geom.get('drone_model', 'x3')]
+    ring = geom.get('ring')
+    tkw = {}
+    if pivot_dz:
+        tkw['pivot_dz'] = pivot_dz
+    if 'rod_mass' in geom:
+        tkw.update(mass=geom['rod_mass'], stub_mass=0.001)
+    if geom.get('magnet_mass'):
+        tkw['magnet_mass'] = geom['magnet_mass']
     px, py, pz, pyaw = placement['payload']
     attaches = placement['attaches']
     drones = placement['drones']
@@ -290,12 +390,12 @@ def build_world(n, placement, detachable=False, legs=False):
     for i in range(n):
         dx, dy, dz = drones[i]
         includes.append(f"""      <include>
-        <uri>models/x3_drone{i}.sdf</uri>
+        <uri>models/{model}{i}.sdf</uri>
         <name>x3_drone{i}</name>
         <pose>{_fmt(dx)} {_fmt(dy)} {_fmt(dz)} 0 0 {_fmt(drone_yaws[i])}</pose>
       </include>""")
     tethers = "".join(tether_block(i, drones[i], attaches[i],
-                                   detachable=detachable)
+                                   detachable=detachable, **tkw)
                       for i in range(n))
     # Per-drone DetachableJoint plugins (model-level), only when detachable.
     detaches = ("".join(detachable_joint_block(i) for i in range(n))
@@ -320,6 +420,17 @@ def build_world(n, placement, detachable=False, legs=False):
       </link>
     </model>""")
     platforms = "\n".join(platforms)
+    if ring:
+        ixx, izz = ring_inertia(ring, PAYLOAD_MASS)
+        ring_title = (f"{2000 * ring['outer_r']:.0f} mm ring, {1000 * ring['thickness']:.0f} mm thick, "
+                      f"12 magnet plates every 30 deg flush with the top face (r {ring['plate_r']:.3f}), "
+                      "plate 0 on +x, rig twin")
+        ring_geo = ring_geometry_block(ring)
+    else:
+        ixx, izz = _IXX, _IZZ
+        ring_title = ("500 mm ring, 12 magnet plates every 30 deg on the top face, "
+                      "plate 0 on +x (m2a_ring_fixture.sdf)")
+        ring_geo = payload_geometry_block(legs)
     return f"""<?xml version="1.0" ?>
 <sdf version="1.6">
   <world name="quadcopter">
@@ -364,15 +475,15 @@ def build_world(n, placement, detachable=False, legs=False):
       <!-- ===== DRONES (elevated, taut rigid cables) ===== -->
 {chr(10).join(includes)}
 
-      <!-- ===== PAYLOAD: 500 mm ring, 12 magnet plates every 30 deg on the top face, plate 0 on +x (m2a_ring_fixture.sdf) ===== -->
+      <!-- ===== PAYLOAD: {ring_title} ===== -->
       <model name="payload">
         <pose>{_fmt(px)} {_fmt(py)} {_fmt(pz)} 0 0 {_fmt(pyaw)}</pose>
         <link name="body">
           <gravity>1</gravity>
           <inertial><mass>{PAYLOAD_MASS}</mass>
-            <inertia><ixx>{_IXX:.3e}</ixx><ixy>0</ixy><ixz>0</ixz><iyy>{_IXX:.3e}</iyy><iyz>0</iyz><izz>{_IZZ:.3e}</izz></inertia>
+            <inertia><ixx>{ixx:.3e}</ixx><ixy>0</ixy><ixz>0</ixz><iyy>{ixx:.3e}</iyy><iyz>0</iyz><izz>{izz:.3e}</izz></inertia>
           </inertial>
-{payload_geometry_block(legs)}
+{ring_geo}
         </link>
         <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
           <publish_link_pose>true</publish_link_pose>
@@ -397,7 +508,9 @@ def main():
     ap.add_argument('--cable-len', type=float, default=1.0)
     ap.add_argument('--elev', type=float, default=45.0, help='cable elevation deg')
     ap.add_argument('--attach-radius', type=float, default=PAYLOAD_RADIUS)
-    ap.add_argument('--attach-z', type=float, default=0.025)
+    ap.add_argument('--attach-z', type=float, default=None,
+                    help='attach height above the payload CoG (default 0.025; with a rig ring '
+                         'its top face, --ring-thickness/2)')
     ap.add_argument('--payload-z', type=float, default=None,
                     help='payload link z at spawn (default 0.025, the historical disc-centre height; '
                          'the ring settles 1.5 cm onto the floor at t=0. With --legs: resting on the legs)')
@@ -420,19 +533,56 @@ def main():
                          'at ground height (a near-horizontal rod). Use with the '
                          "planner's handover_elev_deg so it creeps up to a "
                          'liftable angle before taking over.')
+    rig = ap.add_argument_group('rig twin (defaults reproduce the legacy worlds byte for byte)')
+    rig.add_argument('--pivot-dz', type=float, default=0.0,
+                     help='drone-end ball this far below the drone centre (m); --cable-len '
+                          'is then measured from it')
+    rig.add_argument('--rod-mass', type=float, default=None,
+                     help='rod mass kg, spread along the rod (legacy 0.001, also the stub)')
+    rig.add_argument('--magnet-mass', type=float, default=0.0,
+                     help='point mass kg at the payload end of the rod (leaves with it on detach)')
+    rig.add_argument('--ring-outer-r', type=float, default=None,
+                     help='rig ring outer radius m (switches to the rig ring: mid-plane origin, '
+                          'plates flush with the top face at --attach-radius)')
+    rig.add_argument('--ring-thickness', type=float, default=None,
+                     help='rig ring thickness m (switches to the rig ring)')
+    rig.add_argument('--drone-model', choices=('x3', 'x3_rig'), default='x3',
+                     help='models/x3_drone{i}.sdf (legacy 0.64 kg) or models/x3_rig_drone{i}.sdf '
+                          '(0.475 kg airframe)')
     a = ap.parse_args()
+    geom = {}
+    if a.ring_outer_r is not None or a.ring_thickness is not None:
+        if a.legs:
+            ap.error('--legs is for the legacy ring only')
+        geom['ring'] = ring_spec(a.ring_outer_r if a.ring_outer_r is not None else RING_OUTER,
+                                 a.ring_thickness if a.ring_thickness is not None else RING_SEG_THICK,
+                                 a.attach_radius)
+    if a.pivot_dz:
+        geom['pivot_dz'] = a.pivot_dz
+    if a.rod_mass is not None:
+        geom['rod_mass'] = a.rod_mass
+    if a.magnet_mass:
+        geom['magnet_mass'] = a.magnet_mass
+    if a.drone_model != 'x3':
+        geom['drone_model'] = a.drone_model
+    ring = geom.get('ring')
+    if a.attach_z is None:
+        a.attach_z = ring['plane_z'] if ring else 0.025
     if a.payload_mass is not None:
         global PAYLOAD_MASS, _IXX, _IZZ
         PAYLOAD_MASS = float(a.payload_mass)
         _IXX, _IZZ = _inertia(PAYLOAD_MASS)
     if a.payload_z is None:
-        a.payload_z = payload_rest_z(True) if a.legs else 0.025
+        if ring:
+            a.payload_z = ring['thickness'] / 2.0
+        else:
+            a.payload_z = payload_rest_z(True) if a.legs else 0.025
     elev = a.elev
     if a.ground_start:
-        # drone_z = payload_z + attach_z + cable_len*sin(elev); solve for the
-        # elev that puts the drone at DRONE_GROUND_Z.
+        # drone_z = payload_z + attach_z + cable_len*sin(elev) + pivot_dz; solve for
+        # the elev that puts the drone at DRONE_GROUND_Z.
         DRONE_GROUND_Z = 0.10
-        need = (DRONE_GROUND_Z - a.payload_z - a.attach_z) / a.cable_len
+        need = (DRONE_GROUND_Z - a.pivot_dz - a.payload_z - a.attach_z) / a.cable_len
         elev = math.degrees(math.asin(max(-1.0, min(1.0, need))))
         print(f'ground start: elev overridden to {elev:.2f} deg '
               f'(drone z = {DRONE_GROUND_Z}, payload z = {a.payload_z})')
@@ -440,7 +590,7 @@ def main():
     if az and len(az) != a.n:
         ap.error(f'--azimuths has {len(az)} entries for --n {a.n}')
     sdf = build(a.n, a.cable_len, elev, a.attach_radius, a.attach_z, a.payload_z,
-                detachable=a.detachable, azimuths_deg=az, legs=a.legs)
+                detachable=a.detachable, azimuths_deg=az, legs=a.legs, geom=geom or None)
     with open(a.out, 'w') as f:
         f.write(sdf)
     print(f"wrote {a.out}: n={a.n} cable_len={a.cable_len} elev={a.elev}deg "

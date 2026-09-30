@@ -136,3 +136,12 @@ def test_fake_mocap_dry_run_prints_without_ros(capsys):
     FM.main(['--num-drones', '3', '--azimuths-deg', '30,150,270', '--drone-z', '0.08', '--dry-run'])
     out = capsys.readouterr().out
     assert out.count('/drone_') == 3 and '/payload/motion_capture_state' in out
+
+
+def test_slot_offset_detail_names_the_plate_and_the_check():
+    from preflight_geometry import slot_offset_detail
+    assert slot_offset_detail(2, 3.0, 90.0) == '+3.0 deg from plate 3'
+    msg = slot_offset_detail(1, -29.7, 330.0)                 # model-f1: one plate off
+    assert msg.startswith('drone 1 sits -30 deg from plate 11:')
+    assert 'ring rigid body (+x toward plate 0)' in msg and 'magnet plates' in msg
+    assert 'sits' in slot_offset_detail(0, 10.5, 0.0) and 'sits' not in slot_offset_detail(0, 9.9, 0.0)

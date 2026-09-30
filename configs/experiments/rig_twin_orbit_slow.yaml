@@ -1,0 +1,76 @@
+name: rig_twin_orbit_slow
+description: 'Rig twin slow circle (rig C1): rig_twin_hover_fixed_zki (net on) with load_traj orbit, r
+  0.5 m at 0.125 m/s (one lap ~25 s after a 4 s spin-up). LAND 36 s after the ring passes 0.3 m. Baseline
+  rig_twin_hover_fixed_zki. Falsifier: ring tilt mean > 3 deg over the lap, |mean z - 0.5| > 5 cm, > 1
+  solve failure, an abort.'
+world: four_rigid_ground_rig.sdf
+launch:
+  package: controller_quad_load
+  file: mpc_quad_load_launch.py
+  args:
+    num_drones: 4
+    load_traj: orbit
+    cable_len: 0.55
+    attach_radius: 0.225
+    attach_z: 0.02
+    payload_rest_z: 0.02
+    load_mass: 0.86
+    drone_mass: 0.55
+    target_z: 0.5
+    thrust_ratio: 35.2
+    takeoff_thrust_ratio: 0.0
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    throttle_max: 0.8
+    kt_trim: false
+    z_ki: 0.4
+    z_i_max: 0.15
+    z_i_gate: 0.25
+    start_taut: false
+    handover_elev_deg: 45.0
+    handover_settle_s: 1.0
+    creep_vel: 0.2
+    lift_ramp_vel: 0.1
+    pretension_s: 3.0
+    measure_rod_len: true
+    rod_tol_frac: 0.25
+    rod_spread_m: 0.08
+    z_taut_gate: 0.9
+    pivot_offset_z: -0.04
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    sim_pack_v0: 23.8
+    traj_radius: 0.5
+    traj_speed: 0.125
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 4
+    sim_thrust_map: rig
+    sim_pack_v0: 23.8
+fleet:
+  num_drones: 4
+  n_total: 4
+timing:
+  duration_s: 120.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 44.0
+  do: LAND
+criteria:
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.45
+  hold_window_s: 30.0
+  max_planner_solve_fail: 1
+  max_hold_z_err_m: 0.05
+  max_hold_tilt_mean_deg: 3.0
+  max_payload_tilt_deg: 8.0

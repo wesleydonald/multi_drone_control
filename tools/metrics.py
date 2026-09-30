@@ -592,6 +592,345 @@ def cable_accel_gap(measured, modelled, mask=None):
             'peak_measured': float(np.max(np.linalg.norm(m, axis=1)))}
 
 
+# ── tethered hold (plan 2026-10, W6): the rig and its sim twin, from the planner log ──
+
+HOLD_WINDOW_S = 20.0        # judged over the last this-many s of the hold
+REF_AGE_STALE_S = 0.3       # a reference older than this is stale
+HEAVE_MIN_PERIODS = 3       # a window shorter than this many periods cannot claim a period
+AIRBORNE_DZ_M = 0.05        # ring above its creep rest by this = airborne (thrust_fit.py)
+
+
+def _sample_dt(t):
+    """Per-sample duration, so a fraction of TIME survives uneven logging (skipped ticks)."""
+    t = np.asarray(t, float)
+    if t.size < 2:
+        return np.ones_like(t)
+    dt = np.diff(t)
+    return np.r_[dt, np.median(dt)]
+
+
+def heave_metrics(t, z, min_periods=HEAVE_MIN_PERIODS):
+    """Ring height oscillation over a hold window: peak-to-peak, sd and dominant period.
+
+    `short` is True when the window holds fewer than `min_periods` of its own dominant
+    period (or none can be found): model-f1 was judged "14 cm at 0.17 Hz" off 3.8 s of
+    ramp data, which cannot resolve a 6 s period. The period comes from the linearly
+    detrended signal, so a slow drift does not pose as the heave; p-p and sd are raw."""
+    t = np.asarray(t, float)
+    z = np.asarray(z, float)
+    good = np.isfinite(t) & np.isfinite(z)
+    t, z = t[good], z[good]
+    if z.size < 2:
+        return {'pp_m': math.nan, 'sd_m': math.nan, 'period_s': math.nan,
+                'window_s': 0.0, 'n_periods': 0.0, 'short': True}
+    span = float(t[-1] - t[0])
+    period = dominant_period_s(t, z - np.polyval(np.polyfit(t, z, 1), t)) if z.size >= 8 else math.nan
+    n_per = span / period if np.isfinite(period) and period > 0 else 0.0
+    return {'pp_m': float(np.ptp(z)), 'sd_m': float(np.std(z)), 'period_s': period,
+            'window_s': span, 'n_periods': float(n_per), 'short': bool(n_per < min_periods)}
+
+
+def hold_window(t, z_tgt, target_z, land=None, window_s=HOLD_WINDOW_S, tol=1e-3):
+    """(t0, t1, hold_s) of the judged hold: the last `window_s` between the lift reaching
+    `target_z` and LAND (or the end of the log). None when the target is never reached.
+    hold_s is the whole hold, so a caller can see a window cut short (hold_s < window_s)."""
+    t = np.asarray(t, float)
+    zt = np.asarray(z_tgt, float)
+    at = np.where(np.isfinite(zt) & (zt >= float(target_z) - tol))[0]
+    if at.size == 0:
+        return None
+    start = float(t[at[0]])
+    end = float(t[-1])
+    if land is not None:
+        ld = np.where((np.asarray(land, float) > 0.5) & (t >= start))[0]
+        if ld.size:
+            end = float(t[ld[0]])
+    return max(start, end - float(window_s)), end, end - start
+
+
+def hold_z_error(z, target_z, mask=None):
+    """Mean ring height minus the target over the hold, signed (m)."""
+    z = np.asarray(z, float)
+    if mask is not None:
+        z = z[mask]
+    return _nanmean(z) - float(target_z)
+
+
+def airborne_mask(z, phase=None, dz=AIRBORNE_DZ_M):
+    """(mask, rest z): ring above its creep rest + dz. The rest is the median ring z over the
+    creep phase, else over the first 10 samples (the thrust_fit.py convention)."""
+    z = np.asarray(z, float)
+    rest = math.nan
+    if phase is not None:
+        creep = np.asarray(phase).astype(str) == 'creep'
+        if np.any(creep & np.isfinite(z)):
+            rest = float(np.nanmedian(z[creep]))
+    if not np.isfinite(rest):
+        rest = float(np.nanmedian(z[:10])) if z.size else math.nan
+    with np.errstate(invalid='ignore'):
+        return z > rest + dz, rest
+
+
+def ref_age_frac(t, ref_age, mask=None, stale_s=REF_AGE_STALE_S):
+    """Fraction of (masked) TIME with the planner reference older than `stale_s`.
+
+    Takes the planner log's ref_age, which is sim time since the last good solve: the
+    trackers' own ref_age column is WALL time, and parallel lab runs at a low real-time
+    factor read stale on it with nothing wrong in the planner. Samples with no age yet
+    (before the first solve) are left out."""
+    t = np.asarray(t, float)
+    a = np.asarray(ref_age, float)
+    w = _sample_dt(t)
+    keep = np.isfinite(a) & np.isfinite(w)
+    if mask is not None:
+        keep &= np.asarray(mask, bool)
+    total = float(np.sum(w[keep]))
+    if total <= 0:
+        return math.nan
+    return float(np.sum(w[keep & (a > stale_s)]) / total)
+
+
+def max_payload_vz(vz, mask=None):
+    """Peak |ring vz| (m/s): the run-up that released a magnet in f6 (0.38 m/s)."""
+    v = np.abs(np.asarray(vz, float))
+    if mask is not None:
+        v = v[mask]
+    return _nanmax(v)
+
+
+SOLVE_STATUS_RE = re.compile(r'solve status (-?\d+)')
+
+
+def planner_solve_failures(status=None, published=None, phase=None, log_text=None):
+    """Failed planner solves, from the tick log and/or the node's 'solve status N' lines.
+
+    Tick log: OCP ticks only -- `published` non-blank, else phase != creep -- because a creep
+    tick's solve_status is the priming solve's (card A critic). `not_solved` counts OCP ticks
+    that published a shifted horizon or nothing (a held-back unconverged solve reads status 0).
+    `n` is the tick count when the log has the column, else the line count (model-f1: 25)."""
+    out = {'ticks': None, 'not_solved': None, 'lines': None, 'n': None}
+    if status is not None:
+        s = np.asarray(status, float)
+        ocp = np.ones(s.size, bool)
+        pub = None
+        if published is not None:
+            pub = np.array(['' if (isinstance(v, float) and math.isnan(v)) else str(v).strip()
+                            for v in published])
+            if np.any(pub != ''):
+                ocp = pub != ''
+            else:
+                pub = None
+        if pub is None and phase is not None:
+            ocp = np.asarray(phase).astype(str) != 'creep'
+        out['ticks'] = int(np.sum(ocp & np.isfinite(s) & (s != 0)))
+        if pub is not None:
+            out['not_solved'] = int(np.sum(np.isin(pub, ('shifted', 'none'))))
+        out['n'] = out['ticks']
+    if log_text is not None:
+        out['lines'] = sum(1 for m in SOLVE_STATUS_RE.finditer(log_text) if int(m.group(1)) != 0)
+        if out['n'] is None:
+            out['n'] = out['lines']
+    return out
+
+
+def plant_law(run_path=None, n=4, thrust_map=None):
+    """The thrust law u -> supported kg that the run's PLANT obeys, in thrust_fit.py's form
+    u = a_i + b M + c (V - 23.5). Rig flights and the sim 'rig' map: the RIG-0930-ladder4 law
+    (per-drone a_i from the bridges' read-back when they carry one). The sim 'linear' map:
+    thrust = 4 mc w_max^2 u, so a = c = 0. `thrust_map` None reads it from params/bf_comm_*."""
+    import thrust_fit as tf
+    a = list(tf.LAW_0930['a']) + [tf.LAW_0930['a'][-1]] * max(0, n - 4)
+    law = {'a': a[:max(n, 4)], 'b': tf.LAW_0930['b'], 'c': tf.LAW_0930['c'], 'map': 'rig'}
+    params = {}
+    if run_path is not None:
+        import yaml
+        for i in range(n):
+            try:
+                with open(os.path.join(run_path, 'params', f'bf_comm_{i}.yaml')) as fh:
+                    params[i] = (next(iter(yaml.safe_load(fh).values())) or {}).get('ros__parameters', {})
+            except (OSError, AttributeError, StopIteration, TypeError):
+                pass
+    if thrust_map is None and run_path is not None:
+        # a sim run: the bridges' map, and 'linear' (every world before W4) when not read back
+        thrust_map = str(next(iter(params.values())).get('thrust_map', 'linear')) if params else 'linear'
+    if thrust_map == 'linear':
+        try:
+            from simulation_communication.rig_thrust import linear_thrust
+        except ImportError:
+            import sys
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))), 'src', 'simulation_communication'))
+            from simulation_communication.rig_thrust import linear_thrust
+        return {'a': [0.0] * max(n, 4), 'b': 9.81 / linear_thrust(1.0), 'c': 0.0, 'map': 'linear'}
+    for i, p in params.items():
+        for key in ('thrust_a', 'rig_a', 'thrust_offset', 'rig_offset'):
+            if isinstance(p.get(key), (int, float)) and p[key] > 0:
+                law['a'][i] = float(p[key])
+                break
+    return law
+
+
+def carried_fraction(planner_path, trackers, ring_kg=0.86, law=None, drone_kg=0.55, window=None):
+    """Rod-force sum over the ring's weight (thrust_fit.py --tethered), airborne and over
+    `window` = (t0, t1) in the planner's sim time. The pass metric that replaced the
+    breakaway % (plan, critic must-fix 4). `ring_kg` is the TRUE ring (the world's in sim),
+    not the planner's belief, so the mass-mismatch arm reads its real balance."""
+    import thrust_fit as tf
+    law = law or tf.LAW_0930
+    with np.errstate(divide='ignore', invalid='ignore'):     # repeated tracker stamps
+        df, rest = tf.rod_forces(planner_path, trackers, law, drone_kg)
+    if df.empty:
+        return None
+    scale = tf.RING_KG / float(ring_kg)
+    # rod_forces rebases t to its first common sample on the lowest-id tracker's clock
+    pl = tf.read_log(planner_path)
+    if not np.isfinite(rest):                           # no creep phase (taut air start)
+        rest = airborne_mask(pl.load_z.to_numpy(float))[1]
+    logs = {i: tf.read_log(p) for i, p in trackers.items()}
+    logs = {i: d for i, d in logs.items() if len(d) > 10}
+    t_lo = max(pl.sim_time.iloc[0], *(d.sim_time.iloc[0] for d in logs.values()))
+    ref_t = logs[min(logs)].sim_time.to_numpy(float)
+    t_abs = df.t.to_numpy(float) + ref_t[ref_t >= t_lo][0]
+    frac = df.frac.to_numpy(float) * scale
+    air = df.ring_z.to_numpy(float) > rest + AIRBORNE_DZ_M
+    out = {'ring_kg': float(ring_kg), 'rest_z': rest, 'airborne_s': float(np.sum(_sample_dt(t_abs)[air]))}
+
+    def med(mask):
+        return float(np.median(frac[mask])) if np.any(mask) else math.nan
+    out['airborne_median'] = med(air)
+    if np.any(air):
+        out['airborne_iqr'] = [float(v) for v in np.percentile(frac[air], [25, 75])]
+    if 'frac_dyn' in df:
+        dyn = df.frac_dyn.to_numpy(float) * scale
+        out['airborne_accel_corrected_median'] = float(np.median(dyn[air])) if np.any(air) else math.nan
+    if window is not None:
+        w = air & (t_abs >= window[0]) & (t_abs <= window[1])
+        out['hold_median'] = med(w)
+    return out
+
+
+def tethered_metrics(planner, target_z=None, hold_window_s=HOLD_WINDOW_S, log_text=None,
+                     stale_s=REF_AGE_STALE_S):
+    """The hold scored from the planner's tick log (a read_csv dict), the same way for a rig
+    flight and a sim run: sim time throughout, so a slow lab slot does not read stale.
+
+    The hold is the last `hold_window_s` from the lift reaching `target_z` to LAND. vz is
+    judged from the hand-over (first 'planner' tick: pretension, breakaway, lift) to the end
+    of the hold. Columns a log does not have (model-f1 predates W1) are simply absent."""
+    t = np.asarray(planner['sim_time'], float)
+    z = np.asarray(planner['load_z'], float)
+    phase = planner.get('phase')
+    z_tgt = planner.get('z_tgt')
+    if target_z is None and z_tgt is not None:
+        target_z = _nanmax(z_tgt)
+    air, rest = airborne_mask(z, phase)
+    out = {'target_z': target_z, 'rest_z': rest,
+           'airborne_s': float(np.sum(_sample_dt(t)[air]))}
+    hw = hold_window(t, z_tgt, target_z, planner.get('land'), hold_window_s) \
+        if z_tgt is not None and target_z is not None else None
+    end = t[-1] if t.size else math.nan
+    out['hold'] = None
+    if hw is not None:
+        t0, t1, hold_s = hw
+        end = t1
+        m = (t >= t0) & (t <= t1)
+        out['hold'] = {'t0': t0, 't1': t1, 'hold_s': hold_s, 'window_s': t1 - t0,
+                       'full': bool(hold_s >= hold_window_s)}
+        out['hold_z_mean_m'] = _nanmean(z[m])
+        out['hold_z_err_m'] = hold_z_error(z, target_z, m)
+        out['heave'] = heave_metrics(t[m], z[m])
+        if 'tilt_deg' in planner:
+            out['hold_tilt_mean_deg'] = _nanmean(planner['tilt_deg'][m])
+            out['hold_tilt_max_deg'] = _nanmax(planner['tilt_deg'][m])
+        if has(planner, 'z_bias'):
+            out['hold_z_bias_max_abs'] = _nanmax(np.abs(planner['z_bias'][m]))
+    if 'tilt_deg' in planner:
+        out['tilt_max_airborne_deg'] = _nanmax(planner['tilt_deg'][air])
+    if phase is not None and 'load_vz' in planner:
+        ph = np.asarray(phase).astype(str)
+        hand = np.where(ph != 'creep')[0]
+        if hand.size:
+            out['max_payload_vz_mps'] = max_payload_vz(
+                planner['load_vz'], (t >= t[hand[0]]) & (t <= end))
+    if has(planner, 'ref_age'):
+        out['ref_age_frac'] = ref_age_frac(t, planner['ref_age'], air, stale_s)
+    out['solve_failures'] = planner_solve_failures(
+        planner.get('solve_status') if has(planner, 'solve_status') else None,
+        planner.get('published'), phase, log_text)
+    return out
+
+
+def planner_logs(run_path):
+    """load_planner_*/log.csv under a run (or rig log) folder, longest first."""
+    root = os.path.join(run_path, 'logs', 'controller_quad_load')
+    root = root if os.path.isdir(root) else run_path
+    paths = glob.glob(os.path.join(root, 'load_planner_*', 'log.csv'))
+    return sorted(paths, key=lambda p: -os.path.getsize(p))
+
+
+def tethered_run_metrics(run_path, hold_window_s=HOLD_WINDOW_S, log_text=None, ring_kg=None,
+                         thrust_map=None):
+    """tethered_metrics + carried_fraction for one run directory or rig log folder, or None
+    when there is no planner log. Ring mass: the argument, else the manifest world's, else
+    the planner's own load_mass. Solve-status lines come from logs/launch.log unless given."""
+    import thrust_fit as tf
+    logs = planner_logs(run_path)
+    if not logs:
+        return None
+    ppath = logs[0]
+    planner = read_csv(ppath)
+    if not planner or 'sim_time' not in planner:
+        return None
+    try:
+        with open(os.path.join(os.path.dirname(ppath), 'params.json')) as fh:
+            pparams = json.load(fh)
+    except (OSError, ValueError):
+        pparams = {}
+    manifest = {}
+    try:
+        with open(os.path.join(run_path, 'manifest.json')) as fh:
+            manifest = json.load(fh)
+    except (OSError, ValueError):
+        pass
+    if log_text is None:
+        log_text = _read_text(os.path.join(run_path, 'logs', 'launch.log')) or None
+    target = pparams.get('target_z')
+    out = tethered_metrics(planner, target, hold_window_s, log_text)
+    out['planner_log'] = os.path.relpath(ppath, run_path)
+    if ring_kg is None and manifest.get('world'):
+        try:
+            from check_geometry import world_geometry
+            w = manifest['world']
+            w = w if os.path.isabs(w) else os.path.join(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))), 'simulation_assets', w)
+            ring_kg = world_geometry(w).get('load_mass')
+        except Exception:                                   # noqa: BLE001
+            ring_kg = None
+    ring_kg = ring_kg or pparams.get('load_mass') or tf.RING_KG
+    if thrust_map is None and manifest.get('kind') == 'sim':
+        thrust_map = str((manifest.get('launch_args') or {}).get('sim_thrust_map', '')) or None
+    n = int(pparams.get('num_drones') or 4)
+    law = plant_law(run_path if manifest.get('kind') == 'sim' else None, n, thrust_map)
+    groups = tf.launches(run_path)
+    if manifest.get('kind') == 'sim' and len(groups) == 1 and not groups[0][1]:
+        # one launch per sim run: a planner building its solver cold starts > 30 s after the trackers
+        groups = [(groups[0][0], {int(os.path.basename(os.path.dirname(t)).split('planner_drone')[1].split('_')[0]): t
+                                  for t in glob.glob(os.path.join(os.path.dirname(os.path.dirname(ppath)),
+                                                                  'planner_drone*', 'log.csv'))})]
+    for p, trackers in groups:
+        if p == ppath and trackers:
+            window = (out['hold']['t0'], out['hold']['t1']) if out.get('hold') else None
+            try:
+                cf = carried_fraction(p, trackers, ring_kg, law,
+                                      float(pparams.get('drone_mass') or tf.DRONE_KG), window)
+            except Exception as e:                          # noqa: BLE001
+                cf = {'error': f'{type(e).__name__}: {e}'}
+            if cf is not None:
+                cf['law'] = law.get('map', 'rig')
+                out['carried_fraction'] = cf
+    return out
+
+
 # ── reading a run directory ──────────────────────────────────────────────────
 
 def read_csv(path):
@@ -928,6 +1267,12 @@ def summarise_run(run_path):
         if text:
             out['fleet_grounded'] = [g for g in FLEET_GROUNDED if g in text]
             break
+    try:
+        teth = tethered_run_metrics(run_path)
+    except Exception as e:                                  # noqa: BLE001
+        teth = {'error': f'{type(e).__name__}: {e}'}
+    if teth is not None:
+        out['tethered'] = teth
     return out
 
 
@@ -1232,10 +1577,17 @@ def _find_key(obj, key):
 def main(argv=None):
     import argparse
     ap = argparse.ArgumentParser(description='metrics.json for a run directory')
-    ap.add_argument('kind', choices=('run', 'm2'),
-                    help='run: a run_experiment/SIL run dir; m2: a drive_m2_handover.py dir')
+    ap.add_argument('kind', choices=('run', 'm2', 'tethered'),
+                    help='run: a run_experiment/SIL run dir; m2: a drive_m2_handover.py dir; '
+                         'tethered: a rig log folder (printed, not written)')
     ap.add_argument('run_dir')
+    ap.add_argument('--log', help='tethered: console log with the planner\'s solve-status lines')
+    ap.add_argument('--hold-window', type=float, default=HOLD_WINDOW_S)
     a = ap.parse_args(argv)
+    if a.kind == 'tethered':
+        text = _read_text(a.log) if a.log else None
+        print(json.dumps(tethered_run_metrics(a.run_dir, a.hold_window, text), indent=2, default=str))
+        return
     out = summarise_m2(a.run_dir) if a.kind == 'm2' else summarise_run(a.run_dir)
     path = os.path.join(a.run_dir, 'metrics.json')
     with open(path, 'w') as fh:

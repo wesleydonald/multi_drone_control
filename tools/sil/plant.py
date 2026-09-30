@@ -23,6 +23,10 @@ What it models, and why each piece is here:
     reason _scheduled_kT / AIRBORNE_MARGIN / the kT estimator all exist. A linear plant
     would delete that error term and flatter the tracker.
 
+  * Optionally (QuadParams.thrust_map 'rig') the rig's affine thrust law with a sagging
+    pack, simulation_communication/rig_thrust.py, the same law and pack the Gazebo
+    bridge and sim_telemetry run under thrust_map 'rig'.
+
   * The betaflight rate curve and the armed 5% throttle floor, decoded exactly as
     simulation_communication/payload_betaflight_comm.py decodes them, so the bench
     consumes the same ELRSCommand the sim does.
@@ -36,9 +40,20 @@ aerodynamics, motor mixing and ESC saturation, mocap noise/latency, rotor inerti
 magnet-arm swing inertia. The rate time constant is shared with the tracker's model,
 so the bench cannot show a failure caused by rate-loop mismatch.
 """
+import os
 from dataclasses import dataclass, field
 
 import numpy as np
+
+try:
+    from simulation_communication import rig_thrust
+except ImportError:     # not built/sourced (or built before it existed): load the source file
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location('rig_thrust', os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), '..', '..', 'src',
+        'simulation_communication', 'simulation_communication', 'rig_thrust.py'))
+    rig_thrust = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(rig_thrust)
 
 G = 9.81
 
@@ -127,6 +142,10 @@ class QuadParams:
     # has to use the secant gain sqrt(thrust_c * a_hover) ~ 31 at the hover operating
     # point. Both come from the SDF motor model, which is not a coincidence.
     thrust_c: float = 83.1      # 4 * 0.62e-6 * 4631^2 / 0.64
+    # 'linear' (a = thrust_c * u) or 'rig' (rig_thrust.rig_thrust with this a_i and the
+    # plant's pack voltage; thrust_c is then unused)
+    thrust_map: str = 'linear'
+    thrust_offset: float = rig_thrust.A_DEFAULT
     # Betaflight rate curve (rates_d / rates_f / rates_g in payload_betaflight_comm,
     # centre_rate_deg / max_rate_deg / rate_expo in dynamics.py).
     rates_d: float = 100.0
@@ -200,9 +219,17 @@ class SilPlant:
     (matching what payload_mocap_emulator publishes in twist.angular).
     """
 
-    def __init__(self, quads, links, payload=None, rod=None, gravity=G):
+    def __init__(self, quads, links, payload=None, rod=None, gravity=G, pack=None):
+        """`pack`: rig_thrust.PackModel keyword arguments for the drones on the rig map
+        (each gets its own pack); linear drones have none."""
         self.n = len(quads)
         self.quads = list(quads)
+        for qp in self.quads:
+            if qp.thrust_map not in rig_thrust.THRUST_MAPS:
+                raise ValueError(f'thrust_map must be one of {rig_thrust.THRUST_MAPS}, '
+                                 f'got {qp.thrust_map!r}')
+        self.packs = [rig_thrust.PackModel(**(pack or {})) if qp.thrust_map == 'rig' else None
+                      for qp in self.quads]
         self.links = list(links)
         assert len(self.links) == self.n, "one Link per drone (attached=False if free)"
         self.pay = payload or PayloadParams()
@@ -297,8 +324,14 @@ class SilPlant:
             self.w[i] += (w_cmd - self.w[i]) / qp.rate_tau * dt
             self.q[i] = quat_integrate(self.q[i], self.w[i], dt)
 
-            # ── thrust: body +z only, quadratic in throttle ──────────────────
-            a_thrust = R @ np.array([0.0, 0.0, qp.thrust_c * u[2]])   # linear, as Gazebo since 2026-09-24
+            # ── thrust: body +z only ──────────────────────────────────────────
+            pack = self.packs[i]
+            if pack is None:
+                a_z = qp.thrust_c * u[2]      # linear, as Gazebo since 2026-09-24
+            else:
+                a_z = rig_thrust.rig_thrust(u[2], pack.v, qp.thrust_offset) / qp.mass
+                pack.step(u[2], dt)
+            a_thrust = R @ np.array([0.0, 0.0, a_z])
             self._a_thrust[i] = a_thrust
             f_drone[i] += qp.mass * a_thrust
             f_drone[i] += np.array([0.0, 0.0, -qp.mass * self.g])
@@ -382,6 +415,22 @@ class SilPlant:
         acceptance criterion."""
         R = quat_to_rot(self.q[i])
         return R.T @ (self._a_thrust[i] + self._a_cable[i])
+
+    def pack_v(self, i):
+        """True pack voltage of drone i (NaN on the linear map)."""
+        return float('nan') if self.packs[i] is None else self.packs[i].v
+
+    def pack_v_measured(self, i):
+        """Pack voltage as the telemetry link reports it (quantised)."""
+        return float('nan') if self.packs[i] is None else self.packs[i].measured()
+
+    def throttle_for_accel(self, i, a):
+        """Throttle giving body-z specific thrust `a` [m/s^2] on drone i's map."""
+        qp, pack = self.quads[i], self.packs[i]
+        if pack is None:
+            return a / qp.thrust_c
+        return (qp.thrust_offset + rig_thrust.C * (pack.v - rig_thrust.V_REF)
+                + a * qp.mass / rig_thrust.K)
 
     def cable_accel(self, i):
         """TRUE world-frame cable acceleration on drone i (rod force / mass). The

@@ -32,8 +32,8 @@ from rcl_interfaces.srv import GetParameters
 from std_msgs.msg import String
 from interfaces.msg import MotionCaptureState, Telemetry
 
-from preflight_geometry import (bearings_deg, fit_circle, match_azimuths, spacing_deg,
-                                typed_azimuths, yaw_deg_from_quat)
+from preflight_geometry import (bearings_deg, fit_circle, match_azimuths, slot_offset_detail,
+                                spacing_deg, typed_azimuths, yaw_deg_from_quat)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -272,7 +272,8 @@ def main():
                          f'should print the same)')
             for s_, d_ in enumerate(slot2drone):
                 check(abs(err[s_]) <= a.az_tol_deg, f'drone {d_} on typed azimuth {typed[s_]:.0f}',
-                      f'measured {meas[d_]:.1f} deg ({err[s_]:+.1f}; plate {meas[d_] / 30.0:.1f})')
+                      f'measured {meas[d_]:.1f} deg; '
+                      + slot_offset_detail(d_, err[s_], typed[s_], a.az_tol_deg))
 
     # 2. geometry from mocap: drone-to-rim-point distance vs cable_len (slot by nearest rim point)
     if pf.payload and rho is not None and cable_len is not None:

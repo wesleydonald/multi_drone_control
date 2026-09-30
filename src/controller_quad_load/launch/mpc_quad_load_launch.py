@@ -132,6 +132,8 @@ def _args():
         DeclareLaunchArgument('z_ki', default_value='0.4'),      # planner height integral, 0 = off (card 2026-09-24_planner_offset)
         DeclareLaunchArgument('z_i_max', default_value='0.15'),
         DeclareLaunchArgument('z_taut_gate', default_value='0.99'),
+        # rod pivot below the drone centre (m, body z); the sim worlds pivot at the centre
+        DeclareLaunchArgument('pivot_offset_z', default_value='0.0'),
         # LAND descent rate (separate from the slow takeoff lift_ramp_vel).
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         # Cable compensation. ON is the correct flight config: the cable pulls
@@ -234,6 +236,28 @@ def _args():
         DeclareLaunchArgument('traj_speed', default_value='0.6'),
         DeclareLaunchArgument('traj_distance', default_value='1.0'),
         DeclareLaunchArgument('traj_radius', default_value='0.5'),
+        # Sim thrust plant (payload_betaflight_comm thrust_map): 'linear' is the x3 map,
+        # 'rig' the rig's affine law with pack sag (needs sim_thrust_map:=rig on the RViz
+        # launch too, which runs the pack). Offset: one a_i, or one per drone comma-separated.
+        DeclareLaunchArgument('sim_thrust_map', default_value='linear'),
+        DeclareLaunchArgument('sim_thrust_offset', default_value='0.185'),
+        DeclareLaunchArgument('sim_pack_v0', default_value='24.4'),
+        # Tracker thrust map (the rig launch's affine law); the defaults are the node's
+        # own, so a sim run that does not set them flies the linear map as before.
+        DeclareLaunchArgument('thrust_offset', default_value='0.0'),
+        DeclareLaunchArgument('thrust_offset_v_slope', default_value='0.0'),
+        DeclareLaunchArgument('thrust_v_ref', default_value='23.5'),
+        DeclareLaunchArgument('throttle_max', default_value='0.6'),
+        # Rig-launch parity (plan 2026-10, W6): empty = the planner's own default, so a
+        # config that does not set them flies exactly as before.
+        DeclareLaunchArgument('attach_radius', default_value=''),
+        DeclareLaunchArgument('attach_z', default_value=''),
+        DeclareLaunchArgument('rod_tol_frac', default_value=''),
+        DeclareLaunchArgument('rod_spread_m', default_value=''),
+        DeclareLaunchArgument('z_i_gate', default_value=''),
+        # 'free_hover': untethered reference (real_hover_launch's free_hover at target_z) in
+        # place of the load planner, for a plant check on a drone detached from the ring
+        DeclareLaunchArgument('reference', default_value='planner'),
     ]
 
 
@@ -253,6 +277,16 @@ def launch_setup(context, *args, **kwargs):
 
     f = lambda name: ParameterValue(LaunchConfiguration(name), value_type=float)
     b = lambda name: ParameterValue(LaunchConfiguration(name), value_type=bool)
+    sim_offsets = [float(x) for x in
+                   LaunchConfiguration('sim_thrust_offset').perform(context).split(',') if x.strip()]
+    if len(sim_offsets) not in (1, n):
+        raise RuntimeError(f'sim_thrust_offset needs one value or {n}, got {len(sim_offsets)}')
+    sim_map = LaunchConfiguration('sim_thrust_map').perform(context).strip().lower()
+    # 'auto' is the linear x3 plant's gain; a rig plant needs the rig's measured map typed in.
+    if sim_map == 'rig' and (LaunchConfiguration('thrust_ratio').perform(context).strip().lower() == 'auto'
+                             or float(LaunchConfiguration('thrust_offset').perform(context)) <= 0.0):
+        raise RuntimeError('sim_thrust_map:=rig needs an explicit thrust_ratio and thrust_offset > 0 '
+                           '(the rig launch values: 35.2, 0.185)')
 
     nodes = [SetParameter(name='use_sim_time', value=True),
              LogInfo(msg=f'[launch] {kt_note}; takeoff {kt_to:.2f}')]
@@ -280,7 +314,10 @@ def launch_setup(context, *args, **kwargs):
             parameters=[{'drone_id': i, 'drone_name': drone_name,
                          'parent_model': PARENT_MODEL,
                          'rate_source': LaunchConfiguration('rate_source'),
-                         'imu_topic': f'/drone_{i}/imu'}]))
+                         'imu_topic': f'/drone_{i}/imu',
+                         'thrust_map': LaunchConfiguration('sim_thrust_map'),
+                         'thrust_offset': sim_offsets[min(i, len(sim_offsets) - 1)],
+                         'pack_v0': f('sim_pack_v0')}]))
         # per-drone CABLE-AWARE MPC tracker — tracks the planner reference
         nodes.append(Node(
             package='controller_quad_load', executable='controller',
@@ -302,13 +339,26 @@ def launch_setup(context, *args, **kwargs):
                          'kt_batt_sag_frac': f('kt_batt_sag_frac'),
                          'kt_batt_v_full': f('kt_batt_v_full'),
                          'kt_batt_v_empty': f('kt_batt_v_empty'),
-                         'kt_print_period_s': f('kt_print_period_s')}],
+                         'kt_print_period_s': f('kt_print_period_s'),
+                         'throttle_max': f('throttle_max'),
+                         'thrust_offset': f('thrust_offset'),
+                         'thrust_offset_v_slope': f('thrust_offset_v_slope'),
+                         'thrust_v_ref': f('thrust_v_ref')}],
             output='screen'))
 
     # ── Central fleet manager ──────────────────────────────────────────────
     nodes.append(Node(
         package='controller_quad_load', executable='main', name='central_controller',
         parameters=[{'num_drones': n}], output='screen'))
+
+    reference = LaunchConfiguration('reference').perform(context).strip()
+    if reference == 'free_hover':
+        nodes.append(Node(
+            package='controller_quad_load', executable='free_hover', name='free_hover',
+            parameters=[{'num_drones': n, 'hover_z': f('target_z')}], output='screen'))
+        return nodes
+    if reference != 'planner':
+        raise RuntimeError(f"reference must be 'planner' or 'free_hover', got {reference!r}")
 
     # ── Centralized cable-suspended load planner ───────────────────────────
     nodes.append(Node(
@@ -324,6 +374,7 @@ def launch_setup(context, *args, **kwargs):
                      'z_ki': f('z_ki'),
                      'z_i_max': f('z_i_max'),
                      'z_taut_gate': f('z_taut_gate'),
+                     'pivot_offset': [0.0, 0.0, float(LaunchConfiguration('pivot_offset_z').perform(context))],
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
@@ -334,7 +385,11 @@ def launch_setup(context, *args, **kwargs):
                      'load_traj': LaunchConfiguration('load_traj'),
                      'traj_speed': f('traj_speed'),
                      'traj_distance': f('traj_distance'),
-                     'traj_radius': f('traj_radius')}],
+                     'traj_radius': f('traj_radius'),
+                     **{k: float(v) for k, v in
+                        ((k, LaunchConfiguration(k).perform(context)) for k in
+                         ('attach_radius', 'attach_z', 'rod_tol_frac', 'rod_spread_m', 'z_i_gate'))
+                        if v.strip()}}],
         output='screen'))
 
     return nodes

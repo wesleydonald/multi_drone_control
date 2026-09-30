@@ -121,9 +121,63 @@ def start_launch_pkg(package, launch_file, argv, log_path, run_dir):
     fh.flush()
     env = dict(os.environ)
     env['MDC_RUN_DIR'] = run_dir
-    p = subprocess.Popen(cmd, cwd=REPO, stdout=fh, stderr=subprocess.STDOUT,
+    p = subprocess.Popen(cmd, cwd=launch_cwd(), stdout=fh, stderr=subprocess.STDOUT,
                          start_new_session=True, env=env)
     return p, fh
+
+
+def declared_launch_args(package, launch_file, _seen=None):
+    """Names a launch file declares, with those of the same-package launch files it includes.
+    Source-level, so it runs before anything is started."""
+    _seen = set() if _seen is None else _seen
+    d = os.path.join(REPO, 'src', package, 'launch')
+    path = os.path.join(d, launch_file)
+    if path in _seen or not os.path.exists(path):
+        return set()
+    _seen.add(path)
+    text = open(path).read()
+    names = set(re.findall(r"DeclareLaunchArgument\(\s*['\"](\w+)['\"]", text))
+    included = included_launch_files(text)
+    for other in os.listdir(d):
+        if other != launch_file and other in included:
+            names |= declared_launch_args(package, other, _seen)
+    return names
+
+
+def included_launch_files(text):
+    """Basenames of the launch files a launch source really includes: string constants
+    inside a PythonLaunchDescriptionSource(...) call. A name in a comment or docstring
+    declares nothing."""
+    import ast
+    out = set()
+    for node in ast.walk(ast.parse(text)):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        if (f.id if isinstance(f, ast.Name) else getattr(f, 'attr', None)) != 'PythonLaunchDescriptionSource':
+            continue
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                out.add(os.path.basename(sub.value))
+    return out
+
+
+def undeclared_launch_args(cfg):
+    """Config args the launch never declares. `ros2 launch` ignores those without a word,
+    so the run flies the default the config meant to change."""
+    bad = []
+    for lf, argv in ((cfg.launch_file, cfg.launch_argv()), (cfg.io_launch_file, cfg.io_launch_argv())):
+        names = declared_launch_args(cfg.launch_package if lf == cfg.launch_file else 'controller_quad_load', lf)
+        if not names:
+            continue                     # launch not found here: start_launch reports it
+        bad += [f'{lf}: {a.split(":=")[0]}' for a in argv if a.split(':=')[0] not in names]
+    return bad
+
+
+def launch_cwd():
+    """Working directory of the launches: the planner generates its solver relative to it
+    (planner_solver CODE_DIR), so parallel lab slots set MDC_LAUNCH_CWD to their own dir."""
+    return os.environ.get('MDC_LAUNCH_CWD') or REPO
 
 
 def rate_source(cfg):
@@ -205,7 +259,7 @@ def start_launch(cfg, launch_file, argv, log_path, run_dir):
     env = dict(os.environ)
     # Every node of this launch writes into ONE run directory (run_context.run_dir).
     env['MDC_RUN_DIR'] = run_dir
-    p = subprocess.Popen(cmd, cwd=REPO, stdout=fh, stderr=subprocess.STDOUT,
+    p = subprocess.Popen(cmd, cwd=launch_cwd(), stdout=fh, stderr=subprocess.STDOUT,
                          start_new_session=True, env=env)
     return p, fh
 
@@ -324,11 +378,85 @@ def dump_params(run_dir, timeout=25, workers=8, only=None, skip=()):
 
 # ── criteria ─────────────────────────────────────────────────────────────────
 
-def evaluate(cfg, rows, t_weld, aborts):
-    """Apply cfg.criteria. Returns (ok, [(name, ok, detail)])."""
+def tethered_checks(c, teth):
+    """The tethered-hold criteria against metrics.tethered_run_metrics. A criterion whose
+    metric is missing FAILS: a hold that never reached its target, or a log without the
+    column, is not a pass."""
+    wanted = [k for k in ('max_planner_solve_fail', 'max_hold_z_err_m', 'max_heave_pp_m',
+                          'max_payload_vz_mps', 'min_carried_fraction', 'max_ref_age_frac',
+                          'max_hold_tilt_mean_deg', 'max_z_bias_abs') if getattr(c, k) is not None]
+    if not wanted:
+        return []
+    if not teth or 'error' in teth:
+        why = (teth or {}).get('error', 'no planner log in the run')
+        return [(f'tethered metrics ({k})', False, why) for k in wanted]
+    hold = teth.get('hold')
+    out = []
+    if hold is None and any(k in wanted for k in ('max_hold_z_err_m', 'max_heave_pp_m',
+                                                  'max_hold_tilt_mean_deg', 'max_z_bias_abs')):
+        out.append(('hold reached target', False, f'z_tgt never reached {teth.get("target_z")}'))
+    elif hold is not None and not hold.get('full'):
+        out.append(('hold window complete', False,
+                    f'hold {hold["hold_s"]:.1f} s < {c.hold_window_s:g} s window'))
+
+    def num(v):
+        return v if isinstance(v, (int, float)) and v == v else None
+    if c.max_planner_solve_fail is not None:
+        v = num((teth.get('solve_failures') or {}).get('n'))
+        out.append(('planner solve failures', v is not None and v <= c.max_planner_solve_fail,
+                    f'{v} (<={c.max_planner_solve_fail})'))
+    if c.max_hold_z_err_m is not None and hold is not None:
+        v = num(teth.get('hold_z_err_m'))
+        out.append(('hold |mean z - target|', v is not None and abs(v) <= c.max_hold_z_err_m,
+                    f'{v:+.3f} m (<={c.max_hold_z_err_m:.3f})' if v is not None else 'n/a'))
+    if c.max_heave_pp_m is not None and hold is not None:
+        hv = teth.get('heave') or {}
+        v = num(hv.get('pp_m'))
+        out.append(('hold heave p-p', v is not None and v <= c.max_heave_pp_m,
+                    (f'{v:.3f} m (<={c.max_heave_pp_m:.3f}), period {hv.get("period_s", math.nan):.1f} s'
+                     + (' [window < 3 periods]' if hv.get('short') else '')) if v is not None else 'n/a'))
+    if c.max_hold_tilt_mean_deg is not None and hold is not None:
+        v = num(teth.get('hold_tilt_mean_deg'))
+        out.append(('hold ring tilt mean', v is not None and v <= c.max_hold_tilt_mean_deg,
+                    f'{v:.2f} deg (<={c.max_hold_tilt_mean_deg:.2f})' if v is not None else 'n/a'))
+    if c.max_z_bias_abs is not None and hold is not None:
+        v = num(teth.get('hold_z_bias_max_abs'))
+        out.append(('hold |z_bias|', v is not None and v <= c.max_z_bias_abs,
+                    f'{v:.3f} m (<={c.max_z_bias_abs:.3f})' if v is not None else 'n/a'))
+    if c.max_payload_vz_mps is not None:
+        v = num(teth.get('max_payload_vz_mps'))
+        out.append(('ring |vz| hand-over to hold end', v is not None and v <= c.max_payload_vz_mps,
+                    f'{v:.3f} m/s (<={c.max_payload_vz_mps:.3f})' if v is not None else 'n/a'))
+    if c.max_ref_age_frac is not None:
+        v = num(teth.get('ref_age_frac'))
+        out.append(('airborne ref age > 0.3 s', v is not None and v <= c.max_ref_age_frac,
+                    f'{100 * v:.1f} % (<={100 * c.max_ref_age_frac:.1f} %)' if v is not None
+                    else 'n/a (no ref_age column)'))
+    if c.min_carried_fraction is not None:
+        cf = teth.get('carried_fraction') or {}
+        v = num(cf.get('hold_median', cf.get('airborne_median')))
+        out.append(('carried fraction (rod force / ring weight)',
+                    v is not None and v >= c.min_carried_fraction,
+                    f'{v:.3f} (>={c.min_carried_fraction:.3f}, {cf.get("law")} law)' if v is not None
+                    else f'n/a {cf.get("error", "")}'.strip()))
+    return out
+
+
+def evaluate(cfg, rows, t_weld, aborts, tethered=None):
+    """Apply cfg.criteria. Returns (ok, [(name, ok, detail)]). With criteria.report_only
+    every check is still listed but ok is True."""
     c = cfg.criteria
     if c is None:
         return True, [('(no criteria — exploratory run)', True, '')]
+    ok, out = _evaluate(cfg, c, rows, t_weld, aborts)
+    out += tethered_checks(c, tethered)
+    ok = ok and all(o[1] for o in out)
+    if c.report_only:
+        return True, [(f'{n} (report only)', g, d) for n, g, d in out]
+    return ok, out
+
+
+def _evaluate(cfg, c, rows, t_weld, aborts):
     if not rows:
         return False, [('no data recorded', False, 'the run produced no rows')]
     t = np.array([r['t'] for r in rows], float)
@@ -423,7 +551,20 @@ def write_metrics_and_plots(run_dir):
 
 # ── one run ──────────────────────────────────────────────────────────────────
 
-def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10):
+def preallocated(run_dir):
+    """(path, run id) of a run directory reserved in advance (tools/remote/lab_batch.py
+    allocates ids on the laptop, because next_run_id is a directory scan and parallel
+    slots would race on it)."""
+    run_dir = os.path.abspath(run_dir)
+    m = re.match(r'(R\d{4})_', os.path.basename(run_dir))
+    if not m:
+        raise SystemExit(f'--run-dir {run_dir}: the name must start with R####_')
+    for sub in ('logs', 'plots', 'params'):
+        os.makedirs(os.path.join(run_dir, sub), exist_ok=True)
+    return run_dir, m.group(1)
+
+
+def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_state=None):
     import rclpy
     from experiment.runner_node import ExperimentRunner
 
@@ -432,7 +573,7 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10):
         os.environ['FASTRTPS_DEFAULT_PROFILES_FILE'] = os.path.join(
             REPO, 'configs', 'dds', 'fastdds_udp_only.xml')
         print('    Fast DDS: UDP-only profile (no shared memory)')
-    run_dir, rid = allocate(f'gz_{cfg.name}', kind='sim')
+    run_dir, rid = preallocated(run_dir) if run_dir else allocate(f'gz_{cfg.name}', kind='sim')
     readback = None            # the manifest is written on the startup-failure path too
     print(f'\n=== Gazebo experiment: {cfg.name}  ({rid}, repeat {repeat}) ===')
     print('   ' + cfg.summary().replace('\n', '\n   '))
@@ -445,6 +586,15 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10):
                    launch_args=cfg.launch_args, repeat=repeat,
                    rate_source=rate_source(cfg),
                    headless=not gui, status='starting')
+    if git_state:
+        # the tree was synced from the laptop without .git: its SHA and diff are the provenance
+        gs = dict(git_state)
+        diff = gs.pop('diff', None)
+        if diff:
+            with open(os.path.join(run_dir, 'git_diff.patch'), 'w') as fh:
+                fh.write(diff)
+            gs['git_diff_file'] = 'git_diff.patch'
+        write_manifest(run_dir, **gs)
 
     clean_out = clean_slate()
     with open(os.path.join(run_dir, 'logs', 'clean_slate.log'), 'w') as fh:
@@ -521,6 +671,7 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10):
         for _ in range(50):
             rclpy.spin_once(node, timeout_sec=0.02)
         node.start_clock()
+        write_manifest(run_dir, t_ready_sim=node.t_ready)
         if getattr(cfg, 'bg_param_dump', True):
             bg_thread.start()
         else:
@@ -636,7 +787,15 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10):
 
     write_logs(run_dir, rows, events, aborts, t_weld)
     mtr = write_metrics_and_plots(run_dir)
-    ok, checks = evaluate(cfg, rows, t_weld, aborts)
+    teth = (mtr or {}).get('tethered') if isinstance(mtr, dict) else None
+    c = cfg.criteria
+    try:
+        import metrics as M
+        if c is not None and c.hold_window_s != M.HOLD_WINDOW_S:
+            teth = M.tethered_run_metrics(run_dir, hold_window_s=c.hold_window_s)
+    except Exception as e:                              # noqa: BLE001
+        teth = {'error': f'{type(e).__name__}: {e}'}
+    ok, checks = evaluate(cfg, rows, t_weld, aborts, teth)
     grounded = (mtr or {}).get('fleet_grounded') if isinstance(mtr, dict) else None
     if grounded:
         # a refused TAKEOFF looks like "never lifted" in the numbers (R0749): VOID, re-fly
@@ -669,6 +828,80 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10):
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
+def checked_config(path):
+    """Load a config and refuse it before anything starts: world present, masses agree with
+    the world (unless mis_seed), IMU world for rate_source imu, every launch arg declared."""
+    cfg = ExperimentConfig.from_yaml(path)
+    wpath = cfg.world if os.path.isabs(cfg.world) else os.path.join(REPO, 'simulation_assets', cfg.world)
+    if not os.path.exists(wpath):
+        raise SystemExit(f'{path}: world not found: {wpath}')
+    # A launch told a different mass than the world flies mis-sized tension on every
+    # drone (35 configs silently did after the 0.86 kg ring landed, 2026-09-23).
+    # Robustness arms declare `mis_seed: true`; everything else must agree.
+    told = cfg.launch_args.get('load_mass')
+    if told is not None and not cfg.mis_seed:
+        sys.path.insert(0, os.path.join(REPO, 'tools'))
+        from check_geometry import world_geometry
+        wmass = world_geometry(wpath).get('load_mass')
+        if wmass is not None and abs(float(told) - wmass) > 1e-3:
+            raise SystemExit(f'{path}: launch load_mass {told} but {cfg.world} has {wmass:.3f} kg; '
+                             f'fix the config or declare mis_seed: true')
+    if rate_source(cfg) == 'imu':
+        require_imu_world(cfg, path)
+    bad = undeclared_launch_args(cfg)
+    if bad:
+        raise SystemExit(f'{path}: launch args no launch declares (they would be ignored):\n  '
+                         + '\n  '.join(bad))
+    check_thrust_map(cfg, wpath, path)
+    if not cfg.mis_seed:
+        check_world_geometry(cfg, wpath, path)
+    return cfg
+
+
+def sim_thrust_maps(cfg):
+    """The sim plant map each launch section flies ('linear' unless it sets sim_thrust_map)."""
+    return tuple(str(a.get('sim_thrust_map', 'linear')).strip().lower()
+                 for a in (cfg.launch_args, cfg.io_launch_args))
+
+
+def check_thrust_map(cfg, wpath, path):
+    """A rig-twin world (x3_rig_drone models) flies the rig thrust map in both launches, every
+    other world the linear one. One section alone on rig pairs the rig bridge with no pack."""
+    ctrl, io = sim_thrust_maps(cfg)
+    if ctrl != io:
+        raise SystemExit(f'{path}: sim_thrust_map {ctrl} on {cfg.launch_file} but {io} on '
+                         f'{cfg.io_launch_file}; set it in both launch sections')
+    rig_world = 'x3_rig_drone' in open(wpath).read()
+    if rig_world != (ctrl == 'rig') and not cfg.mis_seed:
+        raise SystemExit(f'{path}: {cfg.world} is a {"rig" if rig_world else "legacy"} world but the '
+                         f'config flies sim_thrust_map {ctrl}; set sim_thrust_map: '
+                         f'{"rig" if rig_world else "linear"} or declare mis_seed: true')
+
+
+# Values only params.py sets (no launch arg): reported, not refused, until params.py follows.
+PARAMS_ONLY_GEOMETRY = ('load_ixx', 'load_izz')
+
+
+def check_world_geometry(cfg, wpath, path):
+    """check_geometry.config_mismatches: every geometry value the controller would fly
+    differently from the world. `geometry_exempt: {key: reason}` names a deliberate one."""
+    sys.path.insert(0, os.path.join(REPO, 'tools'))
+    from check_geometry import config_mismatches
+    lp = os.path.join(REPO, 'src', cfg.launch_package, 'launch', cfg.launch_file)
+    bad = []
+    for k, wv, cv in config_mismatches(wpath, lp if os.path.exists(lp) else None, cfg.launch_args):
+        line = f'{k}: world {wv:.4g}, controller {cv:.4g}'
+        if k in cfg.geometry_exempt:
+            continue
+        if k in PARAMS_ONLY_GEOMETRY:
+            print(f'warn  {path}: {line} (params.py)', file=sys.stderr)
+            continue
+        bad.append(line)
+    if bad:
+        raise SystemExit(f'{path}: controller geometry differs from {cfg.world}:\n  ' + '\n  '.join(bad)
+                         + '\n  fix the config, name the key under geometry_exempt, or declare mis_seed: true')
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -678,28 +911,39 @@ def main():
                     help='nice level for the headless Gazebo process (0 = none)')
     ap.add_argument('--gui', action='store_true',
                     help='run Gazebo with its GUI (debugging; not for batches)')
+    ap.add_argument('--run-dir', help='use this pre-allocated R####_* directory (one config, '
+                                      'one repeat; tools/remote/lab_batch.py)')
+    ap.add_argument('--git-state-file', help='JSON with the source tree\'s git_sha, git_branch, '
+                                             'dirty_files, diff_sha256 (+ diff): recorded in the '
+                                             'manifest instead of this checkout\'s')
+    ap.add_argument('--check', action='store_true',
+                    help='validate the configs (world, masses, launch args) and exit')
     args = ap.parse_args()
+    if args.run_dir and (len(args.config) != 1 or args.repeats != 1):
+        ap.error('--run-dir takes exactly one config and one repeat')
+    git_state = None
+    if args.git_state_file:
+        import json
+        with open(args.git_state_file) as fh:
+            git_state = json.load(fh)
 
     results = []
+    if args.check:
+        n_bad = 0
+        for path in args.config:
+            try:
+                checked_config(path)
+                print(f'ok    {path}')
+            except (SystemExit, ValueError) as e:
+                n_bad += 1
+                print(f'FAIL  {e}')
+        return 1 if n_bad else 0
     for path in args.config:
-        cfg = ExperimentConfig.from_yaml(path)
-        # A launch told a different mass than the world flies mis-sized tension on every
-        # drone (35 configs silently did after the 0.86 kg ring landed, 2026-09-23).
-        # Robustness arms declare `mis_seed: true`; everything else must agree.
-        told = cfg.launch_args.get('load_mass')
-        if told is not None and not cfg.mis_seed:
-            sys.path.insert(0, os.path.join(REPO, 'tools'))
-            from check_geometry import world_geometry
-            wpath = cfg.world if os.path.isabs(cfg.world) else os.path.join(REPO, 'simulation_assets', cfg.world)
-            wmass = world_geometry(wpath).get('load_mass')
-            if wmass is not None and abs(float(told) - wmass) > 1e-3:
-                raise SystemExit(f'{path}: launch load_mass {told} but {cfg.world} has {wmass:.3f} kg; '
-                                 f'fix the config or declare mis_seed: true')
-        if rate_source(cfg) == 'imu':
-            require_imu_world(cfg, path)
+        cfg = checked_config(path)
         for rep in range(args.repeats):
             results.append((cfg, rep, run_once(cfg, path, gui=args.gui, repeat=rep,
-                                               gz_nice=args.gz_nice)))
+                                               gz_nice=args.gz_nice, run_dir=args.run_dir,
+                                               git_state=git_state)))
 
     print('\n=== experiment summary ===')
     ok_all = True

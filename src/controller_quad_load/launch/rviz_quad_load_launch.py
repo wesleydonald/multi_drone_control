@@ -135,9 +135,16 @@ def launch_setup(context, *args, **kwargs):
     # elrs_interface, so real_io_launch.py must NOT start this node. Drive one
     # drone low to check the warning is visible:
     #   ros2 param set /sim_telemetry voltage_drone_1 19.8
+    # sim_thrust_map:=rig swaps the placeholder for the pack model the rig thrust law
+    # reads (/drone_i/sim/pack_v); pair it with sim_thrust_map:=rig on the control launch.
+    rig_pack = LaunchConfiguration('sim_thrust_map').perform(context) == 'rig'
+    tel = {'num_drones': n_viz}
+    if rig_pack:
+        tel.update({'pack_model': True, 'rate_hz': 10.0,
+                    'pack_v0': float(LaunchConfiguration('sim_pack_v0').perform(context))})
     nodes.append(Node(
         package='simulation_communication', executable='sim_telemetry',
-        name='sim_telemetry', parameters=[{'num_drones': n_viz}],
+        name='sim_telemetry', parameters=[tel],
         output='screen'))
 
     for i in range(n_viz):
@@ -221,5 +228,7 @@ def generate_launch_description():
         DeclareLaunchArgument('viz_hz', default_value='30'),
         # RViz-only TF/markers; off for headless batches (26 % of a core, 2026-09-26)
         DeclareLaunchArgument('fleet_viz', default_value='true'),
+        DeclareLaunchArgument('sim_thrust_map', default_value='linear'),
+        DeclareLaunchArgument('sim_pack_v0', default_value='24.4'),
         OpaqueFunction(function=launch_setup),
     ])

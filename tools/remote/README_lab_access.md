@@ -35,7 +35,7 @@ Several people can be logged in at once; each SSH session is independent. What i
 
 | Shared | Rule |
 |---|---|
-| CPU and RAM | Run `htop` before starting anything heavy. Leave cores for others: batches use at most 16 of the 24 unless the machine is idle. Simulations with wall-clock watchdogs fail when starved. |
+| CPU and RAM | Run `htop` before starting anything heavy. Batches use all 24 cores (6 slots) only while nobody else is using the PC and back off automatically when other load appears. Simulations with wall-clock watchdogs fail when starved. |
 | **ROS 2 network** | Everyone on the PC shares ROS discovery. Use **your own `ROS_DOMAIN_ID`** (table below) in every terminal (`export ROS_DOMAIN_ID=<yours>`, or put it in your `~/.bashrc`). Otherwise your nodes see and command someone else's. |
 | **Gazebo** | Same problem: `export GZ_PARTITION=<yourname>` in every terminal. |
 | Docker | Name containers with your user as a prefix (`--name alice_...`). Never run `docker rm -f $(docker ps -q)` or `docker system prune`: they hit everyone's containers. |
@@ -60,3 +60,15 @@ Add yourself to this table (the copy at `~/REMOTE_ACCESS.md` on the PC) when you
 - **`ssh: Could not resolve hostname drones`**: Tailscale isn't running on your side (`tailscale status`).
 - **It times out:** the PC is probably off. Someone in the lab needs to switch it on.
 - **Your simulation behaves oddly or sees extra topics:** check `ROS_DOMAIN_ID` and `GZ_PARTITION`, then `ros2 node list` for nodes that aren't yours.
+
+## Our Docker parity image
+
+`mdc-humble:db1c3ca` reproduces the laptop sim stack: Humble, Gazebo Harmonic at the laptop's exact versions (gz-sim 8.10.0, repacked from the laptop because the OSRF archive keeps only the newest), acados db1c3ca with OpenMP off and the laptop's BLASFEO target, and the same Python pins. The checkout lives at `drones:~/mdc` and is mounted at `/home/wesley/multi_drone_control`; `build/`, `install/` and `results/` there belong to the lab PC. Run all three from the laptop:
+
+```bash
+tools/remote/lab_sync.sh                    # rsync the working tree to drones:~/mdc
+tools/remote/lab_build.sh                   # image if missing (--image forces it, ~30 min), then colcon build in a container
+tools/remote/lab_run.sh --tag t1 --cpus 4 --domain 41 --partition wesley_1 -- python3 tools/prebuild_planner.py 4
+```
+
+Containers are named `wesley_<tag>`, each on its own bridge network, and are removed when the command ends. Stay within the 16-core total across parallel runs.

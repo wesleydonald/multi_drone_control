@@ -90,11 +90,17 @@ The bench owns `/clock`. It advances sim time **only after every tracker has pub
 a fresh `ELRSCommand` for the current step**:
 
 ```
-publish /clock(t), poses(t), imu(t)
+publish poses(t), imu(t), then /clock(t)          (a timer on the clock finds this step's poses)
 wait until all n+1 trackers have published a command stamped after t   (wall timeout)
+  and, on a step where the planner's 10 Hz tick is due, its /planner/tick marker for t
 apply commands, integrate the plant DT=20 ms
 t += DT
 ```
+
+The planner joined the barrier on 2026-09-30 (card 2026-10-01_tethered_model, Group 6): its
+~20 ms solves had landed on whichever ~9 ms step was current, and repeats split by 3.4 deg.
+The payload pose is withheld until the scenario clock starts, which starts on a planner tick,
+and events count steps, so two runs of one config are bit-identical (R0796/R0797).
 
 Why lockstep rather than free-running:
 

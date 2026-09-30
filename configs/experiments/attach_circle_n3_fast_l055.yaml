@@ -74,3 +74,5 @@ criteria:
   min_payload_z: 0.005
   min_peak_payload_z: 0.35
   forbid_abort: false
+geometry_exempt:
+  cable_len: robustness arm, the controller is told the wrong rod length on purpose

@@ -422,6 +422,8 @@ class DissipativeController(LoadPlanner):
             # from drone_pos like any tethered drone
             self.drone_pos[d] = self.attach_pos[j]
             self.drone_vel[d] = np.array([lv.x, lv.y, lv.z])
+            o = msg.pose.orientation
+            self.drone_quat[d] = np.array([o.w, o.x, o.y, o.z])     # _pivot_at tilts the pivot with it
 
     def _reserved_index(self, d):
         """j for a reserved (magnet) drone id d, else None. Reserved ids are counted

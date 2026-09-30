@@ -101,6 +101,13 @@ else
   echo "!! weld variants stale: rerun tools/make_weld_variants.py"
   GEO_BAD=1
 fi
+# Rig-twin carry worlds and x3_rig_drone models are generated from the x3 models.
+if python3 tools/make_carry_worlds.py --check >/dev/null 2>&1; then
+  echo "   ok   rig carry worlds up to date"
+else
+  echo "!! rig carry worlds stale: rerun tools/make_carry_worlds.py"
+  GEO_BAD=1
+fi
 [ "$GEO_BAD" -eq 0 ] || FAILED+=("geometry")
 
 if [ "$QUICK" -eq 0 ]; then

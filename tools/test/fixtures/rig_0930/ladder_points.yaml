@@ -1,0 +1,17 @@
+# RIG-0930-ladder1 (drone 0, 5 flights) + RIG-0930-ladder4 (17:08 and 17:10), 13 free-hover points.
+# Each csv is the reference plateau of the tracker log named in source (u2 > 0.1, ref_z within 1 cm of its top).
+# Excluded: 16:40 98 g (mass rested on the floor), 16:52 void (no takeoff).
+points:
+  - {path: ladder/d0_163736_000g.csv, drone: 0, hung_kg: 0.000, time: "16:37", source: results/rig/2026-09-30/ladder1_000g_logs/logs/controller_quad_load/planner_drone0_20260930_163736}
+  - {path: ladder/d0_164256_098g.csv, drone: 0, hung_kg: 0.098, time: "16:42", source: results/rig/2026-09-30/ladder1_000g_logs/logs/controller_quad_load/planner_drone0_20260930_164256}
+  - {path: ladder/d0_164608_196g.csv, drone: 0, hung_kg: 0.196, time: "16:46", source: results/rig/2026-09-30/ladder1_000g_logs/logs/controller_quad_load/planner_drone0_20260930_164608}
+  - {path: ladder/d0_165502_000g.csv, drone: 0, hung_kg: 0.000, time: "16:55", source: results/rig/2026-09-30/ladder1_000g_logs/logs/controller_quad_load/planner_drone0_20260930_165502}
+  - {path: ladder/d0_165742_196g.csv, drone: 0, hung_kg: 0.196, time: "16:57", source: results/rig/2026-09-30/ladder1_000g_logs/logs/controller_quad_load/planner_drone0_20260930_165742}
+  - {path: ladder/d0_170818_000g.csv, drone: 0, hung_kg: 0.000, time: "17:08", source: results/rig/2026-09-30/ladder4_000g_logs/logs/controller_quad_load/planner_drone0_20260930_170818}
+  - {path: ladder/d1_170817_098g.csv, drone: 1, hung_kg: 0.098, time: "17:08", source: results/rig/2026-09-30/ladder4_000g_logs/logs/controller_quad_load/planner_drone1_20260930_170817}
+  - {path: ladder/d2_170811_000g.csv, drone: 2, hung_kg: 0.000, time: "17:08", source: results/rig/2026-09-30/ladder4_000g_logs/logs/controller_quad_load/planner_drone2_20260930_170811}
+  - {path: ladder/d3_170814_098g.csv, drone: 3, hung_kg: 0.098, time: "17:08", source: results/rig/2026-09-30/ladder4_000g_logs/logs/controller_quad_load/planner_drone3_20260930_170814}
+  - {path: ladder/d0_171033_098g.csv, drone: 0, hung_kg: 0.098, time: "17:10", source: results/rig/2026-09-30/ladder4_000g_logs/logs/controller_quad_load/planner_drone0_20260930_171033}
+  - {path: ladder/d1_171031_000g.csv, drone: 1, hung_kg: 0.000, time: "17:10", source: results/rig/2026-09-30/ladder4_000g_logs/logs/controller_quad_load/planner_drone1_20260930_171031}
+  - {path: ladder/d2_171032_098g.csv, drone: 2, hung_kg: 0.098, time: "17:10", source: results/rig/2026-09-30/ladder4_000g_logs/logs/controller_quad_load/planner_drone2_20260930_171032}
+  - {path: ladder/d3_171029_000g.csv, drone: 3, hung_kg: 0.000, time: "17:10", source: results/rig/2026-09-30/ladder4_000g_logs/logs/controller_quad_load/planner_drone3_20260930_171029}

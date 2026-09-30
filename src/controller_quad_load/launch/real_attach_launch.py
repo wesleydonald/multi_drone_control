@@ -217,6 +217,9 @@ def launch_setup(context, *args, **kwargs):
                      'z_ki': f('z_ki'),
                      'z_i_max': f('z_i_max'),
                      'z_taut_gate': f('z_taut_gate'),
+                     # legacy rod geometry: attach drones store no attitude for the pivot model yet
+                     'pivot_offset': [0.0, 0.0, 0.0],
+                     'solve_budget_s': 0.06,
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),

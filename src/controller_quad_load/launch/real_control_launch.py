@@ -93,9 +93,15 @@ def _args():
         # hold the taut config).
         DeclareLaunchArgument('lift_ramp_vel', default_value='0.1'),
         DeclareLaunchArgument('z_ki', default_value='0.4'),      # planner height integral, 0 = off (card 2026-09-24_planner_offset)
-        DeclareLaunchArgument('z_i_max', default_value='0.4'),
-        DeclareLaunchArgument('z_i_gate', default_value='0.6'),   # integral runs only while |miss| < this
+        # a small safety net only (Wesley 2026-09-30): the model is judged with z_ki 0
+        DeclareLaunchArgument('z_i_max', default_value='0.15'),
+        DeclareLaunchArgument('z_i_gate', default_value='0.25'),  # integral runs only while |miss| < this
+        # rig fallback z_taut_gate:=0.6 only if the planner pivot model is off
         DeclareLaunchArgument('z_taut_gate', default_value='0.9'),
+        # rod pivot below the drone centre (m, body z): the rig joint sits 4 cm under it
+        DeclareLaunchArgument('pivot_offset_z', default_value='-0.04'),
+        # wall cap on a planner solve (s) so a hard solve cannot stall the 10 Hz loop; 0 = off (sim)
+        DeclareLaunchArgument('solve_budget_s', default_value='0.06'),
         DeclareLaunchArgument('land_vel', default_value='0.20'),
         # Cable compensation. ON is the correct flight config. Zero only for a
         # deliberate A/B (cable_ff_scale:=0.0 cable-blind; attitude_ff:=false level).
@@ -225,6 +231,8 @@ def launch_setup(context, *args, **kwargs):
                      'z_i_max': f('z_i_max'),
                      'z_i_gate': f('z_i_gate'),
                      'z_taut_gate': f('z_taut_gate'),
+                     'pivot_offset': [0.0, 0.0, float(LaunchConfiguration('pivot_offset_z').perform(context))],
+                     'solve_budget_s': f('solve_budget_s'),
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),
                      'handover_settle_s': f('handover_settle_s'),
@@ -244,7 +252,7 @@ def launch_setup(context, *args, **kwargs):
 
 
 # Rig defaults = the 30 Sep 2026 lab values (Wesley's word): four drones on the even ring,
-# measured drone 0.55 kg, rod 0.55 m (pivot 4 cm below the drone centre, not modelled),
+# measured drone 0.55 kg, rod 0.55 m (pivot 4 cm below the drone centre: pivot_offset_z),
 # magnets at r 0.225 m, kT 21.7, cap 0.8, pretension, widened rod trust band and height integral.
 def generate_launch_description():
     return LaunchDescription(_args() + [OpaqueFunction(function=launch_setup)])

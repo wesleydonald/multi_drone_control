@@ -18,6 +18,11 @@ Parameters (ROS):
   rate_source   str   'imu' (the IMU gyro, default since 2026-09-28) | 'pose' (difference
                       the gz poses)
   imu_topic     str   /drone_{drone_id}/imu (sensor_msgs/Imu), used when rate_source is imu
+  thrust_map    str   'linear' (default: thrust 4 mc max^2 u) | 'rig' (the rig's affine law with
+                      pack voltage, rig_thrust.py; V from /drone_{drone_id}/sim/pack_v)
+  thrust_offset float 0.185  the rig law's per-drone a_i (thrust_map rig)
+  pack_v0       float 24.4   voltage used until the first pack_v sample (thrust_map rig)
+  motor_constant float 0.62e-6  the world's rotor motorConstant (thrust_map rig)
 """
 
 import math
@@ -25,11 +30,13 @@ import os
 import numpy as np
 
 from simulation_communication.rate_pid import RatePid, gyro_sample, integrate_active
+from simulation_communication import rig_thrust
 import rclpy
 from rclpy.node import Node
 from actuator_msgs.msg import Actuators
 from geometry_msgs.msg import PoseArray
 from sensor_msgs.msg import Imu
+from std_msgs.msg import Float32
 from interfaces.msg import ELRSCommand
 from tf_transformations import quaternion_multiply, quaternion_inverse, quaternion_matrix
 
@@ -96,7 +103,26 @@ class PayloadBetaflightComm(Node):
                 'rate_ki', float(os.environ.get('SIM_RATE_KI', '5.0'))).value),
             kd=float(self.declare_parameter('rate_kd', 0.0).value),
             i_limit=float(self.declare_parameter('rate_i_limit', 200.0).value))
-        self._i_min_u = float(self.declare_parameter('rate_i_min_u', 0.09).value)
+        self.thrust_map = str(self.declare_parameter('thrust_map', 'linear').value)
+        if self.thrust_map not in rig_thrust.THRUST_MAPS:
+            raise ValueError(f"thrust_map must be one of {rig_thrust.THRUST_MAPS}, "
+                             f"got {self.thrust_map!r}")
+        self.thrust_offset = float(self.declare_parameter(
+            'thrust_offset', rig_thrust.A_DEFAULT).value)
+        self.motor_constant = float(self.declare_parameter(
+            'motor_constant', rig_thrust.MOTOR_CONSTANT).value)
+        self.pack_v = float(self.declare_parameter('pack_v0', 24.4).value)
+        self._got_pack_v = False
+        self._warned_no_pack = False
+        if self.thrust_map == 'rig':
+            self.create_subscription(
+                Float32, f'/drone_{self.drone_id}/sim/pack_v', self._pack_v_cb, 10)
+            self.get_logger().info(
+                f'[BF{self.drone_id}] thrust = rig law, a_i {self.thrust_offset:.3f}, '
+                f'V from /drone_{self.drone_id}/sim/pack_v ({self.pack_v:.1f} V until then)')
+        # Under the rig law nothing lifts below the ~0.19 offset, so the I-term waits longer.
+        self._i_min_u = float(self.declare_parameter(
+            'rate_i_min_u', 0.35 if self.thrust_map == 'rig' else 0.09).value)
         self.add_on_set_parameters_callback(self._on_rate_params)
         self._active = False
 
@@ -114,6 +140,10 @@ class PayloadBetaflightComm(Node):
                 self._pid.kp = float(prm.value)
                 self.get_logger().info(f'rate_kp -> {self._pid.kp}')
         return SetParametersResult(successful=True)
+
+    def _pack_v_cb(self, msg: Float32):
+        self.pack_v = float(msg.data)
+        self._got_pack_v = True
 
     def _betaflight_rates(self, x):
         x = max(-1.0, min(1.0, x))
@@ -237,7 +267,11 @@ class PayloadBetaflightComm(Node):
         # makes a = 88.6 u at every throttle, which is what the rig's Betaflight gives.
         # This is the node every OCP launch runs per drone (mpc_quad_load_launch:264).
         u = max(0.0, min(1.0, (msg.channel_2 + 1) / 2))
-        throttle = math.sqrt(u) * 4631
+        if self.thrust_map == 'rig':
+            throttle = rig_thrust.rotor_speed(
+                rig_thrust.rig_thrust(u, self.pack_v, self.thrust_offset), self.motor_constant)
+        else:
+            throttle = math.sqrt(u) * 4631
 
         if msg.armed and throttle < 0.05 * 4631:
             throttle = 0.05 * 4631
@@ -250,6 +284,12 @@ class PayloadBetaflightComm(Node):
             self.get_logger().warn(
                 f'[BF{self.drone_id}] armed with rate_source imu but no gyro sample yet: '
                 'no motor command is sent until one arrives (is the IMU bridged?)')
+        if (self.thrust_map == 'rig' and msg.armed and not self._got_pack_v
+                and not self._warned_no_pack):
+            self._warned_no_pack = True
+            self.get_logger().warn(
+                f'[BF{self.drone_id}] armed on the rig thrust law with no pack voltage: flying a '
+                f'constant {self.pack_v:.1f} V (give the RViz launch sim_thrust_map:=rig too)')
 
 
 def main(args=None):

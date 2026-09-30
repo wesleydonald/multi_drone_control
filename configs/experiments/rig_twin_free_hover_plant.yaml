@@ -1,0 +1,58 @@
+name: rig_twin_free_hover_plant
+description: 'Rig-plant check (card A critic phase 2, should-fix 6): drone 0 of the rig twin released from
+  the ring at the payload end (it carries its rod and magnet, 0.55 kg), free hover at 0.6 m for 20 s on
+  sim_thrust_map rig, tracker as the rig (35.2, offset 0.185, slope 0.022). The model throttle (thr_out -
+  thr_off) must sit on the law 0.507 x 0.55 = 0.2787 plus (plant a_0 0.181 - tracker 0.185), within 0.01.
+  Drones 1-3 stay on the floor, unarmed.'
+world: four_rigid_ground_rig.sdf
+geometry_exempt:
+  num_drones: one drone flown of the four in the world
+launch:
+  package: controller_quad_load
+  file: mpc_quad_load_launch.py
+  args:
+    num_drones: 1
+    reference: free_hover
+    target_z: 0.6
+    cable_len: 0.55
+    attach_radius: 0.225
+    attach_z: 0.02
+    payload_rest_z: 0.02
+    load_mass: 0.86
+    drone_mass: 0.55
+    thrust_ratio: 35.2
+    takeoff_thrust_ratio: 0.0
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    throttle_max: 0.8
+    kt_trim: false
+    pivot_offset_z: -0.04
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181
+    sim_pack_v0: 23.8
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 1
+    sim_thrust_map: rig
+    sim_pack_v0: 23.8
+fleet:
+  num_drones: 1
+  n_total: 1
+timing:
+  duration_s: 60.0
+  pose_timeout_s: 5.0      # GZ_PUB blocks the runner ~2.5 s (R0787)
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+events:
+- t: 1.0
+  do: GZ_PUB
+  arg: /drone_0/detach
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 36.0
+  do: LAND
+criteria:
+  forbid_abort: true

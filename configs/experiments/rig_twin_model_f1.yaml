@@ -1,0 +1,85 @@
+name: rig_twin_model_f1
+description: 'Sim reproduction of RIG-0930-model-f1 (plan 2026-10 section 4, card R, arm R1): rig twin
+  world (even ring, rods 0.55 pivoting 4 cm below the drone centre, drones 0.55 kg, ring 0.86), rig affine
+  thrust plant with per-drone offsets and pack sag from 23.8 V, launch args mirroring the rig launch defaults
+  of 30 Sep with kt_trim off, z_ki 0, target 0.5 and pivot_offset_z 0 (the planner as flown, without the
+  pivot model). Floor start, hold >= 25 s. Criteria report only: the verdict bars are the card R table
+  (solve status != 0 >= 5 in the 10 s after breakaway, ref age > 0.3 s >= 25 % of airborne time, rods
+  0.57-0.62 at hand-over, ring z 0.28-0.42 in the hold). The W8 solve handling and the W12 tracker bookkeeping
+  are in this tree, so failures and ref age read against the fixed fallback.'
+world: four_rigid_ground_rig.sdf
+launch:
+  package: controller_quad_load
+  file: mpc_quad_load_launch.py
+  args:
+    num_drones: 4
+    load_traj: hover
+    cable_len: 0.55
+    attach_radius: 0.225
+    attach_z: 0.02
+    payload_rest_z: 0.02
+    load_mass: 0.86
+    drone_mass: 0.55
+    target_z: 0.5
+    thrust_ratio: 35.2
+    takeoff_thrust_ratio: 0.0
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    throttle_max: 0.8
+    kt_trim: false
+    z_ki: 0.0
+    z_i_max: 0.15
+    z_i_gate: 0.25
+    start_taut: false
+    handover_elev_deg: 45.0
+    handover_settle_s: 1.0
+    creep_vel: 0.2
+    lift_ramp_vel: 0.1
+    pretension_s: 3.0
+    measure_rod_len: true
+    rod_tol_frac: 0.25
+    rod_spread_m: 0.08
+    z_taut_gate: 0.9
+    pivot_offset_z: 0.0
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    sim_pack_v0: 23.8
+io_launch:
+  file: rviz_quad_load_launch.py
+  args:
+    num_drones: 4
+    sim_thrust_map: rig
+    sim_pack_v0: 23.8
+fleet:
+  num_drones: 4
+  n_total: 4
+timing:
+  duration_s: 120.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 38.0
+  do: LAND
+criteria:
+  report_only: true
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.2
+  hold_window_s: 20.0
+  max_planner_solve_fail: 1
+  max_hold_z_err_m: 0.05
+  max_heave_pp_m: 0.03
+  max_payload_tilt_deg: 5.0
+  max_hold_tilt_mean_deg: 2.0
+  max_payload_vz_mps: 0.15
+  max_ref_age_frac: 0.05
+  min_carried_fraction: 0.9
+geometry_exempt:
+  pivot_offset_z: the planner as flown on 30 Sep modelled the pivot at the drone centre

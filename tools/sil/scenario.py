@@ -60,10 +60,15 @@ class Scenario:
     load_mass: float = 0.6
     drone_mass: float = 0.64        # x3 model over all links (2026-09-24; was 0.6)
     thrust_c: float = 83.1          # linear plant a = c*u, 4*0.62e-6*4631^2/0.64 (was 88.6 quadratic)
+    # plant: section. 'rig' = the rig's affine law + pack sag (rig_thrust.py), a_i thrust_offset
+    thrust_map: str = 'linear'
+    thrust_offset: float = 0.185
+    pack_v0: float = 24.4
     magnet_arm_len: float = 0.5
 
     load_z0: float = 0.45
     elev_deg: float = 45.0
+    load_yaw_deg: float = 0.0       # ring yaw at spawn; the drones sit on the rotated slots
     weld_x: float = 0.0
     weld_y: float = 0.0
     weld_z_offset: float = 0.05
@@ -116,10 +121,18 @@ class Scenario:
         init = raw.get('initial') or {}
         s.load_z0 = float(init.get('load_z', s.load_z0))
         s.elev_deg = float(init.get('elev_deg', s.elev_deg))
+        s.load_yaw_deg = float(init.get('load_yaw_deg', s.load_yaw_deg))
         s.weld_x = float(init.get('weld_x', s.weld_x))
         s.weld_y = float(init.get('weld_y', s.weld_y))
         s.weld_z_offset = float(init.get('weld_z_offset', s.weld_z_offset))
         s.stands = bool(init.get('stands', s.stands))
+        plant = raw.get('plant') or {}
+        s.thrust_map = str(plant.get('thrust_map', s.thrust_map))
+        s.thrust_offset = float(plant.get('thrust_offset', s.thrust_offset))
+        s.pack_v0 = float(plant.get('pack_v0', s.pack_v0))
+        if s.thrust_map == 'rig' and 'drone_mass' not in (raw.get('geometry') or {}):
+            raise ValueError(f"{path}: plant thrust_map rig needs geometry drone_mass "
+                             f"(the rig drone, not the x3's {s.drone_mass})")
         tim = raw.get('timing') or {}
         s.dt = float(tim.get('dt', s.dt))
         s.substeps = int(tim.get('substeps', s.substeps))
@@ -195,7 +208,7 @@ class Scenario:
         load = np.array([0.0, 0.0, self.load_z0])
         e = np.radians(self.elev_deg)
         pos = []
-        for rho in self.attach_rho():
+        for rho in np.asarray(self.attach_rho(), float) @ self.load_R().T:
             az = rho[:2] / max(float(np.linalg.norm(rho[:2])), 1e-9)
             d = np.array([az[0] * np.cos(e), az[1] * np.cos(e), np.sin(e)])
             pos.append(load + rho + self.cable_len * d)
@@ -206,6 +219,11 @@ class Scenario:
             pos.append(load + np.array([self.weld_x, self.weld_y,
                                         self.weld_z_offset + self.magnet_arm_len]))
         return pos, load
+
+    def load_R(self):
+        """Payload attitude at spawn: a yaw of load_yaw_deg about world z."""
+        c, s = np.cos(np.radians(self.load_yaw_deg)), np.sin(np.radians(self.load_yaw_deg))
+        return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
 
     def weld_point_body(self, plant, i):
         """Payload-frame attach point for the newcomer's weld, taken from where its

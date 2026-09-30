@@ -190,6 +190,8 @@ class VelocityLoop:
         self.yaw_k = float(yaw_k)
         self.tilt_max_deg = float(tilt_max_deg)
         self.rates = (float(centre_rate_deg), float(max_rate_deg), float(rate_expo))
+        # model throttle ceiling; the controller keeps it at the MPC's cap (real cap - offset)
+        self.thr_max = 0.6
         self.reset()
 
     def reset(self):
@@ -241,7 +243,7 @@ class VelocityLoop:
 
         a_sp = limit_tilt(a_ff + self.kv * e_v + self.ki * self.integral,
                           self.tilt_max_deg)
-        throttle, q_sp = tilt_quat_from_accel(a_sp, thrust_ratio, heading)
+        throttle, q_sp = tilt_quat_from_accel(a_sp, thrust_ratio, heading, thr_hi=self.thr_max)
 
         # Attitude -> body rates. Roll/pitch come from the tilt error; yaw is driven
         # separately toward the held heading so a yaw disagreement never steals
