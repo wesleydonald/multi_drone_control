@@ -503,6 +503,47 @@ times without a solve failure either way, so SIL cannot show A4's effect: the re
 needs the 30 deg slot offset (W2), which the bench cannot spawn (plant and planner share
 `attach_azimuths_deg`).
 
+### Twin on the flown code (fba2d7a, laptop)
+
+One headless run per arm on the laptop, the exact rig code (fba2d7a, clean tree), against the lab twins.
+Bars: 0 failures, hold z within 1 cm, tilt within 0.3 deg, heave within 0.5 cm; orbit xy within +10 %.
+Hand-over is the planner's pivot reading (log / per drone); hold metrics over the last 20 s.
+
+| run | config | baseline | failures | rods at hand-over | hand-over (log / d0-d3) | hold z | heave p-p | tilt mean / max | carried | ref_age | RTF | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| R0810 | rig_twin_hover_fixed | R0783 / R0784 | 0 | 0.550 x4 | 55.4 / 57.5, 56.2, 55.6, 55.4 | 0.5103 | 1.17 cm | 1.21 / 1.40 | 0.997 | 0.0 | 0.32 | PASS |
+| R0811 | rig_twin_hover_fixed (repeat) | R0783 / R0784 | 0 | 0.550 x4 | 55.5 / 57.4, 56.3, 55.5, 55.5 | 0.5103 | 1.18 cm | 1.22 / 1.54 | 0.997 | 0.0 | 0.32 | PASS |
+| (base) | R0783 / R0784 | | 0 | 0.550 x4 | 55.4-55.5 / 57.4, 56.4, 55.6, 55.4 | 0.5102 / 0.5103 | 1.19 / 1.17 cm | 1.22 / 1.43 | 0.997 | 0.0 | 0.27 / 0.28 (lab) | |
+| R0812 | rig_twin_hover_3915 | R0786 | - | - | - | - | - | - | - | - | - | VOID (drone 2 pose timeout 0.26 s before TAKEOFF, no compile) |
+| R0813 | rig_twin_hover_3915 (re-fly of R0812) | R0786 | 0 | 0.550 x4 | 55.5 / 57.5, 56.2, 55.5, 55.5 | 0.5038 | 0.45 cm | 1.42 / 1.79 | 0.996 | 0.0 | 0.30 | PASS |
+| (base) | R0786 | | 0 | 0.550 x4 | 55.4 / 57.5, 56.3, 55.4, 55.8 | 0.5038 | 0.49 cm | 1.41 / 1.77 | 0.996 | 0.0 | 0.30 | |
+| R0814 | rig_twin_hover_fixed_zki | R0788 | 0 | 0.550 x4 | 55.6 / 57.5, 56.2, 55.6, 55.6 | 0.4996 | 1.48 cm | 1.21 / 1.68 | 0.997 | 0.0 | 0.28 | PASS (planner solver rebuilt in the run, ~80 s wall, lift t 25.1 vs 17.9) |
+| R0816 | rig_twin_hover_fixed_zki (clean re-fly of R0814) | R0788 | 0 | 0.550 x4 | 55.5 / 57.8, 56.4, 55.7, 55.5 | 0.4996 | 1.46 cm | 1.21 / 1.52 | 0.998 | 0.0 | 0.31 | hold PASS; FAIL: fleet disarm on LAND |
+| (base) | R0788 | | 0 | 0.550 x4 | 55.6 / 57.5, 56.1, 55.6, 55.6 | 0.4996 | 1.46 cm | 1.22 / 1.50 | 0.998 | 0.0 | 0.24 | |
+| R0815 | rig_twin_orbit_slow | R0789 | 0 | 0.550 x4 | 55.5 / 57.6, 56.3, 55.7, 55.5 | 0.5001 | 1.50 cm | lap 1.22 / 1.69 | 0.996 | 0.0 | 0.30 | PASS |
+| (base) | R0789 | | 0 | 0.550 x4 | 55.5 / 57.5, 56.3, 55.7, 55.5 | 0.5001 | 1.47 cm | lap 1.22 / 1.54 | 0.996 | 0.0 | 0.25 | |
+
+| orbit lap (same window) | tilt mean | \|z err\| max | xy err mean | xy err max |
+|---|---|---|---|---|
+| R0789 (base) | 1.22 deg | 1.27 cm | 2.91 cm | 4.80 cm |
+| R0815 | 1.22 deg | 1.28 cm | 2.95 cm | 5.08 cm (+6 %) |
+
+R0816 LAND:
+
+| t (s) | event |
+|---|---|
+| 50.45 | ring down, planner "load down, rods slack" |
+| 50.45-51.8 | drone 0 pushed out by its rod (radius 0.58 -> 0.80 m), rate commands saturate (roll -1.0, yaw +1.0), tilt 20 -> 29 -> 74 deg |
+| 51.86 | envelope fault at 77.9 deg, fleet disarm (ring on the floor; drones 1-3 <= 3.6 deg) |
+
+Same mechanism as R0793 LAND, now on the nominal twin: 1 of 11 nominal twin landings (the other 10 landed
+with every drone <= 21 deg). Not load or timing: ring true climb speed 0.119 m/s (R0788 0.118); the planner's
+vz estimate peaked at 0.28 in both laptop z_ki runs (R0788 0.151), an estimate only; stale-reference
+warnings at baseline level.
+
+Verdict: hold, hand-over and orbit on fba2d7a reproduce the lab twins (hold z within 0.1 mm, tilt mean
+within 0.01 deg, heave within 0.04 cm, 0 failures, orbit xy max +6 %); the rigid-rod LAND tip is the open risk.
+
 ## Status before the 1 Oct rig visit
 
 Verified in sim (runs above):
@@ -577,9 +618,10 @@ Verdict: WEAK.
 Supported: the twin numbers (recomputed from the run logs, all within 10 %); SIL bit-identity (R0796 /
 R0797); the rig-plant closed-loop check R0792; each arm changes one variable.
 
-Weak: single runs (H2/H3/C1 twins R0788, R0786, R0789); no twin run on the HEAD code (5006965 = a013220 +
-docs: R0783-R0789 predate the node-clock timer change and the planner tick marker, R0807-R0809 carried the
-removed creep fix); the scope is twin-only (fitted law, carried ~1.0 by construction), so nothing in sim
+Weak: single runs (H2/H3/C1 twins R0788, R0786, R0789; the fba2d7a re-flies R0813, R0816, R0815 are one
+more run each, on the laptop); the HEAD-code gap is closed: R0810-R0816 fly the exact rig code fba2d7a and
+match the lab twins (hold z within 0.1 mm, tilt within 0.01 deg, orbit xy max +6 %), but R0816 tipped drone 0
+on LAND and disarmed the fleet (R0793 mechanism, 1 of 11 nominal twin landings); the scope is twin-only (fitted law, carried ~1.0 by construction), so nothing in sim
 predicts the rig's force shortfall.
 
 Not supported as first written (corrected above): replay "25 -> 0 failures" (it is 14 -> 0 for arm g on

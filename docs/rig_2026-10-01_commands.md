@@ -8,26 +8,27 @@ Freeze is on (it is the only code path; no launch arg). Code under test: W8 (sol
 warning), W13 (safety-net bound 0.15, gate 0.25).
 
 **What the sim does and does not show.** Every sim number below is from the rig TWIN (fitted thrust law, so the
-carried fraction is ~1.0 by construction): it does not predict the rig's force shortfall. No twin run was flown on
-the exact HEAD code (5006965 = a013220 + docs): R0783-R0789 predate the node-clock timer change and the planner
-tick marker (sim-only changes), and R0807-R0809 carried the since-removed creep fix. The H2/H3/C1 twins are single
-runs.
+carried fraction is ~1.0 by construction): it does not predict the rig's force shortfall. The exact rig code
+(fba2d7a) was flown on the laptop twin (R0810-R0816, card A "Twin on the flown code"): hold, hand-over and orbit
+match the lab twins R0783-R0789 (hold z within 0.1 mm, tilt within 0.01 deg, orbit xy max +6 %), 0 failures.
+R0816 (z_ki 0.4) disarmed the fleet on LAND after the ring was down (drone 0 tipped, R0793 mechanism; 1 of 11
+nominal twin landings). The H2/H3/C1 twins stay single runs per machine (R0788/R0816, R0786/R0813, R0789/R0815).
 
 ## What the sim says to expect (lab runs and laptop SIL, 30 Sep night; card A "## Results", Groups 3-6)
 
 | item | sim (rig twin: rig world, rig thrust plant; SIL where stated) | what it means for tonight |
 |---|---|---|
-| solve failures, ref age | 0 failures in every twin run; ref age 0.0 in R0782-R0789 and R0791 (R0793 0.0028 during the LAND abort); SIL at ring yaw 180, A4 on / off: 0 / 0 (R0798 / R0800) | neither sim has the replay trigger (ring yaw near 180 deg plus a 30 deg slot offset; the benches cannot spawn the offset); the rig check that matters is the slot-offset line below |
+| solve failures, ref age | 0 failures in every twin run; ref age 0.0 in R0782-R0789, R0791 and R0810-R0816 (R0793 0.0028 during the LAND abort); SIL at ring yaw 180, A4 on / off: 0 / 0 (R0798 / R0800) | neither sim has the replay trigger (ring yaw near 180 deg plus a 30 deg slot offset; the benches cannot spawn the offset); the rig check that matters is the slot-offset line below |
 | rig thrust plant vs tracker | free drone 0 (0.55 kg with rod): model throttle 0.2743 against 0.2747 expected (R0792) | the tracker's offset bookkeeping (W12) closes the loop on the affine plant in sim; D1 is its first rig test |
-| rods at hand-over | 0.550 with the pivot on (R0783, R0784, R0786, R0788, R0789), 0.583 with it off | on the rig expect 0.53-0.58 per drone (model-f1 read 0.587-0.613 without the pivot) |
-| hand-over elevation | 54.7-55.6 deg (R0782-R0789; a trial creep fix, R0801-R0809, did not move it and was removed). The legacy floor worlds hand over at 45.7-45.8 (R0773, R0778) | not a measurement error: the drones build an 11-15 deg lead in the first second after lift-off (they leave the 0.10 m vertical lead at 0.5-0.6 m/s), and the latch fires before it decays. The lead comes from the lift-off pop, not from where the sweep starts. Bar 50-60 on the pivot reading (model-f1 53.6 on the centre reading is ~51 on the pivot); recorded, not a stop rule (section 6) |
-| hold z, z_ki 0 | 0.510 / 0.504 at target 0.5 (R0783, R0786) | the twin carries the ring by construction (fitted law, carried 0.996). The rig force deficit (~0.8 of the ring below 0.45 m) is NOT in the sim: expect H1 to sit low, as model-f1 did (0.31-0.35) |
+| rods at hand-over | 0.550 with the pivot on (R0783, R0784, R0786, R0788, R0789; fba2d7a R0810-R0816), 0.583 with it off | on the rig expect 0.53-0.58 per drone (model-f1 read 0.587-0.613 without the pivot) |
+| hand-over elevation | 54.7-55.6 deg (R0782-R0789; fba2d7a 55.4-55.6, R0810-R0816; a trial creep fix, R0801-R0809, did not move it and was removed). The legacy floor worlds hand over at 45.7-45.8 (R0773, R0778) | not a measurement error: the drones build an 11-15 deg lead in the first second after lift-off (they leave the 0.10 m vertical lead at 0.5-0.6 m/s), and the latch fires before it decays. The lead comes from the lift-off pop, not from where the sweep starts. Bar 50-60 on the pivot reading (model-f1 53.6 on the centre reading is ~51 on the pivot); recorded, not a stop rule (section 6) |
+| hold z, z_ki 0 | 0.510 / 0.504 at target 0.5 (R0783, R0786; fba2d7a R0810/R0811 0.510, R0813 0.504) | the twin carries the ring by construction (fitted law, carried 0.996). The rig force deficit (~0.8 of the ring below 0.45 m) is NOT in the sim: expect H1 to sit low, as model-f1 did (0.31-0.35) |
 | ring mass off by -0.16 / +0.16 kg (z_ki 0) | hold +16.4 / -14.5 cm; tilt 1.2-1.3 deg, heave 1.2 cm, 0 failures (R0793 / R0791) | a mass error shows as height only, which is what z_ki closes (H2). The freeze caught the light ring at 97 % of the pull and did nothing on the heavy one |
 | standing tilt | 1.2-1.4 deg mean | from the per-drone offsets 0.181-0.187 against one tracker offset 0.185; expect about this much on the rig from that alone |
-| H2 (net on) | hold 0.500, heave 1.5 cm, tilt 1.22 deg, \|z_bias\| max 0.013, 0 failures (R0788) | the net works with the pivot model in the rig twin; on the rig z_bias will be larger by the force deficit (bar 0.10) |
-| C1 (circle r 0.5 at 0.125 m/s) | lap tilt mean 1.22 deg (max 1.54), \|z err\| max 1.3 cm, xy err 3.1 cm mean (4.8 max), 0 failures (R0789) | inside every C1 bar with margin in sim |
-| 1/3/5/9 hover (z_ki 0) | R0786 (single run): 0 failures, rods 0.550, hand-over 55.4, hold 0.504, heave 0.5 cm, hold tilt mean 1.41 deg (peak 1.77), carried 0.996. | the uneven ring holds like the even one in sim; with z_ki 0.4 (H2 line) the hold should close to 0.500 as in R0788 |
-| LAND after the ring is down | R0793 (light ring; all four drones hovered wide, radii 0.595-0.604 vs R0783 0.572-0.580): drone 0 tipped 4 -> 22 -> 68 deg at 49.25-49.75 s, envelope fault, fleet disarm with the ring on the floor. R0783-R0792 landed clean | a rigid rod reaches the ring before the drone reaches the floor; a drone wide of the ring can tip on the way down. LAND is unchanged: watch it (section 6) |
+| H2 (net on) | hold 0.500, heave 1.5 cm, tilt 1.22 deg, \|z_bias\| max 0.013, 0 failures (R0788; fba2d7a R0816 and R0814 the same, R0816 then disarmed on LAND) | the net works with the pivot model in the rig twin; on the rig z_bias will be larger by the force deficit (bar 0.10) |
+| C1 (circle r 0.5 at 0.125 m/s) | lap tilt mean 1.22 deg (max 1.54), \|z err\| max 1.3 cm, xy err 3.1 cm mean (4.8 max), 0 failures (R0789); fba2d7a R0815 same window: 1.22 deg (max 1.69), 1.3 cm, 2.95 cm (5.08 max, +6 %) | inside every C1 bar with margin in sim |
+| 1/3/5/9 hover (z_ki 0) | R0786: 0 failures, rods 0.550, hand-over 55.4, hold 0.504, heave 0.5 cm, hold tilt mean 1.41 deg (peak 1.77), carried 0.996; fba2d7a R0813: 0 / 0.550 / 55.5 / 0.504 / 0.45 cm / 1.42 (1.79) / 0.996 | the uneven ring holds like the even one in sim; with z_ki 0.4 (H2 line) the hold should close to 0.500 as in R0788 |
+| LAND after the ring is down | R0793 (light ring; all four drones hovered wide, radii 0.595-0.604 vs R0783 0.572-0.580): drone 0 tipped 4 -> 22 -> 68 deg at 49.25-49.75 s, envelope fault, fleet disarm with the ring on the floor. Nominal twin, fba2d7a R0816 (z_ki 0.4): ring down t 50.45, drone 0 pushed out by its rod (radius 0.58 -> 0.80 m), rates saturate, tilt 20 -> 29 -> 74, fault 77.9 deg, fleet disarm t 51.86; other three <= 3.6 deg. 1 of 11 nominal twin landings; the other 10 (R0783-R0792, R0810-R0815) landed, every drone <= 21 deg | a rigid rod reaches the ring before the drone reaches the floor; a drone pushed wide of the ring can tip on the way down, now seen on the nominal twin too (rate unknown from one event). LAND is unchanged: watch the drop after "load down, rods slack", hand on the throttle cut (section 6) |
 
 ## Open decisions (default applies without an answer)
 
@@ -226,10 +227,10 @@ Pass bars (card A):
 
 | test | pass | sim twin / 30 Sep baseline |
 |---|---|---|
-| H1 | 0-1 solve failures; ref age > 0.3 s under 5 % of airborne time; heave p-p <= 6 cm; tilt mean <= 3, max <= 8 deg; hand-over 50-60 deg (pivot reading, recorded; > 60: section 6); rods at hand-over 0.53-0.58 each | twin R0783: 0 / 0.0 / 1.2 cm / 1.22 deg / 55 deg / 0.550. Rig model-f1: 25 failures, 14 cm, 6.5 / 16 deg, 53.6 deg, rods 0.587-0.613 |
-| H2 | H1 bars, \|mean z - 0.5\| <= 2 cm over the last 20 s, \|z_bias\| <= 0.10 throughout | twin R0788: hold 0.500, \|z_bias\| max 0.013, 0 failures |
-| H3 (1/3/5/9) | H2 bars; slot line ~0 deg (within +-10) for all four before ARM | twin R0786 (z_ki 0): 0 / 0.0 / 0.5 cm / 1.41 deg / 55.4 deg / 0.550, hold 0.504 |
-| C1 | ring tilt mean <= 3 deg over the lap, \|z err\| <= 5 cm, xy err <= 10 cm, 0 solve failures, no release | twin R0789: lap tilt 1.22 deg, \|z err\| 1.3 cm, xy 3.1 cm (max 4.8), 0 failures |
+| H1 | 0-1 solve failures; ref age > 0.3 s under 5 % of airborne time; heave p-p <= 6 cm; tilt mean <= 3, max <= 8 deg; hand-over 50-60 deg (pivot reading, recorded; > 60: section 6); rods at hand-over 0.53-0.58 each | twin R0783: 0 / 0.0 / 1.2 cm / 1.22 deg / 55 deg / 0.550 (fba2d7a R0810/R0811 the same). Rig model-f1: 25 failures, 14 cm, 6.5 / 16 deg, 53.6 deg, rods 0.587-0.613 |
+| H2 | H1 bars, \|mean z - 0.5\| <= 2 cm over the last 20 s, \|z_bias\| <= 0.10 throughout | twin R0788: hold 0.500, \|z_bias\| max 0.013, 0 failures (fba2d7a R0816: hold 0.500, 0 failures; fleet disarm on LAND) |
+| H3 (1/3/5/9) | H2 bars; slot line ~0 deg (within +-10) for all four before ARM | twin R0786 (z_ki 0): 0 / 0.0 / 0.5 cm / 1.41 deg / 55.4 deg / 0.550, hold 0.504 (fba2d7a R0813 the same, tilt 1.42) |
+| C1 | ring tilt mean <= 3 deg over the lap, \|z err\| <= 5 cm, xy err <= 10 cm, 0 solve failures, no release | twin R0789: lap tilt 1.22 deg, \|z err\| 1.3 cm, xy 3.1 cm (max 4.8), 0 failures (fba2d7a R0815: 1.22 deg, 1.3 cm, xy max 5.1) |
 
 After each tethered flight (T3):
 ```bash
@@ -248,7 +249,7 @@ next lift in any case).
 | `[planner] load yaw datum latched at +x.x deg` | within +-45 of 0 (decision 1) | near +-180: re-place the ring |
 | `[planner] slot azimuth error (deg): d0 ... (plate 0), ...` | every value within +-10 (H3: plates 1/3/5/9) | `SLOT OFFSET:` line: do not ARM (section 0) |
 | `[planner arc-creep] ref=..deg target=45deg ... measured: d0:.. d1:.. d2:.. d3:..` | the four rise together, 10-16 deg ahead of ref (known creep lead) | one drone far behind: LAND |
-| `[planner] elevation XX.Xdeg reached (target 45, tol 8) — coupled planner active` | record XX; twin 55.4-55.6 (R0783-R0789), bar 50-60 (pivot reading) | `elevation timeout at` below 30: `NOT lifting`, press LAND |
+| `[planner] elevation XX.Xdeg reached (target 45, tol 8) — coupled planner active` | record XX; twin 55.4-55.6 (R0783-R0789, R0810-R0816), bar 50-60 (pivot reading) | `elevation timeout at` below 30: `NOT lifting`, press LAND |
 | `[planner] measure_rod_len: rods [...] m from mocap at handover (typed 0.550)` | each 0.53-0.58 (pivot in) | `keeping typed cable_len ...`: rods not trusted; LAND, read the log |
 | `[planner] pretension: ramping every rod to its share over 3.0 s ... (length gates [...])` | the four "thr" rise together, ring floats up level | one side lifts first, tilt > 5 deg: LAND |
 | `[planner] pretension: ring broke free at NN% of the planned pull ...; pull held there` | record NN (log-only now; 30 Sep 60-80 %) | - |
@@ -265,7 +266,7 @@ a visible run-up of the ring (as in f6); vz is checked in the read-back; 3 or mo
 - Hand-over elevation alone does not stop a flight. Above 60 deg: finish the flight; before the next lift
   read the `arc-creep` lines (which drone leads, by how much) and `measure_rod_len` (a rod read long lifts
   the elevation). Above 60 on two flights is the same bar failing twice: no C1, stop and report.
-- LAND with rigid rods (R0793) is unchanged: after "load down, rods slack", watch each drone's descent. A
+- LAND with rigid rods (R0793, and R0816 on the nominal twin) is unchanged: after "load down, rods slack", watch each drone's descent. A
   fleet disarm after the ring is down is recorded (not a stop rule for later flights), then props off and
   the section 7 drop check on every drone.
 - No soft-hold command exists (card A wants "ramp the pull down and hold, then LAND"): the stop action is LAND
