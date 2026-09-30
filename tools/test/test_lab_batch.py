@@ -133,5 +133,7 @@ def test_a_live_slot_is_allowed_beside_a_batch_that_neither_syncs_nor_builds(mon
 
 def test_provenance_carries_the_ignored_code_the_sync_ships():
     code, other = LB.synced_ignored_files()
-    assert 'tools/remote/lab_batch.py' in code
+    # an ignored-and-untracked tools/ file the sync ships must be listed; tracked ones never are
+    assert 'tools/remote/lab_batch.py' not in code          # tracked since a013220
+    assert all(f.startswith(('tools/', 'configs/', 'docs/', 'src/', 'simulation_assets/')) for f in code)
     assert not any(f.startswith(LB.SYNC_EXCLUDED) or '__pycache__' in f for f in code + other)

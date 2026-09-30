@@ -53,7 +53,7 @@ W10 (pull model) and W11 (freeze removal) are later arms of this card, not built
 |---|---|---|---|
 | D1 | one drone, free hover, rod and magnet removed (0.475 kg), 20 s | `drone_mass:=0.475`, `thrust_ratio:=40.7` (9.81 / (0.507 x 0.475); 35.2 is for 0.55 kg) | model throttle vs the law at 0.475 kg; tells whether the rod in the downwash biased the fit. Doubles as the A3 takeoff check |
 | D2 | tethered hold at ring 0.3 m, then 0.7 m, 15 s steady each (\|vz\| < 0.03 m/s for >= 5 s) | `z_ki:=0.0` | rod-force sum / ring weight at each height (`thrust_fit.py --tethered`); height effect vs a fixed law error |
-| H1 | tethered hover 0.5 m, A1 + A2 + A3, 25 s | `z_ki:=0.0` | 0-1 solve failures; ref age > 0.3 s under 5 % of airborne time; heave p-p <= 6 cm; tilt mean <= 3, max <= 8 deg; hand-over 45 +- 5 deg; rods at hand-over 0.53-0.58 |
+| H1 | tethered hover 0.5 m, A1 + A2 + A3, 25 s | `z_ki:=0.0` | 0-1 solve failures; ref age > 0.3 s under 5 % of airborne time; heave p-p <= 6 cm; tilt mean <= 3, max <= 8 deg; hand-over 50-60 deg on the pivot reading (recorded, not a stop rule; was 45 +- 5, twin 55.5-55.7 with the creep fix, R0803-R0808); rods at hand-over 0.53-0.58 |
 | H2 | as H1 with the safety net | rig defaults (z_ki 0.4, bound 0.15, gate 0.25) | H1 bars, \|mean z - 0.5\| <= 2 cm, \|z_bias\| <= 0.10 throughout |
 | C1 | slow circle r 0.5 m at 0.125 m/s, net on; only if H1 and H2 pass | `load_traj:=orbit` | ring tilt mean <= 3 deg over the lap, \|z err\| <= 5 cm, 0 solve failures |
 
@@ -520,7 +520,51 @@ with the 30 deg slot offset; R0798 / R0800 give 0 failures with A4 on and off); 
 and its height dependence (D1, D2; the twin carries 0.996 by construction); A3 closed-loop takeoff (D1).
 
 Open risks: hand-over at 55 deg in every twin run (creep lead, drones 10-16 deg ahead of the arc from
-liftoff), outside this card's H1 row (45 +- 5); the rig sheet flies 48-60 until Wesley decides the row and
-the creep fix. LAND with rigid rods can tip a drone that hovers wide of the ring (R0793) and disarm the fleet
+liftoff), the creep fix does not move it (R0801-R0809, below); the H1 row is now 50-60 on the pivot reading. LAND with rigid rods can tip a drone that hovers wide of the ring (R0793) and disarm the fleet
 after the ring is down. The freeze has no off switch, so the W11 freeze-off arms are unflown. sil_smoke
 still fails its peak cable acceleration bar (10.56 against 8.0) until it is re-baselined.
+
+### Creep fix
+
+Lift-off margin path starts the sweep at the measured mean elevation, clipped to [spawn, target]
+(`creep_controller.py` `_arc_creep`, +9; 4 unit tests). Critic: sound, no must-fix items. Should-fixes not
+applied in this change: (1) timeout path still sweeps from spawn (rigid-rod stall case), (2) `meas` from the
+live ring pose rather than `arc_anchor`, (3) `dtheta` uses `cable_len` not `_rod(i)` (pre-existing). Unflown:
+needs one floor-start twin run on the lab PC (latch below 55 deg, measured within ~6 deg of the reference).
+
+### Creep fix runs
+
+Lab PC, one batch of six (R0801-R0806) and a re-fly of its three voids on three slots (R0807-R0809).
+Hand-over elevation is the planner's pivot reading at the creep-to-planner switch (log line, then per
+drone); lift-off is the first drone 5 cm above its spawn; tilt and vz are the drone peaks in the 2 s after it.
+
+| run | config | hand-over (log / d0-d3) | TAKEOFF to hand-over | lift-off to hand-over | sweep start | lift-off tilt / vz | failures | hold z | heave p-p | hold tilt mean | carried | baseline | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| R0807 | rig_twin_hover_fixed | 55.6 / 57.7, 56.5, 55.7, 55.6 | 3.56 s | 2.82 s | 8.5 deg | 4.09 deg / 0.52 m/s | 0 | 0.510 | 1.2 cm | 1.22 deg | 0.997 | R0783: 55.4 / 3.87 / 3.11 / 2.1 / 3.66, 0.49 / 0 / 0.510 / 1.2 / 1.22 | FAIL hand-over; hold PASS |
+| R0808 | rig_twin_hover_fixed (repeat) | 55.7 / 57.5, 56.4, 55.7, 55.7 | 3.57 s | 2.82 s | 8.4 deg | 3.71 deg / 0.54 m/s | 0 | 0.510 | 1.2 cm | 1.22 deg | 0.997 | R0784: 55.5 / 3.92 / 3.16 / 2.1 / 4.34, 0.58 / 0 / 0.510 / 1.2 / 1.21 | FAIL hand-over; hold PASS |
+| R0803 | rig_twin_hover_3915 | 55.7 / 57.6, 56.3, 55.7, 55.7 | 3.63 s | 2.88 s | 7.1 deg | 3.76 deg / 0.59 m/s | 0 | 0.504 | 0.5 cm | 1.42 deg | 0.163 (metric) | R0786: 55.4 / 6.95 / 3.17 / 2.1 / 4.09, 0.52 / 0 / 0.504 / 0.5 / 1.41 | FAIL hand-over; hold PASS |
+| R0804 | rig_twin_orbit_slow | 55.5 / 57.6, 56.3, 55.5, 55.6 | 3.64 s | 2.91 s | 7.0 deg | 4.01 deg / 0.60 m/s | 0 | 0.500 | 1.4 cm | 1.18 deg | 0.996 | R0789: 55.5 / 3.91 / 3.17 / 2.1 / 4.81, 0.61 / 0 / 0.500 / 1.5 / 1.18 | FAIL hand-over; hold PASS |
+| R0809 | rig_lift_n4_even_floor | 45.7 / 45.7, 45.8, 45.8, 45.8 | 2.94 s | 2.37 s | 16.2 deg | 1.39 deg / 0.45 m/s | 0 | 0.601 | 2.5 cm | 0.02 deg | 1.005 | R0773: 45.8 / 3.38 / 2.80 / 7.5 / 1.70, 0.45 / 0 / 0.601 / 3.6 / 0.02 | PASS |
+| R0806 | ocp_hover_ground_creep_defaults | 45.5 / 45.7, 45.5, 45.7 | 3.01 s | 2.41 s | 14.0 deg | 1.66 deg / 0.44 m/s | 0 | 0.600 | 0.2 cm | 0.03 deg | 1.005 | R0778: 45.7 / 3.35 / 2.75 / 7.6 / 1.56, 0.52 / 0 / 0.600 / 0.2 / 0.04 | PASS |
+
+R0801, R0802 and R0805 are void: wall-clock pose timeouts with six 4-core slots on the 24-core PC
+(Gazebo at ~0.25 real time); re-flown as R0807-R0809. R0803's carried fraction is a pairing artifact of
+the metric (its tracker throttles and hold z equal R0786's).
+
+Creep trace (planner log, once a second):
+
+| run | at lift-off: ref / measured | +1 s: ref / measured | ref at target: ref / measured | latch |
+|---|---|---|---|---|
+| R0783 (base) | 2.1 / not logged | 12.5 / 24.8-26.7 | 45.0 / 56.8-59.1 | 55.4 |
+| R0807 (fix) | 8.5 / 8.5 | 23.1 / 34.3-38.1 | 45.0 / 55.9-57.9 | 55.6 |
+
+Verdict: FAIL on the hand-over bar (55.5-55.7 against 45 +- 5, unchanged from 55.4-55.5). The fix does what
+it says (the sweep now starts where the drones are, 7-8.5 deg, and hand-over comes 0.3 s sooner), but the
+12-15 deg lead builds in the first second after lift-off, while the drones leave the 0.10 m vertical lead at
+0.5-0.6 m/s, so it was not a start-angle offset. Hold metrics, failures and the lift-off jerk are unchanged
+(hold z within 0.1 mm, tilt within 0.02 deg, lift-off tilt 3.7-4.1 against 3.7-4.8). The legacy floor
+worlds still hand over at 45.5-45.7. Not iterated.
+
+### Creep fix: removed (Wesley, 1 Oct)
+
+The sweep-start change did not move the hand-over angle (R0803-R0808: 55.5-55.7 deg, against 54.7-55.5 before). It was reverted the same session (house rule: code that does not beat its baseline is deleted). The lead comes from the lift-off pop (0.5-0.6 m/s off the 0.10 m vertical lead). After the visit, the options are: cap the climb rate at lift-off, or make the latch two-sided (a gate change).

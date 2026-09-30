@@ -49,7 +49,8 @@ from run_dir import git_state, next_run_id         # noqa: E402
 LAB = os.environ.get('LAB_HOST', 'drones@drones')
 SLOTS_DIR = 'mdc_slots'              # under the lab user's home
 CTR_REPO = '/home/wesley/multi_drone_control'
-MAX_SLOTS = 6
+MAX_SLOTS = 6                        # hard ceiling; the default below is what stays in real time
+DEFAULT_SLOTS = 4                    # 6 x 4 cores slowed Gazebo to RTF 0.25 and voided R0801/R0802/R0805
 CORE_BUDGET = 24                     # all cores while nobody else uses the PC (Wesley, 30 Sep)
 OTHERS_FREE = 1                      # other users' load above this comes off the budget
 DOMAIN_BASE = 40
@@ -296,7 +297,7 @@ def worker(slot, jobs_q, cpus, gz_nice, active, lock):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('config', nargs='+', help='experiment YAMLs inside this repo')
-    ap.add_argument('--slots', type=int, default=MAX_SLOTS, help='at most this many in parallel (<= 6)')
+    ap.add_argument('--slots', type=int, default=DEFAULT_SLOTS, help='at most this many in parallel (<= 6)')
     ap.add_argument('--cpus', type=float, default=4, help='cores per container (3-4)')
     ap.add_argument('--gz-nice', type=int, default=10)
     ap.add_argument('--dry-run', action='store_true',

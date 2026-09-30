@@ -5,7 +5,8 @@ Card: `docs/experiments/2026-10-01_tethered_model.md` (card A: rig arms, stop ru
 node-0 tension, rod length and elevation, ring quaternion and omega, reference age; tracker thr_out, thr_off.
 Freeze is on (it is the only code path; no launch arg). Code under test: W8 (solve-failure handling), W9 (pivot
 4 cm below the drone centre), W12 (tracker throttle bookkeeping), A4 (ring quaternion continuity, slot-offset
-warning), W13 (safety-net bound 0.15, gate 0.25).
+warning), W13 (safety-net bound 0.15, gate 0.25)
+at lift-off (R0801-R0809).
 
 ## What the sim says to expect (lab runs and laptop SIL, 30 Sep night; card A "## Results", Groups 3-6)
 
@@ -14,32 +15,21 @@ warning), W13 (safety-net bound 0.15, gate 0.25).
 | solve failures, ref age | 0 and 0.0 in every twin run (R0781-R0793); SIL at ring yaw 180, A4 on / off: 0 / 0 (R0798 / R0800) | neither sim has the replay trigger (ring yaw near 180 deg plus a 30 deg slot offset; the benches cannot spawn the offset); the rig check that matters is the slot-offset line below |
 | rig thrust plant vs tracker | free drone 0 (0.55 kg with rod): model throttle 0.2743 against 0.2747 expected (R0792) | the tracker's offset bookkeeping (W12) closes the loop on the affine plant in sim; D1 is its first rig test |
 | rods at hand-over | 0.550 with the pivot on (R0783, R0784, R0786, R0788, R0789), 0.583 with it off | on the rig expect 0.53-0.58 per drone (model-f1 read 0.587-0.613 without the pivot) |
-| hand-over elevation | 54.7-55.4 deg (min of four) in every run, pivot on or off | not a measurement error: the drones really sit 10-16 deg ahead of the arc from liftoff and the latch fires 1.0 s after the sweep ends, before that lead decays (~0.8 deg/s). Expect 48-60 on the pivot reading (model-f1 53.6 on the centre reading is ~51 on the pivot). Record it; see decision 1 |
+| hand-over elevation | 54.7-55.5 deg (R0782-R0789; a trial creep fix, R0801-R0809, did not move it and was removed). The legacy floor worlds hand over at 45.5-45.7 (R0806, R0809) | not a measurement error: the drones build an 11-15 deg lead in the first second after lift-off (they leave the 0.10 m vertical lead at 0.5-0.6 m/s), and the latch fires before it decays. The lead comes from the lift-off pop, not from where the sweep starts. Bar 50-60 on the pivot reading (model-f1 53.6 on the centre reading is ~51 on the pivot); recorded, not a stop rule (section 6) |
 | hold z, z_ki 0 | 0.510 / 0.504 at target 0.5 (R0783, R0786) | the twin carries the ring by construction (fitted law, carried 0.996). The rig force deficit (~0.8 of the ring below 0.45 m) is NOT in the sim: expect H1 to sit low, as model-f1 did (0.31-0.35) |
 | ring mass off by -0.16 / +0.16 kg (z_ki 0) | hold +16.4 / -14.5 cm; tilt 1.2-1.3 deg, heave 1.2 cm, 0 failures (R0793 / R0791) | a mass error shows as height only, which is what z_ki closes (H2). The freeze caught the light ring at 97 % of the pull and did nothing on the heavy one |
 | standing tilt | 1.2-1.4 deg mean | from the per-drone offsets 0.181-0.187 against one tracker offset 0.185; expect about this much on the rig from that alone |
 | H2 (net on) | hold 0.500, heave 1.5 cm, tilt 1.22 deg, \|z_bias\| max 0.013, 0 failures (R0788) | the net works with the pivot model on the rig geometry; on the rig z_bias will be larger by the force deficit (bar 0.10) |
 | C1 (circle r 0.5 at 0.125 m/s) | lap tilt mean 1.22 deg (max 1.54), \|z err\| max 1.3 cm, xy err 3.1 cm mean (4.8 max), 0 failures (R0789) | inside every C1 bar with margin in sim |
-| LAND after the ring is down | R0793 (light ring, drone 0 hovering wide at r 0.601 vs 0.577): drone 0 tipped 8 -> 42 -> 76 deg at z 0.45-0.48, envelope fault, fleet disarm with the ring on the floor. R0783-R0792 landed clean | a rigid rod reaches the ring before the drone reaches the floor; a drone wide of the ring can tip on the way down. See decision 4 |
+| 1/3/5/9 hover (z_ki 0) | R0786: 0 failures, rods 0.550, hand-over 55.4, hold 0.504, heave 0.5 cm, hold tilt mean 1.41 deg (peak 1.77), carried 0.996. | the uneven ring holds like the even one in sim; with z_ki 0.4 (H2 line) the hold should close to 0.500 as in R0788 |
+| LAND after the ring is down | R0793 (light ring, drone 0 hovering wide at r 0.601 vs 0.577): drone 0 tipped 8 -> 42 -> 76 deg at z 0.45-0.48, envelope fault, fleet disarm with the ring on the floor. R0783-R0792 landed clean | a rigid rod reaches the ring before the drone reaches the floor; a drone wide of the ring can tip on the way down. LAND is unchanged: watch it (section 6) |
 
-## Decisions before the session (default applies without an answer)
+## Open decisions (default applies without an answer)
 
-1. **Hand-over elevation bar: 48-60 deg on the pivot reading (card A's H1 row still says 45 +- 5).** Default:
-   the 48-60 bar here governs tonight; recorded and reported, not a stop rule and not a gate for C1 (it is the
-   creep lead, not the fixes under test; the twin says 55). 55 instead of 45 lowers each rod's tension 14 % and
-   the inward pull 30 %, and the OCP settles at ~51 in the hold either way. The creep fix (start the sweep at
-   the drones' measured elevation at liftoff; optional latch upper bound target + 8) is not in the code and
-   waits for your word plus one lab floor-start run; it does not fly tonight.
-2. **Ring placement.** Default: plate 0 pointing roughly to world +x (ring yaw within +-45 deg of 0), so the
+1. **Ring placement.** Default: plate 0 pointing roughly to world +x (ring yaw within +-45 deg of 0), so the
    ring yaw never crosses +-180 deg tonight. A4 (quaternion continuity) is then not exercised on the rig; it
    passed the replay (arm g: 25 -> 0 failures); SIL cannot show it (R0798 / R0800 both 0 failures).
-3. **Code hash.** Nothing is committed. Default: the flights record `git rev-parse HEAD`, the diff and a tarball
-   of src/tools/configs (section 0). A commit before the visit needs your word.
-4. **LAND with rigid rods (R0793).** Default: LAND unchanged. After "load down, rods slack", watch each drone's
-   descent; a fleet disarm after the ring is down is recorded (not a stop rule for later flights), then props
-   off and the section 7 drop check on every drone. The alternative (magnet OFF once the ring is down, so the
-   drones land free) is a code change and needs your word.
-5. **Freeze-off arg (W11).** Default: none tonight; the freeze stays on (the only code path). Adding a launch
+2. **Freeze-off arg (W11).** Default: none tonight; the freeze stays on (the only code path). Adding a launch
    arg to switch it off touches a gate that can hold the fleet down, so it goes through the critic after the
    visit.
 
@@ -47,15 +37,16 @@ warning), W13 (safety-net bound 0.15, gate 0.25).
 
 | min | step | flights |
 |---|---|---|
-| 0-20 | setup, ring orientation, magnet check, packs, dry launch (props off), preflight | - |
-| 20-30 | D1 free hover, drone 0, rod and magnet removed | 1 |
-| 30-45 | D2 tethered holds, target 0.3 then 0.7, freeze on, z_ki 0 | 2 |
-| 45-58 | H1 tethered hover 0.5, z_ki 0 | 1 |
-| 58-70 | H2 as H1 with the safety net | 1 |
-| 70-85 | C1 slow circle r 0.5 at 0.125 m/s, only if H1 and H2 pass | 1 |
+| 0-17 | setup, ring orientation, magnet check, packs, dry launch (props off), preflight | - |
+| 17-25 | D1 free hover, drone 0, rod and magnet removed | 1 |
+| 25-37 | D2 tethered holds, target 0.3 then 0.7, freeze on, z_ki 0 | 2 |
+| 37-47 | H1 tethered hover 0.5, z_ki 0 | 1 |
+| 47-57 | H2 as H1 with the safety net | 1 |
+| 57-70 | H3 hover on plates 1/3/5/9 (move drones 0 and 2 one plate, magnet check, fly the H2 line) | 1 |
+| 70-85 | C1 slow circle r 0.5 at 0.125 m/s, even ring (magnets back on 0/3/6/9), only if H1 and H2 pass | 1 |
 | 85-90 | copy logs, land packs, note times | - |
 
-If the time runs out, cut from the bottom (C1, then H2). D2 comes before H1 (critic must-fix 2).
+If time is short, C1 is the one to drop. D2 comes before H1 (critic must-fix 2).
 
 ## 0. Setup (before props)
 
@@ -83,7 +74,7 @@ Motive: ring body 8 (origin at the ring centre on the plate plane), quads 11-14.
 **Ring rigid-body orientation (model-f1 sat one plate, 30 deg, off).**
 1. In Motive, select the ring body: its local +x axis must point at plate 0 (the plate the drone-0 rod goes on).
    If not, re-make or rotate the body pivot so +x is on plate 0, with the body level.
-2. Place the ring with plate 0 toward world +x (decision 2). Magnets on plates 0 / 3 / 6 / 9 (even ring:
+2. Place the ring with plate 0 toward world +x (decision 1). Magnets on plates 0 / 3 / 6 / 9 (even ring:
    azimuths 0 / 90 / 180 / 270, `attach_azimuths_deg` empty).
 3. After T2 is up (section 1), the planner prints, before ARM:
    `[planner] slot azimuth error (deg): d0 +x.x (plate 0), ...` with every value within +-10, and no
@@ -93,7 +84,7 @@ Motive: ring body 8 (origin at the ring centre on the plate plane), quads 11-14.
 
 **Magnet check (props off, T2 down).** Each drone on its plate, magnet ON: pull along the rod with the spring
 scale, holds >= 6 N; lift the drone by hand, the ring rim rises with it; magnet OFF releases in < 0.2 s. Note
-which plate each magnet sits on (0/3/6/9) and the rod pivot 4 cm under each drone centre, unchanged.
+which plate each magnet sits on (0/3/6/9; 1/3/5/9 for H3) and the rod pivot 4 cm under each drone centre, unchanged.
 
 **Packs.** >= 23.6 V at rest on all four, and telemetry non-zero on all four (drone 1 read 0.00 V on 30 Sep;
 without a voltage the tracker drops the voltage term, about 0.02 throttle per volt):
@@ -197,7 +188,7 @@ Reported, no bar: carried fraction per height band against 30 Sep (0.78-0.87 bel
 Both near 1.0: the deficit was lift-off dynamics or pre-pivot geometry. Low only at 0.3: height effect. Low at
 both: a fixed law error when tethered.
 
-## 4. H1, H2, C1
+## 4. H1, H2, H3 (1/3/5/9), C1
 
 **H1: tethered hover 0.5 m, z_ki 0, 25 s hold.** Same T2 line as D2 with `F=h1`, `target_z:=0.5`, `z_ki:=0.0`.
 
@@ -205,7 +196,17 @@ both: a fixed law error when tethered.
 launch defaults; `z_taut_gate` stays 0.9, the pivot model is in). If `height integral ... is near its bound`
 prints: finish the hold, LAND, no C1.
 
-**C1: slow circle, only after H1 and H2 each pass once.** `F=c1`, `target_z:=0.5`, `z_ki:=0.4`,
+**H3: hover on plates 1/3/5/9, after H2.** Move the magnets to plates 1, 3, 5 and 9, counted from plate 0
+(the +x plate) the same way as the even ring (plate 3 is drone 1's plate in both): drone 0 goes from plate 0
+to plate 1, drone 2 from plate 6 to plate 5, drones 1 and 3 stay on 3 and 9. Ring placement unchanged (plate 0
+toward world +x). Magnet check on drones 0 and 2. Then the H2 T2 line with `F=h3_1359` and
+`attach_azimuths_deg:=30,90,150,270` added. Before ARM the slot line must read ~0 deg for all four:
+`slot azimuth error (deg): d0 +0.x (plate 1), d1 ... (plate 3), d2 ... (plate 5), d3 ... (plate 9)`, each
+within +-10 and no `SLOT OFFSET` line (a +-30 reading means a drone or magnet is one plate off: do not ARM).
+Same pass bars and stop rules as H2. Afterwards move drones 0 and 2 back to plates 0 and 6 for C1 and redo
+their magnet check.
+
+**C1: slow circle, even ring, only after H1 and H2 each pass once.** `F=c1`, `target_z:=0.5`, `z_ki:=0.4`,
 `load_traj:=orbit traj_radius:=0.5 traj_speed:=0.125`. The orbit starts when the lift tops out, spins up over
 4 s and runs until LAND; one lap is 25 s, so LAND about 30 s after it starts moving. The ring's circle starts at
 its lift point, heads world +x, and is centred 0.5 m toward world +y: place the ring so there is >= 1.7 m to
@@ -215,8 +216,9 @@ Pass bars (card A):
 
 | test | pass | sim twin / 30 Sep baseline |
 |---|---|---|
-| H1 | 0-1 solve failures; ref age > 0.3 s under 5 % of airborne time; heave p-p <= 6 cm; tilt mean <= 3, max <= 8 deg; hand-over 48-60 deg (decision 1); rods at hand-over 0.53-0.58 each | twin R0783: 0 / 0.0 / 1.2 cm / 1.22 deg / 55 deg / 0.550. Rig model-f1: 25 failures, 14 cm, 6.5 / 16 deg, 53.6 deg, rods 0.587-0.613 |
+| H1 | 0-1 solve failures; ref age > 0.3 s under 5 % of airborne time; heave p-p <= 6 cm; tilt mean <= 3, max <= 8 deg; hand-over 50-60 deg (pivot reading, recorded; > 60: section 6); rods at hand-over 0.53-0.58 each | twin R0783: 0 / 0.0 / 1.2 cm / 1.22 deg / 55 deg / 0.550. Rig model-f1: 25 failures, 14 cm, 6.5 / 16 deg, 53.6 deg, rods 0.587-0.613 |
 | H2 | H1 bars, \|mean z - 0.5\| <= 2 cm over the last 20 s, \|z_bias\| <= 0.10 throughout | twin R0788: hold 0.500, \|z_bias\| max 0.013, 0 failures |
+| H3 (1/3/5/9) | H2 bars; slot line ~0 deg (within +-10) for all four before ARM | twin R0786 (z_ki 0): 0 / 0.0 / 0.5 cm / 1.41 deg / 55.4 deg / 0.550, hold 0.504 |
 | C1 | ring tilt mean <= 3 deg over the lap, \|z err\| <= 5 cm, xy err <= 10 cm, 0 solve failures, no release | twin R0789: lap tilt 1.22 deg, \|z err\| 1.3 cm, xy 3.1 cm (max 4.8), 0 failures |
 
 After each tethered flight (T3):
@@ -232,10 +234,10 @@ next lift in any case).
 | line | expect | act on |
 |---|---|---|
 | `[planner] geometry: n=4 cable_len=0.550 attach_radius=0.225 attach_z=0.000 load_mass=0.860 pivot_offset=[0.0, 0.0, -0.04] ...` | exactly this | any other value: Ctrl-C, fix the line |
-| `[planner] load yaw datum latched at +x.x deg` | within +-45 of 0 (decision 2) | near +-180: re-place the ring |
-| `[planner] slot azimuth error (deg): d0 ... (plate 0), ...` | every value within +-10 | `SLOT OFFSET:` line: do not ARM (section 0) |
+| `[planner] load yaw datum latched at +x.x deg` | within +-45 of 0 (decision 1) | near +-180: re-place the ring |
+| `[planner] slot azimuth error (deg): d0 ... (plate 0), ...` | every value within +-10 (H3: plates 1/3/5/9) | `SLOT OFFSET:` line: do not ARM (section 0) |
 | `[planner arc-creep] ref=..deg target=45deg ... measured: d0:.. d1:.. d2:.. d3:..` | the four rise together, 10-16 deg ahead of ref (known creep lead) | one drone far behind: LAND |
-| `[planner] elevation XX.Xdeg reached (target 45, tol 8) — coupled planner active` | record XX; twin 55, bar 48-60 (pivot reading) | `elevation timeout at` below 30: `NOT lifting`, press LAND |
+| `[planner] elevation XX.Xdeg reached (target 45, tol 8) — coupled planner active` | record XX; twin 55.5-55.7, bar 50-60 (pivot reading) | `elevation timeout at` below 30: `NOT lifting`, press LAND |
 | `[planner] measure_rod_len: rods [...] m from mocap at handover (typed 0.550)` | each 0.53-0.58 (pivot in) | `keeping typed cable_len ...`: rods not trusted; LAND, read the log |
 | `[planner] pretension: ramping every rod to its share over 3.0 s ... (length gates [...])` | the four "thr" rise together, ring floats up level | one side lifts first, tilt > 5 deg: LAND |
 | `[planner] pretension: ring broke free at NN% of the planned pull ...; pull held there` | record NN (log-only now; 30 Sep 60-80 %) | - |
@@ -249,7 +251,12 @@ LAND now on: a magnet release; ring tilt > 5 deg in the pretension or > 12 deg i
 ring vz > 0.25 m/s (a visible run-up, f6); 3 or more `solve status` lines; a creep timeout or refusal.
 - After one release: no further lift until the log has been read. After two releases: no more lifts tonight.
 - The same bar failing twice: stop and report.
-- Hand-over elevation alone does not stop a flight (decision 1).
+- Hand-over elevation alone does not stop a flight. Above 60 deg: finish the flight; before the next lift
+  read the `arc-creep` lines (which drone leads, by how much) and `measure_rod_len` (a rod read long lifts
+  the elevation). Above 60 on two flights is the same bar failing twice: no C1, stop and report.
+- LAND with rigid rods (R0793) is unchanged: after "load down, rods slack", watch each drone's descent. A
+  fleet disarm after the ring is down is recorded (not a stop rule for later flights), then props off and
+  the section 7 drop check on every drone.
 - No soft-hold command exists (card A wants "ramp the pull down and hold, then LAND"): the stop action is LAND
   (the planner lowers the ring at 0.2 m/s and blends the pull out).
 
@@ -270,5 +277,5 @@ ring vz > 0.25 m/s (a visible run-up, f6); 3 or more `solve status` lines; a cre
 ## After the session
 
 Registry rows (one per flight): RIG-1001-d1, RIG-1001-d2-z030, RIG-1001-d2-z070, RIG-1001-h1, RIG-1001-h2,
-RIG-1001-c1, each against its baseline above. Copy `results/rig/2026-10-01/` whole; nothing runs in sim until the
+RIG-1001-h3-1359, RIG-1001-c1, each against its baseline above. Copy `results/rig/2026-10-01/` whole; nothing runs in sim until the
 rig stack is down.
