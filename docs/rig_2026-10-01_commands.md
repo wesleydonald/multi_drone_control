@@ -6,13 +6,12 @@ full. Every launch default below is already the rig value (geometry, affine thru
 
 | min | step |
 |---|---|
-| 0-17 | setup, ring +x on plate 0, magnets 0/3/6/9, packs, dry launch (props off) |
-| 17-25 | D1 free hover, drone 0 without rod and magnet |
-| 25-37 | D2 tethered holds at 0.3 and 0.7, z_ki 0 |
-| 37-47 | H1 hover 0.5, z_ki 0 |
-| 47-57 | H2 hover 0.5, net on |
-| 57-70 | H3 hover on plates 1/3/5/9 |
-| 70-85 | C1 circle (only if H1 and H2 pass; first to drop) |
+| 0-15 | setup, ring +x on plate 0, magnets 0/3/6/9, packs, dry launch (props off) |
+| 15-30 | D2 tethered holds at 0.3 and 0.7, z_ki 0 |
+| 30-42 | H1 hover 0.5, z_ki 0 |
+| 42-54 | H2 hover 0.5, net on |
+| 54-68 | H3 hover on plates 1/3/5/9 |
+| 68-85 | C1 circle (only if H1 and H2 pass; first to drop) |
 | 85-90 | copy logs |
 
 ## 0. Setup
@@ -26,7 +25,6 @@ ls -l /dev/QUAD*                                   # QUAD1..4 = drones 0..3
 for i in 0 1 2 3; do ros2 topic echo --once /drone_$i/telemetry | grep battery_voltage; done   # all >= 23.6, none 0.00
 ```
 - Motive: ring body 8 with +x on plate 0, origin at the ring centre; ring placed with plate 0 toward world +x.
-- Magnet check (props off): >= 6 N along the rod, OFF releases at once.
 
 ## 1. Terminals
 
@@ -54,15 +52,13 @@ Dry launch once (H1 line, props off): "Controller ready" x4, nothing compiles, p
 
 | F | setup | launch line |
 |---|---|---|
-| `d1_free` | drone 0 only, rod and magnet off; others disarmed; T3 preflight `--drones 1 --planner free_hover` | `real_hover_launch.py num_drones:=1 hover_z:=0.8 thrust_ratio:=40.7 thrust_offset:=0.185 thrust_offset_v_slope:=0.022 kt_trim:=false` |
-| `d2_z030` | rod and magnet back on drone 0, magnet check | `real_control_launch.py z_ki:=0.0 target_z:=0.3` |
+| `d2_z030` | | `real_control_launch.py z_ki:=0.0 target_z:=0.3` |
 | `d2_z070` | | `real_control_launch.py z_ki:=0.0 target_z:=0.7` |
 | `h1` | | `real_control_launch.py z_ki:=0.0 target_z:=0.5` |
 | `h2` | | `real_control_launch.py target_z:=0.5` |
-| `h3_1359` | drone 0 to plate 1, drone 2 to plate 5, magnet check | `real_control_launch.py target_z:=0.5 attach_azimuths_deg:=30,90,150,270` |
+| `h3_1359` | drone 0 to plate 1, drone 2 to plate 5 | `real_control_launch.py target_z:=0.5 attach_azimuths_deg:=30,90,150,270` |
 | `c1` | drones 0 and 2 back to plates 0 and 6; >= 1.7 m clear on +y, 1.2 m elsewhere | `real_control_launch.py target_z:=0.5 load_traj:=orbit traj_radius:=0.5 traj_speed:=0.125` |
 
-- D1: ARM and TAKEOFF from the panel, hold 20 s, LAND.
 - D2: hold 15 s steady.
 - H1 to H3: hold 25 s.
 - C1: LAND about 30 s after the ring starts moving (one lap).
