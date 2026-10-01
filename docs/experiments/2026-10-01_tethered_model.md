@@ -633,3 +633,5 @@ Action before the rig: none blocking; the rig flights are exploratory data (D1/D
 rules.
 
 **1 Oct, before the visit (Wesley):** D1 (free hover without the rod) and the magnet checks are dropped from tonight's session. Whether rod drag biased the thrust fit stays open; D2 still measures the carried fraction against height.
+
+**1 Oct, at the rig:** the QUAD3 airframe is out, so tonight flies three drones (QUAD1/2/4, mocap bodies 11/12/14), even ring on plates 0/4/8. H3 (1/3/5/9) is dropped. No 3-drone rig twin was flown first (the rig stack was up on the laptop and the lab SSH needed re-approval).
