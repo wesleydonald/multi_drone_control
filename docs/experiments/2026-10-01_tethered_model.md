@@ -631,3 +631,5 @@ flights only); "ref_age_frac 0.0 in every twin run R0781-R0793"; R0793 as drone 
 
 Action before the rig: none blocking; the rig flights are exploratory data (D1/D2) plus hovers with stop
 rules.
+
+**1 Oct, before the visit (Wesley):** D1 (free hover without the rod) and the magnet checks are dropped from tonight's session. Whether rod drag biased the thrust fit stays open; D2 still measures the carried fraction against height.
