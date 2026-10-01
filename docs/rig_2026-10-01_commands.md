@@ -266,8 +266,9 @@ a visible run-up of the ring (as in f6); vz is checked in the read-back; 3 or mo
 - Hand-over elevation alone does not stop a flight. Above 60 deg: finish the flight; before the next lift
   read the `arc-creep` lines (which drone leads, by how much) and `measure_rod_len` (a rod read long lifts
   the elevation). Above 60 on two flights is the same bar failing twice: no C1, stop and report.
-- LAND with rigid rods (R0793, and R0816 on the nominal twin) is unchanged: after "load down, rods slack", watch each drone's descent. A
-  fleet disarm after the ring is down is recorded (not a stop rule for later flights), then props off and
+- LAND with rigid rods (R0793, and R0816 on the nominal twin) is unchanged: after "load down, rods slack", watch each drone's descent. If a
+  drone starts leaning or sliding outward on its rod, press DISARM (the drones are ~0.4 m up; a drop
+  beats a 70 deg tip, Wesley 1 Oct). A fleet disarm after the ring is down is recorded (not a stop rule for later flights), then props off and
   the section 7 drop check on every drone.
 - No soft-hold command exists (card A wants "ramp the pull down and hold, then LAND"): the stop action is LAND
   (the planner lowers the ring at 0.2 m/s and blends the pull out).
