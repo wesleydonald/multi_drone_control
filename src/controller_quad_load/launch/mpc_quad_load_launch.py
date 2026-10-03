@@ -132,6 +132,8 @@ def _args():
         DeclareLaunchArgument('z_ki', default_value='0.4'),      # planner height integral, 0 = off (card 2026-09-24_planner_offset)
         DeclareLaunchArgument('z_i_max', default_value='0.15'),
         DeclareLaunchArgument('z_taut_gate', default_value='0.99'),
+        DeclareLaunchArgument('ff_cap_force', default_value='0.0'),   # test only: frozen cable-FF cap (B1)
+        DeclareLaunchArgument('ff_cap_release_s', default_value='2.0'),
         # rod pivot below the drone centre (m, body z); the sim worlds pivot at the centre
         DeclareLaunchArgument('pivot_offset_z', default_value='0.0'),
         # LAND descent rate (separate from the slow takeoff lift_ramp_vel).
@@ -374,6 +376,8 @@ def launch_setup(context, *args, **kwargs):
                      'z_ki': f('z_ki'),
                      'z_i_max': f('z_i_max'),
                      'z_taut_gate': f('z_taut_gate'),
+                     'ff_cap_force': f('ff_cap_force'),
+                     'ff_cap_release_s': f('ff_cap_release_s'),
                      'pivot_offset': [0.0, 0.0, float(LaunchConfiguration('pivot_offset_z').perform(context))],
                      'land_vel': f('land_vel'),
                      'handover_elev_deg': f('handover_elev_deg'),

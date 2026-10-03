@@ -288,6 +288,14 @@ class LoadPlanner(Node):
         # opt-in: keep integrating through a constant-speed level orbit (M1 orbits from the
         # end of the lift, so the gated hover never happens and the ring flies 6 cm high, R0653)
         self._z_ki_in_orbit = bool(self.declare_parameter('z_ki_in_orbit', True).value)
+        # The breakaway freeze holds the pull where the ring broke free, but only through the
+        # pretension: once the lift ramp starts the cap returns to 1 over ff_cap_release_s.
+        # Held for the whole flight (0 here) it told the trackers the rods pull 7-27 % less
+        # than they do and left the rig ring 20-30 cm low (1 Oct; twin R0817/R0818).
+        self._ff_release_s = float(self.declare_parameter('ff_cap_release_s', 2.0).value)
+        # TEST ONLY: cap the pull at this fraction when the pretension ends, as a rig breakaway
+        # at 73-93 % does, so the twin can stand in for the rig. 0 = off.
+        self._ff_cap_force = float(self.declare_parameter('ff_cap_force', 0.0).value)
         self._zbias_warned = False
         self._load_t = None                    # monotonic time of the last payload pose
         self.auto_slot_assign = cfg.auto_slot_assign
@@ -417,6 +425,8 @@ class LoadPlanner(Node):
         self._lift_refused = False
         self._refuse_anchor = None
         self._ff_cap = 1.0              # pull fraction frozen at the pretension breakaway
+        self._ff_rel_step = None        # cap release per tick, set when the release starts
+        self._ff_forced = False         # test-only ff_cap_force applied this lift
         # The phase in words for the RViz panel, latched and sent only on change
         self._phase_text = None
         self._phase_pub = self.create_publisher(String, '/fleet/phase', QoSProfile(
@@ -726,7 +736,7 @@ class LoadPlanner(Node):
         q = self.drone_quat.get(self.slot2drone[i])
         if q is None and not getattr(self, '_pivot_level_warned', False):
             self._pivot_level_warned = True
-            self.get_logger().warn(f'[planner] drone {self.slot2drone[i]} has no attitude: '
+            self.get_logger().warn(f'[planner] drone {self.slot2drone[i] + 1} has no attitude: '
                                    f'its rod pivot assumes a level drone')
         R = quat_to_rot_np(q) if q is not None else np.eye(3)
         return p + R @ self.pivot_offset
@@ -773,8 +783,10 @@ class LoadPlanner(Node):
             self.drone_pos, self.load_state[0:2], self.n, load_yaw=self.psi0,
             slot_az=[np.arctan2(r[1], r[0]) for r in self.rho])
         self._slots_assigned = True
+        if getattr(self, 'creep', None) is not None:
+            self.creep.label = lambda i: self.slot2drone[i] + 1
         self.get_logger().info(
-            f'[planner] auto slot assignment (slot->drone): {self.slot2drone} '
+            f'[planner] auto slot assignment (slot->drone, drones numbered from 1): {[d + 1 for d in self.slot2drone]} '
             f'(load yaw datum {np.degrees(self.psi0):+.1f} deg)')
 
     def _check_slot_offsets(self):
@@ -784,7 +796,7 @@ class LoadPlanner(Node):
         errs = slot_azimuth_errors(self.drone_pos, self.load_state[0:2], self.psi0, self.slot2drone,
                                    [np.arctan2(r[1], r[0]) for r in self.rho])
         self.get_logger().info('[planner] slot azimuth error (deg): '
-                               + ', '.join(f'd{d} {e:+.1f} (plate {p})' for d, e, p in errs))
+                               + ', '.join(f'd{d + 1} {e:+.1f} (plate {p})' for d, e, p in errs))
         warns = slot_offset_warnings(errs)
         for text in warns:
             self.get_logger().warn(f'[planner] SLOT OFFSET: {text}')
@@ -997,6 +1009,21 @@ class LoadPlanner(Node):
                 # liftoff. Ease in over LIFT_SOFT_S, out over LIFT_SOFT_D metres.
                 total = self.target_z - self.lift_z0
                 self._lift_t += 1.0 / PLANNER_HZ
+                if (self._ff_cap_force > 0.0 and not self._ff_forced
+                        and float(self.load_state[2]) - self.lift_z0 > BREAKAWAY_DZ):
+                    # test stand-in for a rig breakaway at this fraction, applied the moment the
+                    # ring is off the floor (the twin's ring leaves after the pretension, so its
+                    # own freeze never fires), so the release below runs with the ring airborne
+                    self._ff_forced = True
+                    self._ff_cap = min(self._ff_cap, self._ff_cap_force)
+                    self._ff_rel_step = None
+                if self._ff_cap < 1.0 and self._ff_release_s > 0.0:
+                    if self._ff_rel_step is None:     # cap -> 1 over ff_cap_release_s, from wherever it froze
+                        self._ff_rel_step = (1.0 - self._ff_cap) / (PLANNER_HZ * self._ff_release_s)
+                        self.get_logger().info(
+                            f'[planner] cable pull cap {self._ff_cap:.0%} released to 100 % over '
+                            f'{self._ff_release_s:.1f} s')
+                    self._ff_cap = min(1.0, self._ff_cap + self._ff_rel_step)
                 ease_in = 0.5 * (1.0 - np.cos(
                     np.pi * min(self._lift_t / max(LIFT_SOFT_S, 1e-6), 1.0)))
                 remaining = max(total - self.lift_progress, 0.0)
@@ -1284,6 +1311,8 @@ class LoadPlanner(Node):
         self._settle_left = self.handover_settle_s
         self._pretension_said = False
         self._ff_cap = 1.0
+        self._ff_rel_step = None
+        self._ff_forced = False
         # a floor start that timed out short of the hand-over angle must not lift: from
         # 18-26 deg the rods need 2-3x the tension, mostly sideways (rig 2026-09-30)
         m = re.search(r'elevation timeout at ([-0-9.]+)', reason)
@@ -1462,7 +1491,7 @@ class LoadPlanner(Node):
         # gate stays 0, the cable never tautens before they lose it.
         self._diag_ctr = getattr(self, '_diag_ctr', 0) + 1
         if self._diag_ctr % int(max(PLANNER_HZ, 1)) == 0:
-            s = '  '.join(f"d{i}:dist={d:.2f} gate={g:.2f} t={t:.2f}"
+            s = '  '.join(f"d{self.slot2drone[i] + 1}:dist={d:.2f} gate={g:.2f} t={t:.2f}"
                           for (i, d, g, t) in diag)
             z_tgt = min(self.target_z, self.lift_z0 + self.lift_progress)
             # load tilt (angle of the load body-z off world-z) and each MEASURED

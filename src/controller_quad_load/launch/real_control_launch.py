@@ -58,6 +58,8 @@ from launch_ros.parameter_descriptions import ParameterValue
 def _args():
     return [
         DeclareLaunchArgument('num_drones', default_value='4'),
+        # ARM waits for each flight controller's own armed report (CRSF flight mode)
+        DeclareLaunchArgument('require_fc_armed', default_value='true'),
         # MUST match the physical cables.
         DeclareLaunchArgument('cable_len', default_value='0.55'),
         # where the rim attachments are (deg, load frame, sized by num_drones); '' = even
@@ -83,6 +85,7 @@ def _args():
         DeclareLaunchArgument('creep_vel', default_value='0.2'),   # m/s creep sweep rate before the handover
         # floor start: every rod's pull ramps in together over this long before the lift (0 = off)
         DeclareLaunchArgument('pretension_s', default_value='3.0'),
+        DeclareLaunchArgument('ff_cap_release_s', default_value='2.0'),   # breakaway cap back to 1 after lift start; 0 = held all flight (pre 2 Oct)
         # trust band for the rod lengths measured at the hand-over (typed cable_len +-tol, spread)
         DeclareLaunchArgument('rod_tol_frac', default_value='0.25'),
         DeclareLaunchArgument('rod_spread_m', default_value='0.08'),
@@ -212,7 +215,9 @@ def launch_setup(context, *args, **kwargs):
     # ── Central fleet manager ─────────────────────────────────────────────────
     nodes.append(Node(
         package='controller_quad_load', executable='main', name='central_controller',
-        parameters=[{'num_drones': n}], output='screen'))
+        parameters=[{'num_drones': n,
+                     'require_fc_armed': LaunchConfiguration('require_fc_armed').perform(context).lower() == 'true'}],
+        output='screen'))
 
     # ── Centralized cable-suspended load planner ──────────────────────────────
     nodes.append(Node(
@@ -238,6 +243,7 @@ def launch_setup(context, *args, **kwargs):
                      'handover_settle_s': f('handover_settle_s'),
                      'creep_vel': f('creep_vel'),
                      'pretension_s': f('pretension_s'),
+                     'ff_cap_release_s': f('ff_cap_release_s'),
                      'rod_tol_frac': f('rod_tol_frac'),
                      'rod_spread_m': f('rod_spread_m'),
                      'auto_slot_assign': b('auto_slot_assign'),
