@@ -177,7 +177,7 @@ class Controller(Node):
         self.declare_parameter("cable_source", "model")
         self.cable_source = self.get_parameter("cable_source").value
         self.get_logger().debug(
-            f"[Drone {self.drone_id}] tracker FF toggles: "
+            f"[Drone {self.drone_id + 1}] tracker FF toggles: "
             f"cable_ff_scale={self.cable_ff_scale} attitude_ff={self.attitude_ff} "
             f"cable_source={self.cable_source}")
 
@@ -223,10 +223,10 @@ class Controller(Node):
 
         # ── Wait for first mocap pose ─────────────────────────────────────
         self.current_pose = None
-        self.get_logger().info(f"[Drone {self.drone_id}] Waiting for initial mocap pose...")
+        self.get_logger().info(f"[Drone {self.drone_id + 1}] Waiting for initial mocap pose...")
         while self.current_pose is None and rclpy.ok():
             rclpy.spin_once(self, timeout_sec=0.1)
-        self.get_logger().debug(f"[Drone {self.drone_id}] Pose received.")
+        self.get_logger().debug(f"[Drone {self.drone_id + 1}] Pose received.")
         # ── Visualizer ────────────────────────────────────────────────────
         # prefix the viz topics per drone (/drone_N/mpc_plan etc) so RViz can
         # show each drone's plan on its own display instead of N drones fighting
@@ -255,7 +255,7 @@ class Controller(Node):
             self._planner_ref_callback,
             1)
         self.get_logger().debug(
-            f"[Drone {self.drone_id}] Tracking external planner reference.")
+            f"[Drone {self.drone_id + 1}] Tracking external planner reference.")
 
         # ── IMU subscription (measured specific force -> cable force) ──────
         self.create_subscription(
@@ -328,7 +328,7 @@ class Controller(Node):
         if (self.kt_batt_sag_frac > 0.0
                 and self.kt_batt_v_full <= self.kt_batt_v_empty):
             self.get_logger().error(
-                f"[Drone {self.drone_id}] kt_batt_v_full "
+                f"[Drone {self.drone_id + 1}] kt_batt_v_full "
                 f"({self.kt_batt_v_full:.2f}) must exceed kt_batt_v_empty "
                 f"({self.kt_batt_v_empty:.2f}); battery derate DISABLED.")
             self.kt_batt_sag_frac = 0.0
@@ -353,7 +353,7 @@ class Controller(Node):
         self._kt_trim_apply = bool(self.get_parameter("kt_trim").value)
         if self._kt_trim_apply and self.cable_source != "model":
             self.get_logger().error(
-                f"[Drone {self.drone_id}] kt_trim needs cable_source=model (got "
+                f"[Drone {self.drone_id + 1}] kt_trim needs cable_source=model (got "
                 f"{self.cable_source!r}): estimate logged only, NOT applied")
             self._kt_trim_apply = False
         self._applied_cable_z0 = 0.0
@@ -370,10 +370,10 @@ class Controller(Node):
                                  self._cable_static_cb, 1)
         if self._kt_trim_apply:
             self.get_logger().debug(
-                f"[Drone {self.drone_id}] kt_trim ON: typed {self.thrust_ratio:.2f}, bound "
+                f"[Drone {self.drone_id + 1}] kt_trim ON: typed {self.thrust_ratio:.2f}, bound "
                 f"[{self._kt_trim.lo:.2f}, {self._kt_trim.hi:.2f}], tau {self._kt_trim.tau:.0f} s")
         self.get_logger().debug(
-            f"[Drone {self.drone_id}] kT FIXED at {self.thrust_ratio:.2f} "
+            f"[Drone {self.drone_id + 1}] kT FIXED at {self.thrust_ratio:.2f} "
             f"(takeoff {self.takeoff_thrust_ratio:.2f}); battery derate "
             + (f"{100 * self.kt_batt_sag_frac:.0f}% across "
                f"{self.kt_batt_v_full:.1f}..{self.kt_batt_v_empty:.1f} V"
@@ -432,13 +432,13 @@ class Controller(Node):
         self._x0_w_fallbacks = 0
         if self.x0_rate_source != 'mocap':
             self.get_logger().warn(
-                f"[Drone {self.drone_id}] x0_rate_source={self.x0_rate_source} "
+                f"[Drone {self.drone_id + 1}] x0_rate_source={self.x0_rate_source} "
                 f"(non-default) - this is an experiment, record it.")
         self.terminal_vel_ref = bool(
             self.get_parameter('terminal_vel_ref').value)
         if self.terminal_vel_ref:
             self.get_logger().warn(
-                f"[Drone {self.drone_id}] T1 ACTIVE: terminal velocity reference "
+                f"[Drone {self.drone_id + 1}] T1 ACTIVE: terminal velocity reference "
                 f"enabled (non-default) - this is an experiment, record it.")
 
         # ── Stage V: which controller turns the reference into channels ───
@@ -479,7 +479,7 @@ class Controller(Node):
                      ('kp_pos', 'kv', 'ki', 'k_att', 'v_max', 'a_i_max', 'swing_k')}
             self.velocity_loop = VelocityLoop(**gains)
             self.get_logger().debug(
-                f"[Drone {self.drone_id}] STAGE V: control_mode={self.control_mode} "
+                f"[Drone {self.drone_id + 1}] STAGE V: control_mode={self.control_mode} "
                 f"({gains}). This is an experiment, record it.")
         if self.control_mode == 'velocity_after_handover':
             # TRANSIENT_LOCAL to match the publisher: the handover fires once, and a
@@ -534,7 +534,7 @@ class Controller(Node):
         set_throttle_max(self.ocp, self.N, self._model_thr_max)
         if self.kt_batt_sag_frac != 0.0 and self.thrust_offset_v_slope != 0.0:
             self.get_logger().warn(
-                f"[Drone {self.drone_id}] kt_batt_sag_frac {self.kt_batt_sag_frac} and "
+                f"[Drone {self.drone_id + 1}] kt_batt_sag_frac {self.kt_batt_sag_frac} and "
                 f"thrust_offset_v_slope {self.thrust_offset_v_slope} both correct for pack "
                 f"voltage: the sag is counted twice. Set one of them to 0.")
         self._cap_pub = self.create_publisher(
@@ -599,7 +599,7 @@ class Controller(Node):
         # ── Control timer ─────────────────────────────────────────────────
         self.timer = self.create_timer(DT, self.control_loop)
         self.get_logger().info(
-            f"[Drone {self.drone_id}] Controller ready: kT {self.thrust_ratio:.1f} "
+            f"[Drone {self.drone_id + 1}] Controller ready: kT {self.thrust_ratio:.1f} "
             f"({'trim on' if self._kt_trim_apply else 'fixed'}), mode {self.control_mode}, "
             f"throttle cap {self.throttle_max:.2f}"
             + (f", thrust offset {self.thrust_offset:.3f} + {self.thrust_offset_v_slope:.3f}/V below "
@@ -705,7 +705,7 @@ class Controller(Node):
         # even when its own envelope is fine.
         self.create_subscription(String, '/fleet/abort', self._fleet_abort_cb, 5)
         self.get_logger().debug(
-            f"[Drone {self.drone_id}] envelope: no geofence (operator failsafe); "
+            f"[Drone {self.drone_id + 1}] envelope: no geofence (operator failsafe); "
             f"tilt<{lim.max_tilt_deg:.0f}/{lim.max_payload_tilt_deg:.0f} deg "
             f"speed<{lim.max_speed:.1f} m/s "
             f"ref_stale>{lim.ref_timeout_s:.1f} s "
@@ -736,7 +736,7 @@ class Controller(Node):
         if self._aborted:
             return
         self.get_logger().error(
-            f"[Drone {self.drone_id}] FLEET ABORT: {msg.data} - disarming.")
+            f"[Drone {self.drone_id + 1}] FLEET ABORT: {msg.data} - disarming.")
         self._do_safety_disarm()
 
     def _safety_check(self):
@@ -757,7 +757,7 @@ class Controller(Node):
                                    if self.payload_pos is not None else None)
             self._kt_frozen_said = False
             self.get_logger().info(
-                f"[Drone {self.drone_id}] envelope armed and reset.")
+                f"[Drone {self.drone_id + 1}] envelope armed and reset.")
         self._was_armed = self.armed
 
         if not self.safety_enabled or self._aborted:
@@ -780,7 +780,7 @@ class Controller(Node):
 
         if verdict.is_fault:
             self.get_logger().error(
-                f"[Drone {self.drone_id}] ENVELOPE FAULT: {verdict.reason} "
+                f"[Drone {self.drone_id + 1}] ENVELOPE FAULT: {verdict.reason} "
                 f"- disarming fleet.")
             self._do_safety_disarm(reason=verdict.reason)
             return True
@@ -789,7 +789,7 @@ class Controller(Node):
             self._safety_warn_ctr += 1
             if self._safety_warn_ctr % 25 == 1:      # ~2 Hz at 50 Hz control
                 self.get_logger().warn(
-                    f"[Drone {self.drone_id}] envelope warning: {verdict.reason}")
+                    f"[Drone {self.drone_id + 1}] envelope warning: {verdict.reason}")
         else:
             self._safety_warn_ctr = 0
         return False
@@ -809,7 +809,7 @@ class Controller(Node):
         if want:
             self.velocity_loop.reset()
         self.get_logger().warn(
-            f"[Drone {self.drone_id}] control phase -> "
+            f"[Drone {self.drone_id + 1}] control phase -> "
             f"{'VELOCITY LOOP' if want else 'MPC'} (/fleet/control_phase="
             f"{msg.data!r})")
 
@@ -920,7 +920,7 @@ class Controller(Node):
                 [float(u[0]), float(u[1]), float(thr), yaw])
             self._applied_u_rate = np.asarray(u_rate, dtype=float).copy()
             self.get_logger().debug(
-                f"[Drone {self.drone_id}] r:{u[0]:.3f} p:{u[1]:.3f} "
+                f"[Drone {self.drone_id + 1}] r:{u[0]:.3f} p:{u[1]:.3f} "
                 f"t:{u[2]:.3f} y:{u[3]:.3f}")
         else:
             self._takeoff_step = None    # reset so the next takeoff spools again
@@ -940,7 +940,7 @@ class Controller(Node):
             # once per ARM (it used to repeat every 2 s while waiting)
             if not getattr(self, '_waiting_said', False):
                 self._waiting_said = True
-                self.get_logger().info(f"[Drone {self.drone_id}] Armed - waiting for TAKEOFF command.")
+                self.get_logger().info(f"[Drone {self.drone_id + 1}] Armed - waiting for TAKEOFF command.")
 
         self.cb.cmd_publisher_.publish(msg)
         # Remember this good command so a later failed solve can hold it.
@@ -1232,7 +1232,7 @@ class Controller(Node):
         elapsed = (self._wall_clock.now() - self.last_pose_update_time).nanoseconds * 1e-9
         if self.armed and elapsed > self.pose_timeout_s:
             self.get_logger().error(
-                f"[Drone {self.drone_id}] Pose timeout ({elapsed:.2f}s) - disarming.")
+                f"[Drone {self.drone_id + 1}] Pose timeout ({elapsed:.2f}s) - disarming.")
             msg = ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0,
                               channel_2=-1.0, channel_3=0.0)
             self.cb.disarm(msg)
@@ -1283,7 +1283,7 @@ class Controller(Node):
                 if self.takeoff_requested and self._last_good_msg is not None:
                     self.cb.cmd_publisher_.publish(self._last_good_msg)
                     self.get_logger().warn(
-                        f"[Drone {self.drone_id}] airborne with no reference - "
+                        f"[Drone {self.drone_id + 1}] airborne with no reference - "
                         f"holding last command.", throttle_duration_sec=1.0)
                 else:
                     self.cb.cmd_publisher_.publish(ELRSCommand(
@@ -1358,7 +1358,7 @@ class Controller(Node):
                     x0_w_fallback = 1.0
                     self._x0_w_fallbacks += 1
                     self.get_logger().warn(
-                        f"[Drone {self.drone_id}] x0 body rate: gyro stale, mocap w used "
+                        f"[Drone {self.drone_id + 1}] x0 body rate: gyro stale, mocap w used "
                         f"({self._x0_w_fallbacks} ticks)", throttle_duration_sec=1.0)
 
             # u_state is a MODEL STATE: it represents where the four channels
@@ -1407,12 +1407,12 @@ class Controller(Node):
                 # perpetuates failure), and only disarm after sustained failure.
                 self._solve_fail_ct += 1
                 self.get_logger().warn(
-                    f"[Drone {self.drone_id}] acados status {status} "
+                    f"[Drone {self.drone_id + 1}] acados status {status} "
                     f"(consecutive fail {self._solve_fail_ct}) - holding last command.")
                 self.first_solve = True   # force set_initial_guess next cycle
                 if self._solve_fail_ct > MAX_CONSEC_SOLVE_FAILS:
                     self.get_logger().error(
-                        f"[Drone {self.drone_id}] {self._solve_fail_ct} consecutive "
+                        f"[Drone {self.drone_id + 1}] {self._solve_fail_ct} consecutive "
                         f"solver failures - disarming for safety.")
                     self.cb.disarm(ELRSCommand(
                         armed=False, channel_0=0.0, channel_1=0.0,
@@ -1561,7 +1561,7 @@ class Controller(Node):
     # ─────────────────────────────────────────────────────────────────────
 
     def signal_handler(self, sig, frame):
-        print(f"[Drone {self.drone_id}] Interrupt received, shutting down...")
+        print(f"[Drone {self.drone_id + 1}] Interrupt received, shutting down...")
         self.on_close()
         sys.exit(0)
 

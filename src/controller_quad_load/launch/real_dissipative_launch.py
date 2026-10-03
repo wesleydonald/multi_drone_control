@@ -68,6 +68,8 @@ def _args():
     return [
         # Must match the num_drones given to real_io_launch.py.
         DeclareLaunchArgument('num_drones', default_value='2'),
+        # ARM waits for each flight controller's own armed report (CRSF flight mode)
+        DeclareLaunchArgument('require_fc_armed', default_value='true'),
         # MUST match the physical rig, not the sim SDF.
         DeclareLaunchArgument('cable_len', default_value='0.5'),
         # where the rim attachments are (deg, load frame, sized by num_drones); '' = even
@@ -234,7 +236,9 @@ def launch_setup(context, *args, **kwargs):
     # ── Central fleet manager ─────────────────────────────────────────────────
     nodes.append(Node(
         package='controller_quad_load', executable='main', name='central_controller',
-        parameters=[{'num_drones': n}], output='screen'))
+        parameters=[{'num_drones': n,
+                     'require_fc_armed': LaunchConfiguration('require_fc_armed').perform(context).lower() == 'true'}],
+        output='screen'))
 
     # ── Decentralized dissipative reference generator ─────────────────────────
     # Replaces controller_load_mpc/planner. OCP takeoff until /fleet/detach, then

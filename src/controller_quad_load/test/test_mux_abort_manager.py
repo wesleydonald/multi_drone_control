@@ -163,7 +163,7 @@ def test_arm_refused_while_a_mux_is_latched_before_any_service_call(sync):
     f = _fake(mux_state={0: 'ours', 3: 'latched'})
     f.fleet_armed = True
     f._arm_fleet_thread()
-    assert 'ARM REFUSED: mux latched on drone 3 (relaunch the muxes)' in f._log.lines
+    assert 'ARM REFUSED: mux latched on drone 4 (relaunch the muxes)' in f._log.lines
     assert all(c.calls == 0 for c in f.arming_clients.values())
     assert not f.fleet_armed and f.service_disarms == [] and f.abort_pub.msgs == []
     f._takeoff_fleet()
@@ -239,7 +239,7 @@ def test_live_late_manager_reads_latch_and_refuses_arm(monkeypatch):
         mgr.get_logger = lambda: types.SimpleNamespace(
             info=logs.append, warn=logs.append, error=logs.append)
         mgr._arm_fleet_thread()
-        assert 'ARM REFUSED: mux latched on drone 2 (relaunch the muxes)' in logs
+        assert 'ARM REFUSED: mux latched on drone 3 (relaunch the muxes)' in logs
         assert not mgr.fleet_armed
         for n in (mux, helper, mgr):
             n.destroy_node()

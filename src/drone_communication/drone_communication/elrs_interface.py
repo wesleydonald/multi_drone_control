@@ -13,6 +13,9 @@ import numpy as np
 from datetime import datetime
 
 from interfaces.msg import MotionCaptureState, ELRSCommand, Telemetry  # Import the Telemetry message
+from std_msgs.msg import Bool
+
+from drone_communication.arm_switch import ArmSwitch
 
 CRSF_SYNC = 0xC8
 
@@ -131,7 +134,14 @@ class ELRSInterface(Node):
         self.range = 820
         self.armed = False
         self.packet = np.full(16, self.idle, dtype=np.uint16)
-        self.packet[4] = 0
+        self.packet[4] = self.idle - self.range
+
+        # arm confirmed against the FC's flight-mode telemetry (arm_switch.py)
+        self.arm_switch = ArmSwitch()
+        self.mode_t = None
+        self.fc_arm_state = 'disarmed'
+        self.fc_state_pub = self.create_publisher(String, 'fc_arm_state', 10)
+        self.fc_armed_pub = self.create_publisher(Bool, 'fc_armed', 10)
 
         self.battery_voltage = 0.0
         self.battery_mah_used = 0
@@ -218,14 +228,10 @@ class ELRSInterface(Node):
         self.last_message_time = time.time()  # Update the timestamp of the most recent message
         self.armed = bool(msg.armed)  # Ensure msg.armed is explicitly converted to a boolean
 
-        self.get_logger().info(f"Armed: {self.armed}")
-
         self.packet[0] = self.idle + int(max(-1.0, min(1.0, msg.channel_0)) * self.range)
         self.packet[1] = self.idle + int(max(-1.0, min(1.0, msg.channel_1)) * self.range)
         self.packet[2] = self.idle + int(max(-1.0, min(1.0, msg.channel_2)) * self.range)
         #self.packet[2] = self.idle - self.range + int(max(0.0, min(1.0, msg.channel_2)) * 2 * self.range) #betaflight throttle
-        print(f"Channel 2: {self.packet[2]} (msg.channel_2: {msg.channel_2})")
-
         self.packet[3] = self.idle + int(max(-1.0, min(1.0, msg.channel_3)) * self.range)
         self.packet[5] = self.idle + int(max(-1.0, min(1.0, msg.channel_4)) * self.range)
         self.packet[6] = self.idle + int(max(-1.0, min(1.0, msg.channel_5)) * self.range)
@@ -235,10 +241,7 @@ class ELRSInterface(Node):
         self.packet[10] = self.idle + int(max(-1.0, min(1.0, msg.channel_9)) * self.range)
         self.packet[11] = self.idle + int(max(-1.0, min(1.0, msg.channel_10)) * self.range)
 
-        if self.armed:
-            self.packet[4] = 2000
-        else:
-            self.packet[4] = 0
+        # packet[4] (the arm switch) is set every tick in publish_message by the arm switch
 
     def handleCrsfPacket(self, ptype, data):
         if ptype == PacketsTypes.RADIO_ID and data[5] == 0x10:
@@ -267,6 +270,7 @@ class ELRSInterface(Node):
             packet = ''.join(map(chr, data[3:-2]))
             print(f"Flight Mode: {packet}")
             self.mode = ''.join(map(chr, data[3:-2]))  # Update mode
+            self.mode_t = time.time()
         elif ptype == PacketsTypes.BATTERY_SENSOR:
             vbat = int.from_bytes(data[3:5], byteorder='big', signed=True) / 10.0
             curr = int.from_bytes(data[5:7], byteorder='big', signed=True) / 10.0
@@ -297,6 +301,16 @@ class ELRSInterface(Node):
             packet = ' '.join(map(hex, data))
             print(f"Unknown 0x{ptype:02x}: {packet}")
 
+    def _update_arm_switch(self):
+        high, state = self.arm_switch.update(self.armed, time.time(), self.mode, self.mode_t)
+        self.packet[4] = self.idle + self.range if high else self.idle - self.range
+        if state != self.fc_arm_state:
+            self.fc_arm_state = state
+            log = self.get_logger().error if state.startswith('failed') else self.get_logger().info
+            log(f'arm ({self.serial_port or "radio"}): {state}')
+            self.fc_state_pub.publish(String(data=f'{state} [{self.serial_port}]'))
+            self.fc_armed_pub.publish(Bool(data=state == 'armed'))
+
     def publish_telemetry(self):
         # Publish telemetry data at 10Hz
         telemetry_msg = Telemetry()
@@ -305,6 +319,9 @@ class ELRSInterface(Node):
         telemetry_msg.rssi = self.rssi
         telemetry_msg.mode = self.mode
         self.telemetry_publisher.publish(telemetry_msg)
+        # re-publish the arm state at 10 Hz so a late subscriber (the manager) sees it
+        self.fc_state_pub.publish(String(data=f'{self.fc_arm_state} [{self.serial_port}]'))
+        self.fc_armed_pub.publish(Bool(data=self.fc_arm_state == 'armed'))
 
     def publish_message(self):
         # Check if no message has been received for 0.1 seconds
@@ -315,12 +332,14 @@ class ELRSInterface(Node):
             # print(" -------------------------- THIS TRIGGERED --------------------------")
             self.armed = False
             self.packet = np.full(16, self.idle, dtype=np.uint16)
-            self.packet[4] = 0
 
         try:
+            self._update_arm_switch()
+            # read whatever telemetry is waiting, then ALWAYS send the channel frame
+            # (an elif here skipped the frame on every tick that had telemetry bytes)
             if self.ser and self.ser.in_waiting > 0:
                 self.input.extend(self.ser.read(self.ser.in_waiting))
-            elif self.ser:
+            if self.ser:
                 if self.magnet_value is not None:
                     apply_magnet(self.packet, self.magnet_channel, self.magnet_value,
                                  self.idle, self.range)

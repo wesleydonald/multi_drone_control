@@ -57,6 +57,8 @@ from launch_ros.parameter_descriptions import ParameterValue
 def _args():
     return [
         DeclareLaunchArgument('num_drones', default_value='3'),      # TETHERED fleet size
+        # ARM waits for each flight controller's own armed report (CRSF flight mode)
+        DeclareLaunchArgument('require_fc_armed', default_value='true'),
         DeclareLaunchArgument('reserved_attach', default_value='1'),
         # ── rig geometry / payload: MEASURED, never the sim defaults ─────────
         DeclareLaunchArgument('cable_len', default_value='0.5'),
@@ -194,7 +196,9 @@ def launch_setup(context, *args, **kwargs):
 
     nodes.append(Node(
         package='controller_quad_load', executable='main', name='central_controller',
-        parameters=[{'num_drones': n}], output='screen'))
+        parameters=[{'num_drones': n,
+                     'require_fc_armed': LaunchConfiguration('require_fc_armed').perform(context).lower() == 'true'}],
+        output='screen'))
 
     nodes.append(Node(
         package='controller_dissipative', executable='dissipative', name='dissipative_controller',

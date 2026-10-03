@@ -160,7 +160,7 @@ spin_until(lambda: 'ARM REFUSED' in read(log2), 20, 'ARM REFUSED on the gate log
 t0 = time.time()
 while time.time() - t0 < 3.0:
     rclpy.spin_once(node, timeout_sec=0.1)
-refused = sorted(set(int(d) for d in re.findall(r'ARM REFUSED: mux latched on drone (\d)', read(log2))))
+refused = sorted(set(int(d) - 1 for d in re.findall(r'ARM REFUSED: mux latched on drone (\d)', read(log2))))
 armed_attempt = 'Arming all drones' in read(log2)
 pids_now = sorted(int(x) for x in re.findall(r'elrs_mux-\d+\]: process started with pid \[(\d+)\]',
                                              read(mux_log)))

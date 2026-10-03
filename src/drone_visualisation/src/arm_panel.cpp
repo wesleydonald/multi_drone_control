@@ -287,7 +287,7 @@ void ArmPanel::updateDroneLabel(int i)
                             : QString("thr --");
   const bool at_cap = drone_cap_since_[i] >= 0.0 &&
                       wallNow() - drone_cap_since_[i] >= THR_CAP_HOLD_S;
-  QString text = QString("D%1   %2   %3   %4%5").arg(i).arg(armed_str).arg(volt_str).arg(thr_str)
+  QString text = QString("D%1   %2   %3   %4%5").arg(i + 1).arg(armed_str).arg(volt_str).arg(thr_str)
                    .arg(at_cap ? "  AT CAP" : "");
 
   // Nothing heard from this drone at all -- neutral grey, not a battery colour.
@@ -463,7 +463,7 @@ void ArmPanel::updateMagnetButton(int i)
     return;
   }
   const bool on = magnet_buttons_[i]->isChecked();
-  magnet_buttons_[i]->setText(QString("MAGNET D%1   %2%3").arg(i).arg(on ? "ON" : "OFF")
+  magnet_buttons_[i]->setText(QString("MAGNET D%1   %2%3").arg(i + 1).arg(on ? "ON" : "OFF")
                                 .arg(is_armed_ ? "   (locked while armed)" : ""));
   magnet_buttons_[i]->setStyleSheet(on
     ? "background-color: #20c997; color: white; font-weight: bold;"

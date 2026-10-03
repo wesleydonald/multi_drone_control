@@ -109,6 +109,16 @@ class CentralController(Node):
                 lambda msg, drone_id=i: self._arming_feedback_callback(msg, drone_id),
                 5)
 
+        # ── Flight-controller arm confirmation (rig only: elrs_interface reads the FC's
+        #    CRSF flight mode; the sims have no FC telemetry, so it is off by default) ──
+        self.require_fc_armed = bool(self.declare_parameter('require_fc_armed', False).value)
+        self.fc_arm_state = {}
+        if self.require_fc_armed:
+            for i in range(self.num_drones):
+                self.create_subscription(
+                    String, f'/drone_{i}/fc_arm_state',
+                    lambda msg, drone_id=i: self.fc_arm_state.__setitem__(drone_id, msg.data), 10)
+
         # ── Per-drone ELRS mux state (drones with a mux only) ─────────────
         self.mux_state = {}
         for i in range(self.num_drones):
@@ -191,7 +201,7 @@ class CentralController(Node):
     def _mux_state_callback(self, msg: String, drone_id: int):
         state = msg.data.strip().lower()
         if self.mux_state.get(drone_id) != state:
-            self.get_logger().info(f"Drone {drone_id} mux: {state}")
+            self.get_logger().info(f"Drone {label(drone_id)} mux: {state}")
         self.mux_state[drone_id] = state
 
     def _arming_feedback_callback(self, msg: Bool, drone_id: int):
@@ -204,11 +214,11 @@ class CentralController(Node):
         # rather than abort, which would latch the partner's drones behind the muxes.
         if self.fleet_armed and not self.flying and was_armed and not msg.data:
             _announce(self, 'error',
-                      f"Drone {drone_id} disarmed before TAKEOFF: fleet disarmed, TAKEOFF refused. "
+                      f"Drone {label(drone_id)} disarmed before TAKEOFF: fleet disarmed, TAKEOFF refused. "
                       f"Usually a pose timeout (mocap lost > 0.25 s) or a solver failure: see drone "
-                      f"{drone_id}'s lines above. Relaunch T2 to retry.")
+                      f"{label(drone_id)}'s lines above. Relaunch T2 to retry.")
             self._disarm_fleet(emergency=False,
-                               reason=f"drone {drone_id} disarmed before TAKEOFF")
+                               reason=f"drone {label(drone_id)} disarmed before TAKEOFF")
             return
 
         # If a drone disarmed unexpectedly while the fleet is flying,
@@ -219,16 +229,16 @@ class CentralController(Node):
                 # tracker's own disarm does not reach the radio, and grounding everyone
                 # for it would drop a drone we do not fly (ruling F5, R0618).
                 self.get_logger().warn(
-                    f"Drone {drone_id} tracker disarmed while its mux forwards the "
+                    f"Drone {label(drone_id)} tracker disarmed while its mux forwards the "
                     f"partner - not escalating to a fleet abort.")
                 return
             _announce(self, 'error',
-                      f"Drone {drone_id} disarmed in flight: EMERGENCY STOP for the whole fleet. "
-                      f"See drone {drone_id}'s lines above for why (pose timeout, envelope, "
+                      f"Drone {label(drone_id)} disarmed in flight: EMERGENCY STOP for the whole fleet. "
+                      f"See drone {label(drone_id)}'s lines above for why (pose timeout, envelope, "
                       f"reference stale).")
             self._disarm_fleet(
                 emergency=True,
-                reason=f"drone {drone_id} disarmed unexpectedly")
+                reason=f"drone {label(drone_id)} disarmed unexpectedly")
 
     # ─────────────────────────────────────────────────────────────────────
     # Fleet operations (run in background threads to avoid blocking the
@@ -246,7 +256,7 @@ class CentralController(Node):
         if latched:
             self.fleet_armed = False
             for i in latched:
-                _announce(self, 'error', f"ARM REFUSED: mux latched on drone {i} (relaunch the muxes)")
+                _announce(self, 'error', f"ARM REFUSED: mux latched on drone {label(i)} (relaunch the muxes)")
             return
         self.get_logger().debug("Arming all drones...")
         self.fleet_armed = False          # a repeat ARM must re-earn it
@@ -256,10 +266,10 @@ class CentralController(Node):
             client = self.arming_clients[i]
             if not client.wait_for_service(timeout_sec=5.0):
                 _announce(self, 'error',
-                          f"ARM FAILED for drone(s) [{i}]: its tracker is not up (not started, or "
+                          f"ARM FAILED for drone(s) [{label(i)}]: its tracker is not up (not started, or "
                           f"still building its solver). Fleet disarmed; TAKEOFF refused. Relaunch T2.")
                 self._disarm_fleet(emergency=False,
-                                   reason=f"arming service for drone {i} not available")
+                                   reason=f"arming service for drone {label(i)} not available")
                 return
 
         # Send arm requests in parallel
@@ -279,14 +289,14 @@ class CentralController(Node):
             if future.done():
                 result = future.result()
                 if result.success:
-                    self.get_logger().debug(f"Drone {i} armed: {result.message}")
+                    self.get_logger().debug(f"Drone {label(i)} armed: {result.message}")
                 else:
                     failed.append(i)
-                    self.get_logger().error(f"Drone {i} refused ARM: {result.message}")
+                    self.get_logger().error(f"Drone {label(i)} refused ARM: {result.message}")
             else:
                 failed.append(i)
                 self.get_logger().error(
-                    f"Drone {i} did not answer ARM within 5 s (tracker busy, e.g. building its solver).")
+                    f"Drone {label(i)} did not answer ARM within 5 s (tracker busy, e.g. building its solver).")
 
         if failed:
             # A fleet missing a drone must not take off: the others would lift and
@@ -296,13 +306,38 @@ class CentralController(Node):
             # ours is flying yet, and in M2 the partner's drones hold the ring behind
             # the muxes, which an abort would latch down.
             _announce(self, 'error',
-                      f"ARM FAILED for drone(s) {failed}: fleet disarmed; TAKEOFF refused. "
+                      f"ARM FAILED for drone(s) {[label(i) for i in failed]}: fleet disarmed; TAKEOFF refused. "
                       f"Relaunch T2 to retry (the disarm shuts the trackers down).")
             self._disarm_fleet(emergency=False,
-                               reason=f"ARM failed for drone(s) {failed}")
+                               reason=f"ARM failed for drone(s) {[label(i) for i in failed]}")
+            return
+        if getattr(self, 'require_fc_armed', False) and not self._wait_fc_armed():
             return
         self.fleet_armed = True
         _announce(self, 'info', f"ARM sequence complete: all {self.num_drones} armed, ready for TAKEOFF.")
+
+    def _wait_fc_armed(self, timeout_s=7.0):
+        """Wait until every flight controller reports armed (or cannot say). A refused arm
+        disarms the fleet and names the drone, its radio and what the FC reported."""
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            states = {i: self.fc_arm_state.get(i, '') for i in range(self.num_drones)}
+            if all(st.startswith(('armed', 'unconfirmed', 'failed')) for st in states.values()):
+                break
+            time.sleep(0.1)
+        states = {i: self.fc_arm_state.get(i, '') or 'no arm state from its radio node'
+                  for i in range(self.num_drones)}
+        bad = {i: st for i, st in states.items() if not st.startswith(('armed', 'unconfirmed'))}
+        for i, st in states.items():
+            if st.startswith('unconfirmed'):
+                _announce(self, 'warn', f"drone {label(i)}: arm not confirmed by its FC ({st})")
+        if bad:
+            for i, st in bad.items():
+                _announce(self, 'error', f"ARM FAILED: drone {label(i)}: {st}")
+            self._disarm_fleet(emergency=False,
+                               reason=f"FC did not arm: drone(s) {[label(i) for i in bad]}")
+            return False
+        return True
 
     def _takeoff_fleet(self):
         if not self.fleet_armed:
@@ -313,10 +348,10 @@ class CentralController(Node):
         not_armed = [i for i in range(self.num_drones) if not self.drone_armed.get(i)]
         if not_armed:
             _announce(self, 'error',
-                      f"TAKEOFF REFUSED: drone(s) {not_armed} not armed: fleet disarmed. "
+                      f"TAKEOFF REFUSED: drone(s) {[label(i) for i in not_armed]} not armed: fleet disarmed. "
                       f"Relaunch T2 to retry.")
             self._disarm_fleet(emergency=False,
-                               reason=f"drone(s) {not_armed} not armed at TAKEOFF")
+                               reason=f"drone(s) {[label(i) for i in not_armed]} not armed at TAKEOFF")
             return
         self.master_step = 0
         self.flying = True
@@ -379,7 +414,7 @@ class CentralController(Node):
                 futures[i] = client.call_async(req)
             else:
                 self.get_logger().warn(
-                    f"Drone {i}: tracker not answering, its disarm is not confirmed (the radio "
+                    f"Drone {label(i)}: tracker not answering, its disarm is not confirmed (the radio "
                     f"disarm and /fleet/abort still apply on an emergency stop).")
 
         deadline = time.time() + 3.0
@@ -389,7 +424,7 @@ class CentralController(Node):
             if future.done():
                 result = future.result()
                 self.get_logger().debug(
-                    f"Drone {i} disarm response: {result.message}")
+                    f"Drone {label(i)} disarm response: {result.message}")
 
         self.get_logger().info("Disarm complete.")
 
@@ -398,6 +433,11 @@ class CentralController(Node):
         for i in range(self.num_drones):
             self.drone_cmd_publishers[i].publish(msg)
         self.get_logger().debug(f"Published '{command}' to all {self.num_drones} drone command topics.")
+
+
+def label(i):
+    """The drone number people see (radios and airframes are labelled QUAD1..): index + 1."""
+    return int(i) + 1
 
 
 def _announce(node, level, text):

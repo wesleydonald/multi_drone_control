@@ -67,7 +67,7 @@ def test_one_drone_fails_blocks_takeoff(bad):
     f = _fake({0: _Client(bad), 1: _Client(True), 2: _Client(True)})
     _arm(f)
     assert not f.fleet_armed
-    assert f.aborts and f.aborts[0][0] is False and '[0]' in f.aborts[0][1]
+    assert f.aborts and f.aborts[0][0] is False and '[1]' in f.aborts[0][1]
     m.CentralController._takeoff_fleet(f)
     assert f.cmds == [] and not f.flying
 

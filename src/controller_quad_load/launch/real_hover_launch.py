@@ -27,6 +27,8 @@ from launch_ros.parameter_descriptions import ParameterValue
 def _args():
     return [
         DeclareLaunchArgument('num_drones', default_value='3'),
+        # ARM waits for each flight controller's own armed report (CRSF flight mode)
+        DeclareLaunchArgument('require_fc_armed', default_value='true'),
         # absolute hover height (m) and the vertical rates of the reference ramp
         DeclareLaunchArgument('hover_z', default_value='0.8'),
         DeclareLaunchArgument('climb_vel', default_value='0.15'),
@@ -95,7 +97,9 @@ def launch_setup(context, *args, **kwargs):
 
     nodes.append(Node(
         package='controller_quad_load', executable='main', name='central_controller',
-        parameters=[{'num_drones': n}], output='screen'))
+        parameters=[{'num_drones': n,
+                     'require_fc_armed': LaunchConfiguration('require_fc_armed').perform(context).lower() == 'true'}],
+        output='screen'))
 
     nodes.append(Node(
         package='controller_quad_load', executable='free_hover', name='free_hover',

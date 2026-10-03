@@ -241,6 +241,6 @@ def slot_azimuth_errors(drone_pos, load_xy, load_yaw, slot2drone, slot_az):
 
 def slot_offset_warnings(errors, tol_deg=SLOT_OFFSET_WARN_DEG):
     """Operator lines for the slots whose |error| exceeds tol_deg (see slot_azimuth_errors)."""
-    return [f'drone {d} sits {err:+.0f} deg from plate {plate}: check the ring rigid body '
+    return [f'drone {d + 1} sits {err:+.0f} deg from plate {plate}: check the ring rigid body '
             f'(+x toward plate 0) or the magnet plates'
             for d, err, plate in errors if abs(err) > tol_deg]

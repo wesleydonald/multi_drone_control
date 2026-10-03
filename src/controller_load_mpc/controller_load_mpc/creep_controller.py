@@ -55,6 +55,7 @@ class CreepController:
         self.hz = hz                       # planner control rate (Hz)
         self._drone_at = drone_at          # slot i -> measured rod pivot (drone centre if none)
         self._publish_ref = publish_ref    # (i, nodes) -> publish drone i's ref
+        self.label = lambda i: i + 1       # slot i -> drone number shown in logs (set by the planner)
         # The arcs are swept for the rod PIVOT; the tracker flies the drone centre, which
         # sits -R @ pivot_offset from it (R level at the drone's heading: creep refs are
         # level hover thrust).
@@ -277,7 +278,7 @@ class CreepController:
         self._diag_ctr += 1
         if self._diag_ctr % int(max(self.hz, 1)) == 0:
             meas = '  '.join(
-                f"d{i}:{np.degrees(np.arcsin(np.clip(self.sin_elev(i, load_state),-1,1))):.1f}"
+                f"d{self.label(i)}:{np.degrees(np.arcsin(np.clip(self.sin_elev(i, load_state),-1,1))):.1f}"
                 for i in range(self.n))
             self._log.info(
                 f"[planner arc-creep] ref={np.degrees(th):.1f}deg "
@@ -311,7 +312,7 @@ class CreepController:
             self.lifted_off = True
             self._log.info(
                 '[planner] airborne arc creep: '
-                + ' '.join(f'd{i}:{np.degrees(t):.1f}' for i, t in enumerate(self._arc_th))
+                + ' '.join(f'd{self.label(i)}:{np.degrees(t):.1f}' for i, t in enumerate(self._arc_th))
                 + f' -> {self.handover_elev_deg:.1f} deg (rod {self.cable_len:.2f} m)')
         target = np.deg2rad(self.handover_elev_deg)
         dtheta = self.creep_vel / max(self.cable_len, 1e-6) / self.hz
@@ -336,7 +337,7 @@ class CreepController:
         self._diag_ctr += 1
         if self._diag_ctr % int(max(self.hz, 1)) == 0:
             meas = '  '.join(
-                f"d{i}:{np.degrees(np.arcsin(np.clip(self.sin_elev(i, load_state),-1,1))):.1f}"
+                f"d{self.label(i)}:{np.degrees(np.arcsin(np.clip(self.sin_elev(i, load_state),-1,1))):.1f}"
                 for i in range(self.n))
             self._log.info(
                 '[planner arc-creep] ref=' + ' '.join(f'{np.degrees(t):.0f}' for t in self._arc_th)
@@ -382,10 +383,10 @@ class CreepController:
         if self._diag_ctr % int(max(self.hz, 1)) == 0:
             if self.handover_elev_deg > 0.0:
                 s = '  '.join(
-                    f"d{i}:elev={np.degrees(np.arcsin(np.clip(self.sin_elev(i, load_state),-1,1))):.1f}deg"
+                    f"d{self.label(i)}:elev={np.degrees(np.arcsin(np.clip(self.sin_elev(i, load_state),-1,1))):.1f}deg"
                     for i in range(self.n))
                 s += f"  (handover at {self.handover_elev_deg:.0f}deg)"
             else:
-                s = '  '.join(f"d{i}:dist={d:.2f} gate={g:.2f}"
+                s = '  '.join(f"d{self.label(i)}:dist={d:.2f} gate={g:.2f}"
                               for i, (g, d) in enumerate(gates))
             self._log.info(f"[planner creep] vz={self.creep_vel:.2f}  {s}")

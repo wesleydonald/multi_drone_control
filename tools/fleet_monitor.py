@@ -213,7 +213,7 @@ def gui(state, exit_after_ms=None):
         age = (now - rg['t']) if rg['t'] else None
         ring.setText('Ring: --' if age is None or age > 1.0 else f'Ring: z {rg["z"]:.2f} m, tilt {rg["tilt"]:.1f} deg')
         for i, d in enumerate(drones):
-            cell(i, 0, f'D{i}')
+            cell(i, 0, f'D{i + 1}')
             cell(i, 1, '--' if d['armed'] is None else ('ARMED' if d['armed'] else 'disarmed'),
                  amber if d['armed'] else None)
             a = (now - d['pose_t']) if d['pose_t'] else None

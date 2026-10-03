@@ -21,7 +21,7 @@ draws the scene straight from the mocap topics.
     spin up; the
     rigid-body map must be edited to match (the node routes bodies by ID).
   * ELRS: one elrs_interface per drone, namespaced to /drone_i, each bound to its
-    own TX serial device (default /dev/QUAD<i>; udev symlinks QUAD0/1/...).
+    own TX serial device (default /dev/QUAD<i+1>: drone i is the airframe labelled QUAD<i+1>).
   * fleet_viz: from the mocap topics alone it broadcasts TF map -> drone_i_mocap
     and map -> payload_mocap, and publishes the PAYLOAD box (/payload/marker). No
     Gazebo needed -- it is pure mocap in, TF + marker out.
@@ -38,7 +38,7 @@ draws the scene straight from the mocap topics.
 
 Run:
     ros2 launch controller_quad_load real_io_launch.py num_drones:=2
-    #   drone0_serial:=/dev/QUAD0 drone1_serial:=/dev/QUAD1 ...   (defaults)
+    #   drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 ...   (defaults)
     #   drone<i>_magnet_initial:=... overrides magnet_initial for one radio
 
 The M1/M2 rig launches (three_attach_launch.py / dissipative_launch.py real:=true) include
@@ -148,14 +148,14 @@ def launch_setup(context, *args, **kwargs):
         package='simulation_communication', executable='fleet_viz',
         name='fleet_viz', parameters=[{'num_drones': n}], output='screen'))
 
-    # Per-drone ELRS TX serial args (default QUAD<i>) + a robot_state_publisher
+    # Per-drone ELRS TX serial args (default QUAD<i+1>, as real_mode.py) + a robot_state_publisher
     # serving that drone's coloured mesh, its root link renamed to the fleet_viz
     # frame drone_<i>_mocap so the airframe follows the live pose. Declared here
     # (not in _args) because the count depends on the resolved num_drones.
     for i in range(n):
         arg = f'drone{i}_serial'
         nodes.append(DeclareLaunchArgument(
-            arg, default_value=f'/dev/QUAD{i}',
+            arg, default_value=f'/dev/QUAD{i + 1}',
             description=f'drone {i} ELRS TX serial device (udev symlink)'))
         # one drone's radio latch, default magnet_initial (real_attach_launch.py drives the
         # newcomer's magnet through its mux merge, so its latch must stay '' there; the M1/M2

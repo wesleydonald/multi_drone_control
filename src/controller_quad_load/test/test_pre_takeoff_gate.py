@@ -26,7 +26,7 @@ def test_disarm_between_arm_and_takeoff_grounds_the_fleet(sync):
     _armed(f)
     f._arming_feedback_callback(Bool(data=False), 2)
     assert _grounded_quietly(f)
-    assert any('Drone 2 disarmed before TAKEOFF' in s for s in f._log.lines)
+    assert any('Drone 3 disarmed before TAKEOFF' in s for s in f._log.lines)
     f._takeoff_fleet()
     assert f.cmds == [] and not f.flying
 
@@ -59,7 +59,7 @@ def test_false_before_fleet_armed_is_caught_at_takeoff(sync):
     assert f.fleet_armed and f.service_disarms == []
     f._takeoff_fleet()
     assert f.cmds == [] and _grounded_quietly(f)
-    assert any('TAKEOFF REFUSED: drone(s) [1] not armed' in s for s in f._log.lines)
+    assert any('TAKEOFF REFUSED: drone(s) [2] not armed' in s for s in f._log.lines)
 
 
 def test_late_true_then_takeoff_is_accepted(sync):

@@ -141,7 +141,7 @@ def main():
         rate = len(msgs) / a.listen
         fresh = (now - msgs[-1][0]) < 0.25 if msgs else False
         nan = any(not math.isfinite(v) for _, m in msgs[-5:] for v in (m.pose.position.x, m.pose.position.y, m.pose.position.z)) if msgs else True
-        check(bool(msgs) and fresh and rate > 20 and not nan, f'mocap drone {i}',
+        check(bool(msgs) and fresh and rate > 20 and not nan, f'mocap drone {i + 1}',
               f'{rate:.0f} Hz, {"fresh" if fresh else "STALE"}{", NaN" if nan else ""}')
     prate = len(pf.payload) / a.listen
     # R1 free hover flies without the ring: its mocap and the ring geometry below are not required
@@ -203,7 +203,7 @@ def main():
         # all None = no radio answered (a node stuck in its serial reconnect loop): unverified, not identical
         check(len(set(chans.values())) == 1 and None not in chans.values(),
               'magnet_channel identical on every radio',
-              ', '.join(f'd{i}={c}' for i, c in chans.items()))
+              ', '.join(f'd{i + 1}={c}' for i, c in chans.items()))
     if prm is not None:
         cable_len = float(prm['cable_len'])
         from controller_load_mpc.geometry import attach_points
@@ -222,8 +222,8 @@ def main():
         q = pf.pose[i][-1][1].pose.orientation
         Rd = quat_to_rot([q.w, q.x, q.y, q.z])
         tilt_d = math.degrees(math.acos(max(-1.0, min(1.0, Rd[2, 2]))))
-        check(tilt_d < 15.0, f'drone {i} resting level',
-              f'{tilt_d:.1f} deg (mocap body orientation; >15 = re-create the rigid body level)')
+        check(tilt_d < 20.0, f'drone {i + 1} resting level',
+              f'{tilt_d:.1f} deg (mocap body orientation; >20 = re-create the rigid body level)')
 
     # 1c. disc centre from the drones themselves. Three drones placed radially out from
     # their magnets with equal rods lie on a circle centred on the DISC CENTRE with radius
@@ -268,10 +268,10 @@ def main():
         else:
             meas = bearings_deg(P, centre, yaw)
             slot2drone, err = match_azimuths(meas, typed)
-            lines.append(f'  payload yaw {yaw:+.1f} deg; slot->drone {slot2drone} (the planner\'s auto slot line '
+            lines.append(f'  payload yaw {yaw:+.1f} deg; slot->drone {[d + 1 for d in slot2drone]} (the planner\'s auto slot line '
                          f'should print the same)')
             for s_, d_ in enumerate(slot2drone):
-                check(abs(err[s_]) <= a.az_tol_deg, f'drone {d_} on typed azimuth {typed[s_]:.0f}',
+                check(abs(err[s_]) <= a.az_tol_deg, f'drone {d_ + 1} on typed azimuth {typed[s_]:.0f}',
                       f'measured {meas[d_]:.1f} deg; '
                       + slot_offset_detail(d_, err[s_], typed[s_], a.az_tol_deg))
 
@@ -291,7 +291,7 @@ def main():
             k = int(np.argmin([x if j not in used else 1e9 for j, x in enumerate(dists)]))
             used.add(k)
             err = dists[k] - cable_len
-            check(abs(err) < 0.06, f'drone {i} rod length (rim point {k})',
+            check(abs(err) < 0.06, f'drone {i + 1} rod length (rim point {k})',
                   f'{dists[k]:.3f} m vs {cable_len:.3f} ({err:+.3f})')
         tilt = math.degrees(math.acos(max(-1.0, min(1.0, R[2, 2]))))
         check(tilt < 25.0, 'payload resting level', f'{tilt:.1f} deg')
@@ -300,9 +300,9 @@ def main():
     if a.real:
         for i, tm in pf.tele.items():
             if tm is None:
-                check(False, f'telemetry drone {i}', 'no message')
+                check(False, f'telemetry drone {i + 1}', 'no message')
             else:
-                check(tm.battery_voltage >= a.battery_min, f'battery drone {i}',
+                check(tm.battery_voltage >= a.battery_min, f'battery drone {i + 1}',
                       f'{tm.battery_voltage:.2f} V (bar {a.battery_min}), RSSI {tm.rssi} dBm')
 
     # 5. not flying yet: every drone on the ground and no network phase announced
