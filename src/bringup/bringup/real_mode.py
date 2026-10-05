@@ -126,7 +126,8 @@ def planner_options(context, resizes=False):
 
     Appended to a planner's parameters list. With dist_est set, the trackers' thrust map goes
     along (a numeric thrust_ratio is required). `resizes`: the graph can attach or detach a
-    drone mid-flight (int_mode model is refused there).
+    drone mid-flight (int_mode model is refused there). int_mode auto (the default since 5 Oct)
+    flies model wherever model is allowed and reference elsewhere.
     """
     opts = {}
     for k, kind in PLANNER_OPTIONAL.items():
@@ -136,12 +137,18 @@ def planner_options(context, resizes=False):
                        else v.lower())
     if opts.get('offset_free') == 'on' and truthy(context, 'kt_trim'):
         raise RuntimeError('offset_free on with kt_trim on: two adaptive loops on one vertical residual')
-    if opts.get('int_mode') == 'model':
-        why = ('the rig (sim only until the claim and Wesley\'s word)' if truthy(context, 'real')
-               else 'kt_trim on (two adaptive loops on one vertical residual)' if truthy(context, 'kt_trim')
-               else 'a fleet that can attach or detach mid-flight' if resizes else '')
-        if why:
+    if opts.get('int_mode') in ('model', 'auto'):
+        z_ki = LaunchConfiguration('z_ki').perform(context).strip()
+        dist = opts.get('dist_est', '')
+        why = ('kt_trim on (two adaptive loops on one vertical residual)'
+               if truthy(context, 'kt_trim')
+               else 'a fleet that can attach or detach mid-flight' if resizes
+               else 'z_ki 0 (it is the gain)' if not z_ki or float(z_ki) <= 0.0
+               else 'offset_free on' if opts.get('offset_free') == 'on'
+               else 'dist_est ' + dist if dist in ('ring', 'full') else '')
+        if why and opts['int_mode'] == 'model':
             raise RuntimeError(f'int_mode model refused with {why} (card 2026-10-04_z_int_model)')
+        opts['int_mode'] = 'reference' if why else 'model'
     if opts.get('dist_est', 'off') != 'off':
         for k in DIST_MAP:
             v = LaunchConfiguration(k).perform(context).strip()

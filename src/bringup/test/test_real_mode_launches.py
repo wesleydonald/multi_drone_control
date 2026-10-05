@@ -593,26 +593,29 @@ def test_sim_magnet_twin_only_with_the_gui():
 
 def test_rig_detach_launch_flies_the_rig_control_values():
     """The rig detach mode takes the rig carry's defaults (Wesley 2026-10-03): every
-    parameter the two give a node is the same; the detach is an OCP resize with the magnet
-    released."""
+    parameter the two give a node is the same, except int_mode (auto: a fleet that can detach
+    flies the reference integral); the detach is an OCP resize with the magnet released."""
     c = _by_name(rig('mpc', num_drones=4))
     d = _by_name(rig('dissipative', num_drones=4))
     for a, b in (('/tracker_0', '/tracker_0'), ('/fleet_manager', '/fleet_manager'),
                  ('/mpc_planner', '/dissipative_planner')):
         pa, pb = c[a]['params'], d[b]['params']
         assert set(pa) <= set(pb), sorted(set(pa) - set(pb))
-        assert {k: pb[k] for k in pa} == pa
+        same = [k for k in pa if k != 'int_mode']
+        assert {k: pb[k] for k in same} == {k: pa[k] for k in same}
+    modes = (c['/mpc_planner']['params']['int_mode'],
+             d['/dissipative_planner']['params']['int_mode'])
+    assert modes == ('model', 'reference')
     p = d['/dissipative_planner']['params']
     assert p['reconfig_mode'] == 'ocp' and p['detach_magnet'] is True
 
 
 def test_int_mode_model_reaches_the_planner_only_where_the_fleet_cannot_resize():
-    """Card 2026-10-04_z_int_model: passed only when set; refused on the rig, with kt_trim on and
-    with a fleet that can attach or detach mid-flight."""
+    """Card 2026-10-04_z_int_model: model refused with kt_trim on and with a fleet that can attach
+    or detach mid-flight; auto (the default since 5 Oct) falls back to reference there."""
     knobs = dict(int_mode='model', int_k_xy=5.4, int_k_z=8.5, kt_trim=False)
     p = _by_name(sim('mpc', num_drones=3, **knobs))['/mpc_planner']['params']
     assert (p['int_mode'], p['int_k_xy'], p['int_k_z']) == ('model', 5.4, 8.5)
-    assert 'int_mode' not in _by_name(sim('mpc', num_drones=3))['/mpc_planner']['params']
     sil_attach = _by_name(sim('attach', num_drones=3, reserved_attach=0, enable_approach=False,
                               **knobs))['/dissipative_planner']['params']
     assert sil_attach['int_mode'] == 'model'
@@ -622,5 +625,20 @@ def test_int_mode_model_reaches_the_planner_only_where_the_fleet_cannot_resize()
         sim('dissipative', num_drones=4, **knobs)
     with pytest.raises(RuntimeError, match='kt_trim'):
         sim('mpc', num_drones=3, **{**knobs, 'kt_trim': True})
-    with pytest.raises(RuntimeError, match='rig'):
-        rig('mpc', num_drones=3, thrust_ratio=35.2, **knobs)
+    with pytest.raises(RuntimeError, match='z_ki 0'):
+        sim('mpc', num_drones=3, **{**knobs, 'z_ki': 0.0})
+    rig_p = _by_name(rig('mpc', num_drones=3, thrust_ratio=35.2, **knobs))['/mpc_planner']['params']
+    assert rig_p['int_mode'] == 'model'
+
+
+def test_int_mode_auto_flies_model_wherever_model_is_allowed():
+    """Wesley 5 Oct: the model integral is the default; the rig carry flies it, with the rig twin's
+    stiffness; a resizing fleet, kt_trim on and z_ki 0 fall back to reference."""
+    p = _by_name(rig('mpc', num_drones=4))['/mpc_planner']['params']
+    assert (p['int_mode'], p['int_k_xy'], p['int_k_z']) == ('model', 5.26, 7.13)
+    def mode(launch, planner='/mpc_planner'):
+        return _by_name(launch)[planner]['params']['int_mode']
+    assert mode(sim('mpc', num_drones=3)) == 'reference'
+    assert mode(sim('mpc', num_drones=3, kt_trim=False)) == 'model'
+    assert mode(sim('mpc', num_drones=3, kt_trim=False, z_ki=0.0)) == 'reference'
+    assert mode(rig('dissipative', num_drones=4), '/dissipative_planner') == 'reference'
