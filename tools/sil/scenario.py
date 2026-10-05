@@ -46,8 +46,8 @@ class Acceptance:
 class Scenario:
     name: str
     description: str = ''
-    launch_package: str = 'controller_quad_load'
-    launch_file: str = 'three_attach_launch.py'
+    launch_package: str = 'bringup'
+    launch_file: str = 'sim_control_launch.py'
     launch_args: dict = field(default_factory=dict)
 
     n_tethered: int = 3
@@ -81,7 +81,7 @@ class Scenario:
     # formation (payload on the floor, tilt 163 deg) before the trackers had even
     # finished compiling. The elevated taut worlds this scenario represents put the
     # drones on stands for exactly this reason, and AIRBORNE_MARGIN /
-    # TAKEOFF_SPOOL_FLOOR in controller_mpc.py are both written for that break-off.
+    # TAKEOFF_SPOOL_FLOOR in tracker_node.py are both written for that break-off.
     #
     # The newcomer never gets a stand: it is a free flyer that has already taken off and
     # flown its approach.
@@ -162,7 +162,7 @@ class Scenario:
                 if abs(theirs - mine) > 1e-9:
                     bad.append(f'{arg}: launch {theirs} vs plant {mine}')
         if 'attach_azimuths_deg' in self.launch_args:
-            from controller_load_mpc.geometry import parse_azimuths_deg
+            from mpc_planner.geometry import parse_azimuths_deg
             la = parse_azimuths_deg(str(self.launch_args['attach_azimuths_deg']))
             mine = parse_azimuths_deg(self.attach_azimuths_deg)
             if la != mine:
@@ -189,11 +189,11 @@ class Scenario:
     def attach_rho(self):
         """The n_tethered cable attach points in the payload body frame.
 
-        Uses the same ring the controllers use -- controller_load_mpc.geometry
+        Uses the same ring the controllers use -- mpc_planner.geometry
         .attach_points(n_tethered, ...). Note it is built for the TETHERED count, not
         n_total: the newcomer does not get a nominal ring point, it welds where its
         magnet lands (see weld_point)."""
-        from controller_load_mpc.geometry import attach_points
+        from mpc_planner.geometry import attach_points
         return attach_points(self.n_tethered, self.attach_radius, self.attach_z,
                              self.attach_azimuths_deg or None)
 
@@ -232,10 +232,7 @@ class Scenario:
         tip = plant.p[i] - np.array([0.0, 0.0, self.magnet_arm_len])
         return plant.RL.T @ (tip - plant.xL)
 
-    def launch_argv(self):
-        out = []
-        for k, v in self.launch_args.items():
-            if isinstance(v, bool):
-                v = 'true' if v else 'false'
-            out.append(f'{k}:={v}')
-        return out
+    def launch_argv(self, params_path=None):
+        """Launch args; knobs that are not launch arguments go to params_path (launch_args.py)."""
+        import launch_args
+        return launch_args.argv(self.launch_file, self.launch_args, params_path)

@@ -3,7 +3,7 @@ elrs_mux.py
 -----------
 Two-input ELRSCommand multiplexer for the ATTACH handoff. The approach drone is flown by
 the collaborator's MPC (controller_mpc_payload) until its magnet welds to the payload, then
-by our dissipative tracker (controller_quad_load). Both stacks emit an ELRSCommand on
+by our tracker (package tracker). Both stacks emit an ELRSCommand on
 `/drone_{id}/ELRSCommand` through the shared CallbackManager; in the launch each is remapped
 to a pre-mux topic so they don't collide:
 

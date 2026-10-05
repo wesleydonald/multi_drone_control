@@ -1,9 +1,10 @@
 name: carry_circle_n3_long
 description: Circle 0.4 m/s baseline on the linear plant (planner offset card, circle off arm).
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 0
     enable_approach: false

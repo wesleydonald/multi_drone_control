@@ -2,9 +2,10 @@ name: attach_hover_net
 description: 'Card 2026-09-25_attach_ocp arm A control: same weld, folded in by the dissipative NETWORK
   (the shipped path), current tree (0.86 kg ring, linear plant, trim on, z_ki 0.4).'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 1
     start_taut: true

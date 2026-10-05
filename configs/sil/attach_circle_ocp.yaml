@@ -2,9 +2,10 @@ name: attach_circle_ocp
 description: 'Card 2026-09-25_attach_ocp arm B: weld DURING the 0.4 m/s circle (hold 10 s at the weld,
   then the circle resumes with four), OCP resize.'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 1
     start_taut: true

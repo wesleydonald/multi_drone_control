@@ -51,8 +51,10 @@ def test_an_included_launch_declares_its_args(tmp_path, monkeypatch):
 
 
 def test_the_sim_launch_declares_the_tracker_thrust_map():
-    names = R.declared_launch_args('controller_quad_load', 'mpc_quad_load_launch.py')
-    assert {'thrust_offset', 'thrust_offset_v_slope', 'thrust_v_ref', 'throttle_max'} <= names
+    names = R.declared_launch_args('bringup', 'sim_control_launch.py')
+    assert {'thrust_offset', 'thrust_offset_v_slope', 'throttle_max'} <= names
+    import launch_args                     # thrust_v_ref: a params_file knob, not an argument
+    assert not launch_args.unknown('sim_control_launch.py', {'thrust_v_ref': 23.5})
 
 
 def _cfg(tmp_path, name, **edit):
@@ -93,7 +95,7 @@ def test_legacy_world_on_the_rig_map_is_refused(tmp_path):
     p = _cfg(tmp_path, 'ocp_hover_ground_ring086.yaml')
     raw = yaml.safe_load(open(p))
     raw['launch']['args']['sim_thrust_map'] = 'rig'
-    raw.setdefault('io_launch', {'file': 'rviz_quad_load_launch.py', 'args': {}})
+    raw.setdefault('io_launch', {'file': 'sim_io_launch.py', 'args': {}})
     raw['io_launch'].setdefault('args', {})['sim_thrust_map'] = 'rig'
     open(p, 'w').write(yaml.safe_dump(raw))
     with pytest.raises(SystemExit, match='legacy world'):
@@ -119,19 +121,19 @@ def _controller_params(**args):
     from launch.actions import DeclareLaunchArgument, OpaqueFunction
     from launch_ros.actions import Node
     from launch_ros.utilities import evaluate_parameters
-    path = os.path.join(REPO, 'src/controller_quad_load/launch/mpc_quad_load_launch.py')
+    path = os.path.join(REPO, 'src/bringup/launch/sim_control_launch.py')
     spec = importlib.util.spec_from_file_location('launch_mpc_cfgcheck', path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     ctx = LaunchContext()
-    ctx.launch_configurations.update({k: str(v) for k, v in args.items()})
+    ctx.launch_configurations.update({'mode': 'mpc', **{k: str(v) for k, v in args.items()}})
     out = {}
     for e in mod.generate_launch_description().entities:
         if isinstance(e, DeclareLaunchArgument):
             e.execute(ctx)
         elif isinstance(e, OpaqueFunction):
             for n in e.execute(ctx) or []:
-                if isinstance(n, Node) and n.node_executable == 'controller':
+                if isinstance(n, Node) and n.node_executable == 'tracker':
                     ps = {}
                     for d in evaluate_parameters(ctx, n._Node__parameters):
                         ps.update(d)

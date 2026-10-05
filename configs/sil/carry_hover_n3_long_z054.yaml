@@ -2,9 +2,10 @@ name: carry_hover_n3_long_z054
 description: 'Planner-offset diagnostic (critic 3.6, zero code): target_z 0.54. If the load settles at
   0.60 the lever DC gain is 1 and the offset is additive.'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 0
     enable_approach: false

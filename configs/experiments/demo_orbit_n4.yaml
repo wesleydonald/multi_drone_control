@@ -6,9 +6,10 @@ description: 'G7 R5 rig twin: ocp_hover_ground_creep_n4_3915 (four on plates 1/3
   > 3 deg over the lap (G1 orbit bar), peak load below 0.35 m, or an abort.'
 world: four_rigid_ground_3915.sdf
 launch:
-  package: controller_quad_load
-  file: mpc_quad_load_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: mpc
     num_drones: 4
     load_traj: orbit
     traj_speed: 0.125
@@ -27,7 +28,7 @@ launch:
     attach_azimuths_deg: 30,90,150,270
     pose_timeout_s: 1.0
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 4
 fleet:

@@ -3,9 +3,10 @@ description: 'Combined M1 candidate (exploratory): adopted defaults + ring movin
   + 0.1 kg object with his kT scheduled (object_mass_kg 0.1) + z_ki_in_orbit; LAND 8 s after the weld.'
 world: three_attach_partner_attached.sdf
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 1
     start_taut: true
@@ -40,7 +41,7 @@ launch:
     z_ki_in_orbit: true
     attach_moving: true
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 3
     attach: true

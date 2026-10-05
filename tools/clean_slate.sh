@@ -44,11 +44,11 @@ SELF=$$
 # name: a bare name also matches the shell running this script, so the script
 # kills itself. That trap is why the original used a '/lib' suffix.
 PATTERNS=(
-  'install/controller_load_mpc/lib'
-  'install/controller_quad_load/lib'
-  'install/controller_dissipative/lib'
+  'install/mpc_planner/lib'
+  'install/tracker/lib'
+  'install/fleet_manager/lib'
+  'install/dissipative_planner/lib'
   'install/controller_mpc_payload/lib'
-  'install/controller_ukf/lib'
   'install/drone_magnet/lib'
   'install/simulation_communication/lib'
   'install/drone_communication/lib'

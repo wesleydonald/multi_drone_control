@@ -309,7 +309,7 @@ This mirrors Wesley's "one graph for sim and rig" answer (ladder Q6).
 
 **Steps**
 1. `python3 tools/fake_mocap.py --udp 127.0.0.1:1511 --num-drones 3 --attach --azimuths-deg 150,270,30 --drone-z 0.08 --tip-body 24 --pickup-body 6`. Drone 3 sits on plate 3, the tip away from the plate.
-2. `ros2 launch controller_quad_load m1_rig_launch.py thrust_ratio:=24 drone_mass:=<w> mocap_magnet_tip_body_id:=24 partner_kt:=<k> partner_rod_m:=<r>`.
+2. `ros2 launch bringup m1_rig_launch.py thrust_ratio:=24 drone_mass:=<w> mocap_magnet_tip_body_id:=24 partner_kt:=<k> partner_rod_m:=<r>`.
 3. **Graph audit** before anything is injected: `python3 tools/graph_audit.py m1_rig`. It wraps `ros2 topic info -v` for each topic, then:
    - `ss -ulpn 'sport = :1511'`;
    - `for n in 1 2 3 4; do lsof "$(readlink -f /dev/QUAD$n)"; done`;

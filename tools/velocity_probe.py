@@ -31,10 +31,10 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.join(REPO, 'src', 'controller_quad_load'))
+sys.path.insert(0, os.path.join(REPO, 'src', 'tracker'))
 
 import metrics as M                                          # noqa: E402
-from controller_quad_load.velocity_loop import VelocityLoop   # noqa: E402
+from tracker.velocity_loop import VelocityLoop   # noqa: E402
 from sil.plant import (Link, PayloadParams, QuadParams,       # noqa: E402
                        SilPlant)
 

@@ -3,9 +3,10 @@ description: 'Card 2026-09-25_attach_ocp arm A: SIL n3 at 330/90/210 hovering, d
   o clock) at 12 s, folded in by OCP RESIZE to n=4 (new). Falsifiers: abort, tilt > 25 deg settled, load
   off 0.60 by > 5 cm settled, newcomer track error > 0.3 m after the hold.'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 1
     start_taut: true

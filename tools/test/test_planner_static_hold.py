@@ -3,7 +3,7 @@ elevations (53.6 deg on model-f1, 65 deg the steepest seen) against its 45 deg r
 every solve must succeed. Prints the node-0 vertical rod pull over the ring's weight.
 
 Runs tools/planner_replay.py --static-hold in a subprocess (it builds the acados solver in
-a scratch directory, ~40 s the first time). MDC_REPLAY_SRC picks another controller_load_mpc."""
+a scratch directory, ~40 s the first time). MDC_REPLAY_SRC picks another mpc_planner."""
 import json
 import os
 import subprocess

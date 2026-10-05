@@ -13,7 +13,7 @@ betaflight mixer clips its rate offsets against zero and cannot hold attitude ei
 
 These tests cover the decision only. Two other pieces of the fix are elsewhere and are
 NOT covered here: dissipative_node._publish_pending_attach_refs (which keeps the tracker
-warm so `require_live` passes immediately), and controller_mpc's airborne no-reference
+warm so `require_live` passes immediately), and tracker_node's airborne no-reference
 branch. Only the SIL bench and Gazebo exercise those together.
 """
 import pytest

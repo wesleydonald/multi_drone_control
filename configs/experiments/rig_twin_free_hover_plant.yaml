@@ -8,11 +8,11 @@ world: four_rigid_ground_rig.sdf
 geometry_exempt:
   num_drones: one drone flown of the four in the world
 launch:
-  package: controller_quad_load
-  file: mpc_quad_load_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: free_hover
     num_drones: 1
-    reference: free_hover
     target_z: 0.6
     cable_len: 0.55
     attach_radius: 0.225
@@ -31,7 +31,7 @@ launch:
     sim_thrust_offset: 0.181
     sim_pack_v0: 23.8
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 1
     sim_thrust_map: rig

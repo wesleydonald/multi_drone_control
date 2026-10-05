@@ -12,17 +12,19 @@ the airframe mass m = dm u_free / (u_loaded - u_free) with no scale. With --mass
 thrust map is linear: predicted u_loaded = u_free (m + dm) / m against the measured one. Last, the throttle each drone
 needs to carry the 0.86 kg ring on 45 deg rods for the three layouts, against the tracker's 0.6 cap.
 
-Folders are MDC_RUN_DIR folders (logs/controller_quad_load/planner_droneN_*/log.csv) or the tracker log dirs themselves.
+Folders are MDC_RUN_DIR folders, rig log folders (either layout, tools/run_logs.py) or a tracker log dir itself.
 Steady hover = the plateau of the reference height after 3 s there, drone above 0.3 m and within
 5 cm of its own median height (it may sit below the reference when the typed kT is high)."""
 import argparse
-import glob
 import math
 import os
 import sys
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import run_logs  # noqa: E402
 
 G = 9.81
 CAP = 0.6
@@ -31,18 +33,10 @@ LAYOUTS = (('three on 1/5/9', [30, 150, 270]), ('even four 0/3/6/9', [0, 90, 180
 
 
 def tracker_logs(folder):
-    pats = [os.path.join(folder, 'logs', 'controller_quad_load', 'planner_drone*', 'log.csv'),
-            os.path.join(folder, 'planner_drone*', 'log.csv'), os.path.join(folder, 'log.csv')]
-    for p in pats:
-        found = sorted(glob.glob(p))
-        if found:
-            out = {}
-            for f in found:
-                tag = os.path.basename(os.path.dirname(f))
-                i = int(tag.split('planner_drone')[1].split('_')[0]) if 'planner_drone' in tag else 0
-                out[i] = f
-            return out
-    return {}
+    out = run_logs.trackers(folder)
+    if not out and os.path.exists(os.path.join(folder, 'log.csv')):
+        out = {0: os.path.join(folder, 'log.csv')}
+    return out
 
 
 def hover_throttle(path):

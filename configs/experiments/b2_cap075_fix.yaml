@@ -5,9 +5,10 @@ description: 'Plan 2026-10-02 B2 (breakaway cap released over ff_cap_release_s a
   2.0 s.'
 world: four_rigid_ground_rig.sdf
 launch:
-  package: controller_quad_load
-  file: mpc_quad_load_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: mpc
     num_drones: 4
     load_traj: hover
     cable_len: 0.55
@@ -43,7 +44,7 @@ launch:
     ff_cap_force: 0.75
     ff_cap_release_s: 2.0
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 4
     sim_thrust_map: rig

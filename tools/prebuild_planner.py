@@ -26,15 +26,15 @@ import sys
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(REPO, 'src', 'controller_load_mpc'))
+sys.path.insert(0, os.path.join(REPO, 'src', 'mpc_planner'))
 
-from controller_load_mpc.geometry import attach_points          # noqa: E402
-from controller_load_mpc.load_cable_dynamics import LoadCableDynamics  # noqa: E402
-from controller_load_mpc.params import (ATTACH_RADIUS, ATTACH_Z,  # noqa: E402
-                                        CABLE_LEN, LOAD_MASS)
-from controller_load_mpc.planner_node import DRONE_MASS  # noqa: E402
-from controller_load_mpc.params import load_inertia
-from controller_load_mpc.planner_solver import PlannerSolver    # noqa: E402
+from mpc_planner.geometry import attach_points          # noqa: E402
+from mpc_planner.load_cable_dynamics import LoadCableDynamics  # noqa: E402
+from mpc_planner.params import (ATTACH_RADIUS, ATTACH_Z,  # noqa: E402
+                                CABLE_LEN, LOAD_MASS)
+from mpc_planner.planner_node import DRONE_MASS  # noqa: E402
+from mpc_planner.params import load_inertia
+from mpc_planner.planner_solver import PlannerSolver    # noqa: E402
 
 
 def main():
@@ -46,15 +46,25 @@ def main():
                          'it (geometry no longer does)')
     ap.add_argument('--drone-mass', type=float, default=DRONE_MASS,
                     help='per-drone mass with pack (sim 0.64); in the cache signature too')
+    ap.add_argument('--rod-mass', type=float, default=0.0,
+                    help='massive-rod model (option F, planner rod_mass); 0 = massless cables')
+    ap.add_argument('--rod-com', type=float, default=0.0,
+                    help='rod centre of mass from the load end, m (planner rod_com)')
+    ap.add_argument('--pin-rates', action='store_true',
+                    help='the variant whose node 0 also pins the rod rates (planner pin_cable_rates)')
+    ap.add_argument('--cable-len', type=float, default=CABLE_LEN,
+                    help='rod length the planner divides rod_com by (must match the launch)')
     args = ap.parse_args()
     print(f'  load_mass={args.load_mass}  (attachment geometry is a RUNTIME parameter '
           f'now, so it does not affect the cache)')
     for n in args.n:
         rho = attach_points(n, ATTACH_RADIUS, ATTACH_Z)
+        lam = args.rod_com / args.cable_len if args.rod_mass > 0.0 else 0.0
         dyn = LoadCableDynamics(n, args.load_mass, load_inertia(args.load_mass),
-                                [CABLE_LEN] * n, rho, args.drone_mass)
+                                [args.cable_len] * n, rho, args.drone_mass,
+                                rod_mass=args.rod_mass, rod_lam=lam)
         t0 = time.time()
-        ps = PlannerSolver(dyn)
+        ps = PlannerSolver(dyn, pin_rates=args.pin_rates)
         print(f'  n={n}: ready in {time.time() - t0:5.1f} s   '
               f'(p = 4 q_ref + {len(ps._geom)} geometry)')
     print('\n  Geometry (rho, cable length) is a RUNTIME parameter, so these solvers '

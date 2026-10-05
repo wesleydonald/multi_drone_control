@@ -21,8 +21,8 @@ def test_state_throttle_cap_and_alerts():
     s.on_cmd(1, types.SimpleNamespace(armed=True, channel_2=-0.1))   # thr 0.45
     assert s.drones[0]['cap_since'] is not None and s.drones[1]['cap_since'] is None
     assert abs(s.drones[1]['thr'] - 0.45) < 1e-9
-    s.on_log(20, 'controller_0', 'Controller ready')                 # INFO: not an alert
-    s.on_log(40, 'central_controller', 'TAKEOFF REFUSED: drone(s) [1] not armed')
+    s.on_log(20, 'tracker_0', 'Controller ready')                 # INFO: not an alert
+    s.on_log(40, 'fleet_manager', 'TAKEOFF REFUSED: drone(s) [1] not armed')
     assert len(s.alerts) == 1 and s.alerts[0][1] == 'ERROR' and 'Relaunch' in s.alerts[0][4]
 
 
@@ -32,5 +32,5 @@ def test_gui_builds_offscreen():
     pytest.importorskip('PyQt5.QtWidgets')
     s = fm.FleetState(3)
     s.on_manager(types.SimpleNamespace(data='ARM sequence complete: all 3 armed, ready for TAKEOFF.'))
-    s.on_log(30, 'load_planner', 'arc creep timed out 3.0s after the sweep ended')
+    s.on_log(30, 'mpc_planner', 'arc creep timed out 3.0s after the sweep ended')
     assert fm.gui(s, exit_after_ms=600) == 0

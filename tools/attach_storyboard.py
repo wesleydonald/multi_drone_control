@@ -56,7 +56,7 @@ Every number drawn comes from the run directory: logs/run.csv (poses, tilt, targ
 attach flag), logs/events.csv (ATTACH = MAGNET, WELD), logs/launch.log (the
 reconfiguration hold, hence RESUME; the weld offset on the rim and the newcomer's slot),
 manifest.json (carrier rim azimuths, mass, rod length, hand-out time) and
-params/dissipative_controller.yaml
+params/dissipative_planner.yaml (dissipative_controller.yaml before the rename)
 (rim radius). The only typed number is the 10 deg of the claim itself.
 """
 import argparse
@@ -104,7 +104,10 @@ def load(run_dir):
     m = re.search(r'weld offset captured for slot (\d+): rho=\(([-0-9.]+),([-0-9.]+)\)', log)
     slot, rho = int(m.group(1)), (float(m.group(2)), float(m.group(3)))
     args = run['manifest']['launch_args']
-    par = open(os.path.join(run_dir, 'params', 'dissipative_controller.yaml')).read()
+    pf = os.path.join(run_dir, 'params', 'dissipative_planner.yaml')
+    if not os.path.exists(pf):                      # node name before the 3 Oct 2026 rename
+        pf = os.path.join(run_dir, 'params', 'dissipative_controller.yaml')
+    par = open(pf).read()
     t = d['t']
     sweep = metrics.sweep_window(t, np.column_stack([d['payload_ref_x'], d['payload_ref_y']]))
     t_weld, t_land = ev['WELD'], ev['LAND']

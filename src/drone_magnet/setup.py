@@ -23,7 +23,6 @@ setup(
             'attach_target_publisher = drone_magnet.attach_target_publisher:main',
             'magnet_attachment_manager = drone_magnet.magnet_attachment_manager:main',
             'magnet_tip_publisher = drone_magnet.magnet_tip_publisher:main',
-            'pendulum_state_publisher = drone_magnet.pendulum_state_publisher:main',
             'elrs_mux = drone_magnet.elrs_mux:main',
         ],
     },

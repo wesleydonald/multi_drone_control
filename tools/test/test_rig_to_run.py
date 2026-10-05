@@ -57,9 +57,9 @@ def test_converts_a_synthetic_rig_flight(tmp_path):
     bag = str(tmp_path / 'bag')
     _bag(bag, t)
     t2 = tmp_path / 't2.log'
-    t2.write_text(f"[main-1] [INFO] [{T0 + 1.0:.6f}] [central_controller]: Fleet command received: 'ARM'\n"
-                  f"[main-1] [INFO] [{T0 + 3.0:.6f}] [central_controller]: Fleet command received: 'TAKEOFF'\n"
-                  f"[main-1] [INFO] [{T0 + 9.0:.6f}] [central_controller]: Landed - disarming the fleet.\n")
+    t2.write_text(f"[main-1] [INFO] [{T0 + 1.0:.6f}] [fleet_manager]: Fleet command received: 'ARM'\n"
+                  f"[main-1] [INFO] [{T0 + 3.0:.6f}] [fleet_manager]: Fleet command received: 'TAKEOFF'\n"
+                  f"[main-1] [INFO] [{T0 + 9.0:.6f}] [fleet_manager]: Landed - disarming the fleet.\n")
     import rig_to_run
     man, n, ne = rig_to_run.convert(trk, str(tmp_path / 'run'), bag=bag, t2_log=str(t2))
     d = pd.read_csv(tmp_path / 'run' / 'logs' / 'run.csv')

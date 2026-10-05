@@ -4,9 +4,10 @@ description: 'Uneven hang: 3/12/9 o clock (attach_azimuths 0,90,180), the 3-dron
   uneven layout). SETTLED variant: LAND at 76 s so an 8 s gain estimate and the sag loop (35 s to within
   2 cm, R0391) are fully converged before the last-8-s window.'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 0
     enable_approach: false

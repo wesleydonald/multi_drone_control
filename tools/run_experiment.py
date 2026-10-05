@@ -128,7 +128,12 @@ def start_launch_pkg(package, launch_file, argv, log_path, run_dir):
 
 def declared_launch_args(package, launch_file, _seen=None):
     """Names a launch file declares, with those of the same-package launch files it includes.
-    Source-level, so it runs before anything is started."""
+    Source-level, so it runs before anything is started. The control launches declare
+    theirs from bringup.profiles (launch_args.py)."""
+    import launch_args
+    if package == 'bringup' and launch_file in launch_args.CONTROL:
+        p = launch_args.profiles()
+        return set(p.kept(launch_args.CONTROL[launch_file])) | {'mode', 'params_file'}
     _seen = set() if _seen is None else _seen
     d = os.path.join(REPO, 'src', package, 'launch')
     path = os.path.join(d, launch_file)
@@ -163,14 +168,21 @@ def included_launch_files(text):
 
 
 def undeclared_launch_args(cfg):
-    """Config args the launch never declares. `ros2 launch` ignores those without a word,
-    so the run flies the default the config meant to change."""
-    bad = []
-    for lf, argv in ((cfg.launch_file, cfg.launch_argv()), (cfg.io_launch_file, cfg.io_launch_argv())):
-        names = declared_launch_args(cfg.launch_package if lf == cfg.launch_file else 'controller_quad_load', lf)
-        if not names:
-            continue                     # launch not found here: start_launch reports it
-        bad += [f'{lf}: {a.split(":=")[0]}' for a in argv if a.split(':=')[0] not in names]
+    """Config args the launch knows neither as an argument nor (control launches) as a
+    params_file knob. `ros2 launch` ignores an undeclared argument without a word, so the
+    run would fly the default the config meant to change."""
+    import launch_args
+    if cfg.launch_package == 'bringup' and cfg.launch_file in launch_args.CONTROL:
+        bad = [f'{cfg.launch_file}: {k}' for k in launch_args.unknown(cfg.launch_file, cfg.launch_args)]
+    else:
+        bad = []
+        names = declared_launch_args(cfg.launch_package, cfg.launch_file)
+        if names:
+            bad += [f'{cfg.launch_file}: {k}' for k in cfg.launch_args if k not in names]
+    names = declared_launch_args('bringup', cfg.io_launch_file)
+    if names:                            # launch not found here: start_launch reports it
+        bad += [f'{cfg.io_launch_file}: {a.split(":=")[0]}' for a in cfg.io_launch_argv()
+                if a.split(':=')[0] not in names]
     return bad
 
 
@@ -303,7 +315,7 @@ def stop(proc, fh, name='process', sig=signal.SIGINT, grace=15):
 
 # ── parameter read-back ──────────────────────────────────────────────────────
 
-REQUIRED_NODE_RE = r'/(controller_\d+|dissipative\w*|central_controller)$'
+REQUIRED_NODE_RE = r'/(tracker_\d+|dissipative\w*|fleet_manager)$'
 
 
 def dump_params(run_dir, timeout=25, workers=8, only=None, skip=()):
@@ -361,8 +373,8 @@ def dump_params(run_dir, timeout=25, workers=8, only=None, skip=()):
             got.add(node)
 
     # A read-back that quietly omits the CONTROLLERS is worse than none: it looks like
-    # evidence and is not. At 16 workers this dropped controller_1, controller_3 and
-    # dissipative_controller while happily capturing 36 bridges.
+    # evidence and is not. At 16 workers this dropped two trackers and the
+    # dissipative planner while happily capturing 36 bridges.
     required = [n for n in nodes if re.search(REQUIRED_NODE_RE, n)]
     absent = [n for n in required if n not in got]
     label = 'param read-back' if only else 'param read-back (background)'
@@ -608,7 +620,7 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
     try:
         gz_proc, gz_fh = start_gazebo(
             cfg, os.path.join(run_dir, 'logs', 'gazebo.log'), gui=gui, nice=gz_nice)
-        # ORDER MATTERS, and the docstring at the top of three_attach_launch.py says so:
+        # ORDER MATTERS (sim_control_launch.py's docstring):
         # the sim-interface launch owns the /clock bridge, the pose bridges and the
         # mocap emulators, and it must be publishing BEFORE any controller starts.
         io, io_fh = start_launch(
@@ -619,7 +631,7 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
         # in ~1-2 s -- a flat 5 s sleep was both slower than necessary and no guarantee.
         wait_for_clock(timeout=30.0)
         stack, stack_fh = start_launch(
-            cfg, cfg.launch_file, cfg.launch_argv(),
+            cfg, cfg.launch_file, cfg.launch_argv(os.path.join(run_dir, 'params_file.yaml')),
             os.path.join(run_dir, 'logs', 'launch.log'), run_dir)
 
         rclpy.init()

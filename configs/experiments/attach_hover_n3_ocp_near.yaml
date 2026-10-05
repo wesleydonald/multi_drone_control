@@ -5,9 +5,10 @@ description: 'Isolating run for the newcomer roll instability (R0526/R0527): fle
   from the origin is not the cause.'
 world: three_attach_rod_near.sdf
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 1
     start_taut: true
@@ -38,7 +39,7 @@ launch:
     safety_ref_timeout_s: 4.0
     pose_timeout_s: 1.0
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 3
     attach: true

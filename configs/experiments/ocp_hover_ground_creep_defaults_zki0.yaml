@@ -3,9 +3,10 @@ description: 'Hover pair arm A (one variable): launch defaults (kt_trim on, cree
   with z_ki 0. Arm B = ocp_hover_ground_creep_defaults. LAND at 52 s.'
 world: three_rigid_ground.sdf
 launch:
-  package: controller_quad_load
-  file: mpc_quad_load_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: mpc
     num_drones: 3
     load_traj: hover
     cable_len: 0.5
@@ -18,7 +19,7 @@ launch:
     pose_timeout_s: 1.0
     z_ki: 0.0
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 3
 fleet:

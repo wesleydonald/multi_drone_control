@@ -10,9 +10,10 @@ description: 'G5 M2 hand-over bench (GOALS step 3): Tejen''s four X3s start weld
   on m2_bench_world.sdf.'
 world: tejen/bench_m2/m2_bench_world_imu.sdf
 launch:
-  package: controller_quad_load
-  file: dissipative_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: dissipative
     num_drones: 4
     sim_interface: false
     partner_m2: true
@@ -35,7 +36,7 @@ launch:
     airborne_start: true
     auto_slot_assign: false
 io_launch:
-  file: m2_bench_io_launch.py
+  file: sim_m2_bench_launch.py
   args:
     num_drones: 4
     start_gz: false

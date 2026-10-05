@@ -3,9 +3,10 @@ description: 'rig_twin_hover_fixed on plates 1/3/5/9 (30/90/150/270, the decided
   layout neighbour. Baseline rig_twin_hover_fixed. Same falsifier.'
 world: four_rigid_ground_rig_3915.sdf
 launch:
-  package: controller_quad_load
-  file: mpc_quad_load_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: mpc
     num_drones: 4
     load_traj: hover
     cable_len: 0.55
@@ -40,7 +41,7 @@ launch:
     sim_pack_v0: 23.8
     attach_azimuths_deg: 30,90,150,270
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 4
     sim_thrust_map: rig

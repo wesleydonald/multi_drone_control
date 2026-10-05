@@ -1,0 +1,53 @@
+# Rig defaults (real_control_launch.py): the 30 Sep 2026 lab values (affine thrust map,
+# drone 0.55 kg, rod 0.55 m pivoting 4 cm below the drone centre, magnets at r 0.225).
+# The base is the carry (mode:=mpc); each `modes:` entry lists only what that mode changes.
+# attach and m2 are the M1/M2 rig modes (the sim graphs with bringup/real_mode.py's rig
+# watchdogs and creep start); they fly the same rig thrust map and geometry (Wesley 2026-10-03).
+fleet_geometry:
+  num_drones: 4
+  cable_len: 0.55
+  drone_mass: 0.55
+  attach_radius: 0.225
+  attach_z: 0.0
+  pivot_offset_z: -0.04
+  rod_tol_frac: 0.25
+  rod_spread_m: 0.08
+takeoff:
+  lift_ramp_vel: 0.1
+  z_taut_gate: 0.9
+  payload_rest_z: 0.05
+height_hold:
+  z_i_gate: 0.25
+trajectory:
+  traj_speed: 0.4
+  hover_z: 0.8
+  climb_vel: 0.15
+  land_tol: 0.10
+thrust_map:
+  thrust_ratio: 35.2
+  takeoff_thrust_ratio: 0.0
+  thrust_offset: 0.185
+  thrust_offset_v_slope: 0.022
+  throttle_max: 0.8
+  kt_trim: false
+watchdogs:
+  solve_budget_s: 0.06
+  require_fc_armed: true
+fleet_resize:
+  reconfig_mode: 'ocp'
+  detach_magnet: true
+network:
+  auto_network_handover: false
+
+modes:
+  mpc: {}
+  free_hover:
+    land_vel: 0.15
+  dissipative: {}
+  attach:
+    num_drones: 3
+    attach_azimuths_deg: '330,90,210'
+    control_mode: 'velocity_after_handover'
+    vel_ki: 0.0
+    diss_ki_load: 1.0
+  m2: {}

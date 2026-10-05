@@ -6,9 +6,10 @@ description: 'Isolating run: the newcomer is a plain x3_drone3 (NO magnet arm, n
   +-0.2 m in the hold: clock_hz 500 tests clock granularity (tracker timer jitter 11-23 ms at 100 Hz).'
 world: three_attach_noarm_near.sdf
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 1
     start_taut: true
@@ -39,7 +40,7 @@ launch:
     safety_ref_timeout_s: 4.0
     pose_timeout_s: 1.0
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 3
     attach: true

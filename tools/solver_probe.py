@@ -20,9 +20,9 @@ import numpy as np
 ACADOS_DIR = '/home/wesley/multi_drone_control/c_generated_code_quad_load'
 os.makedirs(ACADOS_DIR, exist_ok=True)
 os.chdir(ACADOS_DIR)
-sys.path.insert(0, '/home/wesley/multi_drone_control/src/controller_quad_load')
+sys.path.insert(0, '/home/wesley/multi_drone_control/src/tracker')
 
-from controller_quad_load.acados import (          # noqa: E402
+from tracker.acados import (          # noqa: E402
     generate_ocp_controller, set_initial_guess, set_planner_reference,
     warm_start_from_previous_solution)
 

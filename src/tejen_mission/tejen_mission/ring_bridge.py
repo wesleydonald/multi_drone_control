@@ -24,7 +24,7 @@ from std_msgs.msg import String
 
 from tejen_mission.fake_cooperative_transport_world import (
     FakeCooperativeTransportWorld, RigidBodyState)
-from controller_load_mpc.load_trajectory import LoadTrajectory
+from mpc_planner.load_trajectory import LoadTrajectory
 
 
 def _yaw_from_quat(w, x, y, z):

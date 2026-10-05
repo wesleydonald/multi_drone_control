@@ -57,7 +57,7 @@ def read(name):
 
 def launch(key, args, name):
     fh = open(os.path.join(logdir, name), 'w')
-    p = subprocess.Popen(['ros2', 'launch', 'controller_quad_load', *args], cwd=REPO,
+    p = subprocess.Popen(['ros2', 'launch', 'bringup', *args], cwd=REPO,
                          env=dict(os.environ), stdout=fh, stderr=subprocess.STDOUT, start_new_session=True)
     procs[key] = p
     return p
@@ -144,7 +144,7 @@ def preflight(tag):
     path = os.path.join(logdir, f'preflight_{tag}.txt')
     with open(path, 'w') as fh:
         p = subprocess.Popen([sys.executable, 'tools/preflight.py', '--drones', '3', '--real', '--planner',
-                              'load_planner', '--max-ground-z', '0.5'], cwd=REPO, env=dict(os.environ),
+                              'mpc_planner', '--max-ground-z', '0.5'], cwd=REPO, env=dict(os.environ),
                              stdout=fh, stderr=subprocess.STDOUT)
         t0 = time.time()
         while p.poll() is None and time.time() - t0 < 180:

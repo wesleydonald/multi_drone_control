@@ -25,11 +25,11 @@ import pandas as pd
 
 HZ = 50.0
 EVENT_RES = [
-    (re.compile(r"\[(\d{9,}\.\d+)\] \[central_controller\]: Fleet command received: '(\w+)'"), None),
-    (re.compile(r"\[(\d{9,}\.\d+)\] \[central_controller\]: EMERGENCY STOP"), 'FLEET_ABORT'),
-    (re.compile(r"\[(\d{9,}\.\d+)\] \[central_controller\]: Landed - disarming"), 'LANDED'),
-    (re.compile(r"\[(\d{9,}\.\d+)\] \[central_controller\]: (Drone \d disarmed before TAKEOFF)"), 'GROUNDED'),
-    (re.compile(r"\[(\d{9,}\.\d+)\] \[central_controller\]: (TAKEOFF REFUSED[^\n]*)"), 'GROUNDED'),
+    (re.compile(r"\[(\d{9,}\.\d+)\] \[(?:fleet_manager|central_controller)\]: Fleet command received: '(\w+)'"), None),
+    (re.compile(r"\[(\d{9,}\.\d+)\] \[(?:fleet_manager|central_controller)\]: EMERGENCY STOP"), 'FLEET_ABORT'),
+    (re.compile(r"\[(\d{9,}\.\d+)\] \[(?:fleet_manager|central_controller)\]: Landed - disarming"), 'LANDED'),
+    (re.compile(r"\[(\d{9,}\.\d+)\] \[(?:fleet_manager|central_controller)\]: (Drone \d disarmed before TAKEOFF)"), 'GROUNDED'),
+    (re.compile(r"\[(\d{9,}\.\d+)\] \[(?:fleet_manager|central_controller)\]: (TAKEOFF REFUSED[^\n]*)"), 'GROUNDED'),
     (re.compile(r"\[(\d{9,}\.\d+)\] \[\w+\]: \[planner\] handover settle complete"), 'HANDOVER'),
 ]
 
@@ -149,7 +149,7 @@ def convert(trackers, out, bag=None, t2_log=None):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--out', required=True)
-    ap.add_argument('--trackers', nargs='+', required=True, help='planner_droneN_* dirs (or log.csv), drone order')
+    ap.add_argument('--trackers', nargs='+', required=True, help='tracker session dirs (logs/tracker/droneN_*, before 3 Oct planner_droneN_*) or log.csv, drone order')
     ap.add_argument('--bag')
     ap.add_argument('--t2-log')
     a = ap.parse_args(argv)

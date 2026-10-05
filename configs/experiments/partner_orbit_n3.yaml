@@ -6,9 +6,10 @@ description: 'Plan step 3 (authority.md): Tejen''s M1 mission (tejen_mission par
   no ring weld by the end, any abort, or ring tilt > 25 deg.'
 world: three_attach_partner.sdf
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 1
     start_taut: true
@@ -40,7 +41,7 @@ launch:
     attach_cable_len: 0.49
     partner: true
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 3
     attach: true

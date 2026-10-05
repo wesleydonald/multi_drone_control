@@ -155,9 +155,9 @@ os.environ['MDC_RUN_DIR'] = logdir
 def launch_ours(part, log_path):
     with open(log_path, 'w') as fh:
         full = args + [f'partner_m2_part:={part}']
-        fh.write('$ ros2 launch controller_quad_load dissipative_launch.py ' + ' '.join(full) + '\n')
+        fh.write('$ ros2 launch bringup sim_control_launch.py mode:=dissipative ' + ' '.join(full) + '\n')
         fh.flush()
-        p = subprocess.Popen(['ros2', 'launch', 'controller_quad_load', 'dissipative_launch.py',
+        p = subprocess.Popen(['ros2', 'launch', 'bringup', 'sim_control_launch.py', 'mode:=dissipative',
                               *full], cwd=REPO, env=dict(os.environ), stdout=fh,
                              stderr=subprocess.STDOUT, start_new_session=True)
     procs.append(p)

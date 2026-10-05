@@ -25,6 +25,7 @@ initial:
   stands: true
 launch:
   args:
+    mode: attach
     attach_azimuths_deg: 0,90,180,270
     cable_len: 0.5
     enable_approach: false
@@ -38,8 +39,8 @@ launch:
     z_ki: 0.4
     reconfig_mode: ocp
     reconfig_hold_s: 1.5
-  file: three_attach_launch.py
-  package: controller_quad_load
+  file: sim_control_launch.py
+  package: bringup
 name: detach_hover_even_ocp
 timing:
   dt: 0.02

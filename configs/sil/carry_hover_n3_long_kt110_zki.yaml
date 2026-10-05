@@ -2,9 +2,10 @@ name: carry_hover_n3_long_kt110_zki
 description: 'Planner offset card: kT typed +10 % (91.41 vs 83.1), kt_trim OFF, z_ki 0.2. The integral
   alone must carry the gain error within its 0.15 m bound.'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 0
     enable_approach: false

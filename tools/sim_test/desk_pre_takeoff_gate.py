@@ -35,7 +35,7 @@ os.environ.update(ROS_DOMAIN_ID=str(domain), ROS_LOCALHOST_ONLY='1', MDC_RUN_DIR
                   MDC_ACADOS_ROOT=work, MDC_REPO_ROOT=REPO)
 os.environ.pop('FASTRTPS_DEFAULT_PROFILES_FILE', None)
 N = 4
-ARGS = ['num_drones:=4', 'sim_interface:=false', 'partner_m2:=true', 'real:=false',
+ARGS = ['num_drones:=4', 'sim_interface:=false', 'partner_m2:=true',
         'cable_len:=0.515', 'attach_azimuths_deg:=30.0,120.0,210.0,300.0', 'start_taut:=false',
         'load_mass:=0.86', 'load_traj:=hover', 'target_z:=0.6', 'reconfig_mode:=ocp',
         'takeoff_spool_s:=0.0', 'airborne_start:=true', 'auto_slot_assign:=false']
@@ -60,7 +60,7 @@ def read(path):
 def launch(part, name):
     path = os.path.join(logdir, name)
     with open(path, 'w') as fh:
-        p = subprocess.Popen(['ros2', 'launch', 'controller_quad_load', 'dissipative_launch.py',
+        p = subprocess.Popen(['ros2', 'launch', 'bringup', 'sim_control_launch.py', 'mode:=dissipative',
                               *ARGS, f'partner_m2_part:={part}'], cwd=work, env=dict(os.environ),
                              stdout=fh, stderr=subprocess.STDOUT, start_new_session=True)
     procs.append(p)

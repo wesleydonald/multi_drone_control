@@ -2,9 +2,10 @@ name: carry_hover_n3_long_x0sym
 description: 'Planner-offset diagnostic (critic 2.3): symmetric node-0 box relaxation instead of the inverted
   multiplicative one. Everything else the long-hover baseline.'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 0
     enable_approach: false

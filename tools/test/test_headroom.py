@@ -5,7 +5,7 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-pytest.importorskip('controller_load_mpc.geometry')
+pytest.importorskip('mpc_planner.geometry')
 import headroom  # noqa: E402
 
 

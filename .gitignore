@@ -9,6 +9,7 @@ install/
 
 c_generated_code/
 c_generated_code_load_planner/
+c_generated_code_load_planner_pr/
 c_generated_code_quad_load/
 acados_ocp.json
 acados_sim.json
@@ -54,3 +55,6 @@ authority.md
 # Lab Docker build context: copied/repacked from this laptop by tools/remote/lab_build.sh
 tools/remote/t_renderer
 tools/remote/debs/
+
+# shell shortcuts, sourced from ~/.bashrc (local)
+shortcuts.md

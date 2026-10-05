@@ -5,9 +5,10 @@ description: 'rig_twin_hover_fixed with the world ring at 0.70 kg while the plan
 mis_seed: true
 world: four_rigid_ground_rig_m070.sdf
 launch:
-  package: controller_quad_load
-  file: mpc_quad_load_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: mpc
     num_drones: 4
     load_traj: hover
     cable_len: 0.55
@@ -41,7 +42,7 @@ launch:
     sim_thrust_offset: 0.181,0.185,0.187,0.187
     sim_pack_v0: 23.8
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 4
     sim_thrust_map: rig

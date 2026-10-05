@@ -10,14 +10,13 @@ offset, b throttle per kg, c per volt; M = drone as flown + hung mass, V = pack)
 hover is thrust_check.py's rule: the reference plateau from 3 s after reaching it, the drone within 5 cm of its median
 height there; u and V are the medians over it.
 
-Tethered: per launch (the load_planner log and the four tracker logs started with it), each drone's mass supported
+Tethered: per launch (the load planner log and the four tracker logs started with it), each drone's mass supported
 by its thrust is M = (u_real - a_i - c (V - 23.5)) / b, its vertical thrust M g R33 (tilt from the mocap quaternion),
 and its vertical pull on the rod M g R33 - m_drone g. Their sum over the ring's weight is the carried fraction.
 u_real is the thr_out column when logged, else u2 + offset(V) for a tracker on the affine map (thrust_offset in its
 params.json), else u2. Drone vertical acceleration is ignored, so read medians over a hold, not single samples.
 The law defaults to RIG-0930-ladder4; --spec refits it."""
 import argparse
-import glob
 import json
 import math
 import os
@@ -25,6 +24,9 @@ import sys
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import run_logs  # noqa: E402
 
 G = 9.81
 V_REF = 23.5
@@ -132,10 +134,8 @@ def _stamp(tag):
 
 def launches(folder):
     """[(planner log, {drone: tracker log})], trackers matched to the planner started within 30 s."""
-    root = os.path.join(folder, 'logs', 'controller_quad_load')
-    root = root if os.path.isdir(root) else folder
-    planners = sorted(glob.glob(os.path.join(root, 'load_planner_*', 'log.csv')))
-    trackers = sorted(glob.glob(os.path.join(root, 'planner_drone*', 'log.csv')))
+    planners = run_logs.node_csvs(folder, 'mpc_planner')
+    trackers = run_logs.node_csvs(folder, 'tracker')
     out = []
     for p in planners:
         ts = _stamp(os.path.basename(os.path.dirname(p)))
@@ -143,7 +143,7 @@ def launches(folder):
         for t in trackers:
             tag = os.path.basename(os.path.dirname(t))
             if abs(_stamp(tag) - ts) < 30.0:
-                group[int(tag.split('planner_drone')[1].split('_')[0])] = t
+                group[run_logs.drone_of(t)] = t
         out.append((p, group))
     return out
 

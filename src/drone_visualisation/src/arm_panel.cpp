@@ -344,7 +344,7 @@ bool ArmPanel::managerRunning() const
   }
   const auto names = node_->get_node_names();
   return std::any_of(names.begin(), names.end(), [](const std::string& n) {
-    return n == "/central_controller" || n == "central_controller";
+    return n == "/fleet_manager" || n == "fleet_manager";
   });
 }
 

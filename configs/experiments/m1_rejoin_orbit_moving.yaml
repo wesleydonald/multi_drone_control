@@ -36,9 +36,10 @@ io_launch:
     clock_hz: 500
     fleet_viz: false
     num_drones: 3
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
 launch:
   args:
+    mode: attach
     attach_azimuths_deg: 150,270,30
     attach_cable_len: 0.49
     attach_central: false
@@ -71,8 +72,8 @@ launch:
     vel_ki: 0.0
     z_ki: 0.4
     attach_moving: true
-  file: three_attach_launch.py
-  package: controller_quad_load
+  file: sim_control_launch.py
+  package: bringup
 name: m1_rejoin_orbit_moving
 timing:
   bg_param_dump: false

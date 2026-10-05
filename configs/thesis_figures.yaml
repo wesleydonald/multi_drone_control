@@ -55,3 +55,57 @@ figures:
       the tilt first rises to 43 deg; from 9.3 s after the weld it stays under 10 deg
       (mean 4.4 deg, peak 9.96 deg), and the four drones fly the rest of the circle,
       0.20 m RMS from the target against 0.02 m with three.
+
+  - id: F_tracker_x0
+    kind: script            # tools/thesis_sim_figures.py (fig_tracker_x0)
+    runs: [R0956, R0957, R0841, R0960, R0832, R0974]
+    caption: >
+      Effect of the tracker's initial condition without integral action (thesis/Source/src/sim_results.tex,
+      fig:tracker_x0). (a) SIL hover, (b) Gazebo hover from the floor, (c) Gazebo circle, first lap,
+      epsilon 0.025 against 0.
+
+  - id: F_disturbance
+    kind: script            # tools/thesis_sim_figures.py (fig_disturbance)
+    runs: [R0962, R0968, R0969, R0961, R0971]
+    caption: >
+      Rejection of a constant force on the ring in the Gazebo rig twin, epsilon 0 (sim_results.tex,
+      fig:disturbance): 0.6 N down and 0.4 N horizontal; no integral, target shift, model integral.
+
+  # tables of sim_results.tex (tools/thesis_sim_tables.py -> thesis/Source/src/tables/): x0 (R0956/R0957,
+  # R0841/R0844, R0960/R0978, R0832, R0974/R0979), disturbance (the *_x0b0 push/pushz/mapneg configs, every
+  # non-void run), gain (R0969, R0976, R0977), four (R0931/R0932, R0936, R0933, R0935, R0939)
+  # land (STRAIGHT list + the land_matrix / land_fix card runs), robust (sim_robustness.tex: R1038-R1067
+  # non-void + R1013/R1023), params (hardware.tex: the rig profile, no runs), traj (the *_lf / *_x0b0 configs
+  # in TRAJ, every non-void run: R1013/R1023, R1018/R1032, R0974/R0979/R1027.., R1033/R1037, R1035/R1036,
+  # line R1068/R1070, spin R1069/R1071), detach (sim_detach.tex: R0939; R0997, R1007, R1012, R1029, R1034)
+
+  - id: F_landing
+    kind: script            # tools/thesis_sim_figures.py (fig_landing)
+    runs: [R0960, R1013]
+    caption: >
+      Landing after the payload touches down, Gazebo rig twin, three UAVs (interchangeable; one run of
+      each). (a, c) Straight descent, the cable feedforward cut at touchdown; (b, d) unwind along the
+      rods, a 1 s feedforward ramp and idle on the floor. (a, b) Radial offset from the reference,
+      positive outward, to 0.25 m (dot); (c, d) lean along the outward radial; dotted +-2 deg.
+
+  - id: F_detach
+    kind: script            # tools/thesis_sim_figures.py (fig_detach)
+    runs: [R1012]
+    caption: >
+      Detach of one UAV of four by OCP resize (plates 1/3/5/9): planned tensions per UAV (released UAV
+      dashed, coloured), ring tilt with the hover band + 0.5 deg (dotted) and the settling time, height
+      error against the 1.0 m target.
+
+  - id: F_traj
+    kind: script            # tools/thesis_sim_figures.py (fig_trajectories)
+    runs: [R1033, R1035, R0933, R0935]
+    caption: >
+      Four-UAV circle and figure-8 with epsilon 0 (paths on the references) and the horizontal error
+      against the relaxed box, over the motion only.
+
+  - id: F_flight
+    kind: script            # tools/thesis_sim_figures.py (fig_flight)
+    runs: [R1013]
+    caption: >
+      One flight from the floor, three UAVs: heights and rod elevations through creep, pretension, lift,
+      hover, LAND and unwind.

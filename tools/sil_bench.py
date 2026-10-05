@@ -60,7 +60,7 @@ def clean_slate():
                    stderr=subprocess.DEVNULL)
 
 
-def start_stack(scn, console_path):
+def start_stack(scn, console_path, params_path):
     """Launch the REAL controllers via the REAL launch file with sil:=true.
 
     Running the actual launch (rather than re-declaring the nodes here) is what keeps
@@ -73,7 +73,7 @@ def start_stack(scn, console_path):
             '    source ~/ros2_humble/install/setup.bash\n'
             '    source install/setup.bash')
     cmd = ['ros2', 'launch', scn.launch_package, scn.launch_file,
-           'sil:=true', *scn.launch_argv()]
+           'sil:=true', *scn.launch_argv(params_path)]
     console = open(console_path, 'w')
     console.write('$ ' + ' '.join(cmd) + '\n\n')
     console.flush()
@@ -171,11 +171,13 @@ def run_one(scn_path, keep_going=False, repeat=0):
 
     print(f'\n=== SIL bench: {scn.name}  ({run_id}) ===')
     print(f'    {scn.description.strip()}')
-    print(f'    launch: {scn.launch_file} sil:=true ' + ' '.join(scn.launch_argv()))
+    print(f'    launch: {scn.launch_file} sil:=true '
+          + ' '.join(scn.launch_argv(os.path.join(run_path, 'params_file.yaml'))))
     print(f'    out:    {run_path}')
 
     clean_slate()
-    proc, console = start_stack(scn, os.path.join(run_path, 'console.log'))
+    proc, console = start_stack(scn, os.path.join(run_path, 'console.log'),
+                                os.path.join(run_path, 'params_file.yaml'))
 
     rclpy.init()
     bench = SilBench(scn, run_path)
@@ -218,7 +220,7 @@ def run_one(scn_path, keep_going=False, repeat=0):
     if rejected:
         acc_ok = False
         results = list(results) + [('takeoff accepted', False,
-                                    f'central_controller rejected TAKEOFF {rejected}x: fleet never flew')]
+                                    f'fleet_manager rejected TAKEOFF {rejected}x: fleet never flew')]
     print(f'\n    ran {len(rows)} steps in {wall:.1f} s wall '
           f'(x{rtf:.2f} realtime), {stalls} lockstep stalls')
     if aborts:

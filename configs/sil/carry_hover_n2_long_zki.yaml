@@ -1,9 +1,10 @@
 name: carry_hover_n2_long_zki
 description: 'Planner offset card, two-drone arm: z_ki 0.2, the rig first configuration.'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 2
     reserved_attach: 0
     enable_approach: false

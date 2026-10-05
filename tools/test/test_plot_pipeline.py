@@ -184,8 +184,8 @@ def test_the_plot_palette_is_the_rviz_palette():
     is imported, not copied, and this test fails if that import is ever replaced by a
     literal that drifts."""
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)),
-                                    'src', 'controller_quad_load'))
-    from controller_quad_load.rviz_config import drone_colour as rviz_colour
+                                    'src', 'bringup'))
+    from bringup.rviz_config import drone_colour as rviz_colour
     for i in range(6):
         r, g, b = (int(v) for v in rviz_colour(i).split(';'))
         assert S.drone_colour(i) == f'#{r:02x}{g:02x}{b:02x}'

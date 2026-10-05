@@ -3,24 +3,21 @@
 param_diff.py — what actually differs between two launch configurations? (F9)
 
 Answers "which parameters do I need to change between simulation and the real rig?"
-without reading two 400-line launch files side by side and hoping you spotted
-everything.
+without reading two configurations side by side and hoping you spotted everything.
 
-It reads `DeclareLaunchArgument` defaults straight out of the launch files, so there
-is no second copy of the configuration to drift. That matters: the whole finding this
-tool closes is that sim/real divergence was implicit, and a YAML mirror of the same
-values would just be one more thing to forget to update.
+The control launches take every default from bringup/config (common.yaml, sim.yaml,
+real.yaml and their modes: entries); this reads those, so there is no second copy of the
+configuration to drift. Any other launch file is read from its DeclareLaunchArgument
+defaults.
 
-    tools/param_diff.py mpc_quad_load_launch.py real_control_launch.py
-    tools/param_diff.py dissipative_launch.py real_dissipative_launch.py
-    tools/param_diff.py --sim-vs-real        # the pairs that matter, all at once
+    tools/param_diff.py sim/mpc real/mpc              # side/mode of the control launches
+    tools/param_diff.py sim/dissipative real/m2
+    tools/param_diff.py sim_io_launch.py real_io_launch.py
+    tools/param_diff.py --sim-vs-real                  # the pairs that fly the same graph
 
-Three categories are reported, and the third is the dangerous one:
-
-  CHANGED       declared in both, different defaults
-  ONLY IN A/B   declared in one only -- the other falls back to the NODE default,
-                silently. This is how real_dissipative_launch.py ended up with no
-                kT block at all while the sim launches carried nine kT parameters.
+  CHANGED       known to both, different defaults
+  ONLY IN A/B   known to one only -- the other falls back to the NODE default, silently
+                (a launch file), or the knob does not exist on that side (a profile).
 """
 import argparse
 import ast
@@ -28,14 +25,21 @@ import pathlib
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-LAUNCH_DIR = REPO / 'src/controller_quad_load/launch'
+LAUNCH_DIR = REPO / 'src/bringup/launch'
 
-# The pairs worth comparing routinely.
-SIM_VS_REAL = [
-    ('mpc_quad_load_launch.py', 'real_control_launch.py'),
-    ('dissipative_launch.py', 'real_dissipative_launch.py'),
-    ('three_attach_launch.py', 'real_attach_launch.py'),
-]
+# The pairs worth comparing routinely: the sim mode and the rig mode that fly one graph.
+SIM_VS_REAL = [('sim/mpc', 'real/mpc'), ('sim/dissipative', 'real/dissipative'),
+               ('sim/attach', 'real/attach'), ('sim/dissipative', 'real/m2')]
+
+
+def profile_args(spec):
+    """{knob: default} of 'side/mode' (bringup/config), or None if spec is not one."""
+    side, _, mode = str(spec).partition('/')
+    if side not in ('sim', 'real') or not mode:
+        return None
+    sys.path.insert(0, str(REPO / 'src' / 'bringup'))
+    from bringup.profiles import profile
+    return profile(side, mode, cdir=str(REPO / 'src' / 'bringup' / 'config'))
 
 
 def launch_args(path):
@@ -66,16 +70,24 @@ def resolve(name):
     raise SystemExit(f"launch file not found: {name}")
 
 
-def compare(a_path, b_path, quiet=False):
-    a, b = launch_args(a_path), launch_args(b_path)
-    an, bn = pathlib.Path(a_path).name, pathlib.Path(b_path).name
+def args_of(spec):
+    """(name, {arg: default}) of a 'side/mode' profile or a launch file."""
+    prof = profile_args(spec)
+    if prof is not None:
+        return str(spec), prof
+    path = resolve(spec)
+    return path.name, launch_args(path)
+
+
+def compare(a_spec, b_spec, quiet=False):
+    (an, a), (bn, b) = args_of(a_spec), args_of(b_spec)
 
     changed = {k: (a[k], b[k]) for k in sorted(a.keys() & b.keys()) if a[k] != b[k]}
     only_a = sorted(a.keys() - b.keys())
     only_b = sorted(b.keys() - a.keys())
 
     print(f"\n══ {an}  vs  {bn} ══")
-    print(f"   {len(a)} vs {len(b)} declared arguments\n")
+    print(f"   {len(a)} vs {len(b)} known arguments\n")
 
     if changed:
         print(f"── CHANGED ({len(changed)}) — same argument, different default")
@@ -107,17 +119,12 @@ def main():
 
     if args.sim_vs_real:
         for a, b in SIM_VS_REAL:
-            pa, pb = LAUNCH_DIR / a, LAUNCH_DIR / b
-            if pa.exists() and pb.exists():
-                compare(pa, pb)
-        print("\nRemember: 'ONLY IN' means the other side is running on whatever the")
-        print("node declares. That is not necessarily wrong -- but it is not visible")
-        print("in the launch file, so check it deliberately before a flight.")
+            compare(a, b)
         return 0
 
     if not (args.a and args.b):
-        ap.error('give two launch files, or --sim-vs-real')
-    compare(resolve(args.a), resolve(args.b))
+        ap.error('give two side/mode profiles or launch files, or --sim-vs-real')
+    compare(args.a, args.b)
     return 0
 
 

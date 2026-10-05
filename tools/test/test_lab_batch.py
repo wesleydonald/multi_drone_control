@@ -110,7 +110,7 @@ def test_undeclared_launch_args_are_caught(tmp_path):
     cfg = ExperimentConfig.from_yaml(CFG)
     assert R.undeclared_launch_args(cfg) == []
     cfg.launch_args['no_such_arg'] = 1
-    assert R.undeclared_launch_args(cfg) == ['mpc_quad_load_launch.py: no_such_arg']
+    assert R.undeclared_launch_args(cfg) == ['sim_control_launch.py: no_such_arg']
 
 
 def test_launch_cwd_follows_the_slot(monkeypatch):

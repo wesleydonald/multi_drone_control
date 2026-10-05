@@ -5,7 +5,7 @@ import_check.py — import every console-script module and report what breaks.
 WHY THIS EXISTS
 ---------------
 On 2026-08-04 a missing `from std_msgs.msg import String` shipped into
-`controller_mpc.py`. All three tracker processes died instantly at launch with
+`tracker_node.py`. All three tracker processes died instantly at launch with
 `NameError: name 'String' is not defined`, raised at *class definition* time.
 
 Neither of the checks used beforehand could see it:
@@ -24,7 +24,7 @@ generated-code directory and take an exclusive compile lock. Sequential subproce
 keep those isolated and let the lock be released between them.
 
     python3 tools/import_check.py            # every package
-    python3 tools/import_check.py controller_quad_load
+    python3 tools/import_check.py tracker
 """
 import ast
 import pathlib
@@ -37,7 +37,6 @@ SRC = REPO / 'src'
 # Modules that are slow or need hardware attached; skipped by default with a reason.
 SKIP = {
     'drone_communication.elrs_interface': 'opens a serial port to the ELRS transmitter',
-    'drone_communication.video_interface': 'opens a camera device',
 }
 
 

@@ -74,8 +74,8 @@ Output: a ranked cause with evidence, a fix, and G1's rejoin criterion met.
 
 Review, with the numbers to back each change (one variable per experiment; critic for any new flight-loop
 law or estimator, reviewer on the final tables):
-- tracker (controller_quad_load MPC): cable FF gating, kt_trim, attitude FF, behaviour under slow ticks;
-- planner OCP (controller_load_mpc) + dissipative node: attach/detach resize, reference slews, creep
+- tracker (package tracker, MPC): cable FF gating, kt_trim, attitude FF, behaviour under slow ticks;
+- planner OCP (mpc_planner) + dissipative node (dissipative_planner): attach/detach resize, reference slews, creep
   (incl. airborne_start), z_ki, landing; the OCP's slow ticks (up to 1.2 s under load);
 - elrs_mux / HandoverPolicy; fleet manager gates;
 - interplay with Tejen's MPC and planner (hand-over instants, magnet commands);
@@ -295,7 +295,7 @@ Runner (`runner_node.py`):
 - Log `PHASE:<x>` from `/join_planner/phase`. Use String, RELIABLE + TRANSIENT_LOCAL, depth 10, with the QoS defined inline (no `tejen_mission` import).
 - Log `HANDOFF` on true edges only of `/join_planner/handoff_ready`.
 - Log `PICKUP` and `DROP` on the edges of `/tejen/object_attached`.
-- Log `FOLD_IN`, `PARTNER_RELEASE` and `PARTNER_HANDOFF` from `/rosout`, filtered to `dissipative_controller`.
+- Log `FOLD_IN`, `PARTNER_RELEASE` and `PARTNER_HANDOFF` from `/rosout`, filtered to `dissipative_planner` (`dissipative_controller` before 3 Oct).
 - Stamp all of these at the runner's sim_t on receipt. ROS log stamps are wall time and are not used.
 - Log `ball_x/y/z` from `/model/payload_model/pose` index 1. Raise an error if the start pose is not (1.2, −1.4, 0.08) ± 0.02.
 - Add config field `cmd_ready_topic` (default `/drone_{i}/ELRSCommand`).
@@ -384,11 +384,11 @@ If T0016 fails, park it with the log. The T0015 path (`M2_RATE_KI=0 M2_LIVE_KI=1
   - the hold pose from T0015: plates 3/0/6/9, ring yaw 20°, bodies at z 0.602–0.605. Place each rod tip on its plate and assert the gap is <5 mm. Do not copy ring z 0.10, which is join drift;
   - hangers copied from `m2a_x3_support.sdf`;
   - absolute include URIs.
-- `controller_quad_load/launch/m2_bench_io_launch.py`:
+- `bringup/launch/m2_bench_io_launch.py`:
   - a copy of his launch l.280–345, with `rate_ki: 10.0`;
   - ros_gz bridges for `/bench/hanger_i/detach`;
   - declares `num_drones`, `attach` and `rviz`;
-  - then `colcon build --packages-select controller_quad_load`.
+  - then `colcon build --packages-select bringup`.
 - `configs/experiments/m2_bench.yaml`:
   - `dissipative_launch partner_m2:=true sim_interface:=false`, azimuths 90,0,180,270;
   - `cmd_ready_topic: /drone_{i}/ELRSCommand_diss`;

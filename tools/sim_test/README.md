@@ -192,7 +192,7 @@ python3 tools/sim_test/make_m2_bench_world.py        # -> simulation_assets/teje
   `/drone_i/magnet/detach`, so the magnets stay welded. The hangers release on
   `std_msgs/Empty` to `/bench/hanger_i/detach` (bridged), and their state is on
   `/bench/hanger_i/state` (String).
-- `m2_bench_io_launch.py` (controller_quad_load) starts his sim plumbing as his M2D launch
+- `sim_m2_bench_launch.py` (bringup) starts his sim plumbing as his M2D launch
   does: the unthrottled `/clock` bridge, the ring pose bridge, the magnet joint bridge, and
   per drone the pose/motor bridge, `tejen_motion_capture_emulator` and
   `tejen_betaflight_communication`. `rate_ki` defaults to M2_RATE_KI, else SIM_RATE_KI,

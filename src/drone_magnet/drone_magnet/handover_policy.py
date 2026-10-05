@@ -11,7 +11,7 @@ THE RULE
   Hand over when the weld has happened AND our tracker is actually commanding thrust.
 
 The second half is not belt-and-braces. A tracker with no reference publishes armed-idle
--- `channel_2 = -1.0`, motors off (`controller_mpc.control_loop`) -- and the newcomer
+-- `channel_2 = -1.0`, motors off (`tracker_node.control_loop`) -- and the newcomer
 cannot have a reference at the weld instant unless something publishes one for it first,
 because `dissipative_node` clears `attach_pending` on the same /magnet/object_attached
 message the mux switches on and only publishes on its next 10 Hz plan tick. Switching

@@ -5,9 +5,10 @@ description: 'G5 weld bench (GOALS step 3): partner_attached_orbit without Tejen
   joint; the partner mission normally releases it).'
 world: three_attach_partner_attached_nopick.sdf
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 1
     start_taut: true
@@ -40,7 +41,7 @@ launch:
     partner: true
     partner_attached: true
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 3
     attach: true

@@ -58,7 +58,7 @@ source install/setup.bash
 If you only wish to build specific packages, use:
 
 ```bash
-colcon build --packages-select controller_quad_load controller_load_mpc controller_dissipative interfaces utility_objects simulation_communication --symlink-install
+colcon build --packages-select mpc_planner tracker fleet_manager bringup dissipative_planner interfaces utility_objects simulation_communication --symlink-install
 ```
 
 ## Visualisation
@@ -105,11 +105,13 @@ The packages that matter for this project:
 
 | Package | What it does |
 |---|---|
-| `controller_load_mpc` | Centralised planner (10 Hz). Solves the coupled load + cable + drone OCP and publishes a reference trajectory per drone. Also owns takeoff. |
-| `controller_quad_load` | Per-drone cable-aware MPC tracker (50 Hz) + the fleet manager. All the launch files live here. |
-| `controller_dissipative` | The dissipative spring-damper network — detach, attach and reconfiguration. Includes an offline verification harness. |
+| `mpc_planner` | Centralised load planner (10 Hz). Solves the coupled load + cable + drone OCP and publishes a reference trajectory per drone. Also owns takeoff (creep, hand-over, pretension, lift). |
+| `tracker` | Per-drone cable-aware MPC tracker (50 Hz), one node per drone, and its thrust model. |
+| `fleet_manager` | ARM / TAKEOFF / LAND / DISARM / ESTOP for the whole fleet; fleet-wide abort. |
+| `bringup` | The five launch files (`sim_io`, `sim_control`, `real_io`, `real_control`, `sim_m2_bench`; the control launches take `mode:=`), their default profiles (`config/`), the RViz config builder and the rig-mode helpers. |
+| `dissipative_planner` | The load planner with mid-flight detach/attach: OCP resize or the dissipative spring-damper network. Includes an offline verification harness. |
 | `controller_mpc_payload` | The approach MPC that flies the magnet drone in (from a collaborator's stack). |
-| `drone_magnet` | Tejen's controller for the join planner, magnet manager, ELRS mux. |
+| `drone_magnet` | The attach chain: join planner, magnet manager, ELRS mux (Tejen's launches run these from here). |
 
 Both reference generators (the OCP planner and the dissipative network) publish the **same message format**, so the trackers don't care which one is driving.
 
@@ -122,28 +124,28 @@ Arm and takeoff from the RViz panel, or by topic — see `CURRENT_STATE.md` §9 
 ## Cooperative carry (the OCP baseline)
 ```bash
 cd simulation_assets && gz sim three_rigid_ground.sdf -v4 -r
-ros2 launch controller_quad_load rviz_quad_load_launch.py num_drones:=3
-ros2 launch controller_quad_load mpc_quad_load_launch.py num_drones:=3 load_traj:=circle
+ros2 launch bringup sim_io_launch.py num_drones:=3
+ros2 launch bringup sim_control_launch.py mode:=mpc num_drones:=3 load_traj:=circle
 ```
 
 ## Detach (a drone leaves mid-flight)
 ```bash
 cd simulation_assets && gz sim four_rigid_ground.sdf -v4 -r
-ros2 launch controller_quad_load rviz_quad_load_launch.py num_drones:=4 detach:=true
-ros2 launch controller_quad_load dissipative_launch.py num_drones:=4
+ros2 launch bringup sim_io_launch.py num_drones:=4 detach:=true
+ros2 launch bringup sim_control_launch.py mode:=dissipative num_drones:=4
 #   ARM -> TAKEOFF -> hit DETACH
 ```
 
 ## Attach (a drone joins mid-flight)
 ```bash
 cd simulation_assets && gz sim three_attach.sdf -v4 -r
-ros2 launch controller_quad_load rviz_quad_load_launch.py num_drones:=3 attach:=true
-ros2 launch controller_quad_load three_attach_launch.py
+ros2 launch bringup sim_io_launch.py num_drones:=3 attach:=true
+ros2 launch bringup sim_control_launch.py mode:=attach
 #   ARM -> TAKEOFF -> hit ATTACH
 ```
 
 ## Flying the whole thing on the dissipative controller
-`dissipative_launch.py` only switches to the network when something actually detaches or attaches. To fly the entire flight on it, use `dissipative_only_launch.py` instead.
+`mode:=dissipative` only switches to the network when something actually detaches or attaches. To fly the entire flight on it, use `mode:=network` instead.
 
 ## Before every launch
 ```bash

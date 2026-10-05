@@ -4,7 +4,7 @@ tools/plot_style.py — the one figure style (THESIS_PLAN §9.4, §6.2)
 Every figure in the thesis is drawn through this module. It enforces two things:
 
   * ONE COLOUR PER DRONE ID, the same colour RViz uses. The palette is IMPORTED from
-    `controller_quad_load/rviz_config.py`, never copied -- a copy drifts silently, and
+    `bringup/rviz_config.py`, never copied -- a copy drifts silently, and
     then drone 2 is green on screen and red in the figure describing it.
   * ONE VISUAL GRAMMAR: reference dashed, actual solid, events vertical dotted, steady
     window shaded.
@@ -17,13 +17,13 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(REPO, 'src', 'controller_quad_load'))
+sys.path.insert(0, os.path.join(REPO, 'src', 'bringup'))
 
 import matplotlib                                     # noqa: E402
 matplotlib.use('Agg')                                 # headless: batches have no display
 import matplotlib.pyplot as plt                       # noqa: E402
 
-from controller_quad_load.rviz_config import (        # noqa: E402
+from bringup.rviz_config import (        # noqa: E402
     DRONE_COLOURS as _RVIZ_DRONE_COLOURS, PAYLOAD_COLOUR as _RVIZ_PAYLOAD_COLOUR)
 
 

@@ -9,11 +9,10 @@ run aborted. A healthy takeoff holds heading to a few degrees; the rig spin of
 2026-09-16 was +180 deg in 1.4 s with the stick pinned.
 
     tools/yaw_excursion.py R0275 R0276              # harness run ids or paths
-    tools/yaw_excursion.py results/logs/controller_quad_load --stamp 20260916_1640  # rig logs
+    tools/yaw_excursion.py results/logs/controller_quad_load --stamp 20260916_1640  # rig logs (either layout)
 """
 import argparse
 import csv
-import glob
 import json
 import os
 import sys
@@ -23,6 +22,7 @@ import numpy as np
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, 'tools'))
 from run_dir import resolve  # noqa: E402
+import run_logs  # noqa: E402
 
 
 def _yaw(w, x, y, z):
@@ -35,13 +35,12 @@ def _load(path):
 
 
 def tracker_logs(run_path, stamp=None):
-    pat = os.path.join(run_path, 'logs', 'controller_quad_load', 'planner_drone*') if stamp is None \
-        else os.path.join(run_path, f'planner_drone*_{stamp}*')
+    if stamp is None:
+        return run_logs.trackers(run_path)
     out = {}
-    for d in sorted(glob.glob(pat)):
-        i = int(os.path.basename(d).split('_')[1].replace('drone', ''))
-        if os.path.exists(os.path.join(d, 'log.csv')):
-            out[i] = os.path.join(d, 'log.csv')
+    for f in run_logs.node_csvs(run_path, 'tracker'):
+        if run_logs.stamp_of(f).startswith(stamp):
+            out[run_logs.drone_of(f)] = f
     return out
 
 

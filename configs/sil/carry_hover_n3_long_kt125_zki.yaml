@@ -2,9 +2,10 @@ name: carry_hover_n3_long_kt125_zki
 description: 'Planner offset card, FAULT-MASKING arm: kT typed +25 % (103.88), kt_trim OFF, z_ki 0.2.
   Expect I to rail at +0.15 with the near-bound WARN printed and the load still low.'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 0
     enable_approach: false

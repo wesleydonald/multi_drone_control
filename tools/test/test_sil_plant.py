@@ -75,7 +75,7 @@ def test_rate_curve_matches_the_sim_inner_loop_and_the_mpc_model():
     and than the model the MPC optimises against."""
     try:
         import casadi as cs
-        from controller_quad_load.dynamics import QuadLoadDynamics
+        from tracker.dynamics import QuadLoadDynamics
     except Exception as exc:                       # pragma: no cover - env dependent
         pytest.skip(f"MPC model not importable here: {exc}")
 
@@ -143,7 +143,7 @@ def test_attitude_lags_the_command():
 # ── 4. IMU convention ────────────────────────────────────────────────────────
 
 def test_imu_reads_one_g_up_at_rest_and_zero_in_free_fall():
-    """controller_mpc._imu_callback documents: at rest [0,0,+9.81]; in flight
+    """tracker_node._imu_callback documents: at rest [0,0,+9.81]; in flight
     (thrust + cable)/m in the body frame. measured_cable_accel() subtracts the modelled
     thrust from this, and |aCm| is half the bench's acceptance criterion -- a sign or
     frame error here would silently invent or hide the runaway signature."""

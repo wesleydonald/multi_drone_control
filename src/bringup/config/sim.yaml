@@ -1,0 +1,67 @@
+# Sim defaults (sim_control_launch.py): the x3 plant, Gazebo budgets, the linear thrust map.
+# The base is the carry (mode:=mpc); each `modes:` entry lists only what that mode changes.
+fleet_geometry:
+  num_drones: 2
+  cable_len: 0.5
+  drone_mass: 0.64
+  attach_radius: ''
+  attach_z: ''
+  pivot_offset_z: 0.0
+  rod_tol_frac: ''
+  rod_spread_m: ''
+takeoff:
+  ff_cap_force: 0.0
+  lift_ramp_vel: 0.22
+  z_taut_gate: 0.99
+  payload_rest_z: -0.1
+height_hold:
+  z_i_gate: ''
+trajectory:
+  traj_speed: 0.6
+thrust_map:
+  thrust_ratio: 'auto'
+  takeoff_thrust_ratio: 'auto'
+  thrust_offset: 0.0
+  thrust_offset_v_slope: 0.0
+  throttle_max: 0.6
+  kt_trim: true
+fleet_resize:
+  reconfig_mode: 'network'
+network:
+  auto_network_handover: true
+sim_interface:
+  sil: false
+  sim_thrust_map: 'linear'
+  sim_thrust_offset: 0.185
+  sim_pack_v0: 24.4
+
+modes:
+  mpc: {}
+  free_hover: {}
+  dissipative:
+    num_drones: 4
+    attach_z: 0.025
+    # rig-twin knobs: '' = not passed (the node's default); a twin detach types them
+    pivot_offset_z: ''
+    pretension_s: ''
+    ff_cap_release_s: ''
+    thrust_offset: ''
+    thrust_offset_v_slope: ''
+    thrust_v_ref: ''
+    throttle_max: ''
+    sim_thrust_map: ''
+    sim_thrust_offset: ''
+    sim_pack_v0: ''
+  network:
+    num_drones: 3
+  attach:
+    num_drones: 3
+    attach_azimuths_deg: '330,90,210'
+    start_taut: true
+    handover_settle_s: 0.75
+    creep_vel: 0.10
+    control_mode: 'velocity_after_handover'
+    vel_ki: 0.0
+    pose_timeout_s: 1.0
+    safety_ref_timeout_s: 2.0
+    diss_ki_load: 1.0

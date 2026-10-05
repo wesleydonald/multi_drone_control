@@ -24,6 +24,7 @@ initial:
   stands: true
 launch:
   args:
+    mode: attach
     attach_azimuths_deg: 30,90,150,270
     cable_len: 0.5
     enable_approach: false
@@ -39,8 +40,8 @@ launch:
     reconfig_hold_s: 1.5
     traj_speed: 0.4
     traj_radius: 0.5
-  file: three_attach_launch.py
-  package: controller_quad_load
+  file: sim_control_launch.py
+  package: bringup
 name: detach_circle_3915_net
 timing:
   dt: 0.02

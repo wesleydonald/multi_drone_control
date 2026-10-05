@@ -40,4 +40,4 @@ stop_bag() { kill -INT "$BAG" 2>/dev/null; wait "$BAG" 2>/dev/null; echo "rig_fl
 trap stop_bag EXIT
 
 echo "rig_flight: F=$F  logs $MDC_RUN_DIR  bag $D/$F (${#topics[@]} topics)"
-ros2 launch controller_quad_load "$LAUNCH" "$@" 2>&1 | tee "$D/$F.log"
+ros2 launch bringup "$LAUNCH" "$@" 2>&1 | tee "$D/$F.log"

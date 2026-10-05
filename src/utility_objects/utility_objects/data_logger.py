@@ -7,15 +7,17 @@ from datetime import datetime
 
 
 def run_log_dir(logging_name, run_name, base_dir=None):
-    """Create and return <base>/logs/<logging_name>/<run_name>_<timestamp>/.
+    """Create and return <base>/logs/<logging_name>/<run_name>_<timestamp>/, or
+    <base>/logs/<logging_name>/<timestamp>/ when run_name is empty.
     Same layout DataLogger uses, for a node that wants the directory without a CSV.
 
     base_dir defaults to the CWD, preserving the original behaviour exactly for
     existing callers. Pass utility_objects.run_context.log_base_dir() to write
     into the results tree instead -- see the note in DataLogger below."""
     base = os.getcwd() if base_dir is None else base_dir
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_dir = os.path.join(base, 'logs', logging_name,
-                           run_name + '_' + datetime.now().strftime("%Y%m%d_%H%M%S"))
+                           f'{run_name}_{stamp}' if run_name else stamp)
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
 

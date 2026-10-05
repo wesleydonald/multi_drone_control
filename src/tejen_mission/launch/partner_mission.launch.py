@@ -1,7 +1,7 @@
 """Tejen's M1 pickup/drop/rejoin mission flown by drone 3 of our three_attach fleet.
 
 Start AFTER our side is up and the ring is flying:
-  ros2 launch controller_quad_load three_attach_launch.py partner:=true ...
+  ros2 launch bringup sim_control_launch.py mode:=attach partner:=true ...
   ros2 launch tejen_mission partner_mission.launch.py
 
 His nodes live in /tejen (MPC, supervisor, pendulum, magnet manager) so their relative

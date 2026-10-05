@@ -4,9 +4,10 @@ description: 'R0a prime (readiness review 2026-09-29, K1): the n3 even-ring hove
   Predicted carry throttle (tools/headroom.py): 0.68, over the 0.6 cap. Exploratory: what the stack does when the tracker''s
   0.6 throttle cap binds.'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 0
     enable_approach: false

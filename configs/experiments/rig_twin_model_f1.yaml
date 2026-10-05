@@ -9,9 +9,10 @@ description: 'Sim reproduction of RIG-0930-model-f1 (plan 2026-10 section 4, car
   are in this tree, so failures and ref age read against the fixed fallback.'
 world: four_rigid_ground_rig.sdf
 launch:
-  package: controller_quad_load
-  file: mpc_quad_load_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: mpc
     num_drones: 4
     load_traj: hover
     cable_len: 0.55
@@ -45,7 +46,7 @@ launch:
     sim_thrust_offset: 0.181,0.185,0.187,0.187
     sim_pack_v0: 23.8
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 4
     sim_thrust_map: rig

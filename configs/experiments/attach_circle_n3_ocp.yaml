@@ -10,9 +10,10 @@ description: 'Card 2026-09-25_attach_ocp arm C: the attach-during-circle demo (t
   to magnet tip on the sim model (R0550).'
 world: three_attach_rod.sdf
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 1
     start_taut: true
@@ -44,7 +45,7 @@ launch:
     pose_timeout_s: 1.0
     attach_cable_len: 0.49
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 3
     attach: true

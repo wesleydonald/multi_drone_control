@@ -2,9 +2,10 @@ name: carry_circle_n3_long_zki
 description: 'Planner offset card, circle arm: z_ki 0.2 must be FROZEN once the lateral trajectory starts
   (traj_t > 0); mean height within 2 cm of the hover value.'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 0
     enable_approach: false

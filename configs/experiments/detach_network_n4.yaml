@@ -22,9 +22,10 @@ description: "(2026-09-23: load_mass rescaled to the official 0.86 kg ring paylo
   \ is the first ring that survives a detach with margin to spare.\n"
 world: four_rigid_ground.sdf
 launch:
-  package: controller_quad_load
-  file: dissipative_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: dissipative
     num_drones: 4
     load_traj: circle
     traj_speed: 0.6
@@ -39,7 +40,7 @@ launch:
     handover_settle_s: 0.75
     creep_vel: 0.1
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 4
     detach: true

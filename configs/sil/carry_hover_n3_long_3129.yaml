@@ -3,9 +3,10 @@ description: 'Uneven hang: 3/12/9 o clock (attach_azimuths 0,90,180), the 3-dron
   with unequal shares; kt_trim off (card 2026-09-23_kt_trim.md, critic 6: per-drone gain spread on an
   uneven layout).'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 0
     enable_approach: false

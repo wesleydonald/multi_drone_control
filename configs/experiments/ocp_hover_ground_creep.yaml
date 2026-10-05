@@ -7,9 +7,10 @@ description: 'Floor start on the CREEP path (plan 2026-09-24, item 1): three dro
   / abort.'
 world: three_rigid_ground.sdf
 launch:
-  package: controller_quad_load
-  file: mpc_quad_load_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: mpc
     num_drones: 3
     load_traj: hover
     cable_len: 0.5
@@ -25,7 +26,7 @@ launch:
     creep_vel: 0.1
     pose_timeout_s: 1.0
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 3
 fleet:

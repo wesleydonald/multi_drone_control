@@ -166,7 +166,7 @@ class QuadParams:
 
 # M2A ring payload (generate_rigid_world.py): annulus 280/220 mm, 30 mm thick. Per-kg
 # inertia so the plant's inertia follows its mass; the planner derives the same way
-# (controller_load_mpc/params.py load_inertia).
+# (mpc_planner/params.py load_inertia).
 RING_IXX_PER_KG = 2.733e-02 / 0.86
 RING_IZZ_PER_KG = 5.452e-02 / 0.86
 
@@ -410,7 +410,7 @@ class SilPlant:
         """Body-frame specific force, the quantity a real IMU reports.
 
         f = R^T (a_thrust_world + a_cable_world). At rest this is [0, 0, +9.81] and in
-        free fall it is zero -- the contract controller_mpc._imu_callback documents, and
+        free fall it is zero -- the contract tracker_node._imu_callback documents, and
         the input to measured_cable_accel() whose magnitude |aCm| is half the bench's
         acceptance criterion."""
         R = quat_to_rot(self.q[i])

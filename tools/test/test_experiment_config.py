@@ -28,7 +28,7 @@ def write(tmp_path, doc):
 BASE = {
     'name': 'unit',
     'world': 'three_attach.sdf',
-    'launch': {'package': 'controller_quad_load', 'file': 'three_attach_launch.py',
+    'launch': {'package': 'bringup', 'file': 'three_attach_launch.py',
                'args': {'num_drones': 3, 'reserved_attach': 1,
                         'attach_central': False}},
     'fleet': {'num_drones': 3, 'n_total': 4},

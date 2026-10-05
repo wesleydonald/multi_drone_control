@@ -4,9 +4,10 @@ description: 'Weld bench + attach_seek_m 0.05 (approach reference creeps up to 5
   normally releases it).'
 world: three_attach_partner_attached_nopick.sdf
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 1
     start_taut: true
@@ -40,7 +41,7 @@ launch:
     partner_attached: true
     attach_seek_m: 0.05
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 3
     attach: true

@@ -24,7 +24,7 @@ EVENT_KINDS = {
     'TAKEOFF',    # /fleet/command "TAKEOFF"
     'LAND',       # /fleet/command "LAND"
     'ESTOP',      # /fleet/command "ESTOP": the manager's emergency path (/fleet/abort + direct
-                  # disarm), the string main.py parses; abort arms need forbid_abort false
+                  # disarm), the string fleet_manager_node.py parses; abort arms need forbid_abort false
     'DISARM',     # /fleet/command "DISARM": the operator's kill switch (panel/spacebar); latches the
                   # muxes like ESTOP (Wesley 2026-09-28) through the service disarm path
     'MAGNET',     # /magnet/command "ON"/"OFF"  -> starts the approach + weld
@@ -48,10 +48,22 @@ EVENT_KINDS = {
                   # e.g. /pickup/detach, which the partner mission sends at its start
     'FLEET_HANDOVER',  # /fleet/handover True for 1.5 s: the elrs_mux (partner_m2) hands each
                        # drone to our tracker on its first flying command (M2 bench)
+    'WRENCH',     # persistent force on a Gazebo link, arg "fx fy fz [scoped link]" (N; default
+                  # lift_system::payload::body); it replaces the previous WRENCH, "0 0 0" removes
+                  # it. Needs a world with the ApplyLinkWrench system (*_push.sdf)
     'WAIT_THRUST',     # not published: block until every drone's ELRSCommand on the arg
                        # template (default cmd_ready_topic) is armed above idle throttle,
                        # then shift later events (M2 bench: hangers release only under thrust)
 }
+
+def wrench_arg(arg):
+    """WRENCH arg -> (force (fx, fy, fz) in N, scoped link name)."""
+    parts = str(arg or '').split()
+    if len(parts) not in (3, 4):
+        raise ValueError(f'WRENCH needs "fx fy fz [link]", got {arg!r}')
+    return tuple(float(v) for v in parts[:3]), (parts[3] if len(parts) == 4
+                                                else 'lift_system::payload::body')
+
 
 def wait_lift_arg(arg):
     """WAIT_LIFT arg -> (payload z threshold, timeout SIM s or None): 'z' or 'z timeout'.
@@ -108,6 +120,8 @@ class Event:
             wait_lift_arg(self.arg)
         if self.do == 'WAIT_THRUST' and self.arg is not None and '{i}' not in str(self.arg):
             raise ValueError(f"WAIT_THRUST arg {self.arg!r} has no '{{i}}' for the drone id")
+        if self.do == 'WRENCH':
+            wrench_arg(self.arg)
         if self.do in ('ATTACH', 'DETACH'):
             if self.arg is None:
                 raise ValueError(f'{self.do} needs a drone id as its arg')
@@ -167,17 +181,17 @@ class ExperimentConfig:
         self.name = name
         self.description = ''
         self.world = 'three_attach.sdf'
-        self.launch_package = 'controller_quad_load'
-        self.launch_file = 'three_attach_launch.py'
+        self.launch_package = 'bringup'
+        self.launch_file = 'sim_control_launch.py'
         self.launch_args = {}
         # The SIM-INTERFACE launch, started FIRST and separately.
         #
-        # This is not optional plumbing: rviz_quad_load_launch.py owns the /clock
+        # This is not optional plumbing: sim_io_launch.py owns the /clock
         # bridge, the pose bridges and the mocap emulators. Start only the control
         # launch and every node sits on use_sim_time with no clock, nothing publishes,
         # and the run times out having produced zero rows -- which is exactly what the
         # first Gazebo run through this tool did. The GUI is suppressed with rviz:=false.
-        self.io_launch_file = 'rviz_quad_load_launch.py'
+        self.io_launch_file = 'sim_io_launch.py'
         self.io_launch_args = {}
         self.num_drones = 3
         self.n_total = 4
@@ -318,8 +332,10 @@ class ExperimentConfig:
             out.append(f'{k}:={v}')
         return out
 
-    def launch_argv(self):
-        return self._argv(self.launch_args)
+    def launch_argv(self, params_path=None):
+        """Control-launch args; knobs that are not launch arguments go to params_path."""
+        import launch_args
+        return launch_args.argv(self.launch_file, self.launch_args, params_path)
 
     def io_launch_argv(self):
         """Args for the sim-interface launch, with the defaults it needs derived from

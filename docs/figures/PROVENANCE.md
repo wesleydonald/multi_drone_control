@@ -14,3 +14,18 @@ The blind test behind the style: `F_attach_demo_storyboard/skill_test_2026-09-29
 |---|---|---|---|
 | R0209 | `ba3ba95c` | 50 | **results/ only** |
 
+
+## F_tracker_x0, F_disturbance (4 Oct 2026)
+
+Built with the thesis-figure skill (`tools/thesis_sim_figures.py`, 6.27 in, Computer Modern; three look rounds and
+one blind critic each, every accepted fix applied). Used in `thesis/Source/src/sim_results.tex` as
+`Images/tracker_x0.pdf` and `Images/disturbance.pdf`. Data in results/ only (not archived).
+
+| figure | runs | code |
+|---|---|---|
+| F_tracker_x0 | R0956, R0957 (SIL); R0841 (old box), R0960 (box 0) hold; R0832 (old box), R0974 (box 0) circle | branch week4, uncommitted (4 Oct) |
+| F_disturbance | R0962, R0968, R0969 (0.6 N down); R0961, R0971 (0.4 N horizontal) | branch week4, uncommitted (4 Oct) |
+| F_landing | R0960 (straight descent, box 0), R1013 (unwind + ramp + idle) | branch week4, uncommitted (4 Oct night) |
+| F_detach | R1012 (w4_3915_detach_lf: box 0, land_unwind, ramp, idle) | branch week4, uncommitted (5 Oct night) |
+| F_traj | R1033 (circle) and R1035 (figure-8), epsilon 0 + landing fix; R0933, R0935 old box | branch week4, uncommitted (5 Oct night) |
+| F_flight | R1013 (box 0, land_unwind + ramp + idle) | branch week4, uncommitted (5 Oct night) |

@@ -1,0 +1,144 @@
+"""Tests for the configuration tools (finding F9).
+
+`check_geometry.py` is a validator, and a validator that reports a mismatch which is
+not real is worse than no validator — it gets ignored, and then it is not there when
+it matters. The first version of it did exactly that: it read `attach_z` in the
+lift_system frame instead of relative to the payload CoG, so every elevated world
+(payload at 0.6 m) looked like `attach_z = 0.625` against a config value of 0.025.
+These tests pin the frame convention down.
+
+    python3 -m pytest src/bringup/test/test_config_tools.py -v
+"""
+import pathlib
+import sys
+
+import pytest
+
+REPO = pathlib.Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO / 'tools'))
+
+from check_geometry import world_geometry, planner_defaults, launch_defaults  # noqa: E402
+from param_diff import launch_args, profile_args                              # noqa: E402
+
+WORLDS = REPO / 'simulation_assets'
+LAUNCHES = REPO / 'src/bringup/launch'
+PROFILES = [f'{side}/{mode}' for side, modes in
+            (('sim', ('mpc', 'free_hover', 'dissipative', 'network', 'attach')),
+             ('real', ('mpc', 'free_hover', 'dissipative', 'attach', 'm2'))) for mode in modes]
+
+
+def every_default():
+    """(name, {arg: default}) of every control-launch profile and every other launch file."""
+    out = [(p, profile_args(p)) for p in PROFILES]
+    out += [(lf.name, launch_args(lf)) for lf in LAUNCHES.glob('*launch.py')
+            if lf.name not in ('sim_control_launch.py', 'real_control_launch.py')]
+    return out
+
+
+def ground_worlds():
+    return [WORLDS / n for n in
+            ('two_rigid_ground.sdf', 'three_rigid_ground.sdf', 'four_rigid_ground.sdf')
+            if (WORLDS / n).exists()]
+
+
+# ── geometry extraction ──────────────────────────────────────────────────────
+
+@pytest.mark.parametrize('sdf', ground_worlds(), ids=lambda p: p.name)
+def test_ground_worlds_match_the_planner_defaults(sdf):
+    """The worlds actually flown must agree with the config the planner uses, or
+    every drone's tension feedforward is sized wrongly."""
+    g = world_geometry(sdf)
+    d = planner_defaults()
+    for k in ('cable_len', 'attach_radius', 'attach_z', 'load_mass'):
+        assert abs(g[k] - d[k]) < 1e-3, (
+            f"{sdf.name}: {k} world={g[k]:.4f} vs params.py={d[k]:.4f}")
+
+
+def test_attach_z_is_relative_to_the_payload_not_the_world():
+    """The bug this file exists for. `four_rigid` hangs its payload at z=0.6 and
+    `four_rigid_ground` at z=0.025; attach_z is defined above the load CoG, so both
+    must report the SAME value. Reading the raw pose gives 0.625 vs 0.05."""
+    elevated = WORLDS / 'four_rigid.sdf'
+    grounded = WORLDS / 'four_rigid_ground.sdf'
+    if not (elevated.exists() and grounded.exists()):
+        pytest.skip('worlds not present')
+    a = world_geometry(elevated)['attach_z']
+    b = world_geometry(grounded)['attach_z']
+    assert abs(a - b) < 1e-3, (
+        f"attach_z differs between an elevated and a grounded world ({a:.4f} vs "
+        f"{b:.4f}) — it is being read in the wrong frame")
+
+
+def test_drone_count_is_extracted():
+    assert world_geometry(WORLDS / 'three_rigid_ground.sdf')['num_drones'] == 3
+    assert world_geometry(WORLDS / 'four_rigid_ground.sdf')['num_drones'] == 4
+
+
+def test_non_uniform_attach_ring_is_flagged():
+    """The randomly-generated worlds have unequal attach radii, which the planner's
+    single `attach_radius` cannot represent. That must not pass silently."""
+    rnd = WORLDS / 'three_random_seed1.sdf'
+    if not rnd.exists():
+        pytest.skip('random world not present')
+    assert '_warn_ring' in world_geometry(rnd)
+
+
+# ── launch argument parsing ──────────────────────────────────────────────────
+
+def test_launch_args_are_parsed_without_executing_the_launch():
+    a = launch_args(LAUNCHES / 'sim_io_launch.py')
+    assert 'num_drones' in a and 'clock_hz' in a
+    assert profile_args('sim/mpc')['thrust_ratio'] == 'auto'
+
+
+def test_sim_and_real_thrust_settings_still_differ():
+    """thrust_ratio 'auto' in sim vs 24.0 on hardware. Gazebo's motor model is
+    QUADRATIC (a = 88.6*u^2), so a linear kT there is the secant gain at the hover
+    operating point, derived per launch by thrust_model.py (32.9 at 0.4 kg, 34.6 at
+    0.6 kg); the real airframe measures 24 at full battery health and is never
+    derived. The rig default is the free-hover measurement of 30 Sep 2026 (21.7)."""
+    sim = profile_args('sim/mpc')
+    real = profile_args('real/mpc')
+    assert sim['thrust_ratio'] != real['thrust_ratio']
+    assert float(real['thrust_ratio']) == 35.2    # gain above the identified 0.185 offset
+
+
+def test_the_adaptive_kt_machinery_stays_gone():
+    """kT is FIXED (supervisor-approved 2026-08-05, reaffirmed 2026-08-05 after the
+    quadratic-inversion finding below). Two mechanisms used to move it underneath the
+    tracker — a per-drone UKF and the thrust_quad_c airborne schedule — and both were
+    removed because neither could be reasoned about from the value the launch file sets:
+    `thrust_ratio:=20` provably changed nothing. If any of these names comes back in a
+    launch, the number below stops meaning what it says.
+
+    `thrust_quad_c` is on this list BY DECISION, not by oversight. Re-linearising kT on
+    the last throttle is the exact algebraic inverse of Gazebo's quadratic motor model
+    and it demonstrably removes the sim attach capsize (SIL R0022/R0023 vs R0015/R0016),
+    but Wesley's decision is that the tracker flies one fixed number and nothing else.
+    The sim/plant mismatch is to be fixed in the SIMULATOR, not by varying kT."""
+    gone = ('thrust_quad_c', 'adaptive_thrust_ratio', 'adaptive_thrust_feedback',
+            'thrust_ratio_estimator', 'kt_seed', 'kt_max_deviation',
+            'kt_freeze_after_s', 'ukf_q_kt', 'ukf_rate_hz')
+    for name_, a in every_default():
+        for name in gone:
+            assert name not in a, f'{name_} re-declares {name}'
+
+
+def test_the_battery_derate_ships_disabled_everywhere():
+    """The linear kT-vs-voltage derate is built but UNCALIBRATED — nobody has measured
+    the sag fraction on this rig. Shipping it on would change every flight on the
+    strength of a guessed number."""
+    for name_, a in every_default():
+        if 'kt_batt_sag_frac' in a:
+            assert float(a['kt_batt_sag_frac']) == 0.0, (
+                f'{name_} enables the battery derate by default')
+            assert float(a['kt_batt_v_full']) > float(a['kt_batt_v_empty']), (
+                f'{name_} has an inverted battery voltage range')
+
+
+def test_terminal_vel_ref_defaults_to_the_historical_behaviour_everywhere():
+    """T1 is an experiment. If a launch ever ships it enabled by default, every run
+    silently includes an unmeasured change."""
+    for name_, a in every_default():
+        if 'terminal_vel_ref' in a:
+            assert a['terminal_vel_ref'] == 'false', f"{name_} enables T1 by default"

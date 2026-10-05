@@ -3,9 +3,10 @@ mis_seed: true
 description: 'docs/experiments/2026-09-23_effective_load_force.md: tracker told thrust_ratio 91.41 (+10
   % vs the derived 83.1), load_force_est off. The rig failure mode (under-thrust). kt_trim ON (card 2026-09-23_kt_trim.md).'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 0
     enable_approach: false

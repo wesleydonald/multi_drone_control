@@ -2,9 +2,10 @@ name: carry_hover_n3_long_kt110_kt_tau15
 mis_seed: true
 description: 'kt_trim tau sweep: 1.5 s (default 8 s converged in 32 s, R0391; too slow for a rig flight).'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 0
     enable_approach: false

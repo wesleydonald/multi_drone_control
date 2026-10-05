@@ -3,9 +3,10 @@ description: 'R3e vs R4 at the RIG thrust gain (readiness review 2026-09-29, dec
   M1 layout), drone 1.0 kg, plant thrust_c 21.8, typed kT 21.8, trim off. Predicted carry throttle: plate-9 drone 0.619, over
   the 0.6 cap; the others 0.52-0.54. Exploratory.'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 4
     reserved_attach: 0
     enable_approach: false

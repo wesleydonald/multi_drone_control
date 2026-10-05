@@ -4,9 +4,10 @@ description: 'Plan 2026-10-02 B2 neighbour: THREE drones, orbit r 0.5 at 0.125 m
   mean > 5 cm or tilt mean > 3 deg.'
 world: three_rigid_ground_rig.sdf
 launch:
-  package: controller_quad_load
-  file: mpc_quad_load_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: mpc
     num_drones: 3
     load_traj: orbit
     cable_len: 0.55
@@ -44,7 +45,7 @@ launch:
     ff_cap_force: 0.75
     ff_cap_release_s: 2.0
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 3
     sim_thrust_map: rig

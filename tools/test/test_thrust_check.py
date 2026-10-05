@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-pytest.importorskip('controller_load_mpc.geometry')
+pytest.importorskip('mpc_planner.geometry')
 import thrust_check  # noqa: E402
 
 

@@ -16,7 +16,7 @@ them would just create a new thing to drift.
 
     tools/check_geometry.py simulation_assets/three_rigid_ground.sdf
     tools/check_geometry.py simulation_assets/three_rigid_ground.sdf \
-        --launch src/controller_quad_load/launch/mpc_quad_load_launch.py
+        --launch src/bringup/launch/sim_control_launch.py --mode mpc
     tools/check_geometry.py --all      # every world, geometry summary
     tools/check_geometry.py --config configs/experiments/<name>.yaml   # world vs launch
                                        # defaults + the config's launch args
@@ -195,10 +195,10 @@ def _drone_and_rod_geometry(sdf_path, world):
 
 
 def planner_defaults():
-    """Module-level defaults in controller_load_mpc/params.py, read without importing
+    """Module-level defaults in mpc_planner/params.py, read without importing
     ROS. These apply whenever a launch does not declare the parameter -- the silent
     case, and the one most likely to be stale."""
-    src = REPO / 'src/controller_load_mpc/controller_load_mpc/params.py'
+    src = REPO / 'src/mpc_planner/mpc_planner/params.py'
     out = {}
     if not src.exists():
         return out
@@ -214,8 +214,18 @@ def planner_defaults():
     return out
 
 
-def launch_defaults(launch_path):
-    """DeclareLaunchArgument defaults from a launch file, without executing it."""
+# the consolidated control launches take their defaults from bringup/config (profiles.py)
+CONTROL_LAUNCHES = {'sim_control_launch.py': 'sim', 'real_control_launch.py': 'real'}
+
+
+def launch_defaults(launch_path, mode=None):
+    """A launch file's argument defaults without executing it: the profile of `mode` for
+    sim_control/real_control_launch.py, else its DeclareLaunchArgument defaults."""
+    side = CONTROL_LAUNCHES.get(pathlib.Path(launch_path).name)
+    if side:
+        sys.path.insert(0, str(REPO / 'src' / 'bringup'))
+        from bringup.profiles import DEFAULT_MODE, profile
+        return profile(side, mode or DEFAULT_MODE, cdir=str(REPO / 'src' / 'bringup' / 'config'))
     tree = ast.parse(pathlib.Path(launch_path).read_text())
     out = {}
     for node in ast.walk(tree):
@@ -253,7 +263,7 @@ def config_mismatches(world, launch_path=None, overrides=None):
     config's launch args) over the launch file's defaults over params.py. For
     run_experiment.py to refuse a config before it spends a run."""
     g = world if isinstance(world, dict) else world_geometry(world)
-    d = dict(launch_defaults(launch_path)) if launch_path else {}
+    d = dict(launch_defaults(launch_path, (overrides or {}).get('mode'))) if launch_path else {}
     d.update({k: v for k, v in (overrides or {}).items() if v is not None})
     nd = planner_defaults()
     bad = []
@@ -286,7 +296,7 @@ def _load_config(path):
     if not world.is_absolute():
         world = REPO / 'simulation_assets' / world
     launch = cfg.get('launch', {})
-    lp = (REPO / 'src' / launch.get('package', 'controller_quad_load') / 'launch'
+    lp = (REPO / 'src' / launch.get('package', 'bringup') / 'launch'
           / launch['file']) if launch.get('file') else None
     return world, lp, launch.get('args') or {}
 
@@ -295,6 +305,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('world', nargs='?')
     ap.add_argument('--launch')
+    ap.add_argument('--mode', help='mode of sim_control/real_control_launch.py (default mpc)')
     ap.add_argument('--all', action='store_true')
     ap.add_argument('--config', help='experiment YAML: its world vs its launch + args')
     args = ap.parse_args()
@@ -338,7 +349,7 @@ def main():
         print("\n   (pass --launch <launch.py> to compare against the controller)")
         return 0
 
-    d = launch_defaults(args.launch)
+    d = launch_defaults(args.launch, args.mode)
     nd = planner_defaults()
     print(f"\n── vs controller config: {pathlib.Path(args.launch).name}")
     bad = 0

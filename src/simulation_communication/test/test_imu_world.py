@@ -38,7 +38,7 @@ def test_every_imu_experiment_world_publishes_every_gyro():
     'tejen/world_drone_env_detach.sdf',          # c1f6
     'tejen/world_drone_env_detach_c1e.sdf',      # c1e
     'tejen/stage1_torque_test.sdf',              # tools/sim_test/stage1_torque_test.py
-    'tejen/bench_m2/m2_bench_world_imu.sdf',     # m2_bench_io_launch default (imu)
+    'tejen/bench_m2/m2_bench_world_imu.sdf',     # sim_m2_bench_launch default (imu)
 ])
 def test_tejen_default_worlds_have_the_imu_system(world):
     path = os.path.join(ASSETS, world)

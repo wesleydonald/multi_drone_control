@@ -3,7 +3,7 @@
 This is a read-only planning pass: no code, launch, world or rig was touched. It uses these sources:
 - the real launches, drone_communication, drone_magnet, the fleet manager, the planner and the dissipative node;
 - tests.txt, CURRENT_STATE.md, decisions.md, real_attach_gap.md and the plan file sparkling-sprouting-possum.md;
-- every `results/logs/controller_quad_load/*/params.json` with `use_sim_time: false` (the real flights), and results/registry.csv;
+- every `results/logs/controller_quad_load/*/params.json` (since 3 Oct `results/logs/{tracker,mpc_planner,dissipative_planner}/*/params.json`) with `use_sim_time: false` (the real flights), and results/registry.csv;
 - Tejen's `~/tejen/drone_cage_control` (branch SwungPayload2026_Collaborative) and our fork `src/tejen_mission`.
 
 `file:line` references are to this repo unless they are prefixed with `tejen:`. "UNVERIFIED" marks a statement no file or log confirms.
@@ -55,7 +55,7 @@ This is a read-only planning pass: no code, launch, world or rig was touched. It
 | M2c | his two drones join (M2a), then `/fleet/handover` to our trackers: sweep and HOLD (no lift: a 2-point hang capsizes), LAND | P12-P14, P16 | after M2a and M2b |
 | M2d | full M2: his four-drone join, hand-over, lift, hover, LAND | his four-drone IRL stack does not exist (his IRL launch is two-drone only) | after M2c |
 
-The draft's "small box" in R1 is dropped. `free_hover` only climbs, holds and lands (src/controller_quad_load/controller_quad_load/free_hover.py:1-16), so a box would be new code for no ladder value.
+The draft's "small box" in R1 is dropped. `free_hover` only climbs, holds and lands (src/tracker/tracker/free_hover.py:1-16), so a box would be new code for no ladder value.
 
 ---
 
@@ -69,7 +69,7 @@ The draft's "small box" in R1 is dropped. `free_hover` only climbs, holds and la
 
 Our convention is drone i = quad(i+1) = body 11+i = `/dev/QUAD(i+1)`. The udev file maps all four unique FTDI serials (/etc/udev/rules.d/99-elrs-quad.rules). Tejen's install command (`sudo install ... tools/irl_test/99-elrs-m2.rules /etc/udev/rules.d/99-elrs-quad.rules`) **overwrites the same filename with only QUAD2/QUAD4**. Never run it on this laptop.
 
-**The shell helpers inject `num_drones:=3` BEFORE your args** (`~/.bashrc:162-164`). The sheets below spell out the full `ros2 launch` so there is no doubt. After the launch, `ros2 param get /central_controller num_drones` confirms the count.
+**The shell helpers inject `num_drones:=3` BEFORE your args** (`shortcuts.md`). The sheets below spell out the full `ros2 launch` so there is no doubt. After the launch, `ros2 param get /fleet_manager num_drones` confirms the count.
 
 **Radio node facts** (src/drone_communication/drone_communication/elrs_interface.py):
 - Magnet: `magnet_channel` default 6 (= Betaflight AUX4, `tools/aux_sweep.py` 2026-09-16), `magnet_initial` ''|ON, and `/drone_<i>/magnet` String latch (:148-157). The latch overrides whatever the command carries on that channel (:311-313).
@@ -82,7 +82,7 @@ Our convention is drone i = quad(i+1) = body 11+i = `/dev/QUAD(i+1)`. The udev f
 - **Bug: `return None` inside `run()` (:419-426) ENDS the receive loop on the first packet without a '|'.** Every pose then goes stale, and the 0.25 s pose watchdog disarms the whole fleet mid-flight. Fix P1 before any flight.
 
 **Abort path:**
-- The fleet manager's ESTOP publishes `/fleet/abort` and a direct disarm on each `/drone_i/ELRSCommand` (src/controller_quad_load/controller_quad_load/main.py:285-308).
+- The fleet manager's ESTOP publishes `/fleet/abort` and a direct disarm on each `/drone_i/ELRSCommand` (src/fleet_manager/fleet_manager/main.py:285-308).
 - Tejen's MPC does not subscribe `/fleet/abort` (grep: only controller_mpc.py and main.py do).
 - Behind a mux, his forwarded stream re-arms the radio on its next message, because `elrs_interface` takes `armed` from the latest message (elrs_interface.py:206).
 - In the M2 graph, our manager's ELRS topics are remapped to `_diss` (dissipative_launch.py:176-181), so before `/fleet/handover` our ESTOP reaches no radio at all.
@@ -115,8 +115,8 @@ Common to every flight rung:
 - **Terminals:** 1 = `real_io_launch.py`, 2 = control launch, 3 = preflight and commands.
 - **Setup:** `source ~/ros2_humble/install/setup.bash && source ~/multi_drone_control/install/setup.bash` (the `mdc` helper).
 - **Logs to read after each flight:**
-  - `results/logs/controller_quad_load/planner_drone<i>_<time>/log.csv`: trackers; diag columns for thr, tilt, body rates, qref, solver status.
-  - `.../load_planner_<time>/` or `.../dissipative_controller_<time>/log.csv`: planner tick log with payload height and tilt at 10 Hz (since 2026-09-25).
+  - `results/logs/tracker/drone<i>_<time>/log.csv` (before 3 Oct `logs/controller_quad_load/planner_drone<i>_<time>`): trackers; diag columns for thr, tilt, body rates, qref, solver status.
+  - `results/logs/mpc_planner/<time>/` or `.../dissipative_planner/<time>/log.csv` (before 3 Oct `load_planner_<time>`, `dissipative_controller_<time>`): planner tick log with payload height and tilt at 10 Hz (since 2026-09-25).
   - `results/preflight/<ts>.md`.
   - Terminal-2 stdout (the `[kT dN]` lines are printed, not logged): run terminal 2 as `ros2 launch ... 2>&1 | tee results/rig/<date>/<flight>.log`.
 - **Bag every flight** (cheap, replayable): `ros2 bag record -o results/rig/<date>/<flight> /drone_{0..3}/motion_capture_state /payload/motion_capture_state /drone_{0..3}/ELRSCommand /drone_{0..3}/telemetry /fleet/command /fleet/abort /fleet/status /fleet/landed`.
@@ -138,16 +138,16 @@ Common to every flight rung:
 - **Desk check:**
   ```bash
   python3 tools/fake_mocap.py --num-drones 3 --cable-len 0.47 --elev-deg 45 --load-z 0.05     # + --azimuths-deg 30,150,270 after P3
-  ros2 launch controller_quad_load real_io_launch.py num_drones:=3 rviz:=false   # elrs_interface loops on "No suitable serial port" without adapters: expected
-  ros2 launch controller_quad_load real_control_launch.py num_drones:=3 load_mass:=0.86 cable_len:=0.47 attach_azimuths_deg:=30,150,270 kt_trim:=false lift_ramp_vel:=0.0
-  python3 tools/preflight.py --drones 3 --planner load_planner --max-ground-z 0.5
+  ros2 launch bringup real_io_launch.py num_drones:=3 rviz:=false   # elrs_interface loops on "No suitable serial port" without adapters: expected
+  ros2 launch bringup real_control_launch.py num_drones:=3 load_mass:=0.86 cable_len:=0.47 attach_azimuths_deg:=30,150,270 kt_trim:=false lift_ramp_vel:=0.0
+  python3 tools/preflight.py --drones 3 --planner mpc_planner --max-ground-z 0.5
   ```
   Then the 4-drone detach graph (plan :113-121):
   ```bash
   python3 tools/fake_mocap.py --num-drones 4
-  ros2 launch controller_quad_load real_io_launch.py num_drones:=4 detach:=true magnet_initial:=ON rviz:=false
-  ros2 launch controller_quad_load real_dissipative_launch.py num_drones:=4 attach_azimuths_deg:=30,90,150,270 reconfig_mode:=ocp detach_magnet:=true
-  ros2 param get /dissipative_controller reconfig_mode          # ocp
+  ros2 launch bringup real_io_launch.py num_drones:=4 detach:=true magnet_initial:=ON rviz:=false
+  ros2 launch bringup real_control_launch.py mode:=dissipative num_drones:=4 attach_azimuths_deg:=30,90,150,270 reconfig_mode:=ocp detach_magnet:=true
+  ros2 param get /dissipative_planner reconfig_mode          # ocp
   ros2 topic pub --once /fleet/detach std_msgs/msg/Int32 "{data: 1}"
   ```
   Expect "OCP ready for n=3", "FLEET RESIZED to n=3", "DETACH drone 1 (OCP resize)", "magnet OFF -> /drone_1/magnet". Then run `tools/clean_slate.sh`.
@@ -167,7 +167,7 @@ Common to every flight rung:
   1. `ros2 topic hz -w 500 /drone_0/motion_capture_state` for each body: ~120 Hz, and record the std dev of dt (input to P9). Bag 60 s of all bodies at rest: velocity noise at rest is the number that decides P9.
   2. `ros2 topic echo /drone_<i>/telemetry --once` for each drone: battery and RSSI (link up).
   3. Magnets: panel MAGNET toggles or `ros2 topic pub --once /drone_<i>/magnet std_msgs/msg/String "{data: ON}"`, then OFF. A steel plate sticks, then drops. If a drone does not respond, run `tools/aux_sweep.py --drone <i>` (terminal 2 down, no `magnet_initial`). This also closes Tejen's open items 1-2 (AUX ch6 on quad2 and quad4, tejen:docs/thesis/m2-irl-two-drone-commissioning-20260924.md:108-115).
-  4. Preflight GO: `python3 tools/preflight.py --drones 3 --real --planner load_planner --max-ground-z 0.5`. It must show the payload origin within 3 cm of the drones' circle centre, every drone resting within 15 deg, and the fitted rod equal to the typed `cable_len` ±4 cm.
+  4. Preflight GO: `python3 tools/preflight.py --drones 3 --real --planner mpc_planner --max-ground-z 0.5`. It must show the payload origin within 3 cm of the drones' circle centre, every drone resting within 15 deg, and the fitted rod equal to the typed `cable_len` ±4 cm.
   5. Abort path (card 2026-09-16_rig_h0_h1.md T0.3): ARM, TAKEOFF with props off, then cover one drone's markers for 2 s. All drones disarm within ~1 s, and the log shows the pose timeout and `/fleet/abort`. Then `tools/clean_slate.sh`, relaunch, ARM and ESTOP: all disarm at once.
 - **Pass:** all five. **Abort:** any drone stays armed in step 5, which means no flight until the log is read.
 - **Time:** 60-90 min including Motive work.
@@ -178,8 +178,8 @@ Common to every flight rung:
 - **Sim rehearsal:** none needed (flown on the rig 09-16).
 - **Rig commands (one drone at a time, then all four spaced ≥ 1 m):**
   ```bash
-  ros2 launch controller_quad_load real_io_launch.py num_drones:=1 drone0_serial:=/dev/QUAD<n>        # mocap map: that drone's body must be drone 0 -> see P13, or fly all four with num_drones:=4
-  ros2 launch controller_quad_load real_hover_launch.py num_drones:=1 hover_z:=0.8 drone_mass:=<unused> 2>&1 | tee ...
+  ros2 launch bringup real_io_launch.py num_drones:=1 drone0_serial:=/dev/QUAD<n>        # mocap map: that drone's body must be drone 0 -> see P13, or fly all four with num_drones:=4
+  ros2 launch bringup real_control_launch.py mode:=free_hover num_drones:=1 hover_z:=0.8 drone_mass:=<unused> 2>&1 | tee ...
   ```
   - Not UNVERIFIED but a trap: with the fixed body map (:25) a 1-drone launch can only fly body 11. For quad2-4 either launch `num_drones:=4` and put all four on the floor (the free hover latches each xy from its first pose; free_hover.py:12-13), or wait for P13.
   - Recommended: `num_drones:=4 drone0_serial:=/dev/QUAD1 ... drone3_serial:=/dev/QUAD4`, all four spaced ≥ 1 m, ARM, TAKEOFF, 30 s hover, LAND.
@@ -212,9 +212,9 @@ Common to every flight rung:
 - **Desk check:** R0a with the same command line.
 - **Rig commands:**
   ```bash
-  ros2 launch controller_quad_load real_io_launch.py num_drones:=3 drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 drone2_serial:=/dev/QUAD3 magnet_initial:=ON
-  ros2 launch controller_quad_load real_control_launch.py num_drones:=3 load_mass:=<weighed> drone_mass:=<weighed mean> cable_len:=0.47 attach_azimuths_deg:=30,150,270 attach_z:=<measured, 0.0 if the Motive origin is on the plate tops> thrust_ratio:=<R1 median> kt_trim:=false lift_ramp_vel:=0.0 load_traj:=hover 2>&1 | tee ...
-  python3 tools/preflight.py --drones 3 --real --planner load_planner --max-ground-z 0.5
+  ros2 launch bringup real_io_launch.py num_drones:=3 drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 drone2_serial:=/dev/QUAD3 magnet_initial:=ON
+  ros2 launch bringup real_control_launch.py num_drones:=3 load_mass:=<weighed> drone_mass:=<weighed mean> cable_len:=0.47 attach_azimuths_deg:=30,150,270 attach_z:=<measured, 0.0 if the Motive origin is on the plate tops> thrust_ratio:=<R1 median> kt_trim:=false lift_ramp_vel:=0.0 load_traj:=hover 2>&1 | tee ...
+  python3 tools/preflight.py --drones 3 --real --planner mpc_planner --max-ground-z 0.5
   # panel: ARM, TAKEOFF; hold 15 s after the handover line; LAND
   ```
 - **Pass:**
@@ -255,11 +255,11 @@ Common to every flight rung:
 - **Sim rehearsal:** existing `configs/experiments/ocp_hover_ground_creep_n4_3915.yaml` (same plates, creep, `four_rigid_ground_3915.sdf`); re-fly on the gyro default (loop step 8).
 - **Rig commands:**
   ```bash
-  ros2 launch controller_quad_load real_io_launch.py num_drones:=4 drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 drone2_serial:=/dev/QUAD3 drone3_serial:=/dev/QUAD4 magnet_initial:=ON detach:=true
-  ros2 launch controller_quad_load real_dissipative_launch.py num_drones:=4 load_mass:=<w> drone_mass:=<w> cable_len:=0.47 attach_azimuths_deg:=30,90,150,270 thrust_ratio:=<R3b> reconfig_mode:=ocp detach_magnet:=true lift_ramp_vel:=0.15 load_traj:=hover 2>&1 | tee ...
-  python3 tools/preflight.py --drones 4 --real --planner dissipative_controller --max-ground-z 0.5
+  ros2 launch bringup real_io_launch.py num_drones:=4 drone0_serial:=/dev/QUAD1 drone1_serial:=/dev/QUAD2 drone2_serial:=/dev/QUAD3 drone3_serial:=/dev/QUAD4 magnet_initial:=ON detach:=true
+  ros2 launch bringup real_control_launch.py mode:=dissipative num_drones:=4 load_mass:=<w> drone_mass:=<w> cable_len:=0.47 attach_azimuths_deg:=30,90,150,270 thrust_ratio:=<R3b> reconfig_mode:=ocp detach_magnet:=true lift_ramp_vel:=0.15 load_traj:=hover 2>&1 | tee ...
+  python3 tools/preflight.py --drones 4 --real --planner dissipative_planner --max-ground-z 0.5
   ```
-  `real_dissipative_launch` flies the OCP until a detach (real_dissipative_launch.py:16-20), so R4 already runs the R6 graph.
+  `real_control_launch.py mode:=dissipative` flies the OCP until a detach, so R4 already runs the R6 graph.
 - **Pass:** as R3b; settled ring tilt ≤ 5 deg (sim R0510 hovers this layout level).
 - **Time:** 45 min.
 

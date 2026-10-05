@@ -116,7 +116,7 @@ def main():
     ap.add_argument('--battery-min', type=float, default=22.8, help='V, 6S pack (3.8 V/cell)')
     ap.add_argument('--max-ground-z', type=float, default=0.30,
                     help='m; a drone above this counts as already flying (taut rods from the floor sit ~0.38)')
-    ap.add_argument('--planner', default='dissipative_controller')
+    ap.add_argument('--planner', default='dissipative_planner')
     ap.add_argument('--detach', action='store_true',
                     help='this flight DETACHES (R6/R7): require reconfig_mode ocp and detach_magnet true '
                          '(real_dissipative defaults to network/false; the network detach tilted the ring 26-48 deg)')
@@ -178,11 +178,11 @@ def main():
                   f'{dm["detach_magnet"]!r} (type detach_magnet:=true, or the magnet stays ON)')
     # per-tracker read-back: kT and the control architecture actually running
     for i in range(a.drones + (1 if a.attach else 0)):
-        tp = pf.read_params(f'controller_{i}', ['thrust_ratio', 'control_mode'])
+        tp = pf.read_params(f'tracker_{i}', ['thrust_ratio', 'control_mode'])
         if tp is None:
             check(False, f'tracker {i} parameters', 'not reachable')
         else:
-            kt = pf.read_params_each(f'controller_{i}', ['kt_trim']) or {'kt_trim': None}
+            kt = pf.read_params_each(f'tracker_{i}', ['kt_trim']) or {'kt_trim': None}
             lines.append(f'  tracker {i} read-back: thrust_ratio={tp["thrust_ratio"]} control_mode={tp["control_mode"]} '
                          f'kt_trim={kt["kt_trim"]}')
             check(tp['thrust_ratio'] > 0, f'tracker {i} kT set', f'{tp["thrust_ratio"]}')
@@ -206,7 +206,7 @@ def main():
               ', '.join(f'd{i + 1}={c}' for i, c in chans.items()))
     if prm is not None:
         cable_len = float(prm['cable_len'])
-        from controller_load_mpc.geometry import attach_points
+        from mpc_planner.geometry import attach_points
         rho = attach_points(a.drones, float(prm['attach_radius']), float(prm['attach_z']),
                             prm['attach_azimuths_deg'] or None)
         check(0.3 <= cable_len <= 1.5, 'cable_len plausible', f'{cable_len:.3f} m')

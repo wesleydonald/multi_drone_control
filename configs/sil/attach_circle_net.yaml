@@ -1,9 +1,10 @@
 name: attach_circle_net
 description: 'Card 2026-09-25_attach_ocp arm B control: weld during the circle, NETWORK.'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 1
     start_taut: true

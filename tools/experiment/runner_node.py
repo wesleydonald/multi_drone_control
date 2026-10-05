@@ -18,6 +18,7 @@ invalidated comparisons once. Wall time appears exactly once, as the startup tim
 because before /clock is flowing there is nothing else to measure.
 """
 import math
+import os
 import re
 import time
 
@@ -32,7 +33,7 @@ from std_msgs.msg import Bool, Empty, Float64MultiArray, Int32, String
 
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
-from .config import wait_lift_arg
+from .config import wait_lift_arg, wrench_arg
 
 ARM_FAIL = 'fleet manager ARM failed or refused'
 
@@ -137,6 +138,8 @@ class ExperimentRunner(Node):
         self.magnet_pub = self.create_publisher(String, '/magnet/command', 10)
         self.attach_pub = self.create_publisher(Int32, '/fleet/attach', 10)
         self.detach_pub = self.create_publisher(Int32, '/fleet/detach', 10)
+        if any(e.do == 'WRENCH' for e in cfg.events):
+            self._wrench_publisher()
         self.handoff_pub = self.create_publisher(Bool, '/join_planner/handoff_ready', 10)
         self.fleet_handover_pub = self.create_publisher(Bool, '/fleet/handover', 10)
         # HANGER_RELEASE publishers exist from the start: one created at the event has no
@@ -247,12 +250,12 @@ class ExperimentRunner(Node):
     def _rosout_cb(self, msg):
         # a failed or refused ARM no longer raises /fleet/abort (Q6b, mux latch card v3), so
         # the manager's log is the only sign of it: fail the run instead of flying nothing
-        if msg.name.endswith('central_controller'):
+        if msg.name.endswith('fleet_manager'):
             if (('ARM FAILED' in msg.msg or 'ARM REFUSED' in msg.msg)
                     and not any(f.startswith(ARM_FAIL) for f in self.failures)):
                 self.failures.append(f'{ARM_FAIL} at t={self._rel():.2f}: {msg.msg}')
             return
-        if not msg.name.endswith('dissipative_controller'):
+        if not msg.name.endswith('dissipative_planner'):
             return
         for pat, name in self._ROSOUT:
             m = pat.search(msg.msg)
@@ -302,7 +305,7 @@ class ExperimentRunner(Node):
         # R0602's ARM reached drone 3's tracker but not the fleet manager
         import time as _t
         subs = {i.node_name for i in self.get_subscriptions_info_by_topic('/fleet/command')}
-        if ok and 'central_controller' in subs:
+        if ok and 'fleet_manager' in subs:
             if self._subs_ok_since is None:
                 self._subs_ok_since = _t.time()
             return _t.time() - self._subs_ok_since >= 2.0
@@ -416,6 +419,38 @@ class ExperimentRunner(Node):
         pub.publish(msg)
         return n
 
+    def _wrench_publisher(self):
+        """Advertise the gz wrench topic. Done when the runner starts, long before any
+        WRENCH: a publisher created at the push itself lost its first message while the
+        connection formed, so only the "off" step reached Gazebo (R0855)."""
+        if getattr(self, '_gz_wrench_pub', None) is None:
+            from gz.msgs10.entity_wrench_pb2 import EntityWrench
+            from gz.transport13 import Node as GzNode
+            sdf = self.cfg.world if os.path.isabs(self.cfg.world) else os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                'simulation_assets', self.cfg.world)
+            world = re.search(r'<world name="([^"]+)"', open(sdf).read()).group(1)
+            self._gz_node = GzNode()
+            self._gz_wrench_pub = self._gz_node.advertise(f'/world/{world}/wrench/persistent',
+                                                          EntityWrench)
+            self._wrench_applied = {}
+        return self._gz_wrench_pub
+
+    def _set_wrench(self, force, link):
+        """Make the persistent force on `link` equal `force`. Persistent wrenches add up in
+        Gazebo, so only the change is sent."""
+        from gz.msgs10.entity_pb2 import Entity
+        from gz.msgs10.entity_wrench_pb2 import EntityWrench
+        pub = self._wrench_publisher()
+        prev = self._wrench_applied.get(link, (0.0, 0.0, 0.0))
+        w = EntityWrench()
+        w.entity.name = link
+        w.entity.type = Entity.LINK
+        w.wrench.force.x, w.wrench.force.y, w.wrench.force.z = (
+            float(f - p) for f, p in zip(force, prev))
+        pub.publish(w)
+        self._wrench_applied[link] = tuple(force)
+
     def _fire(self, ev):
         if ev.do in ('ARM', 'TAKEOFF', 'LAND', 'ESTOP', 'DISARM'):
             self._publish(self.fleet_pub, String(data=ev.do), f'/fleet/command {ev.do}')
@@ -460,6 +495,8 @@ class ExperimentRunner(Node):
                 subprocess.run(['gz', 'topic', '-t', str(ev.arg), '-m', 'gz.msgs.Empty', '-p', ''],
                                timeout=10, check=False)
             self.get_logger().warn(f'[exp] gz {ev.arg} sent x3')
+        elif ev.do == 'WRENCH':
+            self._set_wrench(*wrench_arg(ev.arg))
         elif ev.do in ('WAIT_WELD', 'WAIT_LIFT', 'WAIT_REWELD', 'WAIT_PARTNER_RELEASE',
                        'WAIT_THRUST'):
             pass

@@ -66,11 +66,11 @@ Two reference generators feed one unchanged per-drone tracker over one wire form
 mocap (/drone_i, /payload motion_capture_state)
         |                                   |
   OCP PLANNER (10 Hz)              DISSIPATIVE NETWORK (10 Hz)
-  controller_load_mpc              controller_dissipative (subclasses the planner)
+  mpc_planner                      dissipative_planner (subclasses the planner)
         +----> /drone_i/reference_trajectory <----+
                [n_nodes, dt, p(3), v(3), a_ff(3), a_cable(3)] x (N+1)
                           |
-             PER-DRONE TRACKER (50 Hz) controller_quad_load
+             PER-DRONE TRACKER (50 Hz) tracker (node tracker_<i>)
              control_mode: mpc | velocity | velocity_after_handover
                           |
                    /drone_i/ELRSCommand  ->  sim betaflight emulator | real ELRS
@@ -83,17 +83,17 @@ mocap (/drone_i, /payload motion_capture_state)
   cable feedforward capped at 6 m/s²). `velocity` is the paper's architecture: a
   velocity loop with attitude and rate layers (`velocity_loop.py`), which cannot fly the
   lift. `velocity_after_handover` flies MPC through the lift and the velocity loop after
-  the network engages. This is the default in `three_attach_launch.py`.
+  the network engages. This is the default in the attach mode (`sim_control_launch.py mode:=attach`).
 - **Common-mode load trim** (`diss_ki_load`): one z-only integrator on measured load
   height, distributed identically (or by tension share with
   `diss_trim_share_weighted`) to every attached node. Per-drone integrators tilt the load.
 - **Measured-force throttle (INDI-lite) was removed on 2026-09-23** (Wesley): exact at the
   drone, never beat the classic loop on the moving load (§4.4 table 2, §6). History in
   `docs/design/measured_force_loop.md`; the runs stay in the registry.
-- **kT starts typed and is trimmed in flight (since 2026-09-23).** Sim launches derive the
-  start value from the operating point (`thrust_ratio:=auto`, `thrust_model.py`); hardware
-  starts from the measured 24. A wrong kT lands in payload height, not throttle; the
-  per-drone trim of §4.10 removes it in tethered hover.
+- **Thrust map.** The rig and the rig-twin sim fly the identified affine map (30 Sep:
+  `thrust_offset` 0.185, `thrust_ratio` 35.2 above it, `thrust_offset_v_slope` 0.022,
+  `kt_trim` off); the legacy sim worlds keep the linear plant (kT 83.1, `thrust_ratio:=auto`,
+  `kt_trim` on, §4.10). A wrong map lands in payload height, not throttle.
 - **Detach** has two modes: `reconfig_mode:=network` (network redistributes, then hands
   back to a pre-built OCP for the new n) and `reconfig_mode:=ocp` (the OCP resizes
   directly; attach geometry is a runtime parameter so the survivors keep their true
@@ -101,11 +101,11 @@ mocap (/drone_i, /payload motion_capture_state)
 - **Attach chain** (`drone_magnet`): join planner, target publisher, magnet manager,
   `elrs_mux` (forwards the approach controller's commands until the weld, then ours;
   never hands authority to a stream that is not commanding thrust).
-- **Partner paths (2026-09-26/27, §4.11).** M1: `three_attach_launch.py partner:=true
+- **Partner paths (2026-09-26/27, §4.11).** M1: `sim_control_launch.py mode:=attach partner:=true
   partner_attached:=true`; drone 3 starts welded on plate 3, the detach is an OCP resize,
   our tracker steps it out, `/partner/release` starts his mission, `/join_planner/handoff_ready`
   hands it back at ATTACH_READY, our approach, weld, OCP resize n=3→4. M2: his join, then
-  `dissipative_launch.py partner_m2:=true sim_interface:=false`; per-drone ELRS muxes switch each
+  `sim_control_launch.py mode:=dissipative partner_m2:=true sim_interface:=false`; per-drone ELRS muxes switch each
   drone to ours on the first flying command after `/fleet/handover`; `airborne_start` creep holds
   live until TAKEOFF, then sweeps each rod from its measured elevation to 45° (T0008).
 
@@ -567,6 +567,11 @@ bridges (6e1606c, used by every M1 config); mocap stamp differencing tried and r
    quaternion and solver status for the next occurrence.
 9. [SETTLED 2026-09-25 by the height integral, z_ki 0.4 default: R0557 0.661 → R0558 0.600; extended
    through a level orbit 2026-09-27, `z_ki_in_orbit`, R0692/R0693. History kept below.]
+   **CAUSE FOUND 2026-10-04:** the tracker's node-0 box (2.5 % of the absolute state), not the planner.
+   At zero width SIL holds -0.12 cm (R0956 +6.76 -> R0957) and Gazebo +0.9 cm from the floor (R0960).
+   Box at zero is the default since 4 Oct (Wesley). The integral can also act as a force on the ring in
+   the planner's model, in x, y and z (`int_mode model`, card 2026-10-04_z_int_model, R0961-R0972,
+   default still `reference`).
    **OCP hover height offset grows with mass, in the planner's reference.** 2026-09-24,
    linear sim plant: SIL R0470 hovers 5.4 cm HIGH with the tracker exact (trim converged to
    0.2 % of the plant) and every drone on its reference; Gazebo on the quadratic plant sat
@@ -690,27 +695,28 @@ the architecture study, honest sim-to-real accounting.
 
 ## 9. Hardware
 
-Launches: `real_io_launch.py` (mocap + ELRS + RViz, terminal 1, must be up first),
-`real_control_launch.py` (OCP), `real_dissipative_launch.py`, `real_attach_launch.py`
-(twin of the sim attach launch, same 69 arguments; `tools/param_diff.py --sim-vs-real`
-shows only the intended deltas). Desk test without the rig: `tools/fake_mocap.py`.
+Launches (package `bringup`): `real_io_launch.py` (mocap + ELRS + RViz, terminal 1, must be
+up first), `real_control_launch.py` in a mode: `mpc` (carry, default), `dissipative` (detach),
+`free_hover`; M1/M2 on the rig are `mode:=attach` and `mode:=m2`, one launch each that starts
+the rig I/O itself. Defaults: `src/bringup/config/real.yaml` (§12); every rig mode flies the
+rig carry's thrust map and geometry since 2026-10-03 (M1/M2 and free_hover unflown on them).
+`tools/param_diff.py --sim-vs-real` shows the deltas. Desk test without the rig: `tools/fake_mocap.py`.
 Pre-arm checklist: `tools/preflight.py --real`. Rig checklist for attach:
 `docs/experimentation/real_attach_gap.md`.
 
 Rig facts (updated 2026-09-29): our drones 0-3 = Tejen's quad1-4 = `/dev/QUAD1..4` (udev: four unique serials) =
 Motive bodies 11-14 (`mocap_drone_body_ids`), ring body 8, Tejen's pickup object 6 (Wesley 2026-09-29; the code defaults
-match); airframes about 1.2 kg each (Wesley, to be weighed 2026-09-30); the magnet tip
-needs its own rigid body; `thrust_ratio:=24`; floor start on the CREEP path,
+match); airframes 0.55 kg (`drone_mass` default, 30 Sep); the magnet tip
+needs its own rigid body; the affine thrust map (`real_control_launch.py` defaults); floor start on the CREEP path,
 `start_taut:=false handover_elev_deg:=45 handover_settle_s:=2.0` (the launch default
 `start_taut:=true` runs the OCP from tick 1, whose references sit 18–22 cm inward of a
 resting drone with flat rods: the 2026-09-23 13:13 non-lift; the arc creep anchors each
 drone where it rests and sweeps the rod to 45° first; plan 2026-09-24);
 `load_mass:=<weighed> cable_len:=<measured>` every session (the real launches default load_mass to 0.86, the ring).
-ELRS adapters: `real_io_launch.py` still defaults drone i to `/dev/QUAD<i>` while the map is QUAD(i+1), so pass
-`drone0_serial:=/dev/QUAD1 ... drone3_serial:=/dev/QUAD4` (the M1/M2 `real:=true` modes map it themselves).
-`tools/preflight.py --real --planner load_planner` for the OCP launch (the default
-planner name is the dissipative node's); `--max-ground-z 0.5` when the drones sit on taut
-rods before takeoff. Since 2026-09-16 `real_dissipative_launch.py` takes `control_mode`,
+ELRS adapters: `real_io_launch.py` defaults drone i to `/dev/QUAD<i+1>`.
+`tools/preflight.py --real --planner mpc_planner` for the OCP launch (the default
+planner name is the dissipative node's, `dissipative_planner`); `--max-ground-z 0.5` when the drones sit on taut
+rods before takeoff. Since 2026-09-16 the rig detach launch takes `control_mode`,
 `vel_*`, `auto_network_handover` and `diss_ki_load` like the sim launch (defaults unchanged:
 MPC tracker, network only on a detach), so the Part A configuration can be flown on the rig. Tether magnets: each drone's
 `elrs_interface` latches a magnet value into aux channel `magnet_channel` (6 = AUX4 on every launch; `/drone_<i>/magnet` String
@@ -738,14 +744,20 @@ ros2 topic pub -t 3 /fleet/detach  std_msgs/msg/Int32  "{data: 1}"
 ros2 topic pub -t 3 /magnet/command std_msgs/msg/String "{data: ON}"      # = the RViz ATTACH button
 ```
 
-Shell helpers (in `~/.bashrc`): `mdc` sources both setups; `cb [pkg]` builds; `rio`,
-`rctl`, `rdiss` are the real launches; `sgz <world>`, `sviz`, `smpc`, `sdo`, `sdet`,
-`satt` are the sim ones; `simcheck <world> <launch>` runs the geometry check.
+Shell helpers (`shortcuts.md` at the repo root, gitignored, sourced from `~/.bashrc`): `mdc`
+sources both setups; `cb [pkg]` builds; `rio`, `rctl`, `rdiss` are the real launches;
+`sgz <world>`, `sio`, `smpc`, `sdo`, `sdet`, `satt` are the sim ones; `simcheck <world> <launch>`
+runs the geometry check; `fleet arm|takeoff|land|disarm|estop`.
 
 ---
 
 ## 10. Traps and hard-won lessons
 
+- **A LAND reference must keep descending.** Touchdown is detected as the drones no longer
+  following a descending reference (`TouchdownDetector`). A LAND reference that pauses reads
+  as touchdown: /fleet/landed disarmed the fleet 0.58 m up (R0852, an unwind held through the
+  feedforward blend; reverted). The runner's criteria do not check LAND; read the drone heights
+  at LANDED.
 - **Read the parameters back.** Launch args have silently failed to plumb through three
   times (net_traj_lean, control_mode on the newcomer, a cut command line). Every run
   writes `params/` by read-back; check it before believing a comparison.
@@ -760,9 +772,10 @@ Shell helpers (in `~/.bashrc`): `mdc` sources both setups; `cb [pkg]` builds; `r
   (12-thread laptop, 2026-09-23). Causes: Gazebo's /clock at 700–1000 Hz handled in a
   PYTHON callback by every node, the emulators republishing every Gazebo pose
   (300–500 Hz) into every tracker, and fleet_viz redrawing per message.
-  `rviz_quad_load_launch.py` defaults clock_hz 100, mocap_hz 120, viz_hz 30 since 2026-09-23 (clock via
-  `clock_throttle`, publisher RELIABLE or the runner sees no sim time) gives 0.60 idle /
-  0.45 in flight with the same hover to 1 mm (R0329 vs R0330). Still unexplained: each
+  `sim_io_launch.py` (then rviz_quad_load_launch.py) throttled the clock to 100 Hz from 2026-09-23 (clock via
+  `clock_throttle`, publisher RELIABLE or the runner sees no sim time): 0.60 idle /
+  0.45 in flight with the same hover to 1 mm (R0329 vs R0330). The default is clock_hz 500
+  since 2026-09-25 (a free drone's rate estimate needs it, §4.11), mocap_hz 120, viz_hz 30. Still unexplained: each
   tracker burns ~0.9 core while DISARMED. Simplifying drone, rod or ring models does
   nothing (measured).
 - **Payload contact geometry is one cylinder.** The ring's 24 box collisions, each
@@ -782,8 +795,8 @@ Shell helpers (in `~/.bashrc`): `mdc` sources both setups; `cb [pkg]` builds; `r
 - **Wall-clock watchdogs in a 0.3× sim** (pose timeout, reference staleness) fire on
   healthy fleets under CPU load. Sim launches carry longer budgets and headless Gazebo
   runs niced. Do not run analysis while a batch flies.
-- **`dissipative_launch.py` never engages the network** unless a detach or attach fires;
-  `dissipative_only_launch.py` does.
+- **`mode:=dissipative` never engages the network** unless a detach or attach fires;
+  `mode:=network` does.
 - **The offline harness and the SIL bench are necessary, not sufficient.** PD proxies
   settle cases Gazebo capsizes; the bench has no rotor vibration and an exact plant.
 - **The tracker has no integrator and trusts the cable feedforward.** Any transient where
@@ -865,8 +878,8 @@ The demo by hand:
 
 ```bash
 cd simulation_assets && gz sim three_attach_rod.sdf -v4 -r
-ros2 launch controller_quad_load rviz_quad_load_launch.py num_drones:=3 attach:=true
-ros2 launch controller_quad_load three_attach_launch.py load_traj:=circle traj_speed:=0.2
+ros2 launch bringup sim_io_launch.py num_drones:=3 attach:=true
+ros2 launch bringup sim_control_launch.py mode:=attach load_traj:=circle traj_speed:=0.2
 #   ARM -> TAKEOFF -> ATTACH
 ```
 
@@ -876,9 +889,11 @@ ros2 launch controller_quad_load three_attach_launch.py load_traj:=circle traj_s
 
 | path | what |
 |---|---|
-| `src/controller_load_mpc` | OCP planner, geometry, trajectories, `params.py` |
-| `src/controller_quad_load` | tracker (`controller_mpc.py`, `velocity_loop.py`, `thrust_model.py`), fleet manager, **all launch files** |
-| `src/controller_dissipative` | network, node, offline harness |
+| `src/mpc_planner` | the load planner: OCP, solver, cable dynamics, creep, geometry, trajectories, `params.py` |
+| `src/tracker` | per-drone tracker (`controller_mpc.py`, `velocity_loop.py`, `thrust_model.py`, `kt_trim.py`), `free_hover` |
+| `src/fleet_manager` | the fleet manager (`main.py`) |
+| `src/bringup` | the five launch files, `config/` (the launch profiles), `profiles.py`, the mode graphs (`graph_carry.py`, `graph_detach.py`, `graph_attach.py`), `rviz_config.py`, `real_mode.py` |
+| `src/dissipative_planner` | detach/attach planner (OCP resize, network), approach, offline harness |
 | `src/drone_magnet`, `src/controller_mpc_payload` | attach chain and the approach MPC |
 | `src/simulation_communication`, `src/drone_communication` | sim bridges; real mocap and ELRS |
 | `simulation_assets/generate_rigid_world.py` | source of truth for every world; `tools/make_weld_variants.py` for the rod/seg2/rigid worlds |
@@ -893,3 +908,47 @@ ros2 launch controller_quad_load three_attach_launch.py load_traj:=circle traj_s
 | `src/simulation_communication/.../rate_pid.py` | the sim rate PI shared by every sim bridge |
 | `tools/sim_test/` | M2 driver `drive_m2_handover.py`, stage-1/2 single-drone benches, his runner scripts |
 | `docs/GOALS.md`, `authority.md` | the integration loop's plan and status; Tejen integration notes |
+
+### Rename map (3 Oct 2026)
+
+History (registry rows, cards, plans, rig sheets) keeps the old names. Topics, parameters
+and message types did not change. Old runs still read: every log tool goes through
+`tools/run_logs.py`, which knows both folder layouts.
+
+| before | after |
+|---|---|
+| package `controller_load_mpc`, executable `planner`, node `load_planner` | `mpc_planner` (package, executable, node) |
+| package `controller_quad_load`: tracker modules, executable `controller`, node `controller_<i>` | package `tracker`, executable `tracker`, node `tracker_<i>` (`free_hover` unchanged) |
+| package `controller_quad_load`: `main.py`, executable `main`, node `central_controller` | `fleet_manager` (package, executable, node) |
+| package `controller_quad_load`: launch files, `rviz_config.py`, `real_mode.py` | package `bringup` |
+| package `controller_dissipative`, executable `dissipative`, node `dissipative_controller` | `dissipative_planner` (package, executable, node) |
+| `logs/controller_quad_load/planner_drone<i>_<stamp>` (tracker) | `logs/tracker/drone<i>_<stamp>` |
+| `logs/controller_quad_load/load_planner_<stamp>` | `logs/mpc_planner/<stamp>` |
+| `logs/controller_quad_load/dissipative_controller_<stamp>` | `logs/dissipative_planner/<stamp>` |
+| `params/controller_<i>.yaml`, `central_controller.yaml`, `load_planner.yaml`, `dissipative_controller.yaml` (runner read-back) | `params/tracker_<i>.yaml`, `fleet_manager.yaml`, `mpc_planner.yaml`, `dissipative_planner.yaml` |
+| `controller_ukf`, `real_attach_launch.py`, unused sim bridges and launches | deleted |
+| shell helpers in `~/.bashrc` | `shortcuts.md` (repo root, gitignored), sourced from `~/.bashrc` |
+| `tracker/controller_mpc.py`, `fleet_manager/main.py` | `tracker/tracker_node.py`, `fleet_manager/fleet_manager_node.py` |
+
+### Launch files (consolidated 3 Oct 2026, plan §3b)
+
+Five launch files in `bringup/launch`; the controllers take `mode:=`. Defaults live in
+`src/bringup/config/common.yaml`, `sim.yaml`, `real.yaml` (each with a `modes:` entry per
+mode); a knob that is not a launch argument goes in `params_file:=<yaml>` (the harnesses
+write it into the run dir). `tools/param_diff.py sim/<mode> real/<mode>` shows what differs.
+`tools/launch_gate.py` replays the 360 frozen commands of the old launches.
+
+| before | after |
+|---|---|
+| `rviz_quad_load_launch.py` | `sim_io_launch.py` |
+| `real_io_launch.py` | `real_io_launch.py` |
+| `mpc_quad_load_launch.py` (`reference:=free_hover`) | `sim_control_launch.py mode:=mpc` (`mode:=free_hover`) |
+| `dissipative_launch.py` | `sim_control_launch.py mode:=dissipative` |
+| `dissipative_only_launch.py` | `sim_control_launch.py mode:=network` |
+| `three_attach_launch.py` (`sil:=true` for the bench) | `sim_control_launch.py mode:=attach` |
+| `real_control_launch.py` | `real_control_launch.py` (`mode:=mpc`, default) |
+| `real_dissipative_launch.py` | `real_control_launch.py mode:=dissipative` |
+| `real_hover_launch.py` | `real_control_launch.py mode:=free_hover` |
+| `three_attach_launch.py real:=true` | `real_control_launch.py mode:=attach` |
+| `dissipative_launch.py real:=true` | `real_control_launch.py mode:=m2` |
+| `m2_bench_io_launch.py` | `sim_m2_bench_launch.py` |

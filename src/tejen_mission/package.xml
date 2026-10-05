@@ -17,7 +17,7 @@
   <!-- Cross-package runtimes started by the M2C launch.  Do not add
        tejen_dynamic_planner here: that package already depends on
        tejen_mission and the reverse edge recreates a colcon cycle. -->
-  <exec_depend>controller_load_mpc</exec_depend>
+  <exec_depend>mpc_planner</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>ament_index_python</exec_depend>

@@ -145,7 +145,7 @@ def test_reset_is_what_re_arming_uses():
 # ── pose-layout contract ─────────────────────────────────────────────────────
 
 def test_current_pose_layout_contract():
-    """controller_mpc slices `current_pose` as [3:7] quaternion (w,x,y,z) and
+    """tracker_node slices `current_pose` as [3:7] quaternion (w,x,y,z) and
     [7:10] linear velocity, matching what CallbackManagerMulti.pose_callback assembles
     ([0:3] position, [10:13] angular velocity). If that layout ever changes, the speed
     check would silently start reading angular velocity. This test fails instead.

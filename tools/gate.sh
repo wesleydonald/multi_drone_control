@@ -44,22 +44,22 @@ fi
 
 step "2/6  unit tests"
 if python3 -m pytest src/utility_objects/test/test_safety.py \
-                    src/controller_quad_load/test/test_rviz_config.py \
-                    src/controller_quad_load/test/test_planner_reference.py \
-                    src/controller_quad_load/test/test_config_tools.py \
-                    src/controller_dissipative/test/test_attach_network.py \
-                    src/controller_dissipative/test/test_load_trim.py \
-                    src/controller_load_mpc/test/test_creep_controller.py \
-                    src/controller_quad_load/test/test_velocity_loop.py \
-                    src/controller_load_mpc/test/test_load_geometry_params.py \
-                    src/controller_quad_load/test/test_kt_trim.py \
-                    src/controller_load_mpc/test/test_attach_azimuths.py \
-                    src/controller_load_mpc/test/test_measured_rod.py \
-                    src/controller_dissipative/test/test_symmetric_handout.py \
+                    src/bringup/test/test_rviz_config.py \
+                    src/tracker/test/test_planner_reference.py \
+                    src/bringup/test/test_config_tools.py \
+                    src/dissipative_planner/test/test_attach_network.py \
+                    src/dissipative_planner/test/test_load_trim.py \
+                    src/mpc_planner/test/test_creep_controller.py \
+                    src/tracker/test/test_velocity_loop.py \
+                    src/mpc_planner/test/test_load_geometry_params.py \
+                    src/tracker/test/test_kt_trim.py \
+                    src/mpc_planner/test/test_attach_azimuths.py \
+                    src/mpc_planner/test/test_measured_rod.py \
+                    src/dissipative_planner/test/test_symmetric_handout.py \
                     src/drone_magnet/test/test_handover_policy.py \
                     src/drone_magnet/test/test_elrs_mux_magnet.py \
                     src/drone_communication/test/test_magnet_channel.py \
-                    src/controller_quad_load/test/test_thrust_model.py \
+                    src/tracker/test/test_thrust_model.py \
                     tools/test -q 2>&1 | tail -3; then
   :
 else
@@ -78,19 +78,20 @@ step "4/6  world geometry vs controller config"
 # feedforward wrong, and presents as "the controller cannot fly" rather than as a
 # config bug. This project has lost a week to exactly that.
 GEO_BAD=0
+launch="src/bringup/launch/sim_control_launch.py"
 for pair in \
-  "simulation_assets/three_rigid_ground.sdf:mpc_quad_load_launch.py" \
-  "simulation_assets/four_rigid_ground.sdf:dissipative_launch.py" \
-  "simulation_assets/three_attach.sdf:three_attach_launch.py" \
-  "simulation_assets/three_rigid_ground.sdf:dissipative_only_launch.py" ; do
-  world="${pair%%:*}"; launch="src/controller_quad_load/launch/${pair##*:}"
+  "simulation_assets/three_rigid_ground.sdf:mpc" \
+  "simulation_assets/four_rigid_ground.sdf:dissipative" \
+  "simulation_assets/three_attach.sdf:attach" \
+  "simulation_assets/three_rigid_ground.sdf:network" ; do
+  world="${pair%%:*}"; mode="${pair##*:}"
   [ -f "$world" ] && [ -f "$launch" ] || continue
-  if ! python3 tools/check_geometry.py "$world" --launch "$launch" >/dev/null 2>&1; then
-    echo "!! geometry mismatch: $(basename "$world") vs $(basename "$launch")"
-    python3 tools/check_geometry.py "$world" --launch "$launch" 2>&1 | grep -E "MISMATCH|WARN"
+  if ! python3 tools/check_geometry.py "$world" --launch "$launch" --mode "$mode" >/dev/null 2>&1; then
+    echo "!! geometry mismatch: $(basename "$world") vs mode $mode"
+    python3 tools/check_geometry.py "$world" --launch "$launch" --mode "$mode" 2>&1 | grep -E "MISMATCH|WARN"
     GEO_BAD=1
   else
-    echo "   ok   $(basename "$world")"
+    echo "   ok   $(basename "$world") (mode $mode)"
   fi
 done
 # The rod/seg2/rigid weld-variant worlds are generated from three_attach.sdf; a
@@ -112,7 +113,7 @@ fi
 
 if [ "$QUICK" -eq 0 ]; then
   step "5/6  offline dissipative harness (tests A-K)"
-  if python3 -m controller_dissipative.verify_dissipative 2>&1 | tail -2; then
+  if python3 -m dissipative_planner.verify_dissipative 2>&1 | tail -2; then
     :
   else
     FAILED+=("verify_dissipative")

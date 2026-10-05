@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         # Include launch files
-        ('share/' + package_name + '/launch', ['launch/betaflight_linear_simulation_launch.py', 'launch/betaflight_simulation_launch.py', 'launch/betaflight_angle_simulation_launch.py', 'launch/omnicopter_simulation_launch.py', 'launch/tejen_betaflight_linear_simulation_launch.py']),
+        ('share/' + package_name + '/launch', ['launch/betaflight_linear_simulation_launch.py', 'launch/betaflight_simulation_launch.py', 'launch/tejen_betaflight_linear_simulation_launch.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -21,13 +21,10 @@ setup(
     license='TODO: License declaration',
     entry_points={
         'console_scripts': [
-            'ELRS_pass_through = simulation_communication.ELRS_pass_through:main',
             'motion_capture_emulator = simulation_communication.motion_capture_emulator:main',
             'betaflight_communication = simulation_communication.betaflight_communication:main',
             'tejen_betaflight_communication = simulation_communication.tejen_betaflight_communication:main',
             'tejen_motion_capture_emulator = simulation_communication.tejen_motion_capture_emulator:main',
-            'pendulum_state_publisher = simulation_communication.pendulum_state_publisher:main',
-            'angle_betaflight_communication = simulation_communication.angle_betaflight_communication:main',
             'pendulum_state_listener = simulation_communication.pendulum_state_listener:main',
             # Bridges for nested lift_system + payload worlds (two_*/four_*.sdf)
             'payload_mocap_emulator = simulation_communication.payload_mocap_emulator:main',

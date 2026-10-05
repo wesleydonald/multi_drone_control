@@ -265,7 +265,7 @@ class PayloadBetaflightComm(Node):
         # and one fixed linear gain matched a single operating point (hover height moved
         # with mass; free drones could not follow the creep arc, R0466/R0468). sqrt(u)
         # makes a = 88.6 u at every throttle, which is what the rig's Betaflight gives.
-        # This is the node every OCP launch runs per drone (mpc_quad_load_launch:264).
+        # This is the node every OCP launch runs per drone (bringup/graph_carry.py, sim_mpc).
         u = max(0.0, min(1.0, (msg.channel_2 + 1) / 2))
         if self.thrust_map == 'rig':
             throttle = rig_thrust.rotor_speed(

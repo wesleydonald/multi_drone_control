@@ -2,9 +2,10 @@ name: demo_traj_n3_orbit_0p6
 description: 'Meeting demo (gz_record): n3 orbit at 0.6 m/s, floor creep start, launch defaults otherwise.'
 world: three_rigid_ground.sdf
 launch:
-  package: controller_quad_load
-  file: mpc_quad_load_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: mpc
     load_traj: orbit
     traj_speed: 0.6
     traj_radius: 0.5
@@ -18,7 +19,7 @@ launch:
     lift_ramp_vel: 0.15
     pose_timeout_s: 1.0
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 3
 fleet:

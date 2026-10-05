@@ -3,9 +3,10 @@ description: 'Planner-offset diagnostic (card 2026-09-24_planner_offset): cable 
   If the hover height moves with the feedforward, the static offset is a force error the re-pinned references
   cannot see.'
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 0
     enable_approach: false

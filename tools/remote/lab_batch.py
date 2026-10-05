@@ -201,7 +201,7 @@ class Job:
         la = self.cfg.launch_args
         n = int(la.get('num_drones', self.cfg.num_drones))
         masses = ''.join(f' --{k.replace("_", "-")} {float(la[k])}' for k in ('load_mass', 'drone_mass') if k in la)
-        tracker = ('from controller_quad_load import controller_mpc as c\n'
+        tracker = ('from tracker import tracker_node as c\n'
                    'c._solver_is_fresh() or c.generate_ocp_controller()')
         planner = ('' if str(la.get('reference', 'planner')) == 'free_hover'
                    else f'python3 {CTR_REPO}/tools/prebuild_planner.py {n}{masses} && ')

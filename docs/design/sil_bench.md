@@ -69,11 +69,11 @@ thing I would suspect, not the last.
         │ /drone_i/imu                                              │
         ▼                                                           │
    ┌─────────────────────────┐        /drone_i/reference_trajectory  │
-   │ dissipative_controller  │ ───────────────────────────────────┐  │
+   │ dissipative_planner     │ ───────────────────────────────────┐  │
    │  (REAL node, unmodified)│                                    ▼  │
    └─────────────────────────┘                    ┌──────────────────────────┐
-   ┌─────────────────────────┐                    │ controller_i × (n+1)     │
-   │ central_controller      │  /fleet/step       │ (REAL acados trackers)   │
+   ┌─────────────────────────┐                    │ tracker_i × (n+1)        │
+   │ fleet_manager           │  /fleet/step       │ (REAL acados trackers)   │
    │  (REAL fleet manager)   │───────────────────▶│                          │
    └─────────────────────────┘                    └──────────────────────────┘
                                                         │ /drone_i/ELRSCommand
@@ -124,17 +124,18 @@ to abandon lockstep.
 
 ### 3.2 Node parameters: one source of truth
 
-The bench does **not** restate the controller parameters. It imports the real launch
-file's `launch_setup`, runs it, and **filters the returned node list by package**:
+The bench does **not** restate the controller parameters. It runs the real launch
+(`sim_control_launch.py mode:=attach`) with `sil:=true`, which leaves out every
+Gazebo-facing node:
 
 | Package | In the bench? |
 |---|---|
-| `controller_quad_load` (`controller`, `main`) | **kept** |
-| `controller_dissipative` (`dissipative`) | **kept** |
+| `tracker` (`tracker`), `fleet_manager` | **kept** |
+| `dissipative_planner` (`dissipative_planner`) | **kept** |
 | `ros_gz_bridge`, `simulation_communication` | dropped — the bench is the simulator |
 | `drone_magnet`, `controller_mpc_payload` | dropped — see §4 |
 
-So `three_attach_launch.py` stays the single authority for every controller parameter,
+So the attach mode (its profile in `bringup/config` and `bringup/graph_attach.py`) stays the single authority for every controller parameter,
 and a launch-file change lands in the bench automatically. This is architecture
 principle 1; the alternative (a parallel parameter list in a bench YAML) is exactly the
 drift F9 exists to close.
@@ -186,16 +187,18 @@ throttle u₂ = (channel_2 + 1)/2
 ω_cmd       = betaflight_rates(channel_0, channel_1, −channel_3)      [dynamics.py:123]
 ω̇           = (ω_cmd − ω) / τ,            τ = 0.12 s                   [tau_rate]
 q̇           = ½ Ω(ω) q
-a_thrust    = R(q) · [0, 0, c·u₂²]                                     [quadratic plant]
+a_thrust    = R(q) · [0, 0, c·u₂]      (linear, c = 83.1; or the rig map)  [plant.py thrust_map]
 v̇           = a_thrust − g ẑ + a_cable + drag
 ```
 
 Two deliberate choices:
 
-- **Quadratic thrust `a = c·u²`, c = 88.6.** This is the SDF motor model, and it is
-  what makes the tracker's assumed-linear `kT` wrong away from its operating point —
-  the whole reason `_scheduled_kT`, `AIRBORNE_MARGIN` and the kT estimator exist. A
-  linear plant would delete that error term and flatter the tracker.
+- **Thrust map (`QuadParams.thrust_map`).** `linear` (default): `a = c·u`, c = 83.1 =
+  4·motorConstant·maxRotVelocity²/0.64, the same law the sim Betaflight bridges give
+  Gazebo since 2026-09-24 (motor speed = 4631·√u). `rig`: the rig's affine law with a
+  sagging pack (`simulation_communication/rig_thrust.py`), the law the rig-twin Gazebo
+  bridges and `sim_telemetry` run. Before 2026-09-24 the plant was quadratic,
+  `a = 88.6·u²` (mass 0.6), and every SIL number from then was flown on it.
 - **Attitude, not omnidirectional force.** §2. Rate loop only; no motor mixing, no
   rotor inertia — the mixer/ESC layer is below the timescale that matters here.
 

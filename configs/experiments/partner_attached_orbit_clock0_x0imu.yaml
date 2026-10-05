@@ -3,9 +3,10 @@ description: 'B1 of card 2026-09-28_mocap_diff_window v3: partner_attached_orbit
   tracker x0 body rate from the stamped gyro (x0_rate_source imu) on carriers 0-2.'
 world: three_attach_partner_attached.sdf
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 1
     start_taut: true
@@ -39,7 +40,7 @@ launch:
     partner_attached: true
     x0_rate_source_drones: '0,1,2'
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 3
     attach: true

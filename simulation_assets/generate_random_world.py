@@ -49,9 +49,9 @@ from generate_rigid_world import build_world, _fmt      # noqa: F401
 # placement. Absent (e.g. running this outside the workspace) we just skip that
 # part of the manifest rather than failing to generate a world.
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_HERE, '..', 'src', 'controller_load_mpc'))
+sys.path.insert(0, os.path.join(_HERE, '..', 'src', 'mpc_planner'))
 try:
-    from controller_load_mpc.geometry import azimuth_slot_assignment
+    from mpc_planner.geometry import azimuth_slot_assignment
 except Exception:                                        # pragma: no cover
     azimuth_slot_assignment = None
 

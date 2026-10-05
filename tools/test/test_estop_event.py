@@ -88,12 +88,12 @@ def test_runner_fails_the_run_on_a_manager_arm_failure():
     f = types.SimpleNamespace(failures=[], _rel=lambda: 4.0, _log_event=lambda *a: None,
                               t_partner_release=None, _ROSOUT=rn.ExperimentRunner._ROSOUT)
     log = lambda name, text: types.SimpleNamespace(name=name, msg=text)  # noqa: E731
-    rn.ExperimentRunner._rosout_cb(f, log('central_controller', 'Arming all drones...'))
+    rn.ExperimentRunner._rosout_cb(f, log('fleet_manager', 'Arming all drones...'))
     assert f.failures == []
     rn.ExperimentRunner._rosout_cb(
-        f, log('central_controller', 'ARM FAILED for drone(s) [2]: disarming the fleet'))
+        f, log('fleet_manager', 'ARM FAILED for drone(s) [2]: disarming the fleet'))
     rn.ExperimentRunner._rosout_cb(
-        f, log('central_controller', 'ARM REFUSED: mux latched on drone 3 (relaunch the muxes)'))
+        f, log('fleet_manager', 'ARM REFUSED: mux latched on drone 3 (relaunch the muxes)'))
     assert len(f.failures) == 1 and f.failures[0].startswith(rn.ARM_FAIL)
-    rn.ExperimentRunner._rosout_cb(f, log('dissipative_controller', 'ARM FAILED'))
+    rn.ExperimentRunner._rosout_cb(f, log('dissipative_planner', 'ARM FAILED'))
     assert len(f.failures) == 1

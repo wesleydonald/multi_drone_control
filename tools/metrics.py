@@ -29,8 +29,10 @@ import re
 
 import numpy as np
 
+import run_logs
+
 SETTLE_S = 5.0            # steady window starts this long after the event
-THROTTLE_SAT = 0.59       # controller_mpc's own saturation annotation threshold
+THROTTLE_SAT = 0.59       # tracker_node's own saturation annotation threshold
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -556,7 +558,7 @@ def solver_health(status, consec_fail_limit=15):
 
     The worst RUN, not just the rate: the tracker holds its last command through
     isolated failures and only disarms after MAX_CONSEC_SOLVE_FAILS in a row
-    (controller_mpc.py), so a 2% failure rate is harmless if scattered and fatal if
+    (tracker_node.py), so a 2% failure rate is harmless if scattered and fatal if
     consecutive."""
     s = np.asarray(status, float)
     s = s[np.isfinite(s)]
@@ -861,10 +863,8 @@ def tethered_metrics(planner, target_z=None, hold_window_s=HOLD_WINDOW_S, log_te
 
 
 def planner_logs(run_path):
-    """load_planner_*/log.csv under a run (or rig log) folder, longest first."""
-    root = os.path.join(run_path, 'logs', 'controller_quad_load')
-    root = root if os.path.isdir(root) else run_path
-    paths = glob.glob(os.path.join(root, 'load_planner_*', 'log.csv'))
+    """The load planner's log.csv files under a run (or rig log) folder, longest first."""
+    paths = run_logs.node_csvs(run_path, 'mpc_planner')
     return sorted(paths, key=lambda p: -os.path.getsize(p))
 
 
@@ -914,9 +914,7 @@ def tethered_run_metrics(run_path, hold_window_s=HOLD_WINDOW_S, log_text=None, r
     groups = tf.launches(run_path)
     if manifest.get('kind') == 'sim' and len(groups) == 1 and not groups[0][1]:
         # one launch per sim run: a planner building its solver cold starts > 30 s after the trackers
-        groups = [(groups[0][0], {int(os.path.basename(os.path.dirname(t)).split('planner_drone')[1].split('_')[0]): t
-                                  for t in glob.glob(os.path.join(os.path.dirname(os.path.dirname(ppath)),
-                                                                  'planner_drone*', 'log.csv'))})]
+        groups = [(groups[0][0], run_logs.trackers(run_logs.run_root(ppath)))]
     for p, trackers in groups:
         if p == ppath and trackers:
             window = (out['hold']['t0'], out['hold']['t1']) if out.get('hold') else None
@@ -1276,7 +1274,7 @@ def summarise_run(run_path):
     return out
 
 
-# fleet-manager lines that end a run before it flies (controller_quad_load main.py)
+# fleet-manager lines that end a run before it flies (fleet_manager_node.py)
 FLEET_GROUNDED = ('disarmed before TAKEOFF', 'TAKEOFF REFUSED', 'ARM FAILED', 'ARM REFUSED')
 
 
@@ -1439,23 +1437,22 @@ def _read_text(path):
 
 
 def _stamp(path):
-    m = re.search(r'_(\d{8}_\d{6})$', os.path.basename(os.path.dirname(path)))
-    if not m:
+    s = run_logs.stamp_of(path)
+    if not s:
         return None
-    return datetime.datetime.strptime(m.group(1), '%Y%m%d_%H%M%S').timestamp()
+    return datetime.datetime.strptime(s, '%Y%m%d_%H%M%S').timestamp()
 
 
 def m2_logs(run_dir):
     """(dissipative log.csv, {drone: tracker log.csv}, runtime.log) of an M2 driver run.
 
-    With MDC_RUN_DIR set by the driver our nodes log under <run>/logs/controller_quad_load.
+    With MDC_RUN_DIR set by the driver our nodes log under <run>/logs (run_logs.py).
     Older runs (T0015) logged to the results root: the dissipative node prints its log
     dir ('params.json -> ...') into ours*.log, and the trackers are its siblings started
     within 5 min of it. runtime.log is in his evidence dir, named in runner.log."""
     ours = ''.join(_read_text(os.path.join(run_dir, f))
                    for f in sorted(os.listdir(run_dir)) if f.startswith('ours'))
-    diss = sorted(glob.glob(os.path.join(run_dir, 'logs', 'controller_quad_load',
-                                         'dissipative_controller_*', 'log.csv')))
+    diss = run_logs.node_csvs(run_dir, 'dissipative_planner')
     diss = diss[-1] if diss else None
     if diss is None:
         m = re.findall(r'params\.json -> (\S+)', ours)
@@ -1464,9 +1461,8 @@ def m2_logs(run_dir):
     trackers = {}
     if diss is not None:
         t0 = _stamp(diss)
-        for f in glob.glob(os.path.join(os.path.dirname(os.path.dirname(diss)),
-                                        'planner_drone*_*', 'log.csv')):
-            i = int(re.search(r'planner_drone(\d+)_', f).group(1))
+        for f in run_logs.node_csvs(run_logs.run_root(diss), 'tracker'):
+            i = run_logs.drone_of(f)
             ts = _stamp(f)
             if t0 is None or ts is None or abs(ts - t0) > 300.0:
                 continue

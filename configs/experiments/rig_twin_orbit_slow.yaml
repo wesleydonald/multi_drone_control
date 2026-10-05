@@ -5,9 +5,10 @@ description: 'Rig twin slow circle (rig C1): rig_twin_hover_fixed_zki (net on) w
   solve failure, an abort.'
 world: four_rigid_ground_rig.sdf
 launch:
-  package: controller_quad_load
-  file: mpc_quad_load_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: mpc
     num_drones: 4
     load_traj: orbit
     cable_len: 0.55
@@ -43,7 +44,7 @@ launch:
     traj_radius: 0.5
     traj_speed: 0.125
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 4
     sim_thrust_map: rig

@@ -25,7 +25,7 @@ def floats(s):
 
 def predict(masses, az_deg, ring_mass, elev_deg=45.0, rho=0.25, kt=None, u_free=None):
     """Per drone (tension N, thrust ratio |F|/(m g), predicted throttle)."""
-    from controller_load_mpc.geometry import balanced_tensions
+    from mpc_planner.geometry import balanced_tensions
     n = len(masses)
     e = math.radians(elev_deg)
     rho_v, s_v = [], []

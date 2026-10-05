@@ -38,9 +38,7 @@ Scored per airborne drone-second: unscheduled events / sum of tick dt over the w
 drones (reported per 100 drone-s), because aborted runs fly shorter.
 """
 import argparse
-import glob
 import os
-import re
 import sys
 
 import numpy as np
@@ -48,6 +46,7 @@ import pandas as pd
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, 'tools'))
+import run_logs  # noqa: E402
 
 THR_KICK = 0.02        # |d throttle| per tick
 YAW_KICK = 0.02        # |d yaw command| per tick
@@ -187,10 +186,7 @@ def drone_ticks(d, drone, mt):
 
 
 def tracker_logs(run):
-    logs = {}
-    for f in sorted(glob.glob(os.path.join(run, 'logs', 'controller_quad_load', 'planner_drone*', 'log.csv'))):
-        logs[int(re.search(r'planner_drone(\d+)', f).group(1))] = f
-    return logs
+    return run_logs.trackers(run)
 
 
 def run_ticks(run):

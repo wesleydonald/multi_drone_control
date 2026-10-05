@@ -10,7 +10,7 @@ because they are easy to break by accident:
 
   * LOCKSTEP. Sim time advances only once every live tracker has published a command
     for the current step. That makes the result independent of machine load BY
-    CONSTRUCTION. controller_mpc.py:141 records two runs of the same trajectory at RTF
+    CONSTRUCTION. tracker_node.py:141 records two runs of the same trajectory at RTF
     0.40 and 0.60 giving payload radius errors of -16% and -34% -- "which made every sim
     A/B silently incomparable". Do not replace this with a wall-clock loop.
 
@@ -291,7 +291,7 @@ class SilBench(Node):
 
         NOT simply "has it welded". A tracker with planner_ref_pos None publishes
         armed-idle -- channel_2 = -1.0, throttle ZERO ("hold armed-idle on the ground",
-        controller_mpc.py) -- and the newcomer cannot have a reference at the weld
+        tracker_node.py) -- and the newcomer cannot have a reference at the weld
         instant, because dissipative_node clears attach_pending on the SAME
         /magnet/object_attached message and only publishes on its next 10 Hz plan tick.
         Measured here: 100-160 ms of zero throttle, in which the drone falls 4-9 cm

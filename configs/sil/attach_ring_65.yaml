@@ -29,9 +29,10 @@ description: 'THE CONTRAST HALF of the §9.3 acceptance pair. Identical to attac
 
   '
 launch:
-  package: controller_quad_load
-  file: three_attach_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: attach
     num_drones: 3
     reserved_attach: 1
     start_taut: true

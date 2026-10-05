@@ -4,10 +4,10 @@ tools/planner_replay.py -- run the load planner's OCP offline, tick by tick, on 
 states a rig flight logged, and toggle one thing at a time.
 
     tools/planner_replay.py                              # model-f1, arms base,a..f
-    tools/planner_replay.py --arms base,a --src <pkg>    # another copy of controller_load_mpc
+    tools/planner_replay.py --arms base,a --src <pkg>    # another copy of mpc_planner
     tools/planner_replay.py --flight f7 --heave          # f7: replayed refs vs the logged ones
 
-What it feeds the solver, per logged planner tick (load_planner_*/log.csv, one row per
+What it feeds the solver, per logged planner tick (the load planner's log.csv, one row per
 _plan call, so the ticks the rig skipped while blocked are skipped here too):
   load p, vz      the logged row
   load vx, vy     differenced from drone 0's payload_x/y (50 Hz), 5-sample mean
@@ -35,7 +35,7 @@ following the drones. Letters combine with '+' (a+g).
 
 The solver is generated and built in --work (never the repo's c_generated_code), and each
 arm runs in its own process: two builds of the same model name cannot share one process.
-Imports come from --src first (default: the repo's src/controller_load_mpc).
+Imports come from --src first (default: the repo's src/mpc_planner).
 """
 import argparse
 import json
@@ -48,11 +48,14 @@ import time
 import numpy as np
 import pandas as pd
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import run_logs  # noqa: E402
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RIG = os.path.join(REPO, 'results', 'rig', '2026-09-30')
 FLIGHTS = {'model_f1': os.path.join(RIG, 'model_f1_logs'),
            'f7': os.path.join(RIG, 'lift_f7_logs')}
-DEFAULT_SRC = os.path.join(REPO, 'src', 'controller_load_mpc')
+DEFAULT_SRC = os.path.join(REPO, 'src', 'mpc_planner')
 DEFAULT_WORK = os.path.join(os.environ.get('TMPDIR', '/tmp'), f'mdc_planner_replay_{os.getuid()}')
 G = 9.81
 PIVOT_DZ = 0.04
@@ -64,27 +67,22 @@ ARM_TEXT = {'base': 'as flown', 'a': 'reset + u=0 on reseed', 'b': 'refs at hand
 
 
 def load_modules(src):
-    """Import the planner's pure-python modules from `src` (a controller_load_mpc package
+    """Import the planner's pure-python modules from `src` (a mpc_planner package
     directory), ahead of any installed copy."""
     sys.path.insert(0, os.path.abspath(src))
-    for k in [k for k in sys.modules if k.startswith('controller_load_mpc')]:
+    for k in [k for k in sys.modules if k.startswith('mpc_planner')]:
         del sys.modules[k]
-    import controller_load_mpc.geometry as geometry
-    import controller_load_mpc.load_cable_dynamics as lcd
-    import controller_load_mpc.params as params
-    import controller_load_mpc.planner_solver as planner_solver
-    import controller_load_mpc.reference_builder as reference_builder
-    import controller_load_mpc.load_trajectory as load_trajectory
+    import mpc_planner.geometry as geometry
+    import mpc_planner.load_cable_dynamics as lcd
+    import mpc_planner.params as params
+    import mpc_planner.planner_solver as planner_solver
+    import mpc_planner.reference_builder as reference_builder
+    import mpc_planner.load_trajectory as load_trajectory
     return argparse.Namespace(geometry=geometry, lcd=lcd, params=params, ps=planner_solver,
                               rb=reference_builder, lt=load_trajectory)
 
 
 # ── flight logs ───────────────────────────────────────────────────────────────
-
-def _latest(logs, prefix):
-    ds = sorted(d for d in os.listdir(logs) if d.startswith(prefix))
-    return os.path.join(logs, ds[-1]) if ds else None
-
 
 def _stamp(line):
     m = re.search(r'\[(\d{9,}\.\d+)\]', line)
@@ -94,8 +92,7 @@ def _stamp(line):
 def read_flight(run_dir):
     """Planner rows, per-drone tracker logs, params and the event times from the launch
     log (<run>.log beside <run>_logs)."""
-    logs = os.path.join(run_dir, 'logs', 'controller_quad_load')
-    pdir = _latest(logs, 'load_planner_')
+    pdir = run_logs.node_dirs(run_dir, 'mpc_planner')[-1]
     rows = pd.read_csv(os.path.join(pdir, 'log.csv'))
     with open(os.path.join(pdir, 'params.json')) as f:
         prm = json.load(f)
@@ -105,10 +102,10 @@ def read_flight(run_dir):
     drones = []
     for i in range(n):
         best = None
-        for d in sorted(os.listdir(logs)):
-            if not d.startswith(f'planner_drone{i}_'):
+        for d in run_logs.node_dirs(run_dir, 'tracker'):
+            if run_logs.drone_of(d) != i:
                 continue
-            df = pd.read_csv(os.path.join(logs, d, 'log.csv'))
+            df = pd.read_csv(os.path.join(d, 'log.csv'))
             if len(df) < 2:
                 continue
             if best is None or abs(df['sim_time'].iloc[0] - t_p) < abs(best['sim_time'].iloc[0] - t_p):
@@ -118,7 +115,7 @@ def read_flight(run_dir):
     ev = {'fail_times': []}
     with open(log_path) as f:
         for line in f:
-            if '[load_planner]' not in line:
+            if '[mpc_planner]' not in line and '[load_planner]' not in line:
                 continue
             t = _stamp(line)
             if 'yaw datum latched at' in line:
@@ -518,7 +515,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--flight', default='model_f1', help='model_f1, f7 or a <run>_logs directory')
     ap.add_argument('--arms', default=','.join(ARMS))
-    ap.add_argument('--src', default=DEFAULT_SRC, help='controller_load_mpc package directory to import')
+    ap.add_argument('--src', default=DEFAULT_SRC, help='mpc_planner package directory to import')
     ap.add_argument('--work', default=DEFAULT_WORK, help='scratch dir for the generated solver')
     ap.add_argument('--omega-sd', type=float, default=0.3, help='arm e: ring angular-rate noise, rad/s')
     ap.add_argument('--jobs', type=int, default=1, help='arms in parallel (inflates solve times)')

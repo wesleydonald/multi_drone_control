@@ -6,9 +6,10 @@ description: 'Hover pair arm B (card 2026-09-24_planner_offset): three drones, c
   load off 0.600 by > 1.5 cm over the last 15 s, or tilt > 2 deg.'
 world: three_rigid_ground.sdf
 launch:
-  package: controller_quad_load
-  file: mpc_quad_load_launch.py
+  package: bringup
+  file: sim_control_launch.py
   args:
+    mode: mpc
     num_drones: 3
     load_traj: hover
     cable_len: 0.5
@@ -20,7 +21,7 @@ launch:
     lift_ramp_vel: 0.15
     pose_timeout_s: 1.0
 io_launch:
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
   args:
     num_drones: 3
 fleet:

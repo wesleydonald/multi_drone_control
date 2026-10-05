@@ -26,9 +26,10 @@ io_launch:
   args:
     detach: true
     num_drones: 4
-  file: rviz_quad_load_launch.py
+  file: sim_io_launch.py
 launch:
   args:
+    mode: dissipative
     attach_azimuths_deg: 30,90,180,270
     cable_len: 0.5
     creep_vel: 0.2
@@ -44,8 +45,8 @@ launch:
     target_z: 0.6
     traj_radius: 0.5
     z_ki: 0.4
-  file: dissipative_launch.py
-  package: controller_quad_load
+  file: sim_control_launch.py
+  package: bringup
 name: detach_hover_n4_3969
 timing:
   duration_s: 100.0
