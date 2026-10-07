@@ -12,6 +12,10 @@ part of a circle or figure-8 (from ORBIT_RAMP_S + 1 s after the path starts to L
   s   the shortfall the fleet then adds: the L0 measured 0.5 s later minus this tick's L5
   D   per drone (tracker log.csv): the time its pose leads its logged node-0 reference (the
       shift that best matches pose(t - D) to ref(t)), the plan's latency as the tracker flies it
+  A0  the ring's lag on ONE clock for every arm (time-cascade critic, must-fix 2): the node clock
+      minus t_start (the first planner tick with traj_t > 0) minus the path time nearest the ring
+      (tracker 0's payload pose). Independent of how traj_t is counted, so a change of that
+      convention cannot move it; L0 - A0 is the reference lead the OCP sees (0.1 s today).
 The reference is rebuilt from the trajectory parameters in the planner's params.json and the
 captured hover point (the ring's first logged position).
 """
@@ -67,10 +71,22 @@ def planner_lags(path):
     st = run.sim_time.to_numpy()
     later = np.interp(st + 0.5, st, L0, right=np.nan)
     s = later - L5
-    return {'kind': traj.kind, 'speed': traj.speed, 'ticks': len(run),
+    t_start = float(L.sim_time[L.traj_t > 0].iloc[0])
+    return {'kind': traj.kind, 'speed': traj.speed, 'ticks': len(run), 'traj': traj, 'hover': hover,
+            't_start': t_start,
             'L0': float(np.nanmean(L0)), 'L5': float(np.nanmean(L5)),
             'c': float(np.nanmean(L0 - L5) / np.nanmean(L0)), 's': float(np.nanmean(s)),
             'window': (float(run.sim_time.iloc[0]), float(run.sim_time.iloc[-1])) if len(run) else None}
+
+
+def absolute_lag(path, pl):
+    """A0: mean of (t - t_start) - path time nearest the ring, over the planner window."""
+    f = sorted(run_logs.node_csvs(path, 'tracker'), key=lambda f: run_logs.drone_of(f) or 0)[0]
+    T = pd.read_csv(f).drop_duplicates('sim_time').dropna(subset=['payload_x'])
+    T = T[(T.sim_time >= pl['window'][0]) & (T.sim_time <= pl['window'][1])].iloc[::10]
+    lags = [(t - pl['t_start']) - _nearest_time(pl['traj'], pl['hover'], np.array([x, y]), t - pl['t_start'])
+            for t, x, y in zip(T.sim_time, T.payload_x, T.payload_y)]
+    return float(np.mean(lags)) if lags else float('nan')
 
 
 def tracker_delay(path, window):
@@ -98,11 +114,12 @@ def main(args):
         p = run_path(a)
         pl = planner_lags(p)
         D = tracker_delay(p, pl['window']) if pl['window'] else {}
+        A0 = absolute_lag(p, pl) if pl['window'] else float('nan')
         rows.append({'run': os.path.basename(p.rstrip('/'))[:40], 'kind': pl['kind'],
                      'speed': pl['speed'], 'ticks': pl['ticks'],
                      'D (s)': round(float(np.mean(list(D.values()))), 3) if D else None,
                      'D per drone': {k: round(v, 3) for k, v in sorted(D.items())},
-                     'L0 (s)': round(pl['L0'], 3), 'L5 (s)': round(pl['L5'], 3),
+                     'A0 (s)': round(A0, 3), 'L0 (s)': round(pl['L0'], 3), 'L5 (s)': round(pl['L5'], 3),
                      'c': round(pl['c'], 3), 's (s)': round(pl['s'], 3)})
     keys = list(rows[0]) if rows else []
     print('| ' + ' | '.join(keys) + ' |')
