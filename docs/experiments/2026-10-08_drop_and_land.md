@@ -281,3 +281,42 @@ The design would not have saved either 7 Oct rig event, and the twin bars cannot
 - **Reported, not falsifiers:**
   - the landing spot (DEPARTED_CLEAR_R by construction);
   - the closest pair, from the trigger to touchdown.
+
+## Results (8 Oct night, twin, branch safety-defaults)
+
+`tools/drop_metrics.py` scores each run from the planner's DROP AND LAND line to the end of the runner
+window.
+- **First round** (098f3be): the trigger and drop worked, but `/fleet/landed` came from the 30 s drop
+  timeout, which ran on WALL time (~8 s of sim at RTF 0.27). In D4/D5 the fleet disarmed with drones
+  still descending at 0.19-0.44 m (R1182-R1185, FAIL), and D1/D2 passed only because their drones
+  were already down.
+- **Fix:** 7ed29c9, the node clock. Re-flown:
+
+| arm | runs | trigger | after the loss/event | faults | drone tilt max | climb max | landed after | height at disarm max | LAND |
+|---|---|---|---|---|---|---|---|---|---|
+| B0 baseline (week4) | R1155, R1156 | none (second detection refused) | - | trackers' 60 deg fault, fleet disarmed in the air at +0.35 s | - | - | - | fell from ~1.5 m | no |
+| D1 second loss | R1191, R1192 | all four trackers' tilt request (34-35 deg) | 0.22, 0.21 s | 0 | 13.6 deg | 0.16 m | 8.6 s | 0.12 m | landed + disarmed |
+| D2 forced from hover | R1193, R1194 | runner DROP | 0.00 s | 0 | 14.9 deg | 0.17 m | 8.6-8.7 s | 0.15 m | yes |
+| D3 one release, 1/3/6/9 | R1181, R1186 | **no drop** (tilt peak 18.3, 16.3 deg) | - | 0 | - | - | - | - | landed normally |
+| D4 bad leaver (240 deg gap) | R1195, R1196 | trackers' tilt request (33-34 deg) | 0.21, 0.25 s | 0 | 11.9 deg | 0.15 m | 8.8-8.9 s | 0.13 m | yes |
+| D5 double loss | R1197, R1198 | trackers' tilt request (33-35 deg) | 0.23, 0.22 s | 0 | 14.7 deg | 0.18 m | 8.7-8.8 s | 0.13 m | yes |
+
+Every drone landed 1.06-1.23 m from where the ring was at the trigger. The closest pair (0.51-0.88 m)
+is the formation's own spacing at the trigger.
+
+**Verdict against the v2 bars: SUPPORTS in the twin.**
+- No drone was disarmed above 0.2 m, and no tracker latched before the stand-down.
+- Drone tilt stayed <= 15 deg (bar 30), and climb <= 0.18 m (bar 0.3).
+- Every drone was down in < 9 s (bar 15), with `/fleet/landed` and the disarm.
+- D3 did not drop: its margin to the trigger was 11.7-13.7 deg.
+- In every capsize the trackers' tilt rule fired first (0.20-0.25 s after the loss). The planner's
+  gap and min_survivors rules were never needed, so they are untested in flight (unit tests only).
+
+**Not tested by the twin** (critic, still open for the rig):
+- the magnet release delay (0.16-0.20 s on the rig, replay);
+- cable slack and snatch;
+- ring-pose glitches (the 15 deg/frame reset is unit-tested only);
+- whether a rig ring at 30 deg is past recovery: r200006's first slip recovered at 30.6 deg. That is
+  the open decision between the plain 30 deg rule and the replay's rate rule.
+
+First rig step if Wesley wants it: a forced drop (`/fleet/drop`) from a low hover.
