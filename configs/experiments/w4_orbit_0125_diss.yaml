@@ -65,7 +65,7 @@ launch:
   package: bringup
 name: w4_orbit_0125_diss
 timing:
-  duration_s: 130.0
+  duration_s: 150.0
   stop_after_abort_s: 8.0
   stop_after_landed_s: 2.0
 world: four_rigid_ground_rig.sdf
