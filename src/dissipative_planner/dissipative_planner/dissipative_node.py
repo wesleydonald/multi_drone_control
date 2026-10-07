@@ -28,6 +28,8 @@ Phases: 'creep' -> 'planner'  (inherited: OCP takeoff + hover)
 Everything else -- the reference wire format, the fleet manager, the per-drone tracker --
 is the shared stack, unchanged.
 """
+import time
+
 import numpy as np
 import rclpy
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -48,6 +50,7 @@ from dissipative_planner.dissipative_network import (
 # a freed drone lands at least this far from the ring centre (ring 0.28 + cable 0.5 + margin)
 DEPARTED_CLEAR_R = 1.2
 DETACH_STEP_VEL = 0.15     # m/s, a freed drone's step out from the ring (detach_step_out_m)
+DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
 
 
 def _largest_gap_deg(rho):
@@ -922,8 +925,18 @@ class DissipativeController(LoadPlanner):
         if (self._detect_m <= 0.0 or self.phase != 'planner' or self._reconfig_mode != 'ocp'
                 or self._land_to_ground or self._unload is not None or not self.takeoff_seen):
             return
+        now = time.monotonic()
+        load_t = getattr(self, '_load_t', None)
+        if load_t is None or now - load_t > DETECT_STALE_S:
+            self._detect_count = {}           # no ring pose: nothing to measure a cable against
+            return
+        over_of = {}
         for i, d in enumerate(list(self.slot2drone)):
             if self.detached[d] or d in self._detect_refused:
+                continue
+            t_d = getattr(self, '_drone_t', {}).get(d)
+            if t_d is not None and now - t_d > DETECT_STALE_S:
+                self._detect_count[d] = 0     # a frozen drone pose would read as a stretched cable
                 continue
             try:
                 dist = self._rim_dist(i)
@@ -931,7 +944,14 @@ class DissipativeController(LoadPlanner):
                 continue
             # against the longer of the typed and measured rod: a rod measured short at the
             # handover (r001: 0.48) reads over once taut, which is not a release
-            over = dist - max(float(self.cable_len), float(self.cable_len_i[i]))
+            over_of[(i, d)] = (dist, dist - max(float(self.cable_len), float(self.cable_len_i[i])))
+        n_over = sum(1 for _, ov in over_of.values() if ov > self._detect_m)
+        if len(over_of) >= 2 and n_over == len(over_of):
+            # every cable over at once: the ring's pose jumped (marker swap, quaternion flip),
+            # not every magnet at once
+            self._detect_count = {}
+            return
+        for (i, d), (dist, over) in over_of.items():
             if over <= self._detect_m:
                 self._detect_count[d] = 0
                 self._detect_ok[d] = over

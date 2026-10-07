@@ -1,6 +1,7 @@
 """Soft detach (7 Oct): with detach_unload_s > 0 the leaver is unloaded in the n-drone OCP and
 its magnet opens only after the blend and the gates; a second detach, a failed gate or a LAND
 cancels cleanly with the magnet ON. detach_unload_s 0 keeps the one-tick detach."""
+import time
 from types import SimpleNamespace
 
 import numpy as np
@@ -104,7 +105,9 @@ def _detect_node(dists, detect_m=0.06):
     f = SimpleNamespace(_detect_m=detect_m, phase='planner', _reconfig_mode='ocp', _land_to_ground=False,
                         _unload=None, takeoff_seen=True, slot2drone=[0, 1, 2, 3], detached=[False] * 4,
                         cable_len=0.55, cable_len_i=[0.55] * 4, _detect_count={}, _detect_ok={},
-                        _detect_refused=set(), calls=[])
+                        _detect_refused=set(), calls=[], _load_t=None, _drone_t={})
+    f.fresh = lambda: (setattr(f, '_load_t', time.monotonic()),
+                       f._drone_t.update({k: time.monotonic() for k in range(4)}))
     f.get_logger = lambda: log
     f._rim_dist = lambda i: dists[i]
     def _det(d):
@@ -117,11 +120,11 @@ def _detect_node(dists, detect_m=0.06):
 def test_unannounced_detach_needs_two_ticks_over_the_length():
     dists = [0.55, 0.55, 0.55, 0.55]
     f = _detect_node(dists)
-    D._detect_tick(f)
+    f.fresh(); D._detect_tick(f)
     dists[1] = 0.65                      # drone 1's cable 10 cm over: its magnet let go
-    D._detect_tick(f)
+    f.fresh(); D._detect_tick(f)
     assert f.calls == []                 # one tick is not enough (a mocap glitch)
-    D._detect_tick(f)
+    f.fresh(); D._detect_tick(f)
     assert f.calls == [1]
 
 
@@ -129,14 +132,14 @@ def test_detection_off_or_one_glitch_does_nothing():
     dists = [0.55, 0.70, 0.55, 0.55]
     f = _detect_node(dists, detect_m=0.0)
     for _ in range(3):
-        D._detect_tick(f)
+        f.fresh(); D._detect_tick(f)
     assert f.calls == []
     f = _detect_node(dists)
-    D._detect_tick(f)
+    f.fresh(); D._detect_tick(f)
     dists[1] = 0.55                      # back within its length: the count restarts
-    D._detect_tick(f)
+    f.fresh(); D._detect_tick(f)
     dists[1] = 0.70
-    D._detect_tick(f)
+    f.fresh(); D._detect_tick(f)
     assert f.calls == []
 
 
@@ -145,22 +148,22 @@ def test_a_rod_measured_short_or_a_steady_bias_is_not_a_release():
     f = _detect_node(dists)
     f.cable_len_i = [0.48, 0.48, 0.48, 0.48]     # r001: rods measured 6-7 cm short at the handover
     for _ in range(5):
-        D._detect_tick(f)
+        f.fresh(); D._detect_tick(f)
     assert f.calls == []
     dists[2] = 0.63                              # a steady 8 cm bias from the first tick
     f = _detect_node(dists)
     for _ in range(5):
-        D._detect_tick(f)
+        f.fresh(); D._detect_tick(f)
     assert f.calls == []
 
 
 def test_r200006_slip_fires_on_two_equal_stale_ticks():
     dists = [0.55, 0.55, 0.55, 0.55]
     f = _detect_node(dists)
-    D._detect_tick(f)
+    f.fresh(); D._detect_tick(f)
     dists[3] = 0.725                             # +0.175 on two ticks with the same mocap sample
-    D._detect_tick(f)
-    D._detect_tick(f)
+    f.fresh(); D._detect_tick(f)
+    f.fresh(); D._detect_tick(f)
     assert f.calls == [3]
 
 
@@ -181,3 +184,25 @@ def test_departed_land_steps_out_then_descends_while_the_fleet_flies():
         D._publish_departed_refs(f)
     assert published[-1][2] < z0 - 0.2 and np.allclose(published[-1][:2], [1.0, 0.0], atol=0.02)
     assert 1 in f._departed_landing
+
+
+def test_stale_ring_or_drone_pose_or_all_cables_over_is_not_a_release():
+    dists = [0.55, 0.55, 0.55, 0.55]
+    f = _detect_node(dists)
+    f.fresh(); D._detect_tick(f)
+    dists[1] = 0.70
+    f._load_t = time.monotonic() - 0.5           # ring pose 0.5 s old
+    for _ in range(3):
+        D._detect_tick(f)
+    assert f.calls == []
+    f = _detect_node([0.70, 0.70, 0.70, 0.70])   # every cable over at once: a ring pose jump
+    for _ in range(4):
+        f.fresh(); D._detect_tick(f)
+    assert f.calls == []
+    dists = [0.55, 0.55, 0.55, 0.55]
+    f = _detect_node(dists)
+    f.fresh(); D._detect_tick(f)
+    dists[2] = 0.70
+    for _ in range(3):                           # drone 2's own pose frozen
+        f.fresh(); f._drone_t[2] = time.monotonic() - 0.5; D._detect_tick(f)
+    assert f.calls == []

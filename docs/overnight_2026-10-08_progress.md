@@ -8,3 +8,4 @@ branch `safety-defaults` (git worktree) until they are twin-verified.
 |---|---|---|---|---|
 | A1 plates clockwise 0-11, RViz 1-4, preflight wording | done | mpc_planner 140, bringup 92, preflight 25, sim_comm 45, gate --quick | (this commit) | yes |
 | A2 rig_flight.sh: run name last (old order works), auto-suffix _2.., dry run, per-run code.txt | done | 4 dry-run tests | (this commit) | yes |
+| A3 detector glitch guard: no detection on a stale ring pose (>0.1 s), a drone's stale pose skips that drone, all cables over at once = ring pose jump (no action) | done | dissipative 49 (11 detect/soft), full suites, gate; replay over 13 flown 7 Oct rig logs: fires only on r200006 (0.38 s after the slip), no all-over ticks | (this commit) | yes |

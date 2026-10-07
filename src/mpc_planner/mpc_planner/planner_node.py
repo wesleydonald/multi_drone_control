@@ -333,6 +333,7 @@ class LoadPlanner(Node):
         self._land_ff_ramp = bool(self.declare_parameter('land_ff_ramp', False).value)
         self._zbias_warned = False
         self._load_t = None                    # monotonic time of the last payload pose
+        self._drone_t = {}                     # monotonic time of each drone's last pose
         self.auto_slot_assign = cfg.auto_slot_assign
         self.load_traj = cfg.load_traj
         self.traj_speed = cfg.traj_speed
@@ -946,6 +947,7 @@ class LoadPlanner(Node):
         self.drone_vel[i] = np.array([lv.x, lv.y, lv.z])
         o = msg.pose.orientation
         self.drone_quat[i] = np.array([o.w, o.x, o.y, o.z])
+        self._drone_t[i] = time.monotonic()
 
     def _fleet_command_cb(self, msg: String):
         cmd = msg.data.strip().upper()
