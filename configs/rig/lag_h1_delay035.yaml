@@ -1,0 +1,3 @@
+# TEST ONLY (card docs/experiments/2026-10-08_lag_h1.md): hold every reference publish 0.035 s of sim time,
+# the rig's extra planner-to-tracker latency over the twin. Needs branch time-cascade.
+ref_publish_delay_s: 0.035
