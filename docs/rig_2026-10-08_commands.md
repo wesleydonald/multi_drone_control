@@ -51,6 +51,25 @@ rio num_drones:=4 magnet_channel:=6 magnet_initial:=ON          # T1, all sessio
 tools/rig_flight.sh real_control_launch.py mode:=mpc num_drones:=4 target_z:=1.0 lift_ramp_vel:=0.15 load_traj:=fig_8 traj_radius:=1.0 traj_speed:=0.2 params_file:=$HOME/multi_drone_control/configs/rig/traj_hold.yaml r301
 ```
 
+**r302 (OPTIONAL, your call): r301 again with `ref_time_shift`.** This is the lag fix's first rung,
+an existing tracker switch.
+- Each tracker flies the plan advanced by the time since it arrived, instead of holding node 0 until
+  the next plan.
+- Twin, figure-8 0.2 m/s, week4 code (lab PC):
+
+  | | D | lag on one clock | tilt max |
+  |---|---|---|---|
+  | base (R1127, R1154) | 0.094-0.096 s | 0.104-0.106 s | 1.5-1.7 deg |
+  | ref_time_shift (R1176, R1177) | 0.043-0.044 s | -0.005 to 0.001 s | 1.1 deg |
+
+  Both landed.
+- Rig expectation (a prediction): lag ~0.2 -> ~0.1 s.
+- Fly it straight after r301 on the same pack, so the two compare.
+- Check in T3 before ARM: `ros2 param get /tracker_0 ref_time_shift` must print True.
+```bash
+tools/rig_flight.sh real_control_launch.py mode:=mpc num_drones:=4 target_z:=1.0 lift_ramp_vel:=0.15 load_traj:=fig_8 traj_radius:=1.0 traj_speed:=0.2 params_file:=$HOME/multi_drone_control/configs/rig/traj_hold_rts.yaml r302
+```
+
 **r303, r304: unannounced detach on 11/9/7/3, twice.**
 - Plates as in the table. Before takeoff, T2's `slot azimuth error` line must show `d4 ... (plate 9)`.
 - Keep 1.3 m clear on +y: drone 4 steps 0.5 m out, and on LAND it moves to 1.2 m before descending.

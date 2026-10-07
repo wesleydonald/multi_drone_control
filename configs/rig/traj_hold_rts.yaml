@@ -1,0 +1,5 @@
+# 8 Oct rig, optional r302 (Wesley's call): r301's 5 s hover hold before the path, plus ref_time_shift: each
+# tracker flies the plan advanced by the time since it arrived (twin: lag on one clock 0.10 s -> 0.00 s on
+# the figure-8, R1176/R1177; card docs/experiments/2026-10-08_time_cascade.md)
+traj_hold_s: 5.0
+ref_time_shift: true
