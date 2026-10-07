@@ -119,13 +119,18 @@ class CallbackManagerMulti:
                 self.node.get_logger().warn(
                     f"[Drone {self.drone_id}] Arming failed: no pose data.")
         else:
+            # a disarm before any TAKEOFF (a refused ARM) keeps the controller up for the next
+            # ARM; after a flight it shuts down as before
+            flown = bool(self.node.takeoff_requested) or bool(getattr(self.node, 'has_flown', False))
             self.node.armed = False
             self.node.takeoff_requested = False
-            self.node.shutdown_requested = True
+            self.node.shutdown_requested = flown
             response.success = True
-            response.message = f"Drone {self.drone_id} disarmed — shutting down controller"
+            response.message = (f"Drone {self.drone_id} disarmed — shutting down controller" if flown
+                                else f"Drone {self.drone_id} disarmed before takeoff — ready to ARM again")
             self.node.get_logger().info(
-                f"[Drone {self.drone_id}] Disarmed via service — initiating shutdown.")
+                f"[Drone {self.drone_id}] Disarmed via service — "
+                + ("initiating shutdown." if flown else "staying up for the next ARM."))
 
         self.publish_arming_state()
         return response
@@ -148,9 +153,10 @@ class CallbackManagerMulti:
                     f"[Drone {self.drone_id}] Cannot arm: no pose data.")
 
         elif command == "DISARM":
+            flown = bool(self.node.takeoff_requested) or bool(getattr(self.node, 'has_flown', False))
             self.node.armed = False
             self.node.takeoff_requested = False
-            self.node.shutdown_requested = True
+            self.node.shutdown_requested = flown
             self.node.get_logger().info(
                 f"[Drone {self.drone_id}] Disarmed via command topic.")
             self.publish_arming_state()
@@ -158,6 +164,7 @@ class CallbackManagerMulti:
         elif command == "TAKEOFF":
             if self.node.armed:
                 self.node.takeoff_requested = True
+                self.node.has_flown = True
                 self.node.get_logger().info(
                     f"[Drone {self.drone_id}] Takeoff requested.")
             else:

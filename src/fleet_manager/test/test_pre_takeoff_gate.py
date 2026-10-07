@@ -17,8 +17,10 @@ def _armed(f):
 
 
 def _grounded_quietly(f):
+    # grounded through the services, no abort; the stack stays up so the operator can ARM
+    # again without relaunching (Wesley 7 Oct: QUAD1 replug and re-ARM)
     return (f.service_disarms == [True] and f.abort_pub.msgs == [] and _direct_elrs(f) == 0
-            and not f.fleet_armed and f.shutdown_requested)
+            and not f.fleet_armed and not f.shutdown_requested)
 
 
 def test_disarm_between_arm_and_takeoff_grounds_the_fleet(sync):

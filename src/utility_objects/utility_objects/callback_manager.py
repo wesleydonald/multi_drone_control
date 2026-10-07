@@ -61,9 +61,12 @@ class CallbackManager:
                 response.message = "Cannot arm: No pose data available"
                 self.node.get_logger().warn("Arming failed: No pose data")
         else:
+            # a disarm before any TAKEOFF (a refused ARM) keeps the controller up for the next
+            # ARM; after a flight it shuts down as before
+            flown = bool(self.node.takeoff_requested) or bool(getattr(self.node, 'has_flown', False))
             self.node.armed = False
             self.node.takeoff_requested = False
-            self.node.shutdown_requested = True
+            self.node.shutdown_requested = flown
             response.success = True
             response.message = "Drone disarmed successfully - shutting down controller"
             self.node.get_logger().info("Drone disarmed via service - initiating shutdown")
@@ -84,15 +87,17 @@ class CallbackManager:
                 self.node.get_logger().warn("Cannot arm: No pose data available")
         
         elif command == "DISARM":
+            flown = bool(self.node.takeoff_requested) or bool(getattr(self.node, 'has_flown', False))
             self.node.armed = False
             self.node.takeoff_requested = False
-            self.node.shutdown_requested = True
+            self.node.shutdown_requested = flown
             self.node.get_logger().info("Drone disarmed via command - initiating shutdown")
             self.publish_arming_state()
         
         elif command == "TAKEOFF":
             if self.node.armed:
                 self.node.takeoff_requested = True
+                self.node.has_flown = True
                 self.node.get_logger().info("Takeoff requested")
             else:
                 self.node.get_logger().warn("Cannot takeoff: Drone not armed")

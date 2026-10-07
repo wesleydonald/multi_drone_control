@@ -216,8 +216,9 @@ class CentralController(Node):
             _announce(self, 'error',
                       f"Drone {label(drone_id)} disarmed before TAKEOFF: fleet disarmed, TAKEOFF refused. "
                       f"Usually a pose timeout (mocap lost > 0.25 s) or a solver failure: see drone "
-                      f"{label(drone_id)}'s lines above. Relaunch T2 to retry.")
-            self._disarm_fleet(emergency=False,
+                      f"{label(drone_id)}'s lines above. Fix that, then ARM again (relaunch T2 only "
+                      f"if a tracker has stopped).")
+            self._disarm_fleet(emergency=False, keep_alive=True,
                                reason=f"drone {label(drone_id)} disarmed before TAKEOFF")
             return
 
@@ -260,6 +261,7 @@ class CentralController(Node):
             return
         self.get_logger().debug("Arming all drones...")
         self.fleet_armed = False          # a repeat ARM must re-earn it
+        self.shutdown_requested = False   # a refused ARM keeps the stack up for this retry
 
         # Wait for all arming services to become available
         for i in range(self.num_drones):
@@ -268,7 +270,7 @@ class CentralController(Node):
                 _announce(self, 'error',
                           f"ARM FAILED for drone(s) [{label(i)}]: its tracker is not up (not started, or "
                           f"still building its solver). Fleet disarmed; TAKEOFF refused. Relaunch T2.")
-                self._disarm_fleet(emergency=False,
+                self._disarm_fleet(emergency=False, keep_alive=True,
                                    reason=f"arming service for drone {label(i)} not available")
                 return
 
@@ -307,8 +309,8 @@ class CentralController(Node):
             # the muxes, which an abort would latch down.
             _announce(self, 'error',
                       f"ARM FAILED for drone(s) {[label(i) for i in failed]}: fleet disarmed; TAKEOFF refused. "
-                      f"Relaunch T2 to retry (the disarm shuts the trackers down).")
-            self._disarm_fleet(emergency=False,
+                      f"Fix the cause, then ARM again (the trackers stay up before a takeoff).")
+            self._disarm_fleet(emergency=False, keep_alive=True,
                                reason=f"ARM failed for drone(s) {[label(i) for i in failed]}")
             return
         if getattr(self, 'require_fc_armed', False) and not self._wait_fc_armed():
@@ -316,28 +318,28 @@ class CentralController(Node):
         self.fleet_armed = True
         _announce(self, 'info', f"ARM sequence complete: all {self.num_drones} armed, ready for TAKEOFF.")
 
-    def _wait_fc_armed(self, timeout_s=7.0):
-        """Wait until every flight controller reports armed (or cannot say). A refused arm
-        disarms the fleet and names the drone, its radio and what the FC reported."""
+    def _wait_fc_armed(self, timeout_s=10.0):
+        """Wait until every flight controller REPORTS armed (rig: require_fc_armed). 'unconfirmed'
+        no longer passes: QUAD1 showed armed on the transmitter with its motors still (7 Oct,
+        '!ERR*' arming disabled). A drone not armed within timeout_s disarms the fleet, names it,
+        and leaves the stack up so the operator can replug it and ARM again."""
         deadline = time.time() + timeout_s
         while time.time() < deadline:
             states = {i: self.fc_arm_state.get(i, '') for i in range(self.num_drones)}
-            if all(st.startswith(('armed', 'unconfirmed', 'failed')) for st in states.values()):
+            if all(st.startswith('armed') for st in states.values()):
+                return True
+            if any(st.startswith('failed') for st in states.values()):
                 break
             time.sleep(0.1)
         states = {i: self.fc_arm_state.get(i, '') or 'no arm state from its radio node'
                   for i in range(self.num_drones)}
-        bad = {i: st for i, st in states.items() if not st.startswith(('armed', 'unconfirmed'))}
-        for i, st in states.items():
-            if st.startswith('unconfirmed'):
-                _announce(self, 'warn', f"drone {label(i)}: arm not confirmed by its FC ({st})")
-        if bad:
-            for i, st in bad.items():
-                _announce(self, 'error', f"ARM FAILED: drone {label(i)}: {st}")
-            self._disarm_fleet(emergency=False,
-                               reason=f"FC did not arm: drone(s) {[label(i) for i in bad]}")
-            return False
-        return True
+        bad = {i: st for i, st in states.items() if not st.startswith('armed')}
+        for i, st in bad.items():
+            _announce(self, 'error', f"ARM FAILED: drone {label(i)} not armed ({st}). TAKEOFF refused: "
+                                     f"replug drone {label(i)}'s battery, then ARM again (no relaunch needed).")
+        self._disarm_fleet(emergency=False, keep_alive=True,
+                           reason=f"FC did not arm: drone(s) {[label(i) for i in bad]}")
+        return False
 
     def _takeoff_fleet(self):
         if not self.fleet_armed:
@@ -349,8 +351,8 @@ class CentralController(Node):
         if not_armed:
             _announce(self, 'error',
                       f"TAKEOFF REFUSED: drone(s) {[label(i) for i in not_armed]} not armed: fleet disarmed. "
-                      f"Relaunch T2 to retry.")
-            self._disarm_fleet(emergency=False,
+                      f"ARM again (the stack stays up before a takeoff).")
+            self._disarm_fleet(emergency=False, keep_alive=True,
                                reason=f"drone(s) {[label(i) for i in not_armed]} not armed at TAKEOFF")
             return
         self.master_step = 0
@@ -379,10 +381,11 @@ class CentralController(Node):
         _announce(self, 'info', "Landed - disarming the fleet.")
         self._disarm_fleet(emergency=False)
 
-    def _disarm_fleet(self, emergency: bool = False, reason: str = ''):
+    def _disarm_fleet(self, emergency: bool = False, reason: str = '', keep_alive: bool = False):
         self.flying = False
         self.fleet_armed = False
-        self.shutdown_requested = not emergency  # on estop keep node alive for debug
+        # on estop keep node alive for debug; keep_alive: a refused ARM, so the next ARM works
+        self.shutdown_requested = not emergency and not keep_alive
 
         if not emergency:
             self.get_logger().info("DISARM: disarming all drones" + (f" ({reason})" if reason else ""))

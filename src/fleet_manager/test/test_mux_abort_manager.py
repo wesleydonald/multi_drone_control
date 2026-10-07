@@ -102,7 +102,7 @@ def test_arm_failed_disarms_through_the_services_only(sync):
     f._arm_fleet_thread()
     assert f.service_disarms == [True]
     assert f.abort_pub.msgs == [] and _direct_elrs(f) == 0
-    assert f.shutdown_requested and not f.fleet_armed
+    assert not f.shutdown_requested and not f.fleet_armed      # stays up for the next ARM
     f._takeoff_fleet()
     assert f.cmds == [] and not f.flying
 

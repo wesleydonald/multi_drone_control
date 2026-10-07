@@ -41,7 +41,7 @@ def _fake(clients):
                               master_step=5, _log=_Log(), aborts=[], cmds=[],
                               mux_state={})
     f.get_logger = lambda: f._log
-    f._disarm_fleet = lambda emergency=False, reason='': f.aborts.append((emergency, reason))
+    f._disarm_fleet = lambda emergency=False, reason='', keep_alive=False: f.aborts.append((emergency, reason))
     f._publish_drone_command = lambda c: f.cmds.append(c)
     f.num_drones = len(clients)
     return f
@@ -79,3 +79,25 @@ def test_service_missing_resets_a_previous_arm():
     assert not f.fleet_armed
     m.CentralController._takeoff_fleet(f)
     assert f.cmds == []
+
+
+def _fc_fake(states):
+    f = _fake({i: _Client(True) for i in range(len(states))})
+    f.fc_arm_state = dict(enumerate(states))
+    return f
+
+
+def test_fc_gate_needs_every_fc_armed(monkeypatch):
+    monkeypatch.setattr(m.time, 'sleep', lambda s: None)
+    f = _fc_fake(['armed', 'armed', 'armed', 'armed'])
+    assert m.CentralController._wait_fc_armed(f, timeout_s=0.05) is True and not f.aborts
+
+
+@pytest.mark.parametrize('st', ['unconfirmed: no flight-mode frame since the arm edge',
+                                "failed: FC says '!ERR*' after 2 tries", 'pending', ''])
+def test_fc_gate_refuses_unconfirmed_failed_or_silent(monkeypatch, st):
+    monkeypatch.setattr(m.time, 'sleep', lambda s: None)
+    f = _fc_fake(['armed', st, 'armed', 'armed'])
+    assert m.CentralController._wait_fc_armed(f, timeout_s=0.05) is False
+    assert f.aborts and f.aborts[0][0] is False
+    assert any('replug drone 2' in s and 'no relaunch' in s for s in f._log.lines)
