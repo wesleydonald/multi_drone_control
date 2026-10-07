@@ -956,7 +956,9 @@ class DissipativeController(LoadPlanner):
         if self._dropped is not None:
             return
         self._dropped = reason
-        self._drop_t = time.monotonic()
+        # node clock: sim time in the twin (a wall-clock timeout fired at ~8 s of sim and disarmed
+        # drones still descending, R1182), wall time on the rig
+        self._drop_t = self.get_clock().now().nanoseconds * 1e-9
         self._cancel_unload_quietly()
         self.get_logger().error(f'[dissipative] DROP AND LAND: {reason} - every magnet OFF, '
                                 f'the ring is dropped, every drone steps clear and lands')
@@ -1005,7 +1007,7 @@ class DissipativeController(LoadPlanner):
         self._publish_departed_refs()
         if self._landed:
             return
-        late = time.monotonic() - self._drop_t > DROP_LAND_WAIT_S
+        late = self.get_clock().now().nanoseconds * 1e-9 - self._drop_t > DROP_LAND_WAIT_S
         if self._departed_down() or late:
             self._landed = True
             self.landed_pub.publish(Bool(data=True))

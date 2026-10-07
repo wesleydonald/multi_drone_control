@@ -47,6 +47,8 @@ def _node(azimuths='30,90,150,270', detached=None, landing=False):
         _dropped_pub=_Pub(), landed_pub=_Pub())
     f.get_logger = lambda: log
     f.log = log
+    f.now = [100.0]                        # the node clock (sim time in the twin)
+    f.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=int(f.now[0] * 1e9)))
     for m in ('_drop_due', '_drop_and_land', '_release_all_magnets', '_drop_tick',
               '_cancel_unload_quietly', '_drop_request_cb'):
         setattr(f, m, (lambda name: lambda *a, **k: getattr(D, name)(f, *a, **k))(m))
@@ -97,10 +99,13 @@ def test_drop_tick_resends_off_and_announces_landed_once_all_down():
     assert f.landed_pub.msgs == [True] and f._landed
 
 
-def test_drop_tick_times_out_into_landed():
+def test_drop_tick_times_out_on_the_node_clock():
     f = _node()
     f._drop_and_land('test')
-    f._drop_t = time.monotonic() - 31.0
+    f.now[0] += 29.0                       # 29 s of node time: still waiting, however long the wall took
+    f._drop_tick()
+    assert f.landed_pub.msgs == []
+    f.now[0] += 2.0
     f._drop_tick()
     assert f.landed_pub.msgs == [True]
 
