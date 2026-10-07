@@ -50,6 +50,21 @@ def _nearest_time(traj, hover, xy, t_guess, span=1.5, step=0.002):
     return float(ts[np.argmin(np.linalg.norm(pts - xy, axis=1))])
 
 
+def runner_end(path, L):
+    """Node-clock time of the runner's last run.csv row (twin runs), else None. run.csv counts
+    from the runner's start: aligned to the planner on the ring's lift-off (3 cm over rest)."""
+    f = os.path.join(path, 'logs', 'run.csv')
+    if not os.path.exists(f):
+        return None
+    run = pd.read_csv(f).drop_duplicates('t')
+    lift = lambda t, z: float(t[z > np.median(z[:20]) + 0.03].iloc[0])  # noqa: E731
+    try:
+        off = lift(L.sim_time, L.load_z) - lift(run.t, run.payload_z)
+    except IndexError:
+        return None
+    return float(run.t.max()) + off
+
+
 def planner_lags(path):
     csv = sorted(run_logs.planner_csvs(path), key=lambda p: -os.path.getsize(p))[0]
     L = pd.read_csv(csv)
@@ -58,6 +73,11 @@ def planner_lags(path):
                           float(prm.get('traj_distance', 1.0)), float(prm.get('traj_radius', 0.5)))
     hover = L[['load_x', 'load_y']].dropna().iloc[0].to_numpy(float)
     run = L[(L.traj_t >= ORBIT_RAMP_S + 1.0) & (L.land.astype(str).isin(['0', 'False', '0.0']))]
+    end = runner_end(path, L)
+    if end is not None:
+        # the node logs run on past the runner (post-landing rows, the stack's shutdown):
+        # never score them (reviewer 8 Oct, R1161/R1162)
+        run = run[run.sim_time <= end]
     if traj.kind == 'fig_8':
         end = traj._fig8_theta(0.0)[3]
         run = run[run.traj_t <= end - ORBIT_RAMP_S - 1.0]
