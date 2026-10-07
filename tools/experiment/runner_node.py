@@ -17,6 +17,7 @@ real-time factor moves with machine load, so a wall-clock schedule makes two run
 invalidated comparisons once. Wall time appears exactly once, as the startup timeout,
 because before /clock is flowing there is nothing else to measure.
 """
+import copy
 import math
 import os
 import re
@@ -49,6 +50,13 @@ def _tilt_deg(q):
     return math.degrees(math.acos(max(-1.0, min(1.0, cz))))
 
 
+
+def schedule(events):
+    """This run's event queue: copies, time-sorted. The lift and thrust waits shift the queued
+    events in place; on the config's own objects that shift carried into the next --repeats run
+    (every second repeat started ~10 s late, R1158/R1160/R1162/R1168; reviewer 8 Oct)."""
+    return sorted((copy.copy(e) for e in events), key=lambda e: e.t)
+
 class ExperimentRunner(Node):
     def __init__(self, cfg, run_dir):
         super().__init__('experiment_runner')
@@ -80,7 +88,7 @@ class ExperimentRunner(Node):
         self.aborts = []
         self.failures = []                     # hard failures -> nonzero exit
         self.step_i = 0
-        self._pending = sorted(cfg.events, key=lambda e: e.t)
+        self._pending = schedule(cfg.events)
         self.launch_requests = []           # LAUNCH events not yet started
         self._subs_ok_since = None
         self._lift_wait = None              # (threshold_z, t_blocked) while WAIT_LIFT holds
