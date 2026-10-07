@@ -72,8 +72,8 @@ def test_match_is_order_free_and_reports_the_error():
 
 
 def test_a_drone_on_the_wrong_plate_shows_a_large_error():
-    typed = [30, 150, 270]                              # 1/5/9 typed
-    meas = [30.0, 120.0, 270.0]                         # drone 1 put on plate 4
+    typed = [30, 150, 270]                              # 11/7/3 typed (clockwise numbering)
+    meas = [30.0, 120.0, 270.0]                         # drone 1 put on plate 8 (clockwise numbering)
     _, err = match_azimuths(meas, typed)
     assert max(abs(e) for e in err) == pytest.approx(30)
 
@@ -140,8 +140,8 @@ def test_fake_mocap_dry_run_prints_without_ros(capsys):
 
 def test_slot_offset_detail_names_the_plate_and_the_check():
     from preflight_geometry import slot_offset_detail
-    assert slot_offset_detail(2, 3.0, 90.0) == '+3.0 deg from plate 3'
+    assert slot_offset_detail(2, 3.0, 90.0) == '3.0 deg anticlockwise of plate 9'   # plates clockwise (7 Oct)
     msg = slot_offset_detail(1, -29.7, 330.0)                 # model-f1: one plate off
-    assert msg.startswith('drone 1 sits -30 deg from plate 11:')
+    assert msg.startswith('drone 1 sits 30 deg clockwise of plate 1:')
     assert 'ring rigid body (+x toward plate 0)' in msg and 'magnet plates' in msg
     assert 'sits' in slot_offset_detail(0, 10.5, 0.0) and 'sits' not in slot_offset_detail(0, 9.9, 0.0)

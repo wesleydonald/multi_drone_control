@@ -232,6 +232,12 @@ def azimuth_slot_assignment(drone_pos, load_xy, n, load_yaw=0.0, slot_az=None):
 
 
 PLATE_PITCH_DEG = 30.0      # M2A ring: 12 magnet plates, plate 0 on the ring body's +x
+
+
+def plate_of_azimuth(az_deg):
+    """Plate number (0-11) at a load-frame azimuth: plate 0 on the ring's +x, counting CLOCKWISE
+    seen from above like a clock (Wesley 7 Oct; was anticlockwise). Azimuths stay anticlockwise."""
+    return int(round(-float(az_deg) / PLATE_PITCH_DEG)) % int(360 / PLATE_PITCH_DEG)
 SLOT_OFFSET_WARN_DEG = 10.0
 
 
@@ -242,13 +248,19 @@ def slot_azimuth_errors(drone_pos, load_xy, load_yaw, slot2drone, slot_az):
     for i, d in enumerate(slot2drone):
         az = np.arctan2(drone_pos[d][1] - load_xy[1], drone_pos[d][0] - load_xy[0]) - load_yaw
         err = (np.degrees(az - slot_az[i]) + 180.0) % 360.0 - 180.0
-        plate = int(round(np.degrees(slot_az[i]) / PLATE_PITCH_DEG)) % int(360 / PLATE_PITCH_DEG)
+        plate = plate_of_azimuth(np.degrees(slot_az[i]))
         out.append((int(d), float(err), plate))
     return out
 
 
 def slot_offset_warnings(errors, tol_deg=SLOT_OFFSET_WARN_DEG):
     """Operator lines for the slots whose |error| exceeds tol_deg (see slot_azimuth_errors)."""
-    return [f'drone {d + 1} sits {err:+.0f} deg from plate {plate}: check the ring rigid body '
+    return [f'drone {d + 1} sits {offset_words(err)} of plate {plate}: check the ring rigid body '
             f'(+x toward plate 0) or the magnet plates'
             for d, err, plate in errors if abs(err) > tol_deg]
+
+
+def offset_words(err_deg, fmt='.0f'):
+    """'30 deg clockwise' for an azimuth error (anticlockwise positive), seen from above: the
+    plates count clockwise, so a bare sign would read backwards against the plate numbers."""
+    return f'{abs(err_deg):{fmt}} deg {"anticlockwise" if err_deg > 0 else "clockwise"}'

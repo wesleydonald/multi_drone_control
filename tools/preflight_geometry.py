@@ -71,12 +71,14 @@ def match_azimuths(measured_deg, typed_deg):
 
 def slot_offset_detail(drone, err_deg, typed_deg, tol_deg=10.0, plate_pitch_deg=30.0):
     """The preflight line for one matched drone; names the plate and what to check on a miss.
-    Plate 0 is on the ring rigid body's +x, one plate every 30 deg (M2A ring)."""
-    plate = int(round(typed_deg / plate_pitch_deg)) % int(round(360.0 / plate_pitch_deg))
+    Plate 0 is on the ring rigid body's +x, one plate every 30 deg, numbered CLOCKWISE seen from
+    above (as mpc_planner.geometry.plate_of_azimuth; azimuths stay anticlockwise)."""
+    plate = int(round(-typed_deg / plate_pitch_deg)) % int(round(360.0 / plate_pitch_deg))
+    side = 'anticlockwise' if err_deg > 0 else 'clockwise'
     if abs(err_deg) <= tol_deg:
-        return f'{err_deg:+.1f} deg from plate {plate}'
-    return (f'drone {drone} sits {err_deg:+.0f} deg from plate {plate}: check the ring rigid body '
-            f'(+x toward plate 0) or the magnet plates')
+        return f'{abs(err_deg):.1f} deg {side} of plate {plate}'
+    return (f'drone {drone} sits {abs(err_deg):.0f} deg {side} of plate {plate}: check the ring '
+            f'rigid body (+x toward plate 0) or the magnet plates')
 
 
 def typed_azimuths(spec, n):

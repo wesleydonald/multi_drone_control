@@ -67,9 +67,9 @@ def test_displays_is_a_populated_list():
 def test_every_drone_gets_an_airframe_and_a_plan():
     n = 4
     names = [d.get('Name', '') for d in parse(n)['Visualization Manager']['Displays']]
-    for i in range(n):
-        assert f'Drone {i} airframe' in names
-        assert f'Drone {i} MPC plan' in names
+    for i in range(n):                       # display names count drones from 1, as on the rig
+        assert f'Drone {i + 1} airframe' in names
+        assert f'Drone {i + 1} MPC plan' in names
 
 
 def test_display_count_scales_with_fleet_size():

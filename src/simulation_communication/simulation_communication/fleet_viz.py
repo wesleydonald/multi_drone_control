@@ -130,7 +130,7 @@ class FleetViz(Node):
         m.id = i
         m.type = Marker.TEXT_VIEW_FACING
         m.action = Marker.ADD
-        m.text = str(i)
+        m.text = str(i + 1)             # drones are numbered 1-4 on the rig
         m.pose.position.z = self.id_label_z
         m.pose.orientation.w = 1.0
         m.scale.z = self.id_label_size
@@ -180,6 +180,23 @@ class FleetViz(Node):
             c = ColorRGBA(r=1.0, g=0.35, b=0.15, a=1.0) if k == 0 else ColorRGBA(r=0.8, g=0.8, b=0.82, a=1.0)
             plates.colors.append(c)
         self.marker_pub.publish(plates)
+        # plate numbers, 0 on +x then clockwise like a clock (geometry.plate_of_azimuth)
+        nums = MarkerArray()
+        for k in range(12):
+            th = -2.0 * math.pi * k / 12
+            t = Marker()
+            t.header = ring.header
+            t.ns = 'plate_number'
+            t.id = k
+            t.type = Marker.TEXT_VIEW_FACING
+            t.action = Marker.ADD
+            t.pose.position = Point(x=1.25 * r * math.cos(th), y=1.25 * r * math.sin(th), z=PLATE_Z)
+            t.pose.orientation.w = 1.0
+            t.scale.z = 0.05
+            t.color.r = t.color.g = t.color.b = t.color.a = 1.0
+            t.text = str(k)
+            nums.markers.append(t)
+        self.id_pub.publish(nums)
         m = ring
 
         # actual track, thinned to one point per path_dt

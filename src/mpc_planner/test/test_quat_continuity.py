@@ -104,7 +104,7 @@ def test_slot_errors_zero_when_on_the_slots():
     D = _ring_drones([150.0, 30.0, 90.0, 270.0], 158.9)
     errs = slot_azimuth_errors(D, (0.3, -0.2), np.radians(158.9), [1, 0, 3, 2], slot_az)
     assert [e[0] for e in errs] == [1, 0, 3, 2]
-    assert [e[2] for e in errs] == [1, 5, 9, 3]
+    assert [e[2] for e in errs] == [11, 7, 3, 9]        # plates clockwise from +x (7 Oct)
     assert max(abs(e[1]) for e in errs) < 1e-9
     assert slot_offset_warnings(errs) == []
 
@@ -117,14 +117,14 @@ def test_one_plate_off_warns_for_every_drone():
     assert [round(e[1]) for e in errs] == [-30, -28, -30, -31]
     w = slot_offset_warnings(errs)
     assert len(w) == 4
-    assert w[0] == ('drone 2 sits -30 deg from plate 1: check the ring rigid body '
+    assert w[0] == ('drone 2 sits 30 deg clockwise of plate 11: check the ring rigid body '
                     '(+x toward plate 0) or the magnet plates')
 
 
 def test_warning_threshold_is_10_deg_and_wraps():
     errs = [(0, 9.9, 0), (1, -10.1, 3), (2, 179.0, 6)]
     w = slot_offset_warnings(errs)
-    assert len(w) == 2 and w[0].startswith('drone 2 sits -10 deg')
+    assert len(w) == 2 and w[0].startswith('drone 2 sits 10 deg clockwise')
     D = _ring_drones([-5.0], 175.0)                      # wraps across +-180
     e = slot_azimuth_errors(D, (0.3, -0.2), np.radians(175.0), [0], [np.radians(355.0)])
     assert e[0][1] == pytest.approx(0.0, abs=1e-9) and e[0][2] == 0

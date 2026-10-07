@@ -69,7 +69,7 @@ def _path_display(name, topic, colour, width, enabled=True):
 
 def _robot_display(i, enabled=True):
     return f"""    - Class: rviz_default_plugins/RobotModel
-      Name: Drone {i} airframe
+      Name: Drone {i + 1} airframe
       Enabled: {str(enabled).lower()}
       Description Source: Topic
       Description Topic:
@@ -85,7 +85,8 @@ def _robot_display(i, enabled=True):
       Update Interval: 0"""
 
 
-def _marker_array(name, topic, namespace):
+def _marker_array(name, topic, *namespaces):
+    ns = '\n'.join(f'        {s}: true' for s in namespaces)
     return f"""    - Class: rviz_default_plugins/MarkerArray
       Name: {name}
       Enabled: true
@@ -95,7 +96,7 @@ def _marker_array(name, topic, namespace):
         Durability Policy: Volatile
         Reliability Policy: Reliable
       Namespaces:
-        {namespace}: true"""
+{ns}"""
 
 
 def build_config(n: int, *, show_actual: bool = False, detach: bool = False,
@@ -150,19 +151,19 @@ def build_config(n: int, *, show_actual: bool = False, detach: bool = False,
     # floating drone-id labels (fleet_viz /fleet/id_markers), one text per drone.
     # Previously sim-only; on hardware it is arguably MORE useful, because you
     # cannot tell the airframes apart by eye across the cage.
-    displays.append(_marker_array('Drone IDs', '/fleet/id_markers', 'drone_id'))
+    displays.append(_marker_array('Drone IDs', '/fleet/id_markers', 'drone_id', 'plate_number'))
 
     for i in range(n):
         c = drone_colour(i)
         displays.append(_robot_display(i))
         if show_plan:
             displays.append(_path_display(
-                f'Drone {i} MPC plan', f'/drone_{i}/mpc_plan', c, 0.02))
+                f'Drone {i + 1} MPC plan', f'/drone_{i}/mpc_plan', c, 0.02))
         displays.append(_path_display(
-            f'Drone {i} actual', f'/drone_{i}/actual_path', c, 0.01,
+            f'Drone {i + 1} actual', f'/drone_{i}/actual_path', c, 0.01,
             enabled=show_actual))
         displays.append(_path_display(
-            f'Drone {i} reference', f'/drone_{i}/trajectory_path', c, 0.01,
+            f'Drone {i + 1} reference', f'/drone_{i}/trajectory_path', c, 0.01,
             enabled=False))
 
     body = "\n".join(displays)
