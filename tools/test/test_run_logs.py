@@ -44,3 +44,13 @@ def test_new_layout(tmp_path):
     assert run_logs.trackers(run_logs.run_root(p)) == {0: t0, 3: t3}
     assert run_logs.trackers(run_logs.run_root(d)) == {0: t0, 3: t3}
     assert run_logs.drone_of(t3) == 3 and run_logs.stamp_of(p) == '20261001_100000'
+
+
+def test_planner_csvs_finds_either_planner(tmp_path):
+    r = tmp_path / 'R0001_x'
+    for sub in ('logs/mpc_planner/20261008_010000', 'logs/dissipative_planner/20261008_020000'):
+        (r / sub).mkdir(parents=True)
+        (r / sub / 'log.csv').write_text('t\n')
+    got = run_logs.planner_csvs(str(r))
+    assert [os.path.basename(os.path.dirname(os.path.dirname(g))) for g in got] == ['mpc_planner', 'dissipative_planner']
+

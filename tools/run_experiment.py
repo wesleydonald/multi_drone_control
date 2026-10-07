@@ -376,7 +376,7 @@ def dump_params(run_dir, timeout=25, workers=8, only=None, skip=()):
     # dissipative planner while happily capturing 36 bridges.
     required = [n for n in nodes if re.search(REQUIRED_NODE_RE, n)]
     absent = [n for n in required if n not in got]
-    label = 'param read-back' if only else 'param read-back (background)'
+    label = 'param read-back' if only else 'param read-back (other nodes, after the run)'
     print(f'    {label}: {len(got)}/{len(nodes)} nodes in '
           f'{time.time() - t0:.1f}s' + (f' ({len(missed)} needed a retry)' if missed
                                         else ''))

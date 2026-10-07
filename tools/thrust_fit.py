@@ -134,7 +134,7 @@ def _stamp(tag):
 
 def launches(folder):
     """[(planner log, {drone: tracker log})], trackers matched to the planner started within 30 s."""
-    planners = run_logs.node_csvs(folder, 'mpc_planner')
+    planners = run_logs.planner_csvs(folder)
     trackers = run_logs.node_csvs(folder, 'tracker')
     out = []
     for p in planners:

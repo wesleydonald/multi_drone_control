@@ -92,7 +92,7 @@ def _stamp(line):
 def read_flight(run_dir):
     """Planner rows, per-drone tracker logs, params and the event times from the launch
     log (<run>.log beside <run>_logs)."""
-    pdir = run_logs.node_dirs(run_dir, 'mpc_planner')[-1]
+    pdir = (run_logs.node_dirs(run_dir, 'mpc_planner') + run_logs.node_dirs(run_dir, 'dissipative_planner'))[-1]
     rows = pd.read_csv(os.path.join(pdir, 'log.csv'))
     with open(os.path.join(pdir, 'params.json')) as f:
         prm = json.load(f)

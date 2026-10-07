@@ -116,6 +116,7 @@ rig-relevant falsifier (a false detection) cannot fail in the twin (exact mocap,
 |---|---|---|---|---|---|---|
 | U1 1/3/5/9, detection | R1140, R1145 | 0.31, 0.38 s | 7.5, 7.9 deg | -2.6, -2.8 cm | 3.9 N | 2.0 deg |
 | U3 1/3/6/9, detection | R1139, R1141 | 0.32, 0.27 s | 13.9, 19.2 deg | -3.9, -5.1 cm | 4.4 N | 2.1-2.3 deg |
+| U1o 1/3/5/9 during a 0.125 m/s circle (r 0.5), 8 Oct | R1149, R1150 | 0.27, 0.21 s | 9.3, 8.7 deg | -3.0, -2.8 cm | 3.8 N | landed; freed drone 1.45 m from the circle centre, down ~9 s after the release |
 | U1n 1/3/5/9, no detection | R1144 | never | 6.7 deg | -2.3 cm | 3.6 N | 5.4 deg (freed drone 15.6 cm outside) |
 | announced, measured (baseline) | R1118 / R1121 | - | 8.4 / 16.4 deg | -3.2 / -4.5 cm | 3.8 / 4.6 N | 2.0 / 2.4 deg |
 
@@ -130,3 +131,14 @@ Voids, all pose timeouts on the lab PC: R1138, R1142, R1143. There were no false
   the detection is what restores a clean landing.
 - On the rig, expect the detection about 0.4 s after the release (the r200006 replay), plus the
   radio and magnet delay.
+
+**8 Oct, the circle (U1o).** R1146-R1148 were voids (the runner's read-back and wall-clock watchdogs,
+fixed in fdbb39a). Since 1ba38bc a freed drone during a circle steps 0.5 m out from the ring, then
+out to r + 1.0 m from the path centre, before it lands. U1o **SUPPORTS** in two runs:
+- detection 0.21-0.27 s;
+- tilt peak 8.7-9.3 deg (bar 12);
+- the freed drone landed 1.45 m from the circle centre;
+- no survivor came closer than the 0.51 m spacing at release.
+
+On the rig, start the ring 0.5 m toward -y of the cage centre: started at the centre, the freed drone
+lands at y = 1.94 m (R1149).

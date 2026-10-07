@@ -68,8 +68,8 @@ tools/rig_flight.sh real_control_launch.py mode:=dissipative num_drones:=4 targe
 - Drone 3 on plate 6 instead of 7; `attach_azimuths_deg:=30,90,180,270`; otherwise as r303.
 - Twin peak 13.9-19.2 deg; r0013 capsized on this layout.
 
-**r306: unannounced detach on 11/9/7/3 during a 0.125 m/s circle** (only with two passing twin runs;
-see the progress log).
+**r306: unannounced detach on 11/9/7/3 during a 0.125 m/s circle.** The twin passed twice overnight:
+detection 0.21-0.27 s, tilt peak 8.7-9.3 deg, freed drone down 1.45 m from the circle centre.
 - Place the ring 0.5 m toward -y of the cage centre: the circle (r 0.5) is then centred in the cage.
 - 5 s hover hold, then the circle. Release as in r303, after 10 s of steady circling.
 - Drone 4 steps 0.5 m out from the ring, then out to 1.5 m from the circle centre, then lands while
