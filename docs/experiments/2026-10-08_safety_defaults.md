@@ -72,3 +72,37 @@ Unit tests: test_resize_yaw_datum (2 new) and test_real_mode_launches (updated, 
 The critic is not required: no new law or estimator, and no gate threshold.
 
 If falsified, the arm's change is reverted on the branch and recorded in the registry.
+
+## Results (8 Oct night)
+
+**M: model integral through an unannounced release** (laptop, safety-defaults f2f7d74, against the
+reference-integral runs):
+
+| arm | runs | detected after | tilt peak release..+10 s | ring z jump | integral change in the 1.5 s hold | LAND |
+|---|---|---|---|---|---|---|
+| M1 hover | R1157, R1158 | 0.28, 0.23 s | 4.7, 4.1 deg | -2.7, -2.6 cm | 0.3, 0.3 cm | landed |
+| baseline (reference) | R1140, R1145 | 0.31, 0.38 s | 7.5, 7.9 deg | -2.6, -2.8 cm | - | landed |
+| M2 circle | R1159, R1160 | 0.28, 0.29 s | 4.9, 5.2 deg | -2.9, -2.6 cm | 0.0, 0.0 cm | landed |
+| baseline (reference) | R1149, R1150 | 0.27, 0.21 s | 9.3, 8.7 deg | -3.0, -2.8 cm | - | landed |
+
+- Detection and the ring drop are unchanged.
+- The tilt peak after the release is about half that of the reference integral.
+- In hover, the learned y force (-4.7 cm of integral, the leaver's pull) unwinds within 5 s of the
+  release.
+- **M SUPPORTS.**
+
+**S: mode dissipative as the carry default.** The first comparison was confounded by the host: the
+laptop flies ~0.05 s less lag than the lab PC with identical code (R1169/R1170 against R1152-R1154).
+Same host (laptop), mode mpc against mode dissipative with detection on:
+
+| trajectory | mpc | dissipative | A0 (s) mpc / diss | L0 (s) mpc / diss | tilt max (deg) mpc / diss | false detections |
+|---|---|---|---|---|---|---|
+| circle 0.125 m/s | R1169 | R1171, R1174 | 0.086 / 0.089, 0.084 | 0.186 / 0.191, 0.184 | 3.7 / 4.5, 3.1 | 0 |
+| figure-8 0.2 m/s | R1170 | R1167, R1168 | 0.069 / 0.073, 0.048 | 0.168 / 0.176, 0.152 | 3.8 / 2.9, 5.9 | 0 |
+
+- **S SUPPORTS.** On one host the two modes track the same, and the detector never fired in a carry
+  with no release.
+- R1161 and R1162 were contaminated by my own CPU load on the laptop (156 and 5 slow solves; R1162
+  oscillated to 14.5 deg) and are excluded.
+- The sim dissipative graph does not pass `ff_cap_force` (the lift's pull cap). It is 0 there, as on
+  the rig, against 0.75 in the sim mpc graph; this affects only the lift.
