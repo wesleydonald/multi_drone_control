@@ -1,0 +1,4 @@
+# safety-defaults card, same-host baseline for M (8 Oct): the detach step as detach_step.yaml, with the
+# reference height integral forced (what a resizing fleet flew before f2f7d74)
+detach_step_out_m: 0.5
+int_mode: reference
