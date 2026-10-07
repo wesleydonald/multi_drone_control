@@ -5,6 +5,9 @@ Every control knob has its default in bringup/config, layered in this order (lat
     common.yaml  ->  sim.yaml | real.yaml  ->  that file's modes:<mode>  ->  params_file:=<yaml>
     ->  the typed launch arguments
 
+sim.yaml is the rig twin. legacy:=true (sim only) reads sim_legacy.yaml instead: the worlds in
+simulation_assets/old_worlds/, and the only profile with the attach and network modes.
+
 Only the knobs in KEPT are launch arguments (set in three or more run configs or commands,
 or structural); any other knob goes in a params_file (flat `knob: value`, or grouped like
 the profiles), so a typo cannot be accepted silently. apply() writes the merged values into
@@ -19,6 +22,8 @@ import yaml
 MODES = {'sim': ('mpc', 'free_hover', 'dissipative', 'network', 'attach'),
          'real': ('mpc', 'free_hover', 'dissipative', 'attach', 'm2')}
 DEFAULT_MODE = 'mpc'
+# sim modes with no rig-twin world or thrust-map plumbing yet (docs/redo_on_twin.md)
+LEGACY_ONLY = ('attach', 'network')
 
 # launch arguments: knobs set in >= 3 configs or commands, then the structural ones
 KEPT_COMMON = (
@@ -37,7 +42,7 @@ KEPT_COMMON = (
     'attach_blend_balanced', 'attach_datum_shift', 'attach_moving', 'diss_balanced_tensions',
     'weld_radius', 'weld_velocity_clock', 'enable_obstacle_avoidance', 'partner',
     'partner_attached', 'partner_m2', 'partner_m2_part')
-KEPT_SIM = ('sil', 'sim_interface', 'ff_cap_force', 'sim_thrust_map', 'sim_thrust_offset',
+KEPT_SIM = ('legacy', 'sil', 'sim_interface', 'ff_cap_force', 'sim_thrust_map', 'sim_thrust_offset',
             'sim_pack_v0')
 KEPT_REAL = ('real_io', 'rviz', 'magnet_channel', 'magnet_initial', 'attach_magnet_initial',
              'require_fc_armed', 'detach_magnet', 'hover_z')
@@ -85,13 +90,21 @@ def as_launch_string(v):
     return str(v)
 
 
+def side_file(side, legacy=False):
+    return 'sim_legacy.yaml' if side == 'sim' and legacy else f'{side}.yaml'
+
+
 def side_knobs(side, cdir=None):
-    """Every knob any mode of this side knows."""
+    """Every knob any mode of this side knows (sim: the twin and the legacy profile)."""
     cdir = cdir or config_dir()
-    common, s = _load(os.path.join(cdir, 'common.yaml')), _load(os.path.join(cdir, f'{side}.yaml'))
-    out = set(flatten(common)) | set(flatten(s))
-    for m in (s.get('modes') or {}).values():
-        out |= set(flatten(m))
+    out = set(flatten(_load(os.path.join(cdir, 'common.yaml'))))
+    for legacy in ((False, True) if side == 'sim' else (False,)):
+        s = _load(os.path.join(cdir, side_file(side, legacy)))
+        out |= set(flatten(s))
+        for m in (s.get('modes') or {}).values():
+            out |= set(flatten(m))
+    if side == 'sim':
+        out.add('legacy')
     return out
 
 
@@ -100,15 +113,20 @@ def kept(side):
     return tuple(KEPT_COMMON) + (KEPT_SIM if side == 'sim' else KEPT_REAL)
 
 
-def profile(side, mode, params_file='', cdir=None):
-    """Merged {knob: launch string} for one side and mode, with a params_file on top."""
+def profile(side, mode, params_file='', cdir=None, legacy=False):
+    """Merged {knob: launch string} for one side and mode, with a params_file on top.
+    legacy: the sim side reads sim_legacy.yaml (the old_worlds/ plant)."""
     if side not in MODES:
         raise RuntimeError(f'side must be sim or real, got {side!r}')
     if mode not in MODES[side]:
         raise RuntimeError(f'{side}_control_launch.py: mode must be one of '
                            f'{", ".join(MODES[side])}, got {mode!r}')
+    legacy = side == 'sim' and bool(legacy)
+    if side == 'sim' and mode in LEGACY_ONLY and not legacy:
+        raise RuntimeError(f'sim_control_launch.py: mode {mode} has no rig-twin attach world yet: '
+                           f'legacy:=true (a world in simulation_assets/old_worlds/)')
     cdir = cdir or config_dir()
-    s = _load(os.path.join(cdir, f'{side}.yaml'))
+    s = _load(os.path.join(cdir, side_file(side, legacy)))
     vals = flatten(_load(os.path.join(cdir, 'common.yaml')))
     vals.update(flatten(s))
     vals.update(flatten((s.get('modes') or {}).get(mode)))
@@ -119,6 +137,8 @@ def profile(side, mode, params_file='', cdir=None):
             raise RuntimeError(f'params_file {params_file}: unknown knob(s) {", ".join(unknown)} '
                                f'for {side}_control_launch.py')
         vals.update(extra)
+    if side == 'sim':
+        vals['legacy'] = legacy
     return {k: as_launch_string(v) for k, v in vals.items()}
 
 
@@ -162,7 +182,9 @@ def apply(context, side):
         raise RuntimeError(f'{side}_control_launch.py: {", ".join(bad)} not a launch argument here; '
                            f'set it in params_file:=<yaml> (knobs: bringup/config/{side}.yaml)')
     mode = LaunchConfiguration('mode').perform(context).strip()
-    vals = profile(side, mode, LaunchConfiguration('params_file').perform(context).strip())
+    legacy = side == 'sim' and LaunchConfiguration('legacy').perform(context).strip().lower() == 'true'
+    vals = profile(side, mode, LaunchConfiguration('params_file').perform(context).strip(),
+                   legacy=legacy)
     for k, v in vals.items():
         if k not in typed:
             lc[k] = v

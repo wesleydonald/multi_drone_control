@@ -47,6 +47,9 @@ def _resolve(uri, base_dir):
                     return cand
         return None
     path = uri if os.path.isabs(uri) else os.path.join(base_dir, uri)
+    if not os.path.exists(path) and not os.path.isabs(uri):
+        # a world in old_worlds/ includes models/ of the folder above
+        path = os.path.join(os.path.dirname(base_dir), uri)
     if os.path.isdir(path):
         path = os.path.join(path, 'model.sdf')
     return path if os.path.isfile(path) else None

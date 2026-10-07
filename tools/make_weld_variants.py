@@ -43,7 +43,7 @@ when `seg2` inserts a link in the middle.
 Usage:  python3 tools/make_weld_variants.py [--check]
 
 Writes simulation_assets/models/x3_drone3_magnet_<v>.sdf and the matching world
-simulation_assets/three_attach_<v>.sdf. Both are GENERATED -- edit this script, not them.
+simulation_assets/old_worlds/three_attach_<v>.sdf. Both are GENERATED -- edit this script, not them.
 `--check` regenerates into memory and fails if anything on disk is stale.
 """
 from __future__ import annotations
@@ -55,7 +55,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(REPO, 'simulation_assets')
 BASE_MODEL = os.path.join(ASSETS, 'models', 'x3_drone3_magnet.sdf')
-BASE_WORLD = os.path.join(ASSETS, 'three_attach.sdf')
+BASE_WORLD = os.path.join(ASSETS, 'old_worlds', 'three_attach.sdf')
 
 # The arm block is delimited by these two comments in the base model. Both are load-bearing
 # markers: if either is reworded, this script must fail loudly rather than emit half a model.
@@ -222,7 +222,7 @@ def main():
         for path, text in (
                 (os.path.join(ASSETS, 'models', f'x3_drone3_magnet_{variant}.sdf'),
                  build_model(model_base, variant)),
-                (os.path.join(ASSETS, f'three_attach_{variant}.sdf'),
+                (os.path.join(ASSETS, 'old_worlds', f'three_attach_{variant}.sdf'),
                  build_world(world_base, variant))):
             if args.check:
                 if not os.path.exists(path) or read(path) != text:

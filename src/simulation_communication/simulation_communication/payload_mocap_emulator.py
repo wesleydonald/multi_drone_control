@@ -15,6 +15,9 @@ Topics produced:
   /payload/motion_capture_state            — for the planner (drone 0 only)
 """
 
+import collections
+import os
+
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -43,6 +46,9 @@ class PayloadMocapEmulator(Node):
         # run at 50 Hz and every message costs a Python callback in each subscriber; the
         # real mocap node throttles the same way (MOCAP_MAX_PUBLISH_HZ).
         self.declare_parameter('max_publish_hz', 0.0)
+        # > 0: each sample is published this long after Gazebo produced it, standing in for the
+        # rig's mocap, relay and network latency (default from SIM_MOCAP_DELAY_S; 0 = off)
+        self.declare_parameter('mocap_delay_s', float(os.environ.get('SIM_MOCAP_DELAY_S', '0.0')))
 
         drone_id = self.get_parameter('drone_id').value
         drone_name = self.get_parameter('drone_name').value
@@ -53,6 +59,10 @@ class PayloadMocapEmulator(Node):
         self._min_dt = (1.0 / hz) if hz > 0 else 0.0
         self._drone_last_pub = None
         self._payload_last_pub = None
+        self._delay = float(self.get_parameter('mocap_delay_s').value)
+        self._queues = {}
+        if self._delay > 0.0:
+            self.get_logger().warn(f'[MOCAP{drone_id}] mocap delay {self._delay:.3f} s')
 
         pose_topic_override = str(self.get_parameter('pose_topic').value)
         drone_pose_topic = (pose_topic_override if pose_topic_override
@@ -159,7 +169,7 @@ class PayloadMocapEmulator(Node):
             self._compute_mcs(pos, ori,
                               self._drone_last_pos, self._drone_last_ori, self._drone_last_time)
         if mcs is not None:
-            self._drone_pub.publish(mcs)
+            self._publish(self._drone_pub, mcs)
 
     def _payload_cb(self, msg: PoseArray):
         if not msg.poses or self._payload_pub is None:
@@ -177,7 +187,20 @@ class PayloadMocapEmulator(Node):
             self._compute_mcs(pos, ori,
                               self._payload_last_pos, self._payload_last_ori, self._payload_last_time)
         if mcs is not None:
-            self._payload_pub.publish(mcs)
+            self._publish(self._payload_pub, mcs)
+
+    def _publish(self, pub, mcs):
+        """Publish now, or after mocap_delay_s (restamped on release, as the rig stamps on receipt)."""
+        if self._delay <= 0.0:
+            pub.publish(mcs)
+            return
+        now = self.get_clock().now()
+        q = self._queues.setdefault(id(pub), collections.deque())
+        q.append((now.nanoseconds * 1e-9, mcs))
+        while q and q[0][0] <= now.nanoseconds * 1e-9 - self._delay:
+            _, m = q.popleft()
+            m.header.stamp = now.to_msg()
+            pub.publish(m)
 
 
 def main(args=None):

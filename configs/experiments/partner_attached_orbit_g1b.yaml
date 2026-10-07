@@ -1,7 +1,7 @@
 name: partner_attached_orbit_g1b
 description: 'G1b: M1 on the adopted defaults (universal rod joints, rejoin flags) with the object at 0.1 kg (test
   copy payload_model_m100.sdf) and his MPC gain scheduled on the object flag (object_mass_kg 0.1).'
-world: three_attach_partner_attached.sdf
+world: old_worlds/three_attach_partner_attached.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

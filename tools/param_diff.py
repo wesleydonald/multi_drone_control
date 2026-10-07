@@ -12,6 +12,7 @@ defaults.
 
     tools/param_diff.py sim/mpc real/mpc              # side/mode of the control launches
     tools/param_diff.py sim/dissipative real/m2
+    tools/param_diff.py sim_legacy/attach real/attach  # sim_legacy = the old_worlds/ profile
     tools/param_diff.py sim_io_launch.py real_io_launch.py
     tools/param_diff.py --sim-vs-real                  # the pairs that fly the same graph
 
@@ -29,17 +30,18 @@ LAUNCH_DIR = REPO / 'src/bringup/launch'
 
 # The pairs worth comparing routinely: the sim mode and the rig mode that fly one graph.
 SIM_VS_REAL = [('sim/mpc', 'real/mpc'), ('sim/dissipative', 'real/dissipative'),
-               ('sim/attach', 'real/attach'), ('sim/dissipative', 'real/m2')]
+               ('sim_legacy/attach', 'real/attach'), ('sim/dissipative', 'real/m2')]
 
 
 def profile_args(spec):
     """{knob: default} of 'side/mode' (bringup/config), or None if spec is not one."""
     side, _, mode = str(spec).partition('/')
-    if side not in ('sim', 'real') or not mode:
+    if side not in ('sim', 'sim_legacy', 'real') or not mode:
         return None
     sys.path.insert(0, str(REPO / 'src' / 'bringup'))
     from bringup.profiles import profile
-    return profile(side, mode, cdir=str(REPO / 'src' / 'bringup' / 'config'))
+    return profile(side.split('_')[0], mode, cdir=str(REPO / 'src' / 'bringup' / 'config'),
+                   legacy=side == 'sim_legacy')
 
 
 def launch_args(path):

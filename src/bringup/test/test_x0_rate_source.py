@@ -109,7 +109,8 @@ def trackers(side='sim', **args):
     spec = importlib.util.spec_from_file_location('control_x0', path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    largs, params = split(side, {'mode': 'attach', **{
+    legacy = {'legacy': 'true'} if side == 'sim' else {}      # attach: the legacy profile only
+    largs, params = split(side, {'mode': 'attach', **legacy, **{
         k: str(v).lower() if isinstance(v, bool) else str(v) for k, v in args.items()}})
     if params:          # x0_rate_source_drones is a params_file knob
         with tempfile.NamedTemporaryFile('w', suffix='.yaml', delete=False) as fh:

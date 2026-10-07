@@ -3,7 +3,7 @@ description: 'Pretension neighbour (critic 2026-09-30): four drones on plates 1/
   (uneven shares), creep floor start with the rig settings (creep 0.2, settle 1.0,
   z_ki 0.4, trim off), pretension 3 s, lift 0.15 to 0.6. Falsifier: ring tilt > 5
   deg during pretension or breakaway, abort.'
-world: four_rigid_ground_3915.sdf
+world: old_worlds/four_rigid_ground_3915.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

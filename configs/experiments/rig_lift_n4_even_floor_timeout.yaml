@@ -44,6 +44,6 @@ name: rig_lift_n4_even_floor_timeout
 timing:
   duration_s: 50.0
   stop_after_abort_s: 8.0
-world: four_rigid_ground.sdf
+world: old_worlds/four_rigid_ground.sdf
 geometry_exempt:
   cable_len: the typed 0.20 rod is the variable under test (creep stall and refusal)

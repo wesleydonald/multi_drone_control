@@ -1,7 +1,7 @@
 name: partner_attached_orbit_imu
 description: Canonical M1 with the sim Betaflight rate loop on the IMU gyro (rate_source imu) instead of differenced
   unstamped poses (GOALS G4, question 4).
-world: three_attach_partner_attached.sdf
+world: old_worlds/three_attach_partner_attached.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

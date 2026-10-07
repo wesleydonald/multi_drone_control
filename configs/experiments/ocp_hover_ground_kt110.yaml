@@ -2,7 +2,7 @@ name: ocp_hover_ground_kt110
 description: 'kt_trim Gazebo arm (card 2026-09-23_kt_trim.md): three drones lift the 0.86 kg ring from
   the floor with thrust_ratio typed 91.41 (+10 % vs the linear 83.1), kt_trim off. Expect a ~10 cm sag
   off; on, the lift at the typed gain then recovery to the correct-gain hover within ~10 s of the hover.'
-world: three_rigid_ground.sdf
+world: old_worlds/three_rigid_ground.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

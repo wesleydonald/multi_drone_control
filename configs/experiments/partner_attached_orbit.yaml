@@ -5,7 +5,7 @@ description: 'Partner demo (Wesley 2026-09-26): all four start attached on plate
   net), which hands it back at ATTACH_READY; our descent, weld on plate 3, OCP n=4, orbit, LAND. Exploratory. Defaults
   since 2026-09-27: ring keeps orbiting through the rejoin, height integral in the orbit, direct descent at the
   handoff; LAND 8 s after the weld.'
-world: three_attach_partner_attached.sdf
+world: old_worlds/three_attach_partner_attached.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

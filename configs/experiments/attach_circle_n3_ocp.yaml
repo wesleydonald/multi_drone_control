@@ -8,7 +8,7 @@ description: 'Card 2026-09-25_attach_ocp arm C: the attach-during-circle demo (t
   its own roll); x0_relax_symmetric true (node-0 box inverted at y=-1.2). R0527: x0_relax_symmetric made
   no difference to the newcomer and tipped drone 0 on LAND; removed. attach_cable_len 0.49: body centre
   to magnet tip on the sim model (R0550).'
-world: three_attach_rod.sdf
+world: old_worlds/three_attach_rod.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

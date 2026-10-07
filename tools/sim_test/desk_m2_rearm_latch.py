@@ -60,7 +60,7 @@ def read(path):
 def launch(part, name):
     path = os.path.join(logdir, name)
     with open(path, 'w') as fh:
-        p = subprocess.Popen(['ros2', 'launch', 'bringup', 'sim_control_launch.py', 'mode:=dissipative',
+        p = subprocess.Popen(['ros2', 'launch', 'bringup', 'sim_control_launch.py', 'mode:=dissipative', 'legacy:=true',
                               *ARGS, f'partner_m2_part:={part}'], cwd=work, env=dict(os.environ),
                              stdout=fh, stderr=subprocess.STDOUT, start_new_session=True)
     procs.append(p)

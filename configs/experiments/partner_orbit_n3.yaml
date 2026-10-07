@@ -4,7 +4,7 @@ description: 'Plan step 3 (authority.md): Tejen''s M1 mission (tejen_mission par
   carriers fly the continuous orbit (0.2 m/s, r 0.5), then his rejoin descent to plate 9 (270 deg) with
   the magnet ON; our magnet manager welds and the OCP resize folds drone 3 in. Exploratory. Falsifier:
   no ring weld by the end, any abort, or ring tilt > 25 deg.'
-world: three_attach_partner.sdf
+world: old_worlds/three_attach_partner.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

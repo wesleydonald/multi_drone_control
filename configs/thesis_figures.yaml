@@ -58,11 +58,11 @@ figures:
 
   - id: F_tracker_x0
     kind: script            # tools/thesis_sim_figures.py (fig_tracker_x0)
-    runs: [R0956, R0957, R0841, R0960, R0832, R0974]
+    runs: [R0841, R0960, R0832, R0974]
     caption: >
       Effect of the tracker's initial condition without integral action (thesis/Source/src/sim_results.tex,
-      fig:tracker_x0). (a) SIL hover, (b) Gazebo hover from the floor, (c) Gazebo circle, first lap,
-      epsilon 0.025 against 0.
+      fig:tracker_x0). (a) Gazebo hover from the floor, (b) Gazebo circle, first lap, epsilon 0.025
+      against 0. The SIL panel (R0956/R0957) was dropped on 5 Oct 2026 (docs/redo_on_twin.md, row 10).
 
   - id: F_disturbance
     kind: script            # tools/thesis_sim_figures.py (fig_disturbance)
@@ -71,8 +71,7 @@ figures:
       Rejection of a constant force on the ring in the Gazebo rig twin, epsilon 0 (sim_results.tex,
       fig:disturbance): 0.6 N down and 0.4 N horizontal; no integral, target shift, model integral.
 
-  # tables of sim_results.tex (tools/thesis_sim_tables.py -> thesis/Source/src/tables/): x0 (R0956/R0957,
-  # R0841/R0844, R0960/R0978, R0832, R0974/R0979), disturbance (the *_x0b0 push/pushz/mapneg configs, every
+  # tables of sim_results.tex (tools/thesis_sim_tables.py -> thesis/Source/src/tables/): x0 (R0841/R0844, R0960/R0978, R0832, R0974/R0979), disturbance (the *_x0b0 push/pushz/mapneg configs, every
   # non-void run), gain (R0969, R0976, R0977), four (R0931/R0932, R0936, R0933, R0935, R0939)
   # land (STRAIGHT list + the land_matrix / land_fix card runs), robust (sim_robustness.tex: R1038-R1067
   # non-void + R1013/R1023), params (hardware.tex: the rig profile, no runs), traj (the *_lf / *_x0b0 configs

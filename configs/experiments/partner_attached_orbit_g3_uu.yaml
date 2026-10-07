@@ -3,7 +3,7 @@ description: 'M1 (partner_attached_orbit) with the G3 fix: damped universal newc
   tension 0.1 N, balanced post-weld blend (bench R0662-R0666). + weld speed gate on sim-time velocities (R0668 welded
   mid-descent). + attach_datum_shift (carry the ring xy offset through the resize). + magnet tip on a damped universal
   (rod pinned both ends, all rotations damped; test copy).'
-world: three_attach_partner_attached_uu.sdf
+world: old_worlds/three_attach_partner_attached_uu.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

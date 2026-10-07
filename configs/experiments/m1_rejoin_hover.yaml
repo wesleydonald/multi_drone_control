@@ -3,7 +3,7 @@ description: 'G5 weld bench (GOALS step 3): partner_attached_orbit without Tejen
   3 detaches, steps out, is released (our hold keeps it there), the runner publishes the handoff, our tracker flies
   the descent, weld on plate 3, OCP n=4, LAND +12 s. Same code path as the M1 rejoin. World: _nopick copy (no pickup
   joint; the partner mission normally releases it).'
-world: three_attach_partner_attached_nopick.sdf
+world: old_worlds/three_attach_partner_attached_nopick.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

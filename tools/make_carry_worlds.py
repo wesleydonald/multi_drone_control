@@ -15,7 +15,7 @@ the rig's as flown on 30 Sep 2026 (docs/decisions.md; rig-thrust-map-and-geometr
 As the planner sees it: cable_len 0.55, attach_radius 0.225, drone_mass 0.55,
 pivot_offset_z -0.04.
 
-The legacy worlds (0.5 m rods, r 0.25, centre pivot, x3_drone*.sdf) are untouched:
+The legacy worlds (0.5 m rods, r 0.25, centre pivot, x3_drone*.sdf; in old_worlds/) are untouched:
 the generator's defaults still reproduce them byte for byte.
 
 Usage:  python3 tools/make_carry_worlds.py [--check]

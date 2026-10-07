@@ -901,8 +901,11 @@ def tethered_run_metrics(run_path, hold_window_s=HOLD_WINDOW_S, log_text=None, r
         try:
             from check_geometry import world_geometry
             w = manifest['world']
-            w = w if os.path.isabs(w) else os.path.join(os.path.dirname(os.path.dirname(
-                os.path.abspath(__file__))), 'simulation_assets', w)
+            assets = os.path.join(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))), 'simulation_assets')
+            w = w if os.path.isabs(w) else os.path.join(assets, w)
+            if not os.path.exists(w):         # a run from before the legacy worlds moved
+                w = os.path.join(assets, 'old_worlds', os.path.basename(w))
             ring_kg = world_geometry(w).get('load_mass')
         except Exception:                                   # noqa: BLE001
             ring_kg = None

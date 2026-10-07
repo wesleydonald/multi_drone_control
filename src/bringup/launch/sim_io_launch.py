@@ -200,7 +200,7 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('num_drones', default_value='2'),
+        DeclareLaunchArgument('num_drones', default_value='3'),
         # The STL is the real TBS frame in mm; 0.001 renders it at its true
         # 209 mm size. The URDF's own 0.002 draws it at ~2x life size.
         DeclareLaunchArgument('mesh_scale', default_value='0.001'),
@@ -213,7 +213,7 @@ def generate_launch_description():
         # and attach:=true shows it too, as on the rig.
         DeclareLaunchArgument('detach', default_value='false'),
         # Show the ATTACH button in the ArmPanel (arms the approach drone's magnet for the
-        # attach flow). Off by default; pass attach:=true with three_attach.sdf.
+        # attach flow). Off by default; pass attach:=true with old_worlds/three_attach.sdf.
         DeclareLaunchArgument('attach', default_value='false'),
         # Start the RViz GUI. Default true = the interactive behaviour everyone
         # already relies on. rviz:=false keeps the clock/pose bridges and the mocap
@@ -228,7 +228,8 @@ def generate_launch_description():
         DeclareLaunchArgument('viz_hz', default_value='30'),
         # RViz-only TF/markers; off for headless batches (26 % of a core, 2026-09-26)
         DeclareLaunchArgument('fleet_viz', default_value='true'),
-        DeclareLaunchArgument('sim_thrust_map', default_value='linear'),
-        DeclareLaunchArgument('sim_pack_v0', default_value='24.4'),
+        # the rig twin's plant; a world in old_worlds/ takes sim_thrust_map:=linear
+        DeclareLaunchArgument('sim_thrust_map', default_value='rig'),
+        DeclareLaunchArgument('sim_pack_v0', default_value='23.8'),
         OpaqueFunction(function=launch_setup),
     ])

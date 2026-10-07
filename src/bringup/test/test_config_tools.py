@@ -21,9 +21,11 @@ from check_geometry import world_geometry, planner_defaults, launch_defaults  # 
 from param_diff import launch_args, profile_args                              # noqa: E402
 
 WORLDS = REPO / 'simulation_assets'
+LEGACY_WORLDS = WORLDS / 'old_worlds'
 LAUNCHES = REPO / 'src/bringup/launch'
 PROFILES = [f'{side}/{mode}' for side, modes in
-            (('sim', ('mpc', 'free_hover', 'dissipative', 'network', 'attach')),
+            (('sim', ('mpc', 'free_hover', 'dissipative')),
+             ('sim_legacy', ('mpc', 'free_hover', 'dissipative', 'network', 'attach')),
              ('real', ('mpc', 'free_hover', 'dissipative', 'attach', 'm2'))) for mode in modes]
 
 
@@ -36,17 +38,16 @@ def every_default():
 
 
 def ground_worlds():
-    return [WORLDS / n for n in
-            ('two_rigid_ground.sdf', 'three_rigid_ground.sdf', 'four_rigid_ground.sdf')
-            if (WORLDS / n).exists()]
+    return [LEGACY_WORLDS / n for n in
+            ('two_rigid_ground.sdf', 'three_rigid_ground.sdf', 'four_rigid_ground.sdf')]
 
 
 # ── geometry extraction ──────────────────────────────────────────────────────
 
 @pytest.mark.parametrize('sdf', ground_worlds(), ids=lambda p: p.name)
 def test_ground_worlds_match_the_planner_defaults(sdf):
-    """The worlds actually flown must agree with the config the planner uses, or
-    every drone's tension feedforward is sized wrongly."""
+    """The legacy worlds must agree with params.py (still the legacy geometry; the twin's
+    is typed by sim.yaml), or every drone's tension feedforward is sized wrongly."""
     g = world_geometry(sdf)
     d = planner_defaults()
     for k in ('cable_len', 'attach_radius', 'attach_z', 'load_mass'):
@@ -55,13 +56,11 @@ def test_ground_worlds_match_the_planner_defaults(sdf):
 
 
 def test_attach_z_is_relative_to_the_payload_not_the_world():
-    """The bug this file exists for. `four_rigid` hangs its payload at z=0.6 and
+    """The bug this file exists for. `four_rigid_2026-09` hangs its payload at z=0.6 and
     `four_rigid_ground` at z=0.025; attach_z is defined above the load CoG, so both
     must report the SAME value. Reading the raw pose gives 0.625 vs 0.05."""
-    elevated = WORLDS / 'four_rigid.sdf'
-    grounded = WORLDS / 'four_rigid_ground.sdf'
-    if not (elevated.exists() and grounded.exists()):
-        pytest.skip('worlds not present')
+    elevated = LEGACY_WORLDS / 'four_rigid_2026-09.sdf'
+    grounded = LEGACY_WORLDS / 'four_rigid_ground.sdf'
     a = world_geometry(elevated)['attach_z']
     b = world_geometry(grounded)['attach_z']
     assert abs(a - b) < 1e-3, (
@@ -70,16 +69,14 @@ def test_attach_z_is_relative_to_the_payload_not_the_world():
 
 
 def test_drone_count_is_extracted():
-    assert world_geometry(WORLDS / 'three_rigid_ground.sdf')['num_drones'] == 3
-    assert world_geometry(WORLDS / 'four_rigid_ground.sdf')['num_drones'] == 4
+    assert world_geometry(WORLDS / 'three_rigid_ground_rig.sdf')['num_drones'] == 3
+    assert world_geometry(LEGACY_WORLDS / 'four_rigid_ground.sdf')['num_drones'] == 4
 
 
 def test_non_uniform_attach_ring_is_flagged():
     """The randomly-generated worlds have unequal attach radii, which the planner's
     single `attach_radius` cannot represent. That must not pass silently."""
-    rnd = WORLDS / 'three_random_seed1.sdf'
-    if not rnd.exists():
-        pytest.skip('random world not present')
+    rnd = LEGACY_WORLDS / 'three_random_seed1.sdf'
     assert '_warn_ring' in world_geometry(rnd)
 
 
@@ -88,19 +85,60 @@ def test_non_uniform_attach_ring_is_flagged():
 def test_launch_args_are_parsed_without_executing_the_launch():
     a = launch_args(LAUNCHES / 'sim_io_launch.py')
     assert 'num_drones' in a and 'clock_hz' in a
-    assert profile_args('sim/mpc')['thrust_ratio'] == 'auto'
+    assert profile_args('sim/mpc')['thrust_ratio'] == '35.2'
+    assert profile_args('sim_legacy/mpc')['thrust_ratio'] == 'auto'
 
 
-def test_sim_and_real_thrust_settings_still_differ():
-    """thrust_ratio 'auto' in sim vs 24.0 on hardware. Gazebo's motor model is
-    QUADRATIC (a = 88.6*u^2), so a linear kT there is the secant gain at the hover
-    operating point, derived per launch by thrust_model.py (32.9 at 0.4 kg, 34.6 at
-    0.6 kg); the real airframe measures 24 at full battery health and is never
-    derived. The rig default is the free-hover measurement of 30 Sep 2026 (21.7)."""
-    sim = profile_args('sim/mpc')
-    real = profile_args('real/mpc')
-    assert sim['thrust_ratio'] != real['thrust_ratio']
-    assert float(real['thrust_ratio']) == 35.2    # gain above the identified 0.185 offset
+THRUST_MAP = ('thrust_ratio', 'takeoff_thrust_ratio', 'thrust_offset', 'thrust_offset_v_slope',
+              'thrust_v_ref', 'throttle_max', 'kt_trim')
+RIG_GEOMETRY = ('cable_len', 'drone_mass', 'attach_radius', 'pivot_offset_z', 'rod_tol_frac',
+                'rod_spread_m', 'lift_ramp_vel', 'z_taut_gate', 'z_i_gate', 'reconfig_mode',
+                'auto_network_handover')
+
+
+@pytest.mark.parametrize('mode', ['mpc', 'dissipative'])
+def test_the_twin_flies_the_rig_thrust_map_and_geometry(mode):
+    """The sim default is the rig twin (5 Oct 2026): the identified affine map (gain 35.2
+    above the 0.185 offset, 30 Sep 2026) and the rig's geometry, never a derived kT."""
+    sim, real = profile_args(f'sim/{mode}'), profile_args(f'real/{mode}')
+    for k in THRUST_MAP + RIG_GEOMETRY:
+        assert sim[k] == real[k], f'{k}: sim {sim[k]} vs rig {real[k]}'
+    assert float(real['thrust_ratio']) == 35.2
+    assert (sim['sim_thrust_map'], sim['sim_pack_v0'], sim['legacy']) == ('rig', '23.8', 'false')
+
+
+def test_the_legacy_profile_is_the_sim_default_of_4_oct():
+    """legacy:=true flies what sim.yaml held before the twin became the default: the x3
+    plant of the worlds in old_worlds/ ('auto' is the secant gain of Gazebo's quadratic motor
+    model at hover, thrust_model.py), so the runs flown there stay reproducible."""
+    was = {'mpc': dict(num_drones='2', cable_len='0.5', drone_mass='0.64', attach_radius='',
+                       attach_z='', pivot_offset_z='0.0', ff_cap_force='0.0',
+                       lift_ramp_vel='0.22', z_taut_gate='0.99', payload_rest_z='-0.1',
+                       z_i_gate='', traj_speed='0.6', thrust_ratio='auto',
+                       takeoff_thrust_ratio='auto', thrust_offset='0.0',
+                       thrust_offset_v_slope='0.0', throttle_max='0.6', kt_trim='true',
+                       reconfig_mode='network', auto_network_handover='true',
+                       sim_thrust_map='linear', sim_thrust_offset='0.185', sim_pack_v0='24.4',
+                       legacy='true'),
+           'dissipative': dict(num_drones='4', attach_z='0.025', pivot_offset_z='',
+                               throttle_max='', thrust_offset='', sim_thrust_map='',
+                               sim_pack_v0=''),
+           'network': dict(num_drones='3', sim_thrust_map='linear'),
+           'attach': dict(num_drones='3', attach_azimuths_deg='330,90,210', start_taut='true',
+                          handover_settle_s='0.75', creep_vel='0.1',
+                          control_mode='velocity_after_handover', vel_ki='0.0',
+                          pose_timeout_s='1.0', safety_ref_timeout_s='2.0', diss_ki_load='1.0')}
+    for mode, want in was.items():
+        got = profile_args(f'sim_legacy/{mode}')
+        assert {k: got[k] for k in want} == want, mode
+
+
+@pytest.mark.parametrize('mode', ['attach', 'network'])
+def test_attach_and_network_are_refused_on_the_twin(mode):
+    """No rig-twin attach world, and those graphs do not pass the rig thrust map yet."""
+    with pytest.raises(RuntimeError, match='legacy:=true'):
+        profile_args(f'sim/{mode}')
+    assert profile_args(f'sim_legacy/{mode}')['legacy'] == 'true'
 
 
 def test_the_adaptive_kt_machinery_stays_gone():

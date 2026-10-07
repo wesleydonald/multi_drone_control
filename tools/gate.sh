@@ -80,12 +80,19 @@ step "4/6  world geometry vs controller config"
 GEO_BAD=0
 launch="src/bringup/launch/sim_control_launch.py"
 for pair in \
-  "simulation_assets/three_rigid_ground.sdf:mpc" \
-  "simulation_assets/four_rigid_ground.sdf:dissipative" \
-  "simulation_assets/three_attach.sdf:attach" \
-  "simulation_assets/three_rigid_ground.sdf:network" ; do
+  "simulation_assets/three_rigid_ground_rig.sdf:mpc" \
+  "simulation_assets/four_rigid_ground_rig.sdf:dissipative" \
+  "simulation_assets/old_worlds/three_rigid_ground.sdf:mpc" \
+  "simulation_assets/old_worlds/four_rigid_ground.sdf:dissipative" \
+  "simulation_assets/old_worlds/three_attach.sdf:attach" \
+  "simulation_assets/old_worlds/three_rigid_ground.sdf:network" ; do
   world="${pair%%:*}"; mode="${pair##*:}"
-  [ -f "$world" ] && [ -f "$launch" ] || continue
+  # a world under old_worlds/ is checked against the legacy profile (check_geometry infers it)
+  if [ ! -f "$world" ] || [ ! -f "$launch" ]; then
+    echo "!! geometry check: $world or $launch is missing"
+    GEO_BAD=1
+    continue
+  fi
   if ! python3 tools/check_geometry.py "$world" --launch "$launch" --mode "$mode" >/dev/null 2>&1; then
     echo "!! geometry mismatch: $(basename "$world") vs mode $mode"
     python3 tools/check_geometry.py "$world" --launch "$launch" --mode "$mode" 2>&1 | grep -E "MISMATCH|WARN"
@@ -94,7 +101,7 @@ for pair in \
     echo "   ok   $(basename "$world") (mode $mode)"
   fi
 done
-# The rod/seg2/rigid weld-variant worlds are generated from three_attach.sdf; a
+# The rod/seg2/rigid weld-variant worlds are generated from old_worlds/three_attach.sdf; a
 # hand edit to the base that skips the generator leaves them silently stale.
 if python3 tools/make_weld_variants.py --check >/dev/null 2>&1; then
   echo "   ok   weld variants up to date"

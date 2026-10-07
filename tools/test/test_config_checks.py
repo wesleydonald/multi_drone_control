@@ -102,6 +102,40 @@ def test_legacy_world_on_the_rig_map_is_refused(tmp_path):
         R.checked_config(p)
 
 
+def test_a_world_in_old_worlds_flies_the_legacy_profile(tmp_path):
+    """The runner infers legacy from the world path: legacy:=true on the control launch and the
+    linear plant on the I/O launch, unless the config types them."""
+    cfg = R.checked_config(os.path.join(CONFIGS, 'ocp_hover_ground_creep_defaults.yaml'))
+    assert cfg.world.startswith('old_worlds/') and cfg.legacy
+    assert 'legacy:=true' in cfg.launch_argv(str(tmp_path / 'p.yaml'))
+    assert 'sim_thrust_map:=linear' in cfg.io_launch_argv()
+    assert R.sim_thrust_maps(cfg) == ('linear', 'linear')
+    twin = R.checked_config(os.path.join(CONFIGS, 'rig_twin_hover_fixed.yaml'))
+    assert not twin.legacy and not [a for a in twin.launch_argv(str(tmp_path / 'q.yaml'))
+                                    if a.startswith('legacy')]
+    m2 = R.ExperimentConfig.from_yaml(os.path.join(CONFIGS, 'm2_bench.yaml'))
+    assert m2.legacy and 'legacy:=true' in m2.launch_argv(str(tmp_path / 'r.yaml'))
+    assert not [a for a in m2.io_launch_argv() if a.startswith('sim_thrust_map')]
+
+
+def test_a_bare_twin_config_passes_on_the_defaults(tmp_path):
+    """World, fleet and events only: the sim defaults are the twin's, so nothing is typed."""
+    p = tmp_path / 'bare.yaml'
+    p.write_text(yaml.safe_dump({
+        'name': 'bare', 'world': 'three_rigid_ground_rig.sdf',
+        'launch': {'package': 'bringup', 'file': 'sim_control_launch.py', 'args': {'mode': 'mpc'}},
+        'io_launch': {'file': 'sim_io_launch.py', 'args': {}},
+        'fleet': {'num_drones': 3, 'n_total': 3},
+        'events': [{'t': 3.0, 'do': 'ARM'}]}))
+    cfg = R.checked_config(str(p))
+    assert R.sim_thrust_maps(cfg) == ('rig', 'rig') and not cfg.legacy
+
+
+def test_a_legacy_mode_on_a_twin_world_is_refused(tmp_path):
+    with pytest.raises((SystemExit, RuntimeError), match='legacy:=true'):
+        R.checked_config(_cfg(tmp_path, 'rig_twin_hover_fixed.yaml', launch__mode='attach'))
+
+
 def test_model_f1_pivot_needs_its_named_exemption(tmp_path):
     with pytest.raises(SystemExit, match='pivot_offset_z'):
         R.checked_config(_cfg(tmp_path, 'rig_twin_model_f1.yaml', geometry_exempt=None))
@@ -141,8 +175,14 @@ def _controller_params(**args):
     return out
 
 
-def test_sim_launch_defaults_leave_the_tracker_linear():
-    p = _controller_params(num_drones=2)[0]
+def test_sim_launch_defaults_fly_the_rig_tracker_map():
+    p = _controller_params()[2]
+    assert (p['thrust_ratio'], p['thrust_offset'], p['thrust_offset_v_slope'], p['throttle_max']) \
+        == (35.2, 0.185, 0.022, 0.8)
+
+
+def test_legacy_sim_launch_leaves_the_tracker_linear():
+    p = _controller_params(num_drones=2, legacy='true')[0]
     assert (p['thrust_offset'], p['thrust_offset_v_slope'], p['throttle_max']) == (0.0, 0.0, 0.6)
 
 
@@ -156,7 +196,7 @@ def test_sim_launch_passes_the_rig_tracker_map():
 
 def test_sim_launch_refuses_a_rig_plant_with_the_linear_tracker():
     with pytest.raises(RuntimeError, match='explicit thrust_ratio'):
-        _controller_params(num_drones=4, sim_thrust_map='rig')
+        _controller_params(num_drones=4, legacy='true', sim_thrust_map='rig')
 
 
 def test_sim_launch_refuses_a_wrong_offset_count():

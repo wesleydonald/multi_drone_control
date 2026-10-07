@@ -37,10 +37,8 @@ from dissipative_planner.approach import ApproachProfile, carrot_step
 
 from interfaces.msg import MotionCaptureState
 from mpc_planner.geometry import (quat_to_rot_np, attach_points, rot_z,
-                                  apex_direction, balanced_tensions,
-                                  nominal_cable_dirs)
+                                  apex_direction, balanced_tensions)
 from mpc_planner.planner_node import LoadPlanner, DRONE_MASS, PLANNER_HZ, TouchdownDetector
-from mpc_planner.reference_builder import ReferenceBuilder
 
 from dissipative_planner.dissipative_network import (
     DissipativeNetwork, DissipativeParams)
@@ -48,6 +46,7 @@ from dissipative_planner.dissipative_network import (
 
 # a freed drone lands at least this far from the ring centre (ring 0.28 + cable 0.5 + margin)
 DEPARTED_CLEAR_R = 1.2
+DETACH_STEP_VEL = 0.15     # m/s, a freed drone's step out from the ring (detach_step_out_m)
 
 
 def _largest_gap_deg(rho):
@@ -242,20 +241,15 @@ class DissipativeController(LoadPlanner):
         self._start_attached = bool(p('start_attached', False).value)
         # M2 hand-over: the partner's fleet is already flying on the grounded ring
         self.creep.airborne_start = bool(p('airborne_start', False).value)
-        # nominal cable elevation of the OCP hover (45 by default). Steeper rods for
-        # the partner's X3, whose tether pivots 0.04 m below the body: the sideways
-        # rod force times that lever out-torques the sim rate loop at 45 (T0008)
-        elev = float(p('cable_elev_deg', 45.0).value)
-        if elev != self.cable_elev_deg:
-            self.cable_elev_deg = elev
-            self._s_nom = nominal_cable_dirs(self.rho, elev)
-            self.refs = ReferenceBuilder(self.dyn, self.n, self._s_nom, self.dt, self.traj)
-            self.get_logger().info(f'[dissipative] nominal cable elevation {elev:.1f} deg')
         self._partner_release = bool(p('partner_release', False).value)
         self._release_out = float(p('partner_release_out_m', 0.5).value)
         self._release_up = float(p('partner_release_up_m', 0.3).value)
         self._release_state = {}
         self._release_pub = self.create_publisher(String, '/partner/release', 1)
+        # > 0: a detached drone steps this far radially out from the ring, then holds there,
+        # clear of the survivors (Wesley 7 Oct); 0 = hold where it let go
+        self._detach_step_out = float(p('detach_step_out_m', 0.0).value)
+        self._departed_step = {}
         handoff_topic = str(p('partner_handoff_topic', '').value)
         if handoff_topic:
             self.create_subscription(Bool, handoff_topic, self._partner_handoff_cb, 5)
@@ -541,6 +535,9 @@ class DissipativeController(LoadPlanner):
         for d, p_hold in self._departed_hold.items():
             if p_hold is None:
                 continue
+            if d in self._departed_step and not self._land_to_ground:
+                p_hold[:], _ = carrot_step(p_hold, self._departed_step[d], DETACH_STEP_VEL,
+                                           1.0 / PLANNER_HZ)
             if self._land_to_ground and not self._departed_clear.get(d, False) \
                     and self.load_state is not None:
                 # Step OUT before descending: the freed drone still trails its released
@@ -790,6 +787,14 @@ class DissipativeController(LoadPlanner):
                                       self._release_up])
             self._release_state[d] = {'target': target, 'released': False, 'quiet': 0.0,
                                       'sent': None}
+        elif self._detach_step_out > 0.0 and self._departed_hold[d] is not None \
+                and self.load_state is not None:
+            hold = self._departed_hold[d]
+            out = hold[:2] - np.asarray(self.load_state[0:2], float)
+            out = out / max(float(np.linalg.norm(out)), 1e-6)
+            self._departed_step[d] = hold + self._detach_step_out * np.array([out[0], out[1], 0.0])
+            self.get_logger().info(f'[dissipative] departed drone {d} steps {self._detach_step_out:.2f} m '
+                                   f'out from the ring at {DETACH_STEP_VEL:.2f} m/s, then holds')
         self._reconfig_hold_left = self._reconfig_hold_s
         self.get_logger().warn(
             f'[dissipative] DETACH drone {d} (OCP resize): n={self.n}, '

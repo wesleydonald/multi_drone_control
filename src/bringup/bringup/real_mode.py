@@ -116,7 +116,9 @@ PLANNER_OPTIONAL = {'land_unwind': 'bool', 'dist_est': 'str', 'dist_tau': 'float
                     'offset_free': 'str', 'of_tau': 'float', 'of_window': 'float',
                     'pin_cable_rates': 'bool',
                     'int_mode': 'str', 'int_k_xy': 'float', 'int_k_z': 'float',
-                    'int_settle_s': 'float', 'land_ff_ramp': 'bool'}
+                    'int_settle_s': 'float', 'land_ff_ramp': 'bool',
+                    'traj_hold_s': 'float', 'detach_step_out_m': 'float',
+                    'cable_elev_deg': 'float'}
 # the trackers' thrust map, which the disturbance estimate reads delivered thrust through
 DIST_MAP = ('thrust_ratio', 'thrust_offset', 'thrust_offset_v_slope', 'thrust_v_ref')
 

@@ -1,7 +1,7 @@
 name: m1_rejoin_orbit_fix_pick
 description: 'Orbit weld bench with every fix on the FULL M1 model (pickup DetachableJoint present, released at
   start like the mission does); vs R0672 (nopick): splits the pickup joint from the partner mission.'
-world: three_attach_partner_attached_u.sdf
+world: old_worlds/three_attach_partner_attached_u.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

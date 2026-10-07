@@ -1,6 +1,6 @@
 name: demo_traj_n3_line_x_0p8
 description: 'Meeting demo (gz_record): n3 line_x at 0.8 m/s, floor creep start, launch defaults otherwise.'
-world: three_rigid_ground.sdf
+world: old_worlds/three_rigid_ground.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

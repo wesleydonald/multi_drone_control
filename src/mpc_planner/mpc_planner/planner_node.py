@@ -313,6 +313,11 @@ class LoadPlanner(Node):
         # opt-in: keep integrating through a constant-speed level orbit (M1 orbits from the
         # end of the lift, so the gated hover never happens and the ring flies 6 cm high, R0653)
         self._z_ki_in_orbit = bool(self.declare_parameter('z_ki_in_orbit', True).value)
+        # > 0: hover this long at the target before a load trajectory starts, so the ring
+        # integral learns a steady push at rest and carries it into the path (x and y integrate
+        # only at rest, and a trajectory starts at the lift: twin 6 Oct, R1088 -> R1091)
+        self._traj_hold_s = float(self.declare_parameter('traj_hold_s', 0.0).value)
+        self._traj_hold_left = self._traj_hold_s
         # The breakaway freeze holds the pull where the ring broke free, but only through the
         # pretension: once the lift ramp starts the cap returns to 1 over ff_cap_release_s.
         # Held for the whole flight (0 here) it told the trackers the rods pull 7-27 % less
@@ -363,8 +368,12 @@ class LoadPlanner(Node):
         self.attach_azimuths = cfg.attach_azimuths
         self.rho = attach_points(self.n, self.attach_radius, self.attach_z,
                                  self.attach_azimuths)
-        self.cable_elev_deg = 45.0             # the dissipative node may override it
+        # nominal cable elevation of the hover (rig default 60 since 7 Oct). Steeper = less
+        # tension per cable and, for the partner's X3, less pivot torque (T0008)
+        self.cable_elev_deg = float(self.declare_parameter('cable_elev_deg', 45.0).value)
         self._s_nom = nominal_cable_dirs(self.rho, self.cable_elev_deg)
+        if self.cable_elev_deg != 45.0:
+            self.get_logger().info(f'[planner] nominal cable elevation {self.cable_elev_deg:.1f} deg')
 
         self.drone_mass = cfg.drone_mass
         # Option F (2026-10-03): rods with mass in the model. The twin books the 0.075 kg rod
@@ -1412,7 +1421,14 @@ class LoadPlanner(Node):
                 # latch the descent.
                 lift_done = (self.lift_progress
                              >= (self.target_z - self.lift_z0) - 1e-6)
-                if self.load_traj != 'hover' and lift_done:
+                if self.load_traj != 'hover' and lift_done and self._traj_hold_left > 0.0:
+                    if self._traj_hold_left >= self._traj_hold_s:
+                        self.get_logger().info(
+                            f'[planner] hover hold {self._traj_hold_s:.1f} s before the {self.load_traj}')
+                    self._traj_hold_left -= 1.0 / PLANNER_HZ
+                    if self._traj_hold_left <= 0.0:
+                        self.get_logger().info(f'[planner] hover hold done: {self.load_traj} starts')
+                elif self.load_traj != 'hover' and lift_done:
                     self.traj_t += 1.0 / PLANNER_HZ
                     if self.traj.complete(self.traj_t):
                         self.descending = True
@@ -1718,6 +1734,7 @@ class LoadPlanner(Node):
         self._ff_cap = 1.0
         self._ff_rel_step = None
         self._ff_forced = False
+        self._traj_hold_left = self._traj_hold_s
         # a floor start that timed out short of the hand-over angle must not lift: from
         # 18-26 deg the rods need 2-3x the tension, mostly sideways (rig 2026-09-30)
         m = re.search(r'elevation timeout at ([-0-9.]+)', reason)

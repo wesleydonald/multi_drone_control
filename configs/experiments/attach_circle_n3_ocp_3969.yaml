@@ -1,7 +1,7 @@
 name: attach_circle_n3_ocp_3969
 description: 'Rejoin during the circle with one plate shift (more room for the joining drone): tethers
   330/90/180, newcomer welds at 270 (gaps 60/90 deg). Otherwise identical to attach_circle_n3_ocp (R0580/R0581).'
-world: three_attach_rod_3969.sdf
+world: old_worlds/three_attach_rod_3969.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

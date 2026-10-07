@@ -1,7 +1,7 @@
 name: m1_rejoin_hover_u_t01_bb
 description: 'H4 bench (R0663/R0664) + attach_blend_balanced: incumbents re-solved along the post-weld slew for
   vertical + roll/pitch balance.'
-world: three_attach_partner_attached_nopick_u.sdf
+world: old_worlds/three_attach_partner_attached_nopick_u.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

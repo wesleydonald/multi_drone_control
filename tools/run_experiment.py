@@ -595,7 +595,7 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
                    scenario=os.path.abspath(cfg_path),
                    scenario_sha256=file_sha256(cfg_path),
                    world=cfg.world, launch_file=cfg.launch_file,
-                   launch_args=cfg.launch_args, repeat=repeat,
+                   launch_args=cfg.control_args(), repeat=repeat,
                    rate_source=rate_source(cfg),
                    headless=not gui, status='starting')
     if git_state:
@@ -871,8 +871,10 @@ def checked_config(path):
 
 
 def sim_thrust_maps(cfg):
-    """The sim plant map each launch section flies ('linear' unless it sets sim_thrust_map)."""
-    return tuple(str(a.get('sim_thrust_map', 'linear')).strip().lower()
+    """The sim plant map each launch section flies: what it sets, else the profile's (rig;
+    linear for a legacy world, i.e. one under old_worlds/ or tejen/)."""
+    default = 'linear' if cfg.legacy else 'rig'
+    return tuple(str(a.get('sim_thrust_map', default)).strip().lower()
                  for a in (cfg.launch_args, cfg.io_launch_args))
 
 
@@ -901,7 +903,7 @@ def check_world_geometry(cfg, wpath, path):
     from check_geometry import config_mismatches
     lp = os.path.join(REPO, 'src', cfg.launch_package, 'launch', cfg.launch_file)
     bad = []
-    for k, wv, cv in config_mismatches(wpath, lp if os.path.exists(lp) else None, cfg.launch_args):
+    for k, wv, cv in config_mismatches(wpath, lp if os.path.exists(lp) else None, cfg.control_args()):
         line = f'{k}: world {wv:.4g}, controller {cv:.4g}'
         if k in cfg.geometry_exempt:
             continue

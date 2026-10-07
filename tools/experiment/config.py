@@ -16,6 +16,8 @@ import os
 
 import yaml
 
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Events the runner knows how to fire. Kept explicit rather than "publish any topic":
 # a typo'd topic name in a YAML is a run that looks fine and does nothing at the moment
 # that mattered, and that has cost whole sessions here before.
@@ -180,7 +182,7 @@ class ExperimentConfig:
     def __init__(self, name):
         self.name = name
         self.description = ''
-        self.world = 'three_attach.sdf'
+        self.world = 'old_worlds/three_attach.sdf'
         self.launch_package = 'bringup'
         self.launch_file = 'sim_control_launch.py'
         self.launch_args = {}
@@ -332,10 +334,33 @@ class ExperimentConfig:
             out.append(f'{k}:={v}')
         return out
 
+    @property
+    def legacy(self):
+        """A world under simulation_assets/old_worlds/ or tejen/ flies the legacy sim profile
+        (sim_legacy.yaml, linear plant); every other world is a rig twin."""
+        w = os.path.normpath(self.world)
+        if os.path.isabs(w):
+            w = os.path.relpath(w, os.path.join(REPO, 'simulation_assets'))
+        return w.split(os.sep)[0] in ('old_worlds', 'tejen')
+
+    def control_args(self):
+        """launch.args as flown: legacy:=true goes along for a legacy world unless typed."""
+        args = dict(self.launch_args)
+        if self.legacy and self.launch_file == 'sim_control_launch.py':
+            args.setdefault('legacy', True)
+        return args
+
+    def io_args(self):
+        """io_launch.args as flown (without the fleet-derived ones of io_launch_argv)."""
+        args = dict(self.io_launch_args)
+        if self.legacy and self.io_launch_file == 'sim_io_launch.py':
+            args.setdefault('sim_thrust_map', 'linear')
+        return args
+
     def launch_argv(self, params_path=None):
         """Control-launch args; knobs that are not launch arguments go to params_path."""
         import launch_args
-        return launch_args.argv(self.launch_file, self.launch_args, params_path)
+        return launch_args.argv(self.launch_file, self.control_args(), params_path)
 
     def io_launch_argv(self):
         """Args for the sim-interface launch, with the defaults it needs derived from
@@ -345,7 +370,7 @@ class ExperimentConfig:
         args = {'num_drones': self.num_drones,
                 'attach': self.n_total > self.num_drones,
                 'rviz': False}
-        args.update(self.io_launch_args)
+        args.update(self.io_args())
         return self._argv(args)
 
     def summary(self):

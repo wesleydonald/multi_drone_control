@@ -1,6 +1,6 @@
 """Rig-twin carry worlds (tools/make_carry_worlds.py) and the generator options behind
-them. The legacy worlds must stay byte-identical: the attach, M1, M2 and weld work is
-pinned to them (decisions.md, 30 Sep 2026).
+them. The legacy worlds (simulation_assets/old_worlds/ since 5 Oct 2026) must stay
+byte-identical: the attach, M1, M2 and weld work is pinned to them (decisions.md, 30 Sep 2026).
 
     python3 -m pytest tools/test/test_rig_worlds.py -q
 """
@@ -14,6 +14,7 @@ import pytest
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 ASSETS = REPO / 'simulation_assets'
+OLD = ASSETS / 'old_worlds'
 sys.path.insert(0, str(REPO / 'tools'))
 
 import make_carry_worlds as mcw                                   # noqa: E402
@@ -25,7 +26,7 @@ LEGACY = {
     'two_rigid_ground.sdf': ['--n', '2', '--ground-start'],
     'four_rigid_ground_3915.sdf': ['--n', '4', '--ground-start', '--azimuths', '30,90,150,270'],
     'three_rigid_ground_m10.sdf': ['--n', '3', '--ground-start', '--payload-mass', '1.0'],
-    'four_rigid.sdf': ['--n', '4', '--payload-z', '0.6'],
+    'four_rigid_2026-09.sdf': ['--n', '4', '--payload-z', '0.6'],
 }
 RIG = sorted(mcw.WORLDS)
 
@@ -36,7 +37,7 @@ def test_generator_defaults_reproduce_the_legacy_worlds(name, tmp_path):
     subprocess.run([sys.executable, str(ASSETS / 'generate_rigid_world.py'),
                     '--cable-len', '0.5', '--detachable', *LEGACY[name], '--out', str(out)],
                    check=True, cwd=ASSETS, stdout=subprocess.DEVNULL)
-    assert out.read_bytes() == (ASSETS / name).read_bytes()
+    assert out.read_bytes() == (OLD / name).read_bytes()
 
 
 def test_rig_worlds_and_models_are_up_to_date():
@@ -130,7 +131,7 @@ def test_a_legacy_config_on_a_rig_world_is_refused():
 
 
 def test_legacy_worlds_read_a_centre_pivot():
-    for name in ('four_rigid_ground.sdf', 'three_rigid_ground.sdf', 'four_rigid.sdf'):
-        g = world_geometry(ASSETS / name)
+    for name in ('four_rigid_ground.sdf', 'three_rigid_ground.sdf', 'four_rigid_2026-09.sdf'):
+        g = world_geometry(OLD / name)
         assert g['pivot_dz'] == pytest.approx(0.0, abs=1e-6)
         assert g['drone_airframe_mass'] == pytest.approx(0.64)

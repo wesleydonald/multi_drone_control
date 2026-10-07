@@ -19,7 +19,8 @@ takeoff:
 height_hold:
   z_i_gate: 0.25
 trajectory:
-  traj_speed: 0.4
+  land_unwind: false           # rig: straight down after touchdown; the rig tethers are cables that go slack (Wesley 7 Oct); the twin keeps the unwind (rigid links)
+  traj_speed: 0.125            # m/s path speed (Wesley 7 Oct; the figure-8 now holds it along the whole lap)
   hover_z: 0.8
   climb_vel: 0.15
   land_tol: 0.10

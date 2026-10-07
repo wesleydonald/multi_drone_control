@@ -3,7 +3,7 @@ description: 'M1 (partner_attached_orbit) with the G3 fix: damped universal newc
   tension 0.1 N, balanced post-weld blend (bench R0662-R0666). + weld speed gate on sim-time velocities (R0668 welded
   mid-descent). + attach_datum_shift (carry the ring xy offset through the resize). + Tejen''s mission stopped (SIGINT)
   at his handoff: does the weld yank need his nodes running?'
-world: three_attach_partner_attached_u.sdf
+world: old_worlds/three_attach_partner_attached_u.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

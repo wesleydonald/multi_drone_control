@@ -25,6 +25,7 @@ import rclpy
 import signal
 import sys
 import numpy as np
+from collections import deque
 import copy
 import math
 import threading
@@ -41,6 +42,7 @@ from .acados import (generate_ocp_controller, set_initial_guess,
 from .velocity_loop import VelocityLoop
 from .kt_trim import KtTrim
 from .x0_rate import X0_RATE_SOURCES, x0_body_rate
+from .delay_comp import DelayPredictor
 N_POSE = 13
 
 
@@ -183,9 +185,16 @@ class Controller(Node):
         self.cable_ff_scale = float(self.get_parameter("cable_ff_scale").value)
         self.declare_parameter("attitude_ff", True)
         self.attitude_ff = bool(self.get_parameter("attitude_ff").value)
-        # cable accel source: 'model' = planner t*s/m, 'measured' = from the imu
+        # cable accel source: 'model' = planner t*s/m, 'measured' = from the imu, 'mocap' = the
+        # mocap acceleration minus the modelled thrust and gravity (7 Oct; the rig has no imu stream)
         self.declare_parameter("cable_source", "model")
         self.cable_source = self.get_parameter("cable_source").value
+        if self.cable_source not in ('model', 'measured', 'mocap'):
+            raise ValueError(f"cable_source must be model, measured or mocap, got {self.cable_source!r}")
+        self._vel_hist = deque(maxlen=12)
+        self._acc_lpf = None
+        self._thr_w_lpf = None
+        self._acc_t = None
         self.declare_parameter("cable_accel_cap", CABLE_ACCEL_CAP)
         self.cable_accel_cap = float(self.get_parameter("cable_accel_cap").value)
         self.get_logger().debug(
@@ -447,6 +456,16 @@ class Controller(Node):
         # (card 2026-10-04_inner_loop_aware_planner, critic must-fix 1)
         self.x0_relax_frac = float(self.declare_parameter('x0_relax_frac', 0.0).value)
         self.ref_time_shift = bool(self.declare_parameter('ref_time_shift', False).value)
+        # > 0: start each solve from the state predicted this far ahead with the commands
+        # already sent (the rig's command and mocap delay; 7 Oct, card delay_comp). 0 = off
+        self.delay_comp_s = float(self.declare_parameter(
+            'delay_comp_s', float(os.environ.get('TRACKER_DELAY_COMP_S', '0.0'))).value)
+        self._delay_pred = None
+        if self.delay_comp_s > 0.0:
+            from .dynamics import QuadLoadDynamics
+            self._delay_pred = DelayPredictor(QuadLoadDynamics().quad_dynamics(), self.delay_comp_s)
+            self.get_logger().warn(f"[Drone {self.drone_id + 1}] delay compensation "
+                                   f"{self.delay_comp_s:.3f} s")
         self._ref_arrival_sim = None
         self._ref_dt = None
         # Body rate in x0: 'mocap' (default) or 'imu' = the mean stamped gyro since the last
@@ -975,6 +994,8 @@ class Controller(Node):
             self._applied_u = np.array(
                 [float(u[0]), float(u[1]), float(thr), yaw])
             self._applied_u_rate = np.asarray(u_rate, dtype=float).copy()
+            if getattr(self, '_delay_pred', None) is not None:
+                self._delay_pred.record(self.get_clock().now().nanoseconds * 1e-9, self._applied_u)
             self.get_logger().debug(
                 f"[Drone {self.drone_id + 1}] r:{u[0]:.3f} p:{u[1]:.3f} "
                 f"t:{u[2]:.3f} y:{u[3]:.3f}")
@@ -1262,19 +1283,58 @@ class Controller(Node):
         return float(np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z)))
 
     def measured_cable_accel(self):
-        """MEASURED cable acceleration in the WORLD frame from the IMU:
-        a_cable = R * (imu_specific_force - [0,0, kT*throttle]).
-        Returns None until an IMU sample and an applied throttle are available."""
-        if self.imu_lin_acc is None or self.current_pose is None:
+        """MEASURED cable acceleration in the WORLD frame: from the IMU,
+        a_cable = R * (imu_specific_force - [0,0, kT*throttle]); from mocap ('mocap'), the
+        measured acceleration minus the model's thrust, gravity and drag.
+        Returns None until a measurement and an applied throttle are available."""
+        if self.current_pose is None:
             return None
-        thr = self._thr_lpf if self._thr_lpf is not None else self.last_cmd_throttle
+        # mocap mode filters the thrust itself (with the acceleration); the imu path uses the
+        # imu-synchronised throttle, which only the sim has
+        thr = (self.last_cmd_throttle if self.cable_source == 'mocap' or self._thr_lpf is None
+               else self._thr_lpf)
         if thr is None:
             return None
         q = self.current_pose[3:7]          # [qw, qx, qy, qz]
         Rmat = R.from_quat([q[1], q[2], q[3], q[0]]).as_matrix()
         kT = float(self.est_params[0])      # thrust_ratio (accel per unit throttle)
         thrust_body = np.array([0.0, 0.0, kT * float(thr)])
+        if self.cable_source == 'mocap':
+            a, thrust_w = self._mocap_accel(Rmat @ thrust_body)
+            if a is None:
+                return None
+            drag_z = float(self.est_params[1]) * float(self.current_pose[9])
+            return a - thrust_w + np.array([0.0, 0.0, 9.81 + drag_z])
+        if self.imu_lin_acc is None:
+            return None
         return Rmat @ (self.imu_lin_acc - thrust_body)
+
+    def _mocap_accel(self, thrust_w, window_s=0.08, tau_s=0.05):
+        """(world acceleration, thrust acceleration), both through the same filter: the
+        acceleration is the least-squares slope of the mocap velocity over the last window_s, the
+        thrust its mean over the same window, then one first-order low-pass (tau_s) on each. The
+        thrust term must carry the acceleration's lag, or a throttle change reads as a pull
+        change at loop gain ~1 (critic, card 2026-10-07_cable_mocap). (None, None) until the
+        window fills."""
+        t = self.get_clock().now().nanoseconds * 1e-9
+        v = np.asarray(self.current_pose[7:10], float)
+        self._vel_hist.append((t, v.copy(), np.asarray(thrust_w, float).copy()))
+        pts = [p for p in self._vel_hist if p[0] >= t - window_s]
+        if len(pts) < 3 or pts[-1][0] - pts[0][0] < 0.5 * window_s:
+            return None, None
+        ts = np.array([p[0] for p in pts]) - pts[-1][0]
+        vs = np.array([p[1] for p in pts])
+        A = np.vstack([ts, np.ones_like(ts)]).T
+        a = np.linalg.lstsq(A, vs, rcond=None)[0][0]
+        f = np.mean([p[2] for p in pts], axis=0)
+        if self._acc_lpf is None or self._acc_t is None:
+            self._acc_lpf, self._thr_w_lpf = a, f
+        else:
+            k = max(t - self._acc_t, 1e-3) / (tau_s + max(t - self._acc_t, 1e-3))
+            self._acc_lpf = self._acc_lpf + k * (a - self._acc_lpf)
+            self._thr_w_lpf = self._thr_w_lpf + k * (f - self._thr_w_lpf)
+        self._acc_t = t
+        return self._acc_lpf, self._thr_w_lpf
 
     def _condition_measured_cable(self, ac):
         """Clamp + slew-limit the measured cable accel before it enters the MPC
@@ -1306,7 +1366,7 @@ class Controller(Node):
         if now - st[3] < 1.0:
             return
         st[3] = now
-        if self._imu_wall is None or now - self._imu_wall > 2.0:
+        if self.cable_source == 'measured' and (self._imu_wall is None or now - self._imu_wall > 2.0):
             self.get_logger().warn(f"[Drone {self.drone_id + 1}] cable_source=measured but no imu for "
                                    f"2 s: flying the planned cable term")
             return
@@ -1419,13 +1479,22 @@ class Controller(Node):
             # Part 2c: optionally replace the open-loop model cable term with
             # the IMU-measured f_ext, held constant across the horizon. Falls
             # back to the model until a valid measurement is available.
-            if self.cable_source == "measured":
+            if self.cable_source in ("measured", "mocap"):
                 ac_meas = self.measured_cable_accel()
                 if self._load_grounded() or not self._kt_airborne():
                     # on the stand or with the ring resting the imu reads the floor's support:
                     # fly the planned term and restart the slew from it once airborne
                     self._applied_cable_vec = None
                     ac_meas = None
+                elif ac_meas is None and self._applied_cable_vec is not None:
+                    # a measurement gap: hold the applied value rather than step to the planned
+                    ac_meas = self._applied_cable_vec.copy()
+                if self.payload_resting and self._applied_cable_vec is not None:
+                    # touchdown: the unwind and the floor make the measurement a bogus pull (a
+                    # drone leaned 19 deg, R1103); slew back to the planned term, which the
+                    # planner ramps to zero, instead of stepping
+                    ac_meas = (np.asarray(ref_cable[0], float) if ref_cable is not None
+                               else np.zeros(3))
                 self._measured_cable_diag(ac_meas, ref_cable[0] if ref_cable is not None else None)
                 if ac_meas is not None:
                     # Seed the slew from the model value on the first measured
@@ -1438,7 +1507,13 @@ class Controller(Node):
                     ac_cond = self._condition_measured_cable(ac_meas)
                     rows = (self.planner_ref_pos.shape[0]
                             if self.planner_ref_pos is not None else self.N + 1)
-                    ref_cable = np.tile(ac_cond, (rows, 1)) * self.cable_ff_scale
+                    if self.cable_source == 'mocap' and ref_cable is not None:
+                        # the planned pull along the horizon plus the measured offset at node 0:
+                        # keeps the plan's turning pull on a path (a constant lagged the orbit
+                        # 0.11 s against 0.04, R1106 vs R1105; critic should-fix)
+                        ref_cable = np.asarray(ref_cable, float) + (ac_cond - np.asarray(ref_cable[0], float))
+                    else:
+                        ref_cable = np.tile(ac_cond, (rows, 1)) * self.cable_ff_scale
             # payload resting on the ground -> the cable carries ~no tension,
             # so zero the cable term. a_cable=0 in the same model IS the
             # resting (free-flight) dynamics, so no separate solver is needed;
@@ -1490,6 +1565,12 @@ class Controller(Node):
             # Pinned to the applied value, u_state starts at zero and the solver
             # ramps it up under its own u_dot bounds (throttle 0.5/s), which is a
             # correct soft-start rather than a bolted-on one.
+            if (getattr(self, '_delay_pred', None) is not None and self.takeoff_requested and self._kt_airborne()
+                    and ref_cable is not None):
+                p9 = np.concatenate([np.asarray(self.est_params[:6], float),
+                                     np.asarray(ref_cable[0], float)])
+                estimated_state = self._delay_pred.predict(
+                    self.get_clock().now().nanoseconds * 1e-9, estimated_state, p9)
             estimated_state_with_control = np.concatenate(
                 (estimated_state, self._applied_u))
 

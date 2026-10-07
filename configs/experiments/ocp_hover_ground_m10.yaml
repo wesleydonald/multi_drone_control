@@ -8,7 +8,7 @@ description: 'TOMORROW''S RIG TAKEOFF RECIPE, IN SIM, AT THE RIG''S MASS (docs/e
   per-drone yaw excursion (tools/yaw_excursion.py, < 15 deg), no fleet abort before LAND.
 
   '
-world: three_rigid_ground_m10.sdf
+world: old_worlds/three_rigid_ground_m10.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

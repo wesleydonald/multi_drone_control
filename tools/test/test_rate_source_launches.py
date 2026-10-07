@@ -132,6 +132,8 @@ def _installed():
 def test_our_launches_fly_the_gyro_and_bridge_every_imu(config, n):
     cfg = _config(config)
     args = dict(cfg['launch']['args'])
+    if str(cfg['world']).startswith(('old_worlds/', 'tejen/')):         # as the runner infers
+        args.setdefault('legacy', True)
     bridges, imu, _ = evaluate(args.pop('mode'), **args)
     assert bridges == {f'/drone_{i}/imu': 'imu' for i in range(n)}     # incl. drone 3 in M1
     assert set(imu) == set(bridges)
@@ -139,7 +141,8 @@ def test_our_launches_fly_the_gyro_and_bridge_every_imu(config, n):
 
 @pytest.mark.parametrize('mode', MODES)
 def test_our_launches_keep_pose_selectable(mode):
-    bridges, _, _ = evaluate(mode, num_drones=3, rate_source='pose')
+    bridges, _, _ = evaluate(mode, num_drones=3, rate_source='pose',
+                             legacy=mode in ('attach', 'network'))
     assert bridges and set(bridges.values()) == {'pose'}
 
 

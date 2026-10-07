@@ -1,6 +1,6 @@
 name: demo_traj_n4_fig_8_0p6
 description: 'Meeting demo (gz_record): n4 fig_8 at 0.6 m/s, floor creep start, launch defaults otherwise.'
-world: four_rigid_ground_3915.sdf
+world: old_worlds/four_rigid_ground_3915.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

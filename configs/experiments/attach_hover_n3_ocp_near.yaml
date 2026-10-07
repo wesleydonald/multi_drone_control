@@ -3,7 +3,7 @@ description: 'Isolating run for the newcomer roll instability (R0526/R0527): fle
   the newcomer spawns at (0,-0.8) instead of (0,-1.2) (world three_attach_rod_near.sdf, test copy), tracker-flown
   approach with the horizon reference, OCP-resize attach. Falsifier: the newcomer tips again -> distance
   from the origin is not the cause.'
-world: three_attach_rod_near.sdf
+world: old_worlds/three_attach_rod_near.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

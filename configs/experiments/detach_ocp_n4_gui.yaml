@@ -14,7 +14,7 @@ description: "(2026-09-23: load_mass rescaled to the official 0.86 kg ring paylo
   \ at t=...\n\nThe hand-back is behind ocp_handback (default false), so every previously verified detach\
   \ run is unchanged. It requires an OCP pre-built for n=3, which the node does at startup; run tools/prebuild_planner.py\
   \ first if the model sources changed.\n"
-world: four_rigid_ground.sdf
+world: old_worlds/four_rigid_ground.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

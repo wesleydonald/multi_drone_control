@@ -10,7 +10,7 @@ fleet_geometry:
   auto_slot_assign: true
 takeoff:
   start_taut: false
-  handover_elev_deg: 45.0
+  handover_elev_deg: 60.0       # creep hands over at the planned cable angle (Wesley 7 Oct)
   handover_settle_s: 1.0
   creep_vel: 0.2
   pretension_s: 3.0
@@ -18,7 +18,7 @@ takeoff:
   target_z: 0.6
   takeoff_spool_s: 0.5
   airborne_start: false
-  cable_elev_deg: 45.0
+  cable_elev_deg: 60.0          # planned cable angle (Wesley 7 Oct: rig r206e60, r2008e60; at 45 a magnet let go on a sharp jerk, r200006)
 height_hold:
   z_ki: 0.4
   z_i_max: 0.3                 # m (was 0.15; Wesley 4 Oct: room for an unknown 0.1 kg object, 2.1 N at K_z 7.1 N/m)
@@ -44,6 +44,8 @@ trajectory:
   int_k_xy: 5.26               # N/m, model mode: ring force per metre of integral (rig twin, card 2026-10-04_z_int_model)
   int_k_z: 7.13
   int_settle_s: ''             # s, model mode: the ring-speed gate only this long after the lift (default: always)
+  traj_hold_s: ''              # s, '' = 0: hover this long at the target before a load trajectory starts (6 Oct)
+  detach_step_out_m: ''        # m, '' = 0: a detached drone steps this far out from the ring, then holds (7 Oct)
   terminal_vel_ref: false
 thrust_map:
   thrust_v_ref: 23.5
@@ -62,8 +64,8 @@ tracker:
   vel_swing_k: 0.0
   cable_ff_scale: 1.0
   attitude_ff: true
-  cable_source: 'model'
-  cable_accel_cap: 6.0            # cable_source measured only: magnitude cap (m/s^2)
+  cable_source: 'mocap'           # the rod pull each drone measures from mocap (Wesley 7 Oct: rig r206e60, r2008e60)
+  cable_accel_cap: 12.0           # cable_source measured / mocap only: magnitude cap (m/s^2)
   w_thr_ref: 0.0                  # tracker weight on the planner's thrust feedforward; 0 = compiled 2e-4
   x0_relax_frac: 0.0              # tracker node-0 box half-width, fraction of the state (0: node 0 = the measurement; was 0.025, Wesley 4 Oct, R0957/R0960)
   ref_time_shift: false           # tracker advances the planner horizon by the time since it arrived

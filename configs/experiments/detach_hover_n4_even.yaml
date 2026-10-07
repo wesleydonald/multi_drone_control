@@ -48,4 +48,4 @@ name: detach_hover_n4_even
 timing:
   duration_s: 100.0
   stop_after_abort_s: 8.0
-world: four_rigid_ground.sdf
+world: old_worlds/four_rigid_ground.sdf

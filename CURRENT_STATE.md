@@ -92,8 +92,15 @@ mocap (/drone_i, /payload motion_capture_state)
   `docs/design/measured_force_loop.md`; the runs stay in the registry.
 - **Thrust map.** The rig and the rig-twin sim fly the identified affine map (30 Sep:
   `thrust_offset` 0.185, `thrust_ratio` 35.2 above it, `thrust_offset_v_slope` 0.022,
-  `kt_trim` off); the legacy sim worlds keep the linear plant (kT 83.1, `thrust_ratio:=auto`,
-  `kt_trim` on, §4.10). A wrong map lands in payload height, not throttle.
+  `kt_trim` off). A wrong map lands in payload height, not throttle.
+- **The rig twin is the simulation (5 Oct 2026).** `bringup/config/sim.yaml` holds the twin's
+  values (the rig's geometry, masses and thrust map; `sim_thrust_map rig`, pack 23.8 V,
+  `ff_cap_force 0.75`), so a twin config sets only its world, fleet and events. The legacy
+  worlds (0.5 m rods, centre pivot, 0.64 kg drones, linear plant kT 83.1, `thrust_ratio:=auto`,
+  `kt_trim` on, §4.10) are in `simulation_assets/old_worlds/` and fly on `sim_legacy.yaml`
+  with `legacy:=true`, which `tools/run_experiment.py` infers from an `old_worlds/` or
+  `tejen/` world path. The SIL bench and `mode:=attach` / `mode:=network` exist only on the
+  legacy profile until ported; what has to be flown again on the twin is `docs/redo_on_twin.md`.
 - **Detach** has two modes: `reconfig_mode:=network` (network redistributes, then hands
   back to a pre-built OCP for the new n) and `reconfig_mode:=ocp` (the OCP resizes
   directly; attach geometry is a runtime parameter so the survivors keep their true
@@ -936,6 +943,8 @@ Five launch files in `bringup/launch`; the controllers take `mode:=`. Defaults l
 `src/bringup/config/common.yaml`, `sim.yaml`, `real.yaml` (each with a `modes:` entry per
 mode); a knob that is not a launch argument goes in `params_file:=<yaml>` (the harnesses
 write it into the run dir). `tools/param_diff.py sim/<mode> real/<mode>` shows what differs.
+`sim.yaml` is the rig twin; `legacy:=true` reads `sim_legacy.yaml` (the `old_worlds/` plant;
+`tools/param_diff.py sim_legacy/<mode> ...`).
 `tools/launch_gate.py` replays the 360 frozen commands of the old launches.
 
 | before | after |

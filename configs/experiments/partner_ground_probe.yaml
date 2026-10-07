@@ -1,7 +1,7 @@
 name: partner_ground_probe
 description: 'Diagnostic: his partner launch with the fleet grounded (no ARM), to stack-dump his MPC (R0599/R0606:
   control loop and arm service silent).'
-world: three_attach_partner.sdf
+world: old_worlds/three_attach_partner.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

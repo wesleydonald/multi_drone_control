@@ -1,6 +1,6 @@
 name: demo_traj_n3_orbit_0p6
 description: 'Meeting demo (gz_record): n3 orbit at 0.6 m/s, floor creep start, launch defaults otherwise.'
-world: three_rigid_ground.sdf
+world: old_worlds/three_rigid_ground.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

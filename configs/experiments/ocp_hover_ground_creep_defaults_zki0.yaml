@@ -1,7 +1,7 @@
 name: ocp_hover_ground_creep_defaults_zki0
 description: 'Hover pair arm A (one variable): launch defaults (kt_trim on, creep_vel 0.2, settle 1.0)
   with z_ki 0. Arm B = ocp_hover_ground_creep_defaults. LAND at 52 s.'
-world: three_rigid_ground.sdf
+world: old_worlds/three_rigid_ground.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

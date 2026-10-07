@@ -129,6 +129,9 @@ def evaluate(launch_file, **args):
 
 
 def sim(mode, **args):
+    # attach and network exist only on the legacy profile (no rig-twin attach world yet)
+    if mode in ('attach', 'network'):
+        args.setdefault('legacy', True)
     return evaluate('sim_control_launch.py', mode=mode, **args)
 
 
@@ -403,7 +406,7 @@ def test_p10_m2_magnet_paths():
 def test_p10_sim_graphs_carry_no_rig_magnet_params():
     for mode, args in (('attach', PARTNER_ATTACHED_ORBIT),
                        ('attach', dict(R8A, pose_timeout_s=1.0)),
-                       ('dissipative', M2_DRIVER)):
+                       ('dissipative', dict(M2_DRIVER, legacy=True))):
         g = _by_name(sim(mode, **args))
         assert 'detach_magnet' not in g['/dissipative_planner']['params']
         assert all('magnet_command_topic' not in m for m in _muxes(g))
@@ -464,7 +467,7 @@ def test_m2_manager_feedback_stays_under_ours(real):
     False before his ARM reaches our fault scoping and ARM gate."""
     g = _by_name(rig('m2', **dict(M2_DRIVER, thrust_ratio=24.0, pose_timeout_s=0.25,
                                   safety_ref_timeout_s=1.0)) if real
-                 else sim('dissipative', **M2_DRIVER))
+                 else sim('dissipative', legacy=True, **M2_DRIVER))
     for i in range(4):
         fb = (f'/drone_{i}/arming_state_feedback', f'/ours/drone_{i}/arming_state_feedback')
         assert fb in g['/fleet_manager']['remappings']
@@ -483,7 +486,7 @@ def test_m2_real_graph_plain_carry():
 
 Q7_KEYS = ('start_taut', 'handover_elev_deg', 'handover_settle_s', 'creep_vel', 'reconfig_mode')
 Q7_RIG = (False, 45.0, 1.0, 0.2, 'ocp')   # settle 1.0 = the rig carry's (2.0 until 2026-10-03)
-# rig mode -> the sim mode whose graph it flies, and that sim mode's defaults
+# rig mode -> the sim mode whose graph it flies, and that sim mode's legacy defaults
 Q7_SIM_MODE = {'attach': 'attach', 'm2': 'dissipative'}
 Q7_SIM = {'attach': (True, 45.0, 0.75, 0.10, 'network'),
           'm2': (False, 45.0, 1.0, 0.2, 'network')}
@@ -530,7 +533,7 @@ def test_q7_typed_watchdog_at_the_sim_default_is_refused():
 
 @pytest.mark.parametrize('mode', sorted(Q7_SIM))
 def test_q7_sim_defaults_unchanged(mode):
-    assert _q7(sim(Q7_SIM_MODE[mode])) == Q7_SIM[mode]
+    assert _q7(sim(Q7_SIM_MODE[mode], legacy=True)) == Q7_SIM[mode]
 
 
 # ── the sim graphs M1 and M2 fly ─────────────────────────────────────────
@@ -551,7 +554,7 @@ def test_sim_m1_graph_is_unchanged_in_shape():
 
 
 def test_sim_m2_graph_is_unchanged_in_shape():
-    nodes = sim('dissipative', **M2_DRIVER)
+    nodes = sim('dissipative', legacy=True, **M2_DRIVER)
     assert all(n['use_sim_time'] for n in nodes)
     g = _by_name(nodes)
     assert '/payload_mocap' in g
@@ -638,7 +641,9 @@ def test_int_mode_auto_flies_model_wherever_model_is_allowed():
     assert (p['int_mode'], p['int_k_xy'], p['int_k_z']) == ('model', 5.26, 7.13)
     def mode(launch, planner='/mpc_planner'):
         return _by_name(launch)[planner]['params']['int_mode']
-    assert mode(sim('mpc', num_drones=3)) == 'reference'
-    assert mode(sim('mpc', num_drones=3, kt_trim=False)) == 'model'
-    assert mode(sim('mpc', num_drones=3, kt_trim=False, z_ki=0.0)) == 'reference'
+    assert mode(sim('mpc', num_drones=3)) == 'model'                    # the twin, as the rig
+    assert mode(sim('mpc', num_drones=3, z_ki=0.0)) == 'reference'
+    assert mode(sim('dissipative', num_drones=4), '/dissipative_planner') == 'reference'
+    assert mode(sim('mpc', num_drones=3, legacy=True)) == 'reference'   # kt_trim on
+    assert mode(sim('mpc', num_drones=3, legacy=True, kt_trim=False)) == 'model'
     assert mode(rig('dissipative', num_drones=4), '/dissipative_planner') == 'reference'

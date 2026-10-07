@@ -2,7 +2,7 @@ name: ocp_hover_ground_creep_n4_3915
 description: 'Four drones, creep floor start, LINEAR plant, plates 1/3/5/9 (30/90/150/270) with layout-balanced
   nominal tensions (card 2026-09-25_detach_layout_mode): the 4-ring must hover level at 0.60 before any
   detach is tried. Falsifier: tilt > 5 deg settled, load off 0.60 by > 3 cm, or abort.'
-world: four_rigid_ground_3915.sdf
+world: old_worlds/four_rigid_ground_3915.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

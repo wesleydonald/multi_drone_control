@@ -4,7 +4,7 @@ description: 'Hover pair arm B (card 2026-09-24_planner_offset): three drones, c
   500. Arm A = ocp_hover_ground_creep_defaults_zki0 (identical but z_ki 0): the one-variable pair the
   reviewer asked for (R0557/R0558 differed in four settings). LAND at 52 s for >= 30 s of hover. Falsifier:
   load off 0.600 by > 1.5 cm over the last 15 s, or tilt > 2 deg.'
-world: three_rigid_ground.sdf
+world: old_worlds/three_rigid_ground.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

@@ -25,6 +25,7 @@ Parameters (ROS):
   motor_constant float 0.62e-6  the world's rotor motorConstant (thrust_map rig)
 """
 
+import collections
 import math
 import os
 import numpy as np
@@ -125,6 +126,13 @@ class PayloadBetaflightComm(Node):
             'rate_i_min_u', 0.35 if self.thrust_map == 'rig' else 0.09).value)
         self.add_on_set_parameters_callback(self._on_rate_params)
         self._active = False
+        # > 0: each command takes effect this long after it arrives, standing in for the rig's
+        # radio, Betaflight filtering and motor lag (default from SIM_CMD_DELAY_S; 0 = off)
+        self._cmd_delay = float(self.declare_parameter(
+            'cmd_delay_s', float(os.environ.get('SIM_CMD_DELAY_S', '0.0'))).value)
+        self._cmd_queue = collections.deque()
+        if self._cmd_delay > 0.0:
+            self.get_logger().warn(f'[BF{self.drone_id}] command delay {self._cmd_delay:.3f} s')
 
     # ------------------------------------------------------------------
     def _on_rate_params(self, params):
@@ -209,6 +217,7 @@ class PayloadBetaflightComm(Node):
         ang_vel_body_deg = np.degrees(ang_vel_body)
 
         self.last_pose, self.last_orientation = pos, ori
+        self._apply_due_cmds()
 
         if self.set_point is not None:
             speeds = self._compute_motor_speeds(ang_vel_body_deg, dt)
@@ -216,6 +225,14 @@ class PayloadBetaflightComm(Node):
             msg_out.header.stamp = self.get_clock().now().to_msg()
             msg_out.velocity = speeds.tolist()
             self.motor_pub.publish(msg_out)
+
+    def _apply_due_cmds(self):
+        """Apply the queued commands whose delay has passed (sim time)."""
+        if not self._cmd_queue:
+            return
+        now = self.get_clock().now().nanoseconds * 1e-9
+        while self._cmd_queue and self._cmd_queue[0][0] <= now - self._cmd_delay:
+            _, self.set_point, self._active = self._cmd_queue.popleft()
 
     def _imu_cb(self, msg: Imu):
         """One rate-loop step per gyro sample, dt from the sensor stamps (sim time).
@@ -234,6 +251,7 @@ class PayloadBetaflightComm(Node):
         w = msg.angular_velocity
         dt, ang_vel_deg, self._imu_t_prev = gyro_sample(t, self._imu_t_prev, (w.x, w.y, w.z))
         self._imu_n += 1
+        self._apply_due_cmds()
         if dt is None or self.set_point is None:
             return
         speeds = self._compute_motor_speeds(ang_vel_deg, dt)
@@ -276,8 +294,12 @@ class PayloadBetaflightComm(Node):
         if msg.armed and throttle < 0.05 * 4631:
             throttle = 0.05 * 4631
 
-        self.set_point = [roll_rate, pitch_rate, throttle, yaw_rate]
-        self._active = integrate_active(msg.armed, u, self._i_min_u)
+        set_point = [roll_rate, pitch_rate, throttle, yaw_rate]
+        active = integrate_active(msg.armed, u, self._i_min_u)
+        if self._cmd_delay > 0.0:
+            self._cmd_queue.append((self.get_clock().now().nanoseconds * 1e-9, set_point, active))
+        else:
+            self.set_point, self._active = set_point, active
         if (self.rate_source == 'imu' and msg.armed and self._imu_n == 0
                 and not self._warned_no_imu):
             self._warned_no_imu = True

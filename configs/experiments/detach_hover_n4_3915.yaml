@@ -51,4 +51,4 @@ name: detach_hover_n4_3915
 timing:
   duration_s: 100.0
   stop_after_abort_s: 8.0
-world: four_rigid_ground_3915.sdf
+world: old_worlds/four_rigid_ground_3915.sdf

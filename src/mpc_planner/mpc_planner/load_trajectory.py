@@ -8,11 +8,11 @@ shape params (kind, speed, distance, radius) -- it holds no node/solver state (t
 trajectory CLOCK traj_t stays in the node) so it is testable in isolation.
 
 Supported kinds: 'hover' (no motion), 'line_x' (sinusoidal shuttle along +x),
-'circle', 'fig_8' (Gerono lemniscate), 'spin' (circle + one full load yaw), 'orbit'
-(the same circle flown continuously at constant speed until LAND, after a smooth
-ORBIT_RAMP_S spin-up: the ring keeps moving through a partner drone's whole mission). All use
-an eased (smootherstep) angle sweep so the maneuver starts and ends at rest -- no
-velocity/accel step that a non-fed-forward payload would take as a pendulum kick.
+'circle', 'fig_8' (Gerono lemniscate, one lap at constant path speed between ORBIT_RAMP_S
+spin-up and wind-down), 'spin' (circle + one full load yaw), 'orbit' (the same circle flown
+continuously at constant speed until LAND, after a smooth ORBIT_RAMP_S spin-up: the ring keeps
+moving through a partner drone's whole mission). All start and end at rest through smootherstep
+profiles -- no velocity/accel step that a non-fed-forward payload would take as a pendulum kick.
 """
 import numpy as np
 
@@ -66,15 +66,48 @@ class LoadTrajectory:
             return th, w * s, w * ds / Tr
         return w * (0.5 * Tr + (t - Tr)), w, 0.0
 
+    def _fig8_table(self):
+        """Arc length along the lemniscate against theta, built once: the lap is timed
+        by distance, since theta's own path speed runs 1 : 1.41 lobe tip to centre."""
+        if getattr(self, '_f8', None) is None:
+            a = max(self.radius, 1e-6)
+            th = np.linspace(0.0, 2.0 * np.pi, 20001)
+            g = a * np.sqrt(np.cos(th) ** 2 + np.cos(2.0 * th) ** 2)
+            s = np.concatenate([[0.0], np.cumsum(0.5 * (g[1:] + g[:-1]) * np.diff(th))])
+            self._f8 = (th, s)
+        return self._f8
+
     def _fig8_theta(self, t):
-        """Eased figure-eight angle (see _eased_sweep). The lemniscate's peak speed
-        is a*sqrt(2)*dtheta_max (at the centre crossing), so T is stretched by the
-        extra sqrt(2) to keep the peak tangential speed at speed. Returns
-        (theta, dtheta/dt, d2theta/dt2, T)."""
+        """Figure-eight angle at constant path speed: a smootherstep spin-up over
+        ORBIT_RAMP_S (as 'orbit'), speed along the path, and the mirrored wind-down into
+        the start point. (Until 7 Oct one eased sweep over the whole lap: 0.03 m/s near
+        the ends, speed only at the centre crossing.) Returns (theta, dtheta/dt,
+        d2theta/dt2, T)."""
         a = max(self.radius, 1e-6)
-        T = 1.875 * 2.0 * np.pi * a * np.sqrt(2.0) / max(self.speed, 1e-6)
-        th, dth, ddth = self._eased_sweep(t, T)
-        return th, dth, ddth, T
+        v = max(self.speed, 1e-6)
+        th_tab, s_tab = self._fig8_table()
+        L = float(s_tab[-1])
+        Tr = min(ORBIT_RAMP_S, L / v)          # the two ramps cover v*Tr of the lap
+        T = Tr + L / v
+
+        def ramp(tt):                           # distance, speed, accel of the spin-up
+            u = min(max(tt / Tr, 0.0), 1.0)
+            return (v * Tr * (u ** 6 - 3.0 * u ** 5 + 2.5 * u ** 4),
+                    v * u * u * u * (u * (6.0 * u - 15.0) + 10.0),
+                    v * 30.0 * u * u * (u - 1.0) * (u - 1.0) / Tr)
+        tc = min(max(t, 0.0), T)
+        if tc < Tr:
+            s, ds, dds = ramp(tc)
+        elif tc > T - Tr:
+            s, ds, dds = ramp(T - tc)
+            s, dds = L - s, -dds
+        else:
+            s, ds, dds = 0.5 * v * Tr + v * (tc - Tr), v, 0.0
+        th = float(np.interp(s, s_tab, th_tab))
+        g = a * np.sqrt(np.cos(th) ** 2 + np.cos(2.0 * th) ** 2)        # |d path / d theta|
+        dg = a * a * (-np.cos(th) * np.sin(th) - 2.0 * np.cos(2.0 * th) * np.sin(2.0 * th)) / g
+        dth = ds / g
+        return th, dth, (dds - dg * dth * dth) / g, T
 
     def complete(self, traj_t):
         """True once the lateral trajectory has finished, so the descent can begin.

@@ -23,7 +23,7 @@ one blind critic each, every accepted fix applied). Used in `thesis/Source/src/s
 
 | figure | runs | code |
 |---|---|---|
-| F_tracker_x0 | R0956, R0957 (SIL); R0841 (old box), R0960 (box 0) hold; R0832 (old box), R0974 (box 0) circle | branch week4, uncommitted (4 Oct) |
+| F_tracker_x0 | SIL panel dropped 5 Oct 2026 (was R0956, R0957); R0841 (old box), R0960 (box 0) hold; R0832 (old box), R0974 (box 0) circle | branch week4, uncommitted (4 Oct) |
 | F_disturbance | R0962, R0968, R0969 (0.6 N down); R0961, R0971 (0.4 N horizontal) | branch week4, uncommitted (4 Oct) |
 | F_landing | R0960 (straight descent, box 0), R1013 (unwind + ramp + idle) | branch week4, uncommitted (4 Oct night) |
 | F_detach | R1012 (w4_3915_detach_lf: box 0, land_unwind, ramp, idle) | branch week4, uncommitted (5 Oct night) |

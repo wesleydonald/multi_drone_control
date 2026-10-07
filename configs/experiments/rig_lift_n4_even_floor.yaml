@@ -4,7 +4,7 @@ description: 'Sim twin of the rig first lift 2026-09-30 (R3b0): four drones on t
   to 0.6. Checks the cable-FF gate change (FF on once the planner lifts, not once
   the ring is off the floor). Exploratory. Falsifier: ring never leaves the floor,
   an abort, drone tilt > 30 deg or ring tilt > 15 deg at breakaway.'
-world: four_rigid_ground.sdf
+world: old_worlds/four_rigid_ground.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

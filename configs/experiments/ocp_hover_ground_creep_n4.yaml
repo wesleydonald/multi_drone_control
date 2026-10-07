@@ -2,7 +2,7 @@ name: ocp_hover_ground_creep_n4
 description: 'Floor start on the CREEP path with FOUR drones (plan 2026-09-24, item 1): start_taut false
   + handover_elev_deg 45, even ring. The rig will fly four next visit. Exploratory. Falsifier: peak load
   below 0.35 m, or a creep timeout / abort.'
-world: four_rigid_ground.sdf
+world: old_worlds/four_rigid_ground.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

@@ -123,14 +123,14 @@ Arm and takeoff from the RViz panel, or by topic — see `CURRENT_STATE.md` §9 
 
 ## Cooperative carry (the OCP baseline)
 ```bash
-cd simulation_assets && gz sim three_rigid_ground.sdf -v4 -r
+cd simulation_assets && gz sim three_rigid_ground_rig.sdf -v4 -r     # the rig twin
 ros2 launch bringup sim_io_launch.py num_drones:=3
 ros2 launch bringup sim_control_launch.py mode:=mpc num_drones:=3 load_traj:=circle
 ```
 
 ## Detach (a drone leaves mid-flight)
 ```bash
-cd simulation_assets && gz sim four_rigid_ground.sdf -v4 -r
+cd simulation_assets && gz sim four_rigid_ground_rig.sdf -v4 -r
 ros2 launch bringup sim_io_launch.py num_drones:=4 detach:=true
 ros2 launch bringup sim_control_launch.py mode:=dissipative num_drones:=4
 #   ARM -> TAKEOFF -> hit DETACH
@@ -138,9 +138,10 @@ ros2 launch bringup sim_control_launch.py mode:=dissipative num_drones:=4
 
 ## Attach (a drone joins mid-flight)
 ```bash
-cd simulation_assets && gz sim three_attach.sdf -v4 -r
-ros2 launch bringup sim_io_launch.py num_drones:=3 attach:=true
-ros2 launch bringup sim_control_launch.py mode:=attach
+# no rig-twin attach world yet: a legacy world (old_worlds/), the linear plant and legacy:=true
+cd simulation_assets && gz sim old_worlds/three_attach.sdf -v4 -r
+ros2 launch bringup sim_io_launch.py num_drones:=3 attach:=true sim_thrust_map:=linear
+ros2 launch bringup sim_control_launch.py mode:=attach legacy:=true
 #   ARM -> TAKEOFF -> hit ATTACH
 ```
 

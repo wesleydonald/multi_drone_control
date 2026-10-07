@@ -10,7 +10,7 @@ description: 'G7 P15 floor-start M1 (the rig R11 start): partner_attached_orbit 
   peak > 5 deg, carriers'' dip > 0.03 m or > 3 s back under 2 deg; TAKEOFF -> landed > 140 s sim) plus: creep
   hand-over (phase creep -> planner) later than 15 s after TAKEOFF, any abort during the creep, or drone 3
   not welded (ring weld lost) before the DETACH.'
-world: three_attach_partner_attached.sdf
+world: old_worlds/three_attach_partner_attached.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

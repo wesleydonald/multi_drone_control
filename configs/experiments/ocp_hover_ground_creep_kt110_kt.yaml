@@ -4,7 +4,7 @@ description: 'G7 R3b rig twin (card 2026-09-30_rig_carry_hover): ocp_hover_groun
   83.1, the size of the rig''s typed 24 vs ~22 measured in free hover (09-16). Creep-path sibling of
   ocp_hover_ground_kt110_kt (which starts taut). Exploratory. Falsifier: peak load below 0.35 m, payload z
   off 0.60 by > 3 cm over the last 10 s of hover, payload tilt > 15 deg, or an abort.'
-world: three_rigid_ground.sdf
+world: old_worlds/three_rigid_ground.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

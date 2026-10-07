@@ -4,7 +4,7 @@ description: 'Isolating run: the newcomer is a plain x3_drone3 (NO magnet arm, n
   arm hypothesis: it still tips. R0535 flew it with clock_hz 0; now the default clock with the period-estimated
   rate timing in the sim Betaflight node (regression of the fix). R0538 (clock 100, rate fix) wobbled
   +-0.2 m in the hold: clock_hz 500 tests clock granularity (tracker timer jitter 11-23 ms at 100 Hz).'
-world: three_attach_noarm_near.sdf
+world: old_worlds/three_attach_noarm_near.sdf
 launch:
   package: bringup
   file: sim_control_launch.py

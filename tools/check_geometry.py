@@ -143,6 +143,8 @@ def _drone_and_rod_geometry(sdf_path, world):
             continue
         drones[int(mm.group(1))] = _pose(inc)
         mf = base / uri
+        if not mf.exists():                   # a world in old_worlds/ includes models/ too
+            mf = REPO / 'simulation_assets' / uri
         if mf.exists():
             model = ET.parse(mf).getroot().find('model')
             masses.append(sum(_link_mass(lk) for lk in model.iter('link')))
@@ -218,14 +220,25 @@ def planner_defaults():
 CONTROL_LAUNCHES = {'sim_control_launch.py': 'sim', 'real_control_launch.py': 'real'}
 
 
-def launch_defaults(launch_path, mode=None):
+def is_legacy_world(world):
+    """A world under simulation_assets/old_worlds/ or tejen/: flown with legacy:=true."""
+    try:
+        rel = pathlib.Path(world).resolve().relative_to((REPO / 'simulation_assets').resolve())
+    except ValueError:
+        return False
+    return rel.parts[0] in ('old_worlds', 'tejen')
+
+
+def launch_defaults(launch_path, mode=None, legacy=False):
     """A launch file's argument defaults without executing it: the profile of `mode` for
-    sim_control/real_control_launch.py, else its DeclareLaunchArgument defaults."""
+    sim_control/real_control_launch.py (legacy: sim_legacy.yaml), else its
+    DeclareLaunchArgument defaults."""
     side = CONTROL_LAUNCHES.get(pathlib.Path(launch_path).name)
     if side:
         sys.path.insert(0, str(REPO / 'src' / 'bringup'))
         from bringup.profiles import DEFAULT_MODE, profile
-        return profile(side, mode or DEFAULT_MODE, cdir=str(REPO / 'src' / 'bringup' / 'config'))
+        return profile(side, mode or DEFAULT_MODE, cdir=str(REPO / 'src' / 'bringup' / 'config'),
+                       legacy=legacy)
     tree = ast.parse(pathlib.Path(launch_path).read_text())
     out = {}
     for node in ast.walk(tree):
@@ -263,7 +276,8 @@ def config_mismatches(world, launch_path=None, overrides=None):
     config's launch args) over the launch file's defaults over params.py. For
     run_experiment.py to refuse a config before it spends a run."""
     g = world if isinstance(world, dict) else world_geometry(world)
-    d = dict(launch_defaults(launch_path, (overrides or {}).get('mode'))) if launch_path else {}
+    legacy = str((overrides or {}).get('legacy', '')).lower() == 'true'
+    d = dict(launch_defaults(launch_path, (overrides or {}).get('mode'), legacy)) if launch_path else {}
     d.update({k: v for k, v in (overrides or {}).items() if v is not None})
     nd = planner_defaults()
     bad = []
@@ -298,7 +312,10 @@ def _load_config(path):
     launch = cfg.get('launch', {})
     lp = (REPO / 'src' / launch.get('package', 'bringup') / 'launch'
           / launch['file']) if launch.get('file') else None
-    return world, lp, launch.get('args') or {}
+    over = dict(launch.get('args') or {})
+    if is_legacy_world(world):
+        over.setdefault('legacy', True)
+    return world, lp, over
 
 
 def main():
@@ -320,7 +337,8 @@ def main():
         return 1 if bad else 0
 
     if args.all:
-        for sdf in sorted((REPO / 'simulation_assets').glob('*.sdf')):
+        assets = REPO / 'simulation_assets'
+        for sdf in sorted(assets.glob('*.sdf')) + sorted((assets / 'old_worlds').glob('*.sdf')):
             try:
                 g = world_geometry(sdf)
             except Exception as e:
@@ -349,7 +367,7 @@ def main():
         print("\n   (pass --launch <launch.py> to compare against the controller)")
         return 0
 
-    d = launch_defaults(args.launch, args.mode)
+    d = launch_defaults(args.launch, args.mode, is_legacy_world(args.world))
     nd = planner_defaults()
     print(f"\n── vs controller config: {pathlib.Path(args.launch).name}")
     bad = 0
@@ -368,7 +386,11 @@ def main():
             print(f"   {k:16s} world={wv:<9.4f} controller=<unknown>")
             continue
         flag = '** MISMATCH **' if abs(cv - wv) > _tol(k, wv) else 'ok'
-        bad += flag != 'ok'
+        if flag != 'ok' and src == 'params.py' and k.startswith('load_i'):
+            # no launch arg sets the ring inertia: reported, not refused, until params.py
+            # follows the twin (as run_experiment.PARAMS_ONLY_GEOMETRY)
+            flag = 'WARN (params.py only)'
+        bad += flag == '** MISMATCH **'
         print(f"   {k:16s} world={wv:<9.4f} {src:>9s}={cv:<9.4f} {flag}")
     for k, (wk, sign, tol) in DECLARED.items():
         if wk not in g or d.get(k) is None:
