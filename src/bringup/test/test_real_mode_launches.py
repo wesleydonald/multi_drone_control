@@ -647,3 +647,12 @@ def test_int_mode_auto_flies_model_wherever_model_is_allowed():
     assert mode(sim('mpc', num_drones=3, legacy=True)) == 'reference'   # kt_trim on
     assert mode(sim('mpc', num_drones=3, legacy=True, kt_trim=False)) == 'model'
     assert mode(rig('dissipative', num_drones=4), '/dissipative_planner') == 'reference'
+
+
+def test_soft_detach_knob_reaches_the_dissipative_node():
+    """detach_unload_s is typed on the command line for a soft detach (7 Oct); unset it stays
+    off (the node's 0)."""
+    p = _by_name(rig('dissipative', num_drones=4, detach_unload_s=3.0))['/dissipative_planner']['params']
+    assert p['detach_unload_s'] == 3.0
+    p0 = _by_name(rig('dissipative', num_drones=4))['/dissipative_planner']['params']
+    assert 'detach_unload_s' not in p0

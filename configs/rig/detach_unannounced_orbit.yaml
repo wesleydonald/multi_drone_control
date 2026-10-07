@@ -1,0 +1,6 @@
+# rig unannounced detach during a circle (Wesley 7 Oct night): detection 0.06 m, 5 s hover hold before the
+# circle, the freed drone steps 0.5 m out (default) and then lands and idles on the floor while the fleet
+# flies on, so the circling formation cannot sweep into it
+detach_detect_m: 0.06
+traj_hold_s: 5.0
+departed_land: true

@@ -1,0 +1,4 @@
+# rig round 2: 5 s hover hold before the path + trackers model the measured (mocap) cable pull
+traj_hold_s: 5.0
+cable_source: 'mocap'
+cable_accel_cap: 12.0

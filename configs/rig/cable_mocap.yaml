@@ -1,0 +1,3 @@
+# trackers model the rod pull they measure (mocap acceleration minus the modelled thrust and gravity)
+cable_source: 'mocap'
+cable_accel_cap: 12.0

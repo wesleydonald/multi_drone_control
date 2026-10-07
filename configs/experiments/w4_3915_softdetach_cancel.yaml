@@ -1,0 +1,77 @@
+criteria:
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+description: 'C: soft detach on 1/3/5/9, planned pull, tilt gate 0.1 deg so the release
+  never passes: the cancel blends back, magnet stays on, then LAND. Card docs/experiments/2026-10-07_soft_detach.md.'
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 20.0
+  do: DETACH
+  arg: 1
+- t: 40.0
+  do: LAND
+fleet:
+  n_total: 4
+  num_drones: 4
+io_launch:
+  args:
+    num_drones: 4
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    detach: true
+  file: sim_io_launch.py
+launch:
+  args:
+    attach_azimuths_deg: 30,90,150,270
+    attach_radius: 0.225
+    attach_z: 0.02
+    cable_len: 0.55
+    creep_vel: 0.2
+    drone_mass: 0.55
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.15
+    load_mass: 0.86
+    load_traj: hover
+    measure_rod_len: true
+    mode: dissipative
+    num_drones: 4
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.0
+    throttle_max: 0.8
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    reconfig_mode: ocp
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    params_file: /home/wesley/multi_drone_control/configs/rig/detach_step.yaml
+    detach_unload_s: 3.0
+    cable_source: model
+    detach_unload_tilt_deg: 0.1
+  file: sim_control_launch.py
+  package: bringup
+name: w4_3915_softdetach_cancel
+timing:
+  duration_s: 120.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+world: four_rigid_ground_rig_3915.sdf

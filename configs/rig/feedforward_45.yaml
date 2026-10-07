@@ -1,0 +1,5 @@
+# rig carry with the round 1 settings, for comparisons: the planner's planned pull and a 45 deg plan
+cable_source: 'model'
+cable_accel_cap: 6.0
+cable_elev_deg: 45.0
+handover_elev_deg: 45.0

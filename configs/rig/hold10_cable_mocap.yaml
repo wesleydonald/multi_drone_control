@@ -1,0 +1,4 @@
+# twin test 7 Oct: 10 s hover hold + trackers model the rod pull they measure from mocap
+traj_hold_s: 10.0
+cable_source: 'mocap'
+cable_accel_cap: 12.0

@@ -39,6 +39,7 @@ from interfaces.msg import MotionCaptureState
 from mpc_planner.geometry import (quat_to_rot_np, attach_points, rot_z,
                                   apex_direction, balanced_tensions)
 from mpc_planner.planner_node import LoadPlanner, DRONE_MASS, PLANNER_HZ, TouchdownDetector
+from mpc_planner.reference_builder import unload_tensions
 
 from dissipative_planner.dissipative_network import (
     DissipativeNetwork, DissipativeParams)
@@ -250,6 +251,22 @@ class DissipativeController(LoadPlanner):
         # clear of the survivors (Wesley 7 Oct); 0 = hold where it let go
         self._detach_step_out = float(p('detach_step_out_m', 0.0).value)
         self._departed_step = {}
+        # > 0: soft detach. The leaver's tension is blended down to detach_unload_t (the
+        # survivors take the balanced n-1 split) over this long in the n-drone OCP before its
+        # magnet opens; 0 = release and resize in one tick (r0013 capsized on that step)
+        self._unload_s = float(p('detach_unload_s', 0.0).value)
+        self._unload_t = float(p('detach_unload_t', 0.5).value)   # N: light but taut (a slack cable snatches)
+        self._unload_tilt = float(p('detach_unload_tilt_deg', 10.0).value)
+        self._unload_wait = float(p('detach_unload_wait_s', 2.0).value)
+        self._post_blend_s = float(p('detach_post_blend_s', 1.0).value)
+        self._unload = None          # the detach being unloaded, until release or cancel
+        # > 0: a drone whose cable measures this much longer than its length for two planner
+        # ticks has let go unannounced (a magnet failing mid-mission): it is treated as
+        # detached and the fleet resizes without being told (Wesley 7 Oct)
+        self._detect_m = float(p('detach_detect_m', 0.0).value)
+        self._detect_count = {}
+        self._detect_ok = {}          # each drone's excess on its last tick within the threshold
+        self._detect_refused = set()  # detected but refused (min_survivors): do not re-fire
         handoff_topic = str(p('partner_handoff_topic', '').value)
         if handoff_topic:
             self.create_subscription(Bool, handoff_topic, self._partner_handoff_cb, 5)
@@ -337,6 +354,10 @@ class DissipativeController(LoadPlanner):
         # a freed drone carries no load: it descends faster than the fleet on LAND so
         # it is down BEFORE the survivors stall (0.0 = twice land_vel)
         self._departed_land_vel = float(p('departed_land_vel', 0.0).value)
+        # true: a freed drone lands right after its step-out and idles on the floor (armed)
+        # while the fleet flies on, out of a trajectory's way (Wesley 7 Oct: detach mid-circle)
+        self._departed_land = bool(p('departed_land', False).value)
+        self._departed_landing = set()
         self._departed_td = {}       # per departed drone: its own TouchdownDetector on LAND
         # rig: release the tether magnet from here on a detach (aux channel via
         # elrs_interface), so the command and the physical release are one tick apart
@@ -452,6 +473,8 @@ class DissipativeController(LoadPlanner):
         if self.phase == 'network':
             self._network_plan()
             return
+        self._unload_tick()
+        self._detect_tick()
         # Freeze the trajectory clock across a resize, so a fleet that is still
         # settling into its new ring is not also asked to chase a moving target.
         if self._reconfig_hold_left > 0.0:
@@ -528,17 +551,27 @@ class DissipativeController(LoadPlanner):
         `ref_stale` and disarms the whole fleet."""
         g = np.array([0.0, 0.0, self.dyn.g])
         zero = np.zeros(3)
-        if not self._land_to_ground:
+        if not self._land_to_ground and not self._departed_land:
             self._departed_td = {}
             self._departed_clear = {}
         rate = self._departed_land_vel if self._departed_land_vel > 0.0 else 2.0 * self.land_vel
         for d, p_hold in self._departed_hold.items():
             if p_hold is None:
                 continue
-            if d in self._departed_step and not self._land_to_ground:
+            if d in self._departed_step and not self._land_to_ground and d not in self._departed_landing:
                 p_hold[:], _ = carrot_step(p_hold, self._departed_step[d], DETACH_STEP_VEL,
                                            1.0 / PLANNER_HZ)
-            if self._land_to_ground and not self._departed_clear.get(d, False) \
+            td_prev = self._departed_td.get(d)
+            down = td_prev is not None and td_prev.stalled
+            # departed_land: straight down once the step-out is done, the fleet still flying
+            if (self._departed_land and not self._land_to_ground and
+                    (d not in self._departed_step or
+                     float(np.linalg.norm(p_hold - self._departed_step[d])) < 0.02)):
+                if d not in self._departed_landing:
+                    self.get_logger().info(f'[dissipative] departed drone {d} lands now (departed_land)')
+                self._departed_landing.add(d)
+            early = d in self._departed_landing and not down
+            if self._land_to_ground and not down and not self._departed_clear.get(d, False) \
                     and self.load_state is not None:
                 # Step OUT before descending: the freed drone still trails its released
                 # cable, and straight down from a hover detach it lands 0.63 m from the
@@ -554,7 +587,8 @@ class DissipativeController(LoadPlanner):
                     goal = np.array([*(c + u * DEPARTED_CLEAR_R), float(p_hold[2])])
                     p_new, _ = carrot_step(p_hold, goal, rate, 1.0 / PLANNER_HZ)
                     p_hold[:] = p_new
-            if self._land_to_ground and self._departed_clear.get(d, False):
+            if (self._land_to_ground and (down or self._departed_clear.get(d, False))) or early or \
+                    (self._departed_land and down):
                 # Descend faster than the fleet (no load on this drone) so it is down
                 # before the survivors stall, and run its own touchdown detector. Once
                 # stalled the reference freezes at the floor (as the survivors' does): a
@@ -699,7 +733,15 @@ class DissipativeController(LoadPlanner):
         if self.detached[d]:
             return
         if self._reconfig_mode == 'ocp':
-            self._detach_ocp(d)
+            if self._unload is not None:
+                if self._unload['d'] != d:
+                    self.get_logger().warn(
+                        f'[dissipative] detach {d} refused: drone {self._unload["d"]} is unloading')
+                return
+            if self._unload_s > 0.0:
+                self._start_unload(d)
+            else:
+                self._detach_ocp(d)
             return
         # first detach also performs the OCP -> network handover (seeds bumplessly).
         if self.phase == 'planner':
@@ -742,25 +784,43 @@ class DissipativeController(LoadPlanner):
         4*pi/n, so that holds only for n >= 5; n=4 sits exactly on the boundary. The
         resize is allowed either way and the margin is logged, because flying a
         marginal configuration is a result worth having, not an error."""
+        plan = self._detach_plan(d)
+        if plan is not None:
+            self._resize_and_release(d, *plan)
+
+    def _detach_plan(self, d):
+        """(survivors, their attach points, largest gap) for detaching d, or None after
+        logging why it is refused."""
         if d not in self.slot2drone:
             self.get_logger().warn(f'[dissipative] detach: drone {d} is not on the load')
-            return
+            return None
         survivors = [x for x in self.slot2drone if x != d and not self.detached[x]]
         if len(survivors) < max(2, self._min_survivors):
             self.get_logger().error(
                 f'[dissipative] refusing to detach {d}: {len(survivors)} would remain '
                 f'(min_survivors {self._min_survivors})')
-            return
+            return None
         # Each survivor keeps its OWN attach point. Captured BEFORE the resize, while
         # self.rho and self.slot2drone still describe the current fleet.
         rho_of = {self.slot2drone[sl]: self.rho[sl]
                   for sl in range(len(self.slot2drone))}
         rho_new = [rho_of[x] for x in survivors]
-        gap = _largest_gap_deg(rho_new)
-        if not self.resize_fleet(len(survivors), survivors, rho=rho_new):
+        return survivors, rho_new, _largest_gap_deg(rho_new)
+
+    def _resize_and_release(self, d, survivors, rho_new, gap, post_blend=None):
+        """Resize the OCP to the survivors and open d's magnet. `post_blend` = (t_from,
+        seconds): start the survivors' tension references there (the soft detach's
+        unloaded split) instead of stepping to the new balance. False if no OCP."""
+        lens_of = {self.slot2drone[sl]: self.cable_len_i[sl] for sl in range(len(self.slot2drone))
+                   if sl < len(self.cable_len_i)}
+        lens = [lens_of[x] for x in survivors] if all(x in lens_of for x in survivors) else None
+        if not self.resize_fleet(len(survivors), survivors, rho=rho_new, cable_lengths=lens):
             self.get_logger().error(
                 f'[dissipative] detach {d} ABORTED: no OCP for n={len(survivors)}')
-            return
+            return False
+        if post_blend is not None:
+            self.refs.start_blend(list(self.refs._s_nom), post_blend[0], post_blend[1])
+            self._resize_log_ticks = 3
         # Warm-start the resized solver before it flies the fleet. Leaving last_X None
         # makes the first live solve a cold reconverge, which _prime_solver's own
         # docstring records as "a jump and a scrambled MPC path".
@@ -800,6 +860,108 @@ class DissipativeController(LoadPlanner):
             f'[dissipative] DETACH drone {d} (OCP resize): n={self.n}, '
             f'trajectory held {self._reconfig_hold_s:.1f} s; surviving ring spans a '
             f'{gap:.0f} deg gap ({"CoG inside" if gap < 180.0 - 1e-6 else "CoG ON/OUTSIDE the hull — the load cannot hang level"})')
+        return True
+
+    def _start_unload(self, d):
+        """Soft detach, phase 1: in the n-drone OCP blend the leaver's tension down to
+        detach_unload_t and the survivors' up to their balanced n-1 split (directions held),
+        with the trajectory clock held. _unload_tick opens the magnet once the blend is done
+        and the gates pass, or cancels."""
+        plan = self._detach_plan(d)
+        if plan is None:
+            return
+        k = self.slot2drone.index(d)
+        _, t_pre = self.refs._refs_at(0)
+        target = unload_tensions(self.dyn.rho, self.refs._s_nom, self.dyn.m, k, self._unload_t,
+                                 rod_mass=getattr(self.dyn, 'mr', 0.0),
+                                 rod_lam=getattr(self.dyn, 'lam', 0.0))
+        self.refs.balanced_blend = False
+        self.refs.retarget(target, self._unload_s)
+        self._unload = {'d': d, 'k': k, 'plan': plan, 't_pre': list(t_pre),
+                        'target': target, 'waited': 0.0}
+        self._reconfig_hold_left = self._unload_s + self._unload_wait + 1.0
+        pct = ' '.join(f'd{self.slot2drone[i]} {t_pre[i]:.2f}->{target[i]:.2f} '
+                       f'({100.0 * (target[i] / max(t_pre[i], 1e-6) - 1.0):+.0f}%)'
+                       for i in range(len(target)))
+        self.get_logger().warn(
+            f'[dissipative] UNLOAD drone {d} over {self._unload_s:.1f} s before release: {pct} N; '
+            f'survivors span a {plan[2]:.0f} deg gap')
+
+    def _unload_tick(self):
+        """Soft detach, phase 2 (every tick while unloading): once the blend is done,
+        release when the leaver's planned tension and the ring tilt pass the gates, or
+        cancel after detach_unload_wait_s."""
+        u = self._unload
+        if u is None or self.refs.blend_active():
+            return
+        u['waited'] += 1.0 / PLANNER_HZ
+        X = self.solver.last_X
+        t_leave = (float(X[13 + 14 * u['k'] + 12, min(1, X.shape[1] - 1)])
+                   if X is not None else float('inf'))
+        R = quat_to_rot_np(self.load_state[3:7])
+        tilt = float(np.degrees(np.arccos(np.clip(R[2, 2], -1.0, 1.0))))
+        if t_leave <= self._unload_t + 0.3 and tilt <= self._unload_tilt:
+            self._unload = None
+            t_from = [t for i, t in enumerate(u['target']) if i != u['k']]
+            self.get_logger().warn(
+                f'[dissipative] UNLOADED drone {u["d"]}: planned {t_leave:.2f} N, ring tilt '
+                f'{tilt:.1f} deg - releasing')
+            if not self._resize_and_release(u['d'], *u['plan'],
+                                            post_blend=(t_from, self._post_blend_s)):
+                self._unload = u
+                self._cancel_unload('resize failed')
+        elif u['waited'] >= self._unload_wait:
+            self._cancel_unload(f'gates not met {self._unload_wait:.1f} s after the blend '
+                                f'(leaver planned {t_leave:.2f} N, tilt {tilt:.1f} deg)')
+
+    def _detect_tick(self):
+        """Unannounced detach: a cable cannot measure longer than itself while its magnet
+        holds, so two ticks over its length by detach_detect_m mean the drone is gone. Resize
+        to the survivors as an announced detach would (its magnet OFF is sent too: harmless
+        if already open, and it stops a half-held magnet from catching again)."""
+        if (self._detect_m <= 0.0 or self.phase != 'planner' or self._reconfig_mode != 'ocp'
+                or self._land_to_ground or self._unload is not None or not self.takeoff_seen):
+            return
+        for i, d in enumerate(list(self.slot2drone)):
+            if self.detached[d] or d in self._detect_refused:
+                continue
+            try:
+                dist = self._rim_dist(i)
+            except (TypeError, IndexError, ValueError):      # a pose not in yet
+                continue
+            # against the longer of the typed and measured rod: a rod measured short at the
+            # handover (r001: 0.48) reads over once taut, which is not a release
+            over = dist - max(float(self.cable_len), float(self.cable_len_i[i]))
+            if over <= self._detect_m:
+                self._detect_count[d] = 0
+                self._detect_ok[d] = over
+                continue
+            self._detect_count[d] = self._detect_count.get(d, 0) + 1
+            # and it must have JUMPED since the last tick within the threshold: a release
+            # stretches 10+ cm in 0.1-0.2 s (r200006), a mocap bias does not move
+            rise = over - self._detect_ok.get(d, over)
+            if self._detect_count[d] >= 2 and rise >= 0.03:
+                self.get_logger().warn(
+                    f'[dissipative] UNANNOUNCED DETACH: drone {d} cable {dist:.3f} m, '
+                    f'{100.0 * over:.0f} cm over its length (up {100.0 * rise:.0f} cm) - resizing')
+                self._detect_count = {}
+                self._detach_ocp(d)
+                if not self.detached[d]:
+                    self._detect_refused.add(d)
+                return
+
+    def _cancel_unload(self, why):
+        """Abandon a soft detach: the tensions blend back to the full split and the magnet
+        stays ON."""
+        u, self._unload = self._unload, None
+        if u is None:
+            return
+        back = max(self._unload_s, 0.5)      # as gently as the unload went
+        self.refs.retarget(u['t_pre'], back)
+        self._reconfig_hold_left = back
+        self.get_logger().warn(
+            f'[dissipative] UNLOAD CANCELLED for drone {u["d"]}: {why}; tensions blend back '
+            f'over {back:.1f} s, magnet stays ON')
 
     def _log_resize_inputs(self, what, d, t_before, s_from, t_from):
         """One JSON line with what the resized OCP starts from (M1 weld yank vs the bench,
@@ -1227,7 +1389,14 @@ class DissipativeController(LoadPlanner):
             return
         if msg.data.strip().upper() == 'ARM':
             self._arm_magnets()
+        self._unload_cancel_on(msg.data)
         super()._fleet_command_cb(msg)
+
+    def _unload_cancel_on(self, cmd):
+        """A LAND, DISARM, ESTOP or ABORT during a soft detach cancels it (magnet stays ON)."""
+        cmd = cmd.strip().upper()
+        if self._unload is not None and cmd in ('LAND', 'DISARM', 'ESTOP', 'ABORT'):
+            self._cancel_unload(f'{cmd} received')
 
     def _arm_magnets(self):
         """The radio latches the last magnet value across flights: re-arm every tether

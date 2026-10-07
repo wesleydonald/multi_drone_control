@@ -1,0 +1,3 @@
+# 7 Oct rig, spin with 100 g in the ring: hover 10 s before the path (height does not integrate during a
+# spin, and the extra weight needs about 10 s to learn)
+traj_hold_s: 10.0

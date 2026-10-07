@@ -31,6 +31,37 @@ def blend_refs(s_from, s_nom, t_from, t_nom, a):
     return s_out, t_out
 
 
+def unload_tensions(rho, s_dirs, load_mass, k, t_leave, rod_mass=0.0, rod_lam=0.0, g=9.81, t_min=0.1):
+    """Tension references that hand slot k's share to the others before it lets go (the
+    soft detach): slot k at t_leave, the rest at the split that holds the load level WITH
+    slot k's remaining pull counted (the static balance of balanced_tensions, least squares
+    from the equal split). With the directions unchanged a linear blend to it is balanced
+    all the way, because both ends are. After the release the n-1 builder's own split
+    differs from this by slot k's t_leave share; the post-release blend covers that."""
+    n = len(rho)
+    keep = [i for i in range(n) if i != k]
+    s = [np.asarray(v, float).reshape(3) for v in s_dirs]
+    r = [np.asarray(v, float).reshape(3) for v in rho]
+    b = np.array([0.0, 0.0, -float(load_mass) * g, 0.0, 0.0, 0.0])
+    if rod_mass > 0.0:
+        G = np.array([0.0, 0.0, -g])
+        for i in range(n):
+            R_i = rod_mass * (rod_lam * float(G @ s[i]) * s[i] + (1.0 - rod_lam) * G)
+            b[0:3] += R_i
+            b[3:6] += np.cross(r[i], R_i)
+    f_k = float(t_leave) * s[k]
+    b = b - np.concatenate([f_k, np.cross(r[k], f_k)])
+    A = np.stack([np.concatenate([s[i], np.cross(r[i], s[i])]) for i in keep], axis=1)
+    sz = -np.mean([s[i][2] for i in keep])
+    t_eq = np.full(len(keep), -b[2] / max(len(keep) * sz, 1e-9))
+    t = t_eq + np.linalg.pinv(A) @ (b - A @ t_eq)
+    out = [0.0] * n
+    for i, v in zip(keep, t):
+        out[i] = float(max(v, t_min))
+    out[k] = float(t_leave)
+    return out
+
+
 def rebalance_incumbents(rho, s_dirs, t, load_mass, fixed=(-1,), g=9.81, t_min=0.1):
     """Keep the `fixed` slots' tensions and re-solve the others (least squares, closest to
     the given values) so the blended references still hold the load up and level:
@@ -102,6 +133,14 @@ class ReferenceBuilder:
             return
         self._blend = ([np.asarray(v, float) for v in s_from],
                        [float(v) for v in t_from], float(blend_s), 0.0)
+
+    def retarget(self, t_nom, blend_s):
+        """Blend the tension references from where they are now (a running blend
+        included) to new nominal tensions over blend_s, directions held: the soft
+        detach's unload, and its cancel back to the full split."""
+        s_now, t_now = self._refs_at(0)
+        self._t_nom = [float(v) for v in t_nom]
+        self.start_blend(s_now, t_now, blend_s)
 
     def blend_active(self):
         return self._blend is not None

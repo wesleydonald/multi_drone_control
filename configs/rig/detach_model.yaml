@@ -1,0 +1,4 @@
+# rig detach runs (Wesley 7 Oct evening): the trackers fly the planned cable pull, so a soft detach's
+# planned unload reaches the drones; the freed drone steps 0.5 m out from the ring, then holds
+cable_source: 'model'
+detach_step_out_m: 0.5

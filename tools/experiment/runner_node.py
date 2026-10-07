@@ -138,6 +138,9 @@ class ExperimentRunner(Node):
         self.magnet_pub = self.create_publisher(String, '/magnet/command', 10)
         self.attach_pub = self.create_publisher(Int32, '/fleet/attach', 10)
         self.detach_pub = self.create_publisher(Int32, '/fleet/detach', 10)
+        # RELEASE: the joint's own topic, made at start so it is matched before the event
+        self.release_pubs = {int(e.arg): self.create_publisher(Empty, f'/drone_{int(e.arg)}/detach', 1)
+                             for e in cfg.events if e.do == 'RELEASE'}
         if any(e.do == 'WRENCH' for e in cfg.events):
             self._wrench_publisher()
         self.handoff_pub = self.create_publisher(Bool, '/join_planner/handoff_ready', 10)
@@ -469,6 +472,11 @@ class ExperimentRunner(Node):
         elif ev.do == 'DETACH':
             self._publish(self.detach_pub, Int32(data=int(ev.arg)),
                           f'/fleet/detach {ev.arg}')
+        elif ev.do == 'RELEASE':
+            # the joint only, as a magnet that fails: the planner has to notice by itself
+            pub = self.release_pubs[int(ev.arg)]
+            self._publish(pub, Empty(), f'/drone_{ev.arg}/detach (unannounced)')
+            self._repeats.append((self._rel() + 0.5, pub, Empty()))
         elif ev.do == 'HANDOFF':
             # latched True, as his planner does while ATTACH_READY; the consumers act on
             # the first True only

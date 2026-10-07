@@ -1,0 +1,42 @@
+name: twin_default_detach_3915
+description: 'Rig twin on the sim defaults (5 Oct): four drones on plates 1/3/5/9, DETACH plate 3, LAND.
+  Only the world, the fleet, the layout and the events are set. Neighbour of w4_3915_detach_def (R1076),
+  which typed every twin value and target_z 1.0. Falsifier: an abort, a tip at LAND, hold height error
+  over 1 cm, or int_mode read back other than reference.'
+world: four_rigid_ground_rig_3915.sdf
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    mode: dissipative
+    num_drones: 4
+    attach_azimuths_deg: 30,90,150,270
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 4
+    detach: true
+fleet:
+  num_drones: 4
+  n_total: 4
+timing:
+  duration_s: 120.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 20.0
+  do: DETACH
+  arg: 1
+- t: 40.0
+  do: LAND
+criteria:
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5

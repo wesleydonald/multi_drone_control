@@ -1,0 +1,3 @@
+# 7 Oct rig: hover 5 s at the target before the path, so the ring integral learns a steady push at
+# rest and carries it into the trajectory (twin 6 Oct: R1087, R1091 at 8 s; 5 s learns 94 %)
+traj_hold_s: 5.0

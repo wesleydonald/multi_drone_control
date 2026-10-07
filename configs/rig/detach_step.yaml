@@ -1,0 +1,2 @@
+# 7 Oct rig, detach runs: the freed drone steps 0.5 m radially out from the ring at 0.15 m/s, then holds
+detach_step_out_m: 0.5

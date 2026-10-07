@@ -1,0 +1,43 @@
+name: twin_default_hover_n3
+description: 'Rig twin on the sim defaults (5 Oct: the twin is the simulation): only the world, the fleet
+  and the events are set. Three drones, even ring, floor start, hover at the default 0.6 m. Neighbour of
+  b2_cap075_fix_n3_def (R1077), which typed every twin value and target_z 1.0. Falsifier: an abort, a
+  tip at LAND, hold height error over 1 cm, or int_mode read back other than model.'
+world: three_rigid_ground_rig.sdf
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    mode: mpc
+    num_drones: 3
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 3
+fleet:
+  num_drones: 3
+  n_total: 3
+timing:
+  duration_s: 120.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 48.0
+  do: LAND
+criteria:
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+  hold_window_s: 20.0
+  max_planner_solve_fail: 1
+  max_hold_z_err_m: 0.05
+  max_heave_pp_m: 0.03
+  max_payload_tilt_deg: 5.0
+  max_hold_tilt_mean_deg: 2.0

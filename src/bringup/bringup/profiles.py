@@ -38,7 +38,7 @@ KEPT_COMMON = (
     'safety_ref_timeout_s', 'reconfig_mode', 'reconfig_hold_s', 'diss_ki_load',
     'reserved_attach', 'enable_approach', 'enable_approach_mpc', 'attach_cable_len',
     'attach_central', 'attach_handout', 'attach_t_handout', 'attach_elev_deg', 'attach_x_offset',
-    'attach_y_offset', 'attach_traj_hold_s', 'attach_traj_hold_mode', 'attach_t_start_new',
+    'attach_y_offset', 'detach_unload_s', 'attach_traj_hold_s', 'attach_traj_hold_mode', 'attach_t_start_new',
     'attach_blend_balanced', 'attach_datum_shift', 'attach_moving', 'diss_balanced_tensions',
     'weld_radius', 'weld_velocity_clock', 'enable_obstacle_avoidance', 'partner',
     'partner_attached', 'partner_m2', 'partner_m2_part')

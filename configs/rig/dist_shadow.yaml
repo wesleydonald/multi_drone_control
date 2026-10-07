@@ -1,0 +1,2 @@
+# 7 Oct rig: option A logs its force estimate (dist_est.csv beside the planner log), applies nothing
+dist_est: 'shadow'

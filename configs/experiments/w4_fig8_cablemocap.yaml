@@ -1,0 +1,71 @@
+criteria:
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.45
+  max_planner_solve_fail: 1
+description: 'Figure-8 arm: w4_even_fig8_def with cable_source mocap. Card docs/experiments/2026-10-07_cable_mocap.md.'
+events:
+- do: ARM
+  t: 3.0
+- do: TAKEOFF
+  t: 6.0
+- arg: 0.3 60
+  do: WAIT_LIFT
+  t: 8.0
+- do: LAND
+  t: 90.0
+fleet:
+  n_total: 4
+  num_drones: 4
+io_launch:
+  args:
+    num_drones: 4
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+  file: sim_io_launch.py
+launch:
+  args:
+    attach_radius: 0.225
+    attach_z: 0.02
+    cable_len: 0.55
+    creep_vel: 0.2
+    drone_mass: 0.55
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_elev_deg: 45.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.1
+    load_mass: 0.86
+    load_traj: fig_8
+    measure_rod_len: true
+    mode: mpc
+    num_drones: 4
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.0
+    throttle_max: 0.8
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    traj_radius: 1.0
+    traj_speed: 0.25
+    params_file: /home/wesley/multi_drone_control/configs/rig/cable_mocap.yaml
+  file: sim_control_launch.py
+  package: bringup
+name: w4_fig8_cablemocap
+timing:
+  duration_s: 120.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+world: four_rigid_ground_rig.sdf

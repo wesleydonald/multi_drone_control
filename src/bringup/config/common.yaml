@@ -45,7 +45,7 @@ trajectory:
   int_k_z: 7.13
   int_settle_s: ''             # s, model mode: the ring-speed gate only this long after the lift (default: always)
   traj_hold_s: ''              # s, '' = 0: hover this long at the target before a load trajectory starts (6 Oct)
-  detach_step_out_m: ''        # m, '' = 0: a detached drone steps this far out from the ring, then holds (7 Oct)
+  detach_step_out_m: 0.5       # m: a detached drone steps this far radially out from the ring centre, then holds (Wesley 7 Oct: default, for safety)
   terminal_vel_ref: false
 thrust_map:
   thrust_v_ref: 23.5
@@ -78,6 +78,13 @@ watchdogs:
 fleet_resize:
   reconfig_hold_s: 1.5
   min_survivors: 3
+  detach_unload_s: ''          # s, '' = 0: soft detach, unload the leaver before its magnet opens (7 Oct)
+  detach_unload_t: ''          # N, '' = 0.5: the leaver's tension at release
+  detach_unload_tilt_deg: ''   # deg, '' = 10: release only below this ring tilt
+  detach_unload_wait_s: ''     # s, '' = 2: gates not met this long after the blend: cancel
+  detach_post_blend_s: ''      # s, '' = 1: survivors' blend after the resize
+  detach_detect_m: ''          # m, '' = 0 (off): a cable this much over its length for 2 ticks = an unannounced detach (7 Oct)
+  departed_land: ''            # '' = false: a freed drone lands after its step-out while the fleet flies on (7 Oct)
 network:
   auto_handover_settle_s: 1.5
   net_horizon_preview: true

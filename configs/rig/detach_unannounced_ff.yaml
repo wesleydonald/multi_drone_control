@@ -1,0 +1,5 @@
+# unannounced detach with the cable FEEDFORWARD (planned pull) instead of the measured pull: detection
+# 0.06 m over the rod, the freed drone steps 0.5 m out (twin or rig; Wesley 7 Oct night)
+cable_source: 'model'
+detach_detect_m: 0.06
+detach_step_out_m: 0.5

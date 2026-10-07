@@ -32,6 +32,8 @@ EVENT_KINDS = {
     'MAGNET',     # /magnet/command "ON"/"OFF"  -> starts the approach + weld
     'ATTACH',     # /fleet/attach <drone id>    -> tell the network directly
     'DETACH',     # /fleet/detach <drone id>
+    'RELEASE',    # /drone_<id>/detach only: the joint lets go and the planner is NOT told
+                  # (an unannounced detach, a magnet failing mid-mission; 7 Oct)
     'WAIT_WELD',  # not published: block until /magnet/object_attached goes True
     'WAIT_LIFT',  # not published: block until the payload is above arg m (default 0.5), then
                   # shift every later event by the wait (a creep lift varies by ~10 s, R0553);
@@ -124,7 +126,7 @@ class Event:
             raise ValueError(f"WAIT_THRUST arg {self.arg!r} has no '{{i}}' for the drone id")
         if self.do == 'WRENCH':
             wrench_arg(self.arg)
-        if self.do in ('ATTACH', 'DETACH'):
+        if self.do in ('ATTACH', 'DETACH', 'RELEASE'):
             if self.arg is None:
                 raise ValueError(f'{self.do} needs a drone id as its arg')
             self.arg = int(self.arg)
