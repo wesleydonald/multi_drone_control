@@ -337,6 +337,10 @@ First rig step if Wesley wants it: a forced drop (`/fleet/drop`) from a low hove
 
 ## Week4 port (8 Oct morning): live for today's rig detaches
 
+**Reviewer, 8 Oct ~09:40: numbers SUPPORTED** (all rows, R1204-R1213); branch content and the carry
+claim supported. It flagged that the rig tree did not yet hold the port (merged into week4 afterwards,
+gate --quick 449) and that the announced 1/3/6/9 pairing had no twin run (R1214/R1215 below).
+
 Wesley, 8 Oct: the plain 30 deg rule, and "we can include that safety in the current code". Branch
 `drop-port` = week4 dbbbb70 plus the two drop commits (098f3be, 7ed29c9; cherry-picked as c142662, c9b6cc6) and nothing else. It does not
 include the model integral, the dissipative default or detection on by default. Drop stays behind
@@ -355,11 +359,13 @@ Twin on the lab PC, 4 slots, 2 runs per arm, on the rig configs themselves:
 | D2 forced from hover | R1205, R1210 | drop | runner DROP | 0 | - | 14.6, 14.7 deg | 8.6 s | 0.13, 0.14 m | landed + disarmed |
 | D3 one release, 1/3/6/9 (r304 layout) | R1206, R1211 | no drop | none | 0 | 15.5, 18.2 deg | - | - | - | landed |
 | announced, 1/3/5/9 (r302) | R1207, R1212 | no drop | none | 0 | 7.4, 8.6 deg (R1118: 8.4) | - | - | - | landed |
+| announced, 1/3/6/9 (r304 if r302 wins) | R1214, R1215 | no drop | none | 0 | 19.5, 20.0 deg (R1121: 16.4) | - | - | - | landed |
 | circle detach (r305) | R1208, R1213 | no drop | none | 0 | 7.3, 6.0 deg (U1o: 8.7-9.3) | - | - | - | landed, freed drone 1.45 m from the circle centre |
 
-**Verdict: SUPPORTS on week4.** All 10 runs did what their arm expected. The planner's min_survivors
+**Verdict: SUPPORTS on week4.** All 12 runs did what their arm expected (R1214/R1215 added after the
+reviewer found no twin run of the announced 1/3/6/9 pairing). The planner's min_survivors
 rule now has a flight as well (R1204, 0.02 s ahead of the trackers). The no-drop margin on the r304
-layout is 11.8 deg.
+layout is 11.8 deg unannounced, 10.0 deg announced.
 
 The rig risks are still the ones listed above: the magnet delay, slack and snatch, glitches, and
 whether 30 deg is recoverable.
