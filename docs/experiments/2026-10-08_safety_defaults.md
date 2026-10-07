@@ -178,3 +178,24 @@ branch):
 - detach_detect_m '' -> 0.06;
 - the drop knobs added (off by default);
 - int_mode model for detach flights (launch rule).
+
+**Clean figure-8 pair (05:40)** (R1202/R1203: safety-defaults 7ed29c9, clean tree, fixed runner,
+laptop; both landed, no detector fire):
+
+| run | mode | A0 (s) | L0 (s) | RMSE 3D (cm) | carry tilt max (deg) |
+|---|---|---|---|---|---|
+| R1170, R1201 | mpc | 0.069, 0.065 | 0.168, 0.165 | 1.82, 1.30 | 3.9, 4.2 |
+| R1202, R1203 | dissipative | 0.068, 0.079 | 0.170, 0.181 | 2.20, 1.82 | 3.9, 3.4 |
+
+- **Lag:** inside the bar (mpc + 20 % = 0.083 s).
+- **RMSE:** R1202 is 0.02 cm over the support bar (2.18 cm) and under the falsifier (1.5 x the mpc
+  mean = 2.34 cm).
+- Over all four dissipative figure-8 runs, RMSE averages 1.94 cm against mpc's 1.56. That is inside
+  the mpc runs' own spread (1.30-1.82) but leans worse.
+- **S final:**
+  - the circle supports (a clean pair inside the mpc pair);
+  - the figure-8 is grey (lag the same, RMSE possibly 0.3-0.4 cm worse, not resolved by 2+4 runs).
+
+  Making dissipative the default carry mode is your call. More figure-8 pairs would settle it if it
+  matters.
+
