@@ -56,6 +56,12 @@ DEPARTED_PATH_CLEAR_M = 1.0
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
 
 
+def _who(d):
+    """A drone in operator lines: its label (1-4, as RViz, the fleet manager and the airframes)
+    and its topic index."""
+    return f'drone {d + 1} (/drone_{d})'
+
+
 def _largest_gap_deg(rho):
     """Largest angular gap between consecutive attach points, degrees.
 
@@ -578,7 +584,7 @@ class DissipativeController(LoadPlanner):
                     (d not in self._departed_step or
                      float(np.linalg.norm(p_hold - self._departed_step[d])) < 0.02)):
                 if d not in self._departed_landing:
-                    self.get_logger().info(f'[dissipative] departed drone {d} lands now (departed_land)')
+                    self.get_logger().info(f'[dissipative] departed {_who(d)} lands now (departed_land)')
                 self._departed_landing.add(d)
             early = d in self._departed_landing and not down
             if self._land_to_ground and not down and not self._departed_clear.get(d, False) \
@@ -615,7 +621,7 @@ class DissipativeController(LoadPlanner):
                 if pos is not None and not td.stalled and td.update([float(pos[2])]):
                     td.stalled = True
                     p_hold[2] = float(pos[2])
-                    self.get_logger().info(f'[dissipative] departed drone {d} is down')
+                    self.get_logger().info(f'[dissipative] departed {_who(d)} is down')
             self._publish_ref(d, [(p_hold, zero, g, zero)] * (self.N + 1))
 
     def _attach_target_cb(self, msg: PoseStamped):
@@ -760,7 +766,7 @@ class DissipativeController(LoadPlanner):
         # JOINED mid-flight (reserved id >= n) can leave again (R0223/R0224 crashed here).
         slot = self._drone_to_net_slot(d)
         if slot is None or not self.net.attached[slot]:
-            self.get_logger().warn(f'[dissipative] detach: drone {d} is not on the load')
+            self.get_logger().warn(f'[dissipative] detach: {_who(d)} is not on the load')
             return
         if self.net.n_attached() - 1 < max(2, self._min_survivors):
             self.get_logger().error(
@@ -777,7 +783,7 @@ class DissipativeController(LoadPlanner):
             # magnet manager releases the weld on OFF (detach_when_magnet_off).
             self._magnet_cmd_pub.publish(String(data='OFF'))
         self.get_logger().info(
-            f'[dissipative] DETACH drone {d} (slot {slot}); '
+            f'[dissipative] DETACH {_who(d)} (slot {slot}); '
             f'{self.net.n_attached()} drones remain on the load')
 
     def _detach_ocp(self, d):
@@ -802,7 +808,7 @@ class DissipativeController(LoadPlanner):
         """(survivors, their attach points, largest gap) for detaching d, or None after
         logging why it is refused."""
         if d not in self.slot2drone:
-            self.get_logger().warn(f'[dissipative] detach: drone {d} is not on the load')
+            self.get_logger().warn(f'[dissipative] detach: {_who(d)} is not on the load')
             return None
         survivors = [x for x in self.slot2drone if x != d and not self.detached[x]]
         if len(survivors) < max(2, self._min_survivors):
@@ -863,18 +869,18 @@ class DissipativeController(LoadPlanner):
             out = hold[:2] - np.asarray(self.load_state[0:2], float)
             out = out / max(float(np.linalg.norm(out)), 1e-6)
             self._departed_step[d] = hold + self._detach_step_out * np.array([out[0], out[1], 0.0])
-            self.get_logger().info(f'[dissipative] departed drone {d} steps {self._detach_step_out:.2f} m '
+            self.get_logger().info(f'[dissipative] departed {_who(d)} steps {self._detach_step_out:.2f} m '
                                    f'out from the ring at {DETACH_STEP_VEL:.2f} m/s, then holds')
             clear = self._path_clear_point(self._departed_step[d], out)
             if clear is not None:
                 self._departed_next[d] = clear
                 self.get_logger().info(
-                    f'[dissipative] departed drone {d} then clears the {self.traj.kind}: to '
+                    f'[dissipative] departed {_who(d)} then clears the {self.traj.kind}: to '
                     f'({clear[0]:.2f}, {clear[1]:.2f}), {self.traj.radius + DEPARTED_PATH_CLEAR_M:.2f} m '
                     f'from the path centre')
         self._reconfig_hold_left = self._reconfig_hold_s
         self.get_logger().warn(
-            f'[dissipative] DETACH drone {d} (OCP resize): n={self.n}, '
+            f'[dissipative] DETACH {_who(d)} (OCP resize): n={self.n}, '
             f'trajectory held {self._reconfig_hold_s:.1f} s; surviving ring spans a '
             f'{gap:.0f} deg gap ({"CoG inside" if gap < 180.0 - 1e-6 else "CoG ON/OUTSIDE the hull — the load cannot hang level"})')
         return True
@@ -917,7 +923,7 @@ class DissipativeController(LoadPlanner):
                        f'({100.0 * (target[i] / max(t_pre[i], 1e-6) - 1.0):+.0f}%)'
                        for i in range(len(target)))
         self.get_logger().warn(
-            f'[dissipative] UNLOAD drone {d} over {self._unload_s:.1f} s before release: {pct} N; '
+            f'[dissipative] UNLOAD {_who(d)} over {self._unload_s:.1f} s before release: {pct} N; '
             f'survivors span a {plan[2]:.0f} deg gap')
 
     def _unload_tick(self):
@@ -992,7 +998,7 @@ class DissipativeController(LoadPlanner):
             rise = over - self._detect_ok.get(d, over)
             if self._detect_count[d] >= 2 and rise >= 0.03:
                 self.get_logger().warn(
-                    f'[dissipative] UNANNOUNCED DETACH: drone {d} cable {dist:.3f} m, '
+                    f'[dissipative] UNANNOUNCED DETACH: {_who(d)} cable {dist:.3f} m, '
                     f'{100.0 * over:.0f} cm over its length (up {100.0 * rise:.0f} cm) - resizing')
                 self._detect_count = {}
                 self._detach_ocp(d)
