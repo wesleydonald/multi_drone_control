@@ -54,6 +54,7 @@ DETACH_STEP_VEL = 0.15     # m/s, a freed drone's step out from the ring (detach
 # also steps out from the PATH centre to r_orbit + this before it holds or lands
 DEPARTED_PATH_CLEAR_M = 1.0
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
+DROP_LAND_WAIT_S = 30.0    # s after a drop: /fleet/landed even if a drone never reads as down
 
 
 def _who(d):
@@ -412,6 +413,24 @@ class DissipativeController(LoadPlanner):
         self._magnet_pubs = ([self.create_publisher(String, f'/drone_{i}/magnet', 1)
                               for i in range(self._n_carry0)] if self._detach_magnet else [])
 
+        # Drop and land (card 2026-10-08_drop_and_land, Wesley 8 Oct): a loss that leaves fewer
+        # than min_survivors or a gap >= 180 deg, any loss in LAND, or a tracker's ring-tilt
+        # request on /fleet/drop -> every magnet OFF, the ring is dropped and every drone steps
+        # clear and lands. Detach mode only; off by default.
+        self._drop_on_loss = bool(self.declare_parameter('drop_on_loss', False).value)
+        if self._drop_on_loss and self._reconfig_mode != 'ocp':
+            self.get_logger().error('[dissipative] drop_on_loss needs reconfig_mode ocp: '
+                                    'turned off')
+            self._drop_on_loss = False
+        self._dropped = None            # the reason, once dropped
+        self._drop_centre = None        # ring xy at the drop: the clear-out centre
+        self._drop_t = None
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                             reliability=ReliabilityPolicy.RELIABLE)
+        self._dropped_pub = self.create_publisher(Bool, '/fleet/payload_dropped', latched)
+        self._dropped_pub.publish(Bool(data=False))
+        self.create_subscription(String, '/fleet/drop', self._drop_request_cb, 10)
+
         # ATTACH wiring for each reserved drone (physical id self.n + j): its own mocap in,
         # its reference out (appended so ref_pub[d] is valid for d>=self.n), plus the two
         # attach triggers. The magnet weld itself is done by the collaborator's manager,
@@ -478,6 +497,9 @@ class DissipativeController(LoadPlanner):
     def _plan_inner(self):
         """The inherited timer calls this. In the network phase we run the spring-damper
         network; otherwise the inherited OCP planner flies (creep -> lift -> hover)."""
+        if self._dropped is not None:
+            self._drop_tick()
+            return
         if self._departed_hold:
             self._publish_departed_refs()
         self._partner_release_tick()
@@ -737,6 +759,9 @@ class DissipativeController(LoadPlanner):
     # ── detach: hand over to the dissipative network, then drop a drone ──────
     def _fleet_detach_cb(self, msg: Int32):
         d = int(msg.data)
+        if self._dropped is not None:
+            self.get_logger().warn('[dissipative] detach ignored - the ring was dropped, landing')
+            return
         if not (0 <= d < len(self.detached)):
             self.get_logger().warn(f'[dissipative] /fleet/detach {d} out of range')
             return
@@ -901,6 +926,93 @@ class DissipativeController(LoadPlanner):
         u = v / n if n > 0.05 else np.asarray(out[:2], float) / max(float(np.linalg.norm(out[:2])), 1e-6)
         return np.array([*(c + u * r_clear), float(p[2])])
 
+    def _drop_due(self, d):
+        """Why losing d means dropping the ring, or None to resize as usual: in LAND, fewer than
+        min_survivors left, or the survivors' largest gap >= 180 deg (CoG on or outside them)."""
+        if self._land_to_ground:
+            return 'during LAND'
+        survivors = [x for x in self.slot2drone if x != d and not self.detached[x]]
+        if len(survivors) < max(2, self._min_survivors):
+            return f'{len(survivors)} would remain (min_survivors {self._min_survivors})'
+        rho_of = {self.slot2drone[sl]: self.rho[sl] for sl in range(len(self.slot2drone))}
+        gap = _largest_gap_deg([rho_of[x] for x in survivors])
+        if gap >= 180.0 - 1e-6:
+            return f'the survivors span a {gap:.0f} deg gap (CoG on or outside them)'
+        return None
+
+    def _drop_request_cb(self, msg):
+        if not self._drop_on_loss:
+            self.get_logger().warn(f'[dissipative] /fleet/drop ignored (drop_on_loss off): '
+                                   f'{msg.data}')
+            return
+        if self.phase != 'planner' or not self.takeoff_seen:
+            self.get_logger().warn(f'[dissipative] /fleet/drop ignored - not flying: {msg.data}')
+            return
+        self._drop_and_land(msg.data)
+
+    def _drop_and_land(self, reason):
+        """Every magnet OFF, the ring dropped, every drone a departed drone that steps clear of
+        the ring (DEPARTED_CLEAR_R from where the ring was) and lands; the OCP stops."""
+        if self._dropped is not None:
+            return
+        self._dropped = reason
+        self._drop_t = time.monotonic()
+        self._cancel_unload_quietly()
+        self.get_logger().error(f'[dissipative] DROP AND LAND: {reason} - every magnet OFF, '
+                                f'the ring is dropped, every drone steps clear and lands')
+        self._drop_centre = (np.asarray(self.load_state[0:2], float).copy()
+                             if self.load_state is not None else None)
+        for d in range(len(self.detached)):
+            if d < len(self.detach_pub) and not self.detached[d]:
+                self.detach_pub[d].publish(Empty())          # the twin's joints
+            self.detached[d] = True
+            if d in self._departed_hold and self._departed_hold[d] is not None:
+                continue                                     # left earlier: keeps its own plan
+            pos = self.drone_pos[d] if d < len(self.drone_pos) else None
+            if pos is None:
+                self._departed_hold[d] = None
+                continue
+            vel = self.drone_vel[d] if d < len(self.drone_vel) and self.drone_vel[d] is not None \
+                else np.zeros(3)
+            # hold where the drone will have braked to, not where it is (a zero-velocity hold
+            # at the current pose is a hard brake for a drone already moving)
+            hold = np.asarray(pos, float) + 0.2 * np.clip(np.asarray(vel, float), -1.0, 1.0)
+            self._departed_hold[d] = hold
+            if self._drop_centre is not None:
+                v = hold[:2] - self._drop_centre
+                r = float(np.linalg.norm(v))
+                if r < DEPARTED_CLEAR_R:
+                    u = v / r if r > 1e-6 else np.array([1.0, 0.0])
+                    self._departed_step[d] = np.array([*(self._drop_centre + u * DEPARTED_CLEAR_R),
+                                                       float(hold[2])])
+        self._departed_next = {}
+        self._departed_land = True
+        self._dropped_pub.publish(Bool(data=True))
+        self._release_all_magnets()
+
+    def _cancel_unload_quietly(self):
+        if getattr(self, '_unload', None) is not None:
+            self._unload = None
+
+    def _release_all_magnets(self):
+        """Every tether OFF; re-sent each tick of a drop (one lost radio OFF would leave a drone
+        tied to a fallen ring)."""
+        for pub in self._magnet_pubs:
+            pub.publish(String(data='OFF'))
+
+    def _drop_tick(self):
+        self._release_all_magnets()
+        self._publish_departed_refs()
+        if self._landed:
+            return
+        late = time.monotonic() - self._drop_t > DROP_LAND_WAIT_S
+        if self._departed_down() or late:
+            self._landed = True
+            self.landed_pub.publish(Bool(data=True))
+            self.get_logger().warn('[dissipative] after the drop every drone is down - announcing '
+                                   '/fleet/landed' + (f' (timed out after {DROP_LAND_WAIT_S:.0f} s)'
+                                                      if late else ''))
+
     def _start_unload(self, d):
         """Soft detach, phase 1: in the n-drone OCP blend the leaver's tension down to
         detach_unload_t and the survivors' up to their balanced n-1 split (directions held),
@@ -958,8 +1070,9 @@ class DissipativeController(LoadPlanner):
         holds, so two ticks over its length by detach_detect_m mean the drone is gone. Resize
         to the survivors as an announced detach would (its magnet OFF is sent too: harmless
         if already open, and it stops a half-held magnet from catching again)."""
+        landing = self._land_to_ground and not (self._drop_on_loss and not self._load_down())
         if (self._detect_m <= 0.0 or self.phase != 'planner' or self._reconfig_mode != 'ocp'
-                or self._land_to_ground or self._unload is not None or not self.takeoff_seen):
+                or landing or self._unload is not None or not self.takeoff_seen):
             return
         now = time.monotonic()
         load_t = getattr(self, '_load_t', None)
@@ -1001,6 +1114,10 @@ class DissipativeController(LoadPlanner):
                     f'[dissipative] UNANNOUNCED DETACH: {_who(d)} cable {dist:.3f} m, '
                     f'{100.0 * over:.0f} cm over its length (up {100.0 * rise:.0f} cm) - resizing')
                 self._detect_count = {}
+                why = self._drop_due(d) if self._drop_on_loss else None
+                if why is not None:
+                    self._drop_and_land(f'unannounced loss of {_who(d)}: {why}')
+                    return
                 self._detach_ocp(d)
                 if not self.detached[d]:
                     self._detect_refused.add(d)
@@ -1443,8 +1560,20 @@ class DissipativeController(LoadPlanner):
             else:
                 self.get_logger().info('[dissipative] LAND (network) already in progress')
             return
-        if msg.data.strip().upper() == 'ARM':
+        cmd = msg.data.strip().upper()
+        if self._dropped is not None and cmd == 'LAND':
+            if self._landed:
+                self.landed_pub.publish(Bool(data=True))
+                self.get_logger().info('[dissipative] LAND after a drop - re-announcing '
+                                       '/fleet/landed')
+            else:
+                self.get_logger().info('[dissipative] LAND during a drop: every drone is '
+                                       'already landing')
+            return
+        if cmd == 'ARM':
             self._arm_magnets()
+            if self._dropped is None:
+                self._dropped_pub.publish(Bool(data=False))     # a re-ARM starts undropped
         self._unload_cancel_on(msg.data)
         super()._fleet_command_cb(msg)
 

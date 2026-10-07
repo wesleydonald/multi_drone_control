@@ -94,6 +94,12 @@ class CentralController(Node):
         # planner signals here once the LAND descent has finished, so we disarm.
         self.landed_sub = self.create_subscription(
             Bool, '/fleet/landed', self._landed_callback, 1)
+        # the planner dropped the ring and is landing every drone (card 2026-10-08_drop_and_land):
+        # landing from here on, so its /fleet/landed disarms the fleet as after a LAND
+        self.create_subscription(
+            Bool, '/fleet/payload_dropped', self._payload_dropped_callback,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                       reliability=ReliabilityPolicy.RELIABLE))
 
         # ── Per-drone arming service clients ──────────────────────────────
         self.arming_clients = {}
@@ -372,6 +378,13 @@ class CentralController(Node):
         # The planner also subscribes to /fleet/command and starts the descent.
         # The drones keep tracking the (now descending) reference until we disarm
         # on /fleet/landed below.
+
+    def _payload_dropped_callback(self, msg: Bool):
+        if not (msg.data and self.flying):
+            return
+        self.landing = True
+        _announce(self, 'error', "PAYLOAD DROPPED: every magnet released, every drone is stepping "
+                                 "clear and landing; the fleet disarms when they are all down.")
 
     def _landed_callback(self, msg: Bool):
         # planner reports the descent is complete; disarm to settle on the ground.

@@ -121,7 +121,8 @@ PLANNER_OPTIONAL = {'land_unwind': 'bool', 'dist_est': 'str', 'dist_tau': 'float
                     'cable_elev_deg': 'float', 'detach_unload_s': 'float',
                     'detach_unload_t': 'float', 'detach_unload_tilt_deg': 'float',
                     'detach_unload_wait_s': 'float', 'detach_post_blend_s': 'float',
-                    'detach_detect_m': 'float', 'departed_land': 'bool'}
+                    'detach_detect_m': 'float', 'departed_land': 'bool',
+                    'drop_on_loss': 'bool'}
 # the trackers' thrust map, which the disturbance estimate reads delivered thrust through
 DIST_MAP = ('thrust_ratio', 'thrust_offset', 'thrust_offset_v_slope', 'thrust_v_ref')
 
@@ -162,6 +163,23 @@ def planner_options(context, resizes=False):
             except ValueError:
                 raise RuntimeError(f'dist_est needs a numeric {k} (the trackers\' map), got {v!r}')
     return [opts] if opts else []
+
+
+# the trackers' half of drop and land (card 2026-10-08_drop_and_land): passed only when set
+TRACKER_DROP = {'drop_on_loss': 'bool', 'drop_tilt_deg': 'float', 'drop_samples': 'int',
+                'drop_glitch_step_deg': 'float'}
+
+
+def tracker_drop_options(context):
+    """{knob: value} of the set TRACKER_DROP knobs, for a detach graph's trackers."""
+    from launch.substitutions import LaunchConfiguration
+    out = {}
+    for k, kind in TRACKER_DROP.items():
+        v = LaunchConfiguration(k).perform(context).strip()
+        if v:
+            out[k] = (truthy(context, k) if kind == 'bool' else int(float(v)) if kind == 'int'
+                      else float(v))
+    return out
 
 
 def map_and_geometry(context, n, real):

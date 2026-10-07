@@ -147,6 +147,7 @@ class ExperimentRunner(Node):
         self.magnet_pub = self.create_publisher(String, '/magnet/command', 10)
         self.attach_pub = self.create_publisher(Int32, '/fleet/attach', 10)
         self.detach_pub = self.create_publisher(Int32, '/fleet/detach', 10)
+        self.drop_pub = self.create_publisher(String, '/fleet/drop', 10)
         # RELEASE: the joint's own topic, made at start so it is matched before the event
         self.release_pubs = {int(e.arg): self.create_publisher(Empty, f'/drone_{int(e.arg)}/detach', 1)
                              for e in cfg.events if e.do == 'RELEASE'}
@@ -487,6 +488,9 @@ class ExperimentRunner(Node):
         elif ev.do == 'DETACH':
             self._publish(self.detach_pub, Int32(data=int(ev.arg)),
                           f'/fleet/detach {ev.arg}')
+        elif ev.do == 'DROP':
+            why = str(ev.arg) if ev.arg else 'forced by the runner'
+            self._publish(self.drop_pub, String(data=why), f'/fleet/drop {why}')
         elif ev.do == 'RELEASE':
             # the joint only, as a magnet that fails: the planner has to notice by itself
             pub = self.release_pubs[int(ev.arg)]
