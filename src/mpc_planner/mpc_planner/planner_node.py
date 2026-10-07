@@ -721,7 +721,8 @@ class LoadPlanner(Node):
             self._lint_lift_t = now_s
         speed_gate = not (self._lint_settle_s > 0.0 and self._lint_lift_t is not None
                           and now_s - self._lint_lift_t >= self._lint_settle_s)
-        gz = self._zbias_gated(vz_gate=speed_gate)
+        # frozen through a reconfiguration hold: the release transient is not a static error
+        gz = self._zbias_gated(vz_gate=speed_gate) and getattr(self, '_reconfig_hold_left', 0.0) <= 0.0
         gxy = bool(gz and (self.traj_t <= 0.0 or self.traj.kind == 'hover')
                    and (not speed_gate or float(np.hypot(ls[7], ls[8])) < 0.05)
                    and float(np.hypot(err[0], err[1])) < self._z_i_gate)
@@ -1665,9 +1666,6 @@ class LoadPlanner(Node):
         self.slot2drone = [int(d) for d in drone_ids]
         if getattr(self, '_of', None) is not None:
             self._of.drop_plan()             # held across the resize (a reset steps ~0.5 N mid-weld)
-        if getattr(self, '_lint', None) is not None:
-            self._lint.reset()               # refused with a resizable fleet; belt and braces
-            self._lint_applied = np.zeros(3)
         if getattr(self, '_dist', None) is not None:
             self._dist.reset(self.n)         # a different fleet: re-estimate from zero
             for d in self.slot2drone:
@@ -1677,6 +1675,10 @@ class LoadPlanner(Node):
             self._fallback.reset()           # nor a horizon to shift
         self.N = self.solver.N
         self.dt = self.solver.dt
+        if getattr(self, '_lint', None) is not None:
+            # the learned ring force survives a resize (same ring, same mass; Wesley 8 Oct):
+            # hand it to the new OCP and reference builder now, not on the next tick
+            self._apply_load_force()
         self.get_logger().warn(
             f'[planner] FLEET RESIZED to n={self.n}; slot->drone {self.slot2drone}; '
             f'attach azimuths '

@@ -83,7 +83,7 @@ fleet_resize:
   detach_unload_tilt_deg: ''   # deg, '' = 10: release only below this ring tilt
   detach_unload_wait_s: ''     # s, '' = 2: gates not met this long after the blend: cancel
   detach_post_blend_s: ''      # s, '' = 1: survivors' blend after the resize
-  detach_detect_m: ''          # m, '' = 0 (off): a cable this much over its length for 2 ticks = an unannounced detach (7 Oct)
+  detach_detect_m: 0.06        # m, '' = 0 (off): a cable this much over its length for 2 ticks = an unannounced detach (7 Oct; on by default 8 Oct)
   departed_land: ''            # '' = false: a freed drone lands after its step-out while the fleet flies on (7 Oct)
 network:
   auto_handover_settle_s: 1.5
