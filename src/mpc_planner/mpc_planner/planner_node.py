@@ -258,6 +258,9 @@ def tick_log_header(n_drones, n_slots):
     # int_mode model (card 2026-10-04_z_int_model): the integral, its force, and the published
     # plan's ring position at node 5 (what the plan predicted for 5 nodes on)
     cols += ['int_bx', 'int_by', 'int_bz', 'int_fx', 'int_fy', 'int_fz', 'plan5_x', 'plan5_y', 'plan5_z']
+    # time-cascade rung a (8 Oct): the ring's and each drone's pose age (node clock minus the
+    # mocap header stamp) when x0 was built, and the tick start to the reference publish
+    cols += ['load_age', 'pub_lat'] + [f'd{k}_age' for k in range(n_drones)]
     return cols
 
 
@@ -333,7 +336,8 @@ class LoadPlanner(Node):
         self._land_ff_ramp = bool(self.declare_parameter('land_ff_ramp', False).value)
         self._zbias_warned = False
         self._load_t = None                    # monotonic time of the last payload pose
-        self._drone_t = {}                     # monotonic time of each drone's last pose
+        self._drone_t = {}
+        self._drone_stamp = {}                 # mocap header stamps (s, node clock domain)                     # monotonic time of each drone's last pose
         self.auto_slot_assign = cfg.auto_slot_assign
         self.load_traj = cfg.load_traj
         self.traj_speed = cfg.traj_speed
@@ -932,6 +936,10 @@ class LoadPlanner(Node):
                 if li is not None else [''] * 6)
         p5 = getattr(self, '_plan5', None)
         row += [f'{v:.4f}' for v in p5] if p5 is not None else [''] * 3
+        ages = getattr(self, '_x0_ages', None) or {}
+        lat = getattr(self, '_pub_lat', None)
+        row += [f'{ages["load"]:.4f}' if 'load' in ages else '', f'{lat:.4f}' if lat is not None else '']
+        row += [f'{ages[k]:.4f}' if k in ages else '' for k in range(nd)]
         return row
 
     # Mocap callbacks
@@ -944,6 +952,7 @@ class LoadPlanner(Node):
             p.x, p.y, p.z, o.w, o.x, o.y, o.z,
             lv.x, lv.y, lv.z, av.x, av.y, av.z])
         self._load_t = time.monotonic()
+        self._load_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         if self.hover_xy is None:
             self.hover_xy = (p.x, p.y)
 
@@ -955,6 +964,7 @@ class LoadPlanner(Node):
         o = msg.pose.orientation
         self.drone_quat[i] = np.array([o.w, o.x, o.y, o.z])
         self._drone_t[i] = time.monotonic()
+        self._drone_stamp[i] = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
 
     def _fleet_command_cb(self, msg: String):
         cmd = msg.data.strip().upper()
@@ -1478,6 +1488,8 @@ class LoadPlanner(Node):
     def _solve_and_publish(self):
         # stamped at the measurement, so the fallback's shift matches the horizon's node 0
         now = self.get_clock().now().nanoseconds * 1e-9
+        self._tick_t0 = now
+        self._x0_ages = self._pose_ages(now)
         drone_slot_pos = [self._pivot_at(i) for i in range(self.n)]
         x_init = (self.solver.build_x_init(self.load_state, drone_slot_pos, self._slot_vel())
                   if getattr(self, 'pin_cable_rates', False)
@@ -1881,6 +1893,16 @@ class LoadPlanner(Node):
                 self._static_pub[k] = self.create_publisher(Float64, f'/drone_{k}/cable_static_z', 1)
             self._static_pub[k].publish(Float64(data=float(az)))
 
+    def _pose_ages(self, now):
+        """{'load': s, drone: s}: node clock minus each pose's mocap header stamp (logged only)."""
+        ages = {}
+        if getattr(self, '_load_stamp', None):
+            ages['load'] = now - self._load_stamp
+        for k, st in getattr(self, '_drone_stamp', {}).items():
+            if st:
+                ages[k] = now - st
+        return ages
+
     def _publish_refs(self, X):
         # Cable-FF soft-start: 0 through the grounded handover settle, easing to 1
         # over FF_EASE_S once the lift starts (clock advanced in _plan). Multiplied
@@ -1929,6 +1951,8 @@ class LoadPlanner(Node):
             self._last_air_ref[self.slot2drone[i]] = (np.asarray(nodes[0][2], float),
                                                       np.asarray(nodes[0][3], float))
         self._publish_static_cable(X)
+        t0 = getattr(self, '_tick_t0', None)
+        self._pub_lat = (self.get_clock().now().nanoseconds * 1e-9 - t0) if t0 is not None else None
 
         # ~1 Hz: per-drone cable tautness so you can see when (and whether) the
         # cable term engages. dist -> CABLE_LEN means taut; gate is the applied

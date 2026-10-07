@@ -80,3 +80,13 @@ def test_row_width_is_latched_across_a_resize():
     h = tick_log_header(3, 3)
     p.n, p.slot2drone, p.rho = 2, [0, 2], [p.rho[0], p.rho[2]]
     assert len(p._tick_log_row()) == len(h)
+
+
+def test_pose_ages_are_node_time_minus_the_mocap_stamps():
+    """Time-cascade rung a: load_age and d<k>_age, logged only."""
+    import types
+    from mpc_planner.planner_node import LoadPlanner
+    p = types.SimpleNamespace(_load_stamp=9.95, _drone_stamp={0: 9.98, 2: 9.90, 3: 0.0})
+    ages = LoadPlanner._pose_ages(p, 10.0)
+    assert abs(ages['load'] - 0.05) < 1e-9 and abs(ages[0] - 0.02) < 1e-9 and abs(ages[2] - 0.1) < 1e-9
+    assert 3 not in ages and LoadPlanner._pose_ages(types.SimpleNamespace(), 10.0) == {}

@@ -97,7 +97,8 @@ MODEL_CAP_PERIOD_S = 1.0       # the model throttle cap follows the pack voltage
 # thr_out = real throttle sent, thr_off = offset in use (voltage term included),
 # acx/acy/acz = node-0 cable accel the model was given, ref_age = s since the last reference.
 TRACKER_W1_COLS = ('thr_out', 'thr_off', 'acx', 'acy', 'acz',
-                   'ff_active', 'grounded', 'ref_age')
+                   'ff_active', 'grounded', 'ref_age',
+                   'pose_age')        # node clock minus this drone's mocap header stamp (8 Oct)
 
 # Height above spawn z at which the drone counts as AIRBORNE, which is when kT
 # switches from takeoff_thrust_ratio to thrust_ratio.
@@ -935,7 +936,8 @@ class Controller(Node):
         return [num(lambda: self._thr_out), num(lambda: self._thr_off),
                 num(lambda: ac[0]), num(lambda: ac[1]), num(lambda: ac[2]),
                 num(lambda: self._planner_ff_active), num(lambda: self._load_grounded()),
-                num(lambda: (self._safety_clock.now() - last).nanoseconds * 1e-9)]
+                num(lambda: (self._safety_clock.now() - last).nanoseconds * 1e-9),
+                num(lambda: self.get_clock().now().nanoseconds * 1e-9 - self.pose_stamp_s)]
 
     def _publish_channels(self, u, u_rate):
         """Send [roll, pitch, throttle, yaw] to the FC, or armed-idle before TAKEOFF.

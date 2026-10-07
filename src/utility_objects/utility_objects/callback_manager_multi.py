@@ -72,6 +72,7 @@ class CallbackManagerMulti:
         ]), 3)
 
         self.motion_capture_pose = arr
+        self.node.pose_stamp_s = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
 
         if self.use_motion_capture:
             self.node.current_pose = arr
