@@ -111,17 +111,21 @@ def read_flight(run_dir):
             if best is None or abs(df['sim_time'].iloc[0] - t_p) < abs(best['sim_time'].iloc[0] - t_p):
                 best = df
         drones.append(best)
-    log_path = run_dir[:-len('_logs')] + '.log' if run_dir.endswith('_logs') else None
+    # rig: <run>.log beside <run>_logs; twin: <run>/logs/launch.log
+    log_path = (run_dir[:-len('_logs')] + '.log' if run_dir.rstrip('/').endswith('_logs')
+                else os.path.join(run_dir, 'logs', 'launch.log'))
     ev = {'fail_times': []}
-    with open(log_path) as f:
+    with open(log_path, errors='replace') as f:
         for line in f:
-            if '[mpc_planner]' not in line and '[load_planner]' not in line:
+            if not any(tag in line for tag in ('[mpc_planner]', '[load_planner]', '[dissipative_planner]')):
                 continue
             t = _stamp(line)
             if 'yaw datum latched at' in line:
                 ev['psi0_deg'] = float(re.search(r'latched at ([-+0-9.]+)', line).group(1))
             elif 'auto slot assignment' in line:
-                ev['slot2drone'] = [int(v) for v in re.search(r'\): \[([0-9, ]+)\]', line).group(1).split(',')]
+                ids = [int(v) for v in re.search(r'\): \[([0-9, ]+)\]', line).group(1).split(',')]
+                # the line prints drones numbered from 1 since 1 Oct; the slots index from 0
+                ev['slot2drone'] = [v - 1 for v in ids] if 'numbered from 1' in line else ids
             elif 'measure_rod_len: rods' in line:
                 ev['rods_applied'] = [float(v) for v in re.search(r'rods \[([0-9., ]+)\]', line).group(1).split(',')]
             elif 'measure_rod_len: keeping typed' in line:
@@ -139,6 +143,16 @@ def read_flight(run_dir):
     ev.setdefault('rods_measured', ev.get('rods_applied'))
     ev.setdefault('slot2drone', list(range(n)))
     return argparse.Namespace(rows=rows, drones=drones, prm=prm, n=n, ev=ev, dir=run_dir)
+
+
+def row_slot2drone(r, fallback):
+    """slot -> drone (0-based) of one planner log row ('3 0 2 1'), else the fallback."""
+    v = r.get('slot2drone') if hasattr(r, 'get') else None
+    if isinstance(v, str) and v.strip():
+        return [int(x) for x in v.split()]
+    if isinstance(v, (int, float)) and np.isfinite(v):
+        return [int(v)]
+    return fallback
 
 
 def _interp(df, col, t):
@@ -323,6 +337,7 @@ def run_arm(fl, mods, arm, work, omega_sd=0.3, seed=0, keep_nodes=False):
         if geo['omega_sd'] > 0.0:
             ls[10:13] = rng.normal(0.0, geo['omega_sd'], 3)
         D = drone_positions(fl, tk, geo['pivot'])
+        s2d = row_slot2drone(r, s2d)
         slot_pos = [D[s2d[i]] for i in range(n)]
         if planner:
             prog = float(r.lift_progress)
@@ -331,7 +346,9 @@ def run_arm(fl, mods, arm, work, omega_sd=0.3, seed=0, keep_nodes=False):
             if int(r.land) and float(r.load_z) <= float(r.z_tgt) - prog + 0.05:
                 break                               # LAND hold: the node stops solving here
             zb = float(r.z_bias) if np.isfinite(r.z_bias) else 0.0
-            refs.update(hover_xy, float(r.z_tgt) - prog, prog, target_z, lift_vel, 0.0, z_bias=zb)
+            # the logged trajectory clock: 0 here replayed every orbit as a hover (8 Oct)
+            traj_t = float(r.traj_t) if 'traj_t' in r and np.isfinite(r.traj_t) else 0.0
+            refs.update(hover_xy, float(r.z_tgt) - prog, prog, target_z, lift_vel, traj_t, z_bias=zb)
             yref_at = refs.yref_at
         else:
             hold = refs.hold_yref(ls)
@@ -353,6 +370,7 @@ def run_arm(fl, mods, arm, work, omega_sd=0.3, seed=0, keep_nodes=False):
             rec['ratio'] = float(-sum(X[ti[i], 0] * X[si[i], 0] for i in range(n)) / (float(fl.prm['load_mass']) * G))
             rec['t0'] = [float(X[ti[i], 0]) for i in range(n)]
             rec['zN'] = float(X[2, -1])
+            rec['plan5'] = [float(v) for v in X[0:3, min(5, X.shape[1] - 1)]]   # ring, node 5 (log plan5_*)
             if keep_nodes:
                 kin0 = [solver.drone_kinematics(X[:, 0], i) for i in range(n)]
                 kin5 = [solver.drone_kinematics(X[:, 5], i) for i in range(n)]
