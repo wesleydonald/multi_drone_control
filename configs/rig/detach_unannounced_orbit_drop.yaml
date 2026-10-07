@@ -1,0 +1,6 @@
+# 8 Oct rig, unannounced detach during a circle with drop and land: detach_unannounced_orbit.yaml
+# (detection 0.06 m, 5 s hover hold, the freed drone clears the circle and lands) plus drop_on_loss
+detach_detect_m: 0.06
+traj_hold_s: 5.0
+departed_land: true
+drop_on_loss: true

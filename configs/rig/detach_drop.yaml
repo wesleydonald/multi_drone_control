@@ -1,0 +1,5 @@
+# 8 Oct rig, announced detach with drop and land (Wesley 8 Oct: the plain 30 deg safety in the current
+# code): the freed drone steps 0.5 m out; a second loss, a 180 deg gap or ring tilt over 30 deg (2 samples)
+# drops the ring and lands every drone (card docs/experiments/2026-10-08_drop_and_land.md)
+detach_step_out_m: 0.5
+drop_on_loss: true

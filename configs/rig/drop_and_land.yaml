@@ -1,5 +1,6 @@
-# drop and land (card docs/experiments/2026-10-08_drop_and_land.md), branch safety-defaults: detection,
-# the 0.5 m step-out and drop_on_loss (planner triggers + the trackers' ring-tilt rule at 30 deg)
+# drop and land (card docs/experiments/2026-10-08_drop_and_land.md): unannounced-detach detection, the
+# 0.5 m step-out and drop_on_loss (planner triggers + the trackers' ring-tilt rule at 30 deg).
+# 8 Oct rig: the unannounced hover detaches
 detach_detect_m: 0.06
 detach_step_out_m: 0.5
 drop_on_loss: true
