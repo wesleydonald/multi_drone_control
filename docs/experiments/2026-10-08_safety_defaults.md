@@ -73,36 +73,57 @@ The critic is not required: no new law or estimator, and no gate threshold.
 
 If falsified, the arm's change is reverted on the branch and recorded in the registry.
 
-## Results (8 Oct night)
+## Results (8 Oct night; corrected after the reviewer)
 
-**M: model integral through an unannounced release** (laptop, safety-defaults f2f7d74, against the
-reference-integral runs):
+Reviewer verdict on the first write-up: **weak**. Corrected below.
 
-| arm | runs | detected after | tilt peak release..+10 s | ring z jump | integral change in the 1.5 s hold | LAND |
-|---|---|---|---|---|---|---|
-| M1 hover | R1157, R1158 | 0.28, 0.23 s | 4.7, 4.1 deg | -2.7, -2.6 cm | 0.3, 0.3 cm | landed |
-| baseline (reference) | R1140, R1145 | 0.31, 0.38 s | 7.5, 7.9 deg | -2.6, -2.8 cm | - | landed |
-| M2 circle | R1159, R1160 | 0.28, 0.29 s | 4.9, 5.2 deg | -2.9, -2.6 cm | 0.0, 0.0 cm | landed |
-| baseline (reference) | R1149, R1150 | 0.27, 0.21 s | 9.3, 8.7 deg | -3.0, -2.8 cm | - | landed |
+**M: model integral through an unannounced release.** The M arms flew on the laptop and the
+reference-integral baselines on the lab PC (week4), and the host alone moves the twin's lag by
+0.04-0.05 s. **So "tilt peak about half" is not yet a claim:** same-host reference-integral baselines
+(`w4_3915_release_intref`, `w4_3915_release_orbit_intref`) are queued on the laptop.
 
-- Detection and the ring drop are unchanged.
-- The tilt peak after the release is about half that of the reference integral.
-- In hover, the learned y force (-4.7 cm of integral, the leaver's pull) unwinds within 5 s of the
-  release.
-- **M SUPPORTS.**
+| arm | runs (host) | detected after | tilt peak release..+10 s | ring z jump | LAND |
+|---|---|---|---|---|---|
+| M1 hover, model | R1157, R1158* (laptop) | 0.28, 0.23 s | 4.7, 4.1 deg | -2.7, -2.6 cm | landed |
+| hover, reference | R1140, R1145 (lab PC) | 0.31, 0.38 s | 7.5, 7.9 deg | -2.6, -2.8 cm | landed |
+| M2 circle, model | R1159, R1160* (laptop) | 0.28, 0.29 s | 4.9, 5.2 deg | -2.9, -2.6 cm | landed |
+| circle, reference | R1149, R1150 (lab PC) | 0.27, 0.21 s | 9.3, 8.7 deg | -3.0, -2.8 cm | landed |
 
-**S: mode dissipative as the carry default.** The first comparison was confounded by the host: the
-laptop flies ~0.05 s less lag than the lab PC with identical code (R1169/R1170 against R1152-R1154).
-Same host (laptop), mode mpc against mode dissipative with detection on:
+\* Second repeats: the runner shifted their events by the first repeat's lift wait (~10 s late; fixed
+f694300). R1160 released ~143 deg further round the circle than R1159.
 
-| trajectory | mpc | dissipative | A0 (s) mpc / diss | L0 (s) mpc / diss | tilt max (deg) mpc / diss | false detections |
-|---|---|---|---|---|---|---|
-| circle 0.125 m/s | R1169 | R1171, R1174 | 0.086 / 0.089, 0.084 | 0.186 / 0.191, 0.184 | 3.7 / 4.5, 3.1 | 0 |
-| figure-8 0.2 m/s | R1170 | R1167, R1168 | 0.069 / 0.073, 0.048 | 0.168 / 0.176, 0.152 | 3.8 / 2.9, 5.9 | 0 |
+- **The integral in the hold:** it does not move inside the reconfiguration hold (0.00 cm). The
+  0.3 cm is the first tick after it.
+- **In the circle the integral is still** for another reason: the xy gate is off on a trajectory.
+- **The hover unwind is confirmed:** -4.7/-5.1 cm fall to -0.35/-0.20 cm within 5 s.
+- **int_mode is confirmed:** model in R1157-R1160, reference in the baselines.
 
-- **S SUPPORTS.** On one host the two modes track the same, and the detector never fired in a carry
-  with no release.
-- R1161 and R1162 were contaminated by my own CPU load on the laptop (156 and 5 slow solves; R1162
-  oscillated to 14.5 deg) and are excluded.
-- The sim dissipative graph does not pass `ff_cap_force` (the lift's pull cap). It is 0 there, as on
-  the rig, against 0.75 in the sim mpc graph; this affects only the lift.
+**S: mode dissipative as the carry default.** Same host (laptop), lag on one clock
+(`tools/lag_metrics.py`, clipped to the runner window), RMSE 3D from the reviewer:
+
+| trajectory | run | mode | A0 (s) | L0 (s) | RMSE 3D (cm) | tilt max (deg) | false detection |
+|---|---|---|---|---|---|---|---|
+| circle | R1169 | mpc | 0.086 | 0.186 | 1.12 | 3.7 | - |
+| circle | R1161 | dissipative | 0.107 | 0.176 | 1.38 | 3.2 | none |
+| circle | R1162* | dissipative | 0.059 | 0.160 | 1.32 | 4.6 (in the run) | none |
+| circle | R1171 | dissipative | 0.089 | 0.191 | 1.16 | 4.5 | none |
+| circle | R1174 | dissipative | 0.084 | 0.184 | 1.13 | 3.1 | none |
+| figure-8 | R1170 | mpc | 0.069 | 0.168 | 1.82 | 3.8 | - |
+| figure-8 | R1167 | dissipative | 0.073 | 0.176 | 1.58 | 2.9 | none |
+| figure-8 | R1168* | dissipative | 0.048 | 0.152 | 2.14 | 5.9 | none |
+
+- **R1161/R1162 are kept.** I first excluded them as "contaminated by my CPU load". The reviewer
+  showed that R1162's 14.5 deg tilt and both runs' 0.4-0.5 s solves came after run.csv ended
+  (shutdown and post-landing rows).
+- **Dissipative mean A0:** circle 0.085 s (4 runs) against mpc 0.086; figure-8 0.061 against 0.069.
+- **The spread is large.** The dissipative repeats differ by up to 0.05 s in A0, more than the mode
+  difference.
+- **Only one mpc run per trajectory flew on this host**, so the card's "within the mpc runs' spread"
+  bar cannot be applied yet; a second laptop mpc run per trajectory is queued.
+- **R1168 did not land within the run** (repeat-shift bug).
+- **Verdict so far:** no mode effect is visible and there are no false detections, but **S is not yet
+  SUPPORTED by the card's bars**. Pending: the mpc repeats.
+- **The `ff_cap_force` difference** (0 in the sim dissipative graph, as on the rig; 0.75 in sim mpc)
+  affects only the lift.
+- **Host effect** (identical code apart from the inert drop knobs): circle A0 0.131-0.144 on the lab
+  vs 0.086 on the laptop; figure-8 0.104-0.106 vs 0.069.
