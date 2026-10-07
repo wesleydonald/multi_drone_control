@@ -59,6 +59,12 @@ def node_csvs(path, kind):
             if os.path.exists(os.path.join(d, 'log.csv'))]
 
 
+def planner_csvs(path):
+    """log.csv of every load-planner session under `path`: mpc_planner, then dissipative_planner
+    (the same columns; the dissipative node subclasses the load planner)."""
+    return node_csvs(path, 'mpc_planner') + node_csvs(path, 'dissipative_planner')
+
+
 def drone_of(path):
     """Drone index of a tracker session dir (or its log.csv), else None."""
     p = os.path.normpath(path)

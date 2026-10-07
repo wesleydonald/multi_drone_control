@@ -750,8 +750,8 @@ def plant_law(run_path=None, n=4, thrust_map=None):
             try:
                 with open(os.path.join(run_path, 'params', f'bf_comm_{i}.yaml')) as fh:
                     params[i] = (next(iter(yaml.safe_load(fh).values())) or {}).get('ros__parameters', {})
-            except (OSError, AttributeError, StopIteration, TypeError):
-                pass
+            except (OSError, AttributeError, StopIteration, TypeError, yaml.YAMLError):
+                pass                 # missing, or a DDS error the read-back captured (lab PC)
     if thrust_map is None and run_path is not None:
         # a sim run: the bridges' map, and 'linear' (every world before W4) when not read back
         thrust_map = str(next(iter(params.values())).get('thrust_map', 'linear')) if params else 'linear'
@@ -864,7 +864,7 @@ def tethered_metrics(planner, target_z=None, hold_window_s=HOLD_WINDOW_S, log_te
 
 def planner_logs(run_path):
     """The load planner's log.csv files under a run (or rig log) folder, longest first."""
-    paths = run_logs.node_csvs(run_path, 'mpc_planner')
+    paths = run_logs.planner_csvs(run_path)
     return sorted(paths, key=lambda p: -os.path.getsize(p))
 
 
