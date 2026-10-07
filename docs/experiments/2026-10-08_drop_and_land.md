@@ -301,16 +301,30 @@ window.
 | D4 bad leaver (240 deg gap) | R1195, R1196 | trackers' tilt request (33-34 deg) | 0.21, 0.25 s | 0 | 11.9 deg | 0.15 m | 8.8-8.9 s | 0.13 m | yes |
 | D5 double loss | R1197, R1198 | trackers' tilt request (33-35 deg) | 0.23, 0.22 s | 0 | 14.7 deg | 0.18 m | 8.7-8.8 s | 0.13 m | yes |
 
-Every drone landed 1.06-1.23 m from where the ring was at the trigger. The closest pair (0.51-0.88 m)
-is the formation's own spacing at the trigger.
+Every drone landed 1.05-1.23 m from where the ring was at the trigger. The closest pair (0.51-0.88 m)
+is the formation's own spacing at the trigger. The peak horizontal drone speed was 0.27-0.65 m/s
+(0.1 s smoothed; raw up to 0.86 m/s, R1196), against the 3 m/s speed fault.
 
 **Verdict against the v2 bars: SUPPORTS in the twin.**
 - No drone was disarmed above 0.2 m, and no tracker latched before the stand-down.
 - Drone tilt stayed <= 15 deg (bar 30), and climb <= 0.18 m (bar 0.3).
 - Every drone was down in < 9 s (bar 15), with `/fleet/landed` and the disarm.
 - D3 did not drop: its margin to the trigger was 11.7-13.7 deg.
-- In every capsize the trackers' tilt rule fired first (0.20-0.25 s after the loss). The planner's
+- In every capsize the trackers' tilt rule fired first (0.21-0.25 s after the loss). The planner's
   gap and min_survivors rules were never needed, so they are untested in flight (unit tests only).
+
+**Reviewer, 8 Oct 05:00: table SUPPORTED.** Its points for a careful reader:
+- **B0 is not a one-variable baseline:** it flew the reference integral, while D1 flew the model
+  integral and drop_on_loss. The ring passed 30 deg at the same +0.21-0.23 s in both, and the bars
+  are absolute.
+- **D3 was not re-flown on the fixed code:** it ran on the laptop at ca6457f. The only change since
+  is the drop-timeout clock, which does nothing without a drop.
+- **"Down" is z < 0.15 m, against a floor rest of 0.10 m.** Some drones were disarmed 1-3 cm above the
+  floor while still descending at 0.28-0.38 m/s (R1193, R1194).
+- **The margin is thin:** the ring passes 60 deg only 0.06-0.12 s after the drop requests (60 deg at
+  +0.31-0.33 s). The trackers' stand-down is what keeps the fleet armed. On the rig the magnets open
+  0.16-0.20 s after the command (replay), so the ring will tip further while still attached than in
+  the twin.
 
 **Not tested by the twin** (critic, still open for the rig):
 - the magnet release delay (0.16-0.20 s on the rig, replay);

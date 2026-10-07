@@ -249,11 +249,17 @@ Adopted: the critic's rungs, gated on H1.
 - **Reading:** the premise holds, and rung b alone removes almost all of the twin's lag. What
   remains of D (0.04 s) is the pose age plus solve and transport, which rung c (x0 predicted to the
   effect time) would remove.
-- **Rig estimate:** D 0.145 = 0.027 pose age + 0.071 solve-to-arrival + ~0.05 hold. Rung b removes
-  the hold, so D ~0.09 s and A0 ~0.20 - 2.3 x 0.05 ~ 0.08 s. This is a prediction, not a measurement;
-  the figure-8 twin check is queued.
+- **Rig:** D 0.145 = 0.027 pose age + 0.071 solve-to-arrival + ~0.05 hold, and rung b removes the
+  hold. How much rig lag that removes is not predicted (see the reviewer note below); r302 measures
+  it.
 
 ## Where this leaves the rungs (8 Oct night)
+
+Reviewer 8 Oct 05:00: H1, rung b and the figure-8 numbers SUPPORTED. Two corrections:
+- the rung-b tilt max column (2.7/6.1 -> 2.0/1.4) is a touchdown artefact. During the carry, the mean
+  goes 0.51/0.49 -> 0.26/0.26 deg and the max 1.1/1.1 -> 0.7/0.8 deg;
+- the twin fit A0 = 2.3 D - 0.09 does not carry to the rig: it over-predicts r206e60 by 0.03 s and
+  misses r2008e60 by 0.12 s. **There is no rig prediction for rung b**; the rig A/B (r302) measures it.
 
 H1 supports (R1172/R1173: +0.035 s of latency -> +0.083 s of lag, c unchanged), and rung b supports
 (R1165/R1166). Accounting, with A0 ~ kappa x D minus the OCP's 0.1 s reference lead (the `traj_t`
@@ -264,8 +270,8 @@ pre-advance):
 | twin base | 0.098 | 0.131-0.144 | 0.135 |
 | twin + 0.035 (H1) | 0.135 | 0.215-0.226 | 0.22 |
 | twin rung b | 0.042 | 0.007-0.015 | 0.007 |
-| rig r206e60 | 0.14 | 0.199 | 0.23 |
-| rig rung b (prediction) | ~0.09 | - | ~0.12 |
+| rig r206e60 (orbit) | 0.14 | 0.199 | 0.23 |
+| rig r2008e60 (figure-8 0.25 m/s) | 0.131 | 0.33 | 0.21 |
 
 **Next, in order:**
 1. **Rung b on the rig:** a figure-8 A/B with `params_file:=.../configs/rig/ref_time_shift.yaml`, base

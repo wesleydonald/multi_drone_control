@@ -141,8 +141,6 @@ f694300). R1160 released ~143 deg further round the circle than R1159.
 
 \\* Released ~10 s late (the repeat-shift bug); R1160 released further round the circle.
 
-- The lab PC shows the same direction with a smaller gap: acceptance run R1189 (model, defaults)
-  6.2 deg against R1140/R1145 (reference) 7.5/7.9.
 - **M SUPPORTS** on the card's bars:
   - tilt below the baseline, not above it +2;
   - ring z jump within +-1.5 cm;
@@ -156,11 +154,20 @@ runner window, RMSE 3D = `payload_rmse_sweep_m`):
 | circle | R1169 0.086 / 1.12, R1200 0.096 / 1.27 | R1161 0.107 / 1.38, R1162 0.059 / 1.32, R1171 0.089 / 1.16, R1174 0.084 / 1.13 | A0 <= 0.115 s, RMSE <= 1.52 cm |
 | figure-8 | R1170 0.069 / 1.82, R1201 0.065 / 1.30 | R1167 0.073 / 1.58, R1168 0.048 / 2.14 | A0 <= 0.083 s, RMSE <= 2.18 cm |
 
-- **S SUPPORTS:**
-  - every dissipative run is inside the mpc spread + 20 % on lag and RMSE;
-  - no detector fired in 6 carries;
-  - no abort.
-- Caveat: R1168 did not land inside its run (the repeat-shift runner bug, fixed f694300).
+- **S: weak support** (reviewer 8 Oct 05:00):
+  - every dissipative run is inside the mpc spread + 20 % on lag and RMSE, no detector fired in 6
+    carries, and nothing aborted;
+  - but the LAND bar holds in only 3 of 6 dissipative runs. R1161 and R1168 got LAND too late for
+    their run length; R1162 never got it (repeat shift, old 130 s durations);
+  - several runs are inside only through the 20 % allowance (R1161 A0 0.107, R1167 A0 0.073, R1168
+    RMSE 2.14 against a 2.18 bar);
+  - the dissipative runs span three commits, and R1162 cannot be reproduced (uncommitted tree);
+  - the one clean same-code pair is on the circle: R1171/R1174 (A0 0.089/0.084 s, RMSE 1.16/1.13
+    cm) sit inside the mpc pair (0.086/0.096 s, 1.12/1.27 cm). The figure-8 rests on R1167/R1168.
+- **To make S a claim:** two dissipative figure-8 runs on one commit, with the 150 s durations, on
+  the laptop.
+- **Reviewer on M: SUPPORTED** (8 runs, one host, read-backs differ only in int_mode). The lab
+  acceptance run R1189 (6.2 deg) is not evidence for M: one run against baselines on other code.
 
 **Acceptance:** the branch defaults alone resolve to dissipative, detection 0.06, the 0.5 m
 step-out and the model integral, and fly U1 (R1189: detected 0.25 s, 6.2 deg, landed).

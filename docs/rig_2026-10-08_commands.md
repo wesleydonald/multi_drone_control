@@ -63,7 +63,10 @@ an existing tracker switch.
   | ref_time_shift (R1176, R1177) | 0.043-0.044 s | -0.005 to 0.001 s | 1.1 deg |
 
   Both landed.
-- Rig expectation (a prediction): lag ~0.2 -> ~0.1 s.
+- On the rig the effect is unknown: the twin's latency-to-lag relation does not fit both 7 Oct rig
+  runs. r302 against r301 measures it.
+- The twin tilt numbers are over the path; over the whole flight, lift included, there is no
+  difference.
 - Fly it straight after r301 on the same pack, so the two compare.
 - Check in T3 before ARM: `ros2 param get /tracker_0 ref_time_shift` must print True.
 ```bash
