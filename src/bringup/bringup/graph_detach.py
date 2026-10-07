@@ -27,7 +27,7 @@ real_control's rig values (decisions 2026-10-03). A detach resizes the OCP and r
 drone's magnet on the same tick (reconfig_mode ocp, detach_magnet true).
 """
 from bringup.real_mode import (apply_rig_values, map_and_geometry, planner_options, rig_io,
-                               rig_magnet_latches, rig_thrust_ratio, truthy)
+                               rig_magnet_latches, rig_thrust_ratio, tracker_drop_options, truthy)
 from launch.actions import LogInfo
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
@@ -112,6 +112,7 @@ def dissipative(context, launch_dir, profile_vals):
                              'w_thr_ref': ParameterValue(LaunchConfiguration('w_thr_ref'), value_type=float),
                              'x0_relax_frac': ParameterValue(LaunchConfiguration('x0_relax_frac'), value_type=float),
                              'ref_time_shift': ParameterValue(LaunchConfiguration('ref_time_shift'), value_type=bool),
+                         **tracker_drop_options(context),
                          'ground_idle': ParameterValue(LaunchConfiguration('ground_idle'), value_type=bool),
                              'cable_accel_cap': ParameterValue(LaunchConfiguration('cable_accel_cap'), value_type=float),
                              'payload_rest_z': f('payload_rest_z'),
@@ -168,6 +169,7 @@ def dissipative(context, launch_dir, profile_vals):
                          'w_thr_ref': ParameterValue(LaunchConfiguration('w_thr_ref'), value_type=float),
                          'x0_relax_frac': ParameterValue(LaunchConfiguration('x0_relax_frac'), value_type=float),
                          'ref_time_shift': ParameterValue(LaunchConfiguration('ref_time_shift'), value_type=bool),
+                         **tracker_drop_options(context),
                          'ground_idle': ParameterValue(LaunchConfiguration('ground_idle'), value_type=bool),
                          'cable_accel_cap': ParameterValue(LaunchConfiguration('cable_accel_cap'), value_type=float),
                          'payload_rest_z': f('payload_rest_z'),
@@ -317,6 +319,7 @@ def sim_network(context, launch_dir, profile_vals):
                          'w_thr_ref': ParameterValue(LaunchConfiguration('w_thr_ref'), value_type=float),
                          'x0_relax_frac': ParameterValue(LaunchConfiguration('x0_relax_frac'), value_type=float),
                          'ref_time_shift': ParameterValue(LaunchConfiguration('ref_time_shift'), value_type=bool),
+                         **tracker_drop_options(context),
                          'ground_idle': ParameterValue(LaunchConfiguration('ground_idle'), value_type=bool),
                          'cable_accel_cap': ParameterValue(LaunchConfiguration('cable_accel_cap'), value_type=float),
                          'payload_rest_z': f('payload_rest_z'),
@@ -417,6 +420,7 @@ def real_dissipative(context, launch_dir, profile_vals):
                          'w_thr_ref': ParameterValue(LaunchConfiguration('w_thr_ref'), value_type=float),
                          'x0_relax_frac': ParameterValue(LaunchConfiguration('x0_relax_frac'), value_type=float),
                          'ref_time_shift': ParameterValue(LaunchConfiguration('ref_time_shift'), value_type=bool),
+                         **tracker_drop_options(context),
                          'ground_idle': ParameterValue(LaunchConfiguration('ground_idle'), value_type=bool),
                          'cable_accel_cap': ParameterValue(LaunchConfiguration('cable_accel_cap'), value_type=float),
                          'payload_rest_z': f('payload_rest_z'),

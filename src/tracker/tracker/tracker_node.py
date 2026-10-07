@@ -70,7 +70,7 @@ def _solver_is_fresh():
 
 from utility_objects.visualization import TrajectoryVisualizer
 from utility_objects.data_logger import DataLogger, node_params, write_params
-from utility_objects.safety import EnvelopeChecker, EnvelopeLimits
+from utility_objects.safety import EnvelopeChecker, EnvelopeLimits, tilt_deg_from_quat
 from utility_objects.callback_manager_multi import CallbackManagerMulti
 from interfaces.msg import MotionCaptureState, ELRSCommand, Telemetry
 from std_msgs.msg import Bool, Int32, Float64, Float64MultiArray, String
@@ -91,6 +91,7 @@ DT = 1.0 / FREQUENCY_HZ
 CABLE_ACCEL_CAP = 6.0          # m/s^2: clamp measured cable-accel magnitude (~2x taut)
 CABLE_SLEW = 25.0              # m/s^2 per second: max rate-of-change of applied cable
 MAX_CONSEC_SOLVE_FAILS = 15    # tolerate this many bad solves (hold) before disarming
+DROP_CONFIRM_S = 0.5           # s after a drop request with no drop: payload checks back on
 MODEL_CAP_PERIOD_S = 1.0       # the model throttle cap follows the pack voltage at most this often
 
 # Tracker log columns for the rig replay, appended after every older column:
@@ -147,6 +148,13 @@ DRONE_OFFSETS = {
     2: (0.0, 1.0),
     3: (1.0, 1.0),
 }
+
+def _quat_step_deg(q0, q1):
+    """Rotation angle between two attitudes (w, x, y, z), sign-safe."""
+    d = abs(sum(a * b for a, b in zip(q0, q1)))
+    n = math.sqrt(sum(a * a for a in q0) * sum(b * b for b in q1)) or 1.0
+    return math.degrees(2.0 * math.acos(min(1.0, d / n)))
+
 
 def _shift_nodes(arr, e, dt):
     """Horizon nodes (N+1, k) at spacing dt advanced by e seconds (the last node held)."""
@@ -728,6 +736,48 @@ class Controller(Node):
         # the ring-attach runaway), so the envelope check needs it.
         q = msg.pose.orientation
         self.payload_quat = (q.w, q.x, q.y, q.z)
+        if self.drop_on_loss:
+            self._drop_rule(self.payload_quat)
+
+    def _drop_rule(self, q):
+        """Drop and land (card 2026-10-08_drop_and_land): every ring sample, tilt over
+        drop_tilt_deg on drop_samples consecutive samples asks the planner to drop the ring.
+        A frame-to-frame attitude step no ring can make is a pose glitch: ignored, count reset."""
+        if self._drop_requested_t is not None or not (self.armed and self.takeoff_requested):
+            self._drop_prev_q = q
+            return
+        prev, self._drop_prev_q = self._drop_prev_q, q
+        if prev is not None and _quat_step_deg(prev, q) > self.drop_glitch_step_deg:
+            self._drop_count = 0
+            return
+        tilt = tilt_deg_from_quat(q)
+        self._drop_count = self._drop_count + 1 if tilt > self.drop_tilt_deg else 0
+        if self._drop_count >= self.drop_samples:
+            self._drop_requested_t = self._safety_clock.now()
+            reason = (f'drone {self.drone_id + 1}: ring tilt {tilt:.1f} deg > '
+                      f'{self.drop_tilt_deg:.0f}')
+            self._drop_pub.publish(String(data=reason))
+            self.get_logger().error(f'[Drone {self.drone_id + 1}] DROP REQUEST: {reason} - payload '
+                                    f'checks stand down while the planner drops the ring')
+
+    def _payload_dropped_cb(self, msg):
+        self._payload_dropped = bool(msg.data)
+
+    def _payload_checks_down(self):
+        """The ring is not ours to check: dropped by the planner, or this tracker asked for the drop
+        within DROP_CONFIRM_S. Past that with no drop the 60 deg fault applies again, as before."""
+        if self._payload_dropped:
+            return True
+        if self._drop_requested_t is None:
+            return False
+        age = (self._safety_clock.now() - self._drop_requested_t).nanoseconds * 1e-9
+        if age <= DROP_CONFIRM_S:
+            return True
+        if not self._drop_fallback_said:
+            self._drop_fallback_said = True
+            self.get_logger().error(f'[Drone {self.drone_id + 1}] no drop {DROP_CONFIRM_S:.1f} s after '
+                                    f'the request: payload checks back on (fleet disarm at the limit)')
+        return False
 
     # ── Flight envelope (F3) ─────────────────────────────────────────────────
 
@@ -743,6 +793,21 @@ class Controller(Node):
         # Mocap watchdog budget, on the node clock: wall time on the rig (0.25 s), sim time in
         # the twin, where a wall budget read ordinary scheduling stalls as a dead link.
         self.pose_timeout_s = float(p('pose_timeout_s', POSE_TIMEOUT_THRESHOLD).value)
+        # drop and land (card 2026-10-08_drop_and_land): detach mode only, off by default
+        self.drop_on_loss = bool(p('drop_on_loss', False).value)
+        self.drop_tilt_deg = float(p('drop_tilt_deg', 30.0).value)
+        self.drop_samples = int(p('drop_samples', 2).value)
+        self.drop_glitch_step_deg = float(p('drop_glitch_step_deg', 15.0).value)
+        self._drop_requested_t = None
+        self._drop_count = 0
+        self._drop_prev_q = None
+        self._drop_fallback_said = False
+        self._payload_dropped = False
+        self._drop_pub = self.create_publisher(String, '/fleet/drop', 10)
+        self.create_subscription(
+            Bool, '/fleet/payload_dropped', self._payload_dropped_cb,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                       reliability=ReliabilityPolicy.RELIABLE))
         lim = EnvelopeLimits(
             max_tilt_deg=float(p('max_tilt_deg', 60.0).value),
             max_payload_tilt_deg=float(p('max_payload_tilt_deg', 60.0).value),
@@ -804,6 +869,9 @@ class Controller(Node):
         if self.armed and not self._was_armed:
             self.envelope.reset()
             self._aborted = False
+            self._drop_requested_t = None
+            self._drop_count = 0
+            self._drop_fallback_said = False
             self._kt_trim.reset()
             self._kt_tethered = False
             self._kt_landing = False
@@ -831,7 +899,7 @@ class Controller(Node):
         verdict = self.envelope.check(
             quat=pose[3:7] if pose is not None else None,
             velocity=pose[7:10] if pose is not None else None,
-            payload_quat=self.payload_quat,
+            payload_quat=None if self._payload_checks_down() else self.payload_quat,
             ref_age_s=ref_age,
             battery_v=None,          # warn-only, and only meaningful on hardware
             airborne=bool(self.armed and self.takeoff_requested),

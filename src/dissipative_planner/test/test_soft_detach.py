@@ -35,7 +35,8 @@ def _node(unload_s=3.0, leaver_t=0.2, tilt_q=(1.0, 0.0, 0.0, 0.0)):
         refs=ReferenceBuilder(dyn, 4, s, 0.1, None), phase='planner', _reconfig_mode='ocp',
         _land_to_ground=False, _unload_s=unload_s, _unload_t=0.2, _unload_tilt=10.0,
         _unload_wait=2.0, _post_blend_s=1.0, _unload=None, _reconfig_hold_left=0.0,
-        solver=SimpleNamespace(last_X=X), load_state=np.r_[0.0, 0.0, 1.0, tilt_q, np.zeros(6)])
+        solver=SimpleNamespace(last_X=X), load_state=np.r_[0.0, 0.0, 1.0, tilt_q, np.zeros(6)],
+        _dropped=None)
     f.calls, f.log = [], log
     f.get_logger = lambda: log
     for m in ('_detach_plan', '_start_unload', '_cancel_unload', '_unload_tick', '_unload_cancel_on'):
@@ -105,7 +106,8 @@ def _detect_node(dists, detect_m=0.06):
     f = SimpleNamespace(_detect_m=detect_m, phase='planner', _reconfig_mode='ocp', _land_to_ground=False,
                         _unload=None, takeoff_seen=True, slot2drone=[0, 1, 2, 3], detached=[False] * 4,
                         cable_len=0.55, cable_len_i=[0.55] * 4, _detect_count={}, _detect_ok={},
-                        _detect_refused=set(), calls=[], _load_t=None, _drone_t={})
+                        _detect_refused=set(), calls=[], _load_t=None, _drone_t={},
+                        _drop_on_loss=False)
     f.fresh = lambda: (setattr(f, '_load_t', time.monotonic()),
                        f._drone_t.update({k: time.monotonic() for k in range(4)}))
     f.get_logger = lambda: log
