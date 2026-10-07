@@ -252,3 +252,29 @@ Adopted: the critic's rungs, gated on H1.
 - **Rig estimate:** D 0.145 = 0.027 pose age + 0.071 solve-to-arrival + ~0.05 hold. Rung b removes
   the hold, so D ~0.09 s and A0 ~0.20 - 2.3 x 0.05 ~ 0.08 s. This is a prediction, not a measurement;
   the figure-8 twin check is queued.
+
+## Where this leaves the rungs (8 Oct night)
+
+H1 supports (R1172/R1173: +0.035 s of latency -> +0.083 s of lag, c unchanged), and rung b supports
+(R1165/R1166). Accounting, with A0 ~ kappa x D minus the OCP's 0.1 s reference lead (the `traj_t`
+pre-advance):
+
+| case | D | A0 measured | A0 from 2.3 D - 0.09 |
+|---|---|---|---|
+| twin base | 0.098 | 0.131-0.144 | 0.135 |
+| twin + 0.035 (H1) | 0.135 | 0.215-0.226 | 0.22 |
+| twin rung b | 0.042 | 0.007-0.015 | 0.007 |
+| rig r206e60 | 0.14 | 0.199 | 0.23 |
+| rig rung b (prediction) | ~0.09 | - | ~0.12 |
+
+**Next, in order:**
+1. **Rung b on the rig:** a figure-8 A/B with `params_file:=.../configs/rig/ref_time_shift.yaml`, base
+   first, same pack. It is an existing switch; the figure-8 twin check (week4 code) is queued on the
+   lab tonight.
+2. **Rung c (daytime, critic first):** predict x0 by the expected application delay, in the
+   plan-delta form x0 + (X_prev(t_a + tau) - X_prev(t_a)), skipped in creep/hold/LAND-down/after a
+   resize or reseed. tau comes from the rung-a logs: pose age plus tick-to-arrival, ~0.1 s on the rig,
+   ~0.06 s in the twin. Removing the 0.1 s pre-advance is a separate later variable: with tau ~ 0.1 s
+   on the rig the pre-advance already matches it.
+3. **Rung d** (stamped wire layout) only if the rung-c logs show the arrival jitter matters (lock:
+   your word).
