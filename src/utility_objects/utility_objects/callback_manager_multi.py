@@ -76,7 +76,8 @@ class CallbackManagerMulti:
         if self.use_motion_capture:
             self.node.current_pose = arr
             # Update wall-clock timestamp for pose-timeout watchdog
-            self.node.last_pose_update_time = self._wall_clock.now()
+            # the node's watchdog clock (tracker: wall on the rig, sim in the twin)
+            self.node.last_pose_update_time = getattr(self.node, '_safety_clock', self._wall_clock).now()
 
             if hasattr(self.node, "ukf_update_from_current_pose"):
                 self.node.ukf_update_from_current_pose()

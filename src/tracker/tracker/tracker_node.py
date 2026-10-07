@@ -30,7 +30,6 @@ import copy
 import math
 import threading
 from rclpy.node import Node
-from rclpy.clock import Clock, ClockType
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from datetime import datetime
 from scipy.spatial.transform import Rotation as R
@@ -237,12 +236,13 @@ class Controller(Node):
         # model with it, so it must be the published command, not the solver's latest.
         self._applied_u_rate = np.zeros(4)
 
-        # get_clock() follows use_sim_time (sim clock in simulation, wall on hardware).
-        # The pose-timeout watchdog deliberately stays on a separate WALL clock: it is
-        # about real comms latency, and CallbackManagerMulti stamps last_pose_update_time
-        # from its own wall clock, so both sides of that comparison must remain wall time.
-        self._wall_clock = Clock(clock_type=ClockType.SYSTEM_TIME)
-        self.last_pose_update_time = self._wall_clock.now()
+        # The pose and reference watchdogs run on the node clock: wall time on the rig (every
+        # real graph sets use_sim_time false, test_real_mode_launches), sim time in the twin.
+        # On a wall clock a twin stall of 0.3 s wall (0.05 s sim, ~6 mocap frames) read as a
+        # dead link and voided 12 runs on 7 Oct (R1119-R1148). CallbackManagerMulti stamps
+        # last_pose_update_time from this same clock.
+        self._safety_clock = self.get_clock()
+        self.last_pose_update_time = self._safety_clock.now()
 
         # ── Callbacks / subscriptions ─────────────────────────────────────
         self.cb = CallbackManagerMulti(self, drone_id=self.drone_id)
@@ -691,9 +691,8 @@ class Controller(Node):
         self.planner_ref_cable = arr[:, 9:12] if fields >= 12 else None
         self._ref_arrival_sim = self.get_clock().now().nanoseconds * 1e-9
         self._ref_dt = float(data[1])
-        # Wall clock, matching the pose watchdog: a stale reference must be
-        # detected in real time even when sim time is running slow.
-        self._last_ref_wall = self._wall_clock.now()
+        # the watchdog clock, as the pose watchdog (wall on the rig, sim in the twin)
+        self._last_ref_wall = self._safety_clock.now()
 
     def _imu_callback(self, msg: Imu):
         """Store the body-frame linear acceleration (specific force) from the
@@ -741,12 +740,8 @@ class Controller(Node):
         tilt and speed. See docs/design/fleet_safety.md."""
         p = self.declare_parameter
         self.safety_enabled = bool(p('safety_enabled', True).value)
-        # Mocap watchdog budget. Measured on the WALL clock on purpose (it is about real
-        # comms latency), which makes it wrong by construction in a simulator running
-        # slower than real time: at Gazebo's ~0.3x realtime, 0.25 s of wall is under four
-        # mocap periods, so ordinary scheduling jitter reads as a dead link and disarms a
-        # healthy drone. It did, ~1 s after ARM, in 6 of today's runs. Sim launches raise
-        # it; hardware keeps 0.25 s, where wall and sim time are the same thing.
+        # Mocap watchdog budget, on the node clock: wall time on the rig (0.25 s), sim time in
+        # the twin, where a wall budget read ordinary scheduling stalls as a dead link.
         self.pose_timeout_s = float(p('pose_timeout_s', POSE_TIMEOUT_THRESHOLD).value)
         lim = EnvelopeLimits(
             max_tilt_deg=float(p('max_tilt_deg', 60.0).value),
@@ -786,7 +781,7 @@ class Controller(Node):
         # No position check here: there is no geofence by decision.
         # Stale mocap: the pose watchdog would fire within 0.25 s of arming anyway,
         # so refuse now rather than arm and immediately abort.
-        age = (self._wall_clock.now()
+        age = (self._safety_clock.now()
                - self.last_pose_update_time).nanoseconds * 1e-9
         if age > self.pose_timeout_s:
             return f'mocap pose is {age:.2f} s stale'
@@ -829,7 +824,7 @@ class Controller(Node):
 
         ref_age = None
         if self._last_ref_wall is not None:
-            ref_age = (self._wall_clock.now()
+            ref_age = (self._safety_clock.now()
                        - self._last_ref_wall).nanoseconds * 1e-9
 
         pose = self.current_pose
@@ -940,7 +935,7 @@ class Controller(Node):
         return [num(lambda: self._thr_out), num(lambda: self._thr_off),
                 num(lambda: ac[0]), num(lambda: ac[1]), num(lambda: ac[2]),
                 num(lambda: self._planner_ff_active), num(lambda: self._load_grounded()),
-                num(lambda: (self._wall_clock.now() - last).nanoseconds * 1e-9)]
+                num(lambda: (self._safety_clock.now() - last).nanoseconds * 1e-9)]
 
     def _publish_channels(self, u, u_rate):
         """Send [roll, pitch, throttle, yaw] to the FC, or armed-idle before TAKEOFF.
@@ -1392,8 +1387,8 @@ class Controller(Node):
             self.cb.request_shutdown()
             return
 
-        # ── Pose timeout watchdog (wall time) ─────────────────────────────
-        elapsed = (self._wall_clock.now() - self.last_pose_update_time).nanoseconds * 1e-9
+        # ── Pose timeout watchdog (node clock: wall on the rig) ───────────
+        elapsed = (self._safety_clock.now() - self.last_pose_update_time).nanoseconds * 1e-9
         if self.armed and elapsed > self.pose_timeout_s:
             self.get_logger().error(
                 f"[Drone {self.drone_id + 1}] Pose timeout ({elapsed:.2f}s) - disarming.")

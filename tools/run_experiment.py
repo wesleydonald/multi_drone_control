@@ -38,7 +38,6 @@ import shutil
 import signal
 import subprocess
 import sys
-import threading
 import time
 
 import numpy as np
@@ -669,26 +668,20 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
         # fatal to the run's credibility. That is ~8 nodes and takes seconds.
         readback = dump_params(run_dir, only=REQUIRED_NODE_RE)
         # Everything else (bridges, mocap emulators, visualisation) is useful context
-        # but not evidence, and there are ~37 of them at ~5-25 s each. Dumping those on
-        # the critical path cost 90 s of dead wall time per run -- comparable to the
-        # simulation itself. They run in a thread alongside the flight instead:
-        # parameters do not change mid-run, and subprocess calls release the GIL so the
-        # rclpy spin loop below is unaffected.
+        # but not evidence, and there are ~37 of them at ~5-25 s each. They are read back
+        # AFTER the flight, while the stack is still up: parameters do not change mid-run,
+        # and the read-back running alongside ARM/TAKEOFF stalled the whole stack for
+        # 0.3-0.4 s wall (12 of 12 pose-timeout voids on 7 Oct, R1119-R1148).
         bg = {}
-        bg_thread = threading.Thread(
-            target=lambda: bg.update(other=dump_params(run_dir, skip=REQUIRED_NODE_RE)),
-            daemon=True)
+        bg_thread = None
         # Drain the mocap that arrived during the dump, so the watchdog starts from
         # fresh stamps rather than pre-dump ones.
         for _ in range(50):
             rclpy.spin_once(node, timeout_sec=0.02)
         node.start_clock()
         write_manifest(run_dir, t_ready_sim=node.t_ready)
-        if getattr(cfg, 'bg_param_dump', True):
-            bg_thread.start()
-        else:
-            bg_thread = None      # ~40 'ros2 param dump' processes mid-flight cost CPU
-            print('    background param read-back: skipped (timing.bg_param_dump false)')
+        if not getattr(cfg, 'bg_param_dump', True):
+            print('    param read-back of the other nodes: skipped (timing.bg_param_dump false)')
 
         # ── the run itself (SIM clock) ──────────────────────────────────────
         last_report = time.time()
@@ -770,6 +763,12 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
         failures.append(f'{type(e).__name__}: {e}')
         reason = 'exception'
     finally:
+        if getattr(cfg, 'bg_param_dump', True) and stack is not None and stack.poll() is None:
+            print('    param read-back of the other nodes (after the run)...')
+            try:
+                bg.update(other=dump_params(run_dir, skip=REQUIRED_NODE_RE))
+            except Exception as e:
+                print(f'    !! param read-back failed: {e}')
         rows = list(node.rows) if node else []
         events = list(node.event_log) if node else []
         aborts = list(node.aborts) if node else []

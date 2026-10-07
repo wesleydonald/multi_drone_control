@@ -76,6 +76,7 @@ class ExperimentRunner(Node):
 
         self.rows = []
         self.event_log = []
+        self.t_grounded = None        # fleet manager: disarmed before TAKEOFF
         self.aborts = []
         self.failures = []                     # hard failures -> nonzero exit
         self.step_i = 0
@@ -257,6 +258,8 @@ class ExperimentRunner(Node):
             if (('ARM FAILED' in msg.msg or 'ARM REFUSED' in msg.msg)
                     and not any(f.startswith(ARM_FAIL) for f in self.failures)):
                 self.failures.append(f'{ARM_FAIL} at t={self._rel():.2f}: {msg.msg}')
+            if 'disarmed before TAKEOFF' in msg.msg and self.t_grounded is None:
+                self.t_grounded = self._rel()
             return
         if not msg.name.endswith('dissipative_planner'):
             return
@@ -304,6 +307,10 @@ class ExperimentRunner(Node):
               and all(p is not None for p in self.pose)
               and all(c is not None for c in self.cmd[:self._n_cmd_ready()])
               and self.payload is not None)
+        # planner modes: the planner must be publishing references too (R1148 started the
+        # clock 17 s before the dissipative planner was up, and ARM went out into nothing)
+        if str(self.cfg.launch_args.get('mode', 'mpc')) in ('mpc', 'dissipative'):
+            ok = ok and all(r is not None for r in self.ref[:self.n])
         # the fleet manager must be discovered on /fleet/command, and stay so for 2 s:
         # R0602's ARM reached drone 3's tracker but not the fleet manager
         import time as _t
@@ -612,6 +619,10 @@ class ExperimentRunner(Node):
         if math.isnan(t):
             return False
         if t >= self.cfg.duration_s:
+            return True
+        # grounded before TAKEOFF: nothing will fly, so stop (R1148 waited 392 s wall)
+        if self.t_grounded is not None and t >= self.t_grounded + 2.0:
+            self.stop_reason = f'stopped: the fleet was grounded before TAKEOFF at t={self.t_grounded:.1f}'
             return True
         # Early stop once the outcome is decided: an abort disarms the whole fleet, so
         # the remaining sim time only records it lying on the floor (see
