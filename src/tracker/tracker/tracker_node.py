@@ -457,6 +457,10 @@ class Controller(Node):
         # (card 2026-10-04_inner_loop_aware_planner, critic must-fix 1)
         self.x0_relax_frac = float(self.declare_parameter('x0_relax_frac', 0.0).value)
         self.ref_time_shift = bool(self.declare_parameter('ref_time_shift', False).value)
+        # test-only (card 2026-10-08_lag_h1): apply each plan this long of node time after it
+        # arrives, the rig's extra planner-to-tracker latency added to the twin; 0 = off
+        self.ref_hold_s = float(self.declare_parameter('ref_hold_s', 0.0).value)
+        self._held_refs = deque()
         # > 0: start each solve from the state predicted this far ahead with the commands
         # already sent (the rig's command and mocap delay; 7 Oct, card delay_comp). 0 = off
         self.delay_comp_s = float(self.declare_parameter(
@@ -675,7 +679,22 @@ class Controller(Node):
         """Parse [n_nodes, dt, px,py,pz, vx,vy,vz, ax,ay,az, cx,cy,cz, ...] from
         mpc_planner (12 fields/node: position, velocity, specific thrust
         acceleration feedforward, and cable tension acceleration t*s/m)."""
-        data = msg.data
+        if self.ref_hold_s > 0.0:
+            due = self.get_clock().now().nanoseconds * 1e-9 + self.ref_hold_s
+            self._held_refs.append((due, list(msg.data)))
+            return
+        self._apply_planner_ref(msg.data)
+
+    def _release_held_refs(self):
+        """ref_hold_s: apply the newest held plan that is due (older due ones are superseded)."""
+        now = self.get_clock().now().nanoseconds * 1e-9
+        data = None
+        while self._held_refs and self._held_refs[0][0] <= now:
+            data = self._held_refs.popleft()[1]
+        if data is not None:
+            self._apply_planner_ref(data)
+
+    def _apply_planner_ref(self, data):
         if len(data) < 2:
             return
         n_nodes = int(data[0])
@@ -1379,6 +1398,8 @@ class Controller(Node):
     # ─────────────────────────────────────────────────────────────────────
 
     def control_loop(self):
+        if self.ref_hold_s > 0.0:
+            self._release_held_refs()
         if self.x0_rate_source == 'imu':
             # the gyro samples of this tick, taken on every tick so the mean never spans a gap
             self._gyro_tick = (self._gyro_sum, self._gyro_n)

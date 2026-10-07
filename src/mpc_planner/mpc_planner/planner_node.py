@@ -504,13 +504,6 @@ class LoadPlanner(Node):
         self._tick_pub = (self.create_publisher(Float64MultiArray, '/planner/tick', 10)
                           if self.get_parameter('use_sim_time').value else None)
         self.create_timer(1.0 / PLANNER_HZ, self._plan_timer)
-        # test-only (card 2026-10-08_lag_h1): hold every reference publish this long of node
-        # time, to add the rig's extra latency to the twin; 0 = off
-        self._ref_delay_s = float(self.declare_parameter('ref_publish_delay_s', 0.0).value)
-        self._ref_queue = []
-        if self._ref_delay_s > 0.0:
-            self.create_timer(0.002, self._flush_delayed_refs)
-            self.get_logger().warn(f'[planner] TEST: every reference held {self._ref_delay_s:.3f} s')
         self.create_timer(0.2, self._publish_phase)
         # Record the run's configuration. Written here AND re-written at the end of a
         # subclass's __init__ (see _dump_run_params), so the file always reflects the
@@ -1804,17 +1797,7 @@ class LoadPlanner(Node):
                      float(ac[0]), float(ac[1]), float(ac[2])]
         msg = Float64MultiArray()
         msg.data = data
-        if getattr(self, '_ref_delay_s', 0.0) > 0.0:
-            due = self.get_clock().now().nanoseconds * 1e-9 + self._ref_delay_s
-            self._ref_queue.append((due, i, msg))
-            return
         self.ref_pub[i].publish(msg)
-
-    def _flush_delayed_refs(self):
-        now = self.get_clock().now().nanoseconds * 1e-9
-        while self._ref_queue and self._ref_queue[0][0] <= now:
-            _, i, msg = self._ref_queue.pop(0)
-            self.ref_pub[i].publish(msg)
 
     def _zbias_gated(self, vz_gate=True):
         """Steady tethered hover, and nothing else moving the height: lift complete, no

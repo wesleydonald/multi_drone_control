@@ -85,7 +85,7 @@ fleet_resize:
   detach_post_blend_s: ''      # s, '' = 1: survivors' blend after the resize
   detach_detect_m: ''          # m, '' = 0 (off): a cable this much over its length for 2 ticks = an unannounced detach (7 Oct)
   departed_land: ''            # '' = false: a freed drone lands after its step-out while the fleet flies on (7 Oct)
-  ref_publish_delay_s: ''      # s, '' = 0: TEST ONLY, hold every reference publish (card 2026-10-08_lag_h1)
+  ref_hold_s: ''               # s, '' = 0: TEST ONLY, trackers apply each plan this late (card 2026-10-08_lag_h1)
 network:
   auto_handover_settle_s: 1.5
   net_horizon_preview: true

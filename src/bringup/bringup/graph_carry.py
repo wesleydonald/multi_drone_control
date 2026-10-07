@@ -99,6 +99,8 @@ def sim_mpc(context, launch_dir, profile_vals):
                          'w_thr_ref': f('w_thr_ref'),
                          'x0_relax_frac': f('x0_relax_frac'),
                          'ref_time_shift': b('ref_time_shift'),
+                         **({'ref_hold_s': float(LaunchConfiguration('ref_hold_s').perform(context))}
+                            if LaunchConfiguration('ref_hold_s').perform(context).strip() else {}),
                          'ground_idle': b('ground_idle'),
                          'cable_accel_cap': f('cable_accel_cap'),
                          'payload_rest_z': f('payload_rest_z'),
