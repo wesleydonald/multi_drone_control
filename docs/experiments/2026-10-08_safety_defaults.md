@@ -127,3 +127,47 @@ f694300). R1160 released ~143 deg further round the circle than R1159.
   affects only the lift.
 - **Host effect** (identical code apart from the inert drop knobs): circle A0 0.131-0.144 on the lab
   vs 0.086 on the laptop; figure-8 0.104-0.106 vs 0.069.
+
+## Same-host results (8 Oct, 04:30)
+
+**M, laptop only, release metrics (`tools/detach_tensions.py`):**
+
+| case | integral | runs | detected after | tilt peak release..+10 s | ring z jump |
+|---|---|---|---|---|---|
+| hover | model | R1157, R1158* | 0.28, 0.23 s | 4.7, 4.1 deg | -2.7, -2.6 cm |
+| hover | reference | R1187, R1188 | 0.30, 0.27 s | 9.2, 7.2 deg | -3.3, -2.4 cm |
+| circle | model | R1159, R1160* | 0.28, 0.29 s | 4.9, 5.2 deg | -2.9, -2.6 cm |
+| circle | reference | R1190, R1199 | 0.26, 0.25 s | 8.0, 9.1 deg | -2.5, -3.2 cm |
+
+\\* Released ~10 s late (the repeat-shift bug); R1160 released further round the circle.
+
+- The lab PC shows the same direction with a smaller gap: acceptance run R1189 (model, defaults)
+  6.2 deg against R1140/R1145 (reference) 7.5/7.9.
+- **M SUPPORTS** on the card's bars:
+  - tilt below the baseline, not above it +2;
+  - ring z jump within +-1.5 cm;
+  - the integral does not move in the hold (0.00 cm).
+
+**S, laptop only, with two mpc runs per trajectory for the spread** (lag on one clock clipped to the
+runner window, RMSE 3D = `payload_rmse_sweep_m`):
+
+| trajectory | mpc A0 / RMSE | dissipative A0 / RMSE | bar (mpc + 20 %) |
+|---|---|---|---|
+| circle | R1169 0.086 / 1.12, R1200 0.096 / 1.27 | R1161 0.107 / 1.38, R1162 0.059 / 1.32, R1171 0.089 / 1.16, R1174 0.084 / 1.13 | A0 <= 0.115 s, RMSE <= 1.52 cm |
+| figure-8 | R1170 0.069 / 1.82, R1201 0.065 / 1.30 | R1167 0.073 / 1.58, R1168 0.048 / 2.14 | A0 <= 0.083 s, RMSE <= 2.18 cm |
+
+- **S SUPPORTS:**
+  - every dissipative run is inside the mpc spread + 20 % on lag and RMSE;
+  - no detector fired in 6 carries;
+  - no abort.
+- Caveat: R1168 did not land inside its run (the repeat-shift runner bug, fixed f694300).
+
+**Acceptance:** the branch defaults alone resolve to dissipative, detection 0.06, the 0.5 m
+step-out and the model integral, and fly U1 (R1189: detected 0.25 s, 6.2 deg, landed).
+
+**What merging safety-defaults changes on the rig profile** (`real/dissipative`, week4 vs the
+branch):
+- default mode mpc -> dissipative;
+- detach_detect_m '' -> 0.06;
+- the drop knobs added (off by default);
+- int_mode model for detach flights (launch rule).
