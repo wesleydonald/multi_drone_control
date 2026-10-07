@@ -50,6 +50,9 @@ from dissipative_planner.dissipative_network import (
 # a freed drone lands at least this far from the ring centre (ring 0.28 + cable 0.5 + margin)
 DEPARTED_CLEAR_R = 1.2
 DETACH_STEP_VEL = 0.15     # m/s, a freed drone's step out from the ring (detach_step_out_m)
+# during a circle the formation sweeps a disc of radius r_orbit + 0.5 (+ props): a freed drone then
+# also steps out from the PATH centre to r_orbit + this before it holds or lands
+DEPARTED_PATH_CLEAR_M = 1.0
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
 
 
@@ -254,6 +257,7 @@ class DissipativeController(LoadPlanner):
         # clear of the survivors (Wesley 7 Oct); 0 = hold where it let go
         self._detach_step_out = float(p('detach_step_out_m', 0.0).value)
         self._departed_step = {}
+        self._departed_next = {}     # d -> the path-clear waypoint after the ring step (circles)
         # > 0: soft detach. The leaver's tension is blended down to detach_unload_t (the
         # survivors take the balanced n-1 split) over this long in the n-drone OCP before its
         # magnet opens; 0 = release and resize in one tick (r0013 capsized on that step)
@@ -564,6 +568,9 @@ class DissipativeController(LoadPlanner):
             if d in self._departed_step and not self._land_to_ground and d not in self._departed_landing:
                 p_hold[:], _ = carrot_step(p_hold, self._departed_step[d], DETACH_STEP_VEL,
                                            1.0 / PLANNER_HZ)
+                if d in self._departed_next and \
+                        float(np.linalg.norm(p_hold - self._departed_step[d])) < 0.02:
+                    self._departed_step[d] = self._departed_next.pop(d)
             td_prev = self._departed_td.get(d)
             down = td_prev is not None and td_prev.stalled
             # departed_land: straight down once the step-out is done, the fleet still flying
@@ -858,12 +865,35 @@ class DissipativeController(LoadPlanner):
             self._departed_step[d] = hold + self._detach_step_out * np.array([out[0], out[1], 0.0])
             self.get_logger().info(f'[dissipative] departed drone {d} steps {self._detach_step_out:.2f} m '
                                    f'out from the ring at {DETACH_STEP_VEL:.2f} m/s, then holds')
+            clear = self._path_clear_point(self._departed_step[d], out)
+            if clear is not None:
+                self._departed_next[d] = clear
+                self.get_logger().info(
+                    f'[dissipative] departed drone {d} then clears the {self.traj.kind}: to '
+                    f'({clear[0]:.2f}, {clear[1]:.2f}), {self.traj.radius + DEPARTED_PATH_CLEAR_M:.2f} m '
+                    f'from the path centre')
         self._reconfig_hold_left = self._reconfig_hold_s
         self.get_logger().warn(
             f'[dissipative] DETACH drone {d} (OCP resize): n={self.n}, '
             f'trajectory held {self._reconfig_hold_s:.1f} s; surviving ring spans a '
             f'{gap:.0f} deg gap ({"CoG inside" if gap < 180.0 - 1e-6 else "CoG ON/OUTSIDE the hull — the load cannot hang level"})')
         return True
+
+    def _path_clear_point(self, p, out):
+        """During a circular trajectory: the point r_orbit + DEPARTED_PATH_CLEAR_M from the path
+        centre, radially out through p (along `out`, the ring step, when p is at the centre).
+        None when p is already that far out or the trajectory is not a circle."""
+        if self.traj.kind not in ('orbit', 'circle', 'spin') or self.hover_xy is None:
+            return None
+        # load_trajectory: offset (r sin th, r (1 - cos th)) from the captured hover point
+        c = np.array([float(self.hover_xy[0]), float(self.hover_xy[1]) + float(self.traj.radius)])
+        v = np.asarray(p[:2], float) - c
+        n = float(np.linalg.norm(v))
+        r_clear = float(self.traj.radius) + DEPARTED_PATH_CLEAR_M
+        if n >= r_clear:
+            return None
+        u = v / n if n > 0.05 else np.asarray(out[:2], float) / max(float(np.linalg.norm(out[:2])), 1e-6)
+        return np.array([*(c + u * r_clear), float(p[2])])
 
     def _start_unload(self, d):
         """Soft detach, phase 1: in the n-drone OCP blend the leaver's tension down to

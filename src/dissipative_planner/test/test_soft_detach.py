@@ -173,7 +173,8 @@ def test_departed_land_steps_out_then_descends_while_the_fleet_flies():
                         _departed_landing=set(), _departed_td={}, _departed_clear={},
                         _departed_land_vel=0.0, land_vel=0.15, N=20, load_state=np.zeros(13),
                         _departed_hold={1: np.array([0.5, 0.0, 1.5])},
-                        _departed_step={1: np.array([1.0, 0.0, 1.5])}, drone_pos=[None, None])
+                        _departed_step={1: np.array([1.0, 0.0, 1.5])}, _departed_next={},
+                        drone_pos=[None, None])
     f.get_logger = lambda: _Log()
     f._publish_ref = lambda d, nodes: published.append(nodes[0][0].copy())
     for _ in range(40):                          # 0.5 m at 0.15 m/s: done in ~3.3 s
@@ -184,6 +185,42 @@ def test_departed_land_steps_out_then_descends_while_the_fleet_flies():
         D._publish_departed_refs(f)
     assert published[-1][2] < z0 - 0.2 and np.allclose(published[-1][:2], [1.0, 0.0], atol=0.02)
     assert 1 in f._departed_landing
+
+
+def test_path_clear_point_during_a_circle():
+    # orbit r 0.5 from the hover point (0, 0): the path centre is (0, 0.5), the clear radius 1.5
+    f = SimpleNamespace(traj=SimpleNamespace(kind='orbit', radius=0.5), hover_xy=(0.0, 0.0))
+    up, east = np.array([0.0, 1.0]), np.array([1.0, 0.0])
+    assert np.allclose(D._path_clear_point(f, np.array([0.0, 1.0, 1.5]), up), [0.0, 2.0, 1.5])
+    assert np.allclose(D._path_clear_point(f, np.array([0.3, 0.1, 1.4]), up),
+                       [0.9, -0.7, 1.4])                       # radial from the centre, not the ring step
+    assert np.allclose(D._path_clear_point(f, np.array([0.0, 0.52, 1.5]), east), [1.5, 0.5, 1.5])
+    assert D._path_clear_point(f, np.array([0.0, 2.1, 1.5]), up) is None         # already clear
+    for kind in ('hover', 'fig_8', 'line_x'):
+        f.traj.kind = kind
+        assert D._path_clear_point(f, np.array([0.0, 1.0, 1.5]), up) is None
+    f.traj.kind, f.hover_xy = 'circle', None
+    assert D._path_clear_point(f, np.array([0.0, 1.0, 1.5]), up) is None
+
+
+def test_freed_drone_clears_the_circle_before_it_lands():
+    published = []
+    f = SimpleNamespace(dyn=SimpleNamespace(g=9.81), _land_to_ground=False, _departed_land=True,
+                        _departed_landing=set(), _departed_td={}, _departed_clear={},
+                        _departed_land_vel=0.0, land_vel=0.15, N=20, load_state=np.zeros(13),
+                        _departed_hold={3: np.array([0.0, 0.5, 1.5])},
+                        _departed_step={3: np.array([0.0, 1.0, 1.5])},
+                        _departed_next={3: np.array([0.0, 2.0, 1.5])}, drone_pos=[None] * 4)
+    f.get_logger = lambda: _Log()
+    f._publish_ref = lambda d, nodes: published.append(nodes[0][0].copy())
+    for _ in range(40):                          # the 0.5 m ring step (3.3 s): no landing yet
+        D._publish_departed_refs(f)
+    assert 3 not in f._departed_landing and published[-1][1] > 1.0 and published[-1][2] == 1.5
+    for _ in range(75):                          # then 1.0 m more to the path-clear point
+        D._publish_departed_refs(f)
+    assert np.allclose(published[-1][:2], [0.0, 2.0], atol=0.02) and 3 in f._departed_landing
+    assert all(q[2] == 1.5 for q in published if q[1] < 1.98)    # level until clear
+    assert published[-1][2] < 1.5 and not f._departed_next
 
 
 def test_stale_ring_or_drone_pose_or_all_cables_over_is_not_a_release():
