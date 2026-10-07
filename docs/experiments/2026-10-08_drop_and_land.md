@@ -210,3 +210,74 @@ The design would not have saved either 7 Oct rig event, and the twin bars cannot
 - **A cheaper way to cut exposure that keeps the ring:** LAND automatically after an unannounced
   detection.
 - **The lock amendment** is Wesley's line in decisions.md and CLAUDE.md before any code.
+
+## Revision v2 after the critic (8 Oct night)
+
+**Design changes** (the critic's must-fix list):
+1. **The trigger starts in the trackers** (must-fix 1).
+   - Each tracker, on every ring sample, asks for the drop on `/fleet/drop` when the ring tilt is
+     over `drop_tilt_deg` (30) for `drop_samples` (2) samples in a row.
+   - A frame-to-frame attitude step over `drop_glitch_step_deg` (20) counts as a pose glitch: the
+     sample is ignored and the count resets (must-fix 2).
+   - The tracker that asks stands its own payload checks down at once. All four see the same ring,
+     so the 60 deg latch cannot win the race.
+   - If no `/fleet/payload_dropped` arrives within 0.5 s, the checks come back, and the 60 deg fault
+     disarms the fleet as today.
+   - The rig values of the rule come from the bag replay (`2026-10-08_drop_trigger_replay.md`,
+     must-fix 3). The twin runs test the mechanism.
+2. **The planner's triggers** (must-fix 4, 7):
+   - a detected loss that leaves fewer than `min_survivors`, or survivors spanning a gap >= 180 deg
+     (`_largest_gap_deg`);
+   - any detected loss in LAND (detection now runs in LAND until the ring is down, with
+     `drop_on_loss`);
+   - a `/fleet/drop` request.
+
+   An announced `/fleet/detach` that would leave too few is still refused.
+3. **The action** (should-fix):
+   - Every magnet OFF, re-sent every tick until landed.
+   - The twin's joints are released once.
+   - Every drone not already gone becomes departed:
+     - its hold is seeded 0.2 s ahead on its velocity;
+     - it steps to 1.2 m from the ring centre latched at the trigger;
+     - it lands on its own touchdown detector.
+   - A drone that left earlier keeps its plan and lands too.
+   - The OCP stops.
+4. **Latch lifecycle** (must-fix 6). `/fleet/payload_dropped` is latched (transient local). The
+   planner publishes False at start and at every ARM before a drop; the trackers clear their
+   request on the re-ARM edge.
+5. **Commands in a drop** (should-fix):
+   - LAND is acknowledged (re-announces `/fleet/landed` once down);
+   - DETACH is ignored;
+   - the fleet manager enters landing on `/fleet/payload_dropped` and disarms on `/fleet/landed`;
+   - `/fleet/landed` comes when every drone is down, or after 30 s.
+6. **Scope** (must-fix 7):
+   - detach mode only; `drop_on_loss` is refused unless `reconfig_mode ocp`;
+   - carry flights (mode mpc) keep today's fleet-wide disarm;
+   - the 60 deg envelope stays as the last resort.
+7. **Not adopted:** resetting the trackers' measured pull at the drop. The measured term decays with
+   the real pull; zeroing it before the magnet lets go would pull the drone toward the ring for the
+   release delay.
+
+**Arms (twin, branch safety-defaults, 2 runs each), replacing section 6:**
+
+| arm | events | config | expected |
+|---|---|---|---|
+| B0 baseline (week4) | release index 1 (90 deg), then index 0 (30 deg) 6 s later | `w4_3915_release2.yaml` | today: capsize, fleet disarm in the air |
+| D1 second loss | the same, `drop_on_loss` | `w4_3915_release2_drop.yaml` | drop at the second loss (A, or the trackers' tilt rule) |
+| D2 forced | steady hover, a DROP event after the lift | `w4_3915_drop_forced.yaml` | drop from 1.0 m |
+| D3 one release, a hard layout | U3 on 1/3/6/9 | `w4_3969_release_drop.yaml` | NO drop (peak 13.9-19.2 deg < 30) |
+| D4 the bad leaver | release index 3 (270 deg): survivors 30/90/150, gap 240 | `w4_3915_release3_drop.yaml` | drop at detection (gap rule) |
+| D5 double loss | indices 1 and 0 together | `w4_3915_release01_drop.yaml` | drop |
+
+**Bars (section 5, revised):**
+- **Must hold:**
+  - no drone disarmed above 0.2 m;
+  - no tracker fault latch before the stand-down;
+  - drone tilt <= 30 deg after the trigger;
+  - climb <= 0.3 m;
+  - horizontal excursion and peak speed reported (speed fault 3 m/s);
+  - every drone down within 15 s and `/fleet/landed` then disarm;
+  - D3 never drops.
+- **Reported, not falsifiers:**
+  - the landing spot (DEPARTED_CLEAR_R by construction);
+  - the closest pair, from the trigger to touchdown.
