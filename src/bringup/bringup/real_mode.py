@@ -39,8 +39,8 @@ from launch.utilities import perform_substitutions
 
 RIG_WATCHDOGS = {'pose_timeout_s': 0.25, 'safety_ref_timeout_s': 1.0}
 RIG_DEFAULTS = {'payload_rest_z': 0.05, 'z_taut_gate': 0.9,
-                'start_taut': 'false', 'handover_elev_deg': 45.0, 'handover_settle_s': 1.0,
-                'creep_vel': 0.2, 'reconfig_mode': 'ocp'}
+                'start_taut': 'false', 'handover_elev_deg': 60.0, 'handover_settle_s': 1.0,
+                'creep_vel': 0.2, 'reconfig_mode': 'ocp'}   # handover 60 as everywhere (Wesley 7-8 Oct)
 _TYPED_KEY = 'real_mode_typed_args'
 
 
@@ -89,6 +89,11 @@ def apply_rig_values(context, sim_defaults):
         raise RuntimeError('real_mode: the launch file must run record_typed_args before '
                            'its DeclareLaunchArgument list')
     typed = set(context.launch_configurations[_TYPED_KEY].split(','))
+    # a params_file value is chosen as deliberately as a typed one: the rig default must not replace it
+    pf = context.launch_configurations.get('params_file', '').strip()
+    if pf:
+        from bringup.profiles import _load, flatten
+        typed |= set(flatten(_load(pf)))
     notes = []
     for name, rig in {**RIG_WATCHDOGS, **RIG_DEFAULTS}.items():
         if name not in sim_defaults:

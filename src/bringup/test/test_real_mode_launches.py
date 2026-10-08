@@ -488,7 +488,7 @@ def test_m2_real_graph_plain_carry():
 # ── Q7: the rig defaults to the creep floor start and the OCP resize ──────────────────
 
 Q7_KEYS = ('start_taut', 'handover_elev_deg', 'handover_settle_s', 'creep_vel', 'reconfig_mode')
-Q7_RIG = (False, 45.0, 1.0, 0.2, 'ocp')   # settle 1.0 = the rig carry's (2.0 until 2026-10-03)
+Q7_RIG = (False, 60.0, 1.0, 0.2, 'ocp')   # handover 60 since 8 Oct; settle 1.0 = the rig carry's (2.0 until 2026-10-03)
 # rig mode -> the sim mode whose graph it flies, and that sim mode's legacy defaults
 Q7_SIM_MODE = {'attach': 'attach', 'm2': 'dissipative'}
 Q7_SIM = {'attach': (True, 45.0, 0.75, 0.10, 'network'),
@@ -524,7 +524,7 @@ def test_q7_real_keeps_typed_values(mode):
 def test_q7_real_keeps_one_typed_value_and_defaults_the_rest():
     nodes = rig('attach', thrust_ratio=24.0,
                      **Q7_RIG_LINE['attach'], creep_vel=0.3)
-    assert _q7(nodes) == (False, 45.0, 1.0, 0.3, 'ocp')
+    assert _q7(nodes) == (False, 60.0, 1.0, 0.3, 'ocp')
 
 
 def test_q7_typed_watchdog_at_the_sim_default_is_refused():
@@ -696,3 +696,15 @@ def test_rig_attach_types_the_mocap_body_ids_and_refuses_without_the_tip():
     assert mocap['params']['drone_body_ids'] == [11, 12, 13, 14]
     with pytest.raises(RuntimeError, match='mocap_magnet_tip_body_id'):
         rig('attach', enable_approach_mpc=False, mocap_magnet_tip_body_id='')
+
+
+def test_rig_attach_flies_the_m1_layout_and_honours_a_params_file(tmp_path):
+    """M1 rig layout (Wesley 8 Oct): carriers 270/30/150, the weld at +y 0.225 (plate 9); a
+    params_file value for a rig-default key is kept, not replaced by the rig default."""
+    g = _by_name(rig('attach', enable_approach_mpc=False))
+    p = g['/dissipative_planner']['params']
+    assert p['handover_elev_deg'] == 60.0
+    pf = tmp_path / 'rung.yaml'
+    pf.write_text('handover_elev_deg: 55.0\n')
+    p = _by_name(rig('attach', enable_approach_mpc=False, params_file=str(pf)))['/dissipative_planner']['params']
+    assert p['handover_elev_deg'] == 55.0
