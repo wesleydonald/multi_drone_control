@@ -48,14 +48,15 @@ def _node(p_ref=(0.0, 0.25, 1.64), pending=True, approaching=True, on=True):
         _departed_down_z=0.15, _land_to_ground=False, _dropped=None, _landed=False,
         _approach_hold_on=True, takeoff_seen=True, phase='planner',
         load_state=np.r_[0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, np.zeros(6)], drone_pos=list(carriers),
-        dyn=SimpleNamespace(g=9.81), N=20, _magnet_cmd_pub=_Pub())
+        dyn=SimpleNamespace(g=9.81), N=20, _magnet_cmd_pub=_Pub(),
+        traj=SimpleNamespace(kind='hover', radius=0.0), hover_xy=None)
     f.get_logger = lambda: log
     f.log = log
     f.now = [100.0]
     f.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=int(f.now[0] * 1e9)))
     for name in ('_abort_newcomer', '_newcomer_off_tick', '_magnet_cmd_cb', '_magnet_attached_cb',
                  '_newcomers_out_on_land', '_publish_departed_refs', '_departed_down', '_pos', '_reserved_index',
-                 '_weld_refused', '_set_on_load'):
+                 '_weld_refused', '_set_on_load', '_path_clear_point'):
         setattr(f, name, MethodType(getattr(D, name), f))
     f.attached = []
     f._do_attach = lambda d: f.attached.append(d)
@@ -264,3 +265,26 @@ def test_an_abort_before_it_leaves_the_floor_lands_it_where_it_is():
     assert 3 not in f._departed_step and 3 not in f._departed_wait
     _ticks(f, 3)
     assert f.published[-1][1][2] < 0.10                            # its reference goes down, not up
+
+
+def test_an_abort_during_a_circle_moves_on_out_past_the_rings_path():
+    f = _node()
+    f.traj, f.hover_xy = SimpleNamespace(kind='orbit', radius=0.5), (0.0, 0.0)   # path centre (0, 0.5)
+    f._abort_newcomer(0, 'abort')
+    step, nxt = f._departed_step[3], f._departed_next[3]
+    assert abs(np.linalg.norm(step[:2]) - DEPARTED_CLEAR_R) < 1e-9                # first clear of the ring
+    assert np.linalg.norm(nxt[:2] - [0.0, 0.5]) == pytest.approx(0.5 + 1.0)       # then clear of its path
+    assert nxt[2] == step[2] == pytest.approx(1.64)
+
+
+def test_the_floor_is_the_height_it_rested_at_not_an_absolute_one():
+    f = _node(p_ref=(0.0, 1.4, 0.30))
+    f._approach_z0 = {0: 0.20}                                     # the rig rests higher than the twin
+    f.attach_pos[0] = np.array([0.0, 1.4, 0.22])                   # 2 cm up: still on the floor
+    f._abort_newcomer(0, 'LAND')
+    assert np.allclose(f._departed_hold[3], [0.0, 1.4, 0.22]) and 3 not in f._departed_wait
+    g = _node(p_ref=(0.0, 1.4, 0.30))
+    g._approach_z0 = {0: 0.10}
+    g.attach_pos[0] = np.array([0.0, 1.4, 0.22])                   # 12 cm up: airborne
+    g._abort_newcomer(0, 'LAND')
+    assert 3 in g._departed_wait

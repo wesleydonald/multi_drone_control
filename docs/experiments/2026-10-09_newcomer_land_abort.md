@@ -12,15 +12,18 @@ own card: 2026-10-09_newcomer_fault_scope.md.
    its approach reference for 0.5 s (the magnet lets go), moves it radially out from the ring centre to 1.2 m at its
    height (0.15 m/s; Wesley: no climb, a climb can itself collide), lands it by itself, and the landed gate waits
    for it; OFF is re-sent every 0.5 s while it is out and any later ON or weld is refused with OFF.
-3. **The one variable.** `newcomer_lifecycle` (bringup common.yaml, default false; planner param), branch
-   newcomer-policy: dissipative_node.py `_abort_newcomer`, `_newcomers_out_on_land`, `_newcomer_off_tick`, OFF/ON
+3. **The one variable.** `newcomer_lifecycle` (bringup common.yaml, default false; planner param), flown from
+   branch newcomer-fault-scope (this card's code from acb21f3 on, under the fault-scope card's be2afda with
+   `newcomer_fault_alone` off in every row here, so NC and A1 differ only in `newcomer_lifecycle`): dissipative_node.py `_abort_newcomer`, `_newcomers_out_on_land`, `_newcomer_off_tick`, OFF/ON
    handling in `_magnet_cmd_cb` (the subscription is no longer gated on the approach hold; ON keeps that gate), weld
    refusals in `_magnet_attached_cb`/`_do_attach`, `_publish_departed_refs` lands a `_land_alone` drone by itself
    (its own 0.15 m/s path also during LAND, its touchdown detector kept between ticks), `_pos` reads an unwelded
    newcomer's own mocap (stamped; older than 0.5 s is not used). Off in every partner run (attached or not) and
    outside the OCP phase. A refused ON sends OFF only while a newcomer is unwelded (OFF releases a welded one).
    A newcomer whose approach never started gets no reference (R0532); one still on the floor when it is taken
-   out lands where it is (its reference goes down and freezes at the stall, no hold at floor height). Test tooling: runner `WAIT_LOG` (times an
+   out (less than 5 cm above its height at ATTACH: the rig's resting z is not the twin's) lands where it is (its
+   reference goes down and freezes at the stall, no hold at floor height). During a circle it moves on out past
+   the ring's path (orbit radius + 1.0 m from the path centre) before it lands, as a detached drone does. Test tooling: runner `WAIT_LOG` (times an
    event into a planner phase), `tools/attach_metrics.py`.
    Pinned: configs/experiments/twin_r8a_dry.yaml (free-start twin attach world, M1 layout 270/30/150, QUAD4 on
    plate 9, hover 1.0 m, weld_radius 0) with `newcomer_lifecycle` the only difference between NC and A1.
@@ -44,13 +47,16 @@ own card: 2026-10-09_newcomer_fault_scope.md.
    Grey (between the columns): one repeat of that run.
    Not flown here (unit tests only): an ON after an abort, and a weld racing LAND or an abort (refused, OFF sent,
    the release hold restarted). The twin cannot make them happen: with the magnet ON during the descent the tip
-   welds before an OFF can reach it near the plate. The refusal reaching the magnet is checked on the rig desk
-   instead (Wed 09:00, props off: ATTACH, OFF, ON; /drone_3's magnet latch must stay OFF; on_refused counts it);
+   welds before an OFF can reach it near the plate. Nor can a props-off desk check (the planner stays in the creep
+   phase, where the switch does nothing, and weld_radius 0 refuses an ON in the magnet manager anyway): the refusal
+   is unit-test-only until a weld-capable rig rung (R8b);
    the network-phase LAND (the switch does nothing outside the OCP phase); the drop path (drop is off in attach;
    its own card).
 6. **Repeats.** A1 and B1: 2 each (Gazebo). NC, A2, A3, B2, N1: 1 each. Neighbour before the repeats: B1 on an
-   orbit (twin_nc_b1_orbit: the abort holds a newcomer that was tracking a moving plate and moves it out from the
-   ring centre while the carriers fly on). Later: A1 on an orbit, OFF after a weld (today's release, caught only by
+   orbit (twin_nc_b1_orbit: the abort holds a newcomer that was tracking a moving plate, moves it out from the ring,
+   then past the ring's path, and lands it while the carriers circle on). Bars: B1's clearance (body >= 0.30, rod
+   >= 0.15 m) and tip-rim (>= 0.02 m) from MAGNET ON to LANDED, its landing spot >= orbit radius + 0.9 m from the
+   path centre; falsified as B1. A failure blocks the switch as the default on trajectories (hover rows stand). Later: A1 on an orbit, OFF after a weld (today's release, caught only by
    detection).
 7. **Cost.** 10 Gazebo runs on the laptop (~11 min each at RTF 0.25).
 8. **New code?** Yes, a gate that can hold the fleet down (the landed gate waits for an out newcomer; its own
@@ -85,7 +91,7 @@ revision 2 does:
   S8 neighbours: listed in 6, the weld-LAND race as a unit test. S9 clearance with the rods. Done (attach_metrics).
   S10 the 'not down after' line and QUAD4's floor tilt. Done (bars). S11 drop path and network LAND out of scope.
   Done (the drop edit removed; the switch acts only in the OCP phase). S12 'a later weld is refused': B3 and unit
-  tests.
+  tests (B3 dropped in revision 3).
 
 Second pass (8 Oct night, on revision 2): REWRITE. M1 a refused ON during LAND sent OFF to a welded, carrying
 newcomer (OFF is its release): fixed, OFF only while a newcomer is unwelded, tested. M2 a partner run that is not
@@ -94,3 +100,8 @@ B3 dropped (unit test + rig desk check), B2 is an abort-in-transit row without a
 restarts the release hold: done. S5 out while still on the floor: lands where it is, done. S6 WAIT_LOG now times
 later events from the matched line (A3's climb line comes before the wait fires): done, tested. S7 B1 on an orbit:
 added. S8 metrics: on_refused, step_dz_ref, disarm_z: done. S9 the fault-scope card exists on its branch.
+
+Third pass (8 Oct night, on revision 3, 5aef593): GO. Should-fixes done before the runs: S1 the props-off desk check
+cannot exercise the refusal (dropped; unit-test-only until R8b); S2 the floor test is relative to the newcomer's
+height at ATTACH (+5 cm), tested; S3 the abort path clears the ring's circle like a detach (`_path_clear_point`),
+tested, and the orbit row has bars; S5 the flown commit named. S4 (absolute params_file path) stays: laptop runs.

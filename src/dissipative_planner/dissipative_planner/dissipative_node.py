@@ -56,6 +56,7 @@ DEPARTED_PATH_CLEAR_M = 1.0
 NEWCOMER_RELEASE_S = 0.5   # s an aborted newcomer holds after its magnet OFF (rig release < 0.2 s)
 NEWCOMER_OFF_EVERY_S = 0.5  # s between the OFFs re-sent while a newcomer is out (a repeated ON must not weld it)
 NEWCOMER_POSE_STALE_S = 0.5  # s: an older newcomer pose is not used (a frozen pose reads as a stall)
+NEWCOMER_LIFTED_M = 0.05   # m above its height at ATTACH before an aborted newcomer counts as off the floor
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
 DROP_LAND_WAIT_S = 30.0    # s after a drop: /fleet/landed even if a drone never reads as down
 
@@ -730,6 +731,8 @@ class DissipativeController(LoadPlanner):
         for j in range(self.reserved_attach):
             if self.attach_pending[j] and self.attach_pos[j] is not None and j not in self._approach \
                     and j not in self._newcomer_out:
+                self._approach_z0 = getattr(self, '_approach_z0', {})
+                self._approach_z0[j] = float(self.attach_pos[j][2])     # its resting height (rig: not 0.10)
                 self._approach[j] = ApproachProfile(self.attach_pos[j], self._attach_body_to_tip,
                                                     1.0 / PLANNER_HZ,
                                                     seek_m=self._attach_seek_m,
@@ -1376,7 +1379,9 @@ class DissipativeController(LoadPlanner):
                                    f'approach: it stays where it is')
             return
         pos = self._pos(d)
-        if pos is not None and float(pos[2]) < self._departed_down_z:
+        z0 = getattr(self, '_approach_z0', {}).get(j)
+        floor = self._departed_down_z if z0 is None else z0 + NEWCOMER_LIFTED_M
+        if pos is not None and float(pos[2]) < floor:
             # its approach had started (its tracker has references) but it has not left the floor:
             # a departed drone that lands where it is, so the reference keeps coming and freezes at the stall
             self._departed_hold[d] = np.asarray(pos, float).copy()
@@ -1391,9 +1396,16 @@ class DissipativeController(LoadPlanner):
             c = np.asarray(self.load_state[0:2], float)
             v = hold[:2] - c
             r = float(np.linalg.norm(v))
+            u = v / r if r > 1e-6 else np.array([1.0, 0.0])
             if r < DEPARTED_CLEAR_R:
-                u = v / r if r > 1e-6 else np.array([1.0, 0.0])
                 self._departed_step[d] = np.array([*(c + u * DEPARTED_CLEAR_R), float(hold[2])])
+            # during a circle, on out past the ring's path before it lands (as a detached drone does)
+            clear = self._path_clear_point(self._departed_step.get(d, hold), u)
+            if clear is not None:
+                if d in self._departed_step:
+                    self._departed_next[d] = clear
+                else:
+                    self._departed_step[d] = clear
         self._land_alone.add(d)
         self.get_logger().warn(f'[dissipative] {_who(d)} out of this flight ({why}): magnet OFF, '
                                f'{NEWCOMER_RELEASE_S:.1f} s for the release, then radially out to '
