@@ -73,3 +73,28 @@ ever: 0.5 s at its rest ends the press, and the tracker's departed branch no lon
 tested). N2 the press after a high stall had no limit: 2 s, then held at its own height and warned (tested). N3/N4
 bars with numbers and a tool (tools/departed_metrics.py). S1 press 0.35 m. S2 rest heights cleared at ARM, logged
 at TAKEOFF, a missing pose warned. S3 refused on an air start. S4 warnings reset. M8 registry rows: with batch 5's.
+
+## Result (9 Oct night, twin, rig-prep 38fa1f3 / 7da010a)
+
+Per departed drone (tools/departed_metrics.py; bars: disarm z - rest <= 0.03 m, press <= 1 s, tilt after idle
+<= 10 deg, stand < 2 s, the tracker's idle before LANDED, no 'held there' line).
+| Row | Run | Who | Back at rest -> idle (s) | Disarm z - rest (m) | Press (s) | Stand (s) | Verdict |
+|---|---|---|---|---|---|---|---|
+| G1 | R1267 | QUAD4 (lands before the ring) | 0.22 | 0.000 | 1.02 (final descent; 0.19 on the floor) | 0.35 | grey (press by 0.02 s) |
+| G1 | R1279 | QUAD4 | 0.17 | 0.000 | 0.96 | 0.41 | supports |
+| B1n | R1268 (before 6c1bc5b) | QUAD4 (aborted, carriers hover) | 0.20 | 0.000 | 1.03 | 0.84 | not supported: 'held there' at +0.00 m (timer wrinkle, fixed) |
+| B1n | R1276 | QUAD4 | 0.21 | 0.000 | 0.99 | 0.41 | supports |
+| B1n | R1277 | QUAD4 | 0.20 | 0.000 | 1.00 | 0.95 | supports |
+| G2 | R1269 | freed carrier (fleet circles) | 0.20 | 0.000 | 0.81 | 0.0 | supports; survivors as R1226/R1227 |
+| G3 | R1275 | QUAD4 (in LAND) | reached rest at LANDED | 0.003 | 0.85 | 0.52 | grey (the gate waited; the fleet disarm came before the idle line) |
+| N1 | R1271 | freed carrier (hover release) | 0.19 | 0.000 | 0.82 | 0.0 | supports; survivors as R1221/R1225 |
+| N2 | R1272 | all four (forced drop) | at rest before LANDED | 0.000-0.008 | <= 0.85 | 0.0 | supports |
+VOID: R1270, R1273 (the planner lagged at startup and had no newcomer pose at TAKEOFF: the switch fell back to the old
+landing as designed; rest heights now come from the last pose, 02dba91), R1278 (a carrier flipped in the creep, cause
+open, nothing of this switch acts before ATTACH).
+
+Baselines without the switch: QUAD4 floated 0.24 m (R1252, R1254, R1255, R1257) or stood on its rod (R1253) and was
+dropped at the fleet disarm; the freed carrier sat at throttle 0.48 on the floor (R1226). Verdict: SUPPORTS in the
+twin: every drone that lands by itself now reaches its own rest and idles there (disarm at rest in every scored row),
+with the ring still in the air; the two greys are bar-letter edges, not failures of the behaviour. The rig's offset
+(0.19-0.22 m near the floor, r305) is larger than the twin's (0.12 m): the 0.35 m press is sized for it but untested.

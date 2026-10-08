@@ -76,3 +76,22 @@ S1 `_excused` cleared on ARM (tested). S2 C1's ring bar is now the LAND descent.
 runner events. S4 no scheduled LAND in C1/C1b/C2. S5 the M3 text fixed. S6 C1b's falsifier says what it blocks.
 S7 forced off with a welded start. S8 attach_metrics `fault` (disarm time and height from the tip, the events,
 carriers armed until LANDED).
+
+## Result (9 Oct night, twin, rig-prep 38fa1f3; C6 re-flown on 7da010a)
+
+| Row | Run | Fault | Loss/push -> QUAD4 disarm | Response | Carriers | Ring | Verdict |
+|---|---|---|---|---|---|---|---|
+| C0 (off) | R1258 | pose loss, transit | 0.27 s (at 1.85 m) | FLEET_ABORT 0.25 s after the loss | disarmed | dropped from 1.0 m | the old stop (test valid) |
+| C1 | R1259 | pose loss, transit | 0.27 s (1.88 m) | FAULT_LAND 0.26 s, PLANNER_LAND 0.28 s | armed to LANDED | landed, tilt 4.6 deg | supports |
+| C1 | R1265 | pose loss, transit | 0.28 s (1.87 m) | FAULT_LAND 0.26 s | armed to LANDED | landed, tilt 3.1 deg | supports |
+| C1b | R1262 | pose loss over plate 9 | 0.25 s (1.63 m, falls onto the ring) | FAULT_LAND 0.24 s | armed to LANDED, tilt up to 22 deg | **tilt 57.4 deg** in the 3 s after, then landed | supports by its bars; violent |
+| C2 | R1263 | push 10 N, 0.5 s | 0.25 s (speed > 3 m/s) | FAULT_LAND 0.23 s | armed to LANDED | landed, tilt 5.5 deg | supports |
+| C3 | R1260 | carrier pose loss | 0.27 s | FLEET_ABORT (the lock) | - | - | supports |
+| C5 | R1264 | operator DISARM | - | FLEET_ABORT, all disarmed, muxes latched | - | - | supports |
+| C6 | R1261 | QUAD4 pose loss in the creep | 0.26 s | FAULT_LAND that the planner ignored in the creep | flew on | **lifted to 1.0 m and hovered** | falsified (the gate leaked) |
+| C6 | R1274 (fix f3a2dee) | as R1261 | 0.26 s | FLEET_ABORT (no flag before the creep ends) | disarmed | stayed on the floor | supports |
+
+Verdict: SUPPORTS in the twin after the C6 fix: an unwelded QUAD4's fault lands the fleet in climb, transit and over
+the plate, a carrier fault, DISARM and a fault in the floor creep keep the fleet-wide stop. C1b is the warning:
+QUAD4 dying over the plate falls onto the rim and tilts the ring 57 deg (the twin rod has no collision, the rig would
+be worse), 3 deg short of the trackers' 60 deg envelope; the old rule would have dropped the ring from 1 m instead.
