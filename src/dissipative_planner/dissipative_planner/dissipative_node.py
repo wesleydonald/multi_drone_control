@@ -767,7 +767,7 @@ class DissipativeController(LoadPlanner):
                         td.stalled = True
                         p_hold[2] = float(pos[2])
                         self.get_logger().info(f'[dissipative] departed {_who(d)} is down (at its rest)')
-                    elif d in self._press_t:
+                    elif d in self._press_t and not near:     # at its rest the 0.5 s above decides (R1268)
                         self._press_t[d] += 1.0 / PLANNER_HZ
                         if self._press_t[d] >= DEPARTED_PRESS_LIMIT_S:
                             td.stalled = True                      # no endless press: held where it is

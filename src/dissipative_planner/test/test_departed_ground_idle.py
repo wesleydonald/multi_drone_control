@@ -117,3 +117,20 @@ def test_arm_clears_the_rest_heights_and_the_warnings():
     f._high_stall_said = {3}
     f._departed_flight_start('ARM')
     assert f._rest_z == {} and f._high_stall_said == set()
+
+
+def test_the_press_limit_does_not_fire_once_it_is_back_at_its_rest():
+    """R1268: the 2 s press timer ran out the tick the drone reached its rest and logged 'held there (not down)'."""
+    f = _node(z=0.60)
+    for z in np.linspace(0.60, 0.40, 10):
+        _at(f, z, 1)
+    _at(f, 0.40, 30)                                                # a high stall: the press timer starts
+    assert 3 in f._press_t
+    t_press = f._press_t[3]
+    for z in np.linspace(0.40, 0.10, 4):                           # the rod falls, it comes down
+        _at(f, z, 1)
+    assert f._press_t[3] < 2.0                                     # it reached its rest inside the 2 s
+    _at(f, 0.10, 25)                                               # at its rest past the 2 s mark
+    assert f._press_t[3] <= t_press + 0.4 + 1e-9                   # the timer stopped at its rest
+    assert f._departed_down() and not any('held there' in m for m in f.log.lines)
+    assert any('is down (at its rest)' in m for m in f.log.lines)
