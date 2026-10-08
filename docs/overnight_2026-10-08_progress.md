@@ -81,3 +81,13 @@ branch `safety-defaults` (git worktree) until they are twin-verified.
 | reviewer: creep and body-to-tip tables | both supported (body-to-tip: approach half only) | - | 9812a80 |
 | tools | runner WAIT_LOG, MOCAP_LOSS; attach_metrics, departed_metrics; push variant of the free-start attach world | tests | rig-prep |
 | combined switches (the rig R8a candidate) | batch 8 flying | twin_all_a1 x2, twin_all_b1 | - |
+
+## 9 Oct 03:00-04:40: reviewer and re-flies on the rig candidate
+
+| item | status | evidence |
+|---|---|---|
+| reviewer on the three newcomer tables | all WEAK (pre-data bars, two code trees, C1b grey, N1 no test, N2 grey); corrections taken in the cards and registry | 2fd4085, c0604f7 |
+| fault rule on the rig candidate | C1 x2, C2 support; C1b again 57 deg ring tilt (reproducible) | R1284-R1287 |
+| combined switches (the R8a candidate) | the abort supports 5/5 (A1 x3, B1 x2); QUAD4's own landing: down at its rest in 4/5, rod stand in R1282 (held at +0.25 m by the 2 s press limit, dropped 0.37 m) | R1280-R1283, R1294 |
+| ground idle on the rig candidate | freed carrier G2 supports (survivors grey at the release transient); N2 grey (disarmed at rest, no idle) | R1288, R1289 |
+| creep-start sampling | no flip in 5 more floor starts: R1278 is 1 in 53, cause open; the planner's startup lag (ARM taken after TAKEOFF, lift ~14.7 s) in 4 runs, with every switch off too | R1290-R1294 |
