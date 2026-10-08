@@ -1,0 +1,86 @@
+% Draft additions to thesis/Source/src/rig_results.tex for 7-8 Oct (written 8 Oct night, for Wesley's review).
+% Not in the Overleaf repo: paste after review. No run ids in the text; sources for the record:
+% registry RIG-1007-r002, r006, r0007, r0012, r0013, r200006, r206e60, r2008e60; RIG-1008-r302_3, r303_4,
+% r304_3, r305; twin R1207/R1212, R1206/R1211, R1208/R1213, R1217-R1234.
+
+% (1) Replace the opening sentences of \subsection{Hardware results}:
+The hardware campaign so far covers carrying the ring with three and four UAVs and, since
+7 October, detaching one UAV in flight: announced and unannounced, from a hover and during a circle.
+Attach has not yet been flown on the rig.
+
+% (2) Add to Table~\ref{tab:rig_days}, after the 1 Oct row:
+7 Oct & Four UAVs. The model height integral brought the ring to its target height (0.93 to
+1.00\,m). Feeding the trackers the rod pull they measure, with the rods planned at 60$^\circ$, cut the
+circle's and the figure-eight's path error from about 8\,cm to 3\,cm (Table~\ref{tab:rig_oct7}). At
+the earlier 45$^\circ$ a magnet let go on a sharp jerk. First detach in flight: one UAV released from
+a hover, peak ring tilt 4.6$^\circ$. On a layout with a wider gap the ring capsized at the release. \\
+8 Oct & Four UAVs. Detach flown four ways, including the first unannounced detach, found by the
+planner from the stretched rod, and a detach during the circle (Table~\ref{tab:rig_oct8}). The
+drop-and-land safety net was armed on every detach and never needed. \\
+
+% (3) Insert before \subsubsection{Simulation against the rig}:
+\subsubsection{7 October: the measured rod pull}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Circle (radius 0.5\,m at 0.125\,m/s) and figure-eight ($a = 1.0$\,m at 0.25\,m/s) at 1.0\,m,
+four UAVs, before and after the trackers were given the rod pull they measure and the rods were planned
+at 60$^\circ$. Path error: mean distance from the trajectory reference; lag: the time shift that best
+matches the ring to its reference.}
+\label{tab:rig_oct7}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xcccc}
+\toprule
+ & \multicolumn{2}{c}{Circle} & \multicolumn{2}{c}{Figure-eight} \\
+ & before & after & before & after \\
+\midrule
+path error, mean / max (cm) & 8.3 / 17.3 & 2.9 / 5.7 & 8.2 / 20.1 & 3.0 / 6.8 \\
+lag (s) & 0.45 & 0.20 & 0.41 & 0.21 \\
+ring height error (cm) & $-0.1$ & $-0.4$ & $-4.8$ & $-0.7$ \\
+ring tilt, mean / max & 2.7 / 6.6$^\circ$ & 1.7 / 4.0$^\circ$ & 3.6 / 10$^\circ$ & 2.6 / 5.9$^\circ$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Both paths flew three times closer to their references with the measured pull, and both lags halved.
+Two things changed at once (the pull the trackers model and the planned rod angle), so the table shows
+their combined effect. The measured pull alone had flown the rods at the planned 45$^\circ$, and at that
+angle a magnet let go 3.9\,s into the circle: planning 60$^\circ$ keeps the pull on each magnet closer
+to its axis.
+
+\subsubsection{8 October: detaching on the rig}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Detach flights on 8 October: four UAVs at 1.0\,m, the leaving UAV at 90$^\circ$ on the
+ring. Announced: the planner releases the magnet and resizes. Unannounced: the magnet is switched off
+with no word to the planner, which finds the detach from the stretched rod. Tilt: peak ring tilt after
+the release. Offset: the ring's steady horizontal distance from its reference in the hover before the
+release. Twin: the same configuration in the Gazebo rig twin, two runs.}
+\label{tab:rig_oct8}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xccccc}
+\toprule
+Flight & Layout (deg) & Found after & Tilt, rig & Tilt, twin & Offset \\
+\midrule
+Hover, announced & 30/90/150/270 & -- & 15.4$^\circ$ & 7.4--8.6$^\circ$ & 6.2\,cm \\
+Hover, unannounced & 30/90/150/270 & 0.42\,s & 6.5$^\circ$ & -- & 5.8\,cm \\
+Hover, unannounced, 150$^\circ$ gap & 30/90/180/270 & 0.33\,s & 17.8$^\circ$ & 15.5--18.2$^\circ$ & 5.2\,cm \\
+Circle, unannounced & 30/90/150/270 & 0.34\,s & 8.1$^\circ$ & 6.0--7.3$^\circ$ & 6.5\,cm \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Every detach landed with the three remaining UAVs still carrying the ring, and the freed UAV stepped
+clear and landed. The unannounced detaches were found 0.33--0.42\,s after the magnet was switched
+off, which includes the magnet's own release time. The announced detach tilted the ring about twice
+as far as in the twin, while the unannounced detaches stayed within the twin's range. In the circle the
+remaining three carried on along the path without a pause.
+
+\paragraph{A constant offset.} All four flights held the ring 5--6.5\,cm to one side of its
+reference, against 1.9\,cm in the carry flights of the day before. The detach flights ran the
+planner's reference height integral, because the model integral was not yet allowed on a fleet that
+changes size; the carry flights ran the model integral. In the circle the offset made the path error
+6.8\,cm; with the circle's mean offset and the lag removed, the remaining error was 2.4\,cm. The
+model integral is now kept through a resize: in the twin it reduced the hover offset of the same
+detach configurations from about 3\,cm to 2\,cm, and it is flown on the rig next.
