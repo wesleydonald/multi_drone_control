@@ -1,7 +1,7 @@
-name: twin_nc_b3_on_again
-description: 'card 2026-10-09_newcomer_land_abort, B3: weld_radius 0.08, OFF 1.5 s into the descent, ON 1 s later
-  (refused), LAND; no weld. Twin R8a dry base (free-start twin attach world, M1 layout 270/30/150, QUAD4 from (0,
-  1.4) to plate 9), newcomer_lifecycle on.'
+name: twin_nc_b1_orbit
+description: 'card 2026-10-09_newcomer_land_abort, B1 neighbour on an orbit: the ring circles r 0.5 at 0.125 m/s
+  (5 s hold, configs/rig/traj_hold.yaml) while QUAD4 approaches the moving plate (attach_moving); OFF 8 s into the
+  descend phase, LAND 25 s later. newcomer_lifecycle on.'
 world: three_rigid_ground_rig_attach.sdf
 launch:
   package: bringup
@@ -18,7 +18,7 @@ launch:
     kt_trim: false
     lift_ramp_vel: 0.15
     load_mass: 0.86
-    load_traj: hover
+    load_traj: orbit
     measure_rod_len: true
     num_drones: 3
     payload_rest_z: 0.02
@@ -41,8 +41,11 @@ launch:
     z_taut_gate: 0.9
     mode: attach
     reserved_attach: 1
-    weld_radius: 0.08
+    weld_radius: 0.0
     newcomer_lifecycle: true
+    traj_radius: 0.5
+    traj_speed: 0.125
+    params_file: /home/wesley/multi_drone_control/configs/rig/traj_hold.yaml
 io_launch:
   file: sim_io_launch.py
   args:
@@ -72,13 +75,10 @@ events:
 - t: 21.0
   do: WAIT_LOG
   arg: '90 approach: drone 3 descend'
-- t: 22.5
+- t: 29.0
   do: MAGNET
   arg: 'OFF'
-- t: 23.5
-  do: MAGNET
-  arg: 'ON'
-- t: 48.0
+- t: 54.0
   do: LAND
 criteria:
   forbid_abort: true

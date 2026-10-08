@@ -21,6 +21,7 @@ Per run, from run.csv and events.csv (runner time):
   floor          the newcomer's peak tilt while armed on the floor after its touchdown, and whether it
                  ever had a reference (N1: an idle floor newcomer must get none, R0532)
   gate_timeout   the planner's 'not down after' line (the landed gate gave up on a departed drone)
+  on_refused     the planner's 'ATTACH refused' lines (an ON after an abort, or during LAND)
 The newcomer is the column block after the carriers (d<num_drones>); node log stamps are epoch wall time,
 anchored on the fleet manager receiving the runner's first ARM and mapped through run.csv's wall column.
 """
@@ -167,6 +168,10 @@ def analyse(rid):
         if len(reach):
             ws = wl & (t <= t[reach[0]])
             r['step_z'] = (round(float(new[ws, 2].min()), 3), round(float(new[ws, 2].max()), 3))
+            if k + 'ref_z' in run:                                # height against its own reference
+                dz = new[:, 2] - run[k + 'ref_z'].to_numpy()
+                ok = ws & np.isfinite(dz)
+                r['step_dz_ref'] = round(float(np.abs(dz[ok]).max()), 3) if ok.any() else None
             if 'tip_x' in run:
                 tip = run[['tip_x', 'tip_y', 'tip_z']].to_numpy()
                 rel = np.einsum('nji,nj->ni', R, tip - ring)          # ring frame
@@ -195,6 +200,7 @@ def analyse(rid):
         r['floor_tilt_max'] = round(float(run[k + 'tilt_deg'].to_numpy()[fl].max()), 1) if fl.any() else None
     r['ref_ever'] = bool(np.isfinite(run[k + 'ref_x'].to_numpy()).any()) if k + 'ref_x' in run else None
     r['gate_timeout'] = any('not down after' in ln for ln in log)
+    r['on_refused'] = sum('ATTACH refused' in ln for ln in log)
     return r
 
 

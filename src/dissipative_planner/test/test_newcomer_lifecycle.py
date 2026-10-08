@@ -234,3 +234,33 @@ def test_pos_reads_the_newcomer_from_its_own_mocap_and_drops_a_stale_one():
     assert f._pos(3) is not None
     f.now[0] = 100.0 + NEWCOMER_POSE_STALE_S + 0.1
     assert f._pos(3) is None
+
+
+def test_on_during_land_never_sends_off_to_a_welded_newcomer():
+    """OFF is how a welded newcomer is released: a refused ON must not send it while one carries (critic, pass 2)."""
+    f = _node(pending=False, approaching=False)
+    f._land_to_ground = True
+    f._magnet_cmd_cb(String(data='ON'))
+    assert f._magnet_cmd_pub.msgs == [] and any('ATTACH refused' in m for m in f.log.lines)
+
+
+def test_a_refused_weld_restarts_the_release_hold():
+    f = _node()
+    f._abort_newcomer(0, 'abort')
+    _ticks(f, int(round(NEWCOMER_RELEASE_S * HZ)) + 2)             # moving out already
+    assert f._departed_wait[3] <= 0.0
+    f._magnet_attached_cb(Bool(data=True))                         # the magnet caught the plate anyway
+    assert f._departed_wait[3] == NEWCOMER_RELEASE_S and f._magnet_cmd_pub.msgs[-1] == 'OFF'
+    q0 = f.published[-1][1].copy()
+    _ticks(f, int(round(NEWCOMER_RELEASE_S * HZ)))
+    assert np.allclose(f.published[-1][1], q0)                     # held while it lets go
+
+
+def test_an_abort_before_it_leaves_the_floor_lands_it_where_it_is():
+    f = _node(p_ref=(0.0, 1.4, 0.18))                              # its climb reference has started
+    f.attach_pos[0] = np.array([0.0, 1.4, 0.10])                   # but it is still on the floor
+    f._newcomers_out_on_land('LAND')
+    assert np.allclose(f._departed_hold[3], [0.0, 1.4, 0.10]) and 3 in f._land_alone
+    assert 3 not in f._departed_step and 3 not in f._departed_wait
+    _ticks(f, 3)
+    assert f.published[-1][1][2] < 0.10                            # its reference goes down, not up

@@ -288,6 +288,7 @@ class DissipativeController(LoadPlanner):
         self._detect_ok = {}          # each drone's excess on its last tick within the threshold
         self._detect_refused = set()  # detected but refused (min_survivors): do not re-fire
         handoff_topic = str(p('partner_handoff_topic', '').value)
+        self._partner_run = bool(handoff_topic) or self._partner_release
         if handoff_topic:
             self.create_subscription(Bool, handoff_topic, self._partner_handoff_cb, 5)
         # The network's ring must be the PHYSICAL tether ring (the parent's rho, the n
@@ -327,7 +328,7 @@ class DissipativeController(LoadPlanner):
         # LAND or /magnet/command OFF before the weld takes the newcomer out of the flight, it moves
         # radially out to DEPARTED_CLEAR_R and lands by itself. Off = the behaviour before it.
         # Not in partner runs (the partner's mission flies that drone and shares its magnet).
-        self._newcomer_lifecycle = bool(p('newcomer_lifecycle', False).value) and not self._partner_release
+        self._newcomer_lifecycle = bool(p('newcomer_lifecycle', False).value) and not self._partner_run
         self._newcomer_out = {}         # j -> why it will not join this flight ('LAND', 'abort')
         self._land_alone = set()        # departed drones that land after their step, departed_land or not
         self._departed_wait = {}        # d -> s still held after its magnet OFF
@@ -336,7 +337,7 @@ class DissipativeController(LoadPlanner):
         # a fault on an unwelded newcomer grounds it alone (card 2026-10-09_newcomer_fault_scope; Wesley
         # 8 Oct night): each reserved drone's latched /drone_d/on_load (False while it is not on the ring)
         # tells the fleet manager not to escalate its in-flight disarm. Off = the fleet-wide stop.
-        self._newcomer_fault_alone = bool(p('newcomer_fault_alone', False).value) and not self._partner_release
+        self._newcomer_fault_alone = bool(p('newcomer_fault_alone', False).value) and not self._partner_run
         self._newcomer_armed = {}
         self._on_load_pubs = {}
         if self._newcomer_fault_alone:
@@ -1244,8 +1245,11 @@ class DissipativeController(LoadPlanner):
                 self._set_on_load(self._n_carry0 + j, True)     # physically on the ring now
                 why = self._weld_refused(j)
                 if why is not None:
-                    self.get_logger().warn(f'[dissipative] weld of {_who(self._n_carry0 + j)} refused: {why}')
+                    d = self._n_carry0 + j
+                    self.get_logger().warn(f'[dissipative] weld of {_who(d)} refused: {why}')
                     self._magnet_cmd_pub.publish(String(data='OFF'))
+                    if d in self._departed_hold:
+                        self._departed_wait[d] = NEWCOMER_RELEASE_S   # let go before it moves on
                     continue
                 self._do_attach(self._n_carry0 + j)
 
@@ -1325,7 +1329,8 @@ class DissipativeController(LoadPlanner):
                                    + ('LAND in progress' if self._land_to_ground else
                                       'the ring was dropped' if self._dropped is not None else
                                       'the newcomer is out of this flight'))
-            self._magnet_cmd_pub.publish(String(data='OFF'))
+            if any(self.attach_pending):
+                self._magnet_cmd_pub.publish(String(data='OFF'))   # never to a welded newcomer: OFF releases it
             return
         if not self._approach_hold_on:
             return
@@ -1369,6 +1374,15 @@ class DissipativeController(LoadPlanner):
         if prof is None:
             self.get_logger().warn(f'[dissipative] {_who(d)} out of this flight ({why}) before its '
                                    f'approach: it stays where it is')
+            return
+        pos = self._pos(d)
+        if pos is not None and float(pos[2]) < self._departed_down_z:
+            # its approach had started (its tracker has references) but it has not left the floor:
+            # a departed drone that lands where it is, so the reference keeps coming and freezes at the stall
+            self._departed_hold[d] = np.asarray(pos, float).copy()
+            self._land_alone.add(d)
+            self.get_logger().warn(f'[dissipative] {_who(d)} out of this flight ({why}) on the floor: it '
+                                   f'stays down')
             return
         hold = np.asarray(prof.p_ref, float).copy()
         self._departed_hold[d] = hold

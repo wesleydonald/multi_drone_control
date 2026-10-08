@@ -46,8 +46,8 @@ def test_wait_log_holds_the_schedule_until_the_planner_line_then_shifts_it():
         r.now = t
         r.fire_due_events()
     assert [d for _, d in r.fired] == ['WAIT_LOG']                 # LAND held back
-    r._planner_lines.append('[dissipative] approach: drone 3 descend')
     r.now = 12.0
+    r._planner_lines.append((12.0, '[dissipative] approach: drone 3 descend'))
     r.fire_due_events()
     assert r.event_log[-1][1] == 'LOGGED'
     r.now = 14.9
@@ -67,14 +67,14 @@ def test_wait_log_times_out_and_a_line_seen_earlier_counts():
         r.fire_due_events()
     assert ('LOG_TIMEOUT' in [n for _, n, _ in r.event_log]) and r.fired[-1] == (4.0, 'LAND')
     q = _waiting_runner([Event(1.0, 'WAIT_LOG', 'climb'), Event(2.0, 'LAND')])
-    q._planner_lines.append('[dissipative] approach: drone 3 climb')
-    q.now = 1.0
+    q._planner_lines.append((0.4, '[dissipative] approach: drone 3 climb'))   # before the wait fired
+    for t in (1.0, 1.1, 1.3):
+        q.now = t
+        q.fire_due_events()
+    assert [d for _, d in q.fired] == ['WAIT_LOG']
+    q.now = 1.4                                                    # 1.0 s after the line, as written
     q.fire_due_events()
-    q.now = 1.0
-    q.fire_due_events()
-    q.now = 2.0
-    q.fire_due_events()
-    assert q.fired[-1] == (2.0, 'LAND')
+    assert q.fired[-1] == (1.4, 'LAND')
 
 
 def test_wait_log_arg_is_checked_when_the_config_loads():

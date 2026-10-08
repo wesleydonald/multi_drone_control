@@ -1,6 +1,6 @@
 # Newcomer LAND and abort (M1 rules a and b)
 
-Revision 2 (critic: REWRITE, 8 Oct night; Wesley's answers the same night). Rule c (a fault on QUAD4 alone) is its
+Revision 3 (critic: REWRITE twice, 8 Oct night; Wesley's answers the same night). Rule c (a fault on QUAD4 alone) is its
 own card: 2026-10-09_newcomer_fault_scope.md.
 
 1. **Question.** Wesley, 8 Oct: "LAND should land all drones no matter which controller it is using"; an unwelded
@@ -17,8 +17,10 @@ own card: 2026-10-09_newcomer_fault_scope.md.
    handling in `_magnet_cmd_cb` (the subscription is no longer gated on the approach hold; ON keeps that gate), weld
    refusals in `_magnet_attached_cb`/`_do_attach`, `_publish_departed_refs` lands a `_land_alone` drone by itself
    (its own 0.15 m/s path also during LAND, its touchdown detector kept between ticks), `_pos` reads an unwelded
-   newcomer's own mocap (stamped; older than 0.5 s is not used). Off in partner runs and outside the OCP phase.
-   A newcomer whose approach never started gets no reference (R0532). Test tooling: runner `WAIT_LOG` (times an
+   newcomer's own mocap (stamped; older than 0.5 s is not used). Off in every partner run (attached or not) and
+   outside the OCP phase. A refused ON sends OFF only while a newcomer is unwelded (OFF releases a welded one).
+   A newcomer whose approach never started gets no reference (R0532); one still on the floor when it is taken
+   out lands where it is (its reference goes down and freezes at the stall, no hold at floor height). Test tooling: runner `WAIT_LOG` (times an
    event into a planner phase), `tools/attach_metrics.py`.
    Pinned: configs/experiments/twin_r8a_dry.yaml (free-start twin attach world, M1 layout 270/30/150, QUAD4 on
    plate 9, hover 1.0 m, weld_radius 0) with `newcomer_lifecycle` the only difference between NC and A1.
@@ -33,20 +35,24 @@ own card: 2026-10-09_newcomer_fault_scope.md.
    | Run | Events | Supports if | Falsified if |
    |---|---|---|---|
    | NC | switch off; MAGNET ON, WAIT_LOG descend, LAND +8 s | QUAD4 disarmed above 0.3 m at LANDED (the bug is there) | it lands cleanly: card void |
-   | A1 | as NC, switch on | no `/fleet/abort`; out (LAND) logged in descend; moves out to >= 1.15 m with z within +/-3 cm of its hold; QUAD4 below 0.15 m and armed before LANDED; no 'not down after' line; clearance body >= 0.30, rod >= 0.15 m; tip-rim >= 0.02 m; ring tilt <= 10 deg; QUAD4 tilt <= 10 deg on the floor | QUAD4 disarmed above 0.15 m, any abort, body < 0.25 / rod < 0.10 m, tip-rim < 0.01 m |
+   | A1 | as NC, switch on | no `/fleet/abort`; out (LAND) logged in descend; moves out to >= 1.15 m with z within +/-3 cm of its own reference (step_dz_ref); QUAD4 below 0.15 m before LANDED and disarmed below 0.15 m (disarm_z); no 'not down after' line; clearance body >= 0.30, rod >= 0.15 m; tip-rim >= 0.02 m; ring tilt <= 10 deg; QUAD4 tilt <= 10 deg on the floor | QUAD4 disarmed above 0.15 m, any abort, body < 0.25 / rod < 0.10 m, tip-rim < 0.01 m |
    | A2 | LAND 2 s after transit starts | as A1 (out logged in transit) | as A1 |
    | A3 | LAND 2 s after the climb starts (at spawn, r 1.4) | as A1 (it is already clear: lands where it is) | as A1 |
    | B1 | weld_radius 0; OFF 8 s after descend starts; LAND 25 s later | out (abort) in descend; moves out and lands while the carriers hover (ring z +/-3 cm of 1.0, tilt <= 5 deg); LANDED after all four are down; A1's clearance and tip-rim bars | as A1, or the carriers move |
-   | B2 | weld_radius 0.08; OFF 2 s after transit starts | no WELD event; as B1 | a weld |
-   | B3 | weld_radius 0.08; OFF 1.5 s after descend starts, ON 1 s later | ON refused (logged), no WELD | a weld |
+   | B2 | weld_radius 0.08; OFF 2 s after transit starts | out (abort) in transit; as B1 | as B1 |
    | N1 | twin_r8a0 with the switch on (LAND before ATTACH) | QUAD4 never gets a reference, z <= 0.12, tilt <= 5 deg; ring as R1238 +/- 1 cm | a reference, or QUAD4 moves |
    Grey (between the columns): one repeat of that run.
-   Not flown here (unit tests only): a weld racing LAND in the last 0.1 m of the descent (refused, OFF sent);
+   Not flown here (unit tests only): an ON after an abort, and a weld racing LAND or an abort (refused, OFF sent,
+   the release hold restarted). The twin cannot make them happen: with the magnet ON during the descent the tip
+   welds before an OFF can reach it near the plate. The refusal reaching the magnet is checked on the rig desk
+   instead (Wed 09:00, props off: ATTACH, OFF, ON; /drone_3's magnet latch must stay OFF; on_refused counts it);
    the network-phase LAND (the switch does nothing outside the OCP phase); the drop path (drop is off in attach;
    its own card).
-6. **Repeats.** A1 and B1: 2 each (Gazebo). NC, A2, A3, B2, B3, N1: 1 each. Neighbours before repeats (S8):
-   A1 on an orbit, OFF after a weld (today's release, caught only by detection): 1 each once the rows above pass.
-7. **Cost.** 10 Gazebo runs on the laptop (~7 min each), +2 neighbours.
+6. **Repeats.** A1 and B1: 2 each (Gazebo). NC, A2, A3, B2, N1: 1 each. Neighbour before the repeats: B1 on an
+   orbit (twin_nc_b1_orbit: the abort holds a newcomer that was tracking a moving plate and moves it out from the
+   ring centre while the carriers fly on). Later: A1 on an orbit, OFF after a weld (today's release, caught only by
+   detection).
+7. **Cost.** 10 Gazebo runs on the laptop (~11 min each at RTF 0.25).
 8. **New code?** Yes, a gate that can hold the fleet down (the landed gate waits for an out newcomer; its own
    touchdown or the planner's existing 15 s fallback ends the wait). Behind `newcomer_lifecycle`, default off; it
    becomes the default (Wesley's standing rule) only after the rows above pass and the reviewer reads the table.
@@ -80,3 +86,11 @@ revision 2 does:
   S10 the 'not down after' line and QUAD4's floor tilt. Done (bars). S11 drop path and network LAND out of scope.
   Done (the drop edit removed; the switch acts only in the OCP phase). S12 'a later weld is refused': B3 and unit
   tests.
+
+Second pass (8 Oct night, on revision 2): REWRITE. M1 a refused ON during LAND sent OFF to a welded, carrying
+newcomer (OFF is its release): fixed, OFF only while a newcomer is unwelded, tested. M2 a partner run that is not
+partner-attached left the switch on: fixed, any partner run forces it off. M3 B2/B3 could not weld either way:
+B3 dropped (unit test + rig desk check), B2 is an abort-in-transit row without a weld falsifier. S4 a refused weld
+restarts the release hold: done. S5 out while still on the floor: lands where it is, done. S6 WAIT_LOG now times
+later events from the matched line (A3's climb line comes before the wait fires): done, tested. S7 B1 on an orbit:
+added. S8 metrics: on_refused, step_dz_ref, disarm_z: done. S9 the fault-scope card exists on its branch.

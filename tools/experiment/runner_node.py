@@ -110,7 +110,7 @@ class ExperimentRunner(Node):
         self.t_partner_release = None
         self._partner_release_wait = None   # t the WAIT_PARTNER_RELEASE event fired
         self._log_wait = None               # (regex, t fired, timeout) of a WAIT_LOG
-        self._planner_lines = []            # every dissipative planner /rosout line this run
+        self._planner_lines = []            # (t, text) of every dissipative planner /rosout line this run
         self.stop_reason = None            # set when the run ends early, for the manifest
 
         best = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -292,7 +292,7 @@ class ExperimentRunner(Node):
             return
         if not msg.name.endswith('dissipative_planner'):
             return
-        self._planner_lines.append(msg.msg)
+        self._planner_lines.append((self._rel(), msg.msg))
         for pat, name in self._ROSOUT:
             m = pat.search(msg.msg)
             if m:
@@ -396,10 +396,12 @@ class ExperimentRunner(Node):
                 f'[exp] t={t:6.2f} partner released; later events shifted {shift:+.2f} s')
         if self._log_wait is not None:
             pat, t0, timeout = self._log_wait
-            seen = any(pat.search(ln) for ln in self._planner_lines)
+            hit = next((tl for tl, ln in self._planner_lines if pat.search(ln)), None)
+            seen = hit is not None
             if not seen and not (timeout and t - t0 >= timeout):
                 return                      # WAIT_LOG blocks the rest of the schedule
-            shift = t - t0
+            # later events are timed from the line itself, which may have come before the wait fired
+            shift = (hit if seen else t) - t0
             for e in self._pending:
                 e.t += shift
             self._log_wait = None

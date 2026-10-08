@@ -65,7 +65,7 @@ EVENT_KINDS = {
                    # drone's state for arg "id [seconds]" (default 600): a lost marker set, the tracker's
                    # own pose-timeout fault (card 2026-10-09_newcomer_fault_scope)
     'WAIT_LOG',   # not published: block until the dissipative planner has logged a line matching
-                  # the arg's regex (any time this run), then shift later events; arg
+                  # the arg's regex (any time this run), then time later events from that line; arg
                   # '[timeout_s] regex', e.g. '60 approach: drone 3 descend' (event LOGGED or
                   # LOG_TIMEOUT). Times an event into a planner phase that has no topic of its own.
 }
