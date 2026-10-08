@@ -16,7 +16,8 @@
      R1222 (LIFTED 10.01, 9.85, 9.86, 9.89 s after WAIT_LIFT, from each events.csv), no arc-creep or lift-off timeout line.
 5. **Pass / fail.**
    - **Direct test (critic M1):** configs/experiments/w4_creep_handled.yaml (push world, even ring: ARM,
-     DISARM, drone 1 pushed up 0.5 s at 6.5 N ~15 cm, ARM, TAKEOFF). Negative control once on 6bfb881^ (the
+     DISARM, drone 1 pushed up 0.4 s at 5.7 N ~12 cm, ARM, TAKEOFF; drone 1 must be upright, tilt < 30 deg, at
+     TAKEOFF or the run is void). Negative control once on 6bfb881^ (the
      creep file reverted): must show the lift-off before TAKEOFF and the ring not lifting (WAIT_LIFT timeout or
      'NOT lifting'); if it lifts normally the twin cannot see r303 and the test is void. Then once on the fix:
      must lift within the normal band below and log 'anchors latched at TAKEOFF' and 'arc sweep started' after
@@ -50,3 +51,18 @@ bars could only show a normal takeoff is unchanged, not that the r303 failure is
 - Also noted: before TAKEOFF the creep reference follows the live pose (+0.1 m lead) instead of a fixed point;
   harmless at armed-idle; takeoff_seen comes from /fleet/step (one 50 Hz tick after TAKEOFF) and never resets,
   so a DISARM after a flight still forces a T2 relaunch.
+
+## Direct test, first attempt (VOID)
+
+The first push (6.5 N for 0.5 s) threw drone 1 0.46 m up; it tumbled (peak tilt 177-179 deg) and lay on its side
+(tilt 90 deg) from 8.5 s to the end in all three runs, so no controller could lift it.
+
+| Run | Code | Lift-off logged | Sweep | Drones 2-4 at sweep end | Drone 1 |
+|---|---|---|---|---|---|
+| R1235 | 6bfb881^ | before TAKEOFF (on the push) | ran and timed out before TAKEOFF | not swept | on its side |
+| R1236 | fix | after TAKEOFF ('anchors latched at TAKEOFF') | after TAKEOFF | 68-70 deg | on its side |
+| R1237 | fix | after TAKEOFF | after TAKEOFF | 68-69 deg | on its side |
+
+The gate behaves as designed in the part the code controls, but the pass bar (a normal lift) cannot be met with a
+drone on its side. Push resized to 5.7 N for 0.4 s (drone 0.475 kg + half the 0.075 kg rod: predicted rise ~0.12 m,
+twice the 0.05 m lift-off margin); negative control and fix re-flown on it.

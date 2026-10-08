@@ -3,7 +3,7 @@ criteria:
   min_payload_z: 0.005
   min_peak_payload_z: 0.5
 description: 'Creep takeoff gate (card 2026-10-09_creep_takeoff_gate, critic M1): r303 in the twin. ARM, operator
-  DISARM, drone 1 lifted by hand (0.5 s of 6.5 N up on its body, ~15 cm), ARM again, TAKEOFF, even ring carry, LAND.
+  DISARM, drone 1 lifted by hand (0.4 s of 5.7 N up on its body, ~12 cm; 6.5 N for 0.5 s flipped it, R1235-R1237), ARM again, TAKEOFF, even ring carry, LAND.
   Before the fix the lift-off fires before TAKEOFF, the sweep times out with the fleet disarmed and the ring never
   lifts; with it the takeoff is normal.'
 events:
@@ -11,12 +11,12 @@ events:
   t: 3.0
 - do: DISARM
   t: 6.0
-- arg: 0 0 6.5 lift_system::x3_drone0::base_link
+- arg: 0 0 5.7 lift_system::x3_drone0::base_link
   do: WRENCH
   t: 7.0
 - arg: 0 0 0 lift_system::x3_drone0::base_link
   do: WRENCH
-  t: 7.5
+  t: 7.4
 - do: ARM
   t: 12.0
 - do: TAKEOFF
