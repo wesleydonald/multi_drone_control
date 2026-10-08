@@ -39,3 +39,18 @@ branch `safety-defaults` (git worktree) until they are twin-verified.
 | rig sheet in Wesley's order (r301 r206e60 circle + ref_time_shift; r302/r303 hover detach announced/unannounced; r304 the better on 11/9/6/3; r305 circle detach; r306 figure-8); 30 deg stop limit (was 15); made concise (65 lines, shell shorthands $R $C $D $O) | done | every run line dry-run through rig_flight.sh; each rig config resolved through the real profile | (this commit) | yes |
 | drop and land on week4 (plain 30 deg tracker rule, Wesley 8 Oct): the two drop commits cherry-picked onto week4 alone (no model integral, default mode or detection default), on only through `drop_on_loss` in the detach configs of r302-r305 | **SUPPORTS on week4** in the twin, 12 of 12: second loss and forced drop drop and land (0 faults, down in 8.6 s, final z <= 0.14 m); r302/r303/r304 (both kinds)/r305 configs never drop (peaks 6.0-20.0 deg) and land | gate --quick 449, dissipative 58, tracker 86, fleet_manager 37, bringup 92; R1204-R1215; reviewer: numbers supported | c142662, c9b6cc6, 700a77b, 938b024, bb0406b | **yes, r302-r305** |
 | CLAUDE.md lock line: fleet-wide disarm except detach runs with drop_on_loss | done | - | (untracked file) | - |
+
+## 8 Oct afternoon: rig session and after
+
+| item | status | evidence | committed |
+|---|---|---|---|
+| r300 props-off arm check | done: QUAD2-4 armed twice, re-ARM without relaunch works; QUAD1 `!ERR*` from boot (power-cycle) | r300.log | - |
+| r301 circle + ref_time_shift | not flown (Wesley: lag not a concern); ref_time_shift stays off everywhere | r301.log (no ARM) | - |
+| r302_3 announced hover detach, 1/3/5/9 | flew: no drop, tilt peak 15.4 deg (twin 7.4-8.6), ring dip 6.9 cm | RIG-1008-r302_3 | registry |
+| r303 | void: QUAD1 handled before TAKEOFF tripped the creep lift-off gate (z rise with no TAKEOFF check); the planner timed out its sweep with the fleet disarmed. Rule: relaunch T2 after touching a drone. Fix pending (gate only after TAKEOFF; needs a floor-start twin run) | RIG-1008-r303 | registry |
+| r303_4 unannounced hover detach, 1/3/5/9 | flew: FIRST RIG UNANNOUNCED DETACH, detected 0.42 s after the release, tilt 6.5 deg | RIG-1008-r303_4 | registry |
+| r304_3 unannounced, 1/3/6/9 (150 deg gap) | flew: detected 0.33 s, tilt 17.8 deg (twin 15.5-18.2) | RIG-1008-r304_3 | registry |
+| r305 unannounced detach in the circle | flew: FIRST RIG CIRCLE DETACH, detected 0.34 s, tilt 8.1 deg, freed drone cleared to 1.5 m and landed; off-path 5.4 cm = a constant ~6 cm offset (reference integral), 2.4 cm with offset and lag removed | RIG-1008-r305, figures/r305_detail.png, r305_video_detach.mp4 | registry |
+| tools/rig_summary.py: one image per run (top view, height, tilt, error split along/off/height, lag A0, detection latency), drawn by rig_flight.sh after Ctrl-C | done | tools 280 passed; used on every run this afternoon | this commit set |
+| model integral on resizing fleets (week4 port of f2f7d74's integral half) | tests 292 + gate --quick; twin port check running | docs/decisions.md 2026-10-08 evening | this commit set |
+| 180 deg gap with an accepted tilt (Wesley's idea for next week) | statics sketched in chat: possible in principle with the gap side drooping; limits are magnet shear at shallow rods, the planner's level-ring target and the neutral axis | - | - |
