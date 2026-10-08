@@ -485,6 +485,7 @@ class LoadPlanner(Node):
             depth=1, reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self._slot_offsets_checked = False
+        self._slots_rechecked_at_takeoff = False   # a replug can put a drone back on the wrong plate
         # Desired load position [x, y, z] at node 0. Logged by the drone-0
         # tracker so plot_run.py can overlay payload desired vs actual.
         self._traj_state_pub = self.create_publisher(String, '/payload/trajectory_state', 5)
@@ -1257,6 +1258,11 @@ class LoadPlanner(Node):
         if self.auto_slot_assign and not self._slots_assigned:
             self._assign_slots()
         if not self._slot_offsets_checked:
+            self._check_slot_offsets()
+        if self.takeoff_seen and not self._slots_rechecked_at_takeoff:
+            # the slots were matched at launch; a drone handled since (r303_2: 47 deg off after a
+            # replug) shows here, before the creep latches its anchors
+            self._slots_rechecked_at_takeoff = True
             self._check_slot_offsets()
 
         self._publish_load_desired()

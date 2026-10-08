@@ -319,3 +319,25 @@ def test_the_anchors_relatch_until_takeoff_so_a_handled_drone_leaves_no_stale_sp
     c.step(load_state(), state['pos'], gates, True)
     assert c.lifted_off is True
     assert any('anchors latched at TAKEOFF' in m for m in log.infos)
+
+
+def test_resize_still_succeeds_after_a_hand_lift_before_takeoff():
+    """The start-weld path (dissipative_node resize before the sweep): a drone handled before TAKEOFF
+    no longer marks the sweep started, so the newcomer can still join the creep."""
+    c, state, log, rho = build()
+    run(c, state, rho, seconds=1.0, rise=LIFTOFF_MARGIN + 0.03, takeoff_seen=False)
+    rho4 = rho + [np.array([0.0, -0.08, 0.025])]
+    assert c.resize(4, rho4, [CABLE] * 4) is True
+
+
+def test_the_soft_creep_relatches_until_takeoff():
+    c, state, log, rho = build(elev_deg=0.0)                 # handover_elev_deg 0: the soft creep
+    gates = [(0.0, 0.0)] * 3
+    state['pos'] = positions(rho, rise=0.0)
+    c.step(load_state(), state['pos'], gates, False)
+    state['pos'] = positions(rho, rise=LIFTOFF_MARGIN + 0.04)  # held up by hand
+    c.step(load_state(), state['pos'], gates, False)
+    assert c.lifted_off is False
+    assert np.allclose(c.creep_anchor[0], state['pos'][0])   # anchored where it now is
+    c.step(load_state(), state['pos'], gates, True)            # TAKEOFF at that pose: no lift-off yet
+    assert c.lifted_off is False
