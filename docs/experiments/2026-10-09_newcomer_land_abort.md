@@ -111,3 +111,26 @@ scored over the level move only, not the start of the descent nor the parked pos
 reads "not closer than 0.02 m, or than parked if parked closer": the first rewording ("never closer than parked")
 failed A2 on a body still catching up with its reference mid-transit at 0.71 m from the rim. Both runs pass the
 original pre-data bar (tip-rim >= 0.02 m) as well.
+
+## Result (8-9 Oct night, twin, rig-prep f3aca33)
+
+| Row | Run | Event in phase | Moved out to (m) | z vs ref in the move (m) | Tip-rim parked / moving min (m) | Clearance body / rod (m) | QUAD4 at the fleet disarm (m) | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| NC (off) | R1249 | LAND, descend +8.0 s | - | - | - | 0.449 / 0.431 | 0.637 (in the air) | the bug reproduced |
+| N1 | R1248 | LAND before ATTACH | (on the floor) | - | - | - | 0.100, no reference ever | supports |
+| A1 | R1250 | LAND, descend | 1.312 | 0.010 | 0.020 / 0.040 | 0.448 / 0.431 | 0.144 | supports |
+| A1 | R1256 | LAND, descend | 1.309 | 0.010 | 0.021 / 0.046 | 0.449 / 0.433 | 0.143 | supports |
+| A2 | R1251 | LAND, transit | 1.192 | 0.004 | 0.792 / 0.713 | 0.864 / 0.864 | 0.100 | supports |
+| A3 | R1252 | LAND, climb | (already at 1.4) | - | - | 1.209 / 1.208 | 0.237 (floated) | landing falsified |
+| B1 | R1253 | OFF, descend | 1.197 | 0.014 | 0.021 / 0.020 | 0.450 / 0.434 | 0.602 (on its rod) | landing falsified |
+| B1 | R1257 | OFF, descend | 1.241 | 0.002 | 0.024 / 0.020 | 0.449 / 0.434 | 0.247 (floated) | landing falsified |
+| B2 | R1254 | OFF, transit | 1.197 | 0.009 | 0.795 / 0.679 | 0.853 / 0.853 | 0.236 (floated) | landing falsified |
+| B1 orbit | R1255 | OFF, descend (circle) | 1.954, 1.49 from the circle centre | 0.028 | 0.049 / 0.032 | 0.402 / 0.399 | 0.235 (floated) | landing falsified |
+
+No /fleet/abort and no weld in any row; the carriers held the ring (0.999-1.001 m, tilt <= 1.9 deg) through every
+abort. Verdict: **the abort and the step-out SUPPORT** (every row, both LAND and OFF, in hover and on a circle);
+**"lands by itself" is FALSIFIED wherever QUAD4 lands while the ring is still in the air** (A3, B1 x2, B2, B1 orbit):
+light on its rod it hovers above any floor reference (12 cm in the twin; the rig's freed QUAD4 did the same in 4/4 on
+8 Oct), and the old stall freeze can hold it on its rod. Where the ring was already down (A1 x2, A2) the tracker's
+ground idle took over and it landed. The fix is the departed ground idle card (rows in batch 6). Until it passes, a
+rig LAND or abort with QUAD4 unwelded ends with QUAD4 hovering 0.15-0.4 m up and dropped at the fleet disarm.
