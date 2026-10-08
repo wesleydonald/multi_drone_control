@@ -100,4 +100,4 @@ def test_fc_gate_refuses_unconfirmed_failed_or_silent(monkeypatch, st):
     f = _fc_fake(['armed', st, 'armed', 'armed'])
     assert m.CentralController._wait_fc_armed(f, timeout_s=0.05) is False
     assert f.aborts and f.aborts[0][0] is False
-    assert any('replug drone 2' in s and 'no relaunch' in s for s in f._log.lines)
+    assert any('replug drone 2' in s and 'relaunch T2 only if a drone moved' in s for s in f._log.lines)

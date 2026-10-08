@@ -342,7 +342,8 @@ class CentralController(Node):
         bad = {i: st for i, st in states.items() if not st.startswith('armed')}
         for i, st in bad.items():
             _announce(self, 'error', f"ARM FAILED: drone {label(i)} not armed ({st}). TAKEOFF refused: "
-                                     f"replug drone {label(i)}'s battery, then ARM again (no relaunch needed).")
+                                     f"replug drone {label(i)}'s battery, put it back on its plate, then ARM again "
+                                     f"(relaunch T2 only if a drone moved to another plate).")
         self._disarm_fleet(emergency=False, keep_alive=True,
                            reason=f"FC did not arm: drone(s) {[label(i) for i in bad]}")
         return False
