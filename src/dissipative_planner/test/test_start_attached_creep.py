@@ -62,7 +62,8 @@ def _node(start_taut=False, takeoff_seen=False, reconfig='ocp', start_attached=T
         psi0=0.0, _yaw_datum_latched=False, load_state=load,
         drone_pos=list(drones), drone_vel=[np.zeros(3)] * 3, attach_pos=[p3],
         attach_pending=[True], _approach={}, _ocp_attached={}, _weld_time={},
-        detached=[False] * 4, _reconfig_hold_left=0.0,
+        detached=[False] * 4, _reconfig_hold_left=0.0, _newcomer_out={}, _land_to_ground=False,
+        _newcomer_lifecycle=False,
         refs=SimpleNamespace(_t_nom=[0.86 * 9.81 / 3 / np.sin(np.radians(45.0))] * 3))
     f._solvers = {4: (dyn4, _Solver(dyn4), dyn4.rho)}
     f.get_logger = lambda: log

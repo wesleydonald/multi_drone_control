@@ -12,6 +12,7 @@ durations. A config that is wrong in one of those ways still runs happily for a 
 and produces a directory full of numbers, which is worse than not running at all. So
 anything checkable is checked before Gazebo is started.
 """
+import re
 import os
 
 import yaml
@@ -60,6 +61,10 @@ EVENT_KINDS = {
     'WAIT_THRUST',     # not published: block until every drone's ELRSCommand on the arg
                        # template (default cmd_ready_topic) is armed above idle throttle,
                        # then shift later events (M2 bench: hangers release only under thrust)
+    'WAIT_LOG',   # not published: block until the dissipative planner has logged a line matching
+                  # the arg's regex (any time this run), then shift later events; arg
+                  # '[timeout_s] regex', e.g. '60 approach: drone 3 descend' (event LOGGED or
+                  # LOG_TIMEOUT). Times an event into a planner phase that has no topic of its own.
 }
 
 def wrench_arg(arg):
@@ -85,6 +90,21 @@ def wait_lift_arg(arg):
     if timeout is not None and timeout <= 0:
         raise ValueError(f'WAIT_LIFT timeout must be > 0, got {timeout}')
     return z, timeout
+
+
+def wait_log_arg(arg):
+    """WAIT_LOG arg -> (compiled regex, timeout SIM s or None): '[timeout_s] regex'."""
+    text = str(arg or '').strip()
+    if not text:
+        raise ValueError('WAIT_LOG needs a regex as its arg')
+    head, _, rest = text.partition(' ')
+    try:
+        timeout = float(head)
+    except ValueError:
+        timeout, rest = None, text
+    if timeout is not None and (timeout <= 0 or not rest.strip()):
+        raise ValueError(f"WAIT_LOG arg {arg!r}: expected '[timeout_s] regex' with timeout > 0")
+    return re.compile(rest.strip()), timeout
 
 
 # SIM seconds an ESTOP run must keep recording after /fleet/abort (drones staying down)
@@ -124,6 +144,8 @@ class Event:
             raise ValueError('LAUNCH needs "package launch_file [k:=v ...]" as its arg')
         if self.do == 'WAIT_LIFT':
             wait_lift_arg(self.arg)
+        if self.do == 'WAIT_LOG':
+            wait_log_arg(self.arg)
         if self.do == 'WAIT_THRUST' and self.arg is not None and '{i}' not in str(self.arg):
             raise ValueError(f"WAIT_THRUST arg {self.arg!r} has no '{{i}}' for the drone id")
         if self.do == 'WRENCH':

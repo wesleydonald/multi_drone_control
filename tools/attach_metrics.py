@@ -13,8 +13,14 @@ Per run, from run.csv and events.csv (runner time):
   approach       the newcomer's approach phases (climb/transit/descend) from the planner log, in runner time
   disarm         the newcomer's height when its arming first drops after TAKEOFF
   at LANDED      the newcomer's z and arming at /fleet/landed; 'down' = it was below 0.15 m before LANDED
-  step-out       after LAND: the newcomer's largest horizontal distance from the ring centre, and its z
-                 range until that distance first reaches 1.15 m
+  step-out       from its abort (the planner's 'out of this flight' line, else LAND): the newcomer's largest
+                 horizontal distance from the ring centre, its z range until it first reaches 1.15 m, and
+                 its magnet tip's closest approach to the ring's plate circle on the way (tip columns)
+  clearance      newcomer body to every carrier body and to every carrier rod (carrier -> its plate),
+                 MAGNET ON -> LANDED (metrics.partner_clearance's geometry; bars 0.30 / 0.15 m)
+  floor          the newcomer's peak tilt while armed on the floor after its touchdown, and whether it
+                 ever had a reference (N1: an idle floor newcomer must get none, R0532)
+  gate_timeout   the planner's 'not down after' line (the landed gate gave up on a departed drone)
 The newcomer is the column block after the carriers (d<num_drones>); node log stamps are epoch wall time,
 anchored on the fleet manager receiving the runner's first ARM and mapped through run.csv's wall column.
 """
@@ -30,6 +36,8 @@ import pandas as pd
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STAMP = re.compile(r'\[(\d{10}\.\d+)\]')
 PHASE = re.compile(r'approach: drone (\d+) (climb|transit|descend)\b')
+OUT = re.compile(r'out of this flight \((\w+)\)')
+RIM_R = 0.225
 DOWN_Z = 0.15
 AIR_Z = 0.2
 CLEAR_R = 1.15
@@ -44,6 +52,36 @@ def run_dir(rid):
 def event_t(ev, name, after=-1.0):
     t = ev.sim_time[(ev.event == name) & (ev.sim_time > after)]
     return float(t.iloc[0]) if len(t) else None
+
+
+def log_times(log, ev, run, pattern):
+    """[(runner t, first group)] of planner log lines matching pattern. Log stamps are epoch wall time and
+    the sim runs slower than real time, so map them through run.csv's wall column."""
+    t_arm = event_t(ev, 'ARM')
+    arm = next((float(STAMP.search(ln).group(1)) for ln in log
+                if "Fleet command received: 'ARM'" in ln and STAMP.search(ln)), None)
+    if t_arm is None or arm is None:
+        return []
+    epoch0 = arm - float(np.interp(t_arm, run.t, run.wall))
+    out = []
+    for ln in log:
+        m, s = pattern.search(ln), STAMP.search(ln)
+        if m and s:
+            out.append((round(float(np.interp(float(s.group(1)) - epoch0, run.wall, run.t)), 2), m.group(1)))
+    return out
+
+
+def _rot(q):
+    w, x, y, z = q.T
+    return np.stack([np.stack([1-2*(y*y+z*z), 2*(x*y-w*z), 2*(x*z+w*y)], -1),
+                     np.stack([2*(x*y+w*z), 1-2*(x*x+z*z), 2*(y*z-w*x)], -1),
+                     np.stack([2*(x*z-w*y), 2*(y*z+w*x), 1-2*(x*x+y*y)], -1)], 1)
+
+
+def _seg_dist(p, a, b):
+    ab = b - a
+    u = np.clip(np.einsum('ij,ij->i', p - a, ab) / np.maximum(np.einsum('ij,ij->i', ab, ab), 1e-12), 0.0, 1.0)
+    return np.linalg.norm(p - (a + u[:, None] * ab), axis=1)
 
 
 def phases(log, ev, run):
@@ -113,16 +151,50 @@ def analyse(rid):
         below = np.where((t >= (t_land or 0.0)) & (new[:, 2] < DOWN_Z))[0]
         r['at_landed'] = {'z': round(float(new[i, 2]), 3), 'armed': bool(armed[i] > 0.5),
                           'down_before': bool(len(below) and t[below[0]] <= t_landed)}
-    if t_land is not None:
-        wl = t >= t_land
+    outs = log_times(log, ev, run, OUT)
+    r['out'] = outs[0] if outs else None
+    t_out = outs[0][0] if outs else t_land
+    q = run[['payload_qw', 'payload_qx', 'payload_qy', 'payload_qz']].to_numpy()
+    R = _rot(q)
+    man = json.load(open(os.path.join(d, 'manifest.json')))['launch_args']
+    az = [float(a) for a in str(man.get('attach_azimuths_deg') or '270,30,150').split(',')][:n]
+    attach_z = float(man.get('attach_z') or 0.02)
+    if t_out is not None:
+        wl = t >= t_out
         horiz = np.linalg.norm(new[:, :2] - ring[:, :2], axis=1)
         r['step_max_r'] = round(float(horiz[wl].max()), 3)
         reach = np.where(wl & (horiz >= CLEAR_R))[0]
         if len(reach):
             ws = wl & (t <= t[reach[0]])
             r['step_z'] = (round(float(new[ws, 2].min()), 3), round(float(new[ws, 2].max()), 3))
+            if 'tip_x' in run:
+                tip = run[['tip_x', 'tip_y', 'tip_z']].to_numpy()
+                rel = np.einsum('nji,nj->ni', R, tip - ring)          # ring frame
+                rim = np.hypot(np.hypot(rel[:, 0], rel[:, 1]) - RIM_R, rel[:, 2] - attach_z)
+                ok = ws & np.isfinite(rim)
+                r['tip_rim_min'] = round(float(rim[ok].min()), 3) if ok.any() else None
         else:
             r['step_z'] = None
+    a = t_on if t_on is not None else t_to
+    b = t_landed if t_landed is not None else end
+    if a is not None:
+        m = (t >= a) & (t <= b) & np.all(np.isfinite(new), 1)
+        body = rod = np.inf
+        for i in range(n):
+            C = carriers[i]
+            rho = np.array([RIM_R * np.cos(np.radians(az[i])), RIM_R * np.sin(np.radians(az[i])), attach_z])
+            plate = ring + np.einsum('nij,j->ni', R, rho)
+            ok = m & np.all(np.isfinite(C), 1)
+            if ok.any():
+                body = min(body, float(np.linalg.norm(new[ok] - C[ok], axis=1).min()))
+                rod = min(rod, float(_seg_dist(new[ok], C[ok], plate[ok]).min()))
+        r['clearance'] = {'body': round(body, 3), 'rod': round(rod, 3)}
+    td = np.where((new[:, 2] < DOWN_Z) & (t > (t_out if t_out is not None else end)))[0]
+    if len(td):
+        fl = (t >= t[td[0]]) & (armed > 0.5) & (new[:, 2] < DOWN_Z)
+        r['floor_tilt_max'] = round(float(run[k + 'tilt_deg'].to_numpy()[fl].max()), 1) if fl.any() else None
+    r['ref_ever'] = bool(np.isfinite(run[k + 'ref_x'].to_numpy()).any()) if k + 'ref_x' in run else None
+    r['gate_timeout'] = any('not down after' in ln for ln in log)
     return r
 
 
