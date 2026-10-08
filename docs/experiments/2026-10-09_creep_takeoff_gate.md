@@ -54,7 +54,7 @@ bars could only show a normal takeoff is unchanged, not that the r303 failure is
 
 ## Direct test, first attempt (VOID)
 
-The first push (6.5 N for 0.5 s) threw drone 1 0.46 m up; it tumbled (peak tilt 177-179 deg) and lay on its side
+The first push (6.5 N for 0.5 s) threw drone 1 0.47-0.48 m up; it tumbled (peak tilt 175-179 deg) and lay on its side
 (tilt 90 deg) from 8.5 s to the end in all three runs, so no controller could lift it.
 
 | Run | Code | Lift-off logged | Sweep | Drones 2-4 at sweep end | Drone 1 |
@@ -77,3 +77,8 @@ twice the 0.05 m lift-off margin); negative control and fix re-flown on it.
 
 SUPPORTS, 2 of 2, inside the band 9.55-10.31 s, no timeout line. Wesley (8 Oct night): he relaunches T2 between rig
 flights anyway, so the sheet rule stays; the props-off r400 check is still on the Wednesday setup.
+
+Reviewer (9 Oct 00:45): SUPPORTED. Lift times recomputed 9.91/9.83 s (run.csv: 9.93/9.84 s); R1242's only
+difference is the old creep file (diff hash reproduced); R1241/R1243 clean trees, identical node params; RTF
+0.270-0.278. Corrections taken above (void runs: rise 0.47-0.48 m, tilt 175-179 deg). Twin only: the rig half
+(props-off r400: ARM, lift QUAD1 10 cm, no 'arc sweep started') is still to fly on Wednesday.
