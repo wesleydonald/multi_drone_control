@@ -57,10 +57,13 @@ NEWCOMER_RELEASE_S = 0.5   # s an aborted newcomer holds after its magnet OFF (r
 NEWCOMER_OFF_EVERY_S = 0.5  # s between the OFFs re-sent while a newcomer is out (a repeated ON must not weld it)
 NEWCOMER_POSE_STALE_S = 0.5  # s: an older newcomer pose is not used (a frozen pose reads as a stall)
 NEWCOMER_LIFTED_M = 0.05   # m above its height at ATTACH before an aborted newcomer counts as off the floor
-DEPARTED_PRESS_M = 0.25    # m: a landing departed drone's reference goes this far below its rest, and never
+DEPARTED_PRESS_M = 0.35    # m: a landing departed drone's reference goes this far below its rest, and never
                            # further below the drone itself (its rod and magnet on the floor make it light:
-                           # it hovered 12 cm (twin R1252) and 15 cm (rig r305) above a floor reference)
+                           # it hovered 12 cm (twin R1252) and 0.19-0.22 m (rig r305, near the floor) above a
+                           # floor reference)
 DEPARTED_REST_TOL_M = 0.03  # m: back at its resting height (the tracker's GROUND_IDLE_MARGIN)
+DEPARTED_AT_REST_S = 0.5   # s at its rest before its reference stops pressing (its tracker idles after 0.2 s)
+DEPARTED_PRESS_LIMIT_S = 2.0  # s of press after it stopped above its rest; then held at its own height
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
 DROP_LAND_WAIT_S = 30.0    # s after a drop: /fleet/landed even if a drone never reads as down
 
@@ -342,6 +345,12 @@ class DissipativeController(LoadPlanner):
         # a departed drone landing by itself reaches its own resting height and idles there (card
         # 2026-10-09_departed_ground_idle): deeper floor reference, down only at rest, the tracker told
         self._departed_gi = bool(p('departed_ground_idle', False).value) and not self._partner_run
+        if self._departed_gi and (self.start_taut or self.creep.airborne_start):
+            # an air start records the stand height as its rest: the press and the gate would sit in the air
+            self.get_logger().error('[dissipative] departed_ground_idle needs a floor start: turned off')
+            self._departed_gi = False
+        self._at_rest_t = {}          # d -> s spent at its rest while landing by itself
+        self._press_t = {}            # d -> s pressed since it stopped above its rest
         self._rest_z = {}
         self._departed_sent = set()
         self._departed_pubs = {}
@@ -747,16 +756,34 @@ class DissipativeController(LoadPlanner):
                 if td is None:
                     td = self._departed_td[d] = TouchdownDetector(rate, PLANNER_HZ)
                     td.stalled = False
+                if rest is not None and pos is not None and not td.stalled:
+                    # at its rest for DEPARTED_AT_REST_S: down, the press ends (also a drone that never left the
+                    # floor, which the stall test cannot see: it needs a real descent first)
+                    near = abs(float(pos[2]) - rest) <= DEPARTED_REST_TOL_M
+                    self._at_rest_t[d] = self._at_rest_t.get(d, 0.0) + 1.0 / PLANNER_HZ if near else 0.0
+                    if self._at_rest_t[d] >= DEPARTED_AT_REST_S:
+                        td.stalled = True
+                        p_hold[2] = float(pos[2])
+                        self.get_logger().info(f'[dissipative] departed {_who(d)} is down (at its rest)')
+                    elif d in self._press_t:
+                        self._press_t[d] += 1.0 / PLANNER_HZ
+                        if self._press_t[d] >= DEPARTED_PRESS_LIMIT_S:
+                            td.stalled = True                      # no endless press: held where it is
+                            p_hold[2] = float(pos[2])
+                            self.get_logger().warn(
+                                f'[dissipative] departed {_who(d)} still {float(pos[2]) - rest:+.2f} m above its '
+                                f'rest after {DEPARTED_PRESS_LIMIT_S:.0f} s of press: held there (not down)')
                 if pos is not None and not td.stalled and td.update([float(pos[2])]):
                     if rest is not None and float(pos[2]) > rest + DEPARTED_REST_TOL_M:
-                        # it stopped above its rest (light on its rod, or standing on it): not down
+                        # it stopped above its rest (light on its rod, or standing on it): not down, press on
                         td.reset()
+                        self._press_t.setdefault(d, 0.0)
                         if d not in getattr(self, '_high_stall_said', set()):
                             self._high_stall_said = getattr(self, '_high_stall_said', set()) | {d}
                             self.get_logger().warn(
                                 f'[dissipative] departed {_who(d)} stopped {float(pos[2]) - rest:+.2f} m above '
                                 f'its rest: still pressing down')
-                    else:
+                    elif rest is None or not self._departed_gi:
                         td.stalled = True
                         p_hold[2] = float(pos[2])
                         self.get_logger().info(f'[dissipative] departed {_who(d)} is down')
@@ -1854,11 +1881,23 @@ class DissipativeController(LoadPlanner):
         for pub in self._departed_pubs.values():
             pub.publish(Bool(data=False))
         self._departed_sent = set()
-        if cmd.strip().upper() == 'TAKEOFF':
-            for dd in range(self.n_net):
-                pos = self._pos(dd)
-                if pos is not None:
-                    self._rest_z[dd] = float(pos[2])
+        self._high_stall_said = set()
+        self._at_rest_t, self._press_t = {}, {}
+        if cmd.strip().upper() == 'ARM':
+            self._rest_z = {}
+            return
+        missing = []
+        for dd in range(self.n_net):
+            pos = self._pos(dd)
+            if pos is not None:
+                self._rest_z[dd] = float(pos[2])
+            else:
+                missing.append(dd)
+        self.get_logger().info('[dissipative] resting heights at TAKEOFF (m): ' + ', '.join(
+            f'{_who(dd)} {z:.3f}' for dd, z in sorted(self._rest_z.items())))
+        for dd in missing:
+            self.get_logger().warn(f'[dissipative] no pose for {_who(dd)} at TAKEOFF: if it departs it lands as '
+                                   f'before (no departed ground idle)')
 
     def _newcomers_out_on_land(self, cmd):
         """LAND lands every drone (Wesley 8 Oct, M1 rule a): before the fleet descends, every unwelded

@@ -62,9 +62,13 @@ def test_departed_needs_its_own_rest_height_both_ways():
 
 def test_departed_without_the_flag_or_before_flying_does_nothing():
     assert _run(_stub(z=0.10, ref_z=-0.15, resting=False, airborne=True), 1.0) is False
+
+
+def test_departed_idles_even_if_it_never_rose_4_cm():
+    """Critic pass 2 N1: a newcomer taken out on the floor must idle too (the flag implies TAKEOFF)."""
     s = _stub(z=0.10, ref_z=-0.15, resting=False)
     s._departed = True
-    assert _run(s, 1.0) is False
+    assert _run(s, GROUND_IDLE_HOLD_S + 0.1) is True
 
 
 def test_the_flag_counts_only_after_this_arm_and_while_flying():

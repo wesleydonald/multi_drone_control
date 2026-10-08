@@ -25,6 +25,7 @@ class _Pub:
 def _node(rest=0.10, z=1.2):
     f = _lifecycle_node(p_ref=(0.0, 1.2, z))
     f._departed_gi, f._rest_z, f._departed_sent = True, {3: rest}, set()
+    f._at_rest_t, f._press_t, f._high_stall_said = {}, {}, set()
     f._departed_pubs = {d: _Pub() for d in range(4)}
     f.n_net = 4
     f._departed_flight_start = MethodType(D._departed_flight_start, f)
@@ -46,8 +47,8 @@ def test_the_reference_goes_below_its_rest_but_not_far_below_the_drone():
     for _ in range(40):
         _ticks(f, 1)
     assert f.published[-1][1][2] == pytest.approx(0.30 - DEPARTED_PRESS_M)   # the drone stays at 0.30: lead-limited
-    g = _node(z=0.10)
-    _ticks(g, 40)
+    g = _node(z=0.06)                                              # 4 cm below its rest (outside the margin)
+    _ticks(g, 10)
     assert g.published[-1][1][2] == pytest.approx(0.10 - DEPARTED_PRESS_M)   # at most PRESS below its rest
 
 
@@ -57,7 +58,7 @@ def test_a_stall_above_its_rest_is_not_down():
         f.attach_pos[0] = np.array([0.0, 1.2, z])                  # 14 cm above its rest (R1252)
         _ticks(f, 1)
     _ticks(f, 40)
-    assert not f._departed_td[3].stalled and not f._departed_down()
+    assert not f._departed_down()                                  # pressed, then held there: never 'down'
     assert any('above its rest: still pressing down' in m for m in f.log.lines)
 
 
@@ -83,3 +84,36 @@ def test_switch_off_keeps_todays_landing():
     f._departed_gi = False
     _ticks(f, 80)
     assert f._departed_pubs[3].msgs == [] and f.published[-1][1][2] >= 0.0
+
+
+def _at(f, z, ticks):
+    for _ in range(ticks):
+        f.attach_pos[0] = np.array([0.0, 1.2, z])
+        _ticks(f, 1)
+
+
+def test_a_drone_that_never_left_the_floor_is_not_pressed_for_ever():
+    """Critic pass 2 N1: the stall test needs a real descent; at its rest for 0.5 s it is down and the press ends."""
+    f = _node(z=0.10)
+    _at(f, 0.10, 8)
+    assert f._departed_td[3].stalled and f.published[-1][1][2] == pytest.approx(0.10)
+    assert f._departed_down()
+
+
+def test_the_press_after_a_high_stall_is_limited_then_held_where_it_is():
+    """Critic pass 2 N2: stopped above its rest -> 2 s more press, then held at its own height (not down)."""
+    f = _node(z=0.60)
+    for z in np.linspace(0.60, 0.24, 20):
+        _at(f, z, 1)
+    _at(f, 0.24, 40)                                                # the detector re-arms after its stall
+    assert 3 in f._press_t
+    _at(f, 0.24, 25)                                                # 2 s of press
+    assert f._departed_td[3].stalled and f.published[-1][1][2] == pytest.approx(0.24)
+    assert not f._departed_down() and any('held there (not down)' in m for m in f.log.lines)
+
+
+def test_arm_clears_the_rest_heights_and_the_warnings():
+    f = _node()
+    f._high_stall_said = {3}
+    f._departed_flight_start('ARM')
+    assert f._rest_z == {} and f._high_stall_said == set()

@@ -1123,7 +1123,9 @@ class Controller(Node):
                 and z <= self._kt_spawn_z + GROUND_IDLE_MARGIN and at_rest_ref)
         # off the ring and landing by itself while the ring flies: back at its own resting height (two-sided,
         # so a drone still tied to the ring cannot idle on a wrong report)
-        down = down or (self._gi_airborne and getattr(self, '_departed', False) and at_rest_ref
+        # (no airborne latch needed: the planner's flag comes only after TAKEOFF, and a newcomer taken out
+        # before it rose 4 cm must idle too)
+        down = down or (getattr(self, '_departed', False) and at_rest_ref
                         and abs(z - self._kt_spawn_z) <= GROUND_IDLE_MARGIN)
         self._gi_ticks = self._gi_ticks + 1 if down else 0
         if self._gi_ticks >= GROUND_IDLE_HOLD_S * FREQUENCY_HZ:

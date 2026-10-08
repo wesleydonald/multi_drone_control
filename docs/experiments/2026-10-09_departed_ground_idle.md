@@ -1,6 +1,6 @@
 # A departed drone landing by itself reaches its resting height and idles there while the ring flies
 
-Revision 2 (critic REWRITE, 9 Oct 00:15: revision 1's diagnosis was wrong).
+Revision 3 (critic REWRITE on rev 1 (wrong diagnosis), then GO on rev 2 with N1-N3 to fix first: done).
 
 1. **Question.** A drone that leaves the ring and lands by itself (an aborted newcomer; a freed carrier with
    `departed_land`, Wednesday's W4/W5) should sit on the floor at armed idle until the fleet lands. Does it?
@@ -17,23 +17,32 @@ Revision 2 (critic REWRITE, 9 Oct 00:15: revision 1's diagnosis was wrong).
      at 0.216 m, the drone hovered at 0.37-0.38 m (throttle 0.45) for ~10 s with the ring resting, then the fleet
      disarm dropped it ~0.32 m. Wednesday's W4/W5 freed drone will do the same with today's code.
    With `departed_ground_idle` on: the planner records each drone's resting height at TAKEOFF; a departed drone's
-   descending reference goes down to DEPARTED_PRESS_M (0.25 m) below its rest and never further than that below the
-   drone itself (a gentle press, also on a drone standing on its rod); a stall more than 0.03 m above its rest is
-   not "down" (the detector re-arms); the landed gate counts it down only within 0.03 m of its rest; the planner
+   descending reference goes down to DEPARTED_PRESS_M (0.35 m, sized from the rig's 0.19-0.22 m floor offset) below
+   its rest and never further than that below the drone itself (a gentle press, also on a drone standing on its
+   rod); 0.5 s at its rest (within 0.03 m) makes it down and ends the press (also a drone that never left the
+   floor, which the stall test cannot see); a stall more than 0.03 m above its rest is not "down" and gets at most
+   2 s more press, then it is held at its own height (warned, not down); the landed gate counts it down only within
+   0.03 m of its rest; resting heights are logged at TAKEOFF and cleared at ARM; refused on an air start; the planner
    latches `/drone_d/departed` True when its own descent starts (False at ARM and TAKEOFF); the tracker's existing
-   ground_idle gate also latches for a departed drone (no resting ring needed) when |z - its resting z| <= 0.03 m
-   with its reference at the floor for 0.2 s, airborne first, and only on a departed flag received after this ARM.
+   ground_idle gate also latches for a departed drone (no resting ring needed, no airborne latch: the flag implies
+   TAKEOFF) when |z - its resting z| <= 0.03 m with its reference at the floor for 0.2 s, and only on a departed
+   flag received after this ARM.
 3. **The one variable.** `departed_ground_idle` (bringup common.yaml default false, PLANNER_OPTIONAL; planner):
    dissipative_node.py `_departed_flight_start`, the departed descent and stall in `_publish_departed_refs`,
    `_departed_down`; tracker_node.py `_departed_cb` and the departed branch of `_ground_idle_update` (acts only with
    the tracker's ground_idle on, the default since 5 Oct; inert without the planner's flag). Off in partner runs.
 4. **Baseline.** R1252, R1254 (float), R1253 (stood on its rod), R1226/R1227 (freed carrier at throttle 0.48 on the
    floor), rig r305 (hover at 0.37 m, dropped ~0.32 m).
-5. **Pass / fail.** Per departed drone, from its tracker log (z, ref, thr_out, ground-idle line) and run.csv.
+5. **Pass / fail.** Per departed drone (QUAD4 in the twin_gi rows, the freed carrier in the w4_gi rows; carriers
+   in LAND are reported, not barred), `tools/departed_metrics.py` on run.csv (rest = its first 2 s): disarm_dz
+   <= 0.03 m; press_max_s <= 1 s (reference >= 0.1 m below it within 0.3 m of rest, not idle); tilt_idle <= 10 deg;
+   stand_s < 2 s (still between rest + 0.3 and + 0.8 m on its way down); idle_t before LANDED. The planner's 'is down
+   (at its rest)' / 'held there' lines and the tracker's 'on the floor after the flight' line are in launch.log; any
+   'held there' line = not supported for that row.
    | Run | Config | Supports if | Falsified if |
    |---|---|---|---|
    | G1 | twin_gi_g1_a3 (A3 + switch: lands before the ring rests) | the tracker's 'on the floor after the flight' line before LANDED; |z - rest| <= 0.03 m at that latch; throttle 0 from the latch to the disarm; tilt <= 10 deg from the latch to the disarm; disarm z - rest <= 0.03 m | an "above its rest" stall that never comes down, throttle > 0.05 after the latch, disarm z - rest > 0.03 m |
-   | B1n | twin_gi_b1 (B1 + switch: aborted while the carriers hover) | as G1, while the ring hovers | as G1, or it stands on its rod until LANDED (then the lay-rod card is needed) |
+   | B1n | twin_gi_b1 (B1 + switch: aborted while the carriers hover) | as G1, while the ring hovers | as G1, or stand_s >= 2 s (then the shelved lay-rod card returns) |
    | G2 | w4_gi_g2_release_orbit (r305 config + switch) | the freed carrier as G1 while the fleet circles; survivors as R1226/R1227 (tilt peak +/- 2 deg) | as G1, or the survivors change |
    | G3 | twin_gi_g3_a1 (A1 + switch, in LAND) | QUAD4 as G1 (R1250's 'is down' came after the fleet's LANDED: here it must be down first) | as G1 |
    | N1 | w4_gi_release_drop (hover release) | as G2 | as G2 |
@@ -58,3 +67,9 @@ the 5 cm case as a unit test. M8 registry rows for R1250-R1254 and the r305 'dow
 S1 carrier pose staleness: open (the tracker's own two-sided check is the guard). S2 the stilt: the lay-rod card
 (B1n shows whether the gentle press is enough). S3 Betaflight at throttle 0: question for Wesley. S4 partner off:
 done. S5 named `/drone_d/departed`. S6 G2 note: done. S7 the W4/W5 rig behaviour: in the morning report.
+
+Second pass (9 Oct 00:50, on rev 2): GO after N1-N3, done. N1 a drone that never left the floor was pressed for
+ever: 0.5 s at its rest ends the press, and the tracker's departed branch no longer needs the airborne latch (both
+tested). N2 the press after a high stall had no limit: 2 s, then held at its own height and warned (tested). N3/N4
+bars with numbers and a tool (tools/departed_metrics.py). S1 press 0.35 m. S2 rest heights cleared at ARM, logged
+at TAKEOFF, a missing pose warned. S3 refused on an air start. S4 warnings reset. M8 registry rows: with batch 5's.
