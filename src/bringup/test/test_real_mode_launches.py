@@ -675,3 +675,9 @@ def test_default_mode_is_dissipative_with_detection_drop_and_departed_land_on():
 def test_attach_keeps_drop_and_departed_land_off_until_drop_covers_the_newcomer():
     p = _by_name(rig('attach', enable_approach_mpc=False))['/dissipative_planner']['params']
     assert p['drop_on_loss'] is False and p['departed_land'] is False
+
+
+def test_rig_attach_fleet_manager_checks_every_fc_armed():
+    """QUAD1's '!ERR*' (arming disabled) must stop TAKEOFF in mode:=attach as in the detach graph."""
+    nodes = _by_name(rig('attach', enable_approach_mpc=False))
+    assert nodes['/fleet_manager']['params']['require_fc_armed'] is True

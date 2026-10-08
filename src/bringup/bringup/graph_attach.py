@@ -174,7 +174,9 @@ def attach(context, launch_dir, profile_vals):
         # manage the newcomer too: it must disarm on LAND and on an abort like the others
         # (R0575/R0577: left armed on the floor after LAND; an abort never reached it).
         # It exists only with the approach chain: a managed drone with no tracker fails ARM.
-        parameters=[{'num_drones': n + (1 if truthy(context, 'enable_approach') else 0)}],
+        parameters=[{'num_drones': n + (1 if truthy(context, 'enable_approach') else 0),
+                     **({'require_fc_armed': LaunchConfiguration('require_fc_armed').perform(context)
+                         .lower() == 'true'} if real else {})}],
         output='screen'))
 
     # ── Dissipative reference generator with 1 reserved ATTACH node ─────────
