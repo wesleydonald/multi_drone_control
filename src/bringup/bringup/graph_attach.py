@@ -279,6 +279,12 @@ def attach(context, launch_dir, profile_vals):
             raise RuntimeError('the approach MPC is not for the rig; add '
                                'enable_approach_mpc:=false (our tracker flies the approach) '
                                'or partner:=true')
+        # without the tip body the mocap node never publishes /magnet_tip_pose: no approach
+        # tracking and no weld can ever be declared (the rig manager detects it from the tip)
+        if truthy(context, 'real_io') and not LaunchConfiguration(
+                'mocap_magnet_tip_body_id').perform(context).strip():
+            raise RuntimeError('rig attach: type mocap_magnet_tip_body_id:=<id> (QUAD4\'s magnet '
+                               'tip, 24): without it there is no /magnet_tip_pose and no weld')
     # rig magnets (docstring, RIG): weld_radius 0 blocks the weld, so the newcomer's magnet
     # must never come on (a physical catch with no weld declared is R8b's abort)
     dry_approach = real and enable_approach and float(

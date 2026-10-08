@@ -136,6 +136,9 @@ def sim(mode, **args):
 
 
 def rig(mode, **args):
+    # the rig attach refuses to start without QUAD4's magnet tip body (no tip, no weld)
+    if mode == 'attach':
+        args.setdefault('mocap_magnet_tip_body_id', 24)
     return evaluate('real_control_launch.py', mode=mode, **args)
 
 
@@ -681,3 +684,15 @@ def test_rig_attach_fleet_manager_checks_every_fc_armed():
     """QUAD1's '!ERR*' (arming disabled) must stop TAKEOFF in mode:=attach as in the detach graph."""
     nodes = _by_name(rig('attach', enable_approach_mpc=False))
     assert nodes['/fleet_manager']['params']['require_fc_armed'] is True
+
+
+def test_rig_attach_types_the_mocap_body_ids_and_refuses_without_the_tip():
+    """The Motive ids reach the mocap node through real_control (they were refused as untyped, so
+    /magnet_tip_pose never existed in mode:=attach); an empty tip id is refused with the approach chain."""
+    g = _by_name(rig('attach', enable_approach_mpc=False, mocap_magnet_tip_body_id=24,
+                     mocap_drone_body_ids='11,12,13,14', mocap_payload_body_id=8))
+    mocap = next(n for k, n in g.items() if 'motion_capture' in k)
+    assert mocap['params']['magnet_tip_body_id'] == 24 and mocap['params']['payload_body_id'] == 8
+    assert mocap['params']['drone_body_ids'] == [11, 12, 13, 14]
+    with pytest.raises(RuntimeError, match='mocap_magnet_tip_body_id'):
+        rig('attach', enable_approach_mpc=False, mocap_magnet_tip_body_id='')

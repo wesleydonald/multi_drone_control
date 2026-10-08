@@ -46,7 +46,9 @@ KEPT_COMMON = (
 KEPT_SIM = ('legacy', 'sil', 'sim_interface', 'ff_cap_force', 'sim_thrust_map', 'sim_thrust_offset',
             'sim_pack_v0')
 KEPT_REAL = ('real_io', 'rviz', 'magnet_channel', 'magnet_initial', 'attach_magnet_initial',
-             'require_fc_armed', 'detach_magnet', 'hover_z')
+             'require_fc_armed', 'detach_magnet', 'hover_z',
+             # Motive body ids, forwarded to real_io_launch.py by the graphs that include it
+             'mocap_drone_body_ids', 'mocap_payload_body_id', 'mocap_magnet_tip_body_id')
 # typed per drone by the rig modes (bringup.real_mode.rig_io, rig_magnet_latches)
 PER_DRONE = re.compile(r'drone\d+_(serial|magnet_initial)$')
 # decided by the side or the mode, never typed
