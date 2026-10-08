@@ -50,7 +50,8 @@ def _node(p_ref=(0.0, 0.25, 1.64), pending=True, approaching=True, on=True):
         _approach_hold_on=True, takeoff_seen=True, phase='planner',
         load_state=np.r_[0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, np.zeros(6)], drone_pos=list(carriers),
         dyn=SimpleNamespace(g=9.81), N=20, _magnet_cmd_pub=_Pub(),
-        traj=SimpleNamespace(kind='hover', radius=0.0), hover_xy=None)
+        traj=SimpleNamespace(kind='hover', radius=0.0), hover_xy=None,
+        _departed_gi=False, _rest_z={}, _departed_sent=set(), _departed_pubs={})
     f.get_logger = lambda: log
     f.log = log
     f.now = [100.0]

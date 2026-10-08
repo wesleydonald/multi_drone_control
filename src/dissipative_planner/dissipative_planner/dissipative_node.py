@@ -57,6 +57,10 @@ NEWCOMER_RELEASE_S = 0.5   # s an aborted newcomer holds after its magnet OFF (r
 NEWCOMER_OFF_EVERY_S = 0.5  # s between the OFFs re-sent while a newcomer is out (a repeated ON must not weld it)
 NEWCOMER_POSE_STALE_S = 0.5  # s: an older newcomer pose is not used (a frozen pose reads as a stall)
 NEWCOMER_LIFTED_M = 0.05   # m above its height at ATTACH before an aborted newcomer counts as off the floor
+DEPARTED_PRESS_M = 0.25    # m: a landing departed drone's reference goes this far below its rest, and never
+                           # further below the drone itself (its rod and magnet on the floor make it light:
+                           # it hovered 12 cm (twin R1252) and 15 cm (rig r305) above a floor reference)
+DEPARTED_REST_TOL_M = 0.03  # m: back at its resting height (the tracker's GROUND_IDLE_MARGIN)
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
 DROP_LAND_WAIT_S = 30.0    # s after a drop: /fleet/landed even if a drone never reads as down
 
@@ -335,6 +339,18 @@ class DissipativeController(LoadPlanner):
         self._departed_wait = {}        # d -> s still held after its magnet OFF
         self._attach_pos_t = [None] * self.reserved_attach
         self._off_resend_t = None
+        # a departed drone landing by itself reaches its own resting height and idles there (card
+        # 2026-10-09_departed_ground_idle): deeper floor reference, down only at rest, the tracker told
+        self._departed_gi = bool(p('departed_ground_idle', False).value) and not self._partner_run
+        self._rest_z = {}
+        self._departed_sent = set()
+        self._departed_pubs = {}
+        if self._departed_gi:
+            latched_gi = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                                    reliability=ReliabilityPolicy.RELIABLE)
+            for dd in range(self.n_net):
+                self._departed_pubs[dd] = self.create_publisher(Bool, f'/drone_{dd}/departed', latched_gi)
+                self._departed_pubs[dd].publish(Bool(data=False))
         # a fault on an unwelded newcomer lands the fleet instead of disarming it (card
         # 2026-10-09_newcomer_fault_scope; Wesley 8 Oct night: "if QUAD4 fails we just land everything"):
         # each reserved drone's latched /drone_d/on_load (False until it is folded in) tells the fleet
@@ -635,6 +651,11 @@ class DissipativeController(LoadPlanner):
             pos = self._pos(d)
             if pos is None:
                 return False
+            rest = self._rest_z.get(d) if getattr(self, '_departed_gi', False) else None
+            if rest is not None:
+                if float(pos[2]) > rest + DEPARTED_REST_TOL_M:
+                    return False
+                continue
             td = self._departed_td.get(d)
             stalled = td is not None and td.stalled
             if not stalled and float(pos[2]) > self._departed_down_z:
@@ -709,17 +730,36 @@ class DissipativeController(LoadPlanner):
                 # reference sinking into the floor pressed the drone onto its trailing
                 # cable and tipped it while it waited for the fleet (R0570)
                 td0 = self._departed_td.get(d)
+                pos = self._pos(d)
+                rest = self._rest_z.get(d) if getattr(self, '_departed_gi', False) else None
+                if rest is not None and d not in self._departed_sent:
+                    self._departed_sent.add(d)
+                    self._departed_pubs[d].publish(Bool(data=True))     # its tracker may idle at its rest
                 if td0 is None or not td0.stalled:
-                    p_hold[2] = max(0.0, float(p_hold[2]) - rate / PLANNER_HZ)
+                    if rest is None:
+                        p_hold[2] = max(0.0, float(p_hold[2]) - rate / PLANNER_HZ)
+                    else:
+                        floor = rest - DEPARTED_PRESS_M
+                        if pos is not None:
+                            floor = max(floor, float(pos[2]) - DEPARTED_PRESS_M)
+                        p_hold[2] = max(floor, float(p_hold[2]) - rate / PLANNER_HZ)
                 td = self._departed_td.get(d)
                 if td is None:
                     td = self._departed_td[d] = TouchdownDetector(rate, PLANNER_HZ)
                     td.stalled = False
-                pos = self._pos(d)
                 if pos is not None and not td.stalled and td.update([float(pos[2])]):
-                    td.stalled = True
-                    p_hold[2] = float(pos[2])
-                    self.get_logger().info(f'[dissipative] departed {_who(d)} is down')
+                    if rest is not None and float(pos[2]) > rest + DEPARTED_REST_TOL_M:
+                        # it stopped above its rest (light on its rod, or standing on it): not down
+                        td.reset()
+                        if d not in getattr(self, '_high_stall_said', set()):
+                            self._high_stall_said = getattr(self, '_high_stall_said', set()) | {d}
+                            self.get_logger().warn(
+                                f'[dissipative] departed {_who(d)} stopped {float(pos[2]) - rest:+.2f} m above '
+                                f'its rest: still pressing down')
+                    else:
+                        td.stalled = True
+                        p_hold[2] = float(pos[2])
+                        self.get_logger().info(f'[dissipative] departed {_who(d)} is down')
             self._publish_ref(d, [(p_hold, zero, g, zero)] * (self.N + 1))
 
     def _attach_target_cb(self, msg: PoseStamped):
@@ -1777,6 +1817,7 @@ class DissipativeController(LoadPlanner):
         (see _network_plan) and announce /fleet/landed for the fleet manager to disarm.
         Every other command, and LAND before handover, falls through to the base handler."""
         self._newcomers_out_on_land(msg.data)
+        self._departed_flight_start(msg.data)
         if self.phase == 'network' and msg.data.strip().upper() == 'LAND':
             if self._landed:
                 self.landed_pub.publish(Bool(data=True))
@@ -1805,6 +1846,19 @@ class DissipativeController(LoadPlanner):
                 self._dropped_pub.publish(Bool(data=False))     # a re-ARM starts undropped
         self._unload_cancel_on(msg.data)
         super()._fleet_command_cb(msg)
+
+    def _departed_flight_start(self, cmd):
+        """ARM and TAKEOFF: every departed flag False; TAKEOFF records each drone's resting height."""
+        if not self._departed_gi or cmd.strip().upper() not in ('ARM', 'TAKEOFF'):
+            return
+        for pub in self._departed_pubs.values():
+            pub.publish(Bool(data=False))
+        self._departed_sent = set()
+        if cmd.strip().upper() == 'TAKEOFF':
+            for dd in range(self.n_net):
+                pos = self._pos(dd)
+                if pos is not None:
+                    self._rest_z[dd] = float(pos[2])
 
     def _newcomers_out_on_land(self, cmd):
         """LAND lands every drone (Wesley 8 Oct, M1 rule a): before the fleet descends, every unwelded

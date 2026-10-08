@@ -1,0 +1,60 @@
+# A departed drone landing by itself reaches its resting height and idles there while the ring flies
+
+Revision 2 (critic REWRITE, 9 Oct 00:15: revision 1's diagnosis was wrong).
+
+1. **Question.** A drone that leaves the ring and lands by itself (an aborted newcomer; a freed carrier with
+   `departed_land`, Wednesday's W4/W5) should sit on the floor at armed idle until the fleet lands. Does it?
+2. **Hypothesis.** No. A departed drone cannot reach a floor reference: its tracker has no vertical integrator and,
+   with its rod (or released cable) and magnet resting on the floor, it needs less thrust than its model, so it
+   hovers above any reference; the planner's touchdown detector reads "the descent stopped" as touchdown, freezes
+   the reference there and the drone rises further; the tracker's ground_idle needs a resting ring and its own
+   height within 3 cm of rest, so it never latches; the fleet disarm at LANDED drops it.
+   - Twin R1252 (A3, tracker_3 log rows 255-380): sinking to 0.118 m against a reference at 0 (rest 0.100), "is
+     down" at 0.118 m, reference frozen at 0.1185, then steady at 0.239 m (throttle 0.44); disarmed at 0.237 m.
+   - Twin R1254 (B2): the same float to 0.236 m. R1226 (freed carrier, r305 config): needed exactly its model
+     thrust and sat at 0.100-0.102 m, at throttle 0.48 on the floor (no idle either).
+   - **Rig r305 (8 Oct)**: rest 0.061 m; reference clamped at 0 with the drone at 0.193 m, stall, reference frozen
+     at 0.216 m, the drone hovered at 0.37-0.38 m (throttle 0.45) for ~10 s with the ring resting, then the fleet
+     disarm dropped it ~0.32 m. Wednesday's W4/W5 freed drone will do the same with today's code.
+   With `departed_ground_idle` on: the planner records each drone's resting height at TAKEOFF; a departed drone's
+   descending reference goes down to DEPARTED_PRESS_M (0.25 m) below its rest and never further than that below the
+   drone itself (a gentle press, also on a drone standing on its rod); a stall more than 0.03 m above its rest is
+   not "down" (the detector re-arms); the landed gate counts it down only within 0.03 m of its rest; the planner
+   latches `/drone_d/departed` True when its own descent starts (False at ARM and TAKEOFF); the tracker's existing
+   ground_idle gate also latches for a departed drone (no resting ring needed) when |z - its resting z| <= 0.03 m
+   with its reference at the floor for 0.2 s, airborne first, and only on a departed flag received after this ARM.
+3. **The one variable.** `departed_ground_idle` (bringup common.yaml default false, PLANNER_OPTIONAL; planner):
+   dissipative_node.py `_departed_flight_start`, the departed descent and stall in `_publish_departed_refs`,
+   `_departed_down`; tracker_node.py `_departed_cb` and the departed branch of `_ground_idle_update` (acts only with
+   the tracker's ground_idle on, the default since 5 Oct; inert without the planner's flag). Off in partner runs.
+4. **Baseline.** R1252, R1254 (float), R1253 (stood on its rod), R1226/R1227 (freed carrier at throttle 0.48 on the
+   floor), rig r305 (hover at 0.37 m, dropped ~0.32 m).
+5. **Pass / fail.** Per departed drone, from its tracker log (z, ref, thr_out, ground-idle line) and run.csv.
+   | Run | Config | Supports if | Falsified if |
+   |---|---|---|---|
+   | G1 | twin_gi_g1_a3 (A3 + switch: lands before the ring rests) | the tracker's 'on the floor after the flight' line before LANDED; |z - rest| <= 0.03 m at that latch; throttle 0 from the latch to the disarm; tilt <= 10 deg from the latch to the disarm; disarm z - rest <= 0.03 m | an "above its rest" stall that never comes down, throttle > 0.05 after the latch, disarm z - rest > 0.03 m |
+   | B1n | twin_gi_b1 (B1 + switch: aborted while the carriers hover) | as G1, while the ring hovers | as G1, or it stands on its rod until LANDED (then the lay-rod card is needed) |
+   | G2 | w4_gi_g2_release_orbit (r305 config + switch) | the freed carrier as G1 while the fleet circles; survivors as R1226/R1227 (tilt peak +/- 2 deg) | as G1, or the survivors change |
+   | G3 | twin_gi_g3_a1 (A1 + switch, in LAND) | QUAD4 as G1 (R1250's 'is down' came after the fleet's LANDED: here it must be down first) | as G1 |
+   | N1 | w4_gi_release_drop (hover release) | as G2 | as G2 |
+   | N2 | w4_gi_drop_forced (every drone departed, the ring resting) | every drone as G1, the drop as R1205/R1210 | as G1 |
+   G2 in the twin cannot stand in for the rig's floor offset (the twin carrier had none, R1226); the rig check is
+   W4/W5 on Wednesday, only if Wesley makes it live. A newcomer taken out before it is 5 cm up never stalls: the
+   gate counts it at its rest (unit test).
+6. **Repeats.** G1 x2; B1n, G2, G3, N1, N2 x1 (neighbours before the G1 repeat).
+7. **Cost.** 7 Gazebo runs.
+8. **New code?** Yes, a change to a gate (the tracker's idle latch) and to the departed landing. Default off; to
+   the rig (W4/W5, R8a) only with these rows, the reviewer and Wesley's word. Rig question for Wesley (critic S3):
+   a drone armed at throttle 0 for 10-30 s, possibly tilted on its rod: Betaflight airmode and I-term behaviour.
+   Removal: drop the commits.
+
+## Critic
+
+Revision 1 (9 Oct 00:15): REWRITE. M1 the mechanism (light on its rod, no integrator, the stall read as touchdown)
+and the rig evidence (r305): restated above. M2 floor relative to rest and deep enough, no freeze/'down' above rest:
+done. M3 the gate with 'payload_resting or departed', not a one-shot: done. M4 False at ARM/TAKEOFF, after-ARM only,
+airborne first: done. M5 two-sided margin for the departed path: done. M6 bars: done. M7 neighbours: B1n, N1, N2;
+the 5 cm case as a unit test. M8 registry rows for R1250-R1254 and the r305 'down' correction: at the end of batch 5.
+S1 carrier pose staleness: open (the tracker's own two-sided check is the guard). S2 the stilt: the lay-rod card
+(B1n shows whether the gentle press is enough). S3 Betaflight at throttle 0: question for Wesley. S4 partner off:
+done. S5 named `/drone_d/departed`. S6 G2 note: done. S7 the W4/W5 rig behaviour: in the morning report.
