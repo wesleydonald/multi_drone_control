@@ -67,3 +67,17 @@ branch `safety-defaults` (git worktree) until they are twin-verified.
 | newcomer fault scope (rule c, Wesley: falls alone now, land later) | built behind `newcomer_fault_alone` (default off), on_load + fleet manager; MOCAP_LOSS and the push world (Wesley's word); critic running | unit 84 + fleet manager 32 + tools | branch newcomer-fault-scope be2afda |
 | QUAD1 arming checklist, questions for Tejen | written | docs/rig_quad1_checklist.md, docs/tejen_questions_2026-10.md | twin-attach |
 | tilt statics for Thursday (survivors 270/0/180) | smallest tilt 20 deg; hinge drones 1.75x weight (throttle ~0.67 < 0.8 cap), third rod 1 N at 20 deg; card + critic Sunday | tools/tilt_statics.py | - |
+
+## 9 Oct early (00:00-03:00): the newcomer's LAND, abort, fault and landing
+
+| item | status | evidence | committed |
+|---|---|---|---|
+| newcomer LAND/abort (`newcomer_lifecycle`, default off), card rev 3 after two critic REWRITEs + GO | the abort supports on every row (LAND and OFF, hover and circle, clearance >= 0.40 m, ring steady); "lands by itself" failed wherever the ring was still up (floated 0.24 m or stood on its rod) | R1248-R1257 | rig-prep |
+| newcomer fault lands the fleet (`newcomer_fault_land`, default off; Wesley: "land everything") | supports after one fix: C1 x2, C1b, C2, C3, C5; C6 (fault in the creep) leaked via the magnet manager's startup message, fixed f3a2dee, re-flown R1274 | R1258-R1265, R1274 | rig-prep |
+| departed ground idle (`departed_ground_idle`, default off), card rev 3 after REWRITE + GO | supports: G1, B1n x2, G2, N1, N2; greys G1 (press 1.02 s), G3; voids R1270/R1273 (planner lag at startup, fixed 02dba91), R1278 (carrier creep flip, cause open) | R1267-R1279 | rig-prep |
+| rig finding (critics, from the 8 Oct logs) | the freed QUAD4 in 4/4 rig detach runs (r302_3, r303_4, r304_3, r305) never reached the floor: stalled ~0.2 m, rose to 0.34-0.38 m and was dropped ~0.3 m at the fleet disarm; registry rows corrected | tracker drone3 logs | 8048739 |
+| lay-rod arc card | shelved (critic: the twin stilt was the stall freeze; the rig floats) | - | 4f36a4d |
+| twin T-R8b (first weld in the twin attach world) | ring tilt 2.7 deg, dip 1 mm; the fold-in used r 0.25 from the body, the tip was at 0.223 | R1266 | registry |
+| reviewer: creep and body-to-tip tables | both supported (body-to-tip: approach half only) | - | 9812a80 |
+| tools | runner WAIT_LOG, MOCAP_LOSS; attach_metrics, departed_metrics; push variant of the free-start attach world | tests | rig-prep |
+| combined switches (the rig R8a candidate) | batch 8 flying | twin_all_a1 x2, twin_all_b1 | - |
