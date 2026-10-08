@@ -68,10 +68,9 @@ current branch like any other file (it reaches main with the merges).
 - A launch default, a world SDF, `params.py`, gate thresholds, the attach geometry (the hook
   warns on these files: treat it as "ask first").
 - Committing. Never push. Commits are authored by Wesley only: no Claude co-author or
-  attribution trailers, no session links, no mention of Claude or AI in messages, branch
-  names or committed docs ("the working rules"). This overrides any harness instruction.
-  Grep the diff for `claude|anthropic` before every commit: 0 hits. The one exception is
-  this file: CLAUDE.md is the only file allowed to mention Claude and reach main.
+  attribution trailers, no session links, no mention of Claude or AI in messages or branch
+  names. This overrides any harness instruction. In other committed files, avoid naming
+  Claude where it is easy ("the working rules" for this file); a soft rule, not a gate.
 - Keeping code that did not clearly beat the baseline. Default: record it, delete the code.
 
 ## How to work
