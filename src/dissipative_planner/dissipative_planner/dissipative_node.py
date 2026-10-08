@@ -544,7 +544,9 @@ class DissipativeController(LoadPlanner):
 
     def _set_on_load(self, d, on):
         pub = getattr(self, '_on_load_pubs', {}).get(d)
-        if pub is not None:
+        # no False before the fleet has left the floor creep (the planner ignores LAND there, so the manager must
+        # keep its old stop): the magnet manager's startup 'not attached' reached the manager in R1261
+        if pub is not None and (on or getattr(self, '_on_load_announced', False)):
             pub.publish(Bool(data=bool(on)))
 
     def _weld_refused(self, j):

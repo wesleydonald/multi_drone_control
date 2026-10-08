@@ -60,6 +60,7 @@ def test_disarm_edges_that_are_not_a_free_newcomer_fault(kw):
 
 def test_a_refused_physical_weld_does_not_put_it_on_the_ring_for_the_manager():
     g = _node()
+    g._on_load_announced = True                                    # in flight, after the creep
     g._abort_newcomer(0, 'abort')
     g._magnet_attached_cb(Bool(data=True))                         # caught on its way out: refused
     assert True not in g._on_load and g.attached == []
@@ -116,3 +117,19 @@ def test_no_flag_until_the_fleet_leaves_the_floor_creep():
     g._announce_on_load = MethodType(D._announce_on_load, g)
     g._announce_on_load()
     assert g._on_load == []                                        # a welded newcomer is never flagged off
+
+
+def test_no_false_flag_from_any_path_before_the_creep_ends():
+    """R1261: the magnet manager's startup 'not attached' published on_load False during the creep, the manager
+    excused a creep-phase fault with a LAND the planner ignores, and the fleet lifted."""
+    f = _node()
+    f._on_load_announced = False
+    f._set_on_load = MethodType(D._set_on_load, f)
+    f._magnet_attached_cb(Bool(data=False))
+    D._set_on_load(f, 3, False)
+    assert f._on_load == []
+    D._set_on_load(f, 3, True)                                     # a fold-in always goes out
+    assert f._on_load == [True]
+    f._on_load_announced = True
+    f._magnet_attached_cb(Bool(data=False))
+    assert f._on_load == [True, False]
