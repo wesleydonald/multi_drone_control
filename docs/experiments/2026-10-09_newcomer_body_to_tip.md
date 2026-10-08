@@ -34,3 +34,16 @@ contact" from the twin bars (the twin tip cannot touch the ring), Wesley's word 
 weld standoff from the capture gap, not the legacy TIP_STANDOFF (the target is 0.05 above the ring origin: 3 cm
 above the twin plate, maybe 5 cm on the rig); the partner direct-descent window is 4 cm tighter; capture from the
 measured tip instead of body - length (alternative); s_new built from the body (nit).
+
+## Result (8 Oct night, twin dry approach, rig-prep 5130c70)
+
+| Run | Arm the approach uses | body - body ref (m) | body - tip, measured (m) | tip - (target - 0.01) (m) |
+|---|---|---|---|---|
+| R1247 (baseline) | 0.550 (attach_cable_len 0.51) | 0.0001 | 0.590 | -0.0401 |
+| R1245 | 0.590 (body-to-tip) | 0.0001 | 0.590 | 0.0002 |
+| R1246 | 0.590 | 0.0001 | 0.590 | 0.0001 |
+
+SUPPORTS, 2 of 2: the measured body-to-tip is 0.590 m (bar 0.59 +/- 0.01) and the tip ends at the target within
+0.2 mm beyond the tracker's own 0.1 mm; the old arm parks it 4.0 cm low, as predicted. Wesley (8 Oct night): default
+on the rig too once the twin confirms, which it now does. Still open from section 5: the weld-capture half (rho_new
+at the weld, fold-in rod length, newcomer tilt after the weld) needs a twin T-R8b weld run.
