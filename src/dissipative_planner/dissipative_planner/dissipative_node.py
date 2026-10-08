@@ -149,6 +149,9 @@ class DissipativeController(LoadPlanner):
         # per-node cable rest for a welded newcomer (a swung-electromagnet pendulum may hang
         # a different length than the tethers); defaults to the shared cable_len.
         self._attach_cable_len = float(p('attach_cable_len', self.cable_len).value)
+        # the newcomer's rod hangs from a pivot below its body (pivot_offset, rig/twin -0.04 m), so
+        # the tip is rod + pivot drop below the body the tracker flies; the OCP keeps the rod itself
+        self._attach_body_to_tip = self._attach_cable_len - float(self.pivot_offset[2])
         # How to fold a welded newcomer into the network:
         #   False (default) -> RING member: it swings out to a cone slot and the fleet
         #     reconfigures. Needs a FLEXIBLE (ball-jointed) weld so it doesn't lever the load.
@@ -661,7 +664,7 @@ class DissipativeController(LoadPlanner):
             return
         for j in range(self.reserved_attach):
             if self.attach_pending[j] and self.attach_pos[j] is not None and j not in self._approach:
-                self._approach[j] = ApproachProfile(self.attach_pos[j], self._attach_cable_len,
+                self._approach[j] = ApproachProfile(self.attach_pos[j], self._attach_body_to_tip,
                                                     1.0 / PLANNER_HZ,
                                                     seek_m=self._attach_seek_m,
                                                     direct=self._attach_approach_direct)
@@ -1346,7 +1349,7 @@ class DissipativeController(LoadPlanner):
         R = quat_to_rot_np(self.load_state[3:7])
         weld_pt = np.asarray(measured, float)
         if d >= self._n_carry0:
-            weld_pt = weld_pt - np.array([0.0, 0.0, float(self._attach_cable_len)])
+            weld_pt = weld_pt - np.array([0.0, 0.0, float(self._attach_body_to_tip)])
         rho_body = R.T @ (weld_pt - load_pos)
         r_xy = float(np.hypot(rho_body[0], rho_body[1]))
         if clamp and r_xy > self.attach_radius and r_xy > 1e-6:

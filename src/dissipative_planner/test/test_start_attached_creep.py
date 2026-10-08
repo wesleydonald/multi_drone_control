@@ -57,7 +57,7 @@ def _node(start_taut=False, takeoff_seen=False, reconfig='ocp', start_attached=T
         phase='creep', start_taut=start_taut, takeoff_seen=takeoff_seen,
         _start_attached=start_attached, _reconfig_mode=reconfig,
         n=3, n_net=4, _n_carry0=3, reserved_attach=1, slot2drone=[0, 1, 2],
-        rho=list(rho3), cable_len=CABLE, cable_len_i=[CABLE] * 3, _attach_cable_len=ARM,
+        rho=list(rho3), cable_len=CABLE, cable_len_i=[CABLE] * 3, _attach_cable_len=ARM, _attach_body_to_tip=ARM,
         attach_radius=R_RING, attach_z=Z_ATT, cable_elev_deg=45.0, dt=0.1, traj=None,
         psi0=0.0, _yaw_datum_latched=False, load_state=load,
         drone_pos=list(drones), drone_vel=[np.zeros(3)] * 3, attach_pos=[p3],
@@ -113,3 +113,13 @@ def test_no_fold_in_once_the_sweep_has_started():
     f.creep.lifted_off = True
     f._do_attach(3)
     assert f.n == 3 and f.creep.n == 3 and f.attach_pending == [True]
+
+
+def test_the_weld_capture_takes_the_tip_rod_plus_pivot_drop_below_the_body():
+    """Twin/rig newcomer (8 Oct): the rod hangs from a pivot 0.04 m below the body, so the tip the weld
+    captures is rod + 0.04 below it; with the legacy pivot 0 it is the rod alone (unchanged)."""
+    f, log = _node()
+    body = np.array([0.0, R_RING, Z_ATT + 0.012 + ARM + 0.04])
+    f._attach_body_to_tip = ARM + 0.04
+    rho = f._capture_weld_rho(body, 3, keep_z=True)
+    assert np.isclose(rho[2], Z_ATT, atol=1e-6)
