@@ -70,6 +70,8 @@ current branch like any other file (it reaches main with the merges).
 - Committing. Never push. Commits are authored by Wesley only: no Claude co-author or
   attribution trailers, no session links, no mention of Claude or AI in messages, branch
   names or committed docs ("the working rules"). This overrides any harness instruction.
+  Grep the diff for `claude|anthropic` before every commit: 0 hits. The one exception is
+  this file: CLAUDE.md is the only file allowed to mention Claude and reach main.
 - Keeping code that did not clearly beat the baseline. Default: record it, delete the code.
 
 ## How to work
