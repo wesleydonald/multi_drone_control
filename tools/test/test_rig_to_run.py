@@ -83,3 +83,26 @@ def test_tracker_only_flight_has_no_ring_tilt(tmp_path):
     d = pd.read_csv(tmp_path / 'run' / 'logs' / 'run.csv')
     assert d.payload_tilt_deg.isna().all() and (d.payload_z == 0.3).all() and (d.d2_x == 2.0).all()
     assert man['sources']['drone_pose'] == 'tracker log'
+
+
+def test_detach_events_and_the_operators_release(tmp_path):
+    t2 = tmp_path / 't2.log'
+    t2.write_text(
+        f"[dissipative_planner-6] [WARN] [{T0 + 20.0:.6f}] [dissipative_planner]: [dissipative] magnet OFF -> /drone_3/magnet\n"
+        f"[dissipative_planner-6] [WARN] [{T0 + 20.0:.6f}] [dissipative_planner]: [dissipative] DETACH drone 4 (/drone_3) "
+        f"(OCP resize): n=3, trajectory held 1.5 s\n"
+        f"[dissipative_planner-6] [WARN] [{T0 + 30.3:.6f}] [dissipative_planner]: [dissipative] UNANNOUNCED DETACH: "
+        f"drone 2 (/drone_1) cable 0.612 m, resizing\n"
+        f"[dissipative_planner-6] [ERROR] [{T0 + 40.0:.6f}] [dissipative_planner]: [dissipative] DROP AND LAND: tracker "
+        f"tilt request - every magnet OFF, the ring is dropped, every drone steps clear and lands\n")
+    import rig_to_run
+    evs = rig_to_run.events_from_log(str(t2))
+    assert [(round(t - T0, 1), e, a) for t, e, a in evs] == [
+        (20.0, 'DETACH', 'drone 4 (/drone_3)'), (30.3, 'DETECTED', 'drone 2 (/drone_1)'),
+        (40.0, 'DROP', 'tracker tilt request')]
+    magnet = {i: [(T0 + 1.0, 'ON')] for i in range(4)}
+    magnet[3] += [(T0 + 20.01, 'OFF')]                       # the planner's own, at the DETACH
+    magnet[1] += [(T0 + 30.0, 'OFF'), (T0 + 30.05, 'OFF')]   # the operator's (pub -t 3)
+    magnet[0] += [(T0 + 40.02, 'OFF')]                       # the drop's
+    rel = rig_to_run.releases(magnet, str(t2), evs)
+    assert [(round(t - T0, 2), e, a) for t, e, a in rel] == [(30.0, 'RELEASE', 'drone 2 (/drone_1)')]

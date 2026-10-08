@@ -10,8 +10,9 @@ so the three line up directly. The flight is resampled on a 50 Hz grid (last sam
 logs/run.csv with the shared t / payload_* / dN_* schema (readiness review 2026-09-29: rig flights could not be
 scored). Drone pose, velocity and tilt come from the bag's mocap when given, else the tracker logs; the ring's
 orientation (payload_tilt_deg) needs the bag. Throttle (dN_thr = u2), references and armed come from the trackers.
-Events (ARM, TAKEOFF, LAND, ESTOP, DISARM, FLEET_ABORT, LANDED, and the manager's grounding lines) come from the T2
-console. t = 0 at the first grid tick; events.csv uses the same origin."""
+Events (ARM, TAKEOFF, LAND, ESTOP, DISARM, FLEET_ABORT, LANDED, the manager's grounding lines, and the dissipative
+planner's DETACH, DETECTED (unannounced detach) and DROP) come from the T2 console; RELEASE (an operator's magnet OFF,
+not sent by the planner) from the bag's /drone_N/magnet. t = 0 at the first grid tick; events.csv uses the same origin."""
 import argparse
 import glob
 import json
@@ -31,7 +32,13 @@ EVENT_RES = [
     (re.compile(r"\[(\d{9,}\.\d+)\] \[(?:fleet_manager|central_controller)\]: (Drone \d disarmed before TAKEOFF)"), 'GROUNDED'),
     (re.compile(r"\[(\d{9,}\.\d+)\] \[(?:fleet_manager|central_controller)\]: (TAKEOFF REFUSED[^\n]*)"), 'GROUNDED'),
     (re.compile(r"\[(\d{9,}\.\d+)\] \[\w+\]: \[planner\] handover settle complete"), 'HANDOVER'),
+    (re.compile(r"\[(\d{9,}\.\d+)\] \[\w+\]: \[dissipative\] DETACH (drone \d+(?: \(/drone_\d+\))?)"), 'DETACH'),
+    (re.compile(r"\[(\d{9,}\.\d+)\] \[\w+\]: \[dissipative\] UNANNOUNCED DETACH: (drone \d+(?: \(/drone_\d+\))?)"),
+     'DETECTED'),
+    (re.compile(r"\[(\d{9,}\.\d+)\] \[\w+\]: \[dissipative\] DROP AND LAND: (.*?) - every magnet"), 'DROP'),
 ]
+# the planner's own magnet OFFs; any other OFF in the bag is the operator's release
+PLANNER_OFF_RE = re.compile(r"\[(\d{9,}\.\d+)\] \[\w+\]: \[dissipative\] magnet OFF -> /drone_(\d+)/magnet")
 
 
 def tilt_deg(qw, qx, qy, qz):
@@ -54,7 +61,7 @@ def read_bag(path):
     r = rosbag2_py.SequentialReader()
     r.open(rosbag2_py.StorageOptions(uri=path, storage_id=''), rosbag2_py.ConverterOptions('cdr', 'cdr'))
     types = {t.name: t.type for t in r.get_all_topics_and_types()}
-    mocap, armed = {}, {}
+    mocap, armed, magnet = {}, {}, {}
     while r.has_next():
         topic, data, ts = r.read_next()
         if topic.endswith('motion_capture_state'):
@@ -64,9 +71,12 @@ def read_bag(path):
         elif re.fullmatch(r'/drone_\d+/ELRSCommand', topic):
             m = deserialize_message(data, get_message(types[topic]))
             armed.setdefault(topic, []).append((ts * 1e-9, float(bool(m.armed))))
+        elif re.fullmatch(r'/drone_\d+/magnet', topic):
+            m = deserialize_message(data, get_message(types[topic]))
+            magnet.setdefault(int(topic.split('/')[1][6:]), []).append((ts * 1e-9, m.data))
     cols = ['t', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz']
     return ({k: pd.DataFrame(v, columns=cols) for k, v in mocap.items()},
-            {k: pd.DataFrame(v, columns=['t', 'armed']) for k, v in armed.items()})
+            {k: pd.DataFrame(v, columns=['t', 'armed']) for k, v in armed.items()}, magnet)
 
 
 def events_from_log(path):
@@ -75,9 +85,27 @@ def events_from_log(path):
     for rx, name in EVENT_RES:
         for m in rx.finditer(text):
             ev = name or m.group(2).upper()
-            arg = m.group(2) if name == 'GROUNDED' else ''
+            arg = m.group(2) if name and rx.groups >= 2 else ''
             out.append((float(m.group(1)), ev, arg))
     return sorted(set(out))
+
+
+def releases(magnet, t2_log, events):
+    """RELEASE events: a tether going ON -> OFF in the bag that the planner did not send itself
+    (its OFF is logged, at an announced DETACH) and that is not part of a drop: the operator's
+    unannounced release."""
+    text = open(t2_log, errors='replace').read() if t2_log else ''
+    own = [(float(m.group(1)), int(m.group(2))) for m in PLANNER_OFF_RE.finditer(text)]
+    drop = min([t for t, e, _ in events if e == 'DROP'], default=math.inf)
+    out = []
+    for i, msgs in sorted(magnet.items()):
+        state = None
+        for t, v in sorted(msgs):
+            if v == 'OFF' and state == 'ON' and t < drop - 0.05 \
+                    and not any(d == i and abs(t - to) < 0.2 for to, d in own):
+                out.append((t, 'RELEASE', f'drone {i + 1} (/drone_{i})'))
+            state = v
+    return out
 
 
 def on_grid(grid, t, values):
@@ -89,7 +117,7 @@ def on_grid(grid, t, values):
 
 def convert(trackers, out, bag=None, t2_log=None):
     tr = {i: read_tracker(p) for i, p in enumerate(trackers)}
-    mocap, armed = read_bag(bag) if bag else ({}, {})
+    mocap, armed, magnet = read_bag(bag) if bag else ({}, {}, {})
     t0 = max(d.sim_time.iloc[0] for d in tr.values())
     t1 = min(d.sim_time.iloc[-1] for d in tr.values())
     if t1 <= t0:
@@ -134,7 +162,9 @@ def convert(trackers, out, bag=None, t2_log=None):
         col[f'd{i}_attached'] = np.full(len(grid), np.nan)
     os.makedirs(os.path.join(out, 'logs'), exist_ok=True)
     pd.DataFrame(col).to_csv(os.path.join(out, 'logs', 'run.csv'), index=False)
-    evs = [(t - t0, e, a) for t, e, a in (events_from_log(t2_log) if t2_log else []) if t0 - 5 <= t <= t1 + 5]
+    evs = events_from_log(t2_log) if t2_log else []
+    evs = sorted(evs + releases(magnet, t2_log, evs))
+    evs = [(t - t0, e, a) for t, e, a in evs if t0 - 5 <= t <= t1 + 5]
     pd.DataFrame(evs, columns=['sim_time', 'event', 'arg']).to_csv(os.path.join(out, 'logs', 'events.csv'), index=False)
     manifest = {'kind': 'rig', 'n_drones': len(tr), 'trackers': [os.path.abspath(p) for p in trackers],
                 'bag': os.path.abspath(bag) if bag else None, 't2_log': os.path.abspath(t2_log) if t2_log else None,

@@ -10,10 +10,11 @@
 # Clears stale control nodes (clean_slate --rig, T1 spared), sets MDC_RUN_DIR so the CSV logs
 # land in results/rig/<date>/<name>_logs, writes <name>_code.txt (git HEAD + status), records
 # the bag with every topic the read-back needs, and tees the launch output to <name>.log.
-# Ctrl-C stops the launch and then the bag (so its metadata is written).
+# Ctrl-C stops the launch and then the bag (so its metadata is written). Then tools/rig_summary.py
+# draws figures/<name>_summary.png in the background, ~20 s (RIG_FLIGHT_SUMMARY=0 skips it).
 set -uo pipefail
 
-usage() { sed -n '2,13p' "$0"; exit 2; }
+usage() { sed -n '2,14p' "$0"; exit 2; }
 [ $# -ge 2 ] || usage
 if [[ "$1" == *.py ]]; then
   LAUNCH="$1"; F="${!#}"
@@ -54,7 +55,13 @@ done
 ros2 bag record -o "$D/$F" "${topics[@]}" > "$D/${F}_bag.txt" 2>&1 &
 BAG=$!
 stop_bag() { kill -INT "$BAG" 2>/dev/null; wait "$BAG" 2>/dev/null; echo "rig_flight: bag $D/$F closed"; }
-trap stop_bag EXIT
+summary() {
+  [ "${RIG_FLIGHT_SUMMARY:-1}" = 1 ] && [ -d "$MDC_RUN_DIR/logs/tracker" ] || return 0
+  # its own session: the next flight's Ctrl-C in this terminal must not stop it
+  setsid nohup python3 tools/rig_summary.py "$D/$F" > "$D/${F}_summary.txt" 2>&1 < /dev/null &
+  echo "rig_flight: summary in ~20 s -> $D/figures/${F}_summary.png"
+}
+trap 'stop_bag; summary' EXIT
 
 echo "rig_flight: F=$F  logs $MDC_RUN_DIR  bag $D/$F (${#topics[@]} topics)"
 ros2 launch bringup "$LAUNCH" "$@" 2>&1 | tee "$D/$F.log"

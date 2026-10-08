@@ -12,7 +12,9 @@
 controller_quad_load folder with --stamp.
 --v0: the wall-clock epoch of the video's first frame (sync it on a visible event: ring lift-off,
 touchdown). --mode paths: the ring's top-view path and height against its reference. --mode drones:
-each UAV's distance to its own reference. Needs ffmpeg (--ffmpeg, else on PATH).
+each UAV's distance to its own reference. --mode detach (--logs = the rig run, e.g.
+results/rig/2026-10-08/r305): top view against the offset-corrected reference, ring tilt, and the
+3-D error with the offset and the lag removed (zero outside TAKEOFF..LAND), one line at the detach. Needs ffmpeg (--ffmpeg, else on PATH).
 """
 import argparse
 import glob
@@ -136,6 +138,96 @@ def panel_paths(ring, events, t_end, shift=False):
     return fig, update
 
 
+def load_run(base, v0):
+    """A rig run converted by rig_to_run.py (rig_summary.resolve converts it once), on the video's
+    clock: run.csv's t + its t0_epoch - v0. Returns (run.csv frame with `tv`, [(event, tv)])."""
+    import rig_summary
+    import metrics
+    run, _, _, _, _ = rig_summary.resolve(base)
+    t0 = json.load(open(os.path.join(run, 'manifest.json')))['t0_epoch']
+    d = pd.read_csv(os.path.join(run, 'logs', 'run.csv'))
+    d['tv'] = d.t + t0 - v0
+    return d, [(e, t + t0 - v0) for t, e, _ in metrics.read_event_list(run)]
+
+
+def panel_detach(d, events, t_end):
+    """Top view (the ring against its reference circle, offset-corrected), the ring tilt and its 3-D
+    error with the circle's mean offset and the lag removed: the distance to the nearest point of the
+    path plus the height error. Tilt and error are zero before TAKEOFF and after LAND."""
+    import rig_summary as rs
+    t = d.tv.to_numpy(float)
+    P = d[['payload_x', 'payload_y', 'payload_z']].to_numpy(float)
+    R = rs.continuous_ref(t, d[['payload_ref_x', 'payload_ref_y', 'payload_ref_z']].to_numpy(float))
+    ev = {}
+    for name, te in events:
+        ev.setdefault(name, te)
+    t_off, t_land = ev.get('TAKEOFF', t[0]), ev.get('LAND', t[-1])
+    t_rel = ev.get('RELEASE', ev.get('DETACH'))
+    fly = (t >= t_off) & (t <= t_land)
+    moving = rs.error_parts(t, P, R)[4] & fly
+    off = np.nanmean(P[moving, :2] - R[moving, :2], axis=0)
+    path = R[moving, :2] + off
+    near = np.array([np.min(np.hypot(*(path - P[i, :2]).T)) if fly[i] else 0.0 for i in range(len(t))])
+    err = np.where(fly, 100 * np.sqrt(near ** 2 + (P[:, 2] - R[:, 2]) ** 2), 0.0)
+    tilt = np.where(fly, np.nan_to_num(d.payload_tilt_deg.to_numpy(float)), 0.0)
+
+    fig = plt.figure(figsize=(W / 100, H / 100), dpi=100, facecolor='#FBFBF8')
+    axp = fig.add_axes([0.15, 0.50, 0.78, 0.44])
+    axt = fig.add_axes([0.15, 0.285, 0.78, 0.15])
+    axe = fig.add_axes([0.15, 0.065, 0.78, 0.15])
+    for a in (axp, axt, axe):
+        a.set_facecolor('#FBFBF8')
+        for sp in ('top', 'right'):
+            a.spines[sp].set_visible(False)
+        a.tick_params(labelsize=12, colors=INK)
+    axp.plot(path[:, 0], path[:, 1], '--', color=GREY, lw=1.2, dashes=(5, 3), label='reference')
+    tr, = axp.plot([], [], color=ps.PAYLOAD_LINE, lw=2.2, label='ring (mocap)')
+    ring_pt, = axp.plot([], [], 'o', color=ps.PAYLOAD_LINE, ms=9)
+    rel_pt, = axp.plot([], [], 'o', mfc='white', mec='#E07B00', ms=9, mew=2)
+    rel_txt = axp.text(0, 0, '', fontsize=12, color='#E07B00')
+    w = fly & (t >= ev.get('HANDOVER', t_off))
+    xs, ys = np.r_[P[w, 0], path[:, 0]], np.r_[P[w, 1], path[:, 1]]
+    cx, cy = (xs.max() + xs.min()) / 2, (ys.max() + ys.min()) / 2
+    half = 0.5 * max(xs.max() - xs.min(), ys.max() - ys.min()) + 0.08
+    axp.set_xlim(cx - half, cx + half)
+    axp.set_ylim(cy - half, cy + half)
+    axp.set_aspect('equal', adjustable='box')
+    axp.set_xlabel('x (m)', fontsize=13, color=INK)
+    axp.set_ylabel('y (m)', fontsize=13, color=INK)
+    axp.legend(loc='upper center', bbox_to_anchor=(0.5, 1.10), frameon=False, fontsize=12, ncol=2)
+    lines = []
+    for a, y, ylab, top in ((axt, tilt, 'Ring tilt (°)', max(10.0, 1.15 * tilt.max())),
+                            (axe, err, '3D error (cm)', max(5.0, 1.15 * err.max()))):
+        a.set_xlim(0, t_end)
+        a.set_ylim(0, top)
+        a.set_ylabel(ylab, fontsize=13, color=INK)
+        if t_rel is not None:
+            a.axvline(t_rel, color='#E07B00', lw=1.2, zorder=0)
+        ln, = a.plot([], [], color=ps.PAYLOAD_LINE if a is axt else INK, lw=1.8)
+        cur = a.axvline(0, color=INK, lw=0.8)
+        txt = a.text(0.99, 0.82, '', transform=a.transAxes, fontsize=12, color=INK, ha='right')
+        lines.append((y, ln, cur, txt, '°' if a is axt else ' cm'))
+    if t_rel is not None:
+        axt.text(t_rel, axt.get_ylim()[1], ' detach', fontsize=12, color='#E07B00', va='bottom')
+    axe.set_xlabel('t (s)', fontsize=13, color=INK)
+
+    def update(tf):
+        k = max(int(np.searchsorted(t, tf, side='right')), 1)
+        m = fly[:k] & (t[:k] >= ev.get('HANDOVER', t_off))
+        tr.set_data(P[:k, 0][m], P[:k, 1][m])
+        ring_pt.set_data([P[k - 1, 0]], [P[k - 1, 1]])
+        if t_rel is not None and tf >= t_rel:
+            i = int(np.searchsorted(t, t_rel))
+            rel_pt.set_data([P[i, 0]], [P[i, 1]])
+            rel_txt.set_position((P[i, 0] + 0.03, P[i, 1] + 0.02))
+            rel_txt.set_text('detach')
+        for y, ln, cur, txt, unit in lines:
+            ln.set_data(t[:k], y[:k])
+            cur.set_xdata([tf, tf])
+            txt.set_text(f'{y[k - 1]:4.1f}{unit}')
+    return fig, update
+
+
 def panel_drones(drones, events, t_end):
     fig = plt.figure(figsize=(W / 100, H / 100), dpi=100, facecolor='#FBFBF8')
     axes, upd = [], []
@@ -184,7 +276,7 @@ def main():
     ap.add_argument('--logs', required=True)
     ap.add_argument('--stamp', default='', help='old layout only: HHMM prefix of the launch stamp, e.g. 1628')
     ap.add_argument('--v0', type=float, required=True)
-    ap.add_argument('--mode', choices=('paths', 'drones'), default='paths')
+    ap.add_argument('--mode', choices=('paths', 'drones', 'detach'), default='paths')
     ap.add_argument('--out', required=True)
     ap.add_argument('--ffmpeg', default='ffmpeg')
     ap.add_argument('--duration', type=float, default=None, help='s (default: the whole video)')
@@ -195,9 +287,13 @@ def main():
     if a.duration is None:
         a.duration = float(subprocess.check_output(
             ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', video]))
-    drones, ring, events = load(a.logs, a.stamp, a.v0, a.duration)
-    fig, update = (panel_paths(ring, events, a.duration, a.shift) if a.mode == 'paths'
-                   else panel_drones(drones, events, a.duration))
+    if a.mode == 'detach':
+        d, events = load_run(a.logs, a.v0)
+        fig, update = panel_detach(d, events, a.duration)
+    else:
+        drones, ring, events = load(a.logs, a.stamp, a.v0, a.duration)
+        fig, update = (panel_paths(ring, events, a.duration, a.shift) if a.mode == 'paths'
+                       else panel_drones(drones, events, a.duration))
     n = int(a.duration * a.fps)
     # two passes at a fixed rate: piping the panel straight into the stack stalls on variable-rate
     # iPhone clips (1/600 s clock; 7 Oct)
