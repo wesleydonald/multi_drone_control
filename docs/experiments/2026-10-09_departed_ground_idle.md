@@ -116,3 +116,17 @@ Reviewer (9 Oct 03:15): WEAK. Taken:
   (departed False, rest heights), though nothing in the log points to it.
 So the twin claim stands on G1 (R1279), B1n x2 and G2; for W4/W5 the freed-carrier evidence is G2 x1 on 38fa1f3 in a
 twin with no floor offset.
+
+## On the rig candidate (52ede66 / c0604f7, after the reviewer)
+
+| Row | Run | Result |
+|---|---|---|
+| combined A1 | R1280, R1281 | QUAD4 down at its rest at the fleet disarm (0.000 m), the gate waited (no idle before LANDED) |
+| combined B1 | R1282 | **rod stand**: landed on its rod tip at +0.50 m, the 2 s press tipped it only to +0.25 m, then the press limit held it there; stood 35 s, the gate fell back after 15 s, dropped 0.37 m |
+| combined B1 | R1283 | rod fell in 0.72 s; idle 0.19 s after rest; disarm at rest: supports |
+| G2 | R1288 | the freed carrier idles 0.18 s after rest, disarm at rest; survivors 9.2 deg at the release transient (outside +/-2, before the switch acts): grey |
+| N2 | R1289 | all four disarmed at their rest; three reached rest at LANDED (no idle): grey |
+
+B1-type with the switch: 3 of 4 land and idle (R1276, R1277, R1283), 1 of 4 loses to the rod stand (R1282). The
+press limit (critic N2: no endless press) is what held R1282 on its rod: the open design question is a longer press
+or a sideways nudge to tip the rod.

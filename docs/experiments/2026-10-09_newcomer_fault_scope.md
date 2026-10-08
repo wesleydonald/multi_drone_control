@@ -104,3 +104,17 @@ Reviewer (9 Oct 03:15): WEAK. Taken:
   ring-tilt guard. At impact the ring dropped 0.998 -> 0.883 m in 0.33 s; touchdown tilt 1.7 deg.
 - C2 has no node parameter read-back (manifest launch_args and the manager's LAND line show the switch).
 - C6 re-fly: the old stop dropped the three carriers from 0.54-0.55 m mid-creep (as designed, but worth seeing).
+
+## On the rig candidate (c0604f7, after the reviewer)
+
+| Row | Run | Result |
+|---|---|---|
+| C1 | R1284 | disarm 0.28 s, FAULT_LAND +0.27 s, no abort, carriers armed, tilt 2.9 deg: supports |
+| C1 | R1285 | disarm 0.28 s, FAULT_LAND +0.26 s, no abort, carriers armed, tilt 3.3 deg: supports |
+| C1b | R1286 | FAULT_LAND +0.26 s, no abort; ring tilt 57.0 deg after the fall (R1262 57.4): not supported by the band, 2 of 2 |
+| C2 | R1287 | envelope fault (speed 4.65 m/s), FAULT_LAND +0.27 s, no abort, tilt 3.8 deg, read-back present: supports |
+| C6 | R1274 | the old stop in the creep, ring on the floor: supports |
+
+Verdict on the rig tree: the rule works (a QUAD4 fault lands the fleet in transit; a carrier fault, DISARM and a
+fault in the creep keep the stop). C1b is the standing hazard: QUAD4 dying over the plate tilts the ring ~57 deg,
+reproducibly, rule or not.
