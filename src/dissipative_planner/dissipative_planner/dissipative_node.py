@@ -63,7 +63,7 @@ DEPARTED_PRESS_M = 0.35    # m: a landing departed drone's reference goes this f
                            # floor reference)
 DEPARTED_REST_TOL_M = 0.03  # m: back at its resting height (the tracker's GROUND_IDLE_MARGIN)
 DEPARTED_AT_REST_S = 0.5   # s at its rest before its reference stops pressing (its tracker idles after 0.2 s)
-DEPARTED_PRESS_LIMIT_S = 2.0  # s of press after it stopped above its rest; then held at its own height
+DEPARTED_PRESS_LIMIT_S = 6.0  # s of press after it stopped above its rest; then held at its own height
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
 DROP_LAND_WAIT_S = 30.0    # s after a drop: /fleet/landed even if a drone never reads as down
 

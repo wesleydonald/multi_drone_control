@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip('acados_template')
 from dissipative_planner.dissipative_node import (  # noqa: E402
-    DEPARTED_PRESS_M, DEPARTED_REST_TOL_M, DissipativeController as D)
+    DEPARTED_PRESS_LIMIT_S, DEPARTED_PRESS_M, DEPARTED_REST_TOL_M, DissipativeController as D)
 
 from test_newcomer_lifecycle import _node as _lifecycle_node, _ticks  # noqa: E402
 
@@ -107,7 +107,7 @@ def test_the_press_after_a_high_stall_is_limited_then_held_where_it_is():
         _at(f, z, 1)
     _at(f, 0.24, 40)                                                # the detector re-arms after its stall
     assert 3 in f._press_t
-    _at(f, 0.24, 25)                                                # 2 s of press
+    _at(f, 0.24, int(round(DEPARTED_PRESS_LIMIT_S * 10)) + 5)       # the press limit
     assert f._departed_td[3].stalled and f.published[-1][1][2] == pytest.approx(0.24)
     assert not f._departed_down() and any('held there (not down)' in m for m in f.log.lines)
 
