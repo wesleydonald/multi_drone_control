@@ -185,6 +185,12 @@ def analyse(rid):
         reach = np.where(wl & (horiz >= CLEAR_R))[0]
         if len(reach):
             ws = wl & (t <= t[reach[0]])
+            if k + 'ref_z' in run:                                # ...or until its own descent begins
+                rz = run[k + 'ref_z'].to_numpy()
+                hold = rz[np.where(wl & np.isfinite(rz))[0][0]] if (wl & np.isfinite(rz)).any() else np.nan
+                down = np.where(wl & (rz < hold - 0.01))[0]
+                if len(down):
+                    ws = ws & (t < t[down[0]])
             r['step_z'] = (round(float(new[ws, 2].min()), 3), round(float(new[ws, 2].max()), 3))
             if k + 'ref_z' in run:                                # height against its own reference
                 dz = new[:, 2] - run[k + 'ref_z'].to_numpy()
@@ -196,6 +202,12 @@ def analyse(rid):
                 rim = np.hypot(np.hypot(rel[:, 0], rel[:, 1]) - RIM_R, rel[:, 2] - attach_z)
                 ok = ws & np.isfinite(rim)
                 r['tip_rim_min'] = round(float(rim[ok].min()), 3) if ok.any() else None
+                # parked (at the abort) vs on the way out (after the 0.5 s release hold): the move must not
+                # bring the tip closer to the rim than the approach parked it
+                at = np.where(ok)[0]
+                moving = ok & (t >= t_out + 0.5)
+                r['tip_rim_parked'] = round(float(rim[at[0]]), 3) if len(at) else None
+                r['tip_rim_moving_min'] = round(float(rim[moving].min()), 3) if moving.any() else None
         else:
             r['step_z'] = None
     a = t_on if t_on is not None else t_to
