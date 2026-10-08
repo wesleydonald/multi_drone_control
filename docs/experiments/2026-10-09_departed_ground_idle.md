@@ -130,3 +130,13 @@ twin with no floor offset.
 B1-type with the switch: 3 of 4 land and idle (R1276, R1277, R1283), 1 of 4 loses to the rod stand (R1282). The
 press limit (critic N2: no endless press) is what held R1282 on its rod: the open design question is a longer press
 or a sideways nudge to tip the rod.
+
+## The rod tip (9 Oct 04:45-05:50, rig candidate)
+
+QUAD4 landing by itself (combined B1) comes down on its rod tip at +0.47-0.50 m in almost every run; what decides
+the landing is whether the press tips the rod over before the press limit holds it there.
+| Press limit | Runs | Landed and idled | Held propped (disarm z - rest) |
+|---|---|---|---|
+| 2 s (critic N2) | R1282, R1283, R1295-R1298 | 2 (R1283, R1295) | 4 (R1282 0.37, R1296 0.23, R1297 0.21, R1298 0.27 m) |
+| 6 s (exploratory, 6e0c825) | R1299-R1302 | 4 (stand 0.8-1.8 s, idle 0.18-0.20 s after rest, disarm at rest) | 0 |
+Kept on rig-prep: the press is still time-bounded (the critic's N2), only longer.

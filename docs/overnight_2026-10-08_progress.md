@@ -91,3 +91,11 @@ branch `safety-defaults` (git worktree) until they are twin-verified.
 | combined switches (the R8a candidate) | the abort supports 5/5 (A1 x3, B1 x2); QUAD4's own landing: down at its rest in 4/5, rod stand in R1282 (held at +0.25 m by the 2 s press limit, dropped 0.37 m) | R1280-R1283, R1294 |
 | ground idle on the rig candidate | freed carrier G2 supports (survivors grey at the release transient); N2 grey (disarmed at rest, no idle) | R1288, R1289 |
 | creep-start sampling | no flip in 5 more floor starts: R1278 is 1 in 53, cause open; the planner's startup lag (ARM taken after TAKEOFF, lift ~14.7 s) in 4 runs, with every switch off too | R1290-R1294 |
+
+## 9 Oct 04:45-05:55: the rod tip
+
+| item | status | evidence |
+|---|---|---|
+| how often QUAD4 stays propped on its rod tip (combined B1, 2 s press limit) | 4 of 6 (the 2 s press tips the rod halfway, then holds it) | R1282, R1283, R1295-R1298 |
+| exploratory: press limit 6 s | 4 of 4 landed and idled at rest; kept on rig-prep (still time-bounded) | R1299-R1302, 6e0c825 |
+| tests on rig-prep d1736ac | dissipative 105, tracker 93, mpc_planner 146, fleet_manager 48 + the 2 old style tests, bringup 98 + 2 style, tools 312; gate --quick passed | - |
