@@ -35,7 +35,7 @@ import rclpy
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Int32, Empty, Bool, Float64MultiArray, String
 from geometry_msgs.msg import PoseStamped, TwistStamped
-from dissipative_planner.approach import ApproachProfile, carrot_step
+from dissipative_planner.approach import ApproachProfile, body_to_tip, carrot_step
 
 from interfaces.msg import MotionCaptureState
 from mpc_planner.geometry import (quat_to_rot_np, attach_points, rot_z,
@@ -151,7 +151,7 @@ class DissipativeController(LoadPlanner):
         self._attach_cable_len = float(p('attach_cable_len', self.cable_len).value)
         # the newcomer's rod hangs from a pivot below its body (pivot_offset, rig/twin -0.04 m), so
         # the tip is rod + pivot drop below the body the tracker flies; the OCP keeps the rod itself
-        self._attach_body_to_tip = self._attach_cable_len - float(self.pivot_offset[2])
+        self._attach_body_to_tip = body_to_tip(self._attach_cable_len, self.pivot_offset[2])
         # How to fold a welded newcomer into the network:
         #   False (default) -> RING member: it swings out to a cone slot and the fleet
         #     reconfigures. Needs a FLEXIBLE (ball-jointed) weld so it doesn't lever the load.
@@ -670,7 +670,8 @@ class DissipativeController(LoadPlanner):
                                                     direct=self._attach_approach_direct)
                 self.get_logger().info(
                     f'[dissipative] approach: drone {self._n_carry0 + j} flies to the weld '
-                    f'target on its own tracker from {np.round(self.attach_pos[j], 2)}')
+                    f'target on its own tracker from {np.round(self.attach_pos[j], 2)} '
+                    f'(body-to-tip {self._attach_body_to_tip:.3f} m)')
 
     def _publish_pending_attach_refs(self):
         """Keep a reserved drone's tracker WARM while the approach controller still flies it.

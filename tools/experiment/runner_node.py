@@ -25,7 +25,7 @@ import time
 
 import numpy as np
 import rclpy
-from geometry_msgs.msg import PoseArray
+from geometry_msgs.msg import PoseArray, PoseStamped
 from rcl_interfaces.msg import Log
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
@@ -37,6 +37,11 @@ from interfaces.msg import ELRSCommand, MotionCaptureState
 from .config import wait_lift_arg, wrench_arg
 
 ARM_FAIL = 'fleet manager ARM failed or refused'
+
+
+def _xyz(msg):
+    p = msg.pose.position
+    return (float(p.x), float(p.y), float(p.z))
 
 
 def _tilt_deg(q):
@@ -127,6 +132,15 @@ class ExperimentRunner(Node):
             self._payload_ref_cb, 5)
         self.create_subscription(Bool, '/magnet/object_attached',
                                  self._attached_cb, 10)
+        # attach runs: the measured magnet tip and its target, so the approach geometry is read
+        # from the tip itself and not from body - arm length (critic, 2026-10-09_newcomer_body_to_tip)
+        self.tip = self.tip_target = None
+        self._log_tip = cfg.n_total > getattr(cfg, 'num_drones', cfg.n_total)
+        if self._log_tip:
+            self.create_subscription(PoseStamped, '/magnet_tip_pose',
+                                     lambda m: setattr(self, 'tip', _xyz(m)), best)
+            self.create_subscription(PoseStamped, '/attach_target/pose',
+                                     lambda m: setattr(self, 'tip_target', _xyz(m)), best)
         self.t_landed = None
         self.create_subscription(Bool, '/fleet/landed', self._landed_cb, 5)
         self.create_subscription(String, '/fleet/abort', self._abort_cb, 10)
@@ -593,6 +607,10 @@ class ExperimentRunner(Node):
         row.update(payload_ref_x=pr[0] if pr else math.nan,
                    payload_ref_y=pr[1] if pr else math.nan,
                    payload_ref_z=pr[2] if pr else math.nan)
+        if self._log_tip:
+            for name, v in (('tip', self.tip), ('tip_target', self.tip_target)):
+                for k, c in zip('xyz', v or (math.nan,) * 3):
+                    row[f'{name}_{k}'] = c
         for i in range(self.n):
             q = self.pose[i]
             v = self.vel[i] or (math.nan,) * 3

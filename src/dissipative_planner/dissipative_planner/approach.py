@@ -24,6 +24,12 @@ DIRECT_XY_M = 0.10       # m: 'already over the plate' for a direct descent
 SEEK_VEL = 0.02          # m/s: below-target seek once the carrot sits on the target
 
 
+def body_to_tip(rod_len, pivot_offset_z):
+    """Distance from the drone body (what the tracker flies) down to the magnet tip: the rod hangs
+    from a pivot pivot_offset_z below the body (negative on the rig and twin, -0.04; 0 on legacy)."""
+    return float(rod_len) - float(pivot_offset_z)
+
+
 def carrot_step(p_ref, goal, v_max, dt):
     """Move p_ref toward goal by at most v_max*dt. Returns (p_new, v_ff)."""
     p_ref = np.asarray(p_ref, float)

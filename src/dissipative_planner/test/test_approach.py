@@ -92,3 +92,9 @@ def test_direct_still_climbs_when_not_over_the_plate():
     prof = ApproachProfile(np.array([0.6, 0.0, body + 0.15]), 0.49, 0.1, direct=True)
     _, _, phase = prof.step(target)
     assert phase == 'climb'
+
+
+def test_body_to_tip_adds_the_pivot_drop_below_the_body():
+    from dissipative_planner.approach import body_to_tip
+    assert body_to_tip(0.55, -0.04) == pytest.approx(0.59)   # rig and twin: pivot 4 cm below the body
+    assert body_to_tip(0.49, 0.0) == pytest.approx(0.49)     # legacy: unchanged
