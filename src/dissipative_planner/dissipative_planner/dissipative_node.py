@@ -1534,7 +1534,7 @@ class DissipativeController(LoadPlanner):
         self._departed_landing.discard(d)
         self._land_alone.discard(d)
         self.get_logger().error(f'[dissipative] {_who(d)} disarmed in flight off the ring: out of this '
-                                f'flight; the fleet manager lands every drone')
+                                f'flight (its magnet OFF, the landed gate does not wait for it)')
 
     def _do_attach(self, d):
         """Add physical drone d to the dissipative network (mirror of _fleet_detach_cb).
