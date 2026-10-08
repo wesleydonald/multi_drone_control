@@ -66,3 +66,14 @@ The first push (6.5 N for 0.5 s) threw drone 1 0.46 m up; it tumbled (peak tilt 
 The gate behaves as designed in the part the code controls, but the pass bar (a normal lift) cannot be met with a
 drone on its side. Push resized to 5.7 N for 0.4 s (drone 0.475 kg + half the 0.075 kg rod: predicted rise ~0.12 m,
 twice the 0.05 m lift-off margin); negative control and fix re-flown on it.
+
+## Direct test, softer push (result)
+
+| Run | Code | Drone 1 rise / tilt at TAKEOFF | Sweep | Lift after WAIT_LIFT | Verdict |
+|---|---|---|---|---|---|
+| R1242 | 6bfb881^ | 0.16 m / 0 deg | timed out before TAKEOFF ('NOT lifting') | none (WAIT_LIFT timeout, peak 0.02 m) | reproduces r303: test valid |
+| R1241 | fix | 0.163 m / 0 deg | anchors latched at TAKEOFF, started after it | 9.91 s | supports |
+| R1243 | fix | 0.163 m / 0 deg | as R1241 | 9.83 s | supports |
+
+SUPPORTS, 2 of 2, inside the band 9.55-10.31 s, no timeout line. Wesley (8 Oct night): he relaunches T2 between rig
+flights anyway, so the sheet rule stays; the props-off r400 check is still on the Wednesday setup.
