@@ -72,3 +72,18 @@ Skip: his fleet panel, the OCP JSON, docs, `backup/` moves. Tell Tejen: our rece
 | `ELRSCommand_tejen` remap | OK (unchanged) | his MPC still publishes `/drone_i/ELRSCommand` straight into his radio node (remaps only arming/command names); the remap exists only in our sim `partner_mission.launch.py`; the rig remap (P14) is still ours to add |
 | hand-over topics | OK names, CHANGED semantics | `/join_planner/handoff_ready`, `/join_planner/reference`, `/join_planner/phase`, magnet/command, object_attached, `/m2c/*`, `/m2d/*` keep their names; new `/m2c/assignment_markers`, `<ns>/attachment/proof_motion_complete`, `<ns>/join_planner/retry`, `<ns>/join_planner/land_now`, `/irl/ring/*`. After the aliasing fix his ATTACH_READY sits 0.12 m lower on the virtual-ring path (ours in sim) |
 | attach geometry (extra) | CHANGED | his tether 0.5575 m anchor-to-face, anchor -0.04, plate pitch radius 0.22375 m; ours `cable_len` 0.55 (measured), pivot -0.04, `attach_radius` 0.225. Differences 7.5 mm and 1.25 mm |
+
+## Update 8 Oct evening: 611dc3d2..11a0683f (3 commits, fast-forward)
+
+Fetched 8 Oct evening (Wesley's OK). The branch fast-forwards from 611dc3d2, so the earlier classification
+stands and these three commits add to it. 21 files, +1158/-35; source part 11 files, +530/-21 (the rest is his
+docs and command sheets).
+
+| commit | what | class | for us |
+|---|---|---|---|
+| c7e88c65 | M1: latch the ground height at the accepted manual TAKEOFF; cap the LAND target against ascent (online_join_planner.py +16, landing-contract test) | port (his M1 landing safety) | merges with the 3-way of online_join_planner.py; keep |
+| 4b34d768 | mocap: stop rounding the filtered body rates to 0.1 rad/s in motion_capture_publisher_irl.py (+ regression test) | **port to OUR mocap node too** | our motion_capture_publisher_node.py:283-285 has the same rounding, and our trackers take x0 body rates from mocap on the rig (x0_rate_source 'mocap'): every rig flight so far fed the MPC rates quantised to 0.1 rad/s (5.7 deg/s). Removing it is one variable for the rig (twin unaffected: its mocap path does not round). Wesley's decision |
+| 11a0683f | M1: opt-in drop and ring measured-tip trim (measured_tip_alignment.py +102, online_join_planner.py +154, m1_measured_tip_tracking.yaml, launch arg target_alignment_mode default 'legacy', 201-line test) | port, keep default 'legacy' | off unless typed; flown nowhere yet ("physical effects unverified") |
+
+Still true from the earlier classification: his MPC, ELRS interfaces, thrust map and arming unchanged; his M1
+IRL launches still fly quad ID12 / magnet ID22 (our M1 uses QUAD4: body 14, tip 24, his values otherwise).
