@@ -596,36 +596,31 @@ def test_sim_magnet_twin_only_with_the_gui():
 
 def test_rig_detach_launch_flies_the_rig_control_values():
     """The rig detach mode takes the rig carry's defaults (Wesley 2026-10-03): every
-    parameter the two give a node is the same, except int_mode (auto: a fleet that can detach
-    flies the reference integral); the detach is an OCP resize with the magnet released."""
+    parameter the two give a node is the same, int_mode model included (8 Oct: the learned ring
+    force is kept through a resize); the detach is an OCP resize with the magnet released."""
     c = _by_name(rig('mpc', num_drones=4))
     d = _by_name(rig('dissipative', num_drones=4))
     for a, b in (('/tracker_0', '/tracker_0'), ('/fleet_manager', '/fleet_manager'),
                  ('/mpc_planner', '/dissipative_planner')):
         pa, pb = c[a]['params'], d[b]['params']
         assert set(pa) <= set(pb), sorted(set(pa) - set(pb))
-        same = [k for k in pa if k != 'int_mode']
-        assert {k: pb[k] for k in same} == {k: pa[k] for k in same}
-    modes = (c['/mpc_planner']['params']['int_mode'],
-             d['/dissipative_planner']['params']['int_mode'])
-    assert modes == ('model', 'reference')
+        assert {k: pb[k] for k in pa} == pa
     p = d['/dissipative_planner']['params']
     assert p['reconfig_mode'] == 'ocp' and p['detach_magnet'] is True
 
 
-def test_int_mode_model_reaches_the_planner_only_where_the_fleet_cannot_resize():
-    """Card 2026-10-04_z_int_model: model refused with kt_trim on and with a fleet that can attach
-    or detach mid-flight; auto (the default since 5 Oct) falls back to reference there."""
+def test_int_mode_model_reaches_every_planner_but_with_kt_trim_or_z_ki_0():
+    """Card 2026-10-04_z_int_model: model refused with kt_trim on or z_ki 0; a fleet that can attach
+    or detach flies it too since 8 Oct (the learned force is kept through a resize)."""
     knobs = dict(int_mode='model', int_k_xy=5.4, int_k_z=8.5, kt_trim=False)
     p = _by_name(sim('mpc', num_drones=3, **knobs))['/mpc_planner']['params']
     assert (p['int_mode'], p['int_k_xy'], p['int_k_z']) == ('model', 5.4, 8.5)
     sil_attach = _by_name(sim('attach', num_drones=3, reserved_attach=0, enable_approach=False,
                               **knobs))['/dissipative_planner']['params']
     assert sil_attach['int_mode'] == 'model'
-    with pytest.raises(RuntimeError, match='attach or detach'):
-        sim('attach', num_drones=3, **knobs)
-    with pytest.raises(RuntimeError, match='attach or detach'):
-        sim('dissipative', num_drones=4, **knobs)
+    for mode in ('attach', 'dissipative'):
+        p = _by_name(sim(mode, num_drones=3 if mode == 'attach' else 4, **knobs))
+        assert p['/dissipative_planner']['params']['int_mode'] == 'model'
     with pytest.raises(RuntimeError, match='kt_trim'):
         sim('mpc', num_drones=3, **{**knobs, 'kt_trim': True})
     with pytest.raises(RuntimeError, match='z_ki 0'):
@@ -636,17 +631,17 @@ def test_int_mode_model_reaches_the_planner_only_where_the_fleet_cannot_resize()
 
 def test_int_mode_auto_flies_model_wherever_model_is_allowed():
     """Wesley 5 Oct: the model integral is the default; the rig carry flies it, with the rig twin's
-    stiffness; a resizing fleet, kt_trim on and z_ki 0 fall back to reference."""
+    stiffness; kt_trim on and z_ki 0 fall back to reference; a resizing fleet flies it (8 Oct)."""
     p = _by_name(rig('mpc', num_drones=4))['/mpc_planner']['params']
     assert (p['int_mode'], p['int_k_xy'], p['int_k_z']) == ('model', 5.26, 7.13)
     def mode(launch, planner='/mpc_planner'):
         return _by_name(launch)[planner]['params']['int_mode']
     assert mode(sim('mpc', num_drones=3)) == 'model'                    # the twin, as the rig
     assert mode(sim('mpc', num_drones=3, z_ki=0.0)) == 'reference'
-    assert mode(sim('dissipative', num_drones=4), '/dissipative_planner') == 'reference'
+    assert mode(sim('dissipative', num_drones=4), '/dissipative_planner') == 'model'
     assert mode(sim('mpc', num_drones=3, legacy=True)) == 'reference'   # kt_trim on
     assert mode(sim('mpc', num_drones=3, legacy=True, kt_trim=False)) == 'model'
-    assert mode(rig('dissipative', num_drones=4), '/dissipative_planner') == 'reference'
+    assert mode(rig('dissipative', num_drones=4), '/dissipative_planner') == 'model'
 
 
 def test_soft_detach_knob_reaches_the_dissipative_node():
@@ -656,3 +651,4 @@ def test_soft_detach_knob_reaches_the_dissipative_node():
     assert p['detach_unload_s'] == 3.0
     p0 = _by_name(rig('dissipative', num_drones=4))['/dissipative_planner']['params']
     assert 'detach_unload_s' not in p0
+

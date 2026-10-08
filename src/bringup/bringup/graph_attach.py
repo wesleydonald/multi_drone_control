@@ -251,9 +251,7 @@ def attach(context, launch_dir, profile_vals):
                          == 'velocity'),
                      # rig: tether latches ON at ARM, OFF at their detach
                      **({'detach_magnet': True} if real else {}),
-                     **map_planner}] + planner_options(
-            context, resizes=(int(LaunchConfiguration('reserved_attach').perform(context) or 0) > 0
-                              or truthy(context, 'enable_approach'))),
+                     **map_planner}] + planner_options(context),
         output='screen'))
 
     # ════════════════ APPROACH DRONE (x3_drone3) CHAIN ════════════════

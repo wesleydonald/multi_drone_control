@@ -127,13 +127,13 @@ PLANNER_OPTIONAL = {'land_unwind': 'bool', 'dist_est': 'str', 'dist_tau': 'float
 DIST_MAP = ('thrust_ratio', 'thrust_offset', 'thrust_offset_v_slope', 'thrust_v_ref')
 
 
-def planner_options(context, resizes=False):
+def planner_options(context):
     """Return [{knob: value}] of the set PLANNER_OPTIONAL knobs, or [].
 
     Appended to a planner's parameters list. With dist_est set, the trackers' thrust map goes
-    along (a numeric thrust_ratio is required). `resizes`: the graph can attach or detach a
-    drone mid-flight (int_mode model is refused there). int_mode auto (the default since 5 Oct)
-    flies model wherever model is allowed and reference elsewhere.
+    along (a numeric thrust_ratio is required). int_mode auto (the default since 5 Oct) flies
+    model wherever model is allowed and reference elsewhere; a fleet that attaches or detaches
+    keeps the learned ring force through the resize (8 Oct).
     """
     opts = {}
     for k, kind in PLANNER_OPTIONAL.items():
@@ -148,7 +148,6 @@ def planner_options(context, resizes=False):
         dist = opts.get('dist_est', '')
         why = ('kt_trim on (two adaptive loops on one vertical residual)'
                if truthy(context, 'kt_trim')
-               else 'a fleet that can attach or detach mid-flight' if resizes
                else 'z_ki 0 (it is the gain)' if not z_ki or float(z_ki) <= 0.0
                else 'offset_free on' if opts.get('offset_free') == 'on'
                else 'dist_est ' + dist if dist in ('ring', 'full') else '')

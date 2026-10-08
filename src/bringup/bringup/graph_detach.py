@@ -248,7 +248,7 @@ def dissipative(context, launch_dir, profile_vals):
                      'cable_elev_deg': f('cable_elev_deg'),
                      # rig: tether latches ON at ARM, OFF at their detach
                      **({'detach_magnet': True} if real else {}),
-                     **twin_planner}] + planner_options(context, resizes=True),
+                     **twin_planner}] + planner_options(context),
         output='screen'))
 
     return nodes
@@ -383,7 +383,7 @@ def sim_network(context, launch_dir, profile_vals):
                      'diss_ki_load': f('diss_ki_load'),
                      'diss_a_i_load_max': f('diss_a_i_load_max'),
                      'diss_trim_share_weighted': b('diss_trim_share_weighted'),
-                     'net_land_z': f('net_land_z')}] + planner_options(context, resizes=True),
+                     'net_land_z': f('net_land_z')}] + planner_options(context),
         output='screen'))
 
     return nodes
@@ -503,7 +503,7 @@ def real_dissipative(context, launch_dir, profile_vals):
                      'reconfig_hold_s': f('reconfig_hold_s'),
                      'detach_magnet': b('detach_magnet'),
                      'min_survivors': i_('min_survivors'),
-                     'net_land_z': f('net_land_z')}] + planner_options(context, resizes=True),
+                     'net_land_z': f('net_land_z')}] + planner_options(context),
         output='screen'))
 
     return nodes
