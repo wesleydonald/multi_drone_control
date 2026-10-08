@@ -35,6 +35,9 @@ thrust_map:
   kt_trim: true
 fleet_resize:
   detach_step_out_m: ''       # off, as before 7 Oct, so legacy runs reproduce
+  detach_detect_m: ''         # off, as before 7 Oct
+  departed_land: ''           # off, as before 7 Oct
+  drop_on_loss: ''            # off, as before 8 Oct
   reconfig_mode: 'network'
 network:
   auto_network_handover: true

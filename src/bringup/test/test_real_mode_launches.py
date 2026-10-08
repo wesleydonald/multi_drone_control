@@ -652,3 +652,26 @@ def test_soft_detach_knob_reaches_the_dissipative_node():
     p0 = _by_name(rig('dissipative', num_drones=4))['/dissipative_planner']['params']
     assert 'detach_unload_s' not in p0
 
+
+
+def test_default_mode_is_dissipative_with_detection_drop_and_departed_land_on():
+    """Wesley 8 Oct: the detach-capable planner is the default, detects an unannounced release
+    (0.06 m), drops and lands on a second loss or a capsize, and a freed drone lands by itself;
+    legacy:=true keeps the mpc carry with all of it off, so legacy runs reproduce."""
+    for launch in (evaluate('sim_control_launch.py', num_drones=4),
+                   evaluate('real_control_launch.py', num_drones=4)):
+        nodes = _by_name(launch)
+        assert '/dissipative_planner' in nodes and '/mpc_planner' not in nodes
+        p = nodes['/dissipative_planner']['params']
+        assert p['detach_detect_m'] == 0.06 and p['drop_on_loss'] is True and p['departed_land'] is True
+        assert nodes['/tracker_0']['params']['drop_on_loss'] is True
+    legacy = _by_name(evaluate('sim_control_launch.py', num_drones=3, legacy=True))
+    assert '/mpc_planner' in legacy and '/dissipative_planner' not in legacy
+    assert not {'detach_detect_m', 'drop_on_loss', 'departed_land'} & set(legacy['/mpc_planner']['params'])
+    typed = _by_name(evaluate('sim_control_launch.py', num_drones=3, legacy=True, mode='dissipative'))
+    assert not {'detach_detect_m', 'drop_on_loss', 'departed_land'} & set(typed['/dissipative_planner']['params'])
+
+
+def test_attach_keeps_drop_and_departed_land_off_until_drop_covers_the_newcomer():
+    p = _by_name(rig('attach', enable_approach_mpc=False))['/dissipative_planner']['params']
+    assert p['drop_on_loss'] is False and p['departed_land'] is False

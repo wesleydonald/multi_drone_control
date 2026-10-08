@@ -21,7 +21,8 @@ import yaml
 
 MODES = {'sim': ('mpc', 'free_hover', 'dissipative', 'network', 'attach'),
          'real': ('mpc', 'free_hover', 'dissipative', 'attach', 'm2')}
-DEFAULT_MODE = 'mpc'
+DEFAULT_MODE = 'dissipative'     # Wesley 8 Oct (was mpc); legacy:=true keeps mpc
+LEGACY_DEFAULT_MODE = 'mpc'
 # sim modes with no rig-twin world or thrust-map plumbing yet (docs/redo_on_twin.md)
 LEGACY_ONLY = ('attach', 'network')
 
@@ -183,6 +184,8 @@ def apply(context, side):
                            f'set it in params_file:=<yaml> (knobs: bringup/config/{side}.yaml)')
     mode = LaunchConfiguration('mode').perform(context).strip()
     legacy = side == 'sim' and LaunchConfiguration('legacy').perform(context).strip().lower() == 'true'
+    if legacy and 'mode' not in typed:
+        mode = lc['mode'] = LEGACY_DEFAULT_MODE
     vals = profile(side, mode, LaunchConfiguration('params_file').perform(context).strip(),
                    legacy=legacy)
     for k, v in vals.items():

@@ -251,7 +251,11 @@ def attach(context, launch_dir, profile_vals):
                          == 'velocity'),
                      # rig: tether latches ON at ARM, OFF at their detach
                      **({'detach_magnet': True} if real else {}),
-                     **map_planner}] + planner_options(context),
+                     **map_planner}] + planner_options(context)
+                    # drop and land is not complete in attach (a welded newcomer's magnet is not in
+                    # the drop and the trackers' tilt rule is not wired): off here until it is. A
+                    # drone detached in M1 is handed to the partner, so it must not land by itself.
+                    + [{'drop_on_loss': False, 'departed_land': False}],
         output='screen'))
 
     # ════════════════ APPROACH DRONE (x3_drone3) CHAIN ════════════════

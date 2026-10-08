@@ -83,9 +83,9 @@ fleet_resize:
   detach_unload_tilt_deg: ''   # deg, '' = 10: release only below this ring tilt
   detach_unload_wait_s: ''     # s, '' = 2: gates not met this long after the blend: cancel
   detach_post_blend_s: ''      # s, '' = 1: survivors' blend after the resize
-  detach_detect_m: ''          # m, '' = 0 (off): a cable this much over its length for 2 ticks = an unannounced detach (7 Oct)
-  departed_land: ''            # '' = false: a freed drone lands after its step-out while the fleet flies on (7 Oct)
-  drop_on_loss: ''             # '' = false: drop the ring and land every drone on a second loss or a capsize (card 2026-10-08_drop_and_land)
+  detach_detect_m: 0.06        # m, '' = 0 (off): a cable this much over its length for 2 ticks = an unannounced detach (7 Oct; on by default 8 Oct)
+  departed_land: true          # a freed drone lands after its step-out while the fleet flies on (7 Oct; on by default with detection, 8 Oct)
+  drop_on_loss: true           # drop the ring and land every drone on a second loss or a capsize (card 2026-10-08_drop_and_land; on by default with detection, 8 Oct)
   drop_tilt_deg: ''            # deg, '' = 30: the trackers' ring-tilt drop threshold
   drop_samples: ''             # '' = 2: consecutive ring samples over it
   drop_glitch_step_deg: ''     # deg, '' = 15: a frame-to-frame ring attitude step above this is a pose glitch (rig bags: real capsizes stay under it)
