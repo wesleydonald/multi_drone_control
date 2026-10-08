@@ -1,4 +1,6 @@
-# A drone landing by itself lays its rod down (no stilt), and only a stall at the floor is "down"
+# [SHELVED, not built] A drone landing by itself lays its rod down (no stilt)
+
+Shelved 9 Oct 00:40 after the critic's REWRITE: the twin "stilt" was the stall freeze pulling a falling rod back up, and the rig's failure (4/4 landings of the freed QUAD4 on 8 Oct) is a float, not a stilt; the arc fixes neither. The critic's simpler alternative (no freeze and no 'down' above rest + margin, the reference keeps descending) is part of 2026-10-09_departed_ground_idle rev 2, whose B1 neighbour (twin_gi_b1) tests whether the rod falls by itself. The arc is built only if it still stands there.
 
 1. **Question.** A drone that leaves the ring and lands by itself (an aborted newcomer; a freed carrier with
    `departed_land`) carries a 0.55 m rod hanging below it. Does it reach the floor, or stand on its rod?
@@ -36,4 +38,20 @@
 
 ## Critic
 
-(pending)
+Verdict REWRITE (9 Oct 00:35); shelved instead. Main points:
+- The stall freeze (dissipative_node.py, departed 'is down') caused the twin stilt: in R1253 the tip rolled from 1.3
+  to 18.7 cm off the body's vertical between 62.52 and 63.51 s, the 1.0 s stall timer froze the reference at
+  0.586 m, throttle rose 0.354 -> 0.471 and the rod swung back vertical. In A1 (R1250) it fell past the point of no
+  return before the timer: a race with the timer, not a balance.
+- Rig, same airframe (QUAD4 freed in the detach runs, 8 Oct; rest 0.061 m): no stilt in 4/4; each stalled at about
+  0.17-0.21 m, the freeze stepped its reference up to that height and it rose:
+  | run | stall z (m) | reference after "is down" (m) | z at disarm (m) |
+  |---|---|---|---|
+  | RIG r302_3 | 0.18-0.20 | 0.206 | 0.367 |
+  | RIG r303_4 | 0.198 | 0.199 | 0.340 |
+  | RIG r304_3 | 0.17-0.19 | 0.189 | 0.352 |
+  | RIG r305 | 0.19-0.21 | 0.216 | 0.377 |
+  Its released tether resting on the floor makes it lighter (r305 logs a measured +1.1 to +1.7 m/s^2 upward 'cable').
+- The arc would also move every landing spot 0.55 m further out (decision 'Newcomer abort path', the 1.6 m clear
+  radius on the 8 Oct sheet), its centre would be in the air (the trigger mixed the body's rest with the tip's floor
+  height), and two runs cannot beat a coin flip. Not built.
