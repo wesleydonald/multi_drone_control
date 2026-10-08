@@ -95,3 +95,12 @@ Verdict: SUPPORTS in the twin after the C6 fix: an unwelded QUAD4's fault lands 
 the plate, a carrier fault, DISARM and a fault in the floor creep keep the fleet-wide stop. C1b is the warning:
 QUAD4 dying over the plate falls onto the rim and tilts the ring 57 deg (the twin rod has no collision, the rig would
 be worse), 3 deg short of the trackers' 60 deg envelope; the old rule would have dropped the ring from 1 m instead.
+
+Reviewer (9 Oct 03:15): WEAK. Taken:
+- Two trees: C0-C5 and both C1 flew 38fa1f3; only C6 flew 7da010a. f3a2dee changes when on_load False is published,
+  which FAULT_LAND depends on: on the rig tree the fault-land path has unit tests and no Gazebo row yet.
+- C1b is grey by this card's own band (no abort, ring tilt 57.4 deg > 10): one repeat is owed. The 57 deg is the
+  ring; the trackers' 60 deg limit is the drones' (the carriers peaked at 20.5-22.0 deg), and attach mode has no
+  ring-tilt guard. At impact the ring dropped 0.998 -> 0.883 m in 0.33 s; touchdown tilt 1.7 deg.
+- C2 has no node parameter read-back (manifest launch_args and the manager's LAND line show the switch).
+- C6 re-fly: the old stop dropped the three carriers from 0.54-0.55 m mid-creep (as designed, but worth seeing).

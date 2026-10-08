@@ -134,3 +134,16 @@ light on its rod it hovers above any floor reference (12 cm in the twin; the rig
 8 Oct), and the old stall freeze can hold it on its rod. Where the ring was already down (A1 x2, A2) the tracker's
 ground idle took over and it landed. The fix is the departed ground idle card (rows in batch 6). Until it passes, a
 rig LAND or abort with QUAD4 unwelded ends with QUAD4 hovering 0.15-0.4 m up and dropped at the fleet disarm.
+
+Reviewer (9 Oct 03:15): WEAK. Taken:
+- On the bars as written before the data, the height bar fails in all six hover rows: |z - ref| from the abort to
+  r >= 1.15 m is 0.17-0.23 m (R1250 0.201, R1256 0.185, R1251 0.196, R1253 0.225, R1257 0.192, R1254 0.174): the
+  reference starts its descent at r ~1.18 m while the body is still at ~1.07 m. A1, A2, B1, B2 are grey on the
+  original bars; the "within 1 cm" holds only on the window changed after A1.
+- B1's tip-rim reaches 0.0198 m unrounded in both runs, under the original 0.02 m bar.
+- A1's "lands" rests on the absolute 0.15 m rule: QUAD4 never idled, it was disarmed at 0.143-0.144 m (rest 0.100)
+  at throttle 0.45 still descending, its 'is down' came after LANDED. Only A2 idled.
+- Every row flew f3aca33, not the rig candidate (the departed path and the fault code changed later); the parameter
+  read-back shows the fault switch under its old name.
+So: "lands by itself is falsified while the ring flies" stands; "the abort and step-out support" holds only on the
+bars changed after the data; the A/B rows need re-flying on the final tree with the bars as now written.

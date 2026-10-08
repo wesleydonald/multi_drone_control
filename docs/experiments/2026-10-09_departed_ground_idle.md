@@ -98,3 +98,21 @@ dropped at the fleet disarm; the freed carrier sat at throttle 0.48 on the floor
 twin: every drone that lands by itself now reaches its own rest and idles there (disarm at rest in every scored row),
 with the ring still in the air; the two greys are bar-letter edges, not failures of the behaviour. The rig's offset
 (0.19-0.22 m near the floor, r305) is larger than the twin's (0.12 m): the 0.35 m press is sized for it but untested.
+
+Reviewer (9 Oct 03:15): WEAK. Taken:
+- Two trees: R1267, G2, N1, N2 flew 38fa1f3; R1279, B1n x2, G3 flew 7da010a (after 6c1bc5b and 02dba91, which change
+  this path). On the rig tree: G1 x1, B1n x2, G3 (grey).
+- The press bar cannot separate rows: all five QUAD4 rows read 0.96-1.03 s, the designed final descent (0.16-0.19 s
+  of it on the floor); grey vs supports turns on 40 ms.
+- N2 is grey, not supports: drones 0-2 never idled (throttle 0.41-0.43 at the disarm, z 0.101-0.109 m); the drop
+  path announced LANDED (43.72 s) before their 'is down (at its rest)' (44.01-44.11 s). Its baselines also differ in
+  int_mode.
+- N1 does not test the switch: the freed carrier came down in the fleet LAND, as the baselines did (idle at the same
+  point); survivor tilt peak 5.91 deg vs R1221 3.59 (+2.32, outside the +/-2 bar; the registry misquoted R1221 as
+  4.49). Not supported.
+- "Idles at its rest in every scored row" is false (G3, N2); "disarmed at its rest" holds in every scored row
+  (<= 0.009 m above rest).
+- R1278 is not a plain void: an unexplained carrier flip on the rig tree; the switch does act at ARM/TAKEOFF
+  (departed False, rest heights), though nothing in the log points to it.
+So the twin claim stands on G1 (R1279), B1n x2 and G2; for W4/W5 the freed-carrier evidence is G2 x1 on 38fa1f3 in a
+twin with no floor offset.
