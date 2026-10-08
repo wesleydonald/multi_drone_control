@@ -93,3 +93,21 @@ def test_mocap_loss_arg():
     for bad in (None, '', '3 0', '3 1 2'):
         with pytest.raises(ValueError):
             Event(1.0, 'MOCAP_LOSS', bad)
+
+
+def test_a_mocap_loss_the_run_injected_is_not_a_harness_failure():
+    """Critic (fault-scope card) M1: the runner's own watchdog ended a MOCAP_LOSS run 2 s after the loss."""
+    pytest.importorskip('interfaces.msg')
+    from types import MethodType, SimpleNamespace
+    from experiment.runner_node import ExperimentRunner
+    def runner(cut):
+        r = SimpleNamespace(cfg=SimpleNamespace(pose_timeout_s=2.0, criteria=None), sim_t=50.0, n=4,
+                            pose_stamp=[50.0, 50.0, 50.0, 40.0], failures=[], aborts=[], _mocap_cut=set(cut))
+        r._rel = lambda: 50.0
+        r.check_health = MethodType(ExperimentRunner.check_health, r)
+        return r
+    assert runner([3]).check_health() is False                     # drone 3 silenced on purpose
+    bad = runner([])
+    assert bad.check_health() is True and 'drone 3 mocap stale' in bad.failures[0]
+    other = runner([0])
+    assert other.check_health() is True                            # only the drone that was cut

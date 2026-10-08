@@ -335,13 +335,14 @@ class DissipativeController(LoadPlanner):
         self._departed_wait = {}        # d -> s still held after its magnet OFF
         self._attach_pos_t = [None] * self.reserved_attach
         self._off_resend_t = None
-        # a fault on an unwelded newcomer grounds it alone (card 2026-10-09_newcomer_fault_scope; Wesley
-        # 8 Oct night): each reserved drone's latched /drone_d/on_load (False while it is not on the ring)
-        # tells the fleet manager not to escalate its in-flight disarm. Off = the fleet-wide stop.
-        self._newcomer_fault_alone = bool(p('newcomer_fault_alone', False).value) and not self._partner_run
+        # a fault on an unwelded newcomer lands the fleet instead of disarming it (card
+        # 2026-10-09_newcomer_fault_scope; Wesley 8 Oct night: "if QUAD4 fails we just land everything"):
+        # each reserved drone's latched /drone_d/on_load (False until it is folded in) tells the fleet
+        # manager to LAND on its in-flight disarm. Off = the fleet-wide stop. Needs the lifecycle switch.
+        self._newcomer_fault_land = (bool(p('newcomer_fault_land', False).value) and self._newcomer_lifecycle)
         self._newcomer_armed = {}
         self._on_load_pubs = {}
-        if self._newcomer_fault_alone:
+        if self._newcomer_fault_land:
             on_load_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
                                      reliability=ReliabilityPolicy.RELIABLE)
             for j in range(self.reserved_attach):
@@ -520,7 +521,8 @@ class DissipativeController(LoadPlanner):
     def _weld_refused(self, j):
         """Why reserved drone j may not be folded in now, or None."""
         why = self._newcomer_out.get(j)
-        if why == 'fault':
+        if why == 'fault' or (self._newcomer_fault_land and getattr(self, 'takeoff_seen', False)
+                              and self._newcomer_armed.get(j) is False):
             return 'it disarmed in flight'
         if self._newcomer_lifecycle and (why is not None or self._land_to_ground):
             return why or 'LAND in progress'
@@ -1245,7 +1247,6 @@ class DissipativeController(LoadPlanner):
             return
         for j in range(self.reserved_attach):
             if self.attach_pending[j]:
-                self._set_on_load(self._n_carry0 + j, True)     # physically on the ring now
                 why = self._weld_refused(j)
                 if why is not None:
                     d = self._n_carry0 + j
@@ -1442,13 +1443,16 @@ class DissipativeController(LoadPlanner):
             self._magnet_cmd_pub.publish(String(data='OFF'))
             self._off_resend_t = 0.0
         self._approach.pop(j, None)
+        self._approach_hold_armed = False
+        if not self._attach_moving and self._reconfig_hold_left > 0.0:
+            self._reconfig_hold_left = 0.0                  # the approach's trajectory hold
         for st in (self._departed_hold, self._departed_step, self._departed_next,
                    self._departed_td, self._departed_clear, self._departed_wait):
             st.pop(d, None)
         self._departed_landing.discard(d)
         self._land_alone.discard(d)
         self.get_logger().error(f'[dissipative] {_who(d)} disarmed in flight off the ring: out of this '
-                                f'flight, the carriers fly on')
+                                f'flight; the fleet manager lands every drone')
 
     def _do_attach(self, d):
         """Add physical drone d to the dissipative network (mirror of _fleet_detach_cb).

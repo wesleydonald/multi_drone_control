@@ -68,7 +68,8 @@ def _fake(n=4, ok=True, mux_state=None, on_load=None):
     f = types.SimpleNamespace(
         num_drones=n, arming_clients={i: _Client(ok) for i in range(n)},
         fleet_armed=False, flying=False, landing=False, shutdown_requested=False,
-        master_step=0, mux_state=dict(mux_state or {}), on_load=dict(on_load or {}),
+        master_step=0, mux_state=dict(mux_state or {}), on_load=dict(on_load or {}), _excused=set(),
+        fleet_cmd_pub=_Rec(), count_publishers=lambda topic: 1,
         drone_armed={i: False for i in range(n)}, drone_last_feedback={},
         _wall_clock=types.SimpleNamespace(now=lambda: 0), _log=_Log(),
         abort_pub=_Rec(), elrs_publishers={i: _Rec() for i in range(n)},
@@ -76,7 +77,7 @@ def _fake(n=4, ok=True, mux_state=None, on_load=None):
     f.get_logger = lambda: f._log
     C = m.CentralController
     for name in ('_disarm_fleet', '_takeoff_fleet', '_arm_fleet_thread',
-                 '_arming_feedback_callback', '_mux_state_callback'):
+                 '_arming_feedback_callback', '_mux_state_callback', '_on_load_live', '_on_load_callback'):
         setattr(f, name, getattr(C, name).__get__(f))
     f._disarm_fleet_thread = lambda: f.service_disarms.append(True)
     f._publish_drone_command = lambda c: f.cmds.append(c)
@@ -157,23 +158,52 @@ def test_partner_scope_is_per_drone(sync):
     assert len(f.abort_pub.msgs) == 1
 
 
-# ── newcomer scope (card 2026-10-09_newcomer_lifecycle, rule c) ─────────────
+# ── newcomer fault (card 2026-10-09_newcomer_fault_scope; Wesley 8 Oct night: land everything) ──
 
-def test_a_newcomer_not_on_the_ring_grounds_itself_only(sync):
+def test_a_newcomer_off_the_ring_that_disarms_lands_the_fleet():
     f = _fake(on_load={3: False})
     _flying(f, 3)
     f._arming_feedback_callback(Bool(data=False), 3)
     assert f.abort_pub.msgs == [] and _direct_elrs(f) == 0 and f.service_disarms == []
-    assert f.flying and not f.drone_armed[3]
-    assert any('before joining the ring' in s for s in f._log.lines)
+    assert [m.data for m in f.fleet_cmd_pub.msgs] == ['LAND'] and f.flying and not f.drone_armed[3]
+    assert any('LAND, every drone lands' in s for s in f._log.lines)
+    f.landing = True                                              # a second edge while landing: no repeat
+    f.drone_armed[3] = True
+    f._arming_feedback_callback(Bool(data=False), 3)
+    assert len(f.fleet_cmd_pub.msgs) == 1
 
 
-@pytest.mark.parametrize('flag', [{3: True}, {}])           # welded / no planner flag at all
+@pytest.mark.parametrize('flag', [{3: True}, {}])           # folded in / no planner flag at all
 def test_a_newcomer_on_the_ring_or_unflagged_grounds_everyone(flag, sync):
     f = _fake(on_load=flag)
     _flying(f, 3)
     f._arming_feedback_callback(Bool(data=False), 3)
-    assert len(f.abort_pub.msgs) == 1 and _direct_elrs(f) == 4
+    assert len(f.abort_pub.msgs) == 1 and _direct_elrs(f) == 4 and f.fleet_cmd_pub.msgs == []
+
+
+def test_a_stale_flag_without_its_planner_grounds_everyone(sync):
+    """A planner relaunched with the switch off leaves the latched False behind: it counts only while live."""
+    f = _fake(on_load={3: False})
+    f.count_publishers = lambda topic: 0
+    _flying(f, 3)
+    f._arming_feedback_callback(Bool(data=False), 3)
+    assert len(f.abort_pub.msgs) == 1 and f.fleet_cmd_pub.msgs == []
+
+
+def test_folded_in_after_its_fault_is_a_carrier_fault(sync):
+    """The weld-order race: its disarm was excused, then the planner reports it on the ring."""
+    f = _fake(on_load={3: False})
+    _flying(f, 3)
+    f._arming_feedback_callback(Bool(data=False), 3)
+    f._on_load_callback(Bool(data=True), 3)
+    assert len(f.abort_pub.msgs) == 1 and _direct_elrs(f) == 4 and not f.flying
+
+
+def test_on_load_true_for_a_healthy_newcomer_changes_nothing(sync):
+    f = _fake(on_load={3: False})
+    _flying(f, 3)
+    f._on_load_callback(Bool(data=True), 3)
+    assert f.on_load[3] is True and f.abort_pub.msgs == [] and f.flying
 
 
 def test_a_carrier_fault_grounds_everyone_while_the_newcomer_is_free(sync):

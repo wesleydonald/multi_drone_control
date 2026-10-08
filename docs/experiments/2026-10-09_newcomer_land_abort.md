@@ -14,7 +14,7 @@ own card: 2026-10-09_newcomer_fault_scope.md.
    for it; OFF is re-sent every 0.5 s while it is out and any later ON or weld is refused with OFF.
 3. **The one variable.** `newcomer_lifecycle` (bringup common.yaml, default false; planner param), flown from
    branch newcomer-fault-scope (this card's code from acb21f3 on, under the fault-scope card's be2afda with
-   `newcomer_fault_alone` off in every row here, so NC and A1 differ only in `newcomer_lifecycle`): dissipative_node.py `_abort_newcomer`, `_newcomers_out_on_land`, `_newcomer_off_tick`, OFF/ON
+   `newcomer_fault_land` off in every row here, so NC and A1 differ only in `newcomer_lifecycle`): dissipative_node.py `_abort_newcomer`, `_newcomers_out_on_land`, `_newcomer_off_tick`, OFF/ON
    handling in `_magnet_cmd_cb` (the subscription is no longer gated on the approach hold; ON keeps that gate), weld
    refusals in `_magnet_attached_cb`/`_do_attach`, `_publish_departed_refs` lands a `_land_alone` drone by itself
    (its own 0.15 m/s path also during LAND, its touchdown detector kept between ticks), `_pos` reads an unwelded

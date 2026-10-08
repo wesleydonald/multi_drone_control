@@ -39,7 +39,8 @@ def _node(p_ref=(0.0, 0.25, 1.64), pending=True, approaching=True, on=True):
     prof = SimpleNamespace(p_ref=np.array(p_ref, float))
     carriers = [np.array([0.5 * np.cos(np.radians(a)), 0.5 * np.sin(np.radians(a)), 1.5]) for a in (270, 30, 150)]
     f = SimpleNamespace(
-        _newcomer_lifecycle=on, _n_carry0=3, reserved_attach=1, n=3, attach_pending=[pending],
+        _newcomer_lifecycle=on, _newcomer_fault_land=False, _newcomer_armed={}, _n_carry0=3, reserved_attach=1,
+        n=3, attach_pending=[pending],
         attach_pos=[np.array(p_ref, float)], _attach_pos_t=[None],
         _approach={0: prof} if approaching else {}, _newcomer_out={}, _land_alone=set(), _off_resend_t=None,
         _approach_hold_armed=True, _attach_moving=True, _reconfig_hold_left=0.0,

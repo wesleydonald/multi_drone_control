@@ -135,14 +135,16 @@ class CentralController(Node):
 
         # ── Per-drone on-load flag (attach graph: the planner latches False for a reserved
         #    newcomer until its weld; carriers publish nothing). A newcomer that is not on the
-        #    ring and disarms in flight grounds itself only (Wesley 8 Oct: a fault on QUAD4
-        #    alone, the carriers fly on). ──
+        #    ring and disarms in flight (its own tracker's fault: its motors are off) makes the
+        #    fleet LAND instead of the fleet-wide disarm (Wesley 8 Oct night: "if QUAD4 fails we
+        #    just land everything"). ──
         self.on_load = {}
+        self._excused = set()        # drones whose in-flight disarm landed the fleet instead
         for i in range(self.num_drones):
             self.create_subscription(
                 Bool, f'/drone_{i}/on_load',
-                lambda msg, drone_id=i: self.on_load.__setitem__(drone_id, bool(msg.data)),
-                MUX_STATE_QOS)
+                lambda msg, drone_id=i: self._on_load_callback(msg, drone_id), MUX_STATE_QOS)
+        self.fleet_cmd_pub = self.create_publisher(String, '/fleet/command', 10)
 
         # ── Master step timer (sim time) ──────────────────────────────────
         self.timer = self.create_timer(DT, self._step_timer_callback)
@@ -215,6 +217,24 @@ class CentralController(Node):
     # Arming feedback - safety monitor
     # ─────────────────────────────────────────────────────────────────────
 
+    def _on_load_live(self, drone_id):
+        """The flag counts only while its planner is up: a relaunched planner with the switch off
+        leaves the old latched False behind."""
+        try:
+            return self.count_publishers(f'/drone_{drone_id}/on_load') > 0
+        except Exception:
+            return False
+
+    def _on_load_callback(self, msg: Bool, drone_id: int):
+        self.on_load[drone_id] = bool(msg.data)
+        if msg.data and drone_id in self._excused and self.flying:
+            # its disarm was excused as off the ring, but it is on the ring now (a weld declared
+            # after the fault): a dead drone hanging on the ring is a carrier fault
+            _announce(self, 'error', f"Drone {label(drone_id)} is on the ring but disarmed: "
+                                     f"EMERGENCY STOP for the whole fleet.")
+            self._disarm_fleet(emergency=True,
+                               reason=f"drone {label(drone_id)} disarmed and on the ring")
+
     def _mux_state_callback(self, msg: String, drone_id: int):
         state = msg.data.strip().lower()
         if self.mux_state.get(drone_id) != state:
@@ -250,11 +270,13 @@ class CentralController(Node):
                     f"Drone {label(drone_id)} tracker disarmed while its mux forwards the "
                     f"partner - not escalating to a fleet abort.")
                 return
-            if self.on_load.get(drone_id) is False:
+            if self.on_load.get(drone_id) is False and self._on_load_live(drone_id):
+                self._excused.add(drone_id)
                 _announce(self, 'warn',
-                          f"Drone {label(drone_id)} disarmed in flight before joining the ring: the "
-                          f"carriers keep flying, drone {label(drone_id)} does not rejoin this flight. "
-                          f"See its lines above for why.")
+                          f"Drone {label(drone_id)} disarmed in flight before joining the ring (its "
+                          f"motors are off): LAND, every drone lands. See its lines above for why.")
+                if not self.landing:
+                    self.fleet_cmd_pub.publish(String(data='LAND'))
                 return
             _announce(self, 'error',
                       f"Drone {label(drone_id)} disarmed in flight: EMERGENCY STOP for the whole fleet. "

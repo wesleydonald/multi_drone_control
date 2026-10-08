@@ -1,7 +1,7 @@
-"""A fault on an unwelded newcomer grounds it alone (card 2026-10-09_newcomer_fault_scope; Wesley 8 Oct night): the
-planner keeps each reserved drone's latched on_load (False until its weld, True while it is physically on the
-ring, False again at its detach) for the fleet manager, and a free newcomer that disarms in flight is out of the
-flight (magnet OFF, no landed-gate wait, no later weld)."""
+"""A fault on an unwelded newcomer lands the fleet (card 2026-10-09_newcomer_fault_scope; Wesley 8 Oct night: "if
+QUAD4 fails we just land everything"): the planner keeps each reserved drone's latched on_load (False until it is
+folded in, False again at its detach) for the fleet manager, and a free newcomer that disarms in flight is out of
+the flight (magnet OFF, no landed-gate wait, never folded in)."""
 from types import MethodType, SimpleNamespace
 
 import pytest
@@ -15,7 +15,7 @@ from test_newcomer_lifecycle import _node as _lifecycle_node  # noqa: E402
 
 def _node(**kw):
     f = _lifecycle_node(**kw)
-    f._newcomer_fault_alone = True
+    f._newcomer_fault_land = True
     f._newcomer_armed = {}
     f._on_load = []
     f._on_load_pubs = {3: SimpleNamespace(publish=lambda m: f._on_load.append(m.data))}
@@ -58,16 +58,32 @@ def test_disarm_edges_that_are_not_a_free_newcomer_fault(kw):
     assert f._newcomer_out == {} and f._magnet_cmd_pub.msgs == []
 
 
-def test_on_load_follows_the_physical_weld_and_a_refusal():
-    f = _node()
-    f._magnet_attached_cb(Bool(data=True))
-    assert f._on_load == [True] and f.attached == [3]
+def test_a_refused_physical_weld_does_not_put_it_on_the_ring_for_the_manager():
     g = _node()
     g._abort_newcomer(0, 'abort')
-    g._magnet_attached_cb(Bool(data=True))                         # welded on its way out: refused
-    assert g._on_load == [True] and g.attached == []
+    g._magnet_attached_cb(Bool(data=True))                         # caught on its way out: refused
+    assert True not in g._on_load and g.attached == []
     g._magnet_attached_cb(Bool(data=False))                        # the OFF let go
-    assert g._on_load == [True, False]
+    assert g._on_load == [False]
+
+
+def test_a_disarmed_newcomer_is_never_folded_in_even_before_its_fault_mark():
+    """The weld-order race: the weld arrives after the disarm but before the edge is handled."""
+    f = _node()
+    f._newcomer_armed[0] = False                                   # its last feedback: disarmed
+    f._magnet_attached_cb(Bool(data=True))
+    assert f.attached == [] and any('it disarmed in flight' in m for m in f.log.lines)
+    g = _node()
+    g._newcomer_armed[0] = True
+    g._magnet_attached_cb(Bool(data=True))
+    assert g.attached == [3]
+
+
+def test_a_fault_clears_a_held_trajectory_as_an_abort_does():
+    f = _node()
+    f._attach_moving, f._reconfig_hold_left = False, 60.0          # the approach's trajectory hold
+    _edge(f)
+    assert f._reconfig_hold_left == 0.0 and not f._approach_hold_armed
 
 
 def test_arm_before_takeoff_clears_a_fault_from_a_refused_arm():

@@ -1,6 +1,7 @@
-name: twin_fs_c4
-description: 'card 2026-10-09_newcomer_fault_scope, C4: weld_radius 0.08, pose loss on QUAD4 5 s after its weld
-  (on the ring: fleet-wide stop). Twin R8a dry base with newcomer_lifecycle on, newcomer_fault_alone on.'
+name: twin_fs_c3
+description: 'card 2026-10-09_newcomer_fault_scope rev 2, C3: carrier drone 1 (/drone_0) loses its mocap 2 s into
+  QUAD4''s transit: the fleet-wide stop stays. Twin R8a dry base (weld_radius 0) with newcomer_lifecycle on, newcomer_fault_land
+  on.'
 world: three_rigid_ground_rig_attach.sdf
 launch:
   package: bringup
@@ -40,9 +41,9 @@ launch:
     z_taut_gate: 0.9
     mode: attach
     reserved_attach: 1
-    weld_radius: 0.08
+    weld_radius: 0.0
     newcomer_lifecycle: true
-    newcomer_fault_alone: true
+    newcomer_fault_land: true
 io_launch:
   file: sim_io_launch.py
   args:
@@ -54,7 +55,7 @@ fleet:
   num_drones: 3
   n_total: 4
 timing:
-  duration_s: 130.0
+  duration_s: 140.0
   stop_after_abort_s: 8.0
   stop_after_landed_s: 2.0
   ready_timeout_s: 420.0
@@ -70,11 +71,12 @@ events:
   do: MAGNET
   arg: 'ON'
 - t: 21.0
-  do: WAIT_WELD
-- t: 26.0
+  do: WAIT_LOG
+  arg: '90 approach: drone 3 transit'
+- t: 23.0
   do: MOCAP_LOSS
-  arg: '3'
-- t: 45.0
+  arg: '0'
+- t: 63.0
   do: LAND
 criteria:
   forbid_abort: false

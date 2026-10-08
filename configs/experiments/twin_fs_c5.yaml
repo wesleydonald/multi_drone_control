@@ -1,6 +1,6 @@
 name: twin_fs_c5
-description: 'card 2026-10-09_newcomer_fault_scope, C5: operator DISARM 2 s into the transit (everything disarms).
-  Twin R8a dry base with newcomer_lifecycle on, newcomer_fault_alone on.'
+description: 'card 2026-10-09_newcomer_fault_scope rev 2, C5: operator DISARM 2 s into the transit (everything disarms).
+  Twin R8a dry base (weld_radius 0) with newcomer_lifecycle on, newcomer_fault_land on.'
 world: three_rigid_ground_rig_attach.sdf
 launch:
   package: bringup
@@ -42,7 +42,7 @@ launch:
     reserved_attach: 1
     weld_radius: 0.0
     newcomer_lifecycle: true
-    newcomer_fault_alone: true
+    newcomer_fault_land: true
 io_launch:
   file: sim_io_launch.py
   args:
@@ -54,7 +54,7 @@ fleet:
   num_drones: 3
   n_total: 4
 timing:
-  duration_s: 130.0
+  duration_s: 140.0
   stop_after_abort_s: 8.0
   stop_after_landed_s: 2.0
   ready_timeout_s: 420.0

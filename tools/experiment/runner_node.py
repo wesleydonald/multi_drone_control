@@ -111,6 +111,7 @@ class ExperimentRunner(Node):
         self._partner_release_wait = None   # t the WAIT_PARTNER_RELEASE event fired
         self._log_wait = None               # (regex, t fired, timeout) of a WAIT_LOG
         self._planner_lines = []            # (t, text) of every dissipative planner /rosout line this run
+        self._mocap_cut = set()             # drones whose mocap a MOCAP_LOSS silenced on purpose
         self.stop_reason = None            # set when the run ends early, for the manifest
 
         best = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -537,6 +538,7 @@ class ExperimentRunner(Node):
             self._repeats.append((self._rel() + 0.5, pub, Empty()))
         elif ev.do == 'MOCAP_LOSS':
             d, secs = mocap_loss_arg(ev.arg)
+            self._mocap_cut.add(d)          # the run goes on: the loss is the test, not a harness fault
             self._publish(self.dropout_pubs[d], Float64(data=secs), f'/drone_{d}/mocap_dropout {secs:.0f} s')
         elif ev.do == 'HANDOFF':
             # latched True, as his planner does while ATTACH_READY; the consumers act on
@@ -598,8 +600,8 @@ class ExperimentRunner(Node):
             return False
         for i in range(self.n):
             st = self.pose_stamp[i]
-            if st is None:
-                continue
+            if st is None or i in getattr(self, '_mocap_cut', ()):
+                continue                    # no pose yet, or silenced by the run's own MOCAP_LOSS
             age = self.sim_t - st
             if age > self.cfg.pose_timeout_s:
                 self.failures.append(

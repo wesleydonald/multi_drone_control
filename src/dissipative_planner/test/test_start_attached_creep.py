@@ -63,7 +63,7 @@ def _node(start_taut=False, takeoff_seen=False, reconfig='ocp', start_attached=T
         drone_pos=list(drones), drone_vel=[np.zeros(3)] * 3, attach_pos=[p3],
         attach_pending=[True], _approach={}, _ocp_attached={}, _weld_time={},
         detached=[False] * 4, _reconfig_hold_left=0.0, _newcomer_out={}, _land_to_ground=False,
-        _newcomer_lifecycle=False,
+        _newcomer_lifecycle=False, _newcomer_fault_land=False, _newcomer_armed={},
         refs=SimpleNamespace(_t_nom=[0.86 * 9.81 / 3 / np.sin(np.radians(45.0))] * 3))
     f._solvers = {4: (dyn4, _Solver(dyn4), dyn4.rho)}
     f.get_logger = lambda: log
@@ -124,3 +124,12 @@ def test_the_weld_capture_takes_the_tip_rod_plus_pivot_drop_below_the_body():
     f._attach_body_to_tip = ARM + 0.04
     rho = f._capture_weld_rho(body, 3, keep_z=True)
     assert np.isclose(rho[2], Z_ATT, atol=1e-6)
+
+
+def test_the_fold_in_puts_it_on_the_ring_for_the_fleet_manager():
+    """on_load (card 2026-10-09_newcomer_fault_scope) goes True at the fold-in, the floor-start weld included."""
+    f, log = _node()
+    sent = []
+    f._on_load_pubs = {3: SimpleNamespace(publish=lambda m: sent.append(m.data))}
+    f._do_attach(3)
+    assert sent == [True] and f._ocp_attached.get(3)
