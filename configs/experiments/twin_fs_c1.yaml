@@ -1,6 +1,7 @@
 name: twin_fs_c1
-description: 'card 2026-10-09_newcomer_fault_scope rev 2, C1: QUAD4 loses its mocap for the rest of the run, 2 s
-  into the transit. Twin R8a dry base (weld_radius 0) with newcomer_lifecycle on, newcomer_fault_land on.'
+description: 'card 2026-10-09_newcomer_fault_scope rev 3, C1: QUAD4 loses its mocap for the rest of the run, 2 s
+  into the transit. Twin R8a dry base (weld_radius 0) with newcomer_lifecycle on, newcomer_fault_land on. No scheduled
+  LAND: LANDED counts only after the manager''s FAULT_LAND.'
 world: three_rigid_ground_rig_attach.sdf
 launch:
   package: bringup
@@ -75,8 +76,6 @@ events:
 - t: 23.0
   do: MOCAP_LOSS
   arg: '3'
-- t: 63.0
-  do: LAND
 criteria:
   forbid_abort: false
   min_payload_z: 0.005

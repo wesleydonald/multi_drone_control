@@ -198,6 +198,7 @@ class CentralController(Node):
         self.get_logger().info(f"Fleet command received: '{command}'")
 
         if command == "ARM":
+            self._excused.clear()        # a new flight: no newcomer fault carried over
             self._arm_fleet()
         elif command == "TAKEOFF":
             self._takeoff_fleet()

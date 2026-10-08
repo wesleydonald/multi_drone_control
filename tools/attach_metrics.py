@@ -22,6 +22,9 @@ Per run, from run.csv and events.csv (runner time):
                  ever had a reference (N1: an idle floor newcomer must get none, R0532)
   gate_timeout   the planner's 'not down after' line (the landed gate gave up on a departed drone)
   on_refused     the planner's 'ATTACH refused' lines (an ON after an abort, or during LAND)
+  fault          a newcomer fault (card newcomer_fault_scope): its disarm time and height (from the tip, tip z +
+                 0.59 m, when its mocap was cut), the runner events FAULT_LAND (the manager landed the fleet),
+                 PLANNER_LAND and FLEET_ABORT, and whether every carrier stayed armed until LANDED
 The newcomer is the column block after the carriers (d<num_drones>); node log stamps are epoch wall time,
 anchored on the fleet manager receiving the runner's first ARM and mapped through run.csv's wall column.
 """
@@ -39,6 +42,7 @@ STAMP = re.compile(r'\[(\d{10}\.\d+)\]')
 PHASE = re.compile(r'approach: drone (\d+) (climb|transit|descend)\b')
 OUT = re.compile(r'out of this flight \((\w+)\)')
 RIM_R = 0.225
+BODY_TIP = 0.59                   # the twin newcomer's body to magnet tip
 DOWN_Z = 0.15
 AIR_Z = 0.2
 CLEAR_R = 1.15
@@ -119,6 +123,8 @@ def analyse(rid):
 
     t_to, t_on = event_t(ev, 'TAKEOFF'), event_t(ev, 'MAGNET')
     t_land, t_landed, t_weld = event_t(ev, 'LAND'), event_t(ev, 'LANDED'), event_t(ev, 'WELD')
+    if t_land is None:
+        t_land = event_t(ev, 'FAULT_LAND')          # no scheduled LAND: the manager's, on a newcomer fault
     end = t[-1]
     r = {'run': os.path.basename(d).split('_')[0], 'weld': t_weld}
 
@@ -145,6 +151,18 @@ def analyse(rid):
     after = t > (t_to if t_to is not None else 0.0)
     drop = np.where(after[1:] & (armed[:-1] > 0.5) & (armed[1:] < 0.5))[0]
     r['disarm_z'] = round(float(new[drop[0] + 1, 2]), 3) if len(drop) else None
+    if len(drop):
+        i = drop[0] + 1
+        z = new[i, 2]
+        if not np.isfinite(z) and 'tip_z' in run:
+            z = float(run.tip_z.iloc[i]) + BODY_TIP      # its mocap was cut: the hanging tip, at the disarm
+        r['fault'] = {'disarm_t': round(float(t[i]), 2), 'disarm_z': round(float(z), 3) if np.isfinite(z) else None,
+                      'fault_land': event_t(ev, 'FAULT_LAND'), 'planner_land': event_t(ev, 'PLANNER_LAND'),
+                      'fleet_abort': event_t(ev, 'FLEET_ABORT')}
+        if t_landed is not None:
+            w = (t > t[i]) & (t < t_landed - 0.1)
+            r['fault']['carriers_armed'] = bool(all((run[f'd{c}_armed'].to_numpy()[w] > 0.5).all()
+                                                    for c in range(n)))
 
     if t_landed is not None:
         i = int(np.searchsorted(t, t_landed))

@@ -279,7 +279,10 @@ class ExperimentRunner(Node):
 
     _ROSOUT = ((re.compile(r'\] ATTACH drone (\d+)'), 'FOLD_IN'),
                (re.compile(r'PARTNER RELEASE: drone (\d+)'), 'PARTNER_RELEASE'),
-               (re.compile(r'PARTNER HANDOFF()'), 'PARTNER_HANDOFF'))
+               (re.compile(r'PARTNER HANDOFF()'), 'PARTNER_HANDOFF'),
+               # a newcomer taken out of the flight, and the planner hearing LAND (card newcomer_fault_scope)
+               (re.compile(r'out of this flight \((\w+)\)'), 'NEWCOMER_OUT'),
+               (re.compile(r"/fleet/command received: 'LAND'()"), 'PLANNER_LAND'))
 
     def _rosout_cb(self, msg):
         # a failed or refused ARM no longer raises /fleet/abort (Q6b, mux latch card v3), so
@@ -290,6 +293,8 @@ class ExperimentRunner(Node):
                 self.failures.append(f'{ARM_FAIL} at t={self._rel():.2f}: {msg.msg}')
             if 'disarmed before TAKEOFF' in msg.msg and self.t_grounded is None:
                 self.t_grounded = self._rel()
+            if 'LAND, every drone lands' in msg.msg:
+                self._log_event('FAULT_LAND')   # the manager landed the fleet on a newcomer's fault
             return
         if not msg.name.endswith('dissipative_planner'):
             return

@@ -1,7 +1,7 @@
 name: twin_fs_c1b
-description: 'card 2026-10-09_newcomer_fault_scope rev 2, C1b: QUAD4 loses its mocap 8 s into the descend phase
+description: 'card 2026-10-09_newcomer_fault_scope rev 3, C1b: QUAD4 loses its mocap 8 s into the descend phase
   (over plate 9: it falls onto the ring). Twin R8a dry base (weld_radius 0) with newcomer_lifecycle on, newcomer_fault_land
-  on.'
+  on. No scheduled LAND: LANDED counts only after the manager''s FAULT_LAND.'
 world: three_rigid_ground_rig_attach.sdf
 launch:
   package: bringup
@@ -76,8 +76,6 @@ events:
 - t: 29.0
   do: MOCAP_LOSS
   arg: '3'
-- t: 69.0
-  do: LAND
 criteria:
   forbid_abort: false
   min_payload_z: 0.005

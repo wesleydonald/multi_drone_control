@@ -97,3 +97,22 @@ def test_arm_before_takeoff_clears_a_fault_from_a_refused_arm():
     f._newcomers_out_on_land('ARM')                                # whichever switch is on
     assert f._newcomer_out == {}
 
+
+
+def test_no_flag_until_the_fleet_leaves_the_floor_creep():
+    """Critic pass 2 M1: the planner ignores LAND in the creep, so a fault there must keep the old stop."""
+    f = _node()
+    f._on_load_announced = False
+    f._announce_on_load = MethodType(D._announce_on_load, f)
+    f.phase = 'creep'
+    f._announce_on_load()
+    assert f._on_load == []
+    f.phase = 'planner'
+    f._announce_on_load()
+    f._announce_on_load()
+    assert f._on_load == [False]                                   # once
+    g = _node(pending=False)
+    g._on_load_announced = False
+    g._announce_on_load = MethodType(D._announce_on_load, g)
+    g._announce_on_load()
+    assert g._on_load == []                                        # a welded newcomer is never flagged off

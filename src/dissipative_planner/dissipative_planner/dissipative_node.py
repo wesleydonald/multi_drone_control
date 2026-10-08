@@ -339,7 +339,10 @@ class DissipativeController(LoadPlanner):
         # 2026-10-09_newcomer_fault_scope; Wesley 8 Oct night: "if QUAD4 fails we just land everything"):
         # each reserved drone's latched /drone_d/on_load (False until it is folded in) tells the fleet
         # manager to LAND on its in-flight disarm. Off = the fleet-wide stop. Needs the lifecycle switch.
-        self._newcomer_fault_land = (bool(p('newcomer_fault_land', False).value) and self._newcomer_lifecycle)
+        # welded starts (R10b/R11) keep it off until a row covers a newcomer welded from t=0
+        self._newcomer_fault_land = (bool(p('newcomer_fault_land', False).value) and self._newcomer_lifecycle
+                                     and not self._start_attached)
+        self._on_load_announced = False
         self._newcomer_armed = {}
         self._on_load_pubs = {}
         if self._newcomer_fault_land:
@@ -347,8 +350,9 @@ class DissipativeController(LoadPlanner):
                                      reliability=ReliabilityPolicy.RELIABLE)
             for j in range(self.reserved_attach):
                 d = self._n_carry0 + j
+                # no flag until the fleet leaves the floor creep (_announce_on_load): the planner ignores
+                # LAND in the creep, so a fault there keeps the old stop, with the ring still on the floor
                 self._on_load_pubs[d] = self.create_publisher(Bool, f'/drone_{d}/on_load', on_load_qos)
-                self._on_load_pubs[d].publish(Bool(data=False))
                 self.create_subscription(Bool, f'/drone_{d}/arming_state_feedback',
                                          lambda msg, j=j: self._newcomer_arming_cb(msg, j), 5)
         self._net_p_des = None                 # current network target (xy from traj, z hold)
@@ -566,6 +570,7 @@ class DissipativeController(LoadPlanner):
         if self._departed_hold:
             self._publish_departed_refs()
         self._newcomer_off_tick()
+        self._announce_on_load()
         self._partner_release_tick()
         self._publish_pending_attach_refs()
         self._partner_magnet_keepalive()
@@ -1411,6 +1416,16 @@ class DissipativeController(LoadPlanner):
         self.get_logger().warn(f'[dissipative] {_who(d)} out of this flight ({why}): magnet OFF, '
                                f'{NEWCOMER_RELEASE_S:.1f} s for the release, then radially out to '
                                f'{DEPARTED_CLEAR_R:.1f} m from the ring at its height and lands')
+
+    def _announce_on_load(self):
+        """Publish each unwelded newcomer's on_load False once the fleet has left the creep (LAND is acted on
+        from the 'planner' phase on), so the fleet manager lands the fleet on its fault from then on."""
+        if self._on_load_announced or not self._on_load_pubs or self.phase not in ('planner', 'network'):
+            return
+        self._on_load_announced = True
+        for j in range(self.reserved_attach):
+            if self.attach_pending[j]:
+                self._set_on_load(self._n_carry0 + j, False)
 
     def _newcomer_off_tick(self):
         """While a newcomer is out and unwelded, keep its magnet OFF: the runner and the RViz panel

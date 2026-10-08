@@ -1,7 +1,7 @@
 name: twin_fs_c2
-description: 'card 2026-10-09_newcomer_fault_scope rev 2, C2: push world, 10 N +y (away from the carriers) on QUAD4
+description: 'card 2026-10-09_newcomer_fault_scope rev 3, C2: push world, 10 N +y (away from the carriers) on QUAD4
   for 0.5 s, 2 s into the transit. Twin R8a dry base (weld_radius 0) with newcomer_lifecycle on, newcomer_fault_land
-  on.'
+  on. No scheduled LAND: LANDED counts only after the manager''s FAULT_LAND.'
 world: three_rigid_ground_rig_attach_push.sdf
 launch:
   package: bringup
@@ -79,8 +79,6 @@ events:
 - t: 23.5
   do: WRENCH
   arg: 0 0 0 x3_drone3::base_link
-- t: 63.0
-  do: LAND
 criteria:
   forbid_abort: false
   min_payload_z: 0.005

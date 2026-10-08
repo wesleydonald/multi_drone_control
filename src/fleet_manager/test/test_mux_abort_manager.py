@@ -199,6 +199,14 @@ def test_folded_in_after_its_fault_is_a_carrier_fault(sync):
     assert len(f.abort_pub.msgs) == 1 and _direct_elrs(f) == 4 and not f.flying
 
 
+def test_arm_starts_a_new_flight_without_an_excused_newcomer(sync):
+    f = _fake(on_load={3: False})
+    f._excused.add(3)
+    f._arm_fleet = lambda: None
+    m.CentralController._command_callback(f, String(data='ARM'))
+    assert f._excused == set()
+
+
 def test_on_load_true_for_a_healthy_newcomer_changes_nothing(sync):
     f = _fake(on_load={3: False})
     _flying(f, 3)
