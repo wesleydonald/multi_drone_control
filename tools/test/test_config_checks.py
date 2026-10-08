@@ -133,7 +133,7 @@ def test_a_bare_twin_config_passes_on_the_defaults(tmp_path):
 
 def test_a_legacy_mode_on_a_twin_world_is_refused(tmp_path):
     with pytest.raises((SystemExit, RuntimeError), match='legacy:=true'):
-        R.checked_config(_cfg(tmp_path, 'rig_twin_hover_fixed.yaml', launch__mode='attach'))
+        R.checked_config(_cfg(tmp_path, 'rig_twin_hover_fixed.yaml', launch__mode='network'))
 
 
 def test_model_f1_pivot_needs_its_named_exemption(tmp_path):

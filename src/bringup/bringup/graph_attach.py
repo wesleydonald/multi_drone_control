@@ -111,7 +111,9 @@ def attach(context, launch_dir, profile_vals):
     # the thrust map and geometry: the rig carry's on the rig, the twin's typed knobs in sim (the
     # twin attach worlds, 8 Oct; legacy leaves them '' = node defaults); n+1 plant offsets with the newcomer
     n_plant = n + (1 if truthy(context, 'enable_approach') else 0)
-    map_tracker, map_bf, map_planner = map_and_geometry(context, n_plant, real)
+    legacy = not real and truthy(context, 'legacy')
+    map_tracker, map_bf, map_planner = (({}, {}, {}) if legacy
+                                        else map_and_geometry(context, n_plant, real))
 
     # ── 3 TETHERED drones: bridges + betaflight comm + our tracker (as dissipative_launch) ──
     for i, drone_name in enumerate(drone_names):

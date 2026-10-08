@@ -694,7 +694,7 @@ def test_rig_attach_types_the_mocap_body_ids_and_refuses_without_the_tip():
                      mocap_drone_body_ids='11,12,13,14', mocap_payload_body_id=8))
     mocap = next(n for k, n in g.items() if 'motion_capture' in k)
     assert mocap['params']['magnet_tip_body_id'] == 24 and mocap['params']['payload_body_id'] == 8
-    assert mocap['params']['drone_body_ids'] == [11, 12, 13, 14]
+    assert list(mocap['params']['drone_body_ids']) == [11, 12, 13, 14]
     with pytest.raises(RuntimeError, match='mocap_magnet_tip_body_id'):
         rig('attach', enable_approach_mpc=False, mocap_magnet_tip_body_id='')
 
@@ -718,8 +718,9 @@ def test_twin_attach_flies_the_rig_layout_on_the_twin_plant():
                      sim_thrust_offset='0.181,0.185,0.187,0.187'))
     p = g['/dissipative_planner']['params']
     assert p['attach_azimuths_deg'] in ('270,30,150', [270.0, 30.0, 150.0])
-    assert p['attach_y_offset'] == 0.225 and p['attach_z'] == 0.02
-    assert p['pivot_offset'] == [0.0, 0.0, -0.04]
+    assert p['attach_z'] == 0.02 and list(p['pivot_offset']) == [0.0, 0.0, -0.04]
+    assert g['/attach_target_publisher']['params']['y_offset'] == 0.225
+    assert g['/magnet_attachment_manager']['params']['object_y_offset'] == 0.225
     bf = {k: n['params'] for k, n in g.items() if '/bf_comm_' in k}
     assert sorted(bf) == ['/bf_comm_0', '/bf_comm_1', '/bf_comm_2', '/bf_comm_3']
     assert [bf[f'/bf_comm_{i}']['thrust_offset'] for i in range(4)] == [0.181, 0.185, 0.187, 0.187]

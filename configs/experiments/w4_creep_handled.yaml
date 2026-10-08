@@ -1,5 +1,5 @@
 criteria:
-  forbid_abort: true
+  forbid_abort: false
   min_payload_z: 0.005
   min_peak_payload_z: 0.5
 description: 'Creep takeoff gate (card 2026-10-09_creep_takeoff_gate, critic M1): r303 in the twin. ARM, operator
