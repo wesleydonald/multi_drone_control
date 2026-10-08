@@ -279,10 +279,8 @@ class ParseData():
             self.last_orientation = np.array([r_qx, r_qy, r_qz, r_qw])
 
 
-            # Round angular velocity (rad/s) to 1 decimal place
-            low_pass_wx = round(low_pass_wx, 1)
-            low_pass_wy = round(low_pass_wy, 1)
-            low_pass_wz = round(low_pass_wz, 1)
+            # body rates go out at full precision: rounding them to 0.1 rad/s (5.7 deg/s) fed the
+            # trackers' x0 a quantised rate on every rig flight to 8 Oct (Tejen found it in his copy, 4b34d768)
 
             # Format with constant width, including sign and padding. Gated:
             # at full mocap rate this alone throttles the receive loop.
