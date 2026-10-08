@@ -1,6 +1,6 @@
 # Overnight 7-8 Oct: progress log
 
-Plan: `/home/wesley/.claude/plans/whimsical-kindling-minsky.md` (approved 8 Oct ~01:00). Branch `week4`
+Plan approved 8 Oct ~01:00. Branch `week4`
 is tomorrow's rig tree: only tested pieces go there. The new defaults and the drop-and-land work live on
 branch `safety-defaults` (git worktree) until they are twin-verified.
 
@@ -38,7 +38,7 @@ branch `safety-defaults` (git worktree) until they are twin-verified.
 |---|---|---|---|---|
 | rig sheet in Wesley's order (r301 r206e60 circle + ref_time_shift; r302/r303 hover detach announced/unannounced; r304 the better on 11/9/6/3; r305 circle detach; r306 figure-8); 30 deg stop limit (was 15); made concise (65 lines, shell shorthands $R $C $D $O) | done | every run line dry-run through rig_flight.sh; each rig config resolved through the real profile | (this commit) | yes |
 | drop and land on week4 (plain 30 deg tracker rule, Wesley 8 Oct): the two drop commits cherry-picked onto week4 alone (no model integral, default mode or detection default), on only through `drop_on_loss` in the detach configs of r302-r305 | **SUPPORTS on week4** in the twin, 12 of 12: second loss and forced drop drop and land (0 faults, down in 8.6 s, final z <= 0.14 m); r302/r303/r304 (both kinds)/r305 configs never drop (peaks 6.0-20.0 deg) and land | gate --quick 449, dissipative 58, tracker 86, fleet_manager 37, bringup 92; R1204-R1215; reviewer: numbers supported | c142662, c9b6cc6, 700a77b, 938b024, bb0406b | **yes, r302-r305** |
-| CLAUDE.md lock line: fleet-wide disarm except detach runs with drop_on_loss | done | - | (untracked file) | - |
+| Working-rules lock line: fleet-wide disarm except detach runs with drop_on_loss | done | - | (untracked file) | - |
 
 ## 8 Oct afternoon: rig session and after
 

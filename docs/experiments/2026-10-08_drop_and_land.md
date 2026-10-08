@@ -95,7 +95,7 @@ Yes, as in section 3, with unit tests:
 - `/fleet/landed` follows only when every drone is down.
 
 It lives on branch `safety-defaults` and is not flown on the rig until the twin passes and Wesley
-says so. The CLAUDE.md lock "fleet-wide disarm on any envelope fault" is amended on this branch:
+says so. The working-rules lock "fleet-wide disarm on any envelope fault" is amended on this branch:
 in detach mode, these two triggers drop and land instead; the 60 deg envelope stays as the last
 resort. If falsified, the code is recorded in the registry and deleted.
 
@@ -130,7 +130,7 @@ The design would not have saved either 7 Oct rig event, and the twin bars cannot
    - three bars pass by construction: magnets OFF within 0.2 s, landing spot >= 1.0 m, and D3 on
      1/3/5/9.
 4. **What it breaks if it works:**
-   - the locked fleet-wide disarm (needs Wesley's line in decisions.md and CLAUDE.md);
+   - the locked fleet-wide disarm (needs Wesley's line in decisions.md and the working rules);
    - research code joins the safety path;
    - the latched topic outlives the flight under re-ARM without relaunch (618e315);
    - attach/m2 modes reach 39-47 deg (R0196/R0197, R0234), so the 30 deg trigger must stay off
@@ -209,7 +209,7 @@ The design would not have saved either 7 Oct rig event, and the twin bars cannot
 - **A twin win in the race says little about the rig** (RTF 0.3).
 - **A cheaper way to cut exposure that keeps the ring:** LAND automatically after an unannounced
   detection.
-- **The lock amendment** is Wesley's line in decisions.md and CLAUDE.md before any code.
+- **The lock amendment** is Wesley's line in decisions.md and the working rules before any code.
 
 ## Revision v2 after the critic (8 Oct night)
 

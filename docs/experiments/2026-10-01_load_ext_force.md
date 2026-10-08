@@ -101,7 +101,7 @@ The mapbias arm is the case that killed the 09-23 estimator.
 ## 7. Cost
 - SIL: 10 runs (free).
 - Gazebo: 5 arms x (2 on + 1 off) = 15 runs. That is beyond the laptop's 10 per session, so it goes on the lab PC once Tailscale SSH is re-approved, or over two laptop sessions.
-- Before any of these: one Gazebo floor start with the estimator on and no disturbance (CLAUDE.md: anything touching takeoff or the floor).
+- Before any of these: one Gazebo floor start with the estimator on and no disturbance (the working rules: anything touching takeoff or the floor).
 
 ## 8. New code?
 Yes:
@@ -113,7 +113,7 @@ Yes:
 - the two world test copies;
 - the SIL plant force hook.
 
-**Removal if it fails:** registry rows for every run, this card kept as history, and the estimator, `p_ext`, launch args and world copies deleted the same session (CLAUDE.md default). The SIL and runner disturbance hooks stay, because they are useful for any later method.
+**Removal if it fails:** registry rows for every run, this card kept as history, and the estimator, `p_ext`, launch args and world copies deleted the same session (the working rules default). The SIL and runner disturbance hooks stay, because they are useful for any later method.
 
 **Interactions to watch:**
 - ZBias (z_ki) stays off in every arm. Whether to keep it with B4 on is a later decision for Wesley (plan B6).
