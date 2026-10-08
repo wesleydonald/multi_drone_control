@@ -129,6 +129,12 @@ attach:
   attach_moving: true
   attach_approach_direct: true
   attach_seek_m: 0.0
+  # LAND or /magnet/command OFF before the weld: the newcomer moves 1.2 m out and lands by itself
+  # (card 2026-10-09_newcomer_land_abort); off until its twin runs pass
+  newcomer_lifecycle: false
+  # a fault on an unwelded newcomer grounds it alone, the carriers fly on (card
+  # 2026-10-09_newcomer_fault_scope); off until its twin runs pass
+  newcomer_fault_alone: false
   diss_balanced_tensions: true
   diss_handout_tension_blend: true
   diss_wrench_true_attitude: false

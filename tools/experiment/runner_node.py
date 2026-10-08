@@ -30,11 +30,11 @@ from rcl_interfaces.msg import Log
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from rosgraph_msgs.msg import Clock
-from std_msgs.msg import Bool, Empty, Float64MultiArray, Int32, String
+from std_msgs.msg import Bool, Empty, Float64, Float64MultiArray, Int32, String
 
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
-from .config import wait_lift_arg, wrench_arg
+from .config import mocap_loss_arg, wait_lift_arg, wait_log_arg, wrench_arg
 
 ARM_FAIL = 'fleet manager ARM failed or refused'
 
@@ -109,6 +109,8 @@ class ExperimentRunner(Node):
         self._object_attached = False
         self.t_partner_release = None
         self._partner_release_wait = None   # t the WAIT_PARTNER_RELEASE event fired
+        self._log_wait = None               # (regex, t fired, timeout) of a WAIT_LOG
+        self._planner_lines = []            # (t, text) of every dissipative planner /rosout line this run
         self.stop_reason = None            # set when the run ends early, for the manifest
 
         best = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -165,6 +167,10 @@ class ExperimentRunner(Node):
         # RELEASE: the joint's own topic, made at start so it is matched before the event
         self.release_pubs = {int(e.arg): self.create_publisher(Empty, f'/drone_{int(e.arg)}/detach', 1)
                              for e in cfg.events if e.do == 'RELEASE'}
+        # MOCAP_LOSS: the sim mocap emulator's dropout input, made at start for the same reason
+        self.dropout_pubs = {mocap_loss_arg(e.arg)[0]: self.create_publisher(
+            Float64, f'/drone_{mocap_loss_arg(e.arg)[0]}/mocap_dropout', 5)
+            for e in cfg.events if e.do == 'MOCAP_LOSS'}
         if any(e.do == 'WRENCH' for e in cfg.events):
             self._wrench_publisher()
         self.handoff_pub = self.create_publisher(Bool, '/join_planner/handoff_ready', 10)
@@ -286,6 +292,7 @@ class ExperimentRunner(Node):
             return
         if not msg.name.endswith('dissipative_planner'):
             return
+        self._planner_lines.append((self._rel(), msg.msg))
         for pat, name in self._ROSOUT:
             m = pat.search(msg.msg)
             if m:
@@ -387,6 +394,20 @@ class ExperimentRunner(Node):
             self._partner_release_wait = None
             self.get_logger().warn(
                 f'[exp] t={t:6.2f} partner released; later events shifted {shift:+.2f} s')
+        if self._log_wait is not None:
+            pat, t0, timeout = self._log_wait
+            hit = next((tl for tl, ln in self._planner_lines if pat.search(ln)), None)
+            seen = hit is not None
+            if not seen and not (timeout and t - t0 >= timeout):
+                return                      # WAIT_LOG blocks the rest of the schedule
+            # later events are timed from the line itself, which may have come before the wait fired
+            shift = (hit if seen else t) - t0
+            for e in self._pending:
+                e.t += shift
+            self._log_wait = None
+            self._log_event('LOGGED' if seen else 'LOG_TIMEOUT', f'{shift:.2f}')
+            self.get_logger().warn(f'[exp] t={t:6.2f} {"logged" if seen else "NOT logged (timeout)"} '
+                                   f'/{pat.pattern}/; later events shifted {shift:+.2f} s')
         if self._thrust_wait is not None:
             tpl, t0 = self._thrust_wait
             if not all(self._thrust_seen[tpl]):
@@ -427,6 +448,10 @@ class ExperimentRunner(Node):
                 return
             if ev.do == 'WAIT_PARTNER_RELEASE' and self.t_partner_release is None:
                 self._partner_release_wait = t
+                return
+            if ev.do == 'WAIT_LOG':
+                pat, timeout = wait_log_arg(ev.arg)
+                self._log_wait = (pat, t, timeout)
                 return
 
     def _publish(self, pub, msg, what, exclude_self=False):
@@ -510,6 +535,9 @@ class ExperimentRunner(Node):
             pub = self.release_pubs[int(ev.arg)]
             self._publish(pub, Empty(), f'/drone_{ev.arg}/detach (unannounced)')
             self._repeats.append((self._rel() + 0.5, pub, Empty()))
+        elif ev.do == 'MOCAP_LOSS':
+            d, secs = mocap_loss_arg(ev.arg)
+            self._publish(self.dropout_pubs[d], Float64(data=secs), f'/drone_{d}/mocap_dropout {secs:.0f} s')
         elif ev.do == 'HANDOFF':
             # latched True, as his planner does while ATTACH_READY; the consumers act on
             # the first True only
@@ -539,7 +567,7 @@ class ExperimentRunner(Node):
         elif ev.do == 'WRENCH':
             self._set_wrench(*wrench_arg(ev.arg))
         elif ev.do in ('WAIT_WELD', 'WAIT_LIFT', 'WAIT_REWELD', 'WAIT_PARTNER_RELEASE',
-                       'WAIT_THRUST'):
+                       'WAIT_THRUST', 'WAIT_LOG'):
             pass
         elif ev.do == 'LAUNCH':
             self.launch_requests.append(str(ev.arg))     # started by run_experiment's loop

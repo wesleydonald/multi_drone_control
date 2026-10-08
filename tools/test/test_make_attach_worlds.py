@@ -229,3 +229,12 @@ def test_magnet_never_touches_the_ring_but_rests_on_the_floor():
 def test_gz_sdf_check(rel):
     r = subprocess.run(['gz', 'sdf', '-k', rel], cwd=ASSETS, capture_output=True, text=True)
     assert r.returncode == 0 and 'Valid' in r.stdout, r.stdout + r.stderr
+
+
+def test_the_push_world_is_the_free_world_plus_the_wrench_tool():
+    """Wesley 8 Oct night: a push variant for the newcomer fault test; the other worlds stay as they are."""
+    free = (ASSETS / 'three_rigid_ground_rig_attach.sdf').read_text()
+    push = (ASSETS / 'three_rigid_ground_rig_attach_push.sdf').read_text()
+    assert push != free and push.replace(maw.WRENCH_PLUGIN, '', 1) == free
+    assert 'ApplyLinkWrench' not in free
+    ET.fromstring(push.split('\n', 1)[1].split('\n', 1)[1])          # well-formed below the two comment lines

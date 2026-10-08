@@ -35,7 +35,7 @@ def test_grounded_before_takeoff_stops_the_run():
     t = [4.0]
     f = types.SimpleNamespace(failures=[], _rel=lambda: t[0], _log_event=lambda *a: None,
                               t_partner_release=None, t_grounded=None, stop_reason=None,
-                              _ROSOUT=rn.ExperimentRunner._ROSOUT,
+                              _ROSOUT=rn.ExperimentRunner._ROSOUT, _planner_lines=[],
                               cfg=types.SimpleNamespace(duration_s=120.0))
     rn.ExperimentRunner._rosout_cb(f, types.SimpleNamespace(
         name='fleet_manager', msg='Drone 2 disarmed before TAKEOFF: fleet disarmed, TAKEOFF refused.'))

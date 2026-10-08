@@ -133,6 +133,17 @@ class CentralController(Node):
                 lambda msg, drone_id=i: self._mux_state_callback(msg, drone_id),
                 MUX_STATE_QOS)
 
+        # ── Per-drone on-load flag (attach graph: the planner latches False for a reserved
+        #    newcomer until its weld; carriers publish nothing). A newcomer that is not on the
+        #    ring and disarms in flight grounds itself only (Wesley 8 Oct: a fault on QUAD4
+        #    alone, the carriers fly on). ──
+        self.on_load = {}
+        for i in range(self.num_drones):
+            self.create_subscription(
+                Bool, f'/drone_{i}/on_load',
+                lambda msg, drone_id=i: self.on_load.__setitem__(drone_id, bool(msg.data)),
+                MUX_STATE_QOS)
+
         # ── Master step timer (sim time) ──────────────────────────────────
         self.timer = self.create_timer(DT, self._step_timer_callback)
 
@@ -238,6 +249,12 @@ class CentralController(Node):
                 self.get_logger().warn(
                     f"Drone {label(drone_id)} tracker disarmed while its mux forwards the "
                     f"partner - not escalating to a fleet abort.")
+                return
+            if self.on_load.get(drone_id) is False:
+                _announce(self, 'warn',
+                          f"Drone {label(drone_id)} disarmed in flight before joining the ring: the "
+                          f"carriers keep flying, drone {label(drone_id)} does not rejoin this flight. "
+                          f"See its lines above for why.")
                 return
             _announce(self, 'error',
                       f"Drone {label(drone_id)} disarmed in flight: EMERGENCY STOP for the whole fleet. "

@@ -72,6 +72,14 @@ WORLDS = {
     'three_rigid_ground_rig_attach_welded.sdf': 'welded',
 }
 MODELS = {'free': f'{MODEL}.sdf', 'welded': f'{MODEL}_welded.sdf'}
+# the free-start world with the runner's WRENCH tool (a push on the newcomer: its envelope fault,
+# card 2026-10-09_newcomer_fault_scope; Wesley 8 Oct night); the other worlds stay as they are
+PUSH_WORLDS = {'three_rigid_ground_rig_attach_push.sdf': 'free'}
+USER_COMMANDS = ('    <plugin filename="ignition-gazebo-user-commands-system" '
+                 'name="gz::sim::systems::UserCommands"/>\n')
+WRENCH_PLUGIN = ('    <!-- push tool: runner WRENCH -> /world/<name>/wrench/persistent -->\n'
+                 '    <plugin filename="gz-sim-apply-link-wrench-system" '
+                 'name="gz::sim::systems::ApplyLinkWrench"/>\n')
 
 
 def _f(x):
@@ -279,6 +287,9 @@ def generate(out_dir):
              for start, name in MODELS.items()}
     base = carrier_world()
     files.update({name: attach_world(base, start) for name, start in WORLDS.items()})
+    files.update({name: _replace_once(attach_world(base, start), USER_COMMANDS, USER_COMMANDS + WRENCH_PLUGIN,
+                                      'user commands plugin')
+                  for name, start in PUSH_WORLDS.items()})
     for rel, text in files.items():
         with open(os.path.join(out_dir, rel), 'w') as f:
             f.write(text)
