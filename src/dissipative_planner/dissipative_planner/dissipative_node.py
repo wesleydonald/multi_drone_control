@@ -1890,7 +1890,11 @@ class DissipativeController(LoadPlanner):
             return
         missing = []
         for dd in range(self.n_net):
-            pos = self._pos(dd)
+            # the last pose seen, not the staleness-filtered one: before TAKEOFF it sits on the floor, so an old
+            # pose is still its rest (R1270: a planner busy at startup had a 0.5 s-stale pose and recorded none)
+            j = self._reserved_index(dd)
+            pos = (self.attach_pos[j] if j is not None
+                   else (self.drone_pos[dd] if dd < len(self.drone_pos) else None))
             if pos is not None:
                 self._rest_z[dd] = float(pos[2])
             else:

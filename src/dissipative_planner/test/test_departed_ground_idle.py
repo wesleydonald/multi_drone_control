@@ -134,3 +134,14 @@ def test_the_press_limit_does_not_fire_once_it_is_back_at_its_rest():
     assert f._press_t[3] <= t_press + 0.4 + 1e-9                   # the timer stopped at its rest
     assert f._departed_down() and not any('held there' in m for m in f.log.lines)
     assert any('is down (at its rest)' in m for m in f.log.lines)
+
+
+def test_takeoff_records_the_rest_from_a_stale_pose_too():
+    """R1270: the newcomer's pose was > 0.5 s old at TAKEOFF (a busy planner) and no rest height was recorded."""
+    f = _node()
+    f._rest_z = {}
+    f.attach_pos[0] = np.array([0.0, 1.4, 0.10])
+    f._attach_pos_t[0] = 90.0                                      # 10 s old at f.now = 100
+    assert f._pos(3) is None
+    f._departed_flight_start('TAKEOFF')
+    assert f._rest_z[3] == pytest.approx(0.10)
