@@ -64,11 +64,11 @@ class _SyncThread:
         self.target()
 
 
-def _fake(n=4, ok=True, mux_state=None):
+def _fake(n=4, ok=True, mux_state=None, on_load=None):
     f = types.SimpleNamespace(
         num_drones=n, arming_clients={i: _Client(ok) for i in range(n)},
         fleet_armed=False, flying=False, landing=False, shutdown_requested=False,
-        master_step=0, mux_state=dict(mux_state or {}),
+        master_step=0, mux_state=dict(mux_state or {}), on_load=dict(on_load or {}),
         drone_armed={i: False for i in range(n)}, drone_last_feedback={},
         _wall_clock=types.SimpleNamespace(now=lambda: 0), _log=_Log(),
         abort_pub=_Rec(), elrs_publishers={i: _Rec() for i in range(n)},
@@ -155,6 +155,45 @@ def test_partner_scope_is_per_drone(sync):
     _flying(f, 1)
     f._arming_feedback_callback(Bool(data=False), 1)          # a carrier we fly
     assert len(f.abort_pub.msgs) == 1
+
+
+# ── newcomer scope (card 2026-10-09_newcomer_lifecycle, rule c) ─────────────
+
+def test_a_newcomer_not_on_the_ring_grounds_itself_only(sync):
+    f = _fake(on_load={3: False})
+    _flying(f, 3)
+    f._arming_feedback_callback(Bool(data=False), 3)
+    assert f.abort_pub.msgs == [] and _direct_elrs(f) == 0 and f.service_disarms == []
+    assert f.flying and not f.drone_armed[3]
+    assert any('before joining the ring' in s for s in f._log.lines)
+
+
+@pytest.mark.parametrize('flag', [{3: True}, {}])           # welded / no planner flag at all
+def test_a_newcomer_on_the_ring_or_unflagged_grounds_everyone(flag, sync):
+    f = _fake(on_load=flag)
+    _flying(f, 3)
+    f._arming_feedback_callback(Bool(data=False), 3)
+    assert len(f.abort_pub.msgs) == 1 and _direct_elrs(f) == 4
+
+
+def test_a_carrier_fault_grounds_everyone_while_the_newcomer_is_free(sync):
+    f = _fake(on_load={3: False})
+    _flying(f, 0)
+    f._arming_feedback_callback(Bool(data=False), 0)
+    assert len(f.abort_pub.msgs) == 1 and _direct_elrs(f) == 4 and not f.flying
+
+
+def test_operator_disarm_still_disarms_a_free_newcomer(sync):
+    f = _fake(on_load={3: False})
+    _flying(f, 3)
+    f._disarm_fleet(emergency=True, reason='operator DISARM')
+    assert len(f.abort_pub.msgs) == 1 and _direct_elrs(f) == 4 and f.service_disarms == [True]
+
+
+def test_on_load_qos_is_latched_and_reliable():
+    from rclpy.qos import DurabilityPolicy, ReliabilityPolicy
+    assert m.MUX_STATE_QOS.durability == DurabilityPolicy.TRANSIENT_LOCAL
+    assert m.MUX_STATE_QOS.reliability == ReliabilityPolicy.RELIABLE
 
 
 # ── item 4: ARM gate ─────────────────────────────────────────────────────────

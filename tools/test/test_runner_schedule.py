@@ -85,3 +85,11 @@ def test_wait_log_arg_is_checked_when_the_config_loads():
     for bad in ('', '0 descend', '-1 x', '5'):
         with pytest.raises(ValueError):
             Event(1.0, 'WAIT_LOG', bad)
+
+
+def test_mocap_loss_arg():
+    from experiment.config import Event, mocap_loss_arg
+    assert mocap_loss_arg('3') == (3, 600.0) and mocap_loss_arg('3 2.5') == (3, 2.5)
+    for bad in (None, '', '3 0', '3 1 2'):
+        with pytest.raises(ValueError):
+            Event(1.0, 'MOCAP_LOSS', bad)

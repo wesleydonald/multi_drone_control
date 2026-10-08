@@ -54,7 +54,8 @@ def _node(p_ref=(0.0, 0.25, 1.64), pending=True, approaching=True, on=True):
     f.now = [100.0]
     f.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=int(f.now[0] * 1e9)))
     for name in ('_abort_newcomer', '_newcomer_off_tick', '_magnet_cmd_cb', '_magnet_attached_cb',
-                 '_newcomers_out_on_land', '_publish_departed_refs', '_departed_down', '_pos', '_reserved_index'):
+                 '_newcomers_out_on_land', '_publish_departed_refs', '_departed_down', '_pos', '_reserved_index',
+                 '_weld_refused', '_set_on_load'):
         setattr(f, name, MethodType(getattr(D, name), f))
     f.attached = []
     f._do_attach = lambda d: f.attached.append(d)

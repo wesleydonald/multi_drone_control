@@ -61,6 +61,9 @@ EVENT_KINDS = {
     'WAIT_THRUST',     # not published: block until every drone's ELRSCommand on the arg
                        # template (default cmd_ready_topic) is armed above idle throttle,
                        # then shift later events (M2 bench: hangers release only under thrust)
+    'MOCAP_LOSS',  # std_msgs/Float64 on /drone_<id>/mocap_dropout: the sim mocap emulator stops that
+                   # drone's state for arg "id [seconds]" (default 600): a lost marker set, the tracker's
+                   # own pose-timeout fault (card 2026-10-09_newcomer_fault_scope)
     'WAIT_LOG',   # not published: block until the dissipative planner has logged a line matching
                   # the arg's regex (any time this run), then shift later events; arg
                   # '[timeout_s] regex', e.g. '60 approach: drone 3 descend' (event LOGGED or
@@ -90,6 +93,17 @@ def wait_lift_arg(arg):
     if timeout is not None and timeout <= 0:
         raise ValueError(f'WAIT_LIFT timeout must be > 0, got {timeout}')
     return z, timeout
+
+
+def mocap_loss_arg(arg):
+    """MOCAP_LOSS arg -> (drone id, seconds): 'id [seconds]' (default 600 s, the rest of the run)."""
+    parts = str(arg if arg is not None else '').split()
+    if not 1 <= len(parts) <= 2:
+        raise ValueError(f"MOCAP_LOSS arg {arg!r}: expected 'drone_id [seconds]'")
+    secs = float(parts[1]) if len(parts) == 2 else 600.0
+    if secs <= 0:
+        raise ValueError(f'MOCAP_LOSS seconds must be > 0, got {secs}')
+    return int(parts[0]), secs
 
 
 def wait_log_arg(arg):
@@ -150,6 +164,8 @@ class Event:
             raise ValueError(f"WAIT_THRUST arg {self.arg!r} has no '{{i}}' for the drone id")
         if self.do == 'WRENCH':
             wrench_arg(self.arg)
+        if self.do == 'MOCAP_LOSS':
+            mocap_loss_arg(self.arg)
         if self.do in ('ATTACH', 'DETACH', 'RELEASE'):
             if self.arg is None:
                 raise ValueError(f'{self.do} needs a drone id as its arg')

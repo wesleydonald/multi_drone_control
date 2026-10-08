@@ -333,6 +333,21 @@ class DissipativeController(LoadPlanner):
         self._departed_wait = {}        # d -> s still held after its magnet OFF
         self._attach_pos_t = [None] * self.reserved_attach
         self._off_resend_t = None
+        # a fault on an unwelded newcomer grounds it alone (card 2026-10-09_newcomer_fault_scope; Wesley
+        # 8 Oct night): each reserved drone's latched /drone_d/on_load (False while it is not on the ring)
+        # tells the fleet manager not to escalate its in-flight disarm. Off = the fleet-wide stop.
+        self._newcomer_fault_alone = bool(p('newcomer_fault_alone', False).value) and not self._partner_release
+        self._newcomer_armed = {}
+        self._on_load_pubs = {}
+        if self._newcomer_fault_alone:
+            on_load_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                                     reliability=ReliabilityPolicy.RELIABLE)
+            for j in range(self.reserved_attach):
+                d = self._n_carry0 + j
+                self._on_load_pubs[d] = self.create_publisher(Bool, f'/drone_{d}/on_load', on_load_qos)
+                self._on_load_pubs[d].publish(Bool(data=False))
+                self.create_subscription(Bool, f'/drone_{d}/arming_state_feedback',
+                                         lambda msg, j=j: self._newcomer_arming_cb(msg, j), 5)
         self._net_p_des = None                 # current network target (xy from traj, z hold)
         self._net_hold_z = None                # held/descending target height
         self._net_landing = False              # LAND received in the network phase
@@ -494,6 +509,20 @@ class DissipativeController(LoadPlanner):
         from the fleet size at construction: self.n shrinks/grows with OCP resizes."""
         j = d - self._n_carry0
         return j if 0 <= j < self.reserved_attach else None
+
+    def _set_on_load(self, d, on):
+        pub = getattr(self, '_on_load_pubs', {}).get(d)
+        if pub is not None:
+            pub.publish(Bool(data=bool(on)))
+
+    def _weld_refused(self, j):
+        """Why reserved drone j may not be folded in now, or None."""
+        why = self._newcomer_out.get(j)
+        if why == 'fault':
+            return 'it disarmed in flight'
+        if self._newcomer_lifecycle and (why is not None or self._land_to_ground):
+            return why or 'LAND in progress'
+        return None
 
     def _pos(self, d):
         """Drone d's measured position: its planner slot, else a reserved drone's own mocap (an
@@ -917,6 +946,7 @@ class DissipativeController(LoadPlanner):
             self._release_magnet(d)
         else:
             self._magnet_cmd_pub.publish(String(data='OFF'))   # magnet-welded newcomer
+        self._set_on_load(d, False)                            # off the ring: a fault grounds it alone
         self._departed_hold[d] = np.asarray(self.drone_pos[d], float).copy() \
             if self.drone_pos[d] is not None else None
         if self._partner_release and self._reserved_index(d) is not None \
@@ -1205,13 +1235,16 @@ class DissipativeController(LoadPlanner):
         """The collaborator's manager announces a completed magnet weld here. On True,
         fold every still-pending reserved drone into the network (usually just one)."""
         if not msg.data:
+            for j in range(self.reserved_attach):
+                if self.attach_pending[j]:
+                    self._set_on_load(self._n_carry0 + j, False)   # a refused weld let go
             return
         for j in range(self.reserved_attach):
             if self.attach_pending[j]:
-                if self._newcomer_lifecycle and (j in self._newcomer_out or self._land_to_ground):
-                    self.get_logger().warn(
-                        f'[dissipative] weld of {_who(self._n_carry0 + j)} refused: '
-                        f'{self._newcomer_out.get(j, "LAND in progress")}')
+                self._set_on_load(self._n_carry0 + j, True)     # physically on the ring now
+                why = self._weld_refused(j)
+                if why is not None:
+                    self.get_logger().warn(f'[dissipative] weld of {_who(self._n_carry0 + j)} refused: {why}')
                     self._magnet_cmd_pub.publish(String(data='OFF'))
                     continue
                 self._do_attach(self._n_carry0 + j)
@@ -1364,6 +1397,33 @@ class DissipativeController(LoadPlanner):
             self._off_resend_t = 0.0
             self._magnet_cmd_pub.publish(String(data='OFF'))
 
+    def _newcomer_arming_cb(self, msg, j):
+        """A reserved drone that is not on the ring disarms in flight (its tracker's own fault: tilt, speed,
+        pose lost, reference stale). The fleet manager does not escalate it (its on_load is False); here it
+        is out of this flight: magnet OFF, its approach and departed path dropped so the landed gate does
+        not wait for a drone that has fallen, and no weld later."""
+        was = self._newcomer_armed.get(j, False)
+        self._newcomer_armed[j] = bool(msg.data)
+        if not was or msg.data or not getattr(self, 'takeoff_seen', False) or self._landed:
+            return
+        d = self._n_carry0 + j
+        if not self.attach_pending[j] and d not in self._departed_hold:
+            return                                     # on the ring: a carrier like any other
+        if self._newcomer_out.get(j) == 'fault':
+            return
+        self._newcomer_out[j] = 'fault'
+        if self.attach_pending[j]:
+            self._magnet_cmd_pub.publish(String(data='OFF'))
+            self._off_resend_t = 0.0
+        self._approach.pop(j, None)
+        for st in (self._departed_hold, self._departed_step, self._departed_next,
+                   self._departed_td, self._departed_clear, self._departed_wait):
+            st.pop(d, None)
+        self._departed_landing.discard(d)
+        self._land_alone.discard(d)
+        self.get_logger().error(f'[dissipative] {_who(d)} disarmed in flight off the ring: out of this '
+                                f'flight, the carriers fly on')
+
     def _do_attach(self, d):
         """Add physical drone d to the dissipative network (mirror of _fleet_detach_cb).
         The first attach also performs the OCP -> network handover, so an attach works
@@ -1372,9 +1432,9 @@ class DissipativeController(LoadPlanner):
             self.get_logger().warn(f'[dissipative] /fleet/attach {d} out of range')
             return
         j = self._reserved_index(d)
-        if j is not None and self._newcomer_lifecycle and (j in self._newcomer_out or self._land_to_ground):
-            self.get_logger().warn(f'[dissipative] attach of {_who(d)} refused: '
-                                   f'{self._newcomer_out.get(j, "LAND in progress")}')
+        why = self._weld_refused(j) if j is not None else None
+        if why is not None:
+            self.get_logger().warn(f'[dissipative] attach of {_who(d)} refused: {why}')
             return
         if self.phase == 'creep' and self._start_weld_joins_creep(d):
             self._attach_ocp(d, start_creep=True)
@@ -1428,6 +1488,7 @@ class DissipativeController(LoadPlanner):
         self.net.attach(slot, measured, cable_len_k=self._attach_cable_len,
                         central=self._attach_central, handout=self._attach_handout,
                         elev_deg_k=self._attach_elev_deg)
+        self._set_on_load(d, True)
         if self._reserved_index(d) is not None:
             self.attach_pending[self._reserved_index(d)] = False
             getattr(self, '_warm_latched', set()).discard(self._reserved_index(d))
@@ -1546,6 +1607,7 @@ class DissipativeController(LoadPlanner):
         self.drone_pos[d] = np.asarray(measured, float).copy()
         self.drone_vel[d] = np.zeros(3)
         self._ocp_attached[d] = True
+        self._set_on_load(d, True)
         if j is not None:
             self.attach_pending[j] = False
             getattr(self, '_warm_latched', set()).discard(j)
@@ -1702,10 +1764,10 @@ class DissipativeController(LoadPlanner):
     def _newcomers_out_on_land(self, cmd):
         """LAND lands every drone (Wesley 8 Oct, M1 rule a): before the fleet descends, every unwelded
         newcomer is taken out of the flight and lands by itself, clear of the ring."""
-        if not self._newcomer_lifecycle:
-            return
         if cmd.strip().upper() == 'ARM' and not getattr(self, 'takeoff_seen', False):
             self._newcomer_out.clear()          # a refused ARM and a re-ARM: a fresh flight
+            return
+        if not self._newcomer_lifecycle:
             return
         if cmd.strip().upper() != 'LAND' or not getattr(self, 'takeoff_seen', False) \
                 or self.phase != 'planner' or self._land_to_ground or self._dropped is not None:

@@ -71,7 +71,7 @@ def _node(start_taut=False, takeoff_seen=False, reconfig='ocp', start_attached=T
     f.creep = CreepController(3, f.rho, CABLE, 20, 0.1, 9.81, 45.0, 10.0,
                               lambda i: f.drone_pos[f.slot2drone[i]], lambda i, nodes: None, log)
     for name in ('_do_attach', '_attach_ocp', '_start_weld_joins_creep', '_reserved_index',
-                 '_capture_weld_rho'):
+                 '_capture_weld_rho', '_weld_refused', '_set_on_load'):
         setattr(f, name, MethodType(getattr(D, name), f))
     f.resize_fleet = MethodType(LoadPlanner.resize_fleet, f)
     return f, log

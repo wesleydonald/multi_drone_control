@@ -30,11 +30,11 @@ from rcl_interfaces.msg import Log
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from rosgraph_msgs.msg import Clock
-from std_msgs.msg import Bool, Empty, Float64MultiArray, Int32, String
+from std_msgs.msg import Bool, Empty, Float64, Float64MultiArray, Int32, String
 
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
-from .config import wait_lift_arg, wait_log_arg, wrench_arg
+from .config import mocap_loss_arg, wait_lift_arg, wait_log_arg, wrench_arg
 
 ARM_FAIL = 'fleet manager ARM failed or refused'
 
@@ -167,6 +167,10 @@ class ExperimentRunner(Node):
         # RELEASE: the joint's own topic, made at start so it is matched before the event
         self.release_pubs = {int(e.arg): self.create_publisher(Empty, f'/drone_{int(e.arg)}/detach', 1)
                              for e in cfg.events if e.do == 'RELEASE'}
+        # MOCAP_LOSS: the sim mocap emulator's dropout input, made at start for the same reason
+        self.dropout_pubs = {mocap_loss_arg(e.arg)[0]: self.create_publisher(
+            Float64, f'/drone_{mocap_loss_arg(e.arg)[0]}/mocap_dropout', 5)
+            for e in cfg.events if e.do == 'MOCAP_LOSS'}
         if any(e.do == 'WRENCH' for e in cfg.events):
             self._wrench_publisher()
         self.handoff_pub = self.create_publisher(Bool, '/join_planner/handoff_ready', 10)
@@ -529,6 +533,9 @@ class ExperimentRunner(Node):
             pub = self.release_pubs[int(ev.arg)]
             self._publish(pub, Empty(), f'/drone_{ev.arg}/detach (unannounced)')
             self._repeats.append((self._rel() + 0.5, pub, Empty()))
+        elif ev.do == 'MOCAP_LOSS':
+            d, secs = mocap_loss_arg(ev.arg)
+            self._publish(self.dropout_pubs[d], Float64(data=secs), f'/drone_{d}/mocap_dropout {secs:.0f} s')
         elif ev.do == 'HANDOFF':
             # latched True, as his planner does while ATTACH_READY; the consumers act on
             # the first True only

@@ -240,6 +240,7 @@ def attach(context, launch_dir, profile_vals):
                      'attach_datum_shift': b('attach_datum_shift'),
                      'attach_moving': b('attach_moving'),
                      'newcomer_lifecycle': b('newcomer_lifecycle'),
+                     'newcomer_fault_alone': b('newcomer_fault_alone'),
                      'attach_approach_direct': b('attach_approach_direct'),
                      'attach_traj_hold_mode': LaunchConfiguration('attach_traj_hold_mode'),
                      'hold_resume_tilt_deg': f('hold_resume_tilt_deg'),
