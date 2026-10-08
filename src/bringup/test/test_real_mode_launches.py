@@ -129,7 +129,8 @@ def evaluate(launch_file, **args):
 
 
 def sim(mode, **args):
-    # attach and network exist only on the legacy profile (no rig-twin attach world yet)
+    # network exists only on the legacy profile; the legacy attach graph is what these tests
+    # check unless legacy=False is typed (the twin attach worlds, 8 Oct)
     if mode in ('attach', 'network'):
         args.setdefault('legacy', True)
     return evaluate('sim_control_launch.py', mode=mode, **args)
@@ -708,3 +709,26 @@ def test_rig_attach_flies_the_m1_layout_and_honours_a_params_file(tmp_path):
     pf.write_text('handover_elev_deg: 55.0\n')
     p = _by_name(rig('attach', enable_approach_mpc=False, params_file=str(pf)))['/dissipative_planner']['params']
     assert p['handover_elev_deg'] == 55.0
+
+
+def test_twin_attach_flies_the_rig_layout_on_the_twin_plant():
+    """mode:=attach on the twin (8 Oct): the M1 rig layout, the affine plant on every drone including
+    the newcomer, the twin geometry to the trackers and the planner, attach_z passed."""
+    g = _by_name(sim('attach', legacy=False, num_drones=3,
+                     sim_thrust_offset='0.181,0.185,0.187,0.187'))
+    p = g['/dissipative_planner']['params']
+    assert p['attach_azimuths_deg'] in ('270,30,150', [270.0, 30.0, 150.0])
+    assert p['attach_y_offset'] == 0.225 and p['attach_z'] == 0.02
+    assert p['pivot_offset'] == [0.0, 0.0, -0.04]
+    bf = {k: n['params'] for k, n in g.items() if '/bf_comm_' in k}
+    assert sorted(bf) == ['/bf_comm_0', '/bf_comm_1', '/bf_comm_2', '/bf_comm_3']
+    assert [bf[f'/bf_comm_{i}']['thrust_offset'] for i in range(4)] == [0.181, 0.185, 0.187, 0.187]
+    assert all(v['thrust_map'] == 'rig' for v in bf.values())
+    assert g['/tracker_3']['params']['thrust_offset'] == 0.185
+
+
+def test_legacy_attach_unchanged_by_the_twin_plumbing():
+    g = _by_name(sim('attach', num_drones=3))
+    p = g['/dissipative_planner']['params']
+    assert 'attach_z' not in p and 'pivot_offset' not in p
+    assert all('thrust_map' not in n['params'] for k, n in g.items() if '/bf_comm_' in k)

@@ -24,7 +24,7 @@ WORLDS = REPO / 'simulation_assets'
 LEGACY_WORLDS = WORLDS / 'old_worlds'
 LAUNCHES = REPO / 'src/bringup/launch'
 PROFILES = [f'{side}/{mode}' for side, modes in
-            (('sim', ('mpc', 'free_hover', 'dissipative')),
+            (('sim', ('mpc', 'free_hover', 'dissipative', 'attach')),
              ('sim_legacy', ('mpc', 'free_hover', 'dissipative', 'network', 'attach')),
              ('real', ('mpc', 'free_hover', 'dissipative', 'attach', 'm2'))) for mode in modes]
 

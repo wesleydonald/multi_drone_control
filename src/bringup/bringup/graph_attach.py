@@ -108,8 +108,10 @@ def attach(context, launch_dir, profile_vals):
         LaunchConfiguration('partner_attached').perform(context).lower() in ('1', 'true', 'yes'))
 
     x0_imu = _x0_rate_imu_drones(context, n, real)
-    # rig: the carry's thrust map and geometry; the sim attach graph passes neither
-    map_tracker, _, map_planner = map_and_geometry(context, n, real) if real else ({}, {}, {})
+    # the thrust map and geometry: the rig carry's on the rig, the twin's typed knobs in sim (the
+    # twin attach worlds, 8 Oct; legacy leaves them '' = node defaults); n+1 plant offsets with the newcomer
+    n_plant = n + (1 if truthy(context, 'enable_approach') else 0)
+    map_tracker, map_bf, map_planner = map_and_geometry(context, n_plant, real)
 
     # ── 3 TETHERED drones: bridges + betaflight comm + our tracker (as dissipative_launch) ──
     for i, drone_name in enumerate(drone_names):
@@ -131,7 +133,8 @@ def attach(context, launch_dir, profile_vals):
                 parameters=[{'drone_id': i, 'drone_name': drone_name,
                              'parent_model': PARENT_MODEL,
                              'rate_source': LaunchConfiguration('rate_source'),
-                             'imu_topic': f'/drone_{i}/imu'}]))
+                             'imu_topic': f'/drone_{i}/imu',
+                             **{k: (v[i] if isinstance(v, list) else v) for k, v in map_bf.items()}}]))
         nodes.append(Node(
             package='tracker', executable='tracker', name=f'tracker_{i}',
             parameters=[{'drone_id': i,
@@ -243,6 +246,10 @@ def attach(context, launch_dir, profile_vals):
                      'diss_a_i_load_max': f('diss_a_i_load_max'),
                      'diss_trim_share_weighted': b('diss_trim_share_weighted'),
                      'net_land_z': f('net_land_z'),
+                     # the plate height in the ring frame: the planner flew params.py's 0.025 (twin
+                     # world 0.02, rig 0.0) because no attach graph passed it (8 Oct)
+                     **({'attach_z': f('attach_z')}
+                        if LaunchConfiguration('attach_z').perform(context).strip() else {}),
                      'attach_approach': (not sil) and (not enable_approach_mpc) and (not partner),
                      'approach_hold': not partner,
                      'partner_handoff_topic': '/join_planner/handoff_ready' if partner else '',
@@ -347,7 +354,8 @@ def attach(context, launch_dir, profile_vals):
             name=f'bf_comm_{d}',
             parameters=[{'drone_id': d, 'drone_name': dn, 'parent_model': PARENT_MODEL,
                          'rate_source': LaunchConfiguration('rate_source'),
-                         'imu_topic': f'/drone_{d}/imu'}],
+                         'imu_topic': f'/drone_{d}/imu',
+                         **{k: (v[d] if isinstance(v, list) else v) for k, v in map_bf.items()}}],
             remappings=[(f'/model/{PARENT_MODEL}/model/{dn}/pose', f'/model/{dn}/pose')]))
 
     if not sil:

@@ -24,7 +24,7 @@ MODES = {'sim': ('mpc', 'free_hover', 'dissipative', 'network', 'attach'),
 DEFAULT_MODE = 'dissipative'     # Wesley 8 Oct (was mpc); legacy:=true keeps mpc
 LEGACY_DEFAULT_MODE = 'mpc'
 # sim modes with no rig-twin world or thrust-map plumbing yet (docs/redo_on_twin.md)
-LEGACY_ONLY = ('attach', 'network')
+LEGACY_ONLY = ('network',)          # attach flies the twin attach worlds since 8 Oct
 
 # launch arguments: knobs set in >= 3 configs or commands, then the structural ones
 KEPT_COMMON = (
@@ -126,7 +126,7 @@ def profile(side, mode, params_file='', cdir=None, legacy=False):
                            f'{", ".join(MODES[side])}, got {mode!r}')
     legacy = side == 'sim' and bool(legacy)
     if side == 'sim' and mode in LEGACY_ONLY and not legacy:
-        raise RuntimeError(f'sim_control_launch.py: mode {mode} has no rig-twin attach world yet: '
+        raise RuntimeError(f'sim_control_launch.py: mode {mode} has no rig-twin world yet: '
                            f'legacy:=true (a world in simulation_assets/old_worlds/)')
     cdir = cdir or config_dir()
     s = _load(os.path.join(cdir, side_file(side, legacy)))
