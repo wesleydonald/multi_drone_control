@@ -9,8 +9,8 @@
    the 0.55 rod, it was 0.51: the kind of mismatch behind the R0547 yank).
 3. **The one variable.** approach.body_to_tip(rod, pivot_z), used by ApproachProfile and _capture_weld_rho only
    (twin-attach 08d9712 and the helper commit). Legacy (pivot 0): unchanged.
-4. **Baseline.** The same twin dry approach with pivot_offset_z typed 0 for the newcomer path (= the pre-change
-   approach): one run, named as the baseline.
+4. **Baseline.** The same twin dry approach with attach_cable_len typed 0.51, so body_to_tip is 0.55 = the
+   pre-change approach arm (pivot_offset is fleet-wide and stays): one run, named as the baseline.
 5. **Pass / fail** (critic: falsify on geometry, not the total tip error, which mixes in the newcomer's own 2-3 cm
    hover offset, R0653). The runner now records /magnet_tip_pose and /attach_target/pose (tip_*, tip_target_*).
    Report three numbers over the 5 s hold: body - body reference (tracker), measured body - tip (geometry), tip -
