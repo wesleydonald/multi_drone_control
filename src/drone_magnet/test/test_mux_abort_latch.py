@@ -183,3 +183,27 @@ def test_ours_only_mux_reports_ours(monkeypatch):
         n.destroy_node()
     finally:
         rclpy.shutdown()
+
+
+# ── combined stack (Wesley 8 Oct): ours from boot, partner aux zeroed on the rig ──
+
+def test_partner_aux_zeroed_except_the_magnet_channel():
+    from drone_magnet.elrs_mux import zero_partner_aux
+    m = ELRSCommand(armed=True, channel_2=0.3, channel_5=1.0, channel_6=1.0, channel_7=1.0,
+                    channel_8=1.0, channel_9=1.0, channel_10=1.0)
+    out = zero_partner_aux(m, keep=(6,))
+    assert (out.channel_5, out.channel_7, out.channel_8, out.channel_9, out.channel_10) == (0, 0, 0, 0, 0)
+    assert out.channel_6 == 1.0 and out.channel_2 == pytest.approx(0.3) and m.channel_5 == 1.0
+
+
+def test_start_ours_forwards_our_idle_and_nothing_of_the_partner_before_release(mux_factory, monkeypatch):
+    n = mux_factory()
+    n._start_ours = True
+    n.policy.welded = True
+    n.policy._switched = True
+    n._attached = True
+    n._diss_cb(ELRSCommand(armed=True, channel_2=-1.0))     # our armed idle on the floor
+    assert n.pub.msgs[-1].armed and n.pub.msgs[-1].channel_2 == -1.0
+    before = len(n.pub.msgs)
+    n._tejen_cb(_cmd())                                       # his stream before /partner/release
+    assert len(n.pub.msgs) == before

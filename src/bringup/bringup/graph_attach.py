@@ -372,6 +372,9 @@ def attach(context, launch_dir, profile_vals):
                          'approach_stream': enable_approach_mpc or partner,
                          'handoff_topic': '/join_planner/handoff_ready' if partner else '',
                          'release_topic': '/partner/release' if partner_attached else '',
+                         # a start-welded drone is a carrier: ours from boot (combined-stack O1)
+                         'start_ours': partner_attached,
+                         **({'zero_partner_aux': True} if real and partner else {}),
                          **rig_magnet}],
             output='screen'))
 

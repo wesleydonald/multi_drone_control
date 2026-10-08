@@ -19,6 +19,8 @@ ignores /fleet/abort, so while it is selected its next command would re-arm a dr
 abort just disarmed. On the first /fleet/abort the mux latches and forwards only disarmed
 idle commands, whichever input is selected, until the node restarts.
 """
+import copy
+
 import rclpy
 from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
@@ -50,6 +52,25 @@ def abort_latch_command(msg=None):
     return out
 
 
+# the partner MPC sends +1 on aux channels 5 and 7-10 when armed; on QUAD4 any of them could be
+# mapped to a Betaflight mode, so they are zeroed on his stream (Wesley 8 Oct: always). Channel 6
+# is the magnet, set by its own writer.
+PARTNER_AUX_ZEROED = (5, 7, 8, 9, 10)
+
+
+def zero_partner_aux(msg, keep=()):
+    """A copy of msg with the partner's aux channels zeroed, except `keep` (the magnet channel,
+    which has its own writer). Never mutates msg."""
+    out = copy.copy(msg)
+    for ch in PARTNER_AUX_ZEROED:
+        if ch in keep:
+            continue
+        field = f'channel_{ch}'
+        if hasattr(out, field):
+            setattr(out, field, 0.0)
+    return out
+
+
 def merge_magnet_channel(msg, channel, value):
     """Write the magnet aux channel into a command about to be forwarded. On hardware the
     magnet manager publishes its ON/OFF on a separate ELRSCommand topic that never reaches
@@ -76,6 +97,15 @@ class ElrsMux(Node):
             live_timeout_s=float(self.declare_parameter('live_timeout_s', 0.5).value))
         self._attached = False
         self.drone_id = drone_id
+        # a drone that starts welded as a carrier is OURS from boot (Wesley 8 Oct, combined-stack O1):
+        # it arms at our idle throttle and nothing of the partner's is forwarded before /partner/release
+        self._start_ours = bool(self.declare_parameter('start_ours', False).value)
+        # rig: zero the partner's aux channels on his stream (the sim plant ignores them)
+        self._zero_aux = bool(self.declare_parameter('zero_partner_aux', False).value)
+        if self._start_ours:
+            self.policy.welded = True
+            self.policy._switched = True
+            self._attached = True
 
         self.pub = self.create_publisher(ELRSCommand, f'/drone_{drone_id}/ELRSCommand', 1)
         self._state = None
@@ -118,8 +148,10 @@ class ElrsMux(Node):
             self.create_subscription(ELRSCommand, magnet_topic, self._magnet_cb, 5)
         self._publish_state()
         self.get_logger().info(
-            f'[elrs_mux] drone {drone_id}: forwarding APPROACH until /magnet/object_attached'
-            f' (latch={self.policy.latch}, require_live={self.policy.require_live})')
+            f'[elrs_mux] drone {drone_id}: '
+            + ('OURS from boot until /partner/release' if self._start_ours
+               else 'forwarding APPROACH until /magnet/object_attached')
+            + f' (latch={self.policy.latch}, require_live={self.policy.require_live})')
 
     def _now(self):
         return self.get_clock().now().nanoseconds * 1e-9
@@ -207,7 +239,7 @@ class ElrsMux(Node):
             self._publish_state()
             self.get_logger().info('[elrs_mux] RELEASED -> APPROACH controller (partner mission)')
         if not self._attached and not self._ours_only:
-            self._forward(msg)
+            self._forward(zero_partner_aux(msg, keep=(self._magnet_channel,)) if self._zero_aux else msg)
 
     def _diss_cb(self, msg: ELRSCommand):
         if self._ours_only:
