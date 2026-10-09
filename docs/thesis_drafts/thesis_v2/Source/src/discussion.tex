@@ -15,9 +15,10 @@ detach is yes, with a condition. A detach by OCP resize redistributes the load i
 and the payload settles level within a few seconds, provided the survivors' attachment points still
 surround its centre of mass. The centralised planner's advantage is that it knows the
 whole attachment geometry. It does not have to discover the new load distribution from the motion
-that follows the event: it solves for it. This supports the hypothesis of the project plan. Neither
-reconfiguration has been flown on the rig.
-% CHECK: stale since the 7-8 Oct rig detach flights (Section 4.3, fig:rig_detach).
+that follows the event: it solves for it. This supports the hypothesis of the project plan. On the rig
+the detach held the ring in all four flights, announced and unannounced, in a hover and in the circle,
+with peak tilts of 6.5--17.8$^\circ$ (Section~\ref{sec:res_detach_rig}); the attach has not yet been
+flown on the rig.
 
 \redo{the attach half of RQ1: the weld transient of an attach by OCP resize in the full rejoin mission (Section~\ref{sec:sim_attach}).}
 % --- original text, flown before the rig twin; kept to refill this place:
@@ -107,11 +108,208 @@ before the twin could be trusted:
 \end{itemize}
 Finding them took as long as the controller work.
 
+\paragraph{Against the literature.} Table~\ref{tab:lit_compare} sets this work against the closest works,
+in the numbers each reports. On a path the rig's ring stayed within 3\,cm of its reference on average, 3--6\,\%
+of the path's half-extent, the same order as Sun et al.'s 4.1\,\% at 1\,m/s and Wang et al.'s 4.7\,\%; but this
+work flew at a tenth of their speed, so the comparison places its accuracy at low speed only. No other work in
+the table reports the transient of a UAV leaving the team in flight: Quan et al.\ remove or lose a UAV with
+94\,\% success but give no transient, and none flies a UAV joining. The rig's detach, with peak tilts of
+6.5--17.8$^\circ$ and dips of 5--7\,cm, is the only such number in the table; the attach has yet to give its rig
+number.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\caption{Cooperative transport of a suspended payload: this work against the closest works, as each
+reports it. ``--'': not reported.}
+\label{tab:lit_compare}
+\begin{tabularx}{\textwidth}{@{}
+  >{\raggedright\arraybackslash\hsize=0.88\hsize}X
+  >{\raggedright\arraybackslash\hsize=0.74\hsize}X
+  >{\raggedright\arraybackslash\hsize=0.82\hsize}X
+  >{\raggedright\arraybackslash\hsize=1.02\hsize}X
+  >{\raggedright\arraybackslash\hsize=1.18\hsize}X
+  >{\raggedright\arraybackslash\hsize=0.80\hsize}X
+  >{\raggedright\arraybackslash\hsize=1.44\hsize}X
+  >{\raggedright\arraybackslash\hsize=1.12\hsize}X@{}}
+\toprule
+Work & Test; UAVs & Payload; link & Path; speed & Position error\textsuperscript{a} &
+Tilt\textsuperscript{b} & UAV removed or added in flight & Control; solve time \\
+\midrule
+Lee \cite{lee2018geometric},\newline 2018 & Sim; 3 & 1.5\,kg box; rigid links 1\,m &
+figure-eight $\pm1.2 \times \pm4.2$\,m; -- & figure only & figure only & -- & geometric PID; -- \\
+\addlinespace
+Klausen \cite{klausen2020cooperative},\newline 2020 & Real, outdoor; 3 & 1.0, 2.2\,kg point mass; -- &
+pilot-set velocity; -- & -- (inter-UAV link error 16--57\,cm) & -- (point mass) & -- &
+decentralised passivity-based; -- \\
+\addlinespace
+Gabellieri\newline \cite{gabellieri2023force}, 2023 & Real (mocap); 2 & 0.2\,kg, 2\,m bar; cables 1\,m &
+pose regulation, no path & -- & figure only & -- & decentralised admittance; -- \\
+\addlinespace
+Wang \cite{wangRobustCooperativeTransportation2024},\newline 2024 & Real (mocap); 3 & point mass; cables
+0.6\,m (sim) & curve on a 1.3\,m sphere; 3\,m/s (sim) & mean 6.1\,cm in steady state (4.7\,\%) &
+-- (point mass) & -- (cable angle 30 to 70$^\circ$ in flight) & backstepping; -- \\
+\addlinespace
+Sun \cite{tudelft},\newline 2025 & Real (mocap); 3, some flights 4 & 1.4\,kg; cables 1\,m & figure-eight
+$\pm2.5 \times \pm2$\,m; peak 1 to 5\,m/s & RMSE 10.2\,cm (4.1\,\%) at 1\,m/s, 19.7\,cm (7.9\,\%) at
+5\,m/s & attitude RMSE 12.9$^\circ$ at 5\,m/s & -- (fixed team) & central OCP 10\,Hz, 2\,s horizon;
+mean 15.3\,ms (3 UAVs) \\
+\addlinespace
+Quan \cite{quan2025swarm},\newline 2025 (preprint) & Real, outdoor; 4 to 6 & 5\,kg; cables 3 to 4.5\,m &
+34\,m delivery; -- & -- (sim: 20--68\,\% of the baselines' error) & -- & one UAV removed or failed: 94\,\%
+success, transient --; joining not flown & decentralised dissipative; -- \\
+\midrule
+This work & Real (mocap), twin; 4 & 0.86\,kg ring; rigid rods 0.55\,m & circle, radius 0.5\,m,
+0.125\,m/s; figure-eight $\pm1.0 \times \pm0.5$\,m, peak 0.25\,m/s & circle: mean 2.9\,cm (5.8\,\%),
+max 5.7\,cm; figure-eight: mean 3.0\,cm (3.0\,\%), max 6.8\,cm; lag 0.2\,s & mean / max: circle
+1.7 / 4.0$^\circ$, figure-eight 2.6 / 5.9$^\circ$ & removed (rig, 4 to 3, four flights): tilt peak
+6.5--17.8$^\circ$, height dip 5.3--6.9\,cm, unannounced loss found in 0.33--0.42\,s, no drop; added
+(twin only, 3 to 4, one run): tilt peak 2.7$^\circ$, dip 0.1\,cm & central OCP 10\,Hz, 2\,s horizon;
+tracking MPC per UAV; median 31\,ms (3 UAVs), 51--66\,ms (4), none over 100\,ms \\
+\bottomrule
+\end{tabularx}
+
+\smallskip
+\parbox{\textwidth}{\scriptsize\raggedright
+\textsuperscript{a}\,In brackets: the error divided by the path's half-extent along its longer axis
+(circle: radius; figure-eight: long semi-amplitude; Wang: sphere radius). This work: mean horizontal
+distance from the time-indexed reference (the lag is in it); Sun et al.: 3-D RMSE; Wang et al.:
+steady-state mean of the 3-D error. A mean is never larger than the RMSE of the same signal.
+\textsuperscript{b}\,Payload tilt. This work: the ring's tilt from level; Sun et al.: axis-angle attitude
+error, yaw included. Mocap: motion capture; sim: simulation.
+Not like-for-like: speed (this work 0.125--0.25\,m/s, Sun et al.\ 1--5\,m/s, Wang et al.\ 3\,m/s in
+simulation, not restated for the flight); this work hangs the payload on rigid rods, the others on
+cables (Lee: rigid links, simulation only); a point mass (Klausen et al., Wang et al.) has no attitude;
+this work's rig entries are one flight each and its attach one twin run; this work's solve times are
+wall-clock medians on a laptop shared with the motion capture and radio nodes, Sun et al.'s a mean CPU
+time; Klausen et al.\ and Quan et al.\ fly outdoors on satellite and onboard sensing.}
+\end{table}
+% ---------------------------------------------------------------------------------------------------
+% SOURCES: every number in Table tab:lit_compare.
+% Page references: "p.N" is the printed page; "PDF N" the page index of the file in
+% docs/papers/ (multi_drone_control repo). "[computed]" = arithmetic on stated numbers, done here.
+%
+% Normalisation used for the bracketed % (footnote a): error / half-extent of the path along its longer
+% axis. Sun: 2.5 m (x semi-amplitude, Table S1); Wang: 1.3 m (sphere radius, eq. 39); this work: circle
+% radius 0.5 m, figure-eight a = 1.0 m (Gerono lemniscate dx = a sin(th), dy = (a/2) sin(2 th), so
+% +-1.0 x +-0.5 m; mpc_planner/load_trajectory.py, thesis trajectories.tex).
+%
+% --- Lee 2018, IEEE TCST 26(1) 255-264, doi 10.1109/TCST.2017.2656060 (file "PDF.js viewer.pdf") ---
+%   Simulation only: abstract p.255/PDF 1 "illustrated by a numerical example"; no experiment.
+%   n = 3; m0 = 1.5 kg box 1.0 x 0.8 x 0.2 m; m_i = 0.755 kg; l_i = 1 m: p.260/PDF 6, Sec. V.
+%   Rigid massless links: abstract ("via rigid links"), Sec. II p.256/PDF 2, Fig. 1 caption.
+%   Path x0d = [1.2 sin(0.2 pi t), 4.2 cos(0.1 pi t), -0.5]: p.260/PDF 6. Speed not stated
+%   ([computed] peak ~1.5 m/s, not used in the table).
+%   Position and attitude error: Fig. 2(a), 2(b) only (Psi0 = 1/2 ||R0 - R0d||^2); no number in the text.
+%   No UAV removal/addition; no control rate or computation time.
+%
+% --- Klausen et al. 2020, IEEE TCST 28(2) 653-660, doi 10.1109/TCST.2018.2876518 (cooperative_control.pdf) ---
+%   Real: three hexacopters "each weighing 2.3-kg" (p.653/PDF 1; also m_c = 2.3 kg p.657/PDF 5; p.658
+%   says "2.2-kg UAVs": inconsistent in the paper, 2.3 used here). Loads "approximately 1 kg" and
+%   "approximately 2.2 kg" (p.657/PDF 5); point-mass load model. Outdoor, GNSS RTK + IMU (p.653, p.657).
+%   Formation "equal-sided triangle with sides of 5 m" (p.657/PDF 5); velocity reference set by a
+%   pilot (p.657, p.659). Cable length for the flights: not stated (simulation: l_i = 2 m, p.656/PDF 4).
+%   Mean link error (inter-UAV distance error, NOT payload error), Table I p.659/PDF 7: light load
+%   0.38 / 0.37 / 0.16 m, heavy load 0.57 / 0.34 / 0.46 m -> "16-57 cm" in the table.
+%   Simulation (p.656/PDF 4): N = 3, UAV 2 kg, load 3 kg, wires 2 m, 1 m/s, wind 4 m/s; link error
+%   plotted only (Fig. 5). Wind on the test day "estimated 4-6 m/s" (p.658/PDF 6).
+%   Decentralised passivity-based formation control (eqs. 16-23; Theorem 1 p.655). No rate, no
+%   computation time. No UAV removal/addition.
+%
+% --- Gabellieri et al. 2023, IROS, pp. 6920-6926, doi 10.1109/IROS55552.2023.10342240 (force_based.pdf) ---
+%   Real (Sec. VI, p.6925/PDF 6): two quadrotors 1.03 kg, cables 1 m, 2 m bar 0.2 kg; motion capture
+%   120 Hz fused with IMU 1 kHz; pose regulation to p_L = [0.5 0 1.5] m, psi 0.2 rad, theta -0.12 rad,
+%   t_L in {1, 2, 3} N (three runs). Attitude error: Fig. 5 box plots only (mean e_RL over the last
+%   20 s); text qualitative (p.6926/PDF 7). Position error: not reported.
+%   Simulation (Sec. V, p.6924/PDF 5): Gazebo, 0.5 kg 1 m bar, 27 runs; only stated error number is
+%   "100 deg in Scenario2" (equilibrium attitude error with a large force bias): not a tracking result.
+%   Admittance leader-follower, "does not require explicit communication" (Remark 1, p.6921-6922).
+%   No rate, no computation time. No UAV removal/addition.
+%
+% --- Wang et al. 2024, IEEE T-ITS 25(9) 11833-11843 (robust_cooperative.pdf) ---
+%   Simulation (Sec. VI, p.11840-11841/PDF 8-9): n = 3; m_L = 0.06 kg (point mass); m_i = 0.21 kg;
+%   cables 0.6 m (rigid, fixed length); Clelia curve eq. (39), 1.3 m sphere, constant speed 3 m/s.
+%   Converges "within approximately 5 s"; "converges to zero by the fourth second" vs 19 s for [9].
+%   Real (Sec. VII, p.11841-11842/PDF 9-10): VICON 100 Hz, three quadrotors (Fig. 1, Fig. 9 legend);
+%   tracks eq. (39) (speed not restated; ~1 m/s read off Fig. 8 by the extraction, not stated);
+%   "the mean position error is only 6.1 cm in steady-state" (p.11842/PDF 10, Sec. VII-B; Fig. 8
+%   inset 0.061 m). [computed] 0.061 / 1.3 = 4.7 %.
+%   Masses and cable length for the flights: not restated (sim values shown in the table, marked).
+%   Cable-angle reconfiguration theta_d 30 -> 70 -> 30 deg, eq. (40), window flight 0.6 m/s for 5 s
+%   (p.11842/PDF 10, Fig. 9); no position-error number for it. No UAV removal/addition.
+%   Backstepping (Fig. 5 p.11836/PDF 4); no rate, no computation time.
+%
+% --- Sun et al. 2025 (bib key tudelft), arXiv 2501.18802v2 (sun2025_...pdf); PDF page index ---
+%   Three quadrotors, 1.4 kg payload, quadrotor 0.6 kg, cables 1 m: PDF 5 (Results, Experimental
+%   Setup); Fig. S3 PDF 41. Four quadrotors in real flight: PDF 18 ("scaled up ... to four units"),
+%   Movie S3 PDF 46; nine in a simulated setpoint task (PDF 18, Fig. 7C).
+%   Paths: Table S1 PDF 45: Slow 2.5 cos(0.25t), 2 sin(0.5t); Fast 2.5 cos(t), 2 sin(2t); z 1.0.
+%   Table 1 PDF 6: vmax Slow 1, Medium 2, Medium Plus 2, Fast 5 m/s. Real position RMSE: Slow 0.102,
+%   Medium 0.093, Medium Plus 0.117, Fast 0.197 m. [computed] 0.102 / 2.5 = 4.1 %, 0.197 / 2.5 = 7.9 %.
+%   Fast real attitude RMSE 12.9 deg, PDF 8; axis-angle, Fig. 2 caption PDF 7; yaw reference
+%   0.25 rad/s, PDF 6.
+%   Planner: central OCP at 10 Hz on a laptop (PDF 6; Fig. 8 PDF 21), horizon 2 s (PDF 5), N = 20
+%   (PDF 23), acados SQP-RTI (PDF 23); onboard tracker 300 Hz with INDI (PDF 26).
+%   "The average CPU time consumed by the planner was 15.3 ms" (3 quadrotors, Fast, real; PDF 18),
+%   Intel i7-13700H; CPU time "grew exponentially" with team size, nine units within 10 Hz (PDF 18).
+%   Wind (PDF 14), not in the table: RMSE 0.048 vs 0.055 m (3 UAVs), 0.048 vs 0.070 m (4 UAVs).
+%   UAV failure, removal or addition: not tested anywhere in the 46 pages.
+%
+% --- Quan et al. 2025, arXiv 2509.03563v1, preprint (quan2025_...pdf; the local copy ends at PDF 9,
+%     mid-Results: Fig. 3 and the Methods are missing, so absent numbers may exist in the full paper) ---
+%   Teams of four, five and six (PDF 8, Results); 5 kg payload with five robots (PDF 8); 94 % success
+%   "under single-robot failure, disconnection events" with six robots (abstract, PDF 1-2; trial
+%   count not given). Cable labels 3, 3.5, 4, 4.5 m in the cable-length-uncertainty panel (Fig. 2,
+%   PDF 9). Delivery "34 m away", load at "15 m above the ground" (PDF 8). Winds up to Beaufort 4
+%   (abstract). Removal shown 4 -> 3 (Fig. 2 Unplug-and-Play, PDF 9); joining described only as a
+%   concept (PDF 8). Simulation tracking errors "20%, 68%, 55.5%, and 21.9% of existing approaches"
+%   (abstract, PDF 1): relative only. Decentralised dissipative force model, no explicit
+%   communication (abstract); onboard LiDAR, camera, DGPS (Fig. 2, PDF 9). No absolute error, tilt,
+%   transient, rate or computation time in PDF 1-9.
+%
+% --- This work: results/registry.csv (multi_drone_control repo) ---
+%   Payload 0.86 kg ring, rods 0.55 m, UAVs 0.55 kg: supplied with the task (the rig and rig-twin
+%   constants; not a registry measurement).
+%   Circle: RIG-1007-r206e60 (rig, 4 UAVs, mpc mode, even ring, orbit r 0.5 at 0.125 m/s, from +4 s
+%   to LAND): xy path err mean 2.91 cm, max 5.7 cm, lag 0.20 s, ring tilt mean 1.7 / max 4.0 deg,
+%   ring z sd 0.5 cm, z err -0.4 cm. [computed] 2.91 / 50 = 5.8 %.
+%   Figure-eight: RIG-1007-r2008e60 (rig, 4 UAVs, mpc, fig_8 a 1.0 at 0.25 m/s): mean 3.0 cm, max
+%   6.8 cm, lag 0.21 s, tilt mean 2.6 / max 5.9 deg, ring z err -0.7 cm. [computed] 3.0 / 100 = 3.0 %.
+%   Path error definition: results/rig/2026-10-07/figures/compare_paths.py: horizontal distance of the
+%   ring (mocap) from the planner's time-indexed payload reference, mean from +4 s on the path to LAND;
+%   lag = the time shift that best aligns the two paths. One flight each.
+%   Detach, rig, 4 -> 3, dissipative mode, drop_on_loss armed, one flight each:
+%     RIG-1008-r302_3 announced, hover: tilt peak 15.4 deg, ring z drop -6.9 cm, xy swing 11.9 cm,
+%       no drop, landed.
+%     RIG-1008-r303_4 unannounced, hover: detected 0.42 s after release, tilt peak 6.5 deg, no drop.
+%     RIG-1008-r304_3 unannounced, 150 deg gap: detected 0.33 s, tilt peak 17.8 deg, z drop -5.3 cm,
+%       xy swing 16.1 cm, no drop.
+%     RIG-1008-r305 unannounced, during the r 0.5 m / 0.125 m/s circle: detected 0.34 s, tilt peak
+%       8.1 deg, 3-D RMSE 6.8 cm (a constant ~6 cm offset: detach runs fly int_mode reference), no drop.
+%     -> tilt peak 6.5-17.8 deg (4 flights), height dip 5.3-6.9 cm (2 flights that report it),
+%        detection 0.33-0.42 s (3 unannounced flights).
+%     Twin bands for the same configs: R1207/R1212 7.4/8.6 deg, R1206/R1211 15.5/18.2 deg,
+%     R1208/R1213 7.3/6.0 deg.
+%     CORRECTION 9 Oct on all four rows: the freed UAV's touchdown detector stalled at 0.17-0.21 m and
+%     it was dropped ~0.3 m by the fleet disarm (card 2026-10-09_departed_ground_idle). Not a payload
+%     number, so not in the table; it qualifies "landed" for the freed UAV.
+%   Attach (no rig attach flown yet): twin R1266 (twin_r8b, exploratory, one run, hover, QUAD4 welded
+%     on plate 9, OCP resized 3 -> 4, 3.3 s on four then LAND): ring tilt peak weld..LAND 2.68 deg,
+%     ring dip 0.001 m.
+%   Planner solve time on the rig (supplied with the task; from the 7-8 Oct rig planner logs,
+%     results/rig/2026-10-0[78]/*_logs, tools/thesis_rig_figures.py fig_solve, docs/figures/F_solve_time;
+%     not a registry row): median 31 ms (3 UAVs), 66 ms (4 UAVs, dissipative mode), 51 ms (4 UAVs, mpc
+%     mode); no solve over the 100 ms budget. Note: trajectories.tex (Table tab:solve_times) still
+%     says 24-30 ms from the 1 Oct flights and that four UAVs were not yet timed on the rig: update it.
+%   10 Hz planner, 2 s horizon, per-UAV tracking MPC: the method chapter.
+%
+
 \paragraph{Limitations.} The work is at lab scale (a 0.86\,kg payload, two to four UAVs, a
 6\,$\times$\,6\,m room) with motion capture as the only sensing and all computation on one ground
 computer. The rods are rigid, so slack cables are outside the model. The attach depends on an
-electromagnet and on a collaborator's approach controller. The hardware results so far cover carrying
-only, with three UAVs on 1 October.
-% CHECK: stale since the 7-8 Oct rig flights (four UAVs; the detach flown on the rig).
+electromagnet and on a collaborator's approach controller. The hardware results cover carrying with
+three and four UAVs and the detach (1, 7 and 8 October), one run per condition; the attach has not yet
+been flown on the rig.
 Several simulation tables rest on single runs or on earlier code,
 and are marked as such; they will be re-flown on the final code before the results are frozen.

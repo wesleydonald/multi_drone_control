@@ -6,8 +6,7 @@
 % tools/thesis_sim_figures.py, run ids in configs/thesis_figures.yaml; rig: docs/rig_2026-09-30_review.md,
 % registry RIG-0930-* and RIG-1001-*; solve times from the planner logs (solve_ms) of the rig 1 Oct
 % flights h5_z100_rot120, c1_z100, f8_z100 and Gazebo R0978/R0979, R0931/R0935.
-% TODO (structure audit, item 9): set the hover and circle errors against TU Delft (normalised by
-% path size, tilt) here once the numbers are extracted.
+% The numeric comparison with the literature (structure audit, item 9) is in the discussion, tab:lit_compare.
 
 \subsection{Carrying with a fixed team}
 \label{sec:res_carry}
@@ -67,9 +66,9 @@ same window; each cell is the mean over the runs.}
 \subsubsection{Rig flights}
 \label{sec:rig_results}
 
-The hardware campaign so far covers carrying the ring with three and four UAVs. Neither detach nor
-attach has been flown on the rig.
-% CHECK: stale since the 7-8 Oct rig flights (the detach was flown on the rig; Section 4.3).
+The hardware campaign so far covers carrying the ring with three and four UAVs and, since 7 October,
+detaching one UAV in flight, announced and unannounced, from a hover and during the circle
+(Section~\ref{sec:res_detach_rig}). Attach has not yet been flown on the rig.
 The rig days, and what each changed, are listed in Appendix~\ref{sec:app_rig}.
 Table~\ref{tab:rig_oct1} gives the six flights of 1 October, with three UAVs to 1.0\,m.
 
@@ -106,6 +105,36 @@ figure-eight its whole path, and every flight landed. Three results stand out, a
 Section~\ref{sec:res_steady} takes them up: the ring sat low (Section~\ref{sec:res_cap}), its tilt fell
 with height (Section~\ref{sec:res_tilt}), and it drifted towards $-x$ (Section~\ref{sec:res_force}).
 
+\paragraph{7 October: four UAVs and the measured rod pull.} On 7 October four UAVs carried the ring on the
+circle and the figure-eight, first with the planned rod pull and then with the trackers' measured pull and the
+rods planned at 60$^\circ$ (Section~\ref{sec:tracker}). Table~\ref{tab:rig_oct7} gives both. Both paths flew
+about three times closer to their references with the measured pull, and both lags halved. Two things changed
+at once, so the table shows their combined effect. The measured pull alone flew the rods at the planned
+45$^\circ$, and at that angle a magnet let go 3.9\,s into the circle; planning 60$^\circ$ keeps each magnet's
+pull closer to its axis.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Circle (radius 0.5\,m at 0.125\,m/s) and figure-eight ($a = 1.0$\,m at 0.25\,m/s) at 1.0\,m on the
+rig, four UAVs, one run each, before and after the trackers were given the rod pull they measure and the rods
+were planned at 60$^\circ$; from 4\,s into the path to LAND. Path error: distance from the trajectory reference;
+lag: the time shift that best matches the ring to its reference.}
+\label{tab:rig_oct7}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xcccc}
+\toprule
+ & \multicolumn{2}{c}{Circle} & \multicolumn{2}{c}{Figure-eight} \\
+ & before & after & before & after \\
+\midrule
+path error, mean / max (cm) & 8.3 / 17.3 & 2.9 / 5.7 & 8.2 / 20.1 & 3.0 / 6.8 \\
+lag (s) & 0.45 & 0.20 & 0.41 & 0.21 \\
+ring height error, mean / sd (cm) & $-0.1$ / 4.8 & $-0.4$ / 0.5 & $-4.8$ / 4.7 & $-0.7$ / 0.6 \\
+ring tilt, mean / max & 2.7 / 6.6$^\circ$ & 1.7 / 4.0$^\circ$ & 3.6 / 10.7$^\circ$ & 2.6 / 5.9$^\circ$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+% Sources: registry RIG-1007-r006 / r206e60 (circle), r0007 / r2008e60 (figure-eight); card 2026-10-07_cable_mocap.
+
 \subsubsection{Thrust identification}
 \label{sec:thrust_id}
 
@@ -124,7 +153,17 @@ the UAV whose own offset is the lowest. A map identified at hover with one propo
 the UAVs 14--17\,cm low. Carrying the ring, the throttle the UAVs needed (0.55--0.60) matched what the
 map predicted for their share of the load (0.569--0.575).
 
-\pendingfig{fig:thrust_map}{Thrust identification: throttle against carried mass per UAV, coloured by pack voltage, with the affine fit and its residuals.}{the 30 Sep identification flights}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{Images/thrust_map.pdf}
+\caption[The rig's thrust map]{The rig's thrust map from 13 free hovers on 30 September, each UAV carrying 0, 98 or
+196\,g. (a) Hover throttle corrected to 23.5\,V and to the mean offset, against the hover mass; one colour per UAV
+(markers offset sideways by up to 9\,g so that hovers at the same mass can be seen); dashed: the fit
+\eqref{eq:thrust_fit} with per-UAV offsets $a_i$ of 0.181--0.187. (b) The residuals of the fit against the pack
+voltage: rms $3.2\times10^{-3}$, at most $5\times10^{-3}$ (about 1\,\% of hover throttle), with no trend left in
+voltage.}
+\label{fig:thrust_map}
+\end{figure}
 
 \subsubsection{Landing}
 \label{sec:sim_landing}
@@ -153,7 +192,17 @@ and settle within $\pm 2.6^\circ$ once the ramp ends.}
 \label{fig:landing}
 \end{figure}
 
-Figure~\ref{fig:land_phases} extends the landing to a LAND commanded in every flight phase.
+A LAND can come at any moment of a flight, not only from a settled hover. Figure~\ref{fig:land_phases}
+presses LAND in each phase of a flight, two runs per phase on one version of the code: on the floor, in the
+creep and the lift; in each phase of an attach (the newcomer parked, climbing, in transit, descending, over
+the plate, and 0.5, 2 and 4\,s after its weld); after a detach (the freed UAV stepping out, landing by
+itself, and after the ring is dropped); twice in a row; and in the circle. In 33 of the 34 runs every UAV
+landed and was disarmed, within 15\,s and with no UAV past 16$^\circ$. In the other, LAND came 0.5\,s
+after the weld: once the ring was down and the carriers unwound along their rods, the newcomer, held by the
+twin's rigid rod, lagged its outward reference, pitched over and stopped the fleet. Over every post-weld LAND
+flown in the twin this happened in 3 of 11 runs within 2\,s of a weld and in none of 5 at 4\,s. On the rig the
+newcomer hangs on a tether that goes slack, and the rig's landing has no unwind (it lands straight down), so this failure is read as the twin's rigid link; it is the first thing to watch
+in the rig's attach flights.
 
 \begin{table}[h]
 \centering
@@ -164,28 +213,47 @@ the landings without a tip.}
 \input{Source/src/tables/land}
 \end{table}
 
-\pendingfig{fig:land_phases}{LAND from every flight phase in the twin: outcome per repeat, the worst UAV tilt and the time from LAND to the last disarm.}{the LAND-every-phase re-fly (9 Oct, twin)}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{Images/land_phases.pdf}
+\caption[LAND in every phase of a flight]{LAND pressed in each phase of a flight in the rig twin, two runs per
+phase on one version of the code. (a) The largest tilt of any UAV between LAND and its disarm, against the
+30$^\circ$ bar. (b) The time from LAND until the fleet is landed and disarmed. Every UAV landed and was disarmed in
+33 of 34 runs, within 15\,s and with no UAV past 16$^\circ$. In the other run (LAND 0.5\,s after the newcomer's
+weld) the newcomer, on the twin's rigid rod, tipped while the carriers unwound after the ring was down, and the
+fleet stopped; its tilt is drawn at the edge of the axis with its value. Armed on the floor, LAND disarms the
+fleet at once.}
+\label{fig:land_phases}
+\end{figure}
 
 \subsubsection{Computation}
+\label{sec:res_compute}
 
-Both levels run on the same laptop as the motion-capture and radio nodes.
-Table~\ref{tab:solve_times} gives the planner's solve time per tick. On the rig, with three UAVs,
-the median is 24--30\,ms and the 95th percentile 49--55\,ms, inside the 60\,ms budget and the
-100\,ms tick. In Gazebo the same laptop also runs the physics and the simulated sensors, which slows
-the solves, but the simulation runs at about 0.3 of real time, so the planner still meets its tick in
-simulated time. The four-UAV planner has not yet been timed on the rig.
+Both levels run on the same laptop as the motion-capture and radio nodes. Figure~\ref{fig:solve_time}
+gives the planner's optimisation time per tick in flight on the rig, 7--8 October. With three UAVs the
+median was 31\,ms; with four, 66\,ms in the dissipative mode and 51\,ms in the trajectory mode. No tick
+reached the 100\,ms budget, but four UAVs leave about 12\,ms of headroom at the 99th percentile, so a fifth
+UAV would need a shorter horizon or a faster solver. In Gazebo the same laptop also runs the physics and the
+simulated sensors, which slows the solves (Table~\ref{tab:solve_times}), but the simulation runs at about
+0.3 of real time, so the planner still meets its tick in simulated time.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{Images/solve_time.pdf}
+\caption[Planner solve time on the rig]{The planner's optimisation time in flight on the rig, 7--8 October:
+three UAVs (after a detach, 15\,883 ticks), four UAVs (dissipative mode, 4\,762 ticks; trajectory mode,
+22\,385 ticks). Box: quartiles and median (gold); whiskers: 1st and 99th percentile; bar: the slowest tick.
+Medians 31, 66 and 51\,ms; 99th percentiles 44, 88 and 78\,ms; no tick reached the 100\,ms budget (dashed).}
+\label{fig:solve_time}
+\end{figure}
 
 \begin{table}[h]
 \centering
-\caption{Planner solve time per 10\,Hz tick (wall clock, one laptop).}
+\caption{Planner solve time per 10\,Hz tick in Gazebo (wall clock, one laptop that also runs the physics).}
 \label{tab:solve_times}
 \begin{tabular}{llccc}
 \toprule
 Platform & Case & Median (ms) & 95th pct. (ms) & Max (ms) \\
-\midrule
-Rig, 3 UAVs & hover at 1.0\,m & 30.4 & 54.9 & 73.3 \\
-            & orbit & 24.6 & 51.9 & 71.8 \\
-            & figure-eight & 23.8 & 49.3 & 76.6 \\
 \midrule
 Gazebo, 3 UAVs & hover at 1.0\,m & 46.7 & 97.8 & 137.9 \\
                & orbit & 47.1 & 91.0 & 149.6 \\
@@ -194,6 +262,8 @@ Gazebo, 4 UAVs & hover at 1.0\,m & 118.5 & 193.2 & 298.5 \\
 \bottomrule
 \end{tabular}
 \end{table}
+% The rig rows of the earlier table (3 UAVs, 1 Oct: hover 30.4/54.9/73.3, orbit 24.6/51.9/71.8, figure-eight
+% 23.8/49.3/76.6 ms) are superseded by fig:solve_time (7-8 Oct, every in-flight tick).
 
 On the last rig flight of 30 September the planner failed to solve 25 times. A replay of the planner on the logged states traced the failures to two faults acting
 together. The UAVs sat 30$^\circ$ round from the attachment points the planner modelled, one plate off,
@@ -201,10 +271,6 @@ and the payload's measured quaternion changed sign when its yaw crossed 180$^\ci
 removed every failure in the replay. The planner now keeps the quaternion's sign continuous and
 warns before ARM if a UAV sits more than 10$^\circ$ from its slot. None of the 1 October flights had a
 solve failure.
-Figure~\ref{fig:solve_scaling} sets the solve time against the number of UAVs.
-
-\pendingfig{fig:solve_scaling}{Planner solve time against the number of UAVs, rig and twin, against the 100\,ms budget.}{planner logs (rig 7-8 Oct; twin N = 2-6)}
-
 \subsubsection{The twin against the rig}
 \label{sec:sim_to_real}
 % NOTE (structure audit): the twin columns were flown before the tracker fix and have no redo box yet.

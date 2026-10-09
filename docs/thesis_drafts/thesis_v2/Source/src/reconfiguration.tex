@@ -48,10 +48,12 @@ Section~\ref{sec:sim_detach}. The OCP resize is the detach used in the rest of t
 % then hands back to a planner built for $N-1$. In simulation the OCP resize won this comparison
 % clearly (Section~\ref{sec:sim_detach}), and it is the detach used in the rest of this work.
 
-% CHECK: this paragraph and "Landing after a detach" describe the departed UAV's landing before the
-% change of Section 4.3 (fig:departed_landing: pressed to its own resting height, then disarmed alone).
-\paragraph{The departing UAV.} After the release the departing UAV holds the position where it
-detached. On LAND it steps out radially, clear of the ring and the survivors, and descends on its own.
+% Departed landing (pressed to its rest, disarmed alone): twin 9 Oct, card 2026-10-09_departed_disarm_alone;
+% the default once the LAND re-fly's reviewer passes it; rig W4/W5 on 14 Oct.
+\paragraph{The departing UAV.} After the release the departing UAV steps 0.5\,m out radially at its
+height, clear of the ring and the survivors, and lands on its own while the survivors carry on. Its
+landing ends at its own resting height: its height reference is pressed below that height until it gets
+there, and it is then disarmed alone, without waiting for the fleet (Section~\ref{sec:res_detach_rig}).
 On the rig the release is the UAV's magnet channel, switched by the same DETACH command.
 
 \paragraph{Layout.} Whether the payload can still hang level after a detach depends on the
@@ -65,8 +67,8 @@ from a moment balance at the actual attachment points, so the payload's referenc
 
 \paragraph{Landing after a detach.} A detach changes which UAVs land with the payload. Touchdown is
 judged on the survivors only, so a departed UAV still descending elsewhere does not hold the
-survivors' references down. The departed UAVs are judged by their own stall, and the fleet is
-declared landed only when they are down too. The cable feedforward is switched off once the payload
+survivors' references down. A departed UAV is judged down at its own resting height, and the fleet
+is declared landed only when the departed UAVs are down too. The cable feedforward is switched off once the payload
 rests, because its sideways component pushes a grounded survivor across the floor.
 % --- original text, flown before the rig twin; kept to refill this place:
 % declared landed only when they are down too. The cable feedforward is switched off once the payload

@@ -117,6 +117,14 @@ as affine in throttle, identified on the rig: the throttle sent is $u_T + u_0(V)
 $u_0(V) = u_0 + \kappa (V_{\mathrm{ref}} - V)$ correcting for the battery voltage $V$ and $k_T$ the gain
 above it. The planned cable acceleration $\mathbf{a}_{c,i}$ enters the model as a known, time-varying
 parameter along the horizon, so the tracker anticipates the rod's pull instead of reacting to it.
+The planned pull is only as good as the planner's model of the rods. On the rig the rods flew at about
+60$^\circ$ from horizontal where the plan assumed 45$^\circ$, so each tracker now measures the pull and uses the
+plan only for its shape along the horizon: the measured pull is the UAV's acceleration from motion capture
+(the least-squares slope of its velocity over 80\,ms, low-pass filtered at 50\,ms) minus the modelled thrust,
+gravity and drag, with the thrust passed through the same filter so that a throttle change does not read as
+a change of pull. The horizon's planned pull is shifted by the difference between the measured and the
+planned pull at its first node, and the result is capped at 12\,m/s$^2$. The planner plans the rods at
+60$^\circ$ to match. Section~\ref{sec:res_rig_integral} gives its effect on the rig.
 
 The tracker solves, every 20\,ms,
 \begin{equation}

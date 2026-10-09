@@ -217,6 +217,38 @@ the next session.
 % T9 (tab:robust): R1038-R1067 (5 Oct, box 0, land fix), no-error baseline z_ki 0 R1013/R1023;
 % generator tools/thesis_sim_tables.py table_robust.
 
+\subsubsection{On the rig: the model integral and the measured rod pull}
+\label{sec:res_rig_integral}
+% Rig 7 Oct: RIG-1007-r0001 (no integral), r002 (model integral, planned pull), r20004 (model integral +
+% measured pull); planner log.csv; figure tools/thesis_rig_figures.py rig_integral. Circle/figure-eight sd from
+% card 2026-10-07_cable_mocap (r006/r206e60, r0007/r2008e60).
+
+On 7 October the rig flew three hovers at 1.0\,m with four UAVs, changing one thing at a time
+(Figure~\ref{fig:rig_integral}). Without an integral the ring sank from 0.97 to 0.92\,m in the 4\,s it held
+before LAND. With the model integral it came back up to its target, learning a downward force of up to
+0.9\,N, but it then bobbed between 0.93 and 1.08\,m at about 0.2\,Hz. With the integral and the trackers'
+measured rod pull (Section~\ref{sec:tracker}) it held between 0.98 and 1.00\,m, and the integral learned only
+0.1\,N. We read this as most of the missing force having been in the rods' pull, which the planned pull got
+wrong. On the circle and the figure-eight, the measured pull together with the rods planned at 60$^\circ$ (two
+changes at once) cut the standard deviation of the ring's height from 4.8 and 4.7\,cm to 0.5 and 0.6\,cm
+(Table~\ref{tab:rig_oct7}). Each is one run, and the measured-pull hover held for 7\,s, ending before the first
+swing of the integral-only run; the circle and the figure-eight, flown for 36 and 68\,s, carry the claim that
+the swing is gone.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{Images/rig_integral.pdf}
+\caption[The model integral and the measured pull on the rig]{Ring height on the rig in a hover at 1.0\,m with
+four UAVs, one change at a time (7 October, one run each; each trace ends at LAND, marked by a tick; shaded: the
+7\,s both integral runs flew). (a) Without an integral the ring sank from 0.97 to 0.92\,m. With the model integral
+it dipped to 0.89\,m after the climb, came back up, and from 8\,s bobbed between 0.93 and 1.08\,m at about
+0.2\,Hz. With the integral and the trackers using the measured rod pull it held between 0.98 and 1.00\,m.
+(b) The vertical force the model integral learned (negative: downward, a force the model lacked): up to
+$-0.9$\,N with the planned pull, $-0.1$\,N with the measured one. The flat stretches are the integral frozen by
+design while the ring moves faster than 0.05\,m/s vertically.}
+\label{fig:rig_integral}
+\end{figure}
+
 \subsubsection{Wrong model values}
 \label{sec:sim_robustness}
 
