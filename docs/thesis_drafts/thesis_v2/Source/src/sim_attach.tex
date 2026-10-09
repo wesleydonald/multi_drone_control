@@ -19,11 +19,10 @@ by OCP resize with a transient small enough for the transport to continue? The b
 attach at the same weld; the bar is the ring's tilt back under 2$^\circ$ within 3\,s of the weld
 (Section~\ref{sec:metrics}).
 
-The attach was developed in three stages: a network-based attach, the attach by OCP resize, and the
-full rejoin mission with the collaborator's approach controller. The attach by OCP resize, with the
-newcomer flying its own approach, has been flown in the rig twin (the measured-tip loop below, and the
-LAND tests of Section~\ref{sec:sim_landing}); the full rejoin mission has not, and none of the three has
-yet been flown on the rig.
+Of the three stages (a network attach, the attach by OCP resize, and the full rejoin mission with the
+collaborator's approach controller), only the attach by OCP resize with the newcomer flying its own approach
+has been flown in the rig twin (the tip loop below and the LAND tests of Section~\ref{sec:sim_landing}), and
+none on the rig yet.
 
 \subsubsection{Network attach}
 
@@ -98,15 +97,14 @@ yet been flown on the rig.
 
 \subsubsection{The approach: steering the magnet tip}
 
-The approach flies the newcomer's body to its target plus an assumed rod length, so an assumed length
-that is wrong parks the magnet tip above or below the plate instead of on it. The collaborator's
-earlier attempts on the rig showed this: the magnet came over the plate but too high. A slow, bounded
-loop on the measured tip height therefore corrects the body goal. It integrates only while the
-newcomer holds still over the plate, and it freezes inside a 5\,mm deadband, on a contact and whenever
-the tip measurement is invalid. In the rig twin, with the assumed rod length 4\,cm wrong in either
-direction, the tip parks 4\,cm high or low with the loop off; with the loop on, in two runs per sign,
-the tip comes within 1\,cm of its setpoint 1.2--2.1\,s after the hold begins and stays within
-0.1--0.6\,cm (Figure~\ref{fig:tip_feedback}).
+The approach flies the newcomer's body to its target plus an assumed rod length, so a wrong length parks
+the magnet tip above or below the plate; in the collaborator's earlier attempts on the rig the magnet came over
+the plate but too high. A slow, bounded loop on the measured tip height therefore corrects the body goal,
+integrating only while the newcomer holds still over the plate and freezing inside a 5\,mm deadband, on a
+contact and on an invalid tip measurement. In the rig twin, with the assumed rod length 4\,cm wrong in either
+direction, the tip parks 4\,cm high or low with the loop off; with the loop on (two runs per sign) it comes
+within 1\,cm of its setpoint 1.2--2.1\,s after the hold begins and stays within 0.1--0.6\,cm
+(Figure~\ref{fig:tip_feedback}).
 
 \begin{figure}[htbp]
 \centering
@@ -166,7 +164,6 @@ the tip comes within 1\,cm of its setpoint 1.2--2.1\,s after the hold begins and
 % duration comes from retries inside the collaborator's mission.
 
 Figure~\ref{fig:rig_rejoin} shows the rejoin on the rig.
-
 \pendingfig{fig:rig_rejoin}{Rejoin on the rig: the fourth UAV's climb, transit, hold over plate 9 and weld, the ring tilt with the reconfiguration window, and the measured tip height against the weld radius.}{rig R8b, 14 Oct}
 
 \subsubsection{Errors during an attach}

@@ -8,18 +8,17 @@
 \subsection{Reconfiguration by OCP resize}
 \label{sec:reconfig}
 
-A reconfiguration changes the number of UAVs carrying the payload while it is in the air. Both
-directions are handled the same way in the final design: the planner switches to a solver for the
-new team size and carries on. This subsection describes the detach, the attach, and the design that
-was replaced for each.
+A reconfiguration changes the number of UAVs carrying the payload in the air. In the final design both
+directions are handled the same way: the planner switches to a solver for the new team size and carries
+on. This subsection describes the detach, the attach, and the design each replaced.
 
 \subsubsection{Detach}
 
-On DETACH the departing UAV's magnet releases the rod at the payload end, and the UAV flies away with
-its rod. The planner continues with the survivors. Two approaches were built and compared.
+On DETACH the departing UAV's magnet releases the rod at the payload end, the UAV flies away with its
+rod, and the planner continues with the survivors. Two approaches were built and compared.
 
-\paragraph{OCP resize.} The planner keeps flying the payload and simply re-solves for the smaller
-fleet. Two properties of the formulation make this possible.
+\paragraph{OCP resize.} The planner keeps flying the payload and re-solves for the smaller fleet, which
+two properties of the formulation make possible.
 \begin{itemize}
     \item The attachment points $\boldsymbol{\rho}_i$ and rod lengths $l_i$ are runtime parameters of
     the model, not constants compiled into the solver. Only the fleet size fixes the problem
@@ -33,43 +32,41 @@ fleet. Two properties of the formulation make this possible.
 %     0, 120 and 240$^\circ$. Handing the planner an even ring instead makes its moment balance wrong by
 %     construction; in an early test this tipped the payload by 62$^\circ$.
 \end{itemize}
-At the detach the planner swaps to the solver for $N-1$ UAVs, sets the survivors' attachment points
-and rod lengths, and warm-starts the new problem from the measured state before it flies. The
-tensions and rod directions are free at node~0, so the survivors' share of the load is
-redistributed by the first solve. No separate hand-off phase is needed. A detach is refused if it
-would leave fewer than three UAVs, and during LAND.
+At the detach the planner swaps to the solver for $N-1$ UAVs, sets the survivors' attachment points and
+rod lengths, and warm-starts the new problem from the measured state. The tensions and rod directions are
+free at node~0, so the first solve redistributes the load, with no separate hand-off phase. A detach is
+refused if it would leave fewer than three UAVs, and during LAND.
 
 \paragraph{Network hand-off.} The alternative, closer to the decentralised literature
-\cite{quan2025swarm}, hands the payload to the dissipative network of Section~\ref{sec:dissipative}
-on the detach. The network holds the payload while it redistributes the load between the survivors,
-then hands back to a planner built for $N-1$. The two are compared in
-Section~\ref{sec:sim_detach}. The OCP resize is the detach used in the rest of this work.
+\cite{quan2025swarm}, hands the payload to the dissipative network of Section~\ref{sec:dissipative} on the
+detach; the network holds it while it redistributes the load between the survivors, then hands back to a
+planner built for $N-1$. Section~\ref{sec:sim_detach} compares the two; the OCP resize is the detach used
+in the rest of this work.
 % --- original text, flown before the rig twin; kept to refill this place:
 % then hands back to a planner built for $N-1$. In simulation the OCP resize won this comparison
 % clearly (Section~\ref{sec:sim_detach}), and it is the detach used in the rest of this work.
 
 % Departed landing (pressed to its rest, disarmed alone): twin 9 Oct, card 2026-10-09_departed_disarm_alone;
 % the default once the LAND re-fly's reviewer passes it; rig W4/W5 on 14 Oct.
-\paragraph{The departing UAV.} After the release the departing UAV steps 0.5\,m out radially at its
-height, clear of the ring and the survivors, and lands on its own while the survivors carry on. Its
-landing ends at its own resting height: its height reference is pressed below that height until it gets
-there, and it is then disarmed alone, without waiting for the fleet (Section~\ref{sec:res_detach_rig}).
-On the rig the release is the UAV's magnet channel, switched by the same DETACH command.
+\paragraph{The departing UAV.} After the release, switched on the rig by the same DETACH command on the
+UAV's magnet channel, the departing UAV steps 0.5\,m out radially at its height, clear of the ring and the
+survivors, and lands on its own while the survivors carry on. Its height reference is pressed below its
+own resting height until it gets there, and it is then disarmed alone, without waiting for the fleet
+(Section~\ref{sec:res_detach_rig}).
 
-\paragraph{Layout.} Whether the payload can still hang level after a detach depends on the
-geometry, not on the controller. The payload's centre of mass must stay inside the polygon of the
-surviving attachment points. Removing one UAV from an even ring of $N$ leaves a largest angular gap of
-$4\pi/N$, which keeps the centre inside only for $N \ge 5$; $N = 4$ sits exactly on the boundary.
-The four-UAV flights therefore use the magnet plates at 30, 90, 150 and 270$^\circ$. Detaching the
-UAV at 90$^\circ$ leaves an even triangle at 30, 150 and 270$^\circ$, under which the ring hangs
-level. With an uneven layout the tensions are no longer equal: the planner's nominal tensions come
-from a moment balance at the actual attachment points, so the payload's reference stays level.
+\paragraph{Layout.} Whether the payload can still hang level after a detach depends on the geometry, not
+on the controller: its centre of mass must stay inside the polygon of the surviving attachment points.
+Removing one UAV from an even ring of $N$ leaves a largest angular gap of $4\pi/N$, which keeps the centre
+inside only for $N \ge 5$; $N = 4$ sits exactly on the boundary. The four-UAV flights therefore use the
+plates at 30, 90, 150 and 270$^\circ$, and detaching the UAV at 90$^\circ$ leaves an even triangle under
+which the ring hangs level. With an uneven layout the planner's nominal tensions come from a moment
+balance at the actual attachment points, so they are unequal and the payload's reference stays level.
 
-\paragraph{Landing after a detach.} A detach changes which UAVs land with the payload. Touchdown is
-judged on the survivors only, so a departed UAV still descending elsewhere does not hold the
-survivors' references down. A departed UAV is judged down at its own resting height, and the fleet
-is declared landed only when the departed UAVs are down too. The cable feedforward is switched off once the payload
-rests, because its sideways component pushes a grounded survivor across the floor.
+\paragraph{Landing after a detach.} Touchdown is judged on the survivors only, so a departed UAV still
+descending elsewhere does not hold their references down; a departed UAV is judged down at its own
+resting height, and the fleet is declared landed only when it is down too. The cable feedforward is
+switched off once the payload rests, because its sideways component pushes a grounded survivor across
+the floor.
 % --- original text, flown before the rig twin; kept to refill this place:
 % declared landed only when they are down too. The cable feedforward is switched off once the payload
 % rests, because its sideways component pushed a grounded survivor across the floor until it tipped
@@ -77,30 +74,29 @@ rests, because its sideways component pushes a grounded survivor across the floo
 
 \subsubsection{Attach}
 
-On ATTACH a free UAV joins the carried payload: it approaches its attachment point, its magnet welds
-to a plate on the ring, and the planner folds it into the team. The approach controller, the
-approach UAV and its magnet are the collaborating student's, and this work takes over at the weld.
+On ATTACH a free UAV (the newcomer) approaches its attachment point, its magnet welds to a plate on the
+ring, and the planner folds it into the team. The approach controller, the approach UAV and its magnet
+are the collaborating student's; this work takes over at the weld.
 % TODO: cite the collaborator's thesis or report once available.
 
 \paragraph{Sequence.}
 \begin{enumerate}
-    \item \textbf{Target hold.} ATTACH freezes the payload's horizontal reference, or (when the
-    payload is moving) keeps it on its trajectory. In both cases the reference is shifted onto the
-    measured payload position, so the target the newcomer approaches is where the payload actually is.
-    \item \textbf{Approach.} The newcomer is flown to a point above its plate and descends onto it.
-    Either the collaborator's approach controller flies it, or the newcomer's own tracker follows an
-    approach profile from this work. The payload may keep moving, at up to 0.2\,m/s.
+    \item \textbf{Target hold.} ATTACH freezes the payload's horizontal reference, or keeps it on its
+    trajectory when the payload is moving, shifted onto the measured payload position, so the newcomer
+    approaches where the payload actually is.
+    \item \textbf{Approach.} The newcomer flies to a point above its plate and descends onto it, flown by
+    the collaborator's approach controller or by its own tracker on an approach profile from this work.
+    The payload may keep moving, at up to 0.2\,m/s.
     \redo{a weld onto a payload moving at 0.4\,m/s against 0.2\,m/s (the limit on the payload's speed during the approach).}
 % --- original text, flown before the rig twin; kept to refill this place:
 %     approach profile from this work. The payload may keep moving, at up to 0.2\,m/s; at 0.4\,m/s the
 %     weld flipped the payload in simulation.
-    \item \textbf{Weld.} A magnet manager welds when the magnet tip is within 8\,cm of the plate
-    point, the relative speed is under 0.05\,m/s, and both have held for 0.15\,s. The plate point
-    is computed from the payload's measured pose, so it moves and turns with the ring.
-    \item \textbf{Authority hand-over.} Until the weld, a multiplexer forwards the approach
-    controller's commands to the newcomer's radio. After the weld it switches to this work's
-    tracker, but only on a command that is armed and above idle throttle.
-    The switch is latched. An abort latches the mux to a disarmed idle command until it is restarted.
+    \item \textbf{Weld.} A magnet manager welds when the magnet tip is within 8\,cm of the plate point,
+    computed from the payload's measured pose, and the relative speed is under 0.05\,m/s, both for 0.15\,s.
+    \item \textbf{Authority hand-over.} Until the weld, a multiplexer forwards the approach controller's
+    commands to the newcomer's radio; after it, the multiplexer switches to this work's tracker, only on a
+    command that is armed and above idle throttle, and latches. An abort latches the mux to a disarmed idle
+    command until it is restarted.
     \redo{the authority hand-over at the weld with the mux switching on an armed but idle stream, against the armed-and-above-idle rule: whether the newcomer's motors cut at the weld.}
 % --- original text, flown before the rig twin; kept to refill this place:
 %     tracker, but only on a command that is armed and above idle throttle. A mux that handed authority
@@ -116,20 +112,19 @@ approach UAV and its magnet are the collaborating student's, and this work takes
     \item \textbf{Resume.} The trajectory continues with $N+1$ UAVs.
 \end{enumerate}
 
-\paragraph{Replaced design: network attach.} Until mid-September the attach handed the payload to
-the dissipative network at the weld. The newcomer was welded as a central lifter and handed out to
-its ring slot over 8--12\,s, with the incumbents' tensions blended over the same ramp. The two
-designs are compared in Section~\ref{sec:sim_attach}.
+\paragraph{Replaced design: network attach.} Until mid-September the attach handed the payload to the
+dissipative network at the weld: the newcomer was welded as a central lifter and handed out to its ring
+slot over 8--12\,s, with the incumbents' tensions blended over the same ramp
+(compared in Section~\ref{sec:sim_attach}).
 % --- original text, flown before the rig twin; kept to refill this place:
 % its ring slot over 8--12\,s, with the incumbents' tensions blended over the same ramp. This flew the
 % demonstration of Figure~\ref{fig:attach} on the earlier, lighter ring. On the 0.86\,kg ring the
 % network capsized the payload within about 8\,s of every weld in simulation, while the OCP resize held
 % the same weld at about 10$^\circ$ (Section~\ref{sec:sim_attach}).
 
-\paragraph{The rejoin mission.} The full mission of Figure~\ref{fig:mission_profile} is assembled with
-the collaborator's mission planner. Four UAVs carry the ring around the orbit. One detaches by OCP
-resize and is released to the collaborator's mission, which picks up an object with its magnet and
-drops it into the ring. It is then handed back at its attach-ready point, approaches, welds and is
-folded back in by OCP resize, after which the fleet lands. A ground-start variant has the
-collaborator's controller join four UAVs to the ring on the floor and hand them over to this work's
-planner, which lifts and carries it.
+\paragraph{The rejoin mission.} The full mission of Figure~\ref{fig:mission_profile} is assembled with the
+collaborator's mission planner. Four UAVs carry the ring around the orbit; one detaches by OCP resize, flies
+the collaborator's mission (picking up an object with its magnet and dropping it into the ring), is handed
+back at its attach-ready point, approaches, welds and is folded back in by OCP resize, and the fleet lands.
+In a ground-start variant the collaborator's controller joins four UAVs to the ring on the floor and hands
+them to this work's planner, which lifts and carries it.

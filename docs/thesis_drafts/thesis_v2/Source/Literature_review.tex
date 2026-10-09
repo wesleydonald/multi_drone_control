@@ -3,10 +3,9 @@
 
 % Template: develop from the previous reports and the supervisors' feedback; flow logically, not
 % necessarily chronologically; end with the major work, its relevance, and the research gaps.
-This section reviews the models used for multi-UAV cable-suspended transport, the centralised and
-distributed control approaches, the work on changes in team composition, the execution layer and
-steady-error rejection, and simulation fidelity, and ends with a comparison and the research gap
-this thesis addresses.
+This section reviews the cable models, the centralised and distributed control approaches, the work on
+changes in team composition, the execution layer and steady-error rejection, and simulation fidelity,
+and ends with a comparison and the research gap.
 
 \input{Source/src/modelling}
 \input{Source/src/control}
@@ -14,16 +13,12 @@ this thesis addresses.
 \subsection{Simulation Fidelity}
 \label{sec:lit_sim}
 
-Before hardware deployment, simulation provides an environment to test controller behaviour. The validity of the simulation model determines how trustworthy these results are and how large the gap between simulation and real-world performance will be. \\
-
-The most accurate approach in the reviewed literature is the software-in-the-loop configuration used by \cite{distributedNMPC}, which replicates the full hardware stack inside Gazebo, including the same state estimator, control architecture, and motor-controller firmware as the physical platform, with cable dynamics modelled via the mass-spring-damper chain. This careful replication minimises the gap between simulation and the real system. This thesis follows the same idea with an emulated flight controller in place of the flight firmware, in a Gazebo twin of the rig (Section~\ref{sec:experiments}). \\
-
-Alternative methods include linearised dynamic equations and a rigid rod model implemented in MATLAB \cite{DistributedMPC}, which improves tractability and allows rapid iteration, but is valid only near the linearisation point and does not capture the nonlinear and geometric effects present during aggressive manoeuvres or large attitude deviations. This approach is considered but not adopted, as Gazebo provides sufficient tractability while retaining the full nonlinear system necessary for validating the join and leave transients.
+The fidelity of a simulation sets how far its results can be trusted on hardware. The most faithful approach reviewed is the software-in-the-loop configuration of \cite{distributedNMPC}, which runs the platform's own state estimator, control architecture and motor-controller firmware inside Gazebo, with mass-spring-damper cables. This thesis follows the same idea, with an emulated flight controller in place of the firmware, in a Gazebo twin of the rig (Section~\ref{sec:experiments}). Linearised dynamics with rigid rods in MATLAB \cite{DistributedMPC} allow rapid iteration but hold only near the linearisation point and miss the nonlinear and geometric effects of aggressive manoeuvres and large attitudes. They were not adopted: Gazebo is tractable enough and keeps the full nonlinear system that the join and leave transients need.
 
 \subsection{Comparison and Research Gap}
 \label{sec:lit_gap}
 
-Table~\ref{tab:control_comparison} summarises the key papers reviewed across six categories: architecture, control method, real-world validation, disturbance handling, the ability to handle UAVs joining or leaving, and approximate computational cost.
+Table~\ref{tab:control_comparison} compares the key papers by architecture, method, real-world validation, disturbance handling, handling of UAVs joining or leaving, and approximate computational cost.
 
 \begin{table}[h]
 \centering
@@ -59,11 +54,9 @@ This work                                              & Centralised & Trajector
 }
 \end{table}
 
-Two clear tradeoffs emerge from this review. NMPC and trajectory-based methods offer the most precise tracking and constraint handling, but computational cost grows with team size and real-time hardware implementation is challenging. Dissipative methods are computationally cheap, inherently stable by energy arguments, and naturally absorb disturbances, but offer less precise trajectory control and cannot easily enforce hard constraints such as tension bounds or collision avoidance on their own. Changes in the team remain an open problem: \cite{quan2025swarm} is the only reviewed work to demonstrate experimental robustness to dropout mid-task, and few works design a communication protocol for adding UAVs to a team. \\
+Two trade-offs emerge. NMPC and trajectory-based methods track and handle constraints most precisely, but their cost grows with the team and real-time hardware implementation is hard. Dissipative methods are cheap, stable by energy arguments and absorb disturbances naturally, but track less precisely and cannot easily enforce hard constraints such as tension bounds or collision avoidance on their own. Changes in the team remain open: \cite{quan2025swarm} is the only reviewed work to show experimental robustness to a mid-task dropout, and few works design a protocol for adding UAVs to a team.
 
-Despite extensive coverage of fixed-team multi-UAV payload transport, no existing work demonstrates a strategy for adding a UAV to an active mid-flight mission. The closest prior work either addresses only removal \cite{tensionbased}, provides dropout robustness with no mechanism for structured addition \cite{quan2025swarm}, or proposes join protocols without experimental validation or explicit force reallocation \cite{tasoojiCooperativeControlMultiQuadrotors}. No work combines both join and leave handling with a principled force allocation strategy. This gap motivates the direction of this thesis: a centralised controller that recomputes the force distribution for the new team at the moment a UAV leaves or joins (RQ1), compared against a decentralised dissipative alternative (RQ2; Section~\ref{sec:rq}). \\
-
-This thesis adopts a centralised architecture, justified by the single-computer laboratory setup, which simplifies global coordination tasks such as force allocation and the management of UAVs joining and leaving. Two control laws are compared: a dissipative approach drawing on \cite{quan2025swarm} and \cite{liuVirtualTubeBasedCooperativeTransport2026}, which provides robustness to disturbances and team changes without the computational burden of real-time optimisation, and a trajectory-based OCP approach following \cite{tudelft}, which offers precise constraint enforcement at higher computational cost. Tension allocation ideas from \cite{efficient} and \cite{vazquez-soquiSQPBasedCableTensionAllocation2026} inform how the centralised node distributes forces when the team changes.
+No existing work demonstrates a strategy for adding a UAV to an active mission mid-flight. The closest work addresses only removal \cite{tensionbased}, tolerates dropout with no mechanism for structured addition \cite{quan2025swarm}, or proposes join protocols without experimental validation or explicit force reallocation \cite{tasoojiCooperativeControlMultiQuadrotors}. None combines join and leave with a principled force allocation. This gap sets the direction of this thesis: a centralised controller that recomputes the force distribution for the new team at the moment a UAV leaves or joins (RQ1), compared against a decentralised dissipative alternative (RQ2; Section~\ref{sec:rq}). The architecture is centralised because the lab has one computer, which simplifies force allocation and the handling of joining and leaving UAVs. The dissipative alternative draws on \cite{quan2025swarm} and \cite{liuVirtualTubeBasedCooperativeTransport2026}, the trajectory-based OCP follows \cite{tudelft}, and the tension allocation of \cite{efficient} and \cite{vazquez-soquiSQPBasedCableTensionAllocation2026} informs how the central node redistributes the forces when the team changes.
 % Stale proposal wording replaced 9 Oct (structure audit): "a centralised dissipative architecture
 % combining agile payload manipulation with robustness to dynamic changes in team composition"; and
 % "Simulation and experimental validation will determine which direction best balances performance

@@ -8,11 +8,11 @@
 
 \subsubsection{Nodes and safety}
 
-All control runs centrally, on one ground computer under ROS~2 (Robot Operating System~2). Motion capture (OptiTrack) is the
-only sensing. It gives the pose of each UAV and of the payload, and nothing on the payload is
-instrumented. Each UAV's flight controller runs Betaflight in rate mode. It receives a collective
-throttle and three body-rate stick commands over its own ExpressLRS (ELRS) radio link, and closes only its
-inner rate loop. Figure~\ref{fig:nodes} shows the nodes and the information they exchange.
+All control runs centrally, on one ground computer under ROS~2 (Robot Operating System~2). Motion
+capture (OptiTrack) is the only sensing: it gives the pose of each UAV and of the payload, and nothing
+on the payload is instrumented. Each UAV's flight controller runs Betaflight in rate mode, receives a
+collective throttle and three body-rate stick commands over its own ExpressLRS (ELRS) radio link, and
+closes only its inner rate loop. Figure~\ref{fig:nodes} shows the nodes and what they exchange.
 
 \begin{figure}[h]
 \centering
@@ -42,53 +42,44 @@ DETACH and ATTACH.}
 
 The system has three layers.
 \begin{description}
-    \item[Planner.] The centralised load--cable MPC of Section~\ref{sec:controller}. At 10\,Hz it
-    plans the motion of the payload and of every rod, and publishes to each UAV its reference over
-    the horizon: position, velocity, acceleration, the planned cable acceleration and the throttle
-    feedforward. A second reference generator, the dissipative network of
-    Section~\ref{sec:dissipative}, can replace it in flight; both publish the same reference format,
-    so the trackers do not know which one is active.
-    \item[Trackers.] One tracking MPC per UAV at 50\,Hz. Each follows its UAV's part of the plan and
-    turns it into the radio commands.
-    \item[Fleet manager.] It sequences the phases of a flight: ARM, TAKEOFF (the climb, the rod sweep
-    to the working elevation and the lift), the trajectory, LAND, and the reconfiguration events
-    DETACH and ATTACH (Section~\ref{sec:reconfig}).
+    \item[Planner.] The centralised load--cable MPC of Section~\ref{sec:controller} plans the motion of
+    the payload and of every rod at 10\,Hz and publishes each UAV's reference over the horizon. The
+    dissipative network of Section~\ref{sec:dissipative} can replace it in flight; both publish the
+    same reference format, so the trackers do not know which one is active.
+    \item[Trackers.] One tracking MPC per UAV at 50\,Hz turns its UAV's part of the plan into the radio
+    commands.
+    \item[Fleet manager.] It sequences ARM, TAKEOFF (the climb, the rod sweep to the working elevation
+    and the lift), the trajectory, LAND, and the reconfiguration events DETACH and ATTACH
+    (Section~\ref{sec:reconfig}).
 \end{description}
-\paragraph{Safety.} Every tracker checks its own UAV against a flight envelope: tilt, payload tilt
-(both 60$^\circ$) and speed (3\,m/s). It also checks that its motion-capture pose is fresh (0.25\,s)
-and that the planner's reference is fresh (1\,s). Any violation disarms the whole fleet, not the one
-UAV: a single UAV losing thrust on a shared rigid payload drags the others with it. There is no
-geofence; the operator holds a kill switch. On the rig, each UAV must also confirm that its flight
-controller is armed before the fleet takes off. The planner stops iterating at a 60\,ms budget,
-and a plan that has not converged by then is replaced by the previous one, shifted by a tick.
-A UAV that disarms between ARM and TAKEOFF grounds the whole fleet and TAKEOFF is refused,
-since three UAVs lifting a ring sized for four would drag it.
+\paragraph{Safety.} Every tracker checks its own UAV against a flight envelope (tilt and payload tilt
+both 60$^\circ$, speed 3\,m/s) and checks that its motion-capture pose (0.25\,s) and the planner's
+reference (1\,s) are fresh. Any violation disarms the whole fleet, not the one UAV: a single UAV losing
+thrust on a shared rigid payload drags the others with it. There is no geofence; the operator holds a
+kill switch. On the rig each UAV must confirm that its flight controller is armed before the fleet
+takes off, and a UAV that disarms between ARM and TAKEOFF grounds the fleet and TAKEOFF is refused,
+since three UAVs lifting a ring sized for four would drag it. The planner stops iterating at a 60\,ms
+budget, and a plan that has not converged by then is replaced by the previous one, shifted by a tick.
 
 \subsubsection{Rig hardware}
 \label{sec:hardware}
 
 \paragraph{UAVs.} Four UAVs run Betaflight in rate mode on six-cell batteries. Each has its own
-ELRS receiver and a ground transmitter on a USB serial port, so every UAV is commanded on its
-own link at 100\,Hz. The throttle, three rate sticks, the arm switch and an auxiliary channel are
-sent; the auxiliary channel switches the UAV's magnet and is held on from start-up, so a quiet link
-cannot drop the payload. The flight controller's telemetry (battery voltage, flight mode, link
-quality) comes back on the same link. As flown, each UAV weighs 0.55\,kg: an airframe and battery of
-0.475\,kg, plus its rod and magnet.
+ELRS receiver and a ground transmitter on a USB serial port, so every UAV is commanded on its own link
+at 100\,Hz: the throttle, three rate sticks, the arm switch and an auxiliary channel that switches the
+UAV's magnet, held on from start-up so that a quiet link cannot drop the payload. The flight
+controller's telemetry (battery voltage, flight mode, link quality) comes back on the same link. As
+flown, each UAV weighs 0.55\,kg: an airframe and battery of 0.475\,kg, plus its rod and magnet.
 
-\paragraph{Rods and payload.} Each UAV carries a rigid rod of 0.55\,m and 0.075\,kg with a ball joint
-at both ends. The upper joint sits 4\,cm below the UAV's centre. The payload is a 0.86\,kg ring of
-0.51\,m diameter and 40\,mm thickness, with twelve magnet plates every 30$^\circ$ on its top face at a
-radius of 0.225\,m.
-Each rod ends in an electromagnet that holds on a plate with 10--12\,N and releases under a jerk.
-A layout is named by its plate numbers, anticlockwise from plate 0 on the ring's $+x$ axis
-(Figure~\ref{fig:geometry}).
+\paragraph{Rods, payload and motion capture.} Each UAV carries a rigid rod of 0.55\,m and 0.075\,kg with
+a ball joint at both ends; the upper joint sits 4\,cm below the UAV's centre. The payload is a 0.86\,kg
+ring of 0.51\,m diameter and 40\,mm thickness, with twelve magnet plates every 30$^\circ$ on its top face
+at a radius of 0.225\,m. Each rod ends in an electromagnet that holds on a plate with 10--12\,N and
+releases under a jerk. A layout is named by its plate numbers, anticlockwise from plate 0 on the ring's
+$+x$ axis (Figure~\ref{fig:geometry}); Figure~\ref{fig:rig_photo} shows the rig. OptiTrack tracks one
+rigid body per UAV and one for the ring. Its poses are the only state measurement: the velocities and
+body rates of the UAVs and of the ring are differentiated from them.
 
 \input{Source/src/fig_geometry}
 
-Figure~\ref{fig:rig_photo} shows the rig.
-
 \pendingfig{fig:rig_photo}{The rig: four UAVs on rods, the ring with its twelve magnet plates, the motion-capture markers and the newcomer's magnet tip.}{photograph at the 14 Oct setup}
-
-\paragraph{Motion capture.} OptiTrack tracks one rigid body per UAV and one for the ring. Its poses
-are the only state measurement: the velocities and body rates of the UAVs and of the ring are
-differentiated from them.

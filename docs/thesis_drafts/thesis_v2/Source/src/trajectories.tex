@@ -7,34 +7,26 @@
 \subsubsection{Test references}
 \label{sec:trajectories}
 
-The payload reference is the lift schedule in height plus a horizontal offset from a trajectory.
-The offset starts once the lift has reached the target height, and is applied to the whole formation,
-so the UAVs keep their places around the payload. The planner evaluates the trajectory at the time
-of every horizon node, so the plan sees the next two seconds of the path. The acceleration
-$\mathbf{a}_L^{\mathrm{ref}}$ used for the rod references (Section~\ref{sec:controller}) is
-its analytic second derivative.
-
-Trajectories that start and end at rest use a smootherstep sweep of the path angle,
+The payload reference is the lift schedule in height plus a horizontal offset from a trajectory, which
+starts once the lift has reached the target height and moves the whole formation, so the UAVs keep their
+places around the payload. The planner evaluates the trajectory at every horizon node, so the plan sees
+the next two seconds of the path, and $\mathbf{a}_L^{\mathrm{ref}}$ (Section~\ref{sec:controller}) is its
+analytic second derivative. Trajectories that start and end at rest use a smootherstep sweep of the path
+angle,
 \begin{equation}
     \theta(t) = 2\pi\, s\!\left(\tfrac{t}{T}\right), \qquad s(u) = 6u^5 - 15u^4 + 10u^3, \quad u \in [0,1],
 \end{equation}
-whose first and second derivatives vanish at both ends, so the manoeuvre has no step in velocity or
-acceleration that the suspended payload would take as a kick. The duration $T$ is chosen so that the
-peak tangential speed equals the commanded speed $v$. The kinds are:
-\begin{description}
-    \item[Hover.] No horizontal motion; the payload holds the target height until LAND.
-    \item[Line.] A shuttle along $x$, $\Delta x = \tfrac{d}{2}\left(1 - \cos\tfrac{2vt}{d}\right)$, repeated until LAND.
-    \item[Circle.] One lap, $\Delta x = r\sin\theta$, $\Delta y = r(1-\cos\theta)$, with
-    $T = 1.875 \cdot 2\pi r / v$. It starts at the lift point heading $+x$ and ends there at rest.
-    \item[Figure-eight.] One Gerono lemniscate, $\Delta x = a\sin\theta$, $\Delta y = \tfrac{a}{2}\sin 2\theta$,
-    with $T = 1.875 \cdot 2\pi a\sqrt{2} / v$ (the peak speed is at the crossing).
-    \item[Spin.] The circle with one full turn of the payload's yaw, synchronised with the path.
-    \item[Orbit.] The circle flown continuously at constant speed until LAND. The angular rate
-    $v/r$ is reached through a smootherstep ramp over 4\,s, and the angle is its exact integral,
-    so position, velocity and acceleration are continuous. The orbit keeps the payload moving
-    for as long as a reconfiguration takes.
-\end{description}
-
-The results use an orbit of radius 0.5\,m at 0.125\,m/s (one lap in 25\,s) and a figure-eight of
-$a = 1.0$\,m at 0.25\,m/s (67\,s, a $2 \times 1$\,m path), sized for the 6\,$\times$\,6\,m flight area
-with the UAVs about 0.7\,m outside the payload's path.
+whose first and second derivatives vanish at both ends, so the suspended payload takes no step in
+velocity or acceleration as a kick; $T$ makes the peak tangential speed equal the commanded speed $v$.
+\emph{Hover} holds the target height until LAND. \emph{Line} is a shuttle along $x$,
+$\Delta x = \tfrac{d}{2}\left(1 - \cos\tfrac{2vt}{d}\right)$, repeated until LAND. \emph{Circle} is one lap,
+$\Delta x = r\sin\theta$, $\Delta y = r(1-\cos\theta)$, $T = 1.875 \cdot 2\pi r / v$, from the lift point
+heading $+x$ back to rest there. \emph{Figure-eight} is one Gerono lemniscate, $\Delta x = a\sin\theta$,
+$\Delta y = \tfrac{a}{2}\sin 2\theta$, $T = 1.875 \cdot 2\pi a\sqrt{2} / v$ (the peak speed is at the
+crossing). \emph{Spin} is the circle with one full turn of the payload's yaw, synchronised with the path.
+\emph{Orbit} is the circle flown continuously at constant speed until LAND, keeping the payload moving for
+as long as a reconfiguration takes; its angular rate $v/r$ is reached through a 4\,s smootherstep ramp and
+the angle is its exact integral, so position, velocity and acceleration are continuous. The results use
+an orbit of radius 0.5\,m at 0.125\,m/s (one lap in 25\,s) and a figure-eight of $a = 1.0$\,m at
+0.25\,m/s (67\,s, a $2 \times 1$\,m path), sized for the 6\,$\times$\,6\,m flight area with the UAVs about
+0.7\,m outside the payload's path.

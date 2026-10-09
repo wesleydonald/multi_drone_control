@@ -26,9 +26,9 @@ ring back within 1\,cm of its target, the band used for the recovery times below
 \label{sec:res_ic}
 
 An earlier version of the tracker relaxed its initial condition to a box with $\epsilon = 0.025$
-(Section~\ref{sec:tracker}). Figure~\ref{fig:tracker_x0} and Table~\ref{tab:x0} compare this relaxed
-initial condition with node~0 pinned to the measurement ($\epsilon = 0$), both without integral
-action.
+(Section~\ref{sec:tracker}). Figure~\ref{fig:tracker_x0} compares it with node~0 pinned to the
+measurement ($\epsilon = 0$), both without integral action (means in Table~\ref{tab:x0},
+Appendix~\ref{sec:app_tests}).
 
 \begin{figure}[h]
 \centering
@@ -42,15 +42,6 @@ reference updates (10\,Hz). Dashed in (a): zero error. One run of each case is s
 Table~\ref{tab:x0} gives the means.}
 \label{fig:tracker_x0}
 \end{figure}
-
-\begin{table}[h]
-\centering
-\caption{Ring error with the relaxed and the pinned initial condition, no integral action. The
-circle with $\epsilon = 0.025$ is a single run on an earlier code version; its horizontal error
-reproduces on the current code (2.8\,cm, with the height integral on).}
-\label{tab:x0}
-\input{Source/src/tables/x0}
-\end{table}
 
 With the box, each tracker could start its prediction from any state within 2.5\,\% of the
 measured one, about 3.5\,cm of height at 1.4\,m, so the box acted as a dead band. The solver used that
@@ -76,31 +67,11 @@ rods' mass to the planner's model corrected the rod elevation but did not move t
 The box was a fraction of each \emph{absolute} coordinate, so it widened as the UAVs moved away from
 the world origin. The circle's error with the box grows with the ring's distance from the origin,
 which is consistent with this (Figure~\ref{fig:tracker_x0}b), although on this circle the distance and
-the phase of the lap change together. Pinning node~0 also removes most of that error.
+the phase of the lap change together. Pinning node~0 also removes most of that error, and with four UAVs
+it cut the horizontal error on the circle and the figure-8 by about a factor of three
+(Appendix~\ref{sec:app_tests}). The landings that tipped a UAV, with and without the box, came from the
+landing, not from the box.
 
-The four-UAV circle and figure-8 of Table~\ref{tab:traj} were also flown with the relaxed box,
-$\epsilon = 0.025$ (Figure~\ref{fig:traj}). Pinning node~0 cut the
-horizontal error over the motion from 3.0 to 1.0\,cm on the circle and from 2.9 to 0.8\,cm on the
-figure-8, and the height error from $+3.2$ to $-1.7$\,cm. The relaxed box's error grows as the ring
-moves away from the world origin and shrinks as it returns, in both shapes.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{Images/trajectories.pdf}
-\caption[Trajectory tracking with four UAVs]{Pinning node~0 cuts the four-UAV trajectory error by about
-a factor of three. (a) Circle of radius 0.5\,m, one lap of 27\,s including a 4\,s spin-up; (b) a
-2\,m\,$\times$\,1\,m figure-8 in 60\,s. Gold: ring path with $\epsilon = 0$; dark dashed: reference;
-dot and arrow: start and direction. (c, d) Horizontal ring error from the onset of motion, sampled
-when the planner's 10\,Hz reference updates, with $\epsilon = 0$ (gold) and the relaxed box
-($\epsilon = 0.025$, dashed). Gazebo rig twin, four UAVs on the even ring, ring at 1.0\,m; one run of
-each.}
-\label{fig:traj}
-\end{figure}
-
-Landing is not yet resolved, with or without the box. In 21 Gazebo flights with $\epsilon = 0$, one
-UAV tipped over during landing after the payload had touched down, as 2 of 32 earlier landings with the
-box had. Both come from landing, not from the box, and the landing of Section~\ref{sec:sim_landing}
-removes them.
 
 \subsubsection{The breakaway cap}
 \label{sec:res_cap}
@@ -150,34 +121,20 @@ change of the integral force is measured from its value before the push (0.06\,N
 \input{Source/src/tables/disturbance}
 \end{table}
 
-Both forms of the integral bring the ring back to the target, and on the vertical push their
-transients are the same to within a few per cent. With the conversion $K$ set to the measured
-stiffness, the loop has the same gain whether the integral moves the target or enters the model. The
-force the model integral learns is the force that was applied, within 3\,\% vertically and
-4--5\,\% horizontally. Only the model form
-acts horizontally, and it removes the horizontal push in the same way.
+Both forms bring the ring back to the target, with vertical transients the same to within a few per
+cent, since with $K$ set to the measured stiffness the loop has the same gain either way. The model
+integral learns the applied force within 3\,\% vertically and 4--5\,\% horizontally, and only it acts
+horizontally, removing the horizontal push in the same way.
 
-The integral reduces the peak only partly, by about a quarter vertically (8.9 to 6.5\,cm) and by
-7\,\% horizontally (7.7 to 7.2\,cm), because it is slower than the cascade. The ring reaches most
-of its uncompensated displacement within about 1\,s, while the integral's time constant is
-$1/k_i = 2.5$\,s. When the push ends, the integral still holds the force it learned and drives the
-ring past the target by about as much as the push displaced it at onset. This overshoot on release
-is a property of integral action, not of where the integral acts. Table~\ref{tab:gain} shows the
-trade-off. Doubling $k_i$ reduces the peak by 14\,\%, but the response rings and settles 55\,\% later,
-the trend the damping relation of Section~\ref{sec:disturbance} predicts (with $\tau \approx 0.9$\,s,
-measured vertically, and $k_i = 0.4$\,s$^{-1}$, $\zeta \approx 0.84$). This is a single run, and its
-settling time is sensitive to the 1\,cm threshold against the 1\,cm heave of the hover. Keeping the
-ring-speed gate only for the first 5\,s after the lift removes 7--8\,\% with no cost on this push; it has
-not yet been flown on a trajectory, a hand-over or a landing.
-
-\begin{table}[h]
-\centering
-\caption{Integral gain and gate on the 0.6\,N vertical push, model integral. Peak: largest
-displacement during the push; overshoot and settling (to within 1\,cm): after it ends. Brackets:
-number of runs.}
-\label{tab:gain}
-\input{Source/src/tables/gain}
-\end{table}
+The integral reduces the peak only partly, by about a quarter vertically (8.9 to 6.5\,cm) and by 7\,\%
+horizontally (7.7 to 7.2\,cm), because it is slower than the cascade: the ring reaches most of its
+uncompensated displacement within about 1\,s, against the integral's time constant of
+$1/k_i = 2.5$\,s. When the push ends, the integral still holds the learned force and drives the ring past
+the target by about as much as the push displaced it at onset, an overshoot on release that is a property
+of integral action, not of where the integral acts. Doubling $k_i$ reduces the peak by
+14\,\%, but the response rings and settles 55\,\% later (one run; Table~\ref{tab:gain},
+Appendix~\ref{sec:app_tests}), the trend the damping relation of Section~\ref{sec:disturbance} predicts
+(with $\tau \approx 0.9$\,s, measured vertically, and $k_i = 0.4$\,s$^{-1}$, $\zeta \approx 0.84$).
 
 When one UAV produces more thrust than its map assumes, both forms hold the height. Only the model
 form also removes the horizontal error, and the ring tilts 1.5$^\circ$ further. The thrust error is a
@@ -194,28 +151,17 @@ moment on the ring that neither form controls.
 % conversion $K$ measured in Gazebo is lower than the SIL plant's stiffness.
 % % TODO: generate the SIL plan-prediction numbers from the planner logs as the tables are.
 
-\paragraph{The rig's pull towards $-x$.} In every rig flight of Table~\ref{tab:rig_oct1} the ring sat 3--17\,cm from its horizontal
-reference, always towards the room's $-x$ direction, and nothing in the controller pulled it back.
-The offset kept its direction when the whole system (ring and UAVs) was rotated by 124$^\circ$, so it
-does not come from a particular UAV, rod or the ring. The force behind it was estimated offline from
-the logs: the UAVs' delivered thrust, from the identified map and their measured attitudes, less the
-total weight. Over the steady holds this gives a horizontal force of 0.41--0.52\,N towards $-x$,
-about 1$^\circ$ of the fleet's thrust. At the planner's horizontal stiffness of about 5\,N/m that
-explains offsets of 8--10\,cm. Moving the system 1.1\,m towards $+x$ reduced the offset to 3--5\,cm,
-in a single flight. Two explanations remain open: a ground plane in the motion-capture calibration
-tilted by about 1$^\circ$, which would put a component of gravity along $x$ in the frame the
-controller works in, or air moving in the room. A plumb-line check of the calibration comes first at
-the next session.
-
-% sim_robustness.tex -- Results: robustness to wrong parameters (draft 4 Oct 2026).
-% Sources: CURRENT_STATE 4.7 (E10, R0215-R0222, 10 Sep, attach demo, 0.6 kg ring), 4.8 (measure_rod_len,
-% SIL R0308-R0327, 23 Sep, quadratic plant, notes 2026-09-23_geometry_autocal), 4.10 (kt_trim,
-% R0405-R0432, notes 2026-09-23_kt_trim), decisions 2026-09-25 (height integral: R0557 0.661 vs
-% R0558 0.600; pair 0.658 x2 vs 0.600 x3).
-% All of these were flown with the tracker's node-0 box at 0.025 (default until 4 Oct), which is the
-% +3.4 cm of the 0.634 baselines; the differences between arms are the result.
-% T9 (tab:robust): R1038-R1067 (5 Oct, box 0, land fix), no-error baseline z_ki 0 R1013/R1023;
-% generator tools/thesis_sim_tables.py table_robust.
+\paragraph{The rig's pull towards $-x$.} In every rig flight of 1 October (Table~\ref{tab:rig_oct1}) the ring
+sat 3--17\,cm from its horizontal reference, always towards the room's $-x$ direction, and nothing in the
+controller pulled it back. The offset kept its direction when the whole system was rotated by 124$^\circ$,
+so it does not come from a particular UAV, rod or the ring. Estimated offline from the UAVs' delivered thrust
+(the identified map and their measured attitudes) less the total weight, the force behind it was
+0.41--0.52\,N towards $-x$ over the steady holds, about 1$^\circ$ of the fleet's thrust, which at the
+planner's horizontal stiffness of about 5\,N/m explains offsets of 8--10\,cm. Moving the system 1.1\,m
+towards $+x$ reduced the offset to 3--5\,cm, in a single flight. Two explanations remain open: a
+motion-capture ground plane tilted by about 1$^\circ$, which would put a component of gravity along $x$ in
+the controller's frame, or air moving in the room; a plumb-line check of the calibration comes first at the
+next session.
 
 \subsubsection{On the rig: the model integral and the measured rod pull}
 \label{sec:res_rig_integral}
@@ -224,16 +170,14 @@ the next session.
 % card 2026-10-07_cable_mocap (r006/r206e60, r0007/r2008e60).
 
 On 7 October the rig flew three hovers at 1.0\,m with four UAVs, changing one thing at a time
-(Figure~\ref{fig:rig_integral}). Without an integral the ring sank from 0.97 to 0.92\,m in the 4\,s it held
-before LAND. With the model integral it came back up to its target, learning a downward force of up to
-0.9\,N, but it then bobbed between 0.93 and 1.08\,m at about 0.2\,Hz. With the integral and the trackers'
-measured rod pull (Section~\ref{sec:tracker}) it held between 0.98 and 1.00\,m, and the integral learned only
-0.1\,N. We read this as most of the missing force having been in the rods' pull, which the planned pull got
-wrong. On the circle and the figure-eight, the measured pull together with the rods planned at 60$^\circ$ (two
-changes at once) cut the standard deviation of the ring's height from 4.8 and 4.7\,cm to 0.5 and 0.6\,cm
-(Table~\ref{tab:rig_oct7}). Each is one run, and the measured-pull hover held for 7\,s, ending before the first
-swing of the integral-only run; the circle and the figure-eight, flown for 36 and 68\,s, carry the claim that
-the swing is gone.
+(Figure~\ref{fig:rig_integral}). Without an integral the ring sank in the 4\,s it held before LAND. The model
+integral brought it back to its target by learning a downward force of up to 0.9\,N, but the ring then bobbed
+at about 0.2\,Hz. With the trackers' measured rod pull added (Section~\ref{sec:tracker}) it held within 2\,cm
+and the integral learned only 0.1\,N: most of the missing force was in the rods' pull, which the planned pull
+got wrong. On the circle and the figure-eight, the measured pull with the rods planned at 60$^\circ$ cut the
+standard deviation of the ring's height from 4.8 and 4.7\,cm to 0.5 and 0.6\,cm (Table~\ref{tab:rig_oct7}).
+Each is one run; the measured-pull hover held for 7\,s, ending before the first swing of the integral-only
+run, so the circle and the figure-eight, flown for 36 and 68\,s, carry the claim that the swing is gone.
 
 \begin{figure}[htbp]
 \centering
@@ -252,95 +196,15 @@ design while the ring moves faster than 0.05\,m/s vertically.}
 \subsubsection{Wrong model values}
 \label{sec:sim_robustness}
 
-The controller is given the payload's mass, the rod lengths and the attachment radius, and each UAV's
-thrust map. On the rig each of these is measured, and each can be wrong. This subsection collects the
-tests of what a wrong value does.
-
-\paragraph{The current controller.} Table~\ref{tab:robust} gives the rig twin's hover at 1.0\,m, three
-UAVs from a floor start, with one wrong value in the controller while the simulated rig keeps the true
-ones. Each case was flown without and with the height integral.
-\begin{itemize}
-    \item A wrong payload mass moves the hover by about 1.25\,cm per percent of mass, the same in
-    both directions. The integral removes it while the miss is inside its 0.25\,m gate, with a target
-    shift that mirrors the error. A 20\,\% overestimate puts the ring 2\,mm over the gate, so the
-    integral never starts and the ring holds 26\,cm high: a miss beyond the gate is not taken for a
-    static offset.
-    % CHECK: "2 mm over the gate" against Table tab:robust (+25.8 cm against the 0.25 m gate, i.e. 8 mm);
-    % the table is the mean over the hover, the gate may have seen a different instant.
-    The bound matters as well: the 20\,\% underestimate needs 23\,cm of shift, which
-    the earlier bound of 0.15\,m would have cut off, and the planner warns that the integral is near
-    its bound.
-    \item Measuring the rods at the hand-over absorbs a 5\,cm rod error completely. Without the
-    measurement the ring sits 8\,cm high, and the integral does not help: a rod typed 5\,cm long
-    measures as only partly taut, and the integral waits for every rod to be taut. For rods typed
-    long, the measurement is therefore what makes the integral available; a rod typed short reads as
-    taut, and that case was not flown.
-    \item A 2\,cm error in the attachment radius has no visible effect.
-\end{itemize}
-The ring's tilt stayed within 1.0--1.3$^\circ$, slightly lower with the mass typed high, and all 28
-flights landed.
-
-\begin{table}[htbp]
-\centering
-\caption[Hover with a wrong model]{Hover at 1.0\,m with one wrong value in the controller's model,
-Gazebo rig twin, three UAVs, $\epsilon = 0$, floor start. Each cell is the mean of two runs. Target
-shift: the integral's correction to the height target at LAND. Tilt: mean over the four runs.
-Landed: flights that landed without a tip. $^a$~The miss is over the integral's 0.25\,m gate, so the
-integral never starts. $^b$~The unmeasured rods read as partly slack, so the integral's tautness
-gate stays closed.}
-\label{tab:robust}
-\input{Source/src/tables/robust}
-\end{table}
-
-\paragraph{Rod length and attachment radius.}
-\redo{hover with a wrong typed geometry, with and without the rod measurement at the hand-over, for the cases Table~\ref{tab:robust} does not have: rods typed short, the attachment radius typed 2\,cm short, and the combination (rods and radius wrong with the payload mass typed 20\,\% low).}
-% --- original text, flown before the rig twin; kept to refill this place:
-% \paragraph{Rod length and attachment radius.} The tautness gate scales each UAV's cable feedforward
-% by its measured rod length over the typed one. A rod 4\,cm shorter than typed therefore reads as
-% partly slack, the fleet flies about half of the cable feedforward, and the payload hangs 22\,cm low.
-% Measuring the rods at the hand-over (Section~\ref{sec:takeoff}) removes this
-% (Table~\ref{tab:rodlen}): rod errors of $\pm 4$\,cm and attachment-radius errors of $\pm 2$\,cm are
-% absorbed to within 1\,cm, and with no error the measurement changes nothing. A mass error is not
-% addressed by the measurement; with the payload 20\,\% heavier than typed the hover sat 9\,cm lower.
-%
-% \begin{table}[h]
-% \centering
-% \caption{Hover height with a wrong typed geometry, with and without measuring the rods
-% (software-in-the-loop, target 0.60\,m, two runs each agreeing to 1\,mm).}
-% \label{tab:rodlen}
-% \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xccc}
-% \toprule
-% Error & Measurement off & Measurement on & Measured rod \\
-% \midrule
-% none & 0.634 & 0.634 & 0.500 \\
-% rod 0.46\,m, typed 0.50\,m & 0.416 & 0.631 & 0.460 \\
-% rod 0.50\,m, typed 0.46\,m & 0.569 & 0.634 & 0.500 \\
-% radius 0.27\,m, typed 0.25\,m & -- & 0.642 & 0.514 \\
-% radius 0.23\,m, typed 0.25\,m & -- & 0.626 & 0.486 \\
-% payload mass +20\,\% & -- & 0.540 & 0.500 \\
-% rod $-4$\,cm, radius $-2$\,cm, mass +20\,\% & -- & 0.549 & 0.474 \\
-% \bottomrule
-% \end{tabularx}
-% \end{table}
-
-% CUT 5 Oct 2026 (legacy-only, not to be redone): the thrust-gain trim (kt_trim), a legacy-plant feature that is off on the rig and the twin.
-% \paragraph{Thrust map.} A per-UAV estimate of the throttle-to-acceleration gain, computed from the
-% UAV's own measured acceleration and its static share of the cable force, was built to correct a
-% typed gain that is wrong. In the software-in-the-loop bench it brought the hover from 0.499 and
-% 0.461\,m back to 0.614\,m with the gain typed 10 and 15\,\% high, with the estimates converging to
-% within 1\,\% of the true gain, 3--9\,s after TAKEOFF and without overshoot. In Gazebo, from a floor start with the
-% gain typed 10\,\% high, the fleet parked at 0.53\,m without it and lifted to 0.609\,m with it. It needed
-% a floor-contact test, because while a UAV rests on the floor the floor carries part of its weight
-% and the estimate read that as strong motors. With two UAVs it chattered at 2\,Hz until its inputs were
-% time-aligned. On the rig the thrust map was instead identified directly (Section~\ref{sec:hardware}),
-% and the estimate is kept off.
-
-% CUT 5 Oct 2026 (legacy-only, not to be redone): the first height-integral test, superseded by Table tab:robust and the disturbance table.
-% \paragraph{Height integral.} The bounded height integral on the target (Section~\ref{sec:disturbance})
-% was first tested on a hover that sat high without it: 0.658\,m in two runs without the integral
-% against 0.600\,m in three runs with it. In software-in-the-loop it held 0.600\,m in every static-offset
-% case in both directions, stayed inert through the circle, and saturated with a warning when the error
-% was a large gain fault rather than an offset.
+The controller is given the payload's mass, the rod lengths, the attachment radius and each UAV's thrust
+map; on the rig each is measured, and each can be wrong. In the rig twin's hover at 1.0\,m with one wrong
+value (Appendix~\ref{sec:app_robust}, Table~\ref{tab:robust}), a wrong payload mass moves the hover by about
+1.25\,cm per percent of mass, which the height integral removes while the miss is inside its 0.25\,m gate; a
+20\,\% overestimate puts the ring just over the gate, so the integral never starts and the ring holds 26\,cm
+high. Measuring the rods at the hand-over absorbs a 5\,cm rod error; without it the ring sits 8\,cm high and
+the integral, waiting for every rod to read taut, does not help. A 2\,cm error in the attachment radius has
+no visible effect, and all 28 flights landed.
+% Detail, Table tab:robust and the rod-length redo box moved 9 Oct (page trim) to Appendix D.
 
 \subsubsection{Estimators from the literature}
 \label{sec:sim_methods}
@@ -349,24 +213,13 @@ gate stays closed.}
 % ancillary_tracker, l1_ring, xy_stiffness_b3); B4 notes 2026-10-01_load_ext_force (offline replay).
 % All flown with the tracker box at 0.025 (before the x0 finding): the +4.8 cm hold is the box.
 
-Before the initial-condition fix, the alternatives of Section~\ref{sec:disturbance} were tried
-against the steady errors, each in the same three-UAV rig twin. Three cases represent the internal
-errors: the hover itself, and one UAV whose thrust map is wrong in each direction (its real offset
-0.03 above or below the 0.185 its tracker assumes). Two represent external forces: a 1\,N horizontal
-push on the ring, and a 0.4\,m/s wind during the orbit. Table~\ref{tab:methods} in
-Appendix~\ref{sec:app_negatives} gives the results and the details of each approach. All of them were
-flown with the tracker's relaxed initial condition, so the hover without any correction sits 4.8\,cm
-high; the comparisons between rows still hold. In short, the height integral on the target zeroes the
-height in every case and does nothing horizontally; the force balance removes the push and most of
-the wind but cannot see the internal height offset; the offset-free observer helps everywhere but
-converges slowly; and the measured cable force is the only approach that levels the ring against one
-UAV's wrong thrust map, but a UAV tipped in four of its six landings.
-
-Two conclusions carried forward. First, the internal height offset was not a force at all, which is
-why no force estimate could find it; it turned out to be the tracker's initial condition.
-Second, a wrong thrust map on one UAV is a moment on the ring, and only a correction of that UAV's own
-force removes the tilt it causes. A force on the ring, estimated or integrated, can only move the
-whole formation.
+Before the initial-condition fix, the alternatives of Section~\ref{sec:disturbance} were flown in the
+three-UAV rig twin against the hover, one UAV's thrust map wrong in either direction, a 1\,N push and a
+0.4\,m/s wind (Appendix~\ref{sec:app_methods}, Table~\ref{tab:methods}). Two conclusions carried forward.
+First, the internal height offset was not a force at all, which is why no force estimate could find it; it
+turned out to be the tracker's initial condition. Second, a wrong thrust map on one UAV is a moment on the
+ring, and only a correction of that UAV's own force (the measured cable force) removes the tilt it causes;
+a force on the ring, estimated or integrated, can only move the whole formation.
 
 \subsubsection{Tilt and height}
 \label{sec:res_tilt}
@@ -385,7 +238,7 @@ removes it.
 
 \begin{table}[h]
 \centering
-\small
+\footnotesize
 \caption{Sources of steady payload error found in this work, how each shows at the payload and what
 removes it.}
 \label{tab:error_sources}

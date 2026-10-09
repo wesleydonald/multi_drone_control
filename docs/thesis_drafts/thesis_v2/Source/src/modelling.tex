@@ -6,10 +6,8 @@
 \subsection{Cable-Suspended Transport and Model Assumptions}
 \label{sec:lit_models}
 
-The cable connecting each UAV to the payload is a critical component of the system model, and the
-assumptions made about its behaviour significantly affect both the complexity of the dynamics and
-the validity of the controller. Two main modelling approaches are presented in the literature, as
-illustrated in Figure~\ref{fig:tension}.
+The assumptions made about the cable set both the complexity of the dynamics and the validity of
+the controller. The literature uses two models (Figure~\ref{fig:tension}).
 
 \begin{figure}[h]
 \centering
@@ -68,14 +66,12 @@ illustrated in Figure~\ref{fig:tension}.
 \label{fig:tension}
 \end{figure}
 
-The most common simplification is the \textit{rigid massless rod} assumption, adopted by \cite{efficient} and \cite{wahbaKinodynamicMotionPlanning2024}, in which the cable is treated as a rigid link of fixed length $l$. The cable direction is described by a unit vector $\mathbf{q}_i$ and tension acts purely along this direction,
+The most common is the \textit{rigid massless rod}, adopted by \cite{efficient} and \cite{wahbaKinodynamicMotionPlanning2024}: a rigid link of fixed length $l$ along the unit vector $\mathbf{q}_i$, with the tension acting purely along it,
 
 \begin{equation}
     \mathbf{T}_i = \lambda_i \mathbf{q}_i, \quad \lambda_i \geq 0
 \end{equation}
 
-where $\lambda_i$ is the scalar tension magnitude and the constraint $\lambda_i \geq 0$ is due to the taut cable assumption, as cables can pull but not push. This keeps the system state compact and computationally tractable, at the cost of being unable to capture cable slackness. \\
+where $\lambda_i$ is the tension, non-negative because a cable can pull but not push. The state stays compact and tractable, but slack cannot be captured. The \textit{mass-spring-damper chain} of \cite{distributedNMPC} discretises the cable into $n$ lumped masses joined by spring--damper links of stiffness $k_s$, damping $b$ and rest length $l_0$. It captures sag and oscillation, at $6n$ extra states per cable.
 
-A more complex alternative is the \textit{mass-spring-damper chain}, used by \cite{distributedNMPC}, in which the cable is discretised into $n$ lumped masses connected by spring--damper links of stiffness $k_s$, damping $b$ and rest length $l_0$. This captures realistic cable sag and oscillation, but increases the state dimension by $6n$ per cable, which becomes complex in a multi-UAV system. \\
-
-Regardless of the cable model used, the majority of controllers in the literature impose a \textit{taut cable assumption}, requiring cable tension to remain strictly positive throughout the task. A slack cable introduces a unilateral constraint and a discontinuity in the equations of motion, and handling this rigorously remains an open problem \cite{efficient}. For moderately aggressive indoor flight, the rigid rod model with the taut cable assumption is sufficient, consistent with \cite{tudelft}.
+Whatever the model, most controllers assume taut cables, with tension strictly positive throughout the task. A slack cable adds a unilateral constraint and a discontinuity in the equations of motion, and handling it rigorously remains open \cite{efficient}. For moderately aggressive indoor flight the rigid rod with taut cables is sufficient, consistent with \cite{tudelft}.

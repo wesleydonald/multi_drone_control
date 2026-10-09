@@ -7,32 +7,27 @@
 \label{sec:metrics}
 
 All metrics are computed from the logged motion-capture poses of the payload and the UAVs, with the
-events (TAKEOFF, the push, DETACH, LAND) taken from the run's event log.
-
+events (TAKEOFF, the push, DETACH, LAND) from the run's event log.
 \begin{description}
-    \item[Height error] $e_z = z_L - z_L^{\mathrm{ref}}$, positive with the payload high. In hover, it
-    is averaged over the 15\,s before LAND.
-    \item[Horizontal error] $\|\mathbf{e}_{xy}\|$, the distance between the payload's centre and its
-    reference in the horizontal plane. On a trajectory, it is averaged over the first lap or the
-    whole figure, and its maximum is reported as well.
-    \item[Payload tilt] The angle between the ring's axis and the vertical. Its mean over the hover and
-    its peak after an event are reported.
-    \item[Heave] The peak-to-peak height of the payload over the hover window.
-    \item[Disturbance response] For a constant force applied for a fixed time, the displacement along
-    the force relative to its mean over the 5\,s before. The steady value is its mean over the last
-    5\,s of the force. The peak is its maximum while the force acts, and the overshoot its largest
-    excursion the other way after the force ends. The time to recover is the time after which it
-    stays within 1\,cm.
-    \item[Stiffness] The applied force divided by the steady displacement with no integral action.
+    \item[Height error] $e_z = z_L - z_L^{\mathrm{ref}}$, positive with the payload high; in hover, averaged
+    over the 15\,s before LAND. \textbf{Heave:} its peak-to-peak over the hover window.
+    \item[Horizontal error] $\|\mathbf{e}_{xy}\|$, the horizontal distance between the payload's centre and
+    its reference; on a trajectory, its mean over the first lap or the whole figure, and its maximum.
+    \item[Payload tilt] The angle between the ring's axis and the vertical: its mean over the hover and its
+    peak after an event.
+    \item[Disturbance response] For a constant force applied for a fixed time, the displacement along the
+    force relative to its mean over the 5\,s before: steady (mean over the last 5\,s of the force), peak
+    (while the force acts), overshoot (the largest excursion the other way after it ends) and time to
+    recover (after which it stays within 1\,cm). \textbf{Stiffness:} the force over the steady displacement
+    with no integral action.
 % CHECK: the detach results (Table tab:detach) measure the time until the tilt stays under the hover's
 % own maximum plus 0.5 deg and the largest height change in the 12 s after DETACH, not the 2 deg and the
 % height loss defined here; the earlier layout study may have used these. Align once the detach is re-flown.
     \item[Detach] The peak payload tilt after DETACH, the time until the tilt stays under 2$^\circ$, and
     the payload's height loss.
-    \item[Attach] The peak payload tilt after the weld, the payload's height loss (dip) after the
-    weld, and whether the tilt returns under 2$^\circ$ within 3\,s; for the full rejoin mission, also
-    the tilt at the detach, the mean tilt over the orbit and the time from TAKEOFF to landed.
+    \item[Attach] The peak payload tilt and the height loss (dip) after the weld, and whether the tilt
+    returns under 2$^\circ$ within 3\,s; for the rejoin mission, also the tilt at the detach, the mean tilt
+    over the orbit and the time from TAKEOFF to landed.
     \item[Solver health] The number of planner solves that failed or did not converge.
 \end{description}
-
 Each table cell is the mean over its runs, with the number of runs in brackets.

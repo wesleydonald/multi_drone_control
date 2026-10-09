@@ -7,31 +7,27 @@
 \label{sec:dissipative}
 
 The second reference generator is a port of the decentralised dissipative controller of Quan et
-al.\ \cite{quan2025swarm}, adapted to rigid rods, a ring payload and the same trackers. It was built
-to compare the two approaches of the literature review on the same plant (RQ2), and because a
-member leaving or joining is its native mode of operation: the network needs no new solver and no
-hand-designed redistribution when the team changes.
+al.\ \cite{quan2025swarm}, adapted to rigid rods, a ring payload and the same trackers. It compares the
+two approaches of the literature on the same plant (RQ2), and a member leaving or joining is its native
+mode: it needs no new solver and no hand-designed redistribution when the team changes.
 
 \paragraph{The network.} Every UAV is a node of a virtual spring--damper network, as in the
-table-mechanics analogy of \cite{quan2025swarm}. Two further nodes are pinned. The payload node sits
-at the desired payload position $\mathbf{p}_L^{\mathrm{des}}$, and the anchor node sits on the
-vertical axis above it at the height $l \sin\phi_0$, with $\phi_0 = 45^\circ$ the design elevation
-(the paper's fixed ``table top''). Each UAV node $i$ is joined by springs to the payload node (rest
-length $l$), to the anchor (rest length $l\cos\phi_0$, the cone radius), to its two neighbours in
-the ring (rest length the chord of an even polygon for the current number of members) and to its
-azimuth slot, and is damped relative to all of them:
+table-mechanics analogy of \cite{quan2025swarm}, with two further nodes pinned: the payload node at the
+desired payload position $\mathbf{p}_L^{\mathrm{des}}$, and the anchor node above it at the height
+$l \sin\phi_0$, with $\phi_0 = 45^\circ$ the design elevation (the paper's fixed ``table top''). Each UAV
+node $i$ is joined by springs to the payload node (rest length $l$), to the anchor (rest length
+$l\cos\phi_0$, the cone radius), to its two neighbours in the ring (the chord of an even polygon for the
+current number of members) and to its azimuth slot, and is damped relative to all of them:
 \begin{equation}
     m_n \ddot{\mathbf{x}}_i = \sum_{j \in \mathcal{N}_i} k_{ij}\big(\|\mathbf{x}_j - \mathbf{x}_i\| - L_{ij}\big)
     \frac{\mathbf{x}_j - \mathbf{x}_i}{\|\mathbf{x}_j - \mathbf{x}_i\|}
     \; - \; c \sum_{j \in \mathcal{N}_i} \big(\dot{\mathbf{x}}_i - \dot{\mathbf{x}}_j\big).
     \label{eq:network}
 \end{equation}
-The damping is the dissipation: any disturbance, including a member leaving, injects energy that it
-removes. With every spring at its rest length the desired cone is a force-free equilibrium, and the
-damping makes it the stable one. The network is integrated with semi-implicit Euler, ten substeps
-per 10\,Hz tick. Its defaults are spring stiffnesses of 40, 40 and 20\,N/m to the payload, anchor
-and neighbours, 18\,N/m to the slot, damping $c = 6$\,N\,s/m and a node mass $m_n = 0.5$\,kg, which
-settle the network in about 1\,s.
+The damping removes the energy any disturbance injects, a member leaving included. With every spring
+at its rest length the desired cone is a force-free equilibrium, and the damping makes it the stable
+one. The network is integrated with semi-implicit Euler, ten substeps per 10\,Hz tick; its defaults
+(Appendix~\ref{sec:app_params}) settle it in about 1\,s.
 
 \paragraph{From node to reference.} As in \cite{quan2025swarm}, the node position is the reference.
 UAV $i$ is placed one rod length out from its own attachment point along the direction of its node,
@@ -41,8 +37,7 @@ UAV $i$ is placed one rod length out from its own attachment point along the dir
 \end{equation}
 where $R_\psi$ is the payload's measured yaw only. Every spring hangs off the node's own attachment
 point on the rim, not the payload's centre. The cone stays vertical; tilting it onto the effective
-gravity of the commanded acceleration, as the planner's references do, is one of the variants of
-Section~\ref{sec:sim_architecture}.
+gravity, as the planner's references do, is a variant of Section~\ref{sec:sim_architecture}.
 
 \redo{the network's cone drawn from the payload's centre against from each UAV's own attachment point on the rim (offline network test): whether the rods can reach the geometry.}
 % --- original text, flown before the rig twin; kept to refill this place:
@@ -53,25 +48,23 @@ Section~\ref{sec:sim_architecture}.
 % was tried and gave no benefit (Section~\ref{sec:sim_architecture}).
 
 \paragraph{Cable feedforward.} The trackers need the rod's pull, which the paper's velocity-commanded
-robots do not. With $m$ UAVs attached, each gets an equal share
-$\lambda_i = m_L g / (m \sin\phi_i)$ at its node's elevation $\phi_i$. For an uneven layout, where
-equal shares would leave a net moment and tilt the payload, the tensions instead come from a
-six-degree-of-freedom wrench balance at the actual attachment geometry.
+robots do not. With $m$ UAVs attached, each gets an equal share $\lambda_i = m_L g / (m \sin\phi_i)$ at
+its node's elevation $\phi_i$; on an uneven layout, where equal shares would leave a net moment, the
+tensions come from a six-degree-of-freedom wrench balance at the actual attachment geometry.
 
-\paragraph{Open loop in payload pose.} The network is built on the desired payload position and the
-measured yaw only. It does not use the payload's measured position or roll and pitch. Building the
-geometry or the tensions on the measured attitude, or adding a horizontal leash on the measured
-position, closes a loop on the payload's pose; these variants are in
-Section~\ref{sec:sim_architecture}. The rods close the loop physically.
+\paragraph{Open loop in payload pose.} The network uses the desired payload position and the measured yaw
+only, not the payload's measured position or roll and pitch. Building the geometry or the tensions on the
+measured attitude, or adding a horizontal leash on the measured position, closes a loop on the payload's
+pose (variants in Section~\ref{sec:sim_architecture}); the rods close the loop physically.
 % --- original text, flown before the rig twin; kept to refill this place:
 % measured yaw only. It does not use the payload's measured position or roll and pitch. Building the
 % geometry or the tensions on the measured attitude, or adding a horizontal leash on the measured
 % position, closes a loop that amplifies tilt: each variant tilted the payload further or aborted the
 % flight (Section~\ref{sec:sim_architecture}). The rods close the loop physically.
 
-\paragraph{Common-mode trim.} The tracker has no integrator, so a steady thrust error shows as a
-steady sag. One integrator on the measured payload height error adds the same correction to every
-attached UAV's acceleration feedforward, bounded to 2\,m/s$^2$:
+\paragraph{Common-mode trim.} The tracker has no integrator, so a steady thrust error shows as a steady
+sag. One integrator on the measured payload height error adds the same correction, bounded to
+2\,m/s$^2$, to every attached UAV's acceleration feedforward:
 \begin{equation}
     \mathbf{a}_{\mathrm{trim}} = k_{\mathrm{trim}} \int \big(z_L^{\mathrm{des}} - z_L\big)\, dt\; \mathbf{e}_3 .
 \end{equation}
@@ -83,23 +76,21 @@ error, and the differences become a moment (Section~\ref{sec:sim_architecture}).
 A variant scales the trim by each UAV's tension share, so that on an uneven layout the most heavily
 loaded UAV, which sags most, gets the most correction.
 
-\paragraph{Velocity tracking.} The robots of \cite{quan2025swarm} take a velocity command, and their
-autopilot closes velocity, attitude and rate. Betaflight accepts only body rates and throttle, so the
-velocity layer is supplied by an alternative tracker mode at 50\,Hz:
+\paragraph{Velocity tracking.} The robots of \cite{quan2025swarm} take a velocity command and their
+autopilot closes velocity, attitude and rate; Betaflight accepts only body rates and throttle, so an
+alternative tracker mode at 50\,Hz supplies the velocity layer:
 \begin{equation}
     \mathbf{v}_{\mathrm{sp}} = \mathbf{v}^{\mathrm{ref}} + k_p\big(\mathbf{p}^{\mathrm{ref}} - \mathbf{p}\big),
     \qquad
     \mathbf{a}_{\mathrm{sp}} = \mathbf{a}^{\mathrm{ff}} + k_v\big(\mathbf{v}_{\mathrm{sp}} - \mathbf{v}\big),
 \end{equation}
 from which the throttle and the attitude set-point follow, and the rate command follows from the
-attitude error through the inverse of the flight controller's rate curve. This loop cannot fly the
-lift, so the mode used with the network flies the MPC tracker through the lift and switches to the
-velocity loop when the network takes over.
+attitude error through the inverse of the flight controller's rate curve. This loop cannot fly the lift,
+so the MPC tracker flies the lift and the velocity loop takes over with the network.
 
-\paragraph{Switching between planner and network.} The planner always flies the creep, the lift and
-the carry; the network cannot break the payload off the floor. The network takes over on a detach
-(in the network detach mode) or by command. At the switch its desired payload position is set to the
-measured one, so there is no jump in the references, and the cable feedforward blends from the
-planner's values to the network's over a ramp. After a detach the network holds the payload while it
-redistributes the load, and then hands back to a planner solver for the smaller team, primed twice
-from the measured state before it flies.
+\paragraph{Switching between planner and network.} The planner always flies the creep, the lift and the
+carry, since the network cannot break the payload off the floor. The network takes over on a detach (in
+the network detach mode) or by command, with its desired payload position set to the measured one, so the
+references do not jump, and the cable feedforward blended from the planner's values to the network's over
+a ramp. After a detach the network holds the payload while it redistributes the load, then hands back to a
+planner solver for the smaller team, primed twice from the measured state before it flies.

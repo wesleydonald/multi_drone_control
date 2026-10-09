@@ -45,11 +45,13 @@ maximum plus 0.5$^\circ$ (Table~\ref{tab:detach}).
 % \end{tabular}
 % \end{table}
 
-\paragraph{The transient.} Figure~\ref{fig:detach} shows one detach in the rig twin: four UAVs on plates 1/3/5/9 in hover, the
-UAV on plate~3 released, with $\epsilon = 0$. The uneven 1/3/5/9 layout loads the UAV on plate~9 most.
-At DETACH the planner, re-solved for the three survivors on their actual plates, hands the released
-UAV's load to them in one 0.1\,s tick. The ring tilts by at most 3.3$^\circ$ and is back within its
-hover band after 1\,s.
+\paragraph{The transient.} Figure~\ref{fig:detach} shows one detach in the rig twin: four UAVs on plates 1/3/5/9
+in hover (a layout that loads the UAV on plate~9 most), the UAV on plate~3 released, with $\epsilon = 0$. At
+DETACH the planner, re-solved for the three survivors on their actual plates, hands the released UAV's load to
+them in one 0.1\,s tick. The ring tilts by at most 3.3$^\circ$ and is back within its hover band after 1\,s.
+Over five runs the peak was 2.8--4.0$^\circ$, back in band after 0.9--1.0\,s, with a height change of
+3.4--3.6\,cm, against 3.2$^\circ$, 2.6\,s and 2.7\,cm in one earlier rehearsal with the relaxed box and the
+height integral on (Table~\ref{tab:detach}, Appendix~\ref{sec:app_tests}): the five runs agree closely.
 
 \begin{figure}[h]
 \centering
@@ -62,21 +64,6 @@ arrow: time until the tilt stays below it. (c) Ring height error against the 1.0
 the tensions are planned, since the rig twin does not measure them.}
 \label{fig:detach}
 \end{figure}
-
-\paragraph{Repeats.} Table~\ref{tab:detach} gives the same detach over five runs with $\epsilon = 0$,
-against the earlier rehearsal, which differed in two ways: the relaxed box and the height integral on.
-With $\epsilon = 0$ every run peaks at a few degrees and is back within its hover band in about a
-second, and the five runs agree closely.
-
-\begin{table}[htbp]
-\centering
-\caption[Detach, repeats]{Detach of one UAV of four in hover by OCP resize, Gazebo rig twin, plates 1,
-3, 5 and 9, ring at 1.0\,m. Peak tilt: in the 5\,s after DETACH. Back in band: time until the tilt
-stays under the hover's own maximum plus 0.5$^\circ$. Height change: largest change from the mean
-height before DETACH, in the 12\,s after. Ranges over the runs.}
-\label{tab:detach}
-\input{Source/src/tables/detach}
-\end{table}
 
 \paragraph{OCP resize against network hand-off.}
 \redo{OCP resize against network hand-off on the same detach, four UAVs to three during a circle (and in hover): settled payload tilt and the survivors' tracking error; with it the network's hand-back to the planner, with and without the two fixes (no soft-start restart on an airborne hand-back, solver primed before it flies).}
@@ -112,16 +99,14 @@ height before DETACH, in the 12\,s after. Ranges over the runs.}
 % OCP resize held the survivors level to within 0.5--2$^\circ$.
 
 \paragraph{On the rig.}\label{sec:res_detach_rig} The detach was flown on the rig on 8 October in four flights
-(Table~\ref{tab:rig_oct8}): announced, where the planner releases the magnet and resizes at once;
-unannounced, where the magnet is switched off without telling the planner, which finds the detach from the
-stretched rod; unannounced with a 150$^\circ$ gap left in the ring; and unannounced during the circle. Every
-detach landed with the three remaining UAVs still carrying the ring, and in the circle they carried on along
-the path without a pause. The planner found the unannounced detaches 0.33--0.42\,s after the magnet was
-switched off, which includes the magnet's own release time. Figure~\ref{fig:rig_detach} sets the three hover
-detaches against the twin. The unannounced detaches stayed within the twin's spread in tilt and dipped about
-1\,cm more. The announced detach rose 11$^\circ$ above its level before the release against the twin's
-6--7$^\circ$, and dipped 6.9\,cm against 2.6--3.0\,cm; it is a single run, so whether the rig's announced
-release is systematically harsher than the twin's is open.
+(Table~\ref{tab:rig_oct8}): announced, where the planner releases the magnet and resizes at once; unannounced,
+where the magnet is switched off without telling the planner, which finds the detach from the stretched rod;
+unannounced with a 150$^\circ$ gap left in the ring; and unannounced during the circle. Every detach landed with
+the three remaining UAVs still carrying the ring, and in the circle they carried on along the path without a
+pause. The planner found the unannounced detaches 0.33--0.42\,s after the magnet was switched off, the magnet's
+own release time included. Against the twin (Figure~\ref{fig:rig_detach}) the unannounced detaches stayed
+within its spread in tilt and dipped about 1\,cm more; the single announced detach rose and dipped more than
+the twin, so whether the rig's announced release is systematically harsher is open.
 
 \begin{table}[h]
 \centering
@@ -162,22 +147,20 @@ against 2.5--2.7\,cm; 5.8 against 4.5--4.8\,cm). Rig traces end at the fleet's L
 \end{figure}
 
 \paragraph{A constant offset.} All four detach flights held the ring 5--6.5\,cm to one side of its reference,
-against 1.9\,cm in the carry flights of the day before. The detach flights ran the planner's reference height
-integral, because the model integral was not yet allowed on a fleet that changes size; the carry flights ran the
-model integral (Section~\ref{sec:res_rig_integral}). In the circle the offset made the path error 6.8\,cm; with the
-circle's mean offset and the lag removed, the remaining error was 2.4\,cm. The model integral is now kept through a
-resize: in the twin it reduced the hover offset of the same detach configurations from about 3\,cm to 2\,cm.
+against 1.9\,cm in the carry flights of the day before, because they ran the reference-shift height integral (the
+model integral was not yet allowed on a fleet that changes size) where the carry flights ran the model integral
+(Section~\ref{sec:res_rig_integral}). In the circle the offset made the path error 6.8\,cm; with the mean offset
+and the lag removed, 2.4\,cm remained. The model integral is now kept through a resize: in the twin it reduced the
+hover offset of the same detach configurations from about 3\,cm to 2\,cm.
 \redo{the model integral through a resize on the rig: a hover detach and the circle detach, against the 8 October
 offset of 5--6.5\,cm (rig, 14 October).}
 
-\paragraph{The freed UAV's own landing.} After a detach the freed UAV lands by itself, off the ring
-(Section~\ref{sec:reconfig}). On the rig on 8 October this landing did not finish: in all four detach
-flights the freed UAV floated above its resting height until the fleet's disarm at the end of the
-landing dropped it about 0.3\,m (Figure~\ref{fig:departed_landing}a), and the twin shows the same stall
-(Figure~\ref{fig:departed_landing}b). Its landing was therefore changed: its height reference is pushed
-down to its own resting height, and once it is there it is disarmed alone, without waiting for the
-fleet (Figure~\ref{fig:departed_landing}c, in the twin). Figure~\ref{fig:rig_departed} shows the
-change on the rig.
+\paragraph{The freed UAV's own landing.} On the rig on 8 October the freed UAV's own landing
+(Section~\ref{sec:reconfig}) did not finish: in all four detach flights it floated above its resting height
+until the fleet's disarm at the end of the landing dropped it about 0.3\,m (Figure~\ref{fig:departed_landing}a),
+and the twin shows the same stall (Figure~\ref{fig:departed_landing}b). Its height reference is now pushed down
+to its own resting height, and once there it is disarmed alone, without waiting for the fleet
+(Figure~\ref{fig:departed_landing}c in the twin; Figure~\ref{fig:rig_departed} on the rig).
 
 \begin{figure}[htbp]
 \centering
@@ -188,10 +171,9 @@ change on the rig.
 
 \pendingfig{fig:rig_departed}{The freed UAV's own landing on the rig with the departed landing: pushed to its resting height and disarmed alone.}{rig W4/W5, 14 Oct}
 
-\paragraph{Fewer than three.} Detaching from three UAVs to two is not attempted. A rigid payload on two
-rim points is a pendulum about the line between them, and its centre of mass hangs off that line.
-The planner refuses a detach that would leave fewer than three
-UAVs.
+\paragraph{Fewer than three.} Detaching from three UAVs to two is not attempted: a rigid payload on two rim
+points is a pendulum about the line between them, with its centre of mass off that line, so the planner refuses
+a detach that would leave fewer than three UAVs.
 
 \redo{a detach from three UAVs to two, to show the payload capsizing on two rim points.}
 % --- original text, flown before the rig twin; kept to refill this place:

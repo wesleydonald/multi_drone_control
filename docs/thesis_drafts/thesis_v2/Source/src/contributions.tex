@@ -40,8 +40,8 @@ of the event, rather than relying on the remaining UAVs to absorb it passively.
 Both questions rest on a team that carries the payload well before anything changes, so the
 results first establish that carry. Table~\ref{tab:rq_map} gives the experiments behind each
 question, flown in the rig twin (a Gazebo simulation of the lab rig, Section~\ref{sec:simulation}) and
-on the rig, and the section that answers it. A reconfiguration is handled by resizing the planner's
-optimal control problem (OCP), the OCP resize of Section~\ref{sec:reconfig}.
+on the rig, and the section that answers it. A reconfiguration resizes the planner's optimal control
+problem (OCP): the OCP resize of Section~\ref{sec:reconfig}.
 
 \begin{table}[h]
 \centering
@@ -71,10 +71,9 @@ This thesis contributes the following.
 \begin{enumerate}
     \item \textbf{A centralised payload controller flown on commercial-grade hardware.} The
     load--cable planner of \cite{tudelft} is combined with a cable-aware tracking model predictive
-    controller (MPC) per UAV that
-    commands Betaflight flight controllers over their radio links, with no changes to the
-    UAVs' firmware. It includes a floor start for rigid rods, a pretension and lift procedure, and
-    a thrust map identified on the rig (Sections~\ref{sec:controller}, \ref{sec:tracker}
+    controller (MPC) per UAV that commands Betaflight flight controllers over their radio links,
+    with no changes to the UAVs' firmware, a floor start for rigid rods, a pretension and lift
+    procedure, and a thrust map identified on the rig (Sections~\ref{sec:controller}, \ref{sec:tracker}
     and~\ref{sec:takeoff}). On the rig, three UAVs carried the 0.86\,kg ring at up to 1.0\,m, around a
     circle and through a figure-eight (Section~\ref{sec:res_carry}).
     \item \textbf{Reconfiguration by resizing the optimal control problem.} The attachment
@@ -100,11 +99,11 @@ This thesis contributes the following.
     plant, tracker and test cases, including the tracking architecture the dissipative method
     assumes (Section~\ref{sec:sim_architecture}).
     \redo{the comparison itself (Section~\ref{sec:sim_architecture}).}
-    \item \textbf{An analysis of steady errors in the cascade.} Several sources of steady payload
-    error were identified and separated: a relaxed initial condition in the tracker, a breakaway
-    pull cap held for the whole flight, model errors in thrust and rod mass, and external forces.
-    Integral action in the planner's model and several estimation approaches from the
-    literature are compared against them (Section~\ref{sec:res_steady}).
+    \item \textbf{An analysis of steady errors in the cascade.} Four sources of steady payload error
+    were separated (a relaxed initial condition in the tracker, a breakaway pull cap held for the whole
+    flight, model errors in thrust and rod mass, and external forces), and integral action in the
+    planner's model and estimators from the literature were compared against them
+    (Section~\ref{sec:res_steady}).
 \end{enumerate}
 % Cut 9 Oct (structure audit): two further items, "A simulation and verification environment that
 % mirrors the rig" (now Section~\ref{sec:experiments}) and "Hardware results" (its claim is folded
@@ -112,10 +111,9 @@ This thesis contributes the following.
 
 \subsection{Outline}
 
-Section~\ref{sec:lit} reviews cooperative cable-suspended transport, its control architectures and the work on
-changing team composition, and states the gap. Section~\ref{sec:method} describes the rig, its model, the planner
-and the trackers, the floor start and landing, the reconfiguration by OCP resize, the dissipative
+Section~\ref{sec:lit} reviews the literature and states the gap. Section~\ref{sec:method} describes the
+rig, its model, the controller, the floor start and landing, the reconfiguration, the dissipative
 alternative and the experimental method. Section~\ref{sec:results} answers the questions in the order of
-Table~\ref{tab:rq_map} and discusses the answers against the literature. Section~\ref{sec:conclusion} concludes. The
-appendices hold the software, the parameters, the rig operations, the negative results and the
-timeline.
+Table~\ref{tab:rq_map} and discusses them against the literature, and Section~\ref{sec:conclusion}
+concludes. The appendices hold the software, the parameters, the rig operations, the negative results
+and further tests, and the timeline.
