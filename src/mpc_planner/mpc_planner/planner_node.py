@@ -962,6 +962,13 @@ class LoadPlanner(Node):
             f'descending={self.descending} land_to_ground={self._land_to_ground})')
         if cmd != 'LAND':
             return
+        if self.phase == 'creep' and self.takeoff_seen and not self.start_taut:
+            # LAND in the floor creep (Wesley 9 Oct: LAND lands every drone, whatever it is doing; R1303
+            # ignored it and the ring lifted): the creep ends where it is, no lift, then the descent below
+            # (the ring is resting, so each drone goes straight down from where it is, _land_hold_refs)
+            self._enter_planner_phase('LAND in the creep', measure=False)
+            self._lift_refused = True
+            self.get_logger().warn('[planner] LAND in the creep: the creep ends here, no lift')
         if self.phase != 'planner' or not self.takeoff_seen:
             self.get_logger().warn('[planner] LAND ignored - not flying yet')
             return
@@ -1721,7 +1728,7 @@ class LoadPlanner(Node):
                 and self.phase == 'planner' and self._settle_left <= 0.0
                 and self._ff_t < self.pretension_s + PRETENSION_HOLD_S)
 
-    def _enter_planner_phase(self, reason):
+    def _enter_planner_phase(self, reason, measure=True):
         """Transition creep -> coupled planner: latch the lift-ramp start height.
         No hard reconverge is forced here: the solver was kept warm on the live
         config through creep (_prime_solver), so the first planner solve warm-starts
@@ -1755,7 +1762,7 @@ class LoadPlanner(Node):
             self.get_logger().error(
                 f'[planner] {reason}: NOT lifting (rods too flat to carry the ring). '
                 f'Holding with no rod pull -- press LAND.')
-        if self.measure_rod_len:
+        if self.measure_rod_len and measure:          # not on a slack creep (a LAND there)
             self._apply_measured_rod_lengths()
         self.get_logger().info(
             f'[planner] {reason} — coupled planner active '

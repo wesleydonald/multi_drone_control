@@ -461,6 +461,12 @@ class CentralController(Node):
 
     def _land_fleet(self):
         if not self.flying:
+            if self.fleet_armed:
+                # LAND before TAKEOFF (Wesley 9 Oct: LAND lands every drone, whatever it is doing; R1311 left
+                # the fleet armed): it is on the floor, so landing it is disarming it, up for the next ARM
+                _announce(self, 'warn', "LAND before TAKEOFF: the fleet is on the floor: disarming it.")
+                self._disarm_fleet(emergency=False, keep_alive=True, reason="LAND before TAKEOFF")
+                return
             _announce(self, 'warn', "Cannot LAND: fleet is not flying.")
             return
         self.landing = True

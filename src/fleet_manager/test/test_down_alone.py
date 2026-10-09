@@ -92,3 +92,20 @@ def test_the_fleet_disarm_skips_a_drone_already_down_alone(sync):
     f._disarm_fleet_thread()
     assert f.arming_clients[3].calls == 0 and all(f.arming_clients[i].calls == 1 for i in range(3))
     assert not any('not answering' in s for s in f._log.lines)
+
+
+# ── LAND before TAKEOFF (Wesley 9 Oct: LAND lands every drone, whatever it is doing; R1311) ──
+
+def test_land_before_takeoff_disarms_the_armed_fleet_and_stays_up(sync):
+    f = _fake()
+    f.fleet_armed = True
+    m.CentralController._land_fleet(f)
+    assert f.service_disarms == [True] and f.abort_pub.msgs == [] and _direct_elrs(f) == 0
+    assert not f.shutdown_requested and not f.fleet_armed and not f.flying
+
+
+def test_land_with_nothing_armed_changes_nothing(sync):
+    f = _fake()
+    m.CentralController._land_fleet(f)
+    assert f.service_disarms == []
+
