@@ -33,6 +33,11 @@ tip the newcomer."
   hero: the worst UAV tilt from LAND to its disarm per phase (two runs), the 30 deg bar dashed; second row: the
   time from LAND to the last disarm. Failures and voids marked. Data: the re-fly on f330bd2.
 
+F_thrust_map -- "Each UAV's hover throttle on the rig is affine in the mass it carries and the pack voltage: one
+slope for all four, a per-UAV offset, and a voltage term; 13 hovers fit to 0.003 rms."
+  hero: the voltage-corrected throttle against the hover mass, one colour per UAV, the fitted line; second panel:
+  the residuals against the pack voltage. Data: the 30 Sep free-hover ladder.
+
 F_tip_feedback -- "Steering the measured magnet tip removes a 4 cm error in the assumed rod, either
 sign, in about 2 s; the approach that flies the body plus a fixed rod length keeps it."
   hero: tip height minus its setpoint from the tip hold's start, switch on (QUAD4's colour, both
@@ -438,7 +443,49 @@ def fig_land_phases():
     return stem, stats
 
 
-FIGS = {'land': fig_land_phases, 'solve': fig_solve, 'departed': fig_departed, 'tip': fig_tip, 'rig_detach': fig_rig_detach}
+THRUST_SPEC = os.path.join(REPO, 'tools', 'test', 'fixtures', 'rig_0930', 'ladder_points.yaml')
+
+
+def fig_thrust():
+    sys.path.insert(0, os.path.join(REPO, 'tools'))
+    import thrust_fit as tf
+    ps.thesis()
+    law = tf.fit(tf.read_spec(THRUST_SPEC))
+    rows = law['rows']
+    a_bar = float(np.nanmean(law['a']))
+    fig, (ax, axr) = plt.subplots(1, 2, figsize=ps.size('full', height=2.2),
+                                  gridspec_kw=dict(width_ratios=[1.5, 1.0]))
+    m = np.linspace(0.52, 0.78, 10)
+    ax.plot(m, a_bar + law['b'] * m, color='0.4', lw=0.8, ls='--', zorder=1)
+    for r in rows:
+        u_c = r['u'] - law['c'] * (r['v'] - tf.V_REF) - (law['a'][r['drone']] - a_bar)   # to 23.5 V, the mean offset
+        col = ps.drone_colour(r['drone'])
+        ax.plot(r['m'] + (r['drone'] - 1.5) * 0.006, u_c, 'o', color=col, ms=4, mec='white', mew=0.5, zorder=2)
+        axr.plot(r['v'], r['res'] * 1000, 'o', color=col, ms=4, mec='white', mew=0.5, zorder=2)
+    for i in range(4):
+        ax.annotate(f'UAV {i + 1}', xy=(0.03, 0.95 - 0.09 * i), xycoords='axes fraction', fontsize=8,
+                    color=ps.drone_colour(i), ha='left', va='top')
+    ax.annotate(f"slope {law['b']:.3f} per kg", xy=(0.70, a_bar + law['b'] * 0.70), xytext=(4, -10),
+                textcoords='offset points', fontsize=8, color='0.35', ha='left', va='top')
+    ax.set_xlabel('Hover mass (kg)')
+    ax.set_ylabel('Throttle at 23.5\\,V')
+    ax.set_xlim(0.52, 0.78)
+    ax.set_xticks([0.55, 0.65, 0.75])
+    axr.axhline(0.0, color='0.6', lw=0.5)
+    axr.set_xlabel('Pack voltage (V)')
+    axr.set_ylabel('Residual ($\\times 10^{-3}$)')
+    axr.set_ylim(-8, 8)
+    axr.set_yticks([-5, 0, 5])
+    axr.annotate(f"rms {law['rms'] * 1000:.1f}$\\times 10^{{-3}}$, {law['n']} hovers", xy=(0.97, 0.95),
+                 xycoords='axes fraction', fontsize=8, color='0.35', ha='right', va='top')
+    ps.panel_label(ax, 'a')
+    ps.panel_label(axr, 'b')
+    stem = os.path.join(OUT, 'F_thrust_map', 'thrust_map')
+    ps.save_print(fig, stem)
+    return stem, dict(a=law['a'], b=law['b'], c=law['c'], rms=law['rms'], n=law['n'])
+
+
+FIGS = {'thrust': fig_thrust, 'land': fig_land_phases, 'solve': fig_solve, 'departed': fig_departed, 'tip': fig_tip, 'rig_detach': fig_rig_detach}
 
 if __name__ == '__main__':
     names = sys.argv[1:] or list(FIGS)
