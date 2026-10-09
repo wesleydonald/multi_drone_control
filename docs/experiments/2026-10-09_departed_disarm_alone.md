@@ -176,3 +176,22 @@ caused by the expected disarm") that this card's 10 rows did not show. Fix f330b
 disarm alone (one-shot keep-alive, unit-tested; it keeps sending disarmed commands; the fleet disarm after LANDED
 closes it). The verdict above stands for its rows only; the rows are re-flown on f330bd2 with the LAND table.
 
+
+### Re-fly on the keep-alive tree (laptop, 9 Oct night)
+
+The card's arms once more on the keep-alive tree (rig-prep b1a9626..d92c1a5; only figure scripts and docs changed
+between them): W4 and W5 twice each, and once each for the rod-tip press, the forced drop, and release then drop.
+
+| run | arm | at rest (s) | disarm edge - at rest (s) | before LANDED | disarm z - rest (m) | aborts | carrier disarms before LANDED | max sim step 3 s after (s) |
+|---|---|---|---|---|---|---|---|---|
+| R1411 | W4 (1) | 37.89 | 0.21 | yes | 0.000 | none | 0 | 0.028 |
+| R1450 | W4 (2) | 37.70 | 0.20 | yes | 0.002 | none | 0 | 0.028 |
+| R1412 | W5 (1) | 48.23 | 0.19 | yes | 0.000 | none | 0 | 0.028 |
+| R1451 | W5 (2) | 48.16 | 0.21 | yes | 0.000 | none | 0 | 0.031 |
+| R1447 | rod-tip press | 64.96 | 0.19 | yes | 0.000 | none | 0 | 0.035 |
+| R1448 | forced drop | 43.14 | 0.21 | yes | 0.001 | none | 0 | 0.031 |
+| R1449 | release, drop | 54.80 | 0.20 | yes | 0.000 | none | 0 | 0.026 |
+
+P1-P4 hold in all seven. In each run the tracker logs "staying up (disarmed alone; the fleet still flies)", and
+it exits only in the end-of-run teardown. The largest sim step in the 3 s after the disarm is 0.035 s (R1378: 0.54 s).
+The departed drone does not move after its edge (P3: at most 2 mm).
