@@ -564,7 +564,8 @@ def attach(context, launch_dir, profile_vals):
                      'magnet_index': 0,
                      'drone_index': -1,
                      'x3_link_poses_are_relative': True,
-                     'max_rate_hz': f('tip_max_rate_hz')}]))
+                     'max_rate_hz': f('tip_max_rate_hz'),
+                     'noise_sd_m': f('tip_noise_sd_m')}]))
 
     # ROS->gz bridges for the magnet DetachableJoint, mirroring the per-drone detach_bridge_{i}
     # above (the PROVEN detach path). The magnet manager publishes std_msgs/Empty on these ROS

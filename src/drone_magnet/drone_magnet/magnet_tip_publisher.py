@@ -39,6 +39,9 @@ class MagnetTipPublisher(Node):
         # at most this rate (Hz; 0 = every frame): the rig's mocap is capped at 120 Hz, the twin publishes 500
         self.max_rate_hz = float(self.declare_parameter('max_rate_hz', 0.0).value)
         self._last_pub_t = None
+        # mocap-like noise on the twin tip (m, sd per axis; 0 = none): the rig's tip is never noiseless
+        self.noise_sd_m = float(self.declare_parameter('noise_sd_m', 0.0).value)
+        self._rng = np.random.default_rng()
         # test only (runner TIP_FREEZE; card 2026-10-09_approach_tip_feedback): repeat the last output for the
         # given seconds, as a frozen mocap body would. Inert unless a message arrives.
         self._frozen = None             # (pose, until) while frozen
@@ -143,11 +146,18 @@ class MagnetTipPublisher(Node):
         if self.max_rate_hz > 0.0 and self._last_pub_t is not None and now - self._last_pub_t < 1.0 / self.max_rate_hz:
             return
         self._last_pub_t = now
+        if self._frozen is not None and now >= self._frozen[1]:
+            self._frozen = None
         if self._frozen is not None:
-            if now < self._frozen[1]:
-                out_pose = self._frozen[0]
-            else:
-                self._frozen = None
+            out_pose = self._frozen[0]
+        elif self.noise_sd_m > 0.0:
+            noisy = Pose()
+            noisy.orientation = out_pose.orientation
+            n = self._rng.normal(0.0, self.noise_sd_m, 3)
+            noisy.position.x = out_pose.position.x + float(n[0])
+            noisy.position.y = out_pose.position.y + float(n[1])
+            noisy.position.z = out_pose.position.z + float(n[2])
+            out_pose = noisy
         self._last_out = out_pose
         out = PoseStamped()
         out.header.stamp = self.get_clock().now().to_msg()

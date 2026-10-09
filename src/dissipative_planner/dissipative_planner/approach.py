@@ -32,7 +32,9 @@ TIP_K = 0.5                     # 1/s on the filtered error: crossover ~0.42 rad
 TIP_TAU_S = 1.5                 # s low-pass on the error, run only in the hold
 TIP_RATE = 0.02                 # m/s on the correction
 TIP_C_MIN, TIP_C_MAX = -0.06, 0.08    # m: at most 6 cm down (contact windup), 8 cm up
-TIP_DB_IN, TIP_DB_IN_S, TIP_DB_OUT = 0.005, 2.0, 0.015   # deadband: in below 5 mm for 2 s, out above 15 mm
+TIP_DB_IN, TIP_DB_IN_S, TIP_DB_OUT = 0.005, 2.0, 0.015   # deadband on the raw error's 0.5 s mean: in below 5 mm
+                                                         # for 2 s, out above 15 mm (the filtered error lags: judged
+                                                         # on it, the loop froze 5-7 mm past the setpoint, rev 4)
 TIP_CONTACT_S, TIP_CONTACT_DC, TIP_CONTACT_RATIO = 2.0, 0.003, 0.3
 HOLD_AT_GOAL_M, HOLD_AT_GOAL_S = 0.005, 1.0
 HOLD_SPEED_IN, HOLD_SPEED_OUT = 0.05, 0.08   # m/s, the target's 1 s mean (rig 8 Oct: hover p50 0.02-0.03, circle 0.12)
@@ -116,11 +118,12 @@ class TipLoop:
             self.reason = 'tip invalid'
             return self.c
         self.e_f += self.dt / (TIP_TAU_S + self.dt) * (self.e - self.e_f)
+        e_mean = float(np.mean(self._e_hist))
         if self._db:
-            if abs(self.e_f) > TIP_DB_OUT:
+            if abs(e_mean) > TIP_DB_OUT:
                 self._db, self._db_t = False, 0.0
         else:
-            self._db_t = self._db_t + self.dt if abs(self.e_f) < TIP_DB_IN else 0.0
+            self._db_t = self._db_t + self.dt if abs(e_mean) < TIP_DB_IN else 0.0
             self._db = self._db_t >= TIP_DB_IN_S
         self._c_hist.append(self.c)
         self._tip_hist.append(float(tip_z))

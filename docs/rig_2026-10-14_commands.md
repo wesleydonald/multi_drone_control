@@ -61,7 +61,10 @@ $A weld_radius:=<from 09:00, default 0.025> r8b                         # weld, 
   QUAD4 stays down and armed idle (never flew).
 - **r8a (dry):** after 10 s steady: `ros2 topic pub -t 3 /magnet/command std_msgs/msg/String "{data: 'ON'}"`.
   QUAD4 climbs, transits, descends over plate 9 and holds; its magnet stays latched OFF (weld 0). The tip loop is
-  on (attach_m1.yaml): T2 shows `approach: drone 3 tip hold`; tip.csv in the run's logs shows where it parks.
+  on in attach_m1.yaml for r8a too: a no-weld preview of R8b's loop (Wesley's decision is "on from the first R8b";
+  the preview was said in chat 9 Oct; for r8a with the loop off add `approach_tip_feedback:=` via a params file
+  copy). T2 shows `approach: drone 3 tip hold (tip +0.0xx m from its setpoint, + above)`; tip.csv in the run's
+  logs shows where it parks.
   After 15 s of hold: first r8a `fleet land` (QUAD4 steps 1.2 m out at its height and lands by itself, disarmed
   alone; the carriers land the ring); second r8a `ros2 topic pub -t 3 /magnet/command std_msgs/msg/String "{data: 'OFF'}"`
   (the abort: QUAD4 out and down, the carriers fly on), then `fleet land`.

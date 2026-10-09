@@ -1,5 +1,5 @@
 name: twin_tf_weld_on
-description: 'card 2026-10-09_approach_tip_feedback rev 3, arm W: E+, weld at the setpoint (weld_point_z 0.04, radius
+description: 'card 2026-10-09_approach_tip_feedback rev 5, arm W: E+, weld at the setpoint (weld_point_z 0.04, radius
   0.025), rig gate 0.05 m/s (switch ON)'
 world: three_rigid_ground_rig_attach.sdf
 launch:
@@ -50,6 +50,7 @@ launch:
     attach_cable_len: 0.59
     weld_point_z: 0.04
     weld_speed_gate: 0.05
+    tip_noise_sd_m: 0.0005
 io_launch:
   file: sim_io_launch.py
   args:

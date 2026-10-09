@@ -206,3 +206,45 @@ rig's marker-to-face offset, occlusion and precision (Wednesday's calibration an
 goes slack (the contact freeze is unit-tested only), a moving ring (R9: the hold is never entered, by design).
 Reviewer next.
 
+## Reviewer on the rev-4 table (9 Oct): WEAK (corrections taken; rev 5 follows)
+
+1. Numbers reproduce (window cut at LAND). Time to 1 cm read instantaneously as the card words it: 1.6 / 1.5 s
+   (E-), 1.7 / 1.8 s (E+); the table's values used a 0.5 s rolling mean; R1371 leaves the band once and stays
+   inside from 4.0 s. **The 5-7 mm residual is a systematic overshoot:** every switch-on run with an injected error
+   stops on the far side (E+, S, F 5.4-7.6 mm below; E- 4.8-6.8 mm above), c ends at +-45-47.5 mm against a 40 mm
+   error: the deadband latches on the lagging filtered error (R1367 entered at e_f +3.1 mm with the raw error
+   +5.6 mm) and does not release until 15 mm. Arms 0, F, W have one run each on 7d63170.
+2. **Arm S fails its bar as written:** c's range from the push through the swing is 30.0 / 29.4 mm (> 15 mm
+   falsify line): the push lands inside the ~2 s convergence, so the frozen bar cannot separate the swing from
+   convergence. The "difference from the no-push E+ arm" (4.3 / 2.8 mm) was chosen after the runs and its noise
+   floor is about the same (2.0 mm between the E+ repeats, 3.6 mm between the S repeats); the push barely reaches
+   z (switch-off S error peak 44.3 vs E+ 42.1 mm); the no-push arm already arrives with a 4-7 cm swing. Invalid
+   share (to be reported): 0.00 / 0.00. **Scored on the original wording: S falsifies** (a card design flaw: the
+   push sits in the convergence). Rev 5 moves the push after convergence.
+3. Arm F was applied as specified (TIP_FREEZE at hold + 0.500 s; the publisher's "tip output frozen" WARN; tip_z
+   bit-identical from 55.000 to 57.002), but c moved **3.6 mm** over the event window (the table's 1.8 mm started
+   one tick late): still < 5 mm; the rate cap bounds it at ~2 mm per stale tick. One run.
+4. Arm W: welded 2.53 s after hold entry at d = 0.022 m (radius 0.025): z -4 mm (the overshoot) and 21.8 mm radial;
+   the speed gate held the weld until the turn of a +-2-4 cm radial rod swing, which the z-only loop does not touch.
+   Switch-off cannot weld by construction (never closer than 37.6 mm). W restates E+ through the gate. One run.
+5. Not shown by the twin: the marker-to-face offset; occlusion other than a bit-identical hold (a marker swap
+   inside [0.55, 0.63] m with steps < 3 cm passes); mocap noise (the twin tip is noiseless) against the
+   bit-identical rule and the 5 mm deadband; a slack tether or tip-plate contact (the contact freeze fired only in
+   R1339's 0.56 m swing, a false latch, and rev 4 did not change that rule); a moving ring (inert by design); xy.
+   Not supported: a better attach rate on the rig; any xy correction; a tip more than ~5 cm high (E+ used 45-49 mm
+   of the 60 mm down bound). Deviations: push resized after R1333 without a separate sizing run (R1362 served);
+   scored with tools/tip_metrics.py, not attach_metrics.py. Log issues: configs/rig/attach_m1.yaml turns the loop
+   on for r8a0/r8a too (decision line: from R8b; the R8a preview was said in chat, now made explicit on the
+   sheet); the hold log line printed E+ as "-0.039 m below" (meaning above): fixed.
+
+### Rev 5 (code + card, before re-flying)
+
+- Deadband on the raw error's 0.5 s mean (not the lagging filter): in after < 5 mm for 2 s, out above 15 mm.
+- Arm S: the push at hold + 8 s (after convergence); bar unchanged (c's range from the push to +6 s <= 5 mm,
+  falsify > 15 mm).
+- The twin tip gets mocap-like noise (`noise_sd_m` 0.0005 on magnet_tip_publisher, every tf arm, baselines too),
+  so the frozen rule and the deadband meet noise.
+- Repeats: 0, F, W x2 as well.
+- Scoring: time to 1 cm instantaneous (as worded) and the 0.5 s mean both reported; F's c change over the event
+  window [freeze, freeze + 2 s]; invalid share reported for every arm.
+

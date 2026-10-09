@@ -126,3 +126,10 @@ def test_a_noisy_still_tip_is_valid():
     fr = [(10.0 + 0.01 * i, np.array([0.0, 0.25, 1.06]) + rng.normal(0.0, 2e-4, 3), np.array([0.0, 0.25, 1.65]))
           for i in range(40)]
     assert tip_valid(fr[-1][0] + 0.01, fr) == (True, '')
+
+
+def test_the_deadband_does_not_freeze_past_the_setpoint():
+    # rev 4 judged the deadband on the lagging filter and froze 5-7 mm past the setpoint (reviewer 9 Oct)
+    for assumed in (0.55, 0.63):
+        out, loop = _fly(assumed, seconds=40.0)
+        assert abs(out[-1][1] - _setpoint()) <= 0.003, (assumed, out[-1][1] - _setpoint())

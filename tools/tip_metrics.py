@@ -6,10 +6,13 @@
 From the dissipative planner's tip.csv (node clock; rows end when the approach ends, at LAND or the weld):
   hold_t        the first hold row, s after the first row (None: never held)
   goal_z_mean   mean |tip z - setpoint z| over the last 5 s of rows with a valid tip (m; bar <= 0.01)
-  conv_s        hold entry to the first time the 0.5 s mean |tip - setpoint| < 0.01 m (None: never)
+  conv_s        hold entry to the first time |tip - setpoint| < 0.01 m (instantaneous, as the card words it)
+  conv_mean_s   the same on the 0.5 s mean; conv_stay_s: from when it stays inside to the end
   c_end, c_min, c_max   the correction (m)
   invalid_share share of hold rows with an invalid tip
-  frozen_dc     the correction's range over rows marked 'frozen' (arm F; m)
+  frozen_dc     the correction's change over the runner's TIP_FREEZE window [t, t + its seconds] (arm F; m), the
+                tip.csv clock aligned on the approach's end (LAND or WELD in events.csv = tip.csv's last row)
+  push_dc       c's range from the runner's first nonzero WRENCH to + 6 s (arm S; m)
   contact       the contact freeze latched
 """
 import glob
@@ -54,17 +57,50 @@ def analyse(rid):
     if hold.any():
         h0 = int(np.argmax(hold))
         out['hold_t'] = round(float(t[h0]), 2)
-        roll = pd.Series(np.abs(err)).rolling(5, min_periods=5).mean().to_numpy()
-        ok = np.where((np.arange(len(t)) >= h0) & (roll < 0.01))[0]
+        after = np.arange(len(t)) >= h0
+        inside = np.abs(err) < 0.01
+        ok = np.where(after & inside)[0]
         out['conv_s'] = round(float(t[ok[0]] - t[h0]), 2) if len(ok) else None
+        roll = pd.Series(np.abs(err)).rolling(5, min_periods=5).mean().to_numpy()
+        ok = np.where(after & (roll < 0.01))[0]
+        out['conv_mean_s'] = round(float(t[ok[0]] - t[h0]), 2) if len(ok) else None
+        out_rows = np.where(after & ~inside)[0]
+        stay = (out_rows[-1] + 1) if len(out_rows) else h0
+        out['conv_stay_s'] = round(float(t[stay] - t[h0]), 2) if stay < len(t) else None
         out['invalid_share'] = round(float(np.mean(~valid[hold])), 3)
     else:
-        out['hold_t'] = out['conv_s'] = None
+        out['hold_t'] = out['conv_s'] = out['conv_mean_s'] = out['conv_stay_s'] = None
     out['c_end'] = round(float(c[-1]), 4)
     out['c_min'] = round(float(np.min(c)), 4)
     out['c_max'] = round(float(np.max(c)), 4)
-    fz = r.why.astype(str).to_numpy() == 'frozen'
-    out['frozen_dc'] = round(float(np.ptp(c[fz])), 4) if fz.any() else None
+    out['frozen_dc'] = out['push_dc'] = None
+    ev_f = os.path.join(d, 'logs', 'events.csv')
+    if os.path.exists(ev_f):
+        ev = pd.read_csv(ev_f)
+        end = ev[ev.event.isin(['WELD', 'LAND'])]
+        if len(end):
+            off = float(r.t.iloc[-1]) - float(end.sim_time.iloc[0])     # tip.csv clock minus runner clock
+            lg = ev[ev.event == 'LOGGED']
+            if hold.any() and len(lg):
+                # a WAIT_LOG on the tip-hold line matches the first hold row within ms (reviewer 9 Oct): finer
+                off_h = float(r.t[hold].iloc[0]) - float(lg.sim_time.iloc[-1])
+                if abs(off_h - off) < 0.5:
+                    off = off_h
+            tn = r.t.to_numpy()
+            fr = ev[ev.event == 'TIP_FREEZE']
+            if len(fr):
+                a0 = float(fr.sim_time.iloc[0]) + off
+                secs = float(fr.arg.iloc[0]) if str(fr.arg.iloc[0]).strip() not in ('', 'nan') else 2.0
+                before = np.where(tn < a0 - 0.005)[0]           # from the last row before the freeze
+                upto = np.where(tn <= a0 + secs + 0.05)[0]
+                if len(before) and len(upto):
+                    out['frozen_dc'] = round(float(c[upto[-1]] - c[before[-1]]), 4)
+            pw = ev[(ev.event == 'WRENCH') & ~ev.arg.astype(str).str.startswith('0 0 0')]
+            if len(pw):
+                a0 = float(pw.sim_time.iloc[0]) + off
+                w = (tn >= a0) & (tn <= a0 + 6.0)
+                if w.any():
+                    out['push_dc'] = round(float(np.ptp(c[w])), 4)
     out['contact'] = bool((r.reason.astype(str) == 'contact').any())
     out['rows'] = int(len(r))
     return out

@@ -914,8 +914,8 @@ class DissipativeController(LoadPlanner):
                     if prof.tip.hold and not getattr(prof, '_hold_said', False):
                         prof._hold_said = True
                         self.get_logger().info(f'[dissipative] approach: drone {self._n_carry0 + j} tip hold '
-                                               f'(tip {prof.tip.e if prof.tip.e is not None else float("nan"):+.3f} m '
-                                               f'below its setpoint)')
+                                               f'(tip {-prof.tip.e if prof.tip.e is not None else float("nan"):+.3f} m '
+                                               f'from its setpoint, + above)')
                 if phase != getattr(prof, '_logged', None):
                     prof._logged = phase
                     self.get_logger().info(

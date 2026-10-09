@@ -1,5 +1,5 @@
 name: twin_tf_freeze_on
-description: 'card 2026-10-09_approach_tip_feedback rev 3, arm F: E+ and the tip frozen 2 s from 0.5 s into the
+description: 'card 2026-10-09_approach_tip_feedback rev 5, arm F: E+ and the tip frozen 2 s from 0.5 s into the
   tip hold (switch ON)'
 world: three_rigid_ground_rig_attach.sdf
 launch:
@@ -48,6 +48,7 @@ launch:
     approach_tip_log: true
     tip_max_rate_hz: 120.0
     attach_cable_len: 0.59
+    tip_noise_sd_m: 0.0005
 io_launch:
   file: sim_io_launch.py
   args:
