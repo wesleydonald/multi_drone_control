@@ -147,3 +147,43 @@ Re-fly: the whole table on f330bd2 (one tree), e12 retimed; the disarm-alone car
 SUPPORTED verdict predates the R1378 finding: P2 "no abort caused by the expected disarm" was met in its own 10
 runs, but R1378 is exactly that failure).
 
+
+## Re-fly on the keep-alive tree (9 Oct night; rig-prep 8588745 with f330bd2; rows R1413-R1446, one tree)
+
+All 34 runs on one tree, e12 retimed (the freed carrier was at 1.2-1.25 m and armed at LAND in both runs).
+
+| phase | runs | LAND -> LANDED (s) | worst drone disarm above rest (m) | worst drone tilt (deg) | ring tilt (deg) | verdict |
+|---|---|---|---|---|---|---|
+| e0 armed on the floor | R1413, R1430 | (no LANDED: fleet disarmed at LAND) | 0.000 | 0.0 | 0.0 | supports |
+| e1 floor creep | R1414, R1431 | 3.42, 3.48 | 0.048 | 3.4 | 0.0 | supports |
+| e2 mid-lift | R1415, R1432 | 6.45, 6.57 | 0.051 | 14.2 | 3.6 | supports |
+| e3 QUAD4 parked, taken out | R1416, R1433 | 9.48, 9.16 | 0.048 | 14.4 | 5.2 | supports |
+| e4 QUAD4 climb | R1417, R1434 | 9.50, 9.40 | 0.045 | 14.7 | 5.8 | supports |
+| e5 QUAD4 transit | R1418, R1435 | 9.49, 9.50 | 0.048 | 14.2 | 6.3 | supports |
+| e6 QUAD4 descent | R1419, R1436 | 12.40, 13.30 | 0.047 | 14.4 | 6.9 | supports |
+| e7 QUAD4 hold over the plate | R1420, R1437 | 12.50, 12.60 | 0.048 | 14.7 | 4.7 | supports |
+| e9 0.5 s after the weld | R1421, R1438 | 10.35, - | 0.044, - | 14.2, **71.6** | 4.0, 7.1 | **falsifies (R1438: QUAD4 tipped, abort)**; R1421 supports |
+| e9b 2 s after the weld | R1422, R1439 | 10.05, 9.79 | 0.050 | 15.1 | 5.3 | supports |
+| e9c 4 s after the weld | R1423, R1440 | 9.63, 9.83 | 0.048 | 15.2 | 3.5 | supports |
+| e11 freed carrier stepping out | R1424, R1441 | 9.22, 9.49 | 0.049 | 14.5 | 6.0 | supports |
+| e12 freed carrier landing by itself (retimed) | R1425, R1442 | 9.40, 9.52 | 0.043 | 15.3 | 5.6 | supports |
+| e13 after a forced drop | R1426, R1443 | 7.71, 7.66 | 0.002 | 8.3 | 0.7 | supports |
+| e14 LAND twice | R1427, R1444 | 12.90, 13.00 | 0.048 | 14.0 | 4.2 | supports |
+| e15 circle, QUAD4 hold | R1428, R1445 | 14.70, 14.20 | 0.051 | 14.7 | 8.7 | supports |
+| e16 carry, QUAD4 armed on the floor | R1429, R1446 | 9.38, 9.59 | 0.051 | 14.1 | 6.4 | supports |
+
+No abort except R1438; no sim step over 0.055 s between LAND and LANDED in any run (the R1378 stall is gone).
+Disarmed alone in flight: QUAD4 in e3/e4 (both runs), drone 2 (/drone_1) in e11/e12, QUAD4 in e13: 10 mid-flight
+disarm-alones, no stall, no abort. With the laptop disarm-alone re-fly (R1411, R1412, R1447-R1451): 17 of 17.
+
+R1438 (LAND 0.5 s after the weld): the LAND descent went normally; after "load down - survivors unwind along their
+rods", QUAD4 on its rigid rod lagged 12 cm behind its outward reference, pitched up and reached 75 deg at 0.4 m:
+envelope fault, fleet EMERGENCY STOP. The same sequence as R1351. Pre-declared reading: the twin's rigid link
+during the unwind; the rig lands straight down (real.yaml land_unwind false) and its tether goes slack.
+
+Post-weld family over every run on 9 Oct: 0.5 s after the weld tipped 2 of 6 (R1315, R1438; R1327, R1350, R1382,
+R1421 landed); 2 s after 1 of 5 (R1351; R1383 grey at 38 deg; R1328, R1422, R1439 clean); 4 s after 0 of 5.
+
+**Verdict (re-fly):** LAND lands and disarms every drone in 16 of 17 phases, 2 of 2 each, on one tree. A LAND
+within ~2 s of a weld tips QUAD4 about 1 time in 4 in the twin, always in the survivors' unwind after load down
+(the pre-declared twin rigid-link reading). The rig never runs that unwind.
