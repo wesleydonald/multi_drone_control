@@ -1465,10 +1465,12 @@ class DissipativeController(LoadPlanner):
         if cmd == 'ON' and self._newcomer_lifecycle and (self._land_to_ground or self._dropped is not None
                             or any(self.attach_pending[j] and j in self._newcomer_out
                                    for j in range(self.reserved_attach))):
+            # an ON repeated by the operator's tools (or the runner) gets an OFF each time, but one line
+            # per 2 s (R1324: 2964 lines in 1.7 s)
             self.get_logger().warn('[dissipative] ATTACH refused: '
                                    + ('LAND in progress' if self._land_to_ground else
                                       'the ring was dropped' if self._dropped is not None else
-                                      'the newcomer is out of this flight'))
+                                      'the newcomer is out of this flight'), throttle_duration_sec=2.0)
             if any(self.attach_pending):
                 self._magnet_cmd_pub.publish(String(data='OFF'))   # never to a welded newcomer: OFF releases it
             return

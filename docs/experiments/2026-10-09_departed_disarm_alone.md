@@ -117,3 +117,52 @@ Notes taken: (a) nothing in the planner, runner or launch depends on the departe
 after it closes; (c) the combined M1 stack keeps the feature off (`_departed_gi` is off in partner runs), so
 QUAD4 landing under Tejen's LAND keeps the old landing there; if it is ever turned on, latch that drone's mux
 on the disarm; (d) the disarm-alone / LANDED race in A1 and the drop is harmless either way.
+
+## Results (9 Oct; rows R1304-R1310, R1324-R1326)
+
+| run | arm | departed drone | first at rest (s) | armed edge - at rest (s) | before LANDED | disarm z - rest (m) | P2 | P4 |
+|---|---|---|---|---|---|---|---|---|
+| R1309 / R1326 | W5 twin (circle) | freed carrier | 48.21 / 48.41 | 0.20 / 0.19 | yes / yes | 0.000 / 0.001 | none | 0 |
+| R1310 / R1325 | W4 twin (hover) | freed carrier | 37.70 / 37.87 | 0.19 / 0.22 | yes / yes | 0.002 / 0.000 | none | 0 |
+| R1304 | freed carrier, departed_land off | freed carrier | 54.79 | 0.24 | yes | 0.002 | none | 0 |
+| R1306 | QUAD4 on its rod tip | QUAD4 | 65.80 | 0.20 | yes | 0.000 | none | 0 |
+| R1307 | forced drop | QUAD4 (others: fleet first) | 43.28 | 0.22 | yes | 0.001 | none | 0 |
+| R1324 | QUAD4 taken out parked (early disarm) | QUAD4 | 30.87 (hand) | 0.185 (hand) | yes | 0.000 | none | 0 |
+| R1305 | QUAD4 aborted (A1) | QUAD4 | at LANDED | - (fleet first, n/a) | - | 0.006 | none | 0 |
+| R1308 | LAND mid-lift, no ATTACH | none (QUAD4 never out) | - | n/a | - | - | none | 0 |
+
+Baseline armed time at throttle 0 for the departed drone: 21.06 s (R1288), 20.49-21.53 s (R1299-R1302).
+P3 (reviewer): the largest |z - rest| from the disarm edge to the end of run.csv is 0.0024 m (R1304).
+
+**Verdict:** supports. A drone that has left the ring and is back at its rest is disarmed alone ~0.2 s after
+reaching it (the tracker's 0.2 s dwell), before LANDED, with no fault path and no carrier disarmed alone.
+
+## Reviewer (9 Oct): SUPPORTED, with corrections (taken)
+
+1. The column scored is "armed edge - first back at rest", an UPPER BOUND on P1's frozen metric (disarm_t -
+   idle_t): the idle latch needs 0.2 s inside the same band, so it cannot precede at_rest. run.csv shows an
+   armed throttle-0 sample only in R1304 and R1325 (0.02 s); elsewhere the throttle drops from the press
+   (0.38-0.42) to 0 on the same row as the armed edge; the tracker logs agree. P1 holds either way.
+2. R1324 is hand-scored: `tools/departed_metrics.py` skips QUAD4 there (it rose 0.080 m, under the tool's
+   0.2 m "flew" gate). Definition used: the first sample after LAND within 0.03 m of rest (30.87 s) to the armed
+   edge (31.055 s). Read literally with the tool's idle_t (the parked idle from 3.03 s) it would fail P1; that
+   idle is before any flight (airmode not active), not this card's case.
+3. The W4 twin configs (`w4_da_release_hover`: R1310, R1325; `w4_gi_release_drop`: R1304) have no armed-idle
+   baseline run; R1288 (cited in the registry) is the W5 config. The baselines R1288/R1289/R1294 also predate
+   the 6 s press limit (6e0c825), which did not bind there (press <= 0.87 s).
+4. Two code trees: cb09b39 (7 runs) and 734f0f4 (R1324-R1326, adds 0400066, whose branches were never
+   reached: every LAND came with the fleet flying); HEAD e434a11 not flown, its diff off by default; parameter
+   read-backs identical between the repeats.
+5. Section 6 named `twin_land_e2_lift` as the early-disarm arm; R1308 showed it is not (no ATTACH), and R1324
+   (`twin_land_e3_parked`) replaced it after R1308 was seen, on the later tree.
+6. Nothing contradicts "expected disarm, no fault path": no EMERGENCY / FAULT_LAND / "not answering" lines; the
+   planner logs the disarm at INFO (it still marks the newcomer out internally, harmless: R1306's next LAND was
+   the scheduled one). Each disarm-alone is followed by the tracker process exiting (-15), as designed.
+7. Not shown: elrs_interface / fc_arm_state / Betaflight airmode (rig bar, section 5); a lost disarm message;
+   QUAD4 has one run per arm (R1306, R1324); untouched armed time at throttle 0: QUAD4 parked before ATTACH
+   (27-40 s, before any flight) and carriers before the fleet disarm (0.6-3.4 s); no bar on the ring (R1326's
+   6.9 deg peak started before its disarm). The feature is off in air starts, partner runs, and for a drone
+   with no pose at TAKEOFF (R1308: a slow planner start; logged, fails safe to the fleet disarm).
+Found outside this card: R1324's magnet command flapped ON/OFF (the runner re-sends ON for 2 s; each refused ON
+gets an OFF, as designed); the refusal's log line is now throttled to one per 2 s.
+
