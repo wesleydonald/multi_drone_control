@@ -80,3 +80,39 @@ the rig default, but it is not hidden: the table shows it.
 
 No new code for this card: the fixes are committed with unit tests (0400066; the switches cb09b39 and earlier).
 Reviewer on the final table before the defaults change (Wesley's word on the defaults).
+
+## Results (9 Oct, tree 7d63170; rows R1342-R1358, R1374-R1392)
+
+| phase | runs | LAND -> LANDED (s) | worst drone disarm above rest (m) | worst drone tilt (deg) | ring tilt (deg) | verdict |
+|---|---|---|---|---|---|---|
+| e0 armed on the floor | R1342, R1374 | (no LANDED: fleet disarmed at LAND) | 0.000 | 0 | 0 | supports |
+| e1 floor creep | R1343, R1375 | 3.45, 3.41 | 0.048 | 4.9 | 0 | supports |
+| e2 mid-lift | R1344, R1376 | 6.55, 6.52 | 0.051 | 14.2 | 3.9 | supports |
+| e3 QUAD4 parked, taken out | R1345, R1377 | 9.37, 9.37 | 0.048 | 14.2 | 6.3 | supports |
+| e4 QUAD4 climb | R1346, R1391 (R1378 void) | 9.39, 9.50 | 0.046 | 13.8 | 2.8 | supports |
+| e5 QUAD4 transit | R1379, R1392 (R1347 void) | 9.49, 9.40 | 0.047 | 14.0 | 2.9 | supports |
+| e6 QUAD4 descent | R1348, R1380 | 12.40, 13.80 | 0.046 | 14.6 | 4.2 | supports |
+| e7 QUAD4 hold over the plate | R1349, R1381 | 12.59, 12.30 | 0.047 | 14.3 | 3.8 | supports |
+| e9 0.5 s after the weld | R1350, R1382 | 10.42, 10.44 | 0.043 | 14.8 | 4.4 | supports |
+| e9b 2 s after the weld | R1351, R1383 | -, 9.56 | -, 0.071 | **85.6**, 38.2 | 2.7, 7.7 | **falsifies (R1351: QUAD4 tipped, abort); R1383 grey** |
+| e9c 4 s after the weld | R1352, R1384 | 9.85, 9.55 | 0.051 | 23.3 | 4.9 | supports |
+| e11 freed carrier stepping out | R1353, R1385 | 9.41, 9.46 | 0.048 | 14.3 | 6.5 | supports |
+| e12 freed carrier landing by itself | R1354, R1386 | 9.30, 9.60 | 0.048 | 14.3 | 3.9 | supports |
+| e13 after a forced drop | R1355, R1387 | 7.69, 7.80 | 0.006 | 8.6 | 0.7 | supports |
+| e14 LAND twice | R1356, R1388 | 12.31, 12.70 | 0.047 | 13.9 | 3.9 | supports |
+| e15 circle, QUAD4 hold | R1357, R1389 | 13.61, 14.30 | 0.051 | 14.0 | 3.9 | supports |
+| e16 carry, QUAD4 armed on the floor | R1358, R1390 | 9.47, 9.45 | 0.051 | 13.8 | 3.7 | supports |
+
+Voids, with evidence: R1378 (a pose timeout on drone 1 3.6 s after LAND: the runner's own run.csv has the same
+0.54 s sim gap, 2.3 s wall, at that moment: every node stalled together); R1347 (the flight landed and disarmed,
+then the runner hung 2 h without writing run.csv; lab_batch now caps a run at 30 min wall, 097c524).
+
+The post-weld family over all runs today: LAND 0.5 s after the weld tipped QUAD4 1 of 4 (R1315; R1327, R1350,
+R1382 landed), 2 s after 1 of 4 (R1351; R1328 landed, R1383 grey at 38 deg), 4 s after 0 of 3 (R1329, R1352,
+R1384; worst 23 deg). Pre-declared reading: the twin's rigid link (Wesley 9 Oct: the twin keeps rigid links); on
+the rig QUAD4's tether goes slack and the rig lands straight down.
+
+**Verdict:** LAND lands and disarms every drone in every phase the twin can fly (16 of 17 phases 2 of 2), except
+a LAND within ~2 s of a weld, where the twin's rigid link tips QUAD4 about 1 time in 4 (twin artefact by the
+pre-declared reading). The drone 1 (/drone_0) disarm ~5 cm above its start is the pre-existing fleet-disarm drop.
+
