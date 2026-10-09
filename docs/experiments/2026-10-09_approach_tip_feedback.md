@@ -248,3 +248,28 @@ Reviewer next.
 - Scoring: time to 1 cm instantaneous (as worded) and the 0.5 s mean both reported; F's c change over the event
   window [freeze, freeze + 2 s]; invalid share reported for every arm.
 
+## Claim table, rev 5 (one tree 1bbe1f8; tip noise 0.5 mm in every arm; rows R1393-R1410)
+
+| arm | switch off | switch ON (2 repeats) | bar | verdict |
+|---|---|---|---|---|
+| 0 | 0.5 mm | 3.0 / 0.6 mm | within 5 mm of off | supports |
+| E- | 40.1 mm low | 0.8 / 5.3 mm; within 1 cm in 1.5 / 1.2 s; c +41 / +45 mm | <= 10 mm; <= 15 s | supports |
+| E+ | 39.6 mm high | 3.5 / 6.3 mm; 1.7 / 2.1 s; c -44 / -46 mm | <= 10 mm; <= 15 s | supports (but a false contact latch in both, below) |
+| S (push at hold + 8 s) | 39.7 mm | 1.3 / 1.7 mm; c moved 0.7 / 0.0 mm from the push to +6 s | c excursion <= 5 mm | supports |
+| F (tip frozen 2 s) | 39.9 mm | 0.7 / 0.6 mm; c moved 3.8 / 3.6 mm over the freeze, then held | < 5 mm | supports |
+| W (rig gate, radius 0.025) | never welds | welded 1.1 / 4.3 s after hold entry (d 0.024 / 0.007 m) | within 15 s | supports (R1404 at the radius edge) |
+
+No aborts; c inside its bounds in every run.
+
+Known flaws (not bar failures):
+- **False contact latch in E+ (2 of 2):** after the first overshoot the loop corrects back slowly; over the 2 s window c
+  moves a few mm while the tip, lagging, moves less than 0.3 of it, and the contact freeze latches (the twin has no
+  tip-plate contact). c is then held 4-6 mm past the setpoint (the 3.5 / 6.3 mm residuals). On the rig the same
+  latch would stop the loop early: safe direction, a few mm left.
+- The deadband fix (rev 5) removed most of the overshoot (E- 0.8 mm in one run), but not all (E- 5.3 mm, R1406).
+- R1404 welded at d 0.024 with c still moving (the tip was inside the radius before the loop finished).
+
+**Verdict:** supports in the twin. In the twin, the loop takes a 4 cm rod error either way to within ~1-6 mm in under
+~2 s; a 6-7 cm swing barely moves it; a frozen tip moves it under 4 mm; and with a rig-like 0.025 m weld radius it
+makes the weld happen where the switch-off arm never does. Reviewer next.
+
