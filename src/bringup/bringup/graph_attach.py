@@ -235,6 +235,9 @@ def attach(context, launch_dir, profile_vals):
                      'diss_wrench_true_attitude': b('diss_wrench_true_attitude'),
                      'attach_traj_hold_s': f('attach_traj_hold_s'),
                      'attach_seek_m': f('attach_seek_m'),
+                     'approach_tip_feedback': b('approach_tip_feedback'),
+                     'approach_tip_log': b('approach_tip_log'),
+                     'attach_tip_dz': f('attach_tip_dz'),
                      'attach_t_start_new': f('attach_t_start_new'),
                      'attach_blend_balanced': b('attach_blend_balanced'),
                      'attach_datum_shift': b('attach_datum_shift'),
@@ -538,6 +541,7 @@ def attach(context, launch_dir, profile_vals):
                          'object_y_offset': f('attach_y_offset'),
                          'use_fallback_object_pose': False,
                          'attach_radius': f('weld_radius'),
+                         'object_z_offset': f('weld_point_z'),
                          'attach_speed_threshold': 0.05,
                          'attach_dwell_time_s': 0.15,
                          'rel_vel_filter_tau_s': f('weld_vel_filter_s'),
@@ -559,7 +563,8 @@ def attach(context, launch_dir, profile_vals):
                      'magnet_tip_topic': '/magnet_tip_pose',
                      'magnet_index': 0,
                      'drone_index': -1,
-                     'x3_link_poses_are_relative': True}]))
+                     'x3_link_poses_are_relative': True,
+                     'max_rate_hz': f('tip_max_rate_hz')}]))
 
     # ROS->gz bridges for the magnet DetachableJoint, mirroring the per-drone detach_bridge_{i}
     # above (the PROVEN detach path). The magnet manager publishes std_msgs/Empty on these ROS
@@ -598,11 +603,15 @@ def attach(context, launch_dir, profile_vals):
                      # offset off-centre by object_x/y_offset, so the horizontal term drops
                      # out). 0.15 gives margin without welding mid-descent. Launch arg.
                      'attach_radius': f('weld_radius'),   # magnet manager's threshold
+                     'object_z_offset': f('weld_point_z'),
                      # partner rejoin: weld only once the tip has stopped (the approach
                      # ends in a hold 4 cm above the plate). Welding mid-descent let the
                      # still-descending drone push the now-rigid rod into the ring: carriers
                      # dropped 0.25 m and the ring tipped 25-35 deg (R0640, R0642)
                      **({'attach_speed_threshold': 0.05} if partner else {}),
+                     # a rig-like gate in the twin (card 2026-10-09_approach_tip_feedback arm W); 0 = as above
+                     **({'attach_speed_threshold': float(LaunchConfiguration('weld_speed_gate').perform(context))}
+                        if float(LaunchConfiguration('weld_speed_gate').perform(context)) > 0.0 else {}),
                      'rel_vel_filter_tau_s': f('weld_vel_filter_s'),
                      'velocity_clock': LaunchConfiguration('weld_velocity_clock'),
                      'object_attached_topic': '/magnet/object_attached',

@@ -130,6 +130,14 @@ attach:
   attach_moving: true
   attach_approach_direct: true
   attach_seek_m: 0.0
+  # the approach corrects its body goal from the measured magnet tip (card 2026-10-09_approach_tip_feedback);
+  # approach_tip_log logs the same hold and error without correcting; attach_tip_dz moves the tip setpoint
+  approach_tip_feedback: false
+  approach_tip_log: false
+  attach_tip_dz: 0.0
+  weld_point_z: 0.0             # the weld check's point above the ring-origin plane (sim manager)
+  weld_speed_gate: 0.0          # sim manager's speed gate (m/s); 0 = its default (partner runs: 0.05)
+  tip_max_rate_hz: 0.0          # sim magnet_tip_publisher cap (Hz); 0 = every frame
   # LAND or /magnet/command OFF before the weld: the newcomer moves 1.2 m out and lands by itself
   # (card 2026-10-09_newcomer_land_abort); off until its twin runs pass
   newcomer_lifecycle: false

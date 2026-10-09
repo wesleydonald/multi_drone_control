@@ -64,6 +64,8 @@ EVENT_KINDS = {
     'MOCAP_LOSS',  # std_msgs/Float64 on /drone_<id>/mocap_dropout: the sim mocap emulator stops that
                    # drone's state for arg "id [seconds]" (default 600): a lost marker set, the tracker's
                    # own pose-timeout fault (card 2026-10-09_newcomer_fault_scope)
+    'TIP_FREEZE',  # std_msgs/Float64 on /magnet_tip_publisher/freeze: the sim tip publisher repeats its last
+                   # output for arg seconds, as a frozen mocap body would (card 2026-10-09_approach_tip_feedback)
     'WAIT_LOG',   # not published: block until the dissipative planner has logged a line matching
                   # the arg's regex (any time this run), then time later events from that line; arg
                   # '[timeout_s] regex', e.g. '60 approach: drone 3 descend' (event LOGGED or
@@ -166,6 +168,10 @@ class Event:
             wrench_arg(self.arg)
         if self.do == 'MOCAP_LOSS':
             mocap_loss_arg(self.arg)
+        if self.do == 'TIP_FREEZE':
+            if self.arg is None or float(self.arg) <= 0.0:
+                raise ValueError(f'TIP_FREEZE needs seconds > 0, got {self.arg!r}')
+            self.arg = float(self.arg)
         if self.do in ('ATTACH', 'DETACH', 'RELEASE'):
             if self.arg is None:
                 raise ValueError(f'{self.do} needs a drone id as its arg')

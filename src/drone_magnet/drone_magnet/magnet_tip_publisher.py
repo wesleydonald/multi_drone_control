@@ -20,6 +20,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped
+from std_msgs.msg import Float64
 
 
 class MagnetTipPublisher(Node):
@@ -35,6 +36,14 @@ class MagnetTipPublisher(Node):
         self.frame_id = str(self.declare_parameter('frame_id', 'map').value)
         self.warn_throttle_s = float(self.declare_parameter('warn_throttle_s', 2.0).value)
 
+        # at most this rate (Hz; 0 = every frame): the rig's mocap is capped at 120 Hz, the twin publishes 500
+        self.max_rate_hz = float(self.declare_parameter('max_rate_hz', 0.0).value)
+        self._last_pub_t = None
+        # test only (runner TIP_FREEZE; card 2026-10-09_approach_tip_feedback): repeat the last output for the
+        # given seconds, as a frozen mocap body would. Inert unless a message arrives.
+        self._frozen = None             # (pose, until) while frozen
+        self._last_out = None
+        self.create_subscription(Float64, '~/freeze', self._freeze_cb, 1)
         self.pub = self.create_publisher(PoseStamped, self.magnet_tip_topic, 10)
         self.create_subscription(PoseArray, self.x3_pose_topic, self.pose_callback, 10)
         self.get_logger().info(
@@ -130,11 +139,26 @@ class MagnetTipPublisher(Node):
         else:
             out_pose = tip_pose
 
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if self.max_rate_hz > 0.0 and self._last_pub_t is not None and now - self._last_pub_t < 1.0 / self.max_rate_hz:
+            return
+        self._last_pub_t = now
+        if self._frozen is not None:
+            if now < self._frozen[1]:
+                out_pose = self._frozen[0]
+            else:
+                self._frozen = None
+        self._last_out = out_pose
         out = PoseStamped()
         out.header.stamp = self.get_clock().now().to_msg()
         out.header.frame_id = self.frame_id
         out.pose = out_pose
         self.pub.publish(out)
+
+    def _freeze_cb(self, msg: Float64) -> None:
+        if self._last_out is not None and msg.data > 0.0:
+            self._frozen = (self._last_out, self.get_clock().now().nanoseconds * 1e-9 + float(msg.data))
+            self.get_logger().warn(f'tip output frozen for {msg.data:.1f} s (test event)')
 
 
 def main(args=None) -> None:

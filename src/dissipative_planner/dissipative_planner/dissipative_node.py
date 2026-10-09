@@ -28,14 +28,17 @@ Phases: 'creep' -> 'planner'  (inherited: OCP takeoff + hover)
 Everything else -- the reference wire format, the fleet manager, the per-drone tracker --
 is the shared stack, unchanged.
 """
+import os
 import time
+from collections import deque
 
 import numpy as np
 import rclpy
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Int32, Empty, Bool, Float64MultiArray, String
 from geometry_msgs.msg import PoseStamped, TwistStamped
-from dissipative_planner.approach import ApproachProfile, body_to_tip, carrot_step
+from dissipative_planner.approach import (ApproachProfile, TIP_FROZEN_N, TIP_STANDOFF_M, TipLoop, body_to_tip,
+                                          carrot_step, tip_valid)
 
 from interfaces.msg import MotionCaptureState
 from mpc_planner.geometry import (quat_to_rot_np, attach_points, rot_z,
@@ -212,6 +215,16 @@ class DissipativeController(LoadPlanner):
         # newcomer hands out; the trajectory then resumes with the full fleet. 0 = off.
         self._attach_traj_hold_s = float(p('attach_traj_hold_s', 0.0).value)
         self._attach_seek_m = float(p('attach_seek_m', 0.0).value)
+        # the approach corrects its body goal from the measured magnet tip (card 2026-10-09_approach_tip_feedback;
+        # Wesley 9 Oct); approach_tip_log computes and logs the same hold and error with no correction (the
+        # switch-off arms); attach_tip_dz moves the tip setpoint (the calibrated point; 0 = today's)
+        self._tip_feedback = bool(p('approach_tip_feedback', False).value)
+        self._tip_log = self._tip_feedback or bool(p('approach_tip_log', False).value)
+        self._tip_dz = float(p('attach_tip_dz', 0.0).value)
+        self._tip_frames = deque(maxlen=TIP_FROZEN_N + 2)
+        self._tip_csv = None
+        if self._tip_log:
+            self.create_subscription(PoseStamped, '/magnet_tip_pose', self._tip_pose_cb, 10)
         self._attach_t_start_new = float(p('attach_t_start_new', 0.1).value)
         self._attach_blend_balanced = bool(p('attach_blend_balanced', True).value)
         self._attach_datum_shift = bool(p('attach_datum_shift', True).value)
@@ -795,6 +808,40 @@ class DissipativeController(LoadPlanner):
         q = msg.pose.position
         self._attach_target = np.array([q.x, q.y, q.z])
 
+    def _tip_pose_cb(self, msg: PoseStamped):
+        # the reserved newcomer's measured tip, stamped at receipt with its body pose beside it (validity)
+        body = self.attach_pos[0] if self.reserved_attach and self.attach_pos[0] is not None else None
+        if body is None:
+            return
+        q = msg.pose.position
+        self._tip_frames.append((self.get_clock().now().nanoseconds * 1e-9, np.array([q.x, q.y, q.z]),
+                                 np.asarray(body, float).copy()))
+
+    def _tip_log_row(self, j, prof, ok, why):
+        if self._run_log_dir is None:
+            return
+        try:
+            if self._tip_csv is None:
+                import csv
+                f = open(os.path.join(self._run_log_dir, 'tip.csv'), 'w', newline='')
+                self._tip_csv = (f, csv.writer(f))
+                self._tip_csv[1].writerow(['t', 'drone', 'phase', 'hold', 'reason', 'tip_z', 'setpoint_z', 'e_z',
+                                           'e_f', 'c_z', 'valid', 'why'])
+            f, w = self._tip_csv
+            loop, fr = prof.tip, self._tip_frames
+            t = self.get_clock().now().nanoseconds * 1e-9
+            sp = (float(self._attach_target[2]) + TIP_STANDOFF_M + self._tip_dz
+                  if self._attach_target is not None else float('nan'))
+            w.writerow([f'{t:.3f}', self._n_carry0 + j, prof.phase, int(loop.hold), loop.reason,
+                        f'{fr[-1][1][2]:.4f}' if fr else '', f'{sp:.4f}',
+                        '' if loop.e is None else f'{loop.e:+.4f}', '' if loop.e_f is None else f'{loop.e_f:+.4f}',
+                        f'{loop.c:+.4f}', int(ok), why])
+            f.flush()
+        except Exception as e:
+            if not getattr(self, '_tip_log_warned', False):
+                self._tip_log_warned = True
+                self.get_logger().warn(f'[dissipative] tip log off: {e}')
+
     def _attach_twist_cb(self, msg: TwistStamped):
         v = msg.twist.linear
         self._attach_target_vel = np.array([v.x, v.y, v.z])
@@ -812,7 +859,10 @@ class DissipativeController(LoadPlanner):
                 self._approach[j] = ApproachProfile(self.attach_pos[j], self._attach_body_to_tip,
                                                     1.0 / PLANNER_HZ,
                                                     seek_m=self._attach_seek_m,
-                                                    direct=self._attach_approach_direct)
+                                                    direct=self._attach_approach_direct,
+                                                    tip_loop=(TipLoop(1.0 / PLANNER_HZ, apply=self._tip_feedback)
+                                                              if self._tip_log else None),
+                                                    tip_dz=self._tip_dz)
                 self.get_logger().info(
                     f'[dissipative] approach: drone {self._n_carry0 + j} flies to the weld '
                     f'target on its own tracker from {np.round(self.attach_pos[j], 2)} '
@@ -851,9 +901,21 @@ class DissipativeController(LoadPlanner):
                 continue                  # released partner drone: its fixed hold flies it
             prof = self._approach.get(j)
             if prof is not None and self._attach_target is not None:
+                ok, why, tip_z = False, 'off', None
+                if prof.tip is not None:
+                    fr = list(self._tip_frames)
+                    ok, why = tip_valid(self.get_clock().now().nanoseconds * 1e-9, fr)
+                    tip_z = float(fr[-1][1][2]) if fr else None
                 p_ref, v_ff, phase = prof.step(
                     self._attach_target,
-                    self._attach_target_vel if self._attach_moving else None)
+                    self._attach_target_vel if self._attach_moving else None, tip_z=tip_z, tip_ok=ok)
+                if prof.tip is not None:
+                    self._tip_log_row(j, prof, ok, why)
+                    if prof.tip.hold and not getattr(prof, '_hold_said', False):
+                        prof._hold_said = True
+                        self.get_logger().info(f'[dissipative] approach: drone {self._n_carry0 + j} tip hold '
+                                               f'(tip {prof.tip.e if prof.tip.e is not None else float("nan"):+.3f} m '
+                                               f'below its setpoint)')
                 if phase != getattr(prof, '_logged', None):
                     prof._logged = phase
                     self.get_logger().info(

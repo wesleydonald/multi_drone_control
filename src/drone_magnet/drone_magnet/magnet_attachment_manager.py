@@ -85,6 +85,9 @@ class MagnetAttachmentManager(Node):
         # balanced-tension mode reconfigure the fleet. 0,0 = centre weld (central lifter).
         self.object_x_offset = float(self.declare_parameter('object_x_offset', 0.0).value)
         self.object_y_offset = float(self.declare_parameter('object_y_offset', 0.0).value)
+        # the weld point's height above the ring-origin plane, in the ring frame (0 = the plane, as always;
+        # card 2026-10-09_approach_tip_feedback: the approach's calibrated tip setpoint)
+        self.object_z_offset = float(self.declare_parameter('object_z_offset', 0.0).value)
         self.magnet_tip_pose_msg_type = str(
             self.declare_parameter('magnet_tip_pose_msg_type', 'pose_stamped').value
         ).strip().lower()
@@ -336,7 +339,7 @@ class MagnetAttachmentManager(Node):
         # off-centre weld reference (see __init__), rotated into the payload's attitude so
         # the trigger point is the physical rim magnet even when the disc is tilted
         q = pose.orientation
-        off = _quat_rot([q.w, q.x, q.y, q.z], [self.object_x_offset, self.object_y_offset, 0.0])
+        off = _quat_rot([q.w, q.x, q.y, q.z], [self.object_x_offset, self.object_y_offset, self.object_z_offset])
         new_pos[0] += off[0]
         new_pos[1] += off[1]
         new_pos[2] += off[2]

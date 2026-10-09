@@ -174,6 +174,8 @@ class ExperimentRunner(Node):
             for e in cfg.events if e.do == 'MOCAP_LOSS'}
         if any(e.do == 'WRENCH' for e in cfg.events):
             self._wrench_publisher()
+        self.tip_freeze_pub = (self.create_publisher(Float64, '/magnet_tip_publisher/freeze', 5)
+                               if any(e.do == 'TIP_FREEZE' for e in cfg.events) else None)
         self.handoff_pub = self.create_publisher(Bool, '/join_planner/handoff_ready', 10)
         self.fleet_handover_pub = self.create_publisher(Bool, '/fleet/handover', 10)
         # HANGER_RELEASE publishers exist from the start: one created at the event has no
@@ -545,6 +547,8 @@ class ExperimentRunner(Node):
             d, secs = mocap_loss_arg(ev.arg)
             self._mocap_cut.add(d)          # the run goes on: the loss is the test, not a harness fault
             self._publish(self.dropout_pubs[d], Float64(data=secs), f'/drone_{d}/mocap_dropout {secs:.0f} s')
+        elif ev.do == 'TIP_FREEZE':
+            self._publish(self.tip_freeze_pub, Float64(data=float(ev.arg)), f'/magnet_tip_publisher/freeze {ev.arg:.1f} s')
         elif ev.do == 'HANDOFF':
             # latched True, as his planner does while ATTACH_READY; the consumers act on
             # the first True only
