@@ -21,3 +21,10 @@ no tick reached the 100\,ms budget (dashed), but four UAVs leave about 12\,ms of
 
 ## fig:departed_landing and fig:tip_feedback
 As written into the draft (see the restructure), numbers unchanged.
+
+## fig:thrust_map (Images/thrust_map.pdf, full width)
+The rig's thrust map from 13 free hovers on 30 September, each UAV carrying 0, 98 or 196\,g. (a) Hover throttle
+corrected to 23.5\,V and to the mean offset, against the hover mass; one colour per UAV (markers offset sideways
+by up to 9\,g so that hovers at the same mass can be seen); dashed: the fit $u = a_i + 0.507\,M - 0.022\,(V - 23.5)$
+with per-UAV offsets $a_i$ of 0.181--0.187. (b) The residuals of the fit against the pack voltage: rms
+$3.2\times10^{-3}$, at most $5\times10^{-3}$ (about 1\,\% of hover throttle), with no trend left in voltage.
