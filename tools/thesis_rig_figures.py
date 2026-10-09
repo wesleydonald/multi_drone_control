@@ -383,14 +383,16 @@ def fig_solve():
     return stem, stats
 
 
-LAND_PHASES = [('twin_land_e0_prearm', 'armed on\nthe floor'), ('twin_land_e1_creep', 'creep'), ('twin_land_e2_lift', 'lift'),
-               ('twin_land_e3_parked', 'newcomer\nparked'), ('twin_land_e4_climb', 'climb'), ('twin_land_e5_transit', 'transit'),
-               ('twin_land_e6_descend', 'descent'), ('twin_all_a1', 'hold over\nthe plate'),
-               ('twin_land_e9_welded', 'weld\n+0.5 s'), ('twin_land_e9b_welded2', 'weld\n+2 s'),
-               ('twin_land_e9c_welded4', 'weld\n+4 s'), ('w4_land_e11_stepout', 'freed UAV\nstepping out'),
-               ('w4_land_e12_landing', 'freed UAV\nlanding'), ('w4_land_e13_drop', 'after\na drop'),
-               ('twin_land_e14_twice', 'LAND\ntwice'), ('twin_land_e15_orbit_hold', 'circle,\nhold'),
-               ('twin_land_e16_r8a0', 'carry,\nnewcomer idle')]
+LAND_PHASES = [('twin_land_e0_prearm', 'armed on the floor'), ('twin_land_e1_creep', 'floor creep'),
+               ('twin_land_e2_lift', 'lift'), ('twin_land_e3_parked', 'newcomer parked'),
+               ('twin_land_e4_climb', 'newcomer climbing'), ('twin_land_e5_transit', 'newcomer in transit'),
+               ('twin_land_e6_descend', 'newcomer descending'), ('twin_all_a1', 'newcomer over the plate'),
+               ('twin_land_e9_welded', 'weld + 0.5 s'), ('twin_land_e9b_welded2', 'weld + 2 s'),
+               ('twin_land_e9c_welded4', 'weld + 4 s'), ('w4_land_e11_stepout', 'freed UAV stepping out'),
+               ('w4_land_e12_landing', 'freed UAV landing'), ('w4_land_e13_drop', 'after a ring drop'),
+               ('twin_land_e14_twice', 'LAND pressed twice'), ('twin_land_e15_orbit_hold', 'circle, newcomer over the plate'),
+               ('twin_land_e16_r8a0', 'carry, newcomer idle on the floor')]
+LAND_GROUPS = [(0, 2, 'take-off'), (3, 10, 'attach'), (11, 13, 'detach'), (14, 16, 'carry')]
 LAND_FIRST_RUN = 1413          # the re-fly on f330bd2 (9 Oct evening)
 
 
@@ -407,37 +409,57 @@ def fig_land_phases():
     sys.path.insert(0, os.path.join(REPO, 'tools'))
     import land_metrics as lm
     ps.thesis()
-    fig, axs = plt.subplots(2, 1, figsize=ps.size('full', height=3.2), sharex=True,
-                            gridspec_kw=dict(height_ratios=[1.3, 1.0]))
-    ax, axt = axs
+    fig, (ax, axt) = plt.subplots(1, 2, figsize=ps.size('full', height=3.7), sharey=True,
+                                  gridspec_kw=dict(width_ratios=[1.25, 1.0]))
     stats = {}
-    for x, (cfg, name) in enumerate(LAND_PHASES):
+    x_max, t_max = 40.0, 20.0
+    dot = dict(ms=3.5, mec='white', mew=0.4, zorder=3, clip_on=False)
+    for y, (cfg, name) in enumerate(LAND_PHASES):
         for k, rid in enumerate(land_runs(cfg)[:2]):
             m = lm.analyse(rid)
             tilt = max(v['tilt_max'] for v in m['drones'].values())
             ok = not m['abort'] and not m['armed_at_end'] and tilt <= 30.0
-            xx = x + (-0.12 if k == 0 else 0.12)
-            col = '0.25' if ok else ps.drone_colour(3)
-            ax.plot(xx, min(tilt, 95.0), 'o' if ok else 'X', color=col, ms=4 if ok else 6, zorder=3)
-            disarms = [v for v in m['drones'].values()]
-            if m['landed_t'] is not None and m['land_t'] is not None:
-                axt.plot(xx, m['landed_t'] - m['land_t'], 'o', color=col, ms=4, zorder=3)
-            stats[rid] = dict(cfg=cfg, tilt=tilt, ok=ok, land_to_landed=m.get('land_to_landed_s'), abort=m['abort'])
-    ax.axhline(30.0, color='0.3', lw=0.8, ls='--')
-    ax.annotate('30$^\\circ$', xy=(len(LAND_PHASES) - 0.5, 30.0), xytext=(0, 2), textcoords='offset points',
-                fontsize=8, color='0.3', ha='right', va='bottom')
-    ax.set_ylabel(r'Worst UAV tilt (\si{\degree})')
-    ax.set_ylim(0, 100)
-    ax.set_yticks([0, 30, 60, 90])
-    axt.set_ylabel('LAND to landed (s)')
-    axt.set_ylim(0, 20)
-    axt.set_yticks([0, 10, 20])
-    axt.set_xticks(range(len(LAND_PHASES)))
-    axt.set_xticklabels([n for _, n in LAND_PHASES], fontsize=7, rotation=0)
-    axt.set_xlim(-0.6, len(LAND_PHASES) - 0.4)
+            yy = y + (-0.17 if k == 0 else 0.17)
+            if ok:
+                ax.plot(tilt, yy, 'o', color='0.25', **dot)
+            else:                   # off the scale: drawn at the edge with its value
+                ax.plot(x_max, yy, 'X', color='black', ms=6, zorder=3, clip_on=False)
+                ax.annotate(f'tipped\n({tilt:.0f}$^\\circ$)', xy=(x_max, yy), xytext=(-7, 0),
+                            textcoords='offset points', fontsize=7.5, ha='right', va='center', color='0.2')
+            if m['land_to_landed_s'] is not None:
+                axt.plot(m['land_to_landed_s'], yy, 'o', color='0.25', **dot)
+            elif not ok:
+                axt.plot(t_max, yy, 'X', color='black', ms=6, zorder=3, clip_on=False)
+                axt.annotate('never landed', xy=(t_max, yy), xytext=(-7, 0), textcoords='offset points',
+                             fontsize=7.5, ha='right', va='center', color='0.2')
+            else:                   # armed on the floor: the fleet disarms at LAND
+                axt.plot(0.0, yy, 'o', color='0.25', **dot)
+                if k == 0:
+                    axt.annotate('disarmed at LAND', xy=(0.0, y), xytext=(8, 0), textcoords='offset points',
+                                 fontsize=7.5, color='0.35', ha='left', va='center')
+            stats[rid] = dict(cfg=cfg, tilt=tilt, ok=ok, land_to_landed=m['land_to_landed_s'], abort=m['abort'])
+    for i0, i1, _ in LAND_GROUPS[1:]:
+        for a in (ax, axt):
+            a.axhline(i0 - 0.5, color='0.85', lw=0.5, zorder=0)
+    for i0, i1, g in LAND_GROUPS:
+        axt.annotate(g, xy=(1.0, (i0 + i1) / 2), xycoords=('axes fraction', 'data'), xytext=(6, 0),
+                     textcoords='offset points', fontsize=8, color='0.45', ha='left', va='center', rotation=90)
+    ax.axvline(30.0, color='0.3', lw=0.8, ls='--')
+    ax.annotate('30$^\\circ$ bar', xy=(30.0, -0.6), xytext=(0, 2), textcoords='offset points', fontsize=8,
+                color='0.3', ha='center', va='bottom')
+    ax.set_xlabel(r'Worst UAV tilt (\si{\degree})')
+    ax.set_xlim(-0.8, x_max)
+    ax.set_xticks([0, 10, 20, 30, 40])
+    axt.set_xlabel('LAND to landed and disarmed (s)')
+    axt.set_xlim(-0.6, t_max)
+    axt.set_xticks([0, 5, 10, 15, 20])
+    ax.set_yticks(range(len(LAND_PHASES)))
+    ax.set_yticklabels([n for _, n in LAND_PHASES], fontsize=8)
+    ax.set_ylim(len(LAND_PHASES) - 0.4, -0.6)
+    ax.tick_params(axis='y', length=0, pad=6)
+    axt.tick_params(axis='y', length=0)
     ps.panel_label(ax, 'a')
     ps.panel_label(axt, 'b')
-    fig.align_ylabels()
     stem = os.path.join(OUT, 'F_land_phases', 'land_phases')
     ps.save_print(fig, stem)
     return stem, stats
@@ -485,7 +507,85 @@ def fig_thrust():
     return stem, dict(a=law['a'], b=law['b'], c=law['c'], rms=law['rms'], n=law['n'])
 
 
-FIGS = {'thrust': fig_thrust, 'land': fig_land_phases, 'solve': fig_solve, 'departed': fig_departed, 'tip': fig_tip, 'rig_detach': fig_rig_detach}
+# 7 Oct rig hovers on the even ring, mpc mode, the same lift and 45 deg plan, one change at a time: run 1 without the
+# integral; run 2 with the model integral; round 2's hover with the model integral and the trackers on the measured
+# rod pull (cable_source mocap; its cap 12 against 6 was never reached)
+RIG_INTEGRAL = [('results/rig/2026-10-07/r0001_logs', 'no integral', '0.55', 0.9),
+                ('results/rig/2026-10-07/r002_logs', 'model integral', '0.2', 0.9),
+                ('results/rig/2026-10-07/r20004_logs', 'model integral + measured pull', ps.PAYLOAD_LINE, 1.4)]
+
+
+def rig_hold(path):
+    f = glob.glob(os.path.join(REPO, path, 'logs', 'mpc_planner', '*', 'log.csv'))[0]
+    L = pd.read_csv(f)
+    L = L[L.phase == 'planner']
+    t = (L.sim_time - L.sim_time.iloc[0]).to_numpy()
+    at = np.flatnonzero(L.z_tgt.to_numpy() >= 0.999)
+    t_top, t_land = t[at[0]], t[at[-1]]          # the climb reaches the target; LAND starts the descent
+    k = (t >= t_top - 3.0) & (t <= t_land)
+    hold = (t >= t_top) & (t <= t_land)
+    return dict(t=t[k] - t_top, z=L.load_z.to_numpy()[k], fz=L.int_fz.to_numpy()[k], t_land=t_land - t_top,
+                z_hold=L.load_z.to_numpy()[hold], fz_hold=L.int_fz.to_numpy()[hold])
+
+
+def fig_rig_integral():
+    from matplotlib.ticker import MultipleLocator
+    ps.thesis()
+    tr = [rig_hold(p) for p, *_ in RIG_INTEGRAL]
+    off, mi, mp = tr
+    fig, (ax, axf) = plt.subplots(2, 1, figsize=ps.size('full', height=3.0), sharex=True,
+                                  gridspec_kw=dict(height_ratios=[1.6, 1.0]))
+    for a in (ax, axf):             # the window the shortest hold with the integral shares with the longest
+        a.axvspan(0.0, mp['t_land'], color='0.94', lw=0, zorder=0)
+    ax.annotate('both integral runs flying', xy=(mp['t_land'] / 2, 1.1), xytext=(0, -2), textcoords='offset points',
+                fontsize=7.5, color='0.45', ha='center', va='top')
+    ax.axhline(1.0, color='0.3', lw=0.8, ls='--', zorder=1)
+    ax.annotate('target', xy=(mi['t_land'] + 4.5, 1.0), xytext=(0, 2), textcoords='offset points', fontsize=8,
+                color='0.3', ha='right', va='bottom')
+    axf.axhline(0.0, color='0.6', lw=0.5)
+    for h, (_, name, col, lw) in zip(tr, RIG_INTEGRAL):
+        z = 3 if col == ps.PAYLOAD_LINE else 2
+        ax.plot(h['t'], h['z'], color=col, lw=lw, zorder=z)
+        ax.plot(h['t'][-1], h['z'][-1], '|', color=col, ms=6, mew=0.9, zorder=4)
+        if np.isfinite(h['fz']).any():
+            axf.plot(h['t'], h['fz'], color=col, lw=lw, zorder=z)
+            axf.plot(h['t'][-1], h['fz'][-1], '|', color=col, ms=6, mew=0.9, zorder=4)
+    lab = dict(fontsize=8, textcoords='offset points', va='center', ha='left')
+    ax.annotate(RIG_INTEGRAL[0][1], xy=(off['t'][-1], off['z'][-1]), xytext=(6, 0), color='0.4', **lab)
+    ax.annotate(RIG_INTEGRAL[1][1], xy=(mi['t'][-1], mi['z'][-1]), xytext=(6, 0), color='0.2', **lab)
+    ax.annotate(RIG_INTEGRAL[2][1], xy=(0.15, 1.0), xytext=(0, 9), color=ps.PAYLOAD_LINE, **lab)
+    axf.annotate(RIG_INTEGRAL[1][1], xy=(mi['t'][-1], mi['fz'][-1]), xytext=(6, 0), color='0.2', **lab)
+    axf.annotate(RIG_INTEGRAL[2][1], xy=(mp['t'][-1], mp['fz'][-1]), xytext=(6, -2), color=ps.PAYLOAD_LINE, **lab)
+    ax.set_ylabel('Ring height $z$ (m)')
+    ax.set_ylim(0.84, 1.1)
+    ax.set_yticks([0.9, 1.0, 1.1])
+    ax.yaxis.set_minor_locator(MultipleLocator(0.02))
+    axf.set_ylabel('Learned $F_z$ (N)')
+    axf.set_ylim(-1.0, 0.1)
+    axf.set_yticks([-1.0, -0.5, 0.0])
+    axf.set_xlabel('Time from the end of the climb (s)')
+    axf.set_xlim(-1.5, mi['t_land'] + 4.5)
+    axf.set_xticks([0, 5, 10, 15])
+    ps.panel_label(ax, 'a')
+    ps.panel_label(axf, 'b')
+    fig.align_ylabels()
+    stem = os.path.join(OUT, 'F_rig_integral', 'rig_integral')
+    ps.save_print(fig, stem)
+    out = {}
+    for h, (_, name, *_r) in zip(tr, RIG_INTEGRAL):
+        w = (h['t'] >= 0.0) & (h['t'] <= min(mp['t_land'], h['t_land']))
+        late = h['t'] >= 8.0
+        out[name] = dict(hold_s=round(float(h['t_land']), 1), z_first=round(float(h['z_hold'][0]), 3),
+                         z_last=round(float(h['z_hold'][-1]), 3), shared_mean=round(float(h['z'][w].mean()), 3),
+                         shared_min=round(float(h['z'][w].min()), 3), shared_max=round(float(h['z'][w].max()), 3),
+                         late_min=round(float(h['z'][late].min()), 3) if late.any() else None,
+                         late_max=round(float(h['z'][late].max()), 3) if late.any() else None,
+                         fz_min=round(float(np.nanmin(h['fz_hold'])), 2) if np.isfinite(h['fz_hold']).any() else None)
+    return stem, out
+
+
+FIGS = {'thrust': fig_thrust, 'land': fig_land_phases, 'solve': fig_solve, 'departed': fig_departed, 'tip': fig_tip,
+        'rig_detach': fig_rig_detach, 'rig_integral': fig_rig_integral}
 
 if __name__ == '__main__':
     names = sys.argv[1:] or list(FIGS)
