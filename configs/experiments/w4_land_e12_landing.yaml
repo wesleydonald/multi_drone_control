@@ -1,7 +1,7 @@
 criteria:
   forbid_abort: true
-description: 'LAND matrix (exploratory, 9 Oct; Wesley: LAND lands every drone whatever it is doing): freed carrier:
-  LAND 5 s after it starts landing by itself'
+description: 'freed carrier: LAND 1.5 s after it starts landing by itself (retimed 9 Oct: at +5 s it was already
+  down, reviewer)'
 events:
 - t: 3.0
   do: ARM
@@ -16,7 +16,7 @@ events:
 - t: 21.0
   do: WAIT_LOG
   arg: 60 departed .* lands now
-- t: 26.0
+- t: 22.5
   do: LAND
 fleet:
   n_total: 4

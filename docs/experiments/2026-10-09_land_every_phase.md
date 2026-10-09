@@ -116,3 +116,34 @@ the rig QUAD4's tether goes slack and the rig lands straight down.
 a LAND within ~2 s of a weld, where the twin's rigid link tips QUAD4 about 1 time in 4 (twin artefact by the
 pre-declared reading). The drone 1 (/drone_0) disarm ~5 cm above its start is the pre-existing fleet-disarm drop.
 
+## Reviewer (9 Oct): NOT SUPPORTED (corrections taken; the table is re-flown on the fix)
+
+1. **R1378 was not a host stall.** The runner's gap (0.54 s sim in 2.30 s wall) is the normal sim speed; tracker_0
+   and tracker_1 logged inside it; the parallel slots R1379/R1380 had no gap. It starts 0.2 s after QUAD4 was
+   disarmed alone at its rest: its tracker shut down and its process died, then drones 1 and 3 timed out on pose
+   (0.54 / 0.53 s) and the fleet got an EMERGENCY STOP at 0.83-0.93 m. The same gap appears only where tracker
+   processes exit (at the fleet disarm in R1318, R1348, R1352, R1376, R1390; R1347's runner hang starts there too).
+   Mid-flight disarm-alones: 1 abort in 9 in the claim runs, 1 in ~20 over the day (gap after each disarm-alone:
+   0.02-0.05 s sim in 20 runs, 0.54 s in R1378). **Reclassified: R1378 FAILS (e4 1 of 3 on this tree).**
+   Fix f330bd2: a tracker disarmed alone keeps its process up (one-shot); the fleet disarm after LANDED closes it.
+2. e12 never had a freed drone mid-landing at LAND: /drone_1 was already down and disarmed alone (R1354 38.08 vs
+   LAND 38.57; R1386 38.01 vs 38.48; R1320). Retimed: LAND 1.5 s after "lands now".
+3. e11-e13 are detach configs: no newcomer, so newcomer_lifecycle / newcomer_fault_land read back false there
+   (departed_ground_idle on); "the switches on" holds for 28 of 34 runs. No row injects a fault on an unwelded
+   QUAD4: newcomer_fault_land's active path is shown by card 2026-10-09_newcomer_fault_scope, not here.
+   R1391/R1392 manifests say e816ab2 (flight code identical; same git_diff.patch md5).
+4. Every cell reproduces; the post-weld text was miscounted: **2 s after the weld: 3 runs, not 4** (R1328 clean
+   6.5 deg, R1351 tipped 85.6 deg, R1383 grey 38.2 deg / 0.071 m): 1 of 3 tipped, 1 of 3 inside the bars; on the
+   claim tree 0 of 2 inside the bars. 0.5 s: 1 of 4 tipped (R1315, on cb09b39). 4 s: 0 of 3 tipped (R1384 23.3 deg,
+   0.051 m). Drone 1's 4-5 cm disarm height is pre-existing (R1290, switches off: 0.049); /drone_1 also disarms
+   3.0-3.3 cm up in 13 of 33 scored runs.
+5. Not covered: Tejen's phase, caught-not-welded, a welded start (newcomer_fault_land is forced off there), a fault
+   on an unwelded QUAD4; **the rig's LAND path** (every twin run has land_unwind true, real.yaml false; R1351's tip
+   began after "load down - survivors unwind"; a straight-down LAND with a welded QUAD4 is not flown in any row);
+   the rig's slack tether vs the twin's rigid rod; whether a tracker exit mid-flight also stalls the rig's graph
+   (the fix removes the exit there too).
+
+Re-fly: the whole table on f330bd2 (one tree), e12 retimed; the disarm-alone card's rows with it (their
+SUPPORTED verdict predates the R1378 finding: P2 "no abort caused by the expected disarm" was met in its own 10
+runs, but R1378 is exactly that failure).
+

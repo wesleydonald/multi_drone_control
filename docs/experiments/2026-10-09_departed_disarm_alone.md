@@ -166,3 +166,13 @@ reaching it (the tracker's 0.2 s dwell), before LANDED, with no fault path and n
 Found outside this card: R1324's magnet command flapped ON/OFF (the runner re-sends ON for 2 s; each refused ON
 gets an OFF, as designed); the refusal's log line is now throttled to one per 2 s.
 
+## After the review: a failure found by the LAND matrix (9 Oct evening)
+
+R1378 (card 2026-10-09_land_every_phase, LAND in QUAD4's climb): QUAD4 was disarmed alone at its rest while the
+carriers still flew; its tracker process exited ~0.1 s later (a disarm after a flight shut the controller down);
+the graph stalled 0.54 s sim (2.3 s wall) and two carriers timed out on pose: fleet EMERGENCY STOP at 0.8-0.9 m.
+Over the day 1 of ~20 mid-flight disarm-alones (the others: 0.02-0.05 s gaps). This is the P2 failure ("an abort
+caused by the expected disarm") that this card's 10 rows did not show. Fix f330bd2: the tracker stays up after a
+disarm alone (one-shot keep-alive, unit-tested; it keeps sending disarmed commands; the fleet disarm after LANDED
+closes it). The verdict above stands for its rows only; the rows are re-flown on f330bd2 with the LAND table.
+
