@@ -346,9 +346,13 @@ class ExperimentRunner(Node):
               and all(c is not None for c in self.cmd[:self._n_cmd_ready()])
               and self.payload is not None)
         # planner modes: the planner must be publishing references too (R1148 started the
-        # clock 17 s before the dissipative planner was up, and ARM went out into nothing)
-        if str(self.cfg.launch_args.get('mode', 'mpc')) in ('mpc', 'dissipative'):
-            ok = ok and all(r is not None for r in self.ref[:self.n])
+        # clock 17 s before the dissipative planner was up, and ARM went out into nothing; R1308:
+        # attach mode was not in the list, and the clock started while the planner compiled its
+        # resize solvers for 126 s). In attach only the carriers have one before the approach.
+        mode = str(self.cfg.launch_args.get('mode', 'mpc'))
+        if mode in ('mpc', 'dissipative', 'attach'):
+            n_ref = self.cfg.num_drones if mode == 'attach' else self.n
+            ok = ok and all(r is not None for r in self.ref[:n_ref])
         # the fleet manager must be discovered on /fleet/command, and stay so for 2 s:
         # R0602's ARM reached drone 3's tracker but not the fleet manager
         import time as _t
