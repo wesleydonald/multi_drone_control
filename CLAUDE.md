@@ -98,3 +98,4 @@ current branch like any other file (it reaches main with the merges).
 - The model integral (`int_mode auto`) is the default everywhere (5 and 8 Oct).
 - The network is yaw-only and open-loop in load pose except the bounded common-mode trim.
 - Attach at 0.2 m/s.
+- The twin models every link as rigid, QUAD4's tether included (9 Oct); the rig's tethers go slack.
