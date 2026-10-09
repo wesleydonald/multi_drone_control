@@ -167,3 +167,20 @@ hover/circle logs (1 s mean, 0.05/0.08 hysteresis); tip precision/repeats unknow
 frozen = identical while the body moved, plus Wednesday's props-off record. Should-fix taken: tip_hold logged
 switch-off; calibrate hanging vertical; TIP_FREEZE inert by default with a unit test.
 
+## First pass (9 Oct, e434a11; rows R1330-R1341)
+
+| arm | switch off | switch ON | verdict |
+|---|---|---|---|
+| 0 | 0.4 mm | 3.2 mm, c +3 mm | supports (within 5 mm) |
+| E- | 40.2 mm low | 6.4 mm; within 1 cm in 1.7 s; c +46.6 mm | supports |
+| E+ | 39.9 mm high | 5.6 mm; within 1 cm in 1.9 s; c -45.5 mm | supports |
+| S | (push 2 N x 0.5 s swung the rod ~0.56 m: oversized, the sizing run) | 2.4 mm, a contact latch during the big swing | not scored; push resized to 0.5 N x 0.2 s |
+| F | 39.7 mm | 3.5 mm, but c ran 23 mm during the 2 s freeze | **FALSIFIES F** (> 20 mm) |
+| W | no weld | welded 1.4 s after hold entry | supports |
+
+F: the rev-3 "frozen" rule needed the body to move by 5 mm, so a frozen tip in a still hold passed as valid
+and the loop integrated on it; the contact test latched after 1.99 s and limited it to 23 mm. Rev 4 (code):
+a tip bit-identical for 0.2 s is frozen whatever the body does (still mocap noise never repeats exactly; on
+the rig a coarse forwarder could only pause the loop, the safe direction; Wednesday's props-off record checks
+it). Rev 4 is a new tree: the whole table is re-flown on it (bars unchanged), with S on the resized push.
+

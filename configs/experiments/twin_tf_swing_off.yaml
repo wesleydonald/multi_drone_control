@@ -1,6 +1,6 @@
 name: twin_tf_swing_off
-description: 'card 2026-10-09_approach_tip_feedback rev 3, arm S: E+ and a 2 N radial push on QUAD4 for 0.5 s, 1
-  s into the tip hold (switch off)'
+description: 'card 2026-10-09_approach_tip_feedback rev 3, arm S: E+ and a 0.5 N radial push on QUAD4 for 0.2 s
+  (2 N x 0.5 s swung the rod ~0.56 m, R1333), 1 s into the tip hold (switch off)'
 world: three_rigid_ground_rig_attach_push.sdf
 launch:
   package: bringup
@@ -79,8 +79,8 @@ events:
   arg: '120 approach: drone 3 tip hold'
 - t: 22.0
   do: WRENCH
-  arg: 0 2 0 x3_drone3::base_link
-- t: 22.5
+  arg: 0 0.5 0 x3_drone3::base_link
+- t: 22.2
   do: WRENCH
   arg: 0 0 0 x3_drone3::base_link
 - t: 52.0

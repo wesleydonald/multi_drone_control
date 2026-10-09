@@ -98,7 +98,8 @@ def _frames(n=12, tip=(0.0, 0.25, 1.06), body=(0.0, 0.25, 1.65), body_step=0.0, 
 
 
 def test_a_good_tip_passes():
-    fr = _frames()
+    fr = _frames(n=12)
+    fr = [(f[0], f[1] + [0.0, 0.0, 1e-4 * i], f[2]) for i, f in enumerate(fr)]
     assert tip_valid(fr[-1][0] + 0.01, fr) == (True, '')
 
 
@@ -110,8 +111,18 @@ def test_stale_distance_lean_step_and_frozen_fail():
     fr = _frames()
     fr[-1] = (fr[-1][0], fr[-1][1] + [0.0, 0.0, 0.04], fr[-1][2])
     assert tip_valid(10.2, fr)[1] in ('step', 'distance')
-    assert tip_valid(10.2, _frames(body_step=0.001))[1] == 'frozen'   # body moved 11 mm, tip identical
+    fr = _frames(n=30)                                     # bit-identical for 0.29 s
+    assert tip_valid(fr[-1][0] + 0.01, fr)[1] == 'frozen'
 
 
-def test_a_still_drone_may_repeat_its_tip():
-    assert tip_valid(10.2, _frames(body_step=0.0)) == (True, '')
+def test_a_frozen_tip_is_caught_even_in_a_still_hold():
+    # R1340: the rev-3 rule needed the body to move, so a freeze in a still hold passed as valid
+    fr = _frames(n=30, body_step=0.0)
+    assert tip_valid(fr[-1][0] + 0.01, fr)[1] == 'frozen'
+
+
+def test_a_noisy_still_tip_is_valid():
+    rng = np.random.default_rng(0)
+    fr = [(10.0 + 0.01 * i, np.array([0.0, 0.25, 1.06]) + rng.normal(0.0, 2e-4, 3), np.array([0.0, 0.25, 1.65]))
+          for i in range(40)]
+    assert tip_valid(fr[-1][0] + 0.01, fr) == (True, '')

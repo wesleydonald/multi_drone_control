@@ -38,13 +38,14 @@ HOLD_AT_GOAL_M, HOLD_AT_GOAL_S = 0.005, 1.0
 HOLD_SPEED_IN, HOLD_SPEED_OUT = 0.05, 0.08   # m/s, the target's 1 s mean (rig 8 Oct: hover p50 0.02-0.03, circle 0.12)
 TIP_BODY_MIN, TIP_BODY_MAX = 0.55, 0.63      # m, |tip - body| of a believable tip
 TIP_XY_MAX, TIP_STEP_MAX, TIP_FRESH_S = 0.15, 0.03, 0.1
-TIP_FROZEN_N, TIP_FROZEN_BODY_M = 10, 0.005
+TIP_FROZEN_S = 0.2              # s: a bit-identical tip this long is frozen (still mocap noise never repeats so);
+TIP_FROZEN_N = 64               # frames kept for the checks (~0.5 s at 120 Hz)
 
 
 def tip_valid(now, frames):
     """frames: the last tip samples as (t, tip xyz, body xyz), oldest first. The tip passes as a measurement:
-    fresh, at a believable distance and lean from the body, no jump, and not frozen while the body moved (a
-    still drone's tip may repeat). Returns (ok, why)."""
+    fresh, at a believable distance and lean from the body, no jump, and not frozen (bit-identical for
+    TIP_FROZEN_S: the body-moved test of rev 3 could not see a freeze in a still hold, R1340). Returns (ok, why)."""
     if not frames:
         return False, 'no tip'
     t, tip, body = frames[-1]
@@ -59,12 +60,10 @@ def tip_valid(now, frames):
     tips = [np.asarray(f[1], float) for f in frames]
     if any(float(np.linalg.norm(b - a)) > TIP_STEP_MAX for a, b in zip(tips, tips[1:])):
         return False, 'step'
-    if len(frames) >= TIP_FROZEN_N:
-        last = frames[-TIP_FROZEN_N:]
-        same = all(np.array_equal(np.asarray(f[1], float), tip) for f in last)
-        moved = float(np.linalg.norm(np.asarray(last[0][2], float) - body)) > TIP_FROZEN_BODY_M
-        if same and moved:
-            return False, 'frozen'
+    recent = [f for f in frames if t - f[0] <= TIP_FROZEN_S]
+    if len(recent) >= 2 and t - frames[0][0] >= TIP_FROZEN_S \
+            and all(np.array_equal(np.asarray(f[1], float), tip) for f in recent):
+        return False, 'frozen'
     return True, ''
 
 
