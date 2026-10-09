@@ -15,7 +15,7 @@ drone down and disarmed at its rest, with no abort and no drone tipping.
 ## 3. The one variable
 
 The switches on (they are the candidate defaults); everything else as the twin defaults. One code tree for
-the whole table: rig-prep e434a11 (the tip feedback in it is off by default). Configs (all existing):
+the whole table: rig-prep 7d63170 (the tip feedback in it is off by default). Configs (all existing):
 
 | phase | config |
 |---|---|
