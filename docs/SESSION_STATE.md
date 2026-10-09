@@ -42,11 +42,12 @@ Updated: Fri 9 Oct 2026, late evening.
   re-baseline needs Wesley's word).
 - Known, harmless: R1418 race (alone-disarm request crossing the LANDED disarm keeps that tracker up until teardown);
   tracker exits at the fleet disarm stall the graph ~1 s after LANDED.
-- Thesis (branch thesis-rig, /home/wesley/mdc_wt/thesis/docs/thesis_drafts/thesis_v2): restructure committed
-  (ebf1b3b); rig figures in (fa94166): thrust_map, land_phases, solve_time, rig_detach, rig_integral; 7 Oct measured
-  pull + 8 Oct detach tables; lit comparison in the discussion. Main text 62 pp vs the 50 limit: a cut agent is
-  running (moves to appendices first; not committing). New figure scripts in tools/thesis_rig_figures.py
-  (rig_integral, land redone after blind critics; 77c502d).
+- Thesis (branch thesis-rig, /home/wesley/mdc_wt/thesis/docs/thesis_drafts/thesis_v2, HEAD c0fc6e8): restructure
+  (ebf1b3b), rig figures + 7-8 Oct tables + lit comparison (fa94166), cut to 50 pp main text (e5260a8: secondary
+  tables to appendices C/D), trim contradictions settled (c0fc6e8). Builds clean, 82 pp total; ~2 lines spare on
+  the conclusion page. Open CHECKs: new refs (plug-and-play MPC, static equilibrium, aerial docking), the "This
+  work" row's qualitative cells, the detach metric definition, the parameter tables, "twelve numbers per node",
+  the 1-of-21 vs 2-of-21 landing count; conclusion value statement not written.
 - Rig finding to report: on 7 Oct the integral-only hover bobbed +-7 cm at 0.2 Hz; with the measured pull it held
   within 1 cm (one 7 s hover; the 36/68 s circle and figure-eight agree: z sd 4.8/4.7 -> 0.5/0.6 cm).
 - Tip feedback rev 5: SUPPORTED (earlier today). Rig: Wednesday sheet docs/rig_2026-10-14_commands.md.
