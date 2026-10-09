@@ -69,7 +69,8 @@ topics=(/payload/motion_capture_state /fleet/command /fleet/abort /fleet/status 
         /magnet/attachment_state /partner/release /join_planner/handoff_ready)
 for ((i = 0; i < N; i++)); do
   topics+=("/drone_$i/motion_capture_state" "/drone_$i/ELRSCommand" "/drone_$i/telemetry"
-           "/drone_$i/magnet" "/drone_$i/fc_arm_state" "/drone_$i/mux_state" "/drone_$i/ELRSCommand_diss")
+           "/drone_$i/magnet" "/drone_$i/fc_arm_state" "/drone_$i/mux_state" "/drone_$i/ELRSCommand_diss"
+           "/drone_$i/departed" "/drone_$i/down_alone" "/drone_$i/on_load")
 done
 ros2 bag record -o "$D/$F" "${topics[@]}" > "$D/${F}_bag.txt" 2>&1 &
 BAG=$!
