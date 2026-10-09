@@ -1136,6 +1136,7 @@ class Controller(Node):
             self.get_logger().warn(f'[Drone {self.drone_id + 1}] on the floor after the flight: '
                                    f'armed idle until disarm')
             if alone and getattr(self, '_down_alone_pub', None) is not None:
+                self.keep_alive_on_disarm = True        # the disarm that follows must not end this process
                 self._down_alone_pub.publish(Bool(data=True))
                 self.get_logger().info(f'[Drone {self.drone_id + 1}] down at its rest off the ring: '
                                        f'asking the fleet manager to disarm it alone')

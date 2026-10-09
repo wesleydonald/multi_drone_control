@@ -84,13 +84,14 @@ def test_a_carrier_fault_after_a_drone_went_down_alone_still_grounds_everyone(sy
     assert len(f.abort_pub.msgs) == 1 and _direct_elrs(f) == 1 + 4
 
 
-def test_the_fleet_disarm_skips_a_drone_already_down_alone(sync):
+def test_the_fleet_disarm_still_reaches_a_drone_down_alone(sync):
+    """Its tracker stays up after the disarm alone (R1378), so the final fleet disarm closes it with the others."""
     f = _fake()
     f._disarm_fleet_thread = m.CentralController._disarm_fleet_thread.__get__(f)
     f.get_logger = lambda: f._log
     f._down_alone.add(3)
     f._disarm_fleet_thread()
-    assert f.arming_clients[3].calls == 0 and all(f.arming_clients[i].calls == 1 for i in range(3))
+    assert all(f.arming_clients[i].calls == 1 for i in range(4))
     assert not any('not answering' in s for s in f._log.lines)
 
 

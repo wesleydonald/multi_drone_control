@@ -519,8 +519,6 @@ class CentralController(Node):
     def _disarm_fleet_thread(self):
         futures = {}
         for i in range(self.num_drones):
-            if i in self._down_alone:
-                continue                 # disarmed alone at its rest; its tracker has closed
             client = self.arming_clients[i]
             if client.service_is_ready():
                 req = SetArming.Request()
