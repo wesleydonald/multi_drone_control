@@ -360,7 +360,7 @@ class DissipativeController(LoadPlanner):
         self._departed_gi = bool(p('departed_ground_idle', False).value) and not self._partner_run
         if self._departed_gi and (self.start_taut or self.creep.airborne_start):
             # an air start records the stand height as its rest: the press and the gate would sit in the air
-            self.get_logger().error('[dissipative] departed_ground_idle needs a floor start: turned off')
+            self.get_logger().info('[dissipative] air start: departed_ground_idle off (it needs a floor start)')
             self._departed_gi = False
         self._at_rest_t = {}          # d -> s spent at its rest while landing by itself
         self._press_t = {}            # d -> s pressed since it stopped above its rest

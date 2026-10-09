@@ -40,6 +40,9 @@ fleet_resize:
   departed_ground_idle: ''
   drop_on_loss: ''            # off, as before 8 Oct
   reconfig_mode: 'network'
+attach:
+  newcomer_lifecycle: false   # off, as before 9 Oct
+  newcomer_fault_land: false
 network:
   auto_network_handover: true
 sim_interface:

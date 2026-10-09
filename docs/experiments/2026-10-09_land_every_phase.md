@@ -177,13 +177,37 @@ Disarmed alone in flight: QUAD4 in e3/e4 (both runs), drone 2 (/drone_1) in e11/
 disarm-alones, no stall, no abort. With the laptop disarm-alone re-fly (R1411, R1412, R1447-R1451): 17 of 17.
 
 R1438 (LAND 0.5 s after the weld): the LAND descent went normally; after "load down - survivors unwind along their
-rods", QUAD4 on its rigid rod lagged 12 cm behind its outward reference, pitched up and reached 75 deg at 0.4 m:
-envelope fault, fleet EMERGENCY STOP. The same sequence as R1351. Pre-declared reading: the twin's rigid link
+rods", QUAD4 on its rigid rod tilted from 0.43 m (6 deg at 54.79 s, 16 deg at 55.02 s) to 72 deg at about 0.17 m:
+envelope fault (75 deg), fleet EMERGENCY STOP at 55.275 s. The same sequence as R1351. (Corrected after the reviewer:
+the first text said 75 deg at 0.4 m and blamed a 12 cm lag; the lag is 0.14-0.16 m in the clean runs too.) Pre-declared reading: the twin's rigid link
 during the unwind; the rig lands straight down (real.yaml land_unwind false) and its tether goes slack.
 
 Post-weld family over every run on 9 Oct: 0.5 s after the weld tipped 2 of 6 (R1315, R1438; R1327, R1350, R1382,
 R1421 landed); 2 s after 1 of 5 (R1351; R1383 grey at 38 deg; R1328, R1422, R1439 clean); 4 s after 0 of 5.
 
 **Verdict (re-fly):** LAND lands and disarms every drone in 16 of 17 phases, 2 of 2 each, on one tree. A LAND
-within ~2 s of a weld tips QUAD4 about 1 time in 4 in the twin, always in the survivors' unwind after load down
+within ~2 s of a weld tips QUAD4 in 3 of 11 twin runs (4 of 11 outside the bars with R1383), always in the survivors' unwind after load down
 (the pre-declared twin rigid-link reading). The rig never runs that unwind.
+
+## Reviewer on the re-fly (9 Oct night): SUPPORTED, with corrections (taken above and here)
+
+1. Every cell, the one tree (8588745 with f330bd2, clean, the same patch of gitignored SIL files), the e12 retime
+   (/drone_1 at 1.24 / 1.22 m, armed, descending at LAND) and the parameter read-backs check out.
+2. No stall after any of the 17 disarm-alones (largest sim step 0.026-0.038 s; R1378 0.543 s). Three of them
+   (R1426, R1443, R1448) come 0.13-0.27 s before LANDED: at touchdown, not mid-flight; 14 of 17 are mid-flight.
+3. **A race the card missed (R1418, e5):** QUAD4 asked to be disarmed alone 4 ms after the fleet manager began
+   the LANDED disarm; the tracker took the fleet's disarm as its one-shot and stayed up until teardown (it keeps
+   sending disarmed commands; `_safety_check` runs only while armed, so no hazard). 1 of 34. Tracker exits at
+   the fleet disarm still stall the graph after LANDED (R1444 0.77 s, R1445 1.0 s) with every drone disarmed:
+   harmless. The departed card's lock wording ("fine only because its tracker has closed") is stale.
+4. R1438's tilt starts at 0.43 m and the fault is at ~0.17 m; the 12 cm lag does not separate the tips (clean
+   runs 0.139-0.163 m, R1351 0.127 m): the trigger is not identified. All tips start 1-3 s after the ring is
+   down. The pre-declared reading was frozen (017b2c4, 15:40) before the first claim run but after R1315 had
+   tipped; it is applied as written. Nothing tests the rigid-link attribution itself (no land_unwind-false run
+   after a weld, no compliant link, no switches-off post-weld run). Counts: 0.5 s 2 of 6, 2 s 1 of 5 (+ R1383
+   grey), 4 s 0 of 5, across four trees.
+5. For the defaults: supported for the twin's LAND with the three switches on. Not covered: the rig's LAND path
+   (land_unwind false; no straight-down LAND in any row, after a weld included); newcomer_fault_land's active
+   path (card 2026-10-09_newcomer_fault_scope); the rig check of the disarm-alone card (elrs_interface,
+   fc_arm_state); Tejen's phase, caught-not-welded, a welded start, slack tethers; whether the post-weld tip
+   depends on the switches; the R1418 race.

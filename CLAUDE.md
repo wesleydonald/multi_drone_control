@@ -89,8 +89,10 @@ current branch like any other file (it reaches main with the merges).
 ## Locked decisions (do not "fix")
 - No geofence. Fleet-wide disarm on any envelope fault, except: detach runs with
   `drop_on_loss` (a second loss or ring tilt > 30 deg drops the ring and lands every drone,
-  8 Oct); and an unwelded QUAD4's fault lands the fleet with `newcomer_fault_land`
-  (Wesley 8 Oct, default off until the rig).
+  8 Oct); and an unwelded QUAD4's fault lands the fleet with `newcomer_fault_land`.
+- LAND lands every drone whatever it is doing; a freed drone off the ring is pushed to its own
+  rest and disarmed alone. `newcomer_lifecycle`, `newcomer_fault_land` and `departed_ground_idle`
+  are on by default (Wesley 9 Oct, after the LAND re-fly's reviewer); the legacy profile keeps them off.
 - Thrust: the rig and the rig twin use the identified affine map (offset 0.185 + 0.507*mass
   - 0.022*(V - 23.5), gain 35.2 above it; 30 Sep) with `kt_trim` off.
 - The rig twin is the simulation (5 Oct). Old worlds live in `simulation_assets/old_worlds/`

@@ -85,7 +85,7 @@ fleet_resize:
   detach_post_blend_s: ''      # s, '' = 1: survivors' blend after the resize
   detach_detect_m: 0.06        # m, '' = 0 (off): a cable this much over its length for 2 ticks = an unannounced detach (7 Oct; on by default 8 Oct)
   departed_land: true          # a freed drone lands after its step-out while the fleet flies on (7 Oct; on by default with detection, 8 Oct)
-  departed_ground_idle: false  # ...reaches its own resting height and idles there (card 2026-10-09_departed_ground_idle); off until its rows pass
+  departed_ground_idle: true   # ...is pushed to its own resting height and disarmed alone there (cards 2026-10-09_departed_ground_idle, _departed_disarm_alone; default 9 Oct after the LAND re-fly's reviewer)
   drop_on_loss: true           # drop the ring and land every drone on a second loss or a capsize (card 2026-10-08_drop_and_land; on by default with detection, 8 Oct)
   drop_tilt_deg: ''            # deg, '' = 30: the trackers' ring-tilt drop threshold
   drop_samples: ''             # '' = 2: consecutive ring samples over it
@@ -140,11 +140,11 @@ attach:
   tip_max_rate_hz: 0.0          # sim magnet_tip_publisher cap (Hz); 0 = every frame
   tip_noise_sd_m: 0.0           # sim magnet_tip_publisher noise (m sd per axis); 0 = none
   # LAND or /magnet/command OFF before the weld: the newcomer moves 1.2 m out and lands by itself
-  # (card 2026-10-09_newcomer_land_abort); off until its twin runs pass
-  newcomer_lifecycle: false
+  # (card 2026-10-09_newcomer_land_abort; default 9 Oct after the LAND-every-phase re-fly's reviewer)
+  newcomer_lifecycle: true
   # a fault on an unwelded newcomer (its motors already off) lands every drone instead of the fleet-wide
-  # disarm (card 2026-10-09_newcomer_fault_scope; needs newcomer_lifecycle); off until its twin runs pass
-  newcomer_fault_land: false
+  # disarm (card 2026-10-09_newcomer_fault_scope; needs newcomer_lifecycle; default 9 Oct, as above)
+  newcomer_fault_land: true
   diss_balanced_tensions: true
   diss_handout_tension_blend: true
   diss_wrench_true_attitude: false
