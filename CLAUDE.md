@@ -27,6 +27,9 @@ current branch like any other file (it reaches main with the merges).
   he has to make. Each item says in plain words what it is and why it matters, not just a
   switch name or a run id. Rig findings go first, even when found by accident.
 - **Better becomes default** once it has passed the twin and the reviewer: say what changes.
+- **No day deadlines.** A plan is an order of work, not a timetable: finish a task well, then
+  start the next. Never rush or cut a task to make a day or a session. Lab days are fixed:
+  what has passed its gates by then flies, the rest waits for the next lab day.
 - When he reports a run in chat, read the log before answering, every time.
 - Ask when something is genuinely unclear (what to test, which reading of a run is right,
   whether a result is good enough). Routine calls (a filename, a plot window, a value already
