@@ -3,6 +3,12 @@
 
 \subsection{Discussion}
 \label{sec:discussion}
+% 9 Oct (structure audit): the list of simulator artefacts moved here from the experimental method;
+% the steady-error taxonomy points at Table tab:error_sources.
+
+This section answers the questions in order, then discusses what the results mean beyond them: the
+role of geometry, the steady errors of a re-planned cascade, the twin against the rig, and the
+limitations.
 
 \paragraph{RQ1: a centralised controller through join and leave.} In simulation the answer for the
 detach is yes, with a condition. A detach by OCP resize redistributes the load in the first solve after the release,
@@ -11,6 +17,7 @@ surround its centre of mass. The centralised planner's advantage is that it know
 whole attachment geometry. It does not have to discover the new load distribution from the motion
 that follows the event: it solves for it. This supports the hypothesis of the project plan. Neither
 reconfiguration has been flown on the rig.
+% CHECK: stale since the 7-8 Oct rig detach flights (Section 4.3, fig:rig_detach).
 
 \redo{the attach half of RQ1: the weld transient of an attach by OCP resize in the full rejoin mission (Section~\ref{sec:sim_attach}).}
 % --- original text, flown before the rig twin; kept to refill this place:
@@ -61,7 +68,7 @@ reconfiguration has been flown on the rig.
 every tick, which closes a loop on the payload's position with no integrator. In the twin its
 stiffness is about 5\,N/m horizontally and 7\,N/m vertically, so a force of half a newton moves the
 payload by 7--10\,cm and stays. The investigation of the payload's height and horizontal offsets
-separated four kinds of cause:
+separated four kinds of cause (Table~\ref{tab:error_sources}):
 \begin{itemize}
     \item a bias in the cascade itself: the tracker's relaxed initial condition, which held the payload
     about 5\,cm high and which no force estimate could find, because it is not a force;
@@ -87,13 +94,24 @@ shortfall from the one setting that caused it. It did not reproduce three things
 breakaway (73--93\,\% of the planned pull against about 97\,\%), the larger tilt near the floor, and
 the steady pull towards $-x$. The first is suspected to be an effect near the floor, the second the
 downwash, the third the room or its calibration. None of them is modelled. Many apparent controller
-faults in simulation turned out to be simulator artefacts: rate estimates from unstamped poses,
-ignored joint damping, wall-clock watchdogs in a slowed simulation, and a proportional-only emulated
-rate loop. Finding them took as long as the controller work.
+faults in simulation turned out to be simulator artefacts, each of which had to be found and removed
+before the twin could be trusted:
+\begin{itemize}
+    \item rate estimates differenced from unstamped poses turned bunched samples into rate spikes under
+    CPU load, so the emulated rate loop now uses the gyro;
+    \item a proportional-only emulated rate loop could not hold the moment of a rod pivoting below a
+    UAV's centre, and flipped UAVs when control was handed over;
+    \item the physics engine ignores damping on ball joints, so a damped rod needs universal joints;
+    \item wall-clock watchdogs fire when the simulation runs slower than real time, which it does
+    (about 0.3 of real time with the full stack on the laptop).
+\end{itemize}
+Finding them took as long as the controller work.
 
 \paragraph{Limitations.} The work is at lab scale (a 0.86\,kg payload, two to four UAVs, a
 6\,$\times$\,6\,m room) with motion capture as the only sensing and all computation on one ground
 computer. The rods are rigid, so slack cables are outside the model. The attach depends on an
 electromagnet and on a collaborator's approach controller. The hardware results so far cover carrying
-only, with three UAVs on 1 October. Several simulation tables rest on single runs or on earlier code,
+only, with three UAVs on 1 October.
+% CHECK: stale since the 7-8 Oct rig flights (four UAVs; the detach flown on the rig).
+Several simulation tables rest on single runs or on earlier code,
 and are marked as such; they will be re-flown on the final code before the results are frozen.

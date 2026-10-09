@@ -1,168 +1,7 @@
 \appendix
-% \section{Drafted ROS2 System Architecture}
-% \label{sec:AppA}
-
-% Figure~\ref{fig:ros2_arch} shows the drafted ROS~2 node architecture for the full system. Red dashed nodes and topics are planned additions for Term~2. Table~\ref{tab:topics} shows the ROS~2 topics and their descriptions.
-
-% \begin{figure}[H]
-% \centering
-% \usetikzlibrary{shapes.geometric, arrows.meta, positioning, backgrounds, fit}
-% \resizebox{\textwidth}{!}{%
-% \begin{tikzpicture}[
-%     ros/.style={rectangle, rounded corners=3pt, draw=black, thick,
-%                 fill=blue!10, minimum width=3.0cm, minimum height=1.0cm,
-%                 font=\small, text centered},
-%     sim/.style={rectangle, rounded corners=3pt, draw=gray!60, thick,
-%                 fill=gray!10, minimum width=3.0cm, minimum height=1.0cm,
-%                 font=\small, text centered},
-%     planned/.style={rectangle, rounded corners=3pt, draw=red!60, thick,
-%                 fill=red!5, minimum width=3.0cm, minimum height=1.0cm,
-%                 font=\small, text centered, dashed},
-%     tl/.style={font=\footnotesize, fill=white, inner sep=1pt},
-%     arr/.style={-Stealth, thick},
-%     darr/.style={-Stealth, thick, dashed, red!60},
-% ]
-
-% %% ROW 1 — Central controller
-% \node[ros] (cc) {\textbf{central\_controller}};
-% \node[planned, right=4.5cm of cc] (ta) {tension\_allocator$^*$};
-
-% %% ROW 2 — Per-drone controllers
-% \node[ros, below left=1.4cm and 4.5cm of cc]  (c0) {controller\_0};
-% \node[ros, below left=1.4cm and 0.8cm of cc]  (c1) {controller\_1};
-% \node[ros, below right=1.4cm and 0.8cm of cc] (c2) {controller\_2};
-% \node[ros, below right=1.4cm and 4.5cm of cc] (c3) {controller\_3};
-
-% %% ROW 3 — Mocap nodes
-% \node[ros, below=1.2cm of c0] (m0) {mocap\_0};
-% \node[ros, below=1.2cm of c1] (m1) {mocap\_1};
-% \node[ros, below=1.2cm of c2] (m2) {mocap\_2};
-% \node[ros, below=1.2cm of c3] (m3) {mocap\_3};
-
-% %% Payload listener (centred)
-% \node[ros, below=1.4cm of cc] (psl) {payload\_state\_listener};
-% \node[planned, below=0.8cm of psl] (ps) {/payload/state$^*$};
-
-% %% fleet/step: central to controllers
-% \draw[<->] (cc) -- node[tl, midway]{\texttt{/fleet/step}} (c0);
-% \draw[<->] (cc) -- (c1);
-% \draw[<->] (cc) -- (c2);
-% \draw[<->] (cc) -- (c3);
-
-% %% planned tension allocator
-% \draw[darr] (ta) -- node[tl]{\texttt{/fleet/tension\_refs}$^*$} (cc);
-
-% %% command: mocap to controllers
-% \draw[arr] (m0) -- node[tl, right]{\texttt{/drone\_N/command}} (c0);
-% \draw[arr] (m1) -- (c1);
-% \draw[arr] (m2) -- (c2);
-% \draw[arr] (m3) -- (c3);
-
-% %% payload state to central
-% \draw[arr] (psl) -- node[tl, right]{\texttt{/payload\_state\_publisher}} (cc);
-% \draw[darr] (ps) -- (psl);
-
-% %% Ground computer bounding box
-% \begin{scope}[on background layer]
-%   \node[draw=blue!40, fill=blue!3, rounded corners=8pt, inner sep=14pt,
-%         fit=(cc)(ta)(c0)(c3)(m0)(m3)(psl)(ps),
-%         label={[font=\small\bfseries, blue!70]above:Ground Computer (Offboard)}] (gcbox) {};
-% \end{scope}
-
-% %% -------------------------------------------------------
-% %% SIMULATION LAYER
-% %% -------------------------------------------------------
-% \node[sim, below=1.6cm of m0] (pb0) {pose\_bridge\_0};
-% \node[sim, below=1.6cm of m1] (pb1) {pose\_bridge\_1};
-% \node[sim, below=1.6cm of m2] (pb2) {pose\_bridge\_2};
-% \node[sim, below=1.6cm of m3] (pb3) {pose\_bridge\_3};
-
-% \node[sim, below=1.0cm of pb0] (gz0) {Gazebo drone\_0};
-% \node[sim, below=1.0cm of pb1] (gz1) {Gazebo drone\_1};
-% \node[sim, below=1.0cm of pb2] (gz2) {Gazebo drone\_2};
-% \node[sim, below=1.0cm of pb3] (gz3) {Gazebo drone\_3};
-
-% %% pose bridge chain
-% \draw[arr] (gz0) -- (pb0);
-% \draw[arr] (gz1) -- node[tl, right]{\texttt{/model/x3\_droneN/pose}} (pb1);
-% \draw[arr] (gz2) -- (pb2);
-% \draw[arr] (gz3) -- (pb3);
-
-% \draw[arr] (pb0) -- (m0);
-% \draw[arr] (pb1) -- (m1);
-% \draw[arr] (pb2) -- (m2);
-% \draw[arr] (pb3) -- (m3);
-
-% %% Simulation bounding box
-% \begin{scope}[on background layer]
-%   \node[draw=gray!40, fill=gray!5, rounded corners=8pt, inner sep=14pt,
-%         fit=(pb0)(pb3)(gz0)(gz3),
-%         label={[font=\small\bfseries, black!60]below:Simulation Layer (replaced by the motion capture system and hardware in experiments)}] {};
-% \end{scope}
-
-% %% Dividing line
-% \draw[thick, dashed, black!50]
-%     ([yshift=-0.8cm]m0.south) -- ([yshift=-0.8cm]m3.south);
-
-% \end{tikzpicture}
-% }
-% \caption{ROS~2 node architecture.}
-% \label{fig:ros2_arch}
-% \end{figure}
-
-% \begin{table}[H]
-% \centering
-% \caption{Key ROS~2 topics in the multi-drone payload system. $^*$Planned for Term~2.}
-% \label{tab:topics}
-% \small
-% \begin{tabular}{llp{4.0cm}}
-% \hline
-% \textbf{Topic} & \textbf{Description} \\
-% \hline
-% \texttt{/fleet/step}  & Synchronised trajectory step index at 30\,Hz \\
-% \texttt{/drone\_N/command} & Desired attitude and thrust setpoint for drone $N$ \\
-% \texttt{/drone\_N/motion\_capture\_state} & Pose and velocity estimate at 120\,Hz \\
-% \texttt{/drone\_N/ELRSCommand} &  ELRS roll/pitch/throttle/yaw commands \\
-% \texttt{/drone\_N/arming\_state\_feedback} &  Arming status from flight controller \\
-% \texttt{/drone\_N/telemetry} &  Flight controller telemetry stream \\
-% \texttt{/model/x3\_droneN/pose} &  Ground-truth drone pose from simulation \\
-% \texttt{/model/payload/pose}  & Ground-truth payload pose from simulation \\
-% \texttt{/x3\_droneN/gazebo/command/motor\_speed} & Motor speed commands to Gazebo actuators \\
-% \texttt{/mpc\_plan} &  MPC trajectory plan for visualisation \\
-% \texttt{/actual\_path} &  Recorded actual flight path for visualisation \\
-% \hline
-% \texttt{/payload/state}$^*$ & Full payload pose and velocity for tension allocator \\
-% \texttt{/fleet/tension\_refs}$^*$ &  Per-drone tension reference vectors \\
-% \texttt{/fleet/agent\_status}$^*$ &  Active agent reference for join/leave management \\
-% \texttt{/docking/attachment\_event}$^*$  & Attachment confirmation triggering join transition \\
-% \hline
-% \end{tabular}
-% \end{table}
-
-% \section{Risk Assessment}
-% \label{sec:AppB}
-
-% \begin{table}[H]
-% \centering
-% \caption{Project Risk Assessment}
-% \label{tab:risk_assessment}
-% \renewcommand{\arraystretch}{1.4}
-% \begin{tabularx}{\textwidth}{p{4.2cm} c c p{6.8cm}}
-% \hline
-% \textbf{Risk} & \textbf{Likelihood} & \textbf{Impact} & \textbf{Mitigation} \\
-% \hline
-% Docking controller or collaborating student integration unavailable or delayed & Medium & Medium & Proceed with agent removal only for hardware validation with agent addition demonstrated in simulation. Result remains independently publishable. \\
-% \hline
-% Motion capture latency or calibration errors during hardware experiments & Medium & Medium & Motion capture emulator validated at 120\,Hz in simulation before hardware phase. Early exposure to hardware to understand the limitations. \\
-% \hline
-% Gazebo real-time factor limits simulation iteration speed & High & Low & Reduce the complexity of the world and run the controller at the simulation time. \\
-% \hline
-% Hardware unavailable during T3 experiment windows & Low & High & Complete all simulation validation before hardware phase. Results can be taken from simulated experiments. \\
-% \hline
-% Drone damage or failure & Low & Medium & Extensive testing in simulation before hardware flights. \\
-% \hline
-% \end{tabularx}
-% \end{table}
+% Restructured 9 Oct (structure audit): the dead commented drafts (ROS 2 node diagram, topic table,
+% risk assessment) deleted; A software, B parameters and weights, C rig operations and log, D negative
+% results and further tests, E timeline.
 % ---------------------------------------------------------------------------------------------
 % Appendices drafted 4 Oct 2026 (code repository state: branch week4, packages as renamed 3 Oct).
 % ---------------------------------------------------------------------------------------------
@@ -206,6 +45,8 @@ Package & Node & Role \\
 Topic & Content \\
 \midrule
 \texttt{/drone\_}$i$\texttt{/motion\_capture\_state}, \texttt{/payload/...} & Pose and velocity of each UAV and of the payload \\
+% CHECK: "twelve numbers per node" against Section 3.1, which lists the throttle feedforward in the
+% reference as well (thirteen per node if it is sent per node).
 \texttt{/drone\_}$i$\texttt{/reference\_trajectory} & The planner's horizon for UAV $i$: node count, time step, then per node position, velocity, acceleration feedforward and planned cable acceleration (twelve numbers per node) \\
 \texttt{/drone\_}$i$\texttt{/ELRSCommand} & The tracker's command: armed flag, throttle, three rate sticks, auxiliary channels \\
 \texttt{/drone\_}$i$\texttt{/telemetry} & Battery voltage, flight mode, link quality \\
@@ -219,8 +60,17 @@ Topic & Content \\
 \end{tabularx}
 \end{table}
 
-\section{Simulation and rig parameters}
+\section{Parameters and weights}
 \label{sec:app_params}
+
+Table~\ref{tab:app_params} sets the parameters of the rig twin against those of the rig,
+Table~\ref{tab:params} lists the rig's launch profile, and Table~\ref{tab:weights} the cost weights of
+the planner and the trackers.
+% CHECK: the two parameter tables are kept apart because they disagree on the twin: Table tab:params
+% says the rig-twin simulations use the rig's values, while Table tab:app_params gives the twin a pose
+% time-out of 1.0 s (rig 0.25 s) and no solve budget (rig 0.06 s). Also "rod elevation at the hand-over
+% 45 deg" in tab:params against the hand-over rule of Section 3.6 (at least 37 deg for 1 s; flown at
+% 51-56 deg); 45 deg is the working elevation the sweep aims for.
 
 \begin{table}[H]
 \centering
@@ -253,31 +103,108 @@ tracker initial-condition box & \multicolumn{2}{c}{0 (was 0.025 until 4 Oct 2026
 \end{tabularx}
 \end{table}
 
-\section{Development timeline}
-\label{sec:app_timeline}
+\begin{table}[htbp]
+\centering
+\caption{Rig parameters, from the rig's launch profile. The rig-twin simulations use the same values.}
+\label{tab:params}
+\input{Source/src/tables/params}
+\end{table}
 
-\begin{table}[H]
+\begin{table}[h]
+\centering
+\caption{Cost weights.}
+\label{tab:weights}
+\begin{tabular}{lll}
+\toprule
+Level & Term & Weight \\
+\midrule
+Planner & payload position $(x, y, z)$ & 60, 60, 80 \\
+        & payload velocity & 18, 18, 22 \\
+        & attitude error, angular velocity & 5, 1 \\
+        & rod direction, tension, rod rate & 25, 5, 3 \\
+        & inputs $\boldsymbol{\gamma}_i$, $\eta_i$ & $10^{-3}$, $5\times10^{-3}$ \\
+\midrule
+Tracker & position $(x, y, z)$ & 80, 80, 40 \\
+        & velocity, body rate & 2, 0.2 \\
+        & stick states & $2\times10^{-4}$ \\
+        & stick rates (roll, pitch, throttle, yaw) & 0.1, 0.1, 5, 0.1 \\
+        & attitude error (roll, pitch, yaw) & 0.5, 0.5, 5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Rig operations and log}
+\label{sec:app_rig}
+
+\subsection{Arming, preflight checks and flight procedure}
+
+\paragraph{Arming.} Betaflight refuses to arm while any of its arming checks fails, and then waits
+for the arm switch to go low and high again. A switch raised at such a moment is ignored until it is
+toggled, which is the likely reason two of the UAVs often failed to arm on the first attempt on the
+rig and armed after a power cycle. Each UAV's radio node therefore holds the arm switch low for
+0.3\,s before raising it, confirms the arm from the flight mode the flight controller reports, and
+retries with a fresh switch edge up to three times. This has been tested against a simulated flight
+controller, not yet on the rig. The fleet manager waits
+for every flight controller to report armed and names any UAV that did not, with the reason it
+reported, before TAKEOFF is accepted.
+
+\paragraph{Preflight checks.} Before each flight a script checks, from the live topics:
+motion capture for every UAV and the payload (fresh, above 20\,Hz, no missing values); each UAV
+resting level (under 20$^\circ$) and the payload resting level (under 25$^\circ$); every battery
+above 23.6\,V and its telemetry present; the same magnet channel on every radio; the parameters the
+controllers actually loaded (masses, rod length, attachment radius, thrust map, throttle cap);
+each UAV within tolerance of its typed attachment azimuth; and each rod length from motion capture.
+It reports GO or NO-GO.
+
+\paragraph{Flight procedure.} Each flight is started with one command that clears leftover
+processes, records every relevant topic and writes the logs to a per-flight folder, so that every
+flight can be read back before the next. The operator holds a disarm button on the ground station;
+a disarm or a fault on any UAV disarms the whole fleet.
+
+\subsection{Rig days}
+
+The rig is available about two days a week, and each day followed the simulation work of the days
+before it, so each is summarised with what it showed and what changed as a result
+(Table~\ref{tab:rig_days}).
+
+\begin{table}[h]
 \centering
 \small
-\caption{Main steps of the work, 2026.}
-\label{tab:app_timeline}
+\caption{Rig sessions with the payload.}
+\label{tab:rig_days}
 \begin{tabularx}{\textwidth}{lX}
 \toprule
-When & Step \\
+Date & What was flown and what it showed \\
 \midrule
-Feb--Apr & ROS~2 and Gazebo environment; four-UAV formation flight in simulation; one UAV with a tethered load \\
-Jun & Cable models (spring--damper, then rigid rods); first port of the load--cable planner \\
-Jul & Three UAVs carrying a payload with rigid rods in simulation; first rig flights; the dissipative controller and the first mid-flight detach \\
-Aug & Experiment runner; OCP resize against network detach; attach integration and the weld-joint ladder; velocity tracking for the network \\
-early Sep & Runtime attachment geometry and detach by OCP resize; network attach during a circle; layout studies \\
-mid Sep & The 0.86\,kg ring in every model; measured rod lengths; thrust-gain trim; rod sweep from the floor; height integral; first carry attempts on the rig \\
-late Sep & Detach layout 1/3/5/9; attach by OCP resize; integration with the collaborator's controllers (rejoin mission, ground join); rig days with the first lifts and the thrust identification; the rig twin \\
-1--4 Oct & Three-UAV rig flights to 1.0\,m; the breakaway cap and its release; comparison of approaches to model error; the tracker initial-condition fix; integral action in the planner's model \\
+3 Aug & First flights of the planner stack on the rig. Fixed: attachment slots matched in the
+payload's frame (a yawed payload made the problem infeasible), a latched payload yaw datum, a latched
+heading per UAV (one UAV turned a full circle on takeoff), trackers on the correct clock. \\
+16 Sep & First carry attempts with the planner from the floor: the payload did not lift. One UAV per
+flight spun in yaw at spool-up, later traced to the tracker's yaw command on a tilted floor rest. The planner's references assumed taut rods and sat inside
+the UAVs (Section~\ref{sec:takeoff}). \\
+23 Sep & Two UAVs, rods typed 0.50\,m against a real 0.46\,m, thrust gain typed: the payload did not
+leave the floor and the UAVs drifted in over it. One battery sagged from 21.2 to 17\,V. Found: battery
+thresholds set for a smaller battery, and the need for the rod sweep. \\
+30 Sep & Four UAVs, 0.86\,kg ring. First lifts and the first sustained carry (12.6\,s at 0.28\,m). Seven
+bugs fixed on the day. The thrust map identified (Section~\ref{sec:thrust_id}). Breakaway at 60--80\,\%
+of the planned pull. Last flight: ring held 16\,cm low with a 14\,cm heave at 0.17\,Hz, and 25 planner
+solve failures. \\
+1 Oct & Three UAVs (one airframe out of service), six flights to 1.0\,m including a circle and a
+figure-eight, with no solve failures (Table~\ref{tab:rig_oct1}). \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-\section{Negative results}
+\paragraph{30 September.} The day went from a ring that would not leave the floor to sustained
+carries. The bugs found on the day each had a clear signature in the logs. The creep fed the UAVs to the
+wrong plates, so the fleet flew into the middle of the ring. The cable feedforward was zeroed while the
+ring rested, so the lift deadlocked. Only one UAV received the pull flag. The pull arrived as a step
+and launched the ring, releasing two magnets. Each was fixed and then flown, which is how the
+pretension and breakaway procedure of Section~\ref{sec:takeoff} came about. Two problems remained at
+the end of the day: the ring was held low, and the planner failed to solve 25 times in the last
+flight; Section~\ref{sec:res_carry} traces the solve failures.
+
+\section{Negative results and further tests}
 \label{sec:app_negatives}
 
 Approaches that were built, tested and not kept. Each is recorded so that it is not repeated.
@@ -312,3 +239,136 @@ Lumped force on the whole system from motion and thrust & blind to internal forc
 \end{table}
 
 \redo{the negative results flown before the rig twin, where they are still cited: a terminal velocity reference in the tracker; per-UAV integrators in the velocity loop; the network cone tilted onto the effective gravity; network tensions at the payload's measured attitude; a horizontal leash on the payload's measured position; an admittance on the measured rod tension; extra compliance at the weld; the measured-force throttle; the hand-back to an even ring after a detach; a load-force Kalman filter driven by the planned motion; steeper nominal rods at the ground hand-over; an emulated rate-loop integral gain of 10.}
+
+\subsection{Approaches to model error}
+
+Table~\ref{tab:methods} gives the approaches to model error of Section~\ref{sec:sim_methods} case by
+case, and the list below their results.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\caption{Approaches to model error in the Gazebo rig twin (three UAVs, 1.0\,m, floor start; flown
+with $\epsilon = 0.025$). Height and horizontal errors in cm, tilt in degrees; one run per cell
+unless noted; a dash: not flown. $^{a}$ A UAV tipped during the landing, after the hover, and the fleet
+disarmed. $^{b}$ Two runs, agreeing within 0.1.}
+\label{tab:methods}
+\begin{tabular}{lccccc}
+\toprule
+ & Hover & One UAV weaker & One UAV stronger & 1\,N push & Wind \\
+ & $e_z$ & $e_z$ / $e_{xy}$ / tilt & $e_z$ / $e_{xy}$ / tilt & $e_{xy}$ & $e_{xy}$ \\
+\midrule
+None & +4.8 & $-$3.0 / 3.8 / 6.7 & +12.8 / 3.5 / 6.0 & 18.0 & 17.9 \\
+Height integral (target) & +0.1 & 0.0 / 3.8 / 6.7 & 0.0 / 3.5 / 6.0 & 17.9 & 18.0 \\
+Force balance & +3.8 & +3.9 / 1.3 / 9.0 & -- & 0.3 & 3.9 \\
+Force balance + height int. & +0.1$^{b}$ & 0.0 / 1.3 / 9.0$^{b}$ & -- & 0.4$^{b}$ & 3.9$^{b}$ \\
+Offset-free observer & +1.6 & +1.0 / 0.2 / 8.0 & +2.4 / 0.1 / 7.5 & 2.6$^{b}$ & 7.8$^{b}$ \\
+Measured cable force & +4.2$^{a}$ & +3.8 / 3.1 / 0.8$^{a}$ & +4.5 / 0.6 / 0.3 & -- & -- \\
+Measured force + height int. & 0.0$^{a}$ & 0.0 / 3.1 / 0.8 & 0.0 / 0.6 / 0.3$^{a}$ & -- & -- \\
+Thrust-gain trim & +3.7 & +4.1 / 1.3 / 2.3 & -- & -- & -- \\
+Rod mass in the planner & +5.0 & -- & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{description}
+    \item[Height integral on the target.] Zeroes the height in every case and does nothing
+    horizontally: the push and the wind still move the ring 18\,cm.
+    \item[Force balance.] Estimates a constant force on the ring and one shared by the UAVs from
+    the measured motion and the delivered thrust, and gives them to the planner's model
+    \cite{muske2002disturbance}. It removes the push and most of the wind. It cannot see the internal
+    height offset: by Newton's law, a force that the system exerts on itself does not appear in its
+    total. It books a UAV's thrust-map error as a force on the ring, and leans the formation into
+    it, which tilts the ring further. Combined with the height integral it was the best on height and
+    external forces. Its transients were not small: on the push it peaked at 14.5\,cm, and on release
+    it overshot by 14.8\,cm and tilted the ring 7.1$^\circ$.
+    \item[Offset-free observer.] Estimates the force from the planner's own prediction error, as in
+    offset-free MPC \cite{pannocchia2003disturbance}. It helped everywhere but converged slowly and left
+    residuals, because a small offset shows up in the plan's rod states rather than in the payload's
+    predicted motion.
+    \item[Measured cable force.] Each tracker takes its rod's force from its measured acceleration
+    and delivered thrust, the ground-side counterpart of the compensation from inertial measurements of
+    \cite{tudelft}. It was the only approach that levelled the ring against one UAV's wrong thrust
+    map (0.3--0.8$^\circ$ against 6--7$^\circ$), because it corrects each UAV's own force. In four of
+    six runs, however, a UAV tipped during the landing.
+    \item[Thrust-gain trim.] A per-UAV estimate of the throttle-to-acceleration gain, from the UAV's
+    own measured acceleration and its static share of the rod force. It partly corrects a wrong map.
+    \item[Rod mass in the planner.] Corrected the rods' elevation (49.7 to 42.8$^\circ$ against a planned
+    45$^\circ$) but not the height.
+\end{description}
+Further candidates were rejected before flying, because tests on logged flights showed they would
+not work. These were pinning the rod rates at node~0, a thrust reference weight in the
+tracker, and an $\mathcal{L}_1$ adaptive force estimate \cite{hovakimyan2010l1} at the planner's
+10\,Hz rate. Raising the planner's weight on the ring's horizontal position by three and by ten times
+cut the push displacement only by 23 and 38\,\% (18.5 to 14.3 and 11.4\,cm), and the higher weight
+rocked the ring by 6$^\circ$. Aiming the rods at the hand-over angle instead of 45$^\circ$ made it
+worse (20.7\,cm). Both were removed.
+
+\subsection{The weld joint ladder}
+\redo{the joint ladder at the weld (ball joint, rod with its inertia, rod with a mid-span joint, rigid weld): flight time after the weld and payload tilt 2\,s and 8\,s after it.}
+% --- original text, flown before the rig twin; kept to refill this place:
+% \paragraph{The weld itself.} An early hypothesis was that the weld transient came from the
+% compliance of the joint between rod and ring. Table~\ref{tab:weld} shows the joint ladder flown to test
+% it. A ball joint, a rod with its real inertia and a rod with an extra mid-span joint all behaved alike,
+% and a rigid, moment-transmitting weld capsized the payload within 2\,s in five runs out of five.
+% Compliance was therefore not the cause. The transient came from the incumbents' tensions stepping to
+% their new solution in one tick at the weld, which was then replaced by a blend over the hand-out. The
+% attachment is modelled as a ball joint from then on.
+%
+% \begin{table}[h]
+% \centering
+% \caption{Payload tilt after the weld by joint model (Gazebo, early attach).}
+% \label{tab:weld}
+% \small
+% \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xccc}
+% \toprule
+% Joint at the weld & Flight after the weld (s) & Tilt at +2\,s & Tilt at +8\,s \\
+% \midrule
+% Ball & 10.1--10.2 & 46--49$^\circ$ & 31--34$^\circ$ \\
+% Rod with inertia & 10.4 & 47$^\circ$ & 36$^\circ$ \\
+% Rod with mid-span joint & 10.0--10.3 & 40--44$^\circ$ & 26--35$^\circ$ \\
+% Rigid & 1.7--1.9 (5 of 5 capsized) & 83--106$^\circ$ & -- \\
+% \bottomrule
+% \end{tabularx}
+% \end{table}
+
+\subsection{Ground join and hand-over}
+
+\redo{the ground join: the collaborator's controller joins four UAVs to the ring on the floor one at a time and hands them to this work's planner, which lifts, hovers and lands (joins completed, ring height, ring and UAV tilt); with it the hand-over bench under CPU load, body rates from the simulated gyro against differenced poses.}
+% --- original text, flown before the rig twin; kept to refill this place:
+% In the second integrated case the collaborator's controller joins four UAVs to the ring on the floor,
+% one at a time, and hands them over to this work's planner, which sweeps the rods up, lifts the ring to
+% 0.60\,m, hovers and lands. Two runs met every target: four joins out of four, the ring at
+% 0.600--0.601\,m, peak ring tilt 1.6--1.8$^\circ$ at the lift, 0.6--0.8$^\circ$ in the hover and
+% 1.2--2.4$^\circ$ during the descent, and UAV tilt of at most 15.4$^\circ$. The result did not hold when four of the
+% next five runs rocked the ring by 7--21$^\circ$. The cause was again the simulator: the collaborator's
+% flight controller emulator estimated body rates by differencing unstamped poses, so bunched samples
+% under CPU load became rate spikes. On a hand-over bench with the rates taken from the simulated gyro,
+% none of six runs under load exceeded 3$^\circ$, against three of six with differenced poses. The full
+% ground join on the gyro had no sustained rocking, but both runs had transients of 3.3--3.4$^\circ$
+% lasting under half a second, above the 3$^\circ$ bar.
+
+\section{Development timeline}
+\label{sec:app_timeline}
+
+\begin{table}[H]
+\centering
+\small
+\caption{Main steps of the work, 2026.}
+\label{tab:app_timeline}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+When & Step \\
+\midrule
+Feb--Apr & ROS~2 and Gazebo environment; four-UAV formation flight in simulation; one UAV with a tethered load \\
+Jun & Cable models (spring--damper, then rigid rods); first port of the load--cable planner \\
+Jul & Three UAVs carrying a payload with rigid rods in simulation; first rig flights; the dissipative controller and the first mid-flight detach \\
+Aug & Experiment runner; OCP resize against network detach; attach integration and the weld-joint ladder; velocity tracking for the network \\
+early Sep & Runtime attachment geometry and detach by OCP resize; network attach during a circle; layout studies \\
+mid Sep & The 0.86\,kg ring in every model; measured rod lengths; thrust-gain trim; rod sweep from the floor; height integral; first carry attempts on the rig \\
+late Sep & Detach layout 1/3/5/9; attach by OCP resize; integration with the collaborator's controllers (rejoin mission, ground join); rig days with the first lifts and the thrust identification; the rig twin \\
+1--4 Oct & Three-UAV rig flights to 1.0\,m; the breakaway cap and its release; comparison of approaches to model error; the tracker initial-condition fix; integral action in the planner's model \\
+\bottomrule
+\end{tabularx}
+\end{table}

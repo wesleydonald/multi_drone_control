@@ -2,15 +2,16 @@
 % Definitions: mpc_planner/load_trajectory.py. Solve times measured from the planner logs
 % (solve_ms column): rig 1 Oct flights h5_z100_rot120, c1_z100, f8_z100 (three UAVs, laptop,
 % no Gazebo); Gazebo R0978/R0979 (three UAVs), R0931/R0935 (four UAVs), laptop at RTF ~0.3.
+% Restructured 9 Oct (structure audit): the computation results moved to Section 4.1.
 
-\subsection{Payload trajectories}
+\subsubsection{Test references}
 \label{sec:trajectories}
 
 The payload reference is the lift schedule in height plus a horizontal offset from a trajectory.
 The offset starts once the lift has reached the target height, and is applied to the whole formation,
 so the UAVs keep their places around the payload. The planner evaluates the trajectory at the time
 of every horizon node, so the plan sees the next two seconds of the path. The acceleration
-$\mathbf{a}_L^{\mathrm{ref}}$ used for the cable references (Section~\ref{sec:controller}) is
+$\mathbf{a}_L^{\mathrm{ref}}$ used for the rod references (Section~\ref{sec:controller}) is
 its analytic second derivative.
 
 Trajectories that start and end at rest use a smootherstep sweep of the path angle,
@@ -37,30 +38,3 @@ peak tangential speed equals the commanded speed $v$. The kinds are:
 The results use an orbit of radius 0.5\,m at 0.125\,m/s (one lap in 25\,s) and a figure-eight of
 $a = 1.0$\,m at 0.25\,m/s (67\,s, a $2 \times 1$\,m path), sized for the 6\,$\times$\,6\,m flight area
 with the UAVs about 0.7\,m outside the payload's path.
-
-\paragraph{Computation.} Both levels run on the same laptop as the motion-capture and radio nodes.
-Table~\ref{tab:solve_times} gives the planner's solve time per tick. On the rig, with three UAVs,
-the median is 24--30\,ms and the 95th percentile 49--55\,ms, inside the 60\,ms budget and the
-100\,ms tick. In Gazebo the same laptop also runs the physics and the simulated sensors, which slows
-the solves, but the simulation runs at about 0.3 of real time, so the planner still meets its tick in
-simulated time. The four-UAV planner has not yet been timed on the rig.
-
-\begin{table}[h]
-\centering
-\caption{Planner solve time per 10\,Hz tick (wall clock, one laptop).}
-\label{tab:solve_times}
-\begin{tabular}{llccc}
-\toprule
-Platform & Case & Median (ms) & 95th pct. (ms) & Max (ms) \\
-\midrule
-Rig, 3 UAVs & hover at 1.0\,m & 30.4 & 54.9 & 73.3 \\
-            & orbit & 24.6 & 51.9 & 71.8 \\
-            & figure-eight & 23.8 & 49.3 & 76.6 \\
-\midrule
-Gazebo, 3 UAVs & hover at 1.0\,m & 46.7 & 97.8 & 137.9 \\
-               & orbit & 47.1 & 91.0 & 149.6 \\
-Gazebo, 4 UAVs & hover at 1.0\,m & 118.5 & 193.2 & 298.5 \\
-               & figure-eight & 106.2 & 189.1 & 313.7 \\
-\bottomrule
-\end{tabular}
-\end{table}

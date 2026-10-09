@@ -3,6 +3,8 @@
 % breakaway, ff_cap_release_s, lift ramp, LAND, TouchdownDetector), bringup/config/*.yaml.
 % Evidence: 23 Sep rig non-lift (start_taut), 30 Sep rig review, R0817/R0818, R0834-R0839 (B2),
 % R0807-R0816 (hand-over angle in the twin), RIG-1001-* (hand-over and rods on the rig).
+% Restructured 9 Oct (structure audit): the outcomes (the hand-over angle flown, fig:flight) moved to
+% Section 4.1.
 
 \subsection{Takeoff, lift and landing}
 \label{sec:takeoff}
@@ -23,9 +25,7 @@ measured at to the working elevation of 45$^\circ$. The UAV's reference is the f
 on that arc, so the rod stays straight and the UAV never moves over the payload. The planner takes
 over (the hand-over) once every rod has been at least 37$^\circ$ for 1\,s, or 3\,s after the sweep
 ends. The hand-over is refused below 30$^\circ$, because from shallower rods the lift needs two to
-three times the tension, mostly sideways. In practice the UAVs lead the arc by 11--15$^\circ$ in the
-first second after they leave the floor, so the planner takes over at 51--56$^\circ$ in both the
-Gazebo twin and on the rig.
+three times the tension, mostly sideways.
 
 \paragraph{Rod lengths.} At the hand-over the planner measures each rod from motion capture, as
 the distance from the UAV's pivot to its attachment point, and uses the measured lengths in its
@@ -47,29 +47,11 @@ broken free of the floor. The fraction of the planned pull reached at that momen
 cap on the feedforward. Continuing the ramp to full pull with the payload already in the air ran
 it upwards at 0.38\,m/s on the rig. Once the lift starts, the cap is released back to full pull over
 2\,s. Holding it for the whole flight, as in the first rig flights, leaves the trackers believing the
-rods pull less than they do, and the payload settles low (Section~\ref{sec:rig_results}).
+rods pull less than they do, and the payload settles low (Section~\ref{sec:res_cap}).
 
 \paragraph{Lift.} The height target then ramps from the resting height to the target height at
 0.1\,m/s, easing in over the first 1.2\,s and out over the
 last 8\,cm. The trajectory starts when the ramp completes.
-
-Figure~\ref{fig:flight} shows one whole flight of the rig twin.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{Images/flight.pdf}
-\caption[One flight from the floor]{One flight from the floor, Gazebo rig twin, three UAVs (their traces
-overlap). (a) Heights of the ring (gold; dashed: its planned height) and of the UAVs (grey). (b)
-Elevation of each rod above the horizontal; dashed: the planned 45$^\circ$; dotted: the 52$^\circ$
-the rods hold. TAKEOFF and LAND are the operator's commands. In the creep the UAVs climb and swing
-their rods up from the floor without lifting the ring; in the pretension they hold their height
-while the cable feedforward eases in and the rods settle; the ring then leaves the floor and follows
-its lift ramp to 1.0\,m. The rods hold 52$^\circ$ rather than the planned 45$^\circ$, the model error
-of the twin's rods (Section~\ref{sec:sim_results}). On LAND the ring and the UAVs descend together
-until the ring is on the floor; the UAVs then unwind along their rods, and one touches down 0.7\,s
-after the others.}
-\label{fig:flight}
-\end{figure}
 
 \paragraph{Landing.} On LAND the planner lowers the payload's height target at 0.2\,m/s, with the
 formation shape unchanged, until the payload rests on the floor. A rigid rod then constrains its UAV:

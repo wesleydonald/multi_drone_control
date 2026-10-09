@@ -3,8 +3,11 @@
 % (sim Betaflight bridges, rate_pid, imu_world), tools/sil/ (plant, lockstep), tools/run_experiment.py,
 % results/registry.csv (832 rows on 4 Oct; run folders R0001-R0986 since 5 Aug), CURRENT_STATE 10.
 % Counts: 667 unit tests in this work's packages and tools (4 Oct), excluding the collaborator's.
+% Restructured 9 Oct (structure audit): now part of the experimental method; the list of simulator
+% artefacts moved to the discussion (Section 4.6), the void rule stays; the SIL bench is defined here;
+% the hardware test ladder moved here from hardware.tex.
 
-\subsection{Simulation and verification}
+\subsubsection{Rig twin and experiment runner}
 \label{sec:simulation}
 
 Every controller change is tested in simulation before it reaches the rig. The same launch files
@@ -20,17 +23,11 @@ offset and a battery that sags under load. It closes a proportional--integral ra
 simulated gyro. A motion-capture emulator publishes the simulated poses on the rig's topics at
 120\,Hz.
 
-Several simulator effects had to be found and removed before the twin could be trusted, each of
-which produced a failure that looked like a controller fault:
-\begin{itemize}
-    \item rate estimates differenced from unstamped poses turned bunched samples into rate spikes under
-    CPU load, so the emulated rate loop now uses the gyro;
-    \item a proportional-only emulated rate loop could not hold the moment of a rod pivoting below a
-    UAV's centre, and flipped UAVs when control was handed over;
-    \item the physics engine ignores damping on ball joints, so a damped rod needs universal joints;
-    \item wall-clock watchdogs fire when the simulation runs slower than real time, which it does
-    (about 0.3 of real time with the full stack on the laptop). Such runs are voided and flown again.
-\end{itemize}
+Wall-clock watchdogs fire when the simulation runs slower than real time, which it does (about 0.3
+of real time with the full stack on the laptop); such runs are voided and flown again. The simulator
+effects that had to be removed before the twin could be trusted are discussed in
+Section~\ref{sec:discussion}. A software-in-the-loop (SIL) bench flies the same controllers against a
+simulated plant that matches the controller's own model.
 
 \paragraph{Experiment runner.} A run is described by a configuration file: the world, the launch
 arguments, a timed list of events (ARM, TAKEOFF, wait for the lift, a push on the payload, DETACH,
@@ -42,5 +39,11 @@ and early October 2026.
 \paragraph{Process.} Each experiment changes one variable against a named baseline run, and the
 result it is expected to give is set out before it is flown. Every run is recorded with its
 configuration, the variable changed, the baseline, the metrics and the outcome, including runs that
-failed or were voided. A Gazebo case is flown twice. Changes climb a ladder from cheapest to most
+failed or were voided. Cases are flown twice; the tables give the number of runs in brackets, so (1)
+marks a single run. Changes climb a ladder from cheapest to most
 expensive: unit tests (about 670), a quick check script, headless Gazebo, and only then the rig.
+
+\paragraph{Test ladder.} New behaviour is flown in an order that isolates one effect at a time:
+free hover, to check the thrust map; then the payload held at its lift height; hover; the circle and
+the figure-8; the detach; and the attach last. Each step is first flown in the rig twin with the
+same launch commands.

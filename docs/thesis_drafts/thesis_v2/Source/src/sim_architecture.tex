@@ -2,12 +2,15 @@
 % (draft 4 Oct 2026). Sources: docs/design/velocity_loop.md sections 1, 8-11 (Part A study, Aug 2026,
 % early 0.4 kg payload, n=3 circle r 0.5 at 0.6 m/s, medians over 5 and 3 runs, R0054-R0077);
 % CURRENT_STATE 4.4 (INDI table: R0234, R0244, R0247, R0255, R0257), 6 (negatives).
+% 9 Oct (structure audit): opens with its question, baseline and bar.
 
 \subsection{Trajectory-based planner against the dissipative network}
 \label{sec:sim_architecture}
 
-The two approaches are compared on the same plant and the same trackers, in carrying, detach and
-attach. This addresses RQ2.
+This section answers RQ2: does the trajectory-based planner or the dissipative network better balance
+robustness and tracking on this system? The two approaches are compared on the same plant and the same
+trackers, in carrying, detach and attach. The baseline is the planner with the OCP resize, and the bars
+are those of Sections~\ref{sec:res_carry}, \ref{sec:sim_detach} and~\ref{sec:sim_attach}.
 
 \paragraph{Where the network's tracking error comes from.}
 \redo{the network flying a circle with the MPC tracker (three UAVs, radius 0.5\,m): the payload's radius ratio and lag, split by stage (desired path to the network's references, references to UAVs, UAVs to payload).}

@@ -24,6 +24,15 @@
   \fcolorbox{redoframe}{redoback}{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\small\raggedright
   \textbf{To re-fly on the rig twin:} #1}}\par\smallskip}
 \makeatother
+% \pendingfig{label}{caption}{run that fills it}: a figure whose data is not flown yet. The caption and
+% label are final, so the text can cite it now; the box says which run fills it.
+\newcommand{\pendingfig}[3]{%
+  \begin{figure}[htbp]
+  \centering
+  \fcolorbox{redoframe}{redoback}{\parbox[c][0.32\textwidth][c]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{%
+    \centering\small\textbf{Pending:} #3}}%
+  \caption{#2}\label{#1}
+  \end{figure}}
 \usepackage{amsfonts}
 \usepackage{tikz}
 \usetikzlibrary{angles, quotes, decorations.pathreplacing, shapes.geometric, arrows.meta, positioning, backgrounds, fit}

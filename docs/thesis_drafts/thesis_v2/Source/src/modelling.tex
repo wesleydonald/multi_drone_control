@@ -1,74 +1,15 @@
-\subsection{Modeling}
+% modelling.tex -- Literature review: cable models and their assumptions.
+% Restructured 9 Oct (structure audit): the single-quadrotor model and fig:quad_frames are cut, the
+% spring-damper equation is cut, and this thesis's own payload model moved to Source/src/model.tex
+% (Methodology), merged with the planner's model. Simulation fidelity moved to Literature_review.tex.
 
-This section presents the mathematical models defining multi-UAV cable-suspended payload systems. The quadrotor dynamics, cable model, and coupled system equations are reviewed, building toward the full system model used in control design. A final subsection reviews simulation options, as Gazebo will be used to validate the controller prior to lab experiments.
+\subsection{Cable-Suspended Transport and Model Assumptions}
+\label{sec:lit_models}
 
-\subsubsection{Single Quadrotor Dynamics}
-
-Single quadrotor dynamics are well established in the literature \cite{beard2008quadrotor, fernando2013modelling, savioloLearningQuadrotorDynamics2023} and summarized here to support understanding of the multi-agent system. A fixed inertial world frame $\mathcal{F}_W$ and a body-fixed frame $\mathcal{F}_B$ attached to the center of mass of the quadrotor are illustrated in Figure~\ref{fig:quad_frames}. The orientation between them is described by a rotation matrix $R \in SO(3)$, where $SO(3) = \{ R \in \mathbb{R}^{3 \times 3} \mid R^\top R = I, \, \det(R) = 1 \}$, mapping vectors from body to world frame. The position of the centre of mass in $\mathcal{F}_W$ is $\mathbf{p}$, and the angular velocity expressed in $\mathcal{F}_B$ is $\boldsymbol{\omega}$.
-
-\begin{figure}[h]
-\centering
-\begin{tikzpicture}[scale=1.2]
-  % World frame at origin
-  \draw[->,thick] (0,0,0) -- (1.2,0,0) node[right] {$x_W$};
-  \draw[->,thick] (0,0,0) -- (0.5,0.8,0) node[above] {$y_W$};
-  \draw[->,thick] (0,0,0) -- (0,1.2,0) node[above] {$z_W$};
-  \node[below left] at (0,0) {$\mathcal{F}_W$};
-
-  % Position vector to quadrotor CoM
-  \draw[->,dashed,gray] (0,0) -- (2.5,2.0) node[midway, below right] {$\mathbf{p}$};
-
-  % Quadrotor body cross at (2.5, 2.0)
-  \begin{scope}[shift={(2.5,2.0)}]
-    \draw[thick] (-0.6,0.15) -- (0.6,0.15);
-    \draw[thick] (-0.15,-0.15) -- (0.15,0.45);
-    % Rotor discs
-    \draw[gray] (-0.6,0.15) circle (0.18);
-    \draw[gray] (0.6,0.15) circle (0.18);
-    \draw[gray] (-0.15,-0.15) circle (0.18);
-    \draw[gray] (0.15,0.45) circle (0.18);
-
-    % Body frame axes
-    \draw[->,blue,thick] (0,0) -- (0.9,0.3) 
-        node[right] {$x_B$};
-    \draw[->,blue,thick] (0,0) -- (-0.3,0.9) 
-        node[right] {$z_B$};
-    \node[blue, below right] at (0,0) {$\mathcal{F}_B$};
-
-    % Thrust along body z
-    \draw[->,red,thick] (0,0) -- (-0.45,1.35) 
-        node[left] {$Rf\mathbf{e}_3$};
-
-    % Gravity downward in world frame
-    \draw[->,thick] (0,0) -- (0,-1.1) 
-        node[right] {$-mg\mathbf{e}_3$};
-  \end{scope}
-
-  % R label on arc between frames
-  \draw[->,gray,thin] (0.8,0.1) arc (20:48:0.8) 
-      node[midway, right] {$R$};
-\end{tikzpicture}
-\caption{Quadrotor reference frames and forces (adapted from \cite{mahonyMultirotorAerialVehicles2012}).}
-\label{fig:quad_frames}
-\end{figure}
-
-Each rotor $i$ produces thrust proportional to the square of its angular velocity $\Omega_i$, given by $f_i = k_f \Omega_i^2$, where $k_f$ is an empirically determined thrust coefficient. The four rotor thrusts sum to a total thrust $f$ acting along the body $z$-axis. Applying Newton's second law in $\mathcal{F}_W$, the translational dynamics are
-
-\begin{equation}
-    m\ddot{\mathbf{p}} = -mg\mathbf{e}_3 + Rf\mathbf{e}_3
-\end{equation}
-
-and the rotational dynamics follow Euler's equation for a rigid body
-
-\begin{equation}
-    \mathbf{J}\dot{\boldsymbol{\omega}} = \boldsymbol{\tau} - \boldsymbol{\omega} \times \mathbf{J}\boldsymbol{\omega}
-\end{equation}
-
-where $\mathbf{J} = \text{diag}(J_{xx}, J_{yy}, J_{zz})$ is the diagonal inertia matrix and $\boldsymbol{\tau}$ is the net torque applied to the body of the quadrotor \cite{luukkonenModellingControlQuadcopter}. These equations form the basis of the full coupled system derived in Section~\ref{sec:payload_dynamics}.
-
-\subsubsection{Cable Modeling}
-
-The cable connecting each UAV to the payload is a critical component of the system model, and the assumptions made about its behavior significantly affect both the complexity of the dynamics and the validity of the controller. Two main modeling approaches are presented in the literature, as illustrated in Figure~\ref{fig:tension}.
+The cable connecting each UAV to the payload is a critical component of the system model, and the
+assumptions made about its behaviour significantly affect both the complexity of the dynamics and
+the validity of the controller. Two main modelling approaches are presented in the literature, as
+illustrated in Figure~\ref{fig:tension}.
 
 \begin{figure}[h]
 \centering
@@ -85,7 +26,7 @@ The cable connecting each UAV to the payload is a critical component of the syst
 
   % Rigid cable with unit vector label
   \draw[thick] (-2,2.4) -- (-2,0.6);
-  \draw[->,red] (-2,1.8) -- (-2,1.2) 
+  \draw[->,red] (-2,1.8) -- (-2,1.2)
       node[right] {$\mathbf{q}, \; l$};
 
   % Payload
@@ -93,7 +34,7 @@ The cable connecting each UAV to the payload is a critical component of the syst
   \node[font=\small] at (-2,0.4) {Payload};
 
   % Tension label
-  \draw[->,blue] (-2.4,1.5) -- (-2.4,1.0) 
+  \draw[->,blue] (-2.4,1.5) -- (-2.4,1.0)
       node[left] {$\mathbf{T}$};
 
   % --- Right: Spring-damper ---
@@ -106,13 +47,13 @@ The cable connecting each UAV to the payload is a critical component of the syst
 
   % Spring segments with lumped masses
   \draw[thick] (2,2.4) -- (2,2.1);
-  \draw[decorate, decoration={zigzag,segment length=4pt, amplitude=3pt}] 
+  \draw[decorate, decoration={zigzag,segment length=4pt, amplitude=3pt}]
       (2,2.1) -- (2,1.5);
   \filldraw (2,1.5) circle (2pt) node[right] {\tiny $m_k$};
-  \draw[decorate, decoration={zigzag,segment length=4pt, amplitude=3pt}] 
+  \draw[decorate, decoration={zigzag,segment length=4pt, amplitude=3pt}]
       (2,1.5) -- (2,0.9);
   \filldraw (2,0.9) circle (2pt) node[right] {\tiny $m_k$};
-  \draw[decorate, decoration={zigzag,segment length=4pt, amplitude=3pt}] 
+  \draw[decorate, decoration={zigzag,segment length=4pt, amplitude=3pt}]
       (2,0.9) -- (2,0.6);
   \draw[thick] (2,0.6) -- (2,0.4);
 
@@ -123,7 +64,7 @@ The cable connecting each UAV to the payload is a critical component of the syst
   \draw[thick,fill=gray!20] (1.2,0.0) rectangle (2.8,0.4);
   \node[font=\small] at (2,0.2) {Payload};
 \end{tikzpicture}
-\caption{Cable modeling approaches.}
+\caption{Cable modelling approaches.}
 \label{fig:tension}
 \end{figure}
 
@@ -135,98 +76,6 @@ The most common simplification is the \textit{rigid massless rod} assumption, ad
 
 where $\lambda_i$ is the scalar tension magnitude and the constraint $\lambda_i \geq 0$ is due to the taut cable assumption, as cables can pull but not push. This keeps the system state compact and computationally tractable, at the cost of being unable to capture cable slackness. \\
 
-A more complex alternative is the \textit{mass-spring-damper chain}, used by \cite{distributedNMPC}, in which the cable is discretised into $n$ lumped masses connected by spring-damper segments. Each link $k$ exerts a tension force,
-
-\begin{equation}
-    \mathbf{T}_k = \left( k_s \left( \|\mathbf{d}_k\| - l_0 \right) + b\frac{\mathbf{d}_k \cdot \dot{\mathbf{d}}_k}{\|\mathbf{d}_k\|} \right) \hat{\mathbf{d}}_k
-\end{equation}
-
-where $\mathbf{d}_k$ is the link displacement vector, $k_s$ the spring stiffness, $b$ the damping coefficient, and $l_0$ the rest length. This captures realistic cable sag and oscillation, but increases the state dimension by $6n$ per cable, which becomes complex in a multi-agent system. \\
+A more complex alternative is the \textit{mass-spring-damper chain}, used by \cite{distributedNMPC}, in which the cable is discretised into $n$ lumped masses connected by spring--damper links of stiffness $k_s$, damping $b$ and rest length $l_0$. This captures realistic cable sag and oscillation, but increases the state dimension by $6n$ per cable, which becomes complex in a multi-UAV system. \\
 
 Regardless of the cable model used, the majority of controllers in the literature impose a \textit{taut cable assumption}, requiring cable tension to remain strictly positive throughout the task. A slack cable introduces a unilateral constraint and a discontinuity in the equations of motion, and handling this rigorously remains an open problem \cite{efficient}. For moderately aggressive indoor flight, the rigid rod model with the taut cable assumption is sufficient, consistent with \cite{tudelft}.
-
-\newpage
-
-\subsubsection{Cable-Suspended Payload Dynamics}
-\label{sec:payload_dynamics}
-
-With the quadrotor and cable models established, the dynamics of the full suspended payload system can be formulated. The payload is modelled as a six degree-of-freedom rigid body with mass $m_L$, inertia matrix $\mathbf{J}_L \in \mathbb{R}^{3\times3}$, position $\mathbf{p}_L \in \mathbb{R}^3$, orientation $R_L \in SO(3)$, and angular velocity $\boldsymbol{\omega}_L$ in the payload body frame. $N$ UAVs each exert cable tension, $\mathbf{T}_i$, at attachment point, $\boldsymbol{\rho}_i$, offset from the payload center of mass, as shown in Figure~\ref{fig:payload_system}.
-
-\begin{figure}[h]
-\centering
-\begin{tikzpicture}[scale=1.1]
-  % Payload box
-  \draw[thick,fill=gray!10] (-1.0,-0.3) rectangle (1.0,0.3);
-
-  % Centre of mass marker
-  \filldraw (0,0) circle (1.5pt);
-  \node[right, font=\small] at (0.05,0) {CoM};
-
-  % Gravity
-  \draw[->,thick] (0,-0.3) -- (0,-1.1) 
-      node[right] {$-m_L g \mathbf{e}_3$};
-
-  % Attachment points on payload surface
-  \filldraw[blue] (-0.6,0.3) circle (2pt);
-  \filldraw[blue] (0.0,0.3) circle (2pt);
-  \filldraw[blue] (0.6,0.3) circle (2pt);
-
-  % UAV 1 - left
-  \filldraw (-1.5, 2.2) circle (2pt);
-  \node[above, font=\small] at (-1.5,2.2) {UAV 1};
-  \draw[thick] (-1.5,2.2) -- (-0.6,0.3);
-  \draw[->,red,thick] (-0.6,0.3) -- (-1.5,2.2);
-  \node[left, font=\small, red] at (-1.1,1.3) {$\mathbf{T}_1$};
-  \draw[->,blue] (0,0) -- (-0.6,0.3) 
-      node[below, font=\small, blue] {$\boldsymbol{\rho}_1$};
-
-  % UAV 2 - centre
-  \filldraw (0, 2.5) circle (2pt);
-  \node[above, font=\small] at (0,2.5) {UAV 2};
-  \draw[thick] (0,2.5) -- (0,0.3);
-  \draw[->,red,thick] (0,0.3) -- (0,2.5);
-  \node[right, font=\small, red] at (0.05,1.4) {$\mathbf{T}_2$};
-  \draw[->,blue] (0,0) -- (0,0.3)
-      node[above right, font=\small, blue] {$\boldsymbol{\rho}_2$};
-
-  % UAV 3 - right
-  \filldraw (1.5, 2.2) circle (2pt);
-  \node[above, font=\small] at (1.5,2.2) {UAV 3};
-  \draw[thick] (1.5,2.2) -- (0.6,0.3);
-  \draw[->,red,thick] (0.6,0.3) -- (1.5,2.2);
-  \node[right, font=\small, red] at (1.1,1.3) {$\mathbf{T}_3$};
-  \draw[->,blue] (0,0) -- (0.6,0.3)
-      node[above right, font=\small, blue] {$\boldsymbol{\rho}_3$};
-
-\end{tikzpicture}
-\caption{Multi-UAV cable-suspended payload system.}
-\label{fig:payload_system}
-\end{figure}
-
-The Newton-Euler equations of motion are,
-
-\begin{equation}
-    m_L \ddot{\mathbf{p}}_L = \sum_{i=1}^{N} \mathbf{T}_i - m_L g \mathbf{e}_3
-\end{equation}
-
-\begin{equation}
-    \mathbf{J}_L \dot{\boldsymbol{\omega}}_L = \sum_{i=1}^{N} \boldsymbol{\rho}_i \times \mathbf{T}_i - \boldsymbol{\omega}_L \times \mathbf{J}_L \boldsymbol{\omega}_L
-\end{equation}
-
-The cable tension $\mathbf{T}_i$ is the central coupling term as it appears as a driving force and torque on the payload above, and simultaneously as an equal and opposite disturbance acting on UAV $i$,
-
-\begin{equation}
-    m_q \ddot{\mathbf{p}}_i = R_i f_i \mathbf{e}_3 - m_q g \mathbf{e}_3 - \mathbf{T}_i
-\end{equation}
-
-This bidirectional coupling makes the multi-agent problem fundamentally harder than independent flight. The full system state comprises the payload pose $({\mathbf{p}}_L, R_L)$, payload velocity $(\dot{\mathbf{p}}_L, \boldsymbol{\omega}_L)$, and for each UAV $i$ its position $\mathbf{p}_i$, orientation $R_i$, and velocities, a state dimension that grows linearly with $N$, directly driving the computational scaling challenges noted in the control literature \cite{tudelft}. \\
-
-The controller developed in this thesis adopts the following standard simplifications: cables are rigid massless rods, cables remain taut at all times, and payload mass and inertia are known. The fixed team size assumption common in the literature \cite{efficient, wahbaKinodynamicMotionPlanning2024, quan2025swarm} is relaxed, as UAVs must be able to join or leave mid-flight without destabilizing the payload.
-
-\subsubsection{Simulation Modeling}
-
-Before hardware deployment, simulation provides an environment to test controller behavior. The validity of the simulation model determines how trustworthy these results are and how large the gap between simulation and real-world performance will be. \\
-
-The most accurate approach in the reviewed literature is the Software-in-the-Loop (SITL) configuration used by \cite{distributedNMPC}, which replicates the full hardware stack inside Gazebo, including the same state estimator, control architecture, and ESC firmware as the physical platform, with cable dynamics modelled via the mass-spring-damper chain. This careful replication minimizes the sim-to-real gap and is the approach adopted in this thesis. \\
-
-Alternative methods include linearized dynamic equations and a rigid rod model implemented in MATLAB \cite{DistributedMPC}, which improves tractability and allows rapid iteration, but is valid only near the linearisation point and does not capture the nonlinear and geometric effects present during aggressive manoeuvres or large attitude deviations. This approach is considered but not adopted, as Gazebo provides sufficient tractability while retaining the full nonlinear system necessary for validating the join and leave transients.

@@ -5,7 +5,7 @@
 % Evidence: CURRENT_STATE 4.1, 4.2, 4.11; notes 2026-09-24_detach_land_fix, 2026-09-25_attach_ocp,
 % 2026-09-27_m1_rejoin, 2026-09-27_m1_full, 2026-09-27_m2_handover.
 
-\subsection{Reconfiguration}
+\subsection{Reconfiguration by OCP resize}
 \label{sec:reconfig}
 
 A reconfiguration changes the number of UAVs carrying the payload while it is in the air. Both
@@ -35,7 +35,7 @@ fleet. Two properties of the formulation make this possible.
 \end{itemize}
 At the detach the planner swaps to the solver for $N-1$ UAVs, sets the survivors' attachment points
 and rod lengths, and warm-starts the new problem from the measured state before it flies. The
-tensions and cable directions are free at node~0, so the survivors' share of the load is
+tensions and rod directions are free at node~0, so the survivors' share of the load is
 redistributed by the first solve. No separate hand-off phase is needed. A detach is refused if it
 would leave fewer than three UAVs, and during LAND.
 
@@ -48,6 +48,8 @@ Section~\ref{sec:sim_detach}. The OCP resize is the detach used in the rest of t
 % then hands back to a planner built for $N-1$. In simulation the OCP resize won this comparison
 % clearly (Section~\ref{sec:sim_detach}), and it is the detach used in the rest of this work.
 
+% CHECK: this paragraph and "Landing after a detach" describe the departed UAV's landing before the
+% change of Section 4.3 (fig:departed_landing: pressed to its own resting height, then disarmed alone).
 \paragraph{The departing UAV.} After the release the departing UAV holds the position where it
 detached. On LAND it steps out radially, clear of the ring and the survivors, and descends on its own.
 On the rig the release is the UAV's magnet channel, switched by the same DETACH command.

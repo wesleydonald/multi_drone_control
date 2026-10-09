@@ -1,7 +1,9 @@
 % metrics.tex -- Methodology: metrics (draft 4 Oct 2026). The definitions are the ones used by the
 % analysis tools (multi_drone_control/tools/method_metrics.py, push_metrics.py).
+% 9 Oct (structure audit): the unused "carried fraction" metric cut; "every Gazebo case is flown at
+% least twice" replaced, since several cells are single runs (marked (1)).
 
-\subsection{Metrics}
+\subsubsection{Metrics}
 \label{sec:metrics}
 
 All metrics are computed from the logged motion-capture poses of the payload and the UAVs, with the
@@ -22,15 +24,15 @@ events (TAKEOFF, the push, DETACH, LAND) taken from the run's event log.
     excursion the other way after the force ends. The time to recover is the time after which it
     stays within 1\,cm.
     \item[Stiffness] The applied force divided by the steady displacement with no integral action.
+% CHECK: the detach results (Table tab:detach) measure the time until the tilt stays under the hover's
+% own maximum plus 0.5 deg and the largest height change in the 12 s after DETACH, not the 2 deg and the
+% height loss defined here; the earlier layout study may have used these. Align once the detach is re-flown.
     \item[Detach] The peak payload tilt after DETACH, the time until the tilt stays under 2$^\circ$, and
     the payload's height loss.
     \item[Attach] The peak payload tilt after the weld, the payload's height loss (dip) after the
     weld, and whether the tilt returns under 2$^\circ$ within 3\,s; for the full rejoin mission, also
     the tilt at the detach, the mean tilt over the orbit and the time from TAKEOFF to landed.
-    \item[Carried fraction] On the rig, where rod tensions are not measured: the total vertical force
-    the UAVs put into their rods, computed from each UAV's throttle through the identified thrust map
-    and its measured attitude, divided by the payload's weight.
     \item[Solver health] The number of planner solves that failed or did not converge.
 \end{description}
 
-Every Gazebo case is flown at least twice and reported as the mean, with the number of runs.
+Each table cell is the mean over its runs, with the number of runs in brackets.

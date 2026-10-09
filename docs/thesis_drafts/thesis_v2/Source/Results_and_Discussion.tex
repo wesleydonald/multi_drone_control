@@ -1,20 +1,29 @@
 \section{Results and Discussion}
+\label{sec:results}
 
 % From the outline: every result is a table (2 repeats, named baseline) or a figure, then one
 % paragraph of discussion. No run ids in the text; they are in the LaTeX comments and in
 % configs/thesis_figures.yaml / docs/figures/PROVENANCE.md in the code repository.
 
-\input{Source/src/sim_results}
+% Restructured 9 Oct (structure audit): ordered by question, not by development history; the rig and
+% the twin side by side in each section. sim_results.tex, rig_results.tex and sim_robustness.tex were
+% split into res_carry.tex (4.1), res_steady.tex (4.2), sim_attach.tex (errors during an attach) and
+% the appendices (rig diary, negative results).
+
+Each section answers one row of Table~\ref{tab:rq_map} and opens with its question, its baseline and
+its bar. Sections~\ref{sec:res_carry} and~\ref{sec:res_steady} establish the carry with a fixed team,
+Sections~\ref{sec:sim_detach} and~\ref{sec:sim_attach} answer RQ1, Section~\ref{sec:sim_architecture}
+answers RQ2, and Section~\ref{sec:discussion} discusses the answers.
+
+\input{Source/src/res_carry}
+
+\input{Source/src/res_steady}
 
 \input{Source/src/sim_detach}
 
 \input{Source/src/sim_attach}
 
 \input{Source/src/sim_architecture}
-
-\input{Source/src/sim_robustness}
-
-\input{Source/src/rig_results}
 
 \input{Source/src/discussion}
 

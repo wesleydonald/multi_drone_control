@@ -1,22 +1,37 @@
 \section{Methodology}
+\label{sec:method}
+
+% Restructured 9 Oct (structure audit): system and platform, the model once, planner, tracker and
+% thrust map, steady-error rejection, floor start and landing, reconfiguration, the dissipative
+% alternative, experimental method. hardware.tex was split: platform to system_overview.tex, the
+% thrust identification procedure to controller.tex, its fit to Section 4.1, the parameter table to
+% Appendix B, arming, preflight and flight procedure to Appendix C, the test ladder to simulation.tex.
+
+This section describes the rig and its model, the two levels of the controller built on that model,
+the procedures that take a flight from the floor into the regime the model covers and back, the
+reconfiguration, the dissipative alternative it is compared with, and the experimental method.
 
 \input{Source/src/system_overview}
 
-% The models (quadrotor, rigid taut rods, 6-DoF payload) are in the literature review
-% (Source/src/modelling.tex) and in the controller section.
+\input{Source/src/model}
 
 \input{Source/src/controller}
 
-\input{Source/src/trajectories}
-
 \input{Source/src/takeoff_landing}
-
-\input{Source/src/dissipative}
 
 \input{Source/src/reconfiguration}
 
-\input{Source/src/hardware}
+\input{Source/src/dissipative}
+
+\subsection{Experimental method}
+\label{sec:experiments}
+
+Every result is flown against a named baseline, in the rig twin first and on the rig after it. This
+subsection describes the twin and the runner that flies it, the test references and the metrics. The
+parameters of the twin and of the rig are listed in Appendix~\ref{sec:app_params}.
 
 \input{Source/src/simulation}
+
+\input{Source/src/trajectories}
 
 \input{Source/src/metrics}

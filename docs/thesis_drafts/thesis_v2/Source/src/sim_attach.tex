@@ -6,13 +6,23 @@
 % M2 T0015-T0029, bench R0707-R0720. Legacy worlds: 0.86 kg ring,
 % 0.5 m rods, 0.64 kg UAVs, linear thrust map, tracker box 0.025 (all before 4 Oct).
 % FIGURE TODO: rebuild the storyboard on the M1 rejoin (R0685) with tools/attach_storyboard.py.
+% Restructured 9 Oct (structure audit): opens with its question, baseline and bar; the weld ladder and
+% the ground join moved to Appendix D; the approach with the measured-tip loop added
+% (fig:tip_feedback, rig-twin runs R1393-R1410 per the claim table of 9 Oct); the attach case of the
+% robustness study moved here from sim_robustness.tex; pending rig rejoin figure.
 
-\subsection{Attach}
+\subsection{Attach and the rejoin}
 \label{sec:sim_attach}
+
+This section answers the join half of RQ1: can a free UAV weld onto the carried ring and be folded in
+by OCP resize with a transient small enough for the transport to continue? The baseline is the network
+attach at the same weld; the bar is the ring's tilt back under 2$^\circ$ within 3\,s of the weld
+(Section~\ref{sec:metrics}).
 
 The attach was developed in three stages: a network-based attach, the attach by OCP resize, and the
 full rejoin mission with the collaborator's approach controller. None has yet been flown on the rig
 twin or the rig.
+% CHECK: the measured-tip loop below was flown in the rig twin (a dry approach, no weld).
 
 \subsubsection{Network attach}
 
@@ -65,34 +75,6 @@ twin or the rig.
 % \end{tabularx}
 % \end{table}
 
-\paragraph{The weld itself.}
-\redo{the joint ladder at the weld (ball joint, rod with its inertia, rod with a mid-span joint, rigid weld): flight time after the weld and payload tilt 2\,s and 8\,s after it.}
-% --- original text, flown before the rig twin; kept to refill this place:
-% \paragraph{The weld itself.} An early hypothesis was that the weld transient came from the
-% compliance of the joint between rod and ring. Table~\ref{tab:weld} shows the joint ladder flown to test
-% it. A ball joint, a rod with its real inertia and a rod with an extra mid-span joint all behaved alike,
-% and a rigid, moment-transmitting weld capsized the payload within 2\,s in five runs out of five.
-% Compliance was therefore not the cause. The transient came from the incumbents' tensions stepping to
-% their new solution in one tick at the weld, which was then replaced by a blend over the hand-out. The
-% attachment is modelled as a ball joint from then on.
-%
-% \begin{table}[h]
-% \centering
-% \caption{Payload tilt after the weld by joint model (Gazebo, early attach).}
-% \label{tab:weld}
-% \small
-% \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xccc}
-% \toprule
-% Joint at the weld & Flight after the weld (s) & Tilt at +2\,s & Tilt at +8\,s \\
-% \midrule
-% Ball & 10.1--10.2 & 46--49$^\circ$ & 31--34$^\circ$ \\
-% Rod with inertia & 10.4 & 47$^\circ$ & 36$^\circ$ \\
-% Rod with mid-span joint & 10.0--10.3 & 40--44$^\circ$ & 26--35$^\circ$ \\
-% Rigid & 1.7--1.9 (5 of 5 capsized) & 83--106$^\circ$ & -- \\
-% \bottomrule
-% \end{tabularx}
-% \end{table}
-
 \subsubsection{Attach by OCP resize}
 
 \redo{network attach against attach by OCP resize at the same weld, in hover and in the middle of a circle, on a plant that matches the controller's model (the software-in-the-loop bench, once it flies the twin): payload tilt after the weld.}
@@ -112,6 +94,25 @@ twin or the rig.
 % a clean landing. A further correction made the newcomer take its balanced share of the load, aiming
 % its reference along the line to the incumbents' cable apex; the weld peaks were then
 % 10.7--11.9$^\circ$.
+
+\subsubsection{The approach: steering the magnet tip}
+
+The approach flies the newcomer's body to its target plus an assumed rod length, so an assumed length
+that is wrong parks the magnet tip above or below the plate instead of on it. The collaborator's
+earlier attempts on the rig showed this: the magnet came over the plate but too high. A slow, bounded
+loop on the measured tip height therefore corrects the body goal. It integrates only while the
+newcomer holds still over the plate, and it freezes inside a 5\,mm deadband, on a contact and whenever
+the tip measurement is invalid. In the rig twin, with the assumed rod length 4\,cm wrong in either
+direction, the tip parks 4\,cm high or low with the loop off; with the loop on, in two runs per sign,
+the tip comes within 1\,cm of its setpoint 1.2--2.1\,s after the hold begins and stays within
+0.1--0.6\,cm (Figure~\ref{fig:tip_feedback}).
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{Images/tip_feedback.pdf}
+\caption[Steering the measured magnet tip]{Steering the measured magnet tip in the rig twin (dry approach to the plate). The approach flies the UAV's body to the target plus an assumed rod length; with that length 4\,cm wrong either way (solid: assumed long, dashed: assumed short) the measured tip parks 4\,cm high or low with the loop off (black). With the measured-tip loop on (red, two runs per sign) a slow, bounded correction of the body goal brings the tip within 1\,cm of its setpoint (shaded) 1.2--2.1\,s after the still hold over the plate begins (dots) and holds it within 0.1--0.6\,cm. (a) Tip height error: the measured tip height minus its setpoint. (b) The correction $c$ added to the body goal; dashed black: the injected rod error. The loop integrates only in the still hold and freezes inside a 5\,mm deadband, on a contact and on an invalid tip.}
+\label{fig:tip_feedback}
+\end{figure}
 
 \subsubsection{The rejoin mission}
 
@@ -163,18 +164,23 @@ twin or the rig.
 % 2.5--3.2$^\circ$ with a 1.1--2.0\,cm dip, and TAKEOFF to landed took 104--133\,s. The spread in
 % duration comes from retries inside the collaborator's mission.
 
-\subsubsection{Ground join and hand-over}
+Figure~\ref{fig:rig_rejoin} shows the rejoin on the rig.
 
-\redo{the ground join: the collaborator's controller joins four UAVs to the ring on the floor one at a time and hands them to this work's planner, which lifts, hovers and lands (joins completed, ring height, ring and UAV tilt); with it the hand-over bench under CPU load, body rates from the simulated gyro against differenced poses.}
+\pendingfig{fig:rig_rejoin}{Rejoin on the rig: the fourth UAV's climb, transit, hold over plate 9 and weld, the ring tilt with the reconfiguration window, and the measured tip height against the weld radius.}{rig R8b, 14 Oct}
+
+\subsubsection{Errors during an attach}
+
+\paragraph{Mass and rod length during an attach.}
+\redo{a wrong payload mass ($\pm 25$\,\%) or rod length ($\pm 10$\,\%) in the controller during an attach, two runs each: whether the flight completes, and the payload height after the weld.}
 % --- original text, flown before the rig twin; kept to refill this place:
-% In the second integrated case the collaborator's controller joins four UAVs to the ring on the floor,
-% one at a time, and hands them over to this work's planner, which sweeps the rods up, lifts the ring to
-% 0.60\,m, hovers and lands. Two runs met every target: four joins out of four, the ring at
-% 0.600--0.601\,m, peak ring tilt 1.6--1.8$^\circ$ at the lift, 0.6--0.8$^\circ$ in the hover and
-% 1.2--2.4$^\circ$ during the descent, and UAV tilt of at most 15.4$^\circ$. The result did not hold when four of the
-% next five runs rocked the ring by 7--21$^\circ$. The cause was again the simulator: the collaborator's
-% flight controller emulator estimated body rates by differencing unstamped poses, so bunched samples
-% under CPU load became rate spikes. On a hand-over bench with the rates taken from the simulated gyro,
-% none of six runs under load exceeded 3$^\circ$, against three of six with differenced poses. The full
-% ground join on the gyro had no sustained rocking, but both runs had transients of 3.3--3.4$^\circ$
-% lasting under half a second, above the 3$^\circ$ bar.
+% \paragraph{Mass and rod length during an attach.} On the attach demonstration the controller was told
+% a wrong mass or rod length while the simulated plant kept the true ones (two runs each). Telling it
+% the payload is 25\,\% lighter, or the rods 10\,\% shorter, than they are was absorbed: both runs
+% completed. Telling it the payload is 25\,\% heavier over-lifted the payload to 0.96\,m, and telling it
+% the rods are 10\,\% longer dropped it to 0.17\,m; both aborted within about 10\,s of the weld. The
+% envelope is asymmetric. An underestimate is made up by the height trim, while an overestimate plans
+% more pull than the payload needs. On the rig the payload is weighed and the rods measured, and a
+% doubtful value is entered low.
+
+The weld joint ladder and the ground join with the collaborator's controller are in
+Appendix~\ref{sec:app_negatives}.
