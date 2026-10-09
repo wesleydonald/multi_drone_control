@@ -22,6 +22,11 @@ transients within its spread (the announced one tilted about twice the twin's)."
   per detach; second row: the ring's height error. Left out: the UAVs, the tensions (F_detach shows them).
   Window: 3 s before the release to 10 s after.
 
+F_solve_time -- "In flight on the rig the planner's optimisation finished inside its 100 ms budget at every
+tick: median 28 ms with three UAVs, 53-57 ms with four (worst 94 ms)."
+  hero: the in-flight solve-time distribution per planner and team size on the rig, the budget dashed.
+  Left out: the floor creep (not the flying planner), the twin.
+
 F_tip_feedback -- "Steering the measured magnet tip removes a 4 cm error in the assumed rod, either
 sign, in about 2 s; the approach that flies the body plus a fixed rod length keeps it."
   hero: tip height minus its setpoint from the tip hold's start, switch on (QUAD4's colour, both
@@ -259,7 +264,8 @@ def fig_rig_detach():
             axz.plot(t[w], dz[w] * 100, color='0.6', lw=0.8, zorder=1)
             stats[f'{col}_{rid}_peak'] = float(np.nanmax(tilt[(t >= 0) & (t <= 10)]))
         t, tilt, dz, ev = detach_trace(rig, event)
-        w = (t >= -3) & (t <= 10)
+        t_land = ev['LAND'][0] - ev[event][0] if 'LAND' in ev else 99.0
+        w = (t >= -3) & (t <= min(10.0, t_land))       # cut at LAND: the descent is not the detach
         ax.plot(t[w], tilt[w], color=ps.PAYLOAD_LINE, lw=1.3, zorder=2)
         axz.plot(t[w], dz[w] * 100, color=ps.PAYLOAD_LINE, lw=1.3, zorder=2)
         post = (t >= 0) & (t <= 10)
@@ -273,8 +279,8 @@ def fig_rig_detach():
             stats[f'{col}_detect_s'] = td
             for a in (ax, axz):
                 a.axvline(td, color='0.75', lw=0.4, zorder=0)
-            ax.annotate(f'found +{td:.2f}\\,s', xy=(td, 1.0), xycoords=('data', 'axes fraction'), xytext=(2, -2),
-                        textcoords='offset points', fontsize=8, color='0.4', ha='left', va='top')
+            axz.annotate(f'found +{td:.2f}\\,s', xy=(td, 0.0), xycoords=('data', 'axes fraction'), xytext=(2, 2),
+                         textcoords='offset points', fontsize=8, color='0.4', ha='left', va='bottom')
         for a in (ax, axz):
             a.axvline(0.0, color='0.4', lw=0.5, zorder=0)
         axz.axhline(0.0, color='0.75', lw=0.5, zorder=0)
@@ -290,15 +296,58 @@ def fig_rig_detach():
     axs[1, 0].set_yticks([-8, -4, 0, 4])
     axs[1, 0].set_xlim(-3, 10)
     axs[1, 0].set_xticks([0, 5, 10])
-    axs[0, 2].annotate('rig', xy=(9.8, 3.5), fontsize=8, color=ps.PAYLOAD_LINE, ha='right', va='bottom')
-    axs[0, 2].annotate('twin, two runs', xy=(9.8, 6.5), fontsize=8, color='0.5', ha='right', va='bottom')
+    axs[0, 0].annotate('rig', xy=(9.8, 18.0), fontsize=8, color=ps.PAYLOAD_LINE, ha='right', va='top')
+    axs[0, 0].annotate('twin, two runs', xy=(9.8, 15.6), fontsize=8, color='0.45', ha='right', va='top')
     fig.align_ylabels()
     stem = os.path.join(OUT, 'F_rig_detach', 'rig_detach')
     ps.save_print(fig, stem)
     return stem, stats
 
 
-FIGS = {'departed': fig_departed, 'tip': fig_tip, 'rig_detach': fig_rig_detach}
+def rig_solve_times():
+    out = {}
+    for f in glob.glob(os.path.join(REPO, 'results', 'rig', '2026-10-0[78]', '*_logs', 'logs', '*planner*', '*', 'log.csv')):
+        planner = 'dissipative' if 'dissipative' in f else 'mpc'
+        try:
+            L = pd.read_csv(f, usecols=['phase', 'n', 'solve_ms'])
+        except Exception:
+            continue
+        L = L[L.phase.isin(['planner', 'network']) & np.isfinite(L.solve_ms) & (L.solve_ms > 0)]
+        for n, g in L.groupby('n'):
+            out.setdefault((planner, int(n)), []).append(g.solve_ms.to_numpy())
+    return {k: np.concatenate(v) for k, v in out.items()}
+
+
+def fig_solve():
+    ps.thesis()
+    data = rig_solve_times()
+    order = [('dissipative', 3), ('dissipative', 4), ('mpc', 4)]
+    names = {('dissipative', 3): 'three UAVs', ('dissipative', 4): 'four UAVs', ('mpc', 4): 'four UAVs,\nmpc mode'}
+    fig, ax = plt.subplots(figsize=ps.size('half', height=2.0))
+    stats = {}
+    vals = [data[k] for k in order]
+    bp = ax.boxplot(vals, vert=False, widths=0.5, whis=(1, 99), showfliers=False, patch_artist=True,
+                    medianprops=dict(color=ps.PAYLOAD_LINE, lw=1.3), boxprops=dict(facecolor='0.92', color='0.3', lw=0.6),
+                    whiskerprops=dict(color='0.3', lw=0.6), capprops=dict(color='0.3', lw=0.6))
+    for i, (k, v) in enumerate(zip(order, vals), start=1):
+        stats[f'{k[0]}_{k[1]}'] = dict(n_ticks=len(v), p50=float(np.median(v)), p99=float(np.percentile(v, 99)),
+                                      max=float(v.max()), over=int((v > 100).sum()))
+        ax.plot(v.max(), i, '|', color='0.3', ms=6, mew=0.8)
+    ax.axvline(100.0, color='0.3', lw=0.8, ls='--')
+    ax.annotate('100\\,ms budget', xy=(100.0, 0.55), xytext=(-2, 0), textcoords='offset points', fontsize=8, color='0.3',
+                ha='right', va='center')
+    ax.set_yticks([1, 2, 3])
+    ax.set_yticklabels([names[k] for k in order], fontsize=8)
+    ax.set_xlabel('Solve time in flight (ms)')
+    ax.set_xlim(0, 110)
+    ax.set_xticks([0, 25, 50, 75, 100])
+    ax.invert_yaxis()
+    stem = os.path.join(OUT, 'F_solve_time', 'solve_time')
+    ps.save_print(fig, stem)
+    return stem, stats
+
+
+FIGS = {'solve': fig_solve, 'departed': fig_departed, 'tip': fig_tip, 'rig_detach': fig_rig_detach}
 
 if __name__ == '__main__':
     names = sys.argv[1:] or list(FIGS)
