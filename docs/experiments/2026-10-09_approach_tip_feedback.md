@@ -184,3 +184,25 @@ a tip bit-identical for 0.2 s is frozen whatever the body does (still mocap nois
 the rig a coarse forwarder could only pause the loop, the safe direction; Wednesday's props-off record checks
 it). Rev 4 is a new tree: the whole table is re-flown on it (bars unchanged), with S on the resized push.
 
+## Claim table (rev 4, one tree 7d63170; rows R1359-R1373)
+
+| arm | switch off | switch ON (repeats) | bar | verdict |
+|---|---|---|---|---|
+| 0 | 0.4 mm | 1.6 mm | within 5 mm of off | supports |
+| E- | 40.2 mm | 4.8 / 6.8 mm; within 1 cm in 1.9 / 1.7 s; c +45 / +47 mm | <= 10 mm; <= 15 s | supports |
+| E+ | 39.8 mm | 6.3 / 5.4 mm; 1.9 / 2.0 s; c -46 / -45 mm | <= 10 mm; <= 15 s | supports |
+| S (swing 6.2-7.2 cm) | 39.7 mm | 6.4 / 7.5 mm; c within 4.3 / 2.8 mm of the no-push E+ arm over the swing | <= 10 mm; c excursion <= 5 mm | supports |
+| F (tip frozen 2 s) | 39.9 mm | 6.2 mm; c moved 1.8 mm over the freeze, frozen flagged on 18 rows | < 5 mm | supports (R1340 on rev 3: 23 mm) |
+| W (rig gate, radius 0.025) | no weld | welded 2.5 s after hold entry | weld within 15 s | supports |
+
+No contact latch in any arm, no aborts, c inside its bounds. The S bar's "c excursion while the rod swings" is
+scored as the largest difference from the no-push E+ arm's c over the same window (aligned at hold entry):
+the push lands 1 s into the hold, while c is still converging, so c's raw range (3 cm) is the convergence, not
+the swing; the method is stated here because the bar did not name its reference.
+
+**Verdict:** in the twin, the measured-tip loop removes a 4 cm rod error either way to 5-7 mm in ~2 s, rides a
+6-7 cm rod swing and a 2 s frozen tip, and makes a weld happen that the switch-off arm never gets. Not shown: the
+rig's marker-to-face offset, occlusion and precision (Wednesday's calibration and tip record), a tether that
+goes slack (the contact freeze is unit-tested only), a moving ring (R9: the hold is never entered, by design).
+Reviewer next.
+
