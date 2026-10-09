@@ -58,8 +58,9 @@ reference (1\,s) are fresh. Any violation disarms the whole fleet, not the one U
 thrust on a shared rigid payload drags the others with it. There is no geofence; the operator holds a
 kill switch. On the rig each UAV must confirm that its flight controller is armed before the fleet
 takes off, and a UAV that disarms between ARM and TAKEOFF grounds the fleet and TAKEOFF is refused,
-since three UAVs lifting a ring sized for four would drag it. The planner stops iterating at a 60\,ms
-budget, and a plan that has not converged by then is replaced by the previous one, shifted by a tick.
+since three UAVs lifting a ring sized for four would drag it. On the rig the planner starts no new
+iteration after 60\,ms, and a plan that has not converged by then is replaced by the previous one, shifted
+by a tick.
 
 \subsubsection{Rig hardware}
 \label{sec:hardware}

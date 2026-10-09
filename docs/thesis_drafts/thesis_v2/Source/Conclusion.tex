@@ -12,9 +12,9 @@ through the departure and the mid-flight arrival of individual UAVs, with a cent
 planner based on \cite{tudelft} and a cable-aware tracking MPC per UAV, flown on Betaflight UAVs over
 their radio links with motion capture as the only sensing.
 
-\paragraph{Carrying with a fixed team.} On hardware, three UAVs carried the 0.86\,kg ring to 1.0\,m,
-around a circle and through a figure-eight with no planner failures, after the thrust map was
-identified on the rig. The remaining gaps to simulation, a low hover and a steady horizontal offset,
+\paragraph{Carrying with a fixed team.} On hardware, three and then four UAVs carried the 0.86\,kg ring
+to 1.0\,m, around a circle and through a figure-eight, within 3\,cm of the path on average once the
+trackers used the rod pull they measure. The remaining gaps to simulation, a low hover and a steady horizontal offset,
 have identified causes or candidate causes. Steady payload errors in the re-planned cascade come
 from sources that look alike at the payload (the tracker's relaxed initial condition, a breakaway pull
 cap held for the whole flight, model errors and external forces), and each needed a different
@@ -23,7 +23,8 @@ three axes in simulation. A per-UAV thrust error is a moment that only a per-UAV
 
 \paragraph{RQ1: leave and join.} Reconfiguration can be handled by resizing the planner's optimal
 control problem, because the attachment geometry is a runtime parameter. In simulation a detach this
-way left the payload level within seconds.
+way left the payload level within seconds, and on the rig it held the ring in all four flights,
+announced and unannounced, with peak tilts of 6.5--17.8$^\circ$.
 \redo{the two comparisons behind this finding: the payload tilt left by a network hand-off on the same detach, and the payload transient of an attach by OCP resize in the full rejoin mission.}
 % --- original text, flown before the rig twin; kept to refill this place:
 %     the attachment geometry is a runtime parameter. In simulation a detach this way left the payload
@@ -43,11 +44,9 @@ must remain inside the polygon of the surviving attachment points, which chooses
 %     tracking, detach and attach. The network's advantages did not carry over to rigid rods and a
 %     heavier payload.
 
-% CHECK (trim 9 Oct): the first sentence below predates the 7-8 Oct rig days, which flew four UAVs and
-% the detach (Sections 4.1 and 4.3); left unchanged for the rewrite of this provisional conclusion.
-\paragraph{Future work.} The immediate steps are to fly the breakaway release and four UAVs on the
-rig, to check the motion-capture calibration for the horizontal pull, and to fly the detach on the
-rig, then the attach with the collaborator's hardware. Beyond this thesis: a model of slack cables,
+\paragraph{Future work.} The immediate steps are the attach on the rig and then the full rejoin with
+the collaborator's hardware, the model integral through a detach on the rig, and a check of the
+motion-capture calibration for the horizontal pull. Beyond this thesis: a model of slack cables,
 so the planner can take over before the rods are taut; force sensing at the UAVs, the onboard
 equivalent of \cite{tudelft}'s incremental inversion, to remove per-UAV thrust errors; outdoor
 flight without motion capture; and larger teams, for which a pre-built solver per team size becomes

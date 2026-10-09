@@ -412,6 +412,8 @@ each.}
 \label{fig:traj}
 \end{figure}
 
+% CHECK: "one UAV tipped in 21" here against "2 of 21" straight-descent landings in Section 4.1.5 /
+% tab:land; whether the two counts are over the same 21 flights is not recorded here.
 Landing is not yet resolved, with or without the box. In 21 Gazebo flights with $\epsilon = 0$, one
 UAV tipped over during landing after the payload had touched down, as 2 of 32 earlier landings with the
 box had. Both come from landing, not from the box, and the landing of Section~\ref{sec:sim_landing}
@@ -510,10 +512,11 @@ ones. Each case was flown without and with the height integral.
 \begin{itemize}
     \item A wrong payload mass moves the hover by about 1.25\,cm per percent of mass, the same in
     both directions. The integral removes it while the miss is inside its 0.25\,m gate, with a target
-    shift that mirrors the error. A 20\,\% overestimate puts the ring 2\,mm over the gate, so the
+    shift that mirrors the error. A 20\,\% overestimate puts the ring just over the gate, so the
     integral never starts and the ring holds 26\,cm high: a miss beyond the gate is not taken for a
     static offset.
-    % CHECK: "2 mm over the gate" against Table tab:robust (+25.8 cm against the 0.25 m gate, i.e. 8 mm);
+    % Was "2 mm over the gate"; Table tab:robust gives +25.8 cm against the 0.25 m gate (8 mm at the settled
+    % height); the miss at the moment the gate was tested is not logged in the table, so no number here.
     % the table is the mean over the hover, the gate may have seen a different instant.
     The bound matters as well: the 20\,\% underestimate needs 23\,cm of shift, which
     the earlier bound of 0.15\,m would have cut off, and the planner warns that the integral is near

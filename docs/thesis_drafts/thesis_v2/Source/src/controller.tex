@@ -211,13 +211,10 @@ state; in offset-free MPC they are output and input disturbance models, which di
 in the steady state \cite{pannocchia2007combined}. The model form keeps the target fixed, so its plan
 predicts a payload held at the target, which is what happens; the reference-shift form plans a move towards
 a shifted target that never comes. The model form also extends to the horizontal axes, and it is the
-default, on the rig as well as in simulation. The reference-shift form flies instead, on the height only,
-wherever the fleet can attach or detach mid-flight, since the problem is resized with the integral in it,
-and wherever the integral is switched off. The rig flights so far used the reference-shift form, as a
-bounded safety net with $k_i = 0.4$\,s$^{-1}$.
-% CHECK (trim 9 Oct): "wherever the fleet can attach or detach" and "the rig flights so far used the
-% reference-shift form" against Section 4.2 (the 7 Oct rig hovers flew the model integral) and Section 4.3
-% ("the model integral is now kept through a resize"). Not changed here; to settle with the next re-fly.
+default everywhere, a resizing fleet included (the learned force is kept through the resize). The
+reference-shift form, on the height only, flies where the model form cannot, and flew on the rig on 1 and
+8 October ($k_i = 0.4$\,s$^{-1}$); the 7 October carry flights flew the model form.
+% Model integral through a resize since 8 Oct (896aff2; bringup real_mode.planner_options).
 % STATUS 5 Oct 2026: int_mode auto (model where allowed, else reference): reference with kt_trim on,
 % a resizing fleet, z_ki 0, offset_free on or dist_est ring/full (bringup real_mode.planner_options).
 
