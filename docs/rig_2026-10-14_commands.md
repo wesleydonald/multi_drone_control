@@ -19,6 +19,10 @@ A="tools/rig_flight.sh real_control_launch.py mode:=attach target_z:=1.0 lift_ra
 Carry/detach runs (W): T1 `rio num_drones:=4 magnet_channel:=6 magnet_initial:=ON` all the time they fly.
 Attach runs (R8): stop T1 first (mode:=attach starts its own radios and mocap; rig_flight refuses otherwise).
 Each run: T2 line -> T3 preflight -> `fleet arm` -> `ARM sequence complete` -> `fleet takeoff`.
+```bash
+python3 tools/preflight.py --drones 4 --real --planner dissipative_planner --detach --max-ground-z 0.5 --battery-min 23.6   # W runs
+python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_planner --max-ground-z 0.5 --battery-min 23.6  # R8 runs
+```
 
 ## 09:00, props off, packs charging
 
@@ -83,7 +87,7 @@ $A weld_radius:=<from 09:00, default 0.025> r8b                         # weld, 
 
 ## To check at the desk rehearsal (Tuesday)
 
-The attach preflight line (`tools/preflight.py` flags for mode:=attach); QUAD4's serial and magnet channel in
+The attach preflight line above (expects the newcomer as drone 3); QUAD4's serial and magnet channel in
 rig_io; `ros2 param get /dissipative_planner approach_tip_feedback` -> True and `attach_tip_dz` as written;
 `/magnet_attachment_manager object_z_offset` = weld_point_z; require_fc_armed True; the departed / down_alone /
 on_load topics in the bag; DISARM from RViz and T3 in the same DDS domain.
