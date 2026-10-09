@@ -27,6 +27,12 @@ tick: median 28 ms with three UAVs, 53-57 ms with four (worst 94 ms)."
   hero: the in-flight solve-time distribution per planner and team size on the rig, the budget dashed.
   Left out: the floor creep (not the flying planner), the twin.
 
+F_land_phases -- "A LAND from any phase of a flight brings every UAV down and disarmed in the twin, within about
+14 s, with no UAV tilting past 30 deg, except a LAND within about 2 s of a weld, where the twin's rigid rod can
+tip the newcomer."
+  hero: the worst UAV tilt from LAND to its disarm per phase (two runs), the 30 deg bar dashed; second row: the
+  time from LAND to the last disarm. Failures and voids marked. Data: the re-fly on f330bd2.
+
 F_tip_feedback -- "Steering the measured magnet tip removes a 4 cm error in the assumed rod, either
 sign, in about 2 s; the approach that flies the body plus a fixed rod length keeps it."
   hero: tip height minus its setpoint from the tip hold's start, switch on (QUAD4's colour, both
@@ -237,10 +243,11 @@ def fig_tip():
 
 
 RIG_DETACH = [
-    ('Announced', dict(path='results/rig/2026-10-08/r302_3_run'), ('R1207', 'R1212'), 'DETACH'),
-    ('Unannounced', dict(path='results/rig/2026-10-08/r303_4_run'), ('R1140', 'R1145'), 'RELEASE'),
-    ('Unannounced, 150$^\\circ$ gap', dict(path='results/rig/2026-10-08/r304_3_run'), ('R1206', 'R1211'), 'RELEASE'),
+    ('Announced, even three left', dict(path='results/rig/2026-10-08/r302_3_run'), ('R1207', 'R1212'), 'DETACH'),
+    ('Unannounced, even three left', dict(path='results/rig/2026-10-08/r303_4_run'), ('R1140', 'R1145'), 'RELEASE'),
+    ('Unannounced, 150$^\\circ$ gap left', dict(path='results/rig/2026-10-08/r304_3_run'), ('R1206', 'R1211'), 'RELEASE'),
 ]
+DETACH_T0, DETACH_T1 = -2.0, 7.5
 
 
 def detach_trace(spec, event):
@@ -250,54 +257,78 @@ def detach_trace(spec, event):
     return t, run.payload_tilt_deg.to_numpy(), (run.payload_z - run.payload_ref_z).to_numpy(), ev
 
 
+def _rise(t, y):
+    pre = (t >= -3.0) & (t < 0.0)
+    post = (t >= 0.0) & (t <= 3.0)
+    base = float(np.nanmean(y[pre]))
+    k = int(np.flatnonzero(post)[np.nanargmax(y[post])])
+    return base, float(y[k]), float(t[k])
+
+
 def fig_rig_detach():
     ps.thesis()
-    fig, axs = plt.subplots(2, 3, figsize=ps.size('full', height=3.1), sharex=True, sharey='row',
+    fig, axs = plt.subplots(2, 3, figsize=ps.size('full', height=3.0), sharex=True, sharey='row',
                             gridspec_kw=dict(height_ratios=[1.4, 1.0]))
     stats = {}
+    gold = ps.PAYLOAD_LINE
     for col, (title, rig, twins, event) in enumerate(RIG_DETACH):
         ax, axz = axs[0, col], axs[1, col]
-        for rid in twins:
-            t, tilt, dz, _ = detach_trace(dict(run=rid), event)
-            w = (t >= -3) & (t <= 10)
-            ax.plot(t[w], tilt[w], color='0.6', lw=0.8, zorder=1)
-            axz.plot(t[w], dz[w] * 100, color='0.6', lw=0.8, zorder=1)
-            stats[f'{col}_{rid}_peak'] = float(np.nanmax(tilt[(t >= 0) & (t <= 10)]))
         t, tilt, dz, ev = detach_trace(rig, event)
         t_land = ev['LAND'][0] - ev[event][0] if 'LAND' in ev else 99.0
-        w = (t >= -3) & (t <= min(10.0, t_land))       # cut at LAND: the descent is not the detach
-        ax.plot(t[w], tilt[w], color=ps.PAYLOAD_LINE, lw=1.3, zorder=2)
-        axz.plot(t[w], dz[w] * 100, color=ps.PAYLOAD_LINE, lw=1.3, zorder=2)
-        post = (t >= 0) & (t <= 10)
-        k = int(np.flatnonzero(post)[np.nanargmax(tilt[post])])
-        stats[f'{col}_rig_peak'] = float(tilt[k])
-        stats[f'{col}_rig_dz_min'] = float(np.nanmin(dz[post]))
-        ax.annotate(f'{tilt[k]:.1f}$^\\circ$', xy=(t[k], tilt[k]), xytext=(4, 0), textcoords='offset points',
-                    fontsize=8, color=ps.PAYLOAD_LINE, ha='left', va='center')
+        t1 = min(DETACH_T1, t_land)
+        tw = []
+        for rid in twins:
+            tt, ti, dzz, _ = detach_trace(dict(run=rid), event)
+            tw.append((tt, ti, dzz))
+            stats[f'{col}_{rid}'] = dict(zip(('base', 'peak', 't_peak'), _rise(tt, ti)), dz_min=float(np.nanmin(dzz[(tt >= 0) & (tt <= 3)])))
+        grid = np.arange(DETACH_T0, t1, 0.02)
+        for yi, a in ((1, ax), (2, axz)):
+            ys = np.array([np.interp(grid, tr[0], tr[yi] * (100 if yi == 2 else 1)) for tr in tw])
+            a.fill_between(grid, ys.min(0), ys.max(0), color='0.7', lw=0, zorder=1)
+            a.plot(grid, ys.mean(0), color='0.5', lw=0.7, zorder=1)
+        w = (t >= DETACH_T0) & (t <= t1)
+        ax.plot(t[w], tilt[w], color=gold, lw=1.1, zorder=2)
+        axz.plot(t[w], dz[w] * 100, color=gold, lw=1.1, zorder=2)
+        base, peak, tp = _rise(t, tilt)
+        post = (t >= 0) & (t <= 3)
+        stats[f'{col}_rig'] = dict(base=base, peak=peak, rise=peak - base, dz_min=float(np.nanmin(dz[post])))
+        tw_rise = [stats[f'{col}_{r}']['peak'] - stats[f'{col}_{r}']['base'] for r in twins]
+        stats[f'{col}_twin_rise'] = (min(tw_rise), max(tw_rise))
+        ax.plot(tp, peak, 'o', color=gold, ms=3, zorder=3)
+        lo, hi = round(min(tw_rise)), round(max(tw_rise))
+        twin_txt = f'+{lo}' if lo == hi else f'+{lo}--{hi}'
+        ax.annotate(f'rise: rig +{peak - base:.0f}$^\\circ$,\ntwin {twin_txt}$^\\circ$', xy=(tp, peak),
+                    xytext=((0.30, 0.93), (0.45, 0.70), (0.30, 0.93))[col], textcoords='axes fraction', fontsize=8,
+                    color='0.25', ha='left', va='top',
+                    arrowprops=dict(arrowstyle='-', color='0.5', lw=0.5, shrinkA=1, shrinkB=2))
+        for a in (ax, axz):
+            a.axvline(0.0, color='0.2', lw=0.6, ls=':', zorder=0)
         if 'DETECTED' in ev and event == 'RELEASE':
             td = ev['DETECTED'][0] - ev[event][0]
             stats[f'{col}_detect_s'] = td
             for a in (ax, axz):
-                a.axvline(td, color='0.75', lw=0.4, zorder=0)
-            axz.annotate(f'found +{td:.2f}\\,s', xy=(td, 0.0), xycoords=('data', 'axes fraction'), xytext=(2, 2),
-                         textcoords='offset points', fontsize=8, color='0.4', ha='left', va='bottom')
-        for a in (ax, axz):
-            a.axvline(0.0, color='0.4', lw=0.5, zorder=0)
+                a.axvline(td, color='0.2', lw=0.6, ls=(0, (1, 2)), zorder=0)
         axz.axhline(0.0, color='0.75', lw=0.5, zorder=0)
-        ax.set_title(title, fontsize=8, color='0.2', loc='left', pad=2)
-        axz.set_xlabel('$t$ after the release (s)')
-        ps.panel_label(ax, 'abc'[col], dy_pt=12)
-        ps.panel_label(axz, 'def'[col])
+        ax.annotate(f"({'abc'[col]}) {title}", xy=(0, 1), xycoords='axes fraction', xytext=(0, 4),
+                    textcoords='offset points', fontsize=8, ha='left', va='bottom')
+        axz.annotate(f"({'def'[col]})", xy=(0, 1), xycoords='axes fraction', xytext=(0, 4),
+                     textcoords='offset points', fontsize=8, ha='left', va='bottom')
+    axs[0, 1].annotate('release', xy=(0.0, 19.5), xytext=(-2, 0), textcoords='offset points', fontsize=8,
+                       color='0.3', ha='right', va='top')
+    td = stats['1_detect_s']
+    axs[0, 1].annotate(f'found +{td:.2f}\\,s', xy=(td, 19.5), xytext=(2, 0), textcoords='offset points',
+                       fontsize=8, color='0.3', ha='left', va='top')
     axs[0, 0].set_ylabel(r'Ring tilt (\si{\degree})')
     axs[0, 0].set_ylim(0, 20)
     axs[0, 0].set_yticks([0, 5, 10, 15, 20])
-    axs[1, 0].set_ylabel('Height error (cm)')
+    axs[1, 0].set_ylabel('Ring height error (cm)')
     axs[1, 0].set_ylim(-8, 4)
     axs[1, 0].set_yticks([-8, -4, 0, 4])
-    axs[1, 0].set_xlim(-3, 10)
-    axs[1, 0].set_xticks([0, 5, 10])
-    axs[0, 0].annotate('rig', xy=(9.8, 18.0), fontsize=8, color=ps.PAYLOAD_LINE, ha='right', va='top')
-    axs[0, 0].annotate('twin, two runs', xy=(9.8, 15.6), fontsize=8, color='0.45', ha='right', va='top')
+    axs[1, 0].set_xlim(DETACH_T0, DETACH_T1)
+    axs[1, 0].set_xticks([-2, 0, 2, 4, 6])
+    axs[0, 2].annotate('rig, one run', xy=(7.3, 12.5), fontsize=8, color=gold, ha='right', va='bottom')
+    axs[0, 2].annotate('twin, two runs', xy=(7.3, 10.3), fontsize=8, color='0.45', ha='right', va='bottom')
+    fig.supxlabel('$t$ after the release (s)', fontsize=9)
     fig.align_ylabels()
     stem = os.path.join(OUT, 'F_rig_detach', 'rig_detach')
     ps.save_print(fig, stem)
@@ -347,7 +378,67 @@ def fig_solve():
     return stem, stats
 
 
-FIGS = {'solve': fig_solve, 'departed': fig_departed, 'tip': fig_tip, 'rig_detach': fig_rig_detach}
+LAND_PHASES = [('twin_land_e0_prearm', 'armed on\nthe floor'), ('twin_land_e1_creep', 'creep'), ('twin_land_e2_lift', 'lift'),
+               ('twin_land_e3_parked', 'newcomer\nparked'), ('twin_land_e4_climb', 'climb'), ('twin_land_e5_transit', 'transit'),
+               ('twin_land_e6_descend', 'descent'), ('twin_all_a1', 'hold over\nthe plate'),
+               ('twin_land_e9_welded', 'weld\n+0.5 s'), ('twin_land_e9b_welded2', 'weld\n+2 s'),
+               ('twin_land_e9c_welded4', 'weld\n+4 s'), ('w4_land_e11_stepout', 'freed UAV\nstepping out'),
+               ('w4_land_e12_landing', 'freed UAV\nlanding'), ('w4_land_e13_drop', 'after\na drop'),
+               ('twin_land_e14_twice', 'LAND\ntwice'), ('twin_land_e15_orbit_hold', 'circle,\nhold'),
+               ('twin_land_e16_r8a0', 'carry,\nnewcomer idle')]
+LAND_FIRST_RUN = 1413          # the re-fly on f330bd2 (9 Oct evening)
+
+
+def land_runs(cfg):
+    out = []
+    for d in sorted(glob.glob(os.path.join(REPO, 'results', '*', f'R*_sim_gz_{cfg}'))):
+        rid = os.path.basename(d).split('_')[0]
+        if int(rid[1:]) >= LAND_FIRST_RUN and os.path.exists(os.path.join(d, 'logs', 'run.csv')):
+            out.append(rid)
+    return out
+
+
+def fig_land_phases():
+    sys.path.insert(0, os.path.join(REPO, 'tools'))
+    import land_metrics as lm
+    ps.thesis()
+    fig, axs = plt.subplots(2, 1, figsize=ps.size('full', height=3.2), sharex=True,
+                            gridspec_kw=dict(height_ratios=[1.3, 1.0]))
+    ax, axt = axs
+    stats = {}
+    for x, (cfg, name) in enumerate(LAND_PHASES):
+        for k, rid in enumerate(land_runs(cfg)[:2]):
+            m = lm.analyse(rid)
+            tilt = max(v['tilt_max'] for v in m['drones'].values())
+            ok = not m['abort'] and not m['armed_at_end'] and tilt <= 30.0
+            xx = x + (-0.12 if k == 0 else 0.12)
+            col = '0.25' if ok else ps.drone_colour(3)
+            ax.plot(xx, min(tilt, 95.0), 'o' if ok else 'X', color=col, ms=4 if ok else 6, zorder=3)
+            disarms = [v for v in m['drones'].values()]
+            if m['landed_t'] is not None and m['land_t'] is not None:
+                axt.plot(xx, m['landed_t'] - m['land_t'], 'o', color=col, ms=4, zorder=3)
+            stats[rid] = dict(cfg=cfg, tilt=tilt, ok=ok, land_to_landed=m.get('land_to_landed_s'), abort=m['abort'])
+    ax.axhline(30.0, color='0.3', lw=0.8, ls='--')
+    ax.annotate('30$^\\circ$', xy=(len(LAND_PHASES) - 0.5, 30.0), xytext=(0, 2), textcoords='offset points',
+                fontsize=8, color='0.3', ha='right', va='bottom')
+    ax.set_ylabel(r'Worst UAV tilt (\si{\degree})')
+    ax.set_ylim(0, 100)
+    ax.set_yticks([0, 30, 60, 90])
+    axt.set_ylabel('LAND to landed (s)')
+    axt.set_ylim(0, 20)
+    axt.set_yticks([0, 10, 20])
+    axt.set_xticks(range(len(LAND_PHASES)))
+    axt.set_xticklabels([n for _, n in LAND_PHASES], fontsize=7, rotation=0)
+    axt.set_xlim(-0.6, len(LAND_PHASES) - 0.4)
+    ps.panel_label(ax, 'a')
+    ps.panel_label(axt, 'b')
+    fig.align_ylabels()
+    stem = os.path.join(OUT, 'F_land_phases', 'land_phases')
+    ps.save_print(fig, stem)
+    return stem, stats
+
+
+FIGS = {'land': fig_land_phases, 'solve': fig_solve, 'departed': fig_departed, 'tip': fig_tip, 'rig_detach': fig_rig_detach}
 
 if __name__ == '__main__':
     names = sys.argv[1:] or list(FIGS)
