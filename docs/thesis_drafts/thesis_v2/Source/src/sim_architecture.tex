@@ -1,0 +1,118 @@
+% sim_architecture.tex -- Results: trajectory-based planner against the dissipative network
+% (draft 4 Oct 2026). Sources: docs/design/velocity_loop.md sections 1, 8-11 (Part A study, Aug 2026,
+% early 0.4 kg payload, n=3 circle r 0.5 at 0.6 m/s, medians over 5 and 3 runs, R0054-R0077);
+% CURRENT_STATE 4.4 (INDI table: R0234, R0244, R0247, R0255, R0257), 6 (negatives).
+
+\subsection{Trajectory-based planner against the dissipative network}
+\label{sec:sim_architecture}
+
+The two approaches are compared on the same plant and the same trackers, in carrying, detach and
+attach. This addresses RQ2.
+
+\paragraph{Where the network's tracking error comes from.}
+\redo{the network flying a circle with the MPC tracker (three UAVs, radius 0.5\,m): the payload's radius ratio and lag, split by stage (desired path to the network's references, references to UAVs, UAVs to payload).}
+% --- original text, flown before the rig twin; kept to refill this place:
+% \paragraph{Where the network's tracking error comes from.} With the network flying a circle (three
+% UAVs, radius 0.5\,m at 0.6\,m/s, early payload), the payload traced a circle 18\,\% too small and
+% 0.68\,s late. Splitting the chain into stages located the error. From the desired path to the
+% centroid of the network's references the radius ratio was 0.94 with a lag of 0.30\,s. From the
+% references to the UAVs it was 0.87 and 0.54\,s, and from the UAVs to the payload 1.00 and $-0.12$\,s.
+% The largest loss was in the tracker: a stiff position MPC with a 2\,s horizon, a stage that the
+% architecture of \cite{quan2025swarm} does not have, since its robots take velocity commands.
+
+\paragraph{Velocity tracking.}
+\redo{the tracking architecture under the network on the same circle, medians over repeats: MPC tracker, velocity loop, velocity loop with the common-mode trim (radius ratio, phase lag, payload RMSE, payload height, tilt after the sweep); and an integrator in each UAV's velocity loop.}
+% --- original text, flown before the rig twin; kept to refill this place:
+% \paragraph{Velocity tracking.} The velocity loop of Section~\ref{sec:dissipative} removes that
+% stage. Table~\ref{tab:arch} shows the effect. The radius ratio went from 0.82 to 1.00, the lag fell
+% by a quarter, and the payload error over the sweep fell from 0.27 to 0.22\,m. The cost was payload
+% tilt after the manoeuvre, 5.4$^\circ$ against 1.4$^\circ$. An integrator in each UAV's velocity loop
+% tilted the payload to 60$^\circ$, because the UAVs integrate different errors and the differences
+% become a moment. The common-mode trim, one integrator for the whole team, brought the payload to its
+% target height without changing the tracking.
+%
+% \begin{table}[h]
+% \centering
+% \caption{Tracking architecture with the dissipative network, circle of radius 0.5\,m at 0.6\,m/s,
+% three UAVs, early payload (median over 3--5 runs).}
+% \label{tab:arch}
+% \begin{tabularx}{\textwidth}{Xccc}
+% \toprule
+%  & MPC tracker & Velocity loop & + common-mode trim \\
+% \midrule
+% payload radius ratio & 0.816 & 1.001 & 1.001 \\
+% payload phase lag (s) & 0.676 & 0.514 & 0.514 \\
+% payload RMSE over the sweep (m) & 0.272 & 0.215 & 0.215 \\
+% payload height (m), target 0.60 & 0.498 & 0.498 & 0.600 \\
+% payload tilt after the sweep & 1.4$^\circ$ & 5.4$^\circ$ & 5.4$^\circ$ \\
+% \bottomrule
+% \end{tabularx}
+% \end{table}
+
+\paragraph{Reconfiguration.}
+\redo{no flights of its own: the trajectory-based planner against the network on a detach and on an attach, restated from the comparisons of Sections~\ref{sec:sim_detach} and~\ref{sec:sim_attach} once those are re-flown.}
+% --- original text, flown before the rig twin; kept to refill this place:
+% \paragraph{Reconfiguration.} In both reconfiguration directions the trajectory-based planner did
+% better. On a detach, the OCP resize held the payload level where the network hand-off left it tilted
+% by 26--48$^\circ$ (Section~\ref{sec:sim_detach}), and on the 0.86\,kg ring the network aborted at
+% 53--61$^\circ$. On an attach, the network capsized the 0.86\,kg ring within about 8\,s of the weld
+% while the OCP resize held it at about 10$^\circ$ (Section~\ref{sec:sim_attach}).
+
+\paragraph{Stiff trackers and slack rods.}
+\redo{the measured-force throttle on the network attach during a circle: model-based (MPC), measured force at gain 1, at gain 0.5, and at gain 0.5 with an anti-swing term (tilt 4--10\,s after the weld, circle tilt, outcome).}
+% --- original text, flown before the rig twin; kept to refill this place:
+% \paragraph{Stiff trackers and slack rods.} A measured-force throttle (the thrust command corrected by
+% the measured acceleration, after the incremental nonlinear dynamic inversion \cite{smeur2016indi} used by
+% \cite{tudelft}) made each
+% UAV exact at its own position. On the network attach it was worse, not better
+% (Table~\ref{tab:indi}). At full gain the payload tilt grew at about 1\,Hz until the flight aborted.
+% A UAV that holds its position exactly turns the payload into a load hanging from fixed points on
+% rods whose lengths the network only approximates. Rods then go slack, and a payload on
+% intermittently slack rods swings. The compliant MPC tracker kept the rods taut by sagging into the
+% load. Half gain with an anti-swing term was the best compromise, and the throttle was removed.
+%
+% \begin{table}[h]
+% \centering
+% \caption{Measured-force throttle on the network attach during a circle (0.6\,kg ring, Gazebo).}
+% \label{tab:indi}
+% \small
+% \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xcc>{\raggedright\arraybackslash}X}
+% \toprule
+% Throttle & Tilt 4--10\,s after weld & Circle tilt, mean / max & Outcome \\
+% \midrule
+% Model-based (MPC) & 28.8$^\circ$ & 3.7 / 9.4$^\circ$ & completes \\
+% Measured force, gain 1 & 7.1$^\circ$ & -- & 1\,Hz tilt growth, abort \\
+% Measured force, gain 0.5 & 17.4$^\circ$ & 8.5 / 16$^\circ$ & completes \\
+% Gain 0.5 + anti-swing & 18.2$^\circ$ & 5.7 / 11.1$^\circ$ & completes \\
+% \bottomrule
+% \end{tabularx}
+% \end{table}
+
+\paragraph{Closing the loop on the payload's pose.}
+\redo{the network variants that use the payload's measured state: tensions solved at the measured attitude, a horizontal leash to the measured position, the cone tilted onto the effective gravity, and an admittance on the measured rod tension, each against the open-loop network.}
+% --- original text, flown before the rig twin; kept to refill this place:
+% \paragraph{Closing the loop on the payload's pose.} Several variants tried to give the network
+% feedback from the payload's measured state, and each made it worse:
+% \begin{itemize}
+%     \item solving the tensions at the payload's measured attitude raised the weld transient to
+%     68$^\circ$ and aborted both runs;
+%     \item a horizontal leash towards the payload's measured position closed a position loop, after
+%     which the flight aborted and the newcomer never welded;
+%     \item tilting the cone onto the effective gravity gave no radius benefit and contracted the
+%     formation further;
+%     \item an admittance on the measured rod tension was biased by the thrust model and made the
+%     hover worse.
+% \end{itemize}
+% The network is therefore kept open-loop in the payload's pose, apart from the common-mode height
+% trim.
+
+\paragraph{Summary.}
+\redo{no flights of its own: the verdict of this comparison (tracking, detach, attach), rewritten from the re-flown results above.}
+% --- original text, flown before the rig twin; kept to refill this place:
+% \paragraph{Summary.} On this system, with rigid rods, a heavy ring and Betaflight UAVs, the
+% trajectory-based planner was better in tracking, in detach and in attach. The network's strengths in
+% \cite{quan2025swarm}, namely no solver per team size and passive tolerance of a member leaving, did
+% not carry over. Its dissipation acts on virtual nodes rather than on the payload, its geometry
+% cannot use the payload's measured pose without destabilising it, and it relies on a cable feedforward
+% that matches the real rod force, which a tracker without an integrator turns directly into a sag or
+% a tilt. The OCP resize needs one pre-built solver per team size, which for two to four UAVs is cheap.

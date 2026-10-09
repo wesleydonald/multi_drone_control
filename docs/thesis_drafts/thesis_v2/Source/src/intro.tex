@@ -1,0 +1,77 @@
+\section{Introduction}
+
+A drone or Unmanned Aerial Vehicle (UAV), is an aircraft that is operated without an onboard pilot, controlled either autonomously or through remote control. A quadcopter is a type of UAV with four horizontal rotors and is naturally underactuated, having four control inputs but six degrees of freedom \cite{kotaruDifferentialflatnessControlQuadrotors2018}. Quadcopters have experienced significant growth in popularity since the development of low-cost microcontrollers and sensors, transitioning from hobbyist and videography uses to a variety of applications \cite{kardaszDronesPossibilitiesTheir2016}. They are agile, able to perform vertical takeoff and landing, and have the capacity to operate in confined or GPS-denied environments. This makes them attractive across a range of commercial applications, including package delivery, search and rescue, construction, and agriculture \cite{olleroPresentFutureAerial2022}. In many of these contexts, the ability to carry a payload is essential, for example, to deliver a package, transport construction materials, or recover an object in a search and rescue mission \cite{thusooQUADROTORSPRESENTERA2021, choiOverviewDroneApplications2023}. Consequently, the problem of UAV payload transport has received significant research attention over the past two decades. \\
+
+Despite these advantages, quadcopters have notable limitations. Their thrust-to-weight ratio constrains the maximum payload they can carry, and a suspended load introduces pendulum-like swing dynamics that can destabilize the vehicle and consume significant control effort to reject \cite{geronelDynamicResponsesDue2023}. These limitations have motivated research into cooperative multi-agent payload transport, where multiple quadcopters jointly lift a single load \cite{Carney_2022}. This approach offers several advantages over single-agent systems: it increases the total liftable payload mass, reduces oscillation by constraining the load through multiple attachment points, can enable full six-degree-of-freedom control of the payload pose, and avoids the cost and complexity of constructing a single large-scale vehicle \cite{tudelft, mohammadiDecentralizedMotionControl2018}. \\
+
+A common method to attach the payload to the quadcopters is through flexible cables. Compared to rigid attachments, cables are mechanically simpler and safer in the event of a collision. However, they introduce additional challenges as cable tension must remain positive to remain taut and in multi-agent systems, the tension contributed by each agent must be carefully allocated to avoid overloading any single vehicle. Formation constraints and inter-agent collision avoidance further complicate the control problem \cite{kotaruDynamicsControlQuadrotor2017}. \\
+
+This field has been explored extensively, with a large body of work addressing trajectory tracking, formation control, tension allocation, and disturbance rejection for fixed-team systems \cite{wangRobustCooperativeTransportation2024, gimenezMultiobjectiveControlCooperative2018, wahbaKinodynamicMotionPlanning2024}. Most existing work is validated in simulation, with fewer papers demonstrating real-world experimental results and very few conducting outdoor experiments, despite the intended applications being predominantly outdoors \cite{estevezReviewAerialTransportation2024}. \\
+
+While robustness to disturbances such as wind and payload uncertainty is frequently addressed, less attention has been given to changes in team composition during a mission. Several works consider reducing the number of active agents, such as \cite{tensionbased, quan2025swarm}, however to the authors' knowledge, no existing work has demonstrated the dynamic addition of an agent to an active system in either simulation or real-world experiments. This problem presents several technical challenges as the joining agent must accurately localize the payload attachment point and load distribution must be reallocated smoothly across the team. Additionally, the existing system must remain stable during the joining transient. \\
+
+The ability to dynamically add agents to an active transport mission would offer significant practical benefits. In real-world deployments, a quadcopter may need to leave the formation due to low battery, mechanical failure, or mission reassignment, reducing the team's total lift capacity and potentially compromising the mission \cite{farrasFaultTolerantControlMultiQuadcopter2024}. If a replacement agent could join the system mid-flight, the mission could continue uninterrupted without requiring the entire team to land and restart. Dynamic addition could also enable more flexible mission profiles, for example, a lighter team could carry the payload through a narrow passage or constrained environment, with additional agents joining once the passage is cleared to increase stability and carrying capacity for the remainder of the mission, with passage navigation being explored in several works \cite{tudelft, tensionbased}. \\
+
+Furthermore, starting a mission with a minimal number of agents and adding more as needed reduces unnecessary energy consumption during phases where full team capacity is not required. Taken together, these scenarios highlight that dynamic agent addition is both a robustness feature and a capability that could meaningfully expand the operational envelope of cooperative aerial transport systems. These scenarios motivate the need for a dynamic agent addition capability, where the system can reconfigure during an ongoing transport mission without full mission interruption. This process is summarized in Figure~\ref{fig:mission_profile}. \\
+
+\tikzset{
+  block/.style={
+    rectangle, rounded corners=4pt,
+    minimum width=5.6cm, minimum height=0.85cm,
+    draw, thick, align=center,
+    font=\small
+  },
+  transport/.style={block, fill=blue!6, draw=blue!40},
+  event/.style={block, fill=orange!12, draw=orange!60},
+  docking/.style={block, fill=purple!8, draw=purple!45},
+  arrow/.style={-Stealth, thick},
+  phase/.style={font=\footnotesize\color{gray}}
+}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=0.6cm and 1.2cm]
+
+\node (p1) [transport]
+{\textbf{Initial transport}\\[-2pt]\scriptsize $N$ agents follow planned trajectory};
+
+\node (ev) [event, below=of p1]
+{\textbf{Agent departure}\\[-2pt]\scriptsize failure / low battery};
+
+\node (p2) [transport, below=of ev]
+{\textbf{Reduced team}\\[-2pt]\scriptsize $N\!-\!1$ agents maintain stability};
+
+\node[phase, left=0.4cm of p1] {Phase 1};
+\node[phase, left=0.4cm of ev] {Phase 2};
+\node[phase, left=0.4cm of p2] {Phase 3};
+
+\draw[arrow] (p1) -- (ev);
+\draw[arrow] (ev) -- (p2);
+
+\node (p3) [docking, right=1.2cm of p1]
+{\textbf{Replacement approach}\\[-2pt]\scriptsize localises docking point};
+
+\node (p4) [docking, below=of p3]
+{\textbf{Attachment}\\[-2pt]\scriptsize guided electromagnetic docking};
+
+\node (p5) [transport, below=of p4]
+{\textbf{Full team resumes}\\[-2pt]\scriptsize load redistributed to $N$ agents};
+
+\node[phase, right=0.4cm of p3] {Phase 4};
+\node[phase, right=0.4cm of p4] {Phase 5};
+\node[phase, right=0.4cm of p5] {Phase 6};
+
+\draw[arrow] (p3) -- (p4);
+\draw[arrow] (p4) -- (p5);
+
+\draw[arrow, thick] (p2.east) -- ++(0.8,0) |- (p3.west);
+
+\end{tikzpicture}
+
+\caption{Mission profile for dynamic agent replacement during transport.}
+\label{fig:mission_profile}
+\end{figure}
+
+This thesis focuses specifically on the multi-agent control problem associated with maintaining stable payload transport following mid-mission agent addition, corresponding to Phases 2, 4, and 6 in Figure~\ref{fig:mission_profile}. A complementary component of the overall system, the physical docking and attachment mechanism during Phases 4 and 5 is being developed by a collaborating student. \\
+
+Accordingly, the present contribution is focused on post-attachment system integration, including redistribution of cable forces, re-stabilization of the formation, and recovery of coordinated transport performance. Validation is to be conducted in simulation and experimental settings.

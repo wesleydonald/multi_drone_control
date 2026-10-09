@@ -1,0 +1,297 @@
+\subsection{Centralised Control}
+
+Multi-UAV control architectures are typically classified according to their information structure and decision-making hierarchy, which directly affects scalability, robustness to communication failure, and computational burden \cite{nathanReviewAutonomousMultiagent2011}. Centralised architectures rely on a single coordinator that has global state information and computes all control actions. However, distributed and decentralized approaches allocate computation across agents, relying only on local communication or sensing. These differences are important in cable-suspended payload systems, where coupling through the payload induces strong inter-agent dependencies that must be either explicitly coordinated or implicitly handled through local interactions \cite{brambillaSwarmRoboticsReview2013}. Figure~\ref{fig:arch_comparison} highlights the difference in information flow and coordination structure between centralised and distributed implementations.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    node distance = 0.55cm and 0.6cm,
+    box/.style     = {rectangle, rounded corners=4pt, draw, thick,
+                      minimum width=2.0cm, minimum height=0.7cm,
+                      font=\small, text centered},
+    central/.style = {box, fill=blue!12, draw=blue!50!black},
+    uav/.style     = {box, fill=orange!15, draw=orange!60!black},
+    payload/.style = {box, fill=gray!18, draw=gray!60, minimum width=2.2cm},
+    arrow/.style   = {-Stealth, thick},
+    dasharrow/.style = {-Stealth, thick, dashed, gray},
+    label/.style   = {font=\footnotesize\itshape}
+]
+
+%% LEFT PANEL — CENTRALISED
+\begin{scope}
+\node[central, minimum width=2.8cm, minimum height=1.0cm]
+    (coord) {\textbf{Central Node}};
+
+\node[uav, below left=0.5cm and -0.3cm of coord]  (u1l) {UAV 1};
+\node[uav, below=0.5cm of coord]                  (u2l) {UAV 2};
+\node[uav, below right=0.5cm and -0.3cm of coord] (u3l) {UAV 3};
+\node[payload, below=0.9cm of u2l] (pl) {Payload};
+
+\draw[<->, thick, purple!70] (coord.south west) -- ++(-0.3,0) -- (u1l.north);
+\draw[<->, thick, purple!70] (coord.south)      -- (u2l.north);
+\draw[<->, thick, purple!70] (coord.south east) -- ++(0.3,0) -- (u3l.north);
+
+\draw[thick, gray!70] (u1l.south) -- (pl.north west);
+\draw[thick, gray!70] (u2l.south) -- (pl.north);
+\draw[thick, gray!70] (u3l.south) -- (pl.north east);
+
+\node[above=0.25cm of coord, font=\normalsize\bfseries] (ltitle) {Centralised};
+
+\begin{scope}[on background layer]
+  \node[draw=blue!30, fill=blue!4, rounded corners=6pt, inner sep=8pt,
+        fit=(ltitle)(u1l)(u3l)(pl)] {};
+\end{scope}
+\end{scope}
+
+%% RIGHT PANEL — DISTRIBUTED
+\begin{scope}[xshift=7.5cm]
+\node[uav] (u2r) {UAV 2};
+\node[uav, below left=1.1cm and 0cm of u2r]  (u1r) {UAV 1};
+\node[uav, below right=1.1cm and 0cm of u2r] (u3r) {UAV 3};
+\node[payload, below=2.2cm of u2r] (pr) {Payload};
+
+\draw[<->] (u1r) -- (u2r);
+\draw[<->] (u2r) -- (u3r);
+\draw[<->] (u1r) -- (u3r);
+
+\draw[thick, gray!70] (u1r.south) -- (pr.north west);
+\draw[thick, gray!70] (u2r.south) -- (pr.north);
+\draw[thick, gray!70] (u3r.south) -- (pr.north east);
+
+\draw[arrow, gray!50, thin] (pr.north west) -- (u1r.south);
+\draw[arrow, gray!50, thin] (pr.north)      -- (u2r.south);
+\draw[arrow, gray!50, thin] (pr.north east) -- (u3r.south);
+
+\node[above=0.25cm of u2r, font=\normalsize\bfseries] (rtitle)
+    {Distributed / Decentralised};
+
+\begin{scope}[on background layer]
+  \node[draw=orange!40, fill=orange!4, rounded corners=6pt, inner sep=10pt,
+        fit=(rtitle)(u1r)(u2r)(u3r)(pr)] {};
+\end{scope}
+\end{scope}
+
+\end{tikzpicture}
+\caption{Centralised versus distributed/decentralised control architectures.}
+\label{fig:arch_comparison}
+\end{figure}
+
+\newpage
+
+In a centralised architecture, a single node receives state information from all agents and computes commands for the entire team. This simplifies the enforcement of global constraints such as cable tension limits, inter-agent collision avoidance, and force allocation, and is a natural fit when a single computer commands all drones, as is the case in this work. The primary drawbacks are that computational cost tends to grow with the number of UAVs, and the central node means a single point of failure for the system \cite{dimakosStudyCentralisedDecentralised2021}.
+
+\subsubsection{Trajectory-Based Planning with Receding Horizon}
+
+Several centralised methods separate the control problem into a high-level trajectory planner and a low-level tracker. Sun et al.\ \cite{tudelft} adopt this structure, solving a centralised receding-horizon optimal control problem online to generate trajectories for each UAV and the payload over the next timestep, accounting for the full UAV-payload coupling. This whole-body kinodynamic planning framework demonstrates agility at least eight times greater than prior force-based approaches and successful flight through narrow passages. A limitation of this approach is that the CPU time grows exponentially with the number of quadrotors, however the authors believe this approach can be upscaled with additional optimizations. \\
+
+The work in \cite{wahbaKinodynamicMotionPlanning2024} takes a hierarchical offline approach, using a sampling-based geometric planner to first find a feasible path through a cluttered environment, followed by constrained nonlinear trajectory optimisation enforcing full system dynamics, actuator limits, and collision avoidance. Formation changes are permitted so UAVs can reconfigure to pass through narrow gaps while maintaining payload stability, though the focus is on offline motion planning rather than real-time control.
+
+\subsubsection{Nonlinear Model Predictive Control}
+
+Nonlinear model predictive control (NMPC) solves a receding-horizon optimisation over the full nonlinear system dynamics at each timestep and represents the most constraint-rich centralised approach in the literature. Sun et al.\ \cite{sunNonlinearMPCFullPose2023} extend a centralised NMPC formulation to up to ten UAVs in simulation with solve times under 100\,ms, though the approach is untested on hardware beyond simulation. The primary limitation of centralised NMPC is that the solve time grows with the number of agents, as each additional UAV expands the state and decision variable dimensions of the optimisation problem, making real-time implementation increasingly difficult at scale. \\
+
+A related approach is presented in \cite{liNonlinearModelPredictive2023}, where NMPC is used to manipulate a rigid-body payload with full six-degree-of-freedom pose control. In contrast to full-system formulations, the method exploits mechanical redundancy by parameterizing the optimisation using only payload states on $\mathrm{SE}(3)$, rather than explicitly including all UAV states. This reduced-order representation lowers computational complexity while still capturing the essential coupled dynamics. The redundancy in the system is then leveraged to achieve secondary objectives such as inter-agent separation and obstacle avoidance, while respecting actuator limits and payload constraints. The approach is validated in both simulation and real-world experiments, demonstrating accurate payload tracking with improved computational efficiency relative to full-state NMPC formulations.
+
+\subsubsection{Optimisation-Based Force Allocation}
+
+A complementary method focuses on how to allocate cable tensions across the team given a desired payload wrench, treating allocation as a separable subproblem. The work in \cite{efficient} uses geometric control on $\text{SE}(3)$ to compute the required payload force and torque, then allocates tensions by solving a cascaded sequence of quadratic programs (QPs), yielding roughly quadratic rather than exponential scaling with the number of UAVs. Scalability to approximately ten robots is claimed, though experiments are demonstrated with up to three. The method assumes rigid massless cable rods and taut cables throughout. \\
+
+A similar hierarchical structure is proposed by \cite{vazquez-soquiSQPBasedCableTensionAllocation2026}, where a sequential quadratic programming (SQP) optimizer allocates cable tensions at the lower level by minimizing the sum of squared tensions while penalising cable misalignment. Simulation results with four drones show millisecond-level solve times, though the method has not been validated on hardware.
+
+\subsubsection{Leader-Follower Control}
+
+Leader-follower control assigns one agent or the payload as the leader, with the remaining agents tracking desired offsets. The work in \cite{tensionbased} treats the payload as the leader and each UAV as an independent follower, using the resultant cable tension as a virtual input to determine desired UAV positions and attitudes. A key contribution is explicit agent removal handling, before a UAV releases, the remaining agents reposition to minimize the departure transient, enabling the formation to contract for narrow corridor traversal. However, \cite{quan2025swarm} note that leader-follower approaches place high demands on robot homogeneity, and system performance degrades significantly when the leader fails. \\
+
+A constrained centralised framework is proposed by \cite{9945662} using universal barrier functions to enforce both safety and performance constraints simultaneously, combined with adaptive estimators to handle actuator saturation and inertia uncertainty. This provides guarantees on constraint satisfaction even under model uncertainty, though the approach is validated in simulation only and does not consider dynamic team composition changes.
+
+\subsubsection{Limitations of Centralised Approaches}
+
+Across the centralised literature, three limitations recur consistently. First, computational cost scales with the number of UAVs, ranging from quadratic in the best case \cite{efficient} to exponential in NMPC and trajectory-based formulations \cite{tudelft}, as illustrated in Figure~\ref{fig:cost_scaling}. Second, most centralised methods reviewed assume a fixed team throughout the mission, none explicitly handle a drone joining mid-task, and few address dropout beyond passive tolerance. Third, the central node is a single point of failure. These limitations motivate the distributed and decentralized approaches reviewed next.
+
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.62\textwidth,
+    height=5.5cm,
+    xlabel={Number of UAVs, $N$},
+    ylabel={Computational cost (log scale)},
+    ymode=log,
+    xmin=2, xmax=10,
+    ymin=1, ymax=5000,
+    xtick={2,3,4,5,6,7,8,9,10},
+    ytick={1,10,100,1000},
+    yticklabels={Low,,Medium,,High},
+    legend pos=north west,
+    legend style={font=\small},
+    grid=major,
+    grid style={gray!20},
+    tick label style={font=\small},
+    label style={font=\small},
+]
+% Exponential — NMPC / trajectory-based
+\addplot[thick, blue, mark=none, domain=2:10, samples=50]
+    {exp(0.65*(x-2))};
+\addlegendentry{Trajectory / NMPC \cite{tudelft}}
+
+% Quadratic — QP allocation
+\addplot[thick, red!70!black, dashed, mark=none, domain=2:10, samples=50]
+    {(x-1)^2 * 0.8};
+\addlegendentry{Geometric + QP \cite{efficient}}
+
+% Near-constant — dissipative
+\addplot[thick, orange!80!black, dotted, mark=none, domain=2:10, samples=50]
+    {2.5};
+\addlegendentry{Dissipative \cite{quan2025swarm}}
+
+\end{axis}
+\end{tikzpicture}
+\caption{Qualitative illustration of computational cost scaling with team size.}
+\label{fig:cost_scaling}
+\end{figure}
+
+\subsection{Distributed and Decentralized Control}
+
+Distributed and decentralized architectures avoid a central coordinator. In a decentralized system each UAV operates using only local sensor measurements with no communication to other agents. In a distributed system UAVs share information with neighbors through peer-to-peer communication to achieve a joint objective \cite{nathanReviewAutonomousMultiagent2011}. Both approaches generally offer better fault tolerance and scalability than centralised methods, though coordinating global objectives such as precise force allocation and six degree-of-freedom manipulation becomes more challenging \cite{scattoliniArchitecturesDistributedHierarchical2009}.
+
+\subsubsection{Dissipative Control}
+
+The most notable result for robustness to dynamic agent changes comes from energy-based dissipative control. The work in \cite{quan2025swarm} proposes a fully decentralized dissipative controller inspired by table mechanics. Disturbances from wind, cable perturbations, or a UAV suddenly leaving the system inject excess energy into the payload-swarm system, which the dissipative controller removes by computing damping forces proportional to relative velocity errors. No inter-robot communication is required. The result is that even when a UAV leaves mid-transport, the remaining agents self-organize to maintain the trajectory with minimal payload swing, which is a robustness to agent dropout rarely seen in the experimental literature. The implementation depends on Differential GPS, limiting deployment to GPS-available outdoor environments. \\
+
+The work in \cite{liuVirtualTubeBasedCooperativeTransport2026} extends the dissipative framework to a distributed setting by combining it with a virtual tube navigation concept, defining a corridor around the desired payload trajectory that the formation must remain inside. Cable tensions are allocated using dissipative systems theory, and the formation adapts to avoid obstacles while remaining within the tube. Simulations with up to ten UAVs and outdoor experiments demonstrate payload transport through constrained environments, though real-time tube generation remains future work.
+\newpage
+\subsubsection{Distributed Model Predictive Control}
+
+Several works distribute the MPC problem across agents to reduce the per-agent computational load. The work in \cite{distributedNMPC} assigns each drone a subset of the global optimisation problem, solved locally and coordinated via a peer-to-peer network, with real-world experiments demonstrating centimeter-level position tracking. The authors identify keeping communication complexity independent of team size as a key open problem. \\
+
+Centralised and decentralized linear MPC formulations are compared by \cite{DistributedMPC} in simulation for four quadcopters. Both yield comparable tracking performance, but the decentralized formulation can run at a higher update frequency within the same compute budget. The linearized model improves tractability but decreases the ability for aggressive manoeuvres. \\
+
+The work in \cite{tasoojiEventTriggeredNonlinearModel} reduces communication overhead further by updating the distributed NMPC only when the system deviates significantly from the planned trajectory, with the controller enforcing inter-robot separation and obstacle avoidance. This framework is extended in \cite{tasoojiCooperativeControlMultiQuadrotors}, which integrates global A* path planning with event-triggered NMPC for local control, alongside a decentralized communication architecture. The event-based update method, driven by perception inputs such as dynamic obstacle detection, improves responsiveness while reducing unnecessary computation. Although the architecture suggests improved scalability through reduced communication and computation demands, the ability to accommodate varying team sizes is not explicitly analyzed.
+
+\subsubsection{Sliding Mode Control}
+
+A Distributed Fixed-Time Homogeneous Sliding Mode Control Protocol (DFHSMC) is proposed by \cite{DFHSMC} within a leader-follower structure, augmented with a disturbance observer. The controller minimizes payload swing and demonstrates stability in three drone experiments under windy conditions, though it inherits the fragility of the leader-follower paradigm and does not address dynamic team changes. A three loop control structure is adopted by \cite{kotaruDynamicsControlQuadrotor2017} consisting of attitude control, sliding mode formation control driven by cable load states, and a payload navigation controller. Results are demonstrated in simulation only.
+
+\subsubsection{Adaptive and Vision-Based Distributed Control}
+
+A leaderless distributed nonlinear adaptive controller is proposed in \cite{arabPlanningDistributedControl2021} in which cable forces are modelled as an adaptive term, making the controller independent of payload dynamics. Path planning is handled by RRT*, and the adaptive term converges online. \\
+
+The work in \cite{9376103} removes the dependence on external localization entirely using onboard monocular cameras and IMUs, with a distributed $\text{SE}(3)$ payload state estimator fusing local measurements via peer-to-peer communication. The case where payload mass and cable lengths are both unknown is addressed in \cite{10144367} using cable tension analysis and an admittance model with online parameter estimation.
+
+\subsubsection{Reinforcement Learning Compensation}
+
+A reinforcement learning compensator is explored by \cite{liMultiUAVCooperativeTransportation2021} on top of a baseline dynamic control allocation method to handle actuator saturation and thrust limits. The approach is demonstrated in simulation for a six degree-of-freedom payload and is promising for constraints difficult to model analytically, though training complexity and lack of hardware validation limit its current applicability.  More broadly, multi-agent reinforcement learning (MARL) has emerged as a promising paradigm for cooperative UAV control under uncertainty \cite{ekechiSurveyUAVControl2025}. However, existing approaches remain fragmented across different architectures, learning frameworks, and evaluation methodologies, limiting their ability for real-world deployment.
+
+\subsection{Hybrid Approaches}
+
+Some works combine centralised planning with distributed execution or layer multiple paradigms. A backstepping-based controller is proposed by \cite{wangRobustCooperativeTransportation2024} combined with a force distribution algorithm splitting the problem into a payload position layer and a cable configuration layer, demonstrated in simulation and experiments with varying load conditions. A null-space kinematic formation controller for two UAVs is presented by \cite{gimenezMultiobjectiveControlCooperative2018} prioritizing trajectory tracking, wind rejection, obstacle avoidance, and per-UAV load redistribution simultaneously via null-space projection. Insetting Formation algorithms are used by \cite{zhangIFBasedTrajectoryPlanning2023} to generate collision-free way points with a publicly available ROS implementation.
+
+\subsection{Low-Level Control}
+
+While the focus of this work is the high-level multi-agent controller, the interface between high-level commands and individual UAV actuation is worth noting briefly. Sun et al.\ \cite{tudelft} use an INDI controller on each UAV to convert planned trajectories into motor commands, compensating for uncertainties in quadrotor dynamics and cable-induced forces without requiring an explicit disturbance model. This demonstrates that centralised planning can be paired with robust local execution, where fast, uncertain dynamics are handled onboard while slower coordination is managed centrally. The quadrotors used in this work employ existing MPC-based low-level controllers, and a high-level controller will be developed to interface with these directly, as illustrated in Figure~\ref{fig:control_arch}.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.7cm and 1.0cm,
+    block/.style={
+        rectangle, draw=black!70, thick,
+        fill=blue!15, rounded corners=4pt,
+        minimum width=2.2cm, minimum height=1.0cm,
+        align=center, font=\small
+    },
+    arrow/.style={->, >=stealth, thick},
+    groupbox/.style={
+        rectangle, draw=black!40, fill=black!5,
+        rounded corners=4pt, inner sep=0.5cm
+    }
+]
+
+%% ── NODES ───────────────────────────────────────────────────────────────────
+
+\node[block] (traj) 
+    {Trajectory\\Planner};
+
+\node[block, right=1.7cm of traj] (highlevel) 
+    {High-Level\\Controller};
+
+\node[block, right=1.7cm of highlevel] (lowlevel) 
+    {Low-Level\\Controller};
+
+\node[block, right=1.7cm of lowlevel] (dynamics) 
+    {Multi-Agent\\Dynamics};
+
+%% ── BACKGROUND BOXES ────────────────────────────────────────────────────────
+
+\begin{scope}[on background layer]
+    \node[groupbox, 
+          fit=(highlevel), 
+          label={[font=\footnotesize\bfseries, anchor=north]north:This work}] {};
+    \node[groupbox,
+          fit=(lowlevel),
+          label={[font=\footnotesize\bfseries, anchor=north]north:Existing}] {};
+\end{scope}
+
+%% ── FORWARD ARROWS ──────────────────────────────────────────────────────────
+
+\draw[arrow] (traj) -- (highlevel)
+    node[midway, above, font=\footnotesize] {$\mathbf{p}_r, \mathbf{R}_r$};
+
+\draw[arrow] (highlevel) -- (lowlevel)
+    node[midway, above, font=\footnotesize] {$\mathbf{u}_i$};
+
+\draw[arrow] (lowlevel) -- (dynamics)
+    node[midway, above, font=\footnotesize] {$\boldsymbol{\tau}_i,\, \omega_m$};
+
+%% ── FEEDBACK ARROWS ─────────────────────────────────────────────────────────
+
+% Full state feedback from dynamics
+\draw[arrow] (dynamics.south) -- ++(0,-0.9) -| (lowlevel.south)
+    node[near start, below, font=\footnotesize] {UAV states};
+
+\draw[arrow] (dynamics.south) -- ++(0,-0.9) -| (highlevel.south)
+    node[midway, below, font=\footnotesize] {Payload \& Cable states};
+
+\end{tikzpicture}
+\caption{Control architecture overview (adapted from \cite{mahonyMultirotorAerialVehicles2012}).}
+\label{fig:control_arch}
+\end{figure}
+
+\subsection{Comparison and Positioning}
+
+Table~\ref{tab:control_comparison} summarises the key papers reviewed across six categories: architecture, control method, real-world validation, disturbance handling, dynamic join/leave capability, and approximate computational cost.
+
+\begin{table}[h]
+\centering
+\caption{Comparison of multi-UAV cooperative payload transport controllers.}
+\label{tab:control_comparison}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lllcccc}
+\hline
+\textbf{Paper} & \textbf{Architecture} & \textbf{Method} & 
+\textbf{Real-World} & \textbf{Disturbance} & \textbf{Join/Leave} & 
+\textbf{Comp. Cost} \\
+\hline
+\cite{vazquez-soquiSQPBasedCableTensionAllocation2026} & Centralised & SQP Allocation  & --         & Low    & --              & Low \\
+\cite{tensionbased}                                    & Centralised & Leader-Follower & \checkmark & Low    & Partial (leave) & Low \\
+\cite{tudelft}                                         & Centralised & Trajectory OCP  & \checkmark & High   & --              & High \\
+\cite{sunNonlinearMPCFullPose2023}                     & Centralised & NMPC            & --         & Medium & --              & High \\
+\cite{liNonlinearModelPredictive2023}                  & Centralised & NMPC            & \checkmark & Medium & --              & Medium \\
+\cite{efficient}                                       & Centralised & Geometric + QP  & \checkmark & Medium & --              & Medium \\
+\cite{liuVirtualTubeBasedCooperativeTransport2026}     & Distributed & Dissipative     & \checkmark & High   & --              & Low \\
+\cite{distributedNMPC}                                 & Distributed & NMPC            & \checkmark & Medium & --              & Medium \\
+\cite{tasoojiEventTriggeredNonlinearModel}             & Distributed & Event NMPC      & --         & Medium & --              & Medium \\
+\cite{tasoojiCooperativeControlMultiQuadrotors}        & Distributed & Event NMPC      & --         & Medium & Partial (join)  & Medium \\
+\cite{DFHSMC}                                          & Distributed & Sliding Mode    & \checkmark & Medium & --              & Low \\
+\cite{liMultiUAVCooperativeTransportation2021}         & Distributed & Alloc. + RL     & --         & Medium & --              & Medium \\
+\cite{quan2025swarm}                                   & Decentralized & Dissipative   & \checkmark & High   & Partial (leave) & Low \\
+\cite{DistributedMPC}                                  & Both        & Linear MPC      & --         & Low    & --              & Low \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+Two clear tradeoffs emerge from this review. NMPC and trajectory-based methods offer the most precise tracking and constraint handling, but computational cost grows with team size and real-time hardware implementation is challenging. Dissipative methods are computationally cheap, inherently stable by energy arguments, and naturally absorb disturbances, but offer less precise trajectory control and cannot easily enforce hard constraints such as tension bounds or collision avoidance on their own. Dynamic agent changes remain an open problem across the literature. \cite{quan2025swarm} is the only researched work to demonstrate experimental robustness to mid-task dropout, and few works work to explicitly design a communication protocol for scalable team addition. No work combines both join and leave handling with a principled force allocation strategy. \\
+
+The controller proposed in this thesis adopts a centralised architecture, justified by the single-computer laboratory setup, which simplifies global coordination tasks such as force allocation and join/leave management. Two candidate control laws are considered, a dissipative approach drawing on \cite{quan2025swarm} and \cite{liuVirtualTubeBasedCooperativeTransport2026}, which provides robustness to disturbances and agent changes without the computational burden of real-time optimisation, and a trajectory-based OCP approach following \cite{tudelft}, which offers precise constraint enforcement at higher computational cost. Tension allocation ideas from \cite{efficient} and \cite{vazquez-soquiSQPBasedCableTensionAllocation2026} inform how the centralised node distributes forces when team composition changes under either approach. Simulation and experimental validation will determine which direction best balances performance and robustness for the dynamic join/leave problem.

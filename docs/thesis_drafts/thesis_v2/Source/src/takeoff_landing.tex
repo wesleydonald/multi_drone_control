@@ -1,0 +1,92 @@
+% takeoff_landing.tex -- Methodology: takeoff from the floor, lift and landing (draft 4 Oct 2026).
+% Code: mpc_planner/creep_controller.py (arc creep, hand-over latch), planner_node.py (pretension,
+% breakaway, ff_cap_release_s, lift ramp, LAND, TouchdownDetector), bringup/config/*.yaml.
+% Evidence: 23 Sep rig non-lift (start_taut), 30 Sep rig review, R0817/R0818, R0834-R0839 (B2),
+% R0807-R0816 (hand-over angle in the twin), RIG-1001-* (hand-over and rods on the rig).
+
+\subsection{Takeoff, lift and landing}
+\label{sec:takeoff}
+
+The planner's formulation assumes taut rods, but every flight starts and ends with the payload on
+the floor and the rods slack or flat. This section describes how the flight gets from the floor into
+the regime the planner models, and back.
+
+\paragraph{Why the planner cannot start from the floor.} With the payload resting and the rods
+lying flat, the UAVs sit about 0.7\,m from the payload's centre. The planner's references put them
+on the 45$^\circ$ cone around the payload, 18--22\,cm further in. Started from rest, the planner
+pulled the UAVs inwards over the payload instead of lifting it. This was the cause of the first
+failed lifts on the rig.
+
+\paragraph{Rod sweep (creep).} On TAKEOFF each UAV is anchored where it rests. Its rod is swept
+about its own attachment point on the payload, at a constant rate, from the elevation it was
+measured at to the working elevation of 45$^\circ$. The UAV's reference is the far end of the rod
+on that arc, so the rod stays straight and the UAV never moves over the payload. The planner takes
+over (the hand-over) once every rod has been at least 37$^\circ$ for 1\,s, or 3\,s after the sweep
+ends. The hand-over is refused below 30$^\circ$, because from shallower rods the lift needs two to
+three times the tension, mostly sideways. In practice the UAVs lead the arc by 11--15$^\circ$ in the
+first second after they leave the floor, so the planner takes over at 51--56$^\circ$ in both the
+Gazebo twin and on the rig.
+
+\paragraph{Rod lengths.} At the hand-over the planner measures each rod from motion capture, as
+the distance from the UAV's pivot to its attachment point, and uses the measured lengths in its
+model and in its tautness gate. A measurement is accepted if each rod is within 25\,\% of the typed
+length and the rods agree within 8\,cm; otherwise the typed length is kept and the reason is logged.
+Without this, a rod shorter than typed reads as partly slack to the gate
+(Section~\ref{sec:sim_robustness}).
+% --- original text, flown before the rig twin; kept to refill this place:
+% Without this, a rod 4\,cm shorter than typed reads as slack to the gate and the fleet flies only
+% part of the cable feedforward (Section~\ref{sec:sim_robustness}).
+
+\paragraph{Pretension.} The rods are then loaded before the payload leaves the floor. Every UAV's
+share of the cable feedforward rises together from zero to its planned value over 3\,s, while the
+height target stays at the resting height. A step in the planned pull here launched the payload and
+released two magnets on the rig, and UAVs pulling one after another tilted it.
+
+\paragraph{Breakaway.} When the payload rises 1\,cm, or its vertical speed exceeds 0.03\,m/s, it has
+broken free of the floor. The fraction of the planned pull reached at that moment is frozen as a
+cap on the feedforward. Continuing the ramp to full pull with the payload already in the air ran
+it upwards at 0.38\,m/s on the rig. Once the lift starts, the cap is released back to full pull over
+2\,s. Holding it for the whole flight, as in the first rig flights, leaves the trackers believing the
+rods pull less than they do, and the payload settles low (Section~\ref{sec:rig_results}).
+
+\paragraph{Lift.} The height target then ramps from the resting height to the target height at
+0.1\,m/s, easing in over the first 1.2\,s and out over the
+last 8\,cm. The trajectory starts when the ramp completes.
+
+Figure~\ref{fig:flight} shows one whole flight of the rig twin.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{Images/flight.pdf}
+\caption[One flight from the floor]{One flight from the floor, Gazebo rig twin, three UAVs (their traces
+overlap). (a) Heights of the ring (gold; dashed: its planned height) and of the UAVs (grey). (b)
+Elevation of each rod above the horizontal; dashed: the planned 45$^\circ$; dotted: the 52$^\circ$
+the rods hold. TAKEOFF and LAND are the operator's commands. In the creep the UAVs climb and swing
+their rods up from the floor without lifting the ring; in the pretension they hold their height
+while the cable feedforward eases in and the rods settle; the ring then leaves the floor and follows
+its lift ramp to 1.0\,m. The rods hold 52$^\circ$ rather than the planned 45$^\circ$, the model error
+of the twin's rods (Section~\ref{sec:sim_results}). On LAND the ring and the UAVs descend together
+until the ring is on the floor; the UAVs then unwind along their rods, and one touches down 0.7\,s
+after the others.}
+\label{fig:flight}
+\end{figure}
+
+\paragraph{Landing.} On LAND the planner lowers the payload's height target at 0.2\,m/s, with the
+formation shape unchanged, until the payload rests on the floor. A rigid rod then constrains its UAV:
+a UAV descending straight down from its hover point is pushed outward as its rod lengthens
+horizontally, by 16--20\,cm in the rig twin, and this tipped UAVs over in a few landings. Three
+measures remove this.
+\begin{itemize}
+    \item \textbf{Unwind.} Each UAV's reference moves out along its rod's circle about the grounded
+    attachment point, at the landing speed, down to level, and then straight down. Below 0.25\,m the
+    horizontal reference follows the UAV.
+    \item \textbf{Feedforward ramp.} The planner blends each UAV's thrust and cable feedforward to plain
+    hover over 1\,s. The trackers fly that blend, instead of dropping the cable term in one step at
+    touchdown, which left the attitude oscillating while the rods still acted.
+    \item \textbf{Ground idle.} A UAV that has flown and is back within 3\,cm of its resting height, with
+    the payload down and its reference at the floor, switches to armed idle until the fleet disarms.
+    Otherwise a UAV that lands first keeps tracking a reference below the floor and rocks on its feet.
+\end{itemize}
+Touchdown is detected when the UAVs stop following the descending reference for 1\,s, after they
+have descended at least 5\,cm. The planner then reports the fleet landed and the fleet manager disarms
+it.

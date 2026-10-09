@@ -1,0 +1,86 @@
+\documentclass[12pt]{article}
+\setlength{\parindent}{0pt}
+\usepackage[a4paper, margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{pgfgantt}
+\usepackage{booktabs}
+\usepackage{mathtools}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{tabularx}
+\usepackage{ulem} 
+\usepackage{titlesec}
+\usepackage{siunitx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{nomencl}
+\definecolor{darkblue}{rgb}{0.0,0.0,0.55}
+% \redo{...}: marks a result that was flown before the rig twin and has to be flown again on it.
+% The old text stays under each box as comments. List of what to fly: docs/redo_on_twin.md (code repository).
+\definecolor{redoframe}{rgb}{0.80,0.40,0.00}
+\definecolor{redoback}{rgb}{1.00,0.95,0.85}
+\makeatletter
+\newcommand{\redo}[1]{\if@noskipsec\leavevmode\fi\par\smallskip\noindent
+  \fcolorbox{redoframe}{redoback}{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\small\raggedright
+  \textbf{To re-fly on the rig twin:} #1}}\par\smallskip}
+\makeatother
+\usepackage{amsfonts}
+\usepackage{tikz}
+\usetikzlibrary{angles, quotes, decorations.pathreplacing, shapes.geometric, arrows.meta, positioning, backgrounds, fit}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage[backend=biber,style=ieee]{biblatex}
+\addbibresource{references.bib}
+\addbibresource{references_extra.bib}
+\usepackage{url}
+\usepackage{microtype}
+\setlength{\emergencystretch}{5em}
+\tolerance=2000
+\hbadness=2000
+\usepackage[colorlinks=true,
+            linkcolor=darkblue,
+            urlcolor=darkblue,
+            citecolor=blue,
+            pdfborder={0 0 0}]{hyperref}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{enumitem}
+\setlist[itemize]{itemsep=-4pt}
+\setlist[enumerate]{itemsep=-4pt}
+
+\makenomenclature
+\renewcommand{\nompreamble}{(The nomenclature must respect the following order: latin symbols, Greek symbols, acronyms. Within each category of symbols, follow alphabetic order. An example is provided below)}
+
+\begin{document}
+
+\input{Source/title_page}
+
+\input{Source/src/intro}
+\input{Source/src/contributions}
+
+\input{Source/Literature_review}
+
+\newpage
+\input{Source/Methodology}
+
+\newpage
+\input{Source/Results_and_Discussion}
+
+\newpage
+\input{Source/Conclusion}
+
+\newpage
+
+\allowbreak
+
+\DeclareFieldFormat{title}{\sloppy#1\par}
+\DeclareFieldFormat{booktitle}{\sloppy#1\par} 
+
+\phantomsection
+\addcontentsline{toc}{section}{References}
+\printbibliography[title={References}]
+
+\newpage
+\input{Source/Appendices}
+
+\end{document}

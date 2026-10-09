@@ -1,0 +1,36 @@
+% metrics.tex -- Methodology: metrics (draft 4 Oct 2026). The definitions are the ones used by the
+% analysis tools (multi_drone_control/tools/method_metrics.py, push_metrics.py).
+
+\subsection{Metrics}
+\label{sec:metrics}
+
+All metrics are computed from the logged motion-capture poses of the payload and the UAVs, with the
+events (TAKEOFF, the push, DETACH, LAND) taken from the run's event log.
+
+\begin{description}
+    \item[Height error] $e_z = z_L - z_L^{\mathrm{ref}}$, positive with the payload high. In hover, it
+    is averaged over the 15\,s before LAND.
+    \item[Horizontal error] $\|\mathbf{e}_{xy}\|$, the distance between the payload's centre and its
+    reference in the horizontal plane. On a trajectory, it is averaged over the first lap or the
+    whole figure, and its maximum is reported as well.
+    \item[Payload tilt] The angle between the ring's axis and the vertical. Its mean over the hover and
+    its peak after an event are reported.
+    \item[Heave] The peak-to-peak height of the payload over the hover window.
+    \item[Disturbance response] For a constant force applied for a fixed time, the displacement along
+    the force relative to its mean over the 5\,s before. The steady value is its mean over the last
+    5\,s of the force. The peak is its maximum while the force acts, and the overshoot its largest
+    excursion the other way after the force ends. The time to recover is the time after which it
+    stays within 1\,cm.
+    \item[Stiffness] The applied force divided by the steady displacement with no integral action.
+    \item[Detach] The peak payload tilt after DETACH, the time until the tilt stays under 2$^\circ$, and
+    the payload's height loss.
+    \item[Attach] The peak payload tilt after the weld, the payload's height loss (dip) after the
+    weld, and whether the tilt returns under 2$^\circ$ within 3\,s; for the full rejoin mission, also
+    the tilt at the detach, the mean tilt over the orbit and the time from TAKEOFF to landed.
+    \item[Carried fraction] On the rig, where rod tensions are not measured: the total vertical force
+    the UAVs put into their rods, computed from each UAV's throttle through the identified thrust map
+    and its measured attitude, divided by the payload's weight.
+    \item[Solver health] The number of planner solves that failed or did not converge.
+\end{description}
+
+Every Gazebo case is flown at least twice and reported as the mean, with the number of runs.

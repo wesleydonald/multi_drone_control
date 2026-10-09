@@ -1,0 +1,70 @@
+% system_overview.tex -- Methodology: system overview (draft 4 Oct 2026).
+
+\subsection{System overview}
+\label{sec:overview}
+
+All control runs centrally, on one ground computer under ROS~2. Motion capture (OptiTrack) is the
+only sensing. It gives the pose of each UAV and of the payload, and nothing on the payload is
+instrumented. Each UAV's flight controller runs Betaflight in rate mode. It receives a collective
+throttle and three body-rate stick commands over its own ExpressLRS radio link, and closes only its
+inner rate loop. Figure~\ref{fig:nodes} shows the nodes and the information they exchange.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[>=Stealth,
+    blk/.style={draw, thick, rounded corners=2pt, align=center, minimum height=0.95cm, font=\small},
+    lab/.style={font=\scriptsize, align=center}]
+  \node[blk, minimum width=2.4cm] (mocap) at (0,0) {Motion capture\\ \scriptsize poses};
+  \node[blk, minimum width=2.7cm] (plan) at (4.9,0) {Load--cable planner\\ \scriptsize 10\,Hz};
+  \node[blk, minimum width=2.4cm] (fm) at (9.5,0) {Fleet manager\\ \scriptsize phases, safety};
+  \node[blk, minimum width=1.9cm] (op) at (13.4,0) {Operator};
+  \node[blk, minimum width=2.7cm] (trk) at (4.9,-2.2) {Tracker $i$\\ \scriptsize 50\,Hz, one per UAV};
+  \node[blk, minimum width=2.7cm] (uav) at (4.9,-4.4) {UAV $i$\\ \scriptsize ELRS link, Betaflight rate loop};
+  \draw[->, thick] (mocap) -- node[lab, above] {payload\\ pose} (plan);
+  \draw[->, thick] (mocap.south) |- node[lab, pos=0.75, above] {UAV pose} (trk.west);
+  \draw[->, thick] (plan) -- node[lab, right] {horizon for UAV $i$} (trk);
+  \draw[->, thick] (trk) -- node[lab, right] {throttle, rate sticks, magnet} (uav);
+  \draw[->, thick] (fm) -- node[lab, above] {phase} (plan);
+  \draw[->, thick] (op) -- node[lab, above] {commands} (fm);
+  \draw[->, thick] ([xshift=-0.35cm]fm.south) |- node[lab, pos=0.75, above] {arm, disarm} ([yshift=0.18cm]trk.east);
+  \draw[->, thick, dashed] ([yshift=-0.18cm]trk.east) -| node[lab, pos=0.25, below] {fault} ([xshift=0.35cm]fm.south);
+\end{tikzpicture}
+\caption[Nodes and links]{Nodes and links. Solid: commands, references and poses; dashed: a tracker
+reporting a fault, which disarms the whole fleet. The operator's commands are ARM, TAKEOFF, LAND,
+DETACH and ATTACH.}
+\label{fig:nodes}
+\end{figure}
+
+The system has three layers.
+\begin{description}
+    \item[Planner.] The centralised load--cable MPC of Section~\ref{sec:controller}. At 10\,Hz it
+    plans the motion of the payload and of every cable, and publishes to each UAV its reference over
+    the horizon: position, velocity, acceleration, the planned cable acceleration and the throttle
+    feedforward. A second reference generator, the dissipative network of
+    Section~\ref{sec:dissipative}, can replace it in flight; both publish the same reference format,
+    so the trackers do not know which one is active.
+    \item[Trackers.] One tracking MPC per UAV at 50\,Hz. Each follows its UAV's part of the plan and
+    turns it into the radio commands.
+    \item[Fleet manager.] It sequences the phases of a flight: ARM, TAKEOFF (the climb, the rod sweep
+    to the working elevation and the lift), the trajectory, LAND, and the reconfiguration events
+    DETACH and ATTACH (Section~\ref{sec:reconfig}).
+\end{description}
+Every reference is a short trajectory, not a single set-point: for each of the $N+1$ nodes of the
+horizon it holds a position, velocity, acceleration and planned cable acceleration (twelve numbers
+per node). The tracker interpolates it at its own rate, so a late or skipped planner tick does not
+leave it without a reference.
+
+\paragraph{Takeoff from the floor.} A flight starts with the payload on the floor and the rods
+lying flat. On TAKEOFF each UAV climbs and swings its rod about its attachment point to a working
+elevation; the planner then takes over, pretensions the rods and lifts the payload
+(Section~\ref{sec:takeoff}).
+
+\paragraph{Safety.} Every tracker checks its own UAV against a flight envelope: tilt, payload tilt
+(both 60$^\circ$) and speed (3\,m/s). It also checks that its motion-capture pose is fresh (0.25\,s)
+and that the planner's reference is fresh (1\,s). Any violation disarms the whole fleet, not the one
+UAV: a single UAV losing thrust on a shared rigid payload drags the others with it. There is no
+geofence; the operator holds a kill switch. On the rig, each UAV must also confirm that its flight
+controller is armed before the fleet takes off. The planner stops iterating at a 60\,ms budget,
+and a plan that has not converged by then is replaced by the previous one, shifted by a tick.
+A UAV that disarms between ARM and TAKEOFF grounds the whole fleet and TAKEOFF is refused,
+since three UAVs lifting a ring sized for four would drag it.

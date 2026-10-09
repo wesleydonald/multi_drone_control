@@ -1,0 +1,15 @@
+\section{Literature Review}
+
+% Template: develop from the previous reports and the supervisors' feedback; flow logically, not
+% necessarily chronologically; end with the major work, its relevance, and the research gaps.
+This section reviews the closest prior work, the models used for multi-UAV cable-suspended
+transport, and the centralised, distributed and hybrid control approaches, and ends with the research
+gaps this thesis addresses.
+
+\input{Source/src/existing}
+\input{Source/src/modelling}
+\input{Source/src/control}
+
+\subsection{Summary of Literature and Research Gaps}
+
+Despite extensive coverage of fixed-team multi-UAV payload transport, no existing work demonstrates a strategy for adding an agent to an active mid-flight mission. The closest prior work either addresses only agent removal \cite{tensionbased}, provides dropout robustness with no mechanism for structured agent addition \cite{quan2025swarm}, or proposes join protocols without experimental validation or explicit force reallocation \cite{tasoojiCooperativeControlMultiQuadrotors}. This gap motivates the proposed direction of this thesis: a centralised dissipative architecture combining agile payload manipulation with robustness to dynamic changes in team composition.

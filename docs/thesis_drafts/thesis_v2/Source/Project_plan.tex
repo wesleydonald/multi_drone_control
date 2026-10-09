@@ -1,0 +1,205 @@
+\section{Project Plan}
+
+\subsection{Research Question}
+
+This project investigates whether a centralised control architecture can maintain stable cooperative cable-suspended payload transport during dynamic mid-mission agent addition and removal. Specifically: \textit{can a centralised controller manage the join and leave transients of individual agents in a multi-UAV tethered payload system while maintaining acceptable payload stability throughout?} A secondary question examines whether a dissipative control law or a trajectory-based OCP approach better balances robustness and performance for this problem, with the comparison informed by simulation and hardware results.
+
+\subsection{Hypothesis and Aims}
+
+It is hypothesized that a centralised architecture is well suited to the dynamic team composition problem because the coordinating node can directly recompute tension distribution across the updated team at the moment of a join or leave event, providing an explicit stabilization mechanism that decentralized approaches cannot. This is motivated directly by the gap identified in the literature review: \cite{quan2025swarm} demonstrates passive robustness to dropout but provides no structured path for agent addition, and \cite{tensionbased} handles reconfiguration. The aims of this project are:
+
+\begin{enumerate}
+    \item Develop and validate a centralised multi-UAV payload controller capable of stable hover and trajectory tracking with a fixed team in simulation and hardware.
+    \item Extend the controller to handle agent removal mid-mission, with autonomous tension redistribution among remaining agents.
+    \item Implement and validate agent addition coordinated with the docking system developed by the collaborating student, completing the full reconfiguration cycle.
+    \item Evaluate the performance of dissipative and trajectory-based OCP control laws against the same test cases as a secondary contribution.
+    \item Demonstrate a full pick-and-place reconfiguration sequence in a real-world experiment, subject to integration with the docking mechanism.
+\end{enumerate}
+
+\subsection{Proposed Solution and Experimental Methodology}
+
+The proposed solution adopts a centralised architecture in which a ground computer coordinates all agents, justified by the need for tension reallocation during join and leave events. Two candidate control laws are developed in parallel, a dissipative controller drawing on \cite{quan2025swarm} and \cite{liuVirtualTubeBasedCooperativeTransport2026}, and a trajectory-based OCP following \cite{tudelft}. Tension allocation under either approach draws on the QP and SQP formulations of \cite{efficient} and \cite{vazquez-soquiSQPBasedCableTensionAllocation2026}. The existing ROS~2 and Gazebo infrastructure provided and developed during Term~1 provides the simulation environment, and the motion capture system provides ground-truth pose feedback for hardware experiments. Four experiments are planned to quantify the results of this thesis.
+\newpage
+
+
+\paragraph{Experiment 1: Cooperative Hover and Trajectory Tracking.}
+The baseline experiment validates stable payload transport with a fixed three or four drone team. The payload will first be held at a fixed hover point, then commanded to follow a circular trajectory and a figure-eight trajectory. This directly replicates the benchmark conditions of \cite{tudelft} at a scale appropriate for the laboratory environment. Success metrics are payload position RMSE during steady-state tracking, cable tension variance across agents, and formation error relative to the desired cable geometry. This experiment will establish the performance baseline against which the novel experiments can be compared.
+
+\paragraph{Experiment 2: Agent Removal.}
+With stable baseline tracking established, one drone is commanded to release from the formation during active payload transport. The centralised node detects the departure, recomputes the tension distribution across the remaining agents, and broadcasts updated references. The payload must remain within an acceptable position envelope throughout the transient and return to steady-state tracking within a defined settling time. Success metrics are peak payload position deviation during the removal transient and transient settling time.
+
+\paragraph{Experiment 3: Agent Addition.}
+A drone that has previously left the formation, or an independent drone, approaches and attaches to the payload mid-flight using the electromagnetic docking mechanism developed by a collaborating student. The centralised node detects the successful attachment, updates the tension allocation to include the new agent, and re-stabilizes the payload. The success metrics are the same as Experiment~2. This experiment is contingent on the availability of the docking controller from the collaborating student.
+
+\paragraph{Experiment 4: Full Reconfiguration and Integration.}
+The complete mission sequence is demonstrated in full. The formation carries the payload along a trajectory, one drone detaches, flies independently to acquire an object using its onboard electromagnet, deposits the object into the payload basket, and reattaches to the formation. Success is defined as completion of the full sequence without destabilizing the remaining formation at any stage. This experiment is contingent on both the docking mechanism and the single-agent swung payload controller being available and validated individually beforehand. \\
+
+The proposed system architecture builds directly on the infrastructure developed during Term~1. A centralised ROS~2 node coordinates the team, subscribing to motion capture pose estimates for the payload and each drone, computing the desired tension distribution, and publishing trajectory references to each drone's onboard MPC controller. The join and leave events are handled as state transitions within the central node. On a leave event the tension allocation matrix is reduced, and on a join event it is expanded and re-solved. The collaborating student's docking controller could interface with this system by publishing an attachment confirmation signal that triggers the join state transition. A drafted ROS~2 node diagram and topic list are provided in Appendix~\ref{sec:AppA}.
+\newpage
+\subsection{Thesis Timeline}
+
+The Gantt charts in Figures~\ref{fig:gantt_t2} and \ref{fig:gantt_t3} present the timeline in two-week blocks.
+
+% Term 2 Gantt Chart 
+\begin{figure}[H]
+\centering
+\begin{ganttchart}[
+    hgrid,
+    vgrid={*{1}{dotted}},
+    title height=1,
+    title label font=\footnotesize\bfseries,
+    bar label font=\footnotesize,
+    group label font=\footnotesize\bfseries,
+    milestone label font=\footnotesize\itshape,
+    group/.append style={fill=black!65, draw=black},
+    milestone/.append style={fill=red!70, draw=red!90},
+    x unit=1.2cm,
+    y unit title=0.6cm,
+    y unit chart=0.45cm,
+    bar height=0.65,
+    bar label node/.append style={align=left, text width=4cm},
+    group label node/.append style={align=left, text width=4cm},
+    milestone label node/.append style={align=left, text width=4cm}
+]{1}{10}
+
+    \gantttitle{Term 2}{10} \\
+    \gantttitle{W1--2}{2}
+    \gantttitle{W3--4}{2}
+    \gantttitle{W5--6}{2}
+    \gantttitle{W7--8}{2}
+    \gantttitle{W9--10}{2} \\
+
+    \ganttgroup{Controller Dev.}{1}{10} \\
+    \ganttbar[bar/.append style={fill=blue!45}]
+        {MPC \& tension alloc.}{1}{2} \\
+    \ganttbar[bar/.append style={fill=blue!45}]
+        {Trajectory tracking}{3}{4} \\
+    \ganttbar[bar/.append style={fill=blue!45}]
+        {Dissipative controller}{5}{6} \\
+    \ganttbar[bar/.append style={fill=blue!45}]
+        {Controller selection}{7}{8} \\
+    \ganttbar[bar/.append style={fill=blue!45}]
+        {Agent removal/addition}{9}{10} \\
+
+    \ganttgroup{Simulation}{1}{10} \\
+    \ganttbar[bar/.append style={fill=green!45}]
+        {Hover/basic trajectory}{1}{2} \\
+    \ganttbar[bar/.append style={fill=green!45}]
+        {Obstacles/disturbances}{3}{6} \\
+    \ganttbar[bar/.append style={fill=green!45}]
+        {Reconfiguration (sim)}{7}{10} \\
+
+    \ganttgroup{Lab Experiments}{5}{8} \\
+    \ganttbar[bar/.append style={fill=orange!55}]
+        {2-4 drone hover}{5}{6} \\
+    \ganttbar[bar/.append style={fill=orange!55}]
+        {Trajectory following}{7}{8} \\
+
+    \ganttmilestone{MPC validated in sim}{4} \\
+    \ganttmilestone{Multi-drone hover}{6} \\
+    \ganttmilestone{Controller selected}{8} \\
+    \ganttmilestone{Reconfig.\ validated in sim}{10}
+
+\end{ganttchart}
+\caption{Term~2 project timeline, red diamond markers denote key milestones.}
+\label{fig:gantt_t2}
+\end{figure}
+
+\paragraph{T2, Weeks 1--2: MPC Baseline and Tension Allocation.}
+A centralised nonlinear MPC following the approach of \cite{tudelft} will be implemented for the tethered-payload case, extending the formation controller developed in Term~1. The receding horizon method handles the combined drone-payload dynamics and cable tension constraints identified in the modeling section. The milestone is a stable hover with payload in simulation.
+
+\paragraph{T2, Weeks 3--4: Trajectory Tracking and Disturbance Validation.}
+The MPC controller will be tested against horizontal and vertical trajectory cases with simulated wind disturbances, following the methodology of \cite{tudelft}. This validates the baseline before a second method is introduced. The milestone is a validated MPC controller with documented tracking performance metrics defined in Experiment~1.
+
+\paragraph{T2, Weeks 5--6: Dissipative Controller and Initial Hardware Experiments.}
+The dissipative control method of \cite{quan2025swarm} will be implemented in simulation. Initial hardware experiments, two to four drones hovering cooperatively with a suspended payload, establishing a hardware baseline and exposing real-world effects not captured in simulation will provide a good progress indication. The milestones are a functional dissipative controller in simulation and stable multi-drone cooperative hover on hardware.
+\newpage
+\paragraph{T2, Weeks 7--8: Controller Comparison, Selection, and Hardware Trajectory Following.}
+Both controllers are evaluated in simulation against the Experiment~1 test metrics. The computational cost of the two methods will be compared as well. The better method or a combination is selected as the controller for the reconfiguration work. Experimental trajectory following with the fixed team provides early data to confirm simulation results. The milestones are a documented controller comparison, a design decision, and demonstrated trajectory following on hardware.
+
+\paragraph{T2, Weeks 9--10: Agent Removal and Addition in Simulation.}
+The selected controller is extended to handle reconfiguration. Agent removal is implemented by dropping an agent from the tension allocation and redistributing forces across the remaining drones. Agent addition is implemented using the docking interface from the collaborating student. The milestone is a simulation of Experiments~2 and~3.
+
+% Term 3 Gantt Chart
+\begin{figure}[H]
+\centering
+\begin{ganttchart}[
+    hgrid,
+    vgrid={*{1}{dotted}},
+    title height=1,
+    title label font=\footnotesize\bfseries,
+    bar label font=\footnotesize,
+    group label font=\footnotesize\bfseries,
+    milestone label font=\footnotesize\itshape,
+    group/.append style={fill=black!65, draw=black},
+    milestone/.append style={fill=red!70, draw=red!90},
+    x unit=1.2cm,
+    y unit title=0.6cm,
+    y unit chart=0.45cm,
+    bar height=0.65,
+    bar label node/.append style={align=left, text width=4cm},
+    group label node/.append style={align=left, text width=4cm},
+    milestone label node/.append style={align=left, text width=4cm}
+]{1}{10}
+
+    \gantttitle{Term 3}{10} \\
+    \gantttitle{W1--2}{2}
+    \gantttitle{W3--4}{2}
+    \gantttitle{W5--6}{2}
+    \gantttitle{W7--8}{2}
+    \gantttitle{W9--10}{2} \\
+
+    \ganttgroup{Simulation}{1}{4} \\
+    \ganttbar[bar/.append style={fill=green!45}]
+        {Final sim data collection}{3}{4} \\
+
+    \ganttgroup{Lab Experiments}{1}{6} \\
+    \ganttbar[bar/.append style={fill=orange!55}]
+        {Agent removal}{1}{2} \\
+    \ganttbar[bar/.append style={fill=orange!55}]
+        {Agent addition}{3}{4} \\
+    \ganttbar[bar/.append style={fill=orange!55}]
+        {Full reconfig.\ + data}{5}{6} \\
+
+    \ganttgroup{Thesis Writing}{1}{10} \\
+    \ganttbar[bar/.append style={fill=gray!45}]
+        {Literature review}{1}{2} \\
+    \ganttbar[bar/.append style={fill=gray!45}]
+        {Methodology section}{3}{6} \\
+    \ganttbar[bar/.append style={fill=gray!45}]
+        {Results \& discussion}{7}{8} \\
+    \ganttbar[bar/.append style={fill=gray!45}]
+        {Full draft, proofread}{9}{10} \\
+
+    \ganttmilestone{Agent removal validated}{4} \\
+    \ganttmilestone{Full reconfig.\ demo}{6} \\
+    \ganttmilestone{Thesis submission (W10)}{10}
+
+\end{ganttchart}
+\caption{Term~3 project timeline.}
+\label{fig:gantt_t3}
+\end{figure}
+
+\paragraph{T3, Weeks 1--2: Agent Removal.}
+Hardware experiments will have scaled to three and four drones with tuning of the controller. The agent removal procedure is then tested on hardware. A drone detaches mid-flight and the remaining agents redistribute tension to maintain stable payload transport (Experiment~2). The milestone is a validated hardware demonstration of agent removal with metrics for the results section.
+
+\paragraph{T3, Weeks 3--4: Agent Addition.}
+Agent addition is tested on hardware coordinated with the collaborating student's docking controller, completing Experiment~3. Once both procedures are individually validated, the full reconfiguration sequence is demonstrated and experimental results can be collected. The milestone is a recorded full reconfiguration demonstration and concrete data for the thesis.
+
+\paragraph{T3, Weeks 5--6: Final Data Collection.}
+If the single-agent swung payload controller are available, Experiment~4 is attempted. Remaining simulation data is collected concurrently. This phase closes the experimental program and all data needed for the thesis is finalized by the end of week~6.
+
+\paragraph{T3, Weeks 1--10: Thesis Writing and Submission.}
+Weeks 1--2 will be used to write the introduction and improve the literature review. Weeks 3--8 cover the methodology and results chapters. Weeks 9--10 covers the abstract, proofreading, and submission at the end of week~10. The presentation is prepared during week~10 for delivery in week~11. Overall, a significant amount of time is allocated to verifying progress in simulation, this is because the simulation alone can provide a publishable result, and the more testing that can be done in simulation, the more likely the results will transfer to real world experiments.
+
+\subsection{Available Resources and Upskilling}
+
+All hardware required for this project is already available in the laboratory, no parts procurement or budget allocation is necessary. Four quadrotors with Betaflight flight controllers will be available for hardware experiments, with cables for payload attachment. A motion capture system is operational in the laboratory and has been mimicked in simulation with a motion capture emulator. The ROS~2 Humble and Gazebo Ignition simulation environment established during Term~1 includes a four-drone formation world with a tethered payload already configured. The collaborating student is developing the single-agent controller, with an initial iteration expected to be available for integration during Term~3. Laboratory induction has been completed, allowing access to conduct hardware flight experiments in the lab. \\
+
+Upskilling has been ongoing during Term~1. The ROS~2 Humble framework, Gazebo Ignition simulation, and the \texttt{ros\_gz\_bridge} communication layer are now understood and operational. Experience with ROS~2 has been extended to the multi-agent architecture described in Section~\ref{sec:pdp}. The mathematical foundations of quadrotor dynamics and cable-suspended payload modeling have been developed through the literature reviewed in this thesis. \\
+
+Remaining upskilling required for Term~2 is focused on three areas. Firstly, the nonlinear MPC formulation for the tethered payload case, drawing on the method used by \cite{tudelft}. Second, dissipative control law implementation and tuning, drawing on \cite{quan2025swarm}. Additionally, hardware upskilling covering the interaction between ROS~2 and the physical drones will be addressed at the start of the hardware experiment phase in Term~2.
+
+\subsection{Contingency Planning}
+
+The main project risk is the dependency on the collaborating student's docking controller for Experiment~3 and~4. If this is not available by Term~3 week~3, the project proceeds with agent removal only for hardware validation, with agent addition demonstrated in simulation. This will provide an adequate result, as the addition and tension redistribution problem is the less studied of the two reconfiguration directions. A secondary risk is the Gazebo real-time factor limitation (currently approximately 60\%), which constrains the speed of simulation-based iteration. This is mitigated by reducing the complexity of the simulated cable model, and running the controller at the Gazebo simulation time. A third risk is hardware availability during the Term~3 experiment windows. The mitigation is to complete all simulation validation of reconfiguration procedures before beginning hardware experiments, to maintain evidence of a set of 3-4 drones that can demonstrate the core behavior even if only in simulation. A full risk assessment is available in Appendix~\ref{sec:AppB}.

@@ -1,0 +1,65 @@
+% contributions.tex -- research questions and contributions (draft 4 Oct 2026). Follows the
+% introduction. The research questions are those of the project plan; the contributions list
+% what has been built and shown so far, and is to be trimmed to what the final results support.
+
+\subsection{Research Questions}
+\label{sec:rq}
+
+The research question of this thesis is whether a centralised controller can manage the join and
+leave transients of individual agents in a multi-UAV payload system while keeping the payload
+stable. Two questions follow from it.
+\begin{enumerate}[label=\textbf{RQ\arabic*}]
+    \item Can a centralised planner that has the whole team's state redistribute the load when a UAV
+    leaves the payload and when a new UAV attaches to it mid-flight, with a transient small enough
+    for the transport to continue?
+    \item Does a decentralised dissipative control law \cite{quan2025swarm} or a trajectory-based
+    optimal control approach \cite{tudelft} better balance robustness and tracking performance
+    for this problem?
+\end{enumerate}
+The working hypothesis is that the centralised approach suits a change of team composition,
+because the coordinating node can recompute the force distribution for the new team at the moment
+of the event, rather than relying on the remaining agents to absorb it passively.
+
+\subsection{Contributions}
+\label{sec:contributions}
+
+The work to date contributes the following.
+\begin{enumerate}
+    \item \textbf{A centralised payload controller flown on commercial-grade hardware.} The
+    load--cable planner of \cite{tudelft} is combined with a cable-aware tracking MPC per UAV that
+    commands Betaflight flight controllers over their radio links, with no changes to the
+    UAVs' firmware. It includes a floor start for rigid rods, a pretension and lift procedure, and
+    a thrust map identified on the rig (Sections~\ref{sec:controller} and~\ref{sec:takeoff}).
+    \item \textbf{Reconfiguration by resizing the optimal control problem.} The attachment
+    geometry is a runtime parameter of the planner, so a detach or an attach becomes a switch to
+    a pre-built solver for the new team size, with each UAV kept on its real attachment point
+    (Section~\ref{sec:reconfig}).
+    \redo{OCP resize against handing the payload to a dissipative network during the transient, on a detach and on an attach.}
+% --- original text, flown before the rig twin; kept to refill this place:
+%     (Section~\ref{sec:reconfig}). In simulation this outperforms handing the payload to a
+%     dissipative network during the transient.
+    \item \textbf{A geometric condition for a level detach.} Whether the payload can stay level
+    after a UAV leaves depends on whether its centre of mass stays inside the polygon of the
+    surviving attachment points. This sets the attachment layout for four UAVs.
+    \item \textbf{Mid-flight attachment of a new UAV.} A free UAV welds onto the carried payload
+    through an electromagnet and is folded into the planner, in combination with a collaborator's
+    approach controller.
+    \redo{the full sequence in simulation: a UAV leaves, completes a pick-up task and rejoins while the team flies an orbit (the rejoin mission).}
+% --- original text, flown before the rig twin; kept to refill this place:
+%     approach controller. The full sequence (a UAV leaves, completes a pick-up task and rejoins
+%     while the team flies an orbit) is demonstrated in simulation.
+    \item \textbf{A comparison of the trajectory-based and dissipative approaches} on the same
+    plant, tracker and test cases, including the tracking architecture the dissipative method
+    assumes.
+    \redo{the comparison itself (Section~\ref{sec:sim_architecture}).}
+    \item \textbf{An analysis of steady errors in the cascade.} Several sources of steady payload
+    error were identified and separated: a relaxed initial condition in the tracker, a breakaway
+    pull cap held for the whole flight, model errors in thrust and rod mass, and external forces.
+    Integral action in the planner's model and several estimation approaches from the
+    literature are compared against them.
+    \item \textbf{A simulation and verification environment that mirrors the rig.} A Gazebo twin
+    of the lab set-up runs the same launch files and parameters as the hardware. Every run is
+    recorded against a named baseline, with a set number of repeats.
+    \item \textbf{Hardware results} with three UAVs carrying a 0.86\,kg ring: hover at up to
+    1.0\,m, a circle and a figure-eight, and an account of the gap between simulation and the rig.
+\end{enumerate}

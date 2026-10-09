@@ -1,0 +1,50 @@
+\section{Conclusion}
+
+% Provisional conclusion (draft 4 Oct 2026): to be rewritten once the hardware reconfiguration
+% results are in.
+
+This thesis set out to test whether a centralised controller can carry a cable-suspended payload
+through the departure and the mid-flight arrival of individual UAVs. A centralised load--cable
+planner, based on \cite{tudelft}, was combined with a cable-aware tracking MPC per UAV and flown on
+Betaflight quadrotors over their radio links, with motion capture as the only sensing.
+
+The main findings so far are the following.
+\begin{itemize}
+    \item Reconfiguration can be handled by resizing the planner's optimal control problem, because
+    the attachment geometry is a runtime parameter. In simulation a detach this way left the payload
+    level within seconds.
+    \redo{the two comparisons behind this finding: the payload tilt left by a network hand-off on the same detach, and the payload transient of an attach by OCP resize in the full rejoin mission.}
+% --- original text, flown before the rig twin; kept to refill this place:
+%     the attachment geometry is a runtime parameter. In simulation a detach this way left the payload
+%     level within seconds where handing it to a dissipative network left it tilted by
+%     26--48$^\circ$. An attach this way, in a full mission with a collaborator's approach controller,
+%     rejoined a UAV with a payload transient under 2$^\circ$.
+    \item Whether a payload can stay level after a UAV leaves is set by geometry: its centre of mass
+    must remain inside the polygon of the surviving attachment points. This chooses the layout
+    (plates 1/3/5/9 for four UAVs).
+% --- original text, flown before the rig twin; kept to refill this place:
+%     (plates 1/3/5/9 for four UAVs) and explains several earlier failures.
+    \item \redo{the comparison finding: trajectory-based planner against the dissipative network in tracking, detach and attach (Section~\ref{sec:sim_architecture}).}
+% --- original text, flown before the rig twin; kept to refill this place:
+%     \item On this system the trajectory-based planner outperformed the dissipative network in
+%     tracking, detach and attach. The network's advantages did not carry over to rigid rods and a
+%     heavier payload.
+    \item Steady payload errors in the re-planned cascade come from several sources that look
+    alike at the payload. The tracker's relaxed initial condition, a breakaway pull cap held for
+    the whole flight, model errors and external forces each needed a different remedy. Integral
+    action in the planner's model removed the steady error from external forces in all three axes in
+    simulation.
+    A per-UAV thrust error is a moment that only a per-UAV correction removes.
+    \item On hardware, three UAVs carried the 0.86\,kg ring to 1.0\,m, around a circle and through
+    a figure-eight with no planner failures, after the thrust map was identified on the rig. The
+    remaining gaps to simulation, a low hover and a steady horizontal offset, have identified causes
+    or candidate causes.
+\end{itemize}
+
+\paragraph{Future work.} The immediate steps are to fly the breakaway release and four UAVs on the
+rig, to check the motion-capture calibration for the horizontal pull, and to fly the detach on the
+rig, then the attach with the collaborator's hardware. Beyond this thesis: a model of slack cables,
+so the planner can take over before the rods are taut; force sensing at the UAVs, the onboard
+equivalent of \cite{tudelft}'s incremental inversion, to remove per-UAV thrust errors; outdoor
+flight without motion capture; and larger teams, for which a pre-built solver per team size becomes
+a memory and build-time cost.
