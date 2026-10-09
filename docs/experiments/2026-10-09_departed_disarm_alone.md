@@ -94,7 +94,7 @@ matrix configs (`*_land_e*`, all with the switch on) fly after this change on th
 
 Lock wording: when the switch becomes a default, the working rules' lock line gets this third exemption from
 "any disarm in flight -> emergency stop" (after newcomer_fault_land and the partner mux), and that `_down_alone`
-silences that drone's feedback until the next ARM (fine only because its tracker has closed).
+silences that drone's feedback until the next ARM (since f330bd2 its tracker stays up, sending disarmed commands; still harmless: `_safety_check` runs only while armed, tracker_node.py:1500-1505).
 
 ## Critic
 
