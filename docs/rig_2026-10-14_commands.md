@@ -36,7 +36,9 @@ python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_plan
    ```
    Then the pull-in gap: lift the face slowly until the magnet lets go of a small steel test piece (or the ring
    follows): gap g. Run again with `--standoff <g - 0.015, not below 0>` and write the printed `attach_tip_dz` and
-   `weld_point_z` into `configs/rig/attach_m1.yaml` (Wesley signs the two numbers). The weld radius for R8b comes
+   `weld_point_z` into `configs/rig/attach_m1.yaml` (Wesley signs the two numbers). The standoff must be at
+   least 1 cm: the tip loop overshoots up to ~9 mm below its setpoint in the twin (reviewer 9 Oct), and its contact
+   freeze is not a protection to rely on (it latched with no contact in 2 of 6 twin runs). The weld radius for R8b comes
    from the same reading (default 0.025).
 4. **Tip record:** the same command with QUAD4 still in the air by hand for 10 s, then again with body 24
    covered for 3 s: read the repeats / smallest step / longest gap lines (the loop calls a tip bit-identical for

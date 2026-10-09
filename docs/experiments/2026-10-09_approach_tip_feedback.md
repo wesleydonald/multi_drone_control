@@ -273,3 +273,41 @@ Known flaws (not bar failures):
 ~2 s; a 6-7 cm swing barely moves it; a frozen tip moves it under 4 mm; and with a rig-like 0.025 m weld radius it
 makes the weld happen where the switch-off arm never does. Reviewer next.
 
+## Reviewer on the rev-5 table (9 Oct evening): SUPPORTED, with corrections (taken)
+
+1. Every number reproduces to 0.1 mm / 0.1 s and every bar passes as written; on/off configs differ only in the
+   switch; all 18 runs on 1bbe1f8, clean; the rev-5 commit precedes the first run. R1397 (F off) started late (lift
+   23.1 s, "no pose for drone 4 at TAKEOFF", read-back incomplete) but its 39.9 mm agrees with the other baselines.
+2. **"The deadband fix removed most of the overshoot" is wrong.** Peak overshoot (0.5 s mean) is 6.7-8.6 mm in rev 5
+   vs 7.1-10.0 mm in rev 4; c still peaks at +-45-48 mm. The cause is the 1.5 s filter's lag on the integrator, not
+   the deadband. Rev 5 changed where c ends: 5 of 8 error runs came back and froze in the deadband at 8.2-11.7 s
+   (0.1-1.7 mm); R1406 froze in the deadband during the overshoot (the zero crossing used up the 2 s timer: the
+   rev-4 failure, now on the raw mean); R1401/R1407 froze on the contact latch. Arm 0 (R1399): the hold began at
+   -6.3 mm while the tip settled, c went to +3.3 mm and froze: 3.0 mm vs 0.5 mm off (inside the bar, but worse).
+   The verdict's "1-6 mm in under 2 s" mixes two things: first within 1 cm at 1.2-2.1 s; the final 0.1-6.3 mm at
+   3.6-11.7 s.
+3. **The contact latch is noise-dependent:** it hit 2 of 6 runs carrying the E+ error (S and F did not latch), at
+   7.2 s and 5.5 s. The test compares two single noisy tip samples 2 s apart (approach.py): a ~1 mm threshold
+   against 0.5 mm noise per sample. Both latches held the tip 3.5 / 6.3 mm below the setpoint, toward the plate:
+   "safe direction" is not shown. R1404 welded with the tip ~21 mm above the setpoint (the 3-D radius accepted a
+   2 cm vertical gap) with c at -21 of ~-41 mm.
+4. **S as flown:** the swing was 9.6 / 8.0 cm horizontal tip-to-body (8.1 cm off), not 6-7 cm (that was rev 4;
+   R1402 is above the sized 3-8 cm); the push landed 8.0 s into the hold and the deadband engaged 0.6 / 0.2 s later,
+   so the integrator ran 5 of 59 and 1 of 60 rows of the window: S shows the deadband holding through a swing, not
+   the integrator riding it (a swing during convergence has passed no bar). Invalid share was promised for every arm:
+   0 except R1399 0.003, R1397 0.061, R1403/R1409 0.087 (19 frozen rows + 8 "step" rows: at the end of the freeze the
+   live tip was 4.8 cm from the frozen value). F first reached 1 cm at 4.6 / 4.6 s (vs 1.7 / 2.1 s for E+). F's
+   3.8 / 3.6 mm is two planner ticks at the 2 mm/tick cap before the 0.2 s rule flags the tip: ~4 mm by
+   construction, 1.2 mm under the bar.
+5. **For the rig (R8b, loop on, Wesley's decision):** supported in the twin (rigid rod, 0.5 mm white tip noise, still
+   ring): a constant +-4 cm tip-to-setpoint error is brought within 1 cm in <= 2.1 s and ends 0.1-6.3 mm off.
+   Not shown: the contact freeze as a protection (it latched with no contact in R1401/R1407; never tested against
+   real contact or a slack tether, unit tests only); magnet face to plate contact (attach_m1.yaml still has
+   attach_tip_dz 0 and weld_point_z 0 until Wednesday's calibration); rig noise and occlusion; a swing during
+   convergence. attach_m1.yaml turns the loop on for R8a0/R8a too (noted in decisions.md).
+
+Consequences for the rig sheet: the overshoot passes up to ~9 mm below the setpoint, so the calibrated setpoint must sit
+at least 1 cm above the magnet-face contact height (standoff >= 1 cm); the contact freeze is not a protection to
+rely on. Open refinements (not flown): contact test on 0.3 s means instead of single samples; less filter lag (or
+anti-windup on the filter) to cut the overshoot; the deadband timer reset at a zero crossing.
+
