@@ -9,6 +9,9 @@ Per drone, from run.csv (runner time):
   at_rest_t     when it is first back within 0.03 m of rest after it flew (None: never)
   idle_t        when its throttle first reads 0 while armed after it flew (the tracker's ground idle)
   disarm_dz     its z at its disarm edge minus rest (bar: <= 0.03 m)
+  disarm_t      its first armed -> disarmed edge (the plant's command, not a log line)
+  idle_armed_s  disarm_t - idle_t: seconds armed at throttle 0 on the floor (card 2026-10-09_departed_disarm_alone)
+  before_landed True when that edge comes before the runner's LANDED (/fleet/landed): disarmed alone, not by the fleet
   press_max_s   the longest stretch within 0.3 m of its rest with its reference >= 0.1 m below it, armed and not
                 idle (pressed into the floor, R0997; bar: <= 1 s)
   tilt_idle     its peak tilt from the idle to the disarm (bar: <= 10 deg)
@@ -68,6 +71,9 @@ def drone(run, i):
     out['idle_t'] = round(float(t[idle[0]]), 2) if len(idle) else None
     edge = np.where(after[1:] & armed[:-1] & ~armed[1:])[0]
     out['disarm_dz'] = round(float(z[edge[0] + 1] - rest), 3) if len(edge) else None
+    out['disarm_t'] = round(float(t[edge[0] + 1]), 2) if len(edge) else None
+    if len(edge) and len(idle):
+        out['idle_armed_s'] = round(float(t[edge[0] + 1] - t[idle[0]]), 2)
     asked_down = np.isfinite(ref) & (z - ref >= PRESS_M)
     press = after & armed & (thr > 1e-3) & asked_down & (z <= rest + 0.3)
     out['press_max_s'] = _longest(press, t)
@@ -82,11 +88,25 @@ def drone(run, i):
     return out
 
 
+def landed_t(d):
+    f = os.path.join(d, 'logs', 'events.csv')
+    if not os.path.exists(f):
+        return None
+    ev = pd.read_csv(f)
+    hit = ev[ev.event == 'LANDED']
+    return float(hit.sim_time.iloc[0]) if len(hit) else None
+
+
 def analyse(rid):
     d = run_dir(rid)
     run = pd.read_csv(os.path.join(d, 'logs', 'run.csv')).drop_duplicates('t').reset_index(drop=True)
     n = len([c for c in run.columns if c.startswith('d') and c.endswith('_armed')])
-    return {'run': os.path.basename(d).split('_')[0], 'drones': {i: drone(run, i) for i in range(n)}}
+    drones = {i: drone(run, i) for i in range(n)}
+    lt = landed_t(d)
+    for v in drones.values():
+        if v.get('disarm_t') is not None:
+            v['before_landed'] = lt is None or v['disarm_t'] < lt
+    return {'run': os.path.basename(d).split('_')[0], 'landed_t': lt, 'drones': drones}
 
 
 def main(argv):

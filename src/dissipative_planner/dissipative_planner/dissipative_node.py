@@ -1522,6 +1522,9 @@ class DissipativeController(LoadPlanner):
             return                                     # on the ring: a carrier like any other
         if self._newcomer_out.get(j) == 'fault':
             return
+        rest, pos = self._rest_z.get(d), self._pos(d)
+        at_rest = (d in self._departed_hold and rest is not None and pos is not None
+                   and abs(float(pos[2]) - rest) <= DEPARTED_REST_TOL_M)
         self._newcomer_out[j] = 'fault'
         if self.attach_pending[j]:
             self._magnet_cmd_pub.publish(String(data='OFF'))
@@ -1535,6 +1538,9 @@ class DissipativeController(LoadPlanner):
             st.pop(d, None)
         self._departed_landing.discard(d)
         self._land_alone.discard(d)
+        if at_rest:                                     # the fleet manager's disarm of a drone down alone
+            self.get_logger().info(f'[dissipative] {_who(d)} disarmed at its rest off the ring: out of this flight')
+            return
         self.get_logger().error(f'[dissipative] {_who(d)} disarmed in flight off the ring: out of this '
                                 f'flight (its magnet OFF, the landed gate does not wait for it)')
 

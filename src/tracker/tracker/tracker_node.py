@@ -412,6 +412,8 @@ class Controller(Node):
             Bool, f'/drone_{self.drone_id}/departed', self._departed_cb,
             QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
                        reliability=ReliabilityPolicy.RELIABLE))
+        # ...and once it idles there, the fleet manager disarms it alone (card 2026-10-09_departed_disarm_alone)
+        self._down_alone_pub = self.create_publisher(Bool, f'/drone_{self.drone_id}/down_alone', 5)
         self._kt_payload_z0 = None        # load height at ARM: the floor test applies until it lifts 5 cm
         self._kt_frozen_said = False
         self.create_subscription(Float64, f'/drone_{self.drone_id}/cable_static_z',
@@ -1125,13 +1127,18 @@ class Controller(Node):
         # so a drone still tied to the ring cannot idle on a wrong report)
         # (no airborne latch needed: the planner's flag comes only after TAKEOFF, and a newcomer taken out
         # before it rose 4 cm must idle too)
-        down = down or (getattr(self, '_departed', False) and at_rest_ref
-                        and abs(z - self._kt_spawn_z) <= GROUND_IDLE_MARGIN)
+        alone = (getattr(self, '_departed', False) and at_rest_ref
+                 and abs(z - self._kt_spawn_z) <= GROUND_IDLE_MARGIN)
+        down = down or alone
         self._gi_ticks = self._gi_ticks + 1 if down else 0
         if self._gi_ticks >= GROUND_IDLE_HOLD_S * FREQUENCY_HZ:
             self._gi_latched = True
             self.get_logger().warn(f'[Drone {self.drone_id + 1}] on the floor after the flight: '
                                    f'armed idle until disarm')
+            if alone and getattr(self, '_down_alone_pub', None) is not None:
+                self._down_alone_pub.publish(Bool(data=True))
+                self.get_logger().info(f'[Drone {self.drone_id + 1}] down at its rest off the ring: '
+                                       f'asking the fleet manager to disarm it alone')
         return self._gi_latched
 
     def _velocity_step(self, ref_acc):

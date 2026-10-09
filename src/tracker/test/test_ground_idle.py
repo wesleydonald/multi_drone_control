@@ -80,3 +80,39 @@ def test_the_flag_counts_only_after_this_arm_and_while_flying():
     assert s._departed is True
     Controller._departed_cb(s, types.SimpleNamespace(data=False))   # the planner's False at ARM/TAKEOFF
     assert s._departed is False
+
+
+# ── ...and is then disarmed alone by the fleet manager (card 2026-10-09_departed_disarm_alone) ──
+
+class _Pub:
+    def __init__(self):
+        self.msgs = []
+
+    def publish(self, msg):
+        self.msgs.append(msg)
+
+
+def _with_pub(s):
+    s._down_alone_pub = _Pub()
+    s.get_logger = lambda: types.SimpleNamespace(warn=lambda *a, **k: None, info=lambda *a, **k: None)
+    return s
+
+
+def test_a_departed_drone_at_its_rest_asks_once_to_be_disarmed_alone():
+    s = _with_pub(_stub(z=0.11, ref_z=-0.15, resting=False, airborne=True))
+    s._departed = True
+    _run(s, GROUND_IDLE_HOLD_S + 1.0)
+    assert [m.data for m in s._down_alone_pub.msgs] == [True]
+
+
+def test_a_carrier_landing_with_the_ring_does_not_ask():
+    s = _with_pub(_stub(z=0.10, ref_z=0.0, airborne=True))
+    assert _run(s, GROUND_IDLE_HOLD_S + 1.0) is True
+    assert s._down_alone_pub.msgs == []
+
+
+def test_a_departed_drone_above_its_rest_does_not_ask():
+    s = _with_pub(_stub(z=0.24, ref_z=-0.15, resting=False, airborne=True))
+    s._departed = True
+    _run(s, 2.0)
+    assert s._down_alone_pub.msgs == []

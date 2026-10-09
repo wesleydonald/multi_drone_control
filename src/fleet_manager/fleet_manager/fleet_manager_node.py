@@ -146,6 +146,22 @@ class CentralController(Node):
                 lambda msg, drone_id=i: self._on_load_callback(msg, drone_id), MUX_STATE_QOS)
         self.fleet_cmd_pub = self.create_publisher(String, '/fleet/command', 10)
 
+        # ── A drone off the ring and down at its own rest is disarmed alone, an expected disarm
+        #    (card 2026-10-09_departed_disarm_alone; Wesley 9 Oct): Betaflight's airmode stays active
+        #    after a flight, so no armed idle at zero throttle on the floor. Needs the planner's
+        #    /drone_i/departed (received in this flight) and its tracker's /drone_i/down_alone. ──
+        self._off_ring = set()
+        self._down_alone = set()
+        departed_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                                  reliability=ReliabilityPolicy.RELIABLE)
+        for i in range(self.num_drones):
+            self.create_subscription(
+                Bool, f'/drone_{i}/departed',
+                lambda msg, drone_id=i: self._departed_callback(msg, drone_id), departed_qos)
+            self.create_subscription(
+                Bool, f'/drone_{i}/down_alone',
+                lambda msg, drone_id=i: self._down_alone_callback(msg, drone_id), 5)
+
         # ── Master step timer (sim time) ──────────────────────────────────
         self.timer = self.create_timer(DT, self._step_timer_callback)
 
@@ -199,6 +215,8 @@ class CentralController(Node):
 
         if command == "ARM":
             self._excused.clear()        # a new flight: no newcomer fault carried over
+            self._off_ring.clear()
+            self._down_alone.clear()
             self._arm_fleet()
         elif command == "TAKEOFF":
             self._takeoff_fleet()
@@ -236,6 +254,35 @@ class CentralController(Node):
             self._disarm_fleet(emergency=True,
                                reason=f"drone {label(drone_id)} disarmed and on the ring")
 
+    def _departed_callback(self, msg: Bool, drone_id: int):
+        # a latched True from an earlier flight arrives at subscription, before this flight: ignored
+        if not msg.data:
+            self._off_ring.discard(drone_id)
+        elif self.flying:
+            self._off_ring.add(drone_id)
+
+    def _down_alone_callback(self, msg: Bool, drone_id: int):
+        if not (msg.data and self.flying) or drone_id in self._down_alone:
+            return
+        if drone_id not in self._off_ring or self.mux_state.get(drone_id) == 'partner':
+            self.get_logger().warn(
+                f"Drone {label(drone_id)} reports down at its rest, but the planner has not released it "
+                f"off the ring in this flight (or its mux forwards the partner): not disarmed alone.")
+            return
+        client = self.arming_clients[drone_id]
+        if not client.service_is_ready():
+            self.get_logger().warn(f"Drone {label(drone_id)}: tracker not answering, not disarmed alone "
+                                   f"(it idles until the fleet disarm).")
+            return
+        self._down_alone.add(drone_id)
+        _announce(self, 'info', f"Drone {label(drone_id)} is down at its rest off the ring: disarmed alone.")
+        req = SetArming.Request()
+        req.arm = False
+        # once its tracker has stopped commanding, a disarm straight to its radio too: the tracker's own
+        # last disarm is a single message (critic 9 Oct); sent after the reply so no armed command follows it
+        stop = ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0, channel_2=-1.0, channel_3=0.0)
+        client.call_async(req).add_done_callback(lambda _f: self.elrs_publishers[drone_id].publish(stop))
+
     def _mux_state_callback(self, msg: String, drone_id: int):
         state = msg.data.strip().lower()
         if self.mux_state.get(drone_id) != state:
@@ -246,6 +293,8 @@ class CentralController(Node):
         self.drone_last_feedback[drone_id] = self._wall_clock.now()
         was_armed = self.drone_armed[drone_id]
         self.drone_armed[drone_id] = msg.data
+        if drone_id in self._down_alone and not msg.data:
+            return                       # its own disarm at its rest, off the ring (above)
 
         # Between ARM and TAKEOFF (R0749: every tracker pose-timed-out and TAKEOFF was still
         # accepted): nothing of ours flies yet, so ground our fleet like a failed ARM (Q11)
@@ -464,6 +513,8 @@ class CentralController(Node):
     def _disarm_fleet_thread(self):
         futures = {}
         for i in range(self.num_drones):
+            if i in self._down_alone:
+                continue                 # disarmed alone at its rest; its tracker has closed
             client = self.arming_clients[i]
             if client.service_is_ready():
                 req = SetArming.Request()

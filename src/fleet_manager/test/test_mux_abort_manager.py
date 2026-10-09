@@ -39,6 +39,9 @@ class _Fut:
     def result(self):
         return types.SimpleNamespace(success=self.ok, message='')
 
+    def add_done_callback(self, cb):
+        cb(self)
+
 
 class _Client:
     def __init__(self, ok):
@@ -69,6 +72,7 @@ def _fake(n=4, ok=True, mux_state=None, on_load=None):
         num_drones=n, arming_clients={i: _Client(ok) for i in range(n)},
         fleet_armed=False, flying=False, landing=False, shutdown_requested=False,
         master_step=0, mux_state=dict(mux_state or {}), on_load=dict(on_load or {}), _excused=set(),
+        _off_ring=set(), _down_alone=set(),
         fleet_cmd_pub=_Rec(), count_publishers=lambda topic: 1,
         drone_armed={i: False for i in range(n)}, drone_last_feedback={},
         _wall_clock=types.SimpleNamespace(now=lambda: 0), _log=_Log(),
@@ -77,7 +81,8 @@ def _fake(n=4, ok=True, mux_state=None, on_load=None):
     f.get_logger = lambda: f._log
     C = m.CentralController
     for name in ('_disarm_fleet', '_takeoff_fleet', '_arm_fleet_thread',
-                 '_arming_feedback_callback', '_mux_state_callback', '_on_load_live', '_on_load_callback'):
+                 '_arming_feedback_callback', '_mux_state_callback', '_on_load_live', '_on_load_callback',
+                 '_departed_callback', '_down_alone_callback'):
         setattr(f, name, getattr(C, name).__get__(f))
     f._disarm_fleet_thread = lambda: f.service_disarms.append(True)
     f._publish_drone_command = lambda c: f.cmds.append(c)
