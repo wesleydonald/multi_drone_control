@@ -589,10 +589,48 @@ def test_m2d_operator_hold_and_release_before_land_contract_is_wired_end_to_end(
     assert 'wait_for_m2d_state M2D_LANDED' in runner
 
 
+def test_permission_revocation_faults_flight_but_not_accepted_landing():
+    import importlib
+    from types import SimpleNamespace
+
+    module = importlib.import_module("tejen_mission.online_join_planner")
+    phase = module.MissionPhase
+    cases = (
+        (phase.M2_VERTICAL_TAKEOFF, True),
+        (phase.M2_CPP_TRANSIT_CAPTURE, True),
+        (phase.M2_LANDING_STAGE, False),
+        (phase.LANDING, False),
+    )
+    for initial_phase, should_fault in cases:
+        planner = object.__new__(module.OnlineJoinPlanner)
+        planner.m2d_enabled = True
+        planner.m2d_mission_permission = True
+        planner.phase = initial_phase
+        transitions = []
+        planner.transition_to = lambda new_phase, reason: transitions.append(
+            (new_phase, reason)
+        )
+        planner.m2d_mission_permission_callback(SimpleNamespace(data=False))
+        assert planner.m2d_mission_permission is False
+        assert transitions == (
+            [(phase.M2_FAULT, "M2D fleet permission revoked while vehicle mission was active")]
+            if should_fault else []
+        ), initial_phase
+
+
 def test_m2d_rviz_uses_dedicated_fleet_panel_without_replacing_single_drone_panel():
     rviz = text(RVIZ)
     panel = text(M2_PANEL)
     panel_header = text(M2_PANEL_HEADER)
+    assert panel.index('new QPushButton("RETRY ACTIVE")') < panel.index('new QPushButton("ARM ACTIVE")')
+    assert panel.index('new QPushButton("LAND ACTIVE")') < panel.index('new QPushButton("ARM ACTIVE")')
+    assert 'new QLabel("Voltage")' in panel
+    assert '"/" + vehicle + "/telemetry"' in panel
+    assert 'interfaces::msg::Telemetry' in panel_header
+    assert 'std::chrono::steady_clock' in panel_header
+    assert 'std::isfinite' in panel and 'battery_voltage' in panel
+    assert 'stale' in panel and '2.0' in panel
+    assert 'Last-reported' in panel and 'cached' in panel
     plugin = text(PLUGIN_DESCRIPTION)
     cmake = text(ROOT / "src" / "drone_visualisation" / "CMakeLists.txt")
 

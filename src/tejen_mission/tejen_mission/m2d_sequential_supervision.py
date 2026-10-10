@@ -28,6 +28,7 @@ class AttachmentEvidence:
     confirmed: bool = False
     lost: bool = False
     stamp_s: Optional[float] = None
+    fresh: bool = True
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,7 @@ class M2DSupervisorSnapshot:
     assigned_plate_ids: Mapping[str, int]
     attached_plate_ids: Mapping[str, int]
     abort_reason: str = ""
+    waiting_reason: str = ""
     landing_vehicle_id: Optional[str] = None
     landed_vehicle_ids: tuple[str, ...] = ()
 
@@ -79,10 +81,13 @@ class M2DSequentialSupervisorCore:
         target_attachment_count: Optional[int] = None,
         operator_hold_after_goal: bool = False,
         simultaneous: bool = False,
+        progressive_policy: bool = False,
     ) -> None:
         # simultaneous (multi_drone_control, Wesley 2026-09-26, for testing): every
         # unattached vehicle holds mission permission at once instead of one at a time
         self.simultaneous = bool(simultaneous)
+        self.progressive_policy = bool(progressive_policy)
+        self.waiting_reason = ""
         self.vehicle_ids = tuple(str(v) for v in vehicle_ids)
         if len(self.vehicle_ids) == 0 or len(set(self.vehicle_ids)) != len(self.vehicle_ids):
             raise ValueError("vehicle_ids must be non-empty and unique")
@@ -141,12 +146,14 @@ class M2DSequentialSupervisorCore:
         confirmed: bool,
         lost: bool,
         stamp_s: float,
+        fresh: bool = True,
     ) -> None:
         self._require_vehicle(vehicle_id)
         self.evidence[str(vehicle_id)] = AttachmentEvidence(
             confirmed=bool(confirmed),
             lost=bool(lost),
             stamp_s=float(stamp_s),
+            fresh=bool(fresh),
         )
 
     def request_landing(self) -> bool:
@@ -181,7 +188,7 @@ class M2DSequentialSupervisorCore:
         if evidence.stamp_s is None:
             return False
         age = float(now_s) - float(evidence.stamp_s)
-        return 0.0 <= age <= self.evidence_timeout_s
+        return (not self.progressive_policy or evidence.fresh) and 0.0 <= age <= self.evidence_timeout_s
 
     def _attachment_healthy(self, vehicle_id: str, now_s: float) -> bool:
         evidence = self.evidence[vehicle_id]
@@ -193,6 +200,9 @@ class M2DSequentialSupervisorCore:
         )
 
     def _abort(self, reason: str) -> None:
+        if self.progressive_policy and reason.startswith(("PROVEN_ATTACHMENT_LOST:", "UNEXPECTED_LANDING_PHASE:")):
+            self.waiting_reason = reason + "; operator-managed recovery"
+            return
         if not self.abort_reason:
             self.abort_reason = str(reason)
 
@@ -237,6 +247,7 @@ class M2DSequentialSupervisorCore:
         now_s = float(now_s)
         if self.abort_reason:
             return self.snapshot()
+        self.waiting_reason = ""
 
         if self.landing_requested:
             self._step_landing(now_s)
@@ -274,6 +285,9 @@ class M2DSequentialSupervisorCore:
         phase = self.phases[active]
         evidence = self.evidence[active]
 
+        if self.progressive_policy and phase in {"M2_LANDING_STAGE", "LANDING", "LANDED_DISARMED"}:
+            self.waiting_reason = "active vehicle landing/landed; operator intervention"
+            return self.snapshot()
         if phase in TERMINAL_FAILURE_PHASES and active not in self.attached:
             self._abort(f"ACTIVE_VEHICLE_TERMINAL_FAILURE:{active}:{phase}")
             return self.snapshot()
@@ -300,6 +314,9 @@ class M2DSequentialSupervisorCore:
         if self.abort_reason:
             state = "M2D_ABORT"
             active = None
+        elif self.progressive_policy and self.waiting_reason:
+            state = "M2D_OPERATOR_WAIT"
+            active = None if self.active_index is None else self.vehicle_ids[self.active_index]
         elif self.assignment is None:
             state = "WAIT_ASSIGNMENT"
             active = None
@@ -324,7 +341,9 @@ class M2DSequentialSupervisorCore:
             state = f"ACTIVE_{self.active_index}"
 
         permissions = {vehicle_id: False for vehicle_id in self.vehicle_ids}
-        if active is not None and not self.abort_reason and state.startswith("ACTIVE_"):
+        if active is not None and not self.abort_reason and (
+                state.startswith("ACTIVE_") or (self.progressive_policy and state == "M2D_OPERATOR_WAIT"
+                and self.phases[active] not in LANDING_PHASES)):
             permissions[active] = True
         if (self.simultaneous and state.startswith("ACTIVE_") and not self.abort_reason):
             for vehicle_id in self.vehicle_ids:
@@ -343,6 +362,7 @@ class M2DSequentialSupervisorCore:
             assigned_plate_ids=assigned,
             attached_plate_ids=attached_plate_ids,
             abort_reason=self.abort_reason,
+            waiting_reason=self.waiting_reason,
             landing_vehicle_id=landing_vehicle,
             landed_vehicle_ids=tuple(
                 vehicle_id for vehicle_id in self.vehicle_ids if vehicle_id in self.landed

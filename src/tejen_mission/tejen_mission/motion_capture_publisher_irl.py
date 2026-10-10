@@ -19,9 +19,8 @@ import scipy.signal  # Import scipy.signal for Butterworth filter
 import re 
 
 # IRL hardware defaults are declared as ROS parameters in MotionCapturePublisher.
-# Commissioned lab convention: pickup object=6, quad=7, electromagnet=8, ring=9.
-# M1 IRL uses the tracked pickup object and a virtual ring; ID 9 is reserved here
-# so the mapping remains explicit when physical-ring tests resume later.
+# Commissioned M1 mapping: pickup=6, quad=12, magnet=22. The default virtual
+# profile leaves ring ID9 unused; the opt-in physical ring uses M2's ID8.
 
 
 @dataclass
@@ -248,10 +247,7 @@ class ParseData():
             self.last_orientation = np.array([r_qx, r_qy, r_qz, r_qw])
 
 
-            # Round angular velocity (rad/s) to 1 decimal place
-            low_pass_wx = round(low_pass_wx, 1)
-            low_pass_wy = round(low_pass_wy, 1)
-            low_pass_wz = round(low_pass_wz, 1)
+            # Preserve filtered body-rate precision for the controller.
 
             # Convert angular velocity from rad/s to deg/s for logging
             deg_wx = np.degrees(low_pass_wx)
@@ -291,9 +287,14 @@ class MotionCapturePublisher(Node):
         self.udp_host = str(self.declare_parameter('udp_host', '192.168.0.87').value)
         self.udp_port = int(self.declare_parameter('udp_port', 1511).value)
         self.pickup_rigid_body_id = str(self.declare_parameter('pickup_rigid_body_id', '6').value)
-        self.quad_rigid_body_id = str(self.declare_parameter('quad_rigid_body_id', '7').value)
-        self.magnet_rigid_body_id = str(self.declare_parameter('magnet_rigid_body_id', '8').value)
+        self.quad_rigid_body_id = str(self.declare_parameter('quad_rigid_body_id', '12').value)
+        self.magnet_rigid_body_id = str(self.declare_parameter('magnet_rigid_body_id', '22').value)
         self.ring_rigid_body_id = str(self.declare_parameter('ring_rigid_body_id', '9').value)
+        self.ring_pose_topic = str(self.declare_parameter('ring_pose_topic', '').value)
+        ids = (self.pickup_rigid_body_id, self.quad_rigid_body_id,
+               self.magnet_rigid_body_id, self.ring_rigid_body_id)
+        if len(set(ids)) != len(ids):
+            raise ValueError('pickup, quad, magnet and ring rigid-body IDs must differ')
         self.pickup_object_pose_topic = str(
             self.declare_parameter('pickup_object_pose_topic', '/irl/pickup_object/pose').value
         )
@@ -314,6 +315,8 @@ class MotionCapturePublisher(Node):
         self.pickup_object_publisher = self.create_publisher(
             PoseArray, self.pickup_object_pose_topic, 10
         )
+        self.ring_pose_publisher = (self.create_publisher(PoseStamped, self.ring_pose_topic, 10)
+                                    if self.ring_pose_topic else None)
         # UDP input from the OptiTrack forwarding process.
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((self.udp_host, self.udp_port))
@@ -321,7 +324,7 @@ class MotionCapturePublisher(Node):
         self.get_logger().info(
             f'Listening for UDP on {self.udp_host}:{self.udp_port}; '
             f'pickup_id={self.pickup_rigid_body_id}, quad_id={self.quad_rigid_body_id}, '
-            f'magnet_id={self.magnet_rigid_body_id}, ring_id={self.ring_rigid_body_id} (reserved), '
+            f'magnet_id={self.magnet_rigid_body_id}, ring_id={self.ring_rigid_body_id}, '
             f'pickup_topic={self.pickup_object_pose_topic}, '
             f'attachment_offset_body={self.attach_offset_body.tolist()}'
         )
@@ -343,6 +346,7 @@ class MotionCapturePublisher(Node):
         self.last_pendulum_time: Optional[float] = None
         self.last_published_magnet_time: Optional[float] = None
         self.pickupParseData = ParseData()
+        self.ringParseData = ParseData()
 
         self.pendulum_rate_buffers = {
             'phi_dot': deque(maxlen=8),
@@ -710,7 +714,7 @@ class MotionCapturePublisher(Node):
                     self.latest_magnet_data = obj_data
                     self.write_csv_row("magnet_raw", obj_data)
 
-                    # ID 8 is the electromagnet/magnet tip. Publish its world-frame
+                    # Publish the configured magnet rigid body's world-frame
                     # pose directly for the planner.
                     magnet_tip_msg = self.create_pose_stamped_msg(obj_data)
                     self.magnet_tip_publisher.publish(magnet_tip_msg)
@@ -731,9 +735,14 @@ class MotionCapturePublisher(Node):
                     motion_capture_msg = self.create_motion_capture_state_msg(obj_data)
                     self.publisher.publish(motion_capture_msg)
 
+                elif (self.ring_pose_publisher is not None
+                      and self.object_id_matches(obj_id, self.ring_rigid_body_id)):
+                    obj_data = self.ringParseData.parse_packet(data)
+                    if obj_data is not None:
+                        self.write_csv_row("ring_raw", obj_data)
+                        self.ring_pose_publisher.publish(self.create_pose_stamped_msg(obj_data))
                 else:
-                    # ID 9 (ring) is intentionally reserved but unused by M1 IRL; the
-                    # moving delivery ring is virtual for this commissioning mission.
+                    # The default virtual-ring mission intentionally ignores ring packets.
                     continue
 
                 

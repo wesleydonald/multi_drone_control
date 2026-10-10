@@ -1,0 +1,68 @@
+# Opt-in M1 experiment: ID8 is the same calibrated physical ring as M2.
+# Ground-ring planner precedence (later values win): visual_astar_visual_only,
+# c1f2b_cpp_authority, irl_commissioning, m1_measured_tip_pickup, THIS overlay,
+# then pickup_alignment_mode=measured_tip_tiered in the launch. Mocap and ring
+# publisher load irl_commissioning then this overlay; pickup attachment manager,
+# controller and ELRS load irl_commissioning only. No live cable-length estimate.
+# Preserve the 2026-10-07 17:53 successful pickup values; virtual M1 is separate.
+m1_irl_operator:
+  ros__parameters:
+    physical_ring_used_for_m1: true
+    rigid_body_id_note: "pickup=6 quad=12 magnet=22 ring=8"
+
+motion_capture_publisher_irl:
+  ros__parameters:
+    ring_rigid_body_id: "8"
+    ring_pose_topic: /irl/ring/mocap_pose
+
+fake_cooperative_transport_world:
+  ros__parameters:
+    trajectory_type: measured_stationary
+    measured_ring_pose_topic: /irl/ring/mocap_pose
+    measured_ring_pose_timeout_s: 0.50
+    measured_ring_max_tilt_deg: 5.0
+    payload_pose_topic: /irl/ring/pose
+    payload_twist_topic: /irl/ring/twist
+    attachment_pose_topic: /irl/ring/plate0/pose
+    attachment_twist_topic: /irl/ring/plate0/twist
+    payload_committed_trajectory_topic: /irl/ring/committed_trajectory
+    ring_plate_pitch_diameter_m: 0.4475
+    ring_plate_diameter_m: 0.060
+    ring_collision_outer_diameter_m: 0.510
+    enable_fake_obstacles: false
+    fake_drone_count: 0
+    publish_shared_trajectories: true
+    shared_trajectory_duration_s: 10.0
+    shared_trajectory_refresh_period_s: 1.0
+
+online_join_planner:
+  ros__parameters:
+    ground_ring_attach_trial: true
+    # Body-reference floor; overrides the planner's 0.60 m code default.
+    min_reference_z: 0.58
+    # Successful 17:53 pickup: request/limit 28 mm below the object's steel
+    # pickup point. The separate support clamp permits the face target down
+    # to world support z - 16 mm; the logged 17:53 face goal was about -10.5 mm.
+    # These are reference geometry, not measured contact or cable estimation.
+    pickup_overtravel: 0.028
+    pickup_max_overtravel: 0.028
+    pickup_support_surface_overtravel_allowance_m: 0.016
+    payload_pose_topic: /irl/ring/pose
+    payload_twist_topic: /irl/ring/twist
+    attachment_pose_topic: /irl/ring/plate0/pose
+    attachment_twist_topic: /irl/ring/plate0/twist
+    match_xy_threshold: 0.025
+    drop_settle_xy_threshold: 0.10
+    match_xy_velocity_threshold: 0.08
+    descend_abort_xy_threshold: 0.050
+    descend_abort_xy_velocity_threshold: 0.15
+    final_attach_offset_z: 0.0125
+    enable_attach_ready_timeout_landing: false
+    ground_ring_marker_to_face_m: 0.0225
+    ground_ring_max_min_face_gap_m: 0.005
+    ground_ring_release_dwell_s: 0.25
+    ground_ring_separation_gap_m: 0.08
+    ground_ring_separation_dwell_s: 0.12
+    ground_ring_rise_limit_m: 0.20
+    ground_ring_rise_rate_mps: 0.03
+

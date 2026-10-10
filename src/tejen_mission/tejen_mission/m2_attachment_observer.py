@@ -63,6 +63,12 @@ class M2AttachmentObserver(Node):
     def __init__(self) -> None:
         super().__init__("m2_attachment_observer")
 
+        self.attachment_policy = str(self.declare_parameter("attachment_policy", "legacy").value)
+        self.tether_anchor_body = np.asarray(self.declare_parameter(
+            "tether_anchor_body", [0.0, 0.0, -0.04]).value, dtype=float)
+        self.proof_motion_complete = False
+        self.create_subscription(Bool, "attachment/proof_motion_complete",
+            lambda msg: setattr(self, "proof_motion_complete", bool(msg.data)), 10)
         self.assigned_plate_id = int(self.declare_parameter("assigned_plate_id", 0).value)
         self.assigned_plate_topic = str(
             self.declare_parameter("assigned_plate_topic", "").value
@@ -118,6 +124,11 @@ class M2AttachmentObserver(Node):
         defaults = default_detector_config()
         angle_direction = defaults.proof_direction_plate
         cfg = type(defaults)(
+            attachment_policy=self.attachment_policy,
+            initial_contact_max_normal_m=float(self.declare_parameter(
+                "initial_contact_max_normal_m", 0.0).value),
+            proof_angle_deg=float(self.declare_parameter("proof_angle_deg", 15.0).value),
+            proof_angle_tolerance_deg=float(self.declare_parameter("proof_angle_tolerance_deg", 2.0).value),
             candidate_xy_m=float(self.declare_parameter("candidate_xy_m", defaults.candidate_xy_m).value),
             candidate_normal_m=float(self.declare_parameter("candidate_normal_m", defaults.candidate_normal_m).value),
             candidate_speed_mps=float(self.declare_parameter("candidate_speed_mps", defaults.candidate_speed_mps).value),
@@ -149,6 +160,9 @@ class M2AttachmentObserver(Node):
                     "magnet_off_counts_as_loss", defaults.magnet_off_counts_as_loss
                 ).value
             ),
+            proof_max_contact_drift_m=(float(self.declare_parameter(
+                "proof_max_contact_drift_m", 0.0
+            ).value) or None),
         )
 
         calibration = default_calibration()
@@ -180,7 +194,10 @@ class M2AttachmentObserver(Node):
         ).strip().lower()
         self.sphere_radius_m = float(self.declare_parameter("sphere_radius_m", 0.025).value)
         self.detector = AttachmentDetector(
-            geometry=RingNetGeometry(),
+            geometry=RingNetGeometry(
+                plate_pitch_diameter_m=float(self.declare_parameter("ring_plate_pitch_diameter_m", 0.50).value),
+                plate_diameter_m=float(self.declare_parameter("ring_plate_diameter_m", 0.06).value),
+            ),
             assigned_plate_id=self.assigned_plate_id,
             calibration=calibration,
             config=cfg,
@@ -392,12 +409,13 @@ class M2AttachmentObserver(Node):
         fields += ["ring_time_s", "magnet_time_s", "drone_time_s", "magnet_on", "proof_requested", "probe_phase"]
         fields += [
             "contact_observation_model", "magnet_center_xy_error_m", "magnet_center_normal_m", "magnet_surface_gap_m",
+            "initial_contact", "proof_angle_error_deg", "proof_motion_complete",
             "detector_state", "fresh", "radial_error_m", "tangential_error_m", "normal_error_m",
             "xy_error_m", "relative_vx_mps", "relative_vy_mps", "relative_vz_mps", "relative_speed_mps",
             "orientation_error_rad", "candidate_condition", "candidate_dwell_s", "proof_condition",
-            "proof_dwell_s", "proof_excitation_m", "confirmed", "lost_condition", "geometry_separated", "loss_dwell_s", "lost",
+            "proof_dwell_s", "proof_excitation_m", "proof_contact_drift_m", "confirmed", "lost_condition", "geometry_separated", "loss_dwell_s", "lost",
             "candidate_xy_m", "candidate_normal_m", "candidate_speed_mps", "candidate_dwell_limit_s",
-            "proof_xy_m", "proof_normal_m", "proof_speed_mps", "proof_dwell_limit_s", "proof_min_excitation_m",
+            "proof_xy_m", "proof_normal_m", "proof_speed_mps", "proof_dwell_limit_s", "proof_min_excitation_m", "proof_max_contact_drift_m",
             "loss_xy_m", "loss_normal_m", "loss_dwell_limit_s", "joint_detached_truth",
         ]
         return fields
@@ -428,12 +446,21 @@ class M2AttachmentObserver(Node):
             "proof_condition": bool(result.proof_condition),
             "proof_dwell_s": float(result.proof_dwell_s),
             "proof_excitation_m": float(result.proof_excitation_m),
+            "proof_contact_drift_m": float(result.proof_contact_drift_m),
             "confirmed": bool(result.confirmed),
             "lost_condition": bool(result.lost_condition),
             "geometry_separated": bool(result.geometry_separated),
             "loss_dwell_s": float(result.loss_dwell_s),
             "lost": bool(result.lost),
         }
+        if self.attachment_policy == "measured_contact_15deg":
+            e = self.detector.progressive
+            payload.update(initial_contact=result.initial_contact,
+                proof_angle_error_deg=result.proof_angle_error_deg,
+                proof_motion_complete=self.proof_motion_complete,
+                contact_seed_plate=None if e.contact_seed is None else e.contact_seed.tolist(),
+                anchor_seed_plate=None if e.anchor_seed is None else e.anchor_seed.tolist(),
+                candidate_ready=bool(result.fresh and e.initial_contact and not e.lost))
         msg = String()
         msg.data = json.dumps(payload, separators=(",", ":"), sort_keys=True)
         self.diagnostics_pub.publish(msg)
@@ -460,6 +487,8 @@ class M2AttachmentObserver(Node):
             magnet_time_s=magnet_time,
             drone_position_world=p_drone,
             drone_time_s=drone_time,
+            anchor_position_world=p_drone + _R_drone @ self.tether_anchor_body,
+            proof_motion_complete=self.proof_motion_complete,
             magnet_on=self.magnet_on,
             proof_requested=self.proof_requested,
         )
@@ -498,6 +527,9 @@ class M2AttachmentObserver(Node):
             "magnet_center_xy_error_m": float(np.linalg.norm(center_plate[:2])),
             "magnet_center_normal_m": float(center_plate[2]),
             "magnet_surface_gap_m": float(center_plate[2] - self.sphere_radius_m),
+            "initial_contact": result.initial_contact,
+            "proof_angle_error_deg": result.proof_angle_error_deg,
+            "proof_motion_complete": self.proof_motion_complete,
             "detector_state": result.state.value,
             "fresh": str(result.fresh).lower(),
             "radial_error_m": result.radial_error_m,
@@ -514,6 +546,7 @@ class M2AttachmentObserver(Node):
             "proof_condition": str(result.proof_condition).lower(),
             "proof_dwell_s": result.proof_dwell_s,
             "proof_excitation_m": result.proof_excitation_m,
+            "proof_contact_drift_m": result.proof_contact_drift_m,
             "confirmed": str(result.confirmed).lower(),
             "lost_condition": str(result.lost_condition).lower(),
             "geometry_separated": str(result.geometry_separated).lower(),
@@ -528,6 +561,7 @@ class M2AttachmentObserver(Node):
             "proof_speed_mps": cfg.proof_speed_mps,
             "proof_dwell_limit_s": cfg.proof_dwell_s,
             "proof_min_excitation_m": cfg.proof_min_excitation_m,
+            "proof_max_contact_drift_m": cfg.proof_max_contact_drift_m,
             "loss_xy_m": cfg.loss_xy_m,
             "loss_normal_m": cfg.loss_normal_m,
             "loss_dwell_limit_s": cfg.loss_dwell_s,

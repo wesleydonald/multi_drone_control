@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Two-drone IRL readiness and frozen opposite-plate assignment manager."""
+"""IRL readiness and frozen symmetric plate assignment for two/four vehicles."""
 
 from __future__ import annotations
 
@@ -12,21 +12,23 @@ import rclpy
 from geometry_msgs.msg import PoseArray, PoseStamped
 from interfaces.msg import MotionCaptureState, Telemetry
 from rclpy.node import Node
+from rclpy.duration import Duration
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, Empty, String
+from visualization_msgs.msg import Marker, MarkerArray
 
+from .cooperative_trajectory import RingNetGeometry
 from .m2_fleet_assignment import (
     FleetAssignmentConfig,
     FleetVehicleState,
     TwoDroneAssignmentLatch,
     choose_two_drone_assignment,
+    FleetAssignmentLatch,
+    choose_fleet_assignment,
 )
 from .m2_irl_readiness import TwoDroneIRLReadinessGate
 from .m2_irl_launch_config import parse_identity_json
 from .m2a_attachment_runtime import quaternion_xyzw_to_rotation
-
-
-VEHICLE_IDS = ("drone_0", "drone_1")
 
 
 def _yaw(q) -> float:
@@ -41,28 +43,40 @@ def _yaw(q) -> float:
 class M2IRLFleetManager(Node):
     def __init__(self) -> None:
         super().__init__("m2_irl_fleet_manager")
-        self.timeout_s = float(self.declare_parameter("readiness_timeout_s", 0.50).value)
-        self.gate = TwoDroneIRLReadinessGate(
-            timeout_s=self.timeout_s,
-            status_timeout_s=float(
-                self.declare_parameter("status_timeout_s", 1.25).value
-            ),
-            stationary_dwell_s=float(
-                self.declare_parameter("stationary_dwell_s", 1.0).value
-            ),
-            max_stationary_speed_mps=float(
-                self.declare_parameter("max_stationary_speed_mps", 0.05).value
-            ),
-        )
         self.identity = parse_identity_json(
             str(self.declare_parameter("hardware_identity_json", "").value)
+        )
+        self.vehicle_ids = tuple(self.identity.vehicles)
+        self.mocap_timeout_s = float(
+            self.declare_parameter("readiness_mocap_timeout_s", 0.50).value
+        )
+        self.ring_timeout_s = float(
+            self.declare_parameter("readiness_ring_timeout_s", self.mocap_timeout_s).value
+        )
+        self.gate = TwoDroneIRLReadinessGate(
+            vehicle_ids=self.vehicle_ids,
+            mocap_timeout_s=self.mocap_timeout_s,
+            telemetry_timeout_s=float(
+                self.declare_parameter("readiness_telemetry_timeout_s", self.mocap_timeout_s).value
+            ),
+            ring_timeout_s=self.ring_timeout_s,
+            link_statistics_timeout_s=float(
+                self.declare_parameter("readiness_link_statistics_timeout_s", 0.75).value
+            ),
+            status_timeout_s=float(self.declare_parameter("status_timeout_s", 1.25).value),
+            stationary_dwell_s=float(self.declare_parameter("stationary_dwell_s", 1.0).value),
+            max_stationary_speed_mps=float(self.declare_parameter("max_stationary_speed_mps", 0.05).value),
         )
         self.hardware = self.identity.vehicles
         self.rigid_ids = {vehicle_id: item.body_id for vehicle_id, item in self.hardware.items()}
         self.physical_quads = {vehicle_id: item.physical_quad for vehicle_id, item in self.hardware.items()}
+        self.ring_geometry = RingNetGeometry(
+            plate_pitch_diameter_m=float(self.declare_parameter("ring_plate_pitch_diameter_m", 0.50).value),
+            plate_diameter_m=float(self.declare_parameter("ring_plate_diameter_m", 0.06).value),
+        )
         self.assignment_config = FleetAssignmentConfig(
-            state_timeout_s=self.timeout_s,
-            ring_state_timeout_s=self.timeout_s,
+            state_timeout_s=self.mocap_timeout_s,
+            ring_state_timeout_s=self.ring_timeout_s,
             tether_length_m=float(self.declare_parameter("tether_length_m", 0.475).value),
             tether_anchor_body=np.array(
                 self.declare_parameter("tether_anchor_body", [0.0, 0.0, -0.04]).value,
@@ -70,7 +84,12 @@ class M2IRLFleetManager(Node):
             ),
             attached_hold_angle_deg=15.0,
         )
-        self.assignment_latch = TwoDroneAssignmentLatch()
+        self.assignment_latch = (
+            TwoDroneAssignmentLatch() if len(self.vehicle_ids) == 2 else FleetAssignmentLatch()
+        )
+        self.choose_assignment = (
+            choose_two_drone_assignment if len(self.vehicle_ids) == 2 else choose_fleet_assignment
+        )
         self.states: dict[str, FleetVehicleState] = {}
         self.speeds: dict[str, float] = {}
         self.body_stamps: dict[str, float] = {}
@@ -84,8 +103,9 @@ class M2IRLFleetManager(Node):
         self.ring_position: Optional[np.ndarray] = None
         self.ring_rotation: Optional[np.ndarray] = None
         self.ring_stamp_s: Optional[float] = None
+        self.ring_frame_id = "map"
 
-        for vehicle_id in VEHICLE_IDS:
+        for vehicle_id in self.vehicle_ids:
             ns = f"/{vehicle_id}"
             self.create_subscription(
                 MotionCaptureState, f"{ns}/motion_capture_state",
@@ -131,6 +151,7 @@ class M2IRLFleetManager(Node):
         self.assignment_pub = self.create_publisher(String, "/m2c/assignment", latched)
         self.ready_pub = self.create_publisher(Bool, "/m2c/ready", 10)
         self.status_pub = self.create_publisher(String, "/m2c/status", 10)
+        self.markers_pub = self.create_publisher(MarkerArray, "/m2c/assignment_markers", 5)
         self.create_timer(0.1, self._tick)
 
     def _now(self) -> float:
@@ -186,10 +207,11 @@ class M2IRLFleetManager(Node):
         self.ring_position = position
         self.ring_rotation = rotation
         self.ring_stamp_s = now
+        self.ring_frame_id = msg.header.frame_id or "map"
         self.gate.update_ring(stamp_s=now)
 
     def _update_gate(self) -> None:
-        for vehicle_id in VEHICLE_IDS:
+        for vehicle_id in self.vehicle_ids:
             tables = (
                 self.body_stamps, self.magnet_stamps, self.speeds, self.armed,
                 self.arming_stamps, self.planner_stamps, self.backend_stamps,
@@ -210,6 +232,73 @@ class M2IRLFleetManager(Node):
                 telemetry_stamp_s=self.telemetry_stamps[vehicle_id],
             )
 
+    def _publish_markers(self, now_s: float) -> None:
+        """Show every plate and highlight the frozen fleet assignment."""
+        if (
+            self.ring_position is None or self.ring_rotation is None
+            or self.ring_stamp_s is None
+            or now_s - self.ring_stamp_s > self.ring_timeout_s
+        ):
+            return
+        assignment = self.assignment_latch.assignment
+        owners = (
+            {int(plate): vehicle_id for vehicle_id, plate in assignment.vehicle_to_plate.items()}
+            if assignment is not None else {}
+        )
+        markers = MarkerArray()
+        stamp = self.get_clock().now().to_msg()
+        lifetime = Duration(seconds=0.35).to_msg()
+        for plate_index in range(self.ring_geometry.plate_count):
+            position = self.ring_geometry.plate_position_world(
+                ring_position=self.ring_position,
+                rotation_world_from_ring=self.ring_rotation,
+                plate_index=plate_index,
+            )
+            owner = owners.get(plate_index)
+            color = (
+                (0.1, 0.9, 1.0) if owner == "drone_0" else
+                (1.0, 0.3, 0.9) if owner == "drone_1" else
+                (0.3, 1.0, 0.3) if owner == "drone_2" else
+                (1.0, 0.7, 0.1) if owner == "drone_3" else
+                (0.7, 0.7, 0.7)
+            )
+            plate = Marker()
+            plate.header.frame_id = self.ring_frame_id
+            plate.header.stamp = stamp
+            plate.ns = "m2c_assignment"
+            plate.id = plate_index
+            plate.type = Marker.CYLINDER
+            plate.action = Marker.ADD
+            plate.lifetime = lifetime
+            plate.pose.orientation.w = 1.0
+            plate.pose.position.x = float(position[0])
+            plate.pose.position.y = float(position[1])
+            plate.pose.position.z = float(position[2] + 0.005)
+            plate.scale.x = plate.scale.y = self.ring_geometry.plate_diameter_m
+            plate.scale.z = 0.006
+            plate.color.r, plate.color.g, plate.color.b = color
+            plate.color.a = 0.9 if owner else 0.45
+            markers.markers.append(plate)
+
+            label = Marker()
+            label.header.frame_id = self.ring_frame_id
+            label.header.stamp = stamp
+            label.ns = "m2c_assignment_labels"
+            label.id = 100 + plate_index
+            label.type = Marker.TEXT_VIEW_FACING
+            label.action = Marker.ADD
+            label.lifetime = lifetime
+            label.pose.orientation.w = 1.0
+            label.pose.position.x = float(position[0])
+            label.pose.position.y = float(position[1])
+            label.pose.position.z = float(position[2] + 0.055)
+            label.scale.z = 0.055
+            label.color.r, label.color.g, label.color.b = color
+            label.color.a = 1.0
+            label.text = f"{plate_index} {owner}" if owner else str(plate_index)
+            markers.markers.append(label)
+        self.markers_pub.publish(markers)
+
     def _tick(self) -> None:
         now = self._now()
         self._update_gate()
@@ -217,12 +306,13 @@ class M2IRLFleetManager(Node):
         if snapshot.ready and not self.assignment_latch.frozen:
             if self.ring_position is not None and self.ring_rotation is not None:
                 try:
-                    chosen = choose_two_drone_assignment(
-                        vehicles=[self.states[v] for v in VEHICLE_IDS],
+                    chosen = self.choose_assignment(
+                        vehicles=[self.states[v] for v in self.vehicle_ids],
                         ring_position_world=self.ring_position,
                         rotation_world_from_ring=self.ring_rotation,
                         ring_stamp_s=self.ring_stamp_s,
                         now_s=now,
+                        geometry=self.ring_geometry,
                         config=self.assignment_config,
                     )
                     self.assignment_latch.freeze(chosen)
@@ -252,6 +342,7 @@ class M2IRLFleetManager(Node):
                 "assignment_frozen": self.assignment_latch.frozen,
             }, sort_keys=True
         )
+        self._publish_markers(now)
         self.status_pub.publish(status)
 
 

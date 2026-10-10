@@ -100,14 +100,27 @@ def _launch_nodes(monkeypatch, rate_source, launch=LAUNCH):
     spec = importlib.util.spec_from_file_location("m2_launch_under_test", launch)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    from launch import LaunchContext
     from launch.actions import TimerAction
     from launch_ros.actions import Node
     ld = mod.generate_launch_description()
+    entities = list(ld.entities)
+    # his M2D launch builds its nodes in an OpaqueFunction since 11a0683f (attachment_policy)
+    for setup in _opaque(ld, "_launch_setup"):
+        context = LaunchContext()
+        context.launch_configurations["attachment_policy"] = "legacy"
+        entities += setup.execute(context)
     nodes = []
-    for entity in ld.entities:
+    for entity in entities:
         if isinstance(entity, TimerAction):
             nodes += [a for a in entity.actions if isinstance(a, Node)]
     return ld, nodes
+
+
+def _opaque(ld, name):
+    from launch.actions import OpaqueFunction
+    return [e for e in ld.entities if isinstance(e, OpaqueFunction)
+            and e._OpaqueFunction__function.__name__ == name]
 
 
 def _text(value):
@@ -133,8 +146,7 @@ def test_launch_pose_has_no_imu_bridges(monkeypatch, launch):
     params = _bridge_params(nodes)
     assert len(params) == 4 and all(p["rate_source"] == "pose" for p in params)
     assert not [n for n in nodes if "imu_bridge" in (n._Node__node_name or "")]
-    from launch.actions import OpaqueFunction
-    assert not [e for e in ld.entities if isinstance(e, OpaqueFunction)]
+    assert not _opaque(ld, "_require_imu_world")
 
 
 @pytest.mark.parametrize("launch", [LAUNCH, LAUNCH_M2C])
@@ -163,8 +175,7 @@ def test_launch_rejects_unknown_rate_source(monkeypatch, launch):
 def test_launch_imu_refuses_a_world_without_the_imu_system(monkeypatch, tmp_path, launch):
     ld, _ = _launch_nodes(monkeypatch, None, launch)
     from launch import LaunchContext
-    from launch.actions import OpaqueFunction
-    check = [e for e in ld.entities if isinstance(e, OpaqueFunction)]
+    check = _opaque(ld, "_require_imu_world")
     assert len(check) == 1
     pose_world = _generate(tmp_path / "pose")["generated_world"]
     imu_world = _generate(tmp_path / "imu", imu_system=True)["generated_world"]

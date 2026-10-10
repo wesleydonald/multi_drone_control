@@ -16,7 +16,7 @@ def test_planner_has_explicit_default_joint_and_irl_measured_truth_sources():
     assert "def m2b_geometry_separated" in source
     assert "self.m2b_attachment_truth_source == \"joint_truth\"" in source
     assert "self.m2b_attachment_truth_source == \"measured_detector\"" in source
-    assert "if self.m2b_attachment_truth_source == \"joint_truth\":\n                    self.m2b_request_detector_reset()" in source
+    assert 'if self.m2b_attachment_truth_source == "joint_truth" and not self.m2b_progressive:' in source
 
 
 def test_measured_detector_bootstrap_bypasses_simulator_joint_truth_gate():

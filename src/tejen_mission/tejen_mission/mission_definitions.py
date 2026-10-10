@@ -7,6 +7,8 @@ metadata are defined here instead of being scattered through reference code.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from .mission_types import (
     ControllerAuthority,
     MissionDefinition,
@@ -73,7 +75,8 @@ def pickup_delivery_mission() -> MissionDefinition:
             ReferenceType.RATE_CONTROLLED_MANOEUVRE,
             TargetSource.PICKUP_OBJECT,
             "ON",
-            "Descend toward the pickup object at a prescribed relative rate.",
+            "Descend toward pickup; legacy uses a timed profile/magnet ON, "
+            "measured-tip opt-in gates HIGH/LOW progress and switches ON at LOW entry.",
         ),
         _spec(
             MissionPhase.MAGNET_ATTACH_WAIT,
@@ -87,7 +90,7 @@ def pickup_delivery_mission() -> MissionDefinition:
             ReferenceType.RATE_CONTROLLED_MANOEUVRE,
             TargetSource.PICKUP_OBJECT,
             "ON",
-            "Lift the newly attached object to the loaded staging hover.",
+            "Lift a pickup candidate; measured-tip M1 proves co-motion before loaded transfer.",
         ),
         _spec(
             MissionPhase.TRANSIT_TO_DROP_POINT,
@@ -238,7 +241,7 @@ def join_only_mission() -> MissionDefinition:
 
 
 
-def m2b_single_attachment_mission() -> MissionDefinition:
+def m2b_single_attachment_mission(attachment_policy: str = "legacy") -> MissionDefinition:
     """Single-drone M2B mission using the same declarative phase framework."""
     specs = [
         _spec(MissionPhase.M2_BOOTSTRAP_DETACH, ReferenceType.STATIONARY_REGULATION, TargetSource.CURRENT_POSE, "OFF", "Keep X3 grounded/disarmed while requesting release of the simulator startup joint."),
@@ -259,20 +262,30 @@ def m2b_single_attachment_mission() -> MissionDefinition:
         _spec(MissionPhase.LANDING, ReferenceType.RATE_CONTROLLED_MANOEUVRE, TargetSource.LANDING_POINT, "OFF", "Controlled vertical landing after a clear retreat."),
         _spec(MissionPhase.LANDED_DISARMED, ReferenceType.STATIONARY_REGULATION, TargetSource.LANDING_POINT, "OFF", "Terminal disarmed state.", authority=ControllerAuthority.DISARMED),
     ]
+    if attachment_policy == "measured_contact_15deg":
+        descriptions = {
+            MissionPhase.M2_ATTACH_CAPTURE_WAIT: "Bounded measured contact search; initial contact dwell starts the 15-degree proof without waiting for the nominal floor.",
+            MissionPhase.M2_ATTACH_PROOF: "Constant-radius outward 15-degree proof; magnet ON until explicit release or convincing loss.",
+            MissionPhase.M2_ATTACHED_HOLD: "Preserve the proven contact point and snapshotted tether radius.",
+            MissionPhase.M2_DETACHED_RETREAT: "Explicit release, vertical clearance, measured separation, then capture return or operator retry wait.",
+            MissionPhase.M2_LANDING_STAGE: "Operator LAND: release and verify vertical clearance before lateral landing-column travel.",
+            MissionPhase.M2_FAULT: "Control/authority fault; magnet state is retained by the runtime adapter, never implicitly released.",
+        }
+        specs = [replace(spec, description=descriptions.get(spec.phase, spec.description)) for spec in specs]
     return MissionDefinition(
         name="m2b_single_attachment",
         initial_phase=MissionPhase.M2_BOOTSTRAP_DETACH,
         phases={spec.phase: spec for spec in specs},
     )
 
-def mission_for_mode(mode: str) -> MissionDefinition:
+def mission_for_mode(mode: str, *, attachment_policy: str = "legacy") -> MissionDefinition:
     normalized = str(mode).strip().lower()
     if normalized in {"pickup_delivery", "pickup-delivery", "full"}:
         return pickup_delivery_mission()
     if normalized in {"join", "join_only", "reattach"}:
         return join_only_mission()
     if normalized in {"m2b", "m2b_single_attachment", "single_attachment"}:
-        return m2b_single_attachment_mission()
+        return m2b_single_attachment_mission(attachment_policy)
     raise ValueError(
         f"Unknown mission_mode={mode!r}; expected 'pickup_delivery', 'join', or 'm2b'."
     )

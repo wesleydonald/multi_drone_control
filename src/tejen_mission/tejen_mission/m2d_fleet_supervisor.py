@@ -49,6 +49,7 @@ class M2DFleetSupervisor(Node):
             target_attachment_count=self.target_attachment_count,
             operator_hold_after_goal=self.operator_hold_after_goal,
             simultaneous=bool(self.declare_parameter("simultaneous", False).value),
+            progressive_policy=str(self.declare_parameter("attachment_policy", "legacy").value) == "measured_contact_15deg",
         )
         self.assignment_topic = str(
             self.declare_parameter("m2c_assignment_topic", "/m2c/assignment").value
@@ -151,6 +152,7 @@ class M2DFleetSupervisor(Node):
                 confirmed=bool(payload.get("confirmed", False)),
                 lost=bool(payload.get("lost", False)),
                 stamp_s=self._now_s(),
+                fresh=bool(payload.get("fresh", False)),
             )
         except Exception as exc:
             self.get_logger().warn(f"Ignored malformed {vehicle_id} attachment diagnostics: {exc}")
@@ -219,6 +221,7 @@ class M2DFleetSupervisor(Node):
             "assigned_plate_ids": dict(snapshot.assigned_plate_ids),
             "attached_plate_ids": dict(snapshot.attached_plate_ids),
             "abort_reason": snapshot.abort_reason,
+            "waiting_reason": snapshot.waiting_reason,
             "target_attachment_count": self.target_attachment_count,
             "operator_hold_after_goal": self.operator_hold_after_goal,
             "landing_vehicle_id": snapshot.landing_vehicle_id,

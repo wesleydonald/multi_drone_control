@@ -14,7 +14,9 @@ import yaml
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction, TimerAction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, TimerAction, OpaqueFunction
+from tejen_mission.m2_irl_launch_config import load_hardware_config, progressive_ros_parameters
+from tejen_mission.m2_irl_attachment_policy import validate_policy, POLICY
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -262,7 +264,16 @@ def _require_imu_world(context):
     return []
 
 
-def generate_launch_description() -> LaunchDescription:
+def _launch_setup(context):
+    policy = validate_policy(LaunchConfiguration("attachment_policy").perform(context))
+    progressive = {"planner": {}, "observer": {}, "supervisor": {}}
+    if policy == POLICY:
+        config = load_hardware_config(Path(get_package_share_directory("tejen_mission")) / "config" / "m2_irl_two_drone.yaml")
+        config["m2_irl"]["attachment_policy"] = policy
+        progressive = progressive_ros_parameters(config)
+        # Gazebo's fixed joint captures within 10 mm and preserves that gap.
+        # This starts measured proof only; IRL retains the zero-gap default.
+        progressive["observer"]["initial_contact_max_normal_m"] = 0.010
     drone_share = Path(get_package_share_directory("tejen_mission"))
     dynamic_share = Path(get_package_share_directory("tejen_dynamic_planner"))
     commissioned_backend_params = _load_commissioned_backend_params(dynamic_share)
@@ -277,17 +288,7 @@ def generate_launch_description() -> LaunchDescription:
     rate_source = _rate_source()
 
     actions = [
-        DeclareLaunchArgument("gui", default_value="true"),
-        DeclareLaunchArgument("world_path"),
-        DeclareLaunchArgument("m2d_log_dir", default_value="logs/m2_attachment/m2d"),
-        DeclareLaunchArgument(
-            "octopus_pre_authority_max_runtime_s", default_value="0.10"
-        ),
-        DeclareLaunchArgument("target_attachment_count", default_value="4"),
-        DeclareLaunchArgument("operator_hold_after_goal", default_value="false"),
-        # all four vehicles hold mission permission at once (testing; multi_drone_control)
-        DeclareLaunchArgument("simultaneous", default_value="false"),
-        *([OpaqueFunction(function=_require_imu_world)] if rate_source == "imu" else []),
+
         ExecuteProcess(
             cmd=["gz", "sim", "-v", "2", world_path],
             name="m2d_gazebo_gui", output="screen", condition=IfCondition(gui),
@@ -477,6 +478,7 @@ def generate_launch_description() -> LaunchDescription:
                     "log_dir": PathJoinSubstitution([log_root, ns, "attachment"]),
                     "metadata_filename": "attachment_metadata.json",
                     "vehicle_pose_semantics": f"real X3/base_link pose during M2D sequential attachment ({ns})",
+                    **progressive["observer"],
                 }],
             ),
         ])
@@ -484,7 +486,7 @@ def generate_launch_description() -> LaunchDescription:
         planner_nodes.append(Node(
             package="tejen_mission", executable="online_join_planner",
             namespace=ns, name="online_join_planner", output="screen",
-            parameters=[_m2b_params(drone_id, log_root)],
+            parameters=[_m2b_params(drone_id, log_root), progressive["planner"]],
         ))
         backend_nodes.append(Node(
             package="tejen_dynamic_planner", executable="dynamic_planner_transfer_backend",
@@ -532,6 +534,7 @@ def generate_launch_description() -> LaunchDescription:
             parameters=[{
                 "use_sim_time": True,
                 "m2c_assignment_topic": "/m2c/assignment",
+                **progressive["supervisor"],
                 "m2c_ready_topic": "/m2c/ready",
                 "attachment_evidence_timeout_s": 0.75,
                 "target_attachment_count": ParameterValue(
@@ -558,4 +561,22 @@ def generate_launch_description() -> LaunchDescription:
         TimerAction(period=1.80, actions=backend_nodes),
         TimerAction(period=2.00, actions=shared_nodes),
     ])
-    return LaunchDescription(actions)
+    return actions
+
+
+def generate_launch_description() -> LaunchDescription:
+    return LaunchDescription([
+        DeclareLaunchArgument("gui", default_value="true"),
+        DeclareLaunchArgument("world_path"),
+        DeclareLaunchArgument("m2d_log_dir", default_value="logs/m2_attachment/m2d"),
+        DeclareLaunchArgument(
+            "octopus_pre_authority_max_runtime_s", default_value="0.10"
+        ),
+        DeclareLaunchArgument("target_attachment_count", default_value="4"),
+        DeclareLaunchArgument("operator_hold_after_goal", default_value="false"),
+        DeclareLaunchArgument("attachment_policy", default_value="legacy"),
+        # all four vehicles hold mission permission at once (testing; multi_drone_control)
+        DeclareLaunchArgument("simultaneous", default_value="false"),
+        *([OpaqueFunction(function=_require_imu_world)] if _rate_source() == "imu" else []),
+        OpaqueFunction(function=_launch_setup),
+    ])

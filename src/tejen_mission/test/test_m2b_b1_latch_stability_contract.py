@@ -165,7 +165,7 @@ def test_latch_stability_gate_resets_dwell_on_moderate_transient_and_times_out()
 
 def test_capture_wait_has_measured_post_latch_substage_before_proof():
     planner = PLANNER.read_text(encoding="utf-8")
-    start = planner.index("if self.phase == MissionPhase.M2_ATTACH_CAPTURE_WAIT:")
+    start = planner.index("if self.phase == MissionPhase.M2_ATTACH_CAPTURE_WAIT:", planner.index("def update_m2b_b1"))
     end = planner.index("if self.phase == MissionPhase.M2_ATTACH_PROOF:", start)
     block = planner[start:end]
     assert "M2BLatchStabilityGate" in planner

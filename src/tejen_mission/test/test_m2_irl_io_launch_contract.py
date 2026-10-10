@@ -74,6 +74,21 @@ def test_checked_in_config_is_fail_closed_until_both_props_off_checks():
 
 
 
+def test_irl_geometry_matches_measured_magnet_center_and_contact_face():
+    payload = yaml.safe_load((PKG / "config" / "m2_irl_two_drone.yaml").read_text())
+    geometry = payload["m2_irl"]["geometry"]
+    detector = payload["m2_irl"]["attachment_detector"]
+    anchor_z = geometry["tether_anchor_body"][2]
+    face_z = detector["magnet_contact_translation_m"][2]
+    length = geometry["tether_length_m"]
+    assert length == pytest.approx(0.5575)  # anchor to contact face
+    assert face_z == pytest.approx(-0.0225)  # marker centre to face
+    assert length - anchor_z + face_z == pytest.approx(0.575)  # body to marker centre
+    launch = (PKG / "launch" / "m2_irl_two_drone.launch.py").read_text()
+    assert '"magnet_drop_below_quad": body_to_magnet_center_m' in launch
+    assert '"m2b_anchor_to_contact_length_m": float(geometry["tether_length_m"])' in launch
+    assert '"contact_offset_z": float(contact["magnet_contact_translation_m"][2])' in launch
+
 def test_link_statistics_event_requires_crc_length_and_positive_uplink_quality():
     module = importlib.import_module("tejen_mission.elrs_interface_irl")
     frame = bytearray([0xC8, 12, 0x14, 206, 205, 70, 4, 0, 2, 4, 201, 50, 3])
@@ -198,7 +213,83 @@ def test_launch_router_and_manager_receive_identical_yaml_identity(tmp_path):
     assert json.loads(yaml.safe_load(router_identity))["m2_irl"]["vehicles"]["drone_0"]["body_id"] == 16
 
 
-def test_launch_runner_and_udev_contract_are_manual_and_two_adapter_only():
+def _mission_backend_parameters(tmp_path):
+    """Inspect both constructed backend nodes, including their YAML defaults."""
+    import importlib.util
+    from launch import LaunchContext
+    from launch.utilities import perform_substitutions
+
+    payload = yaml.safe_load((PKG / "config" / "m2_irl_two_drone.yaml").read_text())
+    for vehicle in payload["m2_irl"]["vehicles"].values():
+        vehicle["props_off_verified"] = True
+    config = tmp_path / "m2_timing_test.yaml"
+    config.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    launch_path = PKG / "launch" / "m2_irl_two_drone.launch.py"
+    spec = importlib.util.spec_from_file_location("m2_irl_timing_launch", launch_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    context = LaunchContext()
+    context.launch_configurations.update({
+        "mode": "mission", "config_file": str(config),
+        "log_dir": str(tmp_path / "logs"), "rviz": "false",
+    })
+    actions = module._launch_setup(context)
+    backends = {}
+    for action in actions:
+        for node in getattr(action, "actions", []):
+            if not hasattr(node, "_Node__parameters"):
+                continue
+            def resolved(value):
+                if isinstance(value, (list, tuple)):
+                    return perform_substitutions(context, value)
+                return str(value)
+
+            params = {
+                resolved(key): str(yaml.safe_load(resolved(value)))
+                for key, value in node._Node__parameters[0].items()
+                if resolved(key) in {
+                    "cooperative_prediction_mode",
+                    "vehicle_id",
+                    "seed_stationary_on_activation",
+                    "fixed_splice_lookahead_s",
+                    "shadow_reference_topic",
+                    "cooperative_shared_start_skew_s",
+                    "cooperative_shared_start_skew_max_speed_mps",
+                }
+            }
+            if params.get("cooperative_prediction_mode") == "shared_trajectory":
+                backends[params["vehicle_id"]] = params
+    assert set(backends) == {"drone_0", "drone_1"}
+    return backends
+
+
+def test_irl_backends_seed_passive_pre_authority_future_splice(tmp_path):
+    for vehicle_id, backend in _mission_backend_parameters(tmp_path).items():
+        assert backend["seed_stationary_on_activation"].lower() == "true", vehicle_id
+        assert float(backend["fixed_splice_lookahead_s"]) == pytest.approx(0.10)
+        assert backend["shadow_reference_topic"] != f"/{vehicle_id}/join_planner/reference"
+
+
+def test_rolling_commitment_recheck_has_future_coverage_or_rejects_late(tmp_path):
+    """A commitment rolled forward during a short solve must still cover splice."""
+    core = (ROOT / "src" / "tejen_dynamic_planner" / "standalone" / "src"
+            / "receding_horizon_planner.cpp").read_text(encoding="utf-8")
+    assert "if (had_incumbent && result.candidate_finish_time_s >= splice_time" in core
+    request_s = 100.0
+    latest_obstacle_start_s = request_s + 0.025
+    ordinary_finish_s = request_s + 0.030
+    late_finish_s = request_s + 0.110
+    for vehicle_id, backend in _mission_backend_parameters(tmp_path).items():
+        has_seed = backend["seed_stationary_on_activation"].lower() == "true"
+        splice_s = request_s + (
+            float(backend["fixed_splice_lookahead_s"]) if has_seed else 0.0
+        )
+        assert latest_obstacle_start_s <= splice_s, vehicle_id
+        assert ordinary_finish_s < splice_s, vehicle_id
+        assert late_finish_s >= splice_s, vehicle_id
+
+
+def test_launch_runner_and_udev_contract_preserve_manual_authority():
     launch = (PKG / "launch" / "m2_irl_two_drone.launch.py").read_text(encoding="utf-8")
     runner = (ROOT / "tools" / "irl_test" / "run_m2_irl_two_drone.sh").read_text(encoding="utf-8")
     rules = (ROOT / "tools" / "irl_test" / "99-elrs-m2.rules").read_text(encoding="utf-8")
@@ -232,12 +323,17 @@ def test_launch_runner_and_udev_contract_are_manual_and_two_adapter_only():
     assert '"takeoff_height": 0.65' in launch
     assert '"m2b_takeoff_require_magnet_clearance": True' in launch
     assert '"m2b_takeoff_magnet_clearance_m": 0.03' in launch
-    assert '"m2b_takeoff_hover_timeout_s": 15.0' in launch
+    assert '"m2b_takeoff_hover_timeout_s":' not in launch
+    assert '**progressive["planner"]' in launch
+    assert '"m2b_takeoff_settle_swing_deg": profiles.takeoff_swing_deg' in launch
+    assert '"m2b_link_statistics_timeout_s": profiles.link_statistics_timeout_s' in launch
+    assert '"c1f2_prepare_settle_acceleration_mps2": profiles.c1f2_acceleration_mps2' in launch
     assert "source /opt/ros/humble/setup.bash" in runner
     assert "set -euo pipefail" in runner
     assert 'ATTRS{serial}=="FTF0AROT"' in rules and 'SYMLINK+="QUAD2"' in rules
     assert 'ATTRS{serial}=="FTF09R63"' in rules and 'SYMLINK+="QUAD4"' in rules
-    assert "QUAD1" not in rules and "QUAD3" not in rules
+    assert 'ATTRS{serial}=="FTF0AR84"' in rules and 'SYMLINK+="QUAD1"' in rules
+    assert 'ATTRS{serial}=="FTF09W4A"' in rules and 'SYMLINK+="QUAD3"' in rules
     assert "/multi_drone_control-week1-ready-for-testing.zip" in ignore
 
 
@@ -273,3 +369,41 @@ def test_mission_launch_wires_each_planner_to_its_namespaced_permission_and_mpc_
 def test_launch_uses_configured_irl_magnet_off_loss_policy():
     launch = (PKG / "launch" / "m2_irl_two_drone.launch.py").read_text(encoding="utf-8")
     assert '"magnet_off_counts_as_loss": bool(contact["magnet_off_counts_as_loss"])' in launch
+
+def test_irl_observer_uses_actual_router_tf_frame_leaves():
+    from tejen_mission.m2a_attachment_runtime import NamedTransform, resolve_named_transform_world
+
+    launch = (PKG / "launch" / "m2_irl_two_drone.launch.py").read_text(encoding="utf-8")
+    assert '"carrier_frame_leaf": "base_link"' in launch
+    assert '"magnet_frame_leaf": "magnet_tip_link"' in launch
+    for vehicle_id in ("drone_0", "drone_1"):
+        transforms = [
+            NamedTransform("map", f"{vehicle_id}/base_link", [0, 0, 1], [0, 0, 0, 1]),
+            NamedTransform("map", f"{vehicle_id}/magnet_tip_link", [0, 0, 0.4], [0, 0, 0, 1]),
+        ]
+        body, _, _ = resolve_named_transform_world(transforms, "base_link")
+        magnet, _, _ = resolve_named_transform_world(transforms, "magnet_tip_link")
+        assert np.allclose(body, [0, 0, 1])
+        assert np.allclose(magnet, [0, 0, 0.4])
+
+
+def test_irl_backend_allows_only_bounded_stationary_peer_start_overlap(tmp_path):
+    from tejen_mission.m2_irl_launch_config import parse_gate_profiles
+
+    payload = yaml.safe_load((PKG / "config" / "m2_irl_two_drone.yaml").read_text(encoding="utf-8"))
+    profile = parse_gate_profiles(payload)
+    assert profile.cooperative_shared_start_skew_s == 0.05
+    launch = (PKG / "launch" / "m2_irl_two_drone.launch.py").read_text(encoding="utf-8")
+    assert '"cooperative_shared_start_skew_s": profiles.cooperative_shared_start_skew_s' in launch
+    assert '"cooperative_shared_start_skew_max_speed_mps": profiles.ground_speed_mps' in launch
+    for vehicle_id, configured in _mission_backend_parameters(tmp_path).items():
+        assert float(configured["cooperative_shared_start_skew_s"]) == pytest.approx(0.05), vehicle_id
+        assert float(configured["cooperative_shared_start_skew_max_speed_mps"]) == pytest.approx(
+            profile.ground_speed_mps), vehicle_id
+
+    backend = (ROOT / "src" / "tejen_dynamic_planner" / "src" / "transfer_backend_node.cpp").read_text(encoding="utf-8")
+    assert '"cooperative_shared_start_skew_s", 0.0' in backend
+    assert 'start_skew_s > cooperative_shared_start_skew_s_' in backend
+    assert 'state.velocity.norm() > cooperative_shared_start_skew_max_speed_mps_' in backend
+    assert 'advertised.velocity.norm() > cooperative_shared_start_skew_max_speed_mps_' in backend
+    assert 'trajectory.evaluate(validation_time_s)' in backend

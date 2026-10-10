@@ -22,7 +22,7 @@ import math
 import os
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Dict, Optional, Tuple
 
@@ -36,7 +36,15 @@ from std_msgs.msg import Bool, Empty, Int32, String
 from trajectory_msgs.msg import MultiDOFJointTrajectory, MultiDOFJointTrajectoryPoint
 from visualization_msgs.msg import Marker, MarkerArray
 
+from .m2_irl_attachment_policy import POLICY, validate_policy, ProofArc, RetryBudget, QuietMissTracker
 from .mission_definitions import mission_for_mode
+from .measured_tip_alignment import TipAlignment, TipAlignmentConfig, TieredDescent, TrackingTipAlignment
+from .m1_ground_ring import GroundRingExit
+from .m1_pickup_proof import PickupProofConfig, PickupProofTracker
+from .m1_pickup_recovery import (
+    PickupProgressStall, PickupRelease, early_candidate_ready,
+    lift_offsets_from_candidate_hold,
+)
 from .m2a_attachment_runtime import quaternion_xyzw_to_rotation
 from .m2_irl_readiness import link_statistics_fresh
 from .mission_types import MissionPhase, ReferenceType, TargetSource
@@ -50,6 +58,9 @@ from .m2b_attachment_mission import (
     M2BEvidenceFreshnessGate,
     M2BLatchStabilityGate,
     M2BRetryTracker,
+    M2BIRLTipAlignment,
+    M2BIRLTipAlignmentConfig,
+    retry_tracker_for_assignment,
     M2BSettleGate,
     attached_hold_direction_plate,
     body_reference_from_contact,
@@ -62,6 +73,8 @@ from .m2b_attachment_mission import (
     proof_success,
     should_enable_magnet,
     should_enter_capture_wait,
+    should_enter_irl_capture_search,
+
     yaw_quaternion_xyzw,
 )
 from .payload_geometry import PayloadGeometryProfile, PickupTargetGeometry
@@ -456,6 +469,14 @@ class OnlineJoinPlanner(Node):
                 ).value
             ),
         )
+        self.c1f2_prepare_settle_acceleration_mps2 = max(
+            0.0,
+            float(
+                self.declare_parameter(
+                    "c1f2_prepare_settle_acceleration_mps2", 0.50
+                ).value
+            ),
+        )
         self.c1f2_prepare_settle_dwell_s = max(
             0.0,
             float(
@@ -489,7 +510,8 @@ class OnlineJoinPlanner(Node):
         self.mission_mode = str(
             self.declare_parameter("mission_mode", "join").value
         ).strip().lower()
-        self.mission = mission_for_mode(self.mission_mode)
+        self.m2b_progressive = validate_policy(str(self.declare_parameter("attachment_policy", "legacy").value)) == POLICY
+        self.mission = mission_for_mode(self.mission_mode, attachment_policy=POLICY if self.m2b_progressive else "legacy")
         self.phase = self.mission.initial_phase
         self.phase_entry_time = self._physical_now_s()
         self.condition_start_time: Optional[float] = None
@@ -613,6 +635,9 @@ class OnlineJoinPlanner(Node):
         self.m2b_pendulum_topic = str(
             self.declare_parameter("m2b_pendulum_topic", "/pendulum_swing_state").value
         )
+        self.m2b_pendulum_timeout_s = max(
+            0.02, float(self.declare_parameter("m2b_pendulum_timeout_s", 0.35).value)
+        )
         self.m2b_ring_pose_source = str(
             self.declare_parameter("m2b_ring_pose_source", "fixed").value
         ).strip().lower()
@@ -625,7 +650,7 @@ class OnlineJoinPlanner(Node):
             self.declare_parameter("m2b_ring_pose_index", 1).value
         )
         self.m2b_ring_pose_timeout_s = max(
-            0.02, float(self.declare_parameter("m2b_ring_pose_timeout_s", 0.25).value)
+            0.02, float(self.declare_parameter("m2b_ring_pose_timeout_s", 0.50).value)
         )
         if self.m2b_ring_pose_source not in {"fixed", "pose_array"}:
             raise ValueError("m2b_ring_pose_source must be 'fixed' or 'pose_array'")
@@ -647,12 +672,16 @@ class OnlineJoinPlanner(Node):
         )
         if self.m2b_anchor_to_contact_length_m <= 0.0:
             raise ValueError("m2b_anchor_to_contact_length_m must be positive")
-        self.m2b_ring_geometry = RingNetGeometry()
+        self.m2b_ring_geometry = RingNetGeometry(
+            plate_pitch_diameter_m=float(self.declare_parameter("ring_plate_pitch_diameter_m", 0.50).value),
+            plate_diameter_m=float(self.declare_parameter("ring_plate_diameter_m", 0.06).value),
+        )
         self.m2b_joint_truth_timeout_s = max(
             0.02,
             float(self.declare_parameter("m2b_joint_truth_timeout_s", 0.35).value),
         )
         self.m2b_config = M2BConfig(
+            progressive_waits=self.m2b_progressive,
             bootstrap_detach_dwell_s=float(
                 self.declare_parameter("m2b_bootstrap_detach_dwell_s", 0.15).value
             ),
@@ -677,6 +706,7 @@ class OnlineJoinPlanner(Node):
             gross_xy_abort_m=float(self.declare_parameter("m2b_gross_xy_abort_m", 0.10).value),
             alignment_pause_timeout_s=float(self.declare_parameter("m2b_alignment_pause_timeout_s", 2.0).value),
             descent_speed_mps=float(self.declare_parameter("m2b_descent_speed_mps", 0.04).value),
+            contact_overtravel_m=float(self.declare_parameter("m2b_contact_overtravel_m", 0.0).value),
             magnet_enable_height_m=float(self.declare_parameter("m2b_magnet_enable_height_m", 0.04).value),
             magnet_enable_relative_speed_mps=float(self.declare_parameter("m2b_magnet_enable_relative_speed_mps", 0.12).value),
             capture_hold_normal_m=float(self.declare_parameter("m2b_capture_hold_normal_m", 0.020).value),
@@ -707,6 +737,44 @@ class OnlineJoinPlanner(Node):
         )
 
         # ------------------------------------------------------------------
+        self.m2b_progressive_budget = RetryBudget(self.m2b_config.max_attempts)
+        self.progressive_arc = None
+        self.progressive_evidence_paused = False
+        self.progressive_proof_time = 0.0
+        self.progressive_target = None
+        self.progressive_waiting_reason = ""
+        self.progressive_arc_duration_s = float(self.declare_parameter("progressive_arc_duration_s", 10.0).value)
+        self.progressive_arc_speed_mps = float(self.declare_parameter("progressive_arc_speed_mps", .03).value)
+        self.progressive_loss_dwell_s = float(self.declare_parameter("progressive_loss_dwell_s", .12).value)
+        self.progressive_release_dwell_s = float(self.declare_parameter("progressive_release_dwell_s", .25).value)
+        self.progressive_release_speed_mps = float(self.declare_parameter("progressive_release_speed_mps", .03).value)
+        self.m2b_irl_quiet_miss_enabled = bool(self.declare_parameter("m2b_irl_quiet_miss_enabled", False).value)
+        self.m2b_quiet_miss = QuietMissTracker(
+            wait_s=float(self.declare_parameter("m2b_irl_quiet_miss_wait_s", 10.0).value),
+            improvement_m=float(self.declare_parameter("m2b_irl_quiet_miss_improvement_m", .005).value),
+        )
+        self.m2b_irl_quiet_miss_relative_speed_mps = float(
+            self.declare_parameter("m2b_irl_quiet_miss_relative_speed_mps", .03).value)
+        if not (math.isfinite(self.m2b_irl_quiet_miss_relative_speed_mps)
+                and self.m2b_irl_quiet_miss_relative_speed_mps > 0):
+            raise ValueError("quiet miss relative speed must be finite and positive")
+        self.progressive_event_publisher = self.create_publisher(String, "join_planner/operator_events", 10)
+        self.progressive_status_publisher = self.create_publisher(String, "join_planner/attachment_policy_status", 10)
+        self.progressive_complete_publisher = self.create_publisher(Bool, "attachment/proof_motion_complete", 10)
+        self.create_subscription(Bool, "join_planner/retry", self.progressive_retry_callback, 10)
+        self.m2b_irl_max_contact_correction_m = float(
+            self.declare_parameter("m2b_irl_max_contact_correction_m", 0.0).value
+        )
+        self.m2b_irl_contact_correction_rate_mps = float(
+            self.declare_parameter("m2b_irl_contact_correction_rate_mps", 0.010).value
+        )
+        if not (math.isfinite(self.m2b_irl_max_contact_correction_m)
+                and 0.0 <= self.m2b_irl_max_contact_correction_m <= 0.030):
+            raise ValueError("IRL measured contact correction must be in [0, 0.030] m")
+        if not (math.isfinite(self.m2b_irl_contact_correction_rate_mps)
+                and 0.0 < self.m2b_irl_contact_correction_rate_mps <= 0.010):
+            raise ValueError("IRL measured contact correction rate must be in (0, 0.010] m/s")
+        self.m2b_irl_contact_correction_m = 0.0
         # Planning and reference settings
         # ------------------------------------------------------------------
         self.publish_rate_hz = max(
@@ -937,6 +1005,9 @@ class OnlineJoinPlanner(Node):
         )
         self.support_surface_z = float(
             self.declare_parameter("support_surface_z", 0.0).value
+        )
+        self.pickup_support_surface_overtravel_allowance_m = float(
+            self.declare_parameter("pickup_support_surface_overtravel_allowance_m", 0.0).value
         )
 
         self.static_obstacle_count = max(
@@ -1500,6 +1571,10 @@ class OnlineJoinPlanner(Node):
         self.match_xy_threshold = max(
             0.0, float(self.declare_parameter("match_xy_threshold", 0.10).value)
         )
+        self.drop_settle_xy_threshold = max(
+            0.0,
+            float(self.declare_parameter("drop_settle_xy_threshold", self.match_xy_threshold).value),
+        )
         self.match_xy_velocity_threshold = max(
             0.0,
             float(
@@ -1586,6 +1661,112 @@ class OnlineJoinPlanner(Node):
         self.pickup_tip_xy_compensation_raw = np.zeros(2, dtype=float)
         self.pickup_tip_xy_compensation_filtered = np.zeros(2, dtype=float)
         self.pickup_tip_xy_compensation_measurement_active = False
+        self.pickup_alignment_mode = str(
+            self.declare_parameter('pickup_alignment_mode', 'legacy').value)
+        if self.pickup_alignment_mode not in {'legacy', 'measured_tip_tiered'}:
+            raise ValueError('pickup_alignment_mode must be legacy or measured_tip_tiered')
+        tip_defaults = TipAlignmentConfig()
+        tip_fields = ('gain_per_s', 'filter_tau_s', 'max_rate_mps', 'max_offset_m',
+                      'min_normal_m', 'pre_low_normal_m', 'capture_xy_m',
+                      'capture_dwell_s', 'low_xy_m', 'low_dwell_s', 'max_relative_speed_mps')
+        tip_values = {key: float(self.declare_parameter(
+            'pickup_alignment_' + key, getattr(tip_defaults, key)).value) for key in tip_fields}
+        if (not all(math.isfinite(v) and v >= 0 for v in tip_values.values())
+                or tip_values['filter_tau_s'] <= 0
+                or not 0 < tip_values['min_normal_m'] < tip_values['pre_low_normal_m']):
+            raise ValueError('invalid pickup alignment profile: finite nonnegative bounds and ordered clearances required')
+        self.pickup_alignment_high_xy_m = float(
+            self.declare_parameter('pickup_alignment_high_xy_m', .05).value)
+        if (not math.isfinite(self.pickup_alignment_high_xy_m)
+                or self.pickup_alignment_high_xy_m < tip_values['low_xy_m']):
+            raise ValueError('pickup HIGH XY tolerance must be finite and >= LOW tolerance')
+        if self.pickup_alignment_mode == 'measured_tip_tiered' and (
+                self.is_m2b or not self.use_measured_magnet_tip or not self.use_geometry_aware_pickup):
+            raise ValueError('measured_tip_tiered requires M1 measured-tip geometry-aware pickup')
+        self.pickup_tier_alignment = TipAlignment(TipAlignmentConfig(**tip_values))
+        self.pickup_tier_descent = None
+        self.pickup_tier_decision = None
+        self.latched_pickup_surface = None
+        self.latched_pickup_marker_to_face = None
+        self.pickup_alignment_last_sample = None
+        self.pickup_alignment_relative_velocity = np.zeros(3)
+        self.pickup_alignment_speed_ready = False
+        self.pickup_alignment_xy_m = float('nan')
+        self.pickup_alignment_clearance_m = float('nan')
+        self.pickup_alignment_waiting_reason = 'inactive'
+        self.target_alignment_mode = str(self.declare_parameter(
+            'target_alignment_mode', 'legacy').value)
+        if self.target_alignment_mode not in {'legacy', 'measured_tip_trim'}:
+            raise ValueError('target_alignment_mode must be legacy or measured_tip_trim')
+        if self.target_alignment_mode != 'legacy' and (self.is_m2b or not self.use_measured_magnet_tip):
+            raise ValueError('measured_tip_trim requires M1 and measured magnet pose')
+        target_fields = ('gain_per_s', 'filter_tau_s', 'max_rate_mps', 'max_offset_m',
+                         'min_normal_m', 'max_relative_speed_mps')
+        target_config = TipAlignmentConfig(**{key: float(self.declare_parameter(
+            'target_alignment_' + key, getattr(tip_defaults, key)).value)
+            for key in target_fields})
+        self.target_drop_trim = TrackingTipAlignment(target_config, self.input_timeout_s)
+        self.target_ring_trim = TrackingTipAlignment(target_config, self.input_timeout_s)
+        self.m1_candidate_hold_reference = None
+        self.pickup_candidate_max_clearance_m = float(self.declare_parameter(
+            'pickup_candidate_max_clearance_m', .005).value)
+        if (not math.isfinite(self.pickup_candidate_max_clearance_m)
+                or self.pickup_candidate_max_clearance_m < 0):
+            raise ValueError('pickup candidate clearance must be finite and nonnegative')
+        proof_defaults = PickupProofConfig()
+        proof_fields = tuple(proof_defaults.__dict__)
+        proof_values = {
+            key: float(self.declare_parameter(
+                'pickup_proof_' + key, getattr(proof_defaults, key)).value)
+            for key in proof_fields
+        }
+        self.pickup_proof_enabled = bool(
+            self.declare_parameter('pickup_proof_enabled', False).value
+            and self.pickup_alignment_mode == 'measured_tip_tiered'
+        )
+        self.pickup_proof_tracker = PickupProofTracker(PickupProofConfig(**proof_values))
+        self.pickup_proof_proven = not self.pickup_proof_enabled
+        self.pickup_proof_last_pair = None
+        self.pickup_retry_enabled = bool(self.declare_parameter('pickup_retry_enabled', False).value
+            and self.pickup_alignment_mode == 'measured_tip_tiered')
+        self.m1_pickup_stall = PickupProgressStall(
+            wait_s=float(self.declare_parameter('pickup_retry_wait_s', 10.).value),
+            improvement_m=float(self.declare_parameter('pickup_retry_progress_m', .005).value))
+        self.m1_pickup_release = PickupRelease(
+            release_dwell_s=float(self.declare_parameter('pickup_retry_release_dwell_s', .20).value),
+            speed_mps=float(self.declare_parameter('pickup_retry_rise_speed_mps', .05).value),
+            max_rise_m=float(self.declare_parameter('pickup_retry_max_rise_m', .20).value),
+            clearance_m=float(self.declare_parameter('pickup_retry_clearance_m', .08).value),
+            separation_dwell_s=float(self.declare_parameter('pickup_retry_separation_dwell_s', .12).value),
+            max_attempts=int(self.declare_parameter('pickup_retry_max_attempts', 3).value))
+        # M1-only, opt-in physical ground-ring attachment trial.
+        self.ground_ring_attach_trial = bool(self.declare_parameter(
+            'ground_ring_attach_trial', False).value)
+        ground_fields = {
+            'marker_to_face_m': .0225,
+            'release_dwell_s': .25,
+            'separation_gap_m': .08,
+            'separation_dwell_s': .12,
+            'rise_limit_m': .20,
+            'rise_rate_mps': .03,
+        }
+        self.ground_ring_config = {key: float(self.declare_parameter(
+            'ground_ring_' + key, default).value) for key, default in ground_fields.items()}
+        if (not all(math.isfinite(value) and value >= 0
+                    for value in self.ground_ring_config.values())
+                or self.ground_ring_config['marker_to_face_m'] <= 0
+                or self.ground_ring_config['rise_rate_mps'] <= 0):
+            raise ValueError('invalid ground-ring trial geometry/release profile')
+        if self.ground_ring_attach_trial and (self.is_m2b or not self.use_measured_magnet_tip):
+            raise ValueError('ground-ring trial requires M1 and measured magnet-tip pose')
+        self.ground_ring_exit = None
+        self.ground_ring_exit_decision = None
+        self.ground_ring_face_gap_m = float('nan')
+        self.ground_ring_xy_m = float('nan')
+        self.ground_ring_relative_speed_mps = float('nan')
+        self.ground_ring_waiting_reason = 'inactive'
+        self.ground_ring_tip_velocity = np.zeros(3)
+        self.ground_ring_last_tip_sample = None
 
         # ------------------------------------------------------------------
         # Landing and simulation safety
@@ -1707,8 +1888,22 @@ class OnlineJoinPlanner(Node):
             start_time_s=self._physical_now_s(),
             release_required=self.m2b_bootstrap_release_required,
         )
-        self.m2b_takeoff_settle_gate = M2BSettleGate(self.m2b_config)
+        self.m2b_takeoff_settle_swing_deg = float(
+            self.declare_parameter(
+                "m2b_takeoff_settle_swing_deg", self.m2b_config.settle_swing_deg
+            ).value
+        )
+        self.m2b_takeoff_settle_gate = M2BSettleGate(
+            replace(self.m2b_config, settle_swing_deg=self.m2b_takeoff_settle_swing_deg)
+        )
         self.m2b_capture_settle_gate = M2BSettleGate(self.m2b_config)
+        self.m2b_takeoff_settle_position_error_m = float("nan")
+        self.m2b_takeoff_settle_speed_mps = float("nan")
+        self.m2b_takeoff_settle_swing_deg = float("nan")
+        self.m2b_takeoff_settle_dwell_s = 0.0
+        self.m2b_takeoff_settle_reason = "NOT_EVALUATED"
+        self.m2b_takeoff_settle_inputs_fresh = False
+        self.m2b_takeoff_settle_settled = False
         self.m2b_capture_settle_position_error_m = float("nan")
         self.m2b_capture_settle_speed_mps = float("nan")
         self.m2b_capture_settle_swing_deg = float("nan")
@@ -1716,12 +1911,30 @@ class OnlineJoinPlanner(Node):
         self.m2b_capture_settle_reason = "NOT_EVALUATED"
         self.m2b_capture_settle_settled = False
         self.m2b_approach_evidence_gate = M2BEvidenceFreshnessGate(self.m2b_config)
+        self.m2b_irl_tip_alignment_enabled = bool(
+            self.declare_parameter("m2b_irl_tip_alignment_enabled", False).value
+        )
+        self.m2b_irl_capture_search_enabled = bool(
+            self.declare_parameter("m2b_irl_capture_search_enabled", False).value
+        )
+        tip_defaults = M2BIRLTipAlignmentConfig()
+        self.m2b_irl_tip_alignment = M2BIRLTipAlignment(M2BIRLTipAlignmentConfig(**{
+            name: float(self.declare_parameter(
+                f"m2b_irl_tip_{name}", getattr(tip_defaults, name)
+            ).value)
+            for name in tip_defaults.__dataclass_fields__
+        }))
+        self.m2b_irl_tip_decision = None
+        self.m2b_irl_tip_error_m = float("nan")
+        self.m2b_irl_tip_normal_m = float("nan")
         self.m2b_retry_tracker = M2BRetryTracker(
             assigned_plate_id=self.m2b_assigned_plate_id,
             max_attempts=self.m2b_config.max_attempts,
         )
         self.m2b_descent_progress: Optional[M2BDescentProgress] = None
         self.m2b_attachment_diagnostics: Optional[dict] = None
+        # Retain confirmation history across detector resets and failed attempts.
+        self.m2b_attachment_was_confirmed = False
         self.m2b_last_attachment_diagnostics_time_s: Optional[float] = None
         self.m2b_pendulum_phi = float("nan")
         self.m2b_pendulum_theta = float("nan")
@@ -1736,6 +1949,7 @@ class OnlineJoinPlanner(Node):
         self.m2b_last_latch_stability_decision = None
         self.m2b_attached_bad_since_time_s: Optional[float] = None
         self.m2b_retreat_stage = "idle"
+
         self.m2b_retreat_target: Optional[np.ndarray] = None
         self.m2b_landing_stage_target: Optional[np.ndarray] = None
         self.m2b_landing_detach_hold_position: Optional[np.ndarray] = None
@@ -1788,6 +2002,7 @@ class OnlineJoinPlanner(Node):
         self.attached_payload_yaw: Optional[float] = None
         self.attached_payload_geometry_source = "unavailable"
         self.object_attached = False
+        self.last_object_attached_time = None
         self.last_magnet_command: Optional[str] = None
         self.attach_wait_start_time: Optional[float] = None
         self.drop_start_time: Optional[float] = None
@@ -2435,8 +2650,20 @@ class OnlineJoinPlanner(Node):
         self.last_payload_twist_time = self._physical_now_s()
 
     def magnet_tip_pose_callback(self, msg: PoseStamped) -> None:
-        self.measured_magnet_tip_position = _vec3_from_position(msg.pose.position)
-        self.last_magnet_tip_pose_time = self._physical_now_s()
+        tip = _vec3_from_position(msg.pose.position)
+        now = self._physical_now_s()
+        if self.ground_ring_attach_trial:
+            previous = self.ground_ring_last_tip_sample
+            if previous is not None and .005 <= now - previous[0] <= .5:
+                dt = now - previous[0]
+                raw = (tip - previous[1]) / dt
+                alpha = dt / (.20 + dt)
+                self.ground_ring_tip_velocity += alpha * (raw - self.ground_ring_tip_velocity)
+            else:
+                self.ground_ring_tip_velocity[:] = 0.
+            self.ground_ring_last_tip_sample = (now, tip.copy())
+        self.measured_magnet_tip_position = tip
+        self.last_magnet_tip_pose_time = now
 
     def pickup_object_pose_callback(self, msg: PoseArray) -> None:
         if self.use_static_pickup_object:
@@ -2471,6 +2698,7 @@ class OnlineJoinPlanner(Node):
             self.attached_payload_yaw = None
             self.attached_payload_geometry_source = "unavailable"
         self.object_attached = attached
+        self.last_object_attached_time = self._physical_now_s()
 
     def attached_payload_geometry_for_safety(
         self,
@@ -2576,6 +2804,11 @@ class OnlineJoinPlanner(Node):
                 MissionPhase.M2_BOOTSTRAP_SETTLE,
                 MissionPhase.M2_WAIT_FOR_ARM,
                 MissionPhase.M2_ATTACHED_HOLD,
+                # Fleet LAND removes manoeuvre permission after the selected
+                # vehicle enters its release/landing sequence. Landing still
+                # owns the measured separation and disarm guards.
+                MissionPhase.M2_LANDING_STAGE,
+                MissionPhase.LANDING,
                 MissionPhase.M2_FAULT,
                 MissionPhase.LANDED_DISARMED,
             }
@@ -2601,10 +2834,13 @@ class OnlineJoinPlanner(Node):
         } and plate != self.m2b_assigned_plate_id:
             self.get_logger().error("Ignoring M2D plate assignment after flight progression")
             return
+        new_assignment = not self.m2d_assignment_received or plate != self.m2b_assigned_plate_id
         self.m2b_assigned_plate_id = plate
-        self.m2b_retry_tracker = M2BRetryTracker(
-            assigned_plate_id=plate, max_attempts=self.m2b_config.max_attempts
+        self.m2b_retry_tracker = retry_tracker_for_assignment(
+            self.m2b_retry_tracker, plate, max_attempts=self.m2b_config.max_attempts
         )
+        if new_assignment and self.m2b_irl_tip_alignment_enabled:
+            self.m2b_irl_tip_alignment.reset_assignment()
         self.m2d_assignment_received = True
 
     def m2b_ring_pose_callback(self, msg: PoseArray) -> None:
@@ -2658,6 +2894,8 @@ class OnlineJoinPlanner(Node):
             )
             return
         self.m2b_attachment_diagnostics = data
+        if data.get("confirmed") is True:
+            self.m2b_attachment_was_confirmed = True
         self.m2b_last_attachment_diagnostics_time_s = self._physical_now_s()
 
     def m2b_pendulum_callback(self, msg: MotionCaptureState) -> None:
@@ -2675,12 +2913,67 @@ class OnlineJoinPlanner(Node):
             and self.m2b_attachment_diagnostics.get("fresh", False)
         )
 
+    def update_m2b_irl_tip_alignment(self) -> None:
+        if not self.is_m2b or not self.m2b_irl_tip_alignment_enabled:
+            return
+        phases = {
+            MissionPhase.M2_SETTLE_CAPTURE: "capture",
+            MissionPhase.M2_ATTACH_APPROACH_HIGH: "high",
+            MissionPhase.M2_ATTACH_APPROACH_LOW: "low",
+        }
+        phase = phases.get(self.phase)
+        if phase is None or (phase == "capture" and self.c1f2_exit_bridge_active):
+            return
+        now = self._physical_now_s()
+        diag = self.m2b_attachment_diagnostics or {}
+        fresh = self.m2b_attachment_evidence_fresh(now)
+        try:
+            radial = float(diag["radial_error_m"])
+            tangential = float(diag["tangential_error_m"])
+            xy = float(diag["xy_error_m"])
+            normal = float(diag["normal_error_m"])
+            relative_speed = float(diag["relative_speed_mps"])
+            _, plate_rotation = self.m2b_plate_pose_world()
+            error_world_xy = -(plate_rotation @ np.array([radial, tangential, 0.0]))[:2]
+            if self.m2b_ring_pose_source == "pose_array":
+                fresh = bool(
+                    fresh and self.m2b_last_ring_pose_time_s is not None
+                    and 0.0 <= now - self.m2b_last_ring_pose_time_s <= self.m2b_ring_pose_timeout_s
+                )
+        except (KeyError, TypeError, ValueError, RuntimeError):
+            error_world_xy = np.zeros(2)
+            xy = normal = relative_speed = float("nan")
+            fresh = False
+        self.m2b_irl_tip_error_m = xy
+        self.m2b_irl_tip_normal_m = normal
+        self.m2b_irl_tip_decision = self.m2b_irl_tip_alignment.step(
+            now_s=now,
+            error_world_xy=error_world_xy,
+            xy_error_m=xy,
+            normal_error_m=normal,
+            relative_speed_mps=relative_speed,
+            fresh=fresh,
+            magnet_on=self.m2b_magnet_on_requested,
+            phase=phase,
+            preserve_aligned_crossing=self.m2b_progressive,
+        )
+
+    def m2b_local_body_target(self, contact_height_m: float) -> np.ndarray:
+        target = self.m2b_body_target_for_contact_height(contact_height_m)
+        if self.m2b_irl_tip_alignment_enabled:
+            target[:2] += self.m2b_irl_tip_alignment.offset_xy
+        if (self.m2b_irl_capture_search_enabled
+                and (self.m2b_progressive or self.m2b_attachment_truth_source == "measured_detector")
+                and self.phase == MissionPhase.M2_ATTACH_CAPTURE_WAIT):
+            target[2] -= self.m2b_irl_contact_correction_m
+        return target
+
     def m2b_pendulum_fresh(self, now_s: Optional[float] = None) -> bool:
         if self.m2b_last_pendulum_time_s is None:
             return False
         now = self._physical_now_s() if now_s is None else float(now_s)
         age = now - self.m2b_last_pendulum_time_s
-        return bool(0.0 <= age <= self.m2b_config.evidence_timeout_s)
+        return bool(0.0 <= age <= self.m2b_pendulum_timeout_s)
 
     def m2b_ring_pose_world(self) -> Tuple[np.ndarray, np.ndarray]:
         if self.m2b_ring_pose_source == "pose_array":
@@ -2718,7 +3011,11 @@ class OnlineJoinPlanner(Node):
 
     def m2b_body_target_for_contact_height(self, contact_height_m: float) -> np.ndarray:
         plate, _ = self.m2b_plate_pose_world()
-        contact = contact_capture_position(plate, capture_height_m=max(0.0, float(contact_height_m)))
+        height = max(self.m2b_config.contact_height_floor_m, float(contact_height_m))
+        contact = contact_capture_position(plate, capture_height_m=max(0.0, height))
+        # Preserve the pure capture helper's nonnegative API; only the explicitly
+        # configured bounded contact correction may move below the nominal plane.
+        contact[2] += min(0.0, height)
         return body_reference_from_contact(
             contact_position_world=contact,
             direction_contact_to_vehicle_world=np.array([0.0, 0.0, 1.0]),
@@ -2759,6 +3056,14 @@ class OnlineJoinPlanner(Node):
             speed_mps=speed_mps,
             swing_magnitude_rad=swing,
         )
+        if gate is self.m2b_takeoff_settle_gate:
+            self.m2b_takeoff_settle_position_error_m = position_error_m
+            self.m2b_takeoff_settle_speed_mps = speed_mps
+            self.m2b_takeoff_settle_swing_deg = math.degrees(swing)
+            self.m2b_takeoff_settle_dwell_s = float(decision.dwell_s)
+            self.m2b_takeoff_settle_reason = str(decision.reason)
+            self.m2b_takeoff_settle_inputs_fresh = bool(pendulum_fresh)
+            self.m2b_takeoff_settle_settled = bool(decision.settled)
         if gate is self.m2b_capture_settle_gate:
             self.m2b_capture_settle_position_error_m = position_error_m
             self.m2b_capture_settle_speed_mps = speed_mps
@@ -2766,6 +3071,8 @@ class OnlineJoinPlanner(Node):
             self.m2b_capture_settle_dwell_s = float(decision.dwell_s)
             self.m2b_capture_settle_reason = str(decision.reason)
             self.m2b_capture_settle_settled = bool(decision.settled)
+        if self.m2b_progressive:
+            self.progressive_waiting_reason = "" if decision.settled else decision.reason
         return bool(decision.settled)
 
     def m2b_takeoff_hover_settled(
@@ -2793,11 +3100,14 @@ class OnlineJoinPlanner(Node):
         )
         if not clearance.ready:
             self.m2b_takeoff_settle_gate.reset()
-            self.get_logger().warning(
-                f"Post-takeoff settle blocked: {clearance.reason}",
-                throttle_duration_sec=1.0,
-            )
-            if clearance.timed_out:
+            if self.m2b_progressive:
+                self.progressive_waiting_reason = clearance.reason
+            else:
+                self.get_logger().warning(
+                    f"Post-takeoff settle blocked: {clearance.reason}",
+                    throttle_duration_sec=1.0,
+                )
+            if clearance.timed_out and not self.m2b_progressive:
                 self.transition_to(
                     MissionPhase.M2_FAULT,
                     f"post-takeoff hover timeout: {clearance.reason}",
@@ -2808,7 +3118,7 @@ class OnlineJoinPlanner(Node):
         if settled:
             return True
         if (
-            self.m2b_takeoff_hover_timeout_s > 0.0
+            not self.m2b_progressive and self.m2b_takeoff_hover_timeout_s > 0.0
             and elapsed_s >= self.m2b_takeoff_hover_timeout_s
         ):
             self.transition_to(
@@ -2832,6 +3142,18 @@ class OnlineJoinPlanner(Node):
             if not self.m2b_attachment_evidence_fresh(now):
                 return False
             diagnostics = self.m2b_attachment_diagnostics or {}
+            if (self.m2b_irl_capture_search_enabled
+                    and self.phase == MissionPhase.M2_ATTACH_CAPTURE_WAIT
+                    and not diagnostics.get("confirmed", False)):
+                # Proximity is not contact: do not freeze high and pull away for
+                # proof just because the broad candidate normal band is satisfied.
+                try:
+                    normal = float(diagnostics.get("normal_error_m", float("nan")))
+                except (TypeError, ValueError):
+                    return False
+                if not (math.isfinite(normal)
+                        and -self.m2b_config.capture_hold_normal_m <= normal <= 0.0):
+                    return False
             return bool(
                 not diagnostics.get("lost", False)
                 and (
@@ -2854,10 +3176,17 @@ class OnlineJoinPlanner(Node):
         diagnostics = self.m2b_attachment_diagnostics or {}
         return bool(
             diagnostics.get("geometry_separated", False)
-            and (not require_lost or diagnostics.get("lost", False))
+            and (
+                not require_lost or not self.m2b_attachment_was_confirmed
+                or diagnostics.get("lost", False)
+            )
         )
 
     def m2b_fail_attempt(self, reason: str) -> None:
+        if self.m2b_progressive:
+            self.progressive_begin_release(reason, failed=True)
+            return
+        # Unchanged legacy simulation retry/terminal-landing policy.
         self.m2b_magnet_on_requested = False
         self.m2b_latch_hold_position = None
         self.m2b_latch_stability_gate = None
@@ -2943,7 +3272,7 @@ class OnlineJoinPlanner(Node):
                     measured_acceleration=self.drone_acceleration,
                     max_drift_m=self.c1f2_prepare_max_lift_drift_m,
                     settle_speed_mps=self.c1f2_prepare_settle_speed_mps,
-                    settle_acceleration_mps2=self.c1f2_handoff_acceleration_tolerance_mps2,
+                    settle_acceleration_mps2=self.c1f2_prepare_settle_acceleration_mps2,
                 )
                 self.c1f2_prepare_drift_m = grant_state.drift_m
                 self.c1f2_prepare_speed_mps = grant_state.speed_mps
@@ -2993,18 +3322,243 @@ class OnlineJoinPlanner(Node):
                 )
             return
 
+    def progressive_retry_available(self) -> bool:
+        return bool(self.m2b_progressive and self.m2b_controller_armed
+            and not getattr(self, "c1f2_exit_bridge_active", False)
+            and (not self.m2d_enabled or self.m2d_mission_permission)
+            and self.phase in {MissionPhase.M2_SETTLE_CAPTURE,
+                MissionPhase.M2_ATTACH_APPROACH_HIGH, MissionPhase.M2_ATTACH_APPROACH_LOW,
+                MissionPhase.M2_ATTACH_CAPTURE_WAIT, MissionPhase.M2_ATTACH_PROOF,
+                MissionPhase.M2_DETACHED_RETREAT}
+            and (self.phase != MissionPhase.M2_DETACHED_RETREAT
+                 or self.m2b_retreat_stage == "await_operator"))
+
+    def progressive_retry_callback(self, msg: Bool) -> None:
+        if not msg.data:
+            return
+        accepted = self.progressive_retry_available()
+        event = dict(time_s=self._physical_now_s(), event="operator_retry",
+            accepted=accepted, phase=self.phase.value,
+            attempt=self.m2b_progressive_budget.attempt,
+            reason="manual retry accepted" if accepted else "retry unavailable in current phase/authority")
+        self.progressive_event_publisher.publish(String(data=json.dumps(event)))
+        self.get_logger().info(json.dumps(event))
+        if self.enable_csv_logging:
+            os.makedirs(self.log_directory, exist_ok=True)
+            with open(os.path.join(self.log_directory, "operator_retry_events.jsonl"), "a") as stream:
+                stream.write(json.dumps(event) + "\n")
+        if accepted:
+            self.m2b_progressive_budget.manual_retry()
+            self.progressive_begin_release("operator RETRY", landing=False)
+
+    def progressive_begin_release(self, reason: str, *, landing=False, failed=False) -> None:
+        if failed:
+            self.m2b_progressive_budget.fail()
+        self.m2b_latch_hold_position = None
+        self.m2b_latch_stability_gate = None
+        self.m2b_magnet_on_requested = False
+        self.progressive_waiting_reason = reason
+        self.transition_to(MissionPhase.M2_LANDING_STAGE if landing else MissionPhase.M2_DETACHED_RETREAT, reason)
+        self.m2b_retreat_stage = "release"
+        self.progressive_release_origin = self.drone_position.copy()
+        self.progressive_target = (self.last_reference.positions[0].copy()
+            if self.last_reference is not None else self.drone_position.copy())
+        self.progressive_separation_since = None
+        self.progressive_release_started = self._physical_now_s()
+
+    def update_m2b_progressive(self, now: float) -> bool:
+        managed = {MissionPhase.M2_ATTACH_CAPTURE_WAIT, MissionPhase.M2_ATTACH_PROOF,
+                   MissionPhase.M2_ATTACHED_HOLD, MissionPhase.M2_DETACHED_RETREAT,
+                   MissionPhase.M2_LANDING_STAGE}
+        if self.phase not in managed:
+            return False
+        diag = self.m2b_attachment_diagnostics or {}
+        fresh = self.m2b_attachment_evidence_fresh(now) and bool(diag.get("fresh", False))
+        self.progressive_waiting_reason = ""
+        self.progressive_evidence_paused = not fresh
+        if not fresh:
+            self.progressive_separation_since = None
+            self.progressive_waiting_reason = "attachment evidence unavailable; preserving magnet/history"
+            return True
+        if self.phase in {MissionPhase.M2_DETACHED_RETREAT, MissionPhase.M2_LANDING_STAGE}:
+            link_ok = not self.m2b_require_recent_link_statistics or link_statistics_fresh(
+                self.m2b_last_link_statistics_s, now_s=now, timeout_s=self.m2b_link_statistics_timeout_s)
+            body_ok = self.last_drone_time is not None and now-self.last_drone_time <= self.input_timeout_s
+            if not link_ok or not body_ok:
+                self.progressive_evidence_paused = True
+                self.progressive_separation_since = None
+                self.progressive_waiting_reason = "release waiting for fresh body/link"
+                return True
+            if self.m2b_retreat_stage == "release":
+                separated = bool(diag.get("geometry_separated", False))
+                if separated:
+                    if self.progressive_separation_since is None:
+                        self.progressive_separation_since = now
+                else:
+                    self.progressive_separation_since = None
+                if (self.progressive_separation_since is not None
+                        and now-self.progressive_separation_since >= self.progressive_loss_dwell_s
+                        and now-self.progressive_release_started >= self.progressive_release_dwell_s):
+                    self.m2b_request_detector_reset()
+                    self.progressive_arc = None
+                    self.progressive_proof_time = 0.0
+                    self.m2b_irl_contact_correction_m = 0.0
+                    self.m2b_retreat_stage = "return"
+                    self.progressive_target = (self.m2b_landing_stage_target.copy()
+                        if self.phase == MissionPhase.M2_LANDING_STAGE else self.m2b_capture_body_target())
+                    self.transfer_generator.reset()
+                    return True
+                if now-self.progressive_release_started >= self.progressive_release_dwell_s:
+                    ceiling = self.progressive_release_origin[2]+self.m2b_config.retreat_rise_m
+                    self.progressive_target[2] = min(ceiling,
+                        self.progressive_target[2]+self.progressive_release_speed_mps*self.dt)
+                    if self.progressive_target[2] >= ceiling-1e-6:
+                        self.progressive_waiting_reason = "clearance limit reached; separation unverified"
+                return True
+            if self.m2b_retreat_stage == "await_operator":
+                self.progressive_waiting_reason = "attempt budget exhausted; RETRY or LAND"
+                return True
+            reached = bool(np.linalg.norm(self.drone_position-self.progressive_target)
+                           <= self.m2b_config.settle_position_tolerance_m
+                           and np.linalg.norm(self.drone_velocity)<=self.m2b_config.settle_speed_mps)
+            if self.condition_true_for(reached, .25):
+                if self.phase == MissionPhase.M2_LANDING_STAGE:
+                    self.transition_to(MissionPhase.LANDING, "operator release/clearance complete")
+                elif self.m2b_progressive_budget.awaiting_operator:
+                    self.m2b_retreat_stage = "await_operator"
+                else:
+                    self.transition_to(MissionPhase.M2_SETTLE_CAPTURE, "measured clearance complete; retry same plate")
+            return True
+        self.m2b_magnet_on_requested = True
+        if bool(diag.get("lost", False)):
+            if self.phase == MissionPhase.M2_ATTACHED_HOLD:
+                self.progressive_waiting_reason = "proven contact lost; operator-managed fleet recovery"
+            else:
+                self.progressive_begin_release("convincing measured contact loss", failed=True)
+            return True
+        if self.phase == MissionPhase.M2_ATTACH_CAPTURE_WAIT:
+            if diag.get("initial_contact", False):
+                plate, rotation = self.m2b_plate_pose_world()
+                reference = self.last_reference.positions[0] if self.last_reference is not None else self.drone_position
+                reference_anchor = rotation.T @ (
+                    reference + self.m2b_body_rotation_world() @ self.m2b_tether_anchor_body - plate)
+                try:
+                    self.progressive_arc = ProofArc(diag["contact_seed_plate"], diag["anchor_seed_plate"],
+                        reference_anchor, angle_deg=self.m2b_config.attached_hold_angle_deg,
+                        duration_s=self.progressive_arc_duration_s, speed_mps=self.progressive_arc_speed_mps)
+                except (KeyError, TypeError, ValueError):
+                    self.progressive_waiting_reason = "waiting for valid contact/anchor proof seed"
+                    return True
+                self.progressive_proof_time = 0.0
+                self.progressive_target = reference.copy()
+                self.transition_to(MissionPhase.M2_ATTACH_PROOF, "initial contact established; begin constant-radius 15-degree proof")
+                return True
+            normal = float(diag.get("normal_error_m", float("nan")))
+            xy = float(diag.get("xy_error_m", float("nan")))
+            if (math.isfinite(normal) and math.isfinite(xy)
+                    and -self.m2b_config.contact_overtravel_m < normal <= self.m2b_config.magnet_enable_height_m
+                    and xy <= self.m2b_config.low_xy_tolerance_m):
+                height = self.m2b_capture_wait_contact_height_m
+                if height is not None:
+                    self.m2b_capture_wait_contact_height_m = max(self.m2b_config.contact_height_floor_m,
+                        height-self.m2b_config.descent_speed_mps*self.dt)
+                    if height <= self.m2b_config.contact_height_floor_m+1e-6:
+                        self.m2b_irl_contact_correction_m = min(self.m2b_irl_max_contact_correction_m,
+                            self.m2b_irl_contact_correction_m + self.dt*min(
+                                self.m2b_irl_contact_correction_rate_mps,
+                                normal+self.m2b_config.contact_overtravel_m))
+            self.progressive_waiting_reason = "searching for contact; RETRY or LAND available"
+            return True
+        if self.progressive_arc is None:
+            self.progressive_waiting_reason = "proof reference unavailable"
+            return True
+        if self.phase == MissionPhase.M2_ATTACH_PROOF:
+            self.progressive_proof_time = min(self.progressive_arc.duration,
+                                              self.progressive_proof_time+self.dt)
+            if diag.get("confirmed", False):
+                self.transition_to(MissionPhase.M2_ATTACHED_HOLD, "measured 15-degree proof confirmed")
+            else:
+                self.progressive_waiting_reason = "15-degree proof progressing" if (
+                    self.progressive_proof_time < self.progressive_arc.duration) else "waiting for measured proof completion"
+        plate, rotation = self.m2b_plate_pose_world()
+        self.progressive_target = (plate + rotation @ self.progressive_arc.position(self.progressive_proof_time)
+                                  - self.m2b_body_rotation_world() @ self.m2b_tether_anchor_body)
+        return True
+
+    def update_m2b_quiet_miss(self, now: float) -> bool:
+        """Recover a quiet precontact miss, never proof or an ordinary settle wait."""
+        tracker = getattr(self, "m2b_quiet_miss", None)
+        if tracker is None:
+            return False
+        diag = self.m2b_attachment_diagnostics or {}
+        try:
+            xy = float(diag.get("xy_error_m", float("nan")))
+            normal = float(diag.get("normal_error_m", float("nan")))
+            speed = float(diag.get("relative_speed_mps", float("nan")))
+        except (TypeError, ValueError):
+            tracker.reset()
+            return False
+        eligible = bool(
+            self.m2b_irl_quiet_miss_enabled and self.m2b_progressive
+            and self.phase in {MissionPhase.M2_ATTACH_APPROACH_LOW, MissionPhase.M2_ATTACH_CAPTURE_WAIT}
+            and self.progressive_retry_available()
+            and not diag.get("initial_contact", False) and not diag.get("confirmed", False)
+            and self.m2b_attachment_evidence_fresh(now) and diag.get("fresh", False)
+            and self.last_drone_time is not None and 0 <= now-self.last_drone_time <= self.input_timeout_s
+            and self.drone_position is not None and np.all(np.isfinite(self.drone_position))
+            and self.drone_velocity is not None and np.all(np.isfinite(self.drone_velocity))
+            and np.linalg.norm(self.drone_velocity) <= self.m2b_config.settle_speed_mps
+            and all(math.isfinite(v) for v in (xy, normal, speed))
+            and xy > self.m2b_config.low_xy_tolerance_m
+            and 0 <= speed <= self.m2b_irl_quiet_miss_relative_speed_mps
+        )
+        if tracker.step(now=now, xy_error_m=xy, eligible=eligible,
+                        key=(self.phase, self.m2b_progressive_budget.attempt)):
+            self.m2b_fail_attempt(
+                f"quiet XY miss: {xy:.3f} m, no {tracker.improvement_m:.3f} m improvement "
+                f"for {tracker.elapsed_s:.1f} s; vertical clearance/retry")
+            return True
+        return False
+
     def update_m2b_b1(self) -> None:
         """Advance only B1 local attachment states using measured evidence.
 
-        Raw Gazebo joint truth is used only to verify physical latch/release. It is
-        never treated as software attachment confirmation. Detector confirmation
-        comes exclusively from m2_attachment_observer diagnostics.
+        The new policy uses observer evidence for all airborne decisions.
+        Legacy simulation retains its physical latch/release truth checks;
+        software attachment confirmation still belongs to the observer.
         """
         if not self.is_m2b or self.m2b_commissioning_stage not in {"b1", "b2"}:
             return
         if self.drone_position is None or self.drone_velocity is None:
+            if getattr(self, "m2b_quiet_miss", None) is not None:
+                self.m2b_quiet_miss.reset()
             return
         now = self._physical_now_s()
+        diag = self.m2b_attachment_diagnostics or {}
+        normal = float(diag.get("normal_error_m", float("nan")))
+        too_deep = (
+            self.m2b_progressive
+            and self.phase in {
+                MissionPhase.M2_ATTACH_APPROACH_LOW,
+                MissionPhase.M2_ATTACH_CAPTURE_WAIT,
+            }
+            and self.m2b_attachment_evidence_fresh(now)
+            and not diag.get("initial_contact", False)
+            and math.isfinite(normal)
+            and normal < -0.020
+        )
+        if not too_deep:
+            self._precontact_depth_since = None
+        elif getattr(self, "_precontact_depth_since", None) is None:
+            self._precontact_depth_since = now
+        elif now - self._precontact_depth_since >= 0.12:
+            self._precontact_depth_since = None
+            self.m2b_fail_attempt("pre-contact face below -20 mm")
+            return
+        if self.update_m2b_quiet_miss(now):
+            return
+        if self.m2b_progressive and self.update_m2b_progressive(now):
+            return
 
         if self.phase == MissionPhase.M2_TAKEOFF_HOVER:
             if self.takeoff_start_position is None:
@@ -3021,8 +3575,9 @@ class OnlineJoinPlanner(Node):
         if self.phase == MissionPhase.M2_SETTLE_CAPTURE:
             if self.m2b_commissioning_stage == "b2" and self.c1f2_exit_bridge_active:
                 return
-            capture = self.m2b_capture_body_target()
-            if self.m2b_measured_settled(self.m2b_capture_settle_gate, capture, now):
+            capture = self.m2b_local_body_target(self.m2b_config.capture_height_m)
+            body_settled = self.m2b_measured_settled(self.m2b_capture_settle_gate, capture, now)
+            if body_settled:
                 if not self.m2b_b1_attachment_enabled:
                     return
                 self.m2b_request_detector_reset()
@@ -3031,6 +3586,7 @@ class OnlineJoinPlanner(Node):
                     initial_contact_height_m=self.m2b_config.capture_height_m,
                 )
                 self.m2b_capture_wait_contact_height_m = None
+                self.m2b_irl_contact_correction_m = 0.0
                 self.m2b_approach_evidence_gate.reset()
                 self.m2b_magnet_on_requested = False
                 self.transition_to(
@@ -3050,29 +3606,71 @@ class OnlineJoinPlanner(Node):
                 now_s=now, fresh=evidence_fresh
             )
             if not evidence_fresh:
-                # Never leave the magnet armed from an earlier LOW-band sample
-                # after attachment evidence becomes stale.  Hold the existing
-                # contact-height target and tolerate only a bounded dropout.
-                self.m2b_magnet_on_requested = False
-                if evidence_decision.failed:
+                # New policy preserves magnet/history and pauses. Legacy
+                # simulation keeps its bounded-dropout release behaviour.
+                if not self.m2b_progressive:
+                    self.m2b_magnet_on_requested = False
+                self.progressive_waiting_reason = "approach waiting for fresh evidence"
+                if evidence_decision.failed and not self.m2b_progressive:
                     self.m2b_fail_attempt("attachment evidence remained stale during approach")
                 return
             diag = self.m2b_attachment_diagnostics or {}
+            if self.m2b_progressive and diag.get("initial_contact", False):
+                # Contact owns the transition, not the nominal descent floor.
+                self.m2b_capture_wait_contact_height_m = self.m2b_descent_progress.target_contact_height_m
+                self.transition_to(MissionPhase.M2_ATTACH_CAPTURE_WAIT, "initial contact; stop descent")
+                self.update_m2b_progressive(now)
+                return
             try:
                 xy = float(diag.get("xy_error_m", float("nan")))
+                normal = float(diag.get("normal_error_m", float("nan")))
             except (TypeError, ValueError):
                 return
+            if (self.m2b_progressive and self.phase == MissionPhase.M2_ATTACH_APPROACH_LOW
+                    and (not math.isfinite(normal) or normal < -self.m2b_config.capture_hold_normal_m)):
+                self.progressive_waiting_reason = "LOW contact geometry inconclusive; RETRY or LAND"
+                return
+            if self.m2b_irl_tip_alignment_enabled and self.phase == MissionPhase.M2_ATTACH_APPROACH_HIGH:
+                if not math.isfinite(xy) or xy >= self.m2b_config.gross_xy_abort_m:
+                    self.m2b_fail_attempt("gross or non-finite XY alignment error")
+                    return
+                tip = self.m2b_irl_tip_decision
+                if tip is None or (tip.timed_out and not self.m2b_progressive):
+                    if self.m2b_progressive:
+                        self.progressive_waiting_reason = "waiting for tip alignment evidence"
+                    else:
+                        self.transition_to(MissionPhase.M2_FAULT, "IRL tip alignment timeout before LOW")
+                    return
+                if self.m2b_progressive:
+                    self.progressive_waiting_reason = tip.reason
+                if tip.raise_to_safe_clearance:
+                    progress = self.m2b_descent_progress
+                    progress.target_contact_height_m = min(
+                        self.m2b_config.capture_height_m,
+                        progress.target_contact_height_m + self.m2b_config.descent_speed_mps * self.dt,
+                    )
+                    return
+                if not tip.pre_low_ready and (
+                    tip.pre_low_active or
+                    self.m2b_descent_progress.target_contact_height_m <=
+                    self.m2b_config.high_low_split_m + self.m2b_config.descent_speed_mps * self.dt
+                ):
+                    return
             decision = self.m2b_descent_progress.step(
                 now_s=now,
                 measured_xy_error_m=xy,
                 dt_s=self.dt,
             )
+            if self.m2b_progressive:
+                self.progressive_waiting_reason = decision.reason if decision.paused_for_xy else ""
             if decision.failed:
                 self.m2b_fail_attempt(decision.reason)
                 return
             if (
                 self.phase == MissionPhase.M2_ATTACH_APPROACH_HIGH
                 and decision.band == "LOW"
+                and (not self.m2b_irl_tip_alignment_enabled or
+                     (self.m2b_irl_tip_decision is not None and self.m2b_irl_tip_decision.pre_low_ready))
             ):
                 self.transition_to(
                     MissionPhase.M2_ATTACH_APPROACH_LOW,
@@ -3092,11 +3690,33 @@ class OnlineJoinPlanner(Node):
                     detector_fresh=True,
                     relative_speed_mps=rel_speed,
                 )
-                if should_enter_capture_wait(
-                    self.m2b_config,
-                    contact_height_m=normal,
-                    magnet_enabled=self.m2b_magnet_on_requested,
-                ):
+                irl_search = bool(self.m2b_progressive or (
+                    self.m2b_irl_capture_search_enabled
+                    and self.m2b_attachment_truth_source == "measured_detector"))
+                if irl_search and math.isfinite(normal) and normal < -self.m2b_config.capture_hold_normal_m:
+                    self.m2b_fail_attempt("estimated magnet face passed below calibrated contact band")
+                    return
+                if (irl_search and decision.target_contact_height_m <= self.m2b_config.contact_height_floor_m + 1e-6
+                        and math.isfinite(normal) and normal > self.m2b_config.magnet_enable_height_m):
+                    if self.m2b_progressive:
+                        self.progressive_waiting_reason = "contact travel limit; RETRY or LAND"
+                    else:
+                        self.m2b_fail_attempt("contact command floor reached while magnet face remained too high")
+                    return
+                enter_search = (
+                    should_enter_irl_capture_search(
+                        self.m2b_config, measured_normal_m=normal,
+                        commanded_height_m=decision.target_contact_height_m,
+                        measured_xy_m=xy, evidence_fresh=True,
+                    ) if irl_search else should_enter_capture_wait(
+                        self.m2b_config, contact_height_m=normal,
+                        magnet_enabled=self.m2b_magnet_on_requested,
+                    )
+                )
+                if enter_search:
+                    # LOW search allows the magnet to swing; only proof uses the
+                    # tighter relative-motion bound.
+                    self.m2b_magnet_on_requested = True
                     # Hold the current commanded height instead of forcing the
                     # reference to zero.  This preserves reference continuity and
                     # lets physical latch dwell close on measured geometry even
@@ -3104,7 +3724,7 @@ class OnlineJoinPlanner(Node):
                     self.m2b_capture_wait_contact_height_m = decision.target_contact_height_m
                     self.transition_to(
                         MissionPhase.M2_ATTACH_CAPTURE_WAIT,
-                        "measured contact entered physical-capture band; freeze descent for latch dwell",
+                        "entered bounded contact search; hold the current descent command" if irl_search else "measured contact entered physical-capture band; freeze descent for latch dwell",
                     )
             return
 
@@ -3267,7 +3887,9 @@ class OnlineJoinPlanner(Node):
             self.m2b_magnet_on_requested = False
             if self.m2b_landing_stage_target is None:
                 return
-            if not self.m2b_geometry_separated(now, require_lost=True):
+            if not self.m2b_geometry_separated(
+                now, require_lost=True
+            ):
                 if self.phase_elapsed() >= self.m2b_config.detach_verify_timeout_s:
                     self.transition_to(MissionPhase.M2_FAULT, "landing refused: physical detach not verified")
                 return
@@ -3353,6 +3975,26 @@ class OnlineJoinPlanner(Node):
     def publish_m2b_control_contracts(self) -> None:
         if not self.is_m2b:
             return
+        if self.m2b_progressive:
+            complete = bool(self.progressive_arc is not None
+                and self.phase in {MissionPhase.M2_ATTACH_PROOF, MissionPhase.M2_ATTACHED_HOLD}
+                and self.progressive_proof_time >= self.progressive_arc.duration)
+            self.progressive_complete_publisher.publish(Bool(data=complete))
+            diag = self.m2b_attachment_diagnostics or {}
+            status = dict(waiting_reason=self.progressive_waiting_reason,
+                initial_contact=bool(diag.get("initial_contact", False)),
+                confirmed=bool(diag.get("confirmed", False)), lost=bool(diag.get("lost", False)),
+                fresh=self.m2b_attachment_evidence_fresh(),
+                proof_angle_error_deg=diag.get("proof_angle_error_deg"),
+                proof_elapsed_s=self.progressive_proof_time, proof_motion_complete=complete,
+                measured_clearance_m=diag.get("normal_error_m"),
+                contact_correction_m=self.m2b_irl_contact_correction_m,
+                retry_stage=self.m2b_retreat_stage,
+                attempt=self.m2b_progressive_budget.attempt,
+                retry_available=self.progressive_retry_available(),
+                quiet_miss_elapsed_s=self.m2b_quiet_miss.elapsed_s,
+                phase=self.phase.value)
+            self.progressive_status_publisher.publish(String(data=json.dumps(status)))
         if self.m2b_arm_permission_publisher is not None:
             permission = Bool()
             permission.data = self.m2b_arm_permitted()
@@ -3380,7 +4022,7 @@ class OnlineJoinPlanner(Node):
             self.m2b_detector_reset_publisher.publish(reset)
         if self.m2b_attempt_publisher is not None:
             attempt = Int32()
-            attempt.data = int(self.m2b_retry_tracker.attempt_number)
+            attempt.data = int(self.m2b_progressive_budget.attempt if self.m2b_progressive else self.m2b_retry_tracker.attempt_number)
             self.m2b_attempt_publisher.publish(attempt)
         if self.m2b_latch_stable_publisher is not None:
             stable = Bool()
@@ -3457,6 +4099,9 @@ class OnlineJoinPlanner(Node):
                 and self.drone_position is not None
             ):
                 self.takeoff_start_position = self.drone_position.copy()
+                # The first mocap pose may have arrived while the disarmed quad
+                # was being carried. Ground height belongs to accepted TAKEOFF.
+                self.initial_quad_z = float(self.takeoff_start_position[2])
                 self.transition_to(
                     MissionPhase.TAKEOFF,
                     "takeoff command received",
@@ -3475,6 +4120,11 @@ class OnlineJoinPlanner(Node):
     def external_landing_callback(self, msg: Bool) -> None:
         if not bool(msg.data):
             return
+        if self.ground_ring_exit is not None:
+            return  # Repeated LAND cannot skip release or measured separation.
+        if self.is_m2b and self.m2b_progressive and self.phase == MissionPhase.M2_LANDING_STAGE:
+            # Repeated LAND must not skip the release/separation sequence.
+            return
         if self.phase in {MissionPhase.LANDING, MissionPhase.LANDED_DISARMED}:
             return
         if self.drone_position is None:
@@ -3482,6 +4132,35 @@ class OnlineJoinPlanner(Node):
             self.get_logger().warning(
                 "Landing request latched until the first drone-state sample."
             )
+            return
+        if self.ground_ring_attach_trial and self.phase in {
+                MissionPhase.TRANSIT_TO_REATTACH, MissionPhase.APPROACH_ABOVE_TARGET,
+                MissionPhase.MATCH_VELOCITY, MissionPhase.DESCEND_TO_ATTACHMENT,
+                MissionPhase.ATTACH_READY}:
+            if self.takeoff_start_position is None:
+                self.ground_ring_waiting_reason = 'takeoff position unknown; cannot route LAND'
+                self.get_logger().error(self.ground_ring_waiting_reason)
+                return
+            cfg = self.ground_ring_config
+            now = self._physical_now_s()
+            self.ground_ring_exit = GroundRingExit(
+                self.drone_position, self.takeoff_start_position[:2],
+                started_s=now, release_dwell_s=cfg['release_dwell_s'],
+                required_face_gap_m=cfg['separation_gap_m'],
+                separation_dwell_s=cfg['separation_dwell_s'],
+                rise_limit_m=cfg['rise_limit_m'], rise_rate_mps=cfg['rise_rate_mps'])
+            self.ground_ring_exit_decision = self.ground_ring_exit.step(
+                now, face_gap_m=float('nan'), fresh=False,
+                body_position=self.drone_position, body_speed_mps=0.)
+            self.publish_magnet_command('OFF')
+            self.ground_ring_waiting_reason = 'operator LAND: magnet OFF, release dwell'
+            return
+        if self.is_m2b and self.m2b_progressive and (
+                self.phase in {MissionPhase.M2_SETTLE_CAPTURE, MissionPhase.M2_ATTACH_APPROACH_HIGH,
+                    MissionPhase.M2_ATTACH_APPROACH_LOW, MissionPhase.M2_ATTACH_CAPTURE_WAIT,
+                    MissionPhase.M2_ATTACH_PROOF, MissionPhase.M2_ATTACHED_HOLD,
+                    MissionPhase.M2_DETACHED_RETREAT, MissionPhase.M2_FAULT}):
+            self.progressive_begin_release("operator LAND", landing=True)
             return
         if self.is_m2b and self.phase == MissionPhase.M2_ATTACHED_HOLD:
             self.transition_to(
@@ -3541,7 +4220,9 @@ class OnlineJoinPlanner(Node):
             "prerequisites will be checked on the next planner tick."
         )
 
-    def _fresh(self, value, timestamp: Optional[float], name: str) -> bool:
+    def _fresh(
+        self, value, timestamp: Optional[float], name: str, timeout_s: Optional[float] = None
+    ) -> bool:
         if value is None or timestamp is None:
             self.get_logger().warn(
                 f"Waiting for {name}...",
@@ -3549,9 +4230,10 @@ class OnlineJoinPlanner(Node):
             )
             return False
         age = self._physical_now_s() - timestamp
-        if age > self.input_timeout_s:
+        allowed_age_s = self.input_timeout_s if timeout_s is None else float(timeout_s)
+        if age > allowed_age_s:
             self.get_logger().warn(
-                f"{name} is stale ({age:.2f} s > {self.input_timeout_s:.2f} s).",
+                f"{name} is stale ({age:.2f} s > {allowed_age_s:.2f} s).",
                 throttle_duration_sec=1.0,
             )
             return False
@@ -3567,6 +4249,7 @@ class OnlineJoinPlanner(Node):
                 self.m2b_live_ring_position,
                 self.m2b_last_ring_pose_time_s,
                 "M2B ring pose",
+                self.m2b_ring_pose_timeout_s,
             ):
                 return False
         if self.use_measured_magnet_tip and not self._fresh(
@@ -3575,6 +4258,9 @@ class OnlineJoinPlanner(Node):
             "magnet-tip pose",
         ):
             return False
+        if self.ground_ring_exit is not None:
+            # Exit policy itself forbids lateral motion without fresh ring evidence.
+            return True
 
         source = self.current_phase_spec().target_source
         if source == TargetSource.PICKUP_OBJECT:
@@ -4277,7 +4963,7 @@ class OnlineJoinPlanner(Node):
                 measured_acceleration=self.drone_acceleration,
                 max_drift_m=self.c1f2_prepare_max_lift_drift_m,
                 settle_speed_mps=self.c1f2_prepare_settle_speed_mps,
-                settle_acceleration_mps2=self.c1f2_handoff_acceleration_tolerance_mps2,
+                settle_acceleration_mps2=self.c1f2_prepare_settle_acceleration_mps2,
             )
             self.c1f2_prepare_drift_m = grant_state.drift_m
             self.c1f2_prepare_speed_mps = grant_state.speed_mps
@@ -4496,6 +5182,15 @@ class OnlineJoinPlanner(Node):
             ) = self.compute_pickup_target_geometry(allow_latched=False)
 
         old_phase = self.phase
+        if new_phase == MissionPhase.LIFT_OBJECT and old_phase != new_phase:
+            self.pickup_proof_tracker.reset()
+            self.pickup_proof_proven = not self.pickup_proof_enabled
+            self.pickup_proof_last_pair = None
+        if (getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered'
+                and new_phase == MissionPhase.DESCEND_TO_PICKUP and pending_geometry is None):
+            self.invalidate_pickup_alignment()
+            self.pickup_alignment_waiting_reason = 'waiting for fresh calibrated pickup geometry'
+            return
         if old_phase == MissionPhase.LIFT_OBJECT and new_phase != MissionPhase.LIFT_OBJECT:
             if self.operator_advance_override_pending:
                 self.operator_override_last_result = "REJECTED_PHASE_EXIT"
@@ -4505,6 +5200,18 @@ class OnlineJoinPlanner(Node):
                 )
             self.operator_advance_override_pending = False
         self.phase = new_phase
+        if new_phase in {MissionPhase.WAIT_FOR_TAKEOFF, MissionPhase.APPROACH_ABOVE_PICKUP,
+                         MissionPhase.DESCEND_TO_PICKUP, MissionPhase.TRANSIT_TO_DROP_POINT,
+                         MissionPhase.LANDING, MissionPhase.LANDED_DISARMED}:
+            self.m1_candidate_hold_reference = None
+        if getattr(self, 'm1_pickup_stall', None) is not None:
+            self.m1_pickup_stall.reset()
+        if (getattr(self, 'm1_pickup_release', None) is not None and
+                new_phase in {MissionPhase.WAIT_FOR_TAKEOFF, MissionPhase.LANDING,
+                              MissionPhase.LANDED_DISARMED}):
+            self.m1_pickup_release.reset_mission()
+        if getattr(self, "m2b_quiet_miss", None) is not None:
+            self.m2b_quiet_miss.reset()
         self.phase_entry_time = self._physical_now_s()
         self.publish_phase()
         self.condition_start_time = None
@@ -4514,8 +5221,23 @@ class OnlineJoinPlanner(Node):
         self.last_rate_profile_complete = False
 
         if self.is_m2b:
+            if self.m2b_irl_tip_alignment_enabled:
+                if new_phase == MissionPhase.M2_SETTLE_CAPTURE:
+                    self.m2b_irl_tip_alignment.start_retry()
+                elif new_phase in {
+                    MissionPhase.M2_LANDING_STAGE, MissionPhase.LANDING,
+                    MissionPhase.LANDED_DISARMED,
+                }:
+                    self.m2b_irl_tip_alignment.reset_assignment()
             if new_phase == MissionPhase.M2_TAKEOFF_HOVER:
                 self.m2b_takeoff_settle_gate.reset()
+                self.m2b_takeoff_settle_position_error_m = float("nan")
+                self.m2b_takeoff_settle_speed_mps = float("nan")
+                self.m2b_takeoff_settle_swing_deg = float("nan")
+                self.m2b_takeoff_settle_dwell_s = 0.0
+                self.m2b_takeoff_settle_reason = "NOT_EVALUATED"
+                self.m2b_takeoff_settle_inputs_fresh = False
+                self.m2b_takeoff_settle_settled = False
             elif new_phase == MissionPhase.M2_SETTLE_CAPTURE:
                 self.m2b_capture_settle_gate.reset()
                 self.m2b_capture_settle_position_error_m = float("nan")
@@ -4542,11 +5264,11 @@ class OnlineJoinPlanner(Node):
                 self.m2b_retreat_target = (
                     None if self.drone_position is None else self.drone_position.copy()
                 )
-                if self.m2b_attachment_truth_source == "joint_truth":
+                if self.m2b_attachment_truth_source == "joint_truth" and not self.m2b_progressive:
                     self.m2b_request_detector_reset()
             elif new_phase == MissionPhase.M2_LANDING_STAGE:
                 self.m2b_magnet_on_requested = False
-                if self.m2b_attachment_truth_source == "joint_truth":
+                if self.m2b_attachment_truth_source == "joint_truth" and not self.m2b_progressive:
                     self.m2b_request_detector_reset()
                 if self.drone_position is not None:
                     self.m2b_landing_detach_hold_position = self.drone_position.copy()
@@ -4559,7 +5281,8 @@ class OnlineJoinPlanner(Node):
                         )
                     self.m2b_landing_stage_target = target
             elif new_phase == MissionPhase.M2_FAULT:
-                self.m2b_magnet_on_requested = False
+                if not self.m2b_progressive:
+                    self.m2b_magnet_on_requested = False
                 self.m2b_fault_hold_position = (
                     None if self.drone_position is None else self.drone_position.copy()
                 )
@@ -4587,6 +5310,15 @@ class OnlineJoinPlanner(Node):
                         pending_geometry,
                         pending_geometry_source,
                     )
+                    if getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered':
+                        self.latched_pickup_surface = pending_geometry.pickup_point_world.copy()
+                        self.latched_pickup_marker_to_face = pending_geometry.marker_to_contact_face_world.copy()
+                        floor = float(pending_geometry.contact_face_target_world[2]
+                                      - self.latched_pickup_surface[2])
+                        self.pickup_tier_descent = TieredDescent(self.pickup_tier_alignment,
+                            start_height_m=floor+self.geometry_pickup_approach_height(),
+                            floor_m=floor, speed_mps=self.pickup_descent_speed,
+                            high_xy_m=self.pickup_alignment_high_xy_m)
         elif new_phase == MissionPhase.MAGNET_ATTACH_WAIT:
             self.attach_wait_start_time = self._physical_now_s()
         elif new_phase == MissionPhase.M2_CPP_TRANSIT_CAPTURE:
@@ -4642,9 +5374,35 @@ class OnlineJoinPlanner(Node):
             self.clear_geometry_pickup_latch()
             self.initialise_landing()
 
+        if getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered':
+            if new_phase in {MissionPhase.WAIT_FOR_TAKEOFF, MissionPhase.LANDING,
+                             MissionPhase.LANDED_DISARMED, MissionPhase.TRANSIT_TO_DROP_POINT}:
+                self.pickup_tier_alignment.reset_assignment()
+                self.pickup_tier_descent = None
+                self.latched_pickup_surface = None
+                self.latched_pickup_marker_to_face = None
+                self.invalidate_pickup_alignment()
+                self.pickup_alignment_waiting_reason = 'inactive'
+            elif new_phase == MissionPhase.APPROACH_ABOVE_PICKUP:
+                # Existing same-object retry: preserve learnt trim, restart dwell.
+                self.pickup_tier_alignment.start_retry()
+                self.pickup_tier_descent = None
+                self.invalidate_pickup_alignment()
+                self.pickup_alignment_waiting_reason = 'approach'
+            elif new_phase in {MissionPhase.MAGNET_ATTACH_WAIT, MissionPhase.LIFT_OBJECT}:
+                self.pickup_alignment_waiting_reason = 'trim frozen; M1 contact/lift authority'
+
         self.get_logger().info(
             f"Planner phase: {old_phase.value} -> {new_phase.value}. Reason: {reason}"
         )
+        if hasattr(self, 'target_drop_trim'):
+            # A transition cannot carry an old velocity sample into a different
+            # target/phase. Keep learnt offsets until mission reset/end.
+            self.invalidate_target_alignment()
+            if new_phase in {MissionPhase.WAIT_FOR_TAKEOFF, MissionPhase.LANDING,
+                             MissionPhase.LANDED_DISARMED}:
+                self.target_drop_trim.reset()
+                self.target_ring_trim.reset()
 
     def condition_true_for(self, condition: bool, duration: float) -> bool:
         if not condition:
@@ -4771,6 +5529,7 @@ class OnlineJoinPlanner(Node):
                 overtravel=self.pickup_overtravel,
                 max_overtravel=self.pickup_max_overtravel,
                 support_surface_z=self.support_surface_z,
+                support_surface_overtravel_allowance_m=self.pickup_support_surface_overtravel_allowance_m,
             )
         except (TypeError, ValueError) as exc:
             return None, pose_position, pose_age, "invalid_profile_or_pose", str(exc)
@@ -4783,6 +5542,10 @@ class OnlineJoinPlanner(Node):
         """Return the active absolute marker target, mode, and fallback reason."""
 
         phase = self.phase if phase is None else phase
+        if (getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered'
+                and phase == MissionPhase.DESCEND_TO_PICKUP
+                and self.pickup_tier_descent is not None):
+            return self.tiered_pickup_marker_target(), 'gated_tiered_descent', ''
         pickup_phases = {
             MissionPhase.APPROACH_ABOVE_PICKUP,
             MissionPhase.SETTLE_ABOVE_PICKUP,
@@ -4808,6 +5571,9 @@ class OnlineJoinPlanner(Node):
                 reason = self.geometry_pickup_latch_error or "no_latched_geometry_target"
                 return None, "legacy_fallback", reason
             if phase == MissionPhase.MAGNET_ATTACH_WAIT:
+                if getattr(self, 'm1_candidate_hold_reference', None) is not None:
+                    return (self.m1_candidate_hold_reference - self.quad_reference_offset_from_tip(),
+                            'candidate_hold', '')
                 return (
                     self.latched_geometry_pickup_contact_target.copy(),
                     "latched_contact",
@@ -5008,7 +5774,8 @@ class OnlineJoinPlanner(Node):
 
     def pickup_compensation_input_active(self) -> bool:
         return bool(
-            self.enable_pickup_tip_xy_compensation
+            getattr(self, 'pickup_alignment_mode', 'legacy') == 'legacy'
+            and self.enable_pickup_tip_xy_compensation
             and self.use_measured_magnet_tip
             and self.drone_position is not None
             and self.measured_magnet_tip_position is not None
@@ -5023,7 +5790,8 @@ class OnlineJoinPlanner(Node):
 
     def pickup_compensation_applies(self) -> bool:
         return bool(
-            self.enable_pickup_tip_xy_compensation
+            getattr(self, 'pickup_alignment_mode', 'legacy') == 'legacy'
+            and self.enable_pickup_tip_xy_compensation
             and self.use_measured_magnet_tip
             and self.phase
             in {
@@ -5062,9 +5830,307 @@ class OnlineJoinPlanner(Node):
 
     def quad_reference_offset_from_tip(self) -> np.ndarray:
         offset = self.nominal_quad_from_tip_offset()
-        if self.pickup_compensation_applies():
+        if (getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered'
+                and self.phase in {MissionPhase.APPROACH_ABOVE_PICKUP,
+                    MissionPhase.SETTLE_ABOVE_PICKUP, MissionPhase.DESCEND_TO_PICKUP,
+                    MissionPhase.MAGNET_ATTACH_WAIT, MissionPhase.LIFT_OBJECT}):
+            offset[:2] += self.pickup_tier_alignment.offset_xy
+        elif self.pickup_compensation_applies():
             offset[:2] += self.pickup_tip_xy_compensation_filtered
+        if hasattr(self, 'target_alignment_offset'):
+            offset[:2] += self.target_alignment_offset()
         return offset
+
+    def target_alignment_group(self):
+        if self.phase in {MissionPhase.SETTLE_ABOVE_DROP_POINT,
+                          MissionPhase.DESCEND_TO_DROP_HEIGHT, MissionPhase.DROP_OBJECT,
+                          MissionPhase.CLEAR_DROP_ZONE}:
+            return 'drop'
+        if self.phase in {MissionPhase.APPROACH_ABOVE_TARGET, MissionPhase.MATCH_VELOCITY,
+                          MissionPhase.DESCEND_TO_ATTACHMENT, MissionPhase.ATTACH_READY}:
+            return 'ring'
+        return 'inactive'
+
+    def target_alignment_offset(self):
+        if (getattr(self, 'target_alignment_mode', 'legacy') == 'legacy'
+                or self.is_m2b or self.c1f2_exit_bridge_active
+                or self.ground_ring_exit is not None):
+            return np.zeros(2)
+        group = self.target_alignment_group()
+        return (self.target_drop_trim.offset_xy.copy() if group == 'drop' else
+                self.target_ring_trim.offset_xy.copy() if group == 'ring' else np.zeros(2))
+
+    def invalidate_target_alignment(self):
+        if hasattr(self, 'target_drop_trim'):
+            self.target_drop_trim.invalidate()
+            self.target_ring_trim.invalidate()
+
+    def update_target_alignment(self):
+        if getattr(self, 'target_alignment_mode', 'legacy') == 'legacy' or self.is_m2b:
+            return
+        group = self.target_alignment_group()
+        if self.phase in {MissionPhase.WAIT_FOR_TAKEOFF, MissionPhase.LANDING,
+                          MissionPhase.LANDED_DISARMED}:
+            self.target_drop_trim.reset()
+            self.target_ring_trim.reset()
+        if group == 'inactive':
+            self.invalidate_target_alignment()
+            return
+        trim = self.target_drop_trim if group == 'drop' else self.target_ring_trim
+        now = self._physical_now_s()
+        times = [self.last_drone_time, self.last_magnet_tip_pose_time]
+        if group == 'ring':
+            times += [self.last_attachment_pose_time, self.last_attachment_twist_time]
+            surface = self.attachment_position
+        elif self.drop_point_source in {'static', 'fixed', 'hardcoded'}:
+            surface = self.static_drop_point
+        elif self.drop_point_source == 'payload':
+            times += [self.last_payload_pose_time, self.last_payload_twist_time]
+            surface = self.payload_position
+        else:
+            times += [self.last_attachment_pose_time, self.last_attachment_twist_time]
+            surface = self.attachment_position
+        fresh = bool(surface is not None and self.measured_magnet_tip_position is not None
+                     and all(t is not None and 0 <= now-t <= self.input_timeout_s for t in times)
+                     and all(p is not None and np.all(np.isfinite(p)) for p in
+                             (surface, self.measured_magnet_tip_position,
+                              self.drone_position, self.drone_velocity)))
+        if not fresh:
+            trim.invalidate()
+            return
+        target = self.target_state(self.current_phase_spec().target_source)
+        if not np.all(np.isfinite(target.velocity)):
+            trim.invalidate()
+            return
+        relative = self.measured_magnet_tip_position - target.position
+        error = self.desired_tip_offset()[:2] - relative[:2]
+        # M1's existing calibration is world-fixed. The ground-ring trial has
+        # its own face-Z setting; never subtract drop_offset or staging height.
+        face_z = self.measured_magnet_tip_position[2] + (
+            -self.ground_ring_config['marker_to_face_m'] if self.ground_ring_attach_trial
+            else self.magnet_marker_to_contact_face[2])
+        owner_blocked = bool(self.c1f2_exit_bridge_active or self.c1f2_cpp_authority_active
+                             or self.ground_ring_exit is not None)
+        learning_phase = self.phase in {MissionPhase.SETTLE_ABOVE_DROP_POINT,
+                                        MissionPhase.DESCEND_TO_DROP_HEIGHT,
+                                        MissionPhase.MATCH_VELOCITY}
+        magnet_ok = self.last_magnet_command == ('ON' if group == 'drop' else 'OFF')
+        trim.step(now_s=now, sample_stamp_s=self.last_magnet_tip_pose_time,
+                  relative_position=relative, error_world_xy=error,
+                  clearance_m=float(face_z-surface[2]), fresh=True,
+                  learning=learning_phase and magnet_ok and not owner_blocked,
+                  frozen_reason=('authority_or_release' if owner_blocked else
+                                 'phase_frozen' if not learning_phase else 'magnet_state'))
+
+    def target_alignment_status(self):
+        group = self.target_alignment_group()
+        trim = self.target_drop_trim if group == 'drop' else self.target_ring_trim
+        enabled = self.target_alignment_mode != 'legacy' and group != 'inactive'
+        return {
+            'target_alignment_mode': self.target_alignment_mode,
+            'target_alignment_group': group,
+            'target_alignment_xy_m': trim.xy_error_m if enabled else float('nan'),
+            'target_alignment_relative_speed_mps': trim.relative_speed_mps if enabled else float('nan'),
+            'target_alignment_clearance_m': trim.clearance_m if enabled else float('nan'),
+            'target_alignment_trim_x_m': float(trim.offset_xy[0]) if enabled else 0.,
+            'target_alignment_trim_y_m': float(trim.offset_xy[1]) if enabled else 0.,
+            'target_alignment_updating': enabled and trim.updating,
+            'target_alignment_saturated': enabled and trim.saturated,
+            'target_alignment_reason': trim.reason if enabled else 'inactive',
+        }
+
+    def invalidate_pickup_alignment(self) -> None:
+        if getattr(self, 'pickup_alignment_mode', 'legacy') != 'measured_tip_tiered':
+            return
+        self.pickup_alignment_last_sample = None
+        self.pickup_alignment_speed_ready = False
+        self.pickup_alignment_relative_velocity[:] = 0.
+        self.pickup_tier_decision = None
+        self.pickup_tier_alignment.last_time_s = None
+        self.pickup_tier_alignment.capture_since_s = None
+        self.pickup_tier_alignment.pre_low_since_s = None
+        if self.pickup_tier_descent is not None:
+            self.pickup_tier_descent.invalidate()
+        self.pickup_alignment_waiting_reason = 'stale_evidence'
+
+    def update_pickup_alignment(self) -> None:
+        if (getattr(self, 'pickup_alignment_mode', 'legacy') != 'measured_tip_tiered'
+                or getattr(getattr(self, 'm1_pickup_release', None), 'stage', 'idle') != 'idle'
+                or self.phase not in {MissionPhase.SETTLE_ABOVE_PICKUP,
+                                      MissionPhase.DESCEND_TO_PICKUP}):
+            return
+        now = self._physical_now_s()
+        geometry, _, _, _, _ = self.compute_pickup_target_geometry(allow_latched=False)
+        fresh = geometry is not None and self.measured_magnet_tip_position is not None
+        for stamp, limit in ((self.last_drone_time, self.input_timeout_s),
+                             (self.last_magnet_tip_pose_time, self.input_timeout_s)):
+            fresh = bool(fresh and stamp is not None and 0 <= now-stamp <= limit)
+        if (not self.use_static_pickup_object and
+                (self.last_pickup_object_pose_time is None or not
+                 0 <= now-self.last_pickup_object_pose_time <= self.payload_pose_timeout_s)):
+            fresh = False
+        if not fresh:
+            self.invalidate_pickup_alignment()
+            return
+        face = self.measured_magnet_tip_position + geometry.marker_to_contact_face_world
+        relative = face - geometry.pickup_point_world
+        if not np.all(np.isfinite(relative)):
+            self.invalidate_pickup_alignment()
+            return
+        # Sample only on a new magnet measurement, not every planner tick. The
+        # .35/.65 velocity filter matches the existing IRL attachment manager.
+        stamp = self.last_magnet_tip_pose_time
+        sample = self.pickup_alignment_last_sample
+        if sample is None:
+            self.pickup_alignment_last_sample = (stamp, relative.copy())
+        elif stamp > sample[0] + 1e-6:
+            delta = stamp - sample[0]
+            if delta > self.input_timeout_s:
+                self.invalidate_pickup_alignment()
+                self.pickup_alignment_last_sample = (stamp, relative.copy())
+                return
+            self.pickup_alignment_relative_velocity = (
+                .35 * (relative-sample[1])/delta + .65*self.pickup_alignment_relative_velocity)
+            self.pickup_alignment_speed_ready = True
+            self.pickup_alignment_last_sample = (stamp, relative.copy())
+        elif stamp < sample[0]:
+            self.invalidate_pickup_alignment()
+            return
+        # Descent references remain latched, but freshness/speed come from live
+        # measurements. Cached pickup targets are never fresh-evidence substitutes.
+        surface = (self.latched_pickup_surface if self.phase == MissionPhase.DESCEND_TO_PICKUP
+                   else geometry.pickup_point_world)
+        if surface is None:
+            self.invalidate_pickup_alignment()
+            return
+        error = surface[:2] - face[:2]
+        clearance = float(face[2]-surface[2])
+        speed = float(np.linalg.norm(self.pickup_alignment_relative_velocity))
+        self.pickup_alignment_xy_m = float(np.linalg.norm(error))
+        self.pickup_alignment_clearance_m = clearance
+        if self.phase == MissionPhase.SETTLE_ABOVE_PICKUP:
+            self.pickup_tier_decision = self.pickup_tier_alignment.step(
+                now_s=now, error_world_xy=error, xy_error_m=self.pickup_alignment_xy_m,
+                normal_error_m=clearance, relative_speed_mps=speed,
+                fresh=self.pickup_alignment_speed_ready, magnet_on=False, phase='capture')
+            self.pickup_alignment_waiting_reason = self.pickup_tier_decision.reason
+        elif self.pickup_tier_descent is not None:
+            self.pickup_tier_descent.step(now_s=now, error_world_xy=error,
+                clearance_m=clearance, relative_speed_mps=speed,
+                fresh=self.pickup_alignment_speed_ready)
+            self.pickup_alignment_waiting_reason = self.pickup_tier_descent.reason
+
+    def begin_m1_pickup_retry(self, reason: str) -> None:
+        if not self.pickup_retry_enabled or self.m1_pickup_release.stage != 'idle':
+            return
+        reference = (self.last_reference.positions[0].copy()
+                     if self.last_reference is not None else self.drone_position.copy())
+        self.m1_pickup_release.begin(now=self._physical_now_s(), reference_position=reference)
+        self.m1_pickup_stall.reset()
+        self.pickup_alignment_waiting_reason = 'retry: ' + reason
+        self.get_logger().warning(
+            f'M1 pickup attempt {self.m1_pickup_release.attempts} failed: {reason}; '
+            'magnet OFF, vertical-only clearance before retry')
+
+    def update_m1_pickup_recovery(self) -> None:
+        release = self.m1_pickup_release
+        if release.stage in {'idle', 'await_operator'}:
+            return
+        now = self._physical_now_s()
+        geometry, _, _, _, _ = self.compute_pickup_target_geometry(allow_latched=False)
+        fresh = bool(geometry is not None and self.measured_magnet_tip_position is not None
+                     and all(stamp is not None and 0 <= now-stamp <= limit for stamp, limit in (
+                         (self.last_drone_time, self.input_timeout_s),
+                         (self.last_magnet_tip_pose_time, self.input_timeout_s),
+                         (self.last_pickup_object_pose_time, self.payload_pose_timeout_s))))
+        clearance = float('nan')
+        if fresh:
+            face = self.measured_magnet_tip_position + geometry.marker_to_contact_face_world
+            clearance = float(face[2] - geometry.pickup_point_world[2])
+            fresh = bool(np.all(np.isfinite(face)) and math.isfinite(clearance))
+        if release.step(now=now, face_clearance_m=clearance, fresh=fresh,
+                        magnet_off=self.last_magnet_command == 'OFF'):
+            release.reset_stage()
+            self.transition_to(MissionPhase.APPROACH_ABOVE_PICKUP,
+                               'fresh measured vertical separation; retry pickup')
+        else:
+            self.pickup_alignment_waiting_reason = release.waiting_reason
+
+    def ground_ring_evidence(self):
+        """Fresh physical face/plate geometry for trial diagnostics and release."""
+        now = self._physical_now_s()
+        required = (
+            (self.last_drone_time, self.drone_position),
+            (self.last_magnet_tip_pose_time, self.measured_magnet_tip_position),
+            (self.last_payload_pose_time, self.payload_position),
+            (self.last_attachment_pose_time, self.attachment_position),
+        )
+        if not all(stamp is not None and pose is not None
+                   and 0 <= now - stamp <= self.input_timeout_s
+                   and np.all(np.isfinite(pose)) for stamp, pose in required):
+            self.ground_ring_face_gap_m = float('nan')
+            self.ground_ring_xy_m = float('nan')
+            self.ground_ring_relative_speed_mps = float('nan')
+            return False
+        face = self.measured_magnet_tip_position.copy()
+        face[2] -= self.ground_ring_config['marker_to_face_m']
+        self.ground_ring_face_gap_m = float(face[2] - self.payload_position[2])
+        self.ground_ring_xy_m = float(np.linalg.norm(
+            face[:2] - self.attachment_position[:2]))
+        ring_velocity = (self.attachment_velocity if
+                         self.last_attachment_twist_time is not None
+                         and 0 <= now - self.last_attachment_twist_time <= self.input_timeout_s
+                         else np.zeros(3))
+        self.ground_ring_relative_speed_mps = float(np.linalg.norm(
+            self.ground_ring_tip_velocity[:2] - ring_velocity[:2]))
+        return all(math.isfinite(value) for value in (
+            self.ground_ring_face_gap_m, self.ground_ring_xy_m,
+            self.ground_ring_relative_speed_mps))
+
+    def update_ground_ring_exit(self):
+        fresh = self.ground_ring_evidence()
+        decision = self.ground_ring_exit.step(
+            self._physical_now_s(), face_gap_m=self.ground_ring_face_gap_m,
+            fresh=fresh, body_position=self.drone_position,
+            body_speed_mps=float(np.linalg.norm(self.drone_velocity))
+            if self.drone_velocity is not None else float('nan'))
+        self.ground_ring_exit_decision = decision
+        self.ground_ring_waiting_reason = decision.waiting_reason or decision.stage
+        if decision.ready_to_land:
+            self.ground_ring_exit = None
+            self.ground_ring_exit_decision = None
+            self.transition_to(MissionPhase.LANDING,
+                               'operator LAND: magnet OFF, measured face separation, pad reached')
+
+
+    def pickup_magnet_command(self, legacy_command):
+        if self.ground_ring_exit is not None:
+            return 'OFF'
+        if self.ground_ring_attach_trial and self.phase in {
+                MissionPhase.DESCEND_TO_ATTACHMENT, MissionPhase.ATTACH_READY}:
+            return 'ON'
+        if getattr(getattr(self, 'm1_pickup_release', None), 'stage', 'idle') != 'idle':
+            return 'OFF'
+        if (getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered'
+                and self.phase == MissionPhase.DESCEND_TO_PICKUP):
+            return ('ON' if self.pickup_tier_descent is not None
+                    and self.pickup_tier_descent.band == 'LOW' else 'OFF')
+        return legacy_command
+
+    def tiered_pickup_marker_target(self):
+        target = self.latched_pickup_surface - self.latched_pickup_marker_to_face
+        target = target.copy()
+        target[2] += self.pickup_tier_descent.height_m
+        return target
+
+    def build_tiered_pickup_reference(self):
+        # All horizon samples use the authorised height: future elapsed-time
+        # samples must not tunnel through a paused HIGH/LOW gate.
+        marker = self.latched_pickup_surface - self.latched_pickup_marker_to_face
+        marker = marker.copy()
+        marker[2] += self.pickup_tier_descent.height_m
+        return stationary_regulation(marker + self.quad_reference_offset_from_tip(),
+            horizon_samples=self.horizon_samples, min_reference_z=self.min_reference_z)
 
     def rate_profile(self, phase: Optional[MissionPhase] = None) -> RateProfile:
         phase = self.phase if phase is None else phase
@@ -5094,6 +6160,12 @@ class OnlineJoinPlanner(Node):
                 self.pickup_descent_speed,
             )
         if phase == MissionPhase.LIFT_OBJECT:
+            if getattr(self, 'm1_candidate_hold_reference', None) is not None:
+                lift_delta = max(0., float(self.pickup_lift_height - self.pickup_attach_clearance))
+                start, goal = lift_offsets_from_candidate_hold(
+                    self.m1_candidate_hold_reference, self.latched_pickup_position,
+                    self.quad_reference_offset_from_tip(), lift_delta_m=lift_delta)
+                return RateProfile(start, goal, self.pickup_lift_speed)
             if (
                 self.use_geometry_aware_pickup
                 and self.latched_geometry_pickup_contact_offset is not None
@@ -5146,6 +6218,10 @@ class OnlineJoinPlanner(Node):
         raise RuntimeError(f"Phase {phase.value} has no relative rate profile.")
 
     def desired_tip_offset(self) -> np.ndarray:
+        if (getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered'
+                and self.phase == MissionPhase.DESCEND_TO_PICKUP
+                and self.pickup_tier_descent is not None):
+            return self.tiered_pickup_marker_target() - self.pickup_target_state().position
         if self.phase in {
             MissionPhase.WAIT_FOR_TAKEOFF,
             MissionPhase.APPROACH_ABOVE_PICKUP,
@@ -5221,6 +6297,37 @@ class OnlineJoinPlanner(Node):
         z_error = float(tip_now[2] - tip_target[2])
         return xy_error, relative_velocity, z_error
 
+    def update_pickup_proof(self, *, force_stale=False):
+        """Use fresh measured co-motion, not proximity, for M1 lift authority."""
+        if not self.pickup_proof_enabled:
+            return self.pickup_proof_tracker.last_decision
+        now = self._physical_now_s()
+        times = (self.last_drone_time, self.last_magnet_tip_pose_time,
+                 self.last_pickup_object_pose_time)
+        poses = (self.drone_position, self.measured_magnet_tip_position,
+                 self.pickup_object_position)
+        fresh = bool(
+            not force_stale and
+            all(t is not None and 0.0 <= now - t <= self.input_timeout_s for t in times)
+            and all(p is not None and np.all(np.isfinite(p)) for p in poses)
+        )
+        if not fresh:
+            return self.pickup_proof_tracker.step(
+                now_s=now, body_position=[0, 0, 0], magnet_position=[0, 0, 0],
+                object_position=[0, 0, 0], fresh=False,
+                magnet_on=self.last_magnet_command == 'ON', candidate=self.object_attached)
+        if times == self.pickup_proof_last_pair:
+            return self.pickup_proof_tracker.last_decision
+        self.pickup_proof_last_pair = times
+        decision = self.pickup_proof_tracker.step(
+            now_s=now, body_position=self.drone_position,
+            magnet_position=self.measured_magnet_tip_position,
+            object_position=self.pickup_object_position, fresh=True,
+            magnet_on=self.last_magnet_command == 'ON',
+            candidate=self.object_attached)
+        self.pickup_proof_proven = decision.proven and not decision.failed
+        return decision
+
     def loaded_lift_quad_z_error_m(self) -> float:
         """Signed quad-Z error from the completed LIFT_OBJECT body endpoint."""
         if self.drone_position is None or self.latched_pickup_position is None:
@@ -5239,6 +6346,12 @@ class OnlineJoinPlanner(Node):
     # ----------------------------------------------------------------------
     def update_state_machine(self) -> None:
         if self.phase in {MissionPhase.LANDING, MissionPhase.LANDED_DISARMED}:
+            return
+        if self.ground_ring_exit is not None:
+            self.update_ground_ring_exit()
+            return
+        if getattr(getattr(self, 'm1_pickup_release', None), 'stage', 'idle') != 'idle':
+            self.update_m1_pickup_recovery()
             return
 
         if self.is_m2b:
@@ -5353,7 +6466,11 @@ class OnlineJoinPlanner(Node):
                 and abs_z_error < self.pickup_z_tolerance
                 and tip_speed < self.pickup_tip_speed_tolerance
             )
-            if self.condition_true_for(good, self.pickup_settle_time_s):
+            settled = self.condition_true_for(good, self.pickup_settle_time_s)
+            if getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered':
+                settled = bool(settled and self.pickup_tier_decision is not None
+                               and self.pickup_tier_decision.capture_ready)
+            if settled:
                 self.transition_to(
                     MissionPhase.DESCEND_TO_PICKUP,
                     "settled above pickup object",
@@ -5361,7 +6478,52 @@ class OnlineJoinPlanner(Node):
             return
 
         if self.phase == MissionPhase.DESCEND_TO_PICKUP:
-            if self.rate_profile().complete(elapsed):
+            if (getattr(self, 'pickup_proof_enabled', False)
+                    and getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered'
+                    and self.pickup_tier_descent is not None):
+                now = self._physical_now_s()
+                live_geometry, _, _, _, _ = self.compute_pickup_target_geometry(allow_latched=False)
+                live_clearance = float('nan')
+                if live_geometry is not None and self.measured_magnet_tip_position is not None:
+                    face = (self.measured_magnet_tip_position
+                            + live_geometry.marker_to_contact_face_world)
+                    live_clearance = float(face[2] - live_geometry.pickup_point_world[2])
+                candidate_fresh = bool(self.pickup_alignment_speed_ready
+                    and live_geometry is not None
+                    and getattr(self, 'last_object_attached_time', None) is not None
+                    and 0 <= now - self.last_object_attached_time <= self.input_timeout_s)
+                if early_candidate_ready(
+                        low=self.pickup_tier_descent.band == 'LOW',
+                        candidate=self.object_attached, fresh=candidate_fresh,
+                        magnet_on=self.last_magnet_command == 'ON',
+                        clearance_m=live_clearance,
+                        max_clearance_m=self.pickup_candidate_max_clearance_m):
+                    self.m1_candidate_hold_reference = (
+                        self.last_reference.positions[0].copy() if self.last_reference is not None
+                        else self.drone_position.copy())
+                    self.transition_to(MissionPhase.MAGNET_ATTACH_WAIT,
+                        f'fresh near-surface LOW pickup candidate (gap={live_clearance:.3f} m); '
+                        'hold for measured lift proof')
+                    return
+            complete = (self.pickup_tier_descent is not None and self.pickup_tier_descent.complete
+                        if getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered'
+                        else self.rate_profile().complete(elapsed))
+            if getattr(self, 'pickup_retry_enabled', False) and self.pickup_tier_descent is not None:
+                descent = self.pickup_tier_descent
+                fresh = bool(self.pickup_alignment_speed_ready
+                             and math.isfinite(self.pickup_alignment_xy_m)
+                             and math.isfinite(self.pickup_alignment_clearance_m))
+                raising = descent.reason == 'raise_to_safe_clearance'
+                progress = (self.pickup_alignment_clearance_m if raising
+                            else -descent.height_m)
+                if self.m1_pickup_stall.step(now=self._physical_now_s(),
+                        progress_m=progress, blocked=fresh and not complete,
+                        key='HIGH_CLEARANCE' if raising else descent.band):
+                    self.begin_m1_pickup_retry(
+                        f'{descent.band} no measured clearance/descent progress for '
+                        f'{self.m1_pickup_stall.wait_s:.0f}s')
+                    return
+            if complete:
                 self.transition_to(
                     MissionPhase.MAGNET_ATTACH_WAIT,
                     "pickup descent profile complete",
@@ -5370,6 +6532,11 @@ class OnlineJoinPlanner(Node):
 
         if self.phase == MissionPhase.MAGNET_ATTACH_WAIT:
             aligned = self.object_attached and xy_error < self.pickup_lift_xy_tolerance
+            if getattr(self, 'pickup_retry_enabled', False) and self.m1_pickup_stall.step(
+                    now=self._physical_now_s(), progress_m=0.,
+                    blocked=not self.object_attached, key='CONTACT_WAIT'):
+                self.begin_m1_pickup_retry('contact wait made no progress for 10s')
+                return
             if self.condition_true_for(aligned, self.pickup_lift_xy_dwell_s):
                 self.transition_to(
                     MissionPhase.LIFT_OBJECT,
@@ -5387,12 +6554,27 @@ class OnlineJoinPlanner(Node):
             return
 
         if self.phase == MissionPhase.LIFT_OBJECT:
+            if self.pickup_proof_enabled and self.object_attached:
+                proof = self.update_pickup_proof()
+                if proof.failed:
+                    self.reset_c1f2_for_pickup_retry()
+                    if self.pickup_retry_enabled:
+                        self.begin_m1_pickup_retry('measured pickup proof separation')
+                    else:
+                        self.transition_to(
+                            MissionPhase.APPROACH_ABOVE_PICKUP,
+                            'measured pickup proof separation; retrying pickup',
+                        )
+                    return
             if not self.object_attached:
                 self.reset_c1f2_for_pickup_retry()
-                self.transition_to(
-                    MissionPhase.APPROACH_ABOVE_PICKUP,
-                    "attachment lost during loaded lift; retrying pickup",
-                )
+                if self.pickup_retry_enabled:
+                    self.begin_m1_pickup_retry('attachment lost during loaded lift')
+                else:
+                    self.transition_to(
+                        MissionPhase.APPROACH_ABOVE_PICKUP,
+                        "attachment lost during loaded lift; retrying pickup",
+                    )
                 return
 
             profile_complete = self.rate_profile().complete(elapsed)
@@ -5406,6 +6588,7 @@ class OnlineJoinPlanner(Node):
                 )
             object_airborne = (
                 self.object_attached
+                and self.pickup_proof_proven
                 and object_clearance >= self.lift_complete_object_clearance
             )
             tracked_lift = (
@@ -5529,7 +6712,7 @@ class OnlineJoinPlanner(Node):
                         measured_acceleration=self.drone_acceleration,
                         max_drift_m=self.c1f2_prepare_max_lift_drift_m,
                         settle_speed_mps=self.c1f2_prepare_settle_speed_mps,
-                        settle_acceleration_mps2=self.c1f2_handoff_acceleration_tolerance_mps2,
+                        settle_acceleration_mps2=self.c1f2_prepare_settle_acceleration_mps2,
                     )
                     self.c1f2_prepare_drift_m = grant_state.drift_m
                     self.c1f2_prepare_speed_mps = grant_state.speed_mps
@@ -5570,7 +6753,7 @@ class OnlineJoinPlanner(Node):
                 return
 
             # Legacy/Python-only behaviour remains unchanged when C1F.2 is disabled.
-            if object_airborne or tracked_lift:
+            if (object_airborne or tracked_lift) and self.pickup_proof_proven:
                 reason = (
                     f"object lifted {object_clearance:.2f} m"
                     if object_airborne
@@ -5636,7 +6819,7 @@ class OnlineJoinPlanner(Node):
                 self.condition_start_time = None
                 return
             good = (
-                xy_error < self.match_xy_threshold
+                xy_error < self.drop_settle_xy_threshold
                 and abs_z_error < self.pickup_z_tolerance
                 and xy_relative_velocity < self.match_xy_velocity_threshold
             )
@@ -5698,10 +6881,17 @@ class OnlineJoinPlanner(Node):
             return
 
         if self.phase == MissionPhase.MATCH_VELOCITY:
-            matched = (
-                xy_error < self.match_xy_threshold
-                and xy_relative_velocity < self.match_xy_velocity_threshold
-            )
+            if self.ground_ring_attach_trial:
+                fresh = self.ground_ring_evidence()
+                matched = (
+                    fresh and self.ground_ring_xy_m <= self.match_xy_threshold
+                    and self.ground_ring_relative_speed_mps <= self.match_xy_velocity_threshold
+                )
+            else:
+                matched = (
+                    xy_error < self.match_xy_threshold
+                    and xy_relative_velocity < self.match_xy_velocity_threshold
+                )
             if self.condition_true_for(matched, self.dwell_time_s):
                 if self.auto_descend:
                     self.transition_to(
@@ -5713,10 +6903,16 @@ class OnlineJoinPlanner(Node):
             return
 
         if self.phase == MissionPhase.DESCEND_TO_ATTACHMENT:
-            if (
-                xy_error > self.descend_abort_xy_threshold
-                or xy_relative_velocity > self.descend_abort_xy_velocity_threshold
-            ):
+            if self.ground_ring_attach_trial:
+                self.ground_ring_evidence()
+                too_far = (not math.isfinite(self.ground_ring_xy_m)
+                           or self.ground_ring_xy_m > self.descend_abort_xy_threshold
+                           or self.ground_ring_relative_speed_mps
+                           > self.descend_abort_xy_velocity_threshold)
+            else:
+                too_far = (xy_error > self.descend_abort_xy_threshold
+                           or xy_relative_velocity > self.descend_abort_xy_velocity_threshold)
+            if too_far:
                 self.transition_to(
                     MissionPhase.APPROACH_ABOVE_TARGET,
                     "attachment descent aborted after loss of relative alignment",
@@ -5729,6 +6925,9 @@ class OnlineJoinPlanner(Node):
             return
 
         if self.phase == MissionPhase.ATTACH_READY:
+            if self.ground_ring_attach_trial:
+                self.ground_ring_waiting_reason = 'unverified attachment trial hold; manual LAND'
+                return
             if (
                 self.enable_attach_ready_timeout_landing
                 and self.attach_ready_land_after_s > 0.0
@@ -5754,8 +6953,26 @@ class OnlineJoinPlanner(Node):
         if self.drone_position is None or self.drone_velocity is None:
             raise RuntimeError("M2B B1 reference requested before drone state")
 
+        if self.m2b_progressive and self.phase in {
+                MissionPhase.M2_ATTACH_PROOF, MissionPhase.M2_ATTACHED_HOLD,
+                MissionPhase.M2_DETACHED_RETREAT, MissionPhase.M2_LANDING_STAGE}:
+            if getattr(self, "progressive_evidence_paused", False) and self.last_reference is not None:
+                return stationary_regulation(self.last_reference.positions[0],
+                    horizon_samples=self.horizon_samples, min_reference_z=self.min_reference_z)
+            target = self.progressive_target
+            if target is None:
+                target = self.drone_position.copy()
+            if self.phase in {MissionPhase.M2_DETACHED_RETREAT, MissionPhase.M2_LANDING_STAGE} and self.m2b_retreat_stage == "return":
+                return self.transfer_generator.generate(phase_key=self.phase.value,
+                    measured_position=self.drone_position, measured_velocity=self.drone_velocity,
+                    target=TargetState(target, np.zeros(3), np.zeros(3)), advance=True)
+            return stationary_regulation(target, horizon_samples=self.horizon_samples,
+                                         min_reference_z=self.min_reference_z)
+
         if self.phase == MissionPhase.M2_SETTLE_CAPTURE:
             target_position = self.m2b_capture_body_target()
+            if self.m2b_irl_tip_alignment_enabled:
+                target_position[:2] += self.m2b_irl_tip_alignment.offset_xy
             return self.transfer_generator.generate(
                 phase_key=self.phase.value,
                 measured_position=self.drone_position,
@@ -5771,7 +6988,7 @@ class OnlineJoinPlanner(Node):
                 else self.m2b_descent_progress.target_contact_height_m
             )
             return stationary_regulation(
-                self.m2b_body_target_for_contact_height(height),
+                self.m2b_local_body_target(height),
                 horizon_samples=self.horizon_samples,
                 min_reference_z=self.min_reference_z,
             )
@@ -5791,7 +7008,7 @@ class OnlineJoinPlanner(Node):
                     else self.m2b_descent_progress.target_contact_height_m
                 )
             return stationary_regulation(
-                self.m2b_body_target_for_contact_height(hold_height),
+                self.m2b_local_body_target(hold_height),
                 horizon_samples=self.horizon_samples,
                 min_reference_z=self.min_reference_z,
             )
@@ -5833,10 +7050,22 @@ class OnlineJoinPlanner(Node):
                     horizon_samples=self.horizon_samples,
                     min_reference_z=self.min_reference_z,
                 )
+            measured_velocity = self.drone_velocity
+            if self.m2b_retreat_stage == "clearance_probe":
+                diag = self.m2b_attachment_diagnostics or {}
+                if (not self.m2b_attachment_evidence_fresh()
+                        or diag.get("confirmed") is not False):
+                    return stationary_regulation(
+                        self.drone_position.copy(),
+                        horizon_samples=self.horizon_samples,
+                        min_reference_z=self.min_reference_z,
+                    )
+                measured_velocity = self.drone_velocity.copy()
+                measured_velocity[:2] = 0.0
             return self.transfer_generator.generate(
                 phase_key=f"{self.phase.value}:{self.m2b_retreat_stage}",
                 measured_position=self.drone_position,
-                measured_velocity=self.drone_velocity,
+                measured_velocity=measured_velocity,
                 target=TargetState(target_position, np.zeros(3), np.zeros(3)),
                 advance=True,
             )
@@ -5846,7 +7075,9 @@ class OnlineJoinPlanner(Node):
             # exact entry position rather than pulling horizontally against the ring.
             # Only after detached truth is fresh may the normal clear-to-landing-column
             # transfer begin.
-            detached = self.m2b_geometry_separated(require_lost=True)
+            detached = self.m2b_geometry_separated(
+                require_lost=True
+            )
             if not detached:
                 hold_position = (
                     self.drone_position.copy()
@@ -5911,6 +7142,24 @@ class OnlineJoinPlanner(Node):
                 horizon_samples=self.horizon_samples,
                 min_reference_z=self.min_reference_z,
             )
+        if self.ground_ring_exit is not None:
+            decision = self.ground_ring_exit_decision
+            if decision is None:
+                raise RuntimeError('ground-ring exit has no decision')
+            if decision.stage == 'return':
+                return self.transfer_generator.generate(
+                    phase_key='M1_GROUND_RING_RETURN',
+                    measured_position=self.drone_position,
+                    measured_velocity=self.drone_velocity,
+                    target=TargetState(decision.target_position, np.zeros(3), np.zeros(3)),
+                    advance=True)
+            return stationary_regulation(
+                decision.target_position,
+                horizon_samples=self.horizon_samples,
+                min_reference_z=self.min_reference_z)
+        if getattr(getattr(self, 'm1_pickup_release', None), 'stage', 'idle') != 'idle':
+            return stationary_regulation(self.m1_pickup_release.target,
+                horizon_samples=self.horizon_samples, min_reference_z=self.min_reference_z)
 
         if (
             self.is_m2b
@@ -6010,6 +7259,10 @@ class OnlineJoinPlanner(Node):
             )
 
         if spec.reference_type == ReferenceType.STATIONARY_REGULATION:
+            if (self.phase == MissionPhase.MAGNET_ATTACH_WAIT
+                    and getattr(self, 'm1_candidate_hold_reference', None) is not None):
+                return stationary_regulation(self.m1_candidate_hold_reference,
+                    horizon_samples=self.horizon_samples, min_reference_z=self.min_reference_z)
             body_target_position = (
                 target.position + self.desired_tip_offset() + quad_offset
             )
@@ -6043,6 +7296,11 @@ class OnlineJoinPlanner(Node):
             )
 
         if spec.reference_type == ReferenceType.RATE_CONTROLLED_MANOEUVRE:
+            if (getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered'
+                    and self.phase == MissionPhase.DESCEND_TO_PICKUP):
+                self.last_rate_profile_duration = self.geometry_pickup_approach_height() / self.pickup_descent_speed
+                self.last_rate_profile_complete = self.pickup_tier_descent.complete
+                return self.build_tiered_pickup_reference()
             profile = self.rate_profile()
             reference, duration, complete = rate_controlled_manoeuvre(
                 target,
@@ -6074,9 +7332,16 @@ class OnlineJoinPlanner(Node):
             self.initial_quad_z = float(self.drone_position[2])
         self.landing_target_xy = self.drone_position[:2].copy()
         self.landing_start_z = float(self.drone_position[2])
-        self.landing_disarm_z = float(
-            self.initial_quad_z + self.landing_disarm_height_above_start
-        )
+        if not self.is_m2b and self.takeoff_start_position is not None:
+            # Use the same manual TAKEOFF ground datum and never plan an
+            # upward LAND reference when LAND arrives near the pad.
+            self.landing_disarm_z = min(self.landing_start_z, float(
+                self.takeoff_start_position[2] + self.landing_disarm_height_above_start
+            ))
+        else:
+            self.landing_disarm_z = float(
+                self.initial_quad_z + self.landing_disarm_height_above_start
+            )
         self.landing_disarm_sent = False
 
     def build_landing_reference(self) -> TrajectoryReference:
@@ -6379,6 +7644,8 @@ class OnlineJoinPlanner(Node):
     # ROS output
     # ----------------------------------------------------------------------
     def m2b_magnet_command(self) -> str:
+        if self.is_m2b and self.m2b_progressive and self.phase == MissionPhase.M2_FAULT:
+            return "ON" if self.m2b_magnet_on_requested else "OFF"
         if not self.is_m2b or self.m2b_commissioning_stage not in {"b1", "b2"}:
             return self.current_phase_spec().magnet_command
         if self.phase in {
@@ -6755,8 +8022,17 @@ class OnlineJoinPlanner(Node):
         lines = [
             f"{self.phase.value}",
             f"reference={spec.reference_type.value}, target={spec.target_source.value}",
-            f"authority={spec.controller_authority.value}, handoff_ready={spec.handoff_ready}",
+            f"authority={spec.controller_authority.value}, handoff_ready={spec.handoff_ready and not self.ground_ring_attach_trial}",
         ]
+        if self.ground_ring_attach_trial:
+            exit_stage = (self.ground_ring_exit_decision.stage
+                          if self.ground_ring_exit_decision is not None else 'inactive')
+            lines.append(
+                'GROUND_RING UNVERIFIED trial: '
+                f'face_gap={self.ground_ring_face_gap_m:.3f}m, '
+                f'face_xy={self.ground_ring_xy_m:.3f}m, '
+                f'rel_speed={self.ground_ring_relative_speed_mps:.3f}m/s, '
+                f'exit={exit_stage}, wait={self.ground_ring_waiting_reason}')
         if self.drone_position is not None and self.inputs_ready_for_status():
             try:
                 xy_error, relative_velocity, z_error = self.tracking_errors()
@@ -6905,7 +8181,47 @@ class OnlineJoinPlanner(Node):
                 f"period={period_text}, "
                 f"deadline_misses={self.planner_deadline_miss_count}"
             )
+        if self.is_m2b and self.m2b_irl_tip_alignment_enabled:
+            tip = self.m2b_irl_tip_decision
+            trim = self.m2b_irl_tip_alignment.offset_xy
+            lines.append(
+                f"IRL tip XY={self.m2b_irl_tip_error_m:.3f} m, "
+                f"normal={self.m2b_irl_tip_normal_m:.3f} m, "
+                f"trim=({trim[0]:+.3f},{trim[1]:+.3f}) m, "
+                f"hold={getattr(tip, 'reason', 'not_evaluated')}, "
+                f"attempt={self.m2b_retry_tracker.attempt_number}"
+            )
         lines.append(f"last transition: {self.last_transition_reason}")
+        if self.target_alignment_mode != 'legacy':
+            status = self.target_alignment_status()
+            lines.append(f"M1 target trim: {status['target_alignment_group']} "
+                         f"xy={status['target_alignment_xy_m']:.4f}m "
+                         f"speed={status['target_alignment_relative_speed_mps']:.4f}m/s "
+                         f"clearance={status['target_alignment_clearance_m']:.4f}m "
+                         f"trim=({status['target_alignment_trim_x_m']:+.4f},"
+                         f"{status['target_alignment_trim_y_m']:+.4f})m "
+                         f"saturated={status['target_alignment_saturated']} "
+                         f"reason={status['target_alignment_reason']}")
+        if getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered':
+            d = self.pickup_tier_descent
+            lines.append(f"M1 measured-tip: tier={d.band if d else 'staging'} "
+                f"xy={self.pickup_alignment_xy_m:.4f}m clearance={self.pickup_alignment_clearance_m:.4f}m "
+                f"trim={self.pickup_tier_alignment.offset_xy.tolist()} "
+                f"height={d.height_m if d else float('nan'):.4f}m "
+                f"wait={self.pickup_alignment_waiting_reason}")
+            lines.append(f"M1 retry: stage={self.m1_pickup_release.stage} "
+                f"failures={self.m1_pickup_release.attempts}/"
+                f"{self.m1_pickup_release.max_attempts} "
+                f"stall={self.m1_pickup_stall.elapsed_s:.1f}s "
+                f"reason={self.m1_pickup_release.waiting_reason}")
+        if self.pickup_proof_enabled and self.phase == MissionPhase.LIFT_OBJECT:
+            proof = self.pickup_proof_tracker.last_decision
+            lines.append(
+                f"M1 pickup proof: {proof.reason}, proven={self.pickup_proof_proven} "
+                f"body_rise={proof.body_rise_m:.3f}m object_rise={proof.object_rise_m:.3f}m "
+                f"drift={proof.contact_drift_m:.3f}m rel_speed={proof.relative_speed_mps:.3f}m/s "
+                f"dwell={proof.proof_dwell_s:.2f}s"
+            )
         return "\n".join(lines)
 
     def inputs_ready_for_status(self) -> bool:
@@ -6933,7 +8249,8 @@ class OnlineJoinPlanner(Node):
         self.state_publisher.publish(message)
 
         ready = Bool()
-        ready.data = bool(self.current_phase_spec().handoff_ready)
+        ready.data = bool(self.current_phase_spec().handoff_ready
+                          and not self.ground_ring_attach_trial)
         self.handoff_ready_publisher.publish(ready)
 
         safety = String()
@@ -8055,7 +9372,14 @@ class OnlineJoinPlanner(Node):
             label.color.b = 0.0
             label.color.a = 1.0
             spec = self.current_phase_spec()
+            tier_text = (
+                f"tier={self.pickup_tier_descent.band}\n"
+                if self.pickup_alignment_mode == 'measured_tip_tiered'
+                and self.phase == MissionPhase.DESCEND_TO_PICKUP
+                and self.pickup_tier_descent is not None else ''
+            )
             label.text = (
+                tier_text +
                 f"{self.phase.value}\n"
                 f"{spec.reference_type.value}\n"
                 f"target={spec.target_source.value}\n"
@@ -8095,6 +9419,12 @@ class OnlineJoinPlanner(Node):
                     "target_source",
                     "controller_authority",
                     "handoff_ready",
+                    "ground_ring_trial",
+                    "ground_ring_face_gap_m",
+                    "ground_ring_xy_m",
+                    "ground_ring_relative_speed_mps",
+                    "ground_ring_exit_stage",
+                    "ground_ring_waiting_reason",
                     "object_attached",
                     "collision_diagnostics_enabled",
                     "static_obstacle_count",
@@ -8222,12 +9552,33 @@ class OnlineJoinPlanner(Node):
                     "c1f2_handoff_position_error_m",
                     "c1f2_handoff_velocity_error_mps",
                     "c1f2_handoff_acceleration_error_mps2",
+                    "m2b_takeoff_settle_position_error_m",
+                    "m2b_takeoff_settle_speed_mps",
+                    "m2b_takeoff_settle_swing_deg",
+                    "m2b_takeoff_settle_dwell_s",
+                    "m2b_takeoff_settle_reason",
+                    "m2b_takeoff_settle_inputs_fresh",
+                    "m2b_takeoff_settle_settled",
+                    "m2b_takeoff_settle_position_tolerance_m",
+                    "m2b_takeoff_settle_speed_limit_mps",
+                    "m2b_takeoff_settle_swing_limit_deg",
                     "m2b_capture_settle_position_error_m",
                     "m2b_capture_settle_speed_mps",
                     "m2b_capture_settle_swing_deg",
                     "m2b_capture_settle_dwell_s",
                     "m2b_capture_settle_reason",
                     "m2b_capture_settle_settled",
+                    "m2b_irl_tip_error_m",
+                    "m2b_irl_tip_normal_m",
+                    "m2b_irl_trim_x_m",
+                    "m2b_irl_trim_y_m",
+                    "m2b_irl_tip_hold_reason",
+                    "m2b_irl_tip_updating",
+                    "m2b_irl_tip_capture_ready",
+                    "m2b_irl_tip_pre_low_ready",
+                    "m2b_attempt_number",
+                    "attachment_policy", "attachment_waiting_reason", "initial_contact",
+                    "proof_angle_error_deg", "proof_elapsed_s", "retry_available", "quiet_miss_elapsed_s",
                     "visual_astar_enabled",
                     "visual_astar_phase_allowed",
                     "visual_astar_job_pending",
@@ -8412,7 +9763,28 @@ class OnlineJoinPlanner(Node):
                     "transfer_progress_scale",
                     "pickup_compensation_x",
                     "pickup_compensation_y",
+                    "pickup_alignment_mode",
+                    "pickup_alignment_tier",
+                    "pickup_alignment_xy_m",
+                    "pickup_alignment_clearance_m",
+                    "pickup_alignment_trim_x_m",
+                    "pickup_alignment_trim_y_m",
+                    "pickup_alignment_height_m",
+                    "pickup_alignment_waiting_reason",
+                    "pickup_retry_stage",
+                    "pickup_retry_failures",
+                    "pickup_retry_stall_elapsed_s",
+                    "pickup_retry_waiting_reason",
+                    "pickup_proof_enabled",
+                    "pickup_proof_proven",
+                    "pickup_proof_reason",
+                    "pickup_proof_body_rise_m",
+                    "pickup_proof_object_rise_m",
+                    "pickup_proof_contact_drift_m",
+                    "pickup_proof_relative_speed_mps",
+                    "pickup_proof_dwell_s",
                     "last_transition_reason",
+                    *self.target_alignment_status().keys(),
                 ],
             )
             self.csv_writer.writeheader()
@@ -8653,6 +10025,7 @@ class OnlineJoinPlanner(Node):
                 )
             loaded_lift_object_airborne = bool(
                 self.object_attached
+                and self.pickup_proof_proven
                 and np.isfinite(lift_object_clearance_m)
                 and lift_object_clearance_m
                 >= self.lift_complete_object_clearance
@@ -8668,6 +10041,7 @@ class OnlineJoinPlanner(Node):
 
         self.csv_writer.writerow(
             {
+                **self.target_alignment_status(),
                 "time_sec": time.time(),
                 "vehicle_id": self.vehicle_id,
                 "assigned_attachment_id": self.assigned_attachment_id,
@@ -8676,7 +10050,14 @@ class OnlineJoinPlanner(Node):
                 "reference_type": spec.reference_type.value,
                 "target_source": spec.target_source.value,
                 "controller_authority": spec.controller_authority.value,
-                "handoff_ready": str(bool(spec.handoff_ready)).lower(),
+                "handoff_ready": str(bool(spec.handoff_ready and not self.ground_ring_attach_trial)).lower(),
+                "ground_ring_trial": str(self.ground_ring_attach_trial).lower(),
+                "ground_ring_face_gap_m": self.ground_ring_face_gap_m,
+                "ground_ring_xy_m": self.ground_ring_xy_m,
+                "ground_ring_relative_speed_mps": self.ground_ring_relative_speed_mps,
+                "ground_ring_exit_stage": (self.ground_ring_exit_decision.stage
+                    if self.ground_ring_exit_decision is not None else 'inactive'),
+                "ground_ring_waiting_reason": self.ground_ring_waiting_reason,
                 "object_attached": str(bool(self.object_attached)).lower(),
                 "collision_diagnostics_enabled": str(
                     bool(self.collision_diagnostics_enabled)
@@ -8923,6 +10304,23 @@ class OnlineJoinPlanner(Node):
                 "c1f2_handoff_acceleration_error_mps2": (
                     self.c1f2_handoff_acceleration_error_mps2
                 ),
+                "m2b_takeoff_settle_position_error_m": self.m2b_takeoff_settle_position_error_m,
+                "m2b_takeoff_settle_speed_mps": self.m2b_takeoff_settle_speed_mps,
+                "m2b_takeoff_settle_swing_deg": self.m2b_takeoff_settle_swing_deg,
+                "m2b_takeoff_settle_dwell_s": self.m2b_takeoff_settle_dwell_s,
+                "m2b_takeoff_settle_reason": self.m2b_takeoff_settle_reason,
+                "m2b_takeoff_settle_inputs_fresh": str(bool(self.m2b_takeoff_settle_inputs_fresh)).lower(),
+                "m2b_takeoff_settle_settled": str(bool(self.m2b_takeoff_settle_settled)).lower(),
+                "m2b_takeoff_settle_position_tolerance_m": self.m2b_config.settle_position_tolerance_m,
+                "m2b_takeoff_settle_speed_limit_mps": self.m2b_config.settle_speed_mps,
+                "m2b_takeoff_settle_swing_limit_deg": self.m2b_takeoff_settle_gate.config.settle_swing_deg,
+                "m2b_takeoff_settle_position_error_m": self.m2b_takeoff_settle_position_error_m,
+                "m2b_takeoff_settle_speed_mps": self.m2b_takeoff_settle_speed_mps,
+                "m2b_takeoff_settle_swing_deg": self.m2b_takeoff_settle_swing_deg,
+                "m2b_takeoff_settle_dwell_s": self.m2b_takeoff_settle_dwell_s,
+                "m2b_takeoff_settle_reason": self.m2b_takeoff_settle_reason,
+                "m2b_takeoff_settle_inputs_fresh": str(bool(self.m2b_takeoff_settle_inputs_fresh)).lower(),
+                "m2b_takeoff_settle_settled": str(bool(self.m2b_takeoff_settle_settled)).lower(),
                 "m2b_capture_settle_position_error_m": (
                     self.m2b_capture_settle_position_error_m
                 ),
@@ -8933,6 +10331,22 @@ class OnlineJoinPlanner(Node):
                 "m2b_capture_settle_settled": str(
                     bool(self.m2b_capture_settle_settled)
                 ).lower(),
+                "m2b_irl_tip_error_m": self.m2b_irl_tip_error_m,
+                "m2b_irl_tip_normal_m": self.m2b_irl_tip_normal_m,
+                "m2b_irl_trim_x_m": float(self.m2b_irl_tip_alignment.offset_xy[0]),
+                "m2b_irl_trim_y_m": float(self.m2b_irl_tip_alignment.offset_xy[1]),
+                "m2b_irl_tip_hold_reason": getattr(self.m2b_irl_tip_decision, "reason", "not_evaluated"),
+                "m2b_irl_tip_updating": str(bool(getattr(self.m2b_irl_tip_decision, "updating", False))).lower(),
+                "m2b_irl_tip_capture_ready": str(bool(getattr(self.m2b_irl_tip_decision, "capture_ready", False))).lower(),
+                "m2b_irl_tip_pre_low_ready": str(bool(getattr(self.m2b_irl_tip_decision, "pre_low_ready", False))).lower(),
+                "m2b_attempt_number": self.m2b_progressive_budget.attempt if self.m2b_progressive else self.m2b_retry_tracker.attempt_number,
+                "attachment_policy": POLICY if self.m2b_progressive else "legacy",
+                "attachment_waiting_reason": self.progressive_waiting_reason,
+                "initial_contact": (self.m2b_attachment_diagnostics or {}).get("initial_contact", False),
+                "proof_angle_error_deg": (self.m2b_attachment_diagnostics or {}).get("proof_angle_error_deg", float("nan")),
+                "proof_elapsed_s": self.progressive_proof_time,
+                "retry_available": self.progressive_retry_available(),
+                "quiet_miss_elapsed_s": self.m2b_quiet_miss.elapsed_s,
                 "visual_astar_enabled": str(
                     bool(self.visual_astar_enabled)
                 ).lower(),
@@ -9275,6 +10689,26 @@ class OnlineJoinPlanner(Node):
                 "transfer_progress_scale": self.transfer_generator.last_progress_scale,
                 "pickup_compensation_x": self.pickup_tip_xy_compensation_filtered[0],
                 "pickup_compensation_y": self.pickup_tip_xy_compensation_filtered[1],
+                "pickup_alignment_mode": self.pickup_alignment_mode,
+                "pickup_alignment_tier": self.pickup_tier_descent.band if self.pickup_tier_descent else "staging",
+                "pickup_alignment_xy_m": self.pickup_alignment_xy_m,
+                "pickup_alignment_clearance_m": self.pickup_alignment_clearance_m,
+                "pickup_alignment_trim_x_m": float(self.pickup_tier_alignment.offset_xy[0]),
+                "pickup_alignment_trim_y_m": float(self.pickup_tier_alignment.offset_xy[1]),
+                "pickup_alignment_height_m": self.pickup_tier_descent.height_m if self.pickup_tier_descent else float('nan'),
+                "pickup_alignment_waiting_reason": self.pickup_alignment_waiting_reason,
+                "pickup_retry_stage": self.m1_pickup_release.stage,
+                "pickup_retry_failures": self.m1_pickup_release.attempts,
+                "pickup_retry_stall_elapsed_s": self.m1_pickup_stall.elapsed_s,
+                "pickup_retry_waiting_reason": self.m1_pickup_release.waiting_reason,
+                "pickup_proof_enabled": self.pickup_proof_enabled,
+                "pickup_proof_proven": self.pickup_proof_proven,
+                "pickup_proof_reason": self.pickup_proof_tracker.last_decision.reason,
+                "pickup_proof_body_rise_m": self.pickup_proof_tracker.last_decision.body_rise_m,
+                "pickup_proof_object_rise_m": self.pickup_proof_tracker.last_decision.object_rise_m,
+                "pickup_proof_contact_drift_m": self.pickup_proof_tracker.last_decision.contact_drift_m,
+                "pickup_proof_relative_speed_mps": self.pickup_proof_tracker.last_decision.relative_speed_mps,
+                "pickup_proof_dwell_s": self.pickup_proof_tracker.last_decision.proof_dwell_s,
                 "last_transition_reason": self.last_transition_reason,
             }
         )
@@ -9320,10 +10754,21 @@ class OnlineJoinPlanner(Node):
                 return
 
             if not self.inputs_ready():
+                if getattr(self, 'pickup_proof_enabled', False) and self.phase == MissionPhase.LIFT_OBJECT:
+                    self.update_pickup_proof(force_stale=True)
+                self.invalidate_pickup_alignment()
+                self.invalidate_target_alignment()
+                if getattr(self, "m2b_quiet_miss", None) is not None:
+                    self.m2b_quiet_miss.reset()
                 return
 
             self.update_pickup_tip_xy_compensation()
+            self.update_pickup_alignment()
+            self.update_m2b_irl_tip_alignment()
+            self.update_target_alignment()
             self.update_state_machine()
+            if self.ground_ring_attach_trial and self.ground_ring_exit is None:
+                self.ground_ring_evidence()
             if self.is_m2b:
                 # A phase transition can change arm permission or MPC mode.
                 self.publish_m2b_control_contracts()
@@ -9331,11 +10776,17 @@ class OnlineJoinPlanner(Node):
 
             # A transition can change which target source is required.
             if not self.inputs_ready():
+                if getattr(self, 'pickup_proof_enabled', False) and self.phase == MissionPhase.LIFT_OBJECT:
+                    self.update_pickup_proof(force_stale=True)
+                self.invalidate_pickup_alignment()
+                self.invalidate_target_alignment()
+                if getattr(self, "m2b_quiet_miss", None) is not None:
+                    self.m2b_quiet_miss.reset()
                 return
 
             spec = self.current_phase_spec()
             self.publish_magnet_command(
-                self.m2b_magnet_command() if self.is_m2b else spec.magnet_command
+                self.m2b_magnet_command() if self.is_m2b else self.pickup_magnet_command(spec.magnet_command)
             )
 
             # C1F.8: once C++ owns TRANSIT_TO_DROP_POINT, the independently

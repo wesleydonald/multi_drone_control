@@ -23,8 +23,8 @@ def test_locked_irl_rigid_body_ids_and_live_pickup_topic():
     data = _yaml()
     mocap = data["motion_capture_publisher_irl"]["ros__parameters"]
     assert mocap["pickup_rigid_body_id"] == "6"
-    assert mocap["quad_rigid_body_id"] == "7"
-    assert mocap["magnet_rigid_body_id"] == "8"
+    assert mocap["quad_rigid_body_id"] == "12"
+    assert mocap["magnet_rigid_body_id"] == "22"
     assert mocap["ring_rigid_body_id"] == "9"
     assert mocap["pickup_object_pose_topic"] == "/irl/pickup_object/pose"
 

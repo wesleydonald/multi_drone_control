@@ -31,6 +31,8 @@ def generate_launch_description() -> LaunchDescription:
     return LaunchDescription([
         DeclareLaunchArgument('planner_rate_hz', default_value='5.0'),
         DeclareLaunchArgument('minimum_search_z_m', default_value='0.20'),
+        DeclareLaunchArgument('ring_commitment_topic',
+                              default_value='/fake_payload/committed_trajectory'),
         LogInfo(msg='M1 IRL backend: current C1F.8d moving-target contract, virtual ring, no cooperative companions.'),
         LogInfo(msg=f'IRL C++ log directory: {run_dir}'),
         Node(
@@ -49,6 +51,8 @@ def generate_launch_description() -> LaunchDescription:
                     'minimum_search_z_m': ParameterValue(
                         LaunchConfiguration('minimum_search_z_m'), value_type=float
                     ),
+                    'moving_basket_committed_trajectory_topic':
+                        LaunchConfiguration('ring_commitment_topic'),
                     'csv_path': str(run_dir / 'backend.csv'),
                     'replan_csv_path': str(run_dir / 'replans.csv'),
                 },
