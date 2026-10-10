@@ -246,8 +246,12 @@ def _nodes(context):
                 'c1f2_prepare_settle_speed_mps': 0.12,
                 # the descent ends on the contact target (ring_bridge's attachment point), held
                 # with no lead; the planner's contact-mode gates are his ground-ring values
-                **({'contact_attach': True, 'final_attach_offset_z': 0.0,
-                    'attach_ready_target_lead_time': 0.0} if contact else {}),
+                # (the card's neighbours move one of them: contact_lead / contact_dz / contact_dx)
+                **({'contact_attach': True,
+                    'final_attach_offset_z': ParameterValue(L('contact_dz'), value_type=float),
+                    'approach_offset_x': ParameterValue(L('contact_dx'), value_type=float),
+                    'attach_ready_target_lead_time': ParameterValue(L('contact_lead'), value_type=float)}
+                   if contact else {}),
             },
         ])
 
@@ -358,6 +362,9 @@ def _arguments():
         # '' = the geometry's; the all-attached start: '[150.0, 270.0, 30.0]', plate 3, gate /partner/release
         DeclareLaunchArgument('carrier_azimuths_deg', default_value=''),
         DeclareLaunchArgument('contact_attach', default_value='false'),
+        DeclareLaunchArgument('contact_lead', default_value='0.0'),   # contact_attach: his hold's reference lead (s)
+        DeclareLaunchArgument('contact_dz', default_value='0.0'),     # contact_attach: tip target above the contact point (m)
+        DeclareLaunchArgument('contact_dx', default_value='0.0'),     # contact_attach: tip target offset along x (m)
         DeclareLaunchArgument('confirm_pickup_release', default_value='false'),
         DeclareLaunchArgument('pickup_lift_height', default_value='1.40'),   # lift ends ~1.9 m, above the 1.8 m search floor (R0639 ended at 1.75)
         DeclareLaunchArgument('drop_approach_clearance', default_value='0.60'),

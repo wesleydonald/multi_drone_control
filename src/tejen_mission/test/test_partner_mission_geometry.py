@@ -124,7 +124,12 @@ def test_contact_attach_on_the_rig_twin():
     # the rest of his mission is untouched (his drop gates included)
     base = _params('rig_twin')['online_join_planner']
     changed = {k for k in set(planner) | set(base) if planner.get(k) != base.get(k)}
-    assert changed == {'contact_attach', 'final_attach_offset_z', 'attach_ready_target_lead_time'}
+    assert changed == {'contact_attach', 'final_attach_offset_z', 'attach_ready_target_lead_time', 'approach_offset_x'}
+    assert planner['approach_offset_x'] == 0.0
+    # the card's neighbours: one value each
+    n = _params('rig_twin', contact_attach='true', contact_lead='0.3', contact_dz='-0.01', contact_dx='0.006')
+    n = n['online_join_planner']
+    assert (n['attach_ready_target_lead_time'], n['final_attach_offset_z'], n['approach_offset_x']) == (0.3, -0.01, 0.006)
 
 
 def test_contact_attach_needs_a_contact_target():
