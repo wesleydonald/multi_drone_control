@@ -16,6 +16,7 @@ on the rig.
 | 4 | **One coil and the puck in the net.** In the twin, a take-back swept QUAD4's tip past the ball lying in the net with his magnet still on. It caught the ball, dragged the ring, and the fleet aborted (R1520). | On the rig the coil is shared. Our take-back's OFF releases it once our span has begun, and the rig gate passes his OFF only in the drop phases. | Fixed: his take-back after the drop holds his magnet OFF. |
 | 5 | **His rig values are QUAD2's, not QUAD4's**: marker-to-face, kT 22 and drop 0.575. The puck is 60 g, not 100 g. | His height and contact target would be off. | Measure Wednesday and Thursday. The rig launch now refuses these values unless they are typed. |
 | 6 | **The whole combined graph has never run at wall-clock speed on one laptop.** That's four trackers, our planner and his whole stack. | If his command stream goes quiet for 0.5 s, the radio disarms QUAD4 mid-air. | Wednesday props-off load test with frozen bars (critic F1). |
+| 7 | **A take-back from plate height must rise before it steps out.** R1543: QUAD4 was taken back with its tip at the ring. It stepped out sideways and the rod hooked the rim. | On the rig the tether is slack and the magnet is OFF, but a magnet sweeping across the plate edge can still catch it. | Fixed (ae57bbb): it rises to ring height + rod + 0.15 m first. |
 
 ## 2. Overnight results (twin, rig twin, one row each in results/registry.csv)
 
@@ -24,9 +25,10 @@ on the rig.
 | e097a94 (claim pass 1) | the contact attach as designed | R1491-R1502 | Hover x2, no-catch x2, LAND in transit, offset, push abort: pass. **Target 1 cm low fails**: the proof lift counted from the target. 3 arms never reached the attach because his pickup stalled. |
 | 7b8985a | lift from the measured contact, first pickup retry | R1505-R1508 | Low and orbit pass. **Pickup still stalls**: the ball welds, then his descent pushes on and the rigid rod buckles. R1509-R1514 void (batch stopped for the fix). |
 | 6143989 | descent ends on the weld, retry when attached but misaligned, airborne kT | R1515-R1530 | **Full M1 end to end: R1517 hover, R1523 circle, R1530 recorded.** Hover x2, orbit, low, high, offset, no-catch hover, LAND in transit, LAND during the proof and the push abort pass the claim bars. **Two fail**: no-catch orbit (R1520, ball re-catch) and orbit repeat (R1522, the contact latch plus a lift goal that was too small). 0.3 s lead fails (R1525, plate bounce: keep lead 0). |
-| m1-rig d4248af (final) | + take-back magnet OFF, lift goal max(target, measured), the rig port | R1531 on (flying) | The claim table: 13 arms, full M1 x2, plus 4 runs with `contact_still` ON. Results below when in. |
+| m1-rig d4248af | + take-back magnet OFF, lift goal max(target, measured), the rig port | R1531-R1550 | **10 claim arms pass** (orbit x2, hover x2, low, high, no-catch hover and orbit, LAND in transit, ...); the R1520/R1522 failures are gone. **Full M1 clean on hover and circle** (R1536, R1541: proof 0.7-1.0 s, ring tilt at most 4.2 deg through the attach). `contact_still` ON: 2 of 2 clean (R1533, R1540). **New failure, R1543**: a take-back from plate height stepped out sideways and hooked the rod on the rim (ring 22 deg, QUAD4 54 deg, fault LAND, all landed). |
+| m1-rig ae57bbb (final) | + the take-back rises clear of the ring first | queued | The claim is re-flown on this tree, then the tilt-cut twin arms. |
 
-Landing: QUAD4 tipped in the landing unwind in R1518 and R1529, the rigid-twin artefact you ruled scored separately.
+Landing: QUAD4 tipped in the landing unwind in R1518, R1529, R1531 and R1534, the rigid-twin artefact you ruled scored separately. It is now 4 of the last 9 attached hover/orbit runs; worth a look before it is called an artefact for good.
 
 **Watch:** proof time is 0.7-2.9 s on 6143989, against the frozen 3 s limit. Slow proofs are QUAD4's MPC barely
 lifting for about 2 s under the ring's load.
