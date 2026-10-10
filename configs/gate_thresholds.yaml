@@ -26,7 +26,8 @@ profiles:
       publish, the planner streams references, lockstep holds, and the load flies.
     scenario: configs/sil/carry_hover_n3.yaml
     baseline: R0047, R0048, R0049, R0050 (2026-08-05, b985f96) at the 0.4 kg box payload;
-      re-baselined 2026-09-10 on R0207 for the 0.6 kg ring payload (see the two notes below)
+      re-baselined 2026-09-10 on R0207 for the 0.6 kg ring payload (see the two notes below);
+      peaks re-baselined 2026-10-10 on R1461/R1462 (0.86 kg ring, 4 Oct LAND defaults; Wesley)
     checks:
       - metric: duration_s
         min: 15.0
@@ -60,16 +61,16 @@ profiles:
         baseline: 0.0001 – 0.0011        # three equal tethers should share evenly
 
       - metric: per_drone.max.peak_track_err_m
-        max: 0.40
-        baseline: 0.142 – 0.158
+        max: 0.60
+        baseline: 0.4705 (R1081/R1082/R1452/R1453/R1461/R1462, bit-identical)   # after LAND on the SIL stands (land_unwind + x0_relax_frac 0, 4 Oct); in flight 0.120; 0.142-0.158 at 0.4 kg
 
       - metric: per_drone.max.settled_track_err_m
         max: 0.05
         baseline: 0.0029 – 0.0030
 
       - metric: per_drone.max.peak_cable_accel
-        max: 8.0
-        baseline: 6.85 (R0207, 0.6 kg)   # 4.60-4.72 at 0.4 kg; a drone has ~13 m/s^2 left after gravity
+        max: 12.0
+        baseline: 9.66 (same six runs, 0.86 kg)   # drones meeting their stands during LAND; in flight 7.12; 6.85 at 0.6 kg (R0207), 4.60-4.72 at 0.4 kg
 
       - metric: control_effort.max.saturated_fraction
         max: 0.02

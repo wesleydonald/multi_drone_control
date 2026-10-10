@@ -305,7 +305,7 @@ Headless Gazebo budget: at most 10 per session on the laptop (the lab budget is 
 - If solve failures and long rods are not reproduced, stop and report. Do not tune.
 - If breakaway is not reproduced but solve failures are, that is a valid split: H3 is outside the sim and the rig checks carry it.
 
-**Re-baseline once, after the fix is final** (CLAUDE.md "re-fly a matrix once"):
+**Re-baseline once, after the fix is final** (the working rules: "re-fly a matrix once"):
 
 | # | config | baseline |
 |---|---|---|
@@ -430,7 +430,7 @@ Headless Gazebo budget: at most 10 per session on the laptop (the lab budget is 
 3. **The sim claim cannot tell whether freeze removal is safe on the rig.**
    - The old sim already floated at the end of the pretension (R0766: +1.6 cm, pretension card). So "breakaway ≥ 90 %" passes on the pre-fix code and does not show the fix works.
    - Fix: add a neighbour with a deliberate mass mismatch to the W11 claim: world ring 0.70, planner 0.86 (the rig's measured condition), and optionally the other sign.
-   - The plan's own A2 arm is optional and sits only in the reproduction. That is not enough. CLAUDE.md asks for "the other sign of the error" as a neighbour.
+   - The plan's own A2 arm is optional and sits only in the reproduction. That is not enough. The working rules ask for "the other sign of the error" as a neighbour.
 
 4. **Once the freeze goes, the breakaway metric changes meaning.**
    - W11 changes the trigger (all plates +5 mm, or ring +1 cm with tilt < 3°). W10 redefines 100 % as statics at the measured directions.
@@ -527,9 +527,9 @@ Headless Gazebo budget: at most 10 per session on the laptop (the lab budget is 
 1. When is the next rig visit, and how long is it? No date was given, and the answer decides what gets cut from roughly 34-38 Gazebo runs.
 2. Should the freeze stay the rig default until the ring is weighed and H3 is closed? (This replaces Q9.)
 3. Can the ring, one drone as flown, the rod plus magnet, and the ladder's hung masses be weighed now, before W7? And can one free hover with the rod removed be added to the next visit?
-4. CLAUDE.md's locked decisions say "sim: 83.1 on the linear plant" and "kt_trim default on". Should they be updated for the rig plant? Should the sim keep kt_trim on while the rig runs it off?
+4. The working rules' locked decisions say "sim: 83.1 on the linear plant" and "kt_trim default on". Should they be updated for the rig plant? Should the sim keep kt_trim on while the rig runs it off?
 5. Who watches the stop rules (ring vz, tilt, solve count) live, and on what screen? Does the monitor show them, or should the planner soft-hold by itself?
-6. Is lab Docker compute (W0) wanted now, and under what run budget? CLAUDE.md sets 10 headless runs per session. `decisions.md` has "no cap" only for the GOALS loop.
+6. Is lab Docker compute (W0) wanted now, and under what run budget? The working rules set 10 headless runs per session. `decisions.md` has "no cap" only for the GOALS loop.
 7. Should the 09-25 "pivot at body centre in sim" lines be superseded for the carry worlds only? They need a new DECIDED line either way.
 8. Is lowering z_taut_gate on the rig acceptable if the pivot fix (W9) is not ready?
 

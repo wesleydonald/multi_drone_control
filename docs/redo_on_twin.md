@@ -5,7 +5,7 @@ on the legacy worlds (`simulation_assets/old_worlds/`, `legacy:=true`) or on the
 `\redo{...}` box in the thesis, with the old text kept under it as comments. This file is the list
 behind those boxes: one row per box, 38 rows for 38 boxes.
 
-Runs: Gazebo arms are flown twice, SIL arms once (CLAUDE.md). Before repeating an arm, fly its
+Runs: Gazebo arms are flown twice, SIL arms once (the working rules). Before repeating an arm, fly its
 neighbours once. Priority: A = a thesis claim rests on it, B = supports a claim, C = restated or
 re-confirmed only where cited.
 

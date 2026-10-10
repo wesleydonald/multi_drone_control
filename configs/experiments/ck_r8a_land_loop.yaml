@@ -1,7 +1,7 @@
 name: ck_r8a_land_loop
 description: 'check run 10 Oct (merge gate for Wednesday): the sheet''s first r8a. Dry approach (weld_radius 0)
   with the tip loop on as attach_m1.yaml flies it, LAND ~15 s into the hold over plate 9 (QUAD4 steps out and lands
-  by itself, disarmed alone). Base twin_tf_weld_on (rev 5 arm W) with the weld off.'
+  by itself; the fleet disarm at LANDED takes it). Base twin_tf_weld_on (rev 5 arm W) with the weld off.'
 world: three_rigid_ground_rig_attach.sdf
 launch:
   package: bringup
