@@ -196,3 +196,31 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   while his stream flies it (our tracker's disarm is not forwarded by the mux; Betaflight has no tilt disarm; only
   DISARM/ESTOP, which drops the ring) -> card docs/experiments/2026-10-11_quad4_tilt_cut.md (F, worktree
   m1-tiltcut), critic, build behind default-off switches, Wesley decides.
+- 22:48: m1-final = ca958da + f29763c (proof lift from the measured contact, pickup retry) + 23f8873 (kT fix
+  cherry-picked) + 7b8985a (WAIT_WELD 210 / WAIT_REWELD 240). Tests (his 893 pass, the 12 old failures), config checks
+  15 ok, gate --quick passed. Lab batch b329q3km7 -> $CLAUDE_JOB_DIR/tmp/lab_final.txt: m1_full_hover, m1c_low,
+  m1c_hover, m1c_orbit first (check these before trusting the rest), then the other 11. Score with
+  TREE="branch m1-final 7b8985a" REV=6 python3 $CLAUDE_JOB_DIR/tmp/score/claim_row.py ...
+- Old tree: R1500 = 3rd pickup stall (not scored); R1504 void (two lab batches collided: a killed queue's inner bash
+  survived; both stopped before flight). Lesson: kill the whole process group of a nohup queue (pkill -P / kill -- -PGID).
+- Tilt cut: card written (m1-tiltcut), critic running. Commit f75d759 on rig-prep (rows, card rev 6, decisions).
+- 23:00: critic round 1 on the tilt cut: REWRITE (C1 the rule cannot fire inside the tracker's armed window; H1 any
+  drone-3 latch while partner leaves our LAND take-back stuck and QUAD4 armed after LANDED -> RIG SHEET LINE for
+  Wesley: after LANDED, if drone 4's mux reads partner, press DISARM; H2 R1503 is a rigid-rod artefact case; H3 races;
+  H4 magnet OFF in the cut frame; M1-M5). Full text $CLAUDE_JOB_DIR/tmp/tiltcut_critic_r1.md. F rewriting rev 2 and
+  building behind default-off switches; critic round 2 before any twin run (lab, after the claim).
+- 23:10: rig port DONE (R): m1-rig dd33dca (coil gate, aux zeroing, ball body, partner_rig_state, his real:=true launch,
+  rig refusals, fake_mocap scripts); tests pass; desk test caught / uncaught / take-back-before-span as designed. Draft
+  sheet item 7c in R's report (to put in the morning report, not the sheet). Desk finding: contact c0 latches 2-5 mm
+  above the plate while the face is still arriving (0.08 / 0.05 m/s) -> Wesley (speed gate or re-latch c0 from a still
+  window). m1-rig lacks the m1-final fixes: the rig tree = merge of m1-final + m1-rig (+ tilt cut if approved).
+  Critic on the rig port running.
+- 23:35: m1-final claim so far: R1506 low PASS (fix works), R1508 orbit PASS, R1507 hover = pickup stall WITH the ball
+  welded (all 4 stalls are this mode: his descent continues 2 s past the weld, the rigid rod buckles, his xy check
+  never holds; the no-ball retry cannot fire). P resumed: end his descent on the attach + retry when attached but
+  misaligned. When ready: stop the m1-final batch (b329q3km7), commit, rebuild, re-fly the whole claim on the new tree.
+- 23:50: rig-port critic: Wed props-off GO WITH CHANGES (measurement list), 21-22 Oct flight NO-GO on dd33dca (F1 load
+  bars, F2 DDS check in every terminal, F3 clamp his throttle until we fly, F4 private coil topic, F5 merge m1-final,
+  F6 stuck take-back -> tilt-cut card, F7 c0 from a still window + speed gate, F8 his QUAD2 values on QUAD4, F9 his OFF
+  by phase, F10 first flight contact_dz 0.03). Text: $CLAUDE_JOB_DIR/tmp/rigport_critic_r1.md. R building F2-F4, F7
+  (switch off), F9, drafts: rig card 2026-10-21 + Wed props-off addition. F5 merge waits for m1-final's pickup fix.

@@ -1,8 +1,11 @@
 # Combined M1 subtest: Tejen flies QUAD4 from its mat through pickup, drop and a contact attach proved by a small lift; our check confirms; bumpless hand-over
 
 Rev 6 (10 Oct 22:20, Wesley, after the first claim pass R1491-R1502 on e097a94): two fixes, then the whole claim
-table is re-flown on the one final tree m1-final 7b8985a (= e097a94 + the full M1 + these fixes); the e097a94 rows stay
-as the record. (1) His LIFT_PROOF rises `proof_rise_max` above the measured contact height, not above his target
+table is re-flown on the one final tree m1-final 6143989 (= e097a94 + the full M1 + these fixes); the e097a94 rows stay
+as the record. (Update 23:35, before any run on 6143989: the pickup stalls were the ball WELDED and his descent pushing on
+until the rigid rod buckled (R1507 on 7b8985a, the same in R1493/R1497/R1500), which the first retry could not see; his
+descent now ends on the weld and his retry also covers a ball attached but misaligned; 7b8985a runs R1505-R1514 are
+exploratory or void.) (1) His LIFT_PROOF rises `proof_rise_max` above the measured contact height, not above his target
 (R1498 `_low`: three caught contacts never proved). (2) His bounded pickup retry under `contact_attach` (no ball after
 10 s: release, rise, re-approach the ball where it is; the third failure is a give-up and our take-back): his pickup
 stalled to LAND in R1493 / R1497 / R1500, so those arms were never scored. Harness: WAIT_WELD 150 -> 210 s so a retry
