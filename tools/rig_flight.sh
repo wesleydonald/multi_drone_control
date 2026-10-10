@@ -35,9 +35,10 @@ base="$F"; k=2
 while [ -e "$D/$F.log" ] || [ -e "$D/$F" ] || [ -e "$D/${F}_logs" ]; do F="${base}_$k"; k=$((k + 1)); done
 [ "$F" != "$base" ] && echo "rig_flight: $base already exists today: this run is $F"
 
-N=""; MODE=""; REAL_IO=true
+N=""; MODE=""; REAL_IO=true; COMBINED=false
 for a in "$@"; do case "$a" in
   num_drones:=*) N="${a#num_drones:=}" ;; mode:=*) MODE="${a#mode:=}" ;; real_io:=false) REAL_IO=false ;;
+  partner_contact:=true) COMBINED=true ;;
 esac; done
 # mode:=attach counts only the tethered drones (default 3); the newcomer is one more radio
 if [ "$MODE" = attach ]; then N=$(( ${N:-3} + 1 )); else N=${N:-4}; fi
@@ -72,6 +73,14 @@ for ((i = 0; i < N; i++)); do
            "/drone_$i/magnet" "/drone_$i/fc_arm_state" "/drone_$i/mux_state" "/drone_$i/ELRSCommand_diss"
            "/drone_$i/departed" "/drone_$i/down_alone" "/drone_$i/on_load")
 done
+# combined M1 contact attach (partner_contact:=true): our check, the coil gate, his mission's side
+if [ "$COMBINED" = true ]; then
+  topics+=(/magnet/contact /magnet/attach_proof /join_planner/phase /join_planner/give_up /join_planner/reference
+           /join_planner/land_now /drone_3/take_back /drone_3/magnet_ours /drone_3/magnet_gate
+           /drone_3/ELRSCommand_tejen /tejen/magnet/command /tejen/object_attached /tejen/pendulum_swing_state
+           /tejen/magnet_tip_pose /pickup/motion_capture_state /fake_attachment_point/pose /fake_payload/pose
+           /payload/trajectory_state)
+fi
 ros2 bag record -o "$D/$F" "${topics[@]}" > "$D/${F}_bag.txt" 2>&1 &
 BAG=$!
 stop_bag() { kill -INT "$BAG" 2>/dev/null; wait "$BAG" 2>/dev/null; echo "rig_flight: bag $D/$F closed"; }

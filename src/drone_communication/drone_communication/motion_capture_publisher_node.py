@@ -55,6 +55,22 @@ MOCAP_DEBUG_PRINT = False
 MOCAP_WORLD_FRAME = "map"
 # ═════════════════════════════════════════════════════════════════════════════
 
+def parse_extra_bodies(spec):
+    """'6:/pickup/motion_capture_state[,id:topic...]' -> {6: '/pickup/motion_capture_state'}; '' -> {}.
+    Extra rigid bodies (the combined M1 stack's pickup ball) go out as MotionCaptureState on their topic."""
+    out = {}
+    for item in str(spec or '').replace(' ', '').split(','):
+        if not item:
+            continue
+        rb, sep, topic = item.partition(':')
+        if not sep or not rb.lstrip('-').isdigit() or not topic.startswith('/'):
+            raise ValueError(f"extra_bodies entry {item!r}: want <body id>:/<topic>")
+        if int(rb) in out:
+            raise ValueError(f'extra_bodies: body {rb} listed twice')
+        out[int(rb)] = topic
+    return out
+
+
 @dataclass
 class ObjectData:
     id: str
@@ -326,9 +342,16 @@ class MotionCapturePublisher(Node):
             -1 if MAGNET_TIP_RIGID_BODY_ID is None else MAGNET_TIP_RIGID_BODY_ID).value)
         self.payload_body_id = None if payload < 0 else payload
         self.magnet_tip_body_id = None if tip < 0 else tip
+        # extra bodies, each to its own topic ('' = none, the default)
+        self.extra_bodies = parse_extra_bodies(self.declare_parameter('extra_bodies', '').value)
+        taken = set(self.body_to_drone) | {self.payload_body_id, self.magnet_tip_body_id}
+        clash = sorted(set(self.extra_bodies) & taken)
+        if clash:
+            raise ValueError(f'extra_bodies {clash} already routed (drone, payload or magnet tip)')
         self.get_logger().info(
             f'MoCap bodies: drones {self.body_to_drone} (id -> drone), payload '
-            f'{self.payload_body_id}, magnet tip {self.magnet_tip_body_id}')
+            f'{self.payload_body_id}, magnet tip {self.magnet_tip_body_id}'
+            + (f', extra {self.extra_bodies}' if self.extra_bodies else ''))
 
         # ROS2 Publishers: one per drone, keyed by drone_id, publishing to
         # /drone_<drone_id>/motion_capture_state (see RIGID_BODY_TO_DRONE above).
@@ -341,6 +364,8 @@ class MotionCapturePublisher(Node):
         self.magnet_tip_parser = ParseData()
         self.payload_publisher = self.create_publisher(
             MotionCaptureState, '/payload/motion_capture_state', 10)
+        self.extra_publishers = {rb: self.create_publisher(MotionCaptureState, topic, 10)
+                                 for rb, topic in self.extra_bodies.items()}
         # TF broadcaster so RViz can render each drone live (map -> drone_<id>).
         self.tf_broadcaster = TransformBroadcaster(self)
         # UDP Setup
@@ -418,6 +443,7 @@ class MotionCapturePublisher(Node):
         self.payloadParseData = ParseData()
         self.drone_parsers = {drone_id: ParseData()
                               for drone_id in self.body_to_drone.values()}
+        extra_parsers = {rb: ParseData() for rb in self.extra_bodies}
         # Per-rigid-body publish throttle. Keyed by rb_id; the decimation happens
         # before parse_packet so the velocity dt widens with the actual spacing.
         min_period = (1.0 / MOCAP_MAX_PUBLISH_HZ) if MOCAP_MAX_PUBLISH_HZ > 0 else 0.0
@@ -479,6 +505,11 @@ class MotionCapturePublisher(Node):
                         self.drone_publishers[drone_id].publish(
                             self.create_motion_capture_state_msg(obj_data))
                         self.broadcast_drone_tf(drone_id, obj_data)
+                elif rb_id in extra_parsers:
+                    obj_data = extra_parsers[rb_id].parse_packet(data)
+                    if obj_data is not None:
+                        self.extra_publishers[rb_id].publish(
+                            self.create_motion_capture_state_msg(obj_data))
                 # else: unknown rigid body -> ignore
 
                 

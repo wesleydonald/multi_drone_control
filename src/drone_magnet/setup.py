@@ -24,6 +24,7 @@ setup(
             'magnet_attachment_manager = drone_magnet.magnet_attachment_manager:main',
             'magnet_tip_publisher = drone_magnet.magnet_tip_publisher:main',
             'elrs_mux = drone_magnet.elrs_mux:main',
+            'magnet_gate = drone_magnet.magnet_gate:main',
         ],
     },
 )

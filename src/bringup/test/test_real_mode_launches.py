@@ -16,8 +16,8 @@ pytest.importorskip('launch_ros')
 from launch import LaunchContext, LaunchDescription  # noqa: E402
 from launch.actions import (DeclareLaunchArgument, GroupAction,  # noqa: E402
                             IncludeLaunchDescription, LogInfo, OpaqueFunction,
-                            PopEnvironment, PushEnvironment, SetLaunchConfiguration,
-                            TimerAction)
+                            PopEnvironment, PushEnvironment, ResetEnvironment,
+                            ResetLaunchConfigurations, SetLaunchConfiguration, TimerAction)
 from launch.actions.pop_launch_configurations import PopLaunchConfigurations  # noqa: E402
 from launch.actions.push_launch_configurations import PushLaunchConfigurations  # noqa: E402
 from launch.utilities import perform_substitutions  # noqa: E402
@@ -64,10 +64,20 @@ def _s(ctx, x):
     return perform_substitutions(ctx, list(x))
 
 
+def _param_file(path, name):
+    """A parameter file's values for node `name` (its own block, or '/**')."""
+    import yaml
+    data = yaml.safe_load(open(path)) or {}
+    out = {}
+    for key in ('/**', name, '/' + name):
+        out.update((data.get(key) or {}).get('ros__parameters', {}))
+    return out
+
+
 def _record(ctx, e):
     params = {}
     for d in evaluate_parameters(ctx, e._Node__parameters or []):
-        params.update(d)
+        params.update(d if isinstance(d, dict) else _param_file(d, _s(ctx, e._Node__node_name)))
     glob = dict(ctx.launch_configurations.get('global_params', []))
     return {
         'package': _s(ctx, e._Node__package),
@@ -87,7 +97,8 @@ def _collect(entities, ctx, out):
             continue
         if isinstance(e, (DeclareLaunchArgument, SetParameter, SetLaunchConfiguration,
                           PushLaunchConfigurations, PopLaunchConfigurations,
-                          PushEnvironment, PopEnvironment)):
+                          PushEnvironment, PopEnvironment, ResetEnvironment,
+                          ResetLaunchConfigurations)):
             e.execute(ctx)
         elif isinstance(e, Node):
             out.append(_record(ctx, e))
@@ -738,7 +749,8 @@ def test_legacy_attach_unchanged_by_the_twin_plumbing():
 # ── combined M1 contact attach (card 2026-10-10_combined_m1_contact): partner_contact, off ─────
 
 CONTACT_KEYS = ('partner_contact', 'contact_joint_state_topic', 'take_back_topic',
-                'warm_follow_applied', 'confirm_mode', 'sim_catch', 'proof_taut_len')
+                'warm_follow_applied', 'confirm_mode', 'sim_catch', 'proof_taut_len',
+                'zero_partner_aux', 'extra_bodies')
 
 
 def _twin_partner(**args):
@@ -746,10 +758,13 @@ def _twin_partner(**args):
 
 
 def test_partner_contact_off_passes_nothing_new():
-    """Off (the default): no new parameter, no joint-state bridge, the hand-back wired as today."""
+    """Off (the default): no new parameter, no joint-state bridge, no coil gate, the hand-back wired as today."""
     for g in (_twin_partner(), _by_name(rig('attach', enable_approach_mpc=False, partner=True))):
         assert not [(k, p) for k, n in g.items() for p in n['params'] if p in CONTACT_KEYS]
         assert '/payload_joint_state_bridge' not in g
+        assert not [k for k, n in g.items() if n['executable'] == 'magnet_gate']
+    g = _by_name(rig('attach', enable_approach_mpc=False, partner=True))
+    assert g['/magnet_attachment_manager']['params']['magnet_latch_topic'] == '/drone_3/magnet'
     g = _twin_partner()
     assert g['/elrs_mux_3']['params']['handoff_topic'] == '/join_planner/handoff_ready'
     p = g['/dissipative_planner']['params']
@@ -781,16 +796,103 @@ def test_partner_contact_twin_graph():
     assert mgr['sim_catch'] is False and mgr['proof_d_ok'] == 0.006    # _nocatch; E1's values
 
 
-def test_partner_contact_rig_graph():
+@pytest.fixture
+def dds(monkeypatch):
+    """The combined rig stack refuses to start outside a local-only DDS domain."""
+    monkeypatch.setenv('ROS_LOCALHOST_ONLY', '1')
+    monkeypatch.setenv('ROS_DOMAIN_ID', '77')
+
+
+def _combined_rig(**args):
+    args = {'proof_taut_len': 0.577, **args}
+    return _by_name(rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True,
+                        weld_radius=0.01, **args))
+
+
+def test_partner_contact_rig_graph(dds):
     """Rig: no joint gate or bridge, no sim catch, the typed taut length."""
-    g = _by_name(rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True,
-                     proof_taut_len=0.587))
+    g = _combined_rig(proof_taut_len=0.587)
     assert g['/dissipative_planner']['params']['contact_joint_state_topic'] == ''
     mgr = g['/magnet_attachment_manager']['params']
     assert (mgr['confirm_mode'], mgr['sim_catch'], mgr['proof_taut_len']) == (
         'contact_lift', False, 0.587)
     assert g['/elrs_mux_3']['params']['take_back_topic'] == '/drone_3/take_back'
     assert not [n for n in g if 'joint_state' in n]
+
+
+def test_combined_rig_one_coil_writer_aux_zeroed_and_his_ball_from_our_mocap(dds):
+    """QUAD4's one coil (critic round 3 finding 6): the manager writes /drone_3/magnet_ours, magnet_gate_3 alone
+    writes the radio latch; his aux channels are zeroed (O6); our mocap node routes his ball (body 6, O3)."""
+    nodes = rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01,
+                proof_taut_len=0.577)
+    g = _assert_rig_graph(nodes, 4, 35.2)
+    assert g['/magnet_attachment_manager']['params']['magnet_latch_topic'] == '/drone_3/magnet_ours'
+    gate = g['/magnet_gate_3']['params']
+    assert (gate['partner_topic'], gate['ours_topic'], gate['out_topic']) == (
+        '/tejen/magnet/command', '/drone_3/magnet_ours', '/drone_3/magnet')
+    writers = [k for k, n in g.items() if '/drone_3/magnet' in (n['params'].get('magnet_latch_topic'),
+                                                                n['params'].get('out_topic'))]
+    assert writers == ['/magnet_gate_3']
+    assert g['/elrs_mux_3']['params']['zero_partner_aux'] is True
+    mocap = next(n for k, n in g.items() if n['executable'] == 'motion_capture_publisher_node')
+    assert mocap['params']['extra_bodies'] == '6:/pickup/motion_capture_state'
+    assert mocap['params']['magnet_tip_body_id'] == 24
+    assert _latches(g, 4) == ['ON', 'ON', 'ON', 'OFF']         # QUAD4's coil OFF from boot
+    assert g['/fleet_manager']['params']['require_fc_armed'] is True     # QUAD4 on its own radio too
+    assert not [k for k in g if 'tejen' in k or k == '/online_join_planner']   # his nodes only on request
+    g = _combined_rig(mocap_extra_bodies='7:/pickup/motion_capture_state')
+    mocap = next(n for k, n in g.items() if n['executable'] == 'motion_capture_publisher_node')
+    assert mocap['params']['extra_bodies'] == '7:/pickup/motion_capture_state'
+
+
+def test_combined_rig_refuses_without_a_local_dds_domain(monkeypatch):
+    monkeypatch.delenv('ROS_LOCALHOST_ONLY', raising=False)
+    monkeypatch.setenv('ROS_DOMAIN_ID', '77')
+    with pytest.raises(RuntimeError, match='ROS_LOCALHOST_ONLY'):
+        _combined_rig()
+    monkeypatch.setenv('ROS_LOCALHOST_ONLY', '1')
+    monkeypatch.delenv('ROS_DOMAIN_ID', raising=False)
+    with pytest.raises(RuntimeError, match='ROS_DOMAIN_ID'):
+        _combined_rig()
+
+
+def test_combined_rig_refuses_a_zero_contact_radius_or_no_taut_length(dds):
+    with pytest.raises(RuntimeError, match='contact radius'):
+        rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.0,
+            proof_taut_len=0.577)
+    with pytest.raises(RuntimeError, match='proof_taut_len'):
+        rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01)
+
+
+def test_combined_rig_with_his_nodes(dds):
+    """partner_nodes: his rig launch in its own scope, our weld point as his contact target, his planner and MPC
+    on the wall clock with his topics; still one mocap node, one radio per drone, no Gazebo node."""
+    nodes = rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01,
+                weld_point_z=0.031, partner_nodes=True, proof_taut_len=0.577,
+                partner_args='pickup_lift_height:=2.1 magnet_drop_below_quad:=0.582')
+    g = _assert_rig_graph(nodes, 4, 35.2)
+    p = g['/online_join_planner']['params']
+    assert p['contact_attach'] is True and p['ring_attached_topic'] == '/magnet/object_attached'
+    assert (p['pickup_lift_height'], p['magnet_drop_below_quad'], p['final_attach_offset_z']) == (2.1, 0.582, -0.01)
+    assert g['/fake_cooperative_transport_world']['params']['bridge_attach_z_m'] == 0.031
+    mpc = g['tejen/tejen_mpc']
+    assert ('ELRSCommand', '/drone_3/ELRSCommand_tejen') in mpc['remappings']
+    assert 'tejen/partner_rig_state' in g and 'tejen/magnet_attachment_manager_irl' in g
+    assert '/dynamic_planner_transfer_backend' in g
+    assert sum(n['executable'] == 'elrs_interface' for n in nodes) == 4
+    # his launch saw none of ours (critic 11): his planner kept his own vehicle label, not our drone ids
+    assert p['vehicle_id'] == 'drone_0' and not [n for n in nodes if n['executable'] == 'elrs_interface_irl']
+
+
+@pytest.mark.parametrize('args,match', [
+    ({'partner_nodes': True}, 'partner_nodes'),                              # not the combined rig
+    ({'partner_nodes': True, 'partner': True, 'partner_contact': True, 'weld_radius': 0.01,
+      'proof_taut_len': 0.577, 'partner_args': 'contact_target_z:=0.1'}, 'contact_target_z'),   # ours to set
+    ({'partner_nodes': True, 'partner': True, 'partner_contact': True, 'weld_radius': 0.01,
+      'proof_taut_len': 0.577, 'partner_args': 'oops'}, 'name:=value')])
+def test_partner_nodes_refusals(dds, args, match):
+    with pytest.raises(RuntimeError, match=match):
+        rig('attach', enable_approach_mpc=False, **args)
 
 
 @pytest.mark.parametrize('args', [{'partner': False}, {'partner': True, 'partner_attached': True}])

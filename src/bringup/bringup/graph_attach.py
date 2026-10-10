@@ -26,9 +26,13 @@ and then the magnet manager owns it. weld_radius:=0 is a dry approach: no weld, 
 magnet stays OFF (a typed ON is refused). Needs on the rig: the tip body in the mocap map, the
 four drones' and the ring's body ids, the prebuilt solver for the weighed masses.
 """
+import os
+import shlex
+
 from bringup.real_mode import (apply_rig_values, map_and_geometry, planner_options, rig_io,
                                rig_magnet_latches, rig_thrust_ratio, truthy)
-from launch.actions import LogInfo
+from launch.actions import GroupAction, IncludeLaunchDescription, LogInfo, TimerAction
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
 from launch_ros.parameter_descriptions import ParameterValue
@@ -41,6 +45,51 @@ ATTACH_DRONE_NAME = 'x3_drone3'
 # ('' = its default)
 PROOF_KNOBS = ('contact_dwell_s', 'proof_d_ok', 'proof_d_fail', 'proof_h_plate', 'proof_dwell_s',
                'proof_fail_dwell_s', 'proof_timeout_s', 'proof_ma_s')
+# combined M1 on the rig: his ball (Motive body 6, his IRL id) for his mission, from our mocap node
+BALL_ROUTE = '6:/pickup/motion_capture_state'
+# his rig nodes start this long after ours (our trackers and planner load their solvers first; a start
+# mid-load starved them, R0604)
+PARTNER_DELAY_S = 5.0
+# what this launch decides for his rig launch (partner_args may not set them)
+PARTNER_OWNED = ('real', 'geometry', 'contact_attach', 'contact_target_z')
+
+
+def _dds_guard():
+    """The combined rig stack: refuse unless ROS_LOCALHOST_ONLY=1 and ROS_DOMAIN_ID are set (combined-stack
+    critic 4: Tejen's laptop on the lab network publishes a root /magnet/object_attached, which would hand QUAD4
+    to our tracker and fold it in wherever it is)."""
+    if os.environ.get('ROS_LOCALHOST_ONLY', '0').strip() != '1' or not os.environ.get('ROS_DOMAIN_ID', '').strip():
+        raise RuntimeError('combined M1 on the rig: export ROS_LOCALHOST_ONLY=1 and a ROS_DOMAIN_ID (e.g. 23) in every '
+                           'terminal (T2, T3, RViz) first: no other machine may reach this graph')
+
+
+def _partner_launch_args(context):
+    """{name: value} of partner_args ('k:=v k:=v'), refusing what this launch owns."""
+    out = {}
+    for tok in shlex.split(LaunchConfiguration('partner_args').perform(context)):
+        k, sep, v = tok.partition(':=')
+        if not sep or not k:
+            raise RuntimeError(f"partner_args: {tok!r} is not name:=value")
+        if k in PARTNER_OWNED:
+            raise RuntimeError(f'partner_args: {k} is set by this launch (contact_target_z = weld_point_z)')
+        out[k] = v
+    return out
+
+
+def _partner_nodes(context):
+    """His mission's rig nodes (tejen_mission partner_mission.launch.py real:=true), started PARTNER_DELAY_S after
+    ours, in their own launch scope (critic 11: nothing of ours leaks into his include). His contact target is
+    our weld point: the calibrated weld_point_z."""
+    from ament_index_python.packages import get_package_share_directory
+    args = {'real': 'true', 'geometry': 'rig', 'contact_attach': 'true',
+            'contact_target_z': LaunchConfiguration('weld_point_z').perform(context).strip(),
+            **_partner_launch_args(context)}
+    path = os.path.join(get_package_share_directory('tejen_mission'), 'launch', 'partner_mission.launch.py')
+    return [LogInfo(msg=f'[launch] COMBINED M1: his rig nodes in {PARTNER_DELAY_S:.0f} s: '
+                        + ' '.join(f'{k}:={v}' for k, v in args.items())),
+            TimerAction(period=PARTNER_DELAY_S, actions=[GroupAction(
+                [IncludeLaunchDescription(PythonLaunchDescriptionSource(path), launch_arguments=list(args.items()))],
+                scoped=True, forwarding=False)])]
 
 
 def _contact_manager_params(context, real):
@@ -57,6 +106,11 @@ def _contact_manager_params(context, real):
     if real:
         out['sim_catch'] = False
         out['proof_taut_len'] = float(LaunchConfiguration('proof_taut_len').perform(context))
+        # on the slack tether an uncaught magnet resting on the plate rides up with a rising plate (a ring bob):
+        # only the taut check tells that from a catch, so the rig never runs without it
+        if out['proof_taut_len'] <= 0.0:
+            raise RuntimeError('partner_contact on the rig: type proof_taut_len:=<the 09:00 record\'s body-to-tip '
+                               'minus 0.003> (without it a magnet resting on a rising plate counts as attached)')
     else:
         out['sim_catch'] = truthy(context, 'sim_catch')
     return out
@@ -136,6 +190,19 @@ def attach(context, launch_dir, profile_vals):
     if partner_contact and (not partner or partner_attached):
         raise RuntimeError('partner_contact needs partner:=true (his mission flies QUAD4) and '
                            'partner_attached:=false')
+    # the rig side of it (card 2026-10-10_combined_m1_contact, docs/design/m1_contact_contract.md): QUAD4's one
+    # coil through magnet_gate, his aux channels zeroed, his ball from our mocap, his nodes on request
+    combined_rig = real and partner_contact
+    # a rig-only argument (the sim launch does not declare it)
+    partner_nodes = context.launch_configurations.get('partner_nodes', '').strip().lower() in ('1', 'true', 'yes')
+    if partner_nodes and not combined_rig:
+        raise RuntimeError('partner_nodes starts his rig nodes for the combined M1 contact attach: real, '
+                           'partner:=true partner_contact:=true')
+    if combined_rig:
+        _dds_guard()
+        if float(LaunchConfiguration('weld_radius').perform(context)) <= 0.0:
+            raise RuntimeError('partner_contact on the rig: weld_radius is the contact radius, > 0 (the 09:00 '
+                               'calibration, e.g. 0.01)')
 
     x0_imu = _x0_rate_imu_drones(context, n, real)
     # the thrust map and geometry: the rig carry's on the rig, the twin's typed knobs in sim (the
@@ -354,8 +421,9 @@ def attach(context, launch_dir, profile_vals):
         if dry_approach and latches[ATTACH_DRONE_ID] != 'OFF':
             raise RuntimeError('rig weld_radius:=0 (no weld) with drone 3\'s magnet ON '
                                'would catch the ring with no weld declared; latch it OFF')
-        nodes += rig_io(launch_dir, n_radio, latches,
-                        attach=enable_approach)
+        nodes += rig_io(launch_dir, n_radio, latches, attach=enable_approach,
+                        **({'extra_bodies': (LaunchConfiguration('mocap_extra_bodies').perform(context).strip()
+                                             or BALL_ROUTE)} if combined_rig else {}))
     if not enable_approach:
         return nodes
 
@@ -417,6 +485,8 @@ def attach(context, launch_dir, profile_vals):
                          'release_topic': '/partner/release' if partner_attached else '',
                          **({'take_back_topic': f'/drone_{d}/take_back'}
                             if partner_contact else {}),
+                         # his MPC's +1 on aux 5, 7-10 (combined-stack O6): zeroed on his stream
+                         **({'zero_partner_aux': True} if real and partner_contact else {}),
                          **rig_magnet}],
             output='screen'))
 
@@ -594,9 +664,26 @@ def attach(context, launch_dir, profile_vals):
                          'command_backend': 'none',
                          'detach_on_start': False,
                          'enable_elrs_magnet_output': False,
-                         'magnet_latch_topic': '' if dry_approach else f'/drone_{d}/magnet',
+                         # combined M1: QUAD4's one coil is magnet_gate's (below); ours is one of its inputs
+                         'magnet_latch_topic': ('' if dry_approach else f'/drone_{d}/magnet_ours'
+                                                if partner_contact else f'/drone_{d}/magnet'),
                          **(_contact_manager_params(context, real) if partner_contact else {})}],
             output='screen'))
+        if partner_contact:
+            # one writer of /drone_3/magnet: his ball commands until our span's first ON, ours after it
+            nodes.append(Node(
+                package='drone_magnet', executable='magnet_gate', name=f'magnet_gate_{d}',
+                parameters=[{'drone_id': d, 'partner_topic': '/tejen/magnet/command',
+                             'ours_topic': f'/drone_{d}/magnet_ours', 'out_topic': f'/drone_{d}/magnet'}],
+                output='screen'))
+            lc = lambda k: float(LaunchConfiguration(k).perform(context))  # noqa: E731
+            nodes.append(LogInfo(msg=(
+                f'[launch] COMBINED M1 (rig): contact radius {lc("weld_radius"):.3f} m at weld_point_z '
+                f'{lc("weld_point_z"):+.4f}, proof taut length {lc("proof_taut_len"):.3f} m. Order: his ARM (QUAD4 '
+                'armed idle, /tejen/drone_command) -> fleet arm -> fleet takeoff -> the ring at height -> his '
+                'TAKEOFF. No RViz ATTACH: an ON before his drop takes the coil.')))
+            if partner_nodes:
+                nodes += _partner_nodes(context)
         return nodes
 
     # magnet tip pose (world) from the drone's poses -> /magnet_tip_pose. Verified array order:

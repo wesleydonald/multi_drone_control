@@ -39,6 +39,13 @@ fleet_resize:
   detach_magnet: true
 network:
   auto_network_handover: false
+# combined M1 contact attach on the rig (mode:=attach partner:=true partner_contact:=true): more Motive bodies
+# ('<id>:/<topic>,...'; '' = his ball 6:/pickup/motion_capture_state under partner_contact), his mission's rig
+# nodes started by this launch (partner_nodes), and launch arguments for them ('k:=v k:=v')
+combined_m1:
+  mocap_extra_bodies: ''
+  partner_nodes: false
+  partner_args: ''
 
 modes:
   mpc: {}

@@ -75,6 +75,9 @@ def _args():
                               description="Motive ring body id; '' = node default 8"),
         DeclareLaunchArgument('mocap_magnet_tip_body_id', default_value='',
                               description="Motive body on drone 3's magnet tip (weld detection); '' = none"),
+        DeclareLaunchArgument('mocap_extra_bodies', default_value='',
+                              description="more Motive bodies, '<id>:/<topic>,...' (combined M1: his ball "
+                                          "6:/pickup/motion_capture_state); '' = none"),
         DeclareLaunchArgument('rviz', default_value='true',
                               description='open RViz2 (drone models + payload + ArmPanel)'),
         # The STL is the real TBS frame in mm; 0.001 renders it at its true 209 mm
@@ -133,6 +136,9 @@ def launch_setup(context, *args, **kwargs):
         v = LaunchConfiguration(arg).perform(context).strip()
         if v:
             mocap_params[key] = int(v)
+    extra = LaunchConfiguration('mocap_extra_bodies').perform(context).strip()
+    if extra:
+        mocap_params['extra_bodies'] = extra
     nodes.append(Node(
         package='drone_communication',
         executable='motion_capture_publisher_node',

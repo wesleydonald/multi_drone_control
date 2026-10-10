@@ -81,3 +81,32 @@ switches that default OFF: with them off, every node behaves exactly as today. B
 
 ## Runner
 - `WAIT_REWELD` takes an optional timeout (s): on expiry it logs and the script goes on (to LAND).
+
+## The rig (branch m1-rig, 11 Oct): `real_control_launch.py mode:=attach partner:=true partner_contact:=true`
+Everything below exists only with real + partner_contact (the rig launches flown today are unchanged: launch dumps
+of the Wednesday sheet lines, the frozen launch gate and the twin claim configs are identical before and after).
+- **DDS**: the launch refuses unless `ROS_LOCALHOST_ONLY=1` and `ROS_DOMAIN_ID` are set (combined-stack critic 4).
+- **Contact radius**: `weld_radius` (> 0, refused at 0), at `weld_point_z` (the 09:00 calibration, attach_m1.yaml);
+  `proof_taut_len` typed from the 09:00 tip record (required > 0: on the slack tether an uncaught magnet resting on
+  a rising plate would otherwise read as attached).
+- **One coil** (O5): the manager's latch goes to `/drone_3/magnet_ours`; `magnet_gate_3` alone writes
+  `/drone_3/magnet` (QUAD4's radio latch): his `/tejen/magnet/command` until the first ON on `/drone_3/magnet_ours`
+  (our span, or any `/magnet/command` ON), then ours only, for good. Before it our OFF keepalive is dropped (a
+  take-back before the span keeps his ball on); after it his OFFs are dropped. `/drone_3/magnet_gate` (latched) says
+  which.
+- **His aux channels** (O6): the mux zeroes channels 5 and 7-10 of his stream (`zero_partner_aux`).
+- **Mocap** (O3): our mocap node routes his ball, `mocap_extra_bodies` (default under partner_contact
+  `6:/pickup/motion_capture_state`), next to QUAD4 (14) and its marker (24, `/magnet_tip_pose`).
+- **His nodes** (`partner_nodes:=true`, 5 s after ours, own launch scope): `tejen_mission partner_mission.launch.py
+  real:=true geometry:=rig contact_attach:=true contact_target_z:=<weld_point_z>` plus `partner_args` ('k:=v ...').
+  `partner_rig_state` turns our mocap into his `/tejen/magnet_tip_pose`, `/tejen/pendulum_swing_state`,
+  `/tejen/pickup_object/pose`, `/tejen/payload_world_state`. His MPC: `/tejen/drone_command` (ARM, TAKEOFF by hand),
+  out on `/drone_3/ELRSCommand_tejen`. No supervisor unless `partner_args:='supervisor:=true'` (stops land).
+- **Order** (require_fc_armed checks QUAD4's own radio too): his ARM (QUAD4 armed idle) -> `fleet arm` ->
+  `fleet takeoff` -> the ring at height -> his TAKEOFF. A take-back before our TAKEOFF cannot switch (our drone-3
+  tracker is not flying): QUAD4 stays on his stream.
+- **The lift margin on the rig**: his LIFT_PROOF rises from his contact TARGET (`final_attach_offset_z`, rig
+  -0.01), not from the height where the contact was seen (z0), by at most `proof_rise_max` (rig 0.03): his reference
+  ends 2 cm above the face, of which the first ~1 cm takes up the tether's slack. (The twin's 1 cm cap from a target
+  1 cm low only brings the tip back to the plate: R1498, three caught contacts timed out.) Rising from z0 is the
+  proper fix; it changes his planner and the claim tree, so it waits for Wesley.

@@ -394,6 +394,11 @@ class SimulationTestSupervisor(Node):
         self.create_subscription(String, "/dynamic_planner/transfer_status", self._planner, 5)
         self.command_publisher = self.create_publisher(String, "drone_command", 5)
         self.land_publisher = self.create_publisher(Bool, "/join_planner/land_now", 5)
+        # multi_drone_control combined rig (H5): 'land' turns every stop's disarm request into
+        # /join_planner/land_now, so a stale input never cuts the motors of a flying vehicle
+        self.stop_action = str(self.declare_parameter("stop_action", "disarm").value).strip().lower()
+        if self.stop_action not in ("disarm", "land"):
+            raise ValueError("stop_action must be disarm or land")
         self.arming_client = self.create_client(SetArming, "drone_arming_service")
         self.timer = self.create_timer(0.1, self._tick)
         self.get_logger().info(
@@ -579,7 +584,12 @@ class SimulationTestSupervisor(Node):
             elif action == SupervisorAction.PUBLISH_LAND:
                 self._publish_land()
             elif action == SupervisorAction.REQUEST_DISARM:
-                self._request_disarm()
+                if self.stop_action == "land":
+                    self.get_logger().warn(
+                        f"Supervisor stop ({decision.reason}): LAND requested instead of a disarm")
+                    self._publish_land()
+                else:
+                    self._request_disarm()
             elif action == SupervisorAction.FINISH:
                 self._write_result(decision)
                 self.exit_code = int(decision.exit_code if decision.exit_code is not None else 2)

@@ -183,3 +183,32 @@ def test_ours_only_mux_reports_ours(monkeypatch):
         n.destroy_node()
     finally:
         rclpy.shutdown()
+
+
+# ── combined stack O6 (Wesley 8 Oct): the partner's aux channels zeroed on the rig ──
+
+def test_partner_aux_zeroed_except_the_magnet_channel():
+    from drone_magnet.elrs_mux import zero_partner_aux
+    m = ELRSCommand(armed=True, channel_2=0.3, channel_5=1.0, channel_6=1.0, channel_7=1.0,
+                    channel_8=1.0, channel_9=1.0, channel_10=1.0)
+    out = zero_partner_aux(m, keep=(6,))
+    assert (out.channel_5, out.channel_7, out.channel_8, out.channel_9, out.channel_10) == (0, 0, 0, 0, 0)
+    assert out.channel_6 == 1.0 and out.channel_2 == pytest.approx(0.3) and m.channel_5 == 1.0
+
+
+def test_zero_partner_aux_only_on_his_stream_and_only_when_set(mux_factory):
+    """Off (the default): his stream is forwarded untouched. On: his aux 5, 7-10 go out at 0 (as ours
+    sends them), the magnet channel and the flight channels are his; our stream is never changed."""
+    his = ELRSCommand(armed=True, channel_2=0.3, channel_5=1.0, channel_6=1.0, channel_7=1.0,
+                      channel_8=1.0, channel_9=1.0, channel_10=1.0)
+    n = mux_factory()
+    n._tejen_cb(his)
+    assert n.pub.msgs[-1].channel_5 == 1.0 and n.pub.msgs[-1].channel_10 == 1.0
+    n._zero_aux, n._magnet_channel = True, 6
+    n._tejen_cb(his)
+    out = n.pub.msgs[-1]
+    assert (out.channel_5, out.channel_7, out.channel_8, out.channel_9, out.channel_10) == (0, 0, 0, 0, 0)
+    assert out.channel_6 == 1.0 and out.armed and out.channel_2 == pytest.approx(0.3)
+    n._handoff_cb(Bool(data=True))
+    n._diss_cb(ELRSCommand(armed=True, channel_2=0.2, channel_7=0.5))
+    assert n.pub.msgs[-1].channel_7 == 0.5                   # ours: untouched
