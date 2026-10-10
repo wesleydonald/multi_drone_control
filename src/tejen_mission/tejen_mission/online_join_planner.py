@@ -1745,8 +1745,10 @@ class OnlineJoinPlanner(Node):
         self.pickup_proof_tracker = PickupProofTracker(PickupProofConfig(**proof_values))
         self.pickup_proof_proven = not self.pickup_proof_enabled
         self.pickup_proof_last_pair = None
+        # contact_attach allows it with the legacy alignment too (no object after the contact wait, or lost in
+        # the lift: release, rise, re-approach the object where it now is); past the budget it gives up
         self.pickup_retry_enabled = bool(self.declare_parameter('pickup_retry_enabled', False).value
-            and self.pickup_alignment_mode == 'measured_tip_tiered')
+            and (self.pickup_alignment_mode == 'measured_tip_tiered' or self.contact_attach))
         self.m1_pickup_stall = PickupProgressStall(
             wait_s=float(self.declare_parameter('pickup_retry_wait_s', 10.).value),
             improvement_m=float(self.declare_parameter('pickup_retry_progress_m', .005).value))
@@ -1820,6 +1822,8 @@ class OnlineJoinPlanner(Node):
         self.contact_descend_start_offset = None
         self.contact_hold_tip_offset = None
         self.contact_hold_position = None
+        self.contact_proof_profile = None
+        self.contact_proof_fallback_logged = False
 
         # ------------------------------------------------------------------
         # Landing and simulation safety
@@ -6127,6 +6131,9 @@ class OnlineJoinPlanner(Node):
                                'fresh measured vertical separation; retry pickup')
         else:
             self.pickup_alignment_waiting_reason = release.waiting_reason
+            if release.stage == 'await_operator' and getattr(self, 'contact_attach', False):
+                # the fleet takes the vehicle back from here, clear of the object
+                self.contact_give_up(f'pickup: {release.attempts} attempts without the object')
 
     def ground_ring_evidence(self):
         """Fresh physical face/plate geometry for trial diagnostics and release."""
@@ -6295,6 +6302,8 @@ class OnlineJoinPlanner(Node):
                 self.descend_rate,
             )
         if phase == MissionPhase.LIFT_PROOF:
+            if getattr(self, 'contact_proof_profile', None) is not None:
+                return self.contact_proof_profile
             contact = np.array(
                 [self.approach_offset_x, self.approach_offset_y, self.final_attach_offset_z]
             )
@@ -6456,7 +6465,7 @@ class OnlineJoinPlanner(Node):
             return True
         if (self.phase in {MissionPhase.DESCEND_TO_ATTACHMENT, MissionPhase.ATTACH_READY}
                 and self.contact_reported):
-            self.transition_to(MissionPhase.LIFT_PROOF, 'contact reported; proving the catch by a small lift')
+            self.enter_lift_proof()
             return True
         if self.phase == MissionPhase.LIFT_PROOF:
             if not self.contact_reported:
@@ -6471,6 +6480,37 @@ class OnlineJoinPlanner(Node):
                     self.contact_descend_start_offset = lifted
             return True
         return False
+
+    def measured_contact_tip_offset(self) -> Optional[np.ndarray]:
+        """The measured tip relative to the contact target (the frame of the rejoin's tip offsets); None if
+        either pose is stale."""
+        now = self._physical_now_s()
+        if not (getattr(self, 'use_measured_magnet_tip', False)
+                and self.measured_magnet_tip_position is not None and self.attachment_position is not None
+                and all(stamp is not None and 0. <= now - stamp <= self.input_timeout_s
+                        for stamp in (self.last_magnet_tip_pose_time, self.last_attachment_pose_time))):
+            return None
+        offset = np.asarray(self.measured_magnet_tip_position - self.attachment_position, dtype=float)
+        return offset if np.all(np.isfinite(offset)) else None
+
+    def enter_lift_proof(self) -> None:
+        """The proof lift ends proof_rise_max above the tip's measured contact height, not above the target: with
+        the target below the plate the tip rests on the plate, and a rise from the target only brought it back
+        there. It starts from the commanded offset, so the reference does not step."""
+        commanded = np.asarray(self.desired_tip_offset(), dtype=float).copy()
+        measured = self.measured_contact_tip_offset()
+        self.transition_to(MissionPhase.LIFT_PROOF, 'contact reported; proving the catch by a small lift')
+        if measured is None:
+            self.contact_proof_profile = None
+            if not self.contact_proof_fallback_logged:
+                self.contact_proof_fallback_logged = True
+                self.get_logger().warning('LIFT_PROOF: no fresh measured tip; the lift rises from the contact target')
+            return
+        goal = np.array([self.approach_offset_x, self.approach_offset_y, measured[2] + self.proof_rise_max])
+        self.contact_proof_profile = RateProfile(commanded, goal, self.proof_rise_rate)
+        self.get_logger().info(
+            f'LIFT_PROOF: tip measured {measured[2]:+.3f} m from the contact target (commanded {commanded[2]:+.3f}); '
+            f'lift to {goal[2]:+.3f}')
 
     def enter_ring_attached(self) -> None:
         if self.phase in {MissionPhase.MATCH_VELOCITY, MissionPhase.DESCEND_TO_ATTACHMENT,

@@ -17,7 +17,7 @@ switches that default OFF: with them off, every node behaves exactly as today. B
 | `/magnet/contact` | std_msgs/Bool | our manager -> his planner, our planner | true: contact detected (latched c0, z0); false: proof failed / reset |
 | `/magnet/object_attached` (existing) | std_msgs/Bool | our manager -> mux, our planner, his planner | true: the attach is CONFIRMED (proof passed); latched until a magnet OFF |
 | `/magnet/attach_proof` | std_msgs/String | our manager -> logs | JSON at 10 Hz: state, drift_m, plate_rise_m, body_to_tip_m, tries |
-| `/join_planner/give_up` | std_msgs/Bool | his planner -> our planner | true once when he gives up (3 failed proofs or 30 s from his first DESCEND start) |
+| `/join_planner/give_up` | std_msgs/Bool | his planner -> our planner | true once when he gives up (3 failed proofs, 30 s from his first DESCEND start, or 3 failed pickups) |
 | `/join_planner/phase` (existing) | std_msgs/String | his planner -> ours | his phase name |
 | `/drone_3/take_back` | std_msgs/Bool | our planner -> mux, his planner | true: QUAD4 goes to our tracker now (no attach) |
 | `/drone_3/mux_state` (existing) | std_msgs/String | mux -> all | "partner" / "ours" |
@@ -42,10 +42,18 @@ switches that default OFF: with them off, every node behaves exactly as today. B
 ## His planner, `contact_attach: true`
 - DESCEND_TO_ATTACHMENT to the contact target (launch: rig_twin `bridge_attach_z_m` 0.032, `final_attach_offset_z` 0).
 - ATTACH_READY: no `handoff_ready`, lead 0, match 0.025 m / 0.08 m/s, abort 0.05 m / 0.15 m/s.
-- LIFT_PROOF (new): from DESCEND or ATTACH_READY on `/magnet/contact` true (checked before his abort guards): rise at
-  `proof_rise_rate` (0.02 m/s) up to `proof_rise_max` (twin 0.01, rig 0.03) above the contact target, plate-relative,
-  then hold. `/magnet/contact` false -> back to DESCEND (failures += 1). 3 failures or 30 s since the first DESCEND
-  start -> give-up: publish `/join_planner/give_up` true, phase TAKEN_BACK.
+- LIFT_PROOF (new): from DESCEND or ATTACH_READY on `/magnet/contact` true (checked before his abort guards): latch
+  the tip's measured offset from the contact target (plate-relative), then rise at `proof_rise_rate` (0.02 m/s) from
+  the offset commanded at entry (no reference step) to `proof_rise_max` (twin 0.01, rig 0.03) above that measured
+  contact height, then hold (m1-final; R1498: a rise from a target below the plate ended back on the plate). A stale
+  measured tip: the rise from the contact target, as before (logged once). `/magnet/contact` false -> back to DESCEND
+  from the lift reference (failures += 1). 3 failures or 30 s since the first DESCEND start -> give-up: publish
+  `/join_planner/give_up` true, phase TAKEN_BACK.
+- Pickup retry (partner launch `pickup_retry_enabled`, with `contact_attach`; m1-final, R1493/R1497): no ball after
+  `pickup_retry_wait_s` (10 s) in MAGNET_ATTACH_WAIT, or the ball lost in the lift: his object magnet OFF, a
+  vertical rise until the face clears the ball by `pickup_retry_clearance_m` (0.10), then APPROACH_ABOVE_PICKUP over
+  the ball where it now is and his descent again. The third failure (two retries) is the give-up, as above, held
+  where the rise stopped.
 - RING_ATTACHED (new, terminal): from any rejoin phase on `/magnet/object_attached` true: hold the lifted offset,
   plate-relative, no lead, until `/drone_3/mux_state` reads "ours", then hold where it is; no magnet commands, no
   hand-back, no phase change after our LAND.
@@ -58,10 +66,11 @@ switches that default OFF: with them off, every node behaves exactly as today. B
   (+ the ring velocity as feed-forward once it is within the warm radius of the ring); no departed hold for it.
 - Ring magnet span: ON (keepalive 1 s) once his phase reaches TRANSIT_TO_REATTACH, QUAD4 is above 0.3 m and the ring
   joint reads detached; this ON bypasses the ATTACH handler (no trajectory hold, no `_start_approach`).
-- Take-back (his give-up, or our LAND before the attach): `/drone_3/take_back` true; fixed hold latched at the measured
-  position; then the departed path: within 1.2 m (xy) of the ring centre radially out to 1.2 m at its height
-  (r < 0.225: out at the reserved plate's azimuth), else land where it is; land alone, disarmed alone; ring magnet OFF
-  only if the span began; while `/tejen/object_attached` is true, drone 3's model mass + 0.1 kg.
+- Take-back (his give-up, or our LAND before the attach; also from his pickup: no ball on, no span begun, so no ring
+  magnet command): `/drone_3/take_back` true; fixed hold latched at the measured position; then the departed path:
+  within 1.2 m (xy) of the ring centre radially out to 1.2 m at its height (r < 0.225: out at the reserved plate's
+  azimuth), else land where it is; land alone, disarmed alone; ring magnet OFF only if the span began; while
+  `/tejen/object_attached` is true, drone 3's model mass + 0.1 kg.
 - Lifecycle gates: `newcomer_lifecycle` / `newcomer_fault_land` / `departed_ground_idle` stay on under
   `partner_contact`; `_newcomer_arming_cb` acts only while `/drone_3/mux_state` reads "ours".
 - On `/magnet/object_attached`: the existing fold-in, with QUAD4's starting share seeded from the measured pull

@@ -248,6 +248,25 @@ def test_far_from_the_ring_it_lands_where_it_is():
     assert np.allclose(p[:2], [1.0, 1.6]) and p[2] < 2.4 - 0.2  # straight down, alone
 
 
+def test_his_give_up_at_the_pickup_takes_it_back_with_no_ring_magnet_command():
+    """His bounded pickup retry gives up before the rejoin (R1493, R1497 stalled there): no ball, no span."""
+    f = _node()
+    f._his_phase_cb(String(data='TAKEOFF'))
+    f._his_phase_cb(String(data='MAGNET_ATTACH_WAIT'))
+    f._joint_state_cb(String(data='detached'))
+    f.attach_pos[0] = np.array([1.0, 1.6, 0.86])              # risen clear of his ball
+    _tick(f)
+    f._give_up_cb(Bool(data=True))
+    f._his_phase_cb(String(data='TAKEN_BACK'))
+    assert f._take_back_pub.msgs == [True] and f._newcomer_out == {0: 'his give-up'} and 3 in f._land_alone
+    assert np.allclose(f._departed_hold[3], [1.0, 1.6, 0.86]) and 3 not in f._departed_step
+    for _ in range(int(round(NEWCOMER_RELEASE_S * HZ)) + 10):
+        _tick(f)
+    p = f.published[-1][1][0][0]
+    assert np.allclose(p[:2], [1.0, 1.6]) and p[2] < 0.86 - 0.2  # down where it is, alone; the carriers fly on
+    assert f._magnet_cmd_pub.msgs == [] and f._span_t is None and not f._land_to_ground
+
+
 def test_land_before_the_attach_is_a_take_back_not_the_approach_abort():
     f = _node()
     _airborne_rejoin(f)
