@@ -145,3 +145,15 @@ def test_slot_offset_detail_names_the_plate_and_the_check():
     assert msg.startswith('drone 1 sits 30 deg clockwise of plate 1:')
     assert 'ring rigid body (+x toward plate 0)' in msg and 'magnet plates' in msg
     assert 'sits' in slot_offset_detail(0, 10.5, 0.0) and 'sits' not in slot_offset_detail(0, 9.9, 0.0)
+
+
+def test_fake_mocap_tip_over_plate_9_sits_at_the_weld_point():
+    """The props-off attach check: plate 9 is the ring's +y (attach_y_offset 0.225 in real.yaml)
+    and the tip sits --tip-dz above the ring origin plane, QUAD4 hanging straight above it."""
+    for yaw in (0.0, 20.0):
+        poses = FM.compute_poses(3, attach=True, radius=0.225, load_z=0.05, yaw_deg=yaw,
+                                 tip_len=0.58, tip_plate=9, tip_dz=0.02)
+        (x, y, z), _ = poses[FM.TIP_TOPIC]
+        a = math.radians(90 + yaw)
+        assert (x, y, z) == pytest.approx((0.225 * math.cos(a), 0.225 * math.sin(a), 0.07))
+        assert poses['/drone_3/motion_capture_state'][0] == pytest.approx((x, y, z + 0.58))

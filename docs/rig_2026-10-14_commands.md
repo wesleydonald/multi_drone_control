@@ -51,7 +51,11 @@ python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_plan
    (a) Hold the magnet face 2 cm above plate 9 for 5 s: no `ATTACH:` line from magnet_attachment_manager.
    (b) Put the face on the plate (it catches) and hold still 2 s: `ATTACH: d=0.0xx m, rel_speed=...` and
    `/magnet/object_attached` true. Note d: a catch off the plate's centre reads larger, and d sets the radius
-   for the combined runs. (c) Slide the ring 5 cm with QUAD4 on it: no change. Then OFF, Ctrl-C, relaunch.
+   for the combined runs. No ATTACH within 2 s (a catch more than 1 cm off the calibration point): read d from
+   `ros2 topic echo --once /magnet/attachment_state` (`distance=`), and repeat with the catch moved around the
+   plate to get the spread. (c) Slide the ring 5 cm with QUAD4 on it: no change. Then OFF, Ctrl-C, relaunch.
+   T2 shows `attach ignored - not flying yet` every 2 s while attached: expected (the planner is on the ground).
+   Motion-capture noise is not a risk for the 0.05 m/s gate: still bodies read 0.01-0.02 m/s at most (8 Oct, r305).
 
 ## Flights, in order
 
@@ -82,6 +86,17 @@ The tree: `git log -1` on week4 (b4e11f1 or later; rig-prep = week4 since 10 Oct
 The newcomer defaults on: `ros2 param get /dissipative_planner` newcomer_lifecycle / newcomer_fault_land / departed_ground_idle -> True
 (on by default since 9 Oct; attach_m1.yaml also sets them).
 The attach preflight line above (expects the newcomer as drone 3); QUAD4's serial and magnet channel in
-rig_io; `/magnet_attachment_manager object_z_offset` = weld_point_z and `attach_radius` 0.01 in the chk launch;
-the 09:00 attach check against fake_mocap (fake tip 2 cm above plate 9: no ATTACH; on the plate: ATTACH); require_fc_armed True; the departed / down_alone /
-on_load topics in the bag; DISARM from RViz and T3 in the same DDS domain.
+rig_io; require_fc_armed True; the departed / down_alone / on_load topics in the bag; DISARM from RViz and T3
+in the same DDS domain.
+
+The 09:00 attach check against fake_mocap (dry-run 10 Oct on rig-prep: all three pass, ATTACH 0.17 s after the
+tip reaches the plate). T1 fakes the ring and QUAD4 hanging over plate 9; T2 is the chk line with `real_io:=false`:
+```bash
+F="python3 tools/fake_mocap.py --rig --num-drones 3 --attach --tip --azimuths-deg 270,30,150 --drone-z 0.08 --tip-plate 9"
+$F --tip-dz 0.02                    # T1, (a): tip 2 cm above the weld point (weld_point_z 0 until 09:00)
+ros2 launch bringup real_control_launch.py mode:=attach target_z:=1.0 lift_ramp_vel:=0.15 enable_approach_mpc:=false \
+  mocap_magnet_tip_body_id:=24 params_file:=$C/attach_m1.yaml weld_radius:=0.01 real_io:=false        # T2
+ros2 param get /magnet_attachment_manager attach_radius      # 0.01; object_z_offset = weld_point_z; object_y_offset 0.225
+ros2 topic pub -t 3 /magnet/command std_msgs/msg/String "{data: 'ON'}"     # then 5 s: no ATTACH
+# Ctrl-C T1, then $F --tip-dz 0.0 (b): ATTACH d=0.000 and /magnet/object_attached true
+```

@@ -1628,7 +1628,8 @@ class DissipativeController(LoadPlanner):
             self._attach_ocp(d, start_creep=True)
             return
         if self.phase not in ('planner', 'network'):
-            self.get_logger().warn('[dissipative] attach ignored - not flying yet')
+            # the manager repeats the weld at its timer rate (the props-off attach check: 551 lines in 20 s)
+            self.get_logger().warn('[dissipative] attach ignored - not flying yet', throttle_duration_sec=2.0)
             return
         if self._reconfig_mode == 'ocp' and self.phase == 'planner':
             self._attach_ocp(d)

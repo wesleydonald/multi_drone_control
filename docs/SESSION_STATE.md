@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep current at each milestone)
 
-Updated: Sat 10 Oct 2026, evening.
+Updated: Sat 10 Oct 2026, late evening.
 
 ## Where things are
 - Main tree `/home/wesley/multi_drone_control` on **rig-prep** (see git log), clean. Nothing running.
@@ -89,6 +89,15 @@ Updated: Sat 10 Oct 2026, evening.
   (596f90a). Rig finding: carriers 9-16 cm above their start at LANDED on 7-8 Oct (stall test; thr ~0.24): ask Wesley.
 - Thursday: sheet draft docs/rig_2026-10-15_commands.md; card docs/experiments/2026-10-10_twin_r9.md with configs
   twin_r9_held / twin_r9_moving (not flown yet). Tilt not built (waits for a later lab day).
+
+## Sat 10 Oct, late
+- Wesley: not pushing week4 to main for now (week4 = rig-prep = 44da020, 128 ahead of origin/main).
+- Desk dry run of Wednesday's 09:00 props-off attach check against fake_mocap (new `--tip-plate/--tip-dz`):
+  radius 0.01 / contact height / plate offset read back; 2 cm above: no ATTACH; on the plate: ATTACH 0.17 s; stays
+  attached. Planner warning flood on the ground throttled (2 s). Sheet: fallback to /magnet/attachment_state for d,
+  the rehearsal commands. Mocap noise of still bodies (8 Oct r305): 0.01-0.02 m/s max, not a risk for the 0.05 gate.
+  Desk script lesson: a background `ros2 launch` in a script ignores SIGINT; use `set -m` and signal the group.
+- Next: the combined M1 card on the new roles (survey of Tejen's ported M1 path running), critic, then build.
 
 ## Open items / next steps (plan: /home/wesley/.claude/plans/whimsical-kindling-minsky.md)
 - Reviewer pass on the final newcomer tables Monday before the freeze (graded WEAK on 9 Oct; re-flies done since).
