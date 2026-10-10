@@ -89,6 +89,9 @@ $A weld_radius:=<from 09:00, default 0.025> r8b                         # weld, 
 
 ## To check at the desk rehearsal (Tuesday)
 
+The tree: `git log -1` on week4 (b4e11f1 or later; rig-prep = week4 since 10 Oct, check runs R1454-R1460).
+The newcomer defaults on: `ros2 param get /dissipative_planner` newcomer_lifecycle / newcomer_fault_land / departed_ground_idle -> True
+(on by default since 9 Oct; attach_m1.yaml also sets them).
 The attach preflight line above (expects the newcomer as drone 3); QUAD4's serial and magnet channel in
 rig_io; `ros2 param get /dissipative_planner approach_tip_feedback` -> True and `attach_tip_dz` as written;
 `/magnet_attachment_manager object_z_offset` = weld_point_z; require_fc_armed True; the departed / down_alone /
