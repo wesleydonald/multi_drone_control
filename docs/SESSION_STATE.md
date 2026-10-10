@@ -106,7 +106,20 @@ Updated: Sat 10 Oct 2026, late evening.
   (switch partner_contact / his contact_attach, both default off). Wesley's three goals (magnet ON through his
   rejoin; contact + small lift proof by HIS controller; bumpless hand-over) -> card rev 2 after critic round 1
   (GO WITH CHANGES: our tracker would fly the welded QUAD4 to the release step-out point; checked true). Critic
-  round 2 running (told: rig twin only, Wesley's later call; his join mode; card to be revised after round 2). tip_calibration prints body-to-tip (the taut length for the rig proof; Wednesday item 4). Build on a branch from
+  round 2: REWRITE (proof must use drift from the contact offset + plate rise, thresholds from one measured lift run;
+  his plate index is CCW (+y = his 3); his MPC needs rig-twin values (thrust_ratio 22 + feedback, cable 0.55, drop
+  0.59); bumpless = all four channels + heading + fold-in seeded from the measured pull; ON span only once airborne
+  and the spawn joint free). Wesley: the subtest = 3 carriers lift, HIS controller takes QUAD4 off the mat, picks up,
+  flies, drops into the ring, then attaches; no attach -> ours (tested abort). Needs a rig-twin world variant with
+  his ball + drop target (world SDF: OK'd). Cage 6x6x4 m (memory). Lab PC: remote any day when free (Wesley).
+- Branch m1-subtest (worktree /home/wesley/mdc_wt/m1-subtest = tejen-sync-check + rig-prep): 528b693 world variant
+  three_rigid_ground_rig_attach_pickup + QUAD4 pickup model (generated), his launch geometry:=rig_twin, config
+  m1_subtest_hover (today's hand-back). E0 running on the lab PC. Card rev 3 written (full mission from the mat, our
+  abort when no attach, proof = drift from contact + plate rise, thresholds from E1 then frozen); critic round 3
+  done: GO WITH CHANGES -> rev 4 (take-back specified as NEW code: our abort was only tested from our own approach;
+  clearance pairs; E1 threshold mapping + stop rule; ball 0x05 + repeated pickup detach; transit 2.7 m; rig one coil:
+  no OFF before the ON span; _land_transit). R1475 VOID (runner's old-world ball check; fixed 04242f4); E0 = R1476
+  running on the lab PC. Next: build (his planner, our manager, planner/tracker/mux/runner, generator) on m1-subtest. tip_calibration prints body-to-tip (the taut length for the rig proof; Wednesday item 4). Build on a branch from
   tejen-sync-check after the critic. Scoring script kept at $CLAUDE_JOB_DIR/tmp/m1_stages.py (to tools/ with the configs).
 
 ## Open items / next steps (plan: /home/wesley/.claude/plans/whimsical-kindling-minsky.md)
