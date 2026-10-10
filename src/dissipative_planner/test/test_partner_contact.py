@@ -53,7 +53,7 @@ def _node(quad=(0.0, 1.4, 0.1), ring_vel=(0.0, 0.0, 0.0), contact=True):
         _departed_down_z=0.15, _land_to_ground=False, _dropped=None, _landed=False,
         _approach_hold_on=False, _attach_approach=False, takeoff_seen=True, phase='planner',
         load_state=np.r_[0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, ring_vel, np.zeros(3)], drone_pos=list(carriers),
-        dyn=SimpleNamespace(g=9.81), N=20, dt=0.1, drone_mass=0.55, attach_radius=0.225,
+        dyn=SimpleNamespace(g=9.81), N=20, dt=0.1, drone_mass=0.55, attach_radius=0.225, _attach_body_to_tip=0.59,
         _magnet_cmd_pub=_Pub(), _take_back_pub=_Pub(), traj=SimpleNamespace(kind='hover', radius=0.0),
         hover_xy=None, _departed_gi=False, _rest_z={3: 0.1}, _departed_sent=set(), _departed_pubs={},
         _attach_target=np.array([0.0, 0.225, 1.05]), _attach_warm_radius=1.0,
@@ -385,3 +385,19 @@ def test_the_fold_in_seeds_quad4_at_its_ocp_share_and_drops_any_departed_entry()
     h._contact_fold_seed = 'start'                                                 # E1b: 'ocp' tilted the ring 8 deg
     h._magnet_attached_cb(Bool(data=True))
     assert h.blends[-1][-1] == pytest.approx(0.1)
+
+
+def test_with_the_ball_on_the_take_back_clears_by_the_rod_too():
+    """R1482: taken back at r 1.3 m with the ball on, QUAD4 landed beside the ball at r 1.03, 0.33 m from carrier 1."""
+    f = _node()
+    f._his_phase_cb(String(data='TRANSIT_TO_DROP_POINT'))
+    f._ball_on = True
+    f.attach_pos[0] = np.array([0.7, 1.09, 2.93])
+    f._take_back(0, 'LAND')
+    step = f._departed_step[3]
+    assert np.linalg.norm(step[:2]) == pytest.approx(1.2 + f._attach_body_to_tip) and step[2] == pytest.approx(2.93)
+    g = _node()
+    g._his_phase_cb(String(data='TRANSIT_TO_DROP_POINT'))
+    g.attach_pos[0] = np.array([0.7, 1.09, 2.93])            # no ball: r 1.3 is already clear
+    g._take_back(0, 'LAND')
+    assert 3 not in g._departed_step

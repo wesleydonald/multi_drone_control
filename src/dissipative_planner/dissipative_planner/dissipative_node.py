@@ -1632,14 +1632,17 @@ class DissipativeController(LoadPlanner):
             return
         self._departed_wait[d] = NEWCOMER_RELEASE_S
         where = 'down where it is'
+        # with his ball on, the ball lands first and QUAD4 comes down beside it along the rod: clear by the rod too
+        # (R1482: taken back at r 1.3 m, it landed at r 1.03, 0.33 m from carrier 1)
+        clear_r = DEPARTED_CLEAR_R + (self._attach_body_to_tip if self._ball_on else 0.0)
         if self.load_state is not None:
             c = np.asarray(self.load_state[0:2], float)
             v = hold[:2] - c
             r = float(np.linalg.norm(v))
             u = v / r if r >= self.attach_radius else self._reserved_plate_dir(j, c)
-            if r < DEPARTED_CLEAR_R:
-                self._departed_step[d] = np.array([*(c + u * DEPARTED_CLEAR_R), float(hold[2])])
-                where = f'out to {DEPARTED_CLEAR_R:.1f} m from the ring at its height, then down'
+            if r < clear_r:
+                self._departed_step[d] = np.array([*(c + u * clear_r), float(hold[2])])
+                where = f'out to {clear_r:.2f} m from the ring at its height, then down'
             # during a circle, on out past the ring's path before it lands (as an aborted newcomer does)
             clear = self._path_clear_point(self._departed_step.get(d, hold), u)
             if clear is not None:
