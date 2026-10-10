@@ -1,5 +1,12 @@
 # Combined M1 subtest: Tejen flies QUAD4 from its mat through pickup, drop and a contact attach proved by a small lift; our check confirms; bumpless hand-over
 
+Rev 5 (10 Oct, before the claim runs; Wesley's decisions after E0/E1): the proof thresholds frozen at lift 1 cm,
+d_ok 3 mm, d_fail 8 mm, h_plate 2.5 mm (the card's mapping cannot be met; QUAD4's mocap force cannot confirm within the
+lift: decisions.md); the fold-in seed is 'start' (QUAD4 at 0.1 N; 'ocp' tilted the ring 7.7-8.6 deg, 4 of 4); after a
+failed proof his controller re-presses from the lifted offset; QUAD4 tipping over in the landing unwind is a rigid-twin
+artefact, so LAND is scored separately and does not hold the claim; with the ball on, the take-back steps out by
+1.2 m + the rod. Claim configs configs/experiments/m1c_*.yaml (13 runs, one tree). The bars in §5 are unchanged.
+
 Rev 4 (10 Oct): the critic's round 3 (GO WITH CHANGES) applied: the take-back is specified as new code (our abort
 was only tested from our own approach), the clearance pairs, the threshold mapping and stop rule for E1, the ball's
 weld and bitmask, a higher transit, the rig's one coil. Rev 3: the rig twin only, Tejen's full mission from the mat

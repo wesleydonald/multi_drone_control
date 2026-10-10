@@ -140,7 +140,10 @@ Updated: Sat 10 Oct 2026, late evening.
   R1484 E1a hover; R1486-R1490 seed comparison: 'ocp' 4/4 > 5 deg (7.7-8.6), 'start' 3/3 <= 2.6 deg -> default
   'start' (80b9352). Proof thresholds: the card's mapping cannot be met (first-lift rise 4.5-6 mm vs plate noise sd
   0.8-1.5 mm; 3/7 first proofs false-rejected by timeout, retry proved; 0 false attaches) -> Wesley. LAND tip-over of
-  QUAD4 in the landing unwind 2/7 (hover) -> Wesley. Card has the E0/E1 results section. Nothing running. tip_calibration prints body-to-tip (the taut length for the rig proof; Wednesday item 4). Build on a branch from
+  QUAD4 in the landing unwind 2/7 (hover) -> Wesley. Card has the E0/E1 results section.
+- Wesley (decisions.md): thresholds 1 cm / 2.5 mm / 3 / 8 mm, but FIRST check QUAD4's mocap-estimated cable force as
+  an attach signal; landing tip-over = twin artefact (scored separately); retry = re-press (as built). Now: the force
+  check (offline on R1479-R1490 + rig noise from the 7-8 Oct carriers' measured pull). tip_calibration prints body-to-tip (the taut length for the rig proof; Wednesday item 4). Build on a branch from
   tejen-sync-check after the critic. Scoring script kept at $CLAUDE_JOB_DIR/tmp/m1_stages.py (to tools/ with the configs).
 
 ## Open items / next steps (plan: /home/wesley/.claude/plans/whimsical-kindling-minsky.md)
