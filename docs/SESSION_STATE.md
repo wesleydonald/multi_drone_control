@@ -322,3 +322,7 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   passed. Card rev 8. QUEUED detached (lab_next.sh, pid 1024634, waits on 986762): claim re-fly on m1-rig ae57bbb (15),
   then tilt wave A on m1-tiltcut3 20626d3 (8) -> $CLAUDE_JOB_DIR/tmp/lab_next.txt. Score ae57bbb rows with
   TREE="branch m1-rig ae57bbb" REV=8.
+- 09:45: d4248af batch done (19 runs, 87.7 min): claim 12/13 (lead030 fails: no contact + take-back snag); contact_still
+  ON x4: catches prove 0.66-1.0 s, no-catch rejects (R1549) but its take-back snagged too (QUAD4 0.14 m from a carrier)
+  -> 2 snags on d4248af (R1543, R1549): the ae57bbb rise fixes it. Landing tip-over 6 of the last 12 attached runs.
+  ae57bbb claim re-fly STARTED 09:45 (lab_next.txt), then tilt wave A.
