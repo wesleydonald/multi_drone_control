@@ -105,7 +105,13 @@ The rest of his mission is unchanged: takeoff, pickup with his proof, C++ transi
     - QUAD4's one ELRS link is shared through the mux: his stream until our confirmation, ours after.
     - The switch is bumpless in the twin. On the rig the radio latency and Betaflight's own rate loop differ.
     - The props-off test checks the switch.
-12. **Moving ring.** The twin attaches on a 0.125 m/s circle (R1488). On the rig his real lag and the prop wash add up. Hover first.
+12. **A missed pickup has no exit.** His MAGNET_ATTACH_WAIT has no time-out in our partner launch; his opt-in
+    stalled-pickup recovery (sync 1) is off.
+    - In R1493 the ball was nudged 5 cm and the tip held at his 0.10 m radius for 150 s, until our LAND took QUAD4
+      back.
+    - On the rig a missed ball would leave QUAD4 hovering over it.
+    - Turn on his recovery, or add a pickup time-out leading to the take-back, before the full M1.
+13. **Moving ring.** The twin attaches on a 0.125 m/s circle (R1488). On the rig his real lag and the prop wash add up. Hover first.
 
 ## 4. For Tuesday's meeting (ideas)
 - **The video of the subtest:** his whole mission in the rig twin (takeoff, ball pickup, transit, drop into the ring, contact, lift proof, hand-over, all four carrying). Videos in results/videos/.
