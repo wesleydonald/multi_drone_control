@@ -99,7 +99,7 @@ events:
   arg: 3                   # step-out point is 0.5 m outside the carriers' swept circle
 - t: 23.6
   do: WAIT_REWELD          # his rejoin: our step-out ~6 s + his mission ~115 s + contact (R1491), give-up 30 s after his first descent
-  arg: 180
+  arg: 240
 - t: 31.6
   do: LAND
 criteria:
