@@ -6,6 +6,7 @@ description: 'Combined M1 subtest on the rig twin (Wesley 10 Oct): our three car
   what breaks on the rig twin before the contact attach is built. Falsifier: no pickup, no drop into the net, no weld,
   an abort, or QUAD4 within 0.35 m of a carrier.'
 world: three_rigid_ground_rig_attach_pickup.sdf
+ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
 launch:
   package: bringup
   file: sim_control_launch.py
