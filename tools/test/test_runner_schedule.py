@@ -250,3 +250,22 @@ def test_attach_proof_fields_ride_along_in_run_csv_columns():
     q = _row_runner(False)                                        # every other config: no new columns
     q.log_row()
     assert not [k for k in q.rows[-1] if k.startswith('proof_')]
+
+
+def test_wait_log_can_wait_for_his_phase():
+    """LAND during his transit (the take-back arm): his phase changes join the lines WAIT_LOG searches."""
+    pytest.importorskip('interfaces.msg')
+    from types import MethodType, SimpleNamespace
+    from experiment.config import Event
+    from experiment.runner_node import ExperimentRunner
+    r = _waiting_runner([Event(20.0, 'WAIT_LOG', '400 PHASE:TRANSIT_TO_DROP_POINT'), Event(25.0, 'LAND')])
+    r._phase = None
+    r._phase_cb = MethodType(ExperimentRunner._phase_cb, r)
+    r.now = 20.0
+    r.fire_due_events()
+    r.now = 90.0
+    r._phase_cb(SimpleNamespace(data='TRANSIT_TO_DROP_POINT'))
+    r.fire_due_events()
+    r.now = 95.0                                                  # 5 s after his transit started
+    r.fire_due_events()
+    assert r.fired[-1] == (95.0, 'LAND')

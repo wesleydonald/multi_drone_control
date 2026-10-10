@@ -279,6 +279,8 @@ class ExperimentRunner(Node):
         if msg.data != self._phase:
             self._phase = msg.data
             self._log_event(f'PHASE:{msg.data}', '/join_planner/phase')
+            # WAIT_LOG can wait for his phase too ('PHASE:TRANSIT_TO_DROP_POINT': LAND during his transit)
+            self._planner_lines.append((self._rel(), f'PHASE:{msg.data}'))
 
     def _handoff_cb(self, msg):
         rising = bool(msg.data) and not self._handoff
