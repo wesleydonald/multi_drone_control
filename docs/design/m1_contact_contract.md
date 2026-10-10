@@ -49,11 +49,17 @@ switches that default OFF: with them off, every node behaves exactly as today. B
   measured tip: the rise from the contact target, as before (logged once). `/magnet/contact` false -> back to DESCEND
   from the lift reference (failures += 1). 3 failures or 30 s since the first DESCEND start -> give-up: publish
   `/join_planner/give_up` true, phase TAKEN_BACK.
-- Pickup retry (partner launch `pickup_retry_enabled`, with `contact_attach`; m1-final, R1493/R1497): no ball after
-  `pickup_retry_wait_s` (10 s) in MAGNET_ATTACH_WAIT, or the ball lost in the lift: his object magnet OFF, a
-  vertical rise until the face clears the ball by `pickup_retry_clearance_m` (0.10), then APPROACH_ABOVE_PICKUP over
-  the ball where it now is and his descent again. The third failure (two retries) is the give-up, as above, held
-  where the rise stopped.
+- Pickup descent (partner launch `pickup_hold_on_attach`; m1-final, R1507): his object flag (`/tejen/object_attached`,
+  in the twin his manager's weld, tip within 0.10 m of the ball centre) ends DESCEND_TO_PICKUP: MAGNET_ATTACH_WAIT
+  holds the tip at its measured height and his lift starts from that hold. The stalls (R1493, R1497, R1500, R1507)
+  were not missed welds: the ball welded and the descent ran ~2 s on, pushing it into the floor and buckling the
+  rigid twin rod, so his lift xy gate never held. Twin only: on the rig his flag is a proximity flag (0.12 m,
+  0.8 s) and his `measured_tip_tiered` path holds at a measured near-surface candidate instead.
+- Pickup retry (partner launch `pickup_retry_enabled`, with `contact_attach`; m1-final): not aligned on the ball
+  (attached but the tip off target, or nothing attached) for `pickup_retry_wait_s` (10 s) in MAGNET_ATTACH_WAIT, or
+  the ball lost in the lift: his object magnet OFF (an attached ball drops), a vertical rise until the face clears
+  the ball by `pickup_retry_clearance_m` (0.10), then APPROACH_ABOVE_PICKUP over the ball where it now lies and his
+  descent again. The third failure (two retries) is the give-up, as above, held where the rise stopped.
 - RING_ATTACHED (new, terminal): from any rejoin phase on `/magnet/object_attached` true: hold the lifted offset,
   plate-relative, no lead, until `/drone_3/mux_state` reads "ours", then hold where it is; no magnet commands, no
   hand-back, no phase change after our LAND.

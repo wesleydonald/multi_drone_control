@@ -414,19 +414,24 @@ def test_take_back_seen_on_the_tick_too():
     assert p.phase == P.TAKEN_BACK
 
 
-# ---- his pickup retry under contact_attach (R1493, R1497) ---------------------------------
+# ---- his pickup under contact_attach: the descent ends on the weld; the bounded retry (R1493, R1497, R1507) ----
 
 BALL = np.array([1.0, 1.6, 0.08])        # the rig-twin ball's centre at its start (r 0.08)
-PUSHED = np.array([1.03, 1.65, 0.08])    # where the descending rod pushed it
-BALL_R, TIP_R = 0.08, 0.012
+PUSHED = np.array([1.03, 1.65, 0.08])    # where it lies after a push or a drop
+BALL_R, TIP_R, CATCH_R = 0.08, 0.012, 0.10   # his sim magnet manager welds the ball within 0.10 m of its centre
+BENT = np.array([0.04, 0.14, 0.0])       # the tip pushed aside by a buckled rod (R1507: tip (1.04, 1.74))
 
 
-def pickup_planner(retry=True):
+def pickup_planner(retry=True, hold=True, weld=True):
     """His pickup as the partner launch flies it: legacy alignment, the geometry-aware target from the
-    spanner_8mm profile, the retry with the launch's 0.10 m clearance and his other defaults."""
+    spanner_8mm profile, his own tracking errors from the measured tip, the hold on the weld, the retry with the
+    launch's 0.10 m clearance and his other defaults. weld: the twin's catch (ON within CATCH_R; an OFF drops it)."""
     p = planner(phase=P.SETTLE_ABOVE_PICKUP)
+    del p.tracking_errors
     p.pickup_alignment_mode = 'legacy'
     p.pickup_retry_enabled = retry
+    p.pickup_hold_on_attach = hold
+    p.weld, p.bend = weld, np.zeros(3)
     p.m1_pickup_stall = PickupProgressStall(wait_s=10.0, improvement_m=0.005)
     p.m1_pickup_release = PickupRelease(clearance_m=0.10)
     p.m1_candidate_hold_reference = None
@@ -437,6 +442,7 @@ def pickup_planner(retry=True):
     p.pickup_xy_tolerance, p.pickup_z_tolerance, p.pickup_tip_speed_tolerance = 0.10, 0.20, 0.60
     p.pickup_settle_time_s = 1.0
     p.pickup_approach_clearance, p.pickup_attach_clearance, p.pickup_descent_speed = 0.35, 0.09, 0.04
+    p.pickup_lift_height, p.pickup_lift_speed = 2.3, 0.12
     p.pickup_lift_xy_tolerance, p.pickup_lift_xy_dwell_s = 0.08, 0.30
     p.attach_wait_start_time, p.attach_wait_timeout_s = None, 8.0
     p.enable_pickup_timeout_landing, p.pickup_land_after_s, p.takeoff_detected_time = True, 20.0, 0.0
@@ -453,13 +459,15 @@ def pickup_planner(retry=True):
     p.latched_pickup_position = p.latched_pickup_yaw = None
     p.clear_geometry_pickup_latch()
     p.last_magnet_command = 'OFF'
+    p.drone_position = BALL + [0.025, 0.0, 0.40] + QUAD_FROM_TIP
+    p.measured_magnet_tip_position = p.drone_position - QUAD_FROM_TIP
     fly(p)
     return p
 
 
 def fly(p, dt=0.0):
-    """One tick as his timer runs it (state machine, magnet, reference); the tip then follows the reference
-    but rests on the ball where the ball is under it."""
+    """One tick as his timer runs it (state machine, magnet, reference). The tip then follows the reference but
+    rests on the ball where the ball is under it; the ball welds as his sim manager welds it."""
     tick(p, dt)
     if p.phase in {P.TAKEN_BACK, P.LIFT_OBJECT}:
         return
@@ -468,33 +476,48 @@ def fly(p, dt=0.0):
             else p.build_reference().positions[0])
     p.last_reference = SimpleNamespace(positions=np.array([body]))
     tip = body - QUAD_FROM_TIP
-    if np.linalg.norm(tip[:2] - p.pickup_object_position[:2]) < BALL_R:
-        tip[2] = max(tip[2], p.pickup_object_position[2] + BALL_R + TIP_R)
+    ball = p.pickup_object_position
+    if np.linalg.norm(tip[:2] - ball[:2]) < BALL_R:
+        tip[2] = max(tip[2], ball[2] + BALL_R + TIP_R)
+    if p.weld:
+        if p.last_magnet_command == 'OFF':
+            p.object_attached = False
+        elif np.linalg.norm(tip - ball) <= CATCH_R:
+            p.object_attached = True
+    if p.object_attached:
+        tip = tip + p.bend
     p.measured_magnet_tip_position = tip
     p.drone_position = tip + QUAD_FROM_TIP
 
 
+def fly_until(p, phases, dt=0.1, limit=400):
+    for _ in range(limit):
+        if p.phase in phases:
+            return
+        fly(p, dt)
+    raise AssertionError(f'still in {p.phase.value}')
+
+
 def to_magnet_wait(p):
-    """SETTLE_ABOVE_PICKUP -> DESCEND_TO_PICKUP (latched on the ball where it is) -> MAGNET_ATTACH_WAIT."""
-    assert p.phase == P.SETTLE_ABOVE_PICKUP
-    fly(p, 0.1)
-    fly(p, 1.01)
-    assert p.phase == P.DESCEND_TO_PICKUP
+    """SETTLE/APPROACH -> DESCEND_TO_PICKUP (latched on the ball where it is) -> MAGNET_ATTACH_WAIT."""
+    fly_until(p, {P.DESCEND_TO_PICKUP})
     np.testing.assert_allclose(p.latched_pickup_position, p.pickup_object_position)
-    for _ in range(70):
-        fly(p, 0.1)
-    assert p.phase == P.MAGNET_ATTACH_WAIT
+    fly_until(p, {P.MAGNET_ATTACH_WAIT})
 
 
 def stall_and_rise(p):
-    """No ball for his wait: magnet OFF and a vertical rise from the stall reference. Returns that reference."""
-    fly(p, 0.1)
-    fly(p, 10.0)
+    """Not on the ball for his wait: magnet OFF (an attached ball drops) and a vertical rise from the stall
+    reference. Returns that reference."""
+    assert p.phase == P.MAGNET_ATTACH_WAIT
+    for _ in range(120):
+        if p.m1_pickup_release.stage != 'idle':
+            break
+        fly(p, 0.1)
     stall = p.m1_pickup_release.target.copy()
-    assert p.m1_pickup_release.stage == 'release'
+    risen = stall
     for _ in range(400):
         fly(p, 0.05)
-        assert p.last_magnet_command == 'OFF'
+        assert p.last_magnet_command == 'OFF' and not p.object_attached
         if p.phase != P.MAGNET_ATTACH_WAIT:
             break
         np.testing.assert_allclose(p.last_reference.positions[0][:2], stall[:2])   # vertical only
@@ -508,23 +531,88 @@ def face_clearance(p):
     return float(p.measured_magnet_tip_position[2] - 0.03 - (p.pickup_object_position[2] + 0.003))
 
 
-def test_a_stalled_pickup_rises_recentres_on_the_moved_ball_and_descends_again():
+# the descent ends on the weld (R1507: the weld at a tip height of 0.175 m, then ~2 s more descent)
+
+def test_the_descent_ends_on_the_weld_and_holds_the_tip_where_it_caught():
     p = pickup_planner()
+    fly_until(p, {P.DESCEND_TO_PICKUP})
+    contact = p.latched_geometry_pickup_contact_target.copy()
+    while not p.object_attached:
+        fly(p, 0.1)
+        assert p.phase == P.DESCEND_TO_PICKUP
+    caught = p.measured_magnet_tip_position.copy()
+    assert caught[2] - contact[2] > 0.05                       # the welded tip on the ball, well above the target
+    fly(p, 0.1)
+    assert p.phase == P.MAGNET_ATTACH_WAIT
+    hold = p.m1_candidate_hold_reference.copy()
+    assert hold[2] == pytest.approx(caught[2] + QUAD_FROM_TIP[2])        # no further descent
+    for _ in range(2):                                         # inside his 0.3 s lift dwell
+        fly(p, 0.1)
+        np.testing.assert_allclose(p.last_reference.positions[0], hold)
+    fly_until(p, {P.LIFT_OBJECT})
+    np.testing.assert_allclose(p.build_reference().positions[0], hold, atol=1e-9)   # the lift starts there
+    assert not p.m1_pickup_release.attempts and not p.give_up_publisher.messages
+
+
+def test_without_the_hold_the_descent_pushes_on_past_the_weld():
+    p = pickup_planner(hold=False)
+    fly_until(p, {P.DESCEND_TO_PICKUP})
+    contact = p.latched_geometry_pickup_contact_target
+    fly_until(p, {P.MAGNET_ATTACH_WAIT})
+    assert p.object_attached and p.m1_candidate_hold_reference is None
+    assert p.last_transition_reason == 'pickup descent profile complete'
+    np.testing.assert_allclose(p.last_reference.positions[0], contact + QUAD_FROM_TIP, atol=1e-9)
+
+
+# the retry: attached but off target, or nothing caught
+
+def test_attached_but_off_target_drops_the_ball_rises_and_catches_on_the_retry():
+    p = pickup_planner()
+    p.bend = BENT                                              # the catch bends the rod aside
+    to_magnet_wait(p)
+    assert p.object_attached
+    for _ in range(50):
+        fly(p, 0.1)
+    assert p.phase == P.MAGNET_ATTACH_WAIT                     # attached, 0.15 m off: never aligned
+    stall = stall_and_rise(p)
+    assert p.phase == P.APPROACH_ABOVE_PICKUP and p.m1_pickup_release.attempts == 1
+    assert p.last_transition_reason == 'fresh measured vertical separation; retry pickup'
+    assert p.last_reference.positions[0][2] > stall[2]
+    p.pickup_object_position = PUSHED.copy()                   # where the dropped ball lies
+    p.bend = np.zeros(3)
+    fly(p, 0.1)
+    approach = p.transfer_body_target().position - QUAD_FROM_TIP
+    np.testing.assert_allclose(approach[:2], PUSHED[:2] + [0.025, 0.0])     # re-centred on it
+    to_magnet_wait(p)
+    fly_until(p, {P.LIFT_OBJECT})
+    assert p.m1_pickup_release.attempts == 1 and not p.contact_gave_up
+
+
+def test_a_rod_bent_on_every_catch_gives_up_after_the_third_clear_of_the_ball():
+    p = pickup_planner()
+    p.bend = BENT
+    for attempt in (1, 2, 3):
+        to_magnet_wait(p)
+        assert p.object_attached
+        stall = stall_and_rise(p)
+        assert p.m1_pickup_release.attempts == attempt
+    assert p.phase == P.TAKEN_BACK and p.contact_gave_up and not p.object_attached
+    assert [m.data for m in p.give_up_publisher.messages] == [True]
+    np.testing.assert_allclose(p.contact_hold_position[:2], stall[:2])
+    assert face_clearance(p) >= 0.10 and p.last_magnet_command == 'OFF'
+
+
+def test_nothing_caught_rises_recentres_on_the_moved_ball_and_descends_again():
+    p = pickup_planner(weld=False)
     to_magnet_wait(p)
     first_target = p.latched_geometry_pickup_contact_target.copy()
     p.pickup_object_position = PUSHED.copy()           # the rod pushed the ball; no weld
-    fly(p, 1.0)
-    assert p.phase == P.MAGNET_ATTACH_WAIT and p.m1_pickup_release.stage == 'idle'
     stall = stall_and_rise(p)
     assert p.phase == P.APPROACH_ABOVE_PICKUP and p.m1_pickup_release.attempts == 1
     assert face_clearance(p) >= 0.10
     assert p.last_reference.positions[0][2] - stall[2] >= 0.09                # ~0.10 m up
-    # re-centred over the ball where it is now, not where it was
     approach = p.transfer_body_target().position - QUAD_FROM_TIP
     np.testing.assert_allclose(approach[:2], PUSHED[:2] + [0.025, 0.0])
-    fly(p, 0.1)
-    fly(p, 0.51)
-    assert p.phase == P.SETTLE_ABOVE_PICKUP
     to_magnet_wait(p)
     np.testing.assert_allclose(p.latched_geometry_pickup_contact_target - first_target,
                                PUSHED - BALL, atol=1e-12)
@@ -532,29 +620,23 @@ def test_a_stalled_pickup_rises_recentres_on_the_moved_ball_and_descends_again()
 
 
 def test_a_pickup_caught_on_the_retry_lifts_the_ball():
-    p = pickup_planner()
+    p = pickup_planner(weld=False)
     to_magnet_wait(p)
     stall_and_rise(p)
-    fly(p, 0.1)
-    fly(p, 0.51)
+    p.weld = True
     to_magnet_wait(p)
-    p.object_attached = True
-    fly(p, 0.1)
-    fly(p, 0.31)
-    assert p.phase == P.LIFT_OBJECT
+    fly_until(p, {P.LIFT_OBJECT})
     assert p.m1_pickup_release.attempts == 1 and not p.contact_gave_up
 
 
 def test_the_third_failed_pickup_gives_up_clear_of_the_ball_and_hands_the_vehicle_back():
-    p = pickup_planner()
+    p = pickup_planner(weld=False)
     for attempt in (1, 2, 3):
         to_magnet_wait(p)
         stall = stall_and_rise(p)
         assert p.m1_pickup_release.attempts == attempt
         if attempt < 3:
             assert p.phase == P.APPROACH_ABOVE_PICKUP
-            fly(p, 0.1)
-            fly(p, 0.51)
     assert p.phase == P.TAKEN_BACK and p.contact_gave_up
     assert [m.data for m in p.give_up_publisher.messages] == [True]
     # held where the rise stopped, above the ball; his magnet stays OFF (TAKEN_BACK sends nothing)
@@ -570,12 +652,23 @@ def test_the_third_failed_pickup_gives_up_clear_of_the_ball_and_hands_the_vehicl
 
 
 def test_without_the_retry_a_stalled_pickup_waits_as_before():
-    p = pickup_planner(retry=False)
+    p = pickup_planner(retry=False, weld=False)
     to_magnet_wait(p)
     for _ in range(12):
         fly(p, 10.0)
     assert p.phase == P.MAGNET_ATTACH_WAIT and p.m1_pickup_release.stage == 'idle'
     assert not p.give_up_publisher.messages
+
+
+def test_without_contact_attach_an_attached_tip_off_target_is_his_wait():
+    """His own retry (measured_tip_tiered) counts only a missing object as a contact-wait stall."""
+    p = pickup_planner()
+    p.bend = BENT
+    to_magnet_wait(p)
+    p.contact_attach = False
+    for _ in range(150):
+        fly(p, 0.1)
+    assert p.phase == P.MAGNET_ATTACH_WAIT and p.m1_pickup_release.stage == 'idle'
 
 
 # ---- the switch off -----------------------------------------------------------------------

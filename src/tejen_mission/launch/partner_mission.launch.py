@@ -19,8 +19,9 @@ topics do not meet ours. Boundary:
 contact_attach:=true (rig_twin only; the combined M1 contact attach, docs/design/m1_contact_contract.md):
 his planner descends to the contact target and proves the catch by a small lift (LIFT_PROOF);
 our /magnet/object_attached ends it in RING_ATTACHED, our /drone_3/take_back or his give-up in
-TAKEN_BACK. No handoff_ready. His pickup retry is on (pickup_retry_enabled): a pickup with no ball
-after his wait rises and re-approaches the ball, and his third failure is a give-up.
+TAKEN_BACK. No handoff_ready. His pickup descent ends on the ball weld (pickup_hold_on_attach) and
+his retry is on (pickup_retry_enabled): a pickup not on the ball after his wait rises and
+re-approaches the ball, and his third failure is a give-up.
 confirm_pickup_release:=true: his supervisor arms only once the
 ball weld made at spawn reads free (repeated /pickup/detach), instead of one gz publish.
 """
@@ -257,12 +258,15 @@ def _nodes(context):
                 # the descent ends on the contact target (ring_bridge's attachment point), held
                 # with no lead; the planner's contact-mode gates are his ground-ring values
                 # (the card's neighbours move one of them: contact_lead / contact_dz / contact_dx).
-                # His bounded pickup retry: no ball after his contact wait -> magnet OFF, rise, re-approach
-                # the ball where it now is; his third failure gives up and we take QUAD4 back
+                # His pickup: the descent ends on the ball weld (his object flag is the weld here, not a
+                # proximity flag as on the rig) and holds the tip there; his bounded retry: not on the ball
+                # after his contact wait -> magnet OFF, rise, re-approach the ball where it now is; his third
+                # failure gives up and we take QUAD4 back
                 **({'contact_attach': True,
                     'final_attach_offset_z': ParameterValue(L('contact_dz'), value_type=float),
                     'approach_offset_x': ParameterValue(L('contact_dx'), value_type=float),
                     'attach_ready_target_lead_time': ParameterValue(L('contact_lead'), value_type=float),
+                    'pickup_hold_on_attach': True,
                     'pickup_retry_enabled': True,
                     'pickup_retry_clearance_m': 0.10}
                    if contact else {}),
@@ -303,7 +307,9 @@ def _nodes(context):
             'object_mass_kg': ParameterValue(L('object_mass_kg'), value_type=float),
             'object_vehicle_mass_kg': G['vehicle_mass'],
             'object_attached_topic': f'/{NS}/object_attached',
-            **({'thrust_ratio_ukf_min_height_above_start': 0.0} if learn_in_air else {}),
+            # his gate is re-checked every tick, not only at the start: 0.0 paused the learning below the arm
+            # height, i.e. through his whole pickup (R1505); -10 m never gates
+            **({'thrust_ratio_ukf_min_height_above_start': -10.0} if learn_in_air else {}),
         }],
         remappings=[('motion_capture_state', state),
                     ('ELRSCommand', f'/drone_{DRONE}/ELRSCommand_tejen')])

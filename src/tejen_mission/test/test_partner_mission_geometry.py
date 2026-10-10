@@ -79,7 +79,7 @@ def test_unknown_geometry_is_refused():
 # ---- the geometry owns his plate and carriers; the contact attach (combined M1, 10 Oct late) ----
 
 CONTACT_KEYS = {'contact_attach', 'full_pose_attachment', 'bridge_attach_z_m', 'pickup_release_state_topic',
-                'pickup_retry_enabled', 'pickup_retry_clearance_m'}
+                'pickup_retry_enabled', 'pickup_retry_clearance_m', 'pickup_hold_on_attach'}
 
 
 def _gz_release(actions):
@@ -126,10 +126,12 @@ def test_contact_attach_on_the_rig_twin():
     base = _params('rig_twin')['online_join_planner']
     changed = {k for k in set(planner) | set(base) if planner.get(k) != base.get(k)}
     assert changed == {'contact_attach', 'final_attach_offset_z', 'attach_ready_target_lead_time', 'approach_offset_x',
-                       'pickup_retry_enabled', 'pickup_retry_clearance_m'}
+                       'pickup_retry_enabled', 'pickup_retry_clearance_m', 'pickup_hold_on_attach'}
     assert planner['approach_offset_x'] == 0.0
     # his bounded pickup retry (R1493, R1497): his wait and attempt budget, a ~0.10 m rise
     assert (planner['pickup_retry_enabled'], planner['pickup_retry_clearance_m']) == (True, 0.10)
+    # his pickup descent ends on the ball weld (R1507), here where his object flag is the weld itself
+    assert planner['pickup_hold_on_attach'] is True
     assert not {'pickup_retry_wait_s', 'pickup_retry_max_attempts', 'pickup_alignment_mode'} & set(planner)
     # the card's neighbours: one value each
     n = _params('rig_twin', contact_attach='true', contact_lead='0.3', contact_dz='-0.01', contact_dx='0.006')

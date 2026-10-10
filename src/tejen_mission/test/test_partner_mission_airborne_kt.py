@@ -6,6 +6,8 @@ R1503), his mission rose at most 0.14 m before the pickup descent: the estimator
 its nominal 22 (the subtest converged to ~21.1 from the mat) and his MPC, with no z integral, flew ~11 cm
 under its reference, so the tip reached the floor. partner_mission.launch.py lets it learn from where it arms
 when the start is in the air (airborne_start 'auto': the gate is /partner/release), where his kT feedback flies.
+His gate is re-checked every tick: 0.0 started it at his takeoff but paused it ('waiting_for_height') as soon as
+QUAD4 went below the arm height, his whole pickup (R1505); the launch passes -10 m, which never gates.
 """
 import ast
 import math
@@ -71,6 +73,7 @@ def _fly(m, zs):
 
 
 R1503_ZS = np.r_[np.linspace(1.847, 1.987, 15), np.linspace(1.987, 0.58, 30)]   # armed in the air, then the pickup
+LEARN_IN_AIR = -10.0      # the launch's gate when QUAD4 arms in the air
 
 
 def test_armed_in_the_air_his_default_gate_never_starts_the_kt_estimator():
@@ -80,11 +83,22 @@ def test_armed_in_the_air_his_default_gate_never_starts_the_kt_estimator():
 
 
 def test_with_no_climb_required_it_starts_where_he_takes_off():
-    m = _mpc(0.0, arm_z=1.847)
+    m = _mpc(LEARN_IN_AIR, arm_z=1.847)
     assert _fly(m, R1503_ZS[:1]) == ['initialized'] and m.thrust_ratio_full_model_ukf.initialized
     g = _mpc(0.20, arm_z=0.10)                            # the subtest: armed on the mat, the climb starts it
     statuses = _fly(g, np.linspace(0.10, 0.70, 30))
     assert statuses[0] == 'waiting_for_height' and 'initialized' in statuses
+
+
+def test_a_descent_below_the_arm_height_keeps_learning():
+    """R1505: with the gate at 0.0 the estimator paused at the first tick below the arm height (1.85 m), so
+    through his whole pickup (~0.7 m); at -10 m it keeps running."""
+    paused = _fly(_mpc(0.0, arm_z=1.847), R1503_ZS)
+    assert paused[0] == 'initialized' and 'waiting_for_height' in paused[15:]
+    m = _mpc(LEARN_IN_AIR, arm_z=1.847)
+    statuses = _fly(m, R1503_ZS)
+    assert statuses[0] == 'initialized' and 'waiting_for_height' not in statuses
+    assert all(s == 'resynced_interval' for s in statuses[1:])        # past the gate on every tick
 
 
 @pytest.mark.parametrize('overrides, learn_in_air', [
@@ -95,7 +109,7 @@ def test_with_no_climb_required_it_starts_where_he_takes_off():
 ])
 def test_the_launch_lets_him_learn_from_an_airborne_arm(overrides, learn_in_air):
     mpc = _params('rig_twin', **overrides)['tejen_mpc']
-    assert (mpc.get(KEY) == 0.0) is learn_in_air
+    assert (mpc.get(KEY) == LEARN_IN_AIR) is learn_in_air
     assert learn_in_air or KEY not in mpc                  # otherwise his own default (0.20)
 
 
