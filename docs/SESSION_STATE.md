@@ -332,3 +332,6 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   carrier + 0.4)), cherry-picked to m1-tiltcut3 ffa41ef (before wave A syncs). Card rev 9. QUEUED (lab_claim5.sh pid
   1039736, after lab_next.sh): claim re-fly on m1-rig c6f2032 -> $CLAUDE_JOB_DIR/tmp/lab_claim5.txt; score with
   TREE="branch m1-rig c6f2032" REV=9. R1557 full M1 hover clean (6th).
+- 10:25: landing tip-over explained (R1534/R1556/R1559 traces): QUAD4 sits 0.5 m from the ring centre (outside the
+  rim); 5 s into LAND its rod's tip reaches the floor beside plate 9 and its body keeps descending 0.2-0.3 m; the rigid
+  twin rod cannot shorten, so it levers QUAD4 sideways (r 0.5 -> 0.74) and over. Twin artefact (rig tether slackens).
