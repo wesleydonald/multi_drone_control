@@ -294,3 +294,8 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   findings (his kT gate 0.2 m above arm height and re-checked every tick; nothing stops a tipped QUAD4 under his stream;
   one coil vs the puck in the net); proof times near the frozen 3 s bar; take-back tilt step 4.5 deg (ramped hold);
   tilt-cut defaults; the rig-port flight NO-GO list.
+- 00:45 (second usage-limit stop): the 6143989 lab batch has ENDED (nothing running on the lab). Unscored: R1523
+  m1_full_orbit PASS, R1525 lead030 PASS, R1526 high PASS, R1527 offset PASS, R1528 land_proof PASS, R1529 abort FAIL
+  (exit 1: read its lab_console.log). m1-rig: the d8c1b65 merge is RESOLVED but NOT COMMITTED ("All conflicts fixed but
+  you are still merging"): run the tests, gate --quick, launch gate 0 changed, twin claim dumps vs m1-final d8c1b65,
+  then `git commit` (no attribution). Then the claim re-fly on the merged tree.
