@@ -80,6 +80,7 @@ switches that default OFF: with them off, every node behaves exactly as today. B
   magnet command): `/drone_3/take_back` true; fixed hold latched at the measured position; then the departed path:
   within 1.2 m (xy) of the ring centre radially out to 1.2 m at its height (r < 0.225: out at the reserved plate's
   azimuth), else land where it is; if its body is below ring z + body-to-tip + 0.15 m (the tip down at the ring),
+  it first rises straight up to the higher of that and the highest carrier + 0.4 m (R1554: 0.24 m over a carrier),
   straight up to that height first, then out (R1543: the step out at plate height hooked the rim); land alone,
   disarmed alone; ring magnet OFF only if the span began; while
   `/tejen/object_attached` is true, drone 3's model mass + 0.1 kg.
