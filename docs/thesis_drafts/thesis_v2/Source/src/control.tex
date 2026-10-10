@@ -151,8 +151,8 @@ Quan et al.\ \cite{quan2025swarm} show experimentally that when a UAV drops out 
 Bacheti et al.\ \cite{tensionbased} handle removal explicitly: before a UAV releases, the others reposition to minimise the transient, and the same reconfiguration contracts and restores the formation for narrow corridors in experiments. It changes the formation, not the team, as does the offline planner of \cite{wahbaKinodynamicMotionPlanning2024}, but the idea could serve the addition or removal of UAVs.
 
 For joining, the event-triggered decentralised architecture of Tasooji et al.\ \cite{tasoojiCooperativeControlMultiQuadrotors} suggests better scalability through less communication and computation, but varying team sizes are not analysed and the join protocol has neither experimental validation nor explicit force reallocation. None of these recomputes the force allocation for the new team at the moment a UAV leaves or joins.
-% CHECK (Wesley to approve the papers): the three paragraphs below cite papers found with Undermind on
-% 10 Oct (DOIs, abstracts and sources in docs/thesis_drafts/refs_2026-10-10.md; alternates listed there).
+% Papers found with Undermind and approved by Wesley, 10 Oct (DOIs, abstracts and sources in
+% docs/thesis_drafts/refs_2026-10-10.md; alternates listed there).
 Plug-and-play model predictive control lets subsystems join or leave a running network without losing
 stability or constraint satisfaction, provided each change is prepared before it happens. Riverso et al.\
 \cite{riverso2013plug} redesign offline only the controllers of the subsystems a newcomer couples to and
