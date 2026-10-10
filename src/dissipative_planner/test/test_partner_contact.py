@@ -209,9 +209,11 @@ def test_give_up_takes_it_back_holds_then_moves_radially_out_at_its_height():
     assert f._take_back_pub.msgs == [True] and f._newcomer_out == {0: 'his give-up'}
     assert f._magnet_cmd_pub.msgs[-1] == 'OFF'                 # the span began: its OFF
     assert np.allclose(f._departed_hold[3], [0.5, 0.5, 1.6]) and f._departed_wait[3] == NEWCOMER_RELEASE_S
-    step = f._departed_step[3]
-    assert np.isclose(np.hypot(step[0], step[1]), DEPARTED_CLEAR_R) and np.isclose(step[0], step[1])
-    assert step[2] == pytest.approx(1.6) and 3 in f._land_alone
+    rise = 1.0 + 0.59 + 0.15                                   # its tip is down at the ring: up first (R1543)
+    assert np.allclose(f._departed_step[3], [0.5, 0.5, rise])
+    out = f._departed_next[3]
+    assert np.isclose(np.hypot(out[0], out[1]), DEPARTED_CLEAR_R) and np.isclose(out[0], out[1])
+    assert out[2] == pytest.approx(rise) and 3 in f._land_alone
     f.published.clear()
     for _ in range(int(round(NEWCOMER_RELEASE_S * HZ))):
         _tick(f)
@@ -219,21 +221,27 @@ def test_give_up_takes_it_back_holds_then_moves_radially_out_at_its_height():
     for _ in range(3):
         _tick(f)
     p = f.published[-1][1][0][0]
-    assert p[0] > 0.5 and p[1] > 0.5 and p[2] == pytest.approx(1.6)
+    assert np.allclose(p[:2], [0.5, 0.5]) and p[2] > 1.6                          # rising, not yet out
+    g = _node()
+    _airborne_rejoin(g, z=1.9)                                 # its tip already clear of the ring
+    g.attach_pos[0] = np.array([0.5, 0.5, 1.9])
+    g._give_up_cb(Bool(data=True))
+    step = g._departed_step[3]
+    assert np.isclose(np.hypot(step[0], step[1]), DEPARTED_CLEAR_R) and step[2] == pytest.approx(1.9)
 
 
 def test_over_the_middle_it_steps_out_along_its_plate_azimuth():
     f = _node()
     _airborne_rejoin(f)
-    f.attach_pos[0] = np.array([0.05, -0.05, 1.6])             # r 0.07 < 0.225, on the far side of plate 9
+    f.attach_pos[0] = np.array([0.05, -0.05, 1.9])             # r 0.07 < 0.225, on the far side of plate 9
     f._take_back(0, 'LAND')
-    assert np.allclose(f._departed_step[3], [0.0, DEPARTED_CLEAR_R, 1.6])
+    assert np.allclose(f._departed_step[3], [0.0, DEPARTED_CLEAR_R, 1.9])
     g = _node()
     _airborne_rejoin(g)
     g._attach_target = None                                    # no live target: the reserved slot's plate
-    g.attach_pos[0] = np.array([0.05, -0.05, 1.6])
+    g.attach_pos[0] = np.array([0.05, -0.05, 1.9])
     g._take_back(0, 'LAND')
-    assert np.allclose(g._departed_step[3], [0.0, DEPARTED_CLEAR_R, 1.6])
+    assert np.allclose(g._departed_step[3], [0.0, DEPARTED_CLEAR_R, 1.9])
 
 
 def test_far_from_the_ring_it_lands_where_it_is():
@@ -602,3 +610,26 @@ def test_the_rejoin_fold_in_of_the_welded_start_is_the_subtests():
     assert f.attach_pending == [False] and f._ocp_attached == {3: True} and 3 not in f._departed_hold
     assert f.blends[-1][-1] == pytest.approx(0.1)
     assert not any('welded at start' in ln for ln in f.log.lines)
+
+
+def test_a_take_back_with_the_tip_at_the_ring_rises_before_it_steps_out():
+    """R1543: taken back at ATTACH_READY, the step out at its height dragged the rod's tip through the rim."""
+    f = _node(quad=(0.0, 0.3, 1.0 + 0.59 + 0.01))               # body over plate 9, tip 1 cm above the ring
+    f._his_phase_cb(String(data='TAKEOFF'))
+    f._take_back(0, 'his give-up')
+    rise = 1.0 + 0.59 + 0.15
+    assert np.allclose(f._departed_step[3], [0.0, 0.3, rise])            # straight up first
+    assert np.allclose(f._departed_next[3][2], rise)                     # then out at that height
+    assert float(np.linalg.norm(f._departed_next[3][:2])) >= 1.2 - 1e-6
+    assert any('clear of the ring' in m for m in f.log.lines)
+    for _ in range(int(20 * HZ)):
+        _tick(f)
+    p = f._departed_hold[3]
+    assert float(np.linalg.norm(p[:2])) >= 1.2 - 0.03                   # it got out
+
+
+def test_a_take_back_high_above_the_ring_steps_out_at_its_height():
+    f = _node(quad=(0.0, 0.6, 2.7))                               # in his transit, over the ring
+    f._his_phase_cb(String(data='TRANSIT_TO_DROP_POINT'))
+    f._take_back(0, 'LAND')
+    assert np.allclose(f._departed_step[3][2], 2.7) and 3 not in f._departed_next
