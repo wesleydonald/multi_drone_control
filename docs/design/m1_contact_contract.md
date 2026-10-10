@@ -79,7 +79,9 @@ switches that default OFF: with them off, every node behaves exactly as today. B
 - Take-back (his give-up, or our LAND before the attach; also from his pickup: no ball on, no span begun, so no ring
   magnet command): `/drone_3/take_back` true; fixed hold latched at the measured position; then the departed path:
   within 1.2 m (xy) of the ring centre radially out to 1.2 m at its height (r < 0.225: out at the reserved plate's
-  azimuth), else land where it is; land alone, disarmed alone; ring magnet OFF only if the span began; while
+  azimuth), else land where it is; if its body is below ring z + body-to-tip + 0.15 m (the tip down at the ring),
+  straight up to that height first, then out (R1543: the step out at plate height hooked the rim); land alone,
+  disarmed alone; ring magnet OFF only if the span began; while
   `/tejen/object_attached` is true, drone 3's model mass + 0.1 kg.
 - Lifecycle gates: `newcomer_lifecycle` / `newcomer_fault_land` / `departed_ground_idle` stay on under
   `partner_contact`; `_newcomer_arming_cb` acts only while `/drone_3/mux_state` reads "ours".
