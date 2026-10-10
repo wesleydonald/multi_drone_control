@@ -290,3 +290,54 @@ def test_resize_is_refused_once_the_sweep_has_started():
 def test_three_drone_creep_is_unchanged_without_a_resize():
     c, state, log, rho = build()
     assert c.cable_lens is None and all(c._rod(i) == CABLE for i in range(3))
+
+
+def test_a_drone_lifted_by_hand_before_takeoff_does_not_start_the_sweep():
+    """r303 (8 Oct rig): QUAD1 was lifted ~5 cm for a battery replug after ARM failed, before
+    TAKEOFF; the z rise set lifted_off, the arc swept with the fleet disarmed, timed out at -3.9 deg
+    and the planner held 'NOT lifting'. Only TAKEOFF may start the sweep."""
+    c, state, log, rho = build()
+    run(c, state, rho, seconds=LIFTOFF_TIMEOUT_S + 3.0, rise=LIFTOFF_MARGIN + 0.03, takeoff_seen=False)
+    assert c.lifted_off is False
+    assert not any('arc sweep started' in m for m in log.infos)
+    assert not log.warns
+
+
+def test_the_anchors_relatch_until_takeoff_so_a_handled_drone_leaves_no_stale_spawn():
+    """Held up by hand before TAKEOFF, then put back down: after TAKEOFF the resting pose is the
+    spawn, so resting does not count as a lift-off, and a real rise still starts the sweep."""
+    c, state, log, rho = build()
+    gates = [(0.0, 0.0)] * 3
+    for rise in [0.0] * 3 + [LIFTOFF_MARGIN + 0.04] * 5 + [-0.01] * 3:      # handled, then set down lower
+        state['pos'] = positions(rho, rise=rise)
+        c.step(load_state(), state['pos'], gates, False)
+    state['pos'] = positions(rho, rise=-0.01)
+    for _ in range(int(HZ)):                                                  # TAKEOFF, still resting
+        c.step(load_state(), state['pos'], gates, True)
+    assert c.lifted_off is False, 'a stale spawn latched while the drone was held up'
+    state['pos'] = positions(rho, rise=-0.01 + LIFTOFF_MARGIN + 0.02)
+    c.step(load_state(), state['pos'], gates, True)
+    assert c.lifted_off is True
+    assert any('anchors latched at TAKEOFF' in m for m in log.infos)
+
+
+def test_resize_still_succeeds_after_a_hand_lift_before_takeoff():
+    """The start-weld path (dissipative_node resize before the sweep): a drone handled before TAKEOFF
+    no longer marks the sweep started, so the newcomer can still join the creep."""
+    c, state, log, rho = build()
+    run(c, state, rho, seconds=1.0, rise=LIFTOFF_MARGIN + 0.03, takeoff_seen=False)
+    rho4 = rho + [np.array([0.0, -0.08, 0.025])]
+    assert c.resize(4, rho4, [CABLE] * 4) is True
+
+
+def test_the_soft_creep_relatches_until_takeoff():
+    c, state, log, rho = build(elev_deg=0.0)                 # handover_elev_deg 0: the soft creep
+    gates = [(0.0, 0.0)] * 3
+    state['pos'] = positions(rho, rise=0.0)
+    c.step(load_state(), state['pos'], gates, False)
+    state['pos'] = positions(rho, rise=LIFTOFF_MARGIN + 0.04)  # held up by hand
+    c.step(load_state(), state['pos'], gates, False)
+    assert c.lifted_off is False
+    assert np.allclose(c.creep_anchor[0], state['pos'][0])   # anchored where it now is
+    c.step(load_state(), state['pos'], gates, True)            # TAKEOFF at that pose: no lift-off yet
+    assert c.lifted_off is False

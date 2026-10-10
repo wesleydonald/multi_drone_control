@@ -137,3 +137,39 @@ def test_provenance_carries_the_ignored_code_the_sync_ships():
     assert 'tools/remote/lab_batch.py' not in code          # tracked since a013220
     assert all(f.startswith(('tools/', 'configs/', 'docs/', 'src/', 'simulation_assets/')) for f in code)
     assert not any(f.startswith(LB.SYNC_EXCLUDED) or '__pycache__' in f for f in code + other)
+
+
+def test_a_hung_run_is_stopped_at_the_wall_cap(tmp_path, monkeypatch):
+    """R1347: a runner that never ends holds its slot for hours; the cap stops this batch's container."""
+    import queue
+    import subprocess
+    import threading
+
+    class _P:
+        def __init__(self, *a, **k):
+            self.waits = 0
+
+        def wait(self, timeout=None):
+            self.waits += 1
+            if self.waits == 1:
+                raise subprocess.TimeoutExpired('run', timeout)
+            return 137
+
+    stopped = []
+    monkeypatch.setattr(LB.subprocess, 'Popen', _P)
+    monkeypatch.setattr(LB, 'lab', lambda cmd, **k: stopped.append(cmd) or '')
+    monkeypatch.setattr(LB, 'fetch', lambda job, slot: False)
+
+    class _Job:
+        rid, rc, note, wall_s, passed, slot = 'R9999', None, '', None, None, None
+        cfg = type('C', (), {'name': 'x'})()
+        local_dir = str(tmp_path)
+
+        def command(self, slot, cpus, gz_nice):
+            return ['true']
+    q = queue.Queue()
+    job = _Job()
+    q.put(job)
+    LB.worker(3, q, 4, 10, {}, threading.Lock(), wall_cap_s=0.01)
+    assert job.rc == 137 and 'WALL CAP' in job.note
+    assert stopped and 'docker stop' in stopped[0] and 'wesley_slot3' in stopped[0]

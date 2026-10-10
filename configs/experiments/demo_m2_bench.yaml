@@ -13,6 +13,9 @@ launch:
   package: bringup
   file: sim_control_launch.py
   args:
+    detach_detect_m: 0.0   # pinned 8 Oct: the default before dissipative/detection/drop/departed_land became defaults
+    drop_on_loss: false
+    departed_land: false
     mode: dissipative
     num_drones: 4
     sim_interface: false

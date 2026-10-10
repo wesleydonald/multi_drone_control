@@ -38,8 +38,8 @@ c_generated_code_approach_mpc/
 acados_ocp_approach_mpc.json
 dissipative_verify/
 
-CLAUDE.md
 **/CLAUDE.md
+!/CLAUDE.md
 .claude/
 **/.claude/
 docs/claude-setup-proposal/

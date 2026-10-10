@@ -266,7 +266,7 @@ def fetch(job, slot):
     return True
 
 
-def worker(slot, jobs_q, cpus, gz_nice, active, lock):
+def worker(slot, jobs_q, cpus, gz_nice, active, lock, wall_cap_s=1800.0):
     while True:
         try:
             job = jobs_q.get_nowait()
@@ -283,7 +283,18 @@ def worker(slot, jobs_q, cpus, gz_nice, active, lock):
             p = subprocess.Popen(cmd, stdout=fh, stderr=subprocess.STDOUT, start_new_session=True)
             with lock:
                 active[slot] = p
-            job.rc = p.wait()
+            try:
+                job.rc = p.wait(timeout=wall_cap_s)
+            except subprocess.TimeoutExpired:
+                # a hung runner holds its slot for hours (R1347: 2 h after a normal landing): stop this
+                # batch's own container, then collect what it left
+                job.note = f'WALL CAP {wall_cap_s / 60:.0f} min: container stopped'
+                lab(f'docker stop -t 20 wesley_slot{slot} >/dev/null 2>&1 || true', check=False, timeout=90)
+                try:
+                    job.rc = p.wait(timeout=120)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    job.rc = p.wait()
             with lock:
                 active.pop(slot, None)
         job.wall_s = time.time() - t0
@@ -300,6 +311,8 @@ def main(argv=None):
     ap.add_argument('--slots', type=int, default=DEFAULT_SLOTS, help='at most this many in parallel (<= 6)')
     ap.add_argument('--cpus', type=float, default=4, help='cores per container (3-4)')
     ap.add_argument('--gz-nice', type=int, default=10)
+    ap.add_argument('--wall-cap-min', type=float, default=30.0,
+                    help='stop a run still going after this many wall minutes (a hung runner)')
     ap.add_argument('--dry-run', action='store_true',
                     help='check, read the lab load and print the plan; reserve, sync and run nothing')
     ap.add_argument('--no-sync', action='store_true', help='skip lab_sync.sh (tree already there)')
@@ -384,7 +397,8 @@ def main(argv=None):
     signal.signal(signal.SIGINT, stop_ours)
     signal.signal(signal.SIGTERM, stop_ours)
 
-    threads = [threading.Thread(target=worker, args=(s, jobs_q, a.cpus, a.gz_nice, active, lock), daemon=True)
+    threads = [threading.Thread(target=worker, args=(s, jobs_q, a.cpus, a.gz_nice, active, lock,
+                                                     a.wall_cap_min * 60.0), daemon=True)
                for s in slots]
     t0 = time.time()
     for k, th in enumerate(threads):

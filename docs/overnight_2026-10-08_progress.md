@@ -54,3 +54,48 @@ branch `safety-defaults` (git worktree) until they are twin-verified.
 | tools/rig_summary.py: one image per run (top view, height, tilt, error split along/off/height, lag A0, detection latency), drawn by rig_flight.sh after Ctrl-C | done | tools 280 passed; used on every run this afternoon | this commit set |
 | model integral on resizing fleets (week4 port of f2f7d74's integral half) | tests 292 + gate --quick; twin port check running | docs/decisions.md 2026-10-08 evening | this commit set |
 | 180 deg gap with an accepted tilt (Wesley's idea for next week) | statics sketched in chat: possible in principle with the gap side drooping; limits are magnet shear at shallow rods, the planner's level-ring target and the neutral axis | - | - |
+
+## 8 Oct night (after the planning session): rig-prep and the M1 branches
+
+| item | status | evidence | committed |
+|---|---|---|---|
+| creep fix direct test (critic M1) | **SUPPORTS 2 of 2** with a valid negative control: R1242 (old file) reproduces r303, R1241/R1243 lift 9.91/9.83 s; first attempt void (the 6.5 N push flipped drone 1: R1235-R1237), R1239/R1240 void (harness) | registry R1235-R1243, card 2026-10-09_creep_takeoff_gate | rig-prep 6b6fdf0 |
+| twin R8a0 (carry on 270/30/150, QUAD4 idle on the floor) | 2 of 2 clean: ring 0.999-1.001 m, tilt peak 3.7 deg, QUAD4 no reference, z 0.10 | R1238, R1244 | rig-prep |
+| rig-prep = twin-attach (body-to-tip, runner tip columns, tools/attach_metrics.py, tools/tilt_statics.py) | merged; dissipative 60, tools 306, bringup 98 (+ the old flake8/pep257), gate --quick passed | - | rig-prep 5130c70 |
+| body-to-tip (twin dry approach) | supports on R1245: body-tip 0.590 m, tip at target - 0.01 within 0.2 mm; R1246 and the 0.51 baseline running | R1245 | - |
+| newcomer LAND and abort (rules a, b) | built behind `newcomer_lifecycle` (default off), card rev 2 after the critic's REWRITE; R1245 already shows the bug it fixes (QUAD4 disarmed at 0.64 m at LANDED); second critic pass running; twin batch 5 written | unit 77 + runner/metrics tests | branch newcomer-policy acb21f3 |
+| newcomer fault scope (rule c, Wesley: falls alone now, land later) | built behind `newcomer_fault_alone` (default off), on_load + fleet manager; MOCAP_LOSS and the push world (Wesley's word); critic running | unit 84 + fleet manager 32 + tools | branch newcomer-fault-scope be2afda |
+| QUAD1 arming checklist, questions for Tejen | written | docs/rig_quad1_checklist.md, docs/tejen_questions_2026-10.md | twin-attach |
+| tilt statics for Thursday (survivors 270/0/180) | smallest tilt 20 deg; hinge drones 1.75x weight (throttle ~0.67 < 0.8 cap), third rod 1 N at 20 deg; card + critic Sunday | tools/tilt_statics.py | - |
+
+## 9 Oct early (00:00-03:00): the newcomer's LAND, abort, fault and landing
+
+| item | status | evidence | committed |
+|---|---|---|---|
+| newcomer LAND/abort (`newcomer_lifecycle`, default off), card rev 3 after two critic REWRITEs + GO | the abort supports on every row (LAND and OFF, hover and circle, clearance >= 0.40 m, ring steady); "lands by itself" failed wherever the ring was still up (floated 0.24 m or stood on its rod) | R1248-R1257 | rig-prep |
+| newcomer fault lands the fleet (`newcomer_fault_land`, default off; Wesley: "land everything") | supports after one fix: C1 x2, C1b, C2, C3, C5; C6 (fault in the creep) leaked via the magnet manager's startup message, fixed f3a2dee, re-flown R1274 | R1258-R1265, R1274 | rig-prep |
+| departed ground idle (`departed_ground_idle`, default off), card rev 3 after REWRITE + GO | supports: G1, B1n x2, G2, N1, N2; greys G1 (press 1.02 s), G3; voids R1270/R1273 (planner lag at startup, fixed 02dba91), R1278 (carrier creep flip, cause open) | R1267-R1279 | rig-prep |
+| rig finding (critics, from the 8 Oct logs) | the freed QUAD4 in 4/4 rig detach runs (r302_3, r303_4, r304_3, r305) never reached the floor: stalled ~0.2 m, rose to 0.34-0.38 m and was dropped ~0.3 m at the fleet disarm; registry rows corrected | tracker drone3 logs | 8048739 |
+| lay-rod arc card | shelved (critic: the twin stilt was the stall freeze; the rig floats) | - | 4f36a4d |
+| twin T-R8b (first weld in the twin attach world) | ring tilt 2.7 deg, dip 1 mm; the fold-in used r 0.25 from the body, the tip was at 0.223 | R1266 | registry |
+| reviewer: creep and body-to-tip tables | both supported (body-to-tip: approach half only) | - | 9812a80 |
+| tools | runner WAIT_LOG, MOCAP_LOSS; attach_metrics, departed_metrics; push variant of the free-start attach world | tests | rig-prep |
+| combined switches (the rig R8a candidate) | batch 8 flying | twin_all_a1 x2, twin_all_b1 | - |
+
+## 9 Oct 03:00-04:40: reviewer and re-flies on the rig candidate
+
+| item | status | evidence |
+|---|---|---|
+| reviewer on the three newcomer tables | all WEAK (pre-data bars, two code trees, C1b grey, N1 no test, N2 grey); corrections taken in the cards and registry | 2fd4085, c0604f7 |
+| fault rule on the rig candidate | C1 x2, C2 support; C1b again 57 deg ring tilt (reproducible) | R1284-R1287 |
+| combined switches (the R8a candidate) | the abort supports 5/5 (A1 x3, B1 x2); QUAD4's own landing: down at its rest in 4/5, rod stand in R1282 (held at +0.25 m by the 2 s press limit, dropped 0.37 m) | R1280-R1283, R1294 |
+| ground idle on the rig candidate | freed carrier G2 supports (survivors grey at the release transient); N2 grey (disarmed at rest, no idle) | R1288, R1289 |
+| creep-start sampling | no flip in 5 more floor starts: R1278 is 1 in 53, cause open; the planner's startup lag (ARM taken after TAKEOFF, lift ~14.7 s) in 4 runs, with every switch off too | R1290-R1294 |
+
+## 9 Oct 04:45-05:55: the rod tip
+
+| item | status | evidence |
+|---|---|---|
+| how often QUAD4 stays propped on its rod tip (combined B1, 2 s press limit) | 4 of 6 (the 2 s press tips the rod halfway, then holds it) | R1282, R1283, R1295-R1298 |
+| exploratory: press limit 6 s | 4 of 4 landed and idled at rest; kept on rig-prep (still time-bounded) | R1299-R1302, 6e0c825 |
+| tests on rig-prep d1736ac | dissipative 105, tracker 93, mpc_planner 146, fleet_manager 48 + the 2 old style tests, bringup 98 + 2 style, tools 312; gate --quick passed | - |

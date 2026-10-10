@@ -86,7 +86,7 @@ def test_runner_fails_the_run_on_a_manager_arm_failure():
     pytest.importorskip('interfaces.msg')
     from experiment import runner_node as rn
     f = types.SimpleNamespace(failures=[], _rel=lambda: 4.0, _log_event=lambda *a: None,
-                              t_partner_release=None, _ROSOUT=rn.ExperimentRunner._ROSOUT)
+                              t_partner_release=None, _ROSOUT=rn.ExperimentRunner._ROSOUT, _planner_lines=[])
     log = lambda name, text: types.SimpleNamespace(name=name, msg=text)  # noqa: E731
     rn.ExperimentRunner._rosout_cb(f, log('fleet_manager', 'Arming all drones...'))
     assert f.failures == []

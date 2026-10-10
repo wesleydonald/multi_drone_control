@@ -22,6 +22,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseArray, Pose, Twist, PoseStamped
+from std_msgs.msg import Float64
 from interfaces.msg import MotionCaptureState
 from tf_transformations import quaternion_multiply, quaternion_inverse, quaternion_matrix
 
@@ -80,6 +81,10 @@ class PayloadMocapEmulator(Node):
         self._drone_pub = self.create_publisher(
             MotionCaptureState, f'/drone_{drone_id}/motion_capture_state', 5)
         self.create_subscription(PoseArray, drone_pose_topic, self._drone_cb, 10)
+        # test fault: the runner's MOCAP_LOSS silences this drone's state for data s (sim time), as a
+        # lost marker set does on the rig (card 2026-10-09_newcomer_fault_scope)
+        self._dropout_until = None
+        self.create_subscription(Float64, f'/drone_{drone_id}/mocap_dropout', self._dropout_cb, 5)
 
         # Payload state (published by the node whose drone_id is 0)
         self._payload_last_pos = None
@@ -154,8 +159,16 @@ class PayloadMocapEmulator(Node):
             return False, last_pub
         return True, now
 
+    def _dropout_cb(self, msg):
+        now = self.get_clock().now().nanoseconds * 1e-9
+        self._dropout_until = now + max(0.0, float(msg.data))
+        self.get_logger().warn(f'[mocap] state silenced for {float(msg.data):.1f} s (MOCAP_LOSS test fault)')
+
     def _drone_cb(self, msg: PoseArray):
         if not msg.poses:
+            return
+        if self._dropout_until is not None and \
+                self.get_clock().now().nanoseconds * 1e-9 < self._dropout_until:
             return
         due, self._drone_last_pub = self._due(self._drone_last_pub)
         if not due:

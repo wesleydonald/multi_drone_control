@@ -129,13 +129,17 @@ def evaluate(launch_file, **args):
 
 
 def sim(mode, **args):
-    # attach and network exist only on the legacy profile (no rig-twin attach world yet)
+    # network exists only on the legacy profile; the legacy attach graph is what these tests
+    # check unless legacy=False is typed (the twin attach worlds, 8 Oct)
     if mode in ('attach', 'network'):
         args.setdefault('legacy', True)
     return evaluate('sim_control_launch.py', mode=mode, **args)
 
 
 def rig(mode, **args):
+    # the rig attach refuses to start without QUAD4's magnet tip body (no tip, no weld)
+    if mode == 'attach':
+        args.setdefault('mocap_magnet_tip_body_id', 24)
     return evaluate('real_control_launch.py', mode=mode, **args)
 
 
@@ -485,7 +489,7 @@ def test_m2_real_graph_plain_carry():
 # ── Q7: the rig defaults to the creep floor start and the OCP resize ──────────────────
 
 Q7_KEYS = ('start_taut', 'handover_elev_deg', 'handover_settle_s', 'creep_vel', 'reconfig_mode')
-Q7_RIG = (False, 45.0, 1.0, 0.2, 'ocp')   # settle 1.0 = the rig carry's (2.0 until 2026-10-03)
+Q7_RIG = (False, 60.0, 1.0, 0.2, 'ocp')   # handover 60 since 8 Oct; settle 1.0 = the rig carry's (2.0 until 2026-10-03)
 # rig mode -> the sim mode whose graph it flies, and that sim mode's legacy defaults
 Q7_SIM_MODE = {'attach': 'attach', 'm2': 'dissipative'}
 Q7_SIM = {'attach': (True, 45.0, 0.75, 0.10, 'network'),
@@ -521,7 +525,7 @@ def test_q7_real_keeps_typed_values(mode):
 def test_q7_real_keeps_one_typed_value_and_defaults_the_rest():
     nodes = rig('attach', thrust_ratio=24.0,
                      **Q7_RIG_LINE['attach'], creep_vel=0.3)
-    assert _q7(nodes) == (False, 45.0, 1.0, 0.3, 'ocp')
+    assert _q7(nodes) == (False, 60.0, 1.0, 0.3, 'ocp')
 
 
 def test_q7_typed_watchdog_at_the_sim_default_is_refused():
@@ -652,3 +656,80 @@ def test_soft_detach_knob_reaches_the_dissipative_node():
     p0 = _by_name(rig('dissipative', num_drones=4))['/dissipative_planner']['params']
     assert 'detach_unload_s' not in p0
 
+
+
+def test_default_mode_is_dissipative_with_detection_drop_and_departed_land_on():
+    """Wesley 8 Oct: the detach-capable planner is the default, detects an unannounced release
+    (0.06 m), drops and lands on a second loss or a capsize, and a freed drone lands by itself;
+    legacy:=true keeps the mpc carry with all of it off, so legacy runs reproduce."""
+    for launch in (evaluate('sim_control_launch.py', num_drones=4),
+                   evaluate('real_control_launch.py', num_drones=4)):
+        nodes = _by_name(launch)
+        assert '/dissipative_planner' in nodes and '/mpc_planner' not in nodes
+        p = nodes['/dissipative_planner']['params']
+        assert p['detach_detect_m'] == 0.06 and p['drop_on_loss'] is True and p['departed_land'] is True
+        assert nodes['/tracker_0']['params']['drop_on_loss'] is True
+    legacy = _by_name(evaluate('sim_control_launch.py', num_drones=3, legacy=True))
+    assert '/mpc_planner' in legacy and '/dissipative_planner' not in legacy
+    assert not {'detach_detect_m', 'drop_on_loss', 'departed_land'} & set(legacy['/mpc_planner']['params'])
+    typed = _by_name(evaluate('sim_control_launch.py', num_drones=3, legacy=True, mode='dissipative'))
+    assert not {'detach_detect_m', 'drop_on_loss', 'departed_land'} & set(typed['/dissipative_planner']['params'])
+
+
+def test_attach_keeps_drop_and_departed_land_off_until_drop_covers_the_newcomer():
+    p = _by_name(rig('attach', enable_approach_mpc=False))['/dissipative_planner']['params']
+    assert p['drop_on_loss'] is False and p['departed_land'] is False
+
+
+def test_rig_attach_fleet_manager_checks_every_fc_armed():
+    """QUAD1's '!ERR*' (arming disabled) must stop TAKEOFF in mode:=attach as in the detach graph."""
+    nodes = _by_name(rig('attach', enable_approach_mpc=False))
+    assert nodes['/fleet_manager']['params']['require_fc_armed'] is True
+
+
+def test_rig_attach_types_the_mocap_body_ids_and_refuses_without_the_tip():
+    """The Motive ids reach the mocap node through real_control (they were refused as untyped, so
+    /magnet_tip_pose never existed in mode:=attach); an empty tip id is refused with the approach chain."""
+    g = _by_name(rig('attach', enable_approach_mpc=False, mocap_magnet_tip_body_id=24,
+                     mocap_drone_body_ids='11,12,13,14', mocap_payload_body_id=8))
+    mocap = next(n for k, n in g.items() if 'motion_capture' in k)
+    assert mocap['params']['magnet_tip_body_id'] == 24 and mocap['params']['payload_body_id'] == 8
+    assert list(mocap['params']['drone_body_ids']) == [11, 12, 13, 14]
+    with pytest.raises(RuntimeError, match='mocap_magnet_tip_body_id'):
+        rig('attach', enable_approach_mpc=False, mocap_magnet_tip_body_id='')
+
+
+def test_rig_attach_flies_the_m1_layout_and_honours_a_params_file(tmp_path):
+    """M1 rig layout (Wesley 8 Oct): carriers 270/30/150, the weld at +y 0.225 (plate 9); a
+    params_file value for a rig-default key is kept, not replaced by the rig default."""
+    g = _by_name(rig('attach', enable_approach_mpc=False))
+    p = g['/dissipative_planner']['params']
+    assert p['handover_elev_deg'] == 60.0
+    pf = tmp_path / 'rung.yaml'
+    pf.write_text('handover_elev_deg: 55.0\n')
+    p = _by_name(rig('attach', enable_approach_mpc=False, params_file=str(pf)))['/dissipative_planner']['params']
+    assert p['handover_elev_deg'] == 55.0
+
+
+def test_twin_attach_flies_the_rig_layout_on_the_twin_plant():
+    """mode:=attach on the twin (8 Oct): the M1 rig layout, the affine plant on every drone including
+    the newcomer, the twin geometry to the trackers and the planner, attach_z passed."""
+    g = _by_name(sim('attach', legacy=False, num_drones=3,
+                     sim_thrust_offset='0.181,0.185,0.187,0.187'))
+    p = g['/dissipative_planner']['params']
+    assert p['attach_azimuths_deg'] in ('270,30,150', [270.0, 30.0, 150.0])
+    assert p['attach_z'] == 0.02 and list(p['pivot_offset']) == [0.0, 0.0, -0.04]
+    assert g['/attach_target_publisher']['params']['y_offset'] == 0.225
+    assert g['/magnet_attachment_manager']['params']['object_y_offset'] == 0.225
+    bf = {k: n['params'] for k, n in g.items() if '/bf_comm_' in k}
+    assert sorted(bf) == ['/bf_comm_0', '/bf_comm_1', '/bf_comm_2', '/bf_comm_3']
+    assert [bf[f'/bf_comm_{i}']['thrust_offset'] for i in range(4)] == [0.181, 0.185, 0.187, 0.187]
+    assert all(v['thrust_map'] == 'rig' for v in bf.values())
+    assert g['/tracker_3']['params']['thrust_offset'] == 0.185
+
+
+def test_legacy_attach_unchanged_by_the_twin_plumbing():
+    g = _by_name(sim('attach', num_drones=3))
+    p = g['/dissipative_planner']['params']
+    assert 'attach_z' not in p and 'pivot_offset' not in p
+    assert all('thrust_map' not in n['params'] for k, n in g.items() if '/bf_comm_' in k)

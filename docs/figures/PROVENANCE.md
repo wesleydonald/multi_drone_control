@@ -29,3 +29,20 @@ one blind critic each, every accepted fix applied). Used in `thesis/Source/src/s
 | F_detach | R1012 (w4_3915_detach_lf: box 0, land_unwind, ramp, idle) | branch week4, uncommitted (5 Oct night) |
 | F_traj | R1033 (circle) and R1035 (figure-8), epsilon 0 + landing fix; R0933, R0935 old box | branch week4, uncommitted (5 Oct night) |
 | F_flight | R1013 (box 0, land_unwind + ramp + idle) | branch week4, uncommitted (5 Oct night) |
+
+
+## F_departed_landing, F_tip_feedback, F_rig_detach (9 Oct 2026)
+
+Built with the thesis-figure skill (`tools/thesis_rig_figures.py`, 6.27 in, Computer Modern; look rounds, audit, one
+blind critic each, accepted fixes applied). Copied into the thesis draft copy (docs/thesis_drafts/thesis_v2/Images on
+branch thesis-rig) as `departed_landing.pdf`, `tip_feedback.pdf`; `rig_detach.pdf` next.
+
+| figure | runs | code |
+|---|---|---|
+| F_departed_landing | rig RIG-1008-r303_4 (QUAD4, old rule, run.csv ends at LANDED: the fleet disarm is drawn there); twin R1257 (QUAD4 old rule, OFF abort in the hold); twin R1306 (QUAD4 departed landing, 6 s press, disarmed alone) | rig: week4 (8 Oct); R1257 newcomer-policy; R1306 rig-prep cb09b39 |
+| F_tip_feedback | R1394/R1395 (loop off, E-/E+), R1400/R1406 (E- on), R1401/R1407 (E+ on); tip.csv | rig-prep 1bbe1f8 (rev 5) |
+| F_rig_detach | rig RIG-1008-r302_3 (announced), r303_4 (unannounced), r304_3 (150 deg gap); twin R1207/R1212, R1140/R1145, R1206/R1211 | rig: week4 (8 Oct); twin: week4 / drop-port (8 Oct) |
+| F_solve_time | every rig planner log.csv of 7-8 Oct (phase planner/network, solve_ms > 0), grouped by planner and team size | rig: main (7 Oct) / week4 (8 Oct) |
+| F_thrust_map | the 30 Sep free-hover ladder (tools/test/fixtures/rig_0930/ladder_points.yaml, 13 hovers), tools/thrust_fit.py | rig 30 Sep |
+| F_land_phases | R1413-R1446 (LAND every phase re-fly; two runs per phase; R1438 tipped), tools/land_metrics.py | rig-prep 8588745 (keep-alive f330bd2) |
+| F_rig_integral | rig RIG-1007-r0001 (no integral), r002 (model integral, planned pull), r20004 (model integral + measured pull); planner log.csv load_z, z_tgt, int_fz | rig: main (7 Oct) |

@@ -133,6 +133,35 @@ class CentralController(Node):
                 lambda msg, drone_id=i: self._mux_state_callback(msg, drone_id),
                 MUX_STATE_QOS)
 
+        # ── Per-drone on-load flag (attach graph: the planner latches False for a reserved
+        #    newcomer until its weld; carriers publish nothing). A newcomer that is not on the
+        #    ring and disarms in flight (its own tracker's fault: its motors are off) makes the
+        #    fleet LAND instead of the fleet-wide disarm (Wesley 8 Oct night: "if QUAD4 fails we
+        #    just land everything"). ──
+        self.on_load = {}
+        self._excused = set()        # drones whose in-flight disarm landed the fleet instead
+        for i in range(self.num_drones):
+            self.create_subscription(
+                Bool, f'/drone_{i}/on_load',
+                lambda msg, drone_id=i: self._on_load_callback(msg, drone_id), MUX_STATE_QOS)
+        self.fleet_cmd_pub = self.create_publisher(String, '/fleet/command', 10)
+
+        # ── A drone off the ring and down at its own rest is disarmed alone, an expected disarm
+        #    (card 2026-10-09_departed_disarm_alone; Wesley 9 Oct): Betaflight's airmode stays active
+        #    after a flight, so no armed idle at zero throttle on the floor. Needs the planner's
+        #    /drone_i/departed (received in this flight) and its tracker's /drone_i/down_alone. ──
+        self._off_ring = set()
+        self._down_alone = set()
+        departed_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                                  reliability=ReliabilityPolicy.RELIABLE)
+        for i in range(self.num_drones):
+            self.create_subscription(
+                Bool, f'/drone_{i}/departed',
+                lambda msg, drone_id=i: self._departed_callback(msg, drone_id), departed_qos)
+            self.create_subscription(
+                Bool, f'/drone_{i}/down_alone',
+                lambda msg, drone_id=i: self._down_alone_callback(msg, drone_id), 5)
+
         # ── Master step timer (sim time) ──────────────────────────────────
         self.timer = self.create_timer(DT, self._step_timer_callback)
 
@@ -185,6 +214,9 @@ class CentralController(Node):
         self.get_logger().info(f"Fleet command received: '{command}'")
 
         if command == "ARM":
+            self._excused.clear()        # a new flight: no newcomer fault carried over
+            self._off_ring.clear()
+            self._down_alone.clear()
             self._arm_fleet()
         elif command == "TAKEOFF":
             self._takeoff_fleet()
@@ -204,6 +236,53 @@ class CentralController(Node):
     # Arming feedback - safety monitor
     # ─────────────────────────────────────────────────────────────────────
 
+    def _on_load_live(self, drone_id):
+        """The flag counts only while its planner is up: a relaunched planner with the switch off
+        leaves the old latched False behind."""
+        try:
+            return self.count_publishers(f'/drone_{drone_id}/on_load') > 0
+        except Exception:
+            return False
+
+    def _on_load_callback(self, msg: Bool, drone_id: int):
+        self.on_load[drone_id] = bool(msg.data)
+        if msg.data and drone_id in self._excused and self.flying:
+            # its disarm was excused as off the ring, but it is on the ring now (a weld declared
+            # after the fault): a dead drone hanging on the ring is a carrier fault
+            _announce(self, 'error', f"Drone {label(drone_id)} is on the ring but disarmed: "
+                                     f"EMERGENCY STOP for the whole fleet.")
+            self._disarm_fleet(emergency=True,
+                               reason=f"drone {label(drone_id)} disarmed and on the ring")
+
+    def _departed_callback(self, msg: Bool, drone_id: int):
+        # a latched True from an earlier flight arrives at subscription, before this flight: ignored
+        if not msg.data:
+            self._off_ring.discard(drone_id)
+        elif self.flying:
+            self._off_ring.add(drone_id)
+
+    def _down_alone_callback(self, msg: Bool, drone_id: int):
+        if not (msg.data and self.flying) or drone_id in self._down_alone:
+            return
+        if drone_id not in self._off_ring or self.mux_state.get(drone_id) == 'partner':
+            self.get_logger().warn(
+                f"Drone {label(drone_id)} reports down at its rest, but the planner has not released it "
+                f"off the ring in this flight (or its mux forwards the partner): not disarmed alone.")
+            return
+        client = self.arming_clients[drone_id]
+        if not client.service_is_ready():
+            self.get_logger().warn(f"Drone {label(drone_id)}: tracker not answering, not disarmed alone "
+                                   f"(it idles until the fleet disarm).")
+            return
+        self._down_alone.add(drone_id)
+        _announce(self, 'info', f"Drone {label(drone_id)} is down at its rest off the ring: disarmed alone.")
+        req = SetArming.Request()
+        req.arm = False
+        # once its tracker has stopped commanding, a disarm straight to its radio too: the tracker's own
+        # last disarm is a single message (critic 9 Oct); sent after the reply so no armed command follows it
+        stop = ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0, channel_2=-1.0, channel_3=0.0)
+        client.call_async(req).add_done_callback(lambda _f: self.elrs_publishers[drone_id].publish(stop))
+
     def _mux_state_callback(self, msg: String, drone_id: int):
         state = msg.data.strip().lower()
         if self.mux_state.get(drone_id) != state:
@@ -214,6 +293,8 @@ class CentralController(Node):
         self.drone_last_feedback[drone_id] = self._wall_clock.now()
         was_armed = self.drone_armed[drone_id]
         self.drone_armed[drone_id] = msg.data
+        if drone_id in self._down_alone and not msg.data:
+            return                       # its own disarm at its rest, off the ring (above)
 
         # Between ARM and TAKEOFF (R0749: every tracker pose-timed-out and TAKEOFF was still
         # accepted): nothing of ours flies yet, so ground our fleet like a failed ARM (Q11)
@@ -238,6 +319,14 @@ class CentralController(Node):
                 self.get_logger().warn(
                     f"Drone {label(drone_id)} tracker disarmed while its mux forwards the "
                     f"partner - not escalating to a fleet abort.")
+                return
+            if self.on_load.get(drone_id) is False and self._on_load_live(drone_id):
+                self._excused.add(drone_id)
+                _announce(self, 'warn',
+                          f"Drone {label(drone_id)} disarmed in flight before joining the ring (its "
+                          f"motors are off): LAND, every drone lands. See its lines above for why.")
+                if not self.landing:
+                    self.fleet_cmd_pub.publish(String(data='LAND'))
                 return
             _announce(self, 'error',
                       f"Drone {label(drone_id)} disarmed in flight: EMERGENCY STOP for the whole fleet. "
@@ -342,7 +431,8 @@ class CentralController(Node):
         bad = {i: st for i, st in states.items() if not st.startswith('armed')}
         for i, st in bad.items():
             _announce(self, 'error', f"ARM FAILED: drone {label(i)} not armed ({st}). TAKEOFF refused: "
-                                     f"replug drone {label(i)}'s battery, then ARM again (no relaunch needed).")
+                                     f"replug drone {label(i)}'s battery, put it back on its plate, then ARM again "
+                                     f"(relaunch T2 only if a drone moved to another plate).")
         self._disarm_fleet(emergency=False, keep_alive=True,
                            reason=f"FC did not arm: drone(s) {[label(i) for i in bad]}")
         return False
@@ -371,6 +461,12 @@ class CentralController(Node):
 
     def _land_fleet(self):
         if not self.flying:
+            if self.fleet_armed:
+                # LAND before TAKEOFF (Wesley 9 Oct: LAND lands every drone, whatever it is doing; R1311 left
+                # the fleet armed): it is on the floor, so landing it is disarming it, up for the next ARM
+                _announce(self, 'warn', "LAND before TAKEOFF: the fleet is on the floor: disarming it.")
+                self._disarm_fleet(emergency=False, keep_alive=True, reason="LAND before TAKEOFF")
+                return
             _announce(self, 'warn', "Cannot LAND: fleet is not flying.")
             return
         self.landing = True

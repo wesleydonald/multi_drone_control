@@ -13,7 +13,7 @@ mode:=
 
 Defaults: bringup/config/common.yaml, sim.yaml and its modes: entry (bringup/profiles.py).
 sim.yaml is the rig twin (the *_rig worlds). legacy:=true flies the worlds in
-simulation_assets/old_worlds/ on sim_legacy.yaml; network and attach exist only there.
+simulation_assets/old_worlds/ on sim_legacy.yaml; network exists only there (attach: the twin attach worlds).
 Knobs that are not launch arguments go in params_file:=<yaml>. What each mode starts, and why:
 bringup/graph_carry.py, graph_detach.py, graph_attach.py.
 """

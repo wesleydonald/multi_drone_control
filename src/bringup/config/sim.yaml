@@ -2,7 +2,8 @@
 # geometry, masses and affine thrust map on the sagging-pack plant.
 # The base is the carry (mode:=mpc); each `modes:` entry lists only what that mode changes.
 # legacy:=true reads sim_legacy.yaml instead (the worlds in simulation_assets/old_worlds/);
-# mode:=attach and mode:=network exist only there until a rig-twin attach world is built.
+# mode:=network exists only there. mode:=attach flies the twin attach worlds (8 Oct):
+# three_rigid_ground_rig_attach.sdf (QUAD4 free on the floor) and _attach_welded.sdf (welded on plate 9).
 fleet_geometry:
   num_drones: 3
   cable_len: 0.55
@@ -43,3 +44,13 @@ modes:
   free_hover: {}
   dissipative:
     num_drones: 4
+  attach:
+    num_drones: 3
+    # the M1 rig layout (real.yaml modes.attach): carriers 270/30/150, the weld on plate 9 at +y 0.225
+    attach_azimuths_deg: '270,30,150'
+    attach_x_offset: 0.0
+    attach_y_offset: 0.225
+    enable_approach_mpc: false
+    control_mode: 'velocity_after_handover'
+    vel_ki: 0.0
+    diss_ki_load: 1.0

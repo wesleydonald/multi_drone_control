@@ -123,15 +123,23 @@ class CallbackManagerMulti:
             # a disarm before any TAKEOFF (a refused ARM) keeps the controller up for the next
             # ARM; after a flight it shuts down as before
             flown = bool(self.node.takeoff_requested) or bool(getattr(self.node, 'has_flown', False))
+            # a drone disarmed alone at its rest while the fleet still flies keeps its process up (one-shot):
+            # a tracker exiting mid-flight stalled the graph ~0.5 s and two carriers timed out on pose (R1378)
+            keep = bool(getattr(self.node, 'keep_alive_on_disarm', False))
+            self.node.keep_alive_on_disarm = False
+            if flown:
+                self.node.has_flown = True          # so the fleet's disarm after LANDED still closes it
             self.node.armed = False
             self.node.takeoff_requested = False
-            self.node.shutdown_requested = flown
+            self.node.shutdown_requested = flown and not keep
             response.success = True
-            response.message = (f"Drone {self.drone_id} disarmed — shutting down controller" if flown
+            response.message = (f"Drone {self.drone_id} disarmed alone — controller stays up" if flown and keep
+                                else f"Drone {self.drone_id} disarmed — shutting down controller" if flown
                                 else f"Drone {self.drone_id} disarmed before takeoff — ready to ARM again")
             self.node.get_logger().info(
                 f"[Drone {self.drone_id}] Disarmed via service — "
-                + ("initiating shutdown." if flown else "staying up for the next ARM."))
+                + ("staying up (disarmed alone; the fleet still flies)." if flown and keep
+                   else "initiating shutdown." if flown else "staying up for the next ARM."))
 
         self.publish_arming_state()
         return response

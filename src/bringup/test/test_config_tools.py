@@ -24,7 +24,7 @@ WORLDS = REPO / 'simulation_assets'
 LEGACY_WORLDS = WORLDS / 'old_worlds'
 LAUNCHES = REPO / 'src/bringup/launch'
 PROFILES = [f'{side}/{mode}' for side, modes in
-            (('sim', ('mpc', 'free_hover', 'dissipative')),
+            (('sim', ('mpc', 'free_hover', 'dissipative', 'attach')),
              ('sim_legacy', ('mpc', 'free_hover', 'dissipative', 'network', 'attach')),
              ('real', ('mpc', 'free_hover', 'dissipative', 'attach', 'm2'))) for mode in modes]
 
@@ -133,12 +133,14 @@ def test_the_legacy_profile_is_the_sim_default_of_4_oct():
         assert {k: got[k] for k in want} == want, mode
 
 
-@pytest.mark.parametrize('mode', ['attach', 'network'])
-def test_attach_and_network_are_refused_on_the_twin(mode):
-    """No rig-twin attach world, and those graphs do not pass the rig thrust map yet."""
+def test_network_is_refused_on_the_twin_and_attach_flies_it():
+    """No rig-twin network world yet; attach flies the twin attach worlds since 8 Oct."""
     with pytest.raises(RuntimeError, match='legacy:=true'):
-        profile_args(f'sim/{mode}')
-    assert profile_args(f'sim_legacy/{mode}')['legacy'] == 'true'
+        profile_args('sim/network')
+    assert profile_args('sim_legacy/network')['legacy'] == 'true'
+    a = profile_args('sim/attach')
+    assert a['attach_azimuths_deg'] == '270,30,150' and a['legacy'] == 'false'
+    assert profile_args('sim_legacy/attach')['legacy'] == 'true'
 
 
 def test_the_adaptive_kt_machinery_stays_gone():

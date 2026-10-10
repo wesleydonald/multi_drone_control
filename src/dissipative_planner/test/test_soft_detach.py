@@ -2,7 +2,7 @@
 its magnet opens only after the blend and the gates; a second detach, a failed gate or a LAND
 cancels cleanly with the magnet ON. detach_unload_s 0 keeps the one-tick detach."""
 import time
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -169,6 +169,16 @@ def test_r200006_slip_fires_on_two_equal_stale_ticks():
     assert f.calls == [3]
 
 
+def _departed_fake(f, reserved=0):
+    """The newcomer-lifecycle state _publish_departed_refs reads (none of it used by a carrier)."""
+    f._land_alone = getattr(f, '_land_alone', set())
+    f._n_carry0 = len(f.drone_pos) - reserved
+    f.reserved_attach = reserved
+    f.attach_pos = getattr(f, 'attach_pos', [None] * reserved)
+    f._reserved_index = MethodType(D._reserved_index, f)
+    f._pos = MethodType(D._pos, f)
+
+
 def test_departed_land_steps_out_then_descends_while_the_fleet_flies():
     published = []
     f = SimpleNamespace(dyn=SimpleNamespace(g=9.81), _land_to_ground=False, _departed_land=True,
@@ -179,6 +189,7 @@ def test_departed_land_steps_out_then_descends_while_the_fleet_flies():
                         drone_pos=[None, None])
     f.get_logger = lambda: _Log()
     f._publish_ref = lambda d, nodes: published.append(nodes[0][0].copy())
+    _departed_fake(f)
     for _ in range(40):                          # 0.5 m at 0.15 m/s: done in ~3.3 s
         D._publish_departed_refs(f)
     assert np.allclose(published[-1][:2], [1.0, 0.0], atol=0.02)
@@ -215,6 +226,7 @@ def test_freed_drone_clears_the_circle_before_it_lands():
                         _departed_next={3: np.array([0.0, 2.0, 1.5])}, drone_pos=[None] * 4)
     f.get_logger = lambda: _Log()
     f._publish_ref = lambda d, nodes: published.append(nodes[0][0].copy())
+    _departed_fake(f)
     for _ in range(40):                          # the 0.5 m ring step (3.3 s): no landing yet
         D._publish_departed_refs(f)
     assert 3 not in f._departed_landing and published[-1][1] > 1.0 and published[-1][2] == 1.5

@@ -1,0 +1,313 @@
+# approach_tip_feedback (9 Oct 2026): the newcomer steers its measured magnet onto the target
+
+## 1. Question
+
+Wesley, 9 Oct: "The drone that comes in to attach can use the feedback from its actual magnet position vs
+where it is supposed to go to have a better chance of attaching (the magnet is defined in mocap as well).
+I saw Tejen had lots of issues with this where the magnet would be directly over but not lower down enough."
+
+## 2. Hypothesis (rev 2, after the critic's REWRITE; Wesley 9 Oct: calibrate + continuous loop)
+
+Two parts, one card:
+- **Setpoint.** The target is calibrated, not assumed: on Wednesday 09:00 (props off) QUAD4's magnet face is
+  set on plate 9 and the tip marker (body 24) is read in the ring frame (body 8). That point, plus a named
+  standoff, is the ONE target for both the approach and the weld check (today they differ: the approach aims
+  at rim + 0.05 - 0.01 while the manager measures to the rim point; Tejen's calibration puts the face 2.25 cm
+  below the marker). Feedback cannot fix a wrong setpoint; this does.
+- **Loop.** With that setpoint, a slow z-only loop on the measured tip removes what the body-to-tip model
+  gets wrong (rod length, lean, the drone's own hover offset) and holds the tip there while the rod swings:
+  in the twin, with the assumed rod 4 cm off either way, the tip settles within 1 cm of the setpoint in z,
+  where the switch-off arm stays 4 cm off; with a swinging rod and a frozen tip pose it does not run away.
+
+## 3. The one variable (rev 3: the critic's rev-2 numbers)
+
+`approach_tip_feedback` (planner parameter, default off). When on, in ApproachProfile:
+- **hold**: the carrot is at its descent goal (within 5 mm) for >= 1 s, the target's 1 s mean speed is
+  < 0.05 m/s (exit > 0.08 m/s; rig 8 Oct: hover p50 0.022-0.029 m/s, the r305 circle p50 0.117 m/s) and the
+  tip is valid. Only in the hold does the loop run; everywhere else c is frozen (no windup on the planned
+  0.25 m descent; a circling ring, R9, freezes it);
+- **filter**: e_z = setpoint_z - tip_z; the low-pass (tau 1.5 s) runs only inside the hold and starts at the
+  0.5 s mean of e_z at hold entry (a filter carried through the descent lags the ramp by ~8 cm, critic rev 2.3);
+- **integrator**: c_z += k * e_f * dt, k 0.5 1/s (crossover ~0.42 rad/s, ~58 deg margin; 10x below the rod),
+  rate <= 0.02 m/s, c_z in [-0.06, +0.08] m (E+ needs -0.04: rev 2's -0.03 would have saturated it);
+- **deadband with hysteresis**: frozen once |e_f| < 5 mm for 2 s; released at |e_f| > 15 mm;
+- **contact / catch freeze (latched until the weld or the end of the approach)**: over the last 2 s, |dc| > 3 mm
+  and the tip moved < 0.3 |dc| (the tip stops following c: contact, a catch, or a slack tether);
+- **tip valid**: fresh (< 0.1 s); |tip - body| in [0.55, 0.63] m; horizontal tip - body < 0.15 m; no step
+  > 0.03 m between frames; not frozen (identical over 10 frames while the body moved > 5 mm: a still drone's
+  tip may legitimately repeat). Invalid: c held; the body goal stays body + rod + c; never reset mid-approach;
+- c resets per approach; dropped at the weld and at a newcomer step-out; starts at 0 after a partner hand-off;
+- **setpoint**: `attach_tip_target_z` (m above the ring-origin plane at the plate, default = today's twin point
+  rim + 0.05 - 0.01 = +0.04). The weld check's point gets its own parameter `weld_point_z` (default 0.0 =
+  today's ring origin + R(x, y, 0), so every other attach run is unchanged); arm W sets it to the setpoint.
+  Rig numbers from Wednesday's props-off calibration (rod/tether hanging vertical, face on plate 9): the
+  setpoint standoff <= the measured pull-in gap minus 1.5 cm (the deadband/overshoot band); Wesley signs
+  them before any rig attach with the switch on;
+- **tip rate**: `magnet_tip_publisher` gets `max_rate_hz` (default 0 = unthrottled, today); every arm here,
+  baselines included, sets 120 (the rig's mocap cap) so the planner is not fed 500 Hz;
+- **logging**: tip_c_z, tip_e_z, tip_e_f, tip_valid, tip_hold, tip_frozen_reason in the planner log, in the
+  switch-off runs too (the same hold reference for both arms);
+- xy is not corrected; seek stays 0 (its default).
+
+QUAD4's arm on the rig is a tether that goes slack (Wesley 9 Oct); in tension it behaves as the twin's rod, and
+the contact freeze is what catches a slack tether (the tip stops following c down).
+
+Pinned: `twin_r8a_dry` and copies; LAND 35 s after the descent starts; one code tree for the table.
+
+| arm | what | config |
+|---|---|---|
+| 0 | no injected error | twin_tf_0 |
+| E- | assumed rod 4 cm short (`attach_cable_len 0.51`): tip ends low | twin_tf_em |
+| E+ | assumed rod 4 cm long (`attach_cable_len 0.59`): tip ends HIGH | twin_tf_ep |
+| S | E+ plus a swing: a horizontal radial push on QUAD4's body at hold entry + 1 s, sized in one exploratory run to a 3-8 cm horizontal tip - body swing (under the 0.15 m band; not the fault-scope push) | twin_tf_swing |
+| F | E+ plus `/magnet_tip_pose` frozen (runner TIP_FREEZE, inert by default) for 2 s from hold entry + 0.5 s, while c moves; frozen samples excluded from tip scoring | twin_tf_freeze |
+| W | E+ with the weld at the setpoint (`weld_point_z` +0.04) and `weld_radius` 0.025, rig gate (0.05 m/s, dwell 0.15, rig weld_vel_filter_s): switch-off cannot weld | twin_tf_weld |
+
+## 4. Baseline
+
+Every arm once with the switch off on the same tree (R1245-R1247 are on an older tree). Expected (R1247): E-
+ends ~4 cm low, E+ ~4 cm high; W switch-off: no weld.
+
+## 5. Pass / fail numbers
+
+Scoring window = the last 5 s before LAND; convergence scored separately. tools/attach_metrics.py gains tip_goal_z
+(tip z minus the setpoint z) and reads tip_c_z and tip_hold from the planner log.
+
+| metric | supports | falsifies |
+|---|---|---|
+| mean |tip_goal_z| in the window, arms E-, E+, S, F | <= 0.01 m (switch-off ~0.04 m) | > 0.02 m in any |
+| arm 0 vs its baseline | within 0.005 m | worse by > 0.01 m |
+| time from hold entry to |tip_goal_z| < 0.01 m, arms E-, E+ | <= 15 s | never |
+| arm S: c excursion while the rod swings | <= 5 mm | > 15 mm |
+| arm S: share of the hold with the tip invalid | reported | - |
+| arm F: c over the 2 s freeze | changes < 5 mm | runs > 20 mm |
+| tip_c_z at the end | inside (-0.06, +0.08) | at a bound |
+| arm W | switch-on welds within 15 s of hold entry | no weld in 30 s |
+| envelope faults, aborts | none | any |
+
+Rig (Wednesday): the calibration (above); a props-off record of `/magnet_tip_pose` for 10 s still and with body
+24 covered (repeats, precision, what arrives when occluded); a bar that does not depend on body 24: with the
+magnet ON the ring follows a small lift (a physical catch), or a side photo shows the face on the plate.
+
+## 6. Repeats
+
+Neighbour pass: every arm once (switch on) after the switch-off baselines; then E-, E+, S x2.
+
+## 7. Cost
+
+6 baselines + 6 arms + 3 repeats + 1 push-sizing run = 16 Gazebo runs (lab PC when idle).
+
+## 8. New code?
+
+Yes: approach.py (hold phase, z loop, validity, freezes), dissipative_node.py (`/magnet_tip_pose` at 120 Hz,
+body pose to the validity check, the switch, log columns), the setpoint parameter (`attach_tip_target`: the
+calibrated tip point in the ring frame; until Wednesday the twin keeps today's rim + 0.05 - 0.01) used by both
+the approach and the weld check, the runner's TIP_FREEZE event (magnet_tip_publisher holds its output),
+tools/attach_metrics.py (tip_goal_z, c), bringup plumbing (graph_attach, rig profile). Unit tests: bounds,
+rate, hold-only integration (no windup on a synthetic descent), freeze on stale/frozen/stepped/out-of-band
+tips, the contact freeze, deadband, resets (weld pop, step-out, partner hand-off). If it fails: rows kept,
+code removed. Attach geometry: the setpoint is Wesley's word (given for this approach, 9 Oct; the numbers
+come from Wednesday's calibration).
+
+## Critic
+
+9 Oct, critic on rev 1 (design review, before any code): **REWRITE**. Its challenge, condensed faithfully:
+- Already tried: `attach_seek_m` (R0655-R0661): the blocker was the 0.05 m/s weld speed gate waiting ~80 s for
+  the rod swing, not height (R0660); R0653, the premise, was a legacy world with a stray pickup joint (R0659).
+  Tejen's tree has two measured-tip trims not ported (906ee3fb/0138b9e1 rate-limited HIGH/LOW trim, "fixes a
+  repeated 5-6 cm tip offset"; 11a0683f `target_alignment_mode`, flown nowhere).
+- Tejen's "over but not low enough" has a documented cause: his attach target was published 0.12 m high
+  (marker aliasing fef23390; 7 Oct rig: face 106 mm above the plate): a setpoint bug in his planner. On our rig
+  the live risk is also the setpoint: TIP_STANDOFF -0.01 on a target +0.05 above body 8 puts the tip MARKER
+  4 cm above the ring-origin plane, attach_z 0.0, the face 2.25 cm below the marker (Tejen's calibration):
+  the face converges ~1.75 cm above body 8's origin plane, unmeasured against the plate top. Feedback makes
+  that gap exact; it does not correct it.
+- The twin tip is ground truth and the injected errors constant: any stable integrator removes them, so the
+  bars test the implementation, not "feedback helps the magnet attach"; on the rig the tip-goal bar is circular.
+- It moves where QUAD4 parks: attach geometry, Wesley's word.
+- Twin vs rig: rod lean/swing yes in both (magnet_tip_link is a real link on two damped joints, R1266 tip 2.7 cm
+  radially in); marker-to-face no in the twin; tip occlusion/frozen pose no in the twin; tip-plate contact no in
+  the twin; weld speed gate 0.35 m/s in the twin vs 0.05 m/s + dwell 0.15 on the rig.
+- Pendulum coupling is not the risk at these gains (outer loop 0.73 rad/s, zeta 0.46, ~20 % overshoot, 2 % in
+  ~12 s; 5.7x below the rod's 4.2 rad/s).
+Must-fix: (1) the error winds up on the planned descent: integrate only in a defined hold (carrot at its goal
+>= 1 s, target speed < 0.02 m/s, tip valid), frozen elsewhere; (2) one calibrated setpoint for the feedback and
+the weld check, from a props-off calibration (body 24 in body 8's frame with the face on plate 9), plus a rig
+bar not based on body 24 (a physical catch); (3) tip validity beyond message age (|tip - body| in ~[0.55, 0.63]
+m, xy < 0.15 m, no 3 cm step, not frozen over N frames), a frozen-tip twin arm and a props-off occlusion check;
+(4) contact/catch anti-windup (asymmetric bound, at most 2-3 cm down; freeze when the tip stops following c;
+freeze within ~1 cm so the reference is still while the gate counts); (5) W cannot discriminate (twin gate
+0.35 m/s welds on first entry; E+ baseline sits exactly at the 0.08 m radius): fly W with the rig gate;
+(6) the swinging-rod arm Wesley asked for (push-world wrench at the hold start), an absolute swing floor, and
+freeze c when |target_vel| > 0.02 m/s (attach_moving, R9); (7) z-only, or test xy; (8) re-fly baselines on the
+final tree, score 3-D, write the hold metric (attach_metrics' tip columns are rim distances), log c, hold >= 15 s
+past convergence; (9) cap the twin tip at 120 Hz (500 Hz into a 10 Hz planner); (10) section 8: Wesley's word.
+Should-fix: drop H/H+ (same z signal as E+-) for the swing and frozen-tip arms; W's tilt reflects the capture
+(`_capture_weld_rho`), not the feedback; a simpler alternative, a one-shot trim (2 s still-hold mean error,
+rate-limited, re-measure, at most 2 iterations, frozen before the weld; close to Tejen's 906ee3fb); unit tests
+for c's resets (weld pop, step-out, partner handoff); seek already defaults to 0.
+
+Rev 2 (above) takes every must-fix: 1 hold-only integration; 2 one calibrated setpoint for the approach and the weld
+check + a rig bar without body 24; 3 validity checks + arm F + the props-off occlusion check; 4 asymmetric bound,
+contact freeze, deadband; 5 W on the rig gate, scored on time; 6 arm S, absolute swing floor, moving-target freeze;
+7 z only; 8 baselines on one tree, z-scored hold metric, c logged, 35 s hold; 9 tip at 120 Hz; 10 section 8.
+Should-fix: H/H+ dropped; the capture (`_capture_weld_rho`) stays its own card; the one-shot trim was offered
+to Wesley and he chose the continuous loop; reset tests listed; seek 0 stated. Rev 2 goes back to the critic.
+
+9 Oct, critic on rev 2: **GO WITH CHANGES** (numbers and definitions only; the design stands). Items: (1) E+ needs
+c -0.04 against rev 2's -0.03 bound -> down bound -0.06; (2) the contact freeze could not see slow windup -> ratio
+test, latched; (3) the filter carried through the descent lags ~8 cm and drives E- the wrong way -> filter only in
+the hold, started at the 0.5 s mean; (4) the deadband froze the ~6 mm overshoot and equalled the bar -> enter
+< 5 mm for 2 s, exit 15 mm; (5) W could not discriminate (the rig gate welds before the hold if the tip is inside
+the radius) -> weld at the setpoint, radius 0.025, switch-off cannot weld; (6) setpoint and weld-point numbers
+named, the weld point behind its own parameter with today's default, Wesley signs the rig numbers; (7) decimate
+at the publisher, every arm; (8) S scored on z (c excursion, invalid share), push sized and specified; (9) F timed
+while c moves, frozen samples excluded; (10) rig thresholds: the moving-target gate re-sized from the 8 Oct rig
+hover/circle logs (1 s mean, 0.05/0.08 hysteresis); tip precision/repeats unknown (no rig run logged the tip):
+frozen = identical while the body moved, plus Wednesday's props-off record. Should-fix taken: tip_hold logged
+switch-off; calibrate hanging vertical; TIP_FREEZE inert by default with a unit test.
+
+## First pass (9 Oct, e434a11; rows R1330-R1341)
+
+| arm | switch off | switch ON | verdict |
+|---|---|---|---|
+| 0 | 0.4 mm | 3.2 mm, c +3 mm | supports (within 5 mm) |
+| E- | 40.2 mm low | 6.4 mm; within 1 cm in 1.7 s; c +46.6 mm | supports |
+| E+ | 39.9 mm high | 5.6 mm; within 1 cm in 1.9 s; c -45.5 mm | supports |
+| S | (push 2 N x 0.5 s swung the rod ~0.56 m: oversized, the sizing run) | 2.4 mm, a contact latch during the big swing | not scored; push resized to 0.5 N x 0.2 s |
+| F | 39.7 mm | 3.5 mm, but c ran 23 mm during the 2 s freeze | **FALSIFIES F** (> 20 mm) |
+| W | no weld | welded 1.4 s after hold entry | supports |
+
+F: the rev-3 "frozen" rule needed the body to move by 5 mm, so a frozen tip in a still hold passed as valid
+and the loop integrated on it; the contact test latched after 1.99 s and limited it to 23 mm. Rev 4 (code):
+a tip bit-identical for 0.2 s is frozen whatever the body does (still mocap noise never repeats exactly; on
+the rig a coarse forwarder could only pause the loop, the safe direction; Wednesday's props-off record checks
+it). Rev 4 is a new tree: the whole table is re-flown on it (bars unchanged), with S on the resized push.
+
+## Claim table (rev 4, one tree 7d63170; rows R1359-R1373)
+
+| arm | switch off | switch ON (repeats) | bar | verdict |
+|---|---|---|---|---|
+| 0 | 0.4 mm | 1.6 mm | within 5 mm of off | supports |
+| E- | 40.2 mm | 4.8 / 6.8 mm; within 1 cm in 1.9 / 1.7 s; c +45 / +47 mm | <= 10 mm; <= 15 s | supports |
+| E+ | 39.8 mm | 6.3 / 5.4 mm; 1.9 / 2.0 s; c -46 / -45 mm | <= 10 mm; <= 15 s | supports |
+| S (swing 6.2-7.2 cm) | 39.7 mm | 6.4 / 7.5 mm; c within 4.3 / 2.8 mm of the no-push E+ arm over the swing | <= 10 mm; c excursion <= 5 mm | supports |
+| F (tip frozen 2 s) | 39.9 mm | 6.2 mm; c moved 1.8 mm over the freeze, frozen flagged on 18 rows | < 5 mm | supports (R1340 on rev 3: 23 mm) |
+| W (rig gate, radius 0.025) | no weld | welded 2.5 s after hold entry | weld within 15 s | supports |
+
+No contact latch in any arm, no aborts, c inside its bounds. The S bar's "c excursion while the rod swings" is
+scored as the largest difference from the no-push E+ arm's c over the same window (aligned at hold entry):
+the push lands 1 s into the hold, while c is still converging, so c's raw range (3 cm) is the convergence, not
+the swing; the method is stated here because the bar did not name its reference.
+
+**Verdict:** in the twin, the measured-tip loop removes a 4 cm rod error either way to 5-7 mm in ~2 s, rides a
+6-7 cm rod swing and a 2 s frozen tip, and makes a weld happen that the switch-off arm never gets. Not shown: the
+rig's marker-to-face offset, occlusion and precision (Wednesday's calibration and tip record), a tether that
+goes slack (the contact freeze is unit-tested only), a moving ring (R9: the hold is never entered, by design).
+Reviewer next.
+
+## Reviewer on the rev-4 table (9 Oct): WEAK (corrections taken; rev 5 follows)
+
+1. Numbers reproduce (window cut at LAND). Time to 1 cm read instantaneously as the card words it: 1.6 / 1.5 s
+   (E-), 1.7 / 1.8 s (E+); the table's values used a 0.5 s rolling mean; R1371 leaves the band once and stays
+   inside from 4.0 s. **The 5-7 mm residual is a systematic overshoot:** every switch-on run with an injected error
+   stops on the far side (E+, S, F 5.4-7.6 mm below; E- 4.8-6.8 mm above), c ends at +-45-47.5 mm against a 40 mm
+   error: the deadband latches on the lagging filtered error (R1367 entered at e_f +3.1 mm with the raw error
+   +5.6 mm) and does not release until 15 mm. Arms 0, F, W have one run each on 7d63170.
+2. **Arm S fails its bar as written:** c's range from the push through the swing is 30.0 / 29.4 mm (> 15 mm
+   falsify line): the push lands inside the ~2 s convergence, so the frozen bar cannot separate the swing from
+   convergence. The "difference from the no-push E+ arm" (4.3 / 2.8 mm) was chosen after the runs and its noise
+   floor is about the same (2.0 mm between the E+ repeats, 3.6 mm between the S repeats); the push barely reaches
+   z (switch-off S error peak 44.3 vs E+ 42.1 mm); the no-push arm already arrives with a 4-7 cm swing. Invalid
+   share (to be reported): 0.00 / 0.00. **Scored on the original wording: S falsifies** (a card design flaw: the
+   push sits in the convergence). Rev 5 moves the push after convergence.
+3. Arm F was applied as specified (TIP_FREEZE at hold + 0.500 s; the publisher's "tip output frozen" WARN; tip_z
+   bit-identical from 55.000 to 57.002), but c moved **3.6 mm** over the event window (the table's 1.8 mm started
+   one tick late): still < 5 mm; the rate cap bounds it at ~2 mm per stale tick. One run.
+4. Arm W: welded 2.53 s after hold entry at d = 0.022 m (radius 0.025): z -4 mm (the overshoot) and 21.8 mm radial;
+   the speed gate held the weld until the turn of a +-2-4 cm radial rod swing, which the z-only loop does not touch.
+   Switch-off cannot weld by construction (never closer than 37.6 mm). W restates E+ through the gate. One run.
+5. Not shown by the twin: the marker-to-face offset; occlusion other than a bit-identical hold (a marker swap
+   inside [0.55, 0.63] m with steps < 3 cm passes); mocap noise (the twin tip is noiseless) against the
+   bit-identical rule and the 5 mm deadband; a slack tether or tip-plate contact (the contact freeze fired only in
+   R1339's 0.56 m swing, a false latch, and rev 4 did not change that rule); a moving ring (inert by design); xy.
+   Not supported: a better attach rate on the rig; any xy correction; a tip more than ~5 cm high (E+ used 45-49 mm
+   of the 60 mm down bound). Deviations: push resized after R1333 without a separate sizing run (R1362 served);
+   scored with tools/tip_metrics.py, not attach_metrics.py. Log issues: configs/rig/attach_m1.yaml turns the loop
+   on for r8a0/r8a too (decision line: from R8b; the R8a preview was said in chat, now made explicit on the
+   sheet); the hold log line printed E+ as "-0.039 m below" (meaning above): fixed.
+
+### Rev 5 (code + card, before re-flying)
+
+- Deadband on the raw error's 0.5 s mean (not the lagging filter): in after < 5 mm for 2 s, out above 15 mm.
+- Arm S: the push at hold + 8 s (after convergence); bar unchanged (c's range from the push to +6 s <= 5 mm,
+  falsify > 15 mm).
+- The twin tip gets mocap-like noise (`noise_sd_m` 0.0005 on magnet_tip_publisher, every tf arm, baselines too),
+  so the frozen rule and the deadband meet noise.
+- Repeats: 0, F, W x2 as well.
+- Scoring: time to 1 cm instantaneous (as worded) and the 0.5 s mean both reported; F's c change over the event
+  window [freeze, freeze + 2 s]; invalid share reported for every arm.
+
+## Claim table, rev 5 (one tree 1bbe1f8; tip noise 0.5 mm in every arm; rows R1393-R1410)
+
+| arm | switch off | switch ON (2 repeats) | bar | verdict |
+|---|---|---|---|---|
+| 0 | 0.5 mm | 3.0 / 0.6 mm | within 5 mm of off | supports |
+| E- | 40.1 mm low | 0.8 / 5.3 mm; within 1 cm in 1.5 / 1.2 s; c +41 / +45 mm | <= 10 mm; <= 15 s | supports |
+| E+ | 39.6 mm high | 3.5 / 6.3 mm; 1.7 / 2.1 s; c -44 / -46 mm | <= 10 mm; <= 15 s | supports (but a false contact latch in both, below) |
+| S (push at hold + 8 s) | 39.7 mm | 1.3 / 1.7 mm; c moved 0.7 / 0.0 mm from the push to +6 s | c excursion <= 5 mm | supports |
+| F (tip frozen 2 s) | 39.9 mm | 0.7 / 0.6 mm; c moved 3.8 / 3.6 mm over the freeze, then held | < 5 mm | supports |
+| W (rig gate, radius 0.025) | never welds | welded 1.1 / 4.3 s after hold entry (d 0.024 / 0.007 m) | within 15 s | supports (R1404 at the radius edge) |
+
+No aborts; c inside its bounds in every run.
+
+Known flaws (not bar failures):
+- **False contact latch in E+ (2 of 2):** after the first overshoot the loop corrects back slowly; over the 2 s window c
+  moves a few mm while the tip, lagging, moves less than 0.3 of it, and the contact freeze latches (the twin has no
+  tip-plate contact). c is then held 4-6 mm past the setpoint (the 3.5 / 6.3 mm residuals). On the rig the same
+  latch would stop the loop early: safe direction, a few mm left.
+- The deadband fix (rev 5) removed most of the overshoot (E- 0.8 mm in one run), but not all (E- 5.3 mm, R1406).
+- R1404 welded at d 0.024 with c still moving (the tip was inside the radius before the loop finished).
+
+**Verdict:** supports in the twin. In the twin, the loop takes a 4 cm rod error either way to within ~1-6 mm in under
+~2 s; a 6-7 cm swing barely moves it; a frozen tip moves it under 4 mm; and with a rig-like 0.025 m weld radius it
+makes the weld happen where the switch-off arm never does. Reviewer next.
+
+## Reviewer on the rev-5 table (9 Oct evening): SUPPORTED, with corrections (taken)
+
+1. Every number reproduces to 0.1 mm / 0.1 s and every bar passes as written; on/off configs differ only in the
+   switch; all 18 runs on 1bbe1f8, clean; the rev-5 commit precedes the first run. R1397 (F off) started late (lift
+   23.1 s, "no pose for drone 4 at TAKEOFF", read-back incomplete) but its 39.9 mm agrees with the other baselines.
+2. **"The deadband fix removed most of the overshoot" is wrong.** Peak overshoot (0.5 s mean) is 6.7-8.6 mm in rev 5
+   vs 7.1-10.0 mm in rev 4; c still peaks at +-45-48 mm. The cause is the 1.5 s filter's lag on the integrator, not
+   the deadband. Rev 5 changed where c ends: 5 of 8 error runs came back and froze in the deadband at 8.2-11.7 s
+   (0.1-1.7 mm); R1406 froze in the deadband during the overshoot (the zero crossing used up the 2 s timer: the
+   rev-4 failure, now on the raw mean); R1401/R1407 froze on the contact latch. Arm 0 (R1399): the hold began at
+   -6.3 mm while the tip settled, c went to +3.3 mm and froze: 3.0 mm vs 0.5 mm off (inside the bar, but worse).
+   The verdict's "1-6 mm in under 2 s" mixes two things: first within 1 cm at 1.2-2.1 s; the final 0.1-6.3 mm at
+   3.6-11.7 s.
+3. **The contact latch is noise-dependent:** it hit 2 of 6 runs carrying the E+ error (S and F did not latch), at
+   7.2 s and 5.5 s. The test compares two single noisy tip samples 2 s apart (approach.py): a ~1 mm threshold
+   against 0.5 mm noise per sample. Both latches held the tip 3.5 / 6.3 mm below the setpoint, toward the plate:
+   "safe direction" is not shown. R1404 welded with the tip ~21 mm above the setpoint (the 3-D radius accepted a
+   2 cm vertical gap) with c at -21 of ~-41 mm.
+4. **S as flown:** the swing was 9.6 / 8.0 cm horizontal tip-to-body (8.1 cm off), not 6-7 cm (that was rev 4;
+   R1402 is above the sized 3-8 cm); the push landed 8.0 s into the hold and the deadband engaged 0.6 / 0.2 s later,
+   so the integrator ran 5 of 59 and 1 of 60 rows of the window: S shows the deadband holding through a swing, not
+   the integrator riding it (a swing during convergence has passed no bar). Invalid share was promised for every arm:
+   0 except R1399 0.003, R1397 0.061, R1403/R1409 0.087 (19 frozen rows + 8 "step" rows: at the end of the freeze the
+   live tip was 4.8 cm from the frozen value). F first reached 1 cm at 4.6 / 4.6 s (vs 1.7 / 2.1 s for E+). F's
+   3.8 / 3.6 mm is two planner ticks at the 2 mm/tick cap before the 0.2 s rule flags the tip: ~4 mm by
+   construction, 1.2 mm under the bar.
+5. **For the rig (R8b, loop on, Wesley's decision):** supported in the twin (rigid rod, 0.5 mm white tip noise, still
+   ring): a constant +-4 cm tip-to-setpoint error is brought within 1 cm in <= 2.1 s and ends 0.1-6.3 mm off.
+   Not shown: the contact freeze as a protection (it latched with no contact in R1401/R1407; never tested against
+   real contact or a slack tether, unit tests only); magnet face to plate contact (attach_m1.yaml still has
+   attach_tip_dz 0 and weld_point_z 0 until Wednesday's calibration); rig noise and occlusion; a swing during
+   convergence. attach_m1.yaml turns the loop on for R8a0/R8a too (noted in decisions.md).
+
+Consequences for the rig sheet: the overshoot passes up to ~9 mm below the setpoint, so the calibrated setpoint must sit
+at least 1 cm above the magnet-face contact height (standoff >= 1 cm); the contact freeze is not a protection to
+rely on. Open refinements (not flown): contact test on 0.3 s means instead of single samples; less filter lag (or
+anti-windup on the filter) to cut the overshoot; the deadband timer reset at a zero crossing.
+

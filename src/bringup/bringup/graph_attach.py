@@ -108,8 +108,12 @@ def attach(context, launch_dir, profile_vals):
         LaunchConfiguration('partner_attached').perform(context).lower() in ('1', 'true', 'yes'))
 
     x0_imu = _x0_rate_imu_drones(context, n, real)
-    # rig: the carry's thrust map and geometry; the sim attach graph passes neither
-    map_tracker, _, map_planner = map_and_geometry(context, n, real) if real else ({}, {}, {})
+    # the thrust map and geometry: the rig carry's on the rig, the twin's typed knobs in sim (the
+    # twin attach worlds, 8 Oct; legacy leaves them '' = node defaults); n+1 plant offsets with the newcomer
+    n_plant = n + (1 if truthy(context, 'enable_approach') else 0)
+    legacy = not real and truthy(context, 'legacy')
+    map_tracker, map_bf, map_planner = (({}, {}, {}) if legacy
+                                        else map_and_geometry(context, n_plant, real))
 
     # ── 3 TETHERED drones: bridges + betaflight comm + our tracker (as dissipative_launch) ──
     for i, drone_name in enumerate(drone_names):
@@ -131,7 +135,8 @@ def attach(context, launch_dir, profile_vals):
                 parameters=[{'drone_id': i, 'drone_name': drone_name,
                              'parent_model': PARENT_MODEL,
                              'rate_source': LaunchConfiguration('rate_source'),
-                             'imu_topic': f'/drone_{i}/imu'}]))
+                             'imu_topic': f'/drone_{i}/imu',
+                             **{k: (v[i] if isinstance(v, list) else v) for k, v in map_bf.items()}}]))
         nodes.append(Node(
             package='tracker', executable='tracker', name=f'tracker_{i}',
             parameters=[{'drone_id': i,
@@ -174,7 +179,9 @@ def attach(context, launch_dir, profile_vals):
         # manage the newcomer too: it must disarm on LAND and on an abort like the others
         # (R0575/R0577: left armed on the floor after LAND; an abort never reached it).
         # It exists only with the approach chain: a managed drone with no tracker fails ARM.
-        parameters=[{'num_drones': n + (1 if truthy(context, 'enable_approach') else 0)}],
+        parameters=[{'num_drones': n + (1 if truthy(context, 'enable_approach') else 0),
+                     **({'require_fc_armed': LaunchConfiguration('require_fc_armed').perform(context)
+                         .lower() == 'true'} if real else {})}],
         output='screen'))
 
     # ── Dissipative reference generator with 1 reserved ATTACH node ─────────
@@ -228,10 +235,15 @@ def attach(context, launch_dir, profile_vals):
                      'diss_wrench_true_attitude': b('diss_wrench_true_attitude'),
                      'attach_traj_hold_s': f('attach_traj_hold_s'),
                      'attach_seek_m': f('attach_seek_m'),
+                     'approach_tip_feedback': b('approach_tip_feedback'),
+                     'approach_tip_log': b('approach_tip_log'),
+                     'attach_tip_dz': f('attach_tip_dz'),
                      'attach_t_start_new': f('attach_t_start_new'),
                      'attach_blend_balanced': b('attach_blend_balanced'),
                      'attach_datum_shift': b('attach_datum_shift'),
                      'attach_moving': b('attach_moving'),
+                     'newcomer_lifecycle': b('newcomer_lifecycle'),
+                     'newcomer_fault_land': b('newcomer_fault_land'),
                      'attach_approach_direct': b('attach_approach_direct'),
                      'attach_traj_hold_mode': LaunchConfiguration('attach_traj_hold_mode'),
                      'hold_resume_tilt_deg': f('hold_resume_tilt_deg'),
@@ -241,6 +253,10 @@ def attach(context, launch_dir, profile_vals):
                      'diss_a_i_load_max': f('diss_a_i_load_max'),
                      'diss_trim_share_weighted': b('diss_trim_share_weighted'),
                      'net_land_z': f('net_land_z'),
+                     # the plate height in the ring frame: the planner flew params.py's 0.025 (twin
+                     # world 0.02, rig 0.0) because no attach graph passed it (8 Oct)
+                     **({'attach_z': f('attach_z')}
+                        if LaunchConfiguration('attach_z').perform(context).strip() else {}),
                      'attach_approach': (not sil) and (not enable_approach_mpc) and (not partner),
                      'approach_hold': not partner,
                      'partner_handoff_topic': '/join_planner/handoff_ready' if partner else '',
@@ -251,7 +267,11 @@ def attach(context, launch_dir, profile_vals):
                          == 'velocity'),
                      # rig: tether latches ON at ARM, OFF at their detach
                      **({'detach_magnet': True} if real else {}),
-                     **map_planner}] + planner_options(context),
+                     **map_planner}] + planner_options(context)
+                    # drop and land is not complete in attach (a welded newcomer's magnet is not in
+                    # the drop and the trackers' tilt rule is not wired): off here until it is. A
+                    # drone detached in M1 is handed to the partner, so it must not land by itself.
+                    + [{'drop_on_loss': False, 'departed_land': False}],
         output='screen'))
 
     # ════════════════ APPROACH DRONE (x3_drone3) CHAIN ════════════════
@@ -273,6 +293,12 @@ def attach(context, launch_dir, profile_vals):
             raise RuntimeError('the approach MPC is not for the rig; add '
                                'enable_approach_mpc:=false (our tracker flies the approach) '
                                'or partner:=true')
+        # without the tip body the mocap node never publishes /magnet_tip_pose: no approach
+        # tracking and no weld can ever be declared (the rig manager detects it from the tip)
+        if truthy(context, 'real_io') and not LaunchConfiguration(
+                'mocap_magnet_tip_body_id').perform(context).strip():
+            raise RuntimeError('rig attach: type mocap_magnet_tip_body_id:=<id> (QUAD4\'s magnet '
+                               'tip, 24): without it there is no /magnet_tip_pose and no weld')
     # rig magnets (docstring, RIG): weld_radius 0 blocks the weld, so the newcomer's magnet
     # must never come on (a physical catch with no weld declared is R8b's abort)
     dry_approach = real and enable_approach and float(
@@ -335,7 +361,8 @@ def attach(context, launch_dir, profile_vals):
             name=f'bf_comm_{d}',
             parameters=[{'drone_id': d, 'drone_name': dn, 'parent_model': PARENT_MODEL,
                          'rate_source': LaunchConfiguration('rate_source'),
-                         'imu_topic': f'/drone_{d}/imu'}],
+                         'imu_topic': f'/drone_{d}/imu',
+                         **{k: (v[d] if isinstance(v, list) else v) for k, v in map_bf.items()}}],
             remappings=[(f'/model/{PARENT_MODEL}/model/{dn}/pose', f'/model/{dn}/pose')]))
 
     if not sil:
@@ -514,6 +541,7 @@ def attach(context, launch_dir, profile_vals):
                          'object_y_offset': f('attach_y_offset'),
                          'use_fallback_object_pose': False,
                          'attach_radius': f('weld_radius'),
+                         'object_z_offset': f('weld_point_z'),
                          'attach_speed_threshold': 0.05,
                          'attach_dwell_time_s': 0.15,
                          'rel_vel_filter_tau_s': f('weld_vel_filter_s'),
@@ -535,7 +563,9 @@ def attach(context, launch_dir, profile_vals):
                      'magnet_tip_topic': '/magnet_tip_pose',
                      'magnet_index': 0,
                      'drone_index': -1,
-                     'x3_link_poses_are_relative': True}]))
+                     'x3_link_poses_are_relative': True,
+                     'max_rate_hz': f('tip_max_rate_hz'),
+                     'noise_sd_m': f('tip_noise_sd_m')}]))
 
     # ROS->gz bridges for the magnet DetachableJoint, mirroring the per-drone detach_bridge_{i}
     # above (the PROVEN detach path). The magnet manager publishes std_msgs/Empty on these ROS
@@ -574,11 +604,15 @@ def attach(context, launch_dir, profile_vals):
                      # offset off-centre by object_x/y_offset, so the horizontal term drops
                      # out). 0.15 gives margin without welding mid-descent. Launch arg.
                      'attach_radius': f('weld_radius'),   # magnet manager's threshold
+                     'object_z_offset': f('weld_point_z'),
                      # partner rejoin: weld only once the tip has stopped (the approach
                      # ends in a hold 4 cm above the plate). Welding mid-descent let the
                      # still-descending drone push the now-rigid rod into the ring: carriers
                      # dropped 0.25 m and the ring tipped 25-35 deg (R0640, R0642)
                      **({'attach_speed_threshold': 0.05} if partner else {}),
+                     # a rig-like gate in the twin (card 2026-10-09_approach_tip_feedback arm W); 0 = as above
+                     **({'attach_speed_threshold': float(LaunchConfiguration('weld_speed_gate').perform(context))}
+                        if float(LaunchConfiguration('weld_speed_gate').perform(context)) > 0.0 else {}),
                      'rel_vel_filter_tau_s': f('weld_vel_filter_s'),
                      'velocity_clock': LaunchConfiguration('weld_velocity_clock'),
                      'object_attached_topic': '/magnet/object_attached',

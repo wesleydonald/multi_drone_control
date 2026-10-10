@@ -404,6 +404,16 @@ class Controller(Node):
         self._gi_ticks = 0
         self._gi_latched = False
         self._kt_desc_ticks = 0
+        # a drone the planner reports off the ring and landing by itself (card 2026-10-09_departed_ground_idle):
+        # it idles on the floor while the ring still flies. Counts only if received after this ARM.
+        self._departed = False
+        self._armed_at = None
+        self.create_subscription(
+            Bool, f'/drone_{self.drone_id}/departed', self._departed_cb,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                       reliability=ReliabilityPolicy.RELIABLE))
+        # ...and once it idles there, the fleet manager disarms it alone (card 2026-10-09_departed_disarm_alone)
+        self._down_alone_pub = self.create_publisher(Bool, f'/drone_{self.drone_id}/down_alone', 5)
         self._kt_payload_z0 = None        # load height at ARM: the floor test applies until it lifts 5 cm
         self._kt_frozen_said = False
         self.create_subscription(Float64, f'/drone_{self.drone_id}/cable_static_z',
@@ -879,6 +889,8 @@ class Controller(Node):
             self._gi_airborne = False
             self._gi_ticks = 0
             self._gi_latched = False
+            self._departed = False
+            self._armed_at = self.get_clock().now().nanoseconds
             self._kt_z_max = -1e9
             self._kt_payload_z0 = (float(self.payload_pos[2])
                                    if self.payload_pos is not None else None)
@@ -1088,6 +1100,13 @@ class Controller(Node):
             self._last_good_msg = msg
         return msg
 
+    def _departed_cb(self, msg):
+        # a latched True from an earlier flight arrives at subscription: only one sent after this ARM counts
+        if not msg.data:
+            self._departed = False
+        elif self.armed and self.takeoff_requested and self._armed_at is not None:
+            self._departed = True
+
     def _ground_idle_update(self):
         """ground_idle: True, latched until the next ARM, once a drone that flew is back within
         GROUND_IDLE_MARGIN of its resting height, with the ring resting and its reference at the
@@ -1101,14 +1120,26 @@ class Controller(Node):
         if z >= self._kt_spawn_z + AIRBORNE_MARGIN:
             self._gi_airborne = True
         ref = self._current_ref_pos
+        at_rest_ref = ref is not None and float(ref[2]) <= self._kt_spawn_z + GROUND_IDLE_MARGIN
         down = (self._gi_airborne and self.payload_resting
-                and z <= self._kt_spawn_z + GROUND_IDLE_MARGIN
-                and ref is not None and float(ref[2]) <= self._kt_spawn_z + GROUND_IDLE_MARGIN)
+                and z <= self._kt_spawn_z + GROUND_IDLE_MARGIN and at_rest_ref)
+        # off the ring and landing by itself while the ring flies: back at its own resting height (two-sided,
+        # so a drone still tied to the ring cannot idle on a wrong report)
+        # (no airborne latch needed: the planner's flag comes only after TAKEOFF, and a newcomer taken out
+        # before it rose 4 cm must idle too)
+        alone = (getattr(self, '_departed', False) and at_rest_ref
+                 and abs(z - self._kt_spawn_z) <= GROUND_IDLE_MARGIN)
+        down = down or alone
         self._gi_ticks = self._gi_ticks + 1 if down else 0
         if self._gi_ticks >= GROUND_IDLE_HOLD_S * FREQUENCY_HZ:
             self._gi_latched = True
             self.get_logger().warn(f'[Drone {self.drone_id + 1}] on the floor after the flight: '
                                    f'armed idle until disarm')
+            if alone and getattr(self, '_down_alone_pub', None) is not None:
+                self.keep_alive_on_disarm = True        # the disarm that follows must not end this process
+                self._down_alone_pub.publish(Bool(data=True))
+                self.get_logger().info(f'[Drone {self.drone_id + 1}] down at its rest off the ring: '
+                                       f'asking the fleet manager to disarm it alone')
         return self._gi_latched
 
     def _velocity_step(self, ref_acc):

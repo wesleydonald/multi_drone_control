@@ -21,9 +21,10 @@ import yaml
 
 MODES = {'sim': ('mpc', 'free_hover', 'dissipative', 'network', 'attach'),
          'real': ('mpc', 'free_hover', 'dissipative', 'attach', 'm2')}
-DEFAULT_MODE = 'mpc'
+DEFAULT_MODE = 'dissipative'     # Wesley 8 Oct (was mpc); legacy:=true keeps mpc
+LEGACY_DEFAULT_MODE = 'mpc'
 # sim modes with no rig-twin world or thrust-map plumbing yet (docs/redo_on_twin.md)
-LEGACY_ONLY = ('attach', 'network')
+LEGACY_ONLY = ('network',)          # attach flies the twin attach worlds since 8 Oct
 
 # launch arguments: knobs set in >= 3 configs or commands, then the structural ones
 KEPT_COMMON = (
@@ -39,13 +40,16 @@ KEPT_COMMON = (
     'reserved_attach', 'enable_approach', 'enable_approach_mpc', 'attach_cable_len',
     'attach_central', 'attach_handout', 'attach_t_handout', 'attach_elev_deg', 'attach_x_offset',
     'attach_y_offset', 'detach_unload_s', 'attach_traj_hold_s', 'attach_traj_hold_mode', 'attach_t_start_new',
-    'attach_blend_balanced', 'attach_datum_shift', 'attach_moving', 'diss_balanced_tensions',
+    'attach_blend_balanced', 'attach_datum_shift', 'attach_moving', 'newcomer_lifecycle', 'newcomer_fault_land',
+    'diss_balanced_tensions',
     'weld_radius', 'weld_velocity_clock', 'enable_obstacle_avoidance', 'partner',
     'partner_attached', 'partner_m2', 'partner_m2_part')
 KEPT_SIM = ('legacy', 'sil', 'sim_interface', 'ff_cap_force', 'sim_thrust_map', 'sim_thrust_offset',
             'sim_pack_v0')
 KEPT_REAL = ('real_io', 'rviz', 'magnet_channel', 'magnet_initial', 'attach_magnet_initial',
-             'require_fc_armed', 'detach_magnet', 'hover_z')
+             'require_fc_armed', 'detach_magnet', 'hover_z',
+             # Motive body ids, forwarded to real_io_launch.py by the graphs that include it
+             'mocap_drone_body_ids', 'mocap_payload_body_id', 'mocap_magnet_tip_body_id')
 # typed per drone by the rig modes (bringup.real_mode.rig_io, rig_magnet_latches)
 PER_DRONE = re.compile(r'drone\d+_(serial|magnet_initial)$')
 # decided by the side or the mode, never typed
@@ -123,7 +127,7 @@ def profile(side, mode, params_file='', cdir=None, legacy=False):
                            f'{", ".join(MODES[side])}, got {mode!r}')
     legacy = side == 'sim' and bool(legacy)
     if side == 'sim' and mode in LEGACY_ONLY and not legacy:
-        raise RuntimeError(f'sim_control_launch.py: mode {mode} has no rig-twin attach world yet: '
+        raise RuntimeError(f'sim_control_launch.py: mode {mode} has no rig-twin world yet: '
                            f'legacy:=true (a world in simulation_assets/old_worlds/)')
     cdir = cdir or config_dir()
     s = _load(os.path.join(cdir, side_file(side, legacy)))
@@ -183,6 +187,8 @@ def apply(context, side):
                            f'set it in params_file:=<yaml> (knobs: bringup/config/{side}.yaml)')
     mode = LaunchConfiguration('mode').perform(context).strip()
     legacy = side == 'sim' and LaunchConfiguration('legacy').perform(context).strip().lower() == 'true'
+    if legacy and 'mode' not in typed:
+        mode = lc['mode'] = LEGACY_DEFAULT_MODE
     vals = profile(side, mode, LaunchConfiguration('params_file').perform(context).strip(),
                    legacy=legacy)
     for k, v in vals.items():

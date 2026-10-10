@@ -1,0 +1,120 @@
+# A fault on an unwelded newcomer lands the fleet (M1 rule c, first step)
+
+Revision 3 (critic REWRITE then GO with one must-fix, 8 Oct night; Wesley the same night: "if quad 4 fails we just land everything because we
+need to do the next run anyway", which replaces revision 1's "the carriers fly on").
+
+1. **Question.** When QUAD4's own tracker faults before its weld, does the fleet land the ring instead of the
+   fleet-wide disarm that drops it from the air?
+2. **Hypothesis.** Today any in-flight disarm of a drone whose mux is 'ours' makes the fleet manager stop the whole
+   fleet (fleet_manager_node.py `_arming_feedback_callback`); QUAD4's mux is 'ours' from boot, so a fault on it
+   drops the ring. With `newcomer_fault_land` on, the planner latches `/drone_3/on_load` False until it folds QUAD4
+   in (False again at its detach), first published only once the fleet has left the floor creep (the planner ignores
+   LAND in the creep, so a fault there keeps the old stop with the ring on the floor); the fleet manager answers an in-flight disarm of a drone whose on_load is False
+   (and whose planner is still publishing it) with LAND on `/fleet/command`, not the emergency stop. QUAD4's own
+   motors are already off (its tracker cut them), so it falls; the carriers land the ring; the planner drops QUAD4
+   from the landed gate and never folds it in. Carrier faults, a fault after the fold-in, DISARM, ESTOP and the
+   pre-TAKEOFF gate are unchanged. Amends the locked fleet-wide disarm for an unwelded newcomer only.
+3. **The one variable.** `newcomer_fault_land` (bringup common.yaml, default false; planner param; it acts only
+   with `newcomer_lifecycle` on), branch newcomer-fault-scope: dissipative_node.py on_load publishers (latched,
+   reliable; True only at the fold-in), `_newcomer_arming_cb` (out 'fault', magnet OFF, gate and trajectory hold
+   released), `_weld_refused` (also refuses a drone whose last feedback was disarmed: the weld-order race);
+   fleet_manager_node.py `_on_load_callback` (an excused drone reported on the ring later is a carrier fault:
+   emergency stop), `_on_load_live` (the flag counts only while its planner publishes it), `_excused` cleared on
+   ARM. Off in every partner run and with a welded start. Runner events FAULT_LAND (the manager's LAND line),
+   PLANNER_LAND and NEWCOMER_OUT from /rosout.
+   Test tooling, sim only: `MOCAP_LOSS` (the emulator stops QUAD4's state: the tracker's real pose-timeout path on a
+   live node; the runner's own mocap watchdog skips that drone) and the push variant of the free-start world
+   (`three_rigid_ground_rig_attach_push.sdf`, Wesley's word). Pinned: the land/abort card's dry base
+   (weld_radius 0) with `newcomer_lifecycle` on in every row; C0 and C1 differ only in `newcomer_fault_land`.
+4. **Baseline.** C0 (switch off, same tree): FLEET_ABORT within 1 s of QUAD4's disarm. If not, the card is void.
+   The land/abort card's rows (batch 5) fly this base first; a WAIT_LOG timeout makes a row VOID.
+5. **Pass / fail.** Twin, events.csv + launch.log + run.csv (`tools/attach_metrics.py`; QUAD4's mocap is NaN after
+   a MOCAP_LOSS, so its height comes from the tip columns, tip z + 0.59 m).
+   | Run | Events | Supports if | Falsified if |
+   |---|---|---|---|
+   | C0 | switch off; MOCAP_LOSS 3 (rest of the run) 2 s into the transit | FLEET_ABORT within 1 s of QUAD4's disarm | no abort: void |
+   | C1 | switch on; as C0; no scheduled LAND | QUAD4 disarmed within 0.5 s of the loss; FAULT_LAND within 1 s of it and PLANNER_LAND after it; no FLEET_ABORT; carriers armed until LANDED; ring tilt peak LAND..LANDED <= 8 deg (clean twin LANDs on this world 2.3-3.7, R1238/R1244-R1247; R1248 6.9); LANDED | any FLEET_ABORT or carrier disarm before LANDED; no FAULT_LAND (the run times out) |
+   | C1b | as C1, 8 s into the descend phase (QUAD4 falls onto the ring at plate 9) | as C1 for the manager; the carriers land the ring; ring tilt peak, z dip and the tilt at touchdown reported | a carrier faults: that is the fall's physics, not the rule (the twin rod has no collision, so the rig would be worse); it does not block the default (the old rule would drop the ring from the air anyway), it goes on the R8b sheet as a stop rule to read |
+   | C2 | push world; 10 N +y on QUAD4 for 0.5 s, 2 s into the transit | QUAD4's envelope fault logged (tilt or speed); as C1 | as C1; no envelope fault (check QUAD4's y velocity) = VOID |
+   | C3 | MOCAP_LOSS 0 (a carrier) 2 s into the transit, switch on | FLEET_ABORT within 1 s (the lock unchanged) | the fleet lands instead |
+   | C5 | DISARM 2 s into the transit, switch on | all four disarmed, muxes latched | any drone armed |
+   | C6 | MOCAP_LOSS 3 during the carriers' floor creep (QUAD4 armed idle on the floor), switch on | FLEET_ABORT (no flag yet: the old stop, ring on the floor) | FAULT_LAND, or the ring lifts |
+   Between the columns (no abort, but the ring outside +/-5 cm or tilt > 10 deg): not supported, one repeat.
+   Unit-test only: no later fold-in of a faulted newcomer (no weld is possible at weld_radius 0); the weld-order race
+   (both orders, planner and manager); a stale flag without its planner. Deferred: a fault after a weld in this
+   world (needs the T-R8b weld runs first).
+6. **Repeats.** C1 x2; C0, C1b, C2, C3, C5, C6 x1. C3 and C6 fly before the C1 repeat.
+7. **Cost.** 8 Gazebo runs (laptop, ~11 min each).
+8. **New code?** Yes: a change to fault escalation. Behind `newcomer_fault_land`, default off; default only after
+   these rows pass and the reviewer reads the table; the locked line in the working rules is amended at that merge.
+   Welded-start worlds (R10b/R11) keep it off until a row covers a drone welded from t=0. Removal: drop the
+   branch (a fault on the newcomer = the fleet-wide stop again).
+
+## Critic
+
+Revision 1 (8 Oct night): REWRITE. What revision 2 does with each item:
+- M1 the runner's own mocap watchdog ended a MOCAP_LOSS run 2 s after the loss: the runner skips the drone it cut
+  (tested).
+- M2 weld/disarm order race: the planner refuses to fold in a drone whose last feedback was disarmed; the manager
+  turns an excused drone that is later reported on the ring into an emergency stop (both tested).
+- M3 the rig magnet can grab before a weld is declared: with "land everything" (Wesley) the excuse can cover the
+  whole approach; on_load is True only at the fold-in. A dead QUAD4 whose magnet holds the plate is sent OFF (it
+  is unwelded), so it is released and falls; no twin row can test it (weld_radius 0).
+- M4 C1b falls onto the ring: numeric report, and what a carrier fault there means (row C1b).
+- M5 no carrier-fault row with the switch on: C3 added.
+- M6 the base was unflown: the land/abort rows fly it first; LOG_TIMEOUT = VOID.
+- S1 no WELD cannot fail at weld_radius 0: unit-test only. S2 the grey band: not supported. S3 metrics: tip
+  height after the loss, the manager's LAND line; to add to attach_metrics with the batch. S4 C4 deferred.
+  S5 stale flag: counts only while its planner publishes. S6 tied to newcomer_lifecycle. S7 a fault releases the
+  trajectory hold. S8 C2 void without an envelope fault. S9 welded starts keep it off. S10 C5 kept as a cheap
+  regression. S11 "for the rest of the run". S12 Wesley's decisions merged into this branch.
+
+Second pass (8 Oct night, on revision 2): GO on C0-C5 with one must-fix before the switch can be a default, done:
+M1 a fault during the floor creep would have announced LAND while the planner ignores LAND in the creep (the fleet
+would then lift): on_load is first published when the fleet leaves the creep (tested), and row C6 flies it.
+S1 `_excused` cleared on ARM (tested). S2 C1's ring bar is now the LAND descent. S3 FAULT_LAND / PLANNER_LAND as
+runner events. S4 no scheduled LAND in C1/C1b/C2. S5 the M3 text fixed. S6 C1b's falsifier says what it blocks.
+S7 forced off with a welded start. S8 attach_metrics `fault` (disarm time and height from the tip, the events,
+carriers armed until LANDED).
+
+## Result (9 Oct night, twin, rig-prep 38fa1f3; C6 re-flown on 7da010a)
+
+| Row | Run | Fault | Loss/push -> QUAD4 disarm | Response | Carriers | Ring | Verdict |
+|---|---|---|---|---|---|---|---|
+| C0 (off) | R1258 | pose loss, transit | 0.27 s (at 1.85 m) | FLEET_ABORT 0.25 s after the loss | disarmed | dropped from 1.0 m | the old stop (test valid) |
+| C1 | R1259 | pose loss, transit | 0.27 s (1.88 m) | FAULT_LAND 0.26 s, PLANNER_LAND 0.28 s | armed to LANDED | landed, tilt 4.6 deg | supports |
+| C1 | R1265 | pose loss, transit | 0.28 s (1.87 m) | FAULT_LAND 0.26 s | armed to LANDED | landed, tilt 3.1 deg | supports |
+| C1b | R1262 | pose loss over plate 9 | 0.25 s (1.63 m, falls onto the ring) | FAULT_LAND 0.24 s | armed to LANDED, tilt up to 22 deg | **tilt 57.4 deg** in the 3 s after, then landed | supports by its bars; violent |
+| C2 | R1263 | push 10 N, 0.5 s | 0.25 s (speed > 3 m/s) | FAULT_LAND 0.23 s | armed to LANDED | landed, tilt 5.5 deg | supports |
+| C3 | R1260 | carrier pose loss | 0.27 s | FLEET_ABORT (the lock) | - | - | supports |
+| C5 | R1264 | operator DISARM | - | FLEET_ABORT, all disarmed, muxes latched | - | - | supports |
+| C6 | R1261 | QUAD4 pose loss in the creep | 0.26 s | FAULT_LAND that the planner ignored in the creep | flew on | **lifted to 1.0 m and hovered** | falsified (the gate leaked) |
+| C6 | R1274 (fix f3a2dee) | as R1261 | 0.26 s | FLEET_ABORT (no flag before the creep ends) | disarmed | stayed on the floor | supports |
+
+Verdict: SUPPORTS in the twin after the C6 fix: an unwelded QUAD4's fault lands the fleet in climb, transit and over
+the plate, a carrier fault, DISARM and a fault in the floor creep keep the fleet-wide stop. C1b is the warning:
+QUAD4 dying over the plate falls onto the rim and tilts the ring 57 deg (the twin rod has no collision, the rig would
+be worse), 3 deg short of the trackers' 60 deg envelope; the old rule would have dropped the ring from 1 m instead.
+
+Reviewer (9 Oct 03:15): WEAK. Taken:
+- Two trees: C0-C5 and both C1 flew 38fa1f3; only C6 flew 7da010a. f3a2dee changes when on_load False is published,
+  which FAULT_LAND depends on: on the rig tree the fault-land path has unit tests and no Gazebo row yet.
+- C1b is grey by this card's own band (no abort, ring tilt 57.4 deg > 10): one repeat is owed. The 57 deg is the
+  ring; the trackers' 60 deg limit is the drones' (the carriers peaked at 20.5-22.0 deg), and attach mode has no
+  ring-tilt guard. At impact the ring dropped 0.998 -> 0.883 m in 0.33 s; touchdown tilt 1.7 deg.
+- C2 has no node parameter read-back (manifest launch_args and the manager's LAND line show the switch).
+- C6 re-fly: the old stop dropped the three carriers from 0.54-0.55 m mid-creep (as designed, but worth seeing).
+
+## On the rig candidate (c0604f7, after the reviewer)
+
+| Row | Run | Result |
+|---|---|---|
+| C1 | R1284 | disarm 0.28 s, FAULT_LAND +0.27 s, no abort, carriers armed, tilt 2.9 deg: supports |
+| C1 | R1285 | disarm 0.28 s, FAULT_LAND +0.26 s, no abort, carriers armed, tilt 3.3 deg: supports |
+| C1b | R1286 | FAULT_LAND +0.26 s, no abort; ring tilt 57.0 deg after the fall (R1262 57.4): not supported by the band, 2 of 2 |
+| C2 | R1287 | envelope fault (speed 4.65 m/s), FAULT_LAND +0.27 s, no abort, tilt 3.8 deg, read-back present: supports |
+| C6 | R1274 | the old stop in the creep, ring on the floor: supports |
+
+Verdict on the rig tree: the rule works (a QUAD4 fault lands the fleet in transit; a carrier fault, DISARM and a
+fault in the creep keep the stop). C1b is the standing hazard: QUAD4 dying over the plate tilts the ring ~57 deg,
+reproducibly, rule or not.

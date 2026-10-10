@@ -16,6 +16,7 @@ from interfaces.msg import MotionCaptureState, ELRSCommand, Telemetry  # Import 
 from std_msgs.msg import Bool
 
 from drone_communication.arm_switch import ArmSwitch
+from drone_communication.serial_lock import open_exclusive
 
 CRSF_SYNC = 0xC8
 
@@ -191,13 +192,13 @@ class ELRSInterface(Node):
                 # Explicit device if the serial_port param is set; else auto-detect
                 # the first /dev/ttyUSB* (single-drone fallback, unchanged).
                 if self.serial_port:
-                    self.ser = serial.Serial(self.serial_port, 921600, timeout=0.1)
+                    self.ser = open_exclusive(self.serial_port)
                     self.get_logger().info(f'Serial port MULTI {self.serial_port} connected.')
                     return
                 ports = serial.tools.list_ports.comports()
                 for port in ports:
                     if '/dev/ttyUSB' in port.device:  # Check for USB serial devices
-                        self.ser = serial.Serial(port.device, 921600, timeout=0.1)  # Reduced timeout
+                        self.ser = open_exclusive(port.device)
                         self.get_logger().info(f'Serial port SINGLE {port.device} connected.')
                         return
                 if say:
@@ -210,7 +211,8 @@ class ELRSInterface(Node):
                     self.get_logger().error(
                         f'Radio {self.serial_port or "/dev/ttyUSB*"} not available ({e}). This drone gets '
                         f'no commands until it connects: plug in / reseat its TX module, check '
-                        f'ls -l /dev/QUAD*. Retrying every second.')
+                        f'ls -l /dev/QUAD*; "busy" means another radio node holds it (T1 still up, or a '
+                        f'second stack). Retrying every second.')
                 time.sleep(1)  # Wait before retrying
 
     def magnet_callback(self, msg):

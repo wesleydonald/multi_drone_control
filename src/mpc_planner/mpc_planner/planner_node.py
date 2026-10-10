@@ -485,6 +485,7 @@ class LoadPlanner(Node):
             depth=1, reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self._slot_offsets_checked = False
+        self._slots_rechecked_at_takeoff = False   # a replug can put a drone back on the wrong plate
         # Desired load position [x, y, z] at node 0. Logged by the drone-0
         # tracker so plot_run.py can overlay payload desired vs actual.
         self._traj_state_pub = self.create_publisher(String, '/payload/trajectory_state', 5)
@@ -961,6 +962,13 @@ class LoadPlanner(Node):
             f'descending={self.descending} land_to_ground={self._land_to_ground})')
         if cmd != 'LAND':
             return
+        if self.phase == 'creep' and self.takeoff_seen and not self.start_taut:
+            # LAND in the floor creep (Wesley 9 Oct: LAND lands every drone, whatever it is doing; R1303
+            # ignored it and the ring lifted): the creep ends where it is, no lift, then the descent below
+            # (the ring is resting, so each drone goes straight down from where it is, _land_hold_refs)
+            self._enter_planner_phase('LAND in the creep', measure=False)
+            self._lift_refused = True
+            self.get_logger().warn('[planner] LAND in the creep: the creep ends here, no lift')
         if self.phase != 'planner' or not self.takeoff_seen:
             self.get_logger().warn('[planner] LAND ignored - not flying yet')
             return
@@ -1257,6 +1265,11 @@ class LoadPlanner(Node):
         if self.auto_slot_assign and not self._slots_assigned:
             self._assign_slots()
         if not self._slot_offsets_checked:
+            self._check_slot_offsets()
+        if self.takeoff_seen and not self._slots_rechecked_at_takeoff:
+            # the slots were matched at launch; a drone handled since (r303_2: 47 deg off after a
+            # replug) shows here, before the creep latches its anchors
+            self._slots_rechecked_at_takeoff = True
             self._check_slot_offsets()
 
         self._publish_load_desired()
@@ -1715,7 +1728,7 @@ class LoadPlanner(Node):
                 and self.phase == 'planner' and self._settle_left <= 0.0
                 and self._ff_t < self.pretension_s + PRETENSION_HOLD_S)
 
-    def _enter_planner_phase(self, reason):
+    def _enter_planner_phase(self, reason, measure=True):
         """Transition creep -> coupled planner: latch the lift-ramp start height.
         No hard reconverge is forced here: the solver was kept warm on the live
         config through creep (_prime_solver), so the first planner solve warm-starts
@@ -1749,7 +1762,7 @@ class LoadPlanner(Node):
             self.get_logger().error(
                 f'[planner] {reason}: NOT lifting (rods too flat to carry the ring). '
                 f'Holding with no rod pull -- press LAND.')
-        if self.measure_rod_len:
+        if self.measure_rod_len and measure:          # not on a slack creep (a LAND there)
             self._apply_measured_rod_lengths()
         self.get_logger().info(
             f'[planner] {reason} — coupled planner active '

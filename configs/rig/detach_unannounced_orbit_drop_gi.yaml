@@ -1,0 +1,7 @@
+# W5 (Wed 14 Oct): detach_unannounced_orbit_drop.yaml (r305) + the freed drone pushed to its rest and disarmed
+# alone (departed_ground_idle; cards 2026-10-09_departed_ground_idle and _departed_disarm_alone)
+detach_detect_m: 0.06
+traj_hold_s: 5.0
+departed_land: true
+drop_on_loss: true
+departed_ground_idle: true

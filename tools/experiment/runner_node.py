@@ -25,18 +25,23 @@ import time
 
 import numpy as np
 import rclpy
-from geometry_msgs.msg import PoseArray
+from geometry_msgs.msg import PoseArray, PoseStamped
 from rcl_interfaces.msg import Log
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from rosgraph_msgs.msg import Clock
-from std_msgs.msg import Bool, Empty, Float64MultiArray, Int32, String
+from std_msgs.msg import Bool, Empty, Float64, Float64MultiArray, Int32, String
 
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
-from .config import wait_lift_arg, wrench_arg
+from .config import mocap_loss_arg, wait_lift_arg, wait_log_arg, wrench_arg
 
 ARM_FAIL = 'fleet manager ARM failed or refused'
+
+
+def _xyz(msg):
+    p = msg.pose.position
+    return (float(p.x), float(p.y), float(p.z))
 
 
 def _tilt_deg(q):
@@ -104,6 +109,9 @@ class ExperimentRunner(Node):
         self._object_attached = False
         self.t_partner_release = None
         self._partner_release_wait = None   # t the WAIT_PARTNER_RELEASE event fired
+        self._log_wait = None               # (regex, t fired, timeout) of a WAIT_LOG
+        self._planner_lines = []            # (t, text) of every dissipative planner /rosout line this run
+        self._mocap_cut = set()             # drones whose mocap a MOCAP_LOSS silenced on purpose
         self.stop_reason = None            # set when the run ends early, for the manifest
 
         best = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -127,6 +135,15 @@ class ExperimentRunner(Node):
             self._payload_ref_cb, 5)
         self.create_subscription(Bool, '/magnet/object_attached',
                                  self._attached_cb, 10)
+        # attach runs: the measured magnet tip and its target, so the approach geometry is read
+        # from the tip itself and not from body - arm length (critic, 2026-10-09_newcomer_body_to_tip)
+        self.tip = self.tip_target = None
+        self._log_tip = cfg.n_total > getattr(cfg, 'num_drones', cfg.n_total)
+        if self._log_tip:
+            self.create_subscription(PoseStamped, '/magnet_tip_pose',
+                                     lambda m: setattr(self, 'tip', _xyz(m)), best)
+            self.create_subscription(PoseStamped, '/attach_target/pose',
+                                     lambda m: setattr(self, 'tip_target', _xyz(m)), best)
         self.t_landed = None
         self.create_subscription(Bool, '/fleet/landed', self._landed_cb, 5)
         self.create_subscription(String, '/fleet/abort', self._abort_cb, 10)
@@ -151,8 +168,14 @@ class ExperimentRunner(Node):
         # RELEASE: the joint's own topic, made at start so it is matched before the event
         self.release_pubs = {int(e.arg): self.create_publisher(Empty, f'/drone_{int(e.arg)}/detach', 1)
                              for e in cfg.events if e.do == 'RELEASE'}
+        # MOCAP_LOSS: the sim mocap emulator's dropout input, made at start for the same reason
+        self.dropout_pubs = {mocap_loss_arg(e.arg)[0]: self.create_publisher(
+            Float64, f'/drone_{mocap_loss_arg(e.arg)[0]}/mocap_dropout', 5)
+            for e in cfg.events if e.do == 'MOCAP_LOSS'}
         if any(e.do == 'WRENCH' for e in cfg.events):
             self._wrench_publisher()
+        self.tip_freeze_pub = (self.create_publisher(Float64, '/magnet_tip_publisher/freeze', 5)
+                               if any(e.do == 'TIP_FREEZE' for e in cfg.events) else None)
         self.handoff_pub = self.create_publisher(Bool, '/join_planner/handoff_ready', 10)
         self.fleet_handover_pub = self.create_publisher(Bool, '/fleet/handover', 10)
         # HANGER_RELEASE publishers exist from the start: one created at the event has no
@@ -258,7 +281,10 @@ class ExperimentRunner(Node):
 
     _ROSOUT = ((re.compile(r'\] ATTACH drone (\d+)'), 'FOLD_IN'),
                (re.compile(r'PARTNER RELEASE: drone (\d+)'), 'PARTNER_RELEASE'),
-               (re.compile(r'PARTNER HANDOFF()'), 'PARTNER_HANDOFF'))
+               (re.compile(r'PARTNER HANDOFF()'), 'PARTNER_HANDOFF'),
+               # a newcomer taken out of the flight, and the planner hearing LAND (card newcomer_fault_scope)
+               (re.compile(r'out of this flight \((\w+)\)'), 'NEWCOMER_OUT'),
+               (re.compile(r"/fleet/command received: 'LAND'()"), 'PLANNER_LAND'))
 
     def _rosout_cb(self, msg):
         # a failed or refused ARM no longer raises /fleet/abort (Q6b, mux latch card v3), so
@@ -269,9 +295,12 @@ class ExperimentRunner(Node):
                 self.failures.append(f'{ARM_FAIL} at t={self._rel():.2f}: {msg.msg}')
             if 'disarmed before TAKEOFF' in msg.msg and self.t_grounded is None:
                 self.t_grounded = self._rel()
+            if 'LAND, every drone lands' in msg.msg:
+                self._log_event('FAULT_LAND')   # the manager landed the fleet on a newcomer's fault
             return
         if not msg.name.endswith('dissipative_planner'):
             return
+        self._planner_lines.append((self._rel(), msg.msg))
         for pat, name in self._ROSOUT:
             m = pat.search(msg.msg)
             if m:
@@ -317,9 +346,13 @@ class ExperimentRunner(Node):
               and all(c is not None for c in self.cmd[:self._n_cmd_ready()])
               and self.payload is not None)
         # planner modes: the planner must be publishing references too (R1148 started the
-        # clock 17 s before the dissipative planner was up, and ARM went out into nothing)
-        if str(self.cfg.launch_args.get('mode', 'mpc')) in ('mpc', 'dissipative'):
-            ok = ok and all(r is not None for r in self.ref[:self.n])
+        # clock 17 s before the dissipative planner was up, and ARM went out into nothing; R1308:
+        # attach mode was not in the list, and the clock started while the planner compiled its
+        # resize solvers for 126 s). In attach only the carriers have one before the approach.
+        mode = str(self.cfg.launch_args.get('mode', 'mpc'))
+        if mode in ('mpc', 'dissipative', 'attach'):
+            n_ref = self.cfg.num_drones if mode == 'attach' else self.n
+            ok = ok and all(r is not None for r in self.ref[:n_ref])
         # the fleet manager must be discovered on /fleet/command, and stay so for 2 s:
         # R0602's ARM reached drone 3's tracker but not the fleet manager
         import time as _t
@@ -373,6 +406,20 @@ class ExperimentRunner(Node):
             self._partner_release_wait = None
             self.get_logger().warn(
                 f'[exp] t={t:6.2f} partner released; later events shifted {shift:+.2f} s')
+        if self._log_wait is not None:
+            pat, t0, timeout = self._log_wait
+            hit = next((tl for tl, ln in self._planner_lines if pat.search(ln)), None)
+            seen = hit is not None
+            if not seen and not (timeout and t - t0 >= timeout):
+                return                      # WAIT_LOG blocks the rest of the schedule
+            # later events are timed from the line itself, which may have come before the wait fired
+            shift = (hit if seen else t) - t0
+            for e in self._pending:
+                e.t += shift
+            self._log_wait = None
+            self._log_event('LOGGED' if seen else 'LOG_TIMEOUT', f'{shift:.2f}')
+            self.get_logger().warn(f'[exp] t={t:6.2f} {"logged" if seen else "NOT logged (timeout)"} '
+                                   f'/{pat.pattern}/; later events shifted {shift:+.2f} s')
         if self._thrust_wait is not None:
             tpl, t0 = self._thrust_wait
             if not all(self._thrust_seen[tpl]):
@@ -413,6 +460,10 @@ class ExperimentRunner(Node):
                 return
             if ev.do == 'WAIT_PARTNER_RELEASE' and self.t_partner_release is None:
                 self._partner_release_wait = t
+                return
+            if ev.do == 'WAIT_LOG':
+                pat, timeout = wait_log_arg(ev.arg)
+                self._log_wait = (pat, t, timeout)
                 return
 
     def _publish(self, pub, msg, what, exclude_self=False):
@@ -496,6 +547,12 @@ class ExperimentRunner(Node):
             pub = self.release_pubs[int(ev.arg)]
             self._publish(pub, Empty(), f'/drone_{ev.arg}/detach (unannounced)')
             self._repeats.append((self._rel() + 0.5, pub, Empty()))
+        elif ev.do == 'MOCAP_LOSS':
+            d, secs = mocap_loss_arg(ev.arg)
+            self._mocap_cut.add(d)          # the run goes on: the loss is the test, not a harness fault
+            self._publish(self.dropout_pubs[d], Float64(data=secs), f'/drone_{d}/mocap_dropout {secs:.0f} s')
+        elif ev.do == 'TIP_FREEZE':
+            self._publish(self.tip_freeze_pub, Float64(data=float(ev.arg)), f'/magnet_tip_publisher/freeze {ev.arg:.1f} s')
         elif ev.do == 'HANDOFF':
             # latched True, as his planner does while ATTACH_READY; the consumers act on
             # the first True only
@@ -525,7 +582,7 @@ class ExperimentRunner(Node):
         elif ev.do == 'WRENCH':
             self._set_wrench(*wrench_arg(ev.arg))
         elif ev.do in ('WAIT_WELD', 'WAIT_LIFT', 'WAIT_REWELD', 'WAIT_PARTNER_RELEASE',
-                       'WAIT_THRUST'):
+                       'WAIT_THRUST', 'WAIT_LOG'):
             pass
         elif ev.do == 'LAUNCH':
             self.launch_requests.append(str(ev.arg))     # started by run_experiment's loop
@@ -556,8 +613,8 @@ class ExperimentRunner(Node):
             return False
         for i in range(self.n):
             st = self.pose_stamp[i]
-            if st is None:
-                continue
+            if st is None or i in getattr(self, '_mocap_cut', ()):
+                continue                    # no pose yet, or silenced by the run's own MOCAP_LOSS
             age = self.sim_t - st
             if age > self.cfg.pose_timeout_s:
                 self.failures.append(
@@ -593,6 +650,10 @@ class ExperimentRunner(Node):
         row.update(payload_ref_x=pr[0] if pr else math.nan,
                    payload_ref_y=pr[1] if pr else math.nan,
                    payload_ref_z=pr[2] if pr else math.nan)
+        if self._log_tip:
+            for name, v in (('tip', self.tip), ('tip_target', self.tip_target)):
+                for k, c in zip('xyz', v or (math.nan,) * 3):
+                    row[f'{name}_{k}'] = c
         for i in range(self.n):
             q = self.pose[i]
             v = self.vel[i] or (math.nan,) * 3

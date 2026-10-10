@@ -78,6 +78,8 @@ class CreepController:
         self._arc_th = None                # per-drone swept elevation (rad)
         self._arc_done = False
         self.lifted_off = False            # gate the creep climb on real liftoff
+        self._arc_logged = False           # the sweep line is logged once, at TAKEOFF
+        self._arc_rods = ''
         self._liftoff_wait = 0.0           # s since TAKEOFF without liftoff
         self._diag_ctr = 0
 
@@ -135,7 +137,7 @@ class CreepController:
         if self.handover_elev_deg > 0.0:
             self._arc_creep(load_state, drone_pos, takeoff_seen)
         else:
-            self._soft_creep(load_state, drone_pos, gates)
+            self._soft_creep(load_state, drone_pos, gates, takeoff_seen)
         return self._handover_check(load_state, gates)
 
     def _handover_check(self, load_state, gates):
@@ -190,6 +192,11 @@ class CreepController:
         if self.airborne_start:
             self._arc_creep_airborne(load_state, drone_pos, takeoff_seen)
             return
+        if not takeoff_seen and not self.lifted_off:
+            # before TAKEOFF a drone may still be handled (a battery replug lifted QUAD1 5 cm and
+            # started the sweep with the fleet disarmed, r303): re-latch every tick from the
+            # resting pose, and only TAKEOFF can start the sweep
+            self.arc_anchor = None
         if self.arc_anchor is None:
             ls = load_state
             R = quat_to_rot_np(ls[3:7])
@@ -205,19 +212,23 @@ class CreepController:
             self.arc_theta = float(np.mean(self.arc_theta0))
             rods = (f'{self.cable_len:.2f}' if self.cable_lens is None
                     else '/'.join(f'{v:.2f}' for v in self.cable_lens))
+            self._arc_rods = rods
+        if takeoff_seen and not self._arc_logged:
+            self._arc_logged = True
             self._log.info(
                 f'[planner] rigid arc creep: sweeping {np.degrees(self.arc_theta):.1f}'
                 f' -> {self.handover_elev_deg:.1f} deg about the grounded attach '
-                f'points (n={self.n}, rod {rods} m)')
+                f'points (n={self.n}, rod {self._arc_rods} m), anchors latched at TAKEOFF')
 
         target = np.deg2rad(self.handover_elev_deg)
         dtheta = self.creep_vel / max(self.cable_len, 1e-6) / self.hz
         if not self.lifted_off:
-            for i in range(self.n):
+            for i in range(self.n if takeoff_seen else 0):
                 z_spawn = (self.arc_anchor[i][0][2]
                            + self._rod(i) * np.sin(self.arc_theta0[i]))
                 if drone_pos[i][2] > z_spawn + LIFTOFF_MARGIN:
                     self.lifted_off = True
+                    self._log.info(f'[planner] arc sweep started: drone {self.label(i)} lifted off')
                     break
             # LIFTOFF TIMEOUT -- same principle as HANDOVER_TIMEOUT_S below: never
             # strand the fleet in a phase it cannot leave.
@@ -344,7 +355,7 @@ class CreepController:
                 + f' target={self.handover_elev_deg:.0f}deg held {self._arc_hold:.1f}s'
                 f'  measured: {meas}')
 
-    def _soft_creep(self, load_state, drone_pos, gates):
+    def _soft_creep(self, load_state, drone_pos, gates, takeoff_seen=True):
         """Phase-1 takeoff: command each drone to rise straight up at CREEP_VEL,
         level attitude, no cable force.
 
@@ -354,7 +365,8 @@ class CreepController:
         position-hold that resists the inward pull of the tautening cable --
         anchoring to the live position instead lets the drone drift inward and wind
         the attitude up until it tips over."""
-        if self.creep_anchor is None:                 # latch spawn xy/z once
+        if self.creep_anchor is None or (not takeoff_seen and not self.lifted_off):
+            # latch the spawn xy/z; re-latched until TAKEOFF (a drone handled before it, r303)
             self.creep_anchor = [drone_pos[i].astype(float).copy()
                                  for i in range(self.n)]
         # Don't accumulate climb until the drones leave the ground: the planner runs
@@ -363,8 +375,8 @@ class CreepController:
         # grounded so takeoff still initiates.
         if not self.lifted_off:
             self.creep_climb = CREEP_LEAD
-            if any(drone_pos[i][2] > self.creep_anchor[i][2] + LIFTOFF_MARGIN
-                   for i in range(self.n)):
+            if takeoff_seen and any(drone_pos[i][2] > self.creep_anchor[i][2] + LIFTOFF_MARGIN
+                                    for i in range(self.n)):
                 self.lifted_off = True
         else:
             self.creep_climb += self.creep_vel / self.hz
