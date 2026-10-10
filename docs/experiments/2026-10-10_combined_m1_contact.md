@@ -35,6 +35,10 @@ On the rig twin, with the ring hovering and with it circling, does the subtest r
   state, the commands actually applied and its heading. There is no jolt (per-channel steps below), and the ring tilt
   peak from contact to the confirmation +8 s stays within the G1 rejoin bar (5 deg).
 - **Most likely failures:**
+  - his height: his MPC has no z integral, so a thrust-ratio mismatch is a steady z error; in E0 (R1476) his loaded
+    lift ended 14 cm under its target while his estimate converged (22 -> 18.1 and still falling). A few cm of that
+    at the plate is a contact that never comes (too high) or a tip pushed through it (too low; no contact physics in
+    the twin);
   - the moving ring (his real lag puts the tip a few cm off: retries);
   - the rigid twin rod resisting the lift (the proof waits for plate rise; Critic B).
 
@@ -280,6 +284,41 @@ Tests first:
 - no double references.
 
 If it fails, everything behind the switches is deleted and the attach roles go back to Wesley with the logs.
+
+## E0 / E1 results (exploratory, 10 Oct; rig twin, pickup world; registry R1475-R1490)
+
+Tejen's mission now runs end to end on the rig twin: takeoff, ball pickup, high transit (lift 2.3 m, floor 2.7 m),
+drop into the net (drop approach 1.35 m), rejoin (R1485 and every E1 run).
+
+| run | arm | contact after his descent (s) | contacts | proof after contact (s) | switch | ring tilt peak contact..proof+8 s (deg) | dip (mm) | LAND |
+|---|---|---|---|---|---|---|---|---|
+| R1479 | E1b hover, seed ocp | 11.4 | 1 | 0.72 | same tick | 8.1 | 4 | abort (QUAD4 tipped in the landing unwind) |
+| R1480 | E1b orbit, seed ocp | 13.0 | 1 | 0.90 | same tick | 8.4 | 4 | landed |
+| R1489 | E1b hover, seed ocp | 13.7 | 2 | 0.86 | same tick | 7.7 | 2 | landed |
+| R1490 | E1b orbit, seed ocp | 20.6 | 1 | 1.76 | same tick | 8.6 | 4 | landed |
+| R1486 | E1b hover, seed start | 6.1 | 1 | 0.82 | same tick | 2.3 | 0.2 | abort (the same tip-over) |
+| R1487 | E1b hover, seed start | 11.3 | 2 | 0.87 | same tick | 1.8 | 2 | landed |
+| R1488 | E1b orbit, seed start | 11.6 | 2 | 2.89 | same tick | 2.6 | 1 | landed |
+
+- The hand-over is bumpless in every run: QUAD4's throttle steps <= 0.3 % of hover at the switch, QUAD4 tilt at the
+  proof <= 0.3 deg.
+- Seed: 'ocp' (QUAD4 starts at its OCP share) let plate 9 sag 2.5-3.5 cm and tilted the ring 7.7-8.6 deg after the
+  switch, 4 of 4; 'start' (0.1 N) 1.8-2.6 deg, 3 of 3. 'start' is the default on the branch (80b9352).
+- `_nocatch` R1481: 3 contacts, 3 failed proofs, his give-up, our take-back out to 1.18 m, landed; no attach declared.
+  `_land_transit` R1482: take-back at LAND with the ball on, bumpless, but it landed 0.33 m from carrier 1 (moving
+  toward the ring when taken back; with the ball on it now steps out by the rod too, d226e85).
+- The proof, measured (E1a R1483 orbit / R1484 hover, the lift held at its 1 cm cap): plate 9 rises 4.5-6.0 mm at the
+  first lift's peak, which the carriers pull back to 0-3 mm in the hold; re-presses rise ~1 mm; tip drift when caught
+  <= 1.7 mm (sd 0.1-0.3 mm). Plate-9 z noise near contact: the 0.1 s average's change over 0.3 s has sd 0.8-1.5 mm
+  (p99 1.7-3.3 mm).
+- **The threshold mapping cannot be met:** h_plate <= half the first-lift rise (2.2-3.0 mm) and >= 3x the noise
+  (2.3-4.4 mm). With the start values (h_plate 3 mm) 3 of 7 first proofs failed by timeout on a real catch (drift
+  0.5-2.5 mm, plate rise -3.9 to +0.9 mm), and the second contact proved each time; no false attach anywhere.
+  The stop rule (rise < 2x noise) is not tripped. The thresholds and the twin cap go to Wesley before the claim.
+- LAND: QUAD4 tipped over in the landing unwind in 2 of 7 (R1479, R1486; both hover): after touchdown its rigid rod
+  lays over (55 -> 16 deg) and it tips past 60 deg in under 1 s; the rigid-link class of the 9 Oct LAND re-fly.
+- Contact speed: 6-21 s after his descent start (the bar's 10 s met in 1 of 7): his height has no integral, so his
+  hold sits a few mm above the plate point; the `_low` neighbour tests aiming lower.
 
 ## Critic
 

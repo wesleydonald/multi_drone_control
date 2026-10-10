@@ -119,7 +119,28 @@ Updated: Sat 10 Oct 2026, late evening.
   done: GO WITH CHANGES -> rev 4 (take-back specified as NEW code: our abort was only tested from our own approach;
   clearance pairs; E1 threshold mapping + stop rule; ball 0x05 + repeated pickup detach; transit 2.7 m; rig one coil:
   no OFF before the ON span; _land_transit). R1475 VOID (runner's old-world ball check; fixed 04242f4); E0 = R1476
-  running on the lab PC. Next: build (his planner, our manager, planner/tracker/mux/runner, generator) on m1-subtest. tip_calibration prints body-to-tip (the taut length for the rig proof; Wednesday item 4). Build on a branch from
+  ran: R1476 exploratory (his takeoff + pickup work on the rig twin; his loaded lift ended 14 cm low with no z integral,
+  under the C++ planner's 2.4 m floor -> WAITING_ABOVE_SEARCH_FLOOR to the 30 min cap). E0 rerun from a clean worktree
+  /home/wesley/mdc_wt/m1-e0 (branch m1-e0 866b2b2: lift 2.3, floor 2.7, cap 80 min) running. Builders: manager +
+  generator DONE (uncommitted in m1-subtest; contact speed = LSQ slope, the twin's 0.5 mm tip noise makes the
+  per-sample speed ~85 mm/s); his side and our planner/tracker/mux/runner DONE. Integrated on m1-subtest b7bb2cb
+  (+ fe0d7c2 lift fix): all package tests pass (known: tejen 12, bringup 2 lint), gate --quick passed, launch gate
+  0 changed. My additions: WAIT_WELD timeout, 1 Hz contact level. E0 rerun R1477 (m1-e0): past the lift into
+  TRANSIT_TO_DROP_POINT. Next: E1a (h_plate out of reach: measure) + E1b (start values: success path) on the lab PC
+  after R1477. Open for Wesley: his retry after a failed proof re-presses from the lifted offset (<= 1 cm), not
+  from the approach height (builder's call, to avoid a 0.29 m yank if partly caught).
+- Runs (registry R1477-R1485): R1485 E0 laptop: his whole mission works on the rig twin (pickup, transit, drop into
+  the net, rejoin); our old descent missed (my attach_cable_len 0.59 + pivot). E1b R1479 hover / R1480 orbit: the
+  contact attach works end to end (contact 11-13 s after his descent, proof 0.7-0.9 s later, switch the same tick,
+  bumpless), but the ring tilts 8.1 / 8.4 deg 1.5 s after the switch (plate 9 sags 2.5-3.5 cm: the fold-in seeds
+  QUAD4 at its OCP share; seed switch contact_fold_seed f9536f3) and R1479 aborted at LAND (QUAD4 tipped in the
+  landing unwind: rigid-link artefact). R1481 nocatch: no false attach, give-up, take-back out to 1.18 m, landed.
+  R1482 LAND in his transit: bumpless take-back with the ball, but landed 0.33 m from carrier 1 (fix d226e85).
+  R1483 E1a orbit: plate rise 5-6 mm at the lift peak, 0-3 mm held; plate noise sd 0.8-1.5 mm (0.1 s avg over 0.3 s).
+  R1484 E1a hover; R1486-R1490 seed comparison: 'ocp' 4/4 > 5 deg (7.7-8.6), 'start' 3/3 <= 2.6 deg -> default
+  'start' (80b9352). Proof thresholds: the card's mapping cannot be met (first-lift rise 4.5-6 mm vs plate noise sd
+  0.8-1.5 mm; 3/7 first proofs false-rejected by timeout, retry proved; 0 false attaches) -> Wesley. LAND tip-over of
+  QUAD4 in the landing unwind 2/7 (hover) -> Wesley. Card has the E0/E1 results section. Nothing running. tip_calibration prints body-to-tip (the taut length for the rig proof; Wednesday item 4). Build on a branch from
   tejen-sync-check after the critic. Scoring script kept at $CLAUDE_JOB_DIR/tmp/m1_stages.py (to tools/ with the configs).
 
 ## Open items / next steps (plan: /home/wesley/.claude/plans/whimsical-kindling-minsky.md)
