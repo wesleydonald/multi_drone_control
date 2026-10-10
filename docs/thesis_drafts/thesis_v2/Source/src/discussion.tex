@@ -6,19 +6,46 @@
 % 9 Oct (structure audit): the list of simulator artefacts moved here from the experimental method;
 % the steady-error taxonomy points at Table tab:error_sources.
 
-This section answers the questions in order, then discusses the role of geometry, the steady errors of a
-re-planned cascade, the twin against the rig, and the limitations.
+This section discusses the answers in question order, then the role of geometry, the twin against the
+rig, the literature and the limitations.
 
-\paragraph{RQ1: a centralised controller through join and leave.} In simulation the answer for the detach
-is yes, with a condition: a detach by OCP resize redistributes the load in the first solve after the release,
-and the payload settles level within a few seconds, provided the survivors' attachment points still surround
-its centre of mass. The centralised planner knows the whole attachment geometry, so it does not have to
-discover the new load distribution from the motion that follows the event: it solves for it. This supports
-the hypothesis of the project plan. On the rig the detach held the ring in all four flights, announced and
-unannounced, in a hover and in the circle, with peak tilts of 6.5--17.8$^\circ$
-(Section~\ref{sec:res_detach_rig}); the attach has not yet been flown on the rig.
+\paragraph{Q1: carrying with a fixed team.} The cascade carries the ring with all control on the ground and
+the UAVs' firmware unchanged: a planner that re-solves the coupled payload--rod problem at 10\,Hz and trackers
+that send rate commands over the radio are enough at lab speeds. What limited the carry on the rig was not the
+plan but what the trackers were told about the rods. The plan assumes massless rods at their planned angle;
+the real rods flew steeper, so the planned pull was wrong, and the ring lagged its path and its height swung
+until each tracker used the pull it measures and the rods were planned at 60$^\circ$
+(Table~\ref{tab:rig_oct7}). Measuring the rod's pull at each UAV is the ground-side counterpart of the onboard
+force inversion of \cite{tudelft}, and it lets a plan made centrally hold on hardware that the planner does
+not model exactly.
 
-\redo{the attach half of RQ1: the weld transient of an attach by OCP resize in the full rejoin mission (Section~\ref{sec:sim_attach}).}
+\paragraph{Q2: steady errors in a re-planned cascade.} Re-solving from the measured state at every tick closes a
+loop on the payload's position with no integrator, of stiffness about 5\,N/m horizontally and 7\,N/m vertically
+in the twin, so a force of half a newton moves the payload by 7--10\,cm and stays. The payload's offsets had four
+kinds of cause (Table~\ref{tab:error_sources}): a bias in the cascade itself (the tracker's relaxed initial
+condition, which no force estimate could find because it is not a force), a wrong belief passed between levels
+(the breakaway cap), model errors (the rods' mass, one UAV's thrust map) and external forces (a push, wind, the
+rig's steady pull towards $-x$). Integral action removes the steady error from all of them, as the internal
+model principle says, but only where its gate is open and within its bound; whether it moves the target or acts
+as a force in the planner's model changes the transient and what the plan predicts, not the steady state. A
+force estimated from motion and thrust removes external forces quickly but, by Newton's law, is blind to forces
+the system exerts on itself, and only a correction of one UAV's own force removes the moment of its wrong thrust
+map. In \cite{tudelft} the onboard incremental inversion makes each UAV exact at its own force, at 300\,Hz from
+rotor speed, which is why the planner needs no integrator there. With Betaflight and a ground-side controller the
+equivalent is the tracker's measured rod pull: in the twin's estimator study it levelled the ring against a wrong
+thrust map but upset the landings, and on the rig, flown since 7 October, it removed most of the force the
+model integral had been learning (Section~\ref{sec:res_rig_integral}). Integral action in the planner then
+removes what remains.
+
+\paragraph{RQ1a: leave.} In simulation the answer is yes, with a condition: a detach by OCP resize
+redistributes the load in the first solve after the release, and the payload settles level within a few
+seconds, provided the survivors' attachment points still surround its centre of mass. The centralised planner
+knows the whole attachment geometry, so it does not have to discover the new load distribution from the motion
+that follows the event: it solves for it. This supports the hypothesis of the project plan. On the rig the
+detach held the ring in all four flights, announced and unannounced, in a hover and in the circle, with peak
+tilts of 6.5--17.8$^\circ$ (Section~\ref{sec:res_detach_rig}). That an unannounced detach, found from the
+stretched rod 0.33--0.42\,s after the release, left the ring no more tilted than an announced one suggests that
+the planner need not be told of a loss in advance, on one run per condition.
 % --- original text, flown before the rig twin; kept to refill this place:
 % \paragraph{RQ1: a centralised controller through join and leave.} In simulation the answer is yes,
 % with a condition. A detach by OCP resize redistributes the load in the first solve after the release,
@@ -29,6 +56,13 @@ unannounced, in a hover and in the circle, with peak tilts of 6.5--17.8$^\circ$
 % that follows the event: it solves for it. This supports the hypothesis of the project plan. Two parts
 % of the answer are not yet in. Neither reconfiguration has been flown on the rig, and the attach
 % results come from the earlier simulation geometry, before the rig twin.
+
+\paragraph{RQ1b: join.} The attach has been flown only in the rig twin, and its weld transient is not yet
+measured against its bar (Section~\ref{sec:sim_attach}). What the twin does show is that the parts around the
+weld work: the newcomer's measured-tip loop removes the error of an assumed rod length, and the fleet lands
+from every phase of an attach except just after the weld, where the twin's rigid rod, which the rig's tether
+does not have, tips the newcomer.
+\redo{RQ1b: the weld transient of an attach by OCP resize in the full rejoin mission (Section~\ref{sec:sim_attach}).}
 
 \redo{the attach's hand-over faults (mux authority on an armed but idle stream, the newcomer's starting tension, the frozen target, the weld gate's clock), restated once the attach has flown on the twin.}
 % --- original text, flown before the rig twin; kept to refill this place:
@@ -62,22 +96,6 @@ unannounced, in a hover and in the circle, with peak tilts of 6.5--17.8$^\circ$
 % UAV, which a tracker without an integrator turns into a roll. Choosing the attachment layout for the
 % reconfigurations that will happen is part of the design, and a simple test (is the centre of mass
 % inside the support polygon, and by how much) predicts which layouts will work.
-
-\paragraph{Steady errors in a re-planned cascade.} Re-solving from the measured state at every tick closes a
-loop on the payload's position with no integrator, of stiffness about 5\,N/m horizontally and 7\,N/m vertically
-in the twin, so a force of half a newton moves the payload by 7--10\,cm and stays. The payload's offsets had four
-kinds of cause (Table~\ref{tab:error_sources}): a bias in the cascade itself (the tracker's relaxed initial
-condition, which no force estimate could find because it is not a force), a wrong belief passed between levels
-(the breakaway cap), model errors (the rods' mass, one UAV's thrust map) and external forces (a push, wind, the
-rig's steady pull towards $-x$). Integral action removes the steady error from all of them, as the internal
-model principle says, but only where its gate is open and within its bound; whether it moves the target or acts
-as a force in the planner's model changes the transient and what the plan predicts, not the steady state. A
-force estimated from motion and thrust removes external forces quickly but, by Newton's law, is blind to forces
-the system exerts on itself, and only a correction of one UAV's own force removes the moment of its wrong thrust
-map. In \cite{tudelft} the onboard incremental inversion makes each UAV exact at its own force, at 300\,Hz from
-rotor speed, which is why the planner needs no integrator there. With Betaflight and a ground-side controller the
-equivalent was the measured-cable-force tracker, which levelled the ring against a wrong thrust map but upset the
-landings in this configuration, so integral action in the planner is the practical substitute.
 
 \paragraph{Simulation and the rig.} The rig twin, flown on exactly the rig's code, matched the rig in the
 takeoff and in solver health, and reproduced the rig's height shortfall from the one setting that caused it

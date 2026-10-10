@@ -11,10 +11,10 @@
 \subsection{Detach}
 \label{sec:sim_detach}
 
-This section answers the leave half of RQ1: does a detach by OCP resize keep the ring level when one UAV
-of four leaves? The baseline is a hand-off of the payload to the dissipative network on the same
-detach, and for the geometry the even layout; the bar is the ring's tilt back under the hover's own
-maximum plus 0.5$^\circ$ (Table~\ref{tab:detach}).
+This section answers RQ1a: does a detach by OCP resize keep the payload level when one UAV of four
+leaves? The baseline is a hand-off of the payload to the dissipative network on the same detach, and for
+the geometry the even layout; the bar is the ring's tilt back under the hover's own maximum plus
+0.5$^\circ$ (Table~\ref{tab:detach}).
 
 \paragraph{Layout.}
 \redo{detach layout study, four UAVs to three in hover, the UAV on plate~3 released, two runs per layout: the even ring (plates 0/3/6/9) against plates 1/3/5/9 (peak and settled tilt); the 1/3/5/9 detach in the middle of a circle; plates 1/3/6/9 (clearance of the departing UAV against tilt and throttle).}
@@ -178,3 +178,9 @@ a detach that would leave fewer than three UAVs.
 \redo{a detach from three UAVs to two, to show the payload capsizing on two rim points.}
 % --- original text, flown before the rig twin; kept to refill this place:
 % In the bench the payload capsized. The planner refuses a detach that would leave fewer than three
+
+\paragraph{Answer to RQ1a.} Yes, as far as it has been flown: in the twin a detach by OCP resize brought the
+ring back within its hover band in 0.9--1.0\,s, and on the rig the three remaining UAVs carried the ring on
+through all four detaches, announced and unannounced, in hover and on the circle, with peak tilts of
+6.5--17.8$^\circ$, the largest with a 150$^\circ$ gap left in the ring; the layout study and the comparison
+with the network hand-off are still to be re-flown on the twin.

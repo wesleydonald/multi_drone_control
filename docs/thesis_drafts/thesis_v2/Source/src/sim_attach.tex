@@ -14,10 +14,9 @@
 \subsection{Attach and the rejoin}
 \label{sec:sim_attach}
 
-This section answers the join half of RQ1: can a free UAV weld onto the carried ring and be folded in
-by OCP resize with a transient small enough for the transport to continue? The baseline is the network
-attach at the same weld; the bar is the ring's tilt back under 2$^\circ$ within 3\,s of the weld
-(Section~\ref{sec:metrics}).
+This section answers RQ1b: does an attach by OCP resize fold a newcomer in with a small transient, small
+enough for the transport to continue? The baseline is the network attach at the same weld; the bar is the
+ring's tilt back under 2$^\circ$ within 3\,s of the weld (Section~\ref{sec:metrics}).
 
 Of the three stages (a network attach, the attach by OCP resize, and the full rejoin mission with the
 collaborator's approach controller), only the attach by OCP resize with the newcomer flying its own approach
@@ -182,3 +181,9 @@ Figure~\ref{fig:rig_rejoin} shows the rejoin on the rig.
 
 The weld joint ladder and the ground join with the collaborator's controller are in
 Appendix~\ref{sec:app_negatives}.
+
+\paragraph{Answer to RQ1b.} Not yet against its bar: the parts flown in the rig twin work, with the
+measured-tip loop parking the newcomer's magnet within 1\,cm of its plate and a LAND after the weld landing
+every UAV except within 2\,s of it, where the twin's rigid rod tipped the newcomer in 3 of 11 runs
+(Section~\ref{sec:sim_landing}), but the weld transient against the network attach, the rejoin mission and
+the attach on the rig are still to fly.

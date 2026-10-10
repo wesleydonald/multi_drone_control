@@ -11,10 +11,11 @@
 \subsection{Carrying with a fixed team}
 \label{sec:res_carry}
 
-Can the cascade carry the ring with a fixed team, from the floor through hover and trajectories to the
-landing, in the rig twin and on the rig? This carry is the baseline for both research questions. The
-bars are the planner's solve inside its 100\,ms tick, landings in which no
-UAV tips, and agreement between the twin and the rig.
+This section answers Q1: can the cascade carry the ring with a fixed team, from the floor through hover
+and trajectories to the landing, in the rig twin and on the rig? The baseline is the rig twin flying the
+same references, and on the rig the same paths flown before the trackers used the rod pull they measure.
+The bars are the planner's solve inside its 100\,ms tick, landings in which no UAV tips, and agreement
+between the twin and the rig. This carry is in turn the baseline for RQ1a, RQ1b and RQ2.
 
 \subsubsection{Takeoff and lift}
 
@@ -210,4 +211,11 @@ planner solve failures & 0 & 0 & 0 \\
 \bottomrule
 \end{tabularx}
 \end{table}
+
+\paragraph{Answer to Q1.} Yes, at lab speeds: on the rig three and then four UAVs carried the ring from the
+floor through hover, the circle and the figure-eight, four of them within 3\,cm of the path on average once
+the trackers used the rod pull they measure, with no planner tick over its 100\,ms budget; in the twin no UAV
+tipped in 18 landings once the unwind, the feedforward ramp and the ground idle were in; and the twin
+reproduced the rig's takeoff, solver health and height shortfall but not its horizontal drift or its tilt near
+the floor.
 

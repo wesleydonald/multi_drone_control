@@ -17,10 +17,11 @@
 \subsection{Steady payload error}
 \label{sec:res_steady}
 
-What leaves a steady error in the payload's position, and what removes it? Each source below is set
-against the same flight without its remedy: the tracker's relaxed initial condition, the breakaway cap
-held for the whole flight, and no integral action for forces and wrong model values. The bar is the
-ring back within 1\,cm of its target, the band used for the recovery times below.
+This section answers Q2: what leaves a steady error in the payload's position, and what removes it?
+Each source below is set against the same flight without its remedy, which is its baseline: the tracker's
+relaxed initial condition, the breakaway cap held for the whole flight, and no integral action for forces
+and wrong model values. The bar is the ring back within 1\,cm of its target, the band used for the
+recovery times below.
 
 \subsubsection{The tracker's initial condition}
 \label{sec:res_ic}
@@ -84,7 +85,12 @@ found afterwards in the logs: the breakaway freeze had held the pull at that fra
 flight, so the trackers were told the rods pull 7--27\,\% less than they do. Holding the pull at
 75\,\% in the Gazebo twin reproduced both symptoms on the rig: the ring 23--26\,cm low and the rods
 steepened from 52 to 58$^\circ$. Releasing the cap once the lift starts restored the twin's height
-to the no-cap value (Section~\ref{sec:sim_to_real}). This fix has not yet been flown.
+to the no-cap value (Section~\ref{sec:sim_to_real}). On the rig the release has flown since 7 October,
+together with the pinned initial condition: without an integral the ring then held 0.97\,m against its 1.0\,m target before it sank to 0.92\,m
+(Figure~\ref{fig:rig_integral}), where with the cap held it had sat 20--30\,cm low.
+% 7 Oct rig: RIG-1007-r0001 is the first flight of the 3-6 Oct changes (cap release, tracker box 0, landing
+% fix): breakaway at 80 %, hold 0.968 -> 0.929 m with no integral (registry). Was "This fix has not yet
+% been flown" (stale since 7 Oct).
 
 \subsubsection{External forces}
 \label{sec:res_force}
@@ -263,3 +269,11 @@ that UAV's own force (measured cable force) & \ref{sec:res_force}, \ref{sec:sim_
 \bottomrule
 \end{tabularx}
 \end{table}
+
+\paragraph{Answer to Q2.} Four kinds of source leave a steady payload error, a bias in the cascade (the
+tracker's relaxed initial condition), a wrong belief passed between levels (the breakaway cap), model
+errors (the rods' mass, the payload's mass, one UAV's thrust map) and external forces, and each needs its
+own remedy (Table~\ref{tab:error_sources}): pinning node~0 and releasing the cap remove the first two at
+their source, integral action in the planner's model removes a force on the payload in all three axes
+within its gate and bound, and only a correction of one UAV's own force removes the moment of its wrong
+thrust map.
