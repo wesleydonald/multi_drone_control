@@ -35,7 +35,7 @@ from std_msgs.msg import Bool, Empty, Float64, Float64MultiArray, Int32, String
 
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
-from .config import mocap_loss_arg, wait_lift_arg, wait_log_arg, wait_reweld_arg, wrench_arg
+from .config import mocap_loss_arg, mocap_tilt_arg, wait_lift_arg, wait_log_arg, wait_reweld_arg, wrench_arg
 
 ARM_FAIL = 'fleet manager ARM failed or refused'
 # WAIT_PICKUP_FREE: his ball weld reads detached this long (SIM s) before the schedule goes on (his gate's hold)
@@ -198,6 +198,16 @@ class ExperimentRunner(Node):
         self.dropout_pubs = {mocap_loss_arg(e.arg)[0]: self.create_publisher(
             Float64, f'/drone_{mocap_loss_arg(e.arg)[0]}/mocap_dropout', 5)
             for e in cfg.events if e.do == 'MOCAP_LOSS'}
+        # MOCAP_TILT: the emulator's attitude-offset input, made at start for the same reason
+        self.tilt_pubs = {mocap_tilt_arg(e.arg)[0]: self.create_publisher(
+            Float64MultiArray, f'/drone_{mocap_tilt_arg(e.arg)[0]}/mocap_tilt', 5)
+            for e in cfg.events if e.do == 'MOCAP_TILT'}
+        # the tilt cut's fault (card 2026-10-11_quad4_tilt_cut), logged as TILT_FAULT
+        if self.tilt_pubs or str(cfg.launch_args.get('partner_tilt_cut', '')).lower() in ('true', '1'):
+            tq = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.VOLATILE)
+            for i in range(self.n):
+                self.create_subscription(Bool, f'/drone_{i}/tilt_fault',
+                                         lambda m, i=i: m.data and self._log_event('TILT_FAULT', i), tq)
         if any(e.do == 'WRENCH' for e in cfg.events):
             self._wrench_publisher()
         self.tip_freeze_pub = (self.create_publisher(Float64, '/magnet_tip_publisher/freeze', 5)
@@ -661,6 +671,10 @@ class ExperimentRunner(Node):
             d, secs = mocap_loss_arg(ev.arg)
             self._mocap_cut.add(d)          # the run goes on: the loss is the test, not a harness fault
             self._publish(self.dropout_pubs[d], Float64(data=secs), f'/drone_{d}/mocap_dropout {secs:.0f} s')
+        elif ev.do == 'MOCAP_TILT':
+            d, deg, secs, ramp = mocap_tilt_arg(ev.arg)
+            self._publish(self.tilt_pubs[d], Float64MultiArray(data=[deg, secs, ramp]),
+                          f'/drone_{d}/mocap_tilt {deg:.0f} deg over {ramp:.2f} s, held {secs:.2f} s')
         elif ev.do == 'TIP_FREEZE':
             self._publish(self.tip_freeze_pub, Float64(data=float(ev.arg)), f'/magnet_tip_publisher/freeze {ev.arg:.1f} s')
         elif ev.do == 'HANDOFF':

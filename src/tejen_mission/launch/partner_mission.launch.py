@@ -256,6 +256,8 @@ def _nodes(context):
                 # with no lead; the planner's contact-mode gates are his ground-ring values
                 # (the card's neighbours move one of them: contact_lead / contact_dz / contact_dx)
                 **({'contact_attach': True,
+                    # card 2026-10-11_quad4_tilt_cut (rig-port critic F6): land here if the fleet cannot take it back
+                    **({'taken_back_self_land': True} if _flag(context, 'taken_back_self_land') else {}),
                     'final_attach_offset_z': ParameterValue(L('contact_dz'), value_type=float),
                     'approach_offset_x': ParameterValue(L('contact_dx'), value_type=float),
                     'attach_ready_target_lead_time': ParameterValue(L('contact_lead'), value_type=float)}
@@ -375,6 +377,9 @@ def _arguments():
         DeclareLaunchArgument('contact_dz', default_value='0.0'),     # contact_attach: tip target above the contact point (m)
         DeclareLaunchArgument('contact_dx', default_value='0.0'),     # contact_attach: tip target offset along x (m)
         DeclareLaunchArgument('confirm_pickup_release', default_value='false'),
+        # contact_attach: no fleet switch 1 s after TAKEN_BACK -> out 1.2 m from the ring, land, disarm (card
+        # 2026-10-11_quad4_tilt_cut); false = TAKEN_BACK holds where it is, as before
+        DeclareLaunchArgument('taken_back_self_land', default_value='false'),
         DeclareLaunchArgument('pickup_lift_height', default_value='1.40'),   # lift ends ~1.9 m, above the 1.8 m search floor (R0639 ended at 1.75)
         DeclareLaunchArgument('drop_approach_clearance', default_value='0.60'),
         DeclareLaunchArgument('minimum_search_z_m', default_value='1.8'),

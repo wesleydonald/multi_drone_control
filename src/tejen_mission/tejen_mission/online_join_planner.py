@@ -1809,6 +1809,19 @@ class OnlineJoinPlanner(Node):
                 self.declare_parameter('contact_abort_xy_velocity_threshold', 0.15).value))
             if self.proof_rise_rate <= 0. or self.contact_give_up_s <= 0.:
                 raise ValueError('contact_attach needs a positive proof_rise_rate and contact_give_up_s')
+            # taken_back_self_land (multi_drone_control card 2026-10-11_quad4_tilt_cut, rig-port critic F6; off): if
+            # the fleet's mux has not taken the vehicle taken_back_mux_wait_s after TAKEN_BACK (its tracker cannot
+            # fly it), fly out to taken_back_clear_radius_m from the ring centre, land and disarm here; no magnet
+            # command (TAKEN_BACK's NONE: on the rig the coil may hold the ball)
+            self.taken_back_self_land = bool(self.declare_parameter('taken_back_self_land', False).value)
+            self.taken_back_mux_wait_s = float(self.declare_parameter('taken_back_mux_wait_s', 1.0).value)
+            self.taken_back_clear_radius_m = float(
+                self.declare_parameter('taken_back_clear_radius_m', 1.2).value)
+            self.taken_back_step_speed = max(0.01, float(
+                self.declare_parameter('taken_back_step_speed', 0.2).value))
+            self.taken_back_land_z = float(self.declare_parameter('taken_back_land_z', 0.20).value)
+        self.taken_back_t0 = None
+        self.taken_back_land = None
         self.contact_reported = False
         self.ring_attach_confirmed = False
         self.take_back_requested = False
@@ -6442,6 +6455,7 @@ class OnlineJoinPlanner(Node):
                     f'RING_ATTACHED: mux reads {self.mux_state}; holding where the vehicle is')
             return True
         if self.phase == MissionPhase.TAKEN_BACK:
+            self.update_taken_back_self_land()
             return True
         if self.take_back_requested:
             self.enter_taken_back('take-back from the fleet planner')
@@ -6490,6 +6504,60 @@ class OnlineJoinPlanner(Node):
                 else self.drone_position)
         self.transition_to(MissionPhase.TAKEN_BACK, reason)
         self.contact_hold_position = np.asarray(hold, dtype=float).copy()
+        self.taken_back_t0 = self._physical_now_s()
+        self.taken_back_land = None
+
+    def update_taken_back_self_land(self) -> None:
+        """taken_back_self_land: no mux switch to the fleet within taken_back_mux_wait_s of TAKEN_BACK -> out to
+        taken_back_clear_radius_m from the ring centre at this height, down to taken_back_land_z, then the landing
+        disarm command. A switch that comes later changes nothing here: the mux no longer forwards this stream."""
+        if not getattr(self, 'taken_back_self_land', False) or self.drone_position is None:
+            return
+        now = self._physical_now_s()
+        land = self.taken_back_land
+        if land is None:
+            if (self.mux_state in {'ours', 'latched', 'cut'} or self.taken_back_t0 is None
+                    or now - self.taken_back_t0 < self.taken_back_mux_wait_s):
+                return
+            start = np.asarray(self.contact_hold_position if self.contact_hold_position is not None
+                               else self.drone_position, dtype=float).copy()
+            out = start.copy()
+            centre = getattr(self, 'payload_position', None)
+            if centre is not None:
+                v = start[:2] - np.asarray(centre, dtype=float)[:2]
+                r = float(np.linalg.norm(v))
+                if r < self.taken_back_clear_radius_m:
+                    u = v / r if r > 1e-6 else np.array([0.0, 1.0])
+                    out[:2] = np.asarray(centre, dtype=float)[:2] + u * self.taken_back_clear_radius_m
+            down = out.copy()
+            down[2] = self.taken_back_land_z
+            self.taken_back_land = {'t0': now, 'start': start, 'out': out, 'down': down, 'disarmed': False}
+            self.get_logger().warning(
+                f'TAKEN_BACK: the mux reads {self.mux_state or "nothing"} {now - self.taken_back_t0:.1f} s after the '
+                f'take-back: out to {self.taken_back_clear_radius_m:.1f} m from the ring, landing here '
+                f'(magnet as it is)')
+            return
+        if (not land['disarmed'] and float(self.drone_position[2]) <= self.taken_back_land_z + 0.05
+                and now - land['t0'] >= self.landing_min_time_before_disarm_s):
+            self.drone_command_publisher.publish(String(data=self.landing_disarm_command))
+            land['disarmed'] = True
+            self.get_logger().warning(f'TAKEN_BACK: down at z={float(self.drone_position[2]):.2f} m: '
+                                      f'{self.landing_disarm_command}')
+
+    def build_taken_back_land_reference(self) -> TrajectoryReference:
+        land = self.taken_back_land
+        elapsed = self._physical_now_s() - land['t0']
+        zero = TargetState(np.zeros(3), np.zeros(3), np.zeros(3))
+        leg1 = float(np.linalg.norm(land['out'] - land['start'])) / self.taken_back_step_speed
+        if elapsed < leg1:
+            start, goal, rate, t = land['start'], land['out'], self.taken_back_step_speed, elapsed
+        else:
+            start, goal, rate, t = land['out'], land['down'], self.landing_descent_speed, elapsed - leg1
+        reference, _, _ = rate_controlled_manoeuvre(
+            zero, start, goal, rate=rate, elapsed=t, dt=self.dt, horizon_samples=self.horizon_samples,
+            min_reference_z=min(self.min_reference_z, self.taken_back_land_z),
+            max_reference_speed=self.max_reference_speed)
+        return reference
 
     def contact_give_up(self, reason: str) -> None:
         self.contact_gave_up = True
@@ -7321,6 +7389,8 @@ class OnlineJoinPlanner(Node):
                 horizon_samples=self.horizon_samples,
                 min_reference_z=self.min_reference_z,
             )
+        if self.phase == MissionPhase.TAKEN_BACK and getattr(self, 'taken_back_land', None) is not None:
+            return self.build_taken_back_land_reference()
         if (self.phase in {MissionPhase.RING_ATTACHED, MissionPhase.TAKEN_BACK}
                 and self.contact_hold_position is not None):
             return stationary_regulation(

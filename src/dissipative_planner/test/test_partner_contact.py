@@ -565,3 +565,133 @@ def test_the_rejoin_fold_in_of_the_welded_start_is_the_subtests():
     assert f.attach_pending == [False] and f._ocp_attached == {3: True} and 3 not in f._departed_hold
     assert f.blends[-1][-1] == pytest.approx(0.1)
     assert not any('welded at start' in ln for ln in f.log.lines)
+
+
+# ── the tilt cut (card 2026-10-11_quad4_tilt_cut, critic round 1 H1/H3/M4) ─────────────────────────────────────
+
+TC_METHODS = ('_tilt_fault_cb', '_off_the_load', '_tilt_tracker_cb', '_release_seen_tick', '_tip_now_cb')
+
+
+def _tc(f, mux='partner'):
+    """Add the tilt cut's state to a test node."""
+    f.__dict__.update(_tilt_faulted=set(), _handover_blocked=False, _tilt_armed={}, _handover_block_pub=_Pub(),
+                      detached=[False] * 4, _release_seen={}, _tip_now=None, _mux_state=mux)
+    for name in TC_METHODS:
+        setattr(f, name, MethodType(getattr(D, name), f))
+    return f
+
+
+def _in_his_transit():
+    f = _tc(_node())
+    f._his_phase_cb(String(data='TAKEOFF'))
+    f._his_phase_cb(String(data='TRANSIT_TO_DROP_POINT'))
+    f.attach_pos[0] = np.array([0.99, 1.54, 2.86])            # R1491, 2 s into his transit
+    _tick(f)
+    return f
+
+
+def test_a_tilt_fault_off_the_ring_takes_quad4_out_with_no_take_back_and_no_references():
+    f = _in_his_transit()
+    f._tilt_fault_cb(Bool(data=True))
+    assert f._newcomer_out == {0: 'fault'} and f._tilt_faulted == {0}
+    assert f._magnet_cmd_pub.msgs[-1] == 'OFF'                 # the cut drone falls with or without the coil
+    f.published.clear()
+    for _ in range(5):
+        _tick(f)
+    assert f.published == []                                   # no warm reference, no departed hold
+    f._newcomers_out_on_land('LAND')
+    f._give_up_cb(Bool(data=True))
+    assert f._take_back_pub.msgs == [] and f._departed_hold == {}
+    assert f._departed_down()                                  # the landed gate does not wait for it
+
+
+@pytest.mark.parametrize('first', ['LAND', 'give-up'])
+def test_a_fault_after_the_take_back_overrides_it_and_clears_the_departed_state(first):
+    """H3: the manager's LAND or his give-up can reach us before the fault."""
+    f = _in_his_transit()
+    if first == 'LAND':
+        f._newcomers_out_on_land('LAND')
+    else:
+        f._give_up_cb(Bool(data=True))
+    assert f._take_back_pub.msgs == [True] and 3 in f._departed_hold and 3 in f._land_alone
+    f._tilt_fault_cb(Bool(data=True))
+    assert f._newcomer_out == {0: 'fault'} and f._departed_hold == {} and 3 not in f._land_alone
+    assert 3 not in f._departed_step and 3 not in f._departed_wait and f._departed_down()
+
+
+def test_a_weld_after_the_cut_is_refused():
+    f = _in_his_transit()
+    f._tilt_fault_cb(Bool(data=True))
+    f._magnet_attached_cb(Bool(data=True))
+    assert f.attach_pending == [True] and any('refused' in ln for ln in f.log.lines)
+
+
+def test_on_the_ring_the_fault_is_a_carrier_fault_and_changes_nothing_here():
+    f = _in_his_transit()
+    f.attach_pending[0] = False                                # folded in
+    f._tilt_fault_cb(Bool(data=True))
+    assert f._newcomer_out == {} and f._tilt_faulted == set()
+    assert any('on the ring' in ln for ln in f.log.lines)
+
+
+def test_while_ours_flies_it_the_fault_is_left_to_its_disarm():
+    """Ours steps the welded start out (or QUAD4 is down, disarmed alone): its own tracker's disarm decides
+    (_newcomer_arming_cb with welded_on_load, else today's stop)."""
+    f = _tc(_welded_node(), mux='ours')
+    f.detached[3] = True
+    for _ in range(5):
+        _wtick(f)                                              # stepping out
+    f._tilt_fault_cb(Bool(data=True))
+    assert f._newcomer_out == {} and 3 in f._departed_hold and f._tilt_faulted == set()
+
+
+def test_a_cut_after_the_release_cancels_the_rest_of_the_release():
+    f = _tc(_welded_node(), mux='ours')
+    f.detached[3] = True
+    _release(f)
+    f._mux_state_cb(String(data='partner'))
+    f._tilt_fault_cb(Bool(data=True))
+    n = len(f._release_pub.msgs)
+    for _ in range(30):
+        _wtick(f)
+    assert f._newcomer_out == {0: 'fault'} and len(f._release_pub.msgs) == n and 3 not in f._departed_hold
+
+
+def test_our_tracker_latching_while_he_flies_it_blocks_the_hand_over_once():
+    """H1: the mux would wait for ever for a tracker that will not fly again."""
+    f = _in_his_transit()
+    f.takeoff_seen = True
+    f._tilt_tracker_cb(Bool(data=True))
+    f._tilt_tracker_cb(Bool(data=False))
+    assert f._handover_blocked and f._handover_block_pub.msgs == [True]
+    f._tilt_tracker_cb(Bool(data=True))
+    f._tilt_tracker_cb(Bool(data=False))
+    assert f._handover_block_pub.msgs == [True]
+    assert any('no take-back or hand-over is possible' in ln for ln in f.log.lines)
+    g = _in_his_transit()                                      # ours flying it: its disarm is a fault of ours
+    g._mux_state = 'ours'
+    g._tilt_tracker_cb(Bool(data=True))
+    g._tilt_tracker_cb(Bool(data=False))
+    assert not g._handover_blocked
+    h = _in_his_transit()                                      # cut: the fault path owns it
+    h._tilt_fault_cb(Bool(data=True))
+    h._tilt_tracker_cb(Bool(data=True))
+    h._tilt_tracker_cb(Bool(data=False))
+    assert not h._handover_blocked
+
+
+def test_welded_on_load_goes_false_only_once_the_tip_has_left_the_plate():
+    """M4: on the rig the tether is slack, so on_load False waits for the tip itself to leave plate 9."""
+    f = _tc(_welded_node(), mux='ours')
+    pub = _Pub()
+    f._on_load_pubs, f._on_load_announced = {3: pub}, True
+    f._release_seen[3] = None                                  # what the detach does under welded_on_load
+    plate = np.array([0.0, 0.225, 1.04])
+    for dz in (0.0, 0.01, 0.03, 0.045):                        # the body steps out, the tip still on the plate
+        f._tip_now_cb(SimpleNamespace(pose=SimpleNamespace(position=SimpleNamespace(
+            x=plate[0], y=plate[1] + dz, z=plate[2]))))
+        f._release_seen_tick()
+    assert pub.msgs == [] and 3 in f._release_seen
+    f._tip_now_cb(SimpleNamespace(pose=SimpleNamespace(position=SimpleNamespace(x=0.0, y=0.29, z=1.06))))
+    f._release_seen_tick()
+    assert pub.msgs == [False] and 3 not in f._release_seen

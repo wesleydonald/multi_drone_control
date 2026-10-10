@@ -36,7 +36,7 @@ from typing import Optional, Tuple
 import numpy as np
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import DurabilityPolicy, QoSProfile
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped
 from std_msgs.msg import Bool, Empty, String
@@ -202,6 +202,21 @@ class MagnetAttachmentManager(Node):
         self._t_object_clk: Optional[float] = None
         self._body_position: Optional[np.ndarray] = None
         self._t_body_clk: Optional[float] = None
+        # tilt cut (card 2026-10-11_quad4_tilt_cut; '' = off): the mux's state 'cut' turns the magnet OFF even after
+        # a confirmed attach (a dead QUAD4 must not hang on plate 9) and refuses every ON after it; the planner's
+        # hand-over block (our drone-3 tracker latched while the partner flies it) refuses the confirmation
+        self._cut = False
+        self._handover_blocked = False
+        cut_topic = str(self.declare_parameter('cut_state_topic', '').value)
+        if cut_topic:
+            self.create_subscription(String, cut_topic, self._cut_state_cb,
+                                     QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                                                reliability=ReliabilityPolicy.RELIABLE))
+        block_topic = str(self.declare_parameter('handover_block_topic', '').value)
+        if block_topic:
+            self.create_subscription(Bool, block_topic, self._handover_block_cb,
+                                     QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                                                reliability=ReliabilityPolicy.RELIABLE))
 
         # State.
         self.magnet_on = False
@@ -480,6 +495,9 @@ class MagnetAttachmentManager(Node):
         command = str(msg.data).strip().upper()
         self.last_magnet_command_time = time.time()
 
+        if command in ON_WORDS and getattr(self, '_cut', False):
+            self.get_logger().warn('Magnet ON refused: this drone was cut', throttle_duration_sec=2.0)
+            return
         if command in ('ON', '1', 'TRUE', 'ENABLE', 'ENABLED'):
             if not self.magnet_on:
                 self.get_logger().info('Magnet command: ON')
@@ -637,9 +655,32 @@ class MagnetAttachmentManager(Node):
         self._body_position = self._pose_to_position(msg.pose)
         self._t_body_clk = self._clock_s()
 
+    def _cut_state_cb(self, msg: String) -> None:
+        if self._cut or str(msg.data).strip().lower() != 'cut':
+            return
+        self._cut = True
+        if self._proof is not None:
+            self._proof.state = 'off'          # the cut overrides the confirmed attach's OFF refusal
+            self._proof._forget_contact()
+            self._proof._forget_samples()
+        self._start_weld = False
+        self.get_logger().error('CUT: the mux cut this drone: magnet OFF (a confirmed attach too), no ON from now on')
+        if self._proof is not None:
+            self.contact_pub.publish(Bool(data=False))
+        self.magnet_command_callback(String(data='OFF'))
+
+    def _handover_block_cb(self, msg: Bool) -> None:
+        if bool(msg.data) and not self._handover_blocked:
+            self.get_logger().error('HAND-OVER BLOCKED: our tracker for this drone latched while the partner flies '
+                                    'it: no attach is confirmed from now on')
+        self._handover_blocked = bool(msg.data)
+
     def _contact_command_callback(self, msg: String) -> None:
         """The arbiter in front of magnet_command_callback."""
         word = str(msg.data).strip().upper()
+        if self._cut and word in ON_WORDS:
+            self.get_logger().warn('Magnet ON refused: this drone was cut', throttle_duration_sec=2.0)
+            return
         if self._proof is not None:
             if word in OFF_WORDS and self._contact_off('magnet command OFF'):
                 return
@@ -702,6 +743,10 @@ class MagnetAttachmentManager(Node):
             if self.sim_catch:
                 self._sim_joint(False, f'proof failed ({f["reason"]})')
             self.contact_pub.publish(Bool(data=False))
+        elif ev == 'proven' and (self._handover_blocked or self._cut):
+            # no hand-over can follow (our tracker latched, or the drone was cut): a failed proof, joint released
+            p.state = 'prove'
+            self._proof_event(p._fail('handover_blocked' if self._handover_blocked else 'cut', self._clock_s()))
         elif ev == 'proven':
             self._declare_attached(
                 f'proven (try {p.tries}): drift {1000.0 * p.drift:.1f} mm, plate rise '

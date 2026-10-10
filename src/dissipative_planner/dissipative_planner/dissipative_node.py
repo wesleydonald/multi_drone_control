@@ -76,6 +76,7 @@ REJOIN_PHASES = ('TRANSIT_TO_REATTACH', 'APPROACH_ABOVE_TARGET', 'MATCH_VELOCITY
 NOT_FLOWN_PHASES = ('', 'WAIT_FOR_TAKEOFF', 'LANDED_DISARMED')
 CONTACT_SPAN_MIN_Z = 0.3   # m: QUAD4 above this before the span's ON (no ON on the floor, near the spawn weld)
 CONTACT_SPAN_EVERY_S = 1.0  # s between the span's ON keepalives
+RELEASE_SEEN_M = 0.05      # m the welded start's tip moves off the plate (ring frame) before its release counts as seen
 
 
 def _ring_off_allowed(node):
@@ -410,8 +411,16 @@ class DissipativeController(LoadPlanner):
         # each reserved drone's latched /drone_d/on_load (False until it is folded in) tells the fleet
         # manager to LAND on its in-flight disarm. Off = the fleet-wide stop. Needs the lifecycle switch.
         # welded starts (R10b/R11) keep it off until a row covers a newcomer welded from t=0
+        # welded_on_load (card 2026-10-11_quad4_tilt_cut, critic round 1 M4; off by default): a welded start gets the
+        # flag too, True at its start weld and False only once its release is SEEN after the detach (the tip off the
+        # plate), so an off-ring QUAD4's disarm lands the fleet after the detach as well
+        self._welded_on_load = bool(p('welded_on_load', False).value) and self._start_attached
+        self._release_seen = {}       # d -> the tip's ring-frame position at the detach, until the release is seen
+        self._tip_now = None
         self._newcomer_fault_land = (bool(p('newcomer_fault_land', False).value) and self._newcomer_lifecycle
-                                     and not self._start_attached)
+                                     and (not self._start_attached or self._welded_on_load))
+        if self._welded_on_load and self._newcomer_fault_land:
+            self.create_subscription(PoseStamped, '/magnet_tip_pose', self._tip_now_cb, 10)
         self._on_load_announced = False
         self._newcomer_armed = {}
         self._on_load_pubs = {}
@@ -434,6 +443,30 @@ class DissipativeController(LoadPlanner):
         self._span_t = None           # our ring magnet span: the last ON sent (None: not begun)
         self._taken_back = False
         self._contact_released = False   # the welded start (partner_release): QUAD4 released in the air
+        # card 2026-10-11_quad4_tilt_cut, each off by default:
+        #  partner_tilt_cut: QUAD4's tilt fault while the partner flies it takes it out of the flight (no take-back,
+        #    no weld, no references; the mux cuts it and the fleet manager lands the fleet);
+        #  partner_stuck_guard: our drone-3 tracker latching while the partner flies it blocks the hand-over (the mux
+        #    would wait for ever for a tracker that will not fly again; critic round 1, H1)
+        self._tilt_cut = bool(p('partner_tilt_cut', False).value) and self.reserved_attach > 0
+        self._stuck_guard = bool(p('partner_stuck_guard', False).value) and self.reserved_attach > 0
+        self._tilt_faulted = set()
+        self._handover_blocked = False
+        self._tilt_armed = {}
+        if self._tilt_cut or self._stuck_guard:
+            d3 = self._n_carry0
+            latched_tc = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                                    reliability=ReliabilityPolicy.RELIABLE)
+            if not self._partner_contact:
+                self.create_subscription(String, f'/drone_{d3}/mux_state', self._mux_state_cb, latched_tc)
+        if self._tilt_cut:
+            self.create_subscription(Bool, f'/drone_{d3}/tilt_fault', self._tilt_fault_cb,
+                                     QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE,
+                                                durability=DurabilityPolicy.VOLATILE))
+        if self._stuck_guard:
+            self.create_subscription(Bool, f'/drone_{d3}/arming_state_feedback', self._tilt_tracker_cb, 5)
+            self._handover_block_pub = self.create_publisher(Bool, f'/drone_{d3}/handover_blocked', latched_tc)
+            self._handover_block_pub.publish(Bool(data=False))
         if self._partner_contact and self.reserved_attach > 0:
             latched_pc = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
                                     reliability=ReliabilityPolicy.RELIABLE)
@@ -669,6 +702,7 @@ class DissipativeController(LoadPlanner):
             self._drop_tick()
             return
         self._contact_release_tick()
+        self._release_seen_tick()
         if self._departed_hold:
             self._publish_departed_refs()
         self._newcomer_off_tick()
@@ -1155,7 +1189,10 @@ class DissipativeController(LoadPlanner):
             self._release_magnet(d)
         else:
             self._magnet_cmd_pub.publish(String(data='OFF'))   # magnet-welded newcomer
-        self._set_on_load(d, False)                            # off the ring: a fault grounds it alone
+        if getattr(self, '_welded_on_load', False) and self._reserved_index(d) is not None:
+            self._release_seen[d] = None                       # on_load False once the tip has left the plate
+        else:
+            self._set_on_load(d, False)                        # off the ring: a fault grounds it alone
         self._departed_hold[d] = np.asarray(self.drone_pos[d], float).copy() \
             if self.drone_pos[d] is not None else None
         if self._partner_release and self._reserved_index(d) is not None \
@@ -1483,6 +1520,8 @@ class DissipativeController(LoadPlanner):
         now = self.get_clock().now().nanoseconds * 1e-9
         contact = getattr(self, '_partner_contact', False)
         for d, st in self._release_state.items():
+            if self._reserved_index(d) in getattr(self, '_tilt_faulted', ()):
+                continue                  # cut on its tilt fault: no release, no start for his mission
             if st['released']:
                 if contact and self._taken_back:
                     continue              # taken back: his mission is not started after it
@@ -1542,6 +1581,90 @@ class DissipativeController(LoadPlanner):
                 self._drop_departed(d)
                 self.get_logger().warn(f'[dissipative] {_who(d)} flies on his stream: its step-out hold gives way '
                                        f'to the warm reference on its measured body')
+
+    # ── welded_on_load (card 2026-10-11_quad4_tilt_cut, M4) ───────────────────────────────────────────────────
+    def _tip_now_cb(self, msg):
+        q = msg.pose.position
+        self._tip_now = (self.get_clock().now().nanoseconds * 1e-9, np.array([q.x, q.y, q.z]))
+
+    def _release_seen_tick(self):
+        """After a welded start's detach: on_load False once the magnet tip has moved RELEASE_SEEN_M from where it
+        sat on the ring (ring frame). On the rig the tether is slack, so the body moving says nothing; the tip
+        staying on the plate means the coil still holds."""
+        if not self._release_seen or self.load_state is None or self._tip_now is None:
+            return
+        t, tip = self._tip_now
+        if self.get_clock().now().nanoseconds * 1e-9 - t > NEWCOMER_POSE_STALE_S:
+            return
+        R = quat_to_rot_np(self.load_state[3:7])
+        rel = R.T @ (tip - np.asarray(self.load_state[0:3], float))
+        for d, rel0 in list(self._release_seen.items()):
+            if rel0 is None:
+                self._release_seen[d] = rel
+                continue
+            moved = float(np.linalg.norm(rel - rel0))
+            if moved >= RELEASE_SEEN_M:
+                del self._release_seen[d]
+                self._set_on_load(d, False)
+                self.get_logger().warn(f'[dissipative] {_who(d)} released (its tip {moved:.3f} m off the plate): '
+                                       f'on_load False, a fault lands the fleet from here')
+
+    # ── partner_tilt_cut (card 2026-10-11_quad4_tilt_cut) ─────────────────────────────────────────────────────
+    def _off_the_load(self, j):
+        d = self._n_carry0 + j
+        return bool(self.attach_pending[j]) or bool(d < len(self.detached) and self.detached[d])
+
+    def _tilt_fault_cb(self, msg):
+        """QUAD4's tilt fault while the partner flies it (the mux cuts it): out of this flight, overriding an earlier
+        take-back: no take-back, no weld, no ring magnet span, no references (the landed gate does not wait for it),
+        the ring magnet OFF (the mux and the manager turn it OFF too: a cut drone falls with or without the coil).
+        On the ring it is a carrier, whose own envelope stops the fleet."""
+        if not msg.data:
+            return
+        if self._mux_state not in ('partner', 'cut'):
+            # ours flies it, or it is down and disarmed alone: its tracker's disarm decides (_newcomer_arming_cb)
+            self.get_logger().warn(f'[dissipative] tilt fault of {_who(self._n_carry0)} while ours flies it or it is '
+                                   f'disarmed: its own disarm decides')
+            return
+        for j in range(self.reserved_attach):
+            d = self._n_carry0 + j
+            if j in self._tilt_faulted:
+                continue
+            if not self._off_the_load(j):
+                self.get_logger().error(f'[dissipative] TILT FAULT of {_who(d)} on the ring: a carrier fault (its '
+                                        f'envelope stops the fleet)')
+                continue
+            self._tilt_faulted.add(j)
+            self._newcomer_out[j] = 'fault'
+            self._approach.pop(j, None)
+            self._approach_hold_armed = False
+            for st in (self._departed_hold, self._departed_step, self._departed_next,
+                       self._departed_td, self._departed_clear, self._departed_wait):
+                st.pop(d, None)
+            self._departed_landing.discard(d)
+            self._land_alone.discard(d)
+            self._release_seen.pop(d, None)
+            self._magnet_cmd_pub.publish(String(data='OFF'))
+            self.get_logger().error(
+                f'[dissipative] TILT FAULT of {_who(d)} off the ring (mux {self._mux_state}): out of this flight - '
+                f'no take-back, no weld, no references, ring magnet OFF')
+
+    def _tilt_tracker_cb(self, msg):
+        """Our drone-3 tracker latched (disarmed after TAKEOFF) while the partner flies QUAD4: the mux can never
+        hand it to ours (its live-takeover rule waits for a tracker that will not fly again), so no attach is
+        confirmed and the take-back cannot switch (critic round 1, H1)."""
+        j = 0
+        was = self._tilt_armed.get(j, False)
+        self._tilt_armed[j] = bool(msg.data)
+        if not was or msg.data or self._handover_blocked or not getattr(self, 'takeoff_seen', False) \
+                or self._landed or self._mux_state != 'partner' or j in self._tilt_faulted:
+            return
+        self._handover_blocked = True
+        self._handover_block_pub.publish(Bool(data=True))
+        self.get_logger().error(
+            f'[dissipative] {_who(self._n_carry0)}\'s tracker latched while the partner flies it: no take-back or '
+            f'hand-over is possible, no attach will be confirmed; at LANDED its mux is cut if it is at its rest, '
+            f'otherwise press DISARM')
 
     def _partner_magnet_keepalive(self):
         if not self._partner_handed or not any(self.attach_pending):
@@ -1640,6 +1763,10 @@ class DissipativeController(LoadPlanner):
                 or not self.attach_pending[j]:
             return
         d = self._n_carry0 + j
+        if j in getattr(self, '_tilt_faulted', ()):
+            self.get_logger().warn(f'[dissipative] no take-back of {_who(d)} ({why}): it was cut on its tilt fault',
+                                   throttle_duration_sec=2.0)
+            return
         self._taken_back = True
         self._newcomer_out[j] = why
         self._take_back_pub.publish(Bool(data=True))

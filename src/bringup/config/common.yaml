@@ -177,6 +177,20 @@ partner:
   proof_fail_dwell_s: ''
   proof_timeout_s: ''
   proof_ma_s: ''
+  # QUAD4 tilt cut (card 2026-10-11_quad4_tilt_cut): its tilt over 60 deg (3 poses, glitch guard) while the partner
+  # flies it -> the mux disarms it alone (magnet OFF), the fleet lands; a mux still on the partner at LANDED is cut
+  # when that drone is at its rest; our drone-3 tracker latched while the partner flies it blocks the hand-over
+  partner_tilt_cut: false
+  tilt_slow_deg: 0.0            # the optional slow tier (critic round 1, M3): deg held tilt_slow_s; 0 = off
+  # our drone-3 tracker latched while the partner flies it: the attach is not confirmed, and at LANDED a mux still on
+  # the partner is cut if that drone is at its rest (critic round 1, H1)
+  partner_stuck_guard: false
+  # a warm drone-3 tracker's fault while the partner flies it: not live (armed idle), not latched (rig-port F6)
+  warm_fault_not_live: false
+  # QUAD4's FC reports disarmed after it flew on the partner's stream: LAND every drone (rig-port F6)
+  fc_disarm_land: false
+  # a welded start's /drone_3/on_load (False once its release is seen), so its disarm off the ring lands the fleet
+  welded_on_load: false
 sim_interface:
   rate_source: 'imu'
   mocap_hz: 120

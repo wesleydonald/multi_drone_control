@@ -150,6 +150,9 @@ class ELRSInterface(Node):
         self.mode = "UNKNOWN"
 
         self.telemetry_publisher = self.create_publisher(Telemetry, 'telemetry', 10)  # Telemetry publisher
+        # the FC's own attitude from CRSF telemetry ([roll, pitch, yaw] rad), next to mocap's: the tilt cut's
+        # rig evidence (card 2026-10-11_quad4_tilt_cut, critic round 1 M1)
+        self.fc_attitude_pub = self.create_publisher(Float32MultiArray, 'fc_attitude', 10)
 
         # Per-drone electromagnet on a Betaflight aux mode. `magnet` (String ON|OFF, relative
         # -> /drone_<i>/magnet) latches the aux value into every packet sent, including the
@@ -268,6 +271,7 @@ class ELRSInterface(Node):
             roll = int.from_bytes(data[5:7], byteorder='big', signed=True) / 10000.0
             yaw = int.from_bytes(data[7:9], byteorder='big', signed=True) / 10000.0
             print(f"Attitude: Pitch={pitch:0.2f} Roll={roll:0.2f} Yaw={yaw:0.2f} (rad)")
+            self.fc_attitude_pub.publish(Float32MultiArray(data=[float(roll), float(pitch), float(yaw)]))
         elif ptype == PacketsTypes.FLIGHT_MODE:
             packet = ''.join(map(chr, data[3:-2]))
             print(f"Flight Mode: {packet}")

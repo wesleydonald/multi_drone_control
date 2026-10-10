@@ -18,6 +18,11 @@ Fleet abort (card docs/experiments/2026-09-28_mux_abort_latch.md): the partner's
 ignores /fleet/abort, so while it is selected its next command would re-arm a drone our
 abort just disarmed. On the first /fleet/abort the mux latches and forwards only disarmed
 idle commands, whichever input is selected, until the node restarts.
+
+Tilt cut (card docs/experiments/2026-10-11_quad4_tilt_cut.md; '' = off): our drone's tilt fault, or the fleet
+manager's cut request at LANDED, while the mux forwards the PARTNER's stream: this drone alone is latched to disarmed
+idle (state 'cut'), its magnet OFF in the same frame (the rig coil through its radio latch). While ours flies it,
+our tracker's own disarm already reaches the radio, so nothing changes.
 """
 import rclpy
 from rclpy.clock import Clock, ClockType
@@ -129,6 +134,20 @@ class ElrsMux(Node):
         magnet_topic = str(self.declare_parameter('magnet_command_topic', '').value)
         if magnet_topic:
             self.create_subscription(ELRSCommand, magnet_topic, self._magnet_cb, 5)
+        # tilt cut ('' = off): the tracker's fault and the manager's request, volatile and reliable (an old fault
+        # must not cut a relaunched mux); the rig's magnet radio latch, which the cut turns OFF
+        self._cut = False
+        self._cut_timer = None
+        self._cut_ticks = 0
+        self._magnet_off_value = float(self.declare_parameter('magnet_off_value', -1.0).value)
+        latch_topic = str(self.declare_parameter('magnet_latch_topic', '').value)
+        self._latch_pub = self.create_publisher(String, latch_topic, 5) if latch_topic else None
+        cut_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE,
+                             durability=DurabilityPolicy.VOLATILE)
+        for name in ('tilt_fault_topic', 'cut_topic'):
+            topic = str(self.declare_parameter(name, '').value)
+            if topic:
+                self.create_subscription(Bool, topic, lambda m, why=name: self._cut_cb(m, why), cut_qos)
         self._publish_state()
         self.get_logger().info(
             f'[elrs_mux] drone {drone_id}: '
@@ -142,6 +161,8 @@ class ElrsMux(Node):
     def _publish_state(self):
         if self._abort_latched:
             state = 'latched'
+        elif self._cut:
+            state = 'cut'
         elif self._ours_only or self._attached:
             state = 'ours'
         else:
@@ -173,6 +194,32 @@ class ElrsMux(Node):
     def _publish_disarm(self):
         self.pub.publish(merge_magnet_channel(abort_latch_command(self._last_cmd),
                                               self._magnet_channel, self._magnet_value))
+
+    def _cut_cb(self, msg: Bool, why: str):
+        if not msg.data or self._cut or self._abort_latched:
+            return
+        if self._ours_only or self._attached:
+            self.get_logger().warn(f'[elrs_mux] drone {self.drone_id}: {why} while ours flies it: not cut (our '
+                                   'tracker\'s own disarm reaches the radio)')
+            return
+        self._cut = True
+        self._release_pending = False
+        self._magnet_value = self._magnet_off_value       # OFF in every frame from now on
+        if self._latch_pub is not None:
+            self._latch_pub.publish(String(data='OFF'))   # the rig coil: its radio latch, this frame
+        self._publish_disarm()
+        self._publish_state()
+        self._cut_timer = self.create_timer(LATCH_REPUBLISH_S, self._cut_tick,
+                                            clock=Clock(clock_type=ClockType.STEADY_TIME))
+        self.get_logger().error(
+            f'[elrs_mux] drone {self.drone_id}: CUT ({why}) while the partner flies it - forwarding DISARM only '
+            f'(armed false, throttle idle, magnet OFF) for this drone until this node is restarted')
+
+    def _cut_tick(self):
+        self._publish_disarm()
+        self._cut_ticks += 1
+        if self._latch_pub is not None and self._cut_ticks % 10 == 0:
+            self._latch_pub.publish(String(data='OFF'))   # 2 Hz, as the magnet manager re-sends its own
 
     def _apply(self, attached):
         if attached == self._attached:
@@ -223,12 +270,12 @@ class ElrsMux(Node):
 
     def _forward(self, msg):
         self._last_cmd = msg
-        if self._abort_latched:
+        if self._abort_latched or self._cut:
             msg = abort_latch_command(msg)
         self.pub.publish(merge_magnet_channel(msg, self._magnet_channel, self._magnet_value))
 
     def _tejen_cb(self, msg: ELRSCommand):
-        if self._release_pending and msg.armed and float(msg.channel_2) > IDLE_THROTTLE:
+        if self._release_pending and not self._cut and msg.armed and float(msg.channel_2) > IDLE_THROTTLE:
             self._release_pending = False
             self._released = True
             self.policy = HandoverPolicy(latch=self.policy.latch,

@@ -565,3 +565,22 @@ def test_ball_clearance_is_measured_to_each_newcomers_own_rod():
     (x, y, _), _ = maw.spawn('welded')
     assert near_q_weld == pytest.approx(math.dist(maw.BALL_XY, (x, y)))       # the body is the nearest point
     assert near_q_free == pytest.approx(1.0, abs=5e-3) and near_q_weld > near_q_free
+
+
+# ===== the tilt cut card's push on QUAD4 in the full M1 (card 2026-10-11_quad4_tilt_cut) =====
+
+WELDED_PICKUP_PUSH = 'three_rigid_ground_rig_attach_welded_pickup_push.sdf'
+FULL_M1_DIGESTS = {   # the full M1's world and model when the push variant was added: byte for byte
+    WELDED_PICKUP: 'e8b9c5baf6e1f4697fd849c9636753a11376f344218ab2b6cd9195b3b58e6fef',
+    f'models/{WELDED_PICKUP_MODEL}': '790dc75f8d161a8fc3f01f46e0433e917e335432a76aa6f67d08374deb1a3dc8',
+}
+
+
+def test_the_full_m1_push_world_is_the_full_m1_world_plus_the_wrench_tool():
+    full = (ASSETS / WELDED_PICKUP).read_text()
+    push = (ASSETS / WELDED_PICKUP_PUSH).read_text()
+    assert push != full and push.replace(maw.WRENCH_PLUGIN, '', 1) == full
+    assert push.count('ApplyLinkWrench') == 1
+    ET.fromstring(push.split('\n', 1)[1].split('\n', 1)[1])
+    for rel, digest in {**OLD_DIGESTS, **SUBTEST_DIGESTS, **FULL_M1_DIGESTS}.items():
+        assert hashlib.sha256((ASSETS / rel).read_bytes()).hexdigest() == digest, rel

@@ -37,7 +37,7 @@ from rclpy.node import Node
 from actuator_msgs.msg import Actuators
 from geometry_msgs.msg import PoseArray
 from sensor_msgs.msg import Imu
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, String
 from interfaces.msg import ELRSCommand
 from tf_transformations import quaternion_multiply, quaternion_inverse, quaternion_matrix
 
@@ -90,6 +90,13 @@ class PayloadBetaflightComm(Node):
         self.create_subscription(
             ELRSCommand, f'/drone_{self.drone_id}/ELRSCommand', self._cmd_cb, 10)
         self.motor_pub = self.create_publisher(Actuators, motor_topic, 10)
+        # the rig's /drone_<i>/fc_arm_state, as the twin's FC would report it ('armed [sim]' / 'disarmed [sim]', on a
+        # change and at 1 Hz): the fleet manager's fc_disarm_land reads it (card 2026-10-11_quad4_tilt_cut; off)
+        self._fc_state_pub = None
+        self._fc_armed = None
+        self._fc_said_t = 0.0
+        if bool(self.declare_parameter('publish_fc_arm_state', False).value):
+            self._fc_state_pub = self.create_publisher(String, f'/drone_{self.drone_id}/fc_arm_state', 10)
 
         self.set_point = None
         self.last_pose = None
@@ -275,6 +282,11 @@ class PayloadBetaflightComm(Node):
 
     # ------------------------------------------------------------------
     def _cmd_cb(self, msg: ELRSCommand):
+        if self._fc_state_pub is not None:
+            now = self.get_clock().now().nanoseconds * 1e-9
+            if bool(msg.armed) != self._fc_armed or now - self._fc_said_t >= 1.0:
+                self._fc_armed, self._fc_said_t = bool(msg.armed), now
+                self._fc_state_pub.publish(String(data=f'{"armed" if msg.armed else "disarmed"} [sim]'))
         roll_rate = self._betaflight_rates(msg.channel_0)
         pitch_rate = self._betaflight_rates(msg.channel_1)
         yaw_rate = self._betaflight_rates(-msg.channel_3)

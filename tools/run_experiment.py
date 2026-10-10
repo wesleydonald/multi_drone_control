@@ -453,18 +453,65 @@ def tethered_checks(c, teth):
     return out
 
 
-def evaluate(cfg, rows, t_weld, aborts, tethered=None):
+def evaluate(cfg, rows, t_weld, aborts, tethered=None, events=None):
     """Apply cfg.criteria. Returns (ok, [(name, ok, detail)]). With criteria.report_only
     every check is still listed but ok is True."""
     c = cfg.criteria
     if c is None:
         return True, [('(no criteria — exploratory run)', True, '')]
     ok, out = _evaluate(cfg, c, rows, t_weld, aborts)
+    out += tilt_cut_checks(cfg, c, rows, events or [])
     out += tethered_checks(c, tethered)
     ok = ok and all(o[1] for o in out)
     if c.report_only:
         return True, [(f'{n} (report only)', g, d) for n, g, d in out]
     return ok, out
+
+
+MOCAP_TILT_MARGIN_S = 0.5      # s after a MOCAP_TILT's window still excluded (the emulator's last fake pose)
+ARMED_TILT_ROWS = 3            # consecutive run.csv rows (0.02 s) above the bar
+
+
+def tilt_cut_checks(cfg, c, rows, events):
+    """max_armed_tilt_deg and disarmed_after_landed_s (card 2026-10-11_quad4_tilt_cut). events: (t, name, arg)."""
+    out = []
+    if not rows or (c.max_armed_tilt_deg is None and c.disarmed_after_landed_s is None):
+        return out
+    from experiment.config import mocap_tilt_arg
+    t = np.array([r['t'] for r in rows], float)
+    if c.max_armed_tilt_deg is not None:
+        fake = {}
+        for te, name, arg in events:
+            if name == 'MOCAP_TILT':
+                d, _, secs, ramp = mocap_tilt_arg(arg)
+                fake.setdefault(d, []).append((float(te), float(te) + ramp + secs + MOCAP_TILT_MARGIN_S))
+        worst = None
+        for i in range(cfg.n_total):
+            tilt = np.array([r.get(f'd{i}_tilt_deg', math.nan) for r in rows], float)
+            armed = np.array([r.get(f'd{i}_armed', 0) for r in rows], float) > 0
+            over = armed & (tilt > c.max_armed_tilt_deg)
+            for a, b in fake.get(i, []):
+                over &= ~((t >= a) & (t <= b))
+            run = 0
+            for k in np.flatnonzero(over) if over.any() else []:
+                run = run + 1 if k > 0 and over[k - 1] else 1
+                if run >= ARMED_TILT_ROWS and worst is None:
+                    worst = (i, float(t[k]), float(tilt[k]))
+        out.append(('no armed drone over the tilt bar', worst is None,
+                    'none' if worst is None else
+                    f'drone {worst[0] + 1} armed at {worst[2]:.1f} deg at t={worst[1]:.1f}s '
+                    f'(>{c.max_armed_tilt_deg:.0f})'))
+    if c.disarmed_after_landed_s is not None:
+        landed = [float(te) for te, name, _ in events if name == 'LANDED']
+        if not landed:
+            out.append(('every drone disarmed after LANDED', True, 'no LANDED (not asserted)'))
+        else:
+            late = [r for r, tk in zip(rows, t) if tk > landed[0] + float(c.disarmed_after_landed_s)]
+            armed = [i + 1 for i in range(cfg.n_total) if any(r.get(f'd{i}_armed', 0) for r in late)]
+            out.append(('every drone disarmed after LANDED', not armed,
+                        f'still armed {c.disarmed_after_landed_s:g} s after LANDED: drone(s) {armed}' if armed
+                        else 'all disarmed' if late else 'the run ended first (not asserted)'))
+    return out
 
 
 def _evaluate(cfg, c, rows, t_weld, aborts):
@@ -806,7 +853,7 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
             teth = M.tethered_run_metrics(run_dir, hold_window_s=c.hold_window_s)
     except Exception as e:                              # noqa: BLE001
         teth = {'error': f'{type(e).__name__}: {e}'}
-    ok, checks = evaluate(cfg, rows, t_weld, aborts, teth)
+    ok, checks = evaluate(cfg, rows, t_weld, aborts, teth, events=events)
     grounded = (mtr or {}).get('fleet_grounded') if isinstance(mtr, dict) else None
     if grounded:
         # a refused TAKEOFF looks like "never lifted" in the numbers (R0749): VOID, re-fly
