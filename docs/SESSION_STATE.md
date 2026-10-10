@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep current at each milestone)
 
-Updated: Sat 10 Oct 2026, midday.
+Updated: Sat 10 Oct 2026, afternoon.
 
 ## Where things are
 - Main tree `/home/wesley/multi_drone_control` on **rig-prep** (see git log), clean. Nothing running.
@@ -62,6 +62,14 @@ Updated: Sat 10 Oct 2026, midday.
 - Thesis (agents): proposed RQs applied, paragraph spacing restored, value statement, CHECKs (text agent, commits on
   thesis-rig); Undermind references -> docs/thesis_drafts/refs_2026-10-10.md (I integrate); new figures #2 r305
   storyboard, #4 parity, #12 swimlanes (figure agent; no commits; I integrate). Page limit not enforced (Wesley).
+- DONE 10 Oct: check runs R1454-R1460 all within bars; reviewer SUPPORTED with corrections (registry + sheet fixed);
+  rig-prep MERGED into week4 (b4e11f1, then fast-forwarded with docs; rig-prep == week4 == 26d4227; Wesley pushes).
+  SIL smoke re-baselined (0.60 / 12.0; cause = 0.86 kg ring + 4 Oct LAND defaults; R1461-R1467). Tejen port on
+  tejen-sync (4 commits, builds, tests as his tree; M1 hand-over 0.12 m lower). Thesis: RQs, spacing, value statement,
+  CHECKs (c857460, e3831d0, a8c629c), references (30c7060; 12 papers to approve); main text ends p57, 88 pp.
+- R9 twin: held R1468 PASS (weld, 3.0 deg, dip 3 mm, circle resumes on four); moving R1469 FAILS (no tip hold on a
+  moving plate -> tip loop never runs -> tip 3 cm high, outside the 2.5 cm weld radius; QUAD4 0.311 m from a carrier
+  in transit). Thursday: R9 held only. Repeats + M1 partner baseline (rig-prep) running on the lab PC.
 - Thursday: sheet draft docs/rig_2026-10-15_commands.md; card docs/experiments/2026-10-10_twin_r9.md with configs
   twin_r9_held / twin_r9_moving (not flown yet). Tilt not built (waits for a later lab day).
 

@@ -46,3 +46,17 @@ branch thesis-rig) as `departed_landing.pdf`, `tip_feedback.pdf`; `rig_detach.pd
 | F_thrust_map | the 30 Sep free-hover ladder (tools/test/fixtures/rig_0930/ladder_points.yaml, 13 hovers), tools/thrust_fit.py | rig 30 Sep |
 | F_land_phases | R1413-R1446 (LAND every phase re-fly; two runs per phase; R1438 tipped), tools/land_metrics.py | rig-prep 8588745 (keep-alive f330bd2) |
 | F_rig_integral | rig RIG-1007-r0001 (no integral), r002 (model integral, planned pull), r20004 (model integral + measured pull); planner log.csv load_z, z_tgt, int_fz | rig: main (7 Oct) |
+
+
+## F_rig_circle_detach, F_twin_rig_parity, F_disarm_lanes (10 Oct 2026)
+
+Built with the thesis-figure skill (`tools/thesis_rig_twin_figures.py`, 6.27 in, Computer Modern; look rounds, audit,
+one blind critic each, accepted fixes applied, then re-rendered and re-audited). Caption, thesis section and citing
+sentence in each `docs/figures/<ID>/caption.md`. PENDING parts are drawn as marked placeholders and filled by adding
+the run directories to the lists at the top of the script (`PARITY_ATTACH['rig']`, `LANES_FREED` rig rows).
+
+| figure | runs | code |
+|---|---|---|
+| F_rig_circle_detach | rig RIG-1008-r305 (circle, unannounced release of QUAD4 from the 90 deg plate); twin R1208/R1213 (w4_3915_release_orbit_drop) | rig: b811d90 (8 Oct); twin: drop-port 700a77b |
+| F_twin_rig_parity | rig RIG-1008-r302_3, r303_4, r304_3, r305; twin R1207/R1212, R1140/R1145, R1206/R1211, R1208/R1213; attach twin R1404/R1410 (twin_tf_weld_on); **pending: rig r8b, 14 Oct** | rig: b811d90; twin: drop-port 700a77b, week4 0e91d86 (R1140/R1145, 14 dirty files), rig-prep 1bbe1f8 (R1404/R1410) |
+| F_disarm_lanes | twin R1258 (twin_fs_c0, old rule), R1284/R1285 (twin_fs_c1), R1310/R1325 (w4_da_release_hover), R1309/R1326 (w4_gi_g2_release_orbit); **pending: rig w4, w5, 14 Oct** | rig-prep 38fa1f3 (R1258), c0604f7 (R1284/R1285), cb09b39 (R1309/R1310), 734f0f4 (R1325/R1326, 1 dirty file) |
