@@ -212,6 +212,31 @@ planner solve failures & 0 & 0 & 0 \\
 \end{tabularx}
 \end{table}
 
+Figure~\ref{fig:twin_rig_parity} sets each detach flight of 8 October against the twin on the same configuration:
+the twin predicts how far the ring tilts after an unannounced detach and how soon the planner finds it to within
+about a third, but on the rig the ring dips up to 2.5 times as far and sits 2--3 times as far from its reference before the
+release.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{Images/twin_rig_parity.pdf}
+\caption[The twin against the rig]{The rig against its twin for the four detach flights of 8 October (four UAVs,
+0.86\,kg ring at 1.0\,m; one marker per flight; 150$^\circ$ gap: the three left on the ring leave a 150$^\circ$ gap
+between two of them), each metric computed the same way from both, on logarithmic axes: $x$, the twin flying the same
+configuration (mean of two runs; bar: their range, hidden where it is shorter than the marker); $y$, the rig (one run).
+Dashed: $y = x$; grey band: within 25\,\% of the twin; dotted: the rig twice the twin. (a) Tilt rise: the ring's peak
+tilt in the 3\,s after the release above its mean over the 3\,s before. (b) Ring dip: its lowest height error in the
+3\,s after the release. (c) Detection delay: from the release to the planner finding an unannounced detach (an
+announced detach needs none). (d) Horizontal error: the ring's mean distance from its reference over the 10\,s before
+the release. Within 25\,\% of the twin: the tilt rise of the 150$^\circ$-gap and circle detaches, the dip of the
+150$^\circ$-gap detach, and two of the three detection delays (the third is 1.26 times the twin; all three within
+0.1\,s). The unannounced hover detach rose 0.65 times the twin and the announced one 1.6 times; the other three dips
+were 1.4--2.5 times the twin's, and the horizontal error was 1.9--3.1 times (5.3--6.8\,cm against 1.7--3.3\,cm).
+Hollow pentagon: the attach (the newcomer's weld), drawn on $y = x$ at the value of the two twin runs (a 1.5$^\circ$
+rise, a 0.2\,cm dip) until the rig flies it.}
+\label{fig:twin_rig_parity}
+\end{figure}
+
 \paragraph{Answer to Q1.} Yes, at lab speeds: on the rig three and then four UAVs carried the ring from the
 floor through hover, the circle and the figure-eight, four of them within 3\,cm of the path on average once
 the trackers used the rod pull they measure, with no planner tick over its 100\,ms budget; in the twin no UAV

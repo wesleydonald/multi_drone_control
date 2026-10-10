@@ -102,8 +102,8 @@ the tensions are planned, since the rig twin does not measure them.}
 (Table~\ref{tab:rig_oct8}): announced, where the planner releases the magnet and resizes at once; unannounced,
 where the magnet is switched off without telling the planner, which finds the detach from the stretched rod;
 unannounced with a 150$^\circ$ gap left in the ring; and unannounced during the circle. Every detach landed with
-the three remaining UAVs still carrying the ring, and in the circle they carried on along the path without a
-pause. The planner found the unannounced detaches 0.33--0.42\,s after the magnet was switched off, the magnet's
+the three remaining UAVs still carrying the ring, and in the circle the planner held the path for 1.5\,s
+from the detection and then carried the ring on round it. The planner found the unannounced detaches 0.33--0.42\,s after the magnet was switched off, the magnet's
 own release time included. Against the twin (Figure~\ref{fig:rig_detach}) the unannounced detaches stayed
 within its spread in tilt and dipped about 1\,cm more; the single announced detach rose and dipped more than
 the twin, so whether the rig's announced release is systematically harsher is open.
@@ -146,6 +146,35 @@ against 2.5--2.7\,cm; 5.8 against 4.5--4.8\,cm). Rig traces end at the fleet's L
 \label{fig:rig_detach}
 \end{figure}
 
+\paragraph{The circle detach.} During the circle (Figure~\ref{fig:rig_circle_detach}) the planner found the
+unannounced detach 0.34\,s after the magnet was switched off, held the path for 1.5\,s while the three survivors
+took up the freed UAV's share, and then carried the ring on round the circle; the ring tilted 8.1$^\circ$ and dipped
+3.9\,cm, against 6.0--7.3$^\circ$ and 2.1--2.5\,cm in the twin, while the freed UAV cleared the circle and began
+its own landing 6.1\,s after the release.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{Images/rig_circle_detach.pdf}
+\caption[Unannounced detach during the circle on the rig]{An unannounced detach during the circle on the rig: four
+UAVs carry the 0.86\,kg ring at 1.0\,m round a circle of radius 0.5\,m at 0.125\,m/s, on the plates at 30, 90, 150
+and 270$^\circ$, and the magnet of the UAV at 90$^\circ$ is switched off without telling the planner. (a) Plan view:
+the circle (dashed; +, its centre; arrow, the direction of travel), the ring's centre from 2.5\,s before the release
+(open circle) to LAND (gold), and the fleet at three instants, each numbered at the ring's centre and at the freed
+UAV: the ring (thin gold circle), the carriers with their rods to their plates (grey, darker for later instants) and
+the freed UAV (red, with its path to LAND). 1: the release; 2: the freed UAV starts its own landing, 6.1\,s later;
+3: the fleet's LAND, 14.0\,s after the release, with the freed UAV 1.5\,m from the circle's centre (dotted arc).
+(b)--(d) The 2.5\,s before the release to 8\,s after it. (b) The planner's tension per UAV, labelled by plate: the
+freed UAV's (dashed) stays in the plan until the planner finds the detach from its stretched rod 0.34\,s after the
+release (dotted line) and drops it at its next logged tick (cross); the three survivors then share the ring at
+3.2--3.3\,N each, from 2.1--3.9\,N before. Grey band: the path held for 1.5\,s from the detection. (c) Ring tilt and
+(d) ring height error (measured minus planned): the rig (gold, one run) against the twin flying the same
+configuration (grey band and line: two runs, nearly identical). The twin's tilt peaks once, at 6.0--7.3$^\circ$
+0.4\,s after the release; the rig's spikes to 6.4$^\circ$ at the same time and peaks at 8.1$^\circ$ 1.0\,s after
+it, against up to 6.0$^\circ$ away from the release (dashed). The ring dips 3.9\,cm against the twin's
+2.1--2.5\,cm.}
+\label{fig:rig_circle_detach}
+\end{figure}
+
 \paragraph{A constant offset.} All four detach flights held the ring 5--6.5\,cm to one side of its reference,
 against 1.9\,cm in the carry flights of the day before, because they ran the reference-shift height integral (the
 model integral was not yet allowed on a fleet that changes size) where the carry flights ran the model integral
@@ -170,6 +199,29 @@ to its own resting height, and once there it is disarmed alone, without waiting 
 \end{figure}
 
 \pendingfig{fig:rig_departed}{The freed UAV's own landing on the rig with the departed landing: pushed to its resting height and disarmed alone.}{rig W4/W5, 14 Oct}
+
+\paragraph{Who is disarmed when.} Only a UAV off the ring is ever disarmed alone
+(Figure~\ref{fig:disarm_lanes}): a newcomer that fails in its transit is disarmed at once while the carriers land
+the ring, where the old rule disarmed all four in the air, and a freed carrier is disarmed once it is down at its
+rest, about 8\,s after the release, while the others fly on until LAND.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{Images/disarm_lanes.pdf}
+\caption[Who is disarmed when]{Which UAV is disarmed when, one lane per UAV: dark, carrying the ring; mid (or the
+UAV's own colour), flying off it; light and thin, landing; cross, disarmed in the air; bar, disarmed at rest. The
+UAV off the ring is drawn in its own colour once it is off, the carriers in grey; times in brackets are the repeat
+run's. (a) The newcomer loses its motion capture 2\,s into its transit to the ring, in the twin. Old rule (one run):
+its pose timeout disarms it and the fleet-wide stop disarms all four in the air, 0.25\,s after the loss. New rule
+(a fault on the newcomer lands the fleet; two runs): it alone is disarmed, 0.24\,s after the loss and 1.8\,m above
+its rest, and the carriers land the ring at once and are disarmed at rest 9.7\,s after the loss. (b) A carrier
+released without warning from the 90$^\circ$ plate, in hover and in the circle (twin, two runs each): it steps out,
+lands by itself and is disarmed alone at rest 7.9\,s (hover) and 8.5\,s (circle) after the release, while the three
+others carry the ring on until the LAND 20\,s after the release (dashed) and are disarmed together 29.5--29.6\,s
+after the release. The repeats' disarms are within 0.2\,s. Hatched: the same two flights on the rig, to be flown on
+14 October.}
+\label{fig:disarm_lanes}
+\end{figure}
 
 \paragraph{Fewer than three.} Detaching from three UAVs to two is not attempted: a rigid payload on two rim
 points is a pendulum about the line between them, with its centre of mass off that line, so the planner refuses

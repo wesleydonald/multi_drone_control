@@ -55,7 +55,10 @@ The system has three layers.
 \paragraph{Safety.} Every tracker checks its own UAV against a flight envelope (tilt and payload tilt
 both 60$^\circ$, speed 3\,m/s) and checks that its motion-capture pose (0.25\,s) and the planner's
 reference (1\,s) are fresh. Any violation disarms the whole fleet, not the one UAV: a single UAV losing
-thrust on a shared rigid payload drags the others with it. There is no geofence; the operator holds a
+thrust on a shared rigid payload drags the others with it. The exceptions are UAVs that are not on the payload: a fault on a newcomer
+that is not yet welded disarms the newcomer alone and lands the fleet, and a UAV that has left the payload is
+pushed down to its resting height and disarmed alone (Figure~\ref{fig:disarm_lanes}). LAND lands every UAV,
+whatever it is doing. There is no geofence; the operator holds a
 kill switch. On the rig each UAV must confirm that its flight controller is armed before the fleet
 takes off, and a UAV that disarms between ARM and TAKEOFF grounds the fleet and TAKEOFF is refused,
 since three UAVs lifting a ring sized for four would drag it. On the rig the planner starts no new
