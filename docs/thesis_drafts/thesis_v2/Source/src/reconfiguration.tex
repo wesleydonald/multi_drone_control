@@ -55,7 +55,8 @@ own resting height until it gets there, and it is then disarmed alone, without w
 (Section~\ref{sec:res_detach_rig}).
 
 \paragraph{Layout.} Whether the payload can still hang level after a detach depends on the geometry, not
-on the controller: its centre of mass must stay inside the polygon of the surviving attachment points.
+on the controller: its centre of mass must stay inside the polygon of the surviving attachment points
+\cite{michael2011cooperative}.
 Removing one UAV from an even ring of $N$ leaves a largest angular gap of $4\pi/N$, which keeps the centre
 inside only for $N \ge 5$; $N = 4$ sits exactly on the boundary. The four-UAV flights therefore use the
 plates at 30, 90, 150 and 270$^\circ$, and detaching the UAV at 90$^\circ$ leaves an even triangle under
@@ -104,7 +105,8 @@ are the collaborating student's; this work takes over at the weld.
 %     latched. An abort latches the mux to a disarmed idle command until it is restarted.
     \item \textbf{Fold-in.} The planner records the weld point in the payload frame and switches to
     the solver for $N+1$ UAVs, with the newcomer's tension starting at 0.1\,N and every UAV's tension
-    blended to the balanced solution for the new geometry.
+    blended to the balanced solution for the new geometry, as a dock blends thrust across the controller
+    switch \cite{sugihara2023trady}.
     \redo{the fold-in with the newcomer's tension starting at 1\,N against 0.1\,N: payload tilt at the weld.}
 % --- original text, flown before the rig twin; kept to refill this place:
 %     blended to the balanced solution for the new geometry. A newcomer started at 1\,N of tension

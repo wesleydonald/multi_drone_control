@@ -151,9 +151,46 @@ Quan et al.\ \cite{quan2025swarm} show experimentally that when a UAV drops out 
 Bacheti et al.\ \cite{tensionbased} handle removal explicitly: before a UAV releases, the others reposition to minimise the transient, and the same reconfiguration contracts and restores the formation for narrow corridors in experiments. It changes the formation, not the team, as does the offline planner of \cite{wahbaKinodynamicMotionPlanning2024}, but the idea could serve the addition or removal of UAVs.
 
 For joining, the event-triggered decentralised architecture of Tasooji et al.\ \cite{tasoojiCooperativeControlMultiQuadrotors} suggests better scalability through less communication and computation, but varying team sizes are not analysed and the join protocol has neither experimental validation nor explicit force reallocation. None of these recomputes the force allocation for the new team at the moment a UAV leaves or joins.
-% CHECK (structure audit, item 9): this section still lacks plug-and-play / variable-dimension MPC,
-% the static equilibrium of suspended loads and aerial docking; each needs references that are not
-% yet in references.bib.
+% CHECK (Wesley to approve the papers): the three paragraphs below cite papers found with Undermind on
+% 10 Oct (DOIs, abstracts and sources in docs/thesis_drafts/refs_2026-10-10.md; alternates listed there).
+Plug-and-play model predictive control lets subsystems join or leave a running network without losing
+stability or constraint satisfaction, provided each change is prepared before it happens. Riverso et al.\
+\cite{riverso2013plug} redesign offline only the controllers of the subsystems a newcomer couples to and
+refuse a change the redesign cannot certify, Zeilinger et al.\ \cite{zeilinger2013plug} and Aboudonia et
+al.\ \cite{aboudonia2022reconfigurable} add a transition phase that prepares the network before the switch,
+and Saccani et al.\ \cite{saccani2023model} remove the request by having each robot also plan a safe
+trajectory that holds if others join within the horizon. All four are shown in simulation, on linear
+coupled subsystems such as power networks and coupled masses or on ground robots coupled only through
+collision constraints. A suspended payload couples every UAV through the load, and a weld or an unannounced
+loss happens at an instant the planner does not choose; this thesis instead switches a centralised
+nonlinear OCP to a pre-built problem of the new size at the event, warm-started from the measured state,
+so the first solve after the switch is shown in flight rather than guaranteed.
+
+Static equilibrium decides which layouts can hold a suspended payload at all. Michael et al.\
+\cite{michael2011cooperative} show that three robots are the fewest that hold a payload over a wide set of
+poses, require the attachment points to span its centre of mass, and treat taut cables under hovering
+robots as rigid rods on ball joints, which admit several equilibria of which only some are stable; Jiang
+and Kumar \cite{jiang2013inverse} show that the robot positions for a given pose are not unique for three
+or more robots and become finitely many for three once the tensions are fixed. Gabellieri et al.\
+\cite{gabellieri2023equilibria} add that the internal force of non-vertical cables makes the load's
+attitude equilibrium stable and less sensitive to model errors, for two robots and a beam in hardware, and
+Liu et al.\ \cite{liu2025wrench} compute from the same quasi-static balance how much wrench a platform on
+rigid links can still receive within the UAVs' thrust limits. All four analyse a fixed team: none asks what
+the equilibrium becomes when one carrier leaves the layout in flight, where this thesis finds that an even
+ring of four leaves the centre of mass on the edge of the surviving triangle (Section~\ref{sec:reconfig}).
+
+UAVs dock to one another in flight, often through magnets, and the controller switch at contact matters as
+much as the mechanism. ModQuad \cite{saldana2018modquad} docks modules with passive permanent magnets that
+pull in small misalignments while the other structure hovers, then uploads a new force distribution to every
+module once motion capture detects the new structure, and TRADY \cite{sugihara2023trady}, which assembles and
+disassembles through a switchable magnet and pegs, cut the altitude jump after assembly from about 0.39 to
+0.065\,m by blending the thrust from the old controller to the new one. Zhang et al.\ \cite{zhang2026epm}
+dock micro-UAVs with an electro-permanent magnet that holds without power and switches on a current pulse,
+and Shankar et al.\ \cite{shankar2020inflight} come closest to joining a carried payload: one multirotor
+grasps a bar held aloft by another, confirms the grasp with a magnetic sensor before the first releases, and
+reschedules its gains for the new mass. Each docks to a rigid structure or to a single carrier; none joins
+a payload hung from a team, where the newcomer's pull at the weld can tilt the payload and the team's
+tensions must be redistributed.
 
 \subsection{Execution Layer and Steady-Error Rejection}
 \label{sec:lit_execution}
