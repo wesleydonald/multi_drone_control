@@ -335,6 +335,11 @@ class DissipativeController(LoadPlanner):
         # combined M1 contact attach (card 2026-10-10_combined_m1_contact): his mission flies QUAD4 until our check
         # confirms the attach; the newcomer lifecycle stays on (our take-back is the no-attach path)
         self._partner_contact = bool(p('partner_contact', False).value)
+        # the newcomer's starting share at the fold-in: 'ocp' its n+1 OCP share, 'start' attach_t_start_new
+        # (E1b R1479 / R1480: 'ocp' let plate 9 sag 2.5-3.5 cm and tilt the ring 8 deg after the switch)
+        self._contact_fold_seed = str(p('contact_fold_seed', 'ocp').value)
+        if self._contact_fold_seed not in ('ocp', 'start'):
+            raise ValueError(f"contact_fold_seed must be 'ocp' or 'start', got {self._contact_fold_seed!r}")
         self._partner_run = (bool(handoff_topic) or self._partner_release) and not self._partner_contact
         if handoff_topic:
             self.create_subscription(Bool, handoff_topic, self._partner_handoff_cb, 5)
@@ -2034,7 +2039,8 @@ class DissipativeController(LoadPlanner):
         s_from = list(self._s_nom[:-1]) + [rot_z(-self.psi0) @ s_new]
         # the newcomer's start tension acts off the incumbents' apex: a moment on the ring
         t_new0 = self._attach_t_start_new
-        if getattr(self, '_partner_contact', False) and j is not None:
+        if (getattr(self, '_partner_contact', False) and j is not None
+                and getattr(self, '_contact_fold_seed', 'ocp') == 'ocp'):
             # his lift proof has QUAD4 carrying part of the ring already. Its measured pull exists only inside its
             # tracker (cable_source mocap), so it starts at the share the n+1 OCP gives it
             t_new0 = float(self.refs._t_nom[-1])

@@ -293,6 +293,7 @@ def attach(context, launch_dir, profile_vals):
                                                if partner and not partner_contact else ''),
                      # the ring weld's gz state gates the magnet span (twin); no joint on the rig
                      **({'partner_contact': True,
+                         'contact_fold_seed': LaunchConfiguration('contact_fold_seed').perform(context),
                          'contact_joint_state_topic': (
                              '' if real else '/payload/detachable_joint_state')}
                         if partner_contact else {}),

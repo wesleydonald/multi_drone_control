@@ -381,3 +381,7 @@ def test_the_fold_in_seeds_quad4_at_its_ocp_share_and_drops_any_departed_entry()
     g._newcomer_lifecycle = g._newcomer_fault_land = False
     g._magnet_attached_cb(Bool(data=True))
     assert g.blends[-1][-1] == pytest.approx(0.1)                                 # off: today's seed
+    h = _fold_in_node()
+    h._contact_fold_seed = 'start'                                                 # E1b: 'ocp' tilted the ring 8 deg
+    h._magnet_attached_cb(Bool(data=True))
+    assert h.blends[-1][-1] == pytest.approx(0.1)

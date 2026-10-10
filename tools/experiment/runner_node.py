@@ -302,11 +302,13 @@ class ExperimentRunner(Node):
             self._log_event('CONTACT' if msg.data else 'CONTACT_LOST', '/magnet/contact')
 
     def _give_up_cb(self, msg):
-        if msg.data:
+        if msg.data and not getattr(self, '_gave_up', False):     # he repeats it at 1 Hz (R1481: 1898 rows)
+            self._gave_up = True
             self._log_event('GIVE_UP', '/join_planner/give_up')
 
     def _take_back_cb(self, msg):
-        if msg.data:
+        if msg.data and not getattr(self, '_taken_back', False):
+            self._taken_back = True
             self._log_event('TAKE_BACK', f'/drone_{self.n - 1}/take_back')
 
     def _mux_state_cb(self, msg):
