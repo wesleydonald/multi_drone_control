@@ -315,3 +315,10 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   landed. Tilt cut ported: m1-tiltcut3 743aa90 (card rev 3, critic r2 applied; launch identical to m1-rig with switches
   off). Tilt wave A (T0, T1, F6b, F6c x2) queued detached behind the claim batch (pid 986762) ->
   $CLAUDE_JOB_DIR/tmp/lab_tc_a.txt. Wave B depends on F6b (2/2 pass -> H1/F6a/F6a2 not flown, their code deleted).
+- 09:15: d4248af claim so far: orbit x2, hover x2, low, high, no-catch hover + orbit, LAND in transit PASS; full M1
+  hover + circle clean (R1536, R1541); contact_still ON x2 clean (R1533, R1540). R1543 lead030: no contact (4 aborts,
+  supports lead 0) and the TAKE-BACK FROM PLATE HEIGHT HOOKED THE RING (ring 22 deg, QUAD4 54 deg) -> fix ae57bbb on
+  m1-rig (rise to ring z + body-to-tip + 0.15 first), cherry-picked to m1-tiltcut3 (20626d3); planner tests pass, gate
+  passed. Card rev 8. QUEUED detached (lab_next.sh, pid 1024634, waits on 986762): claim re-fly on m1-rig ae57bbb (15),
+  then tilt wave A on m1-tiltcut3 20626d3 (8) -> $CLAUDE_JOB_DIR/tmp/lab_next.txt. Score ae57bbb rows with
+  TREE="branch m1-rig ae57bbb" REV=8.

@@ -1,5 +1,10 @@
 # Combined M1 subtest: Tejen flies QUAD4 from its mat through pickup, drop and a contact attach proved by a small lift; our check confirms; bumpless hand-over
 
+Rev 8 (11 Oct 09:15): R1543 (_lead030 on d4248af) showed the take-back from plate height hooks the rigid rod on the
+rim when it steps out at its height (ring 22 deg, QUAD4 54 deg, fault LAND). Fix ae57bbb on m1-rig: a take-back with
+the tip down at the ring rises to ring z + body-to-tip + 0.15 m first, then steps out. The claim table is re-flown on
+m1-rig ae57bbb (one tree); the d4248af rows (R1531-R1550) are the record. Bars unchanged.
+
 Rev 7 (11 Oct 07:55, before any run on it): the claim table is flown on the merged rig tree m1-rig d4248af (configs
 ead6afe) = m1-final d8c1b65 + the rig port (all rig changes behind rig switches; the launch graph is identical to
 d8c1b65 for all 360 frozen cases up to paths). d8c1b65 adds to 6143989: his TAKEN_BACK after the drop holds his object
