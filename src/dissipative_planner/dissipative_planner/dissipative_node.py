@@ -1402,6 +1402,10 @@ class DissipativeController(LoadPlanner):
             self._departed_hold.pop(self._n_carry0 + j, None)
         self.get_logger().warn('[dissipative] PARTNER HANDOFF: our tracker flies the last '
                                'descent; ring magnet ON')
+        # started here: a partner run has no approach hold, so the ON below returns before it
+        # would start the approach, and with _attach_approach set a newcomer with no approach
+        # gets no reference at all (ref stale 4 s after the hand-off, fleet abort: R1470)
+        self._start_approach()
         self._magnet_cmd_cb(String(data='ON'))
         self._partner_magnet_sent = None
 
