@@ -733,3 +733,68 @@ def test_legacy_attach_unchanged_by_the_twin_plumbing():
     p = g['/dissipative_planner']['params']
     assert 'attach_z' not in p and 'pivot_offset' not in p
     assert all('thrust_map' not in n['params'] for k, n in g.items() if '/bf_comm_' in k)
+
+
+# ── combined M1 contact attach (card 2026-10-10_combined_m1_contact): partner_contact, off ─────
+
+CONTACT_KEYS = ('partner_contact', 'contact_joint_state_topic', 'take_back_topic',
+                'warm_follow_applied', 'confirm_mode', 'sim_catch', 'proof_taut_len')
+
+
+def _twin_partner(**args):
+    return _by_name(sim('attach', legacy=False, num_drones=3, partner=True, **args))
+
+
+def test_partner_contact_off_passes_nothing_new():
+    """Off (the default): no new parameter, no joint-state bridge, the hand-back wired as today."""
+    for g in (_twin_partner(), _by_name(rig('attach', enable_approach_mpc=False, partner=True))):
+        assert not [(k, p) for k, n in g.items() for p in n['params'] if p in CONTACT_KEYS]
+        assert '/payload_joint_state_bridge' not in g
+    g = _twin_partner()
+    assert g['/elrs_mux_3']['params']['handoff_topic'] == '/join_planner/handoff_ready'
+    p = g['/dissipative_planner']['params']
+    assert p['partner_handoff_topic'] == '/join_planner/handoff_ready'
+
+
+def test_partner_contact_twin_graph():
+    """Twin: planner, mux, drone-3 tracker, manager and the latched ring-weld state bridge."""
+    g = _twin_partner(partner_contact=True)
+    p = g['/dissipative_planner']['params']
+    assert p['partner_contact'] is True and p['partner_handoff_topic'] == ''
+    assert p['contact_joint_state_topic'] == '/payload/detachable_joint_state'
+    assert p['departed_ground_idle'] is True           # not forced off (legacy partner only)
+    mux = g['/elrs_mux_3']['params']
+    assert mux['handoff_topic'] == '' and mux['take_back_topic'] == '/drone_3/take_back'
+    t3 = g['/tracker_3']
+    assert t3['params']['warm_follow_applied'] is True
+    assert set(t3['remappings']) == {('/drone_3/ELRSCommand', '/drone_3/ELRSCommand_diss'),
+                                     ('/drone_3/ELRSCommand_applied', '/drone_3/ELRSCommand')}
+    mgr = g['/magnet_attachment_manager']['params']
+    assert mgr['confirm_mode'] == 'contact_lift' and mgr['sim_catch'] is True
+    assert 'proof_taut_len' not in mgr and 'proof_d_ok' not in mgr     # the node's defaults
+    br = g['/payload_joint_state_bridge']
+    js = '/payload/detachable_joint_state'
+    assert br['arguments'] == [f'{js}@std_msgs/msg/String[gz.msgs.StringMsg']
+    assert br['params'][f'qos_overrides.{js}.publisher.durability'] == 'transient_local'
+    mgr = _twin_partner(partner_contact=True, sim_catch=False,
+                        proof_d_ok=0.006)['/magnet_attachment_manager']['params']
+    assert mgr['sim_catch'] is False and mgr['proof_d_ok'] == 0.006    # _nocatch; E1's values
+
+
+def test_partner_contact_rig_graph():
+    """Rig: no joint gate or bridge, no sim catch, the typed taut length."""
+    g = _by_name(rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True,
+                     proof_taut_len=0.587))
+    assert g['/dissipative_planner']['params']['contact_joint_state_topic'] == ''
+    mgr = g['/magnet_attachment_manager']['params']
+    assert (mgr['confirm_mode'], mgr['sim_catch'], mgr['proof_taut_len']) == (
+        'contact_lift', False, 0.587)
+    assert g['/elrs_mux_3']['params']['take_back_topic'] == '/drone_3/take_back'
+    assert not [n for n in g if 'joint_state' in n]
+
+
+@pytest.mark.parametrize('args', [{'partner': False}, {'partner': True, 'partner_attached': True}])
+def test_partner_contact_needs_his_mission_from_the_mat(args):
+    """partner_contact without his mission, or with the welded partner start, is refused."""
+    with pytest.raises(RuntimeError, match='partner_contact needs partner'):
+        sim('attach', legacy=False, num_drones=3, partner_contact=True, **args)

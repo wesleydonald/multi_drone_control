@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument
+from launch_ros.utilities import evaluate_parameters
 
 LAUNCH = Path(__file__).resolve().parents[1] / 'launch' / 'partner_mission.launch.py'
 
@@ -17,12 +18,7 @@ def _module():
     return mod
 
 
-def _text(key):
-    """A normalised parameter name (a tuple of TextSubstitutions) as a str."""
-    return key if isinstance(key, str) else ''.join(getattr(t, 'text', str(t)) for t in key)
-
-
-def _params(geometry):
+def _context(geometry, **overrides):
     mod = _module()
     ctx = LaunchContext()
     for a in mod._arguments():
@@ -30,12 +26,28 @@ def _params(geometry):
             ctx.launch_configurations[a.name] = a.default_value[0].text if a.default_value else ''
     if geometry is not None:
         ctx.launch_configurations['geometry'] = geometry
+    ctx.launch_configurations.update(overrides)
+    return mod, ctx
+
+
+def _actions(geometry, **overrides):
+    mod, ctx = _context(geometry, **overrides)
+    return mod._nodes(ctx)
+
+
+def _params(geometry, **overrides):
+    """Each node's parameters, evaluated as the launch would pass them."""
+    mod, ctx = _context(geometry, **overrides)
     out = {}
     for node in mod._nodes(ctx):
         name = getattr(node, '_Node__node_name', None)
-        for p in getattr(node, '_Node__parameters', None) or []:
-            if isinstance(p, dict) and name:
-                out.setdefault(name, {}).update({_text(k): v for k, v in p.items()})
+        params = getattr(node, '_Node__parameters', None)
+        if not name or not params:
+            continue
+        for p in evaluate_parameters(ctx, params):
+            if isinstance(p, dict):
+                out.setdefault(name, {}).update(
+                    {k: list(v) if isinstance(v, tuple) else v for k, v in p.items()})
     return out
 
 
@@ -62,3 +74,68 @@ def test_rig_twin_values():
 def test_unknown_geometry_is_refused():
     with pytest.raises(RuntimeError, match='geometry'):
         _params('rig')
+
+
+# ---- the geometry owns his plate and carriers; the contact attach (combined M1, 10 Oct late) ----
+
+CONTACT_KEYS = {'contact_attach', 'full_pose_attachment', 'bridge_attach_z_m', 'pickup_release_state_topic'}
+
+
+def _gz_release(actions):
+    """The one-shot `gz topic -t /pickup/detach` publish."""
+    def words(action):
+        return [''.join(getattr(t, 'text', '') for t in part) for part in action.cmd]
+    return [a for a in actions if hasattr(a, 'cmd') and not hasattr(a, '_Node__node_name')
+            and words(a)[:3] == ['gz', 'topic', '-t'] and '/pickup/detach' in words(a)]
+
+
+def _node_args(actions, name):
+    node = next(a for a in actions if getattr(a, '_Node__node_name', None) == name)
+    return [''.join(getattr(t, 'text', str(t)) for t in arg) if not isinstance(arg, str) else arg
+            for arg in node._Node__arguments]
+
+
+def test_the_geometry_owns_the_plate_and_carriers():
+    legacy, rig = _params(None)['fake_cooperative_transport_world'], _params('rig_twin')['fake_cooperative_transport_world']
+    assert (legacy['ring_attachment_plate_index'], legacy['bridge_carrier_azimuths_deg']) == (9, [330.0, 90.0, 210.0])
+    assert (rig['ring_attachment_plate_index'], rig['bridge_carrier_azimuths_deg']) == (3, [270.0, 30.0, 150.0])
+    explicit = _params('rig_twin', plate='9', carrier_azimuths_deg='[150.0, 270.0, 30.0]')
+    ring = explicit['fake_cooperative_transport_world']
+    assert (ring['ring_attachment_plate_index'], ring['bridge_carrier_azimuths_deg']) == (9, [150.0, 270.0, 30.0])
+
+
+@pytest.mark.parametrize('geometry', [None, 'rig_twin'])
+def test_defaults_add_no_contact_attach_and_keep_the_one_shot_release(geometry):
+    p = _params(geometry)
+    assert not any(CONTACT_KEYS & set(params) for params in p.values())
+    planner = p['online_join_planner']
+    assert (planner['attach_ready_target_lead_time'], planner['match_xy_threshold']) == (0.30, 0.18)
+    actions = _actions(geometry)
+    assert len(_gz_release(actions)) == 1
+    assert 'pickup_state_bridge' not in p
+
+
+def test_contact_attach_on_the_rig_twin():
+    p = _params('rig_twin', contact_attach='true')
+    planner, ring = p['online_join_planner'], p['fake_cooperative_transport_world']
+    assert (planner['contact_attach'], planner['final_attach_offset_z'], planner['attach_ready_target_lead_time']) \
+        == (True, 0.0, 0.0)
+    assert (ring['bridge_attach_z_m'], ring['full_pose_attachment']) == (0.032, True)
+    # the rest of his mission is untouched (his drop gates included)
+    base = _params('rig_twin')['online_join_planner']
+    changed = {k for k in set(planner) | set(base) if planner.get(k) != base.get(k)}
+    assert changed == {'contact_attach', 'final_attach_offset_z', 'attach_ready_target_lead_time'}
+
+
+def test_contact_attach_needs_a_contact_target():
+    with pytest.raises(RuntimeError, match='contact'):
+        _params(None, contact_attach='true')
+
+
+def test_confirmed_pickup_release_bridges_the_joint_state_and_gates_the_arm():
+    actions = _actions('rig_twin', confirm_pickup_release='true')
+    assert not _gz_release(actions)
+    assert _node_args(actions, 'pickup_state_bridge') == [
+        '/pickup/detachable_joint_state@std_msgs/msg/String[gz.msgs.StringMsg']
+    supervisor = _params('rig_twin', confirm_pickup_release='true')['simulation_test_supervisor']
+    assert supervisor['pickup_release_state_topic'] == '/pickup/detachable_joint_state'

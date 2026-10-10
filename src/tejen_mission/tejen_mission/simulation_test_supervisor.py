@@ -16,7 +16,7 @@ from interfaces.msg import MotionCaptureState
 from interfaces.srv import SetArming
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, Empty, String
 
 
 class SupervisorAction(str, Enum):
@@ -269,6 +269,51 @@ class SupervisorCore:
         )
 
 
+class PickupReleaseGate:
+    """Frees the pickup weld gz makes at spawn before the mission may arm (Gazebo only).
+
+    Detaches repeat until the joint's own state reads 'detached' for hold_s. gz reports the
+    state only when it changes, so a detach that landed before we listened leaves no echo:
+    after echo_timeout_s without any state, one attach forces a fresh attached/detached pair.
+    A queued attach can re-weld just after a detach, hence the hold.
+    """
+
+    def __init__(self, period_s: float = 1.0, echo_timeout_s: float = 5.0, hold_s: float = 1.0):
+        self.period_s = float(period_s)
+        self.echo_timeout_s = float(echo_timeout_s)
+        self.hold_s = float(hold_s)
+        self.state: Optional[str] = None
+        self.state_time: Optional[float] = None
+        self.last_send: Optional[float] = None
+        self.echo_wait_start: Optional[float] = None
+        self.open = False
+
+    def observe(self, now: float, data: str) -> None:
+        text = str(data).strip().lower()
+        state = 'detached' if 'detached' in text else 'attached' if 'attached' in text else None
+        if state is not None and state != self.state:
+            self.state, self.state_time = state, float(now)
+
+    def step(self, now: float) -> Optional[str]:
+        """The command to send now ('detach' / 'attach') or None."""
+        now = float(now)
+        if self.open:
+            return None
+        if self.state == 'detached':
+            if now - self.state_time >= self.hold_s:
+                self.open = True
+            return None
+        if self.last_send is not None and now - self.last_send < self.period_s:
+            return None
+        self.last_send = now
+        if self.echo_wait_start is None:
+            self.echo_wait_start = now
+        if self.state is None and now - self.echo_wait_start >= self.echo_timeout_s:
+            self.echo_wait_start = now
+            return 'attach'
+        return 'detach'
+
+
 class SimulationTestSupervisor(Node):
     def __init__(self) -> None:
         super().__init__("simulation_test_supervisor")
@@ -298,6 +343,20 @@ class SimulationTestSupervisor(Node):
         self.start_gate_open = not self.start_gate_topic
         if self.start_gate_topic:
             self.create_subscription(String, self.start_gate_topic, self._start_gate, 5)
+        # optional (multi_drone_control rig-twin subtest): the arm waits until the pickup
+        # weld made at spawn reads free; a one-shot detach was lost before (R0678)
+        self.release_state_topic = str(
+            self.declare_parameter("pickup_release_state_topic", "").value).strip()
+        self.release_gate = None
+        if self.release_state_topic:
+            self.release_gate = PickupReleaseGate()
+            self.create_subscription(
+                String, self.release_state_topic,
+                lambda msg: self.release_gate.observe(time.monotonic(), msg.data), 10)
+            self.release_publishers = {
+                command: self.create_publisher(Empty, str(self.declare_parameter(
+                    f"pickup_release_{command}_topic", f"/pickup/{command}").value), 5)
+                for command in ("attach", "detach")}
         result_path_value = str(self.declare_parameter("result_path", "").value).strip()
         if not result_path_value:
             raise ValueError("result_path is required")
@@ -366,7 +425,8 @@ class SimulationTestSupervisor(Node):
     def _inputs_ready(self, now: float) -> bool:
         state_stamps = (self.last_motion, self.last_pendulum, self.last_payload)
         return bool(
-            self.phase is not None
+            (self.release_gate is None or self.release_gate.open)
+            and self.phase is not None
             and self.armed is not None
             and self.arming_client.service_is_ready()
             and self.command_publisher.get_subscription_count() > 0
@@ -382,7 +442,10 @@ class SimulationTestSupervisor(Node):
         def age(stamp: Optional[float]) -> Optional[float]:
             return None if stamp is None else max(0.0, now - stamp)
 
+        released = {} if self.release_gate is None else {
+            "pickup_released": self.release_gate.open, "pickup_joint_state": self.release_gate.state}
         return {
+            **released,
             "phase_received": self.phase is not None,
             "arming_feedback_received": self.armed is not None,
             "arming_service_ready": self.arming_client.service_is_ready(),
@@ -476,6 +539,16 @@ class SimulationTestSupervisor(Node):
         if self.finished:
             return
         now = time.monotonic()
+        if self.release_gate is not None:
+            was_open = self.release_gate.open
+            command = self.release_gate.step(now)
+            if command is not None:
+                self.release_publishers[command].publish(Empty())
+                self.get_logger().info(
+                    f"pickup weld: {command} (joint reads {self.release_gate.state})",
+                    throttle_duration_sec=5.0)
+            if self.release_gate.open and not was_open:
+                self.get_logger().info("pickup weld reads free; the arm may proceed")
         if not self.start_gate_open:
             self.core.start_time = self.core.state_entry_time = now
             return

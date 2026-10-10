@@ -42,7 +42,8 @@ EVENT_KINDS = {
                   # shift every later event by the wait (a creep lift varies by ~10 s, R0553);
                   # arg 'z timeout_s' gives up after timeout_s (event LIFT_TIMEOUT)
     'WAIT_REWELD',  # not published: block until the magnet welds AGAIN after a release
-                    # (a drone that starts welded, leaves and rejoins), then shift later events
+                    # (a drone that starts welded, leaves and rejoins), then shift later events;
+                    # arg 'timeout_s' gives up after timeout_s (event REWELD_TIMEOUT) and goes on
     'LAUNCH',     # not published: start a second launch mid-run, arg "pkg file [k:=v ...]"
                   # (the partner's mission once the ring flies); stopped with the stack
     'HANDOFF',    # /join_planner/handoff_ready True: our tracker takes the partner's last
@@ -95,6 +96,20 @@ def wait_lift_arg(arg):
     if timeout is not None and timeout <= 0:
         raise ValueError(f'WAIT_LIFT timeout must be > 0, got {timeout}')
     return z, timeout
+
+
+def wait_reweld_arg(arg, what='WAIT_REWELD'):
+    """WAIT_REWELD / WAIT_WELD arg -> timeout SIM s or None: '' or 'timeout_s'. On expiry the schedule
+    goes on (card 2026-10-10_combined_m1_contact: no attach, then LAND)."""
+    if arg is None or str(arg).strip() == '':
+        return None
+    parts = str(arg).split()
+    if len(parts) != 1:
+        raise ValueError(f"{what} arg {arg!r}: expected 'timeout_s'")
+    timeout = float(parts[0])
+    if timeout <= 0:
+        raise ValueError(f'{what} timeout must be > 0, got {timeout}')
+    return timeout
 
 
 def mocap_loss_arg(arg):
@@ -160,6 +175,8 @@ class Event:
             raise ValueError('LAUNCH needs "package launch_file [k:=v ...]" as its arg')
         if self.do == 'WAIT_LIFT':
             wait_lift_arg(self.arg)
+        if self.do in ('WAIT_REWELD', 'WAIT_WELD'):
+            wait_reweld_arg(self.arg, self.do)
         if self.do == 'WAIT_LOG':
             wait_log_arg(self.arg)
         if self.do == 'WAIT_THRUST' and self.arg is not None and '{i}' not in str(self.arg):

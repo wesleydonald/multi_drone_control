@@ -69,6 +69,29 @@ DEPARTED_AT_REST_S = 0.5   # s at its rest before its reference stops pressing (
 DEPARTED_PRESS_LIMIT_S = 6.0  # s of press after it stopped above its rest; then held at its own height
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
 DROP_LAND_WAIT_S = 30.0    # s after a drop: /fleet/landed even if a drone never reads as down
+# partner_contact (card 2026-10-10_combined_m1_contact): his phases from the rejoin on, in which our ring magnet span
+# may begin (tejen_mission MissionPhase; LIFT_PROOF and RING_ATTACHED are the contact attach's own)
+REJOIN_PHASES = ('TRANSIT_TO_REATTACH', 'APPROACH_ABOVE_TARGET', 'MATCH_VELOCITY', 'DESCEND_TO_ATTACHMENT',
+                 'ATTACH_READY', 'LIFT_PROOF', 'RING_ATTACHED')
+NOT_FLOWN_PHASES = ('', 'WAIT_FOR_TAKEOFF', 'LANDED_DISARMED')
+CONTACT_SPAN_MIN_Z = 0.3   # m: QUAD4 above this before the span's ON (no ON on the floor, near the spawn weld)
+CONTACT_SPAN_EVERY_S = 1.0  # s between the span's ON keepalives
+
+
+def _ring_off_allowed(node):
+    """partner_contact: the newcomer's ring magnet OFF only once our ON span has begun. On the rig one coil holds his
+    ball before it, so an OFF there drops the ball over the ring (card 2026-10-10_combined_m1_contact, critic 6)."""
+    return not getattr(node, '_partner_contact', False) or getattr(node, '_span_t', None) is not None
+
+
+def _free_drone_ff(node, d, g):
+    """(thrust feedforward, external pull) of drone d flying off the ring: its own weight, plus his ball's while
+    QUAD4 carries it under partner_contact (/tejen/object_attached)."""
+    j = d - getattr(node, '_n_carry0', d + 1)
+    if not getattr(node, '_ball_on', False) or not 0 <= j < getattr(node, 'reserved_attach', 0):
+        return g, np.zeros(3)
+    b = node._ball_mass * float(g[2]) / node.drone_mass
+    return g + np.array([0.0, 0.0, b]), np.array([0.0, 0.0, -b])
 
 
 def _who(d):
@@ -309,7 +332,10 @@ class DissipativeController(LoadPlanner):
         self._detect_ok = {}          # each drone's excess on its last tick within the threshold
         self._detect_refused = set()  # detected but refused (min_survivors): do not re-fire
         handoff_topic = str(p('partner_handoff_topic', '').value)
-        self._partner_run = bool(handoff_topic) or self._partner_release
+        # combined M1 contact attach (card 2026-10-10_combined_m1_contact): his mission flies QUAD4 until our check
+        # confirms the attach; the newcomer lifecycle stays on (our take-back is the no-attach path)
+        self._partner_contact = bool(p('partner_contact', False).value)
+        self._partner_run = (bool(handoff_topic) or self._partner_release) and not self._partner_contact
         if handoff_topic:
             self.create_subscription(Bool, handoff_topic, self._partner_handoff_cb, 5)
         # The network's ring must be the PHYSICAL tether ring (the parent's rho, the n
@@ -393,6 +419,34 @@ class DissipativeController(LoadPlanner):
                 self._on_load_pubs[d] = self.create_publisher(Bool, f'/drone_{d}/on_load', on_load_qos)
                 self.create_subscription(Bool, f'/drone_{d}/arming_state_feedback',
                                          lambda msg, j=j: self._newcomer_arming_cb(msg, j), 5)
+        self._his_phase = ''
+        self._his_took_off = False
+        self._mux_state = None
+        self._joint_free = None       # the ring weld joint read free (None: no state yet)
+        self._ball_on = False
+        self._ball_mass = float(p('contact_ball_mass', 0.1).value)   # his pickup ball (tejen/payload_model.sdf)
+        self._span_t = None           # our ring magnet span: the last ON sent (None: not begun)
+        self._taken_back = False
+        if self._partner_contact and self.reserved_attach > 0:
+            latched_pc = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                                    reliability=ReliabilityPolicy.RELIABLE)
+            d = self._n_carry0
+            self._take_back_pub = self.create_publisher(Bool, f'/drone_{d}/take_back', latched_pc)
+            self.create_subscription(String, f'/drone_{d}/mux_state', self._mux_state_cb, latched_pc)
+            self.create_subscription(String, '/join_planner/phase', self._his_phase_cb, latched_pc)   # his is latched
+            self.create_subscription(Bool, '/join_planner/give_up', self._give_up_cb, 10)
+            self.create_subscription(Bool, '/tejen/object_attached', self._ball_cb, 10)
+            self.create_subscription(Bool, '/magnet/contact', self._contact_cb, 10)
+            # the gz state of the ring weld (sim): the span waits for 'detached' after spawn. Its bridge latches the
+            # one-shot state for a late subscriber. '' (the rig): no joint to wait for
+            joint_topic = str(p('contact_joint_state_topic', '').value)
+            if joint_topic:
+                self.create_subscription(String, joint_topic, self._joint_state_cb, latched_pc)
+            else:
+                self._joint_free = True
+            self.get_logger().warn(
+                f'[dissipative] partner_contact: drone {d} warm from his takeoff, ring magnet span from his rejoin, '
+                f'take-back on his give-up or our LAND before the attach (joint gate: {joint_topic or "none"})')
         self._net_p_des = None                 # current network target (xy from traj, z hold)
         self._net_hold_z = None                # held/descending target height
         self._net_landing = False              # LAND received in the network phase
@@ -614,6 +668,7 @@ class DissipativeController(LoadPlanner):
         self._partner_release_tick()
         self._publish_pending_attach_refs()
         self._partner_magnet_keepalive()
+        self._contact_span_tick()
         if self.phase == 'network':
             self._network_plan()
             return
@@ -707,10 +762,11 @@ class DissipativeController(LoadPlanner):
         for d, p_hold in self._departed_hold.items():
             if p_hold is None:
                 continue
+            a_ff, a_c = _free_drone_ff(self, d, g)
             wait = getattr(self, '_departed_wait', {}).get(d, 0.0)
             if wait > 0.0:                      # an aborted newcomer: the magnet lets go first
                 self._departed_wait[d] = wait - 1.0 / PLANNER_HZ
-                self._publish_ref(d, [(p_hold, zero, g, zero)] * (self.N + 1))
+                self._publish_ref(d, [(p_hold, zero, a_ff, a_c)] * (self.N + 1))
                 continue
             alone = d in self._land_alone
             if d in self._departed_step and (alone or not self._land_to_ground) \
@@ -802,7 +858,7 @@ class DissipativeController(LoadPlanner):
                         td.stalled = True
                         p_hold[2] = float(pos[2])
                         self.get_logger().info(f'[dissipative] departed {_who(d)} is down')
-            self._publish_ref(d, [(p_hold, zero, g, zero)] * (self.N + 1))
+            self._publish_ref(d, [(p_hold, zero, a_ff, a_c)] * (self.N + 1))
 
     def _attach_target_cb(self, msg: PoseStamped):
         q = msg.pose.position
@@ -899,6 +955,9 @@ class DissipativeController(LoadPlanner):
                 continue
             if (self._n_carry0 + j) in self._departed_hold:
                 continue                  # released partner drone: its fixed hold flies it
+            if getattr(self, '_partner_contact', False):
+                self._contact_warm_ref(j, load_p, g)
+                continue
             prof = self._approach.get(j)
             if prof is not None and self._attach_target is not None:
                 ok, why, tip_z = False, 'off', None
@@ -1387,7 +1446,8 @@ class DissipativeController(LoadPlanner):
                 if why is not None:
                     d = self._n_carry0 + j
                     self.get_logger().warn(f'[dissipative] weld of {_who(d)} refused: {why}')
-                    self._magnet_cmd_pub.publish(String(data='OFF'))
+                    if _ring_off_allowed(self):
+                        self._magnet_cmd_pub.publish(String(data='OFF'))
                     if d in self._departed_hold:
                         self._departed_wait[d] = NEWCOMER_RELEASE_S   # let go before it moves on
                     continue
@@ -1456,6 +1516,144 @@ class DissipativeController(LoadPlanner):
             self._magnet_cmd_pub.publish(String(data='ON'))
             self._partner_magnet_sent = now
 
+    # ── partner_contact (card 2026-10-10_combined_m1_contact): his mission flies QUAD4 to the attach ──────
+    def _his_phase_cb(self, msg):
+        ph = str(msg.data).strip().upper()
+        if ph != self._his_phase:
+            self.get_logger().info(f'[dissipative] his phase {ph}')
+        self._his_phase = ph
+        if not self._his_took_off and ph not in NOT_FLOWN_PHASES:
+            self._his_took_off = True
+            self.get_logger().warn(f'[dissipative] his takeoff ({ph}): drone {self._n_carry0}\'s tracker warm on '
+                                   f'its measured body from here')
+
+    def _mux_state_cb(self, msg):
+        self._mux_state = str(msg.data).strip().lower()
+
+    def _ball_cb(self, msg):
+        if bool(msg.data) != self._ball_on:
+            self.get_logger().info(f'[dissipative] his ball {"on" if msg.data else "off"}: drone '
+                                   f'{self._n_carry0}\'s model mass {"+" if msg.data else "-"}{self._ball_mass:.2f} kg')
+        self._ball_on = bool(msg.data)
+
+    def _contact_cb(self, msg):
+        self.get_logger().info(f'[dissipative] /magnet/contact {bool(msg.data)}')
+
+    def _joint_state_cb(self, msg):
+        s = str(msg.data).strip().lower()
+        if s not in ('attached', 'detached'):
+            return
+        if (s == 'detached') != self._joint_free:
+            self.get_logger().info(f'[dissipative] ring weld joint {s}')
+        self._joint_free = s == 'detached'
+
+    def _give_up_cb(self, msg):
+        if msg.data:
+            for j in range(self.reserved_attach):
+                self._take_back(j, 'his give-up')
+
+    def _contact_warm_ref(self, j, load_p, g):
+        """From his takeoff, drone j's tracker gets its measured body (not only near the ring, as the
+        proximity-gated hold does) so it is warm wherever a take-back finds it; within the warm radius the ring
+        velocity is fed forward along the horizon, the attach's hand-over point."""
+        if not self._his_took_off or j in self._newcomer_out:
+            return
+        d = self._n_carry0 + j
+        p = np.asarray(self.attach_pos[j], float).copy()
+        v = np.zeros(3)
+        if float(np.linalg.norm(p - load_p)) <= self._attach_warm_radius and len(self.load_state) >= 10:
+            v = np.asarray(self.load_state[7:10], float).copy()
+        a_ff, a_c = _free_drone_ff(self, d, g)
+        self._publish_ref(d, [(p + v * (self.dt * k), v, a_ff, a_c) for k in range(self.N + 1)])
+
+    def _contact_span_tick(self):
+        """Our ring magnet span: ON from his rejoin (TRANSIT_TO_REATTACH on) once QUAD4 is above
+        CONTACT_SPAN_MIN_Z and the ring weld joint reads free, re-sent every CONTACT_SPAN_EVERY_S until the attach
+        or the take-back. Before it the one coil holds his ball on the rig."""
+        if not self._partner_contact or self._taken_back or not self.reserved_attach \
+                or not self.attach_pending[0] or 0 in self._newcomer_out:
+            return
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if self._span_t is None:
+            pos = self._pos(self._n_carry0)
+            if (self._his_phase not in REJOIN_PHASES or pos is None or float(pos[2]) <= CONTACT_SPAN_MIN_Z
+                    or self._joint_free is not True or self._land_to_ground or self._dropped is not None):
+                return
+            self.get_logger().warn(f'[dissipative] ring magnet span begins: ON (his {self._his_phase}, drone '
+                                   f'{self._n_carry0} at z {float(pos[2]):.2f} m, the ring weld joint free)')
+        elif now - self._span_t < CONTACT_SPAN_EVERY_S:
+            return
+        self._span_t = now
+        self._magnet_cmd_pub.publish(String(data='ON'))
+
+    def _reserved_plate_dir(self, j, c):
+        """Unit xy from the ring centre c to reserved drone j's plate: the live attach target, else its slot."""
+        t = self._attach_target
+        if t is not None and float(np.linalg.norm(np.asarray(t[:2], float) - c)) > 1e-3:
+            v = np.asarray(t[:2], float) - c
+        else:
+            v = (quat_to_rot_np(self.load_state[3:7]) @ self.net.rho[self._n_carry0 + j])[:2]
+        return v / max(float(np.linalg.norm(v)), 1e-6)
+
+    def _take_back(self, j, why):
+        """No attach (his give-up, or our LAND before it): QUAD4 goes to our tracker (/drone_3/take_back) and holds
+        where it is measured; then the departed path: within DEPARTED_CLEAR_R of the ring centre radially out at
+        its height (over the middle, r < attach_radius, along its reserved plate's azimuth), else down where it is,
+        landing and disarmed alone. The ring magnet goes OFF only if our span began. Before his takeoff it stays
+        on its mat with no reference (a hold there fights the floor, R0531/R0532)."""
+        if not self._partner_contact or self._taken_back or not (0 <= j < self.reserved_attach) \
+                or not self.attach_pending[j]:
+            return
+        d = self._n_carry0 + j
+        self._taken_back = True
+        self._newcomer_out[j] = why
+        self._take_back_pub.publish(Bool(data=True))
+        off = self._span_t is not None
+        if off:
+            self._magnet_cmd_pub.publish(String(data='OFF'))
+            self._off_resend_t = 0.0
+        pos = self.attach_pos[j]
+        if not self._his_took_off or pos is None:
+            self.get_logger().warn(f'[dissipative] TAKE-BACK of {_who(d)} ({why}) before his takeoff: it stays '
+                                   f'where it is, no reference')
+            return
+        hold = np.asarray(pos, float).copy()
+        self._departed_hold[d] = hold
+        self._land_alone.add(d)
+        rest = self._rest_z.get(d)
+        floor = self._departed_down_z if rest is None else rest + NEWCOMER_LIFTED_M
+        if float(hold[2]) < floor:
+            self.get_logger().warn(f'[dissipative] TAKE-BACK of {_who(d)} ({why}) on the floor: it lands where it is')
+            return
+        self._departed_wait[d] = NEWCOMER_RELEASE_S
+        where = 'down where it is'
+        if self.load_state is not None:
+            c = np.asarray(self.load_state[0:2], float)
+            v = hold[:2] - c
+            r = float(np.linalg.norm(v))
+            u = v / r if r >= self.attach_radius else self._reserved_plate_dir(j, c)
+            if r < DEPARTED_CLEAR_R:
+                self._departed_step[d] = np.array([*(c + u * DEPARTED_CLEAR_R), float(hold[2])])
+                where = f'out to {DEPARTED_CLEAR_R:.1f} m from the ring at its height, then down'
+            # during a circle, on out past the ring's path before it lands (as an aborted newcomer does)
+            clear = self._path_clear_point(self._departed_step.get(d, hold), u)
+            if clear is not None:
+                if d in self._departed_step:
+                    self._departed_next[d] = clear
+                else:
+                    self._departed_step[d] = clear
+                where = 'out past the ring\'s path at its height, then down'
+        self.get_logger().warn(f'[dissipative] TAKE-BACK of {_who(d)} ({why}): our tracker takes it, '
+                               f'{"magnet OFF, " if off else ""}held at {np.round(hold, 2)}, then {where}; it '
+                               f'lands alone')
+
+    def _drop_departed(self, d):
+        for st in (self._departed_hold, self._departed_step, self._departed_next,
+                   self._departed_td, self._departed_clear, self._departed_wait):
+            st.pop(d, None)
+        self._departed_landing.discard(d)
+        self._land_alone.discard(d)
+
     def _magnet_cmd_cb(self, msg):
         cmd = msg.data.strip().upper()
         if cmd == 'OFF':
@@ -1475,9 +1673,11 @@ class DissipativeController(LoadPlanner):
                                    + ('LAND in progress' if self._land_to_ground else
                                       'the ring was dropped' if self._dropped is not None else
                                       'the newcomer is out of this flight'), throttle_duration_sec=2.0)
-            if any(self.attach_pending):
+            if any(self.attach_pending) and _ring_off_allowed(self):
                 self._magnet_cmd_pub.publish(String(data='OFF'))   # never to a welded newcomer: OFF releases it
             return
+        if getattr(self, '_partner_contact', False):
+            return            # the ON is our own span's: no trajectory hold, no approach (critic round 3, H and 3)
         if not self._approach_hold_on:
             return
         # ON is republished by the operator tools; arm the hold once per approach so a
@@ -1574,7 +1774,8 @@ class DissipativeController(LoadPlanner):
         self._off_resend_t += 1.0 / PLANNER_HZ
         if self._off_resend_t >= NEWCOMER_OFF_EVERY_S:
             self._off_resend_t = 0.0
-            self._magnet_cmd_pub.publish(String(data='OFF'))
+            if _ring_off_allowed(self):
+                self._magnet_cmd_pub.publish(String(data='OFF'))
 
     def _newcomer_arming_cb(self, msg, j):
         """A reserved drone that is not on the ring disarms in flight (its tracker's own fault: tilt, speed,
@@ -1585,6 +1786,11 @@ class DissipativeController(LoadPlanner):
         self._newcomer_armed[j] = bool(msg.data)
         if not was or msg.data or not getattr(self, 'takeoff_seen', False) or self._landed:
             return
+        if getattr(self, '_partner_contact', False) and getattr(self, '_mux_state', None) != 'ours':
+            # his stream flies QUAD4: our idle tracker's disarm must not turn the magnet OFF or take QUAD4 out
+            self.get_logger().warn(f'[dissipative] {_who(self._n_carry0 + j)}\'s tracker disarmed while his stream '
+                                   f'flies it: ignored here')
+            return
         d = self._n_carry0 + j
         if not self.attach_pending[j] and d not in self._departed_hold:
             return                                     # on the ring: a carrier like any other
@@ -1594,7 +1800,7 @@ class DissipativeController(LoadPlanner):
         at_rest = (d in self._departed_hold and rest is not None and pos is not None
                    and abs(float(pos[2]) - rest) <= DEPARTED_REST_TOL_M)
         self._newcomer_out[j] = 'fault'
-        if self.attach_pending[j]:
+        if self.attach_pending[j] and _ring_off_allowed(self):
             self._magnet_cmd_pub.publish(String(data='OFF'))
             self._off_resend_t = 0.0
         self._approach.pop(j, None)
@@ -1677,6 +1883,8 @@ class DissipativeController(LoadPlanner):
         self.net.attach(slot, measured, cable_len_k=self._attach_cable_len,
                         central=self._attach_central, handout=self._attach_handout,
                         elev_deg_k=self._attach_elev_deg)
+        if getattr(self, '_partner_contact', False):
+            self._drop_departed(d)
         self._set_on_load(d, True)
         if self._reserved_index(d) is not None:
             self.attach_pending[self._reserved_index(d)] = False
@@ -1796,6 +2004,8 @@ class DissipativeController(LoadPlanner):
         self.drone_pos[d] = np.asarray(measured, float).copy()
         self.drone_vel[d] = np.zeros(3)
         self._ocp_attached[d] = True
+        if getattr(self, '_partner_contact', False):
+            self._drop_departed(d)                            # the OCP is its one reference from now on
         self._set_on_load(d, True)
         if j is not None:
             self.attach_pending[j] = False
@@ -1823,7 +2033,14 @@ class DissipativeController(LoadPlanner):
         s_new = dvec / max(float(np.linalg.norm(dvec)), 1e-6)
         s_from = list(self._s_nom[:-1]) + [rot_z(-self.psi0) @ s_new]
         # the newcomer's start tension acts off the incumbents' apex: a moment on the ring
-        t_from = t_before + [self._attach_t_start_new]
+        t_new0 = self._attach_t_start_new
+        if getattr(self, '_partner_contact', False) and j is not None:
+            # his lift proof has QUAD4 carrying part of the ring already. Its measured pull exists only inside its
+            # tracker (cable_source mocap), so it starts at the share the n+1 OCP gives it
+            t_new0 = float(self.refs._t_nom[-1])
+            self.get_logger().info(f'[dissipative] partner_contact: {_who(d)} starts at the OCP share '
+                                   f'{t_new0:.2f} N (not {self._attach_t_start_new:.2f})')
+        t_from = t_before + [t_new0]
         if self._attach_datum_shift and self.load_state is not None:
             # BUMPLESS in xy, as the network handover: the approach hold froze the orbit
             # reference while the ring coasted on (0.13 m off at the weld, R0669) and the
@@ -1993,7 +2210,10 @@ class DissipativeController(LoadPlanner):
             return
         for j in range(self.reserved_attach):
             if self.attach_pending[j]:
-                self._abort_newcomer(j, 'LAND')
+                if getattr(self, '_partner_contact', False):
+                    self._take_back(j, 'LAND')     # his stream flies it: our approach never started
+                else:
+                    self._abort_newcomer(j, 'LAND')
 
     def _unload_cancel_on(self, cmd):
         """A LAND, DISARM, ESTOP or ABORT during a soft detach cancels it (magnet stays ON)."""

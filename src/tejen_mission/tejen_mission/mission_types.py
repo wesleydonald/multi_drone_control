@@ -30,6 +30,11 @@ class MissionPhase(str, Enum):
     MATCH_VELOCITY = "MATCH_VELOCITY"
     DESCEND_TO_ATTACHMENT = "DESCEND_TO_ATTACHMENT"
     ATTACH_READY = "ATTACH_READY"
+    # contact_attach (combined M1 subtest): the catch is proved by a small lift, then the
+    # fleet's controller takes the vehicle, attached or not
+    LIFT_PROOF = "LIFT_PROOF"
+    RING_ATTACHED = "RING_ATTACHED"
+    TAKEN_BACK = "TAKEN_BACK"
     LANDING = "LANDING"
     LANDED_DISARMED = "LANDED_DISARMED"
 
@@ -92,7 +97,8 @@ class PhaseSpec:
 
     def __post_init__(self) -> None:
         command = self.magnet_command.strip().upper()
-        if command not in {"ON", "OFF"}:
+        # NONE: the planner sends nothing in this phase and the manager keeps its last state
+        if command not in {"ON", "OFF", "NONE"}:
             raise ValueError(f"Unsupported magnet command: {self.magnet_command!r}")
         object.__setattr__(self, "magnet_command", command)
 

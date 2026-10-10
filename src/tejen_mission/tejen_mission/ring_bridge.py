@@ -31,11 +31,23 @@ def _yaw_from_quat(w, x, y, z):
     return math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
 
 
+def _rotate(q, v):
+    """v rotated by the unit quaternion q = (w, x, y, z)."""
+    w, x, y, z = q
+    n = math.sqrt(w * w + x * x + y * y + z * z) or 1.0
+    w, x, y, z = w / n, x / n, y / n, z / n
+    vx, vy, vz = v
+    cx, cy, cz = y * vz - z * vy, z * vx - x * vz, x * vy - y * vx
+    ccx, ccy, ccz = y * cz - z * cy, z * cx - x * cz, x * cy - y * cx
+    return (vx + 2.0 * (w * cx + ccx), vy + 2.0 * (w * cy + ccy), vz + 2.0 * (w * cz + ccz))
+
+
 class RingBridge(FakeCooperativeTransportWorld):
     def __init__(self) -> None:
         self._traj_state = None          # latest /payload/trajectory_state (dict)
         self._traj_rx_s = None           # node time it arrived
         self._ring = None                # latest measured ring RigidBodyState
+        self._ring_q = None              # its attitude (w, x, y, z)
         super().__init__()
         self.create_subscription(String, '/payload/trajectory_state', self._traj_cb, 5)
         self.create_subscription(MotionCaptureState, '/payload/motion_capture_state',
@@ -58,6 +70,7 @@ class RingBridge(FakeCooperativeTransportWorld):
         p, q, v = msg.pose.position, msg.pose.orientation, msg.twist.linear
         self._ring = RigidBodyState(x=p.x, y=p.y, z=p.z, yaw=_yaw_from_quat(q.w, q.x, q.y, q.z),
                                     vx=v.x, vy=v.y, vz=v.z, yaw_rate=0.0)
+        self._ring_q = (q.w, q.x, q.y, q.z)
 
     # ── parameters (declared lazily: the parent calls the offsets in its __init__) ─
     def _param(self, name, default):
@@ -114,8 +127,15 @@ class RingBridge(FakeCooperativeTransportWorld):
                               z=z, yaw=yaw, vx=vx, vy=vy, vz=0.0, yaw_rate=0.0)
 
     def compute_attachment_xyz(self, payload_state: RigidBodyState) -> Tuple[float, float, float]:
+        z0 = float(self._param('bridge_attach_z_m', 0.025))
+        if self._param('full_pose_attachment', False) and self._ring_q is not None:
+            # the plate point as our magnet manager computes it (ring pose + R(q) @ offset): a
+            # tilted ring moves the plate by r*sin(tilt), which a yaw-only target misses
+            plate = self.ring_geometry.plate_body_offset(self.ring_attachment_plate_index)
+            ox, oy, oz = _rotate(self._ring_q, (float(plate[0]), float(plate[1]), float(plate[2]) + z0))
+            return (payload_state.x + ox, payload_state.y + oy, payload_state.z + oz)
         x, y, z = super().compute_attachment_xyz(payload_state)
-        return (x, y, z + float(self._param('bridge_attach_z_m', 0.025)))
+        return (x, y, z + z0)
 
 
 def main(args=None) -> None:

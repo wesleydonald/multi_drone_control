@@ -100,6 +100,11 @@ class ElrsMux(Node):
         handoff_topic = str(self.declare_parameter('handoff_topic', '').value)
         if handoff_topic:
             self.create_subscription(Bool, handoff_topic, self._handoff_cb, 10)
+        # take-back (combined M1 contact attach: no attach, our tracker flies it away and lands
+        # it), latched by its publisher ('' = off)
+        take_back_topic = str(self.declare_parameter('take_back_topic', '').value)
+        if take_back_topic:
+            self.create_subscription(Bool, take_back_topic, self._take_back_cb, MUX_STATE_QOS)
         # partner release (a start-welded drone after its detach and step-out): hand it to
         # the approach stream on that stream's first flying command, never before
         self._release_pending = False
@@ -166,6 +171,10 @@ class ElrsMux(Node):
                     '[elrs_mux] welded but the dissipative tracker is idle/silent - '
                     'HOLDING approach authority (switching now would cut the motors)',
                     throttle_duration_sec=1.0)
+            elif self.policy.taken_back and not attached:
+                self.get_logger().warn(
+                    '[elrs_mux] taken back, but our tracker is not flying yet: the approach '
+                    'stream stays on until it is', throttle_duration_sec=2.0)
             return
         self._attached = attached
         self._publish_state()
@@ -186,6 +195,13 @@ class ElrsMux(Node):
         if self._ours_only or not msg.data:
             return
         self._apply(self.policy.weld(True, self._now()))
+
+    def _take_back_cb(self, msg: Bool):
+        if self._ours_only or not msg.data:
+            return
+        if not self.policy.taken_back:
+            self.get_logger().warn('[elrs_mux] TAKE-BACK: our tracker takes the drone (no attach)')
+        self._apply(self.policy.take_back(self._now()))
 
     def _magnet_cb(self, msg: ELRSCommand):
         self._magnet_value = float(getattr(msg, f'channel_{self._magnet_channel}', 0.0))

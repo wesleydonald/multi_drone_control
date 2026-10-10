@@ -37,6 +37,29 @@ from tracker.thrust_model import resolve_thrust_ratio
 PARENT_MODEL = 'lift_system'
 ATTACH_DRONE_ID = 3
 ATTACH_DRONE_NAME = 'x3_drone3'
+# partner_contact: the manager's contact and proof thresholds, passed only when set
+# ('' = its default)
+PROOF_KNOBS = ('contact_dwell_s', 'proof_d_ok', 'proof_d_fail', 'proof_h_plate', 'proof_dwell_s',
+               'proof_fail_dwell_s', 'proof_timeout_s', 'proof_ma_s')
+
+
+def _contact_manager_params(context, real):
+    """Return the magnet manager's contact-and-lift parameters.
+
+    Card 2026-10-10_combined_m1_contact: the twin makes the gz joint at contact unless sim_catch
+    is false; the rig's proof also wants the taut body-to-tip length (proof_taut_len, 0 = off).
+    """
+    out = {'confirm_mode': 'contact_lift'}
+    for k in PROOF_KNOBS:
+        v = LaunchConfiguration(k).perform(context).strip()
+        if v:
+            out[k] = float(v)
+    if real:
+        out['sim_catch'] = False
+        out['proof_taut_len'] = float(LaunchConfiguration('proof_taut_len').perform(context))
+    else:
+        out['sim_catch'] = truthy(context, 'sim_catch')
+    return out
 
 
 def _x0_rate_imu_drones(context, n, real):
@@ -106,6 +129,13 @@ def attach(context, launch_dir, profile_vals):
     # stepped out and released to the partner's mission, then rejoins
     partner_attached = partner and (
         LaunchConfiguration('partner_attached').perform(context).lower() in ('1', 'true', 'yes'))
+    # combined M1 contact attach (card 2026-10-10_combined_m1_contact): his mission flies QUAD4
+    # to a contact and a small lift, our manager confirms it, then the mux hands over (or our
+    # take-back)
+    partner_contact = truthy(context, 'partner_contact')
+    if partner_contact and (not partner or partner_attached):
+        raise RuntimeError('partner_contact needs partner:=true (his mission flies QUAD4) and '
+                           'partner_attached:=false')
 
     x0_imu = _x0_rate_imu_drones(context, n, real)
     # the thrust map and geometry: the rig carry's on the rig, the twin's typed knobs in sim (the
@@ -259,7 +289,13 @@ def attach(context, launch_dir, profile_vals):
                         if LaunchConfiguration('attach_z').perform(context).strip() else {}),
                      'attach_approach': (not sil) and (not enable_approach_mpc) and (not partner),
                      'approach_hold': not partner,
-                     'partner_handoff_topic': '/join_planner/handoff_ready' if partner else '',
+                     'partner_handoff_topic': ('/join_planner/handoff_ready'
+                                               if partner and not partner_contact else ''),
+                     # the ring weld's gz state gates the magnet span (twin); no joint on the rig
+                     **({'partner_contact': True,
+                         'contact_joint_state_topic': (
+                             '' if real else '/payload/detachable_joint_state')}
+                        if partner_contact else {}),
                      'start_attached': partner_attached,
                      'partner_release': partner_attached,
                      'attach_velocity_newcomer': (
@@ -375,8 +411,11 @@ def attach(context, launch_dir, profile_vals):
             package='drone_magnet', executable='elrs_mux', name=f'elrs_mux_{d}',
             parameters=[{'drone_id': d, 'latch': True,
                          'approach_stream': enable_approach_mpc or partner,
-                         'handoff_topic': '/join_planner/handoff_ready' if partner else '',
+                         'handoff_topic': ('/join_planner/handoff_ready'
+                                           if partner and not partner_contact else ''),
                          'release_topic': '/partner/release' if partner_attached else '',
+                         **({'take_back_topic': f'/drone_{d}/take_back'}
+                            if partner_contact else {}),
                          **rig_magnet}],
             output='screen'))
 
@@ -461,11 +500,15 @@ def attach(context, launch_dir, profile_vals):
                      # (x*(1-eps), x*(1+eps)) inverts on its negative y, R0523/R0526
                      'x0_relax_symmetric': b('x0_relax_symmetric'),
                      'enable_diag_log': True,
+                     # warm on his flight: its u-state is the mux output, its learned states hold
+                     **({'warm_follow_applied': True} if partner_contact else {}),
                      **map_tracker}],
         # In SIL there is no mux, so this tracker publishes straight onto
         # /drone_3/ELRSCommand, which the bench plant consumes. Everything else about
         # the node is unchanged, so it is the same tracker the Gazebo run flies.
-        remappings=([] if sil else [(elrs, f'{elrs}_diss')]), output='screen'))
+        # partner_contact: it reads the mux output under another name (a remap is applied once)
+        remappings=([] if sil else [(elrs, f'{elrs}_diss')]
+                    + ([(f'{elrs}_applied', elrs)] if partner_contact else [])), output='screen'))
 
     # SIL stops here: the bench replaces the magnet/approach chain below with a
     # scripted weld and a /magnet/object_attached publish (decision D5).
@@ -550,7 +593,8 @@ def attach(context, launch_dir, profile_vals):
                          'command_backend': 'none',
                          'detach_on_start': False,
                          'enable_elrs_magnet_output': False,
-                         'magnet_latch_topic': '' if dry_approach else f'/drone_{d}/magnet'}],
+                         'magnet_latch_topic': '' if dry_approach else f'/drone_{d}/magnet',
+                         **(_contact_manager_params(context, real) if partner_contact else {})}],
             output='screen'))
         return nodes
 
@@ -578,6 +622,18 @@ def attach(context, launch_dir, profile_vals):
     nodes.append(Node(
         package='ros_gz_bridge', executable='parameter_bridge', name='payload_detach_bridge',
         arguments=['/payload/detach@std_msgs/msg/Empty]gz.msgs.Empty']))
+    if partner_contact:
+        # the ring weld's gz state ('attached' / 'detached', sent once per change): the planner's
+        # magnet span waits for 'detached' after spawn. Latched, because the manager frees the
+        # spawn weld before the planner (building its solvers) subscribes
+        js = '/payload/detachable_joint_state'
+        nodes.append(Node(
+            package='ros_gz_bridge', executable='parameter_bridge',
+            name='payload_joint_state_bridge',
+            arguments=[f'{js}@std_msgs/msg/String[gz.msgs.StringMsg'],
+            parameters=[{f'qos_overrides.{js}.publisher.durability': 'transient_local',
+                         f'qos_overrides.{js}.publisher.reliability': 'reliable',
+                         f'qos_overrides.{js}.publisher.depth': 1}]))
 
     # magnet manager: auto-welds (ROS /payload/attach -> bridge -> gz) when the tip is near &
     # slow, and announces /magnet/object_attached (Bool) -- the single signal that flips the mux
@@ -618,7 +674,8 @@ def attach(context, launch_dir, profile_vals):
                      'object_attached_topic': '/magnet/object_attached',
                      'command_backend': 'ros_topic',
                      'ros_attach_topic': '/payload/attach',
-                     'ros_detach_topic': '/payload/detach'}],
+                     'ros_detach_topic': '/payload/detach',
+                     **(_contact_manager_params(context, real) if partner_contact else {})}],
         output='screen'))
 
     return nodes

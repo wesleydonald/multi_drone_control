@@ -15,9 +15,17 @@ topics do not meet ours. Boundary:
     plate before the 10 Oct sync, 0.12 m of it from his label-marker aliasing bug), our
     dissipative node commands the ring magnet ON, and the weld folds it in
   * the ring and carriers <- ring_bridge (our ring's mocap + the load planner's trajectory)
+
+contact_attach:=true (rig_twin only; the combined M1 contact attach, docs/design/m1_contact_contract.md):
+his planner descends to the contact target and proves the catch by a small lift (LIFT_PROOF);
+our /magnet/object_attached ends it in RING_ATTACHED, our /drone_3/take_back or his give-up in
+TAKEN_BACK. No handoff_ready. confirm_pickup_release:=true: his supervisor arms only once the
+ball weld made at spawn reads free (repeated /pickup/detach), instead of one gz publish.
 """
 import os
 from pathlib import Path
+
+import yaml
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -38,20 +46,34 @@ OBJECT_POSE = '/model/payload_model/pose'
 # plates at r 0.225, 0.55 m rods at 60 deg, QUAD4 0.55 kg with a 0.55 m rod from a pivot 4 cm below the body
 # (body to tip 0.59), flown through the rig thrust map, so his MPC takes his rig values (thrust ratio 22 with
 # feedback, irl_commissioning.yaml) instead of the linear plant's 82.7.
+# His plates count counter-clockwise from +x every 30 deg. legacy: plate 9 = 270 deg = our old weld
+# point (attach_y_offset -0.25), carriers at 330/90/210. rig_twin: plate 3 = 90 deg = +y = rig plate 9
+# (attach_y_offset 0.225), carriers at 270/30/150 (rig plates 3/11/7). contact_attach_z_m: his contact
+# target above the ring origin, the tip sphere's centre on the plate (plate top 0.02 + 0.012 radius).
 GEOMETRY = {
     'legacy': {
         'ring_radius': 0.25, 'ring_cable_len': 0.5, 'ring_cable_elev_deg': 45.0,
         'ring_pitch_diameter': 0.50, 'ring_collision_outer_diameter': 0.56,
         'magnet_drop_below_quad': 0.49, 'mpc_cable_length': 0.49,
         'thrust_ratio': 82.7, 'thrust_ratio_feedback': False, 'vehicle_mass': 0.643,
+        'plate': '9', 'carrier_azimuths_deg': '[330.0, 90.0, 210.0]', 'contact_attach_z_m': None,
     },
     'rig_twin': {
         'ring_radius': 0.225, 'ring_cable_len': 0.55, 'ring_cable_elev_deg': 60.0,
         'ring_pitch_diameter': 0.45, 'ring_collision_outer_diameter': 0.51,
         'magnet_drop_below_quad': 0.59, 'mpc_cable_length': 0.55,
         'thrust_ratio': 22.0, 'thrust_ratio_feedback': True, 'vehicle_mass': 0.55,
+        'plate': '3', 'carrier_azimuths_deg': '[270.0, 30.0, 150.0]', 'contact_attach_z_m': 0.032,
     },
 }
+# the topics the contact attach adds to the diagnosis bag
+CONTACT_TOPICS = ['/magnet/contact', '/magnet/object_attached', '/magnet/attach_proof',
+                  '/join_planner/give_up', f'/drone_{DRONE}/take_back', f'/drone_{DRONE}/mux_state']
+PICKUP_STATE = '/pickup/detachable_joint_state'
+
+
+def _flag(context, name):
+    return LaunchConfiguration(name).perform(context).strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -63,6 +85,13 @@ def _nodes(context):
     if geometry not in GEOMETRY:
         raise RuntimeError(f'partner_mission: geometry:={geometry!r}, expected one of {sorted(GEOMETRY)}')
     G = GEOMETRY[geometry]
+    contact = _flag(context, 'contact_attach')
+    if contact and G['contact_attach_z_m'] is None:
+        raise RuntimeError(f'partner_mission: contact_attach:=true has no contact target for geometry:={geometry}')
+    confirm_release = _flag(context, 'confirm_pickup_release')
+    plate = int(LaunchConfiguration('plate').perform(context) or G['plate'])
+    azimuths = [float(a) for a in yaml.safe_load(
+        LaunchConfiguration('carrier_azimuths_deg').perform(context) or G['carrier_azimuths_deg'])]
     share = Path(get_package_share_directory('tejen_mission'))
     dyn_share = Path(get_package_share_directory('tejen_dynamic_planner'))
     state = f'/drone_{DRONE}/motion_capture_state'
@@ -77,7 +106,7 @@ def _nodes(context):
         output='screen',
         parameters=[{
             'use_sim_time': True,
-            'bridge_carrier_azimuths_deg': ParameterValue(L('carrier_azimuths_deg'), value_type=None),
+            'bridge_carrier_azimuths_deg': azimuths,
             'bridge_attach_radius_m': G['ring_radius'],
             'bridge_cable_len_m': G['ring_cable_len'],
             'bridge_cable_elev_deg': G['ring_cable_elev_deg'],
@@ -85,8 +114,7 @@ def _nodes(context):
             'ring_plate_count': 12,
             'ring_plate_pitch_diameter_m': G['ring_pitch_diameter'],
             'ring_plate_diameter_m': 0.06,
-            # plate 9 = 270 deg = our weld point (attach_y_offset -0.25)
-            'ring_attachment_plate_index': ParameterValue(L('plate'), value_type=int),
+            'ring_attachment_plate_index': plate,     # GEOMETRY: his numbering vs ours
             'ring_collision_outer_diameter_m': G['ring_collision_outer_diameter'],
             'ring_collision_top_offset_m': 0.0,
             'ring_collision_bottom_offset_m': -0.27,
@@ -101,6 +129,8 @@ def _nodes(context):
             'shared_trajectory_duration_s': 30.0,
             'shared_trajectory_control_interval_s': 0.50,
             'shared_trajectory_refresh_period_s': 1.0,
+            # the contact target, rotated by the full ring attitude like our weld point
+            **({'bridge_attach_z_m': G['contact_attach_z_m'], 'full_pose_attachment': True} if contact else {}),
         }])
 
     pendulum = Node(
@@ -214,6 +244,10 @@ def _nodes(context):
                 # starts from the re-latched measured state either way.
                 'c1f2_prepare_max_lift_drift_m': 0.30,
                 'c1f2_prepare_settle_speed_mps': 0.12,
+                # the descent ends on the contact target (ring_bridge's attachment point), held
+                # with no lead; the planner's contact-mode gates are his ground-ring values
+                **({'contact_attach': True, 'final_attach_offset_z': 0.0,
+                    'attach_ready_target_lead_time': 0.0} if contact else {}),
             },
         ])
 
@@ -281,6 +315,7 @@ def _nodes(context):
             'failure_phase': 'LANDED_DISARMED',
             'require_handoff_ready': True,
             'landing_request_phase': '',
+            **({'pickup_release_state_topic': PICKUP_STATE} if confirm_release else {}),
         }],
         remappings=[('/motion_capture_state', state),
                     ('/pendulum_swing_state', f'/{NS}/pendulum_swing_state'),
@@ -291,17 +326,24 @@ def _nodes(context):
         package='ros_gz_bridge', executable='parameter_bridge', name=f'pickup_{w}_bridge',
         arguments=[f'/pickup/{w}@std_msgs/msg/Empty]gz.msgs.Empty']) for w in ('attach', 'detach')]
 
-    # gz DetachableJoint may weld the object to the tip at spawn: free it before the mission
-    release = ExecuteProcess(
-        cmd=['gz', 'topic', '-t', '/pickup/detach', '-m', 'gz.msgs.Empty', '-p', ''],
-        output='screen')
+    # gz DetachableJoint may weld the object to the tip at spawn: free it before the mission.
+    # confirm_pickup_release: the supervisor repeats /pickup/detach until the joint reads free.
+    if confirm_release:
+        release = Node(
+            package='ros_gz_bridge', executable='parameter_bridge', name='pickup_state_bridge',
+            arguments=[f'{PICKUP_STATE}@std_msgs/msg/String[gz.msgs.StringMsg'])
+    else:
+        release = ExecuteProcess(
+            cmd=['gz', 'topic', '-t', '/pickup/detach', '-m', 'gz.msgs.Empty', '-p', ''],
+            output='screen')
 
     # diagnosis record: his view of the drone, his reference and his commands
     bag = ExecuteProcess(
         cmd=['ros2', 'bag', 'record', '-o', L('bag_path'), '--use-sim-time',
              state, f'/{NS}/pendulum_swing_state', f'/{NS}/magnet_tip_pose',
              '/join_planner/reference', '/join_planner/phase', f'/drone_{DRONE}/ELRSCommand_tejen',
-             '/fake_payload/pose', '/magnet/command', f'/{NS}/magnet/command', '/join_planner/handoff_ready', f'/{NS}/object_attached', OBJECT_POSE],
+             '/fake_payload/pose', '/magnet/command', f'/{NS}/magnet/command', '/join_planner/handoff_ready', f'/{NS}/object_attached', OBJECT_POSE,
+             *(CONTACT_TOPICS if contact else []), *([PICKUP_STATE] if confirm_release else [])],
         output='screen', condition=IfCondition(L('record')))
 
     return [bag, release, object_bridge, *pickup_bridges, ring, pendulum, magnet, planner, backend, controller,
@@ -311,10 +353,12 @@ def _nodes(context):
 def _arguments():
     return [
         DeclareLaunchArgument('geometry', default_value='legacy', choices=sorted(GEOMETRY)),
-        DeclareLaunchArgument('plate', default_value='9'),
+        DeclareLaunchArgument('plate', default_value=''),   # '' = the geometry's
         DeclareLaunchArgument('object_mass_kg', default_value='0.1'),   # the 0.1 kg object (payload_model.sdf)
-        # the all-attached start: '[150.0, 270.0, 30.0]', plate 3, gate /partner/release
-        DeclareLaunchArgument('carrier_azimuths_deg', default_value='[330.0, 90.0, 210.0]'),
+        # '' = the geometry's; the all-attached start: '[150.0, 270.0, 30.0]', plate 3, gate /partner/release
+        DeclareLaunchArgument('carrier_azimuths_deg', default_value=''),
+        DeclareLaunchArgument('contact_attach', default_value='false'),
+        DeclareLaunchArgument('confirm_pickup_release', default_value='false'),
         DeclareLaunchArgument('pickup_lift_height', default_value='1.40'),   # lift ends ~1.9 m, above the 1.8 m search floor (R0639 ended at 1.75)
         DeclareLaunchArgument('drop_approach_clearance', default_value='0.60'),
         DeclareLaunchArgument('minimum_search_z_m', default_value='1.8'),

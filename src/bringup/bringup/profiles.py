@@ -43,11 +43,11 @@ KEPT_COMMON = (
     'attach_blend_balanced', 'attach_datum_shift', 'attach_moving', 'newcomer_lifecycle', 'newcomer_fault_land',
     'diss_balanced_tensions',
     'weld_radius', 'weld_velocity_clock', 'enable_obstacle_avoidance', 'partner',
-    'partner_attached', 'partner_m2', 'partner_m2_part')
+    'partner_attached', 'partner_m2', 'partner_m2_part', 'partner_contact')
 KEPT_SIM = ('legacy', 'sil', 'sim_interface', 'ff_cap_force', 'sim_thrust_map', 'sim_thrust_offset',
-            'sim_pack_v0')
+            'sim_pack_v0', 'sim_catch')
 KEPT_REAL = ('real_io', 'rviz', 'magnet_channel', 'magnet_initial', 'attach_magnet_initial',
-             'require_fc_armed', 'detach_magnet', 'hover_z',
+             'require_fc_armed', 'detach_magnet', 'hover_z', 'proof_taut_len',
              # Motive body ids, forwarded to real_io_launch.py by the graphs that include it
              'mocap_drone_body_ids', 'mocap_payload_body_id', 'mocap_magnet_tip_body_id')
 # typed per drone by the rig modes (bringup.real_mode.rig_io, rig_magnet_latches)

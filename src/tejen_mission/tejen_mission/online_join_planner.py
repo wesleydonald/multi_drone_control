@@ -145,8 +145,21 @@ APPROACH_ABOVE_TARGET = MissionPhase.APPROACH_ABOVE_TARGET.value
 MATCH_VELOCITY = MissionPhase.MATCH_VELOCITY.value
 DESCEND_TO_ATTACHMENT = MissionPhase.DESCEND_TO_ATTACHMENT.value
 ATTACH_READY = MissionPhase.ATTACH_READY.value
+LIFT_PROOF = MissionPhase.LIFT_PROOF.value
+RING_ATTACHED = MissionPhase.RING_ATTACHED.value
+TAKEN_BACK = MissionPhase.TAKEN_BACK.value
 LANDING = MissionPhase.LANDING.value
 LANDED_DISARMED = MissionPhase.LANDED_DISARMED.value
+
+# contact_attach: the phases from which the fleet's attach confirmation ends the rejoin
+CONTACT_REJOIN_PHASES = frozenset({
+    MissionPhase.TRANSIT_TO_REATTACH,
+    MissionPhase.APPROACH_ABOVE_TARGET,
+    MissionPhase.MATCH_VELOCITY,
+    MissionPhase.DESCEND_TO_ATTACHMENT,
+    MissionPhase.ATTACH_READY,
+    MissionPhase.LIFT_PROOF,
+})
 
 
 def _vec3_from_position(position) -> np.ndarray:
@@ -511,7 +524,12 @@ class OnlineJoinPlanner(Node):
             self.declare_parameter("mission_mode", "join").value
         ).strip().lower()
         self.m2b_progressive = validate_policy(str(self.declare_parameter("attachment_policy", "legacy").value)) == POLICY
-        self.mission = mission_for_mode(self.mission_mode, attachment_policy=POLICY if self.m2b_progressive else "legacy")
+        # contact_attach (multi_drone_control combined M1 subtest, default off): the rejoin
+        # descends to contact, proves the catch by a small lift (LIFT_PROOF) and the fleet's
+        # attach confirmation (RING_ATTACHED) or take-back (TAKEN_BACK) ends it
+        self.contact_attach = bool(self.declare_parameter("contact_attach", False).value)
+        self.mission = mission_for_mode(self.mission_mode, attachment_policy=POLICY if self.m2b_progressive else "legacy",
+                                        contact_attach=self.contact_attach)
         self.phase = self.mission.initial_phase
         self.phase_entry_time = self._physical_now_s()
         self.condition_start_time: Optional[float] = None
@@ -1767,6 +1785,41 @@ class OnlineJoinPlanner(Node):
         self.ground_ring_waiting_reason = 'inactive'
         self.ground_ring_tip_velocity = np.zeros(3)
         self.ground_ring_last_tip_sample = None
+        if self.contact_attach and self.ground_ring_attach_trial:
+            raise ValueError('contact_attach and ground_ring_attach_trial are separate attach modes')
+        if self.contact_attach:
+            self.contact_topic = str(self.declare_parameter('contact_topic', '/magnet/contact').value)
+            self.ring_attached_topic = str(self.declare_parameter(
+                'ring_attached_topic', '/magnet/object_attached').value)
+            self.give_up_topic = str(self.declare_parameter('give_up_topic', '/join_planner/give_up').value)
+            self.take_back_topic = str(self.declare_parameter('take_back_topic', '/drone_3/take_back').value)
+            self.mux_state_topic = str(self.declare_parameter('mux_state_topic', '/drone_3/mux_state').value)
+            self.proof_rise_max = max(0., float(self.declare_parameter('proof_rise_max', 0.01).value))
+            self.proof_rise_rate = float(self.declare_parameter('proof_rise_rate', 0.02).value)
+            self.contact_max_failures = max(1, int(self.declare_parameter('contact_max_failures', 3).value))
+            self.contact_give_up_s = float(self.declare_parameter('contact_give_up_s', 30.0).value)
+            # the rejoin's own gates: match_xy_* also gate the drop settle, which stays as it was
+            self.contact_match_xy_threshold = max(0., float(self.declare_parameter(
+                'contact_match_xy_threshold', 0.025).value))
+            self.contact_match_xy_velocity_threshold = max(0., float(self.declare_parameter(
+                'contact_match_xy_velocity_threshold', 0.08).value))
+            self.contact_abort_xy_threshold = max(self.contact_match_xy_threshold, float(
+                self.declare_parameter('contact_abort_xy_threshold', 0.05).value))
+            self.contact_abort_xy_velocity_threshold = max(self.contact_match_xy_velocity_threshold, float(
+                self.declare_parameter('contact_abort_xy_velocity_threshold', 0.15).value))
+            if self.proof_rise_rate <= 0. or self.contact_give_up_s <= 0.:
+                raise ValueError('contact_attach needs a positive proof_rise_rate and contact_give_up_s')
+        self.contact_reported = False
+        self.ring_attach_confirmed = False
+        self.take_back_requested = False
+        self.mux_state = ''
+        self.contact_failures = 0
+        self.contact_first_descend_s = None
+        self.contact_gave_up = False
+        self.contact_give_up_sent_s = None
+        self.contact_descend_start_offset = None
+        self.contact_hold_tip_offset = None
+        self.contact_hold_position = None
 
         # ------------------------------------------------------------------
         # Landing and simulation safety
@@ -2354,6 +2407,20 @@ class OnlineJoinPlanner(Node):
                 self.external_landing_callback,
                 10,
             )
+        self.give_up_publisher = None
+        if self.contact_attach:
+            self.create_subscription(Bool, self.contact_topic,
+                                     lambda msg: setattr(self, 'contact_reported', bool(msg.data)), 10)
+            self.create_subscription(Bool, self.ring_attached_topic,
+                                     lambda msg: setattr(self, 'ring_attach_confirmed', bool(msg.data)), 10)
+            self.create_subscription(Bool, self.take_back_topic, self.take_back_callback, 10)
+            latched = QoSProfile(depth=1)
+            latched.reliability = ReliabilityPolicy.RELIABLE
+            latched.durability = DurabilityPolicy.TRANSIENT_LOCAL
+            self.create_subscription(String, self.mux_state_topic,
+                                     lambda msg: setattr(self, 'mux_state', str(msg.data).strip().lower()),
+                                     latched)
+            self.give_up_publisher = self.create_publisher(Bool, self.give_up_topic, latched)
         self.create_subscription(
             Bool,
             self.operator_advance_override_topic,
@@ -4125,7 +4192,8 @@ class OnlineJoinPlanner(Node):
         if self.is_m2b and self.m2b_progressive and self.phase == MissionPhase.M2_LANDING_STAGE:
             # Repeated LAND must not skip the release/separation sequence.
             return
-        if self.phase in {MissionPhase.LANDING, MissionPhase.LANDED_DISARMED}:
+        if self.phase in {MissionPhase.LANDING, MissionPhase.LANDED_DISARMED,
+                          MissionPhase.RING_ATTACHED, MissionPhase.TAKEN_BACK}:
             return
         if self.drone_position is None:
             self.external_landing_pending = True
@@ -5321,6 +5389,10 @@ class OnlineJoinPlanner(Node):
                             high_xy_m=self.pickup_alignment_high_xy_m)
         elif new_phase == MissionPhase.MAGNET_ATTACH_WAIT:
             self.attach_wait_start_time = self._physical_now_s()
+        elif new_phase == MissionPhase.DESCEND_TO_ATTACHMENT and getattr(self, 'contact_attach', False):
+            if self.contact_first_descend_s is None:
+                self.contact_first_descend_s = self._physical_now_s()
+            self.contact_descend_start_offset = None
         elif new_phase == MissionPhase.M2_CPP_TRANSIT_CAPTURE:
             if self.c1f2_cpp_authority_enabled:
                 if (
@@ -6104,6 +6176,8 @@ class OnlineJoinPlanner(Node):
 
 
     def pickup_magnet_command(self, legacy_command):
+        if legacy_command == 'NONE':
+            return legacy_command
         if self.ground_ring_exit is not None:
             return 'OFF'
         if self.ground_ring_attach_trial and self.phase in {
@@ -6198,14 +6272,19 @@ class OnlineJoinPlanner(Node):
                 self.drop_clear_speed,
             )
         if phase == MissionPhase.DESCEND_TO_ATTACHMENT:
+            start = np.array(
+                [
+                    self.approach_offset_x,
+                    self.approach_offset_y,
+                    self.approach_offset_z,
+                ]
+            )
+            if getattr(self, 'contact_descend_start_offset', None) is not None:
+                # a retry after a failed proof descends from where the lift stopped: a restart
+                # at the approach height would step the reference up while the tip may still hold
+                start = self.contact_descend_start_offset
             return RateProfile(
-                np.array(
-                    [
-                        self.approach_offset_x,
-                        self.approach_offset_y,
-                        self.approach_offset_z,
-                    ]
-                ),
+                start,
                 np.array(
                     [
                         self.approach_offset_x,
@@ -6214,6 +6293,13 @@ class OnlineJoinPlanner(Node):
                     ]
                 ),
                 self.descend_rate,
+            )
+        if phase == MissionPhase.LIFT_PROOF:
+            contact = np.array(
+                [self.approach_offset_x, self.approach_offset_y, self.final_attach_offset_z]
+            )
+            return RateProfile(
+                contact, contact + np.array([0.0, 0.0, self.proof_rise_max]), self.proof_rise_rate
             )
         raise RuntimeError(f"Phase {phase.value} has no relative rate profile.")
 
@@ -6242,6 +6328,7 @@ class OnlineJoinPlanner(Node):
             MissionPhase.DESCEND_TO_DROP_HEIGHT,
             MissionPhase.CLEAR_DROP_ZONE,
             MissionPhase.DESCEND_TO_ATTACHMENT,
+            MissionPhase.LIFT_PROOF,
         }:
             return self.rate_profile().tip_offset_at(self.phase_elapsed())
         if self.phase in {
@@ -6271,6 +6358,8 @@ class OnlineJoinPlanner(Node):
                     self.final_attach_offset_z,
                 ]
             )
+        if self.phase == MissionPhase.RING_ATTACHED and self.contact_hold_tip_offset is not None:
+            return self.contact_hold_tip_offset.copy()
         return np.zeros(3, dtype=float)
 
     def current_magnet_tip_position(self) -> np.ndarray:
@@ -6344,7 +6433,87 @@ class OnlineJoinPlanner(Node):
     # ----------------------------------------------------------------------
     # Mission transition guards
     # ----------------------------------------------------------------------
+    def update_contact_attach(self) -> bool:
+        """contact_attach transitions, ahead of every other guard. True: this tick is decided."""
+        if self.phase == MissionPhase.RING_ATTACHED:
+            if self.contact_hold_position is None and self.mux_state in {'ours', 'latched'}:
+                self.contact_hold_position = self.drone_position.copy()
+                self.get_logger().info(
+                    f'RING_ATTACHED: mux reads {self.mux_state}; holding where the vehicle is')
+            return True
+        if self.phase == MissionPhase.TAKEN_BACK:
+            return True
+        if self.take_back_requested:
+            self.enter_taken_back('take-back from the fleet planner')
+            return True
+        rejoin = self.phase in CONTACT_REJOIN_PHASES
+        if rejoin and self.ring_attach_confirmed:
+            self.enter_ring_attached()
+            return True
+        if (rejoin and self.contact_first_descend_s is not None
+                and self._physical_now_s() - self.contact_first_descend_s >= self.contact_give_up_s):
+            self.contact_give_up(f'no confirmed attach {self.contact_give_up_s:.0f} s after the first descent')
+            return True
+        if (self.phase in {MissionPhase.DESCEND_TO_ATTACHMENT, MissionPhase.ATTACH_READY}
+                and self.contact_reported):
+            self.transition_to(MissionPhase.LIFT_PROOF, 'contact reported; proving the catch by a small lift')
+            return True
+        if self.phase == MissionPhase.LIFT_PROOF:
+            if not self.contact_reported:
+                self.contact_failures += 1
+                if self.contact_failures >= self.contact_max_failures:
+                    self.contact_give_up(f'{self.contact_failures} failed proofs')
+                else:
+                    lifted = self.desired_tip_offset()
+                    self.transition_to(
+                        MissionPhase.DESCEND_TO_ATTACHMENT,
+                        f'proof failed ({self.contact_failures}/{self.contact_max_failures}); descending again')
+                    self.contact_descend_start_offset = lifted
+            return True
+        return False
+
+    def enter_ring_attached(self) -> None:
+        if self.phase in {MissionPhase.MATCH_VELOCITY, MissionPhase.DESCEND_TO_ATTACHMENT,
+                          MissionPhase.ATTACH_READY, MissionPhase.LIFT_PROOF}:
+            offset = self.desired_tip_offset()
+        else:
+            # a transfer phase has no fixed offset: hold the measured one
+            offset = self.current_magnet_tip_position() - self.attachment_target_state().position
+        self.transition_to(MissionPhase.RING_ATTACHED, f'attach confirmed by the fleet in {self.phase.value}')
+        self.contact_hold_tip_offset = np.asarray(offset, dtype=float).copy()
+        self.contact_hold_position = None
+
+    def enter_taken_back(self, reason: str) -> None:
+        if self.phase in {MissionPhase.RING_ATTACHED, MissionPhase.TAKEN_BACK}:
+            return
+        hold = (self.last_reference.positions[0] if self.last_reference is not None
+                else self.drone_position)
+        self.transition_to(MissionPhase.TAKEN_BACK, reason)
+        self.contact_hold_position = np.asarray(hold, dtype=float).copy()
+
+    def contact_give_up(self, reason: str) -> None:
+        self.contact_gave_up = True
+        self.get_logger().warning(f'Contact attach: giving up ({reason}); the fleet takes the vehicle back')
+        self.publish_contact_give_up()
+        self.enter_taken_back(f'give-up: {reason}')
+
+    def publish_contact_give_up(self) -> None:
+        if not getattr(self, 'contact_gave_up', False) or self.give_up_publisher is None:
+            return
+        now = self._wall_now_s()
+        if self.contact_give_up_sent_s is not None and now - self.contact_give_up_sent_s < 1.0:
+            return
+        self.give_up_publisher.publish(Bool(data=True))
+        self.contact_give_up_sent_s = now
+
+    def take_back_callback(self, msg: Bool) -> None:
+        self.take_back_requested = bool(msg.data)
+        if self.take_back_requested and self.drone_position is not None:
+            self.enter_taken_back('take-back from the fleet planner')
+
     def update_state_machine(self) -> None:
+        if getattr(self, 'contact_attach', False) and self.update_contact_attach():
+            return
         if self.phase in {MissionPhase.LANDING, MissionPhase.LANDED_DISARMED}:
             return
         if self.ground_ring_exit is not None:
@@ -6887,6 +7056,11 @@ class OnlineJoinPlanner(Node):
                     fresh and self.ground_ring_xy_m <= self.match_xy_threshold
                     and self.ground_ring_relative_speed_mps <= self.match_xy_velocity_threshold
                 )
+            elif getattr(self, 'contact_attach', False):
+                matched = (
+                    xy_error < self.contact_match_xy_threshold
+                    and xy_relative_velocity < self.contact_match_xy_velocity_threshold
+                )
             else:
                 matched = (
                     xy_error < self.match_xy_threshold
@@ -6909,6 +7083,9 @@ class OnlineJoinPlanner(Node):
                            or self.ground_ring_xy_m > self.descend_abort_xy_threshold
                            or self.ground_ring_relative_speed_mps
                            > self.descend_abort_xy_velocity_threshold)
+            elif getattr(self, 'contact_attach', False):
+                too_far = (xy_error > self.contact_abort_xy_threshold
+                           or xy_relative_velocity > self.contact_abort_xy_velocity_threshold)
             else:
                 too_far = (xy_error > self.descend_abort_xy_threshold
                            or xy_relative_velocity > self.descend_abort_xy_velocity_threshold)
@@ -6928,6 +7105,11 @@ class OnlineJoinPlanner(Node):
             if self.ground_ring_attach_trial:
                 self.ground_ring_waiting_reason = 'unverified attachment trial hold; manual LAND'
                 return
+            abort_xy, abort_velocity = (
+                (self.contact_abort_xy_threshold, self.contact_abort_xy_velocity_threshold)
+                if getattr(self, 'contact_attach', False)
+                else (self.descend_abort_xy_threshold, self.descend_abort_xy_velocity_threshold)
+            )
             if (
                 self.enable_attach_ready_timeout_landing
                 and self.attach_ready_land_after_s > 0.0
@@ -6937,10 +7119,7 @@ class OnlineJoinPlanner(Node):
                     MissionPhase.LANDING,
                     f"ATTACH_READY timeout after {elapsed:.1f} s",
                 )
-            elif (
-                xy_error > self.descend_abort_xy_threshold
-                or xy_relative_velocity > self.descend_abort_xy_velocity_threshold
-            ):
+            elif xy_error > abort_xy or xy_relative_velocity > abort_velocity:
                 self.transition_to(
                     MissionPhase.APPROACH_ABOVE_TARGET,
                     "terminal attachment alignment lost",
@@ -7139,6 +7318,13 @@ class OnlineJoinPlanner(Node):
             )
             return stationary_regulation(
                 target,
+                horizon_samples=self.horizon_samples,
+                min_reference_z=self.min_reference_z,
+            )
+        if (self.phase in {MissionPhase.RING_ATTACHED, MissionPhase.TAKEN_BACK}
+                and self.contact_hold_position is not None):
+            return stationary_regulation(
+                self.contact_hold_position,
                 horizon_samples=self.horizon_samples,
                 min_reference_z=self.min_reference_z,
             )
@@ -7660,6 +7846,8 @@ class OnlineJoinPlanner(Node):
 
     def publish_magnet_command(self, command: str) -> None:
         normalized = str(command).strip().upper()
+        if normalized == "NONE":
+            return
         # the current command is re-sent every second: a single on-change publish was
         # lost when the magnet manager's subscription matched late (multi_drone_control
         # R0619: the pickup ON never arrived). Both magnet managers are idempotent.
@@ -8252,6 +8440,7 @@ class OnlineJoinPlanner(Node):
         ready.data = bool(self.current_phase_spec().handoff_ready
                           and not self.ground_ring_attach_trial)
         self.handoff_ready_publisher.publish(ready)
+        self.publish_contact_give_up()
 
         safety = String()
         if self.last_safety_result is None:

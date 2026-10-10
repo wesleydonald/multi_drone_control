@@ -25,11 +25,17 @@ the rig-matched twin instead of the legacy sim (Wesley, 8 Oct 2026; docs/decisio
                                            ground-start elevation
   models/x3_rig_drone3_magnet_pickup.sdf   the free newcomer + the partner model's second weld
                                            (/pickup/*) onto Tejen's ball (tejen/payload_model.sdf)
+  models/rig_pickup_ball.sdf               Tejen's ball (tejen/payload_model.sdf) on collide bits
+                                           0x05, so QUAD4's magnet (0x02) passes through it
   three_rigid_ground_rig_attach_pickup.sdf the combined M1 subtest (Wesley 10 Oct): the free world
                                            with the pickup newcomer, an open ring (annulus + the
                                            partner world's net, scaled) and Tejen's ball on the
                                            floor; his controller takes QUAD4 off, picks the ball
                                            up, drops it into the net, then attaches on plate 9
+  three_rigid_ground_rig_attach_push.sdf   the free world + the runner's WRENCH tool (ApplyLinkWrench)
+  three_rigid_ground_rig_attach_pickup_push.sdf
+                                           the pickup world + the same tool (the combined M1
+                                           card's _abort arm: a push on the ring)
 
 The carriers and ring are generate_rigid_world.py with make_carry_worlds.RIG_ARGS, i.e. the
 same twin as the carry worlds. Rig plate labels run clockwise from +x (plate 9 at 90 deg);
@@ -43,9 +49,11 @@ none and hung through it). Its collide_bitmask 0x02 and the ring's 0x01 keep it 
 contact with the ring, so the weld (tip on the plate) and the approach see no ring contact,
 as with the legacy tip.
 
-In the pickup world the net has its own bit, 0x04: the ball (all bits) lands in it, the magnet
-(0x02) and the floor pass through it. The floor there is 0x03 (the ring and the magnet still rest
-on it), so the net may sag below the ring's resting height, as in the partner world.
+In the pickup world the net has its own bit, 0x04: the ball lands in it, the magnet (0x02) and the
+floor pass through it. The floor there is 0x03 (the ring and the magnet still rest on it), so the
+net may sag below the ring's resting height, as in the partner world. The ball is a copy on 0x05:
+the floor, the ring and the net, but not the magnet, which in the legacy world had no collision
+at all (card 2026-10-10_combined_m1_contact, critic round 3).
 
 Usage:  python3 tools/make_attach_worlds.py [--check]
 
@@ -86,6 +94,8 @@ PICKUP_MODEL = f'{MODEL}_pickup.sdf'
 PICKUP_WORLD = 'three_rigid_ground_rig_attach_pickup.sdf'
 BALL_SDF = 'tejen/payload_model.sdf'
 BALL_MODEL, BALL_LINK = 'payload_model', 'payload_link'
+BALL_COPY = 'rig_pickup_ball.sdf'   # under models/
+BALL_BITMASK = '0x05'             # the floor (0x03), the ring (0x01), the net (0x04); not the tip (0x02)
 BALL_XY = (1.0, 1.6)              # (1.0, 1.4) was 1.06 m from carrier 1 at (0.67, 0.39)
 BALL_CLEAR_CARRIER = 1.2          # m, ball centre to each carrier's centre
 BALL_CLEAR_NEWCOMER = 1.0         # m, ball centre to QUAD4's body and laid-out arm
@@ -106,9 +116,11 @@ WORLDS = {
     'three_rigid_ground_rig_attach_welded.sdf': 'welded',
 }
 MODELS = {'free': f'{MODEL}.sdf', 'welded': f'{MODEL}_welded.sdf'}
-# the free-start world with the runner's WRENCH tool (a push on the newcomer: its envelope fault,
-# card 2026-10-09_newcomer_fault_scope; Wesley 8 Oct night); the other worlds stay as they are
-PUSH_WORLDS = {'three_rigid_ground_rig_attach_push.sdf': 'free'}
+# a world with the runner's WRENCH tool -> the world it copies: the free start (a push on the newcomer:
+# its envelope fault, card 2026-10-09_newcomer_fault_scope; Wesley 8 Oct night) and the pickup world
+# (a push on the ring during his descent: the combined M1 card's _abort arm)
+PUSH_WORLDS = {'three_rigid_ground_rig_attach_push.sdf': 'three_rigid_ground_rig_attach.sdf',
+               'three_rigid_ground_rig_attach_pickup_push.sdf': PICKUP_WORLD}
 USER_COMMANDS = ('    <plugin filename="ignition-gazebo-user-commands-system" '
                  'name="gz::sim::systems::UserCommands"/>\n')
 WRENCH_PLUGIN = ('    <!-- push tool: runner WRENCH -> /world/<name>/wrench/persistent -->\n'
@@ -348,10 +360,32 @@ NET_LOOK = ('<material><ambient>0.9 0.9 0.9 0.35</ambient><diffuse>0.9 0.9 0.9 0
             '</material><transparency>0.6</transparency>')
 
 
-def ball():
-    """Tejen's ball: (resting height, collide bitmask). Fails if its model or link is not what
-    the pickup weld names, or if the net would not catch it."""
-    model = ET.parse(os.path.join(ASSETS, BALL_SDF)).getroot().find('model')
+BALL_COLLISION_END = '        </geometry>\n      </collision>'
+
+
+def ball_model():
+    """Tejen's ball with its collision on BALL_BITMASK. The model and link names stay: the pickup
+    weld and his launch's /model/payload_model/pose bridge use them."""
+    with open(os.path.join(ASSETS, BALL_SDF)) as f:
+        text = f.read()
+    hdr = '<sdf version="1.6">'
+    for old, what in ((hdr, 'the sdf tag'), (BALL_COLLISION_END, 'the collision end')):
+        if text.count(old) != 1:
+            raise SystemExit(f'{BALL_SDF}: {what} not found exactly once; update '
+                             'tools/make_attach_worlds.py')
+    text = text.replace(hdr, hdr + (
+        f'\n  <!-- GENERATED by tools/make_attach_worlds.py from {BALL_SDF}: do not edit. Its collision '
+        f'is on bits {BALL_BITMASK}:\n       the floor, the ring ({RING_BITMASK}) and the net '
+        f'({NET_BITMASK}), not QUAD4\'s magnet ({TIP_BITMASK}). -->'), 1)
+    return text.replace(BALL_COLLISION_END, (
+        '        </geometry>\n        <surface><contact><collide_bitmask>'
+        f'{BALL_BITMASK}</collide_bitmask></contact></surface>\n      </collision>'), 1)
+
+
+def ball(text):
+    """The ball copy: (resting height, collide bitmask). Fails if its model or link is not what
+    the pickup weld names, or if it would miss the floor, the ring or the net, or hit the tip."""
+    model = ET.fromstring(text).find('model')
     links = model.findall('link')
     if model.get('name') != BALL_MODEL or [lk.get('name') for lk in links] != [BALL_LINK]:
         raise SystemExit(f'{BALL_SDF}: not model {BALL_MODEL} with the one link {BALL_LINK}; '
@@ -361,8 +395,11 @@ def ball():
     if any(float(v) for p in poses for v in p) or col.find('pose') is not None:
         raise SystemExit(f'{BALL_SDF}: offset poses; the resting height assumes a centred sphere')
     bits = col.findtext('surface/contact/collide_bitmask') or '0xffff'
-    if not int(bits, 16) & int(NET_BITMASK, 16):
-        raise SystemExit(f'{BALL_SDF}: bitmask {bits} misses the net ({NET_BITMASK})')
+    b = int(bits, 16)
+    if not all(b & int(m, 16) for m in (NET_BITMASK, RING_BITMASK, PICKUP_FLOOR_BITMASK)):
+        raise SystemExit(f'{BALL_SDF}: bitmask {bits} misses the floor, the ring or the net')
+    if b & int(TIP_BITMASK, 16):
+        raise SystemExit(f"{BALL_SDF}: bitmask {bits} hits QUAD4's magnet ({TIP_BITMASK})")
     return float(col.findtext('geometry/sphere/radius')), bits
 
 
@@ -435,14 +472,14 @@ def open_ring():
     return ''.join(out) + net(scale, RING_THICKNESS / 2.0, NET_BITMASK)
 
 
-def pickup_world(free, base):
+def pickup_world(free, base, ball_text):
     """The free-start world for the combined M1 subtest: the pickup newcomer, the open ring
-    with its net, the floor under the net masked off, and Tejen's ball on the floor."""
+    with its net, the floor under the net masked off, and Tejen's ball (the copy) on the floor."""
     seg = re.search(r'<visual name="ring_0_visual"><pose>(\S+) .*?<size>\S+ (\S+) ', base)
     if (abs(float(seg[1]) - float(seg[2]) / 2 - RING_INNER_R) > 1e-6
             or abs(float(seg[1]) + float(seg[2]) / 2 - RING_OUTER_R) > 1e-6):
         raise SystemExit('the annulus does not match the ring visuals')
-    ball_z, ball_bits = ball()
+    ball_z, ball_bits = ball(ball_text)
     near_carrier, near_newcomer = ball_clearance(base)
     if near_carrier < BALL_CLEAR_CARRIER or near_newcomer < BALL_CLEAR_NEWCOMER:
         raise SystemExit(f'ball at {BALL_XY}: {near_carrier:.2f} m from a carrier, '
@@ -472,12 +509,12 @@ def pickup_world(free, base):
         'newcomer note')
     (x, y), r = BALL_XY, ball_z
     block = f"""
-    <!-- ===== TEJEN'S BALL: his pickup object ({BALL_SDF}, r {r:g}, bitmask {ball_bits}) =====
+    <!-- ===== TEJEN'S BALL: his pickup object ({BALL_SDF} as models/{BALL_COPY}, r {r:g}, bitmask {ball_bits}) =====
          On the floor at ({x}, {y}), resting on its radius: {near_newcomer:.2f} m beside QUAD4's laid-out arm,
          {near_carrier:.2f} m from the nearest carrier. His object magnet welds it to QUAD4's tip (/pickup/attach) and
          drops it into the ring's net (/pickup/detach). /model/{BALL_MODEL}/pose: [link, model]. -->
     <include>
-      <uri>{BALL_SDF}</uri>
+      <uri>models/{BALL_COPY}</uri>
       <pose>{_f(x)} {_f(y)} {_f(r)} 0 0 0</pose>
 {BALL_POSE_PUBLISHER}    </include>
 """
@@ -491,13 +528,14 @@ def generate(out_dir):
              for start, name in MODELS.items()}
     base = carrier_world()
     files.update({name: attach_world(base, start) for name, start in WORLDS.items()})
-    files.update({name: _replace_once(attach_world(base, start), USER_COMMANDS, USER_COMMANDS + WRENCH_PLUGIN,
-                                      'user commands plugin')
-                  for name, start in PUSH_WORLDS.items()})
     files[os.path.join('models', PICKUP_MODEL)] = pickup_model(
         files[os.path.join('models', MODELS['free'])])
+    files[os.path.join('models', BALL_COPY)] = ball_model()
     files[PICKUP_WORLD] = pickup_world(files[next(n for n, s in WORLDS.items() if s == 'free')],
-                                       base)
+                                       base, files[os.path.join('models', BALL_COPY)])
+    files.update({name: _replace_once(files[src], USER_COMMANDS, USER_COMMANDS + WRENCH_PLUGIN,
+                                      'user commands plugin')
+                  for name, src in PUSH_WORLDS.items()})
     for rel, text in files.items():
         with open(os.path.join(out_dir, rel), 'w') as f:
             f.write(text)

@@ -40,7 +40,45 @@ def _spec(
     )
 
 
-def pickup_delivery_mission() -> MissionDefinition:
+def _contact_attach_specs(specs):
+    """contact_attach (combined M1 subtest): the fleet's attach confirmation hands the vehicle
+    over, so ATTACH_READY drops the hand-back flag; three phases join the rejoin."""
+    specs = [
+        replace(spec, handoff_ready=False,
+                description="Hold the contact target until the fleet's manager reports contact.")
+        if spec.phase == MissionPhase.ATTACH_READY else spec
+        for spec in specs
+    ]
+    return specs + [
+        _spec(
+            MissionPhase.LIFT_PROOF,
+            ReferenceType.RATE_CONTROLLED_MANOEUVRE,
+            TargetSource.ATTACHMENT_POINT,
+            "ON",
+            "Rise plate-relative by at most proof_rise_max while the fleet's manager proves the catch.",
+        ),
+        _spec(
+            MissionPhase.RING_ATTACHED,
+            ReferenceType.TARGET_RELATIVE_TRACKING,
+            TargetSource.ATTACHMENT_POINT,
+            "NONE",
+            "Attach confirmed: hold the lifted plate offset until the fleet's controller has the "
+            "vehicle, then hold where it is. Terminal.",
+            authority=ControllerAuthority.EXTERNAL_CONTROLLER,
+        ),
+        _spec(
+            MissionPhase.TAKEN_BACK,
+            ReferenceType.STATIONARY_REGULATION,
+            TargetSource.CURRENT_POSE,
+            "NONE",
+            "The fleet's controller took the vehicle back without an attach: hold the last "
+            "reference, no magnet commands. Terminal.",
+            authority=ControllerAuthority.EXTERNAL_CONTROLLER,
+        ),
+    ]
+
+
+def pickup_delivery_mission(contact_attach: bool = False) -> MissionDefinition:
     specs = [
         _spec(
             MissionPhase.WAIT_FOR_TAKEOFF,
@@ -179,6 +217,8 @@ def pickup_delivery_mission() -> MissionDefinition:
             authority=ControllerAuthority.DISARMED,
         ),
     ]
+    if contact_attach:
+        specs = _contact_attach_specs(specs)
     return MissionDefinition(
         name="pickup_delivery_reattach",
         initial_phase=MissionPhase.WAIT_FOR_TAKEOFF,
@@ -186,7 +226,7 @@ def pickup_delivery_mission() -> MissionDefinition:
     )
 
 
-def join_only_mission() -> MissionDefinition:
+def join_only_mission(contact_attach: bool = False) -> MissionDefinition:
     phases = [
         _spec(
             MissionPhase.APPROACH_ABOVE_TARGET,
@@ -233,6 +273,8 @@ def join_only_mission() -> MissionDefinition:
             authority=ControllerAuthority.DISARMED,
         ),
     ]
+    if contact_attach:
+        phases = _contact_attach_specs(phases)
     return MissionDefinition(
         name="join_only",
         initial_phase=MissionPhase.APPROACH_ABOVE_TARGET,
@@ -278,13 +320,16 @@ def m2b_single_attachment_mission(attachment_policy: str = "legacy") -> MissionD
         phases={spec.phase: spec for spec in specs},
     )
 
-def mission_for_mode(mode: str, *, attachment_policy: str = "legacy") -> MissionDefinition:
+def mission_for_mode(mode: str, *, attachment_policy: str = "legacy",
+                     contact_attach: bool = False) -> MissionDefinition:
     normalized = str(mode).strip().lower()
     if normalized in {"pickup_delivery", "pickup-delivery", "full"}:
-        return pickup_delivery_mission()
+        return pickup_delivery_mission(contact_attach)
     if normalized in {"join", "join_only", "reattach"}:
-        return join_only_mission()
+        return join_only_mission(contact_attach)
     if normalized in {"m2b", "m2b_single_attachment", "single_attachment"}:
+        if contact_attach:
+            raise ValueError("contact_attach is an M1 rejoin mode; m2b has its own attachment phases.")
         return m2b_single_attachment_mission(attachment_policy)
     raise ValueError(
         f"Unknown mission_mode={mode!r}; expected 'pickup_delivery', 'join', or 'm2b'."

@@ -27,6 +27,7 @@ sets the pickup object's pose to the magnet tip while attached, using the Gazebo
 
 from __future__ import annotations
 
+import json
 import math
 import subprocess
 import time
@@ -35,11 +36,16 @@ from typing import Optional, Tuple
 import numpy as np
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile
 
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped
 from std_msgs.msg import Bool, Empty, String
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
+from drone_magnet.contact_proof import ContactProof, ProofConfig
+
+ON_WORDS = ('ON', '1', 'TRUE', 'ENABLE', 'ENABLED')
+OFF_WORDS = ('OFF', '0', 'FALSE', 'DISABLE', 'DISABLED')
 
 
 def _quat_rot(q, v):
@@ -162,6 +168,41 @@ class MagnetAttachmentManager(Node):
         self._last_kinematic_update = 0.0
         self._last_kinematic_warning = 0.0
 
+        # 'weld' (default): the check above declares attached. 'contact_lift' (combined M1, card
+        # 2026-10-10_combined_m1_contact): the same radius, speed and plate point only make a contact
+        # (and the twin's joint, sim_catch); attached needs Tejen's small lift to prove the catch.
+        # Its dwells and timeout run on the node clock (sim time in the twin), not time.time().
+        self.confirm_mode = str(self.declare_parameter('confirm_mode', 'weld').value).strip().lower()
+        if self.confirm_mode not in ('weld', 'contact_lift'):
+            raise ValueError(f'confirm_mode {self.confirm_mode!r}: weld or contact_lift')
+        self.contact_dwell_s = float(self.declare_parameter('contact_dwell_s', 0.15).value)
+        self.proof_d_ok = float(self.declare_parameter('proof_d_ok', 0.003).value)
+        self.proof_d_fail = float(self.declare_parameter('proof_d_fail', 0.008).value)
+        self.proof_h_plate = float(self.declare_parameter('proof_h_plate', 0.003).value)
+        self.proof_dwell_s = float(self.declare_parameter('proof_dwell_s', 0.3).value)
+        self.proof_fail_dwell_s = float(self.declare_parameter('proof_fail_dwell_s', 0.12).value)
+        self.proof_timeout_s = float(self.declare_parameter('proof_timeout_s', 3.0).value)
+        # rig: body-to-tip at least the taut length (Wednesday's record minus 3 mm); 0 = off (twin)
+        self.proof_taut_len = float(self.declare_parameter('proof_taut_len', 0.0).value)
+        self.proof_ma_s = float(self.declare_parameter('proof_ma_s', 0.1).value)
+        self.body_pose_topic = str(
+            self.declare_parameter('body_pose_topic', '/drone_3/motion_capture_state').value)
+        self.sim_catch = bool(self.declare_parameter('sim_catch', True).value)
+        self.contact_topic = str(self.declare_parameter('contact_topic', '/magnet/contact').value)
+        self.proof_state_topic = str(
+            self.declare_parameter('proof_state_topic', '/magnet/attach_proof').value)
+        self._proof: Optional[ContactProof] = None
+        if self.confirm_mode == 'contact_lift':
+            self._proof = ContactProof(ProofConfig(
+                radius=self.attach_radius, speed=self.attach_speed_threshold,
+                contact_dwell_s=self.contact_dwell_s, d_ok=self.proof_d_ok, d_fail=self.proof_d_fail,
+                h_plate=self.proof_h_plate, proof_dwell_s=self.proof_dwell_s,
+                fail_dwell_s=self.proof_fail_dwell_s, timeout_s=self.proof_timeout_s,
+                taut_len=self.proof_taut_len, ma_s=self.proof_ma_s))
+        self._t_object_clk: Optional[float] = None
+        self._body_position: Optional[np.ndarray] = None
+        self._t_body_clk: Optional[float] = None
+
         # State.
         self.magnet_on = False
         self.last_magnet_command_time: Optional[float] = None
@@ -182,7 +223,9 @@ class MagnetAttachmentManager(Node):
         self.last_magnet_tip_time: Optional[float] = None
         self.last_object_time: Optional[float] = None
 
-        self.create_subscription(String, self.magnet_command_topic, self.magnet_command_callback, 10)
+        self.create_subscription(String, self.magnet_command_topic,
+                                 self._contact_command_callback if self._proof is not None
+                                 else self.magnet_command_callback, 10)
         if self.magnet_tip_pose_msg_type in ('pose_stamped', 'posestamped', 'stamped'):
             self.create_subscription(PoseStamped, self.magnet_tip_pose_topic, self.magnet_tip_pose_stamped_callback, 10)
         elif self.magnet_tip_pose_msg_type in ('pose_array', 'posearray', 'array'):
@@ -206,6 +249,11 @@ class MagnetAttachmentManager(Node):
         self.elrs_magnet_pub = self.create_publisher(ELRSCommand, self.elrs_magnet_command_topic, 5)
         self.magnet_latch_pub = (self.create_publisher(String, self.magnet_latch_topic, 5)
                                  if self.magnet_latch_topic else None)
+        if self._proof is not None:
+            self.contact_pub = self.create_publisher(
+                Bool, self.contact_topic, QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+            self.proof_state_pub = self.create_publisher(String, self.proof_state_topic, 5)
+            self.create_subscription(MotionCaptureState, self.body_pose_topic, self._body_callback, 10)
 
         # Gazebo's DetachableJoint is created ATTACHED at spawn, which would rigidly weld the
         # magnet to the payload from t=0 (before any ATTACH) and drag the payload around. Send
@@ -220,6 +268,7 @@ class MagnetAttachmentManager(Node):
             self.declare_parameter('detach_on_start_period_s', 1.0).value)
         self._start_time = time.time()
         self._last_start_detach = 0.0
+        self._last_contact_beat = 0.0
         self._ever_magnet_on = False
         # the drone starts WELDED to the payload (the partner demo's fourth carrier): keep
         # the joint gz created at spawn and report attached from t=0; magnet OFF releases it
@@ -228,8 +277,21 @@ class MagnetAttachmentManager(Node):
             self.attached = True
             self.magnet_on = True
             self._ever_magnet_on = True
+            if self._proof is not None:
+                self.get_logger().warn('attached_at_start: the drone starts welded, so the weld check '
+                                       'stays in charge (confirm_mode contact_lift ignored)')
+                self._proof = None
 
         self.timer = self.create_timer(1.0 / 30.0, self.timer_callback)
+        if self._proof is not None:
+            self.proof_timer = self.create_timer(0.1, self._publish_proof_state)
+            self.get_logger().info(
+                f'confirm_mode=contact_lift: contact {self.attach_radius:.3f} m / '
+                f'{self.attach_speed_threshold:.3f} m/s for {self.contact_dwell_s:.2f} s, proof '
+                f'd_ok={self.proof_d_ok:.4f} d_fail={self.proof_d_fail:.4f} h_plate={self.proof_h_plate:.4f} '
+                f'dwell={self.proof_dwell_s:.2f} s fail_dwell={self.proof_fail_dwell_s:.2f} s '
+                f'timeout={self.proof_timeout_s:.1f} s taut_len={self.proof_taut_len:.3f} '
+                f'ma={self.proof_ma_s:.2f} s, sim_catch={self.sim_catch}, body={self.body_pose_topic}')
 
         self.get_logger().info(
             'Magnet attachment manager started. '
@@ -307,6 +369,8 @@ class MagnetAttachmentManager(Node):
             'tip', self._stamp(msg), self.magnet_tip_velocity
         )
         self.last_magnet_tip_time = now
+        if self._proof is not None:
+            self._proof_sample()
 
     def magnet_tip_pose_stamped_callback(self, msg: PoseStamped) -> None:
         """Update magnet tip from a world-frame PoseStamped, e.g. /magnet_tip_pose."""
@@ -318,6 +382,8 @@ class MagnetAttachmentManager(Node):
             'tip', self._stamp(msg), self.magnet_tip_velocity
         )
         self.last_magnet_tip_time = now
+        if self._proof is not None:
+            self._proof_sample()
 
     def object_pose_callback(self, msg: PoseArray) -> None:
         pose = self._select_pose(msg, self.object_pose_index)
@@ -349,6 +415,8 @@ class MagnetAttachmentManager(Node):
             'object', stamp, self.object_velocity
         )
         self.last_object_time = now
+        if self._proof is not None:
+            self._t_object_clk = self._clock_s()
 
     def _set_elrs_channel(self, msg: ELRSCommand, channel_index: int, value: float) -> bool:
         """Set one normalised ELRS channel field, e.g. channel_10 = +1.0."""
@@ -554,6 +622,108 @@ class MagnetAttachmentManager(Node):
         self.state_pub.publish(state_msg)
         self.last_state_text = text
 
+    # ----- confirm_mode contact_lift -----
+
+    def _clock_s(self) -> float:
+        return self.get_clock().now().nanoseconds * 1e-9
+
+    def _body_callback(self, msg: MotionCaptureState) -> None:
+        self._body_position = self._pose_to_position(msg.pose)
+        self._t_body_clk = self._clock_s()
+
+    def _contact_command_callback(self, msg: String) -> None:
+        """The arbiter in front of magnet_command_callback."""
+        word = str(msg.data).strip().upper()
+        if self._proof is not None:
+            if word in OFF_WORDS and self._contact_off('magnet command OFF'):
+                return
+            if word in ON_WORDS:
+                self._proof.magnet(True)
+        self.magnet_command_callback(msg)
+
+    def _contact_off(self, reason: str) -> bool:
+        """An OFF for the proof; True when it is refused (the attach is confirmed: nothing detaches)."""
+        ev = self._proof.magnet(False)
+        if ev == 'refused':
+            self.get_logger().warn(f'Magnet OFF refused ({reason}): the attach is confirmed, the magnet '
+                                   'stays ON', throttle_duration_sec=2.0)
+            return True
+        if ev == 'reset':
+            self.get_logger().info(f'CONTACT RESET ({reason}): the proof is void until a new ON')
+            if self.sim_catch:
+                self._sim_joint(False, reason)
+            self.contact_pub.publish(Bool(data=False))
+        return False
+
+    def _sim_joint(self, attach: bool, reason: str) -> None:
+        """The twin's catch: the ring joint through the weld check's backend, without declaring the
+        attach (not command_attach_once: attached and object_attached wait for the proof)."""
+        self.get_logger().info(f'{"CATCH" if attach else "RELEASE"} (sim joint): {reason}')
+        pub, topic = ((self.attach_pub, self.gz_attach_topic) if attach
+                      else (self.detach_pub, self.gz_detach_topic))
+        if self.command_backend in ('ros_topic', 'both'):
+            pub.publish(Empty())
+        if self.command_backend in ('gz_cli', 'both'):
+            self.publish_gz_empty(topic)
+
+    def _proof_sample(self) -> None:
+        """One tip pose into the proof, against the latest plate point and body (each at most
+        proof_ma_s old on the node clock)."""
+        now = self._clock_s()
+        plate_fresh = (self.object_position is not None and self._t_object_clk is not None
+                       and now - self._t_object_clk <= self.proof_ma_s)
+        body = (self._body_position if self._t_body_clk is not None
+                and now - self._t_body_clk <= self.proof_ma_s else None)
+        self._proof_event(self._proof.step(now, self.magnet_tip_position, self.object_position,
+                                           body=body, fresh=plate_fresh))
+
+    def _proof_event(self, ev: Optional[str]) -> None:
+        p = self._proof
+        if ev == 'contact':
+            c0 = 1000.0 * p.c0
+            self.get_logger().info(
+                f'CONTACT (try {p.tries}): d={p.distance:.4f} m, rel_speed={p.rel_speed:.3f} m/s, '
+                f'c0=({c0[0]:+.1f}, {c0[1]:+.1f}, {c0[2]:+.1f}) mm, plate z0={p.z0:.4f} m')
+            if self.sim_catch:
+                self._sim_joint(True, f'contact, try {p.tries}')
+            self.contact_pub.publish(Bool(data=True))
+        elif ev == 'failed':
+            f = p.last_fail
+            self.get_logger().warn(
+                f'PROOF FAILED (try {p.tries}, {f["reason"]}): drift {1000.0 * f["drift_m"]:.1f} mm, '
+                f'plate rise {1000.0 * f["plate_rise_m"]:.1f} mm, {f["contact_age_s"]:.2f} s after the contact')
+            # the joint goes before the contact false, so he never descends again while welded
+            if self.sim_catch:
+                self._sim_joint(False, f'proof failed ({f["reason"]})')
+            self.contact_pub.publish(Bool(data=False))
+        elif ev == 'proven':
+            self._declare_attached(
+                f'proven (try {p.tries}): drift {1000.0 * p.drift:.1f} mm, plate rise '
+                f'{1000.0 * p.rise:.1f} mm, body-to-tip {p.body_to_tip:.3f} m')
+
+    def _declare_attached(self, reason: str) -> None:
+        """The proven catch: attached, latched (an OFF is refused from now on). The twin's joint was
+        made at the contact; nothing is sent to the backend here."""
+        self.attached = True
+        self.attach_command_sent = True
+        self.detach_command_sent = False
+        self.get_logger().info(f'ATTACH: {reason}')
+        self.publish_elrs_magnet_command(True, f'attach: {reason}', force=True)
+        self.attached_pub.publish(Bool(data=True))
+
+    def _contact_lift_tick(self) -> None:
+        p = self._proof
+        self._proof_event(p.tick(self._clock_s()))
+        self.publish_state(
+            f'magnet_on={self.magnet_on} attached={self.attached} mode=contact_lift state={p.state} '
+            f'distance={p.distance:.3f}m radius={self.attach_radius:.3f}m '
+            f'rel_speed={p.rel_speed:.3f}m/s threshold={self.attach_speed_threshold:.3f}m/s '
+            f'tries={p.tries} fails={p.fails}')
+
+    def _publish_proof_state(self) -> None:
+        if self._proof is not None:
+            self.proof_state_pub.publish(String(data=json.dumps(self._proof.report(self._clock_s()))))
+
     def timer_callback(self) -> None:
         now = time.time()
 
@@ -577,8 +747,14 @@ class MagnetAttachmentManager(Node):
             if self.command_backend in ('gz_cli', 'both'):
                 self.publish_gz_empty(self.gz_detach_topic)
 
+        # his planner reads the contact as a level: a 1 Hz repeat bounds a lost change to 1 s
+        if self._proof is not None and now - self._last_contact_beat >= 1.0:
+            self._last_contact_beat = now
+            self.contact_pub.publish(Bool(data=self._proof.state in ('prove', 'attached')))
+
         if self.command_timeout_s > 0.0 and self.last_magnet_command_time is not None:
-            if now - self.last_magnet_command_time > self.command_timeout_s:
+            if now - self.last_magnet_command_time > self.command_timeout_s and not (
+                    self._proof is not None and self._contact_off('magnet command timeout')):
                 if self.magnet_on:
                     self.get_logger().warn('Magnet command timed out; turning magnet OFF')
                 self.magnet_on = False
@@ -590,6 +766,10 @@ class MagnetAttachmentManager(Node):
         # high-level command is latched. This helps if the ELRS interface starts
         # after this node or misses the first command.
         self.publish_elrs_magnet_command(self.magnet_on)
+
+        if self._proof is not None:
+            self._contact_lift_tick()
+            return
 
         fresh, freshness_reason = self.poses_fresh()
         object_pos = self.current_object_position()

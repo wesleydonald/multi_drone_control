@@ -162,6 +162,20 @@ partner:
   partner_m2: false
   partner_m2_part: 'all'
   sim_interface: true
+  # combined M1 contact attach (card 2026-10-10_combined_m1_contact): his mission flies QUAD4 down to a contact and a
+  # small lift, our manager's check confirms it, then our tracker takes over; false = his ATTACH_READY hand-back
+  partner_contact: false
+  sim_catch: true               # twin: the manager makes the gz joint at contact (false: the _nocatch arm)
+  proof_taut_len: 0.0           # rig: the proof's body-to-tip floor (m, Wednesday's taut length - 3 mm); 0 = off
+  # the manager's contact and proof thresholds, '' = its default (E1 sets loose ones, then they are frozen)
+  contact_dwell_s: ''
+  proof_d_ok: ''
+  proof_d_fail: ''
+  proof_h_plate: ''
+  proof_dwell_s: ''
+  proof_fail_dwell_s: ''
+  proof_timeout_s: ''
+  proof_ma_s: ''
 sim_interface:
   rate_source: 'imu'
   mocap_hz: 120

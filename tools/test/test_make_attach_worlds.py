@@ -1,7 +1,8 @@
 """Rig-twin attach newcomer and worlds (tools/make_attach_worlds.py): the generated files are
 current, the newcomer is QUAD4 on the twin's rod, and the worlds put the carriers on the M1
 layout with the newcomer free on the floor or welded on plate 9. The combined M1 subtest world
-(pickup) is the free world with the pickup newcomer, an open ring with a net, and Tejen's ball.
+(pickup) is the free world with the pickup newcomer, an open ring with a net, and Tejen's ball (a
+copy on collide bits 0x05, clear of QUAD4's magnet); its push variant adds the WRENCH tool.
 
     python3 -m pytest tools/test/test_make_attach_worlds.py -q
 """
@@ -27,6 +28,7 @@ from check_geometry import world_geometry                         # noqa: E402
 FREE, WELDED = 'three_rigid_ground_rig_attach.sdf', 'three_rigid_ground_rig_attach_welded.sdf'
 MODELS = {'free': 'x3_rig_drone3_magnet.sdf', 'welded': 'x3_rig_drone3_magnet_welded.sdf'}
 PICKUP, PICKUP_MODEL = 'three_rigid_ground_rig_attach_pickup.sdf', 'x3_rig_drone3_magnet_pickup.sdf'
+PICKUP_PUSH, BALL_COPY = 'three_rigid_ground_rig_attach_pickup_push.sdf', 'models/rig_pickup_ball.sdf'
 LINKS = ['base_link', 'rotor_0', 'rotor_1', 'rotor_2', 'rotor_3', 'magnet_arm', 'magnet_tip_link']
 
 
@@ -160,7 +162,7 @@ def test_skid_rests_the_newcomer_at_the_carriers_height():
         assert _newcomer(world)[1][2] == pytest.approx(0.10)
 
 
-@pytest.mark.parametrize('world', [FREE, WELDED, PICKUP])
+@pytest.mark.parametrize('world', [FREE, WELDED, PICKUP, PICKUP_PUSH])
 def test_carriers_are_the_twin_on_the_m1_layout(world):
     g = world_geometry(ASSETS / world)
     for k, v in mcw.EXPECT.items():
@@ -230,7 +232,7 @@ def test_magnet_never_touches_the_ring_but_rests_on_the_floor():
 
 
 @pytest.mark.skipif(shutil.which('gz') is None, reason='gz CLI not installed')
-@pytest.mark.parametrize('rel', [FREE, WELDED, PICKUP]
+@pytest.mark.parametrize('rel', [FREE, WELDED, PICKUP, PICKUP_PUSH, BALL_COPY]
                          + [f'models/{m}' for m in [*MODELS.values(), PICKUP_MODEL]])
 def test_gz_sdf_check(rel):
     r = subprocess.run(['gz', 'sdf', '-k', rel], cwd=ASSETS, capture_output=True, text=True)
@@ -276,8 +278,8 @@ def _ring_body(world):
         "link[@name='body']")
 
 
-def _ball_include(world):
-    inc = [i for i in world.findall('include') if i.findtext('uri') == 'tejen/payload_model.sdf']
+def _ball_include(world, uri=BALL_COPY):
+    inc = [i for i in world.findall('include') if i.findtext('uri') == uri]
     assert len(inc) == 1
     return inc[0]
 
@@ -296,7 +298,7 @@ def _numbers(elem):
 
 def test_pickup_files_are_generated(tmp_path):
     rels = {pathlib.Path(r).as_posix() for r in maw.generate(tmp_path)}
-    for rel in (PICKUP, f'models/{PICKUP_MODEL}'):
+    for rel in (PICKUP, f'models/{PICKUP_MODEL}', BALL_COPY, PICKUP_PUSH):
         assert rel in rels
         assert (tmp_path / rel).read_bytes() == (ASSETS / rel).read_bytes()
 
@@ -425,18 +427,21 @@ def test_pickup_bitmasks():
     tip = _bits(_model('pickup').find("link[@name='magnet_tip_link']/collision"))
     assert tip == 0x02
     floor = _bits(w.find("model[@name='ground_plane']/link/collision"))
-    ball = _bits(ET.parse(BALL).getroot().find('model/link/collision'))
+    ball = _bits(ET.parse(ASSETS / BALL_COPY).getroot().find('model/link/collision'))
+    assert ball == 0x05
     assert ball & 0x04                                               # the ball lands in the net
     assert not tip & 0x04 and not floor & 0x04                       # magnet and floor pass through
     assert tip & floor and 0x01 & floor and ball & floor             # all rest on the floor
     assert not tip & 0x01 and ball & 0x01                            # the magnet never touches the ring
+    assert not tip & ball                                            # nor the ball, as the legacy tip
 
 
 def test_ball_rests_on_the_floor_clear_of_the_carriers_and_quad4():
     w = _world(PICKUP)
     inc = _ball_include(w)
     ball = _pose(inc)[:3]
-    radius = float(ET.parse(BALL).getroot().findtext('model/link/collision/geometry/sphere/radius'))
+    radius = float(ET.parse(ASSETS / BALL_COPY).getroot().findtext(
+        'model/link/collision/geometry/sphere/radius'))
     assert ball[2] == pytest.approx(radius)
     assert inc.find('name') is None             # model payload_model: the weld's child_model
     lift = next(m for m in w.findall('model') if m.get('name') == 'lift_system')
@@ -451,8 +456,34 @@ def test_ball_rests_on_the_floor_clear_of_the_carriers_and_quad4():
 
 
 def test_ball_pose_publisher_is_the_partner_worlds():
-    def block(world):
-        pubs = _ball_include(world).findall('plugin')
+    def block(world, uri=BALL_COPY):
+        pubs = _ball_include(world, uri).findall('plugin')
         assert len(pubs) == 1
         return pubs[0].attrib, [(c.tag, c.text) for c in pubs[0]]
-    assert block(_world(PICKUP)) == block(ET.parse(LEGACY_WORLD).getroot().find('world'))
+    legacy = ET.parse(LEGACY_WORLD).getroot().find('world')
+    assert block(_world(PICKUP)) == block(legacy, 'tejen/payload_model.sdf')
+
+
+def test_the_ball_copy_is_his_ball_plus_the_bitmask():
+    """Only the header and the collision's bitmask differ; the names stay (the pickup weld and his
+    launch's /model/payload_model/pose bridge use them). His file is untouched."""
+    his = BALL.read_text().splitlines()
+    ours = (ASSETS / BALL_COPY).read_text().splitlines()
+    added = [ln for ln in ours if ln not in his]
+    assert [ln for ln in his if ln not in ours] == []
+    assert len(ours) - len(his) == len(added) == 3
+    assert 'GENERATED' in added[0]
+    assert added[2].strip() == '<surface><contact><collide_bitmask>0x05</collide_bitmask></contact></surface>'
+    model = ET.parse(ASSETS / BALL_COPY).getroot().find('model')
+    assert model.get('name') == 'payload_model'
+    assert [lk.get('name') for lk in model.findall('link')] == ['payload_link']
+    assert ET.parse(BALL).getroot().find('model/link/collision/surface') is None
+
+
+def test_the_pickup_push_world_is_the_pickup_world_plus_the_wrench_tool():
+    """The combined M1 card's _abort arm: a runner WRENCH push on the ring during his descent."""
+    pick = (ASSETS / PICKUP).read_text()
+    push = (ASSETS / PICKUP_PUSH).read_text()
+    assert push != pick and push.replace(maw.WRENCH_PLUGIN, '', 1) == pick
+    assert 'ApplyLinkWrench' not in pick and push.count('ApplyLinkWrench') == 1
+    ET.fromstring(push.split('\n', 1)[1].split('\n', 1)[1])          # well-formed below the two comment lines

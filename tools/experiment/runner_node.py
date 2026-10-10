@@ -18,6 +18,7 @@ invalidated comparisons once. Wall time appears exactly once, as the startup tim
 because before /clock is flowing there is nothing else to measure.
 """
 import copy
+import json
 import math
 import os
 import re
@@ -34,7 +35,7 @@ from std_msgs.msg import Bool, Empty, Float64, Float64MultiArray, Int32, String
 
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
-from .config import mocap_loss_arg, wait_lift_arg, wait_log_arg, wrench_arg
+from .config import mocap_loss_arg, wait_lift_arg, wait_log_arg, wait_reweld_arg, wrench_arg
 
 ARM_FAIL = 'fleet manager ARM failed or refused'
 
@@ -101,6 +102,7 @@ class ExperimentRunner(Node):
         self._released = False
         self.t_reweld = None
         self._reweld_wait = None            # t the WAIT_REWELD event fired
+        self._reweld_timeout = None         # its timeout (SIM s), None = wait for the re-weld
         self._last_log_t = None
         self._repeats = []                  # (until, pub, msg) re-sent by resend_pending
         self._phase = None
@@ -156,6 +158,19 @@ class ExperimentRunner(Node):
         self.create_subscription(Bool, '/join_planner/handoff_ready', self._handoff_cb, 10)
         self.create_subscription(Bool, '/tejen/object_attached', self._object_cb, 10)
         self.create_subscription(Log, '/rosout', self._rosout_cb, 100)
+        # combined M1 contact attach (card 2026-10-10_combined_m1_contact): the contact, the proof, his give-up,
+        # our take-back and who flies QUAD4, for E1 and the claim runs; only in runs that launch partner_contact
+        self._contact_run = str(cfg.launch_args.get('partner_contact', '')).lower() in ('true', '1')
+        self._contact = False
+        self._mux_state = None
+        self._proof = None
+        if self._contact_run:
+            d = self.n - 1
+            self.create_subscription(Bool, '/magnet/contact', self._contact_cb, latched)
+            self.create_subscription(Bool, '/join_planner/give_up', self._give_up_cb, 10)
+            self.create_subscription(Bool, f'/drone_{d}/take_back', self._take_back_cb, latched)
+            self.create_subscription(String, f'/drone_{d}/mux_state', self._mux_state_cb, latched)
+            self.create_subscription(String, '/magnet/attach_proof', self._proof_cb, 10)
         if cfg.ball_start is not None:
             self.create_subscription(PoseArray, '/model/payload_model/pose',
                                      self._ball_cb, best)
@@ -279,6 +294,34 @@ class ExperimentRunner(Node):
             self._object_attached = bool(msg.data)
             self._log_event('PICKUP' if msg.data else 'DROP', '/tejen/object_attached')
 
+    def _contact_cb(self, msg):
+        if bool(msg.data) != self._contact:
+            self._contact = bool(msg.data)
+            self._log_event('CONTACT' if msg.data else 'CONTACT_LOST', '/magnet/contact')
+
+    def _give_up_cb(self, msg):
+        if msg.data:
+            self._log_event('GIVE_UP', '/join_planner/give_up')
+
+    def _take_back_cb(self, msg):
+        if msg.data:
+            self._log_event('TAKE_BACK', f'/drone_{self.n - 1}/take_back')
+
+    def _mux_state_cb(self, msg):
+        if msg.data != self._mux_state:
+            self._mux_state = msg.data
+            self._log_event(f'MUX:{msg.data}', f'/drone_{self.n - 1}/mux_state')
+
+    PROOF_COLS = ('state', 'drift_m', 'plate_rise_m', 'body_to_tip_m')
+
+    def _proof_cb(self, msg):
+        try:
+            p = json.loads(msg.data)
+        except ValueError:
+            return
+        if isinstance(p, dict):
+            self._proof = p
+
     _ROSOUT = ((re.compile(r'\] ATTACH drone (\d+)'), 'FOLD_IN'),
                (re.compile(r'PARTNER RELEASE: drone (\d+)'), 'PARTNER_RELEASE'),
                (re.compile(r'PARTNER HANDOFF()'), 'PARTNER_HANDOFF'),
@@ -385,18 +428,30 @@ class ExperimentRunner(Node):
         if math.isnan(t):
             return
         if self._waiting_for_weld:
-            if self.attached:
-                self._waiting_for_weld = False
-            else:
+            timeout = getattr(self, '_weld_timeout', None)
+            expired = not self.attached and timeout is not None and t - self._weld_wait >= timeout
+            if not self.attached and not expired:
                 return                      # WAIT_WELD blocks the rest of the schedule
+            self._waiting_for_weld = False
+            if timeout is not None:         # with a timeout, later events are timed from the weld
+                shift = t - self._weld_wait
+                for e in self._pending:
+                    e.t += shift
+                if expired:
+                    self._log_event('WELD_TIMEOUT', f'{shift:.2f}')
         if self._reweld_wait is not None:
-            if self.t_reweld is None:
+            timeout = getattr(self, '_reweld_timeout', None)
+            expired = self.t_reweld is None and timeout is not None and t - self._reweld_wait >= timeout
+            if self.t_reweld is None and not expired:
                 return                      # WAIT_REWELD blocks the rest of the schedule
             shift = t - self._reweld_wait
             for e in self._pending:
                 e.t += shift
             self._reweld_wait = None
-            self.get_logger().warn(f'[exp] t={t:6.2f} re-welded; later events shifted {shift:+.2f} s')
+            if expired:
+                self._log_event('REWELD_TIMEOUT', f'{shift:.2f}')
+            self.get_logger().warn(f'[exp] t={t:6.2f} {"NOT re-welded (timeout)" if expired else "re-welded"}; '
+                                   f'later events shifted {shift:+.2f} s')
         if self._partner_release_wait is not None:
             if self.t_partner_release is None:
                 return                      # WAIT_PARTNER_RELEASE blocks the rest
@@ -447,6 +502,8 @@ class ExperimentRunner(Node):
             self._fire(ev)
             if ev.do == 'WAIT_WELD' and not self.attached:
                 self._waiting_for_weld = True
+                self._weld_wait = t
+                self._weld_timeout = wait_reweld_arg(ev.arg, 'WAIT_WELD')
                 return
             if ev.do == 'WAIT_LIFT':
                 z_th, timeout = wait_lift_arg(ev.arg)
@@ -457,6 +514,7 @@ class ExperimentRunner(Node):
                 return
             if ev.do == 'WAIT_REWELD' and self.t_reweld is None:
                 self._reweld_wait = t
+                self._reweld_timeout = wait_reweld_arg(ev.arg)
                 return
             if ev.do == 'WAIT_PARTNER_RELEASE' and self.t_partner_release is None:
                 self._partner_release_wait = t
@@ -684,6 +742,10 @@ class ExperimentRunner(Node):
         if self.cfg.ball_start is not None:
             b = self.ball or (math.nan,) * 3
             row['ball_x'], row['ball_y'], row['ball_z'] = b
+        if getattr(self, '_contact_run', False):
+            # the manager's latest /magnet/attach_proof (10 Hz); empty before the first
+            for k in self.PROOF_COLS:
+                row[f'proof_{k}'] = (self._proof or {}).get(k)
         self.rows.append(row)
         self.step_i += 1
 

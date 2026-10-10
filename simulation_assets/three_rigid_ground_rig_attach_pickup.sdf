@@ -429,12 +429,12 @@
       <pose>0.000000 1.400000 0.100000 0 0 0</pose>
     </include>
 
-    <!-- ===== TEJEN'S BALL: his pickup object (tejen/payload_model.sdf, r 0.08, bitmask 0xffff) =====
+    <!-- ===== TEJEN'S BALL: his pickup object (tejen/payload_model.sdf as models/rig_pickup_ball.sdf, r 0.08, bitmask 0x05) =====
          On the floor at (1.0, 1.6), resting on its radius: 1.00 m beside QUAD4's laid-out arm,
          1.26 m from the nearest carrier. His object magnet welds it to QUAD4's tip (/pickup/attach) and
          drops it into the ring's net (/pickup/detach). /model/payload_model/pose: [link, model]. -->
     <include>
-      <uri>tejen/payload_model.sdf</uri>
+      <uri>models/rig_pickup_ball.sdf</uri>
       <pose>1.000000 1.600000 0.080000 0 0 0</pose>
       <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
         <publish_link_pose>true</publish_link_pose>

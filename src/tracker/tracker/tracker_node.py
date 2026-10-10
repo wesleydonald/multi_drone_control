@@ -669,6 +669,21 @@ class Controller(Node):
         self.control_history = []
         self.estimated_state_history = []
 
+        # Combined M1 contact attach (card 2026-10-10_combined_m1_contact): while the mux forwards another stream,
+        # the model's actuator state is the command the mux actually sends, and the states learned from our own
+        # command (measured cable, thrust history, trims) hold until the switch to ours.
+        self.warm_follow_applied = bool(self.declare_parameter('warm_follow_applied', False).value)
+        self._in_authority = not self.warm_follow_applied
+        self._applied_cmd = None
+        if self.warm_follow_applied:
+            self.create_subscription(
+                String, f'/drone_{self.drone_id}/mux_state', self._mux_state_cb,
+                QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                           reliability=ReliabilityPolicy.RELIABLE))
+            # the launch remaps this name onto the mux output (our own command topic is remapped to the pre-mux one)
+            self.create_subscription(ELRSCommand, f'/drone_{self.drone_id}/ELRSCommand_applied',
+                                     self._applied_cmd_cb, 1)
+
         # ── Control timer ─────────────────────────────────────────────────
         self.timer = self.create_timer(DT, self.control_loop)
         self.get_logger().info(
@@ -952,6 +967,39 @@ class Controller(Node):
             f"{'VELOCITY LOOP' if want else 'MPC'} (/fleet/control_phase="
             f"{msg.data!r})")
 
+    def _mux_state_cb(self, msg):
+        ours = str(msg.data).strip().lower() == 'ours'
+        if ours and not self._in_authority:
+            # bumpless: the next solve starts cold from the measured state with the applied command as its
+            # actuator state, holding the heading the drone has now (the other controller may have turned it)
+            self.first_solve = True
+            self._heading_datum = self._measured_heading()
+            self._yaw_hold = False
+            self._vel_hist.clear()
+            self._acc_lpf = self._thr_w_lpf = self._acc_t = None
+            self._applied_cable_vec = None
+            self.get_logger().warn(
+                f"[Drone {self.drone_id + 1}] mux -> ours: solver re-seeded from the measured state, heading "
+                f"{math.degrees(self._heading_datum):.1f} deg, u-state {np.round(self._applied_u, 3).tolist()}")
+        self._in_authority = ours
+
+    def _applied_cmd_cb(self, msg):
+        self._applied_cmd = msg
+        if not self._in_authority:
+            self._pin_applied()
+
+    def _pin_applied(self):
+        """The actuator state is the mux output's last command: roll, pitch and yaw as sent, the throttle in model
+        units ((ch2 + 1) / 2 through the thrust map). Nothing sent, or disarmed: no thrust."""
+        m = self._applied_cmd
+        if m is None or not m.armed:
+            self._applied_u = np.zeros(4)
+            self.last_cmd_throttle = None
+            return
+        thr = self._realised_model_throttle((float(m.channel_2) + 1.0) / 2.0)
+        self._applied_u = np.array([float(m.channel_0), float(m.channel_1), float(thr), float(m.channel_3)])
+        self.last_cmd_throttle = thr
+
     def _thrust_off(self):
         """Throttle offset of the affine map at the current pack voltage (0 = proportional map)."""
         if self.thrust_offset <= 0.0:
@@ -1027,6 +1075,10 @@ class Controller(Node):
             self._waiting_said = False
             thr = float(u[2])
             spool_frac = 1.0
+            if getattr(self, 'warm_follow_applied', False):
+                # warm on another stream's flight: a take-over mid-air must not start from a half-throttle spool
+                self._takeoff_step = max(self._takeoff_step or 0,
+                                         int(math.ceil(max(1.0, self.takeoff_spool_s * FREQUENCY_HZ))))
             # takeoff spool-up: for the first takeoff_spool_s, scale the throttle up
             # from 0 to the commanded value so thrust rises smoothly and the drones
             # ease off the platforms. Raised-cosine (not linear): the applied throttle
@@ -1069,6 +1121,8 @@ class Controller(Node):
             self._applied_u = np.array(
                 [float(u[0]), float(u[1]), float(thr), yaw])
             self._applied_u_rate = np.asarray(u_rate, dtype=float).copy()
+            if not getattr(self, '_in_authority', True):
+                self._pin_applied()                # our command is not the one flying
             if getattr(self, '_delay_pred', None) is not None:
                 self._delay_pred.record(self.get_clock().now().nanoseconds * 1e-9, self._applied_u)
             self.get_logger().debug(
@@ -1083,6 +1137,8 @@ class Controller(Node):
             # channel_2 = -1.0 maps to throttle 0, so every channel is at zero
             self._applied_u = np.zeros(4)
             self._applied_u_rate = np.zeros(4)
+            if not getattr(self, '_in_authority', True):
+                self._pin_applied()
             # THROTTLED: this branch runs every cycle of the 50 Hz loop for as long as
             # the fleet sits armed waiting for TAKEOFF. Logging it unthrottled put 50
             # lines/s PER DRONE through the launch stdout pipe (200/s with four
@@ -1165,7 +1221,7 @@ class Controller(Node):
         # Integrate only while actually flying the reference. On the stand the drone
         # cannot move toward it and the integrator would wind up against the platform,
         # then dump that trim in as a lurch the moment thrust is applied.
-        integrate = bool(self.takeoff_requested and not self.payload_resting)
+        integrate = bool(self.takeoff_requested and not self.payload_resting) and getattr(self, '_in_authority', True)
         u = self.velocity_loop.step(
             p, v, q, p_ref, v_ref, a_ff, 1.0 / FREQUENCY_HZ,
             self._effective_kT(), heading=self._heading_datum,
@@ -1523,7 +1579,8 @@ class Controller(Node):
             # Assumed thrust gain for this cycle: the configured thrust_ratio, or
             # takeoff_thrust_ratio while still on the stand, times the battery
             # derate. Constant for the whole flight unless the derate is enabled.
-            self._update_kt_trim()
+            if self._in_authority:
+                self._update_kt_trim()
             self.est_params[0] = self._effective_kT()
             self._refresh_model_cap()
 
@@ -1573,7 +1630,8 @@ class Controller(Node):
             # Part 2c: optionally replace the open-loop model cable term with
             # the IMU-measured f_ext, held constant across the horizon. Falls
             # back to the model until a valid measurement is available.
-            if self.cable_source in ("measured", "mocap"):
+            # (Frozen while another stream flies the drone: the planned term, no measurement history.)
+            if self.cable_source in ("measured", "mocap") and self._in_authority:
                 ac_meas = self.measured_cable_accel()
                 if self._load_grounded() or not self._kt_airborne():
                     # on the stand or with the ring resting the imu reads the floor's support:
@@ -1739,7 +1797,7 @@ class Controller(Node):
                     rdrift = float(np.linalg.norm(cxy) - np.linalg.norm(rxy))
                     # imu measured cable accel vs applied model: |aCm| = measured,
                     # dC = |measured - modelled| (small once they agree)
-                    ac_meas = self.measured_cable_accel()
+                    ac_meas = self.measured_cable_accel() if self._in_authority else None
                     if ac_meas is not None:
                         ac_mod = (self.planner_ref_cable[0] * self.cable_ff_scale
                                   if self.planner_ref_cable is not None
