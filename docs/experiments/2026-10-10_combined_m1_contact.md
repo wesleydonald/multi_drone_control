@@ -1,5 +1,14 @@
 # Combined M1 subtest: Tejen flies QUAD4 from its mat through pickup, drop and a contact attach proved by a small lift; our check confirms; bumpless hand-over
 
+Rev 6 (10 Oct 22:20, Wesley, after the first claim pass R1491-R1502 on e097a94): two fixes, then the whole claim
+table is re-flown on the one final tree m1-final 7b8985a (= e097a94 + the full M1 + these fixes); the e097a94 rows stay
+as the record. (1) His LIFT_PROOF rises `proof_rise_max` above the measured contact height, not above his target
+(R1498 `_low`: three caught contacts never proved). (2) His bounded pickup retry under `contact_attach` (no ball after
+10 s: release, rise, re-approach the ball where it is; the third failure is a give-up and our take-back): his pickup
+stalled to LAND in R1493 / R1497 / R1500, so those arms were never scored. Harness: WAIT_WELD 150 -> 210 s so a retry
+fits. The bars in §5 and the frozen thresholds are unchanged. No critic round: neither is a control law, an estimator
+or a fleet gate (the proof lift is a reference offset; the retry ends in the existing give-up path).
+
 Rev 5 (10 Oct, before the claim runs; Wesley's decisions after E0/E1): the proof thresholds frozen at lift 1 cm,
 d_ok 3 mm, d_fail 8 mm, h_plate 2.5 mm (the card's mapping cannot be met; QUAD4's mocap force cannot confirm within the
 lift: decisions.md); the fold-in seed is 'start' (QUAD4 at 0.1 N; 'ocp' tilted the ring 7.7-8.6 deg, 4 of 4); after a

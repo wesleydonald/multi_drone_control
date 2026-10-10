@@ -159,3 +159,40 @@ Updated: Sat 10 Oct 2026, 21:40 (overnight plan running).
 - Helpers: V twin videos (tools/twin_video.py, main tree, results/videos/), R rig port (worktree m1-rig), F full M1
   (worktree m1-full). Me: the integration rundown + real-life concerns (docs/m1_integration_rundown_2026-10-10.md).
 - Wesley: think real life first (memory); no thesis now; lab PC any time it is free.
+- 22:05: claim scored so far R1491 / R1502 hover PASS, R1492 / R1494 nocatch PASS, R1495 land_transit PASS, R1493 orbit
+  no attempt (his pickup stalled: ball pushed by the rod, no timeout); R1496-R1499 flying, R1500-R1501 next, then
+  m1c_orbit + m1c_orbit_2 queued (task b2jecacfc, waits on the batch PID). Monitor bbmd52gjc.
+- V done: tools/twin_video.py committed (037589d), seven log-rendered videos in results/videos/ (frames checked).
+  Gazebo-rendered attempt waits for the lab to free. R (m1-rig) and F (m1-full) still building.
+- 22:50: R1496 lead030 PASS (2 alignment aborts, contact 22.5 s), R1499 offset PASS (retry), R1497 high = pickup stall
+  (2nd, like R1493), R1498 low FALSIFIES the attach at a 1 cm low target (his proof lift counts from the target; fix =
+  rise from z0, changes the claim tree -> Wesley); safe path fine. R1500/R1501 flying. Re-queue (pid 766533, waits on
+  725916): m1c_orbit, m1c_orbit_2, m1c_high -> $CLAUDE_JOB_DIR/tmp/lab_m1c_orbit2.txt.
+- F done: m1-full ca958da (tests pass). First exploratory m1_full_hover on the LAPTOP (task bs5jcfamg).
+
+## Overnight loop 10-11 Oct (Wesley back ~10:00; decisions 22:20 in docs/decisions.md)
+Order of work (each item finished well before the next; look at every run as it lands):
+1. Claim on e097a94: R1491-R1502 logged (R1500 land_proof last). These rows are the record, not the final table.
+2. Fixes (helper, worktree /home/wesley/mdc_wt/m1-final, branch m1-final from ca958da = e097a94 + full M1): his
+   LIFT_PROOF rises from the latched contact height; bounded pickup retry (2 retries, then give-up -> our take-back).
+   Review, tests, gate, commit on m1-final; claim_row.py tree string -> m1-final SHA; card rev 6 (same frozen bars).
+3. Re-fly all 13 m1c arms on m1-final on the lab (4 slots), score each as it lands, then the reviewer on that table.
+4. Full M1: exploratory m1_full_hover on the laptop (bs5jcfamg) + m1_full_orbit / m1_full_hover on the lab from
+   m1-full (b2p5t0v9x, after the claim batch). Fix, one run on the failed arm; then on m1-final; card + critic for
+   a full-M1 claim once it flies cleanly 2 of 2.
+5. Gazebo recording (helper, worktree m1-rec): method + smoke; then ONE recording of the full M1 on m1-final.
+6. Rig port (helper R, m1-rig): review, tests, commit; desk test on the laptop (flock the laptop lock).
+7. Morning report ~09:45: rig findings first, table, verdict, decisions.
+Laptop lock: flock $CLAUDE_JOB_DIR/tmp/laptop.lock for anything that starts ROS/Gazebo on the laptop. Lab: one tree
+at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1full / lab_final / laptop logs.
+- 22:45: R1501 abort PASS (logged). R1503 (laptop, m1-full, exploratory): welded start -> detach -> release -> his
+  pickup works up to the ball weld, then his pickup descent runs 0.11 m lower than in the subtest -> tip on the
+  floor, stall, QUAD4 tipped on his stream (no fleet abort). Helper F resumed to find the height datum (m1-full).
+  RTF of all these runs is 0.15-0.19 (normal). Lab: R1500 last, then R1504/R1505 m1_full orbit/hover (b2p5t0v9x).
+- 22:55: R1503 cause found (F): his MPC re-latches its kT estimator start height while disarmed and learns kT only
+  0.20 m above it; armed in the air at the step-out (z 1.85) it never climbed 0.2 m -> kT stuck at 22 -> 11 cm low.
+  Fix 84b1779 on m1-full (launch arg airborne_start auto on the /partner/release gate). RIG FINDINGS for the report:
+  (a) the same latch on the rig if QUAD4 is released to him in the air; (b) nothing automatic stops a tipped QUAD4
+  while his stream flies it (our tracker's disarm is not forwarded by the mux; Betaflight has no tilt disarm; only
+  DISARM/ESTOP, which drops the ring) -> card docs/experiments/2026-10-11_quad4_tilt_cut.md (F, worktree
+  m1-tiltcut), critic, build behind default-off switches, Wesley decides.
