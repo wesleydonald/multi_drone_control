@@ -14,6 +14,9 @@ poses never move, so ARM/TAKEOFF must not be sent against it.
         --yaw-deg 0 --drone-z 0.08 --load-z 0.05 --dry-run   # rig-like creep start, print only
     tools/fake_mocap.py --rig --num-drones 3 --attach --tip --azimuths-deg 270,30,150 --drone-z 0.08
         # the M1 desk rehearsal: rig geometry, QUAD4 on the floor with its magnet tip (/magnet_tip_pose)
+    tools/fake_mocap.py --rig --num-drones 3 --attach --tip --azimuths-deg 270,30,150 --drone-z 0.08 \
+        --tip-plate 9 --tip-dz 0.02     # the props-off attach check: QUAD4 held, its tip 2 cm above
+                                        # plate 9's weld point (--tip-dz <weld_point_z>: on the plate)
 
 Azimuths are anticlockwise degrees in the LOAD frame, plate 0 on the payload's +x; the plates
 are numbered CLOCKWISE since 8 Oct (plate k at -30*k deg, so 30/90/150/270 are plates
@@ -21,7 +24,9 @@ are numbered CLOCKWISE since 8 Oct (plate k at -30*k deg, so 30/90/150/270 are p
 with it. --drone-z puts the drones at that height with the rod still cable_len long (rods near
 flat, the creep floor start) instead of on the --elev-deg cone. --rig takes the rig geometry
 (rod 0.55, magnets at r 0.225, 60 deg); --tip adds the newcomer's magnet tip resting on the floor
---tip-len from its body (0.58: QUAD4's pivot-to-plate 0.54 m in the 8 Oct logs + the 4 cm pivot).
+--tip-len from its body (0.58: QUAD4's pivot-to-plate 0.54 m in the 8 Oct logs + the 4 cm pivot);
+--tip-plate k puts that tip over plate k instead, --tip-dz above the ring origin plane, QUAD4 hanging
+straight above it.
 """
 import argparse
 import math
@@ -42,7 +47,7 @@ RIG = {'cable_len': 0.55, 'attach_radius': 0.225, 'elev_deg': 60.0}
 
 
 def compute_poses(n, attach=False, cable_len=0.5, radius=0.25, elev_deg=45.0, load_z=0.05,
-                  azimuths_deg=None, yaw_deg=0.0, drone_z=None, tip_len=None):
+                  azimuths_deg=None, yaw_deg=0.0, drone_z=None, tip_len=None, tip_plate=None, tip_dz=0.0):
     """Static poses {topic: ((x, y, z), (qw, qx, qy, qz))}. The defaults reproduce the
     original even ring on the 45-deg cone with the payload at yaw 0."""
     az = parse_azimuths(azimuths_deg, n)
@@ -63,7 +68,12 @@ def compute_poses(n, attach=False, cable_len=0.5, radius=0.25, elev_deg=45.0, lo
         poses[f'/drone_{i}/motion_capture_state'] = ((r * math.cos(a), r * math.sin(a), z), level)
     if attach:
         poses[f'/drone_{n}/motion_capture_state'] = ((0.0, -1.2, 0.12), level)
-        if tip_len:
+        if tip_len and tip_plate is not None:
+            a = math.radians(-30.0 * tip_plate) + yaw          # plates clockwise from +x
+            tip = (radius * math.cos(a), radius * math.sin(a), load_z + tip_dz)
+            poses[TIP_TOPIC] = (tip, level)
+            poses[f'/drone_{n}/motion_capture_state'] = ((tip[0], tip[1], tip[2] + tip_len), level)
+        elif tip_len:
             dz = 0.12 - 0.02                    # the tip rests on the floor, outward of the body
             poses[TIP_TOPIC] = ((0.0, -1.2 - math.sqrt(max(tip_len ** 2 - dz ** 2, 0.0)), 0.02), level)
     poses['/payload/motion_capture_state'] = (
@@ -117,6 +127,10 @@ def main(argv=None):
     ap.add_argument('--rig', action='store_true', help='rig geometry: rod 0.55, plates at r 0.225, 60 deg')
     ap.add_argument('--tip', action='store_true', help='with --attach: also publish the newcomer magnet tip')
     ap.add_argument('--tip-len', type=float, default=0.58, help='body-to-tip length of the newcomer (m)')
+    ap.add_argument('--tip-plate', type=int, default=None,
+                    help='with --tip: the tip over this plate (0-11, clockwise from +x), QUAD4 above it')
+    ap.add_argument('--tip-dz', type=float, default=0.0,
+                    help='with --tip-plate: tip height above the ring origin plane (m)')
     ap.add_argument('--load-z', type=float, default=0.05)
     ap.add_argument('--azimuths-deg', default='',
                     help="load-frame azimuth per drone, e.g. 30,150,270 (plates 1/5/9); '' = even ring")
@@ -132,9 +146,11 @@ def main(argv=None):
             setattr(a, k, v)
     if a.tip and not a.attach:
         ap.error('--tip needs --attach (the tip belongs to the newcomer)')
+    if a.tip_plate is not None and not a.tip:
+        ap.error('--tip-plate needs --tip')
     poses = compute_poses(a.num_drones, a.attach, a.cable_len, a.attach_radius, a.elev_deg,
                           a.load_z, a.azimuths_deg, a.yaw_deg, a.drone_z,
-                          tip_len=a.tip_len if a.tip else None)
+                          tip_len=a.tip_len if a.tip else None, tip_plate=a.tip_plate, tip_dz=a.tip_dz)
     if a.dry_run:
         for t, ((x, y, z), q) in poses.items():
             print(f'{t:36s} xyz ({x:+.3f}, {y:+.3f}, {z:+.3f})  q(wxyz) '

@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep current at each milestone)
 
-Updated: Sat 10 Oct 2026, afternoon.
+Updated: Sat 10 Oct 2026, late evening.
 
 ## Where things are
 - Main tree `/home/wesley/multi_drone_control` on **rig-prep** (see git log), clean. Nothing running.
@@ -70,8 +70,44 @@ Updated: Sat 10 Oct 2026, afternoon.
 - R9 twin: held R1468 PASS (weld, 3.0 deg, dip 3 mm, circle resumes on four); moving R1469 FAILS (no tip hold on a
   moving plate -> tip loop never runs -> tip 3 cm high, outside the 2.5 cm weld radius; QUAD4 0.311 m from a carrier
   in transit). Thursday: R9 held only. Repeats + M1 partner baseline (rig-prep) running on the lab PC.
+- R9 repeats: held 2 of 2 supports (R1468/R1471), moving 2 of 2 falsifies (R1469/R1472): Thursday R9 held only.
+- M1 partner baseline R1470 (rig-prep, legacy) FAILS at the hand-back: QUAD4 gets no reference (approach_hold off for
+  partners + _attach_approach set by the hand-off; since bbce103). Fix on branch partner-handoff-fix (worktree
+  /home/wesley/mdc_wt/partner-fix, 0b50b40, unit test); check run R1473 from it (lab). Port check branch
+  tejen-sync-check (worktree /home/wesley/mdc_wt/tejen-check) = tejen-sync + the fix, for the port's M1 run.
+  Worktree batches need MDC_REPO_ROOT=<worktree> MDC_RESULTS_ROOT=/home/wesley/multi_drone_control/results.
+- R1473 (fix) PASS: detach 2.71 / reweld 2.52 deg, 98.5 s (R0752 2.80 / 2.74, 106.3). R1474 (port + fix): reweld 5.62 deg
+  (G1 bar 5), weld 0.29 s after a hand-off 0.12 m lower (the marker fix): port not mergeable as is; 1 run.
+- Evening: partner-handoff-fix MERGED into week4 (6049543; rig-prep == week4); papers approved (thesis 1659d7d);
+  Wesley to push week4 -> origin main. Q3 (port's lower hand-off) and Q4 (moving R9) re-asked with context.
+- Wesley 10 Oct evening (decisions.md, CLAUDE.md lock line): Tejen's controller does EVERY QUAD4 attach on the rig,
+  down to contact (the magnet only catches on the plate); OUR motion-capture check alone confirms it; then we take
+  QUAD4 over and fold in. R8a/R8b/R9 dropped from the rig sheets (Wed: W4, W5, R8a0 + a props-off attach check at
+  09:00 with weld_radius 0.01; Thu: R10a + carry follow-ups). Next work: the combined M1 stack on these roles (his
+  descent to contact, our check, mux + fold-in on object_attached, also on a moving ring), then twin.
+- rig_to_run fixed for w4/w5 (a09244b). Figures F_rig_circle_detach, F_twin_rig_parity, F_disarm_lanes in the thesis
+  (596f90a). Rig finding: carriers 9-16 cm above their start at LANDED on 7-8 Oct (stall test; thr ~0.24): ask Wesley.
 - Thursday: sheet draft docs/rig_2026-10-15_commands.md; card docs/experiments/2026-10-10_twin_r9.md with configs
   twin_r9_held / twin_r9_moving (not flown yet). Tilt not built (waits for a later lab day).
+
+## Sat 10 Oct, late
+- Wesley: not pushing week4 to main for now (week4 = rig-prep = 44da020, 128 ahead of origin/main).
+- Desk dry run of Wednesday's 09:00 props-off attach check against fake_mocap (new `--tip-plate/--tip-dz`):
+  radius 0.01 / contact height / plate offset read back; 2 cm above: no ATTACH; on the plate: ATTACH 0.17 s; stays
+  attached. Planner warning flood on the ground throttled (2 s). Sheet: fallback to /magnet/attachment_state for d,
+  the rehearsal commands. Mocap noise of still bodies (8 Oct r305): 0.01-0.02 m/s max, not a risk for the 0.05 gate.
+  Desk script lesson: a background `ros2 launch` in a script ignores SIGINT; use `set -m` and signal the group.
+- Wesley: the 9-16 cm drop at LANDED is fine (decisions.md); week4 fast-forwarded to d9490b3 (his OK). The week4fix
+  worktree was re-synced by Wesley (reset --hard, clean at d9490b3).
+- Combined M1 on the new roles: survey done (no HANDOFF phase: the hand-back is /join_planner/handoff_ready raised in
+  ATTACH_READY; the ring magnet ON comes only from our hand-off reaction; no tip-plate contact in either twin).
+  Wesley: rig aims the face 1 cm below the plate; twin aims at the plate and holds; old partner world first
+  (exploratory), rig twin for the claim (decisions.md). Card docs/experiments/2026-10-10_combined_m1_contact.md
+  (switch partner_contact / his contact_attach, both default off). Wesley's three goals (magnet ON through his
+  rejoin; contact + small lift proof by HIS controller; bumpless hand-over) -> card rev 2 after critic round 1
+  (GO WITH CHANGES: our tracker would fly the welded QUAD4 to the release step-out point; checked true). Critic
+  round 2 running (told: rig twin only, Wesley's later call; his join mode; card to be revised after round 2). tip_calibration prints body-to-tip (the taut length for the rig proof; Wednesday item 4). Build on a branch from
+  tejen-sync-check after the critic. Scoring script kept at $CLAUDE_JOB_DIR/tmp/m1_stages.py (to tools/ with the configs).
 
 ## Open items / next steps (plan: /home/wesley/.claude/plans/whimsical-kindling-minsky.md)
 - Reviewer pass on the final newcomer tables Monday before the freeze (graded WEAK on 9 Oct; re-flies done since).
