@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <iomanip>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 
@@ -748,11 +750,50 @@ ReplanResult RecedingHorizonPlanner::replan(
 
     auto checkAgainstSnapshot = [&](const WorldSnapshot& latest,
                                     bool retry) -> bool {
+        // Results describe this snapshot only; an exception in the final check
+        // must not expose the previous snapshot's SAFE candidate/prefix fields.
+        result.prefix_safety.reset();
+        result.candidate_safety.reset();
+        result.candidate_backup_safety.reset();
+        result.candidate_terminal_hold_safety.reset();
+        result.recheck_error.clear();
+        double check_from_s;
+        try {
+            // Sample AFTER the snapshot: a rolling peer commitment may have
+            // started since candidate_finish_time_s (including during snapshot).
+            check_from_s = trajectoryNow();
+        } catch (const std::exception& exc) {
+            result.recheck_error = exc.what();
+            result.status = "TRAJECTORY_TIME_INVALID";
+            return false;
+        }
+        if (had_incumbent && check_from_s >= splice_time - 1e-12) {
+            result.candidate_late = true;
+            result.status = "LATE_CANDIDATE_REJECTED_AFTER_RECHECK";
+            return false;
+        }
+        const auto requireCoverage = [&](const char* stage, double from_s, double until_s) {
+            if (until_s <= from_s + 1e-12) return;
+            for (const auto& obstacle : latest.cooperative_obstacles) {
+                const auto& trajectory = obstacle.trajectory;
+                if (from_s < trajectory.startTime() - kTrajectoryTimeToleranceS ||
+                    (until_s > trajectory.endTime() + kTrajectoryTimeToleranceS &&
+                     !trajectory.endsInStoppedHold())) {
+                    std::ostringstream error;
+                    error << std::setprecision(17) << stage << " coverage unavailable: obstacle="
+                          << obstacle.name << " requested=[" << from_s << ',' << until_s
+                          << "] available=[" << trajectory.startTime() << ','
+                          << trajectory.endTime() << "] stopped_hold=" << trajectory.endsInStoppedHold();
+                    throw std::invalid_argument(error.str());
+                }
+            }
+        };
         try {
             if (had_incumbent) {
                 const auto prefix_started = Clock::now();
+                requireCoverage("prefix", check_from_s, splice_time);
                 result.prefix_safety = safety_checker_.checkCommitted(
-                    committed_, result.candidate_finish_time_s,
+                    committed_, check_from_s,
                     splice_time, latest);
                 result.safety_check_s +=
                     std::chrono::duration<double>(Clock::now() - prefix_started).count();
@@ -773,6 +814,7 @@ ReplanResult RecedingHorizonPlanner::replan(
             }
 
             const auto candidate_started = Clock::now();
+            requireCoverage("candidate", splice_time, candidate.valid_until);
             result.candidate_safety = safety_checker_.checkPiece(
                 candidate, splice_time, candidate.valid_until, latest);
             result.safety_check_s +=
@@ -789,6 +831,8 @@ ReplanResult RecedingHorizonPlanner::replan(
                     return false;
                 }
                 const auto backup_started = Clock::now();
+                requireCoverage("backup", rendezvous_backup_piece->valid_from,
+                                rendezvous_backup_piece->valid_until);
                 result.candidate_backup_safety = safety_checker_.checkPiece(
                     *rendezvous_backup_piece, rendezvous_backup_piece->valid_from,
                     rendezvous_backup_piece->valid_until, latest);
@@ -814,6 +858,8 @@ ReplanResult RecedingHorizonPlanner::replan(
                         return false;
                     }
                     const auto terminal_started = Clock::now();
+                    requireCoverage("backup_terminal_hold", rendezvous_backup_piece->valid_until,
+                                    rendezvous_backup_piece->valid_until + config_.terminal_hold_guard_s);
                     result.candidate_terminal_hold_safety = safety_checker_.checkCommitted(
                         candidate_with_backup, rendezvous_backup_piece->valid_until,
                         rendezvous_backup_piece->valid_until + config_.terminal_hold_guard_s, latest);
@@ -837,6 +883,8 @@ ReplanResult RecedingHorizonPlanner::replan(
                     return false;
                 }
                 const auto terminal_started = Clock::now();
+                requireCoverage("terminal_hold", candidate.valid_until,
+                                candidate.valid_until + config_.terminal_hold_guard_s);
                 result.candidate_terminal_hold_safety = safety_checker_.checkCommitted(
                     candidate_with_hold, candidate.valid_until,
                     candidate.valid_until + config_.terminal_hold_guard_s, latest);

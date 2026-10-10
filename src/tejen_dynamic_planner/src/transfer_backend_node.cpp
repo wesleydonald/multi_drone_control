@@ -700,6 +700,10 @@ public:
             "cooperative_vehicle_ids", std::vector<std::string>{});
         cooperative_state_timeout_s_ = declare_parameter<double>(
             "cooperative_state_timeout_s", 0.30);
+        cooperative_shared_start_skew_s_ = declare_parameter<double>(
+            "cooperative_shared_start_skew_s", 0.0);
+        cooperative_shared_start_skew_max_speed_mps_ = declare_parameter<double>(
+            "cooperative_shared_start_skew_max_speed_mps", 0.0);
         cooperative_prediction_horizon_s_ = declare_parameter<double>(
             "cooperative_prediction_horizon_s", 20.0);
         cooperative_physical_half_extents_ = Vec3(
@@ -1012,6 +1016,11 @@ private:
             (payload_half_extents_.array() <= 0.0).any() ||
             !payload_center_from_magnet_center_.allFinite() ||
             !std::isfinite(cooperative_state_timeout_s_) || !(cooperative_state_timeout_s_ > 0.0) ||
+            !std::isfinite(cooperative_shared_start_skew_s_) ||
+            cooperative_shared_start_skew_s_ < 0.0 || cooperative_shared_start_skew_s_ > 0.05 ||
+            !std::isfinite(cooperative_shared_start_skew_max_speed_mps_) ||
+            cooperative_shared_start_skew_max_speed_mps_ < 0.0 ||
+            cooperative_shared_start_skew_max_speed_mps_ > 0.05 ||
             !std::isfinite(terminal_hold_guard_s_) || !(terminal_hold_guard_s_ >= 0.0) ||
             !std::isfinite(terminal_hold_guard_interval_s_) || !(terminal_hold_guard_interval_s_ > 0.0) ||
             !std::isfinite(emergency_panic_horizon_s_) || !(emergency_panic_horizon_s_ > 0.0) ||
@@ -1693,12 +1702,25 @@ private:
             const double state_age = now_s - state.receive_ros_s;
             if (!std::isfinite(state_age) || state_age < -0.02 ||
                 state_age > cooperative_state_timeout_s_) continue;
+            double validation_time_s = state.receive_ros_s;
+            const double start_skew_s = trajectory.startTime() - validation_time_s;
+            if (start_skew_s > dynamic_planner::kTrajectoryTimeToleranceS) {
+                // ROS callbacks can deliver a new peer future just before the next
+                // peer state. Only the IRL opt-in accepts this short, slow-peer
+                // overlap; state age and the spatial tracking tube stay unchanged.
+                if (!(cooperative_shared_start_skew_s_ > 0.0) ||
+                    start_skew_s > cooperative_shared_start_skew_s_ ||
+                    state.velocity.norm() > cooperative_shared_start_skew_max_speed_mps_) continue;
+                validation_time_s = trajectory.startTime();
+            }
             State advertised;
             try {
-                advertised = trajectory.evaluate(state.receive_ros_s);
+                advertised = trajectory.evaluate(validation_time_s);
             } catch (const std::exception&) {
                 continue;
             }
+            if (validation_time_s != state.receive_ros_s &&
+                advertised.velocity.norm() > cooperative_shared_start_skew_max_speed_mps_) continue;
             const Vec3 error = (state.position - advertised.position).cwiseAbs();
             double ratio = 0.0;
             bool inside = true;
@@ -3919,6 +3941,8 @@ private:
     Vec3 obstacle_centre_ = Vec3(0.50, 0.06, 0.68);
     Vec3 obstacle_half_extents_ = Vec3(0.12, 0.25, 0.10);
     bool cooperative_scene_enabled_ = false;
+    double cooperative_shared_start_skew_s_ = 0.0;
+    double cooperative_shared_start_skew_max_speed_mps_ = 0.0;
     double cooperative_state_timeout_s_ = 0.30;
     double cooperative_prediction_horizon_s_ = 20.0;
     Vec3 cooperative_physical_half_extents_ = Vec3(0.105, 0.105, 0.060);

@@ -30,6 +30,8 @@ class ScriptedWorld final : public WorldSnapshotSource {
 public:
     std::vector<WorldSnapshot> snapshots;
     int forced_commit_mismatches = 0;
+    std::function<void(std::size_t)> after_snapshot;
+    std::function<void()> before_commit;
 
     WorldSnapshot snapshot(double captured_at_s) const override {
         if (snapshots.empty()) {
@@ -39,6 +41,7 @@ public:
         ++snapshot_calls_;
         WorldSnapshot value = snapshots[index];
         value.captured_at_s = captured_at_s;
+        if (after_snapshot) after_snapshot(index);
         return value;
     }
 
@@ -58,6 +61,7 @@ public:
         if (snapshots[index].version != expected_version) {
             return false;
         }
+        if (before_commit) before_commit();
         action();
         return true;
     }
@@ -125,8 +129,81 @@ WorldSnapshot attachmentSnapshot(std::uint64_t version, bool attached) {
 
 }  // namespace
 
-int main() {
+// Deterministic ROS-clock progression: rolling starts move during snapshot
+// acquisition, not by sleeping or depending on machine performance.
+void rollingRecheck(const std::string& scenario) {
+    State start;
+    start.position = Vec3(0, 0, 1.5);
+    auto config = makeConfig();
+    config.fixed_splice_lookahead_s = .10;
+    RecedingHorizonPlanner planner(Vec3(3,0,1.5), config, makeLocalConfig());
+    planner.initializeCommittedTrajectory(makeStationaryHoverTrajectory(start.position, 99.0, .1));
+    const auto before = planner.committedTrajectory();
+    auto rolling = [](std::uint64_t version, double t0) {
+        auto snapshot = emptySnapshot(version);
+        CooperativeObstacleTrajectory peer;
+        peer.name = "rolling_peer";
+        peer.trajectory = makeStationaryHoverTrajectory(Vec3(0, 10, 1.5), t0, 20.0);
+        snapshot.cooperative_obstacles.push_back(peer);
+        return snapshot;
+    };
+    double clock_s = 100.0;
+    ScriptedWorld world;
+    world.snapshots = {rolling(0,99.0), rolling(1, scenario == "first" ? 100.025 : 99.0),
+                       rolling(2, scenario == "gap" ? 100.080 : 100.050)};
+    world.after_snapshot = [&](std::size_t i) { clock_s = 100.0 + (i == 0 ? .020 : i == 1 ? .030 : .060); };
+    world.forced_commit_mismatches = scenario == "first" ? 0 : 1;
+    if (scenario == "late") {
+        world.after_snapshot = [&](std::size_t i) { clock_s = 100.0 + (i == 0 ? .020 : i == 1 ? .030 : .110); };
+    }
+    if (scenario == "commit_late") world.before_commit = [&]() { clock_s = 100.110; };
+    if (scenario == "collision") {
+        world.snapshots[2].physical_static_obstacles.push_back(
+            {"prefix_blocker", boxVertices(start.position, Vec3::Constant(.2))});
+    }
+    if (scenario == "race") world.forced_commit_mismatches = 2;
+    const auto result = planner.replan(100.0, start, world, [&]() { return clock_s; });
+    if (scenario == "first" || scenario == "final") {
+        requireTrue(result.accepted, "rolling " + scenario + " recheck rejected: " + result.status + ": " + result.recheck_error);
+        requireTrue(result.prefix_safety.has_value(), "missing remaining-prefix certificate");
+        requireNear(result.prefix_safety->checked_from_s, scenario == "first" ? 100.030 : 100.060, 1e-9,
+                    "prefix did not start at post-snapshot clock");
+    } else {
+        requireTrue(!result.accepted, "invalid candidate gained authority: " + scenario);
+        requireTrue(planner.committedTrajectory().pieceCount() == before.pieceCount(), "rejection mutated incumbent pieces");
+        requireNear(planner.committedTrajectory().endTime(), before.endTime(), 1e-9, "rejection mutated incumbent time");
+        requireMatrixNear(planner.committedTrajectory().endState().position, before.endState().position, 1e-12,
+                          "rejection mutated incumbent endpoint");
+        if (scenario == "gap") {
+            requireTrue(result.recheck_error.find("prefix") != std::string::npos &&
+                        result.recheck_error.find("rolling_peer") != std::string::npos &&
+                        result.recheck_error.find("requested") != std::string::npos &&
+                        result.recheck_error.find("available") != std::string::npos,
+                        "coverage gap lacks stage/obstacle/interval diagnostic: " + result.recheck_error);
+            requireTrue(!result.prefix_safety && !result.candidate_safety &&
+                        !result.candidate_backup_safety && !result.candidate_terminal_hold_safety,
+                        "failed final recheck retained old SAFE results");
+        } else if (scenario == "late" || scenario == "commit_late") {
+            requireTrue(result.candidate_late && result.status == "LATE_CANDIDATE_REJECTED_AFTER_RECHECK",
+                        "missed splice not classified as late: " + result.status);
+        } else if (scenario == "collision") {
+            requireTrue(result.incumbent_prefix_unsafe, "remaining-prefix collision not detected");
+        } else if (scenario == "race") {
+            requireTrue(result.status == "WORLD_CHANGED_DURING_FINAL_RECHECK", "second world race accepted");
+        }
+    }
+}
+
+int main(int argc, char** argv) {
     try {
+        if (argc == 2) {
+            rollingRecheck(argv[1]);
+            std::cout << "rolling " << argv[1] << ": PASS\n";
+            return 0;
+        }
+        for (const auto& scenario : {"first", "final", "gap", "late", "commit_late", "collision", "race"}) {
+            rollingRecheck(scenario);
+        }
         State start;
         start.position = Vec3(0.0, 0.0, 1.5);
         const Vec3 goal(3.0, 0.0, 1.5);
@@ -217,7 +294,8 @@ int main() {
                 emptySnapshot(0),
                 blockedSnapshot(1, Vec3(0.02, 0.0, 1.5), Vec3(0.08, 0.20, 0.20))
             };
-            const auto result = planner.replan(now, state, world);
+            // This is a collision test, not a machine-speed/deadline test.
+            const auto result = planner.replan(now, state, world, [now]() { return now; });
             requireTrue(!result.accepted, "unsafe incumbent prefix was allowed to commit");
             requireTrue(result.incumbent_prefix_unsafe,
                         "unsafe-prefix flag was not set");
@@ -255,7 +333,7 @@ int main() {
                 blockedSnapshot(1, local_blocker_center, local_blocker_half),
                 blockedSnapshot(1, local_blocker_center, local_blocker_half)
             };
-            const auto result = planner.replan(now, state, world);
+            const auto result = planner.replan(now, state, world, [now]() { return now; });
             requireTrue(!result.accepted,
                         "blocked local-plan failure unexpectedly committed");
             requireTrue(result.incumbent_prefix_unsafe,

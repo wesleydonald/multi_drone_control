@@ -10,6 +10,38 @@
 namespace dynamic_planner {
 namespace {
 
+bool sameSuspendedGeometry(const SuspendedGeometry& a, const SuspendedGeometry& b) {
+    return a.enabled == b.enabled && a.cable_length_m == b.cable_length_m &&
+        a.cable_radius_m == b.cable_radius_m && a.max_swing_angle_rad == b.max_swing_angle_rad &&
+        a.magnet_half_extents == b.magnet_half_extents &&
+        a.magnet_center_below_cable_end_m == b.magnet_center_below_cable_end_m &&
+        a.payload_attached == b.payload_attached && a.payload_half_extents == b.payload_half_extents &&
+        a.payload_center_from_magnet_center == b.payload_center_from_magnet_center;
+}
+
+// Exact equality only: even a tiny real geometry or trajectory-time change must
+// invalidate a certificate. Receipt/freshness bookkeeping remains in the ROS adapter.
+bool sameCooperativeObstacle(const CooperativeObstacleTrajectory& a,
+                             const CooperativeObstacleTrajectory& b) {
+    const auto& at = a.attached_tether_geometry;
+    const auto& bt = b.attached_tether_geometry;
+    if (a.name != b.name || a.physical_half_extents != b.physical_half_extents ||
+        a.tracking_error_half_extents != b.tracking_error_half_extents ||
+        !sameSuspendedGeometry(a.suspended_geometry, b.suspended_geometry) ||
+        at.enabled != bt.enabled || at.anchor_from_body != bt.anchor_from_body ||
+        at.plate_from_body != bt.plate_from_body || at.radius_m != bt.radius_m ||
+        a.trajectory.pieceCount() != b.trajectory.pieceCount()) return false;
+    for (std::size_t i = 0; i < a.trajectory.pieceCount(); ++i) {
+        const auto& ap = a.trajectory.pieces()[i];
+        const auto& bp = b.trajectory.pieces()[i];
+        if (ap.valid_from != bp.valid_from || ap.valid_until != bp.valid_until ||
+            ap.knots != bp.knots || ap.control_points.rows() != bp.control_points.rows() ||
+            ap.control_points.cols() != bp.control_points.cols() ||
+            !(ap.control_points.array() == bp.control_points.array()).all()) return false;
+    }
+    return true;
+}
+
 void validateStaticObstacle(const StaticConvexObstacle& obstacle) {
     if (obstacle.name.empty() || obstacle.vertices.rows() < 1 ||
         obstacle.vertices.cols() != 3 || !obstacle.vertices.allFinite()) {
@@ -344,6 +376,7 @@ void VersionedWorld::upsertCooperativeTrajectory(CooperativeObstacleTrajectory o
     if (it == cooperative_obstacles_.end()) {
         cooperative_obstacles_.push_back(std::move(obstacle));
     } else {
+        if (sameCooperativeObstacle(*it, obstacle)) return;
         *it = std::move(obstacle);
     }
     ++version_;
@@ -375,6 +408,7 @@ void VersionedWorld::upsertCooperativeTrajectories(
         }
     }
 
+    bool changed = false;
     for (auto& obstacle : obstacles) {
         auto it = std::find_if(
             cooperative_obstacles_.begin(), cooperative_obstacles_.end(),
@@ -384,10 +418,12 @@ void VersionedWorld::upsertCooperativeTrajectories(
         if (it == cooperative_obstacles_.end()) {
             cooperative_obstacles_.push_back(std::move(obstacle));
         } else {
+            if (sameCooperativeObstacle(*it, obstacle)) continue;
             *it = std::move(obstacle);
         }
+        changed = true;
     }
-    ++version_;
+    if (changed) ++version_;
 }
 
 bool VersionedWorld::removeCooperativeTrajectory(const std::string& name) {
