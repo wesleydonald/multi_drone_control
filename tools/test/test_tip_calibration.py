@@ -36,3 +36,10 @@ def test_repeats_and_gaps_are_reported():
     s = [(0.01 * i, (0.0, 0.225, 0.03), ring, q) for i in range(10)] + [(0.5, (0.0, 0.225, 0.031), ring, q)]
     out = summarise(s, standoff=0.0)
     assert out['repeats'] == 9 and abs(out['longest_gap_s'] - 0.41) < 1e-9
+
+
+def test_body_to_tip_distance():
+    from tip_calibration import body_to_tip
+    assert body_to_tip([]) is None
+    out = body_to_tip([((0.0, 0.0, 1.0), (0.0, 0.0, 0.42)), ((0.0, 0.0, 1.0), (0.0, 0.0, 0.40))])
+    assert out['n'] == 2 and abs(out['mean'] - 0.59) < 1e-9 and abs(out['max'] - 0.60) < 1e-9

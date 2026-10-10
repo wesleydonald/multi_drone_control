@@ -41,7 +41,8 @@ python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_plan
    `configs/rig/attach_m1.yaml` (Wesley signs it). `attach_tip_dz` stays 0: our approach is not flown on the rig.
 4. **Tip record:** the same command with QUAD4 still in the air by hand for 10 s, then again with body 24
    covered for 3 s: read the repeats / smallest step / longest gap lines (the loop calls a tip bit-identical for
-   0.2 s frozen; a coarse forwarder would show repeats here).
+   0.2 s frozen; a coarse forwarder would show repeats here). Note the `body 14 to tip 24` line from the in-air
+   record (tether hanging): the taut length, the reference of the combined M1 lift proof.
 5. Kill path (RViz DISARM, T3 `fleet disarm`, Ctrl-C), radio-loss failsafe, QUAD1/QUAD4 Betaflight status.
 6. r400: props off, the W4 line named `r400`: `fleet arm` -> ARM complete -> `fleet disarm` -> `fleet arm` again
    -> `fleet disarm`, Ctrl-C.

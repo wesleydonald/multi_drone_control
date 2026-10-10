@@ -97,7 +97,17 @@ Updated: Sat 10 Oct 2026, late evening.
   attached. Planner warning flood on the ground throttled (2 s). Sheet: fallback to /magnet/attachment_state for d,
   the rehearsal commands. Mocap noise of still bodies (8 Oct r305): 0.01-0.02 m/s max, not a risk for the 0.05 gate.
   Desk script lesson: a background `ros2 launch` in a script ignores SIGINT; use `set -m` and signal the group.
-- Next: the combined M1 card on the new roles (survey of Tejen's ported M1 path running), critic, then build.
+- Wesley: the 9-16 cm drop at LANDED is fine (decisions.md); week4 fast-forwarded to d9490b3 (his OK). The week4fix
+  worktree was re-synced by Wesley (reset --hard, clean at d9490b3).
+- Combined M1 on the new roles: survey done (no HANDOFF phase: the hand-back is /join_planner/handoff_ready raised in
+  ATTACH_READY; the ring magnet ON comes only from our hand-off reaction; no tip-plate contact in either twin).
+  Wesley: rig aims the face 1 cm below the plate; twin aims at the plate and holds; old partner world first
+  (exploratory), rig twin for the claim (decisions.md). Card docs/experiments/2026-10-10_combined_m1_contact.md
+  (switch partner_contact / his contact_attach, both default off). Wesley's three goals (magnet ON through his
+  rejoin; contact + small lift proof by HIS controller; bumpless hand-over) -> card rev 2 after critic round 1
+  (GO WITH CHANGES: our tracker would fly the welded QUAD4 to the release step-out point; checked true). Critic
+  round 2 running. tip_calibration prints body-to-tip (the taut length for the rig proof; Wednesday item 4). Build on a branch from
+  tejen-sync-check after the critic. Scoring script kept at $CLAUDE_JOB_DIR/tmp/m1_stages.py (to tools/ with the configs).
 
 ## Open items / next steps (plan: /home/wesley/.claude/plans/whimsical-kindling-minsky.md)
 - Reviewer pass on the final newcomer tables Monday before the freeze (graded WEAK on 9 Oct; re-flies done since).

@@ -13,7 +13,9 @@ Props off, QUAD4's tether hanging, its magnet face held ON plate 9. Reads /magne
 with h the marker's height above the ring-origin plane and standoff at most the measured pull-in gap minus
 1.5 cm (the loop's deadband and overshoot). It also reports the record the card asks for: bit-identical repeats,
 the precision seen, and the longest gap between tip frames (cover body 24 during a second run to see what
-arrives when it is occluded).
+arrives when it is occluded). With QUAD4's body (14, /drone_3) streaming it also prints the body-to-tip distance:
+with the tether hanging in the air, its taut length, the reference of the combined M1 lift proof
+(card 2026-10-10_combined_m1_contact).
 """
 import argparse
 import sys
@@ -51,6 +53,14 @@ def summarise(samples, standoff):
             'attach_tip_dz': h + standoff - SETPOINT_TODAY, 'weld_point_z': h + standoff}
 
 
+def body_to_tip(pairs):
+    """pairs: [(body_world, tip_world)]. Distance stats (m), or None without pairs."""
+    if not pairs:
+        return None
+    d = np.array([np.linalg.norm(np.asarray(t, float) - np.asarray(b, float)) for b, t in pairs])
+    return {'n': len(d), 'mean': float(d.mean()), 'sd': float(d.std()), 'min': float(d.min()), 'max': float(d.max())}
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--seconds', type=float, default=5.0)
@@ -63,18 +73,27 @@ def main(argv):
     rclpy.init()
     node = rclpy.create_node('tip_calibration')
     ring = {}
+    body = {}
     samples = []
+    pairs = []
 
     def on_ring(m):
         p, q = m.pose.position, m.pose.orientation
         ring['pos'], ring['quat'] = (p.x, p.y, p.z), (q.w, q.x, q.y, q.z)
 
+    def on_body(m):
+        p = m.pose.position
+        body['pos'] = (p.x, p.y, p.z)
+
     def on_tip(m):
+        p = m.pose.position
+        if 'pos' in body:
+            pairs.append((body['pos'], (p.x, p.y, p.z)))
         if 'pos' in ring:
-            p = m.pose.position
             samples.append((node.get_clock().now().nanoseconds * 1e-9, (p.x, p.y, p.z), ring['pos'], ring['quat']))
 
     node.create_subscription(MotionCaptureState, '/payload/motion_capture_state', on_ring, 10)
+    node.create_subscription(MotionCaptureState, '/drone_3/motion_capture_state', on_body, 10)
     node.create_subscription(PoseStamped, '/magnet_tip_pose', on_tip, 50)
     t_end = node.get_clock().now().nanoseconds * 1e-9 + a.seconds
     while rclpy.ok() and node.get_clock().now().nanoseconds * 1e-9 < t_end:
@@ -93,6 +112,10 @@ def main(argv):
           f"longest gap {s['longest_gap_s']:.3f} s")
     print(f"configs/rig/attach_m1.yaml:  attach_tip_dz: {s['attach_tip_dz']:+.3f}   weld_point_z: {s['weld_point_z']:.3f}"
           f"   (standoff {a.standoff:.3f} m)")
+    b = body_to_tip(pairs)
+    print('body 14 to tip 24: no body frames (/drone_3/motion_capture_state)' if b is None else
+          f"body 14 to tip 24 over {b['n']} frames: mean {b['mean']:.4f} m  sd {b['sd'] * 1e3:.1f} mm  "
+          f"range {b['min']:.4f}-{b['max']:.4f} (tether hanging in the air: the taut length)")
     return 0
 
 
