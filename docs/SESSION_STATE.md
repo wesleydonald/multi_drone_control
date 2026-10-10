@@ -339,3 +339,11 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   c6f2032); R1564 full M1 orbit clean (7th). Tilt wave A refused locally (two installs sourced in one script: m1-rig's
   bringup first on the path, tilt args read undeclared) -> re-queued in a fresh shell (lab_tc_a2.sh, waits on
   lab_claim5.sh 1039736). c6f2032 claim re-fly RUNNING (lab_claim5.txt).
+- 11:00 STOP-AND-REPORT (rule: a fix not shown in two runs): the take-back ON THE CIRCLE has failed three ways:
+  step out at plate height hooks the rim (R1543, R1549); rise to rim height then out passes 0.24 m over a carrier
+  (R1554, ae57bbb); rise over the carriers while held world-fixed lets the orbiting formation sweep carrier 2 into
+  QUAD4's rod -> carrier 66.7 deg -> FLEET EMERGENCY STOP (R1565, c6f2032). Hover take-backs are fine (R1553, R1562...).
+  Asked Wesley (push + chat): proposal (a) a take-back while the ring flies a trajectory first holds the trajectory
+  (as the attach hold does), then QUAD4 rises to carrier z + rod + 0.15 (~2.3 m), steps out, lands; (b) co-move with
+  the ring during the rise; (c) no circle take-back on the rig until fixed (combined M1 on the rig = hover only).
+  No third fix built. The c6f2032 batch keeps running (other arms), then tilt wave A.
