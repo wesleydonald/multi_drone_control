@@ -369,6 +369,7 @@ def _fold_in_node():
 
 def test_the_fold_in_seeds_quad4_at_its_ocp_share_and_drops_any_departed_entry():
     f = _fold_in_node()
+    f._contact_fold_seed = 'ocp'
     f._departed_hold[3] = np.array([0.0, 0.225, 1.61])        # a stray departed entry must not outlive the weld
     f._land_alone.add(3)
     f._magnet_attached_cb(Bool(data=True))
@@ -381,8 +382,7 @@ def test_the_fold_in_seeds_quad4_at_its_ocp_share_and_drops_any_departed_entry()
     g._newcomer_lifecycle = g._newcomer_fault_land = False
     g._magnet_attached_cb(Bool(data=True))
     assert g.blends[-1][-1] == pytest.approx(0.1)                                 # off: today's seed
-    h = _fold_in_node()
-    h._contact_fold_seed = 'start'                                                 # E1b: 'ocp' tilted the ring 8 deg
+    h = _fold_in_node()                                                            # the default since R1479-R1490
     h._magnet_attached_cb(Bool(data=True))
     assert h.blends[-1][-1] == pytest.approx(0.1)
 
