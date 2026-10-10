@@ -81,7 +81,7 @@ events:
 - t: 1.0
   do: LAUNCH
   arg: tejen_mission partner_mission.launch.py geometry:=rig_twin plate:=3 carrier_azimuths_deg:=[270.0,30.0,150.0]
-    pickup_lift_height:=2.3 minimum_search_z_m:=2.7 drop_approach_clearance:=0.60
+    pickup_lift_height:=2.3 minimum_search_z_m:=2.7 drop_approach_clearance:=1.35
 - t: 3.0
   do: ARM
 - t: 6.0
