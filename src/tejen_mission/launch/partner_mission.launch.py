@@ -72,6 +72,7 @@ GEOMETRY = {
 CONTACT_TOPICS = ['/magnet/contact', '/magnet/object_attached', '/magnet/attach_proof',
                   '/join_planner/give_up', f'/drone_{DRONE}/take_back', f'/drone_{DRONE}/mux_state']
 PICKUP_STATE = '/pickup/detachable_joint_state'
+RELEASE_GATE = '/partner/release'    # our planner's release of a start-welded QUAD4, in the air after its step-out
 
 
 def _flag(context, name):
@@ -91,6 +92,13 @@ def _nodes(context):
     if contact and G['contact_attach_z_m'] is None:
         raise RuntimeError(f'partner_mission: contact_attach:=true has no contact target for geometry:={geometry}')
     confirm_release = _flag(context, 'confirm_pickup_release')
+    # his MPC arms where QUAD4 is (it re-latches its kT estimator's start height every disarmed tick) and learns kT
+    # only 0.20 m above it: released in the air (our welded start, gate /partner/release) his mission never climbs
+    # that far before the pickup, kT stays at its nominal 22 and he flies ~11 cm under his reference (R1503)
+    airborne = LaunchConfiguration('airborne_start').perform(context).strip().lower()
+    airborne = (LaunchConfiguration('start_gate_topic').perform(context).strip() == RELEASE_GATE
+                if airborne in ('', 'auto') else airborne in ('1', 'true', 'yes', 'on'))
+    learn_in_air = airborne and G['thrust_ratio_feedback']
     plate = int(LaunchConfiguration('plate').perform(context) or G['plate'])
     azimuths = [float(a) for a in yaml.safe_load(
         LaunchConfiguration('carrier_azimuths_deg').perform(context) or G['carrier_azimuths_deg'])]
@@ -295,6 +303,7 @@ def _nodes(context):
             'object_mass_kg': ParameterValue(L('object_mass_kg'), value_type=float),
             'object_vehicle_mass_kg': G['vehicle_mass'],
             'object_attached_topic': f'/{NS}/object_attached',
+            **({'thrust_ratio_ukf_min_height_above_start': 0.0} if learn_in_air else {}),
         }],
         remappings=[('motion_capture_state', state),
                     ('ELRSCommand', f'/drone_{DRONE}/ELRSCommand_tejen')])
@@ -376,6 +385,9 @@ def _arguments():
         DeclareLaunchArgument('drop_approach_clearance', default_value='0.60'),
         DeclareLaunchArgument('minimum_search_z_m', default_value='1.8'),
         DeclareLaunchArgument('start_gate_topic', default_value='/payload/trajectory_state'),
+        # his MPC learns kT from where it arms (no climb first); 'auto' = true when the gate is /partner/release.
+        # Applied only where his kT feedback flies (rig_twin)
+        DeclareLaunchArgument('airborne_start', default_value='auto', choices=['auto', 'true', 'false']),
         DeclareLaunchArgument('record', default_value='false'),
         DeclareLaunchArgument('bag_path', default_value=os.path.join(
             os.environ.get('MDC_RUN_DIR', '/tmp'), 'partner_bag')),

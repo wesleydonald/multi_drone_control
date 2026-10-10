@@ -142,6 +142,15 @@ standalone 19/20: `test_suspended_system` exceeds its 240 s ctest timeout on thi
 | `test/test_m1_contact_attach.py`, `test/test_m1_contact_targets.py` (ours, new), `test/test_partner_mission_geometry.py` (ours) | his phase transitions under `contact_attach` and with it off; the full-pose target equal to our manager's weld point on a tilted ring; the release gate; the launch switches; the geometry test evaluates parameters as the launch passes them | tests first (card section 8) |
 | `launch/partner_mission.launch.py` (ours) | `contact_lead`, `contact_dz`, `contact_dx` launch args (default 0) for his hold's lead, target height and x offset under `contact_attach` | the card's neighbour runs (`_lead030`, `_high`, `_low`, `_offset`) |
 
+## 10 Oct 2026 (night): the full M1 on the rig twin (branch m1-full; Wesley 10 Oct)
+
+His code is unchanged; the launch below is ours.
+
+| file | change | why |
+|---|---|---|
+| `launch/partner_mission.launch.py` (ours) | `airborne_start` (`auto` default: true when `start_gate_topic` is `/partner/release`; `true` / `false` override): where his kT feedback flies (rig_twin), his MPC gets `thrust_ratio_ukf_min_height_above_start` 0.0 (his default 0.20). The subtest (gate `/payload/trajectory_state`) and the legacy geometry pass nothing new | his MPC re-latches its kT estimator's start height on every disarmed tick, so it arms at QUAD4's step-out point (1.85 m in R1503) and learns kT only 0.20 m above it; his mission rose at most 0.14 m before the pickup descent: the estimator never started (`waiting_for_height` for the whole flight), kT stayed at 22 (the subtest converges to ~21.1 from the mat) and his MPC, with no z integral, flew 11 cm under his reference (settle 0.847 vs 0.961, descent end 0.588 vs 0.701): the tip went to the floor at the ball |
+| `test/test_partner_mission_airborne_kt.py` (ours, new) | his `run_full_model_thrust_ratio_ukf` executed from his source on R1503's heights (default gate: never starts; 0.0: starts at his takeoff; mat start as before) and the launch switch | as above |
+
 ## 10 Oct 2026 (night): the proof lift and the pickup retry (branch m1-final; Wesley 22:20)
 
 | file | change | why |
