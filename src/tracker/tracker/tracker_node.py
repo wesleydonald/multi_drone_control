@@ -43,6 +43,7 @@ from .kt_trim import KtTrim
 from .x0_rate import X0_RATE_SOURCES, x0_body_rate
 from .delay_comp import DelayPredictor
 N_POSE = 13
+WARM_FAULT_HOLD_S = 0.5     # s a warm tracker stays not live after its last fault (warm_fault_not_live)
 
 
 # recompile the solver if acados.py/dynamics.py changed since the last build
@@ -675,6 +676,12 @@ class Controller(Node):
         self.warm_follow_applied = bool(self.declare_parameter('warm_follow_applied', False).value)
         self._in_authority = not self.warm_follow_applied
         self._applied_cmd = None
+        # card 2026-10-11_quad4_tilt_cut (rig-port critic F6; off by default): a fault while another stream flies the
+        # drone makes this tracker NOT LIVE (armed idle, so the mux never hands the drone to it) instead of latching,
+        # held WARM_FAULT_HOLD_S after the last fault; with authority a fault latches as before
+        self.warm_fault_not_live = (bool(self.declare_parameter('warm_fault_not_live', False).value)
+                                    and self.warm_follow_applied)
+        self._warm_hold_until = None
         if self.warm_follow_applied:
             self.create_subscription(
                 String, f'/drone_{self.drone_id}/mux_state', self._mux_state_cb,
@@ -684,6 +691,8 @@ class Controller(Node):
             self.create_subscription(ELRSCommand, f'/drone_{self.drone_id}/ELRSCommand_applied',
                                      self._applied_cmd_cb, 1)
 
+        self._init_tilt_cut()
+
         # ── Control timer ─────────────────────────────────────────────────
         self.timer = self.create_timer(DT, self.control_loop)
         self.get_logger().info(
@@ -692,6 +701,76 @@ class Controller(Node):
             f"throttle cap {self.throttle_max:.2f}"
             + (f", thrust offset {self.thrust_offset:.3f} + {self.thrust_offset_v_slope:.3f}/V below "
                f"{self.thrust_v_ref:.1f} V." if self.thrust_offset > 0.0 else "."))
+
+    # ── QUAD4 tilt cut (card 2026-10-11_quad4_tilt_cut; '' = off) ────────────
+    def _init_tilt_cut(self):
+        """The newcomer's tilt fault, for the mux to cut it while another stream flies it: on every fresh pose,
+        ahead of the pose-timeout and armed gates and of the envelope's latch (a disarm clears armed and
+        takeoff_requested on the same tick, and a knock latches the speed fault first: critic round 1, C1)."""
+        p = self.declare_parameter
+        self.tilt_fault_topic = str(p('tilt_fault_topic', '').value).strip()
+        self._tilt_rule = None
+        if not self.tilt_fault_topic:
+            return
+        from utility_objects.tilt_cut import TiltCutConfig, TiltCutRule
+        self._tilt_rule = TiltCutRule(TiltCutConfig(
+            cut_deg=float(p('tilt_cut_deg', 60.0).value),
+            cut_hold_s=float(p('tilt_cut_hold_s', 0.025).value),
+            glitch_rate_dps=float(p('tilt_glitch_rate_dps', 3000.0).value),
+            glitch_holdoff_s=float(p('tilt_glitch_holdoff_s', 0.5).value),
+            slow_deg=float(p('tilt_slow_deg', 0.0).value),
+            slow_s=float(p('tilt_slow_s', 0.5).value)))
+        self._tilt_prev_armed = False
+        self._tilt_glitches_said = 0
+        self._tilt_speed_said = False
+        # volatile: a relaunched mux must not be cut by an old fault (critic round 1, M5); its subscribers are up
+        # long before a flight, and the mux re-sends its own disarm
+        self._tilt_pub = self.create_publisher(
+            Bool, self.tilt_fault_topic, QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE,
+                                                    durability=DurabilityPolicy.VOLATILE))
+        self.create_subscription(MotionCaptureState, f'/drone_{self.drone_id}/motion_capture_state',
+                                 self._tilt_pose_cb, 10)
+        cfg = self._tilt_rule.config
+        self.get_logger().info(
+            f"[Drone {self.drone_id + 1}] tilt cut: {cfg.cut_deg:.0f} deg held {cfg.cut_hold_s * 1e3:.0f} ms from "
+            f"TAKEOFF to the next ARM (glitch above {cfg.glitch_rate_dps:.0f} deg/s, hold-off "
+            f"{cfg.glitch_holdoff_s:.1f} s"
+            + (f", slow {cfg.slow_deg:.0f} deg for {cfg.slow_s:.1f} s" if cfg.slow_deg > 0.0 else "")
+            + f") -> {self.tilt_fault_topic}")
+
+    def _tilt_pose_cb(self, msg: MotionCaptureState):
+        rule = self._tilt_rule
+        armed = bool(self.armed)
+        if armed and not self._tilt_prev_armed:
+            rule.arm()
+            self._tilt_glitches_said = 0
+            self._tilt_speed_said = False
+        self._tilt_prev_armed = armed
+        if self.takeoff_requested:
+            rule.takeoff()
+        o = msg.pose.orientation
+        why = rule.step(self.get_clock().now().nanoseconds * 1e-9, (o.w, o.x, o.y, o.z))
+        if rule.glitches > self._tilt_glitches_said:
+            self._tilt_glitches_said = rule.glitches
+            self.get_logger().warn(f"[Drone {self.drone_id + 1}] tilt cut: attitude change faster than "
+                                   f"{rule.config.glitch_rate_dps:.0f} deg/s between two poses (mocap glitch "
+                                   f"{rule.glitches}): not counted for {rule.config.glitch_holdoff_s:.1f} s",
+                                   throttle_duration_sec=1.0)
+        v = msg.twist.linear
+        speed = math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+        if rule.flying and speed > self.envelope.limits.max_speed and not self._tilt_speed_said:
+            # logged only (critic round 1, M2): the speed rule is not part of the cut
+            self._tilt_speed_said = True
+            self.get_logger().warn(f"[Drone {self.drone_id + 1}] tilt cut: would cut (speed) {speed:.2f} m/s > "
+                                   f"{self.envelope.limits.max_speed:.1f} (logged only)")
+        if why is None:
+            return
+        self._tilt_pub.publish(Bool(data=True))
+        self.get_logger().error(
+            f"[Drone {self.drone_id + 1}] TILT FAULT ({why}): drone tilt {rule.fault_tilt:.1f} deg > "
+            f"{rule.config.slow_deg if why == 'slow' else rule.config.cut_deg:.0f} "
+            f"({'ours' if getattr(self, '_in_authority', True) else 'another stream'} flying it, "
+            f"{'armed' if armed else 'disarmed'}) -> {self.tilt_fault_topic}")
 
     # ─────────────────────────────────────────────────────────────────────
     # Fleet step callback
@@ -932,11 +1011,19 @@ class Controller(Node):
             airborne=bool(self.armed and self.takeoff_requested),
         )
 
+        if verdict.is_fault and self._warm_unlatched():
+            self.envelope.reset()               # re-evaluated next tick: a fault that persists keeps it not live
+            self._warm_not_live(verdict.reason)
+            return True
         if verdict.is_fault:
             self.get_logger().error(
                 f"[Drone {self.drone_id + 1}] ENVELOPE FAULT: {verdict.reason} "
                 f"- disarming fleet.")
             self._do_safety_disarm(reason=verdict.reason)
+            return True
+        if self._warm_unlatched() and self._warm_hold_until is not None and \
+                self._safety_clock.now().nanoseconds * 1e-9 < self._warm_hold_until:
+            self._publish_warm_idle()
             return True
 
         if verdict.level == 'WARN':
@@ -966,6 +1053,24 @@ class Controller(Node):
             f"[Drone {self.drone_id + 1}] control phase -> "
             f"{'VELOCITY LOOP' if want else 'MPC'} (/fleet/control_phase="
             f"{msg.data!r})")
+
+    def _warm_unlatched(self):
+        """warm_fault_not_live and another stream flies the drone: a fault makes this tracker not live, not latched."""
+        return getattr(self, 'warm_fault_not_live', False) and not getattr(self, '_in_authority', True)
+
+    def _publish_warm_idle(self):
+        self.cb.cmd_publisher_.publish(ELRSCommand(armed=True, channel_0=0.0, channel_1=0.0, channel_2=-1.0,
+                                                   channel_3=0.0))
+
+    def _warm_not_live(self, why):
+        """Not live for WARM_FAULT_HOLD_S after the last fault: armed idle on our pre-mux stream (the mux's
+        live-takeover rule never hands the drone to a tracker that idles), nothing latched, no disarm."""
+        now = self._safety_clock.now().nanoseconds * 1e-9
+        if self._warm_hold_until is None or now >= self._warm_hold_until:     # a new episode: say it once
+            self.get_logger().warn(f"[Drone {self.drone_id + 1}] {why} while another stream flies it: not live "
+                                   f"(armed idle), not latched; live again {WARM_FAULT_HOLD_S:.1f} s after it clears")
+        self._warm_hold_until = now + WARM_FAULT_HOLD_S
+        self._publish_warm_idle()
 
     def _mux_state_cb(self, msg):
         ours = str(msg.data).strip().lower() == 'ours'
@@ -1544,6 +1649,9 @@ class Controller(Node):
 
         # ── Pose timeout watchdog (node clock: wall on the rig) ───────────
         elapsed = (self._safety_clock.now() - self.last_pose_update_time).nanoseconds * 1e-9
+        if self.armed and elapsed > self.pose_timeout_s and self._warm_unlatched():
+            self._warm_not_live(f'pose timeout ({elapsed:.2f}s)')
+            return
         if self.armed and elapsed > self.pose_timeout_s:
             self.get_logger().error(
                 f"[Drone {self.drone_id + 1}] Pose timeout ({elapsed:.2f}s) - disarming.")

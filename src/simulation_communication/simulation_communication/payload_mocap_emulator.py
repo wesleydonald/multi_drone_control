@@ -22,7 +22,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseArray, Pose, Twist, PoseStamped
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Float64MultiArray
 from interfaces.msg import MotionCaptureState
 from tf_transformations import quaternion_multiply, quaternion_inverse, quaternion_matrix
 
@@ -85,6 +85,12 @@ class PayloadMocapEmulator(Node):
         # lost marker set does on the rig (card 2026-10-09_newcomer_fault_scope)
         self._dropout_until = None
         self.create_subscription(Float64, f'/drone_{drone_id}/mocap_dropout', self._dropout_cb, 5)
+        # test fault: the runner's MOCAP_TILT [deg, s, ramp_s] rotates this drone's published attitude about its body
+        # x, in one step (a mis-solve) or over ramp_s (a body tipping), then holds it s; the tracker and the partner's
+        # MPC see it (card 2026-10-11_quad4_tilt_cut)
+        self._tilt_until = None
+        self._tilt = None
+        self.create_subscription(Float64MultiArray, f'/drone_{drone_id}/mocap_tilt', self._tilt_cb, 5)
 
         # Payload state (published by the node whose drone_id is 0)
         self._payload_last_pos = None
@@ -164,6 +170,20 @@ class PayloadMocapEmulator(Node):
         self._dropout_until = now + max(0.0, float(msg.data))
         self.get_logger().warn(f'[mocap] state silenced for {float(msg.data):.1f} s (MOCAP_LOSS test fault)')
 
+    def _tilt_cb(self, msg):
+        deg, secs, ramp = (float(v) for v in (list(msg.data) + [0.0, 0.0, 0.0])[:3])
+        t0 = self.get_clock().now().nanoseconds * 1e-9
+        self._tilt = (t0, deg, max(0.0, ramp))
+        self._tilt_until = t0 + max(0.0, ramp) + max(0.0, secs)
+        self.get_logger().warn(f'[mocap] attitude tilted {deg:.0f} deg over {ramp:.2f} s, held {secs:.2f} s '
+                               f'(MOCAP_TILT test fault)')
+
+    def _tilt_q(self, now):
+        """The injected rotation about body x at now, (x, y, z, w)."""
+        t0, deg, ramp = self._tilt
+        h = 0.5 * np.radians(deg * (min(1.0, (now - t0) / ramp) if ramp > 0.0 else 1.0))
+        return [np.sin(h), 0.0, 0.0, np.cos(h)]
+
     def _drone_cb(self, msg: PoseArray):
         if not msg.poses:
             return
@@ -176,6 +196,10 @@ class PayloadMocapEmulator(Node):
         idx = self._pose_index if -len(msg.poses) <= self._pose_index < len(msg.poses) else -1
         pos = msg.poses[idx].position
         ori = msg.poses[idx].orientation
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if self._tilt_until is not None and now < self._tilt_until:
+            ori.x, ori.y, ori.z, ori.w = (float(v) for v in quaternion_multiply(
+                [ori.x, ori.y, ori.z, ori.w], self._tilt_q(now)))
         ori.x, ori.y, ori.z, ori.w = self._normalize_quat(ori.x, ori.y, ori.z, ori.w)
 
         mcs, self._drone_last_pos, self._drone_last_ori, self._drone_last_time = \

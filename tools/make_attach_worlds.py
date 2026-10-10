@@ -44,6 +44,9 @@ the rig-matched twin instead of the legacy sim (Wesley, 8 Oct 2026; docs/decisio
   three_rigid_ground_rig_attach_pickup_push.sdf
                                            the pickup world + the same tool (the combined M1
                                            card's _abort arm: a push on the ring)
+  three_rigid_ground_rig_attach_welded_pickup_push.sdf
+                                           the full M1 world + the same tool (the tilt cut card's
+                                           push on QUAD4)
 
 The carriers and ring are generate_rigid_world.py with make_carry_worlds.RIG_ARGS, i.e. the
 same twin as the carry worlds. Rig plate labels run clockwise from +x (plate 9 at 90 deg);
@@ -131,7 +134,9 @@ MODELS = {'free': f'{MODEL}.sdf', 'welded': f'{MODEL}_welded.sdf'}
 # its envelope fault, card 2026-10-09_newcomer_fault_scope; Wesley 8 Oct night) and the pickup world
 # (a push on the ring during his descent: the combined M1 card's _abort arm)
 PUSH_WORLDS = {'three_rigid_ground_rig_attach_push.sdf': 'three_rigid_ground_rig_attach.sdf',
-               'three_rigid_ground_rig_attach_pickup_push.sdf': PICKUP_WORLD}
+               'three_rigid_ground_rig_attach_pickup_push.sdf': PICKUP_WORLD,
+               # the full M1 + the WRENCH tool (card 2026-10-11_quad4_tilt_cut: a push on QUAD4 in his flight)
+               'three_rigid_ground_rig_attach_welded_pickup_push.sdf': PICKUP_WORLDS['welded']}
 USER_COMMANDS = ('    <plugin filename="ignition-gazebo-user-commands-system" '
                  'name="gz::sim::systems::UserCommands"/>\n')
 WRENCH_PLUGIN = ('    <!-- push tool: runner WRENCH -> /world/<name>/wrench/persistent -->\n'

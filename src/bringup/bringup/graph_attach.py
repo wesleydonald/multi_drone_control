@@ -131,6 +131,17 @@ def _contact_manager_params(context, real):
     return out
 
 
+def _tilt_cut_manager_params(d, tilt_cut, stuck_guard):
+    """Return the magnet manager's tilt-cut inputs (card 2026-10-11_quad4_tilt_cut).
+
+    The mux's 'cut' turns the magnet OFF (a confirmed attach too); the planner's hand-over
+    block refuses a confirmation.
+    """
+    cut = {'cut_state_topic': f'/drone_{d}/mux_state'} if tilt_cut or stuck_guard else {}
+    block = {'handover_block_topic': f'/drone_{d}/handover_blocked'} if stuck_guard else {}
+    return {**cut, **block}
+
+
 def _x0_rate_imu_drones(context, n, real):
     """Tethered drone ids whose tracker uses x0_rate_source imu (x0_rate_source_drones)."""
     typed = LaunchConfiguration('x0_rate_source_drones').perform(context).strip()
@@ -218,6 +229,13 @@ def attach(context, launch_dir, profile_vals):
         if float(LaunchConfiguration('weld_radius').perform(context)) <= 0.0:
             raise RuntimeError('partner_contact on the rig: weld_radius is the contact radius, > 0 (the 09:00 '
                                'calibration, e.g. 0.01)')
+    # QUAD4 tilt cut (card 2026-10-11_quad4_tilt_cut): where the partner's stream can fly QUAD4
+    tilt_cut = partner and truthy(context, 'partner_tilt_cut')
+    stuck_guard = partner and truthy(context, 'partner_stuck_guard')
+    fc_disarm_land = partner and truthy(context, 'fc_disarm_land')
+    # needs the warm tracker (partner_contact)
+    warm_not_live = partner_contact and truthy(context, 'warm_fault_not_live')
+    welded_on_load = partner_attached and truthy(context, 'welded_on_load')
 
     x0_imu = _x0_rate_imu_drones(context, n, real)
     # the thrust map and geometry: the rig carry's on the rig, the twin's typed knobs in sim (the
@@ -292,6 +310,9 @@ def attach(context, launch_dir, profile_vals):
         # (R0575/R0577: left armed on the floor after LAND; an abort never reached it).
         # It exists only with the approach chain: a managed drone with no tracker fails ARM.
         parameters=[{'num_drones': n + (1 if truthy(context, 'enable_approach') else 0),
+                     **({'tilt_fault_land': True} if tilt_cut else {}),
+                     **({'landed_partner_cut': True} if stuck_guard else {}),
+                     **({'fc_disarm_land': True} if fc_disarm_land else {}),
                      **({'require_fc_armed': LaunchConfiguration('require_fc_armed').perform(context)
                          .lower() == 'true'} if real else {})}],
         output='screen'))
@@ -383,6 +404,9 @@ def attach(context, launch_dir, profile_vals):
                         if partner_contact else {}),
                      'start_attached': partner_attached,
                      'partner_release': partner_attached,
+                     **({'partner_tilt_cut': True} if tilt_cut else {}),
+                     **({'partner_stuck_guard': True} if stuck_guard else {}),
+                     **({'welded_on_load': True} if welded_on_load else {}),
                      'attach_velocity_newcomer': (
                          LaunchConfiguration('attach_control_mode').perform(context).strip()
                          == 'velocity'),
@@ -485,6 +509,8 @@ def attach(context, launch_dir, profile_vals):
             parameters=[{'drone_id': d, 'drone_name': dn, 'parent_model': PARENT_MODEL,
                          'rate_source': LaunchConfiguration('rate_source'),
                          'imu_topic': f'/drone_{d}/imu',
+                         # the twin's stand-in for the rig FC's arm state (fc_disarm_land)
+                         **({'publish_fc_arm_state': True} if fc_disarm_land else {}),
                          **{k: (v[d] if isinstance(v, list) else v) for k, v in map_bf.items()}}],
             remappings=[(f'/model/{PARENT_MODEL}/model/{dn}/pose', f'/model/{dn}/pose')]))
 
@@ -510,6 +536,9 @@ def attach(context, launch_dir, profile_vals):
                          # held at armed idle until our planner flies the ring (critic F3)
                          **({'zero_partner_aux': True, 'partner_hold_until_planner': True}
                             if real and partner_contact else {}),
+                         # tilt cut: the tracker's fault, the manager's cut at LANDED
+                         **({'tilt_fault_topic': f'/drone_{d}/tilt_fault'} if tilt_cut else {}),
+                         **({'cut_topic': f'/drone_{d}/mux_cut'} if stuck_guard else {}),
                          **rig_magnet}],
             output='screen'))
 
@@ -596,6 +625,9 @@ def attach(context, launch_dir, profile_vals):
                      'enable_diag_log': True,
                      # warm on his flight: its u-state is the mux output, its learned states hold
                      **({'warm_follow_applied': True} if partner_contact else {}),
+                     **({'tilt_fault_topic': f'/drone_{d}/tilt_fault',
+                         'tilt_slow_deg': f('tilt_slow_deg')} if tilt_cut else {}),
+                     **({'warm_fault_not_live': True} if warm_not_live else {}),
                      **map_tracker}],
         # In SIL there is no mux, so this tracker publishes straight onto
         # /drone_3/ELRSCommand, which the bench plant consumes. Everything else about
@@ -690,6 +722,7 @@ def attach(context, launch_dir, profile_vals):
                          # combined M1: QUAD4's one coil is magnet_gate's (below); ours is one of its inputs
                          'magnet_latch_topic': ('' if dry_approach else f'/drone_{d}/magnet_ours'
                                                 if partner_contact else f'/drone_{d}/magnet'),
+                         **(_tilt_cut_manager_params(d, tilt_cut, stuck_guard)),
                          **(_contact_manager_params(context, real) if partner_contact else {})}],
             output='screen'))
         if partner_contact:
@@ -701,7 +734,9 @@ def attach(context, launch_dir, profile_vals):
                              'phase_topic': '/join_planner/phase', 'puck_topic': '/tejen/object_attached',
                              # the full M1: welded at boot (ours), his from /partner/release, ours at our span
                              **({'start_ours': True, 'release_topic': '/partner/release'}
-                                if partner_attached else {})}],
+                                if partner_attached else {}),
+                             # the tilt cut: the mux's 'cut' turns the coil OFF for good (critic round 2, H-B)
+                             **({'cut_state_topic': f'/drone_{d}/mux_state'} if tilt_cut or stuck_guard else {})}],
                 output='screen'))
             lc = lambda k: float(LaunchConfiguration(k).perform(context))  # noqa: E731
             nodes.append(LogInfo(msg=(
@@ -790,6 +825,7 @@ def attach(context, launch_dir, profile_vals):
                      'command_backend': 'ros_topic',
                      'ros_attach_topic': '/payload/attach',
                      'ros_detach_topic': '/payload/detach',
+                     **(_tilt_cut_manager_params(d, tilt_cut, stuck_guard)),
                      **(_contact_manager_params(context, real) if partner_contact else {})}],
         output='screen'))
 

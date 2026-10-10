@@ -119,6 +119,23 @@ def test_restore_takes_ours_back_and_ignores_partner():
     assert g.source == 'ours' and g.partner('OFF') is None
 
 
+@pytest.mark.parametrize('start_ours,span', [(False, False), (False, True), (True, False)])
+def test_the_cut_turns_the_coil_off_and_drops_both_inputs_for_good(start_ours, span):
+    """The tilt cut (card 2026-10-11_quad4_tilt_cut, critic round 2 H-B): his stream flies QUAD4 (the gate his, or
+    ours once our span began in his ring descent); the mux's 'cut' turns the coil OFF and nothing turns it on again:
+    not his rejoin's ON, not ours, not a release or a restore."""
+    g = MagnetGate(start_ours=start_ours)
+    g.partner('ON')
+    if span:
+        g.ours('ON')                                  # our span began (his descent onto plate 9)
+    assert g.cut() == 'OFF' and g.source == 'cut' and g.last == 'OFF'
+    assert g.partner('ON') is None and g.ours('ON') is None and g.ours('OFF') is None
+    g.release()
+    g.restore('ours')
+    assert g.source == 'cut' and g.partner('ON') is None
+    assert sum('ignored: the coil is cut' in e for e in g.events) == 1 and g.cut() == 'OFF'
+
+
 @pytest.mark.parametrize('seq,coil', [
     # (input, word) sequences and the last word on the coil
     ([('p', 'ON'), ('o', 'OFF'), ('o', 'OFF')], 'ON'),                 # take-back before the span
@@ -186,6 +203,35 @@ def test_node_restart_restores_ours_and_forwards_nothing_meanwhile(monkeypatch):
         assert n.pub.msgs == [] and n.gate.source == 'ours'
         n._end_restore()
         assert [m.data for m in n.pub.msgs] == ['ON'] and [m.data for m in n.state_pub.msgs] == ['ours']
+        n.destroy_node()
+    finally:
+        rclpy.shutdown()
+
+
+def test_node_cut_publishes_off_at_once_even_while_restoring_and_resends_it(monkeypatch):
+    """H-B: the mux's latched 'cut' (cut_state_topic) reaches the coil within the callback, restoring or not; the
+    state reads 'cut'; nothing else reaches the coil; 'partner' / 'ours' / 'latched' do not cut. Off by default."""
+    try:
+        n = _node(monkeypatch, '-p', 'restore_s:=5.0', '-p', 'cut_state_topic:=/drone_3/mux_state')
+        assert '/drone_3/mux_state' in {x.topic_name for x in n.subscriptions}
+        for st in ('partner', 'ours', 'latched'):
+            n._mux_state_cb(String(data=st))
+        assert n.pub.msgs == [] and n.gate.source == 'partner'
+        n._mux_state_cb(String(data='cut'))
+        assert [m.data for m in n.pub.msgs] == ['OFF'] and [m.data for m in n.state_pub.msgs] == ['cut']
+        n._mux_state_cb(String(data='cut'))           # the latched state again: no second cut
+        n._end_restore()
+        n._on(n.gate.partner, 'ON')
+        n._on(n.gate.ours, 'ON')
+        assert [m.data for m in n.pub.msgs] == ['OFF'] and [m.data for m in n.state_pub.msgs] == ['cut']
+        n._cut_timer.callback()                       # the 2 Hz re-send
+        assert [m.data for m in n.pub.msgs] == ['OFF', 'OFF']
+        n.destroy_node()
+    finally:
+        rclpy.shutdown()
+    try:
+        n = _node(monkeypatch, '-p', 'restore_s:=0.0')
+        assert '/drone_3/mux_state' not in {x.topic_name for x in n.subscriptions}
         n.destroy_node()
     finally:
         rclpy.shutdown()

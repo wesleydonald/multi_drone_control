@@ -28,13 +28,19 @@ On a restart it forwards nothing for restore_s while it listens to its own latch
 
 The full M1 (start_ours, QUAD4 starts welded as a carrier): the coil is ours from boot (our detach releases it),
 his from /partner/release on (his pickup), and ours again from our span's first ON.
+
+The tilt cut (card docs/experiments/2026-10-11_quad4_tilt_cut.md, critic round 2 H-B; cut_state_topic '' = off): when
+QUAD4's mux reads 'cut' (it has disarmed the vehicle), the coil goes OFF at once and stays OFF, re-sent at 2 Hz, and
+both inputs are dropped until this node restarts: a dead QUAD4 must not hang on plate 9, and neither his rejoin's ON
+nor ours may reach it. A restarted gate reads the mux's latched state and cuts again while the mux still reads 'cut'.
 """
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, String
 
-PARTNER, OURS = 'partner', 'ours'
+PARTNER, OURS, CUT = 'partner', 'ours', 'cut'
+CUT_RESEND_S = 0.5
 DROP_PHASES = ('DROP_OBJECT', 'CLEAR_DROP_ZONE')
 # his pickup phases, at the pickup site away from the ring: his bounded retry releases there (m1-final 6143989: also
 # an object attached but not aligned), so his OFF passes there too
@@ -72,6 +78,7 @@ class MagnetGate:
         self._dropped_partner = False
         self._held_off_in = None
         self._held_on = False
+        self._dropped_after_cut = False
 
     def his_phase(self, phase):
         self.phase = str(phase).strip().upper()
@@ -85,10 +92,27 @@ class MagnetGate:
         self.puck_now = attached
         self.puck_ever = self.puck_ever or attached
 
+    def cut(self):
+        """QUAD4's mux has cut it: the coil OFF now and for good; returns the word to publish (always 'OFF')."""
+        if self.source != CUT:
+            self.source = CUT
+            self._release_pending = False
+            self.events.append('CUT: the mux has disarmed QUAD4: coil OFF, his and our commands ignored from now')
+        self.last = 'OFF'
+        return 'OFF'
+
+    def _dropped_cut(self, who, w):
+        if not self._dropped_after_cut:
+            self._dropped_after_cut = True
+            self.events.append(f'{who} {w} ignored: the coil is cut')
+        return None
+
     def partner(self, text):
         w = magnet_word(text)
         if w is None:
             return None
+        if self.source == CUT:
+            return self._dropped_cut('his', w)
         if self.source != PARTNER:
             if not self._dropped_partner:
                 self._dropped_partner = True
@@ -106,6 +130,8 @@ class MagnetGate:
         w = magnet_word(text)
         if w is None:
             return None
+        if self.source == CUT:
+            return self._dropped_cut('our', w)
         if self.source == PARTNER:
             if w == 'OFF':
                 if not self._dropped_ours_off:
@@ -125,7 +151,7 @@ class MagnetGate:
 
     def release(self):
         """/partner/release after a welded start (start_ours): the coil is his until our span's first ON."""
-        if not self._release_pending:
+        if not self._release_pending or self.source == CUT:
             return
         self._release_pending = False
         self.source = PARTNER
@@ -133,7 +159,7 @@ class MagnetGate:
 
     def restore(self, state):
         """A previous instance's latched state: 'ours' is taken back at once (never handed to him)."""
-        if str(state).strip().lower() == OURS and self.source != OURS:
+        if str(state).strip().lower() == OURS and self.source not in (OURS, CUT):
             self.source = OURS
             self._release_pending = False
             self.events.append('OURS restored from the latched gate state (restart)')
@@ -158,6 +184,7 @@ class MagnetGateNode(Node):
         restore_s = float(self.declare_parameter('restore_s', 1.0).value)
         start_ours = bool(self.declare_parameter('start_ours', False).value)
         release_topic = str(self.declare_parameter('release_topic', '').value)
+        cut_state_topic = str(self.declare_parameter('cut_state_topic', '').value)
         self.gate = MagnetGate(start_ours=start_ours)
         self._t0 = self.get_clock().now().nanoseconds * 1e-9
         self._restore_s = restore_s
@@ -177,6 +204,10 @@ class MagnetGateNode(Node):
             self.create_subscription(
                 String, release_topic,
                 lambda m: self._on(lambda _v: self.gate.release(), None) if '"running": true' in m.data else None, 5)
+        self._cut_timer = None
+        if cut_state_topic:
+            # the mux's latched state ('partner' | 'ours' | 'cut' | 'latched'): a cut acts at once, restoring or not
+            self.create_subscription(String, cut_state_topic, self._mux_state_cb, GATE_STATE_QOS)
         if self._restoring:
             self._restore_timer = self.create_timer(restore_s, self._end_restore)
         else:
@@ -185,6 +216,16 @@ class MagnetGateNode(Node):
             f'[magnet_gate] drone {d}: {out_topic} follows his {partner_topic} until the first ON on '
             f'{ours_topic} (our span), then ours only' + (f'; his puck from {puck_topic}' if puck_topic else ''))
 
+    def _mux_state_cb(self, msg):
+        if msg.data.strip().lower() != CUT or self.gate.source == CUT:
+            return
+        self.pub.publish(String(data=self.gate.cut()))
+        self.state_pub.publish(String(data=CUT))
+        for e in self.gate.events:
+            self.get_logger().error(f'[magnet_gate] {e}')
+        self.gate.events.clear()
+        self._cut_timer = self.create_timer(CUT_RESEND_S, lambda: self.pub.publish(String(data='OFF')))
+
     def _state_cb(self, msg):
         if self._restoring and msg.data.strip().lower() == OURS:
             self._on(self.gate.restore, msg.data)
@@ -192,6 +233,8 @@ class MagnetGateNode(Node):
     def _end_restore(self):
         self._restore_timer.cancel()
         self._restoring = False
+        if self.gate.source == CUT:
+            return                   # cut while restoring: published then, and re-sent by its own timer
         self.state_pub.publish(String(data=self.gate.source))
         if self.gate.last is not None:
             self.pub.publish(String(data=self.gate.last))

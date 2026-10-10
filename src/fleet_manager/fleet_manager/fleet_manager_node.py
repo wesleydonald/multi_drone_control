@@ -34,7 +34,7 @@ from rclpy.clock import Clock, ClockType
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String, Bool, Int32
 from interfaces.srv import SetArming
-from interfaces.msg import ELRSCommand
+from interfaces.msg import ELRSCommand, MotionCaptureState
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -48,7 +48,13 @@ READY_TIMEOUT_SEC = 30.0
 # If a drone misses this many consecutive heartbeats we treat it as dropped
 ARMING_FEEDBACK_TIMEOUT_SEC = 1.0
 
-# elrs_mux's /drone_i/mux_state ('partner' | 'ours' | 'latched'), latched on both ends so
+# the tilt cut (card 2026-10-11_quad4_tilt_cut): airborne is this far over the height at ARM; down and still is under
+# this height and speed (a drone lying tipped on the floor: body z 0.08, R1503)
+FC_AIRBORNE_M = 0.10
+REST_Z_MAX_M = 0.25
+REST_SPEED_MAX = 0.10
+
+# elrs_mux's /drone_i/mux_state ('partner' | 'ours' | 'latched' | 'cut'), latched on both ends so
 # the state is read even when the manager starts after the mux. No publisher (no mux on
 # that drone) = ours and not latched.
 MUX_STATE_QOS = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
@@ -162,6 +168,40 @@ class CentralController(Node):
                 Bool, f'/drone_{i}/down_alone',
                 lambda msg, drone_id=i: self._down_alone_callback(msg, drone_id), 5)
 
+        # ── Tilt cut (card 2026-10-11_quad4_tilt_cut; off by default): a drone's tilt fault while it is off the
+        #    ring (its mux forwards the partner or has cut it, or its on_load is False) lands the fleet, never the
+        #    emergency stop; at LANDED a mux still forwarding the partner is cut when that drone is down at its rest
+        #    (a take-back stuck behind a latched tracker left QUAD4 armed after LANDED, R1503). ──
+        self.tilt_fault_land = bool(self.declare_parameter('tilt_fault_land', False).value)
+        self.landed_partner_cut = bool(self.declare_parameter('landed_partner_cut', False).value)
+        # his stream's disarm (/drone_i/fc_arm_state: on the rig the arm flag the radio sends, from the forwarded
+        # command; in the twin bf_comm's stand-in) after the drone was airborne lands the fleet (rig-port critic F6:
+        # his MPC's self-disarm never reached us). Not an FC failure: a brown-out or RX failsafe keeps 'armed'
+        # (critic round 2, M-B)
+        self.fc_disarm_land = bool(self.declare_parameter('fc_disarm_land', False).value)
+        self._rest_z = {}
+        self._pose_z = {}
+        self._pose_speed = {}
+        self._cut_pubs = {}
+        self._fc_armed = {}
+        self._fc_flew = set()
+        self._fc_landed_for = set()
+        self._fault_land_sent = False
+        cut_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE,
+                             durability=DurabilityPolicy.VOLATILE)
+        for i in range(self.num_drones):
+            if self.tilt_fault_land:
+                self.create_subscription(Bool, f'/drone_{i}/tilt_fault',
+                                         lambda msg, drone_id=i: self._tilt_fault_callback(msg, drone_id), cut_qos)
+            if self.landed_partner_cut or self.fc_disarm_land:
+                self.create_subscription(MotionCaptureState, f'/drone_{i}/motion_capture_state',
+                                         lambda msg, drone_id=i: self._tilt_pose_callback(msg, drone_id), 1)
+            if self.landed_partner_cut:
+                self._cut_pubs[i] = self.create_publisher(Bool, f'/drone_{i}/mux_cut', cut_qos)
+            if self.fc_disarm_land:
+                self.create_subscription(String, f'/drone_{i}/fc_arm_state',
+                                         lambda msg, drone_id=i: self._fc_state_callback(msg, drone_id), 10)
+
         # ── Master step timer (sim time) ──────────────────────────────────
         self.timer = self.create_timer(DT, self._step_timer_callback)
 
@@ -215,6 +255,9 @@ class CentralController(Node):
 
         if command == "ARM":
             self._excused.clear()        # a new flight: no newcomer fault carried over
+            self._rest_z = dict(getattr(self, '_pose_z', {}))   # each drone's height at ARM: airborne is 0.1 above
+            self._fc_flew, self._fc_landed_for = set(), set()
+            self._fault_land_sent = False
             self._off_ring.clear()
             self._down_alone.clear()
             self._arm_fleet()
@@ -312,7 +355,7 @@ class CentralController(Node):
         # If a drone disarmed unexpectedly while the fleet is flying,
         # trigger an emergency stop for the entire fleet.
         if self.flying and was_armed and not msg.data:
-            if self.mux_state.get(drone_id) == 'partner':
+            if self.mux_state.get(drone_id) in ('partner', 'cut'):
                 # Not under our command (its mux forwards the partner's stream): the
                 # tracker's own disarm does not reach the radio, and grounding everyone
                 # for it would drop a drone we do not fly (ruling F5, R0618).
@@ -348,11 +391,13 @@ class CentralController(Node):
     def _arm_fleet_thread(self):
         # A latched mux holds its drone's motors off until the mux restarts: armed
         # trackers behind it would wind up their integrators against dead motors.
-        latched = sorted(i for i, s in self.mux_state.items() if s == 'latched')
+        latched = sorted(i for i, s in self.mux_state.items() if s in ('latched', 'cut'))
         if latched:
             self.fleet_armed = False
             for i in latched:
-                _announce(self, 'error', f"ARM REFUSED: mux latched on drone {label(i)} (relaunch the muxes)")
+                _announce(self, 'error', f"ARM REFUSED: mux latched on drone {label(i)} (relaunch the muxes)"
+                          if self.mux_state[i] == 'latched' else
+                          f"ARM REFUSED: mux cut on drone {label(i)} (his DISARM, then relaunch T2)")
             return
         self.get_logger().debug("Arming all drones...")
         self.fleet_armed = False          # a repeat ARM must re-earn it
@@ -493,7 +538,80 @@ class CentralController(Node):
             return
         self.landing = False
         _announce(self, 'info', "Landed - disarming the fleet.")
+        if getattr(self, 'landed_partner_cut', False):
+            self._cut_partner_at_rest()
         self._disarm_fleet(emergency=False)
+
+    def _tilt_fault_callback(self, msg: Bool, drone_id: int):
+        """A drone's tilt fault (its tracker, every fresh pose). While the partner's stream flies it (its mux reads
+        'partner' or 'cut'): the mux has cut it, and every drone lands. While ours flies it, its own tracker's disarm
+        decides, as today (on the ring a carrier fault; off it, on_load False, LAND); a drone already disarmed
+        alone that topples at its rest must not land the fleet (rig 7-8 Oct: 4 of 18 flights)."""
+        if not msg.data or not self.flying:
+            return
+        if self.mux_state.get(drone_id) not in ('partner', 'cut'):
+            self.get_logger().warn(f"Drone {label(drone_id)} tilt fault while ours flies it (or it is disarmed): "
+                                   f"its own tracker's disarm decides.")
+            return
+        self._excused.add(drone_id)
+        self._fault_land(f"Drone {label(drone_id)} tilt fault off the ring (mux "
+                         f"{self.mux_state.get(drone_id, 'none')}): its motors are cut: LAND, every drone lands.")
+
+    def _fault_land(self, text):
+        """One LAND per flight for a fault of a drone the partner flies: the tilt fault and his stream's disarm can
+        both follow one upset, and the LAND they publish reaches _land_fleet only through the topic (critic round 2,
+        M-C)."""
+        if self.landing or self._fault_land_sent:
+            self.get_logger().warn(f"{text} (already landing)")
+            return
+        self._fault_land_sent = True
+        _announce(self, 'warn', text)
+        self.fleet_cmd_pub.publish(String(data='LAND'))
+
+    def _tilt_pose_callback(self, msg, drone_id: int):
+        z = float(msg.pose.position.z)
+        v = msg.twist.linear
+        self._pose_z[drone_id] = z
+        self._pose_speed[drone_id] = (v.x * v.x + v.y * v.y + v.z * v.z) ** 0.5
+        rest = self._rest_z.get(drone_id)
+        if self._fc_armed.get(drone_id) and rest is not None and z > rest + FC_AIRBORNE_M:
+            self._fc_flew.add(drone_id)
+
+    def _fc_state_callback(self, msg: String, drone_id: int):
+        """The arm state of a drone the partner flies: armed and airborne (0.1 m over its height at ARM), then
+        disarmed -> his stream's disarm (his MPC's self-disarm or his DISARM): it is falling or down: LAND, every
+        drone lands (once). On the floor before his takeoff a disarm changes nothing (critic round 2, M-B)."""
+        st = msg.data.strip().lower()
+        self._fc_armed[drone_id] = st.startswith('armed')
+        if self._fc_armed[drone_id]:
+            z, rest = self._pose_z.get(drone_id), self._rest_z.get(drone_id)
+            if z is not None and rest is not None and z > rest + FC_AIRBORNE_M:
+                self._fc_flew.add(drone_id)
+            return
+        if not self.flying or self.mux_state.get(drone_id) not in ('partner',):
+            return
+        if (drone_id in self._fc_flew and drone_id not in self._fc_landed_for
+                and (st.startswith('disarmed') or st.startswith('failed'))):
+            self._fc_landed_for.add(drone_id)
+            self._excused.add(drone_id)
+            self._fault_land(f"Drone {label(drone_id)}'s stream disarmed it in the air ({msg.data.strip()}) while "
+                             f"the partner flies it: LAND, every drone lands.")
+
+    def _cut_partner_at_rest(self):
+        """At LANDED every tracker is disarmed, but a drone whose mux still forwards the partner keeps whatever the
+        partner sends: cut it when it is down and still; otherwise say so (the operator's DISARM). Down is a height,
+        not the height at ARM: a welded start armed on the ring at ~0.6 m (critic round 2, L-C)."""
+        for i, st in self.mux_state.items():
+            if st != 'partner':
+                continue
+            z, speed = self._pose_z.get(i), self._pose_speed.get(i)
+            if z is not None and speed is not None and z < REST_Z_MAX_M and speed < REST_SPEED_MAX:
+                self._cut_pubs[i].publish(Bool(data=True))
+                _announce(self, 'warn', f"Drone {label(i)} is down and still on the partner's stream at LANDED: "
+                                        f"its mux is cut.")
+            else:
+                _announce(self, 'error', f"Drone {label(i)} is still on the partner's stream at LANDED and not down "
+                                         f"(z {z if z is None else round(z, 2)}): press DISARM once it is down.")
 
     def _disarm_fleet(self, emergency: bool = False, reason: str = '', keep_alive: bool = False):
         self.flying = False

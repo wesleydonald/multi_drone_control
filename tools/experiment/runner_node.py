@@ -35,7 +35,7 @@ from std_msgs.msg import Bool, Empty, Float64, Float64MultiArray, Int32, String
 
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
-from .config import mocap_loss_arg, wait_lift_arg, wait_log_arg, wait_reweld_arg, wrench_arg
+from .config import mocap_loss_arg, mocap_tilt_arg, wait_lift_arg, wait_log_arg, wait_reweld_arg, wrench_arg
 
 ARM_FAIL = 'fleet manager ARM failed or refused'
 # WAIT_PICKUP_FREE: his ball weld reads detached this long (SIM s) before the schedule goes on (his gate's hold)
@@ -198,6 +198,16 @@ class ExperimentRunner(Node):
         self.dropout_pubs = {mocap_loss_arg(e.arg)[0]: self.create_publisher(
             Float64, f'/drone_{mocap_loss_arg(e.arg)[0]}/mocap_dropout', 5)
             for e in cfg.events if e.do == 'MOCAP_LOSS'}
+        # MOCAP_TILT: the emulator's attitude-offset input, made at start for the same reason
+        self.tilt_pubs = {mocap_tilt_arg(e.arg)[0]: self.create_publisher(
+            Float64MultiArray, f'/drone_{mocap_tilt_arg(e.arg)[0]}/mocap_tilt', 5)
+            for e in cfg.events if e.do == 'MOCAP_TILT'}
+        # the tilt cut's fault (card 2026-10-11_quad4_tilt_cut), logged as TILT_FAULT
+        if self.tilt_pubs or str(cfg.launch_args.get('partner_tilt_cut', '')).lower() in ('true', '1'):
+            tq = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.VOLATILE)
+            for i in range(self.n):
+                self.create_subscription(Bool, f'/drone_{i}/tilt_fault',
+                                         lambda m, i=i: m.data and self._log_event('TILT_FAULT', i), tq)
         if any(e.do == 'WRENCH' for e in cfg.events):
             self._wrench_publisher()
         self.tip_freeze_pub = (self.create_publisher(Float64, '/magnet_tip_publisher/freeze', 5)
@@ -616,20 +626,21 @@ class ExperimentRunner(Node):
             self._wrench_applied = {}
         return self._gz_wrench_pub
 
-    def _set_wrench(self, force, link):
-        """Make the persistent force on `link` equal `force`. Persistent wrenches add up in
-        Gazebo, so only the change is sent."""
+    def _set_wrench(self, force, torque, link):
+        """Make the persistent force and torque on `link` equal `force`, `torque` (world frame).
+        Persistent wrenches add up in Gazebo, so only the change is sent."""
         from gz.msgs10.entity_pb2 import Entity
         from gz.msgs10.entity_wrench_pb2 import EntityWrench
         pub = self._wrench_publisher()
-        prev = self._wrench_applied.get(link, (0.0, 0.0, 0.0))
+        prev = self._wrench_applied.get(link, (0.0,) * 6)
+        delta = [float(n - o) for n, o in zip(tuple(force) + tuple(torque), prev)]
         w = EntityWrench()
         w.entity.name = link
         w.entity.type = Entity.LINK
-        w.wrench.force.x, w.wrench.force.y, w.wrench.force.z = (
-            float(f - p) for f, p in zip(force, prev))
+        w.wrench.force.x, w.wrench.force.y, w.wrench.force.z = delta[:3]
+        w.wrench.torque.x, w.wrench.torque.y, w.wrench.torque.z = delta[3:]
         pub.publish(w)
-        self._wrench_applied[link] = tuple(force)
+        self._wrench_applied[link] = tuple(force) + tuple(torque)
 
     def _fire(self, ev):
         if ev.do in ('ARM', 'TAKEOFF', 'LAND', 'ESTOP', 'DISARM'):
@@ -661,6 +672,10 @@ class ExperimentRunner(Node):
             d, secs = mocap_loss_arg(ev.arg)
             self._mocap_cut.add(d)          # the run goes on: the loss is the test, not a harness fault
             self._publish(self.dropout_pubs[d], Float64(data=secs), f'/drone_{d}/mocap_dropout {secs:.0f} s')
+        elif ev.do == 'MOCAP_TILT':
+            d, deg, secs, ramp = mocap_tilt_arg(ev.arg)
+            self._publish(self.tilt_pubs[d], Float64MultiArray(data=[deg, secs, ramp]),
+                          f'/drone_{d}/mocap_tilt {deg:.0f} deg over {ramp:.2f} s, held {secs:.2f} s')
         elif ev.do == 'TIP_FREEZE':
             self._publish(self.tip_freeze_pub, Float64(data=float(ev.arg)), f'/magnet_tip_publisher/freeze {ev.arg:.1f} s')
         elif ev.do == 'HANDOFF':

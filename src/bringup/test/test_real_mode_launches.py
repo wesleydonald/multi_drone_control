@@ -950,3 +950,94 @@ def test_start_ours_only_for_the_welded_contact_start(contact):
     for kw in ({'partner_attached': True, 'partner_contact': False},
                {'partner_contact': contact}):
         assert 'start_ours' not in _twin_partner(**kw)['/elrs_mux_3']['params']
+
+
+# ── the QUAD4 tilt cut (card 2026-10-11_quad4_tilt_cut): every switch off by default ──────
+
+TILT_KEYS = ('tilt_fault_topic', 'cut_topic', 'tilt_fault_land', 'partner_tilt_cut',
+             'cut_state_topic', 'handover_block_topic', 'welded_on_load', 'tilt_slow_deg',
+             'partner_stuck_guard', 'landed_partner_cut', 'fc_disarm_land', 'warm_fault_not_live',
+             'publish_fc_arm_state')
+
+
+def _rig_contact(**kw):
+    return _combined_rig(**kw)
+
+
+def _new_keys(g):
+    return [(k, p) for k, n in g.items() for p in n['params'] if p in TILT_KEYS]
+
+
+def test_tilt_cut_off_passes_nothing_new(dds):
+    """Keep every graph as before with the switches off."""
+    for g in (_twin_partner(partner_contact=True),
+              _twin_partner(partner_contact=True, partner_attached=True), _rig_contact()):
+        assert not _new_keys(g)
+        assert 'magnet_latch_topic' not in g['/elrs_mux_3']['params']   # the coil is the gate's alone
+
+
+def test_tilt_cut_twin_and_rig_graphs(dds):
+    """Wire the cut to the newcomer's tracker, the mux, the fleet manager and the managers.
+
+    Only the newcomer's tracker gets the rule; on the rig the coil's one writer, magnet_gate, reads the mux's
+    'cut' (critic round 2, H-B): the mux writes no coil latch of its own.
+    """
+    for g, on_rig in ((_twin_partner(partner_contact=True, partner_tilt_cut=True), False),
+                      (_rig_contact(partner_tilt_cut=True), True)):
+        t3 = g['/tracker_3']['params']
+        assert t3['tilt_fault_topic'] == '/drone_3/tilt_fault' and 'tilt_slow_deg' in t3
+        assert all('tilt_fault_topic' not in g[f'/tracker_{i}']['params'] for i in range(3))
+        mux = g['/elrs_mux_3']['params']
+        assert mux['tilt_fault_topic'] == '/drone_3/tilt_fault'
+        assert 'magnet_latch_topic' not in mux
+        gate = g.get('/magnet_gate_3', {}).get('params', {})
+        assert (gate.get('cut_state_topic') == '/drone_3/mux_state') is on_rig
+        fm = g['/fleet_manager']['params']
+        assert fm['tilt_fault_land'] is True and 'landed_partner_cut' not in fm
+        mgr = g['/magnet_attachment_manager']['params']
+        assert mgr['cut_state_topic'] == '/drone_3/mux_state'
+        assert 'handover_block_topic' not in mgr
+        p = g['/dissipative_planner']['params']
+        assert p['partner_tilt_cut'] is True
+        assert 'welded_on_load' not in p and 'partner_stuck_guard' not in p
+        assert 'cut_topic' not in mux
+
+
+def test_each_f6_and_h1_switch_wires_only_its_own_parts(dds):
+    """Give each arm one variable: the stuck guard, the warm not-live fault, the FC LAND."""
+    g = _twin_partner(partner_contact=True, partner_stuck_guard=True)
+    mux, fm = g['/elrs_mux_3']['params'], g['/fleet_manager']['params']
+    assert mux['cut_topic'] == '/drone_3/mux_cut' and 'tilt_fault_topic' not in mux
+    assert fm['landed_partner_cut'] is True and 'tilt_fault_land' not in fm
+    assert g['/dissipative_planner']['params']['partner_stuck_guard'] is True
+    mgr = g['/magnet_attachment_manager']['params']
+    assert mgr['handover_block_topic'] == '/drone_3/handover_blocked'
+    assert mgr['cut_state_topic'] == '/drone_3/mux_state'
+    g = _twin_partner(partner_contact=True, warm_fault_not_live=True)
+    assert g['/tracker_3']['params']['warm_fault_not_live'] is True
+    assert all('warm_fault_not_live' not in g[f'/tracker_{i}']['params'] for i in range(3))
+    no_warm = _twin_partner(warm_fault_not_live=True)['/tracker_3']['params']
+    assert 'warm_fault_not_live' not in no_warm
+    g = _twin_partner(partner_contact=True, fc_disarm_land=True)
+    assert g['/fleet_manager']['params']['fc_disarm_land'] is True
+    assert g['/bf_comm_3']['params']['publish_fc_arm_state'] is True
+    real = _rig_contact(fc_disarm_land=True)
+    assert real['/fleet_manager']['params']['fc_disarm_land'] is True
+    assert '/bf_comm_3' not in real and 'cut_state_topic' not in real['/magnet_gate_3']['params']
+    real = _rig_contact(partner_stuck_guard=True)
+    assert real['/magnet_gate_3']['params']['cut_state_topic'] == '/drone_3/mux_state'
+
+
+def test_welded_on_load_is_its_own_switch_and_only_for_the_welded_start():
+    """Pass welded_on_load to the planner only on the welded start."""
+    g = _twin_partner(partner_contact=True, partner_attached=True, welded_on_load=True)
+    p = g['/dissipative_planner']['params']
+    assert p['welded_on_load'] is True and 'partner_tilt_cut' not in p
+    free = _twin_partner(partner_contact=True, welded_on_load=True)
+    assert 'welded_on_load' not in free['/dissipative_planner']['params']
+
+
+def test_tilt_cut_needs_the_partner():
+    """Wire nothing without the partner's stream."""
+    assert not _new_keys(_by_name(sim('attach', legacy=False, num_drones=3,
+                                      partner_tilt_cut=True)))

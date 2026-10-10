@@ -56,9 +56,10 @@ EVENT_KINDS = {
                   # e.g. /pickup/detach, which the partner mission sends at its start
     'FLEET_HANDOVER',  # /fleet/handover True for 1.5 s: the elrs_mux (partner_m2) hands each
                        # drone to our tracker on its first flying command (M2 bench)
-    'WRENCH',     # persistent force on a Gazebo link, arg "fx fy fz [scoped link]" (N; default
-                  # lift_system::payload::body); it replaces the previous WRENCH, "0 0 0" removes
-                  # it. Needs a world with the ApplyLinkWrench system (*_push.sdf)
+    'WRENCH',     # persistent wrench on a Gazebo link, arg "fx fy fz [tx ty tz] [scoped link]" (N, N m, world
+                  # frame; default lift_system::payload::body); it replaces the previous WRENCH on that link,
+                  # "0 0 0" (or "0 0 0 0 0 0") removes it. Needs a world with the ApplyLinkWrench system
+                  # (*_push.sdf)
     'WAIT_THRUST',     # not published: block until every drone's ELRSCommand on the arg
                        # template (default cmd_ready_topic) is armed above idle throttle,
                        # then shift later events (M2 bench: hangers release only under thrust)
@@ -67,6 +68,10 @@ EVENT_KINDS = {
                    # own pose-timeout fault (card 2026-10-09_newcomer_fault_scope)
     'TIP_FREEZE',  # std_msgs/Float64 on /magnet_tip_publisher/freeze: the sim tip publisher repeats its last
                    # output for arg seconds, as a frozen mocap body would (card 2026-10-09_approach_tip_feedback)
+    'MOCAP_TILT',  # Float64MultiArray [deg, s, ramp_s] on /drone_<id>/mocap_tilt: the sim mocap emulator rotates that
+                   # drone's published attitude about its body x, in one step (a mis-solve) or over ramp_s (a body
+                   # tipping), then holds deg for s seconds (default 1), as the trackers and the partner's MPC see it
+                   # (card 2026-10-11_quad4_tilt_cut); arg "id deg [s [ramp_s]]"
     'WAIT_PICKUP_FREE',  # not published: block until his ball weld (/pickup/detachable_joint_state, made at
                          # spawn on QUAD4's tip) has read 'detached' for 1 s, then shift later events; arg
                          # 'timeout_s': on expiry the run fails and stops (the full M1: QUAD4's tip is also
@@ -78,12 +83,15 @@ EVENT_KINDS = {
 }
 
 def wrench_arg(arg):
-    """WRENCH arg -> (force (fx, fy, fz) in N, scoped link name)."""
+    """WRENCH arg -> (force (fx, fy, fz) in N, torque (tx, ty, tz) in N m, scoped link name):
+    'fx fy fz [tx ty tz] [link]' (torque 0 and the ring's body by default)."""
     parts = str(arg or '').split()
-    if len(parts) not in (3, 4):
-        raise ValueError(f'WRENCH needs "fx fy fz [link]", got {arg!r}')
-    return tuple(float(v) for v in parts[:3]), (parts[3] if len(parts) == 4
-                                                else 'lift_system::payload::body')
+    if len(parts) not in (3, 4, 6, 7):
+        raise ValueError(f'WRENCH needs "fx fy fz [tx ty tz] [link]", got {arg!r}')
+    nums = parts[:6] if len(parts) >= 6 else parts[:3]
+    vals = tuple(float(v) for v in nums)
+    link = parts[len(nums)] if len(parts) > len(nums) else 'lift_system::payload::body'
+    return vals[:3], (vals[3:] if len(vals) == 6 else (0.0, 0.0, 0.0)), link
 
 
 def wait_lift_arg(arg):
@@ -114,6 +122,19 @@ def wait_reweld_arg(arg, what='WAIT_REWELD'):
     if timeout <= 0:
         raise ValueError(f'{what} timeout must be > 0, got {timeout}')
     return timeout
+
+
+def mocap_tilt_arg(arg):
+    """MOCAP_TILT arg -> (drone id, deg, seconds, ramp_s): 'id deg [seconds [ramp_s]]' (default 1 s, a step)."""
+    parts = str(arg if arg is not None else '').split()
+    if not 2 <= len(parts) <= 4:
+        raise ValueError(f"MOCAP_TILT arg {arg!r}: expected 'drone_id deg [seconds [ramp_s]]'")
+    deg = float(parts[1])
+    secs = float(parts[2]) if len(parts) >= 3 else 1.0
+    ramp = float(parts[3]) if len(parts) == 4 else 0.0
+    if not 0.0 < abs(deg) <= 180.0 or secs <= 0.0 or ramp < 0.0:
+        raise ValueError(f'MOCAP_TILT: deg in (0, 180], seconds > 0 and ramp_s >= 0, got {deg}, {secs}, {ramp}')
+    return int(parts[0]), deg, secs, ramp
 
 
 def mocap_loss_arg(arg):
@@ -189,6 +210,8 @@ class Event:
             wrench_arg(self.arg)
         if self.do == 'MOCAP_LOSS':
             mocap_loss_arg(self.arg)
+        if self.do == 'MOCAP_TILT':
+            mocap_tilt_arg(self.arg)
         if self.do == 'TIP_FREEZE':
             if self.arg is None or float(self.arg) <= 0.0:
                 raise ValueError(f'TIP_FREEZE needs seconds > 0, got {self.arg!r}')
@@ -239,6 +262,11 @@ class Criteria:
         self.max_ref_age_frac = kw.pop('max_ref_age_frac', None)
         self.max_hold_tilt_mean_deg = kw.pop('max_hold_tilt_mean_deg', None)
         self.max_z_bias_abs = kw.pop('max_z_bias_abs', None)     # height integral, over the hold
+        # card 2026-10-11_quad4_tilt_cut (harness only): any ARMED drone above this tilt for 3 consecutive rows, with
+        # a MOCAP_TILT's own window excluded for that drone (its run.csv attitude is the fake one); and every drone
+        # disarmed this long after LANDED (R1503: QUAD4 armed upside down after LANDED)
+        self.max_armed_tilt_deg = kw.pop('max_armed_tilt_deg', None)
+        self.disarmed_after_landed_s = kw.pop('disarmed_after_landed_s', None)
         # every check is computed and printed but none fails the run (a reproduction)
         self.report_only = bool(kw.pop('report_only', False))
         if kw:
