@@ -224,3 +224,73 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   F6 stuck take-back -> tilt-cut card, F7 c0 from a still window + speed gate, F8 his QUAD2 values on QUAD4, F9 his OFF
   by phase, F10 first flight contact_dz 0.03). Text: $CLAUDE_JOB_DIR/tmp/rigport_critic_r1.md. R building F2-F4, F7
   (switch off), F9, drafts: rig card 2026-10-21 + Wed props-off addition. F5 merge waits for m1-final's pickup fix.
+- 23:45: m1-final 6143989 = 7b8985a + pickup descent ends on the weld + retry when attached but misaligned + kT gate
+  -10 m (tests: his 899 pass / the 12 old failures; gate, checks ok). 7b8985a batch stopped (R1509-R1514 void, R1515+
+  reservations removed; two orphan lab_run.sh wrappers killed, containers removed). NEW batch (bzq7g8emt ->
+  $CLAUDE_JOB_DIR/tmp/lab_final2.txt): R1515 m1c_hover, R1516 m1c_orbit, R1517 m1_full_hover, R1518 m1c_low first, then
+  the other 11. Score with TREE="branch m1-final 6143989" REV=6. Monitor watches lab_final2.txt.
+- Usage limit (Wesley asked): auto-continue is not offered for background sessions; lab batches keep running; future
+  batches launched detached (setsid nohup) so they survive the session.
+- 23:55: recording DONE (G): run_experiment --record logs gz state, render_video.py replays headless (ogre2/EGL on the
+  laptop iGPU) to 1080p mp4 per camera (wide / ring / plate9), 30 fps sim time; RTF cost <= ~5%; frames checked (real
+  Gazebo scene). m1-rec 9e3cd00; cherry-picked onto m1-video (worktree mdc_wt/m1-video = 6143989 + 9f3d898, building).
+  Record the full M1 on the LAPTOP once R1517 (full M1 hover, 6143989) flies cleanly:
+  cd /home/wesley/mdc_wt/m1-video; flock $CLAUDE_JOB_DIR/tmp/laptop.lock python3 tools/run_experiment.py
+  configs/experiments/m1_full_hover.yaml --record  (MDC_REPO_ROOT=m1-video, MDC_RESULTS_ROOT=main results; ~25 min +
+  ~12 min render).
+- 00:05: rig port round 2 committed on m1-rig (26e0959, 4df4957): F2/F3/F4/F9/F7(switch contact_still, off)/F8 + drafts
+  (rig card docs/experiments/2026-10-21_combined_m1_rig.md, docs/rig_2026-10-14_combined_props_off_draft.md, both in
+  m1-rig). F7 desk ramps: without contact_still c0 +7.4/+2.9/+2.1 mm at 3/5/8 cm/s (3 cm/s proof fails), with it within
+  0.2 mm -> recommend ON for the rig (Wesley). Notes: $CLAUDE_JOB_DIR/tmp/rig_port_notes.md. R now merging m1-final
+  6143989 into m1-rig (F5); then rig-port critic round 2 and one m1c_hover + m1c_nocatch_hover on the merged tree.
+- Recording run of the full M1 on the laptop (m1-video, --record, task bhj66ywpu) started 23:51.
+- 00:15: 6143989 wave 1: R1515 hover PASS (pickup fix works: lift 0.37 s after the weld; proof 0.74 s), R1516 orbit
+  PASS (proof 2.68 s), R1518 low PASS bars (proof 2.94 s on the 2nd contact, 1st timed out) + LAND FLEET_ABORT (landing
+  tip-over, scored separately). WATCH: proof time near the frozen 3 s bar in 2 of 3 (R1516: QUAD4's body did not rise
+  for ~2 s after contact, bobbing +-2 mm, then 5 mm by 2.7 s; R1515 rose 5 mm in 0.6 s). e097a94/7b8985a proofs were
+  0.6-1.45 s. If more runs sit near/over 3 s -> finding for Wesley (timeout frozen).
+- 00:25: R1517 = FIRST FULL M1 END TO END on the twin (m1-final 6143989, lab): welded start -> detach -> release -> his
+  pickup/transit/drop -> contact -> proof 0.9 s -> fold-in -> LAND, no abort; ring tilt <= 1.6 deg through the attach
+  (4.55 at the detach). The laptop recording run (m1-video = 6143989 + recorder) is the video candidate.
+- 00:15: tilt cut rev 2 built and committed m1-tiltcut 5c50fa1 (6 switches, all off: partner_tilt_cut,
+  partner_stuck_guard, warm_fault_not_live, fc_disarm_land, his taken_back_self_land, welded_on_load; MOCAP_TILT ramp;
+  19 tc_* configs = 22 runs). Base 84b1779 (needs a merge with m1-final before flying). Critic round 2 running.
+- R1521 hover_2 PASS (proof 0.98 s). R1530 = laptop recording run: 2nd clean full M1 (first proof timed out, re-press
+  proved), rendering the video now.
+- 00:30: R1520 nocatch orbit (6143989) FALSIFIES the _nocatch bar: after his give-up the take-back swept QUAD4's tip
+  within 0.10 m of the ball in the net with his object magnet still ON -> the twin welded the ball -> step-out dragged
+  the ring -> QUAD4 61 deg -> fault LAND -> ring 61 deg -> FLEET_ABORT. Real-life analogue: the one coil left ON near
+  the puck in a take-back (on the rig our take-back OFF turns the coil off once the span began; the twin models his
+  object magnet separately). Fix (P): his TAKEN_BACK after the drop commands his object magnet OFF. Then the claim
+  re-fly on the next tree. Current 6143989 batch keeps running as exploratory evidence for the other arms.
+- 00:20: VIDEO DONE: results/videos/full_M1_twin_R1530_edit.mp4 (captioned 1x, 2:35, three cameras cut) + the raw
+  wide / ring / plate9 mp4s (R1530, m1-video). Frames checked. R1522 orbit_2 FALSIFIES (3 caught contacts no proof:
+  drift 3.4-3.8 mm from the c0 arrival latch; tip below the target -> lift goal too small) -> P adds lift goal =
+  max(target, measured) + rise; c0 still-window (contact_still, in m1-rig) is Wesley's word.
+- 00:16 (real clock; earlier stamps in this file ran ~20 min ahead): m1-final d8c1b65 = 6143989 + TAKEN_BACK after the
+  drop holds his object magnet OFF (R1520) + lift goal max(target, measured) + rise (R1522); his 917 pass / 12 known.
+  R merging d8c1b65 into m1-rig; the merged m1-rig = the ONE tree for the claim re-fly and the rig. Then: claim (13 +
+  full M1 x2, contact_still off) + exploratory contact_still ON arms (orbit x2, hover, nocatch orbit) on the lab.
+- 00:35: tilt-cut critic round 2: GO WITH CHANGES (text $CLAUDE_JOB_DIR/tmp/tiltcut_critic_r2.md): rebase onto merged
+  m1-rig, cut as a magnet_gate input (single coil writer), F6a adopts TAKEN_BACK OFF after the drop, glitch guard by
+  rate/time, T6 as a torque, void rules, F6b/F6c early (if F6b passes 2/2, H1 + F6a code deleted), combined-default arm,
+  M-E his landing-disarm on 'cut'. F doing base-independent parts now; ports to m1-tiltcut3 from the merged m1-rig SHA
+  when R reports it. Wednesday tilt items (a)-(f) need no code (bag at height, hand tumble, DISARM timing, RX-off blind
+  spot, coil under disarm, fc_attitude vs mocap).
+
+## HANDOFF 11 Oct ~00:40 (usage limit reached; resume from here)
+- Running when stopped: lab batch bzq7g8emt (6143989 claim arms; remaining R1523 full orbit, R1525 lead030, R1526 high,
+  R1527 offset, R1528 land_proof, R1529 abort -> score as exploratory with TREE="branch m1-final 6143989" REV=6; they
+  keep running on the lab even if this session is idle). Helpers R (merge d8c1b65 into m1-rig: CHECK `git -C
+  /home/wesley/mdc_wt/m1-rig status` for a half-done merge) and F (tilt-cut rev 3 prep in m1-tiltcut) were stopped.
+- Next, in order: (1) finish/verify the m1-rig merge of d8c1b65 (tests, gate, twin claim dumps identical to m1-final
+  d8c1b65), commit; (2) claim re-fly on the merged m1-rig on the lab (13 m1c + 2 m1_full, contact_still off) + 4
+  exploratory contact_still-ON arms (orbit x2, hover, nocatch orbit); (3) reviewer on that table; (4) tilt cut: port to
+  m1-tiltcut3 from merged m1-rig per $CLAUDE_JOB_DIR/tmp/tiltcut_critic_r2.md, then its arms; (5) morning report.
+- Morning report inputs: rig_port_notes.md, rigport_critic_r1.md, tiltcut_critic_r1/r2.md (all in $CLAUDE_JOB_DIR/tmp),
+  registry R1491-R1530, video results/videos/full_M1_twin_R1530_edit.mp4.
+- Decisions for Wesley: contact_still ON for the rig (desk ramps: c0 +7.4/+2.9/+2.1 mm off vs <= 0.2 mm on); sheet line
+  "after LANDED, if drone 4's mux reads partner, DISARM"; Wednesday combined props-off items (draft in m1-rig); rig
+  findings (his kT gate 0.2 m above arm height and re-checked every tick; nothing stops a tipped QUAD4 under his stream;
+  one coil vs the puck in the net); proof times near the frozen 3 s bar; take-back tilt step 4.5 deg (ramped hold);
+  tilt-cut defaults; the rig-port flight NO-GO list.
