@@ -71,10 +71,15 @@ $A weld_radius:=<from 09:00, default 0.025> r8b                         # weld, 
   the preview was said in chat 9 Oct; for r8a with the loop off add `approach_tip_feedback:=` via a params file
   copy). T2 shows `approach: drone 3 tip hold (tip +0.0xx m from its setpoint, + above)`; tip.csv in the run's
   logs shows where it parks.
-  After 15 s of hold: first r8a `fleet land` (QUAD4 steps 1.2 m out at its height and lands by itself, disarmed
-  alone; the carriers land the ring); second r8a `ros2 topic pub -t 3 /magnet/command std_msgs/msg/String "{data: 'OFF'}"`
+  After 15 s of hold: first r8a `fleet land` (QUAD4 steps 1.2 m out at its height and lands by itself; it is
+  the last down, so the fleet disarm at LANDED usually takes it, not a disarm alone (twin R1455); the carriers land the ring); second r8a `ros2 topic pub -t 3 /magnet/command std_msgs/msg/String "{data: 'OFF'}"`
   (the abort: QUAD4 out and down, the carriers fly on), then `fleet land`.
 - **Decision point (after r8a):** the parked tip height from tip.csv against the 09:00 setpoint; the weld radius.
+  The weld radius must be at least the standoff + 1 cm: a catch from the hold puts the tip at the face height, a full
+  standoff below `weld_point_z` (tools/tip_calibration.py sets weld_point_z = h + standoff), and it only welds
+  inside the radius (reviewer 10 Oct). The weld gate is unfiltered (0.05 m/s, dwell 0.15 s): in the twin, with no
+  physical catch, it took up to 9.9 s inside the radius (R1454); a caught tip moves with the ring, so the 1 s rule
+  below stays, and an OFF is the safe direction (R1456).
 - **r8b:** ON as above; expect the weld (`ATTACH drone 3 (OCP resize)`), the reconfiguration hold, four carry;
   15 s later `fleet land`.
 
