@@ -70,6 +70,14 @@ Updated: Sat 10 Oct 2026, afternoon.
 - R9 twin: held R1468 PASS (weld, 3.0 deg, dip 3 mm, circle resumes on four); moving R1469 FAILS (no tip hold on a
   moving plate -> tip loop never runs -> tip 3 cm high, outside the 2.5 cm weld radius; QUAD4 0.311 m from a carrier
   in transit). Thursday: R9 held only. Repeats + M1 partner baseline (rig-prep) running on the lab PC.
+- R9 repeats: held 2 of 2 supports (R1468/R1471), moving 2 of 2 falsifies (R1469/R1472): Thursday R9 held only.
+- M1 partner baseline R1470 (rig-prep, legacy) FAILS at the hand-back: QUAD4 gets no reference (approach_hold off for
+  partners + _attach_approach set by the hand-off; since bbce103). Fix on branch partner-handoff-fix (worktree
+  /home/wesley/mdc_wt/partner-fix, 0b50b40, unit test); check run R1473 from it (lab). Port check branch
+  tejen-sync-check (worktree /home/wesley/mdc_wt/tejen-check) = tejen-sync + the fix, for the port's M1 run.
+  Worktree batches need MDC_REPO_ROOT=<worktree> MDC_RESULTS_ROOT=/home/wesley/multi_drone_control/results.
+- rig_to_run fixed for w4/w5 (a09244b). Figures F_rig_circle_detach, F_twin_rig_parity, F_disarm_lanes in the thesis
+  (596f90a). Rig finding: carriers 9-16 cm above their start at LANDED on 7-8 Oct (stall test; thr ~0.24): ask Wesley.
 - Thursday: sheet draft docs/rig_2026-10-15_commands.md; card docs/experiments/2026-10-10_twin_r9.md with configs
   twin_r9_held / twin_r9_moving (not flown yet). Tilt not built (waits for a later lab day).
 
