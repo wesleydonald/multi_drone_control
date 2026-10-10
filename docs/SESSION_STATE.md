@@ -106,7 +106,7 @@ Updated: Sat 10 Oct 2026, late evening.
   (switch partner_contact / his contact_attach, both default off). Wesley's three goals (magnet ON through his
   rejoin; contact + small lift proof by HIS controller; bumpless hand-over) -> card rev 2 after critic round 1
   (GO WITH CHANGES: our tracker would fly the welded QUAD4 to the release step-out point; checked true). Critic
-  round 2 running. tip_calibration prints body-to-tip (the taut length for the rig proof; Wednesday item 4). Build on a branch from
+  round 2 running (told: rig twin only, Wesley's later call; his join mode; card to be revised after round 2). tip_calibration prints body-to-tip (the taut length for the rig proof; Wednesday item 4). Build on a branch from
   tejen-sync-check after the critic. Scoring script kept at $CLAUDE_JOB_DIR/tmp/m1_stages.py (to tools/ with the configs).
 
 ## Open items / next steps (plan: /home/wesley/.claude/plans/whimsical-kindling-minsky.md)
