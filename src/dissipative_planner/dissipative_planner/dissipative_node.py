@@ -61,6 +61,7 @@ NEWCOMER_OFF_EVERY_S = 0.5  # s between the OFFs re-sent while a newcomer is out
 NEWCOMER_POSE_STALE_S = 0.5  # s: an older newcomer pose is not used (a frozen pose reads as a stall)
 NEWCOMER_LIFTED_M = 0.05   # m above its height at ATTACH before an aborted newcomer counts as off the floor
 TAKE_BACK_TIP_CLEAR_M = 0.15  # m: a take-back near the ring first lifts the tip this far above the ring's centre
+TAKE_BACK_OVER_CARRIERS_M = 0.4  # m: ... and its body this far above the highest carrier before it moves sideways
 DEPARTED_PRESS_M = 0.35    # m: a landing departed drone's reference goes this far below its rest, and never
                            # further below the drone itself (its rod and magnet on the floor make it light:
                            # it hovered 12 cm (twin R1252) and 0.19-0.22 m (rig r305, near the floor) above a
@@ -1691,8 +1692,14 @@ class DissipativeController(LoadPlanner):
                 where = 'out past the ring\'s path at its height, then down'
             # taken back with its tip down at the ring (his descent, ATTACH_READY): straight up first, or the step
             # out drags the tip through the rim (R1543: the rod hooked the ring, ring 22 deg, QUAD4 54 deg)
-            rise_z = float(self.load_state[2]) + self._attach_body_to_tip + TAKE_BACK_TIP_CLEAR_M
-            if d in self._departed_step and float(hold[2]) < rise_z:
+            # and over the carriers before it moves sideways: on a circle the ring sweeps a carrier under its path
+            # (R1554: 0.24 m above carrier 1 at 1.77 m)
+            tip_clear_z = float(self.load_state[2]) + self._attach_body_to_tip + TAKE_BACK_TIP_CLEAR_M
+            rise_z = tip_clear_z
+            carriers = [p for p in self.drone_pos[:self._n_carry0] if p is not None]
+            if carriers:
+                rise_z = max(rise_z, max(float(p[2]) for p in carriers) + TAKE_BACK_OVER_CARRIERS_M)
+            if d in self._departed_step and float(hold[2]) < tip_clear_z:
                 out = self._departed_next.pop(d, self._departed_step[d])
                 self._departed_step[d] = np.array([hold[0], hold[1], rise_z])
                 self._departed_next[d] = np.array([out[0], out[1], rise_z])

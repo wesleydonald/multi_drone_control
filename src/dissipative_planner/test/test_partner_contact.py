@@ -209,7 +209,7 @@ def test_give_up_takes_it_back_holds_then_moves_radially_out_at_its_height():
     assert f._take_back_pub.msgs == [True] and f._newcomer_out == {0: 'his give-up'}
     assert f._magnet_cmd_pub.msgs[-1] == 'OFF'                 # the span began: its OFF
     assert np.allclose(f._departed_hold[3], [0.5, 0.5, 1.6]) and f._departed_wait[3] == NEWCOMER_RELEASE_S
-    rise = 1.0 + 0.59 + 0.15                                   # its tip is down at the ring: up first (R1543)
+    rise = 1.5 + 0.4                                           # tip down at the ring: up over the carriers first (R1543, R1554)
     assert np.allclose(f._departed_step[3], [0.5, 0.5, rise])
     out = f._departed_next[3]
     assert np.isclose(np.hypot(out[0], out[1]), DEPARTED_CLEAR_R) and np.isclose(out[0], out[1])
@@ -617,7 +617,7 @@ def test_a_take_back_with_the_tip_at_the_ring_rises_before_it_steps_out():
     f = _node(quad=(0.0, 0.3, 1.0 + 0.59 + 0.01))               # body over plate 9, tip 1 cm above the ring
     f._his_phase_cb(String(data='TAKEOFF'))
     f._take_back(0, 'his give-up')
-    rise = 1.0 + 0.59 + 0.15
+    rise = max(1.0 + 0.59 + 0.15, 1.5 + 0.4)                    # clear of the rim and over the carriers (R1554)
     assert np.allclose(f._departed_step[3], [0.0, 0.3, rise])            # straight up first
     assert np.allclose(f._departed_next[3][2], rise)                     # then out at that height
     assert float(np.linalg.norm(f._departed_next[3][:2])) >= 1.2 - 1e-6
@@ -633,3 +633,12 @@ def test_a_take_back_high_above_the_ring_steps_out_at_its_height():
     f._his_phase_cb(String(data='TRANSIT_TO_DROP_POINT'))
     f._take_back(0, 'LAND')
     assert np.allclose(f._departed_step[3][2], 2.7) and 3 not in f._departed_next
+
+
+def test_the_take_back_rise_clears_the_highest_carrier():
+    """R1554: risen only clear of the rim (1.77 m), the step out passed 0.24 m over a carrier at 1.54 m."""
+    f = _node(quad=(0.0, 0.3, 1.6))
+    f.drone_pos[1] = np.array([0.43, 0.25, 1.8])                 # one carrier higher than the rest
+    f._his_phase_cb(String(data='TAKEOFF'))
+    f._take_back(0, 'his give-up')
+    assert f._departed_step[3][2] == pytest.approx(1.8 + 0.4)
