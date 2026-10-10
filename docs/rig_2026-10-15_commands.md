@@ -5,8 +5,8 @@ QUAD4 (`/drone_3`, body 14, tip body 24) welds onto plate 9. Thursday flies only
 
 | run | gate before Thursday | status 10 Oct |
 |---|---|---|
-| R9 held | 2 clean R8b on Wednesday; twin_r9_held 2 of 2 (card 2026-10-10_twin_r9) | twin pending |
-| R9 moving | R9 held clean on the rig; twin_r9_moving 2 of 2 | twin pending |
+| R9 held | 2 clean R8b on Wednesday; twin_r9_held 2 of 2 (card 2026-10-10_twin_r9) | twin 2 of 2 (R1468, R1471); reviewer pending |
+| R9 moving | R9 held clean on the rig; twin_r9_moving 2 of 2 | NOT flown: twin falsified 2 of 2 (no weld on a moving plate; 0.31 m to a carrier) |
 | R10a | Tejen's own sheet, his stack alone | his |
 | tilt (180 deg gap) | card + critic + twin 2 of 2 + neighbours (plan X) | not built: waits for a later lab day |
 | R10b / R11 | combined M1 stack (critic, R0c desk run) | slips to 21-22 Oct |
@@ -31,15 +31,13 @@ Weld radius: the value chosen at Wednesday's decision point (default 0.025). Kil
 
 ```bash
 $A $O params_file:=$C/attach_m1_orbit_held.yaml weld_radius:=<Wed> r9h     # circle held for the attach, x2
-$A $O params_file:=$C/attach_m1_orbit.yaml weld_radius:=<Wed> r9m          # attach on the moving plate, x1-2
 ```
 
 - **r9h:** after the circle has run one lap on three (~25 s): `ros2 topic pub -t 3 /magnet/command std_msgs/msg/String "{data: 'ON'}"`.
   T2: `ATTACH commanded: trajectory held 10 s for the approach`; QUAD4 climbs, transits, descends over plate 9 (the
   ring is still), tip hold, `ATTACH drone 3 (OCP resize)`, the reconfiguration hold, then the circle resumes on four.
   One lap on four, then `fleet land`.
-- **r9m:** the same, but T2 says `trajectory keeps running (attach_moving)`: QUAD4 descends onto the moving plate.
-  Only after a clean r9h.
+- **r9m:** not flown (twin: the tip loop never runs on a moving plate, so no weld; needs new code first).
 - **R10a:** our stack DOWN (Ctrl-C T1/T2, `ros2 node list` empty), the other three radios unplugged; Tejen runs his
   sheet on QUAD4 with his serial port. We watch only.
 
