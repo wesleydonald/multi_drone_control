@@ -17,6 +17,8 @@ import os
 
 import yaml
 
+from . import record as _record
+
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Events the runner knows how to fire. Kept explicit rather than "publish any topic":
@@ -274,6 +276,7 @@ class ExperimentConfig:
         self.dds_udp_only = False        # Fast DDS UDP-only profile for every process
         self.bg_param_dump = True        # background read-back of the non-evidence nodes
         self.gz_record = False           # gz --record-path <run>/gz_record (GUI playback)
+        self.record = None               # video: experiment/record.py (`record:` or --record)
         self.stop_after_landed_s = 0.0   # end the run this long after /fleet/landed (0 = off)
         self.stop_launch_on_handoff = False  # SIGINT every LAUNCH-event launch at the partner's handoff
         self.pose_timeout_s = 2.0        # SIM seconds without mocap = dead run
@@ -326,6 +329,7 @@ class ExperimentConfig:
         c.gz_record = bool((raw.get('timing') or {}).get('gz_record', False))
         c.stop_after_landed_s = float((raw.get('timing') or {}).get('stop_after_landed_s', 0.0))
         c.stop_launch_on_handoff = bool((raw.get('timing') or {}).get('stop_launch_on_handoff', False))
+        c.record = _record.parse(raw.get('record'))
         for k in ('duration_s', 'ready_timeout_s', 'pose_timeout_s', 'settle_s',
                   'stop_after_abort_s'):
             if k in tim:

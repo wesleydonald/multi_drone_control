@@ -7,6 +7,7 @@ One command runs a Gazebo experiment and writes a self-describing result directo
     ./tools/run_experiment.py configs/experiments/attach_ring_45_gz.yaml
     ./tools/run_experiment.py configs/experiments/attach_ring_45_gz.yaml --repeats 5
     ./tools/run_experiment.py <cfg> --gui        # watch it, for debugging only
+    ./tools/run_experiment.py <cfg> --record     # + an mp4 per camera, rendered after the run
 
 Requirements, each earned by a past failure (§9.1):
 
@@ -83,6 +84,12 @@ def start_gazebo(cfg, log_path, gui=False, nice=10):
         world = os.path.join(REPO, 'simulation_assets', world)
     if not os.path.exists(world):
         raise SystemExit(f'world not found: {world}')
+    rec = getattr(cfg, 'record', None)
+    if rec:
+        # the world with the camera models and no Sensors system: nothing renders during the run
+        from experiment.record import write_recording_world
+        world = write_recording_world(world, os.path.join(
+            os.path.dirname(os.path.dirname(log_path)), 'record', os.path.basename(world)), rec)
     cmd = ['gz', 'sim', '-r', '-v', '2', world] if gui else \
           ['gz', 'sim', '-s', '-r', '-v', '2', world]
     # Gazebo below the controllers in scheduling priority: a 12-core box sat at load
@@ -90,11 +97,12 @@ def start_gazebo(cfg, log_path, gui=False, nice=10):
     # 0.3-0.7 s WALL (never in SIL, which has no Gazebo), tripping the trackers'
     # 1 s wall-clock reference watchdog (R0169, R0225). Slowing the physics costs
     # only wall time; starving a controller costs the run.
-    if getattr(cfg, 'gz_record', False):
+    if getattr(cfg, 'gz_record', False) or rec:
         # a recording plays back at real speed in the GUI (`gz sim --playback <dir>`),
         # so a headless ~0.25x run can be watched without waiting for it
-        rec = os.path.join(os.path.dirname(os.path.dirname(log_path)), 'gz_record')
-        cmd = cmd[:-1] + ['--record-path', rec, cmd[-1]]
+        path = os.path.join(os.path.dirname(os.path.dirname(log_path)), 'gz_record')
+        period = ['--record-period', f'{rec["period_s"]:g}'] if rec else []
+        cmd = cmd[:-1] + ['--record-path', path, *period, cmd[-1]]
     if nice and not gui:
         cmd = ['nice', '-n', str(int(nice))] + cmd
     fh = open(log_path, 'w')
@@ -560,6 +568,39 @@ def write_metrics_and_plots(run_dir):
     return finish_run(run_dir)
 
 
+# ── video (experiment/record.py) ─────────────────────────────────────────────
+
+def write_record_spec(run_dir, spec, **run_times):
+    """<run>/record.json: what tools/render_video.py needs (cameras, fps; t_ready_sim is run t = 0)."""
+    import json
+    from experiment.record import TOPIC_PREFIX
+    with open(os.path.join(run_dir, 'record.json'), 'w') as fh:
+        json.dump(dict(spec, topic_prefix=TOPIC_PREFIX, **run_times), fh, indent=1)
+
+
+def render_video(run_dir):
+    """Render the run's cameras now (the stack is down). A failed render never fails the run:
+    `tools/render_video.py <run_dir>` repeats it."""
+    import json
+    print('\n    rendering the video (tools/render_video.py)...', flush=True)
+    os.makedirs(os.path.join(run_dir, 'video'), exist_ok=True)
+    with open(os.path.join(run_dir, 'video', 'render.log'), 'w') as fh:
+        r = subprocess.run([sys.executable, os.path.join(HERE, 'render_video.py'), run_dir],
+                           stdout=fh, stderr=subprocess.STDOUT)
+    try:
+        with open(os.path.join(run_dir, 'video', 'render.json')) as fh:
+            out = json.load(fh)
+    except (OSError, ValueError):
+        out = {'cameras': {}}
+    out['exit'] = r.returncode
+    for name, c in out['cameras'].items():
+        print(f'    [{"OK" if c["ok"] else "FAIL"}] video {name}: {c["file"]} ({c["frames"]}/'
+              f'{c["expected"]} frames, {c["repeated"]} repeated)')
+    if r.returncode:
+        print(f'    !! render failed (exit {r.returncode}); see {run_dir}/video/render.log')
+    return out
+
+
 # ── one run ──────────────────────────────────────────────────────────────────
 
 def preallocated(run_dir):
@@ -607,6 +648,9 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
             gs['git_diff_file'] = 'git_diff.patch'
         write_manifest(run_dir, **gs)
 
+    if cfg.record:
+        write_record_spec(run_dir, cfg.record)
+        write_manifest(run_dir, record=cfg.record)
     clean_out = clean_slate()
     with open(os.path.join(run_dir, 'logs', 'clean_slate.log'), 'w') as fh:
         fh.write(clean_out)
@@ -832,6 +876,11 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
                    checks=[{'check': n, 'passed': bool(g), 'detail': d}
                            for n, g, d in checks],
                    metrics=mtr)
+    if cfg.record:
+        write_record_spec(run_dir, cfg.record, t_ready_sim=getattr(node, 't_ready', None),
+                          t_last_row=rows[-1]['t'] if rows else None)
+        if cfg.record['render']:
+            write_manifest(run_dir, video=render_video(run_dir))
     return {'run_dir': run_dir, 'run_id': rid, 'ok': bool(ok),
             'duration_s': dur, 'failures': failures,
             'stopped_early': bool(node is not None and node.stop_reason)}
@@ -931,6 +980,9 @@ def main():
                                              'manifest instead of this checkout\'s')
     ap.add_argument('--check', action='store_true',
                     help='validate the configs (world, masses, launch args) and exit')
+    ap.add_argument('--record', action='store_true',
+                    help='record a video: the config\'s `record:` block, else the default cameras '
+                         '(experiment/record.py); mp4s in <run>/video/')
     args = ap.parse_args()
     if args.run_dir and (len(args.config) != 1 or args.repeats != 1):
         ap.error('--run-dir takes exactly one config and one repeat')
@@ -953,6 +1005,9 @@ def main():
         return 1 if n_bad else 0
     for path in args.config:
         cfg = checked_config(path)
+        if args.record and not cfg.record:
+            from experiment.record import parse
+            cfg.record = parse(True)
         for rep in range(args.repeats):
             results.append((cfg, rep, run_once(cfg, path, gui=args.gui, repeat=rep,
                                                gz_nice=args.gz_nice, run_dir=args.run_dir,
