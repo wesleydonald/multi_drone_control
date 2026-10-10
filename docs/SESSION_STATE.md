@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep current at each milestone)
 
-Updated: Sat 10 Oct 2026, late evening.
+Updated: Sat 10 Oct 2026, 21:40 (overnight plan running).
 
 ## Where things are
 - Main tree `/home/wesley/multi_drone_control` on **rig-prep** (see git log), clean. Nothing running.
@@ -152,3 +152,10 @@ Updated: Sat 10 Oct 2026, late evening.
 - C workstream (combined M1 stack with Tejen's code), P (Tejen port), X (tilt card + critic), R (Wed/Thu sheets,
   Tuesday desk rehearsal, send Tejen docs/tejen_questions_2026-10.md, QUAD1 checklist docs/rig_quad1_checklist.md).
 - Re-freeze the launch gate baseline at week4 (backlog).
+
+## Overnight 10-11 Oct (plan approved: /home/wesley/.claude/plans/parsed-inventing-mist.md)
+- Claim batch R1491-R1501 (m1c_*, m1-subtest e097a94) on the lab, 4 slots; m1c_hover_2 on the laptop; m1c_orbit_2
+  parked in $CLAUDE_JOB_DIR/tmp (restore, then fly it on the lab from e097a94). Monitor per finished run.
+- Helpers: V twin videos (tools/twin_video.py, main tree, results/videos/), R rig port (worktree m1-rig), F full M1
+  (worktree m1-full). Me: the integration rundown + real-life concerns (docs/m1_integration_rundown_2026-10-10.md).
+- Wesley: think real life first (memory); no thesis now; lab PC any time it is free.
