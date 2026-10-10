@@ -1,5 +1,10 @@
 # Combined M1 subtest: Tejen flies QUAD4 from its mat through pickup, drop and a contact attach proved by a small lift; our check confirms; bumpless hand-over
 
+Rev 9 (11 Oct 10:30): on ae57bbb the rise-first take-back fixed the rim snag (R1553), but on the circle the step
+out at the rise height (1.78 m) passed 0.24 m over a carrier (R1554, under the 0.30 m bar). Fix c6f2032: the rise goes
+to the higher of the rim clearance and the highest carrier + 0.4 m before any sideways move. The claim is re-flown on
+m1-rig c6f2032 (queued after the tilt-cut wave A); the ae57bbb rows (R1550-R1564) are the record. Bars unchanged.
+
 Rev 8 (11 Oct 09:15): R1543 (_lead030 on d4248af) showed the take-back from plate height hooks the rigid rod on the
 rim when it steps out at its height (ring 22 deg, QUAD4 54 deg, fault LAND). Fix ae57bbb on m1-rig: a take-back with
 the tip down at the ring rises to ring z + body-to-tip + 0.15 m first, then steps out. The claim table is re-flown on

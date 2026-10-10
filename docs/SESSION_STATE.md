@@ -326,3 +326,9 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   ON x4: catches prove 0.66-1.0 s, no-catch rejects (R1549) but its take-back snagged too (QUAD4 0.14 m from a carrier)
   -> 2 snags on d4248af (R1543, R1549): the ae57bbb rise fixes it. Landing tip-over 6 of the last 12 attached runs.
   ae57bbb claim re-fly STARTED 09:45 (lab_next.txt), then tilt wave A.
+- 10:30: ae57bbb claim so far: hover x2, orbit x2 (R1556 LAND tip-over), low?, no-catch hover PASS (rise-first take-back
+  works, R1553); lead030 no contact (clearance 0.302, between bars); R1554 no-catch orbit FALSIFIES clearance: the
+  risen step-out passed 0.24 m over a carrier on the circle -> fix c6f2032 on m1-rig (rise to max(rim clear, highest
+  carrier + 0.4)), cherry-picked to m1-tiltcut3 ffa41ef (before wave A syncs). Card rev 9. QUEUED (lab_claim5.sh pid
+  1039736, after lab_next.sh): claim re-fly on m1-rig c6f2032 -> $CLAUDE_JOB_DIR/tmp/lab_claim5.txt; score with
+  TREE="branch m1-rig c6f2032" REV=9. R1557 full M1 hover clean (6th).
