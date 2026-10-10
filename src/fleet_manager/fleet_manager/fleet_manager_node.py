@@ -430,6 +430,11 @@ class CentralController(Node):
                   for i in range(self.num_drones)}
         bad = {i: st for i, st in states.items() if not st.startswith('armed')}
         for i, st in bad.items():
+            if self.mux_state.get(i) == 'partner':
+                # the partner's stream arms it through the mux (combined M1, critic F3): his ARM comes first
+                _announce(self, 'error', f"ARM FAILED: drone {label(i)} not armed ({st}): it flies the partner's "
+                                         f"stream, so his ARM first (it arms idle on its mat), then ARM again.")
+                continue
             _announce(self, 'error', f"ARM FAILED: drone {label(i)} not armed ({st}). TAKEOFF refused: "
                                      f"replug drone {label(i)}'s battery, put it back on its plate, then ARM again "
                                      f"(relaunch T2 only if a drone moved to another plate).")

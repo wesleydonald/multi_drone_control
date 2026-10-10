@@ -52,6 +52,45 @@ def test_events_name_the_switch_and_each_first_drop_once():
     assert 'coil ON (his command)' in text
 
 
+def test_after_the_pickup_his_off_reaches_the_coil_only_in_the_drop():
+    """Critic F9: a LANDING (land_now) or any other OFF of his with the puck on must not drop it over the ring."""
+    g = MagnetGate()
+    g.his_phase('DESCEND_TO_PICKUP')
+    assert g.partner('OFF') == 'OFF'                  # before the puck: harmless, forwarded
+    assert g.partner('ON') == 'ON'
+    g.puck(True)
+    for ph in ('LIFT_OBJECT', 'TRANSIT_TO_DROP_POINT', 'LANDING', 'TAKEN_BACK', ''):
+        g.his_phase(ph)
+        assert g.partner('OFF') is None, ph            # held: the puck stays on
+    assert g.last == 'ON'
+    g.his_phase('DROP_OBJECT')
+    assert g.partner('OFF') == 'OFF'                  # the drop
+    g.puck(False)
+    g.his_phase('TRANSIT_TO_REATTACH')
+    assert g.partner('OFF') is None and g.last == 'OFF'
+
+
+def test_our_on_takes_the_coil_only_with_the_puck_released():
+    """Critic F9: an ON before the drop (RViz ATTACH, or a span begun early) must not take the coil with the puck."""
+    g = MagnetGate()
+    g.partner('ON')
+    g.puck(True)
+    assert g.ours('ON') is None and g.source == 'partner'
+    g.his_phase('DROP_OBJECT')
+    assert g.partner('OFF') == 'OFF'
+    g.puck(False)
+    assert g.ours('ON') == 'ON' and g.source == 'ours'
+    assert sum('our ON held' in e for e in g.events) == 1
+
+
+def test_restore_takes_ours_back_and_ignores_partner():
+    g = MagnetGate()
+    g.restore('partner')
+    assert g.source == 'partner'
+    g.restore('ours')
+    assert g.source == 'ours' and g.partner('OFF') is None
+
+
 @pytest.mark.parametrize('seq,coil', [
     # (input, word) sequences and the last word on the coil
     ([('p', 'ON'), ('o', 'OFF'), ('o', 'OFF')], 'ON'),                 # take-back before the span
@@ -84,19 +123,41 @@ class _Rec:
         self.msgs.append(m)
 
 
-def test_node_forwards_and_reports_its_source(monkeypatch):
+def _node(monkeypatch, *extra):
     monkeypatch.setenv('ROS_LOCALHOST_ONLY', '1')
-    rclpy.init(args=['--ros-args', '-p', 'drone_id:=3'], domain_id=DOMAIN)
+    rclpy.init(args=['--ros-args', '-p', 'drone_id:=3', *extra], domain_id=DOMAIN)
+    from drone_magnet.magnet_gate import MagnetGateNode
+    n = MagnetGateNode()
+    n.pub, n.state_pub = _Rec(), _Rec()
+    return n
+
+
+def test_node_forwards_and_reports_its_source(monkeypatch):
     try:
-        from drone_magnet.magnet_gate import MagnetGateNode
-        n = MagnetGateNode()
-        n.pub, n.state_pub = _Rec(), _Rec()
-        n._on(n.gate.ours, String(data='OFF'))
-        n._on(n.gate.partner, String(data='ON'))
-        n._on(n.gate.ours, String(data='ON'))
-        n._on(n.gate.partner, String(data='OFF'))
+        n = _node(monkeypatch, '-p', 'restore_s:=0.0')
+        n._on(n.gate.ours, 'OFF')
+        n._on(n.gate.partner, 'ON')
+        n._on(n.gate.ours, 'ON')
+        n._on(n.gate.partner, 'OFF')
         assert [m.data for m in n.pub.msgs] == ['ON', 'ON']
         assert [m.data for m in n.state_pub.msgs] == ['ours']
+        n.destroy_node()
+    finally:
+        rclpy.shutdown()
+
+
+def test_node_restart_restores_ours_and_forwards_nothing_meanwhile(monkeypatch):
+    """A restarted gate (low, critic r1): during restore_s it moves its state but writes nothing; a previous
+    instance's latched 'ours' is taken back at once, so his commands never reach the coil again."""
+    try:
+        n = _node(monkeypatch, '-p', 'restore_s:=5.0')
+        n._on(n.gate.partner, 'OFF')                    # his, during the window: not forwarded
+        n._state_cb(String(data='ours'))                # the previous instance's latched state
+        n._on(n.gate.partner, 'ON')
+        n._on(n.gate.ours, 'ON')                         # our keepalive
+        assert n.pub.msgs == [] and n.gate.source == 'ours'
+        n._end_restore()
+        assert [m.data for m in n.pub.msgs] == ['ON'] and [m.data for m in n.state_pub.msgs] == ['ours']
         n.destroy_node()
     finally:
         rclpy.shutdown()

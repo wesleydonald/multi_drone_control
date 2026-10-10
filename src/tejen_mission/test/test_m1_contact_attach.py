@@ -343,3 +343,50 @@ def test_switch_off_match_gate_is_his():
     tick(p, 1.01)
     assert p.phase == P.DESCEND_TO_ATTACHMENT
     np.testing.assert_allclose(p.rate_profile().start_tip_offset, [0, 0, APPROACH_Z])
+
+
+# ---- multi_drone_control rig (critic F9): the drop ends on the measured object, a stuck one is a give-up ----
+
+def _dropping(on_tip_offset, check=True, fresh=True):
+    p = planner(phase=P.DROP_OBJECT)
+    p.drop_check_puck, p.drop_stuck_radius_m = check, 0.08
+    p.drop_wait_time_s, p.drop_start_time = 0.4, p.clock.t
+    p.input_timeout_s = 0.25
+    p.object_attached = False                        # his IRL flag clears with the OFF itself (inferred)
+    p.measured_magnet_tip_position = PLATE + np.array([0.0, 0.0, 1.0])
+    p.pickup_object_position = p.measured_magnet_tip_position + np.asarray(on_tip_offset, float)
+    p.last_magnet_tip_pose_time = p.last_pickup_object_pose_time = p.clock.t if fresh else p.clock.t - 1.0
+    return p
+
+
+def test_drop_waits_the_release_dwell_even_with_the_flag_clear():
+    p = _dropping([0.0, 0.0, -0.04])
+    tick(p, 0.2)
+    p.last_magnet_tip_pose_time = p.last_pickup_object_pose_time = p.clock.t
+    assert p.phase == P.DROP_OBJECT
+
+
+def test_drop_timeout_with_the_object_measured_on_the_magnet_is_a_give_up():
+    p = _dropping([0.0, 0.0, -0.04])
+    p.clock.t += 0.5
+    p.last_magnet_tip_pose_time = p.last_pickup_object_pose_time = p.clock.t
+    tick(p)
+    assert p.phase == P.TAKEN_BACK and p.contact_gave_up
+    assert [m.data for m in p.give_up_publisher.messages] == [True]
+
+
+def test_drop_clears_once_the_object_is_measured_away_or_not_measured():
+    p = _dropping([0.0, 0.0, -0.6])
+    p.clock.t += 0.5
+    p.last_magnet_tip_pose_time = p.last_pickup_object_pose_time = p.clock.t
+    tick(p)
+    assert p.phase == P.CLEAR_DROP_ZONE
+    p = _dropping([0.0, 0.0, -0.04], fresh=False)
+    tick(p, 0.5)
+    assert p.phase == P.CLEAR_DROP_ZONE and not p.contact_gave_up
+
+
+def test_drop_without_the_switch_is_his():
+    p = _dropping([0.0, 0.0, -0.04], check=False)
+    tick(p)
+    assert p.phase == P.CLEAR_DROP_ZONE               # his: the flag is clear, so the drop is done

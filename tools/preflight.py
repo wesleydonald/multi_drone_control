@@ -124,6 +124,18 @@ def main():
                     help='deg; FAIL when a drone\'s measured bearing is further than this from its typed azimuth')
     a = ap.parse_args()
     rclpy.init()
+    # critic F2: a terminal outside the fleet's DDS domain reads nothing and its checks would pass on silence
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from fleet_reach import env_line, probe
+    reach = rclpy.create_node('preflight_reach')
+    status = probe(reach, 2.0)
+    reach.destroy_node()
+    if status is None:
+        print(f'PREFLIGHT REFUSED: no fleet manager answered on /fleet/manager_status within 2 s from this terminal '
+              f'({env_line()}): export the T2 domain (ROS_LOCALHOST_ONLY=1, ROS_DOMAIN_ID as T2) or check that T2 '
+              f'is up.', file=sys.stderr)
+        rclpy.shutdown()
+        sys.exit(2)
     pf = Preflight(a.drones, a.attach, a.real, a.listen)
     t0 = time.time()
     while time.time() - t0 < a.listen:

@@ -117,6 +117,10 @@ private:
   bool show_attach_;
   bool show_magnets_;
   bool magnet_initial_on_;
+  // drones with no MAGNET row and no /drone_<i>/magnet publisher (config HiddenMagnets "3,..."): the combined
+  // M1 stack, where QUAD4's coil has one writer (magnet_gate_3) and the radio listens on a private topic
+  std::vector<int> hidden_magnets_;
+  bool magnetHidden(int i) const;
   int num_drones_;
   std::vector<bool> drone_armed_;
   std::vector<float> drone_voltage_;

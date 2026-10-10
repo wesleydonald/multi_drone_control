@@ -2,6 +2,7 @@
 #include <pluginlib/class_list_macros.hpp>
 #include <rviz_common/display_context.hpp>
 #include <QHBoxLayout>
+#include <QStringList>
 #include <algorithm>
 
 namespace drone_visualisation
@@ -218,7 +219,7 @@ void ArmPanel::rebuild()
     btn->setCheckable(true);
     btn->setChecked(magnet_initial_on_);
     btn->setFixedHeight(36);
-    btn->setVisible(show_magnets_);
+    btn->setVisible(show_magnets_ && !magnetHidden(i));
     btn->setEnabled(!is_armed_);
     connect(btn, &QPushButton::toggled, this, [this, i](bool on) { this->onMagnetToggled(i, on); });
     magnet_buttons_.push_back(btn);
@@ -238,7 +239,8 @@ void ArmPanel::rebuild()
   }
   for (int i = 0; i < num_drones_; ++i) {
     const std::string ns = "/drone_" + std::to_string(i);
-    magnet_pubs_.push_back(node_->create_publisher<std_msgs::msg::String>(ns + "/magnet", 10));
+    magnet_pubs_.push_back(magnetHidden(i) ? nullptr
+                           : node_->create_publisher<std_msgs::msg::String>(ns + "/magnet", 10));
     arming_state_subs_.push_back(node_->create_subscription<std_msgs::msg::Bool>(
       ns + "/arming_state_feedback", 10,
       [this, i](const std_msgs::msg::Bool::SharedPtr msg) {
@@ -473,7 +475,7 @@ void ArmPanel::updateMagnetButton(int i)
 void ArmPanel::onMagnetToggled(int i, bool on)
 {
   updateMagnetButton(i);
-  if (!node_ || i >= static_cast<int>(magnet_pubs_.size())) {
+  if (!node_ || i >= static_cast<int>(magnet_pubs_.size()) || !magnet_pubs_[i]) {
     return;
   }
   if (magnet_pubs_[i]->get_subscription_count() == 0) {
@@ -488,9 +490,14 @@ void ArmPanel::onMagnetToggled(int i, bool on)
 
 void ArmPanel::applyShowMagnets()
 {
-  for (auto* btn : magnet_buttons_) {
-    btn->setVisible(show_magnets_);
+  for (size_t i = 0; i < magnet_buttons_.size(); ++i) {
+    magnet_buttons_[i]->setVisible(show_magnets_ && !magnetHidden(static_cast<int>(i)));
   }
+}
+
+bool ArmPanel::magnetHidden(int i) const
+{
+  return std::find(hidden_magnets_.begin(), hidden_magnets_.end(), i) != hidden_magnets_.end();
 }
 
 void ArmPanel::applyShowDetach()
@@ -528,6 +535,17 @@ void ArmPanel::load(const rviz_common::Config& config)
   if (config.mapGetBool("MagnetInitialOn", &m_on)) {
     magnet_initial_on_ = m_on;
   }
+  QString hidden;
+  hidden_magnets_.clear();
+  if (config.mapGetString("HiddenMagnets", &hidden)) {
+    for (const auto& tok : hidden.split(',', Qt::SkipEmptyParts)) {
+      bool ok = false;
+      const int d = tok.trimmed().toInt(&ok);
+      if (ok) {
+        hidden_magnets_.push_back(d);
+      }
+    }
+  }
 
   // Fleet size for the per-drone rows. The launch files write this; absent or
   // nonsensical values fall back to a single drone.
@@ -546,6 +564,13 @@ void ArmPanel::save(rviz_common::Config config) const
   config.mapSetValue("ShowAttach", show_attach_);
   config.mapSetValue("ShowMagnets", show_magnets_);
   config.mapSetValue("MagnetInitialOn", magnet_initial_on_);
+  if (!hidden_magnets_.empty()) {
+    QStringList ids;
+    for (int d : hidden_magnets_) {
+      ids << QString::number(d);
+    }
+    config.mapSetValue("HiddenMagnets", ids.join(","));
+  }
   config.mapSetValue("NumDrones", num_drones_);
 }
 

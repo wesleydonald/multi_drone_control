@@ -47,6 +47,11 @@ PROOF_KNOBS = ('contact_dwell_s', 'proof_d_ok', 'proof_d_fail', 'proof_h_plate',
                'proof_fail_dwell_s', 'proof_timeout_s', 'proof_ma_s')
 # combined M1 on the rig: his ball (Motive body 6, his IRL id) for his mission, from our mocap node
 BALL_ROUTE = '6:/pickup/motion_capture_state'
+# combined M1 on the rig: QUAD4's radio latch listens here, written by magnet_gate_3 alone (critic F4: the RViz
+# MAGNET D4 row and any shell `ros2 topic pub /drone_3/magnet` no longer reach the coil)
+COIL_TOPIC = f'/drone_{ATTACH_DRONE_ID}/magnet_coil'
+# his puck (irl_commissioning.yaml pickup_object_mass_kg) for our model of a taken-back QUAD4 (the twin ball is 0.1)
+RIG_PUCK_MASS = 0.06
 # his rig nodes start this long after ours (our trackers and planner load their solvers first; a start
 # mid-load starved them, R0604)
 PARTNER_DELAY_S = 5.0
@@ -99,6 +104,13 @@ def _contact_manager_params(context, real):
     is false; the rig's proof also wants the taut body-to-tip length (proof_taut_len, 0 = off).
     """
     out = {'confirm_mode': 'contact_lift'}
+    # critic F7, off by default: c0 from the dwell's tail and a vertical-speed gate (thresholds: Wesley)
+    if truthy(context, 'contact_still'):
+        out['contact_still'] = True
+        for k in ('contact_vz_max', 'contact_c0_tail_s'):
+            v = LaunchConfiguration(k).perform(context).strip()
+            if v:
+                out[k] = float(v)
     for k in PROOF_KNOBS:
         v = LaunchConfiguration(k).perform(context).strip()
         if v:
@@ -362,7 +374,9 @@ def attach(context, launch_dir, profile_vals):
                      **({'partner_contact': True,
                          'contact_fold_seed': LaunchConfiguration('contact_fold_seed').perform(context),
                          'contact_joint_state_topic': (
-                             '' if real else '/payload/detachable_joint_state')}
+                             '' if real else '/payload/detachable_joint_state'),
+                         # rig: his 60 g puck, and no span while it reads attached (critic F8, F9)
+                         **({'contact_ball_mass': RIG_PUCK_MASS, 'contact_span_wait_ball': True} if real else {})}
                         if partner_contact else {}),
                      'start_attached': partner_attached,
                      'partner_release': partner_attached,
@@ -423,7 +437,8 @@ def attach(context, launch_dir, profile_vals):
                                'would catch the ring with no weld declared; latch it OFF')
         nodes += rig_io(launch_dir, n_radio, latches, attach=enable_approach,
                         **({'extra_bodies': (LaunchConfiguration('mocap_extra_bodies').perform(context).strip()
-                                             or BALL_ROUTE)} if combined_rig else {}))
+                                             or BALL_ROUTE),
+                            'magnet_topic_overrides': f'{ATTACH_DRONE_ID}:{COIL_TOPIC}'} if combined_rig else {}))
     if not enable_approach:
         return nodes
 
@@ -485,8 +500,10 @@ def attach(context, launch_dir, profile_vals):
                          'release_topic': '/partner/release' if partner_attached else '',
                          **({'take_back_topic': f'/drone_{d}/take_back'}
                             if partner_contact else {}),
-                         # his MPC's +1 on aux 5, 7-10 (combined-stack O6): zeroed on his stream
-                         **({'zero_partner_aux': True} if real and partner_contact else {}),
+                         # his MPC's +1 on aux 5, 7-10 (combined-stack O6): zeroed on his stream; his throttle
+                         # held at armed idle until our planner flies the ring (critic F3)
+                         **({'zero_partner_aux': True, 'partner_hold_until_planner': True}
+                            if real and partner_contact else {}),
                          **rig_magnet}],
             output='screen'))
 
@@ -674,7 +691,8 @@ def attach(context, launch_dir, profile_vals):
             nodes.append(Node(
                 package='drone_magnet', executable='magnet_gate', name=f'magnet_gate_{d}',
                 parameters=[{'drone_id': d, 'partner_topic': '/tejen/magnet/command',
-                             'ours_topic': f'/drone_{d}/magnet_ours', 'out_topic': f'/drone_{d}/magnet'}],
+                             'ours_topic': f'/drone_{d}/magnet_ours', 'out_topic': COIL_TOPIC,
+                             'phase_topic': '/join_planner/phase', 'puck_topic': '/tejen/object_attached'}],
                 output='screen'))
             lc = lambda k: float(LaunchConfiguration(k).perform(context))  # noqa: E731
             nodes.append(LogInfo(msg=(

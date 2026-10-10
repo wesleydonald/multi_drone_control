@@ -395,10 +395,14 @@ class SimulationTestSupervisor(Node):
         self.command_publisher = self.create_publisher(String, "drone_command", 5)
         self.land_publisher = self.create_publisher(Bool, "/join_planner/land_now", 5)
         # multi_drone_control combined rig (H5): 'land' turns every stop's disarm request into
-        # /join_planner/land_now, so a stale input never cuts the motors of a flying vehicle
+        # /join_planner/land_now, so a stale input never cuts the motors of a flying vehicle; 'give_up' (critic F9)
+        # publishes /join_planner/give_up instead (the fleet takes the vehicle back: his LANDING would send the
+        # object magnet OFF over the ring)
         self.stop_action = str(self.declare_parameter("stop_action", "disarm").value).strip().lower()
-        if self.stop_action not in ("disarm", "land"):
-            raise ValueError("stop_action must be disarm or land")
+        if self.stop_action not in ("disarm", "land", "give_up"):
+            raise ValueError("stop_action must be disarm, land or give_up")
+        self.give_up_publisher = (self.create_publisher(Bool, "/join_planner/give_up", 5)
+                                  if self.stop_action == "give_up" else None)
         self.arming_client = self.create_client(SetArming, "drone_arming_service")
         self.timer = self.create_timer(0.1, self._tick)
         self.get_logger().info(
@@ -588,6 +592,10 @@ class SimulationTestSupervisor(Node):
                     self.get_logger().warn(
                         f"Supervisor stop ({decision.reason}): LAND requested instead of a disarm")
                     self._publish_land()
+                elif self.stop_action == "give_up":
+                    self.get_logger().warn(
+                        f"Supervisor stop ({decision.reason}): give-up instead of a disarm (the fleet takes it back)")
+                    self.give_up_publisher.publish(Bool(data=True))
                 else:
                     self._request_disarm()
             elif action == SupervisorAction.FINISH:

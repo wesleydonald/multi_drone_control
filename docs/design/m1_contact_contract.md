@@ -90,10 +90,23 @@ of the Wednesday sheet lines, the frozen launch gate and the twin claim configs 
   `proof_taut_len` typed from the 09:00 tip record (required > 0: on the slack tether an uncaught magnet resting on
   a rising plate would otherwise read as attached).
 - **One coil** (O5): the manager's latch goes to `/drone_3/magnet_ours`; `magnet_gate_3` alone writes
-  `/drone_3/magnet` (QUAD4's radio latch): his `/tejen/magnet/command` until the first ON on `/drone_3/magnet_ours`
-  (our span, or any `/magnet/command` ON), then ours only, for good. Before it our OFF keepalive is dropped (a
-  take-back before the span keeps his ball on); after it his OFFs are dropped. `/drone_3/magnet_gate` (latched) says
-  which.
+  `/drone_3/magnet_coil`, the private topic QUAD4's radio latch listens on (critic F4: its RViz MAGNET D4 row is
+  hidden, and `/drone_3/magnet` no longer reaches the coil). His `/tejen/magnet/command` until the first ON on
+  `/drone_3/magnet_ours` (our span, or any `/magnet/command` ON), then ours only, for good. Before it our OFF
+  keepalive is dropped (a take-back before the span keeps his ball on); after it his OFFs are dropped.
+  `/drone_3/magnet_gate` (latched) says which. Critic F9: once his puck has been attached (`/tejen/object_attached`)
+  his OFF reaches the coil only in DROP_OBJECT / CLEAR_DROP_ZONE; our ON takes the coil only while the puck reads
+  released (and our span waits for it, `contact_span_wait_ball`). A restarted gate writes nothing for 1 s while it
+  listens for its old latched state and our manager's 2 Hz ON.
+- **His drop** (F9, `drop_check_puck`): the release dwell always runs (his object flag is inferred and clears with the
+  OFF); then the object MEASURED within 8 cm of the marker is a give-up (our take-back), away (or not measured, with a
+  warning) clears the drop zone.
+- **His throttle** (F3): the mux holds his stream at armed idle (throttle -1, rates 0) until our planner's
+  `/fleet/status` reads PLANNER or NETWORK.
+- **Contact** (F7, `contact_still`, default off): c0 and z0 from the dwell's last 0.05 s, and the contact also needs
+  the tip's vertical speed relative to the plate <= `contact_vz_max` (0.02 proposed). Thresholds: Wesley.
+- **QUAD4's numbers** (F8): his launch refuses `magnet_drop_below_quad` and `mpc_thrust_ratio` untyped (his IRL
+  defaults are QUAD2's); our planner models his puck at 0.06 kg. His supervisor is refused on the combined rig.
 - **His aux channels** (O6): the mux zeroes channels 5 and 7-10 of his stream (`zero_partner_aux`).
 - **Mocap** (O3): our mocap node routes his ball, `mocap_extra_bodies` (default under partner_contact
   `6:/pickup/motion_capture_state`), next to QUAD4 (14) and its marker (24, `/magnet_tip_pose`).
@@ -103,8 +116,10 @@ of the Wednesday sheet lines, the frozen launch gate and the twin claim configs 
   `/tejen/pickup_object/pose`, `/tejen/payload_world_state`. His MPC: `/tejen/drone_command` (ARM, TAKEOFF by hand),
   out on `/drone_3/ELRSCommand_tejen`. No supervisor unless `partner_args:='supervisor:=true'` (stops land).
 - **Order** (require_fc_armed checks QUAD4's own radio too): his ARM (QUAD4 armed idle) -> `fleet arm` ->
-  `fleet takeoff` -> the ring at height -> his TAKEOFF. A take-back before our TAKEOFF cannot switch (our drone-3
-  tracker is not flying): QUAD4 stays on his stream.
+  `fleet takeoff` -> the ring at height -> his TAKEOFF (the mux holds his throttle at idle until then). A take-back
+  before our TAKEOFF cannot switch (our drone-3 tracker is not flying): QUAD4 stays on his stream.
+- **DDS** (F2): `tools/fleet_reach.py` (the fleet CLI's check), `tools/preflight.py` and `tools/rig_flight.sh` refuse
+  unless the latched `/fleet/manager_status` answers within 2 s from the terminal.
 - **The lift margin on the rig**: his LIFT_PROOF rises from his contact TARGET (`final_attach_offset_z`, rig
   -0.01), not from the height where the contact was seen (z0), by at most `proof_rise_max` (rig 0.03): his reference
   ends 2 cm above the face, of which the first ~1 cm takes up the tether's slack. (The twin's 1 cm cap from a target

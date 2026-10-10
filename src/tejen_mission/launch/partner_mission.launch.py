@@ -420,6 +420,15 @@ def _rig_nodes(context):
     if not _flag(context, 'contact_attach'):
         raise RuntimeError('partner_mission real:=true is the combined M1 contact attach: contact_attach:=true '
                            '(the ATTACH_READY hand-back is not for the rig, decisions 10 Oct)')
+    # QUAD4's own numbers (critic F8): his IRL defaults are QUAD2's (body 12 / marker 22), so the rig refuses them
+    # untyped; they come from Wednesday's tip record and Thursday's R10a, with weld_point_z and proof_taut_len
+    for name, what in (('magnet_drop_below_quad', "QUAD4's body to magnet marker (m, the 09:00 tip record)"),
+                       ('mpc_thrust_ratio', "his kT on QUAD4 (Thursday's R10a)")):
+        if name not in typed or not LaunchConfiguration(name).perform(context).strip():
+            raise RuntimeError(f'partner_mission real:=true: type {name}:=<{what}>; his IRL default is QUAD2\'s')
+    if _flag(context, 'supervisor'):
+        raise RuntimeError('partner_mission real:=true: supervisor:=true is refused on the combined rig until its '
+                           'give-up stop has been through the critic (critic F9); ARM and TAKEOFF stay manual')
     target_z = LaunchConfiguration('contact_target_z').perform(context).strip()
     if not target_z:
         raise RuntimeError('partner_mission real:=true: type contact_target_z:=<weld_point_z> (the 09:00 '
@@ -530,6 +539,8 @@ def _rig_nodes(context):
                 'approach_offset_x': f('contact_dx', 0.0),
                 'attach_ready_target_lead_time': f('contact_lead', 0.0),
                 'proof_rise_max': f('proof_rise_max', RIG['proof_rise_max']),
+                # the drop ends on the measured object leaving the marker; stuck = give-up (critic F9)
+                'drop_check_puck': True,
                 'contact_topic': '/magnet/contact',
                 'ring_attached_topic': '/magnet/object_attached',
                 'give_up_topic': '/join_planner/give_up',
@@ -578,7 +589,7 @@ def _rig_nodes(context):
             parameters=[{
                 'use_sim_time': False,
                 'control_mode': 'manual',          # ARM and TAKEOFF stay with the operator
-                'stop_action': 'land',             # H5: a stale input lands, never disarms
+                'stop_action': 'give_up',          # H5 / F9: a stale input gives up (our take-back), never disarms
                 'result_path': ParameterValue(LaunchConfiguration('result_path'), value_type=str),
                 'startup_timeout_s': 600.0,
                 'manual_start_timeout_s': 600.0,
@@ -628,9 +639,9 @@ def _arguments():
         # real:=true only (the rig; the sim graph above does not read these)
         DeclareLaunchArgument('real', default_value='false'),
         DeclareLaunchArgument('contact_target_z', default_value=''),     # m, the calibrated weld_point_z
-        DeclareLaunchArgument('magnet_drop_below_quad', default_value=''),   # '' = his IRL 0.575
+        DeclareLaunchArgument('magnet_drop_below_quad', default_value=''),   # QUAD4's, typed (refused untyped)
         DeclareLaunchArgument('proof_rise_max', default_value=''),       # '' = the rig's 0.03
-        DeclareLaunchArgument('mpc_thrust_ratio', default_value=''),     # '' = his IRL 22 (UKF + feedback)
+        DeclareLaunchArgument('mpc_thrust_ratio', default_value=''),     # QUAD4's, typed (refused untyped)
         DeclareLaunchArgument('mpc_cable_length', default_value=''),     # '' = his MPC's 0.531
         DeclareLaunchArgument('anchor_offset_z', default_value=''),      # '' = his IRL -0.030
         DeclareLaunchArgument('supervisor', default_value='false'),      # his supervisor (manual, stops land)

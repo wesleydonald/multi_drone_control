@@ -236,13 +236,15 @@ def rig_magnet_latches(context, defaults):
     return out
 
 
-def rig_io(launch_dir, n_radio, magnet_initial, attach=False, detach=False, extra_bodies=None):
+def rig_io(launch_dir, n_radio, magnet_initial, attach=False, detach=False, extra_bodies=None,
+           magnet_topic_overrides=None):
     """real_io_launch.py for drones 0..n_radio-1, scoped so its arguments do not leak.
 
     magnet_initial: one value per drone for its radio latch (rig_magnet_latches).
     Each drone's serial port is the launch argument drone<i>_serial (default
     /dev/QUAD<i+1>). extra_bodies: the mocap node's extra Motive bodies ('<id>:/<topic>,...';
-    None = whatever mocap_extra_bodies says).
+    None = whatever mocap_extra_bodies says). magnet_topic_overrides: '<i>:/<topic>' moves drone i's radio
+    latch to a private topic and hides its RViz MAGNET row (None = none).
     """
     actions = []
     args = {'num_drones': str(n_radio),
@@ -252,6 +254,8 @@ def rig_io(launch_dir, n_radio, magnet_initial, attach=False, detach=False, extr
             'detach': 'true' if (attach or detach) else 'false'}
     if extra_bodies is not None:
         args['mocap_extra_bodies'] = extra_bodies
+    if magnet_topic_overrides is not None:
+        args['magnet_topic_overrides'] = magnet_topic_overrides
     for i in range(n_radio):
         name = f'drone{i}_serial'
         actions.append(DeclareLaunchArgument(

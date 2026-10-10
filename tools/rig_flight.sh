@@ -12,7 +12,8 @@
 # the bag with every topic the read-back needs, and tees the launch output to <name>.log.
 # Ctrl-C stops the launch and then the bag (so its metadata is written). Then tools/rig_summary.py
 # draws figures/<name>_summary.png in the background, ~20 s (RIG_FLIGHT_SUMMARY=0 skips it).
-# Refuses unless ROS_LOCALHOST_ONLY=1 and ROS_DOMAIN_ID are set; mode:=attach refuses while T1 is up.
+# Refuses unless ROS_LOCALHOST_ONLY=1 and ROS_DOMAIN_ID are set; mode:=attach refuses while T1 is up; refuses when a
+# fleet manager already answers in this domain, and stops the launch if its own never answers (tools/fleet_reach.py).
 set -uo pipefail
 
 usage() { sed -n '2,15p' "$0"; exit 2; }
@@ -62,6 +63,9 @@ mkdir -p "$D"
 { git rev-parse HEAD; git status --short; } > "$D/${F}_code.txt" 2>&1
 
 tools/clean_slate.sh --rig || { echo "rig_flight: clean_slate failed" >&2; exit 1; }
+# critic F2: no fleet manager may answer in this domain before ours starts (a second stack), and ours must answer
+# from this terminal once it starts (else T3, RViz and his terminal would command nothing): refuse otherwise
+python3 tools/fleet_reach.py --absent || { echo "rig_flight: REFUSED (see above)" >&2; exit 1; }
 export MDC_RUN_DIR="$PWD/$D/${F}_logs"
 
 topics=(/payload/motion_capture_state /fleet/command /fleet/abort /fleet/status /fleet/landed
@@ -76,7 +80,7 @@ done
 # combined M1 contact attach (partner_contact:=true): our check, the coil gate, his mission's side
 if [ "$COMBINED" = true ]; then
   topics+=(/magnet/contact /magnet/attach_proof /join_planner/phase /join_planner/give_up /join_planner/reference
-           /join_planner/land_now /drone_3/take_back /drone_3/magnet_ours /drone_3/magnet_gate
+           /join_planner/land_now /drone_3/take_back /drone_3/magnet_ours /drone_3/magnet_gate /drone_3/magnet_coil
            /drone_3/ELRSCommand_tejen /tejen/magnet/command /tejen/object_attached /tejen/pendulum_swing_state
            /tejen/magnet_tip_pose /pickup/motion_capture_state /fake_attachment_point/pose /fake_payload/pose
            /payload/trajectory_state)
@@ -93,4 +97,12 @@ summary() {
 trap 'stop_bag; summary' EXIT
 
 echo "rig_flight: F=$F  logs $MDC_RUN_DIR  bag $D/$F (${#topics[@]} topics)"
+SHELL_PID=$$
+( sleep 3
+  if python3 tools/fleet_reach.py --wait 120 >/dev/null; then
+    echo "rig_flight: the fleet manager answers in this domain ($ROS_DOMAIN_ID, localhost only)"
+  else
+    echo "rig_flight: REFUSED: the fleet manager never answered from this terminal in 120 s: stopping the launch" >&2
+    pkill -INT -P "$SHELL_PID" -f "ros2 launch bringup" || true
+  fi ) &
 ros2 launch bringup "$LAUNCH" "$@" 2>&1 | tee "$D/$F.log"

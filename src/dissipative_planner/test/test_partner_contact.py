@@ -401,3 +401,21 @@ def test_with_the_ball_on_the_take_back_clears_by_the_rod_too():
     g.attach_pos[0] = np.array([0.7, 1.09, 2.93])            # no ball: r 1.3 is already clear
     g._take_back(0, 'LAND')
     assert 3 not in g._departed_step
+
+
+def test_rig_span_waits_for_his_ball_released():
+    """Rig (critic F9, contact_span_wait_ball): no span ON while /tejen/object_attached reads true; off (the twin), as
+    before."""
+    for wait, expect in ((True, []), (False, ['ON'])):
+        f = _node()
+        f._span_wait_ball = wait
+        f._his_phase_cb(String(data='TAKEOFF'))
+        f._ball_cb(Bool(data=True))
+        f.attach_pos[0] = np.array([0.0, 0.6, 1.6])
+        f._joint_state_cb(String(data='detached'))
+        f._his_phase_cb(String(data='TRANSIT_TO_REATTACH'))
+        _tick(f)
+        assert f._magnet_cmd_pub.msgs == expect
+        f._ball_cb(Bool(data=False))
+        _tick(f)
+        assert f._magnet_cmd_pub.msgs[:1] == ['ON']

@@ -34,6 +34,10 @@ class ProofConfig:
     timeout_s: float = 3.0
     taut_len: float = 0.0           # m, body to tip; 0 = not checked (the twin's rod is rigid)
     ma_s: float = 0.1
+    # contact_still (critic F7, off = 0): c0 and z0 from the dwell's last c0_tail_s only (not its whole window, which
+    # still holds the arrival), and the contact also needs the tip's VERTICAL speed relative to the plate <= vz_max
+    c0_tail_s: float = 0.0
+    vz_max: float = 0.0
 
     def __post_init__(self) -> None:
         if not all(math.isfinite(float(v)) and float(v) >= 0.0 for v in self.__dict__.values()):
@@ -71,6 +75,7 @@ class ContactProof:
         self.last_fail: Optional[dict] = None
         self.distance = math.nan
         self.rel_speed = math.nan
+        self.rel_vz = math.nan
         self.body_to_tip = math.nan
         self._win = deque()       # (t, tip-to-plate, plate z, body-to-tip) over the last ma_s
         self._near = deque()      # (t, tip-to-plate, plate z) while the tip stays within the radius
@@ -177,10 +182,15 @@ class ContactProof:
         t = [n[0] for n in self._near]
         rels = np.array([n[1] for n in self._near])
         self.rel_speed = slope_speed(t, rels)
-        if now - t[0] < cfg.contact_dwell_s - _EPS or not self.rel_speed <= cfg.speed:
+        still = True
+        if cfg.vz_max > 0.0:
+            self.rel_vz = slope_speed(t, rels[:, 2:3])
+            still = self.rel_vz <= cfg.vz_max
+        if now - t[0] < cfg.contact_dwell_s - _EPS or not self.rel_speed <= cfg.speed or not still:
             return None
-        self.c0 = rels.mean(axis=0)
-        self.z0 = float(np.mean([n[2] for n in self._near]))
+        tail = (np.array(t) >= now - cfg.c0_tail_s - _EPS) if cfg.c0_tail_s > 0.0 else np.ones(len(t), bool)
+        self.c0 = rels[tail].mean(axis=0)
+        self.z0 = float(np.mean([n[2] for n, k in zip(self._near, tail) if k]))
         self.t_contact = now
         self.tries += 1
         self.state = PROVE
@@ -206,4 +216,5 @@ class ContactProof:
                 'body_to_tip_m': num(self.body_to_tip), 'tries': self.tries,
                 'contact_age_s': None if self.t_contact is None else num(now - self.t_contact),
                 'fails': self.fails, 'reason': self.reason, 'distance_m': num(self.distance),
-                'rel_speed_mps': num(self.rel_speed)}
+                'rel_speed_mps': num(self.rel_speed),
+                **({'rel_vz_mps': num(self.rel_vz)} if self.config.vz_max > 0.0 else {})}

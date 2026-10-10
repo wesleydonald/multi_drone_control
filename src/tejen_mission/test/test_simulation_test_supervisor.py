@@ -175,6 +175,9 @@ class StopActionTest(unittest.TestCase):
         try:
             node = SimulationTestSupervisor()
             node.land_publisher, node.command_publisher = Rec(), Rec()
+            if node.give_up_publisher is not None:
+                node.give_up_publisher = Rec()
+                self.give_ups = node.give_up_publisher
             node.arming_client = type('C', (), {'service_is_ready': lambda self: False})()
             node.core.step = lambda now, snap: SupervisorDecision(
                 actions=(SupervisorAction.REQUEST_DISARM,), outcome='FAIL', reason='REQUIRED_INPUT_STALE')
@@ -190,3 +193,7 @@ class StopActionTest(unittest.TestCase):
 
     def test_land_lands_and_never_disarms(self):
         self.assertEqual(self._run('land'), ([True], []))
+
+    def test_give_up_gives_up_and_neither_lands_nor_disarms(self):
+        self.assertEqual(self._run('give_up'), ([], []))
+        self.assertEqual([m.data for m in self.give_ups.msgs], [True])

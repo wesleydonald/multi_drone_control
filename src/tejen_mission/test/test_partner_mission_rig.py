@@ -26,7 +26,8 @@ def _module():
 
 def _rig(**typed):
     """(module, context, entities) as `ros2 launch ... real:=true contact_attach:=true contact_target_z:=0.031`."""
-    typed = {'real': 'true', 'contact_attach': 'true', 'contact_target_z': '0.031', **typed}
+    typed = {'real': 'true', 'contact_attach': 'true', 'contact_target_z': '0.031',
+             'magnet_drop_below_quad': '0.575', 'mpc_thrust_ratio': '22.0', **typed}
     mod = _module()
     ctx = LaunchContext()
     ctx.launch_configurations.update(typed)
@@ -70,7 +71,7 @@ def test_rig_node_set_has_no_gazebo_node_and_the_wall_clock():
 
 
 def test_every_topic_is_written_out_and_none_is_ours():
-    g, _ = _nodes(supervisor='true')
+    g, _ = _nodes()
     reads = {('partner_rig_state', k) for k in ('body_topic', 'tip_topic', 'ball_topic')}   # our mocap, read
     for name, n in g.items():
         for k, v in n['params'].items():
@@ -120,15 +121,22 @@ def test_typed_values_win():
     assert g['tejen_mpc']['params']['thrust_ratio'] == 24.5
 
 
-def test_supervisor_is_optional_manual_and_lands():
+def test_supervisor_is_off_and_refused_on_the_rig():
+    """Critic F9: refused on the combined rig until its give-up stop has been through the critic."""
     assert 'simulation_test_supervisor' not in _nodes()[0]
-    s = _nodes(supervisor='true')[0]['simulation_test_supervisor']['params']
-    assert (s['control_mode'], s['stop_action'], s['freshness_timeout_s']) == ('manual', 'land', 0.5)
+    with pytest.raises(RuntimeError, match='supervisor'):
+        _rig(supervisor='true')
+
+
+def test_drop_ends_on_the_measured_object():
+    assert _nodes()[0]['online_join_planner']['params']['drop_check_puck'] is True
 
 
 @pytest.mark.parametrize('typed,match', [({'contact_attach': 'false'}, 'contact_attach'),
                                          ({'contact_target_z': ''}, 'contact_target_z'),
-                                         ({'geometry': 'rig_twin'}, 'geometry')])
+                                         ({'geometry': 'rig_twin'}, 'geometry'),
+                                         ({'magnet_drop_below_quad': ''}, 'magnet_drop_below_quad'),
+                                         ({'mpc_thrust_ratio': ''}, 'mpc_thrust_ratio')])
 def test_refusals(typed, match):
     with pytest.raises(RuntimeError, match=match):
         _rig(**typed)

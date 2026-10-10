@@ -71,6 +71,22 @@ def zero_partner_aux(msg, keep=()):
     return out
 
 
+def clamp_partner_idle(msg):
+    """A copy of his command at armed idle: throttle -1 and zero rates (with airmode a rate command spins
+    the motors on the mat), armed and aux as sent. Never mutates msg."""
+    out = copy.copy(msg)
+    out.channel_0 = 0.0
+    out.channel_1 = 0.0
+    out.channel_2 = -1.0
+    out.channel_3 = 0.0
+    return out
+
+
+def planner_flying(status):
+    """True when our planner's /fleet/status line ('PLANNER | ...', 'NETWORK | ...') says it flies the ring."""
+    return str(status).split('|', 1)[0].strip().upper() in ('PLANNER', 'NETWORK')
+
+
 def merge_magnet_channel(msg, channel, value):
     """Write the magnet aux channel into a command about to be forwarded. On hardware the
     magnet manager publishes its ON/OFF on a separate ELRSCommand topic that never reaches
@@ -99,6 +115,14 @@ class ElrsMux(Node):
         self.drone_id = drone_id
         # rig, combined M1: zero the partner's aux channels on his stream (the sim plant ignores them)
         self._zero_aux = bool(self.declare_parameter('zero_partner_aux', False).value)
+        # rig, combined M1 (critic F3): his stream is held at armed idle until our planner flies the ring (its
+        # /fleet/status reads PLANNER or NETWORK): a TAKEOFF of his before ours could not be taken back
+        self._hold_partner = bool(self.declare_parameter('partner_hold_until_planner', False).value)
+        self._planner_flying = False
+        if self._hold_partner:
+            self.create_subscription(
+                String, str(self.declare_parameter('planner_status_topic', '/fleet/status').value),
+                self._planner_status_cb, 5)
 
         self.pub =self.create_publisher(ELRSCommand, f'/drone_{drone_id}/ELRSCommand', 1)
         self._state = None
@@ -226,6 +250,12 @@ class ElrsMux(Node):
             self.get_logger().warn('[elrs_mux] TAKE-BACK: our tracker takes the drone (no attach)')
         self._apply(self.policy.take_back(self._now()))
 
+    def _planner_status_cb(self, msg: String):
+        if not self._planner_flying and planner_flying(msg.data):
+            self._planner_flying = True
+            self.get_logger().info(f'[elrs_mux] our planner flies the ring ({msg.data.split("|")[0].strip()}): '
+                                   f'the partner\'s throttle passes from now')
+
     def _magnet_cb(self, msg: ELRSCommand):
         self._magnet_value = float(getattr(msg, f'channel_{self._magnet_channel}', 0.0))
 
@@ -246,6 +276,12 @@ class ElrsMux(Node):
             self._publish_state()
             self.get_logger().info('[elrs_mux] RELEASED -> APPROACH controller (partner mission)')
         if not self._attached and not self._ours_only:
+            if self._hold_partner and not self._planner_flying and msg.armed and (
+                    float(msg.channel_2) > -1.0 or msg.channel_0 or msg.channel_1 or msg.channel_3):
+                msg = clamp_partner_idle(msg)
+                self.get_logger().warn('[elrs_mux] the partner\'s throttle held at armed idle: our planner is not '
+                                       'flying the ring yet (fleet takeoff first, then his TAKEOFF)',
+                                       throttle_duration_sec=2.0)
             self._forward(zero_partner_aux(msg, keep=(self._magnet_channel,)) if self._zero_aux else msg)
 
     def _diss_cb(self, msg: ELRSCommand):

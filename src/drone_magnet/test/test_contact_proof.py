@@ -251,3 +251,41 @@ def test_slope_speed():
     r = np.outer(t, [0.03, 0.0, -0.04]) + [1.0, 2.0, 3.0]
     assert slope_speed(t, r) == pytest.approx(0.05)
     assert math.isnan(slope_speed(t[:1], r[:1]))
+
+
+# ── contact_still (critic F7, default off): c0 from the dwell's tail and a vertical-speed gate ──
+
+def _arrival(v, *, seed, noise=0.0002, from_mm=20.0, t_end=1.5):
+    """The tip arriving on the plate at v m/s from from_mm above it, then resting (120 Hz, mocap noise)."""
+    rng = np.random.default_rng(seed)
+    out = []
+    for k in range(int(t_end * HZ) + 1):
+        t = k / HZ
+        tip = PLATE + [0.0, 0.0, max(0.0, from_mm / 1000.0 - v * t)]
+        out.append((t, tip + rng.normal(0.0, noise, 3), PLATE.copy(), tip + [0.0, 0.0, BODY_TO_TIP]))
+    return out
+
+
+def _c0_z(v, config, seed):
+    p = _on(config)
+    for t, tip, plate, body in _arrival(v, seed=seed):
+        if p.step(t, tip, plate, body=body) == 'contact':
+            return 1000.0 * p.c0[2], p
+    raise AssertionError('no contact')
+
+
+@pytest.mark.parametrize('v', [0.03, 0.05, 0.08])
+def test_contact_still_sets_c0_on_the_resting_tip(v):
+    """With the switch on, c0 is within 1 mm of the rest point at every arrival speed (the critic's pass bar for the
+    desk ramps); off, the dwell that opens while the tip still arrives leaves c0 above it."""
+    still = ProofConfig(radius=0.01, c0_tail_s=0.05, vz_max=0.02)
+    for seed in range(20):
+        z, p = _c0_z(v, still, seed)
+        assert abs(z) <= 1.0, (v, seed, z)
+        assert p.rel_vz <= 0.02 and 'rel_vz_mps' in p.report(2.0)
+
+
+def test_without_contact_still_a_slow_arrival_latches_c0_above_the_plate():
+    zs = [_c0_z(0.05, ProofConfig(radius=0.01), seed)[0] for seed in range(20)]
+    assert max(zs) > 2.0                    # the 10 Oct desk run: +4.9 mm, then every proof timed out
+    assert 'rel_vz_mps' not in _on(ProofConfig(radius=0.01)).report(0.0)

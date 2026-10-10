@@ -100,6 +100,9 @@ def _args():
         # 6 = Betaflight AUX4, where these airframes' magnet mode sits (tools/aux_sweep.py, 2026-09-16).
         DeclareLaunchArgument('magnet_channel', default_value='6'),
         DeclareLaunchArgument('magnet_initial', default_value='ON'),
+        # combined M1 (real_control_launch.py mode:=attach partner_contact:=true): a drone's radio latch listens on
+        # a private topic only the coil gate writes ('<i>:/<topic>,...'), and its RViz MAGNET row is hidden ('' = none)
+        DeclareLaunchArgument('magnet_topic_overrides', default_value=''),
     ]
 
 
@@ -121,6 +124,14 @@ def launch_setup(context, *args, **kwargs):
         base_urdf = fh.read()
 
     nodes = []
+    # drone id -> the radio latch's private topic (its MAGNET row is hidden: the panel would write the old one)
+    magnet_topics = {}
+    for item in LaunchConfiguration('magnet_topic_overrides').perform(context).replace(' ', '').split(','):
+        if item:
+            d, _, topic = item.partition(':')
+            if not d.isdigit() or not topic.startswith('/'):
+                raise RuntimeError(f'magnet_topic_overrides {item!r}: want <drone id>:/<topic>')
+            magnet_topics[int(d)] = topic
 
     # ── MoCap: ONE publisher node. Routes each drone body to
     #    /drone_<id>/motion_capture_state and the payload body
@@ -179,6 +190,7 @@ def launch_setup(context, *args, **kwargs):
             parameters=[{'serial_port': LaunchConfiguration(arg),
                          'magnet_channel': ParameterValue(LaunchConfiguration('magnet_channel'), value_type=int),
                          'magnet_initial': ParameterValue(LaunchConfiguration(mag), value_type=str)}],
+            remappings=[('magnet', magnet_topics[i])] if i in magnet_topics else [],
             output='screen',
         ))
 
@@ -203,7 +215,7 @@ def launch_setup(context, *args, **kwargs):
         magnet_on = LaunchConfiguration('magnet_initial').perform(context).strip().upper() == 'ON'
         fh.write(build_config(n, show_actual=show_actual,
                               detach=(detach or attach), attach=attach,
-                              magnets=True, magnet_on=magnet_on))
+                              magnets=True, magnet_on=magnet_on, hidden_magnets=sorted(magnet_topics)))
 
     nodes.append(Node(
         package='rviz2', executable='rviz2', name='rviz2',

@@ -185,6 +185,11 @@ class MagnetAttachmentManager(Node):
         # rig: body-to-tip at least the taut length (Wednesday's record minus 3 mm); 0 = off (twin)
         self.proof_taut_len = float(self.declare_parameter('proof_taut_len', 0.0).value)
         self.proof_ma_s = float(self.declare_parameter('proof_ma_s', 0.1).value)
+        # contact_still (critic F7, default off; the thresholds are Wesley's): c0 from the dwell's last
+        # contact_c0_tail_s and a vertical-speed gate contact_vz_max, so a tip still arriving does not set c0
+        self.contact_still = bool(self.declare_parameter('contact_still', False).value)
+        self.contact_vz_max = float(self.declare_parameter('contact_vz_max', 0.02).value)
+        self.contact_c0_tail_s = float(self.declare_parameter('contact_c0_tail_s', 0.05).value)
         self.body_pose_topic = str(
             self.declare_parameter('body_pose_topic', '/drone_3/motion_capture_state').value)
         self.sim_catch = bool(self.declare_parameter('sim_catch', True).value)
@@ -198,7 +203,9 @@ class MagnetAttachmentManager(Node):
                 contact_dwell_s=self.contact_dwell_s, d_ok=self.proof_d_ok, d_fail=self.proof_d_fail,
                 h_plate=self.proof_h_plate, proof_dwell_s=self.proof_dwell_s,
                 fail_dwell_s=self.proof_fail_dwell_s, timeout_s=self.proof_timeout_s,
-                taut_len=self.proof_taut_len, ma_s=self.proof_ma_s))
+                taut_len=self.proof_taut_len, ma_s=self.proof_ma_s,
+                **({'c0_tail_s': self.contact_c0_tail_s, 'vz_max': self.contact_vz_max}
+                   if self.contact_still else {})))
         self._t_object_clk: Optional[float] = None
         self._body_position: Optional[np.ndarray] = None
         self._t_body_clk: Optional[float] = None
@@ -291,7 +298,9 @@ class MagnetAttachmentManager(Node):
                 f'd_ok={self.proof_d_ok:.4f} d_fail={self.proof_d_fail:.4f} h_plate={self.proof_h_plate:.4f} '
                 f'dwell={self.proof_dwell_s:.2f} s fail_dwell={self.proof_fail_dwell_s:.2f} s '
                 f'timeout={self.proof_timeout_s:.1f} s taut_len={self.proof_taut_len:.3f} '
-                f'ma={self.proof_ma_s:.2f} s, sim_catch={self.sim_catch}, body={self.body_pose_topic}')
+                f'ma={self.proof_ma_s:.2f} s, sim_catch={self.sim_catch}, body={self.body_pose_topic}'
+                + (f', contact_still: c0 from the last {self.contact_c0_tail_s:.2f} s, vertical speed <= '
+                   f'{self.contact_vz_max:.3f} m/s' if self.contact_still else ''))
 
         self.get_logger().info(
             'Magnet attachment manager started. '
@@ -683,6 +692,7 @@ class MagnetAttachmentManager(Node):
             c0 = 1000.0 * p.c0
             self.get_logger().info(
                 f'CONTACT (try {p.tries}): d={p.distance:.4f} m, rel_speed={p.rel_speed:.3f} m/s, '
+                + (f'rel_vz={p.rel_vz:.3f} m/s, ' if p.config.vz_max > 0.0 else '') +
                 f'c0=({c0[0]:+.1f}, {c0[1]:+.1f}, {c0[2]:+.1f}) mm, plate z0={p.z0:.4f} m')
             if self.sim_catch:
                 self._sim_joint(True, f'contact, try {p.tries}')

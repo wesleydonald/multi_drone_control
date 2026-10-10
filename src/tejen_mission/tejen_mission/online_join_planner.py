@@ -1809,6 +1809,10 @@ class OnlineJoinPlanner(Node):
                 self.declare_parameter('contact_abort_xy_velocity_threshold', 0.15).value))
             if self.proof_rise_rate <= 0. or self.contact_give_up_s <= 0.:
                 raise ValueError('contact_attach needs a positive proof_rise_rate and contact_give_up_s')
+            # multi_drone_control rig (critic F9): the object flag is inferred (it clears with the OFF), so the drop
+            # ends on the MEASURED object leaving the marker; a drop that times out with it still there is a give-up
+            self.drop_check_puck = bool(self.declare_parameter('drop_check_puck', False).value)
+            self.drop_stuck_radius_m = float(self.declare_parameter('drop_stuck_radius_m', 0.08).value)
         self.contact_reported = False
         self.ring_attach_confirmed = False
         self.take_back_requested = False
@@ -6483,6 +6487,31 @@ class OnlineJoinPlanner(Node):
         self.contact_hold_tip_offset = np.asarray(offset, dtype=float).copy()
         self.contact_hold_position = None
 
+    def measured_object_on_tip(self) -> Optional[bool]:
+        """True / False: the measured object is / is not within drop_stuck_radius_m of the measured marker; None
+        when either pose is stale (input_timeout_s)."""
+        now = self._physical_now_s()
+        times = (getattr(self, 'last_pickup_object_pose_time', None), getattr(self, 'last_magnet_tip_pose_time', None))
+        poses = (getattr(self, 'pickup_object_position', None), getattr(self, 'measured_magnet_tip_position', None))
+        if any(t is None or now - t > self.input_timeout_s for t in times) or any(p is None for p in poses):
+            return None
+        return bool(np.linalg.norm(np.asarray(poses[0]) - np.asarray(poses[1])) <= self.drop_stuck_radius_m)
+
+    def update_measured_drop(self, waited: bool) -> None:
+        """DROP_OBJECT under drop_check_puck: the release dwell always runs; then the object measured away from the
+        marker (or not measured, with a warning) clears the drop zone, and one still on it is a give-up (the fleet
+        takes the vehicle back and lands it with the object on)."""
+        if not waited:
+            return
+        on_tip = self.measured_object_on_tip()
+        if on_tip:
+            self.contact_give_up('the drop timed out with the object measured on the magnet')
+            return
+        if on_tip is None:
+            self.get_logger().warning('Drop: the object or the marker is not measured; trusting the release')
+        self.transition_to(MissionPhase.CLEAR_DROP_ZONE, 'object measured away from the magnet after the release dwell'
+                           if on_tip is False else 'release dwell completed (object not measured)')
+
     def enter_taken_back(self, reason: str) -> None:
         if self.phase in {MissionPhase.RING_ATTACHED, MissionPhase.TAKEN_BACK}:
             return
@@ -7012,6 +7041,9 @@ class OnlineJoinPlanner(Node):
                 self.drop_start_time is not None
                 and self._physical_now_s() - self.drop_start_time >= self.drop_wait_time_s
             )
+            if self.contact_attach and getattr(self, 'drop_check_puck', False):
+                self.update_measured_drop(waited)
+                return
             if not self.object_attached or waited:
                 self.transition_to(
                     MissionPhase.CLEAR_DROP_ZONE,

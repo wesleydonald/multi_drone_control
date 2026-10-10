@@ -43,7 +43,7 @@ KEPT_COMMON = (
     'attach_blend_balanced', 'attach_datum_shift', 'attach_moving', 'newcomer_lifecycle', 'newcomer_fault_land',
     'diss_balanced_tensions',
     'weld_radius', 'weld_velocity_clock', 'enable_obstacle_avoidance', 'partner',
-    'partner_attached', 'partner_m2', 'partner_m2_part', 'partner_contact', 'contact_fold_seed')
+    'partner_attached', 'partner_m2', 'partner_m2_part', 'partner_contact', 'contact_fold_seed', 'contact_still')
 KEPT_SIM = ('legacy', 'sil', 'sim_interface', 'ff_cap_force', 'sim_thrust_map', 'sim_thrust_offset',
             'sim_pack_v0', 'sim_catch')
 KEPT_REAL = ('real_io', 'rviz', 'magnet_channel', 'magnet_initial', 'attach_magnet_initial',

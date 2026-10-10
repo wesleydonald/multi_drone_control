@@ -750,7 +750,8 @@ def test_legacy_attach_unchanged_by_the_twin_plumbing():
 
 CONTACT_KEYS = ('partner_contact', 'contact_joint_state_topic', 'take_back_topic',
                 'warm_follow_applied', 'confirm_mode', 'sim_catch', 'proof_taut_len',
-                'zero_partner_aux', 'extra_bodies')
+                'zero_partner_aux', 'extra_bodies', 'partner_hold_until_planner', 'contact_ball_mass',
+                'contact_span_wait_ball', 'contact_still', 'contact_vz_max', 'contact_c0_tail_s')
 
 
 def _twin_partner(**args):
@@ -758,7 +759,11 @@ def _twin_partner(**args):
 
 
 def test_partner_contact_off_passes_nothing_new():
-    """Off (the default): no new parameter, no joint-state bridge, no coil gate, the hand-back wired as today."""
+    """Off (the default): no new parameter, no joint-state bridge, no coil gate, no radio remap, every RViz MAGNET
+    row, the hand-back wired as today."""
+    nodes = rig('attach', enable_approach_mpc=False, partner=True)
+    assert all(n['remappings'] == [] for n in nodes if n['executable'] == 'elrs_interface')
+    assert 'HiddenMagnets' not in open(next(n for n in nodes if n['executable'] == 'rviz2')['arguments'][1]).read()
     for g in (_twin_partner(), _by_name(rig('attach', enable_approach_mpc=False, partner=True))):
         assert not [(k, p) for k, n in g.items() for p in n['params'] if p in CONTACT_KEYS]
         assert '/payload_joint_state_bridge' not in g
@@ -829,11 +834,21 @@ def test_combined_rig_one_coil_writer_aux_zeroed_and_his_ball_from_our_mocap(dds
     assert g['/magnet_attachment_manager']['params']['magnet_latch_topic'] == '/drone_3/magnet_ours'
     gate = g['/magnet_gate_3']['params']
     assert (gate['partner_topic'], gate['ours_topic'], gate['out_topic']) == (
-        '/tejen/magnet/command', '/drone_3/magnet_ours', '/drone_3/magnet')
-    writers = [k for k, n in g.items() if '/drone_3/magnet' in (n['params'].get('magnet_latch_topic'),
-                                                                n['params'].get('out_topic'))]
+        '/tejen/magnet/command', '/drone_3/magnet_ours', '/drone_3/magnet_coil')
+    assert (gate['phase_topic'], gate['puck_topic']) == ('/join_planner/phase', '/tejen/object_attached')
+    # critic F4: QUAD4's radio latch listens on the gate's private topic; the RViz MAGNET D4 row is hidden
+    radio = g['/drone_3/elrs_interface']
+    assert radio['remappings'] == [('magnet', '/drone_3/magnet_coil')]
+    assert all(g[f'/drone_{i}/elrs_interface']['remappings'] == [] for i in range(3))
+    rviz = next(n for n in nodes if n['executable'] == 'rviz2')
+    assert 'HiddenMagnets: "3"' in open(rviz['arguments'][1]).read()
+    writers = [k for k, n in g.items() if '/drone_3/magnet_coil' in (n['params'].get('magnet_latch_topic'),
+                                                                     n['params'].get('out_topic'))]
     assert writers == ['/magnet_gate_3']
-    assert g['/elrs_mux_3']['params']['zero_partner_aux'] is True
+    mux = g['/elrs_mux_3']['params']
+    assert mux['zero_partner_aux'] is True and mux['partner_hold_until_planner'] is True      # O6, F3
+    p = g['/dissipative_planner']['params']
+    assert (p['contact_ball_mass'], p['contact_span_wait_ball']) == (0.06, True)               # F8, F9
     mocap = next(n for k, n in g.items() if n['executable'] == 'motion_capture_publisher_node')
     assert mocap['params']['extra_bodies'] == '6:/pickup/motion_capture_state'
     assert mocap['params']['magnet_tip_body_id'] == 24
@@ -869,7 +884,7 @@ def test_combined_rig_with_his_nodes(dds):
     on the wall clock with his topics; still one mocap node, one radio per drone, no Gazebo node."""
     nodes = rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01,
                 weld_point_z=0.031, partner_nodes=True, proof_taut_len=0.577,
-                partner_args='pickup_lift_height:=2.1 magnet_drop_below_quad:=0.582')
+                partner_args='pickup_lift_height:=2.1 magnet_drop_below_quad:=0.582 mpc_thrust_ratio:=21.5')
     g = _assert_rig_graph(nodes, 4, 35.2)
     p = g['/online_join_planner']['params']
     assert p['contact_attach'] is True and p['ring_attached_topic'] == '/magnet/object_attached'
@@ -877,6 +892,7 @@ def test_combined_rig_with_his_nodes(dds):
     assert g['/fake_cooperative_transport_world']['params']['bridge_attach_z_m'] == 0.031
     mpc = g['tejen/tejen_mpc']
     assert ('ELRSCommand', '/drone_3/ELRSCommand_tejen') in mpc['remappings']
+    assert mpc['params']['thrust_ratio'] == 21.5
     assert 'tejen/partner_rig_state' in g and 'tejen/magnet_attachment_manager_irl' in g
     assert '/dynamic_planner_transfer_backend' in g
     assert sum(n['executable'] == 'elrs_interface' for n in nodes) == 4

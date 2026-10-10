@@ -177,6 +177,11 @@ partner:
   proof_fail_dwell_s: ''
   proof_timeout_s: ''
   proof_ma_s: ''
+  # critic F7 (default off; the thresholds are Wesley's): the contact's c0 from the dwell's last contact_c0_tail_s and
+  # a vertical-speed gate contact_vz_max ('' = the manager's 0.05 s / 0.02 m/s), so a tip still arriving sets no c0
+  contact_still: false
+  contact_vz_max: ''
+  contact_c0_tail_s: ''
 sim_interface:
   rate_source: 'imu'
   mocap_hz: 120

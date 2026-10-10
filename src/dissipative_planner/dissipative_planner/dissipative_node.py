@@ -431,6 +431,8 @@ class DissipativeController(LoadPlanner):
         self._joint_free = None       # the ring weld joint read free (None: no state yet)
         self._ball_on = False
         self._ball_mass = float(p('contact_ball_mass', 0.1).value)   # his pickup ball (tejen/payload_model.sdf)
+        # rig (critic F9): our span waits until his ball reads released (/tejen/object_attached false)
+        self._span_wait_ball = bool(p('contact_span_wait_ball', False).value)
         self._span_t = None           # our ring magnet span: the last ON sent (None: not begun)
         self._taken_back = False
         if self._partner_contact and self.reserved_attach > 0:
@@ -1584,6 +1586,10 @@ class DissipativeController(LoadPlanner):
             pos = self._pos(self._n_carry0)
             if (self._his_phase not in REJOIN_PHASES or pos is None or float(pos[2]) <= CONTACT_SPAN_MIN_Z
                     or self._joint_free is not True or self._land_to_ground or self._dropped is not None):
+                return
+            if getattr(self, '_span_wait_ball', False) and self._ball_on:
+                self.get_logger().warn(f'[dissipative] ring magnet span held: his ball still reads attached (his '
+                                       f'{self._his_phase})', throttle_duration_sec=2.0)
                 return
             self.get_logger().warn(f'[dissipative] ring magnet span begins: ON (his {self._his_phase}, drone '
                                    f'{self._n_carry0} at z {float(pos[2]):.2f} m, the ring weld joint free)')
