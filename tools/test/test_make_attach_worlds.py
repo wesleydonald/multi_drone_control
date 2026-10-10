@@ -2,7 +2,8 @@
 current, the newcomer is QUAD4 on the twin's rod, and the worlds put the carriers on the M1
 layout with the newcomer free on the floor or welded on plate 9. The combined M1 subtest world
 (pickup) is the free world with the pickup newcomer, an open ring with a net, and Tejen's ball (a
-copy on collide bits 0x05, clear of QUAD4's magnet); its push variant adds the WRENCH tool.
+copy on collide bits 0x05, clear of QUAD4's magnet); its push variant adds the WRENCH tool. The full M1
+world (welded_pickup) is the same on the welded world: QUAD4 welded on plate 9 with the pickup weld.
 
     python3 -m pytest tools/test/test_make_attach_worlds.py -q
 """
@@ -29,11 +30,13 @@ FREE, WELDED = 'three_rigid_ground_rig_attach.sdf', 'three_rigid_ground_rig_atta
 MODELS = {'free': 'x3_rig_drone3_magnet.sdf', 'welded': 'x3_rig_drone3_magnet_welded.sdf'}
 PICKUP, PICKUP_MODEL = 'three_rigid_ground_rig_attach_pickup.sdf', 'x3_rig_drone3_magnet_pickup.sdf'
 PICKUP_PUSH, BALL_COPY = 'three_rigid_ground_rig_attach_pickup_push.sdf', 'models/rig_pickup_ball.sdf'
+WELDED_PICKUP = 'three_rigid_ground_rig_attach_welded_pickup.sdf'
+WELDED_PICKUP_MODEL = 'x3_rig_drone3_magnet_welded_pickup.sdf'
 LINKS = ['base_link', 'rotor_0', 'rotor_1', 'rotor_2', 'rotor_3', 'magnet_arm', 'magnet_tip_link']
 
 
 def _model(start):
-    name = PICKUP_MODEL if start == 'pickup' else MODELS[start]
+    name = {'pickup': PICKUP_MODEL, 'welded_pickup': WELDED_PICKUP_MODEL}.get(start) or MODELS[start]
     return ET.parse(ASSETS / 'models' / name).getroot().find('model')
 
 
@@ -162,7 +165,7 @@ def test_skid_rests_the_newcomer_at_the_carriers_height():
         assert _newcomer(world)[1][2] == pytest.approx(0.10)
 
 
-@pytest.mark.parametrize('world', [FREE, WELDED, PICKUP, PICKUP_PUSH])
+@pytest.mark.parametrize('world', [FREE, WELDED, PICKUP, PICKUP_PUSH, WELDED_PICKUP])
 def test_carriers_are_the_twin_on_the_m1_layout(world):
     g = world_geometry(ASSETS / world)
     for k, v in mcw.EXPECT.items():
@@ -232,8 +235,8 @@ def test_magnet_never_touches_the_ring_but_rests_on_the_floor():
 
 
 @pytest.mark.skipif(shutil.which('gz') is None, reason='gz CLI not installed')
-@pytest.mark.parametrize('rel', [FREE, WELDED, PICKUP, PICKUP_PUSH, BALL_COPY]
-                         + [f'models/{m}' for m in [*MODELS.values(), PICKUP_MODEL]])
+@pytest.mark.parametrize('rel', [FREE, WELDED, PICKUP, PICKUP_PUSH, BALL_COPY, WELDED_PICKUP]
+                         + [f'models/{m}' for m in [*MODELS.values(), PICKUP_MODEL, WELDED_PICKUP_MODEL]])
 def test_gz_sdf_check(rel):
     r = subprocess.run(['gz', 'sdf', '-k', rel], cwd=ASSETS, capture_output=True, text=True)
     assert r.returncode == 0 and 'Valid' in r.stdout, r.stdout + r.stderr
@@ -262,6 +265,14 @@ OLD_DIGESTS = {
         'aa2a7e30f41839aab8b4f4691f5acdfe52d02eec0e1a529c64f53990e7f80cd8',
     f"models/{MODELS['free']}": 'ff36ee07b5e489a5fe617b0d7dd65a68a992324f873430953828509716bf94f1',
     f"models/{MODELS['welded']}": '5839b65674a9cf31e03937a0a5940c2b13b219ef4bfaf33c75b410b306de3fd6',
+}
+# the combined M1 subtest's outputs when the welded pickup variant (the full M1) was added: it leaves them
+# byte for byte too
+SUBTEST_DIGESTS = {
+    PICKUP: 'ac07b0e1d68159ee91b48cdfde1c90d24d909939a34f498704c40fc4d7db02af',
+    f'models/{PICKUP_MODEL}': 'ec0a10dc0d5146206cd970aa2611f48ab2d6e0ab0e53da1eb070a6d73f680569',
+    BALL_COPY: '44c07dd5313a33d625b040a0a264faa21cbccc8b237f42abe2931c877a567ace',
+    PICKUP_PUSH: 'e5d4ddf1411c6b4ae76ad8e7bff200345f06aa67c1e38b83722ff4b9488d16b6',
 }
 
 
@@ -298,13 +309,19 @@ def _numbers(elem):
 
 def test_pickup_files_are_generated(tmp_path):
     rels = {pathlib.Path(r).as_posix() for r in maw.generate(tmp_path)}
-    for rel in (PICKUP, f'models/{PICKUP_MODEL}', BALL_COPY, PICKUP_PUSH):
+    for rel in (PICKUP, f'models/{PICKUP_MODEL}', BALL_COPY, PICKUP_PUSH, WELDED_PICKUP,
+                f'models/{WELDED_PICKUP_MODEL}'):
         assert rel in rels
         assert (tmp_path / rel).read_bytes() == (ASSETS / rel).read_bytes()
 
 
 def test_pickup_variant_leaves_the_existing_outputs_byte_for_byte():
     for rel, digest in OLD_DIGESTS.items():
+        assert hashlib.sha256((ASSETS / rel).read_bytes()).hexdigest() == digest, rel
+
+
+def test_welded_pickup_variant_leaves_the_subtest_outputs_byte_for_byte():
+    for rel, digest in {**OLD_DIGESTS, **SUBTEST_DIGESTS}.items():
         assert hashlib.sha256((ASSETS / rel).read_bytes()).hexdigest() == digest, rel
 
 
@@ -416,15 +433,17 @@ def test_pickup_net_is_the_partner_net_scaled_to_the_inner_radius():
         assert r - dr <= patch
 
 
-def test_pickup_bitmasks():
-    w = _world(PICKUP)
+@pytest.mark.parametrize('world', [PICKUP, WELDED_PICKUP])
+def test_pickup_bitmasks(world):
+    w = _world(world)
     cols = _ring_body(w).findall('collision')
     annulus = [c for c in cols if c.get('name').startswith('ring_annulus_')]
     net = [c for c in cols if c.get('name').startswith('net_')]
     assert len(cols) == len(annulus) + len(net) and len(net) == 17
     assert {_bits(c) for c in annulus} == {0x01}
     assert {_bits(c) for c in net} == {0x04}
-    tip = _bits(_model('pickup').find("link[@name='magnet_tip_link']/collision"))
+    tip = _bits(_model('pickup' if world == PICKUP else 'welded_pickup').find(
+        "link[@name='magnet_tip_link']/collision"))
     assert tip == 0x02
     floor = _bits(w.find("model[@name='ground_plane']/link/collision"))
     ball = _bits(ET.parse(ASSETS / BALL_COPY).getroot().find('model/link/collision'))
@@ -436,8 +455,9 @@ def test_pickup_bitmasks():
     assert not tip & ball                                            # nor the ball, as the legacy tip
 
 
-def test_ball_rests_on_the_floor_clear_of_the_carriers_and_quad4():
-    w = _world(PICKUP)
+@pytest.mark.parametrize('world', [PICKUP, WELDED_PICKUP])
+def test_ball_rests_on_the_floor_clear_of_the_carriers_and_quad4(world):
+    w = _world(world)
     inc = _ball_include(w)
     ball = _pose(inc)[:3]
     radius = float(ET.parse(ASSETS / BALL_COPY).getroot().findtext(
@@ -449,8 +469,8 @@ def test_ball_rests_on_the_floor_clear_of_the_carriers_and_quad4():
                 if c.findtext('name') in ('x3_drone0', 'x3_drone1', 'x3_drone2')]
     assert len(carriers) == 3
     assert min(math.dist(ball, c) for c in carriers) >= maw.BALL_CLEAR_CARRIER >= 1.0
-    body = _newcomer(PICKUP)[1][:3]
-    pivot, tip = _tip_world(PICKUP, 'pickup')
+    body = _newcomer(world)[1][:3]
+    pivot, tip = _tip_world(world, 'pickup' if world == PICKUP else 'welded_pickup')
     arm = [body] + [tuple(p + i / 100 * (q - p) for p, q in zip(pivot, tip)) for i in range(101)]
     assert min(math.dist(ball, p) for p in arm) >= 1.0
 
@@ -487,3 +507,61 @@ def test_the_pickup_push_world_is_the_pickup_world_plus_the_wrench_tool():
     assert push != pick and push.replace(maw.WRENCH_PLUGIN, '', 1) == pick
     assert 'ApplyLinkWrench' not in pick and push.count('ApplyLinkWrench') == 1
     ET.fromstring(push.split('\n', 1)[1].split('\n', 1)[1])          # well-formed below the two comment lines
+
+
+# ===== the full M1 world (Wesley 10 Oct): QUAD4 welded on plate 9 with the pickup weld =====
+
+def test_welded_pickup_model_is_the_welded_model_plus_the_pickup_weld():
+    welded = (ASSETS / 'models' / MODELS['welded']).read_text().splitlines()
+    pick = (ASSETS / 'models' / WELDED_PICKUP_MODEL).read_text().splitlines()
+    gone = [ln for ln in welded if ln not in pick]
+    assert len(gone) == 1 and gone[0].endswith('tip on the plate. -->')                # header
+    assert len(pick) - len(welded) == 1 + len(maw.PICKUP_WELD.splitlines())
+    assert [lk.get('name') for lk in _model('welded_pickup').findall('link')] == LINKS
+    # the same two welds as the free pickup model, the arm spawned as the welded model's
+    assert _welds(_model('welded_pickup')) == _welds(_model('pickup'))
+    arm = {m: _pose(_model(m).find("link[@name='magnet_arm']")) for m in ('welded_pickup', 'welded', 'pickup')}
+    assert arm['welded_pickup'] == arm['welded'] != arm['pickup']
+
+
+def test_welded_pickup_world_is_the_welded_world_with_the_pickup_changes():
+    """The same lines go as from the free world to the subtest world: the header, the floor, the disc, the
+    newcomer note and its uri; and the same come in: the annulus, the net, the floor bits and the ball."""
+    welded = (ASSETS / WELDED).read_text().splitlines()
+    full = (ASSETS / WELDED_PICKUP).read_text().splitlines()
+    gone = [ln.strip() for ln in welded if ln not in full]
+    assert gone[0].startswith('<!-- GENERATED') and 'welded start' in gone[0]
+    assert gone[1].startswith('<collision name="collision"><geometry><plane>')
+    assert gone[2].startswith('<collision name="collision"><pose>0 0 0 0 0 0</pose>')
+    assert gone[3].startswith('<geometry><cylinder><radius>0.255</radius>')
+    assert gone[4].startswith('<surface><contact><collide_bitmask>0x01')
+    assert gone[5] == '</collision>'
+    assert gone[6].endswith('(attached_at_start). -->')
+    assert gone[7] == f"<uri>models/{MODELS['welded']}</uri>"
+    assert len(gone) == 8
+    assert _newcomer(WELDED_PICKUP) == (f'models/{WELDED_PICKUP_MODEL}', _newcomer(WELDED)[1])
+    # everything else as the subtest world: only the header, the newcomer block and the ball's note differ
+    pick = (ASSETS / PICKUP).read_text().splitlines()
+    assert len(full) == len(pick) + 1
+    differ = [ln for ln in full if ln not in pick]
+    assert len(differ) == 7 and differ[0].startswith('<!-- GENERATED') and 'full M1' in differ[0]
+    assert "QUAD4's body and rod (welded)" in differ[-1]
+
+
+def test_full_m1_quad4_starts_on_plate_9_and_the_ball_weld_rides_its_tip():
+    pivot, tip = _tip_world(WELDED_PICKUP, 'welded_pickup')
+    assert tip == pytest.approx((0.0, 0.225, 0.04), abs=1e-5)                 # plate 9 top, ring on floor
+    assert _ball_include(_world(WELDED_PICKUP)).findtext('uri') == BALL_COPY
+    ring, pickup = _welds(_model('welded_pickup'))
+    assert ring['child_model'] == 'lift_system::payload' and pickup['child_model'] == 'payload_model'
+    assert ring['parent_link'] == pickup['parent_link'] == 'magnet_tip_link'
+
+
+def test_ball_clearance_is_measured_to_each_newcomers_own_rod():
+    base = maw.carrier_world()
+    near_c_free, near_q_free = maw.ball_clearance(base, 'free')
+    near_c_weld, near_q_weld = maw.ball_clearance(base, 'welded')
+    assert near_c_free == near_c_weld >= maw.BALL_CLEAR_CARRIER
+    (x, y, _), _ = maw.spawn('welded')
+    assert near_q_weld == pytest.approx(math.dist(maw.BALL_XY, (x, y)))       # the body is the nearest point
+    assert near_q_free == pytest.approx(1.0, abs=5e-3) and near_q_weld > near_q_free

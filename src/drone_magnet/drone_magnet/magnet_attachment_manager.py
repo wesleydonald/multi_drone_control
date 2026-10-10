@@ -270,6 +270,9 @@ class MagnetAttachmentManager(Node):
         self._last_start_detach = 0.0
         self._last_contact_beat = 0.0
         self._ever_magnet_on = False
+        # contact_lift with a welded start (the full M1): the start weld is reported attached and released
+        # by the first OFF (the detach) like the weld check's; only the contacts after it need the proof
+        self._start_weld = False
         # the drone starts WELDED to the payload (the partner demo's fourth carrier): keep
         # the joint gz created at spawn and report attached from t=0; magnet OFF releases it
         if bool(self.declare_parameter('attached_at_start', False).value):
@@ -278,9 +281,9 @@ class MagnetAttachmentManager(Node):
             self.magnet_on = True
             self._ever_magnet_on = True
             if self._proof is not None:
-                self.get_logger().warn('attached_at_start: the drone starts welded, so the weld check '
-                                       'stays in charge (confirm_mode contact_lift ignored)')
-                self._proof = None
+                self._start_weld = True
+                self.get_logger().warn('attached_at_start: the drone starts welded (attached until the first '
+                                       'OFF, which releases it); every contact after that is proved by the lift')
 
         self.timer = self.create_timer(1.0 / 30.0, self.timer_callback)
         if self._proof is not None:
@@ -540,6 +543,9 @@ class MagnetAttachmentManager(Node):
         self.attach_command_sent = False
         self.attached = False
         self.attach_condition_start = None
+        if getattr(self, '_start_weld', False):
+            self._start_weld = False
+            self.get_logger().info('the start weld is released: from the next ON a contact needs the lift proof')
         self.get_logger().info(f'DETACH: {reason}')
         self.publish_elrs_magnet_command(False, f'detach: {reason}', force=True)
 
@@ -637,7 +643,7 @@ class MagnetAttachmentManager(Node):
         if self._proof is not None:
             if word in OFF_WORDS and self._contact_off('magnet command OFF'):
                 return
-            if word in ON_WORDS:
+            if word in ON_WORDS and not self._start_weld:     # nothing to prove while the start weld holds
                 self._proof.magnet(True)
         self.magnet_command_callback(msg)
 

@@ -81,3 +81,29 @@ switches that default OFF: with them off, every node behaves exactly as today. B
 
 ## Runner
 - `WAIT_REWELD` takes an optional timeout (s): on expiry it logs and the script goes on (to LAND).
+
+## The full M1 (partner_contact with partner_attached; Wesley 10 Oct)
+QUAD4 starts welded on plate 9 and carries as the fourth drone, is detached (`/fleet/detach 3`: its ring magnet OFF),
+stepped out 0.5 m and up 0.3 m, released to his mission (`/partner/release`), then rejoins by the contact attach above.
+World three_rigid_ground_rig_attach_welded_pickup.sdf (generated); configs m1_full_hover / m1_full_orbit.
+- graph_attach: partner_contact needs partner:=true only; with partner_attached the mux gets `start_ours: true`.
+- Mux `start_ours` (combined-stack O1, from branch combined-m1 8c21fe8): ours from boot; his stream only after
+  `/partner/release` on its first flying command; then the attach or the take-back as above. A take-back cancels a
+  pending release and blocks a later one.
+- Manager, `attached_at_start` with `confirm_mode: contact_lift`: attached from t=0 (the start weld, no proof); the
+  first OFF (the detach) is accepted and releases the joint; from the next ON every contact needs the lift proof, and
+  an OFF after the proven attach is refused as above. A stray ON while the start weld holds starts no proof.
+- Our planner: the release as before (step-out, 2 s still, `/partner/release` at 1 Hz). Then:
+  - the fixed step-out hold stays while our tracker flies QUAD4; once the mux reads "partner" and his phase has left
+    WAIT_FOR_TAKEOFF it gives way to the warm reference on QUAD4's measured body (critic round 1, finding 1), in the
+    same tick (one reference per tick);
+  - LAND before the release cancels it: QUAD4 lands with the fleet as a departed drone (out to 1.2 m, down);
+  - LAND or his give-up after the release is the take-back, also before his stream flew it (QUAD4 is airborne);
+    `/partner/release` stops after a take-back;
+  - the ring magnet span, the proof and the fold-in as above (the joint gate reads 'detached' after our detach).
+- Runner `WAIT_PICKUP_FREE timeout_s`: holds ARM until his ball weld (made at spawn on QUAD4's tip, which is also
+  welded to the ring) has read 'detached' for 1 s, or his supervisor logs "pickup weld reads free"; on expiry the
+  run fails and stops.
+- Unchanged for the welded start: `newcomer_fault_land` stays off (`start_attached`), so a fault of our drone-3 tracker
+  while ours flies QUAD4 (welded, stepping out, taken back) is a fleet emergency stop, as for any carrier; while his
+  stream flies it the fleet manager does not escalate it.

@@ -100,3 +100,23 @@ def test_off_the_tracker_books_its_own_command_as_before():
     c._takeoff_step = 10 ** 6
     c.publish([0.05, 0.04, 0.4, 0.0])
     assert np.allclose(c._applied_u, [0.05, 0.04, 0.4, 0.0]) and c.last_cmd_throttle == pytest.approx(0.4)
+
+
+def test_the_full_m1_mux_is_ours_from_boot_then_his_after_the_release_then_ours_at_the_attach():
+    """The welded start (mux start_ours): our command books while QUAD4 carries, his after /partner/release,
+    and the switch back at the attach re-seeds from the measured state."""
+    c = _node(yaw_deg=0.0)
+    c._mux_state_cb(String(data='ours'))                       # latched at boot
+    assert c._in_authority
+    c.first_solve = False
+    c._applied_cmd_cb(_his(thr=0.9))                           # whatever the mux output shows: not ours to book
+    c.publish([0.05, 0.04, 0.4, 0.0])
+    assert np.allclose(c._applied_u, [0.05, 0.04, 0.4, 0.0])   # a carrier on its own command
+    c._mux_state_cb(String(data='partner'))                    # released to his stream
+    assert not c._in_authority and not c.first_solve
+    c._applied_cmd_cb(_his(thr=0.55))
+    c.publish([0.05, 0.04, 0.4, 0.0])
+    assert np.allclose(c._applied_u, [0.2, -0.3, 0.55 - OFF, 0.1])
+    c.current_pose[3:7] = [math.cos(math.radians(20.0)), 0.0, 0.0, math.sin(math.radians(20.0))]
+    c._mux_state_cb(String(data='ours'))                       # the attach (or a take-back)
+    assert c._in_authority and c.first_solve and c._heading_datum == pytest.approx(math.radians(40.0))

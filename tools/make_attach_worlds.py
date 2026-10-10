@@ -32,6 +32,14 @@ the rig-matched twin instead of the legacy sim (Wesley, 8 Oct 2026; docs/decisio
                                            partner world's net, scaled) and Tejen's ball on the
                                            floor; his controller takes QUAD4 off, picks the ball
                                            up, drops it into the net, then attaches on plate 9
+  models/x3_rig_drone3_magnet_welded_pickup.sdf
+                                           the welded newcomer + the same pickup weld
+  three_rigid_ground_rig_attach_welded_pickup.sdf
+                                           the full M1 (Wesley 10 Oct): the welded world with the
+                                           welded pickup newcomer, the open ring with its net and
+                                           Tejen's ball; QUAD4 lifts the ring as the fourth carrier,
+                                           detaches, is released to his controller (pickup, drop),
+                                           then attaches on plate 9 again
   three_rigid_ground_rig_attach_push.sdf   the free world + the runner's WRENCH tool (ApplyLinkWrench)
   three_rigid_ground_rig_attach_pickup_push.sdf
                                            the pickup world + the same tool (the combined M1
@@ -92,13 +100,16 @@ PICKUP_FLOOR_BITMASK = '0x03'     # the ring and the magnet rest on the floor, t
 # Combined M1 subtest (Wesley 10 Oct): Tejen's ball and the pickup weld of his partner model
 PICKUP_MODEL = f'{MODEL}_pickup.sdf'
 PICKUP_WORLD = 'three_rigid_ground_rig_attach_pickup.sdf'
+# the full M1 (Wesley 10 Oct): the same with QUAD4 welded on plate 9 from spawn
+PICKUP_MODELS = {'free': PICKUP_MODEL, 'welded': f'{MODEL}_welded_pickup.sdf'}
+PICKUP_WORLDS = {'free': PICKUP_WORLD, 'welded': 'three_rigid_ground_rig_attach_welded_pickup.sdf'}
 BALL_SDF = 'tejen/payload_model.sdf'
 BALL_MODEL, BALL_LINK = 'payload_model', 'payload_link'
 BALL_COPY = 'rig_pickup_ball.sdf'   # under models/
 BALL_BITMASK = '0x05'             # the floor (0x03), the ring (0x01), the net (0x04); not the tip (0x02)
 BALL_XY = (1.0, 1.6)              # (1.0, 1.4) was 1.06 m from carrier 1 at (0.67, 0.39)
 BALL_CLEAR_CARRIER = 1.2          # m, ball centre to each carrier's centre
-BALL_CLEAR_NEWCOMER = 1.0         # m, ball centre to QUAD4's body and laid-out arm
+BALL_CLEAR_NEWCOMER = 1.0         # m, ball centre to QUAD4's body and arm (laid out, or welded on plate 9)
 # the rig ring is open: its 60 mm rim centred on the plates, as ring_k_visual draws it
 RING_INNER_R = 2 * ATTACH_RADIUS - RING_OUTER_R
 ANNULUS_SEGMENTS = 16             # the partner world's; each box on the floor costs RTF
@@ -403,24 +414,25 @@ def ball(text):
     return float(col.findtext('geometry/sphere/radius')), bits
 
 
-def ball_clearance(base):
+def ball_clearance(base, start='free'):
     """(nearest carrier, newcomer) from the ball centre on the floor: carrier centres, and QUAD4's
-    body-to-tip segment laid out along +y."""
+    body-to-tip segment (laid out along +y, or welded: from its body in to plate 9)."""
     carriers = re.findall(r'<name>x3_drone[0-2]</name>\s*<pose>(\S+) (\S+)', base)
     if len(carriers) != 3:
         raise SystemExit('carrier poses not found in the base world')
     near_carrier = min(math.dist(BALL_XY, (float(x), float(y))) for x, y in carriers)
-    _, roll = spawn('free')
-    reach = CABLE_LEN * math.sin(roll)
-    t = min(max((BALL_XY[1] - FREE_XY[1]) / reach, 0.0), 1.0)
-    return near_carrier, math.dist(BALL_XY, (FREE_XY[0], FREE_XY[1] + t * reach))
+    (x, y, _), roll = spawn(start)
+    tip_y = y + CABLE_LEN * math.sin(roll)        # free: out along +y; welded: in to the plate
+    lo, hi = min(y, tip_y), max(y, tip_y)
+    return near_carrier, math.dist(BALL_XY, (x, min(max(BALL_XY[1], lo), hi)))
 
 
-def pickup_model(free):
-    """The free newcomer + the partner model's pickup weld."""
-    text = _replace_once(free, 'with the magnet on the floor. -->', (
-        "with the magnet on the floor.\n         With the pickup weld onto Tejen's ball "
-        f'(/pickup/*) for {PICKUP_WORLD}. -->'), 'free header')
+def pickup_model(text, start='free'):
+    """The newcomer (free or welded) + the partner model's pickup weld."""
+    end = ('with the magnet on the floor. -->' if start == 'free' else 'tip on the plate. -->')
+    text = _replace_once(text, end, (
+        end[:-len(' -->')] + "\n         With the pickup weld onto Tejen's ball "
+        f'(/pickup/*) for {PICKUP_WORLDS[start]}. -->'), f'{start} header')
     close = '    </model>\n</sdf>'
     return _replace_once(text, close, PICKUP_WELD + close, 'closing </model>')
 
@@ -472,27 +484,40 @@ def open_ring():
     return ''.join(out) + net(scale, RING_THICKNESS / 2.0, NET_BITMASK)
 
 
-def pickup_world(free, base, ball_text):
-    """The free-start world for the combined M1 subtest: the pickup newcomer, the open ring
-    with its net, the floor under the net masked off, and Tejen's ball (the copy) on the floor."""
+def _pickup_header(start):
+    if start == 'free':
+        return ('<!-- GENERATED by tools/make_attach_worlds.py: do not edit. Rig-twin combined M1 subtest '
+                '(Wesley 10 Oct): three carriers on the floor at '
+                f'{CARRIER_AZIMUTHS.replace(",", "/")} deg (rig plates 3/11/7) lift the ring; Tejen\'s '
+                'controller takes QUAD4 (x3_drone3, free on the floor at (0, 1.4)) off, picks up his ball '
+                f'(on the floor at ({BALL_XY[0]}, {BALL_XY[1]})), drops it into the ring\'s net, then '
+                'attaches on rig plate 9 (90 deg). The free-start attach world with the pickup newcomer, an '
+                f'open ring (annulus r {RING_INNER_R:.3f}-{RING_OUTER_R:.3f} + net, bit {NET_BITMASK}) '
+                f'and the floor at {PICKUP_FLOOR_BITMASK}. -->\n')
+    return ('<!-- GENERATED by tools/make_attach_worlds.py: do not edit. Rig-twin full M1 (Wesley 10 Oct): '
+            f'three carriers on the floor at {CARRIER_AZIMUTHS.replace(",", "/")} deg (rig plates 3/11/7) and '
+            'QUAD4 (x3_drone3) welded on rig plate 9 (90 deg) lift the ring; QUAD4 detaches, steps clear and '
+            f'is released to Tejen\'s controller, which picks up his ball (on the floor at ({BALL_XY[0]}, '
+            f'{BALL_XY[1]})), drops it into the ring\'s net, then attaches on plate 9 again. The welded-start '
+            'attach world with the welded pickup newcomer, an open ring (annulus r '
+            f'{RING_INNER_R:.3f}-{RING_OUTER_R:.3f} + net, bit {NET_BITMASK}) and the floor at '
+            f'{PICKUP_FLOOR_BITMASK}. -->\n')
+
+
+def pickup_world(world, base, ball_text, start='free'):
+    """The attach world (free start: the combined M1 subtest; welded: the full M1) with the pickup
+    newcomer, the open ring with its net, the floor under the net masked off, and Tejen's ball (the
+    copy) on the floor."""
     seg = re.search(r'<visual name="ring_0_visual"><pose>(\S+) .*?<size>\S+ (\S+) ', base)
     if (abs(float(seg[1]) - float(seg[2]) / 2 - RING_INNER_R) > 1e-6
             or abs(float(seg[1]) + float(seg[2]) / 2 - RING_OUTER_R) > 1e-6):
         raise SystemExit('the annulus does not match the ring visuals')
     ball_z, ball_bits = ball(ball_text)
-    near_carrier, near_newcomer = ball_clearance(base)
+    near_carrier, near_newcomer = ball_clearance(base, start)
     if near_carrier < BALL_CLEAR_CARRIER or near_newcomer < BALL_CLEAR_NEWCOMER:
         raise SystemExit(f'ball at {BALL_XY}: {near_carrier:.2f} m from a carrier, '
                          f'{near_newcomer:.2f} m from the newcomer')
-    text = _replace_once(free, _header('free'), (
-        '<!-- GENERATED by tools/make_attach_worlds.py: do not edit. Rig-twin combined M1 subtest '
-        '(Wesley 10 Oct): three carriers on the floor at '
-        f'{CARRIER_AZIMUTHS.replace(",", "/")} deg (rig plates 3/11/7) lift the ring; Tejen\'s '
-        'controller takes QUAD4 (x3_drone3, free on the floor at (0, 1.4)) off, picks up his ball '
-        f'(on the floor at ({BALL_XY[0]}, {BALL_XY[1]})), drops it into the ring\'s net, then '
-        'attaches on rig plate 9 (90 deg). The free-start attach world with the pickup newcomer, an '
-        f'open ring (annulus r {RING_INNER_R:.3f}-{RING_OUTER_R:.3f} + net, bit {NET_BITMASK}) '
-        f'and the floor at {PICKUP_FLOOR_BITMASK}. -->\n'), 'free header')
+    text = _replace_once(world, _header(start), _pickup_header(start), f'{start} header')
     text = _replace_once(text, FLOOR_COLLISION, FLOOR_COLLISION.replace(
         '</geometry>', f'</geometry><surface><contact><collide_bitmask>{PICKUP_FLOOR_BITMASK}'
         '</collide_bitmask></contact></surface>', 1) + (
@@ -501,16 +526,18 @@ def pickup_world(free, base, ball_text):
     disc = ('          <collision name="collision"><pose>0 0 0 0 0 0</pose>\n            '
             + RING_COLLISION_MASKED + '\n')
     text = _replace_once(text, disc, open_ring(), 'ring disc')
-    text = _replace_once(text, f'<uri>models/{MODELS["free"]}</uri>',
-                         f'<uri>models/{PICKUP_MODEL}</uri>', 'newcomer uri')
-    text = _replace_once(text, '(detach_on_start). -->', (
-        "(detach_on_start).\n         The pickup weld onto Tejen's ball forms at spawn too; "
+    text = _replace_once(text, f'<uri>models/{MODELS[start]}</uri>',
+                         f'<uri>models/{PICKUP_MODELS[start]}</uri>', 'newcomer uri')
+    note = '(detach_on_start).' if start == 'free' else '(attached_at_start).'
+    text = _replace_once(text, f'{note} -->', (
+        f"{note}\n         The pickup weld onto Tejen's ball forms at spawn too; "
         'partner_mission.launch.py frees it\n         (/pickup/detach) before his mission. -->'),
         'newcomer note')
     (x, y), r = BALL_XY, ball_z
+    beside = "QUAD4's laid-out arm" if start == 'free' else "QUAD4's body and rod (welded)"
     block = f"""
     <!-- ===== TEJEN'S BALL: his pickup object ({BALL_SDF} as models/{BALL_COPY}, r {r:g}, bitmask {ball_bits}) =====
-         On the floor at ({x}, {y}), resting on its radius: {near_newcomer:.2f} m beside QUAD4's laid-out arm,
+         On the floor at ({x}, {y}), resting on its radius: {near_newcomer:.2f} m beside {beside},
          {near_carrier:.2f} m from the nearest carrier. His object magnet welds it to QUAD4's tip (/pickup/attach) and
          drops it into the ring's net (/pickup/detach). /model/{BALL_MODEL}/pose: [link, model]. -->
     <include>
@@ -528,11 +555,13 @@ def generate(out_dir):
              for start, name in MODELS.items()}
     base = carrier_world()
     files.update({name: attach_world(base, start) for name, start in WORLDS.items()})
-    files[os.path.join('models', PICKUP_MODEL)] = pickup_model(
-        files[os.path.join('models', MODELS['free'])])
     files[os.path.join('models', BALL_COPY)] = ball_model()
-    files[PICKUP_WORLD] = pickup_world(files[next(n for n, s in WORLDS.items() if s == 'free')],
-                                       base, files[os.path.join('models', BALL_COPY)])
+    for start in ('free', 'welded'):
+        files[os.path.join('models', PICKUP_MODELS[start])] = pickup_model(
+            files[os.path.join('models', MODELS[start])], start)
+        files[PICKUP_WORLDS[start]] = pickup_world(
+            files[next(n for n, s in WORLDS.items() if s == start)], base,
+            files[os.path.join('models', BALL_COPY)], start)
     files.update({name: _replace_once(files[src], USER_COMMANDS, USER_COMMANDS + WRENCH_PLUGIN,
                                       'user commands plugin')
                   for name, src in PUSH_WORLDS.items()})

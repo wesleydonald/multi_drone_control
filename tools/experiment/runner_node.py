@@ -38,6 +38,9 @@ from interfaces.msg import ELRSCommand, MotionCaptureState
 from .config import mocap_loss_arg, wait_lift_arg, wait_log_arg, wait_reweld_arg, wrench_arg
 
 ARM_FAIL = 'fleet manager ARM failed or refused'
+# WAIT_PICKUP_FREE: his ball weld reads detached this long (SIM s) before the schedule goes on (his gate's hold)
+PICKUP_FREE_HOLD_S = 1.0
+PICKUP_STUCK = 'the ball weld never read free'
 
 
 def _xyz(msg):
@@ -174,6 +177,14 @@ class ExperimentRunner(Node):
         if cfg.ball_start is not None:
             self.create_subscription(PoseArray, '/model/payload_model/pose',
                                      self._ball_cb, best)
+        # WAIT_PICKUP_FREE (the full M1): his ball weld forms at spawn on QUAD4's tip, which on the welded start is
+        # also welded to the ring; the creep must not move the ring before his launch has freed the ball
+        self._pickup_free_t = None          # sim t the ball weld read detached (None: not free)
+        self._pickup_wait = None            # (t the event fired, timeout SIM s)
+        self._pickup_watch = any(e.do == 'WAIT_PICKUP_FREE' for e in cfg.events)
+        if self._pickup_watch:
+            # the joint's own state (sent once per change), and his supervisor's gate line on /rosout below
+            self.create_subscription(String, '/pickup/detachable_joint_state', self._pickup_state_cb, 10)
 
         self.fleet_pub = self.create_publisher(String, '/fleet/command', 10)
         self.magnet_pub = self.create_publisher(String, '/magnet/command', 10)
@@ -334,6 +345,13 @@ class ExperimentRunner(Node):
                (re.compile(r"/fleet/command received: 'LAND'()"), 'PLANNER_LAND'))
 
     def _rosout_cb(self, msg):
+        if (getattr(self, '_pickup_watch', False) and msg.name.endswith('simulation_test_supervisor')
+                and 'pickup weld reads free' in msg.msg and self._pickup_free_t is None
+                and self.sim_t is not None):
+            # his gate held 'detached' for its own second: free now (a joint-state message can be lost)
+            self._pickup_free_t = self.sim_t - PICKUP_FREE_HOLD_S
+            self._log_event('PICKUP_JOINT', 'free (his supervisor)')
+            return
         # a failed or refused ARM no longer raises /fleet/abort (Q6b, mux latch card v3), so
         # the manager's log is the only sign of it: fail the run instead of flying nothing
         if msg.name.endswith('fleet_manager'):
@@ -368,6 +386,14 @@ class ExperimentRunner(Node):
                 self.failures.append(
                     f'pickup object starts at ({p.x:.3f}, {p.y:.3f}, {p.z:.3f}), not '
                     f'{self.cfg.ball_start} +- 0.02: wrong world or pose index')
+
+    def _pickup_state_cb(self, msg):
+        text = str(msg.data).strip().lower()
+        state = 'detached' if 'detached' in text else 'attached' if 'attached' in text else None
+        if state is None or self.sim_t is None or (state == 'detached') == (self._pickup_free_t is not None):
+            return
+        self._pickup_free_t = self.sim_t if state == 'detached' else None
+        self._log_event('PICKUP_JOINT', state)
 
     def _abort_cb(self, msg):
         self.aborts.append((self._rel(), str(msg.data)))
@@ -489,6 +515,25 @@ class ExperimentRunner(Node):
             self._thrust_wait = None
             self._log_event('THRUST', f'{shift:.2f}')
             self.get_logger().warn(f'[exp] t={t:6.2f} all drones under thrust; later events shifted {shift:+.2f} s')
+        if getattr(self, '_pickup_wait', None) is not None:
+            t0, timeout = self._pickup_wait
+            free_t = getattr(self, '_pickup_free_t', None)
+            free = (free_t is not None and self.sim_t is not None
+                    and self.sim_t - free_t >= PICKUP_FREE_HOLD_S - 1e-6)
+            if not free:
+                if not (timeout and t - t0 >= timeout):
+                    return                  # WAIT_PICKUP_FREE blocks the rest of the schedule
+                if not any(f.startswith(PICKUP_STUCK) for f in self.failures):
+                    # nothing more is fired: ARM and the creep would lift the ring with the ball welded on its tip
+                    self.failures.append(f'{PICKUP_STUCK} within {timeout:.0f} s (WAIT_PICKUP_FREE at t={t0:.1f})')
+                    self._log_event('PICKUP_FREE_TIMEOUT', f'{t - t0:.2f}')
+                return
+            shift = t - t0
+            for e in self._pending:
+                e.t += shift
+            self._pickup_wait = None
+            self._log_event('PICKUP_FREE', f'{shift:.2f}')
+            self.get_logger().warn(f'[exp] t={t:6.2f} the ball weld reads free; later events shifted {shift:+.2f} s')
         if self._lift_wait is not None:
             z_th, t0, timeout = self._lift_wait
             lifted = self.payload is not None and self.payload[2] >= z_th
@@ -526,6 +571,9 @@ class ExperimentRunner(Node):
             if ev.do == 'WAIT_LOG':
                 pat, timeout = wait_log_arg(ev.arg)
                 self._log_wait = (pat, t, timeout)
+                return
+            if ev.do == 'WAIT_PICKUP_FREE':
+                self._pickup_wait = (t, wait_reweld_arg(ev.arg, 'WAIT_PICKUP_FREE'))
                 return
 
     def _publish(self, pub, msg, what, exclude_self=False):
@@ -644,7 +692,7 @@ class ExperimentRunner(Node):
         elif ev.do == 'WRENCH':
             self._set_wrench(*wrench_arg(ev.arg))
         elif ev.do in ('WAIT_WELD', 'WAIT_LIFT', 'WAIT_REWELD', 'WAIT_PARTNER_RELEASE',
-                       'WAIT_THRUST', 'WAIT_LOG'):
+                       'WAIT_THRUST', 'WAIT_LOG', 'WAIT_PICKUP_FREE'):
             pass
         elif ev.do == 'LAUNCH':
             self.launch_requests.append(str(ev.arg))     # started by run_experiment's loop
@@ -683,7 +731,7 @@ class ExperimentRunner(Node):
                     f'drone {i} mocap stale for {age:.2f}s sim at t={t:.2f} '
                     f'(pose_timeout_s={self.cfg.pose_timeout_s})')
                 return True
-        if any(f.startswith(('pickup object starts', ARM_FAIL)) for f in self.failures):
+        if any(f.startswith(('pickup object starts', ARM_FAIL, PICKUP_STUCK)) for f in self.failures):
             return True
         if self.aborts and self.cfg.criteria and self.cfg.criteria.forbid_abort:
             self.failures.append(

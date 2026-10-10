@@ -433,6 +433,7 @@ class DissipativeController(LoadPlanner):
         self._ball_mass = float(p('contact_ball_mass', 0.1).value)   # his pickup ball (tejen/payload_model.sdf)
         self._span_t = None           # our ring magnet span: the last ON sent (None: not begun)
         self._taken_back = False
+        self._contact_released = False   # the welded start (partner_release): QUAD4 released in the air
         if self._partner_contact and self.reserved_attach > 0:
             latched_pc = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
                                     reliability=ReliabilityPolicy.RELIABLE)
@@ -667,6 +668,7 @@ class DissipativeController(LoadPlanner):
         if self._dropped is not None:
             self._drop_tick()
             return
+        self._contact_release_tick()
         if self._departed_hold:
             self._publish_departed_refs()
         self._newcomer_off_tick()
@@ -1479,11 +1481,21 @@ class DissipativeController(LoadPlanner):
         """Step a detached partner drone out and up at 0.15 m/s, wait until it is still
         there, then release it (announced every 1 s: his supervisor and our mux)."""
         now = self.get_clock().now().nanoseconds * 1e-9
+        contact = getattr(self, '_partner_contact', False)
         for d, st in self._release_state.items():
             if st['released']:
+                if contact and self._taken_back:
+                    continue              # taken back: his mission is not started after it
                 if st['sent'] is None or now - st['sent'] >= 1.0:
                     self._release_pub.publish(String(data='{"running": true}'))
                     st['sent'] = now
+                continue
+            if contact and (self._land_to_ground or self._dropped is not None):
+                # LAND before the release: no release, it lands with the fleet as a departed drone
+                if not st.get('cancelled'):
+                    st['cancelled'] = True
+                    self.get_logger().warn(f'[dissipative] PARTNER RELEASE of {_who(d)} cancelled (LAND before '
+                                           f'it): it lands as a departed drone')
                 continue
             hold = self._departed_hold.get(d)
             if hold is None:
@@ -1505,6 +1517,8 @@ class DissipativeController(LoadPlanner):
                 st['released'] = True
                 j = self._reserved_index(d)
                 self.attach_pending[j] = True
+                if contact:
+                    self._contact_released = True
                 self._warm_latched = getattr(self, '_warm_latched', set()) | {j}
                 self._partner_handed = False
                 # the fixed step-out hold stays until the rejoin handoff: if the partner
@@ -1513,6 +1527,21 @@ class DissipativeController(LoadPlanner):
                 self.get_logger().warn(
                     f'[dissipative] PARTNER RELEASE: drone {d} stepped out to '
                     f'{np.round(st["target"], 2)}; its mission takes it from here')
+
+    def _contact_release_tick(self):
+        """partner_contact with the welded start (the full M1): once his stream flies the released QUAD4 (the mux
+        reads partner, his mission past WAIT_FOR_TAKEOFF), its fixed step-out hold gives way to the warm reference
+        on its measured body (critic round 1, finding 1), so the attach and a take-back find our tracker on QUAD4.
+        Run before the departed references: one reference per tick for drone 3."""
+        if not getattr(self, '_partner_contact', False) or self._taken_back or not self._his_took_off \
+                or getattr(self, '_mux_state', None) != 'partner':
+            return
+        for d, st in self._release_state.items():
+            if st['released'] and not st.get('warm') and d in self._departed_hold:
+                st['warm'] = True
+                self._drop_departed(d)
+                self.get_logger().warn(f'[dissipative] {_who(d)} flies on his stream: its step-out hold gives way '
+                                       f'to the warm reference on its measured body')
 
     def _partner_magnet_keepalive(self):
         if not self._partner_handed or not any(self.attach_pending):
@@ -1619,7 +1648,8 @@ class DissipativeController(LoadPlanner):
             self._magnet_cmd_pub.publish(String(data='OFF'))
             self._off_resend_t = 0.0
         pos = self.attach_pos[j]
-        if not self._his_took_off or pos is None:
+        # (the welded start releases QUAD4 in the air: from then on it is taken back where it flies)
+        if (not self._his_took_off and not getattr(self, '_contact_released', False)) or pos is None:
             self.get_logger().warn(f'[dissipative] TAKE-BACK of {_who(d)} ({why}) before his takeoff: it stays '
                                    f'where it is, no reference')
             return

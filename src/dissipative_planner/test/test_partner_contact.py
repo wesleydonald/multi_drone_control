@@ -401,3 +401,167 @@ def test_with_the_ball_on_the_take_back_clears_by_the_rod_too():
     g.attach_pos[0] = np.array([0.7, 1.09, 2.93])            # no ball: r 1.3 is already clear
     g._take_back(0, 'LAND')
     assert 3 not in g._departed_step
+
+
+# ── the full M1: QUAD4 welded on plate 9 from spawn, detached, stepped out and released to his mission ───────────
+
+STEP_OUT = np.array([0.0, 1.0, 1.78])     # 0.5 m out and 0.3 m up from its detach point (partner_release_out/up_m)
+
+
+def _welded_node(contact=True):
+    """After the detach: QUAD4 folded in at the creep, detached, its step-out hold at the detach point."""
+    f = _node(quad=(0.0, 0.5, 1.48), contact=contact)
+    f.attach_pending[0] = False
+    hold = np.array([0.0, 0.5, 1.48])
+    f._departed_hold[3] = hold.copy()
+    f.drone_pos.append(hold.copy())
+    f.drone_vel = [np.zeros(3)] * 4
+    f._release_state = {3: {'target': STEP_OUT.copy(), 'released': False, 'quiet': 0.0, 'sent': None}}
+    f._release_pub = _Pub()
+    f._contact_released = False
+    f._partner_handed = False
+    f._mux_state = 'ours'                  # start_ours: ours from boot until his stream flies it
+    f._his_phase_cb(String(data='WAIT_FOR_TAKEOFF'))
+    for name in ('_partner_release_tick', '_contact_release_tick'):
+        setattr(f, name, MethodType(getattr(D, name), f))
+    return f
+
+
+def _wtick(f, follow=True):
+    """_plan_inner's order; QUAD4 tracks drone 3's reference perfectly while ours flies it."""
+    n0 = len(f.published)
+    f._contact_release_tick()
+    if f._departed_hold:
+        f._publish_departed_refs()
+    f._newcomer_off_tick()
+    f._partner_release_tick()
+    f._publish_pending_attach_refs()
+    f._contact_span_tick()
+    f.now[0] += 1.0 / HZ
+    mine = [d for d, _ in f.published[n0:] if d == 3]
+    assert len(mine) <= 1                                       # never two references for drone 3 in a tick
+    if follow and mine:
+        p = f.published[-1][1][0][0]
+        f.drone_pos[3] = p.copy()
+        f.attach_pos[0] = p.copy()
+    return mine
+
+
+def _release(f):
+    for _ in range(200):
+        _wtick(f)
+        if f._release_state[3]['released']:
+            return
+    raise AssertionError('never released')
+
+
+def test_the_released_quad4_keeps_its_step_out_hold_until_his_stream_flies_it_then_goes_warm():
+    """Critic round 1, finding 1: the step-out hold must give way to the warm reference on QUAD4's measured body
+    once his stream flies it, or the switch at the attach would hand our tracker a reference 1-3 m away."""
+    f = _welded_node()
+    _release(f)
+    assert f.attach_pending == [True] and f._contact_released
+    assert any('PARTNER RELEASE' in ln for ln in f.log.lines)
+    for _ in range(11):
+        assert _wtick(f) == [3]                                 # still the fixed hold, ours flies it
+    assert np.allclose(f.published[-1][1][0][0], STEP_OUT) and 3 in f._departed_hold
+    assert f._release_pub.msgs.count('{"running": true}') >= 1
+    f._his_phase_cb(String(data='TAKEOFF'))                     # his mission starts; his MPC not flying yet
+    _wtick(f)
+    assert 3 in f._departed_hold and np.allclose(f.published[-1][1][0][0], STEP_OUT)
+    f._mux_state_cb(String(data='partner'))                     # his first flying command
+    f.attach_pos[0] = np.array([0.1, 1.1, 1.9])                 # he moves it
+    assert _wtick(f, follow=False) == [3]
+    assert 3 not in f._departed_hold and np.allclose(f.published[-1][1][0][0], [0.1, 1.1, 1.9])
+    f.attach_pos[0] = np.array([0.6, 1.4, 2.5])
+    assert _wtick(f, follow=False) == [3]
+    assert np.allclose(f.published[-1][1][0][0], [0.6, 1.4, 2.5])   # the warm reference follows him
+    assert any('flies on his stream' in ln for ln in f.log.lines)
+
+
+def test_land_before_the_release_cancels_it_and_it_lands_as_a_departed_drone():
+    f = _welded_node()
+    for _ in range(10):
+        _wtick(f)                                               # stepping out
+    f._newcomers_out_on_land('LAND')                            # not pending: no take-back
+    f._land_to_ground = True
+    zs = []
+    for _ in range(150):
+        _wtick(f)
+        zs.append(f.published[-1][1][0][0][2])
+    assert f._release_pub.msgs == [] and f._take_back_pub.msgs == [] and not f._contact_released
+    assert f.attach_pending == [False] and not f._release_state[3]['released']
+    p = f.published[-1][1][0][0]
+    assert np.hypot(p[0], p[1]) == pytest.approx(DEPARTED_CLEAR_R, abs=0.05)   # out of the ring's way, then down
+    assert zs[-1] < zs[0] - 0.5
+    assert any('PARTNER RELEASE of drone 4 (/drone_3) cancelled' in ln for ln in f.log.lines)
+
+
+def test_land_after_the_release_before_his_stream_flies_it_is_a_take_back_where_it_hovers():
+    f = _welded_node()
+    _release(f)
+    f._newcomers_out_on_land('LAND')
+    assert f._take_back_pub.msgs == [True] and f._newcomer_out == {0: 'LAND'}
+    assert np.allclose(f._departed_hold[3], STEP_OUT, atol=0.03) and 3 in f._land_alone   # held where it is
+    step = f._departed_step[3]
+    assert step[1] == pytest.approx(DEPARTED_CLEAR_R) and step[2] == pytest.approx(1.78, abs=0.03)
+    f._land_to_ground = True
+    n_rel = len(f._release_pub.msgs)
+    f._his_phase_cb(String(data='TAKEOFF'))
+    f._mux_state_cb(String(data='partner'))                     # even if his stream got it: ours keeps the hold
+    for _ in range(30):
+        _wtick(f)
+    assert 3 in f._departed_hold and len(f._release_pub.msgs) == n_rel
+    assert f._magnet_cmd_pub.msgs == []                         # no span began: no OFF (rig: the coil is his)
+
+
+def test_his_give_up_after_the_warm_hand_over_takes_it_back_and_stops_the_release():
+    f = _welded_node()
+    _release(f)
+    f._his_phase_cb(String(data='TAKEOFF'))
+    f._mux_state_cb(String(data='partner'))
+    _wtick(f)
+    f.attach_pos[0] = np.array([0.0, 0.6, 1.6])
+    f._his_phase_cb(String(data='TRANSIT_TO_REATTACH'))
+    f._joint_state_cb(String(data='detached'))                  # our detach freed the ring weld
+    _wtick(f, follow=False)
+    assert f._magnet_cmd_pub.msgs == ['ON']                     # the span from his rejoin, as the subtest
+    n_rel = len(f._release_pub.msgs)
+    f._give_up_cb(Bool(data=True))
+    assert f._take_back_pub.msgs == [True] and np.allclose(f._departed_hold[3], [0.0, 0.6, 1.6])
+    assert f._magnet_cmd_pub.msgs[-1] == 'OFF'
+    for _ in range(20):
+        _wtick(f, follow=False)
+    assert len(f._release_pub.msgs) == n_rel and 3 in f._departed_hold
+
+
+def test_off_the_partner_release_is_todays():
+    """partner_contact off (the legacy partner_attached flow): the step-out hold stays until his hand-off, and
+    LAND does not cancel the release (its tick keeps pulling the hold to the release point, as before)."""
+    f = _welded_node(contact=False)
+    _release(f)
+    f._his_phase_cb(String(data='TAKEOFF'))
+    f._mux_state_cb(String(data='partner'))
+    for _ in range(5):
+        _wtick(f, follow=False)
+    assert 3 in f._departed_hold and np.allclose(f.published[-1][1][0][0], STEP_OUT)
+    g = _welded_node(contact=False)
+    _wtick(g)
+    g._land_to_ground = True
+    for _ in range(30):
+        _wtick(g)
+    assert 'cancelled' not in g._release_state[3] and not g._contact_released
+    assert not any('cancelled' in ln for ln in g.log.lines)
+
+
+def test_the_rejoin_fold_in_of_the_welded_start_is_the_subtests():
+    """Welded at the start (start_attached) and folded in at the creep; the rejoin after takeoff folds in from the
+    measured tip with the 'start' seed, not the plate-at-start rule."""
+    f = _fold_in_node()
+    f._start_attached = True
+    f.takeoff_seen = True
+    f._departed_hold[3] = np.array([0.0, 1.0, 1.78])            # a stale entry must not outlive the weld
+    f._magnet_attached_cb(Bool(data=True))
+    assert f.attach_pending == [False] and f._ocp_attached == {3: True} and 3 not in f._departed_hold
+    assert f.blends[-1][-1] == pytest.approx(0.1)
+    assert not any('welded at start' in ln for ln in f.log.lines)

@@ -67,6 +67,10 @@ EVENT_KINDS = {
                    # own pose-timeout fault (card 2026-10-09_newcomer_fault_scope)
     'TIP_FREEZE',  # std_msgs/Float64 on /magnet_tip_publisher/freeze: the sim tip publisher repeats its last
                    # output for arg seconds, as a frozen mocap body would (card 2026-10-09_approach_tip_feedback)
+    'WAIT_PICKUP_FREE',  # not published: block until his ball weld (/pickup/detachable_joint_state, made at
+                         # spawn on QUAD4's tip) has read 'detached' for 1 s, then shift later events; arg
+                         # 'timeout_s': on expiry the run fails and stops (the full M1: QUAD4's tip is also
+                         # welded to the ring, so the creep must not start with the ball on it)
     'WAIT_LOG',   # not published: block until the dissipative planner has logged a line matching
                   # the arg's regex (any time this run), then time later events from that line; arg
                   # '[timeout_s] regex', e.g. '60 approach: drone 3 descend' (event LOGGED or
@@ -175,7 +179,7 @@ class Event:
             raise ValueError('LAUNCH needs "package launch_file [k:=v ...]" as its arg')
         if self.do == 'WAIT_LIFT':
             wait_lift_arg(self.arg)
-        if self.do in ('WAIT_REWELD', 'WAIT_WELD'):
+        if self.do in ('WAIT_REWELD', 'WAIT_WELD', 'WAIT_PICKUP_FREE'):
             wait_reweld_arg(self.arg, self.do)
         if self.do == 'WAIT_LOG':
             wait_log_arg(self.arg)

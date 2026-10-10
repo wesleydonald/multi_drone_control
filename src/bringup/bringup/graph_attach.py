@@ -14,7 +14,10 @@ approach until the weld and ours after it. /magnet/object_attached flips the mux
 drone 3 into the planner. sil:=true brings up only the controllers (tools/sil_bench.py supplies
 mocap, IMU, /clock and a scripted weld). partner:=true lets Tejen's mission fly the newcomer
 (start tejen_mission partner_mission.launch.py); partner_attached:=true starts it welded as the
-fourth carrier, then it leaves and rejoins.
+fourth carrier, then it leaves and rejoins. partner_contact:=true: his mission flies QUAD4
+down to a contact and a small lift, our manager's check confirms it
+(docs/design/m1_contact_contract.md); with partner_attached as well (the full M1) the mux is
+ours from boot and the manager's contact_lift starts from the start weld.
 
 real attach (was three_attach_launch.py real:=true; the rig flies this for M1): one launch that
 includes real_io_launch.py itself, no Gazebo-facing node, the wall clock, a typed kT and the rig
@@ -131,11 +134,11 @@ def attach(context, launch_dir, profile_vals):
         LaunchConfiguration('partner_attached').perform(context).lower() in ('1', 'true', 'yes'))
     # combined M1 contact attach (card 2026-10-10_combined_m1_contact): his mission flies QUAD4
     # to a contact and a small lift, our manager confirms it, then the mux hands over (or our
-    # take-back)
+    # take-back). With partner_attached (the full M1) QUAD4 first carries as the fourth drone, is
+    # detached, stepped out and released to his mission, then attaches the same way
     partner_contact = truthy(context, 'partner_contact')
-    if partner_contact and (not partner or partner_attached):
-        raise RuntimeError('partner_contact needs partner:=true (his mission flies QUAD4) and '
-                           'partner_attached:=false')
+    if partner_contact and not partner:
+        raise RuntimeError('partner_contact needs partner:=true (his mission flies QUAD4)')
 
     x0_imu = _x0_rate_imu_drones(context, n, real)
     # the thrust map and geometry: the rig carry's on the rig, the twin's typed knobs in sim (the
@@ -417,6 +420,9 @@ def attach(context, launch_dir, profile_vals):
                          'release_topic': '/partner/release' if partner_attached else '',
                          **({'take_back_topic': f'/drone_{d}/take_back'}
                             if partner_contact else {}),
+                         # the full M1: a start-welded carrier is ours from boot (combined-stack
+                         # O1), his stream only after /partner/release
+                         **({'start_ours': True} if partner_contact and partner_attached else {}),
                          **rig_magnet}],
             output='screen'))
 

@@ -197,10 +197,40 @@ def test_the_timeout_runs_on_the_timer_and_the_node_clock(manager):
     assert [m.data for m in n.contact_pub.msgs] == [True, False] and n._proof.reason == 'timeout'
 
 
-def test_attached_at_start_keeps_the_weld_check(manager):
+def test_attached_at_start_is_the_weld_check_until_the_detach(manager):
+    """The full M1 (QUAD4 welded on plate 9 from spawn): attached from t=0 with no proof, the first OFF (the
+    detach) is accepted and releases the joint, and only the contacts after it need the lift proof."""
     n = manager(confirm_mode='contact_lift', attached_at_start=True)
-    assert n._proof is None and n.attached
-    n._contact_command_callback(String(data='OFF'))           # the partner demo's release, as today
+    assert n._proof is not None and n._start_weld and n.attached and n.magnet_on
+    clock = _with_clock(n)
+    n.timer_callback()
+    assert n.attached_pub.msgs[-1].data is True                       # the start weld folds it in at the creep
+    assert [m.data for m in n.contact_pub.msgs] == [False]            # no contact, nothing to prove
+    n._contact_command_callback(String(data='ON'))                    # a stray ON while welded: still nothing
+    for s in _trace(caught=True):                                     # the tip sits on the plate
+        _feed(n, clock, s)
+    assert n._proof.state == 'off' and not n.attach_pub.msgs and len(n.contact_pub.msgs) == 1
+    n._contact_command_callback(String(data='OFF'))                   # the detach: accepted, not refused
+    assert not n.attached and not n.magnet_on and not n._start_weld
+    assert len(n.detach_pub.msgs) == 1                                 # the twin's joint lets go
+    n.timer_callback()
+    assert n.attached_pub.msgs[-1].data is False
+    # the rejoin: our span's ON, a contact, the proof
+    n._contact_command_callback(String(data='ON'))
+    assert n._proof.state == 'watch'
+    trace = _trace(caught=True)
+    _until(n, clock, trace, lambda: n.contact_pub.msgs[-1].data)
+    assert len(n.attach_pub.msgs) == 1 and not n.attached             # caught, not yet proven
+    _until(n, clock, trace, lambda: n.attached)
+    assert n.attached_pub.msgs[-1].data is True
+    n._contact_command_callback(String(data='OFF'))                   # now an OFF is refused
+    assert n.attached and n.magnet_on and len(n.detach_pub.msgs) == 1
+
+
+def test_attached_at_start_with_the_weld_check_as_before(manager):
+    n = manager(attached_at_start=True)
+    assert n._proof is None and n.attached and not n._start_weld
+    n.magnet_command_callback(String(data='OFF'))             # the partner demo's release, as today
     assert not n.attached and n.detach_pub.msgs
 
 

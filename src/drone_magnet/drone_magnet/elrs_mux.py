@@ -76,6 +76,13 @@ class ElrsMux(Node):
             live_timeout_s=float(self.declare_parameter('live_timeout_s', 0.5).value))
         self._attached = False
         self.drone_id = drone_id
+        # a drone that starts welded as a carrier is OURS from boot (Wesley 8 Oct, combined-stack O1):
+        # it arms at our idle throttle and nothing of the partner's is forwarded before /partner/release
+        self._start_ours = bool(self.declare_parameter('start_ours', False).value)
+        if self._start_ours:
+            self.policy.welded = True
+            self.policy._switched = True
+            self._attached = True
 
         self.pub = self.create_publisher(ELRSCommand, f'/drone_{drone_id}/ELRSCommand', 1)
         self._state = None
@@ -109,6 +116,7 @@ class ElrsMux(Node):
         # the approach stream on that stream's first flying command, never before
         self._release_pending = False
         self._released = False
+        self._taken_back = False
         release_topic = str(self.declare_parameter('release_topic', '').value)
         if release_topic:
             self.create_subscription(String, release_topic, self._release_cb, 5)
@@ -123,8 +131,10 @@ class ElrsMux(Node):
             self.create_subscription(ELRSCommand, magnet_topic, self._magnet_cb, 5)
         self._publish_state()
         self.get_logger().info(
-            f'[elrs_mux] drone {drone_id}: forwarding APPROACH until /magnet/object_attached'
-            f' (latch={self.policy.latch}, require_live={self.policy.require_live})')
+            f'[elrs_mux] drone {drone_id}: '
+            + ('OURS from boot until /partner/release' if self._start_ours
+               else 'forwarding APPROACH until /magnet/object_attached')
+            + f' (latch={self.policy.latch}, require_live={self.policy.require_live})')
 
     def _now(self):
         return self.get_clock().now().nanoseconds * 1e-9
@@ -187,7 +197,7 @@ class ElrsMux(Node):
         self._apply(self.policy.weld(bool(msg.data), self._now()))
 
     def _release_cb(self, msg: String):
-        if self._released or self._ours_only or '"running": true' not in msg.data:
+        if self._released or self._ours_only or self._taken_back or '"running": true' not in msg.data:
             return
         self._release_pending = True
 
@@ -199,6 +209,11 @@ class ElrsMux(Node):
     def _take_back_cb(self, msg: Bool):
         if self._ours_only or not msg.data:
             return
+        self._taken_back = True
+        if self._release_pending:
+            # taken back before his stream took over (a welded start released, then our LAND): it stays ours
+            self._release_pending = False
+            self.get_logger().warn('[elrs_mux] TAKE-BACK before the partner flew it: the release is cancelled')
         if not self.policy.taken_back:
             self.get_logger().warn('[elrs_mux] TAKE-BACK: our tracker takes the drone (no attach)')
         self._apply(self.policy.take_back(self._now()))
