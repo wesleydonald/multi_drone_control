@@ -269,3 +269,73 @@ def test_wait_log_can_wait_for_his_phase():
     r.now = 95.0                                                  # 5 s after his transit started
     r.fire_due_events()
     assert r.fired[-1] == (95.0, 'LAND')
+
+
+# ── WAIT_PICKUP_FREE (the full M1: his ball weld on QUAD4's tip, which is also welded to the ring) ─────────────
+
+def _pickup_runner(events):
+    from types import MethodType
+    from experiment.runner_node import ExperimentRunner
+    r = _waiting_runner(events)
+    r.sim_t, r.failures, r._pickup_free_t, r._pickup_wait, r._pickup_watch = 0.0, [], None, None, True
+    for name in ('_pickup_state_cb', '_rosout_cb'):
+        setattr(r, name, MethodType(getattr(ExperimentRunner, name), r))
+    return r
+
+
+def _at(r, t):
+    r.now = r.sim_t = t
+    r.fire_due_events()
+
+
+def test_wait_pickup_free_holds_arm_until_the_ball_weld_has_read_free_for_a_second():
+    pytest.importorskip('interfaces.msg')
+    from std_msgs.msg import String
+    from experiment.config import Event
+    r = _pickup_runner([Event(2.0, 'WAIT_PICKUP_FREE', '120'), Event(3.0, 'ARM'), Event(6.0, 'TAKEOFF')])
+    for t in (2.0, 3.0, 5.0):
+        _at(r, t)
+    assert [d for _, d in r.fired] == ['WAIT_PICKUP_FREE']
+    r._pickup_state_cb(String(data='attached'))                 # the spawn weld
+    _at(r, 6.0)
+    r._pickup_state_cb(String(data='detached'))                 # his launch frees it
+    _at(r, 6.5)
+    r._pickup_state_cb(String(data='attached'))                 # his gate's forced pair: not yet
+    _at(r, 7.2)
+    r._pickup_state_cb(String(data='detached'))
+    _at(r, 7.5)
+    _at(r, 8.1)
+    assert [d for _, d in r.fired] == ['WAIT_PICKUP_FREE'] and not r.failures
+    _at(r, 8.2)                                                 # 1 s after the last 'detached'
+    assert r.event_log[-1][1] == 'PICKUP_FREE'
+    _at(r, 9.2)
+    assert r.fired[-1] == (9.2, 'ARM')                          # 1 s after the gate, as written
+
+
+def test_wait_pickup_free_takes_his_supervisors_line_and_fails_the_run_on_its_timeout():
+    pytest.importorskip('interfaces.msg')
+    from types import SimpleNamespace
+    from experiment.config import Event
+    r = _pickup_runner([Event(2.0, 'WAIT_PICKUP_FREE', '120'), Event(3.0, 'ARM')])
+    _at(r, 2.0)
+    r._rosout_cb(SimpleNamespace(name='tejen.simulation_test_supervisor',
+                                 msg='pickup weld reads free; the arm may proceed'))
+    _at(r, 2.5)
+    assert r.event_log[-1][1] == 'PICKUP_FREE'
+    _at(r, 3.5)
+    assert r.fired[-1] == (3.5, 'ARM')
+    q = _pickup_runner([Event(2.0, 'WAIT_PICKUP_FREE', '10'), Event(3.0, 'ARM')])
+    for t in (2.0, 11.9, 12.0, 30.0):
+        _at(q, t)
+    assert [d for _, d in q.fired] == ['WAIT_PICKUP_FREE']      # never ARM with the ball on the ring
+    assert len(q.failures) == 1 and q.failures[0].startswith('the ball weld never read free')
+    assert [n for _, n, _ in q.event_log].count('PICKUP_FREE_TIMEOUT') == 1
+
+
+def test_wait_pickup_free_arg_is_checked_when_the_config_loads():
+    pytest.importorskip('interfaces.msg')
+    from experiment.config import Event
+    Event(2.0, 'WAIT_PICKUP_FREE', '120')
+    Event(2.0, 'WAIT_PICKUP_FREE')
+    with pytest.raises(ValueError):
+        Event(2.0, 'WAIT_PICKUP_FREE', '-1')

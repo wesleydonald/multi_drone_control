@@ -48,6 +48,6 @@ T2: `[magnet_gate] OURS from now (first ON from the ring-magnet manager)`. Watch
   taut check).
 - (c) **Noise**: a caught face still 10 s, and the ring alone 10 s.
 - Stop rule: any ATTACH in (b): the proof is not safe on the rig; stop the combined M1 and report.
-- In flight his reference ends 2 cm above the face (target 1 cm below + the 3 cm cap); the first ~1 cm takes up the
-  slack. If the hand lift needs more than ~1.5 cm of plate rise, raise `proof_rise_max` before the flight, not the
-  thresholds.
+- In flight his lift ends `proof_rise_max` (3 cm) above the measured contact; the first ~1 cm takes up the slack
+  (his descent aims 1 cm below), so up to ~3 cm can pull the plate before our proof stops it. Note the plate rise the
+  hand lift needs: if under ~1 cm, 0.02 is enough on the rig and tilts the ring less; if over ~1.5 cm, keep 0.03.

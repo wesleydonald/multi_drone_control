@@ -18,11 +18,16 @@ The switch is one-way: nothing hands the coil back to him. An operator /magnet/c
 (the RViz ATTACH button) is our span too, so it must not be pressed before his drop.
 
 His puck (critic F9; /tejen/object_attached, /join_planner/phase):
-  * once his puck has been attached, his OFF reaches the coil only in DROP_OBJECT / CLEAR_DROP_ZONE: a LANDING
-    (land_now) or any other OFF of his before the drop does not drop the puck over the ring;
+  * from his puck's pickup to his drop, his OFF reaches the coil only in his pickup phases (at the pickup site: his
+    retry releases there) and in DROP_OBJECT / CLEAR_DROP_ZONE: a LANDING (land_now) or any other OFF of his in the
+    transit or over the ring does not drop the puck; after the drop his OFFs pass again (his TAKEN_BACK holds his
+    magnet OFF so it cannot re-catch the puck in the net, R1520);
   * our first ON takes the coil only while the puck reads released: an ON before the drop (RViz ATTACH) is held.
 On a restart it forwards nothing for restore_s while it listens to its own latched state (a previous instance's
 'ours', if still held) and to our manager's ON keepalive (2 Hz), so a restarted gate does not hand the coil back.
+
+The full M1 (start_ours, QUAD4 starts welded as a carrier): the coil is ours from boot (our detach releases it),
+his from /partner/release on (his pickup), and ours again from our span's first ON.
 """
 import rclpy
 from rclpy.node import Node
@@ -31,6 +36,11 @@ from std_msgs.msg import Bool, String
 
 PARTNER, OURS = 'partner', 'ours'
 DROP_PHASES = ('DROP_OBJECT', 'CLEAR_DROP_ZONE')
+# his pickup phases, at the pickup site away from the ring: his bounded retry releases there (m1-final 6143989: also
+# an object attached but not aligned), so his OFF passes there too
+PICKUP_PHASES = ('APPROACH_ABOVE_PICKUP', 'SETTLE_ABOVE_PICKUP', 'DESCEND_TO_PICKUP', 'MAGNET_ATTACH_WAIT',
+                 'LIFT_OBJECT')
+OFF_PHASES = PICKUP_PHASES + DROP_PHASES
 ON_WORDS = ('ON', '1', 'TRUE', 'ENABLE', 'ENABLED')
 OFF_WORDS = ('OFF', '0', 'FALSE', 'DISABLE', 'DISABLED')
 GATE_STATE_QOS = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
@@ -49,13 +59,15 @@ class MagnetGate:
     partner(word) / ours(word) return the word to publish on the coil latch, or None (dropped).
     `events` collects one-line descriptions of every state change and first drop, for the log."""
 
-    def __init__(self):
-        self.source = PARTNER
+    def __init__(self, start_ours=False):
+        self.source = OURS if start_ours else PARTNER
+        self._release_pending = bool(start_ours)     # the welded start hands the coil to him once
         self.last = None              # the last word forwarded to the coil
         self.events = []
         self.phase = ''               # his mission phase
         self.puck_now = False         # /tejen/object_attached
         self.puck_ever = False        # his puck has been attached in this flight
+        self.dropped = False          # his mission has reached the drop
         self._dropped_ours_off = False
         self._dropped_partner = False
         self._held_off_in = None
@@ -63,6 +75,8 @@ class MagnetGate:
 
     def his_phase(self, phase):
         self.phase = str(phase).strip().upper()
+        if self.phase in DROP_PHASES:
+            self.dropped = True
 
     def puck(self, attached):
         attached = bool(attached)
@@ -80,11 +94,11 @@ class MagnetGate:
                 self._dropped_partner = True
                 self.events.append(f'his {w} ignored: the coil is ours since our span began')
             return None
-        if w == 'OFF' and self.puck_ever and self.phase not in DROP_PHASES:
+        if w == 'OFF' and self.puck_ever and not self.dropped and self.phase not in OFF_PHASES:
             if self._held_off_in != self.phase:
                 self._held_off_in = self.phase
-                self.events.append(f'his OFF held in {self.phase or "an unknown phase"}: after the pickup his OFF '
-                                   f'reaches the coil only in {" / ".join(DROP_PHASES)}')
+                self.events.append(f'his OFF held in {self.phase or "an unknown phase"}: from the pickup to the drop '
+                                   f'his OFF reaches the coil only at the pickup or in {" / ".join(DROP_PHASES)}')
             return None
         return self._forward(w, 'his')
 
@@ -109,10 +123,19 @@ class MagnetGate:
                                'are ignored')
         return self._forward(w, 'our')
 
+    def release(self):
+        """/partner/release after a welded start (start_ours): the coil is his until our span's first ON."""
+        if not self._release_pending:
+            return
+        self._release_pending = False
+        self.source = PARTNER
+        self.events.append('PARTNER from now (/partner/release: the welded start was released to his mission)')
+
     def restore(self, state):
         """A previous instance's latched state: 'ours' is taken back at once (never handed to him)."""
         if str(state).strip().lower() == OURS and self.source != OURS:
             self.source = OURS
+            self._release_pending = False
             self.events.append('OURS restored from the latched gate state (restart)')
 
     def _forward(self, w, who):
@@ -133,7 +156,9 @@ class MagnetGateNode(Node):
         phase_topic = str(self.declare_parameter('phase_topic', '').value)
         puck_topic = str(self.declare_parameter('puck_topic', '').value)
         restore_s = float(self.declare_parameter('restore_s', 1.0).value)
-        self.gate = MagnetGate()
+        start_ours = bool(self.declare_parameter('start_ours', False).value)
+        release_topic = str(self.declare_parameter('release_topic', '').value)
+        self.gate = MagnetGate(start_ours=start_ours)
         self._t0 = self.get_clock().now().nanoseconds * 1e-9
         self._restore_s = restore_s
         self._restoring = restore_s > 0.0
@@ -148,6 +173,10 @@ class MagnetGateNode(Node):
                                      GATE_STATE_QOS)
         if puck_topic:
             self.create_subscription(Bool, puck_topic, lambda m: self._on(self.gate.puck, m.data), 10)
+        if release_topic:
+            self.create_subscription(
+                String, release_topic,
+                lambda m: self._on(lambda _v: self.gate.release(), None) if '"running": true' in m.data else None, 5)
         if self._restoring:
             self._restore_timer = self.create_timer(restore_s, self._end_restore)
         else:
@@ -172,7 +201,7 @@ class MagnetGateNode(Node):
         out = feed(value)
         for e in self.gate.events:
             # one severity per call site (rclpy refuses a logger call that changes it)
-            if 'OURS' in e or 'held' in e:
+            if 'OURS' in e or 'PARTNER' in e or 'held' in e:
                 self.get_logger().warn(f'[magnet_gate] {e}')
             else:
                 self.get_logger().info(f'[magnet_gate] {e}')

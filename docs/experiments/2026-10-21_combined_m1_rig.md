@@ -18,7 +18,7 @@ QUAD4 back and land it?
 | F2 | every terminal in the fleet's domain (`fleet`, preflight, rig_flight refuse otherwise); the kill path repeated from T3 and from his terminal | built (tools/fleet_reach.py); sheet lines drafted |
 | F3 | the mux holds his throttle at armed idle until our planner flies the ring; ARM FAILED says "his ARM first" | built |
 | F4 | QUAD4's radio latch on a private topic only magnet_gate_3 writes; RViz MAGNET D4 hidden; no `/drone_3/magnet` line on a combined-day sheet | built |
-| F9 | his OFF reaches the coil only in DROP_OBJECT / CLEAR_DROP_ZONE after the pickup; gate switch and span wait for the puck released; the drop ends on the measured puck (stuck = give-up); his supervisor refused | built |
+| F9 | after the pickup his OFF reaches the coil only at the pickup site (his retry) or in DROP_OBJECT / CLEAR_DROP_ZONE; gate switch and span wait for the puck released; the drop ends on the measured puck (stuck = give-up); his supervisor refused | built |
 | F7 | contact_still (c0 from the dwell's last 0.05 s + vertical speed gate) decided with Wednesday's hand ramps | built behind a switch, off; thresholds Wesley's |
 | F8 | QUAD4's body-to-marker, marker-to-face, taut length, weld_point_z, contact radius (Wednesday) and his kT with and without the puck (Thursday R10a) typed from one QUAD4 record | values open |
 | F1 | the full combined graph at wall clock on the rig laptop, >= 10 min, passes the load bars (section 5.1) | Wednesday props-off, if Wesley OKs the combined item |
@@ -55,7 +55,8 @@ at 1.0 m (T2: `our planner flies the ring`) -> his TAKEOFF. End of every flight:
 
 ### 5.3 Proof
 - **Confirms**: proven within 3 s of the last contact; QUAD4's body-to-marker >= the taut length at the proof; plate 9
-  rise <= 2 cm (his reference ends 2 cm above the face: target 1 cm below + the 3 cm cap).
+  rise <= 2 cm (his lift ends `proof_rise_max` above the measured contact, 3 cm on the rig, after ~1 cm of slack:
+  Wesley may set 0.02 after Wednesday's hand lifts).
 - **Falsifies**: any `ATTACH:` in R11a; a proof on a contact whose c0 is more than 3 mm above the rest point.
 
 ### 5.4 Hand-over (QUAD4's applied command, last 0.1 s before against the first 0.3 s after the switch)
@@ -77,8 +78,8 @@ at 1.0 m (T2: `our planner flies the ring`) -> his TAKEOFF. End of every flight:
   QUAD4 closer than 0.30 m to a carrier.
 
 ### 5.7 Authority (every flight)
-- Zero `/drone_3/magnet_coil` writers but magnet_gate_3; zero his OFFs reaching the coil outside the drop after the
-  pickup (`[magnet_gate] his OFF held` lines are fine); zero "HOLDING approach authority" with QUAD4 airborne.
+- Zero `/drone_3/magnet_coil` writers but magnet_gate_3; zero his OFFs reaching the coil in the transit or over the
+  ring once the puck is taken (`[magnet_gate] his OFF held` lines are fine); zero "HOLDING approach authority" with QUAD4 airborne.
 
 ## 6. Stop rules (the sheet's, plus)
 - Any falsifier in 5.1, 5.6 or 5.7: no more combined flights today.

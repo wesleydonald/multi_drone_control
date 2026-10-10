@@ -98,7 +98,7 @@ events:
   arg: 0 0 0
 - t: 22.0
   do: WAIT_WELD
-  arg: 150
+  arg: 210
 - t: 30.0
   do: LAND
 criteria:

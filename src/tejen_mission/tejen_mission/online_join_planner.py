@@ -160,6 +160,8 @@ CONTACT_REJOIN_PHASES = frozenset({
     MissionPhase.ATTACH_READY,
     MissionPhase.LIFT_PROOF,
 })
+# contact_attach: the phases after the drop released the object (the object magnet holds nothing)
+CONTACT_DROPPED_PHASES = CONTACT_REJOIN_PHASES | {MissionPhase.CLEAR_DROP_ZONE}
 
 
 def _vec3_from_position(position) -> np.ndarray:
@@ -1745,8 +1747,13 @@ class OnlineJoinPlanner(Node):
         self.pickup_proof_tracker = PickupProofTracker(PickupProofConfig(**proof_values))
         self.pickup_proof_proven = not self.pickup_proof_enabled
         self.pickup_proof_last_pair = None
+        # contact_attach allows it with the legacy alignment too (not aligned on the object after the contact
+        # wait, or the object lost in the lift: release, rise, re-approach it where it now is); past the budget
+        # it gives up
         self.pickup_retry_enabled = bool(self.declare_parameter('pickup_retry_enabled', False).value
-            and self.pickup_alignment_mode == 'measured_tip_tiered')
+            and (self.pickup_alignment_mode == 'measured_tip_tiered' or self.contact_attach))
+        # only where the object flag is the weld itself (the twin): a proximity flag would end the descent early
+        self.pickup_hold_on_attach = bool(self.declare_parameter('pickup_hold_on_attach', False).value)
         self.m1_pickup_stall = PickupProgressStall(
             wait_s=float(self.declare_parameter('pickup_retry_wait_s', 10.).value),
             improvement_m=float(self.declare_parameter('pickup_retry_progress_m', .005).value))
@@ -1824,6 +1831,9 @@ class OnlineJoinPlanner(Node):
         self.contact_descend_start_offset = None
         self.contact_hold_tip_offset = None
         self.contact_hold_position = None
+        self.contact_proof_profile = None
+        self.contact_proof_fallback_logged = False
+        self.contact_taken_back_magnet = None
 
         # ------------------------------------------------------------------
         # Landing and simulation safety
@@ -6096,6 +6106,18 @@ class OnlineJoinPlanner(Node):
                 fresh=self.pickup_alignment_speed_ready)
             self.pickup_alignment_waiting_reason = self.pickup_tier_descent.reason
 
+    def pickup_attach_hold_reference(self) -> np.ndarray:
+        """The body hold that keeps the tip at its measured height (the commanded xy); the commanded point if
+        the measured tip is stale."""
+        hold = (self.last_reference.positions[0].copy() if self.last_reference is not None
+                else self.drone_position.copy())
+        now = self._physical_now_s()
+        if (getattr(self, 'use_measured_magnet_tip', False) and self.measured_magnet_tip_position is not None
+                and self.last_magnet_tip_pose_time is not None
+                and 0. <= now - self.last_magnet_tip_pose_time <= self.input_timeout_s):
+            hold[2] = float(self.measured_magnet_tip_position[2] + self.quad_reference_offset_from_tip()[2])
+        return hold
+
     def begin_m1_pickup_retry(self, reason: str) -> None:
         if not self.pickup_retry_enabled or self.m1_pickup_release.stage != 'idle':
             return
@@ -6131,6 +6153,9 @@ class OnlineJoinPlanner(Node):
                                'fresh measured vertical separation; retry pickup')
         else:
             self.pickup_alignment_waiting_reason = release.waiting_reason
+            if release.stage == 'await_operator' and getattr(self, 'contact_attach', False):
+                # the fleet takes the vehicle back from here, clear of the object
+                self.contact_give_up(f'pickup: {release.attempts} attempts without the object')
 
     def ground_ring_evidence(self):
         """Fresh physical face/plate geometry for trial diagnostics and release."""
@@ -6180,6 +6205,8 @@ class OnlineJoinPlanner(Node):
 
 
     def pickup_magnet_command(self, legacy_command):
+        if self.phase == MissionPhase.TAKEN_BACK and getattr(self, 'contact_taken_back_magnet', None):
+            return self.contact_taken_back_magnet
         if legacy_command == 'NONE':
             return legacy_command
         if self.ground_ring_exit is not None:
@@ -6299,6 +6326,8 @@ class OnlineJoinPlanner(Node):
                 self.descend_rate,
             )
         if phase == MissionPhase.LIFT_PROOF:
+            if getattr(self, 'contact_proof_profile', None) is not None:
+                return self.contact_proof_profile
             contact = np.array(
                 [self.approach_offset_x, self.approach_offset_y, self.final_attach_offset_z]
             )
@@ -6460,7 +6489,7 @@ class OnlineJoinPlanner(Node):
             return True
         if (self.phase in {MissionPhase.DESCEND_TO_ATTACHMENT, MissionPhase.ATTACH_READY}
                 and self.contact_reported):
-            self.transition_to(MissionPhase.LIFT_PROOF, 'contact reported; proving the catch by a small lift')
+            self.enter_lift_proof()
             return True
         if self.phase == MissionPhase.LIFT_PROOF:
             if not self.contact_reported:
@@ -6475,6 +6504,39 @@ class OnlineJoinPlanner(Node):
                     self.contact_descend_start_offset = lifted
             return True
         return False
+
+    def measured_contact_tip_offset(self) -> Optional[np.ndarray]:
+        """The measured tip relative to the contact target (the frame of the rejoin's tip offsets); None if
+        either pose is stale."""
+        now = self._physical_now_s()
+        if not (getattr(self, 'use_measured_magnet_tip', False)
+                and self.measured_magnet_tip_position is not None and self.attachment_position is not None
+                and all(stamp is not None and 0. <= now - stamp <= self.input_timeout_s
+                        for stamp in (self.last_magnet_tip_pose_time, self.last_attachment_pose_time))):
+            return None
+        offset = np.asarray(self.measured_magnet_tip_position - self.attachment_position, dtype=float)
+        return offset if np.all(np.isfinite(offset)) else None
+
+    def enter_lift_proof(self) -> None:
+        """The proof lift ends proof_rise_max above the higher of the target and the tip's measured contact height.
+        With the target below the plate the tip rests on the plate, and a rise from the target only brought it back
+        there; with the tip pressed below the target (the ring sagging) a rise from the tip barely lifted it. It
+        starts from the commanded offset, so the reference does not step."""
+        commanded = np.asarray(self.desired_tip_offset(), dtype=float).copy()
+        measured = self.measured_contact_tip_offset()
+        self.transition_to(MissionPhase.LIFT_PROOF, 'contact reported; proving the catch by a small lift')
+        if measured is None:
+            self.contact_proof_profile = None
+            if not self.contact_proof_fallback_logged:
+                self.contact_proof_fallback_logged = True
+                self.get_logger().warning('LIFT_PROOF: no fresh measured tip; the lift rises from the contact target')
+            return
+        base = max(float(self.final_attach_offset_z), float(measured[2]))
+        goal = np.array([self.approach_offset_x, self.approach_offset_y, base + self.proof_rise_max])
+        self.contact_proof_profile = RateProfile(commanded, goal, self.proof_rise_rate)
+        self.get_logger().info(
+            f'LIFT_PROOF: tip measured {measured[2]:+.3f} m from the contact target, target offset '
+            f'{self.final_attach_offset_z:+.3f} (commanded {commanded[2]:+.3f}); lift to {goal[2]:+.3f}')
 
     def enter_ring_attached(self) -> None:
         if self.phase in {MissionPhase.MATCH_VELOCITY, MissionPhase.DESCEND_TO_ATTACHMENT,
@@ -6517,8 +6579,14 @@ class OnlineJoinPlanner(Node):
             return
         hold = (self.last_reference.positions[0] if self.last_reference is not None
                 else self.drone_position)
+        dropped = getattr(self, 'contact_attach', False) and self.phase in CONTACT_DROPPED_PHASES
         self.transition_to(MissionPhase.TAKEN_BACK, reason)
         self.contact_hold_position = np.asarray(hold, dtype=float).copy()
+        if dropped:
+            # past the drop his object magnet holds nothing; left ON (the rejoin's) it caught the dropped object
+            # while the fleet stepped the vehicle out
+            self.contact_taken_back_magnet = 'OFF'
+            self.get_logger().warning('TAKEN_BACK after the drop: object magnet OFF')
 
     def contact_give_up(self, reason: str) -> None:
         self.contact_gave_up = True
@@ -6703,6 +6771,12 @@ class OnlineJoinPlanner(Node):
                         f'fresh near-surface LOW pickup candidate (gap={live_clearance:.3f} m); '
                         'hold for measured lift proof')
                     return
+            if getattr(self, 'pickup_hold_on_attach', False) and self.object_attached:
+                # descending on past the weld pushes the object into the floor and bends the rod aside
+                self.m1_candidate_hold_reference = self.pickup_attach_hold_reference()
+                self.transition_to(MissionPhase.MAGNET_ATTACH_WAIT,
+                                   'object attached during the descent; holding the tip height')
+                return
             complete = (self.pickup_tier_descent is not None and self.pickup_tier_descent.complete
                         if getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered'
                         else self.rate_profile().complete(elapsed))
@@ -6730,10 +6804,14 @@ class OnlineJoinPlanner(Node):
 
         if self.phase == MissionPhase.MAGNET_ATTACH_WAIT:
             aligned = self.object_attached and xy_error < self.pickup_lift_xy_tolerance
+            # contact_attach: attached but off target is a stall too (a bent rod does not come back on its own)
+            stalled = not aligned if getattr(self, 'contact_attach', False) else not self.object_attached
             if getattr(self, 'pickup_retry_enabled', False) and self.m1_pickup_stall.step(
                     now=self._physical_now_s(), progress_m=0.,
-                    blocked=not self.object_attached, key='CONTACT_WAIT'):
-                self.begin_m1_pickup_retry('contact wait made no progress for 10s')
+                    blocked=stalled, key='CONTACT_WAIT'):
+                self.begin_m1_pickup_retry(
+                    f'object attached but the tip {xy_error:.3f} m off target' if self.object_attached
+                    else f'contact wait made no progress for {self.m1_pickup_stall.wait_s:.0f}s')
                 return
             if self.condition_true_for(aligned, self.pickup_lift_xy_dwell_s):
                 self.transition_to(

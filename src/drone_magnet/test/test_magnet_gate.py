@@ -52,22 +52,31 @@ def test_events_name_the_switch_and_each_first_drop_once():
     assert 'coil ON (his command)' in text
 
 
-def test_after_the_pickup_his_off_reaches_the_coil_only_in_the_drop():
-    """Critic F9: a LANDING (land_now) or any other OFF of his with the puck on must not drop it over the ring."""
+def test_after_the_pickup_his_off_reaches_the_coil_only_at_the_pickup_or_in_the_drop():
+    """Critic F9: a LANDING (land_now) or any other OFF of his with the puck on must not drop it over the ring; his
+    pickup retry (m1-final) still releases at the pickup site."""
     g = MagnetGate()
     g.his_phase('DESCEND_TO_PICKUP')
     assert g.partner('OFF') == 'OFF'                  # before the puck: harmless, forwarded
     assert g.partner('ON') == 'ON'
     g.puck(True)
-    for ph in ('LIFT_OBJECT', 'TRANSIT_TO_DROP_POINT', 'LANDING', 'TAKEN_BACK', ''):
+    for ph in ('MAGNET_ATTACH_WAIT', 'LIFT_OBJECT', 'APPROACH_ABOVE_PICKUP'):
+        g.his_phase(ph)
+        assert g.partner('OFF') == 'OFF', ph           # his pickup retry releases at the pickup site
+        assert g.partner('ON') == 'ON'
+    for ph in ('TRANSIT_TO_DROP_POINT', 'SETTLE_ABOVE_DROP_POINT', 'DESCEND_TO_DROP_HEIGHT', 'LANDING',
+               'TAKEN_BACK', ''):
         g.his_phase(ph)
         assert g.partner('OFF') is None, ph            # held: the puck stays on
     assert g.last == 'ON'
     g.his_phase('DROP_OBJECT')
     assert g.partner('OFF') == 'OFF'                  # the drop
     g.puck(False)
-    g.his_phase('TRANSIT_TO_REATTACH')
-    assert g.partner('OFF') is None and g.last == 'OFF'
+    for ph in ('TRANSIT_TO_REATTACH', 'TAKEN_BACK'):  # after the drop his OFFs pass (d8c1b65: TAKEN_BACK holds OFF)
+        g.his_phase(ph)
+        assert g.partner('OFF') == 'OFF', ph
+    g.puck(True)                                      # the puck re-caught after the drop (R1520): OFF still passes
+    assert g.partner('OFF') == 'OFF'
 
 
 def test_our_on_takes_the_coil_only_with_the_puck_released():
@@ -81,6 +90,25 @@ def test_our_on_takes_the_coil_only_with_the_puck_released():
     g.puck(False)
     assert g.ours('ON') == 'ON' and g.source == 'ours'
     assert sum('our ON held' in e for e in g.events) == 1
+
+
+def test_full_m1_welded_start_ours_then_his_after_the_release_then_ours_at_our_span():
+    g = MagnetGate(start_ours=True)
+    assert g.source == 'ours' and g.ours('ON') == 'ON' and g.partner('OFF') is None   # welded: ours
+    assert g.ours('OFF') == 'OFF'                     # our detach releases QUAD4 from the ring
+    g.release()
+    assert g.source == 'partner' and g.partner('ON') == 'ON'      # his pickup
+    g.puck(True)
+    g.his_phase('DROP_OBJECT')
+    assert g.partner('OFF') == 'OFF'
+    g.puck(False)
+    assert g.ours('ON') == 'ON' and g.source == 'ours'
+    g.release()                                       # once only
+    assert g.source == 'ours'
+    assert MagnetGate().source == 'partner'
+    h = MagnetGate()
+    h.release()                                       # no welded start: a release changes nothing
+    assert h.source == 'partner'
 
 
 def test_restore_takes_ours_back_and_ignores_partner():

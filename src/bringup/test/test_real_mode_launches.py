@@ -911,8 +911,42 @@ def test_partner_nodes_refusals(dds, args, match):
         rig('attach', enable_approach_mpc=False, **args)
 
 
-@pytest.mark.parametrize('args', [{'partner': False}, {'partner': True, 'partner_attached': True}])
-def test_partner_contact_needs_his_mission_from_the_mat(args):
-    """partner_contact without his mission, or with the welded partner start, is refused."""
+def test_partner_contact_needs_his_mission():
+    """partner_contact without his mission is refused."""
     with pytest.raises(RuntimeError, match='partner_contact needs partner'):
-        sim('attach', legacy=False, num_drones=3, partner_contact=True, **args)
+        sim('attach', legacy=False, num_drones=3, partner_contact=True, partner=False)
+
+
+def test_full_m1_welded_start_graph(dds):
+    """Wire the full M1: partner_contact with partner_attached.
+
+    QUAD4 starts welded and carries, the mux is ours from boot and releases it on
+    /partner/release, the manager starts attached under contact_lift, the planner steps it out
+    and releases it; the contact attach and the take-back as in the subtest.
+    """
+    twin = _twin_partner(partner_contact=True, partner_attached=True)
+    real = _by_name(rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True,
+                        partner_attached=True, proof_taut_len=0.587))
+    for g, on_rig in ((twin, False), (real, True)):
+        mux = g['/elrs_mux_3']['params']
+        assert mux['start_ours'] is True and mux['release_topic'] == '/partner/release'
+        assert mux['take_back_topic'] == '/drone_3/take_back' and mux['handoff_topic'] == ''
+        mgr = g['/magnet_attachment_manager']['params']
+        assert mgr['attached_at_start'] is True and mgr['confirm_mode'] == 'contact_lift'
+        p = g['/dissipative_planner']['params']
+        assert p['partner_contact'] is True and p['partner_handoff_topic'] == ''
+        assert p['start_attached'] is True and p['partner_release'] is True
+        assert g['/tracker_3']['params']['warm_follow_applied'] is True
+        assert ('/payload_joint_state_bridge' in g) is (not on_rig)
+    # the rig coil gate: ours from boot (welded), his from /partner/release, ours again at our span
+    gate = real['/magnet_gate_3']['params']
+    assert gate['start_ours'] is True and gate['release_topic'] == '/partner/release'
+    assert 'start_ours' not in _combined_rig()['/magnet_gate_3']['params']
+
+
+@pytest.mark.parametrize('contact', [False, True])
+def test_start_ours_only_for_the_welded_contact_start(contact):
+    """Keep today's mux for the legacy partner_attached flow and the subtest."""
+    for kw in ({'partner_attached': True, 'partner_contact': False},
+               {'partner_contact': contact}):
+        assert 'start_ours' not in _twin_partner(**kw)['/elrs_mux_3']['params']
