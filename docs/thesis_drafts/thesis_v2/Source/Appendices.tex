@@ -45,9 +45,10 @@ Package & Node & Role \\
 Topic & Content \\
 \midrule
 \texttt{/drone\_}$i$\texttt{/motion\_capture\_state}, \texttt{/payload/...} & Pose and velocity of each UAV and of the payload \\
-% CHECK: "twelve numbers per node" against Section 3.1, which lists the throttle feedforward in the
-% reference as well (thirteen per node if it is sent per node).
-\texttt{/drone\_}$i$\texttt{/reference\_trajectory} & The planner's horizon for UAV $i$: node count, time step, then per node position, velocity, acceleration feedforward and planned cable acceleration (twelve numbers per node) \\
+% SETTLED 10 Oct (was a CHECK): twelve numbers per node (mpc_planner planner_node.py _publish_ref; tracker_node.py
+% _planner_ref_callback): position, velocity, the planned thrust per unit mass f_i/m_q and the cable
+% acceleration. The throttle feedforward is not a thirteenth number: it is the magnitude of f_i/m_q.
+\texttt{/drone\_}$i$\texttt{/reference\_trajectory} & The planner's horizon for UAV $i$: node count, time step, then per node position, velocity, planned thrust per unit mass (its magnitude is the throttle feedforward, its direction the attitude reference) and planned cable acceleration (twelve numbers per node) \\
 \texttt{/drone\_}$i$\texttt{/ELRSCommand} & The tracker's command: armed flag, throttle, three rate sticks, auxiliary channels \\
 \texttt{/drone\_}$i$\texttt{/telemetry} & Battery voltage, flight mode, link quality \\
 \texttt{/drone\_}$i$\texttt{/fc\_arm\_state} & The flight controller's own arm state and the reason for a refusal \\
@@ -63,51 +64,78 @@ Topic & Content \\
 \section{Parameters and weights}
 \label{sec:app_params}
 
-Table~\ref{tab:app_params} sets the parameters of the rig twin against those of the rig,
-Table~\ref{tab:params} lists the rig's launch profile, and Table~\ref{tab:weights} the cost weights of
-the planner and the trackers.
-% CHECK: the two parameter tables are kept apart because they disagree on the twin: Table tab:params
-% says the rig-twin simulations use the rig's values, while Table tab:app_params gives the twin a pose
-% time-out of 1.0 s (rig 0.25 s) and no solve budget (rig 0.06 s). Also "rod elevation at the hand-over
-% 45 deg" in tab:params against the hand-over rule of Section 3.6 (at least 37 deg for 1 s; flown at
-% 51-56 deg); 45 deg is the working elevation the sweep aims for.
-
-\begin{table}[H]
-\centering
-\small
-\caption{Parameters of the rig twin and the rig.}
-\label{tab:app_params}
-\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xcc}
-\toprule
-Parameter & Rig twin & Rig \\
-\midrule
-UAV mass (kg) & 0.55 & 0.55 \\
-rod length (m) & 0.55 & 0.55 \\
-attachment radius (m) & 0.225 & 0.225 \\
-rod pivot below the UAV centre (m) & 0.04 & 0.04 \\
-thrust map & affine & affine \\
-thrust gain $k_T$ & 35.2 & 35.2 \\
-per-UAV thrust trim & off & off \\
-throttle cap & 0.8 & 0.8 \\
-lift rate (m/s) & 0.1 & 0.1 \\
-rod tautness gate & 0.9 & 0.9 \\
-pose time-out (s) & 1.0 & 0.25 \\
-reference time-out (s) & 2.0 & 1.0 \\
-planner solve budget (s) & none & 0.06 \\
-\midrule
-payload mass (kg) & \multicolumn{2}{c}{0.86} \\
-height integral $k_i$, bound, gate & \multicolumn{2}{c}{0.4\,s$^{-1}$, 0.3\,m, 0.25\,m} \\
-pretension, cap release (s) & \multicolumn{2}{c}{3.0, 2.0} \\
-tracker initial-condition box & \multicolumn{2}{c}{0 (was 0.025 until 4 Oct 2026)} \\
-\bottomrule
-\end{tabularx}
-\end{table}
+Table~\ref{tab:app_params} sets the parameters of the rig twin against those of the rig, and
+Table~\ref{tab:weights} gives the cost weights of the planner and the trackers.
+% SETTLED 10 Oct (was a CHECK): the two parameter tables (the hand-made twin-and-rig table and the generated rig
+% profile, "the rig-twin simulations use the same values") are merged into this one. Values from the
+% launch profiles of the final code (multi_drone_control, bringup/config common.yaml, sim.yaml, real.yaml;
+% tools/param_diff.py sim/mpc real/mpc at rig-prep c2279cf). Settled: the twin's pose and reference
+% time-outs are the rig's 0.25 s and 1.0 s since 7 Oct (commit 0e91d86 moved 1.0 / 2.0 s to the legacy
+% profile; the 4-6 Oct twin runs flew 1.0 / 2.0); the solve budget is rig only (twin node default 0 =
+% none); the hand-over is a latch at the planned elevation minus 8 deg held 1 s (creep_controller
+% HANDOVER_ELEV_TOL, HANDOVER_SETTLE_S), with the planned elevation 60 deg since 7 Oct (45 before, so the
+% latch was 37 deg); "touchdown tolerance 0.1 m" dropped, it is the free-hover landing's only (land_tol);
+% the 7-8 Oct rig flights used lift_ramp_vel 0.15 (registry RIG-1007-*, RIG-1008-*); the twin imposes the
+% breakaway cap at 0.75 at lift-off (ff_cap_force), released over 2 s like the rig's.
 
 \begin{table}[htbp]
 \centering
-\caption{Rig parameters, from the rig's launch profile. The rig-twin simulations use the same values.}
-\label{tab:params}
-\input{Source/src/tables/params}
+\small
+\caption[Parameters of the rig twin and the rig]{Parameters of the rig twin and the rig, from the launch
+profiles of the final code. A value spanning both columns is flown by both; a letter marks a value that changed
+during the work (notes below the table). The twin's time-outs run on simulation time.}
+\label{tab:app_params}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X>{\centering\arraybackslash}p{2.9cm}>{\centering\arraybackslash}p{2.9cm}}
+\toprule
+Parameter & Rig twin & Rig \\
+\midrule
+\multicolumn{3}{l}{\textit{Fleet and payload}} \\
+\quad UAV mass, with rod and magnet (kg) & \multicolumn{2}{c}{0.55} \\
+\quad payload mass (kg) & \multicolumn{2}{c}{0.86} \\
+\quad rod length (m) & \multicolumn{2}{c}{0.55} \\
+\quad rod pivot below the UAV centre (m) & \multicolumn{2}{c}{0.04} \\
+\quad attachment radius (m) & \multicolumn{2}{c}{0.225} \\
+\multicolumn{3}{l}{\textit{Thrust map}} \\
+\quad throttle offset $a_i$, shared & \multicolumn{2}{c}{0.185} \\
+\quad voltage slope about 23.5\,V (1/V) & \multicolumn{2}{c}{0.022} \\
+\quad gain above the offset, $k_T$ (m/s$^2$) & \multicolumn{2}{c}{35.2} \\
+\quad throttle cap & \multicolumn{2}{c}{0.8} \\
+\quad per-UAV thrust trim & \multicolumn{2}{c}{off} \\
+\multicolumn{3}{l}{\textit{Takeoff and lift}} \\
+\quad rod sweep (creep) speed (m/s) & \multicolumn{2}{c}{0.2} \\
+\quad planned rod elevation & \multicolumn{2}{c}{60$^\circ$\,$^a$} \\
+\quad hand-over: every rod within 8$^\circ$ of it for (s) & \multicolumn{2}{c}{1.0} \\
+\quad pretension (s) & \multicolumn{2}{c}{3.0} \\
+\quad breakaway cap on the pull & 0.75 at lift-off & at breakaway \\
+\quad cap release (s) & \multicolumn{2}{c}{2.0} \\
+\quad rod tautness gate, measured over typed length & \multicolumn{2}{c}{0.9} \\
+\quad lift ramp (m/s) & 0.1 & 0.1\,$^b$ \\
+\multicolumn{3}{l}{\textit{Height integral and tracker}} \\
+\quad integral gain $k_i$ (1/s), bound (m), gate (m) & \multicolumn{2}{c}{0.4, 0.3, 0.25} \\
+\quad integral conversion $K_{xy}$, $K_z$ (N/m) & \multicolumn{2}{c}{5.3, 7.1} \\
+\quad tracker initial-condition box $\epsilon$ & \multicolumn{2}{c}{0\,$^c$} \\
+\multicolumn{3}{l}{\textit{Landing}} \\
+\quad descent speed (m/s) & \multicolumn{2}{c}{0.2} \\
+\quad unwind along the rods & yes & no \\
+\multicolumn{3}{l}{\textit{Reconfiguration}} \\
+\quad fewest UAVs after a detach & \multicolumn{2}{c}{3} \\
+\quad unannounced detach: rod over its length, 0.2\,s (m) & \multicolumn{2}{c}{0.06} \\
+\quad step-out of the freed UAV (m) & \multicolumn{2}{c}{0.5} \\
+\quad weld radius (m) & \multicolumn{2}{c}{0.08} \\
+\multicolumn{3}{l}{\textit{Watchdogs}} \\
+\quad motion-capture time-out (s) & 0.25\,$^d$ & 0.25 \\
+\quad reference time-out (s) & 1.0\,$^d$ & 1.0 \\
+\quad planner solve budget (s) & none & 0.06 \\
+\quad flight controller confirms arming & no & yes \\
+\bottomrule
+\end{tabularx}
+
+\smallskip
+\parbox{\textwidth}{\footnotesize\raggedright
+$^a$\,45$^\circ$ before 7 October, so the hand-over came at 37$^\circ$.
+$^b$\,The rig flights of 7 and 8 October lifted at 0.15\,m/s.
+$^c$\,0.025 before 4 October (Section~\ref{sec:res_ic}).
+$^d$\,1.0 and 2.0\,s in the twin before 7 October.}
 \end{table}
 
 The dissipative network of Section~\ref{sec:dissipative} uses spring stiffnesses of 40, 40 and 20\,N/m
@@ -412,12 +440,15 @@ each.}
 \label{fig:traj}
 \end{figure}
 
-% CHECK: "one UAV tipped in 21" here against "2 of 21" straight-descent landings in Section 4.1.5 /
-% tab:land; whether the two counts are over the same 21 flights is not recorded here.
-Landing is not yet resolved, with or without the box. In 21 Gazebo flights with $\epsilon = 0$, one
-UAV tipped over during landing after the payload had touched down, as 2 of 32 earlier landings with the
-box had. Both come from landing, not from the box, and the landing of Section~\ref{sec:sim_landing}
-removes them.
+% SETTLED 10 Oct (was a CHECK): the same 21 flights (R0960-R0986, the straight-descent row of tab:land). A UAV
+% tipped past 45 deg in two: R0981 (70 deg, fleet abort) and R0985 (59 deg, landed); "one" counted the
+% abort only (card 2026-10-04_land_matrix: "1 abort in 21"). The 2 of 32 with the box (R0793, R0816) were
+% both aborts at 74-76 deg; no other of the 32 passed 25.5 deg (card 2026-10-03_land_unwind). Recomputed
+% with tools/land_metrics.py as of 0400066^ (the version that generated tab:land).
+Landing is not yet resolved, with or without the box. In the 21 Gazebo flights with $\epsilon = 0$, a
+UAV tipped over during landing after the payload had touched down in 2 (one of them stopping the fleet),
+as in 2 of 32 earlier landings with the box. Both come from landing, not from the box, and the landing of
+Section~\ref{sec:sim_landing} removes them.
 
 \paragraph{Integral gain and gate.} Table~\ref{tab:gain} gives the gain trade-off of
 Section~\ref{sec:res_force}. The doubled gain is a single run, and its settling time is sensitive to the

@@ -20,11 +20,16 @@ events (TAKEOFF, the push, DETACH, LAND) from the run's event log.
     (while the force acts), overshoot (the largest excursion the other way after it ends) and time to
     recover (after which it stays within 1\,cm). \textbf{Stiffness:} the force over the steady displacement
     with no integral action.
-% CHECK: the detach results (Table tab:detach) measure the time until the tilt stays under the hover's
-% own maximum plus 0.5 deg and the largest height change in the 12 s after DETACH, not the 2 deg and the
-% height loss defined here; the earlier layout study may have used these. Align once the detach is re-flown.
-    \item[Detach] The peak payload tilt after DETACH, the time until the tilt stays under 2$^\circ$, and
-    the payload's height loss.
+% SETTLED 10 Oct (was a CHECK): aligned with what Table tab:detach and Figure fig:detach measure
+% (tools/thesis_sim_tables.py detach_stats, multi_drone_control): peak in the 5 s after DETACH; back in
+% band = the tilt stays under the hover's own maximum over the 5 s before plus 0.5 deg; height change =
+% largest |z - mean of the 5 s before| in the 12 s after. Was: "the time until the tilt stays under
+% 2 deg, and the payload's height loss" (the pre-twin layout study's wording).
+    \item[Detach] The peak payload tilt in the 5\,s after DETACH; the time until the tilt stays under
+    the hover's own maximum over the 5\,s before DETACH plus 0.5$^\circ$ (back in band); and the largest
+    change of the payload's height from its mean over the 5\,s before, in the 12\,s after. On the rig, where
+    the ring rocks in hover, the rise of the peak above its mean over the 3\,s before the release is also
+    given.
     \item[Attach] The peak payload tilt and the height loss (dip) after the weld, and whether the tilt
     returns under 2$^\circ$ within 3\,s; for the rejoin mission, also the tilt at the detach, the mean tilt
     over the orbit and the time from TAKEOFF to landed.

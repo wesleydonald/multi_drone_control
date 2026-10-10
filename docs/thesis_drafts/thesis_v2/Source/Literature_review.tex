@@ -50,9 +50,13 @@ Table~\ref{tab:control_comparison} compares the key papers by architecture, meth
 \cite{quan2025swarm}                                   & Decentralised & Dissipative   & \checkmark & High   & Partial (leave) & Low \\
 \cite{DistributedMPC}                                  & Both        & Linear MPC      & --         & Low    & --              & Low \\
 \hline
-% CHECK: the qualitative cells of this row (disturbance, cost, join/leave) are a first reading of
-% Sections 3 and 4; confirm. Join is flown in simulation only so far.
-This work                                              & Centralised & Trajectory OCP, resized & \checkmark & Medium & Leave and join & High \\
+% SETTLED 10 Oct (was a CHECK) against Sections 4.1-4.4: real-world yes (rig carry and four rig detaches, 1-8 Oct);
+% disturbance Medium (the model integral removes constant forces on the payload within 3-5 % in the twin,
+% Table tab:disturbance, but slowly, 1/k_i = 2.5 s, and not a moment or a gust; the rig's pull towards -x
+% stayed on 1 Oct); join/leave: leave on the rig, join in the twin only (no rig attach in the registry up to
+% 8 Oct); cost High (a centralised OCP plus a tracking MPC per UAV, median 31-66 ms per 100 ms tick on the
+% rig, Figure fig:solve_time).
+This work                                              & Centralised & Trajectory OCP, resized & \checkmark & Medium & Leave (rig), join (twin) & High \\
 \hline
 \end{tabular}%
 }

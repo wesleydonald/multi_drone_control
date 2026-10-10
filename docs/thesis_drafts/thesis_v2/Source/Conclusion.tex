@@ -42,8 +42,8 @@ must remain inside the polygon of the surviving attachment points, which chooses
 %     (plates 1/3/5/9 for four UAVs) and explains several earlier failures.
 
 \paragraph{RQ1b: join.} The attach by OCP resize has so far been flown only in the rig twin, where the
-newcomer's measured-tip loop parks its magnet within 1\,cm of its plate and the fleet lands from every phase of
-an attach except just after the weld, on the twin's rigid rod. Its weld transient, against a network attach and
+newcomer's measured-tip loop parks its magnet within 1\,cm of its setpoint over the plate and the fleet lands from every phase of
+an attach, except in some runs within 2\,s of the weld, on the twin's rigid rod. Its weld transient, against a network attach and
 in the rejoin mission, and the attach on the rig are not yet flown.
 \redo{the payload transient of an attach by OCP resize in the full rejoin mission (original text under RQ1a above).}
 
@@ -53,6 +53,27 @@ in the rejoin mission, and the attach on the rig are not yet flown.
 %     \item On this system the trajectory-based planner outperformed the dissipative network in
 %     tracking, detach and attach. The network's advantages did not carry over to rigid rods and a
 %     heavier payload.
+
+\paragraph{Value added.} What is new is a centralised way to change the team under a carried payload, flown
+on hardware. A detach or an attach is a switch to a pre-built solver with the attachment geometry as a runtime
+parameter, so in the first tick after the event the planner solves for the load distribution of the team it
+actually has, instead of leaving the survivors to find it from the motion that follows. On the rig this carried
+the ring on through four detaches, announced and unannounced, in hover and on a circle, a transient that none of
+the closest works reports (Table~\ref{tab:lit_compare}). Two further results transfer beyond this rig: a
+geometric condition, checkable before a flight, for whether a layout can lose a given UAV and keep the payload
+level, and a map of the steady payload errors of a re-planned cascade, each with its signature at the payload and
+its remedy (Table~\ref{tab:error_sources}). They are of use to groups that build cooperative transport on
+commercial UAVs, where the onboard force control of \cite{tudelft} is not available: a ground-side cascade on
+unmodified Betaflight UAVs, with motion capture as its only sensor, carried a rigid-rod payload within 3\,cm of its
+path once each tracker measured its rod's pull. They are also of use to work on fault tolerance and on teams whose
+members are replaced in flight. The detach on the rig, with the twin alongside, is the core of a publishable result
+on reconfiguring cooperative transport. What it still lacks is scale, repeats and the other half: a 0.86\,kg ring
+at up to 0.25\,m/s in a motion-capture room, one rig run per condition, and the attach, which no reviewed work has
+flown and which this work has so far flown only in the twin.
+% Value statement written 10 Oct (writing rule 36; rubric "conclusions and value added"). Every claim is
+% a result of Sections 4.1-4.6: the rig detach (Table tab:rig_oct8), the literature comparison
+% (Table tab:lit_compare and its paragraph), the error map (Table tab:error_sources), the 3 cm path error
+% (Table tab:rig_oct7); the limitations are those of the discussion's last paragraph.
 
 \paragraph{Future work.} The immediate steps are the attach on the rig and then the full rejoin with
 the collaborator's hardware, the model integral through a detach on the rig, and a check of the

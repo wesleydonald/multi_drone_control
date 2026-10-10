@@ -19,10 +19,11 @@ planner's references put them. Started from rest, the planner pulled the UAVs in
 instead of lifting it, the cause of the first failed lifts on the rig.
 
 \paragraph{Rod sweep (creep).} On TAKEOFF each UAV is anchored where it rests, and its rod is swept about
-its own attachment point at a constant rate, from its measured elevation to the working elevation of
-45$^\circ$. The UAV's reference is the far end of the rod on that arc, so the rod stays straight and the
-UAV never moves over the payload. The planner takes over (the hand-over) once every rod has been at least
-37$^\circ$ for 1\,s, or 3\,s after the sweep ends. The hand-over is refused below 30$^\circ$, because from
+its own attachment point at a constant rate, from its measured elevation to the planned elevation, 45$^\circ$
+until 7 October and 60$^\circ$ since. The UAV's reference is the far end of the rod on that arc, so the rod stays
+straight and the UAV never moves over the payload. The planner takes over (the hand-over) once every rod has
+been within 8$^\circ$ of the planned elevation for 1\,s (at least 37$^\circ$ before 7 October), or 3\,s after
+the sweep ends. The hand-over is refused below 30$^\circ$, because from
 shallower rods the lift needs two to three times the tension, mostly sideways.
 
 \paragraph{Rod lengths.} At the hand-over the planner measures each rod from motion capture, from the

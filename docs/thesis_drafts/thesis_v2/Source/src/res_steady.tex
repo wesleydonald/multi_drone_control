@@ -270,10 +270,10 @@ that UAV's own force (measured cable force) & \ref{sec:res_force}, \ref{sec:sim_
 \end{tabularx}
 \end{table}
 
-\paragraph{Answer to Q2.} Four kinds of source leave a steady payload error, a bias in the cascade (the
+\paragraph{Answer to Q2.} Four kinds of source leave a steady payload error: a bias in the cascade (the
 tracker's relaxed initial condition), a wrong belief passed between levels (the breakaway cap), model
-errors (the rods' mass, the payload's mass, one UAV's thrust map) and external forces, and each needs its
-own remedy (Table~\ref{tab:error_sources}): pinning node~0 and releasing the cap remove the first two at
+errors (the rods' mass, the payload's mass, one UAV's thrust map) and external forces; each needs its own
+remedy (Table~\ref{tab:error_sources}): pinning node~0 and releasing the cap remove the first two at
 their source, integral action in the planner's model removes a force on the payload in all three axes
 within its gate and bound, and only a correction of one UAV's own force removes the moment of its wrong
 thrust map.

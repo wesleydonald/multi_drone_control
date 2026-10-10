@@ -33,7 +33,7 @@ Both horizons have $N_h = 20$ nodes over $T_h = 2$\,s.
   \node[blk, right=1.3cm of trk, minimum width=2.2cm] (fc) {Flight controller\\ \scriptsize rate loop};
   \node[blk, below=1.1cm of trk, minimum width=2.8cm] (sys) {UAVs, rods and payload};
   \node[blk, below=1.1cm of plan, minimum width=3.2cm] (dist) {Payload state, $\mathbf{d}$\\ \scriptsize integral, estimate};
-  \draw[->, thick] (plan) -- node[lab, above] {$\mathbf{p}_i, \mathbf{v}_i, \mathbf{a}_i,$\\ $\mathbf{a}_{c,i}, u_{T,i}^{\mathrm{ff}}$} (trk);
+  \draw[->, thick] (plan) -- node[lab, above] {$\mathbf{p}_i, \mathbf{v}_i,$\\ $\mathbf{f}_i/m_q, \mathbf{a}_{c,i}$} (trk);
   \draw[->, thick] (trk) -- node[lab, above] {$u_T, \boldsymbol{\omega}_{\mathrm{cmd}}$} (fc);
   \draw[->, thick] (fc) |- (sys);
   \draw[->, thick] (sys) -- node[lab, right] {mocap:\\ UAV state} (trk);
@@ -77,17 +77,18 @@ $\mathbf{d}$ needs the rods to support the effective gravity
     \mathbf{g}_{\mathrm{eff}} = g\mathbf{e}_3 + \mathbf{a}_{L,xy}^{\mathrm{ref}} - \mathbf{d}/m_L ,
 \end{equation}
 where $\mathbf{a}_{L,xy}^{\mathrm{ref}}$ is the horizontal part of the reference acceleration (the
-trajectories are level). The nominal formation (each rod at 45$^\circ$ elevation, tensions
+trajectories are level). The nominal formation (each rod at the planned elevation, 45$^\circ$ until 7 October and 60$^\circ$ since, tensions
 $\lambda_i^{0}$ balancing the payload weight) is rotated so that its vertical axis lies along
 $\mathbf{g}_{\mathrm{eff}}$, and the tensions are scaled to $\lambda_i^{\mathrm{ref}} = \lambda_i^{0}\,
 \|\mathbf{g}_{\mathrm{eff}}\| / g$. Of the weights (Table~\ref{tab:weights}, Appendix~\ref{sec:app_params}),
 the one on the rod directions holds the formation's shape and the one on the rod rates damps rod swing.
 
-\paragraph{Output to the trackers.} From the solved horizon the planner sends each tracker its
-reference position, velocity and acceleration from \eqref{eq:rod_kin}, the planned cable acceleration
-$\mathbf{a}_{c,i} = -\lambda_i \mathbf{q}_i / m_q$ at every node, and a throttle feedforward from
-$\|\mathbf{f}_i\|$ in \eqref{eq:thrust_req}. The tracker interpolates the whole horizon at its own rate,
-so a late or skipped planner tick does not leave it without a reference.
+\paragraph{Output to the trackers.} From the solved horizon the planner sends each tracker, at every node,
+its reference position and velocity from \eqref{eq:rod_kin}, the planned thrust per unit mass
+$\mathbf{f}_i/m_q$ from \eqref{eq:thrust_req}, whose magnitude is the throttle feedforward and whose direction
+the attitude reference, and the planned cable acceleration $\mathbf{a}_{c,i} = -\lambda_i \mathbf{q}_i / m_q$:
+twelve numbers per node. The tracker interpolates the whole horizon at its own rate, so a late or skipped
+planner tick does not leave it without a reference.
 
 \subsection{UAV tracking MPC and thrust map}
 \label{sec:tracker}
