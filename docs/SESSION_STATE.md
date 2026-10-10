@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep current at each milestone)
 
-Updated: Sat 10 Oct 2026, afternoon.
+Updated: Sat 10 Oct 2026, evening.
 
 ## Where things are
 - Main tree `/home/wesley/multi_drone_control` on **rig-prep** (see git log), clean. Nothing running.
@@ -78,6 +78,8 @@ Updated: Sat 10 Oct 2026, afternoon.
   Worktree batches need MDC_REPO_ROOT=<worktree> MDC_RESULTS_ROOT=/home/wesley/multi_drone_control/results.
 - R1473 (fix) PASS: detach 2.71 / reweld 2.52 deg, 98.5 s (R0752 2.80 / 2.74, 106.3). R1474 (port + fix): reweld 5.62 deg
   (G1 bar 5), weld 0.29 s after a hand-off 0.12 m lower (the marker fix): port not mergeable as is; 1 run.
+- Evening: partner-handoff-fix MERGED into week4 (6049543; rig-prep == week4); papers approved (thesis 1659d7d);
+  Wesley to push week4 -> origin main. Q3 (port's lower hand-off) and Q4 (moving R9) re-asked with context.
 - rig_to_run fixed for w4/w5 (a09244b). Figures F_rig_circle_detach, F_twin_rig_parity, F_disarm_lanes in the thesis
   (596f90a). Rig finding: carriers 9-16 cm above their start at LANDED on 7-8 Oct (stall test; thr ~0.24): ask Wesley.
 - Thursday: sheet draft docs/rig_2026-10-15_commands.md; card docs/experiments/2026-10-10_twin_r9.md with configs
