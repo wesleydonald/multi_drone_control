@@ -335,3 +335,7 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
 - 10:25: landing tip-over explained (R1534/R1556/R1559 traces): QUAD4 sits 0.5 m from the ring centre (outside the
   rim); 5 s into LAND its rod's tip reaches the floor beside plate 9 and its body keeps descending 0.2-0.3 m; the rigid
   twin rod cannot shorten, so it levers QUAD4 sideways (r 0.5 -> 0.74) and over. Twin artefact (rig tether slackens).
+- 10:45: ae57bbb batch done (15 runs, 75.5 min): claim arms pass except R1554 (take-back clearance on the circle, fixed
+  c6f2032); R1564 full M1 orbit clean (7th). Tilt wave A refused locally (two installs sourced in one script: m1-rig's
+  bringup first on the path, tilt args read undeclared) -> re-queued in a fresh shell (lab_tc_a2.sh, waits on
+  lab_claim5.sh 1039736). c6f2032 claim re-fly RUNNING (lab_claim5.txt).
