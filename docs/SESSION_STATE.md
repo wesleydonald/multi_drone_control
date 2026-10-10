@@ -80,6 +80,11 @@ Updated: Sat 10 Oct 2026, evening.
   (G1 bar 5), weld 0.29 s after a hand-off 0.12 m lower (the marker fix): port not mergeable as is; 1 run.
 - Evening: partner-handoff-fix MERGED into week4 (6049543; rig-prep == week4); papers approved (thesis 1659d7d);
   Wesley to push week4 -> origin main. Q3 (port's lower hand-off) and Q4 (moving R9) re-asked with context.
+- Wesley 10 Oct evening (decisions.md, CLAUDE.md lock line): Tejen's controller does EVERY QUAD4 attach on the rig,
+  down to contact (the magnet only catches on the plate); OUR motion-capture check alone confirms it; then we take
+  QUAD4 over and fold in. R8a/R8b/R9 dropped from the rig sheets (Wed: W4, W5, R8a0 + a props-off attach check at
+  09:00 with weld_radius 0.01; Thu: R10a + carry follow-ups). Next work: the combined M1 stack on these roles (his
+  descent to contact, our check, mux + fold-in on object_attached, also on a moving ring), then twin.
 - rig_to_run fixed for w4/w5 (a09244b). Figures F_rig_circle_detach, F_twin_rig_parity, F_disarm_lanes in the thesis
   (596f90a). Rig finding: carriers 9-16 cm above their start at LANDED on 7-8 Oct (stall test; thr ~0.24): ask Wesley.
 - Thursday: sheet draft docs/rig_2026-10-15_commands.md; card docs/experiments/2026-10-10_twin_r9.md with configs

@@ -101,3 +101,6 @@ current branch like any other file (it reaches main with the merges).
 - The network is yaw-only and open-loop in load pose except the bounded common-mode trim.
 - Attach at 0.2 m/s.
 - The twin models every link as rigid, QUAD4's tether included (9 Oct); the rig's tethers go slack.
+- On the rig Tejen's controller does every QUAD4 attach, down to contact (the magnet only catches on the plate).
+  Our motion-capture check alone confirms the attach; only then do we take QUAD4 over and fold it in (10 Oct).
+  Our own approach (R8a/R8b/R9) is twin and thesis only.
