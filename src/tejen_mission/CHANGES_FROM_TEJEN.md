@@ -127,3 +127,9 @@ assertions (`test_irl_m1_attachment_retry::test_irl_config_uses_one_detach_dwell
 not carry (his RViz configs and panel, his arm panel, his repo `.gitignore`). C++: 15/15 ROS tests,
 standalone 19/20: `test_suspended_system` exceeds its 240 s ctest timeout on this laptop, before this sync too
 (the rig-prep build's `static_overflight` scenario alone ran past 239 s).
+
+## 10 Oct 2026 (late): the combined M1 subtest on the rig twin (branch m1-subtest; Wesley 10 Oct)
+
+| file | change | why |
+|---|---|---|
+| `launch/partner_mission.launch.py` (ours) | `geometry:=legacy` (default, every value as before) or `rig_twin`: ring radius 0.225, rods 0.55 m at 60 deg, plate pitch diameter 0.45, ring collision diameter 0.51, `magnet_drop_below_quad` 0.59, MPC `cable_length` 0.55, `thrust_ratio` 22 with his thrust-ratio feedback on (his rig values, irl_commissioning.yaml), vehicle mass 0.55; the nodes are built in an OpaqueFunction | his mission on the rig-twin attach world (QUAD4 0.55 kg through the rig thrust map, where 82.7 for the linear plant cannot lift it off) |

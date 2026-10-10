@@ -21,7 +21,7 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -33,8 +33,36 @@ DRONE = 3
 DRONE_MODEL = 'x3_drone3'
 OBJECT_POSE = '/model/payload_model/pose'
 
+# geometry:=legacy is the old partner worlds (our x3_drone3 partner rod, linear plant); geometry:=rig_twin is
+# the rig-twin attach world (three_rigid_ground_rig_attach_pickup.sdf, the combined M1 subtest, Wesley 10 Oct):
+# plates at r 0.225, 0.55 m rods at 60 deg, QUAD4 0.55 kg with a 0.55 m rod from a pivot 4 cm below the body
+# (body to tip 0.59), flown through the rig thrust map, so his MPC takes his rig values (thrust ratio 22 with
+# feedback, irl_commissioning.yaml) instead of the linear plant's 82.7.
+GEOMETRY = {
+    'legacy': {
+        'ring_radius': 0.25, 'ring_cable_len': 0.5, 'ring_cable_elev_deg': 45.0,
+        'ring_pitch_diameter': 0.50, 'ring_collision_outer_diameter': 0.56,
+        'magnet_drop_below_quad': 0.49, 'mpc_cable_length': 0.49,
+        'thrust_ratio': 82.7, 'thrust_ratio_feedback': False, 'vehicle_mass': 0.643,
+    },
+    'rig_twin': {
+        'ring_radius': 0.225, 'ring_cable_len': 0.55, 'ring_cable_elev_deg': 60.0,
+        'ring_pitch_diameter': 0.45, 'ring_collision_outer_diameter': 0.51,
+        'magnet_drop_below_quad': 0.59, 'mpc_cable_length': 0.55,
+        'thrust_ratio': 22.0, 'thrust_ratio_feedback': True, 'vehicle_mass': 0.55,
+    },
+}
+
 
 def generate_launch_description() -> LaunchDescription:
+    return LaunchDescription(_arguments() + [OpaqueFunction(function=_nodes)])
+
+
+def _nodes(context):
+    geometry = LaunchConfiguration('geometry').perform(context)
+    if geometry not in GEOMETRY:
+        raise RuntimeError(f'partner_mission: geometry:={geometry!r}, expected one of {sorted(GEOMETRY)}')
+    G = GEOMETRY[geometry]
     share = Path(get_package_share_directory('tejen_mission'))
     dyn_share = Path(get_package_share_directory('tejen_dynamic_planner'))
     state = f'/drone_{DRONE}/motion_capture_state'
@@ -50,16 +78,16 @@ def generate_launch_description() -> LaunchDescription:
         parameters=[{
             'use_sim_time': True,
             'bridge_carrier_azimuths_deg': ParameterValue(L('carrier_azimuths_deg'), value_type=None),
-            'bridge_attach_radius_m': 0.25,
-            'bridge_cable_len_m': 0.5,
-            'bridge_cable_elev_deg': 45.0,
+            'bridge_attach_radius_m': G['ring_radius'],
+            'bridge_cable_len_m': G['ring_cable_len'],
+            'bridge_cable_elev_deg': G['ring_cable_elev_deg'],
             'payload_committed_trajectory_topic': '/fake_payload/committed_trajectory',
             'ring_plate_count': 12,
-            'ring_plate_pitch_diameter_m': 0.50,
+            'ring_plate_pitch_diameter_m': G['ring_pitch_diameter'],
             'ring_plate_diameter_m': 0.06,
             # plate 9 = 270 deg = our weld point (attach_y_offset -0.25)
             'ring_attachment_plate_index': ParameterValue(L('plate'), value_type=int),
-            'ring_collision_outer_diameter_m': 0.56,
+            'ring_collision_outer_diameter_m': G['ring_collision_outer_diameter'],
             'ring_collision_top_offset_m': 0.0,
             'ring_collision_bottom_offset_m': -0.27,
             'ring_structure_height_m': 0.07,
@@ -175,7 +203,7 @@ def generate_launch_description() -> LaunchDescription:
                 # our x3_drone3 rod: body centre to tip 0.49 (his airframe 0.50 below a
                 # 0.05 pivot); his 0.60 reference floor held our tip 8 cm above the
                 # pickup target (R0627)
-                'magnet_drop_below_quad': 0.49,
+                'magnet_drop_below_quad': G['magnet_drop_below_quad'],
                 'min_reference_z': 0.52,
                 # the backend publishes at 5 Hz (sim); a 0.20 s freshness limit is one
                 # period, and one late tick parked the drone on its terminal hold for the
@@ -209,18 +237,19 @@ def generate_launch_description() -> LaunchDescription:
             'use_external_reference': True,
             'enable_thrust_ratio_ukf': True,
             # linear sim plant, x3 0.643 kg, motorConstant 0.62e-6: 4*0.62e-6*4631^2/0.643
-            'thrust_ratio': 82.7,
+            'thrust_ratio': G['thrust_ratio'],
+            'enable_thrust_ratio_feedback': G['thrust_ratio_feedback'],
             'xy_bias_mode': 'legacy_integral',
             # a cached solver: a fresh acados build at launch starved drone 3's mocap (R0600)
             'acados_cache_dir': os.path.expanduser('~/.cache/multi_drone_control/tejen_payload_mpc'),
-            'cable_length': 0.49,
+            'cable_length': G['mpc_cable_length'],
             'pose_timeout_s': 1.0,       # sim at ~0.25 real time (R0620 self-disarm)
             # periodic ARM state heartbeat: a single startup message can be lost, and his
             # supervisor then never arms (R0638, R0641 'arming_feedback_received': False)
             'arming_state_feedback_period_s': 0.5,        # body centre to tip on x3_drone3_magnet_rod_partner
             # carried-object gain schedule (G1b; 0 = off; default 0.1 kg = payload_model.sdf): kT*m_d/(m_d+m_obj) while the object is on
             'object_mass_kg': ParameterValue(L('object_mass_kg'), value_type=float),
-            'object_vehicle_mass_kg': 0.643,
+            'object_vehicle_mass_kg': G['vehicle_mass'],
             'object_attached_topic': f'/{NS}/object_attached',
         }],
         remappings=[('motion_capture_state', state),
@@ -275,7 +304,13 @@ def generate_launch_description() -> LaunchDescription:
              '/fake_payload/pose', '/magnet/command', f'/{NS}/magnet/command', '/join_planner/handoff_ready', f'/{NS}/object_attached', OBJECT_POSE],
         output='screen', condition=IfCondition(L('record')))
 
-    return LaunchDescription([
+    return [bag, release, object_bridge, *pickup_bridges, ring, pendulum, magnet, planner, backend, controller,
+            supervisor]
+
+
+def _arguments():
+    return [
+        DeclareLaunchArgument('geometry', default_value='legacy', choices=sorted(GEOMETRY)),
         DeclareLaunchArgument('plate', default_value='9'),
         DeclareLaunchArgument('object_mass_kg', default_value='0.1'),   # the 0.1 kg object (payload_model.sdf)
         # the all-attached start: '[150.0, 270.0, 30.0]', plate 3, gate /partner/release
@@ -288,5 +323,4 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('bag_path', default_value=os.path.join(
             os.environ.get('MDC_RUN_DIR', '/tmp'), 'partner_bag')),
         DeclareLaunchArgument('result_path', default_value='/tmp/partner_mission_result.json'),
-        bag, release, object_bridge, *pickup_bridges, ring, pendulum, magnet, planner, backend, controller, supervisor,
-    ])
+    ]

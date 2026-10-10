@@ -1,11 +1,14 @@
 """Rig-twin attach newcomer and worlds (tools/make_attach_worlds.py): the generated files are
 current, the newcomer is QUAD4 on the twin's rod, and the worlds put the carriers on the M1
-layout with the newcomer free on the floor or welded on plate 9.
+layout with the newcomer free on the floor or welded on plate 9. The combined M1 subtest world
+(pickup) is the free world with the pickup newcomer, an open ring with a net, and Tejen's ball.
 
     python3 -m pytest tools/test/test_make_attach_worlds.py -q
 """
+import hashlib
 import math
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -23,11 +26,13 @@ from check_geometry import world_geometry                         # noqa: E402
 
 FREE, WELDED = 'three_rigid_ground_rig_attach.sdf', 'three_rigid_ground_rig_attach_welded.sdf'
 MODELS = {'free': 'x3_rig_drone3_magnet.sdf', 'welded': 'x3_rig_drone3_magnet_welded.sdf'}
+PICKUP, PICKUP_MODEL = 'three_rigid_ground_rig_attach_pickup.sdf', 'x3_rig_drone3_magnet_pickup.sdf'
 LINKS = ['base_link', 'rotor_0', 'rotor_1', 'rotor_2', 'rotor_3', 'magnet_arm', 'magnet_tip_link']
 
 
 def _model(start):
-    return ET.parse(ASSETS / 'models' / MODELS[start]).getroot().find('model')
+    name = PICKUP_MODEL if start == 'pickup' else MODELS[start]
+    return ET.parse(ASSETS / 'models' / name).getroot().find('model')
 
 
 def _pose(elem):
@@ -155,7 +160,7 @@ def test_skid_rests_the_newcomer_at_the_carriers_height():
         assert _newcomer(world)[1][2] == pytest.approx(0.10)
 
 
-@pytest.mark.parametrize('world', [FREE, WELDED])
+@pytest.mark.parametrize('world', [FREE, WELDED, PICKUP])
 def test_carriers_are_the_twin_on_the_m1_layout(world):
     g = world_geometry(ASSETS / world)
     for k, v in mcw.EXPECT.items():
@@ -225,7 +230,8 @@ def test_magnet_never_touches_the_ring_but_rests_on_the_floor():
 
 
 @pytest.mark.skipif(shutil.which('gz') is None, reason='gz CLI not installed')
-@pytest.mark.parametrize('rel', [FREE, WELDED] + [f'models/{m}' for m in MODELS.values()])
+@pytest.mark.parametrize('rel', [FREE, WELDED, PICKUP]
+                         + [f'models/{m}' for m in [*MODELS.values(), PICKUP_MODEL]])
 def test_gz_sdf_check(rel):
     r = subprocess.run(['gz', 'sdf', '-k', rel], cwd=ASSETS, capture_output=True, text=True)
     assert r.returncode == 0 and 'Valid' in r.stdout, r.stdout + r.stderr
@@ -238,3 +244,215 @@ def test_the_push_world_is_the_free_world_plus_the_wrench_tool():
     assert push != free and push.replace(maw.WRENCH_PLUGIN, '', 1) == free
     assert 'ApplyLinkWrench' not in free
     ET.fromstring(push.split('\n', 1)[1].split('\n', 1)[1])          # well-formed below the two comment lines
+
+
+# ===== the combined M1 subtest world (Wesley 10 Oct) =====
+
+LEGACY_WORLD = ASSETS / 'old_worlds' / 'three_attach_partner_attached.sdf'
+LEGACY_MODEL = ASSETS / 'models' / 'x3_drone3_magnet_rod_partner_attached.sdf'
+BALL = ASSETS / 'tejen' / 'payload_model.sdf'
+# the existing outputs when the pickup variant was added: it leaves them byte for byte. A deliberate
+# change to one of them updates its digest here.
+OLD_DIGESTS = {
+    FREE: '807924f97b3872f23efe38c88d6473b0de9dab332cfbd487d1bfe1872714f076',
+    WELDED: '587805ff1ce120845e0e61a7fceeb25e05aa881654993f10df8b2e3a528d830b',
+    'three_rigid_ground_rig_attach_push.sdf':
+        'aa2a7e30f41839aab8b4f4691f5acdfe52d02eec0e1a529c64f53990e7f80cd8',
+    f"models/{MODELS['free']}": 'ff36ee07b5e489a5fe617b0d7dd65a68a992324f873430953828509716bf94f1',
+    f"models/{MODELS['welded']}": '5839b65674a9cf31e03937a0a5940c2b13b219ef4bfaf33c75b410b306de3fd6',
+}
+
+
+def _world(name):
+    return ET.parse(ASSETS / name).getroot().find('world')
+
+
+def _bits(collision):
+    return int(collision.findtext('surface/contact/collide_bitmask') or '0xffff', 16)
+
+
+def _ring_body(world):
+    return next(m for m in world.iter('model') if m.get('name') == 'payload').find(
+        "link[@name='body']")
+
+
+def _ball_include(world):
+    inc = [i for i in world.findall('include') if i.findtext('uri') == 'tejen/payload_model.sdf']
+    assert len(inc) == 1
+    return inc[0]
+
+
+def _welds(model):
+    keys = ('parent_link', 'child_model', 'child_link', 'attach_topic', 'detach_topic',
+            'output_topic')
+    plugins = [p for p in model.findall('plugin') if p.get('name').endswith('DetachableJoint')]
+    return [{k: p.findtext(k) for k in keys} for p in plugins]
+
+
+def _numbers(elem):
+    """Every number under an element's geometry."""
+    return [float(v) for v in ' '.join(elem.find('geometry').itertext()).split()]
+
+
+def test_pickup_files_are_generated(tmp_path):
+    rels = {pathlib.Path(r).as_posix() for r in maw.generate(tmp_path)}
+    for rel in (PICKUP, f'models/{PICKUP_MODEL}'):
+        assert rel in rels
+        assert (tmp_path / rel).read_bytes() == (ASSETS / rel).read_bytes()
+
+
+def test_pickup_variant_leaves_the_existing_outputs_byte_for_byte():
+    for rel, digest in OLD_DIGESTS.items():
+        assert hashlib.sha256((ASSETS / rel).read_bytes()).hexdigest() == digest, rel
+
+
+def test_pickup_model_is_the_free_model_plus_the_pickup_weld():
+    free = (ASSETS / 'models' / MODELS['free']).read_text().splitlines()
+    pick = (ASSETS / 'models' / PICKUP_MODEL).read_text().splitlines()
+    gone = [ln for ln in free if ln not in pick]
+    assert len(gone) == 1 and gone[0].endswith('with the magnet on the floor. -->')   # header
+    assert len(pick) - len(free) == 1 + len(maw.PICKUP_WELD.splitlines())
+    # PoseArray index 0 is the LAST declared link: the tip must stay last (magnet_index 0)
+    assert [lk.get('name') for lk in _model('pickup').findall('link')] == LINKS
+
+
+def test_pickup_weld_names_the_ball_as_the_partner_model_does():
+    ball = ET.parse(BALL).getroot().find('model')
+    assert ball.get('name') == 'payload_model'
+    assert [lk.get('name') for lk in ball.findall('link')] == ['payload_link']
+    ring, pickup = _welds(_model('pickup'))
+    assert ring == _welds(_model('free'))[0]                         # the ring weld as before
+    assert pickup == {'parent_link': 'magnet_tip_link', 'child_model': ball.get('name'),
+                      'child_link': ball.find('link').get('name'),
+                      'attach_topic': '/pickup/attach', 'detach_topic': '/pickup/detach',
+                      'output_topic': '/pickup/detachable_joint_state'}
+    # its comments hold '--', which ElementTree rejects: parse the plugins alone
+    legacy = re.findall(r'<plugin [^>]*DetachableJoint">.*?</plugin>', LEGACY_MODEL.read_text(), re.S)
+    legacy = _welds(ET.fromstring('<model>' + ''.join(legacy) + '</model>'))
+    assert pickup in legacy
+
+
+def test_pickup_world_is_the_free_world_with_the_listed_changes():
+    free = (ASSETS / FREE).read_text().splitlines()
+    pick = (ASSETS / PICKUP).read_text().splitlines()
+    gone = [ln.strip() for ln in free if ln not in pick]
+    assert gone[0].startswith('<!-- GENERATED') and 'free start' in gone[0]
+    assert gone[1].startswith('<collision name="collision"><geometry><plane>')      # the floor
+    assert gone[2].startswith('<collision name="collision"><pose>0 0 0 0 0 0</pose>')
+    assert gone[3].startswith('<geometry><cylinder><radius>0.255</radius>')        # the disc
+    assert gone[4].startswith('<surface><contact><collide_bitmask>0x01')
+    assert gone[5] == '</collision>'
+    assert gone[6].endswith('(detach_on_start). -->')
+    assert gone[7] == f"<uri>models/{MODELS['free']}</uri>"
+    assert len(gone) == 8
+    added = [ln for ln in pick if ln not in free]
+    assert pick.count('    <include>') - free.count('    <include>') == 1   # the ball
+    assert sum('collide_bitmask' in ln for ln in added) == 1 + 16 + 17  # floor, annulus, net
+    assert _newcomer(PICKUP) == (f'models/{PICKUP_MODEL}', _newcomer(FREE)[1])
+
+
+def test_pickup_ring_is_an_annulus_at_the_rings_real_radii():
+    disc = _ring_body(_world(FREE)).find('collision')
+    r_out = float(disc.findtext('geometry/cylinder/radius'))
+    thick = float(disc.findtext('geometry/cylinder/length'))
+    body = _ring_body(_world(PICKUP))
+    assert body.find("collision[@name='collision']") is None          # no solid disc
+    vis = body.find("visual[@name='ring_0_visual']")                  # the rim as drawn
+    rc = math.hypot(*_pose(vis)[:2])
+    width = float(vis.findtext('geometry/box/size').split()[1])
+    r_in = rc - width / 2
+    assert (r_in, rc + width / 2) == pytest.approx((0.195, r_out))
+    assert rc == pytest.approx(mcw.ATTACH_RADIUS)                     # the plates centred on it
+    boxes = [c for c in body.findall('collision') if c.get('name').startswith('ring_annulus_')]
+    assert len(boxes) == maw.ANNULUS_SEGMENTS
+    for c in boxes:
+        x, y, z, roll, pitch, yaw = _pose(c)
+        sx, sy, sz = (float(v) for v in c.findtext('geometry/box/size').split())
+        assert math.hypot(x, y) == pytest.approx((r_in + r_out) / 2, abs=1e-4)
+        assert abs(math.remainder(math.atan2(y, x) - yaw, 2 * math.pi)) < 1e-3
+        assert (sx, sz, z, roll, pitch) == pytest.approx((r_out - r_in, thick, _pose(disc)[2], 0, 0),
+                                                         abs=1e-4)
+        assert sy >= 2 * r_out * math.tan(math.pi / len(boxes)) - 1e-4   # outer edge closed
+
+
+def test_pickup_net_is_the_partner_net_scaled_to_the_inner_radius():
+    legacy_body = _ring_body(ET.parse(LEGACY_WORLD).getroot().find('world'))
+    a0 = legacy_body.find("collision[@name='ring_annulus_0']")
+    a0_size = [float(v) for v in a0.findtext('geometry/box/size').split()]
+    legacy_rim = _pose(a0)[0] - a0_size[0] / 2
+    legacy_top = _pose(a0)[2] + a0_size[2] / 2
+    assert maw.LEGACY_NET_RIM_R == pytest.approx(legacy_rim)
+    legacy = [e for e in legacy_body if (e.get('name') or '').startswith('net_')]
+    # the generator at scale 1 reproduces the partner world's net
+    ours = list(ET.fromstring('<link>' + maw.net(1.0, legacy_top, '0x02') + '</link>'))
+    assert [e.get('name') for e in ours] == [e.get('name') for e in legacy]
+    for a, b in zip(ours, legacy):
+        assert _pose(a) == pytest.approx(_pose(b), abs=1e-4)
+        assert _numbers(a) == pytest.approx(_numbers(b), abs=1e-4)
+        if a.tag == 'collision':
+            assert _bits(a) == _bits(b) == 0x02
+    # here: scaled about the axis and the top face to the inner radius, panel thickness kept
+    s = maw.RING_INNER_R / legacy_rim
+    top = mcw.RING_THICKNESS / 2
+    body = _ring_body(_world(PICKUP))
+    net = [e for e in body if (e.get('name') or '').startswith('net_')]
+    assert [e.get('name') for e in net] == [e.get('name') for e in legacy]
+    for a, b in zip(net, legacy):
+        x, y, z, *rpy = _pose(b)
+        assert _pose(a) == pytest.approx([s * x, s * y, top + s * (z - legacy_top), *rpy], abs=2e-4)
+        want = _numbers(b)
+        want = [s * v for v in want[:-1]] + want[-1:]                 # thickness unscaled
+        assert _numbers(a) == pytest.approx(want, abs=2e-4)
+    # the panels reach the annulus at the top face and overlap the centre patch
+    patch = float(body.findtext("collision[@name='net_centre']/geometry/cylinder/radius"))
+    for c in (e for e in net if e.tag == 'collision' and e.get('name') != 'net_centre'):
+        x, y, z, _, pitch, _ = _pose(c)
+        half = float(c.findtext('geometry/box/size').split()[0]) / 2
+        r, dr, dz = math.hypot(x, y), half * math.cos(pitch), -half * math.sin(pitch)
+        assert maw.RING_INNER_R <= r + dr <= maw.RING_INNER_R + 0.005
+        assert top - 0.002 <= z + dz <= top
+        assert r - dr <= patch
+
+
+def test_pickup_bitmasks():
+    w = _world(PICKUP)
+    cols = _ring_body(w).findall('collision')
+    annulus = [c for c in cols if c.get('name').startswith('ring_annulus_')]
+    net = [c for c in cols if c.get('name').startswith('net_')]
+    assert len(cols) == len(annulus) + len(net) and len(net) == 17
+    assert {_bits(c) for c in annulus} == {0x01}
+    assert {_bits(c) for c in net} == {0x04}
+    tip = _bits(_model('pickup').find("link[@name='magnet_tip_link']/collision"))
+    assert tip == 0x02
+    floor = _bits(w.find("model[@name='ground_plane']/link/collision"))
+    ball = _bits(ET.parse(BALL).getroot().find('model/link/collision'))
+    assert ball & 0x04                                               # the ball lands in the net
+    assert not tip & 0x04 and not floor & 0x04                       # magnet and floor pass through
+    assert tip & floor and 0x01 & floor and ball & floor             # all rest on the floor
+    assert not tip & 0x01 and ball & 0x01                            # the magnet never touches the ring
+
+
+def test_ball_rests_on_the_floor_clear_of_the_carriers_and_quad4():
+    w = _world(PICKUP)
+    inc = _ball_include(w)
+    ball = _pose(inc)[:3]
+    radius = float(ET.parse(BALL).getroot().findtext('model/link/collision/geometry/sphere/radius'))
+    assert ball[2] == pytest.approx(radius)
+    assert inc.find('name') is None             # model payload_model: the weld's child_model
+    lift = next(m for m in w.findall('model') if m.get('name') == 'lift_system')
+    carriers = [_pose(c)[:3] for c in lift.findall('include')
+                if c.findtext('name') in ('x3_drone0', 'x3_drone1', 'x3_drone2')]
+    assert len(carriers) == 3
+    assert min(math.dist(ball, c) for c in carriers) >= maw.BALL_CLEAR_CARRIER >= 1.0
+    body = _newcomer(PICKUP)[1][:3]
+    pivot, tip = _tip_world(PICKUP, 'pickup')
+    arm = [body] + [tuple(p + i / 100 * (q - p) for p, q in zip(pivot, tip)) for i in range(101)]
+    assert min(math.dist(ball, p) for p in arm) >= 1.0
+
+
+def test_ball_pose_publisher_is_the_partner_worlds():
+    def block(world):
+        pubs = _ball_include(world).findall('plugin')
+        assert len(pubs) == 1
+        return pubs[0].attrib, [(c.tag, c.text) for c in pubs[0]]
+    assert block(_world(PICKUP)) == block(ET.parse(LEGACY_WORLD).getroot().find('world'))
