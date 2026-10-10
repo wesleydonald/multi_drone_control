@@ -160,6 +160,8 @@ CONTACT_REJOIN_PHASES = frozenset({
     MissionPhase.ATTACH_READY,
     MissionPhase.LIFT_PROOF,
 })
+# contact_attach: the phases after the drop released the object (the object magnet holds nothing)
+CONTACT_DROPPED_PHASES = CONTACT_REJOIN_PHASES | {MissionPhase.CLEAR_DROP_ZONE}
 
 
 def _vec3_from_position(position) -> np.ndarray:
@@ -1827,6 +1829,7 @@ class OnlineJoinPlanner(Node):
         self.contact_hold_position = None
         self.contact_proof_profile = None
         self.contact_proof_fallback_logged = False
+        self.contact_taken_back_magnet = None
 
         # ------------------------------------------------------------------
         # Landing and simulation safety
@@ -6198,6 +6201,8 @@ class OnlineJoinPlanner(Node):
 
 
     def pickup_magnet_command(self, legacy_command):
+        if self.phase == MissionPhase.TAKEN_BACK and getattr(self, 'contact_taken_back_magnet', None):
+            return self.contact_taken_back_magnet
         if legacy_command == 'NONE':
             return legacy_command
         if self.ground_ring_exit is not None:
@@ -6509,9 +6514,10 @@ class OnlineJoinPlanner(Node):
         return offset if np.all(np.isfinite(offset)) else None
 
     def enter_lift_proof(self) -> None:
-        """The proof lift ends proof_rise_max above the tip's measured contact height, not above the target: with
-        the target below the plate the tip rests on the plate, and a rise from the target only brought it back
-        there. It starts from the commanded offset, so the reference does not step."""
+        """The proof lift ends proof_rise_max above the higher of the target and the tip's measured contact height.
+        With the target below the plate the tip rests on the plate, and a rise from the target only brought it back
+        there; with the tip pressed below the target (the ring sagging) a rise from the tip barely lifted it. It
+        starts from the commanded offset, so the reference does not step."""
         commanded = np.asarray(self.desired_tip_offset(), dtype=float).copy()
         measured = self.measured_contact_tip_offset()
         self.transition_to(MissionPhase.LIFT_PROOF, 'contact reported; proving the catch by a small lift')
@@ -6521,11 +6527,12 @@ class OnlineJoinPlanner(Node):
                 self.contact_proof_fallback_logged = True
                 self.get_logger().warning('LIFT_PROOF: no fresh measured tip; the lift rises from the contact target')
             return
-        goal = np.array([self.approach_offset_x, self.approach_offset_y, measured[2] + self.proof_rise_max])
+        base = max(float(self.final_attach_offset_z), float(measured[2]))
+        goal = np.array([self.approach_offset_x, self.approach_offset_y, base + self.proof_rise_max])
         self.contact_proof_profile = RateProfile(commanded, goal, self.proof_rise_rate)
         self.get_logger().info(
-            f'LIFT_PROOF: tip measured {measured[2]:+.3f} m from the contact target (commanded {commanded[2]:+.3f}); '
-            f'lift to {goal[2]:+.3f}')
+            f'LIFT_PROOF: tip measured {measured[2]:+.3f} m from the contact target, target offset '
+            f'{self.final_attach_offset_z:+.3f} (commanded {commanded[2]:+.3f}); lift to {goal[2]:+.3f}')
 
     def enter_ring_attached(self) -> None:
         if self.phase in {MissionPhase.MATCH_VELOCITY, MissionPhase.DESCEND_TO_ATTACHMENT,
@@ -6543,8 +6550,14 @@ class OnlineJoinPlanner(Node):
             return
         hold = (self.last_reference.positions[0] if self.last_reference is not None
                 else self.drone_position)
+        dropped = getattr(self, 'contact_attach', False) and self.phase in CONTACT_DROPPED_PHASES
         self.transition_to(MissionPhase.TAKEN_BACK, reason)
         self.contact_hold_position = np.asarray(hold, dtype=float).copy()
+        if dropped:
+            # past the drop his object magnet holds nothing; left ON (the rejoin's) it caught the dropped object
+            # while the fleet stepped the vehicle out
+            self.contact_taken_back_magnet = 'OFF'
+            self.get_logger().warning('TAKEN_BACK after the drop: object magnet OFF')
 
     def contact_give_up(self, reason: str) -> None:
         self.contact_gave_up = True

@@ -32,8 +32,9 @@ def planner(contact_attach=True, phase=P.MATCH_VELOCITY):
     p.clock = clock
     p._physical_now_s = lambda: clock.t
     p._wall_now_s = lambda: clock.t
-    p.warnings = []
-    log = SimpleNamespace(info=lambda *a, **k: None, warning=lambda msg, *a, **k: p.warnings.append(msg),
+    p.warnings, p.infos = [], []
+    log = SimpleNamespace(info=lambda msg, *a, **k: p.infos.append(msg),
+                          warning=lambda msg, *a, **k: p.warnings.append(msg),
                           warn=lambda *a, **k: None, error=lambda *a, **k: None)
     p.get_logger = lambda: log
     p.mission = mission_for_mode('pickup_delivery', contact_attach=contact_attach)
@@ -97,6 +98,7 @@ def planner(contact_attach=True, phase=P.MATCH_VELOCITY):
     p.contact_hold_position = None
     p.contact_proof_profile = None
     p.contact_proof_fallback_logged = False
+    p.contact_taken_back_magnet = None
     p.give_up_publisher = Recorder() if contact_attach else None
     return p
 
@@ -289,6 +291,37 @@ def test_a_failed_proof_after_a_low_target_presses_again_from_the_lift_reference
     np.testing.assert_allclose(p.rate_profile().goal_tip_offset, [0, 0, 0.012])
 
 
+def test_a_tip_pressed_below_the_target_still_lifts_the_full_rise_above_the_target():
+    """R1522: the ring sagged under the press and the tip read 5-6 mm below the target; a rise from the tip ended
+    4-5 mm above the commanded offset, his MPC barely moved and the proofs timed out."""
+    p = planner(phase=P.ATTACH_READY)
+    p.measured_magnet_tip_position = PLATE + [0, 0, -0.006]
+    p.contact_reported = True
+    tick(p)
+    assert p.phase == P.LIFT_PROOF
+    np.testing.assert_allclose(p.rate_profile().start_tip_offset, [0, 0, CONTACT_Z])
+    np.testing.assert_allclose(p.rate_profile().goal_tip_offset, [0, 0, CONTACT_Z + 0.01])
+    line = next(m for m in p.infos if m.startswith('LIFT_PROOF:'))
+    assert 'tip measured -0.006' in line and 'target offset +0.000' in line and 'lift to +0.010' in line
+
+
+@pytest.mark.parametrize('target_z, tip_z, goal_z', [
+    (0.0, -0.006, 0.010),     # pressed below the target (R1522): the target + rise, as before
+    (LOW_Z, 0.0, 0.010),      # resting above a low target (R1498): the measured contact + rise
+    (0.0, 0.0, 0.010),        # nominal
+    (0.0, 0.003, 0.013),      # held above the target: from the measured contact
+    (LOW_Z, -0.012, 0.0),     # below a low target too: the target + rise
+])
+def test_the_lift_rises_from_the_higher_of_the_target_and_the_measured_contact(target_z, tip_z, goal_z):
+    p = planner(phase=P.ATTACH_READY)
+    p.final_attach_offset_z = target_z
+    p.measured_magnet_tip_position = PLATE + [0, 0, tip_z]
+    p.contact_reported = True
+    tick(p)
+    assert p.rate_profile().goal_tip_offset[2] == pytest.approx(goal_z)
+    assert p.rate_profile().goal_tip_offset[2] >= target_z + 0.01 - 1e-12     # never less than before
+
+
 @pytest.mark.parametrize('tip_dz', [-0.0008, 0.0, 0.0008])
 def test_the_nominal_target_lifts_as_before_within_a_millimetre(tip_dz):
     p = planner(phase=P.ATTACH_READY)
@@ -412,6 +445,46 @@ def test_take_back_seen_on_the_tick_too():
     p.take_back_requested = True
     tick(p)
     assert p.phase == P.TAKEN_BACK
+
+
+def magnet_ticks(p, n=3, dt=1.0):
+    """His timer's magnet command for n ticks; the commands published."""
+    for _ in range(n):
+        tick(p, dt)
+        p.publish_magnet_command(p.pickup_magnet_command(p.current_phase_spec().magnet_command))
+    return [m.data for m in p.magnet_command_publisher.messages]
+
+
+def test_a_give_up_after_the_drop_turns_his_object_magnet_off():
+    """R1520: given up in the rejoin with his object magnet ON, our step-out brought the tip within his 0.10 m
+    catch of the ball lying in the ring's net, and the weld dragged the net."""
+    p = planner(phase=P.LIFT_PROOF)
+    p.contact_first_descend_s = p.clock.t
+    p.contact_failures = 2
+    tick(p)                                   # the third failed proof
+    assert p.phase == P.TAKEN_BACK and p.contact_gave_up
+    sent = magnet_ticks(p)
+    assert sent and set(sent) == {'OFF'} and p.last_magnet_command == 'OFF'
+    assert p.warnings.count('TAKEN_BACK after the drop: object magnet OFF') == 1
+
+
+@pytest.mark.parametrize('phase', sorted(CONTACT_REJOIN_PHASES | {P.CLEAR_DROP_ZONE}, key=lambda ph: ph.value))
+def test_our_take_back_after_the_drop_turns_his_object_magnet_off(phase):
+    p = planner(phase=phase)
+    p.take_back_callback(SimpleNamespace(data=True))
+    assert p.phase == P.TAKEN_BACK
+    assert set(magnet_ticks(p)) == {'OFF'}
+
+
+@pytest.mark.parametrize('phase', [P.LIFT_OBJECT, P.TRANSIT_TO_DROP_POINT, P.SETTLE_ABOVE_DROP_POINT,
+                                   P.DESCEND_TO_DROP_HEIGHT])
+def test_a_take_back_while_he_carries_the_ball_sends_no_object_magnet_command(phase):
+    """Before the drop the ball stays on (on the rig one coil holds it)."""
+    p = planner(phase=phase)
+    p.take_back_callback(SimpleNamespace(data=True))
+    assert p.phase == P.TAKEN_BACK
+    assert magnet_ticks(p) == [] and p.last_magnet_command == 'ON'
+    assert not any('object magnet OFF' in w for w in p.warnings)
 
 
 # ---- his pickup under contact_attach: the descent ends on the weld; the bounded retry (R1493, R1497, R1507) ----

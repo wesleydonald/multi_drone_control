@@ -44,9 +44,10 @@ switches that default OFF: with them off, every node behaves exactly as today. B
 - ATTACH_READY: no `handoff_ready`, lead 0, match 0.025 m / 0.08 m/s, abort 0.05 m / 0.15 m/s.
 - LIFT_PROOF (new): from DESCEND or ATTACH_READY on `/magnet/contact` true (checked before his abort guards): latch
   the tip's measured offset from the contact target (plate-relative), then rise at `proof_rise_rate` (0.02 m/s) from
-  the offset commanded at entry (no reference step) to `proof_rise_max` (twin 0.01, rig 0.03) above that measured
-  contact height, then hold (m1-final; R1498: a rise from a target below the plate ended back on the plate). A stale
-  measured tip: the rise from the contact target, as before (logged once). `/magnet/contact` false -> back to DESCEND
+  the offset commanded at entry (no reference step) to `proof_rise_max` (twin 0.01, rig 0.03) above the higher of the
+  target offset and that measured contact height, then hold (m1-final; R1498: a rise from a target below the plate
+  ended back on the plate; R1522: a rise from a tip pressed below the target, the ring sagging, barely lifted). A
+  stale measured tip: the rise from the contact target, as before (logged once). `/magnet/contact` false -> back to DESCEND
   from the lift reference (failures += 1). 3 failures or 30 s since the first DESCEND start -> give-up: publish
   `/join_planner/give_up` true, phase TAKEN_BACK.
 - Pickup descent (partner launch `pickup_hold_on_attach`; m1-final, R1507): his object flag (`/tejen/object_attached`,
@@ -63,8 +64,11 @@ switches that default OFF: with them off, every node behaves exactly as today. B
 - RING_ATTACHED (new, terminal): from any rejoin phase on `/magnet/object_attached` true: hold the lifted offset,
   plate-relative, no lead, until `/drone_3/mux_state` reads "ours", then hold where it is; no magnet commands, no
   hand-back, no phase change after our LAND.
-- TAKEN_BACK (new, terminal): on `/drone_3/take_back` true or his give-up: no references needed, no object-magnet
-  commands (the ball stays on), no restart.
+- TAKEN_BACK (new, terminal): on `/drone_3/take_back` true or his give-up: no references needed, no restart. His
+  object magnet: entered after the drop (CLEAR_DROP_ZONE to LIFT_PROOF) it is commanded OFF and held (m1-final,
+  R1520: left ON from the rejoin it welded the ball lying in the ring's net while we stepped QUAD4 out); entered
+  while he still carries the ball (before the drop), no object-magnet command (the ball stays on). On the rig the
+  coil is one: our take-back's OFF (once the span began) releases it too.
 - ring_bridge: with `full_pose_attachment` true (rig_twin), the plate offset is rotated by the full ring attitude.
 
 ## Our planner, `partner_contact: true`
