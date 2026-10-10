@@ -11,8 +11,9 @@ topics do not meet ours. Boundary:
   * his object magnet -> gz /pickup/attach|detach (second DetachableJoint on the partner model)
   * magnets: his planner and object manager use /tejen/magnet/command; /magnet/command is
     our ring magnet. At his ATTACH_READY (/join_planner/handoff_ready) our mux hands drone
-    3 to our tracker, which flies the last descent (his ready point is ~0.18 m above the
-    plate), our dissipative node commands the ring magnet ON, and the weld folds it in
+    3 to our tracker, which flies the last descent (his ready point was ~0.18 m above the
+    plate before the 10 Oct sync, 0.12 m of it from his label-marker aliasing bug), our
+    dissipative node commands the ring magnet ON, and the weld folds it in
   * the ring and carriers <- ring_bridge (our ring's mocap + the load planner's trajectory)
 """
 import os

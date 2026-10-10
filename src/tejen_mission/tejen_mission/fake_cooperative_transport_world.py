@@ -19,6 +19,7 @@ is only for visualisation/debugging.
 from __future__ import annotations
 
 from collections import deque
+from copy import deepcopy
 from dataclasses import dataclass
 import math
 from typing import Deque, List, Sequence, Tuple
@@ -878,7 +879,7 @@ class FakeCooperativeTransportWorld(Node):
         self.append_ring_markers(markers, payload_state, stamp)
 
         attachment_marker = self.make_marker_common(1, 'fake_attachment_point', Marker.SPHERE, stamp)
-        attachment_marker.pose = attachment_pose.pose
+        attachment_marker.pose = deepcopy(attachment_pose.pose)
         diameter = self.get_float_param('attachment_marker_diameter')
         attachment_marker.scale.x = diameter
         attachment_marker.scale.y = diameter
@@ -890,7 +891,7 @@ class FakeCooperativeTransportWorld(Node):
         markers.markers.append(attachment_marker)
 
         label_marker = self.make_marker_common(2, 'fake_attachment_label', Marker.TEXT_VIEW_FACING, stamp)
-        label_marker.pose = attachment_pose.pose
+        label_marker.pose = deepcopy(attachment_pose.pose)
         label_marker.pose.position.z += 0.12
         label_marker.scale.z = 0.12
         label_marker.color.r = 0.0
@@ -915,7 +916,7 @@ class FakeCooperativeTransportWorld(Node):
             pose = self.make_pose(state.x, state.y, state.z, state.yaw)
 
             drone_marker = self.make_marker_common(100 + i, 'fake_obstacle_ground_truth', Marker.SPHERE, stamp)
-            drone_marker.pose = pose
+            drone_marker.pose = deepcopy(pose)
             drone_marker.scale.x = 2.0 * obstacle.radius
             drone_marker.scale.y = 2.0 * obstacle.radius
             drone_marker.scale.z = 2.0 * obstacle.radius
@@ -926,7 +927,7 @@ class FakeCooperativeTransportWorld(Node):
             markers.markers.append(drone_marker)
 
             safety_marker = self.make_marker_common(200 + i, 'fake_obstacle_legacy_visual_safety_radius', Marker.SPHERE, stamp)
-            safety_marker.pose = pose
+            safety_marker.pose = deepcopy(pose)
             safety_marker.scale.x = 2.0 * obstacle.safety_radius
             safety_marker.scale.y = 2.0 * obstacle.safety_radius
             safety_marker.scale.z = 2.0 * obstacle.safety_radius
@@ -937,7 +938,7 @@ class FakeCooperativeTransportWorld(Node):
             markers.markers.append(safety_marker)
 
             label_marker = self.make_marker_common(300 + i, 'fake_obstacle_label', Marker.TEXT_VIEW_FACING, stamp)
-            label_marker.pose = pose
+            label_marker.pose = deepcopy(pose)
             label_marker.pose.position.z += obstacle.safety_radius + 0.08
             label_marker.scale.z = 0.10
             label_marker.color.r = 1.0
