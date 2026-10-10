@@ -310,3 +310,8 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   $CLAUDE_JOB_DIR/tmp/lab_rig.txt; score with TREE="branch m1-rig d4248af" REV=7 (card rev 7 = the merged tree).
 - Next: morning report by 10:00 (docs/morning_report_2026-10-11.md), then the reviewer once the table is in, then the
   tilt-cut port.
+- 08:20: claim on m1-rig: R1531 orbit_2 PASS bars (the R1522 arm fixed), R1534 hover PASS bars, both LAND tip-over
+  (scored separately; now 4 of the last 7 attached runs); R1533 m1x_still_orbit_2 (contact_still ON) proof 1.0 s,
+  landed. Tilt cut ported: m1-tiltcut3 743aa90 (card rev 3, critic r2 applied; launch identical to m1-rig with switches
+  off). Tilt wave A (T0, T1, F6b, F6c x2) queued detached behind the claim batch (pid 986762) ->
+  $CLAUDE_JOB_DIR/tmp/lab_tc_a.txt. Wave B depends on F6b (2/2 pass -> H1/F6a/F6a2 not flown, their code deleted).
