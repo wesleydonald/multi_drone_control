@@ -1,5 +1,13 @@
 # Combined M1 subtest: Tejen flies QUAD4 from its mat through pickup, drop and a contact attach proved by a small lift; our check confirms; bumpless hand-over
 
+Rev 7 (11 Oct 07:55, before any run on it): the claim table is flown on the merged rig tree m1-rig d4248af (configs
+ead6afe) = m1-final d8c1b65 + the rig port (all rig changes behind rig switches; the launch graph is identical to
+d8c1b65 for all 360 frozen cases up to paths). d8c1b65 adds to 6143989: his TAKEN_BACK after the drop holds his object
+magnet OFF (R1520: the take-back caught the ball in the net and dragged the ring) and the LIFT_PROOF goal max(target,
+measured) + rise (R1522). Bars and thresholds unchanged; contact_still stays OFF in the claim (Wesley's word); four
+m1x_still_* runs with it ON fly beside the table as exploratory evidence. The 7b8985a / 6143989 rows (R1505-R1529) are
+the record of the failures that led here.
+
 Rev 6 (10 Oct 22:20, Wesley, after the first claim pass R1491-R1502 on e097a94): two fixes, then the whole claim
 table is re-flown on the one final tree m1-final 6143989 (= e097a94 + the full M1 + these fixes); the e097a94 rows stay
 as the record. (Update 23:35, before any run on 6143989: the pickup stalls were the ball WELDED and his descent pushing on

@@ -299,3 +299,14 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   (exit 1: read its lab_console.log). m1-rig: the d8c1b65 merge is RESOLVED but NOT COMMITTED ("All conflicts fixed but
   you are still merging"): run the tests, gate --quick, launch gate 0 changed, twin claim dumps vs m1-final d8c1b65,
   then `git commit` (no attribution). Then the claim re-fly on the merged tree.
+
+## 11 Oct morning (resumed 07:43 after the usage-limit stop)
+- Scored the 6143989 tail: R1523 full M1 ORBIT end to end (first on the circle, proof 1.0 s); R1525 lead030 falsifies
+  (plate bounces under the 0.3 s lead, supports lead 0); R1526 high, R1527 offset PASS; R1528 land_proof PASS; R1529
+  abort PASS bars + landing tip-over (scored separately).
+- m1-rig merge of d8c1b65 COMMITTED d4248af (tests = m1-final's, gate passed, all 360 launch cases identical to m1-final
+  up to paths). Exploratory configs m1x_still_* (contact_still ON) ead6afe.
+- CLAIM RE-FLY on m1-rig ead6afe launched ~07:58 on the lab, detached (setsid): 13 m1c + 2 m1_full + 4 m1x_still ->
+  $CLAUDE_JOB_DIR/tmp/lab_rig.txt; score with TREE="branch m1-rig d4248af" REV=7 (card rev 7 = the merged tree).
+- Next: morning report by 10:00 (docs/morning_report_2026-10-11.md), then the reviewer once the table is in, then the
+  tilt-cut port.
