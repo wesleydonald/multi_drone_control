@@ -72,6 +72,8 @@ The most common is the \textit{rigid massless rod}, adopted by \cite{efficient} 
     \mathbf{T}_i = \lambda_i \mathbf{q}_i, \quad \lambda_i \geq 0
 \end{equation}
 
-where $\lambda_i$ is the tension, non-negative because a cable can pull but not push. The state stays compact and tractable, but slack cannot be captured. The \textit{mass-spring-damper chain} of \cite{distributedNMPC} discretises the cable into $n$ lumped masses joined by spring--damper links of stiffness $k_s$, damping $b$ and rest length $l_0$. It captures sag and oscillation, at $6n$ extra states per cable.
+where $\lambda_i$ is the tension, non-negative because a cable can pull but not push. The state stays compact and tractable, but slack cannot be captured.
+
+The \textit{mass-spring-damper chain} of \cite{distributedNMPC} discretises the cable into $n$ lumped masses joined by spring--damper links of stiffness $k_s$, damping $b$ and rest length $l_0$. It captures sag and oscillation, at $6n$ extra states per cable.
 
 Whatever the model, most controllers assume taut cables, with tension strictly positive throughout the task. A slack cable adds a unilateral constraint and a discontinuity in the equations of motion, and handling it rigorously remains open \cite{efficient}. For moderately aggressive indoor flight the rigid rod with taut cables is sufficient, consistent with \cite{tudelft}.
