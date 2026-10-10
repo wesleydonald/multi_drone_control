@@ -67,7 +67,7 @@ fleet:
   num_drones: 3
   n_total: 4
 timing:
-  duration_s: 500.0
+  duration_s: 600.0
   stop_after_abort_s: 8.0
   stop_after_landed_s: 5.0
   ready_timeout_s: 420.0
@@ -81,7 +81,7 @@ events:
 - t: 1.0
   do: LAUNCH
   arg: tejen_mission partner_mission.launch.py geometry:=rig_twin plate:=3 carrier_azimuths_deg:=[270.0,30.0,150.0]
-    pickup_lift_height:=1.75 minimum_search_z_m:=2.4 drop_approach_clearance:=0.60
+    pickup_lift_height:=2.3 minimum_search_z_m:=2.7 drop_approach_clearance:=0.60
 - t: 3.0
   do: ARM
 - t: 6.0
