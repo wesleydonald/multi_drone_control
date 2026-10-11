@@ -50,7 +50,11 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
   Critic round 2 changes are on the candidate: m1-harden merged as 793183d (205 planner tests, gate pass). Guard
   constants: wait 3 s, +0.05 above slack, guard-stage speed 0.06 m/s, follow-down slack 0.12. Next: the QUAD4
   record loader. No helper is running.
-- The other chat (thesis lane) finished 11 Oct; its work is merged (see above).
+- The other chat (thesis lane):
+  - lanes 1 and 2 are merged: thesis-rig 5dc4eb1, rig-prep de41c93; their branches and worktrees are removed;
+  - lane 2 built the supervisor deck https://claude.ai/artifact/TwjqA7ebTDrkgDK6nwutiR, the T6 metrics text and the
+    three 8 Oct figures on the tilt rise;
+  - overnight it may draft Ch2/Ch3 (thesis-work3).
 
 ## TB6 (co-moving take-back, m1-comove c53ae0c; card rev 10 §6.2): COMPLETE, passes its gate criteria
 - **All 11 support:** R1615-R1625. R1624 is read on the commanded path (Wesley ~16:20).
