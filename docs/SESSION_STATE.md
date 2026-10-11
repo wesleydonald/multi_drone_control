@@ -43,10 +43,9 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 
 ## Running
 - Lab PC: idle. The smoke on the candidate 793183d passed, 4 of 4 support (R1628-R1631; the 10th clean full M1 is R1631).
-- Laptop: recording the full M1 on the circle for a video (m1_full_orbit --record on the candidate with the recorder
-  cherry-picked, adaf2c5; `$CLAUDE_JOB_DIR/tmp/laptop_rec_orbit.txt`, waiter bcqb9a70g). Afterwards re-aim the plate-9 and
-  ring cameras with render_video.py --view at the attach location, then cut a captioned edit like R1530's (captions in
-  `$CLAUDE_JOB_DIR/tmp/edit/`). Keep the laptop quiet for the first 3 min.
+- Laptop: idle. The full M1 on the circle is recorded and cut (R1633, the 11th clean full M1):
+  results/videos/full_M1_twin_R1633_orbit_edit.mp4 (2 min 56 s, captioned; raw: _wide, _circle, _plate9). The recorder
+  is on the candidate (adaf2c5).
 - Critic round 2 done: GO WITH CHANGES for hover R11a/R11b (rig card ## Critic; answers in decisions.md).
   Critic round 2 changes are on the candidate: m1-harden merged as 793183d (205 planner tests, gate pass). Guard
   constants: wait 3 s, +0.05 above slack, guard-stage speed 0.06 m/s, follow-down slack 0.12. Next: the QUAD4
