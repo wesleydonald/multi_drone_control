@@ -1,0 +1,123 @@
+% app_network_lit.tex -- Appendix F, first part: the architecture taxonomy and the distributed and decentralised
+% literature that framed the project plan's planner-against-network question. Moved here from control.tex on
+% 12 Oct 2026 (thesis plan of 11 Oct: "the distributed detail and Fig 3 -> App F"); the condensed version is
+% Section 2.1.
+
+\subsection{The architectures behind the question}
+\label{sec:app_network_lit}
+
+Multi-UAV control architectures are classified by their information structure, which sets their scalability,
+robustness to communication failure and computational burden \cite{nathanReviewAutonomousMultiagent2011}. A
+centralised coordinator has the global state and computes every control action; distributed and decentralised
+approaches spread the computation across the UAVs, which rely on local communication or sensing
+(Figure~\ref{fig:arch_comparison}). In cable-suspended transport the payload couples the UAVs, and the coupling
+must either be coordinated explicitly or handled through local interactions
+\cite{brambillaSwarmRoboticsReview2013}. A central node simplifies global constraints such as tension limits,
+inter-UAV collision avoidance and force allocation, and fits a lab where one computer commands every UAV, as in
+this work; its drawbacks are a computational cost that grows with the team and a single point of failure
+\cite{dimakosStudyCentralisedDecentralised2021}. Three limitations recur across the centralised work of
+Section~\ref{sec:lit_models}: a cost that grows with the team, from quadratic \cite{efficient} to exponential in
+NMPC and trajectory-based formulations \cite{tudelft}; a fixed team; and a single point of failure. They motivated
+the project plan's question.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    node distance = 0.55cm and 0.6cm,
+    box/.style     = {rectangle, rounded corners=4pt, draw, thick,
+                      minimum width=2.0cm, minimum height=0.7cm,
+                      font=\small, text centered},
+    central/.style = {box, fill=blue!12, draw=blue!50!black},
+    uav/.style     = {box, fill=orange!15, draw=orange!60!black},
+    payload/.style = {box, fill=gray!18, draw=gray!60, minimum width=2.2cm},
+    arrow/.style   = {-Stealth, thick},
+    dasharrow/.style = {-Stealth, thick, dashed, gray},
+    label/.style   = {font=\footnotesize\itshape}
+]
+\begin{scope}
+\node[central, minimum width=2.8cm, minimum height=1.0cm] (coord) {\textbf{Central Node}};
+\node[uav, below left=0.5cm and -0.3cm of coord]  (u1l) {UAV 1};
+\node[uav, below=0.5cm of coord]                  (u2l) {UAV 2};
+\node[uav, below right=0.5cm and -0.3cm of coord] (u3l) {UAV 3};
+\node[payload, below=0.9cm of u2l] (pl) {Payload};
+\draw[<->, thick, purple!70] (coord.south west) -- ++(-0.3,0) -- (u1l.north);
+\draw[<->, thick, purple!70] (coord.south)      -- (u2l.north);
+\draw[<->, thick, purple!70] (coord.south east) -- ++(0.3,0) -- (u3l.north);
+\draw[thick, gray!70] (u1l.south) -- (pl.north west);
+\draw[thick, gray!70] (u2l.south) -- (pl.north);
+\draw[thick, gray!70] (u3l.south) -- (pl.north east);
+\node[above=0.25cm of coord, font=\normalsize\bfseries] (ltitle) {Centralised};
+\begin{scope}[on background layer]
+  \node[draw=blue!30, fill=blue!4, rounded corners=6pt, inner sep=8pt, fit=(ltitle)(u1l)(u3l)(pl)] {};
+\end{scope}
+\end{scope}
+\begin{scope}[xshift=7.5cm]
+\node[uav] (u2r) {UAV 2};
+\node[uav, below left=1.1cm and 0cm of u2r]  (u1r) {UAV 1};
+\node[uav, below right=1.1cm and 0cm of u2r] (u3r) {UAV 3};
+\node[payload, below=2.2cm of u2r] (pr) {Payload};
+\draw[<->] (u1r) -- (u2r);
+\draw[<->] (u2r) -- (u3r);
+\draw[<->] (u1r) -- (u3r);
+\draw[thick, gray!70] (u1r.south) -- (pr.north west);
+\draw[thick, gray!70] (u2r.south) -- (pr.north);
+\draw[thick, gray!70] (u3r.south) -- (pr.north east);
+\draw[arrow, gray!50, thin] (pr.north west) -- (u1r.south);
+\draw[arrow, gray!50, thin] (pr.north)      -- (u2r.south);
+\draw[arrow, gray!50, thin] (pr.north east) -- (u3r.south);
+\node[above=0.25cm of u2r, font=\normalsize\bfseries] (rtitle) {Distributed / Decentralised};
+\begin{scope}[on background layer]
+  \node[draw=orange!40, fill=orange!4, rounded corners=6pt, inner sep=10pt, fit=(rtitle)(u1r)(u2r)(u3r)(pr)] {};
+\end{scope}
+\end{scope}
+\end{tikzpicture}
+\caption{Centralised versus distributed/decentralised control architectures.}
+\label{fig:arch_comparison}
+\end{figure}
+
+\paragraph{Distributed and decentralised control.} Distributed and decentralised architectures have no central
+coordinator. A decentralised UAV uses only its own measurements and does not communicate; distributed UAVs share
+information with their neighbours towards a joint objective \cite{nathanReviewAutonomousMultiagent2011}. Both
+generally tolerate faults and scale better than centralised methods, but global objectives such as precise force
+allocation and six-degree-of-freedom manipulation are harder to coordinate
+\cite{scattoliniArchitecturesDistributedHierarchical2009}.
+
+Energy-based dissipative control is the most robust to changes in the team. In the fully decentralised controller
+of Quan et al.\ \cite{quan2025swarm}, inspired by table mechanics, each UAV damps the relative motion between
+itself and the payload from local measurements, with no communication. Any disturbance (wind, a cable
+perturbation, a UAV suddenly leaving) injects energy into the payload--swarm system, which damping forces
+proportional to the relative velocity errors remove. It is validated under varying UAV capability, cable-length
+uncertainty and payload weight, and depends on differential GPS, which limits it to outdoor flight. The
+peer-reviewed form of the same idea, a virtual-passivity network of nodes, springs and dampers that separates the
+UAVs' internal coordination from the load's velocity tracking, carries a 6\,kg load with six UAVs in field tests
+and a 14\,kg load with ten in simulation \cite{liu2026passivity}. The work in
+\cite{liuVirtualTubeBasedCooperativeTransport2026} makes the framework distributed with a virtual tube, a corridor
+around the desired payload path inside which the formation adapts to avoid obstacles, with the tensions allocated
+by dissipative systems theory; simulations with up to ten UAVs and outdoor experiments carry payloads through
+constrained spaces, and real-time tube generation remains future work.
+
+Distributing the MPC problem reduces each UAV's load. In \cite{distributedNMPC} each UAV solves its part of the
+global problem, coordinated peer to peer, and experiments show centimetre-level position tracking; keeping the
+communication independent of team size is left open. The comparison of centralised and decentralised linear MPC
+for four UAVs in \cite{DistributedMPC} finds comparable tracking in simulation, with the decentralised form running
+faster on the same compute and the linear model limiting aggressive manoeuvres. The distributed NMPC of
+\cite{tasoojiEventTriggeredNonlinearModel} updates only when the system leaves its plan, enforcing robot
+separation and obstacle avoidance; \cite{tasoojiCooperativeControlMultiQuadrotors} adds global A* planning and
+decentralised communication, with updates triggered by perception such as dynamic obstacle detection.
+
+The distributed fixed-time homogeneous sliding mode protocol of \cite{DFHSMC}, a leader-follower structure with a
+disturbance observer, limits payload swing in three-UAV experiments in wind, but inherits the leader-follower
+fragility and does not address team changes. The three loops of \cite{kotaruDynamicsControlQuadrotor2017} nest
+attitude control, sliding mode formation control on the cable load states and payload navigation, in simulation
+only. The leaderless distributed adaptive controller of \cite{arabPlanningDistributedControl2021} models the cable
+forces as an adaptive term that converges online, independent of the payload dynamics, with RRT* path planning.
+The work in \cite{9376103} removes external localisation with onboard monocular cameras and inertial units, fused
+by a distributed $\text{SE}(3)$ payload estimator over peer-to-peer links, and \cite{10144367} handles unknown
+payload mass and cable lengths with tension analysis and an admittance model with online estimation.
+Reinforcement learning has compensated for actuator saturation on top of a dynamic allocation, in simulation only
+\cite{liMultiUAVCooperativeTransportation2021}, and multi-agent reinforcement learning is promising but still
+fragmented \cite{ekechiSurveyUAVControl2025}. Hybrid approaches combine centralised planning with distributed
+execution: backstepping with a force distribution split into payload-position and cable-configuration layers
+\cite{wangRobustCooperativeTransportation2024}, a null-space formation controller for two UAVs
+\cite{gimenezMultiobjectiveControlCooperative2018}, and insetting-formation trajectory planning
+\cite{zhangIFBasedTrajectoryPlanning2023}.

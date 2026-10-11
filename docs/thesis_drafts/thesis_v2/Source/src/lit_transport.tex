@@ -1,0 +1,78 @@
+% lit_transport.tex -- Literature 2.1: cooperative transport and link models (drafted 12 Oct 2026 from the
+% thesis plan of 11 Oct, section 4 "2 Literature"). Condensed from modelling.tex and control.tex, which are no
+% longer input (the distributed detail and the architecture figure are in Appendix F). Entries the plan lists for
+% this section that are not yet in the bibliography (Six 2018, Lee/Sreenath/Kumar 2013, Mellinger 2010, Masone
+% 2016, Geng 2020, Wang 2026) wait for the approval batch of plan section 7 and are marked in brackets.
+
+\subsection{Cooperative transport and link models}
+\label{sec:lit_models}
+
+Several quadcopters carrying one suspended payload raise the mass a team can lift, constrain the payload's
+swing through several attachment points and can control its full pose, at the price of a coupled system in
+which every vehicle feels the others through the load \cite{tudelft, mohammadiDecentralizedMotionControl2018}.
+The field is reviewed most recently by Lv et al.\ \cite{lv2026review} and, for suspended cables, by Estevez et
+al.\ \cite{estevezReviewAerialTransportation2024}: most of it concerns trajectory tracking, tension allocation,
+formation keeping and disturbance rejection for a team whose membership never changes, and most of it is
+validated in simulation.
+
+\paragraph{Link models.} The assumptions made about the link set both the size of the model and the regime in
+which the controller is valid. The common choice is the rigid massless rod: a link of fixed length along a unit
+vector, carrying a tension $\lambda_i \ge 0$ along it, so that the link can pull but not push
+\cite{efficient, wahbaKinodynamicMotionPlanning2024}. It keeps the state compact and the equations smooth, and
+it is exact for a taut cable under a hovering vehicle, which Michael et al.\ \cite{michael2011cooperative} treat
+as a rod on ball joints; the non-negativity of the tension is then a modelling choice about when the link is
+believed, not a property of the hardware [Six 2018, pending the approval batch]. The mass-spring-damper chain of
+De Carli et al.\ \cite{distributedNMPC} discretises the cable into lumped masses joined by spring-damper
+elements, captures sag and oscillation, and costs six states per element per cable. Whatever the model, nearly
+every controller assumes the links taut throughout; a slack link adds a unilateral constraint and a
+discontinuity, and handling it rigorously is still open \cite{efficient}. The rig of this thesis carries its
+ring on rigid rods, so the rod model is the hardware's own, except for the newcomer's tether
+(Section~\ref{sec:overview}).
+
+\paragraph{Centralised control.} Architectures are classified by their information structure, which sets the
+computation, the scaling with team size and the robustness to a lost link \cite{nathanReviewAutonomousMultiagent2011}.
+A central node with the global state can impose tension limits, collision avoidance and a force allocation
+directly, at the cost of a solve that grows with the team and a single point of failure
+\cite{dimakosStudyCentralisedDecentralised2021}. The benchmark for this thesis is Sun et al.\ \cite{tudelft}, who
+solve a centralised optimal control problem over the full load--cable--vehicle dynamics at 10\,Hz, with thrust
+limits, cable tautness and collision avoidance as path constraints, and track the planned trajectories onboard
+with incremental nonlinear dynamic inversion (INDI), which compensates the cable force from inertial
+measurements so that the load carries no sensor. Three and four vehicles reach 5\,m/s and 8\,m/s$^2$, at least
+eight times the agility of earlier force-based methods. Two things in that work are left open and matter here:
+the solve time grows exponentially with the team, and the results do not separate what the INDI force
+compensation contributes from what the planner does. Full-pose nonlinear MPC scales to ten vehicles in
+simulation at under 100\,ms \cite{sunNonlinearMPCFullPose2023}, or lowers its cost by parameterising the problem
+on the payload's states alone \cite{liNonlinearModelPredictive2023}. Allocation methods separate the split of a
+desired payload wrench into tensions: a cascade of quadratic programs after geometric control
+\cite{efficient}, which scales about quadratically, or sequential quadratic programming on the squared tensions
+\cite{vazquez-soquiSQPBasedCableTensionAllocation2026}. Kinodynamic planning finds a feasible path through
+clutter offline and then enforces the full dynamics \cite{wahbaKinodynamicMotionPlanning2024}; leader-follower
+control makes the payload the leader and splits the resultant tension among the vehicles, flown on hardware with
+a point-mass payload \cite{tensionbased}; adaptive and barrier-function schemes guarantee constraints under
+model uncertainty in simulation \cite{9945662}. All of these hold the team fixed.
+
+\paragraph{Distributed and decentralised control.} Without a central node each vehicle solves for itself from
+what it measures or what its neighbours send, which removes the single point of failure and the growth of one
+solve with the team, and makes global objectives such as an exact force allocation harder
+\cite{scattoliniArchitecturesDistributedHierarchical2009}. Distributed nonlinear MPC reaches centimetre-level
+tracking with each vehicle solving its part of the global problem \cite{distributedNMPC}; event-triggered
+variants update only when the system leaves its plan \cite{tasoojiEventTriggeredNonlinearModel,
+tasoojiCooperativeControlMultiQuadrotors}; sliding-mode, adaptive, vision-based and learned controllers cover
+the rest of the design space \cite{DFHSMC, arabPlanningDistributedControl2021, 9376103,
+liMultiUAVCooperativeTransportation2021}. The line of work closest in spirit to a changing team is the dissipative
+control of Quan et al.\ \cite{quan2025swarm}: each vehicle damps its motion relative to the payload from local
+measurements, with no communication, so that any disturbance, a member leaving included, injects energy that the
+damping removes; its peer-reviewed form, a virtual-passivity network of nodes, springs and dampers, carries a
+6\,kg load with six vehicles in field tests \cite{liu2026passivity}, and a virtual-tube extension steers the
+formation through constrained spaces \cite{liuVirtualTubeBasedCooperativeTransport2026}. Appendix~\ref{sec:app_network}
+reviews this family in more detail.
+
+\paragraph{Why the network is not a research question here.} The project plan asked whether the dissipative
+network or the trajectory-based planner better balances robustness and tracking on the same plant. That question
+was answered on the earlier simulation plant, before the rig twin existed: a port of the network to rigid rods, a
+heavy ring and Betaflight trackers tracked worse, tilted the ring further on a detach and capsized it on an
+attach (Appendix~\ref{sec:app_network}). The comparison is not re-flown, and the main text rests on the planner.
+What this thesis takes from the literature is the optimal control problem of Sun et al.\ as its planner, with the
+team size and the attachment geometry made runtime parameters (Section~\ref{sec:model}), and a tracking
+controller per vehicle on the ground in place of INDI, because the flight controllers are unmodified
+(Section~\ref{sec:lit_execution}).

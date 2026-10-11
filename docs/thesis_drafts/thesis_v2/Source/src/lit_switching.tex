@@ -1,0 +1,45 @@
+% lit_switching.tex -- Literature 2.4: switching between controllers, bumpless transfer and runtime assurance
+% (drafted 12 Oct 2026 from the thesis plan of 11 Oct). Entries the plan lists that are not yet in the bibliography
+% (Graebe and Ahlen 1996, Peng et al. 1996, Sha 2001, Gros 2020, Hendrickx and Martin 2017, Sekercioglu et al. 2026)
+% wait for the approval batch and are marked in brackets.
+
+\subsection{Switching, bumpless transfer and runtime assurance}
+\label{sec:lit_switching}
+
+A membership change is a switch between two plants, with $N$ and $N \pm 1$ vehicles, and so between two
+controllers. Three bodies of work say how such a switch is made without a step, how an optimisation-based
+controller survives it, and what keeps the system safe if it does not.
+
+\paragraph{Bumpless transfer.} When control passes from one controller to another, the second must start from
+the first's output or the plant takes a step. The classical remedy keeps the idle controller's state tracking the
+active one's output, so that at the switch the two agree [Graebe and Ahl\'en 1996; Peng, Vran\v{c}i\'c and Hanus
+1996, pending the approval batch]. In a dock the same idea appears as a blend: TRADY \cite{sugihara2023trady}
+ramps the thrust from the old controller's value to the new one's across the assembly and reduces the altitude
+jump sixfold. This thesis takes three measures of the same kind: the planner's new problem is warm-started from
+the measured state with the tensions free at its first node, so the first solve after a leave takes up the
+leaver's share without a prescribed step; an announced change is ramped; and a newcomer is folded in from a small
+starting tension, with every tension blended to the balanced solution for the new geometry
+(Section~\ref{sec:reconfig}). The throttle step at the switch of authority over a newcomer is measured as a
+validation metric (Section~\ref{sec:experiments}).
+
+\paragraph{Real-time iteration.} Nonlinear MPC in flight runs the real-time iteration scheme of Diehl et al.\
+\cite{diehl2002rti}: one Newton-type step per tick, warm-started from the previous solution, with the quadratic
+subproblem solved by a structure-exploiting solver \cite{frison2020hpipm, verschueren2022acados}. The scheme's
+accuracy rests on the previous solution being close to the next \cite{rawlings2017mpc}; a switch to a problem of a
+different size breaks that chain, since there is no previous solution of the new problem [Gros 2020, pending, on
+the convergence of the scheme from a cold start]. The solver for each team size is therefore built in advance and
+primed on the measured state before it flies, and the status of the first live solve after a switch, its
+residual and its distance from an offline solve of the same problem run to convergence are reported as the
+validation of the switch itself (Section~\ref{sec:experiments}).
+
+\paragraph{Runtime assurance.} A complex controller can be flown inside a simple safety envelope: the Simplex
+architecture runs a high-performance controller alongside a verified baseline and a monitor, and hands control to
+the baseline when the monitor trips [Sha 2001, pending the approval batch]. The fall-backs of this thesis are
+framed the same way (Section~\ref{sec:safety}): a newcomer that proves nothing is taken back and landed, a tilt
+over its limit cuts the newcomer's motors, a second loss or a ring tilt over 30$^\circ$ drops the ring and lands
+every vehicle, LAND lands every vehicle whatever it is doing, and at every instant exactly one controller owns
+each vehicle. In the multi-agent literature a system whose agents join and leave while it runs is an open
+multi-agent system [Hendrickx and Martin 2017; \c{S}ekercio\u{g}lu, De Carli and Dimarogonas 2026, pending], and
+the plug-and-play control of Section~\ref{sec:lit_team} is its control-side counterpart; what distinguishes a
+carried payload is that the agents are coupled through one rigid body, so a change of membership is also a change
+of plant.
