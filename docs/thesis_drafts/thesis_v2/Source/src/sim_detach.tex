@@ -75,9 +75,9 @@ where the magnet is switched off without telling the planner, which finds the de
 unannounced with a 150$^\circ$ gap left in the ring; and unannounced during the circle. Every detach landed with
 the three remaining UAVs still carrying the ring, and in the circle the planner held the path for 1.5\,s
 from the detection and then carried the ring on round it. The planner found the unannounced detaches 0.33--0.42\,s after the magnet was switched off, the magnet's
-own release time included. Against the twin (Figure~\ref{fig:rig_detach}) the unannounced detaches stayed
-within its spread in tilt and dipped about 1\,cm more; the single announced detach rose and dipped more than
-the twin, so whether the rig's announced release is systematically harsher is open.
+own release time included. Against the twin (Figure~\ref{fig:rig_detach}) the unannounced detaches rose 0.85 and 1.05 times the twin's tilt
+rise and dipped about 1\,cm more; the single announced detach rose 1.7 times the twin and dipped 2.5 times as far, so
+whether the rig's announced release is systematically harsher is open.
 
 \begin{table}[h]
 \centering
@@ -107,13 +107,14 @@ Circle, unannounced & 30/90/150/270 & 0.34\,s & 8.1$^\circ$ & 6.0--7.3$^\circ$ &
 the rig twin (grey band and line: two runs, nearly identical), aligned on the release (dotted). Announced: the
 planner releases the magnet and drops the UAV from its optimisation at once. Unannounced: the magnet is switched
 off without telling the planner, which finds the detach from the stretched rod (second dotted line, 0.33--0.42\,s
-after the release on the rig). (a--c) Ring tilt, the angle of the ring's normal from vertical; the labels give the
-rise of the peak above each trace's own mean over the 3\,s before the release, because the rig ring rocks
-2--5$^\circ$ in hover (ring swing and motion-capture noise the twin does not model) where the twin sits at
-1.5$^\circ$. (d--f) Ring height error, measured minus planned (negative: below). Announced: the rig rose
-11$^\circ$ against the twin's 6--7$^\circ$ and dipped 6.9\,cm against 2.6--3.0\,cm. Unannounced: the rig rose
-4$^\circ$ against 6$^\circ$ and 17$^\circ$ against 15--17$^\circ$, and dipped about 1\,cm more than the twin (3.7
-against 2.5--2.7\,cm; 5.8 against 4.5--4.8\,cm). Rig traces end at the fleet's LAND.}
+after the release on the rig). (a--c) The ring's tilt departure: the length of its tilt vector's difference from
+that vector's mean over the 5\,s before the release, so that the rig ring's own rocking in hover (1--1.4$^\circ$
+about its mean) is measured about the mean rather than added to the rise; the marker and label give the tilt rise
+$\Delta\theta$, the departure's peak from the release to LAND, with the twin cut at the rig flight's hold.
+(d--f) Ring height error, measured minus planned (negative: below). Announced: the rig rose 11$^\circ$ against the
+twin's 6--7$^\circ$ and dipped 6.9\,cm against 2.6--3.0\,cm. Unannounced: the rig rose 5$^\circ$ against 6$^\circ$
+and 17$^\circ$ against 15--17$^\circ$, and dipped about 1\,cm more than the twin (3.7 against 2.5--2.7\,cm; 5.8
+against 4.5--4.8\,cm). Rig traces end at the fleet's LAND.}
 \label{fig:rig_detach}
 \end{figure}
 
@@ -130,9 +131,9 @@ against 2.5--2.7\,cm; 5.8 against 4.5--4.8\,cm). Rig traces end at the fleet's L
 % the 7 Oct tests may be repeated once everything else works.
 \paragraph{The circle detach.} During the circle (Figure~\ref{fig:rig_circle_detach}) the planner found the
 unannounced detach 0.34\,s after the magnet was switched off, held the path for 1.5\,s while the three survivors
-took up the freed UAV's share, and then carried the ring on round the circle; the ring tilted 8.1$^\circ$ and dipped
-3.9\,cm, against 6.0--7.3$^\circ$ and 2.1--2.5\,cm in the twin, while the freed UAV cleared the circle and began
-its own landing 6.1\,s after the release.
+took up the freed UAV's share, and then carried the ring on round the circle; the ring's tilt rose 8.0$^\circ$ and it
+dipped 3.9\,cm, against 4.0--5.4$^\circ$ and 2.1--2.5\,cm in the twin, while the freed UAV cleared the circle and
+began its own landing 6.1\,s after the release.
 
 \begin{figure}[htbp]
 \centering
@@ -148,12 +149,14 @@ the freed UAV (red, with its path to LAND). 1: the release; 2: the freed UAV sta
 (b)--(d) The 2.5\,s before the release to 8\,s after it. (b) The planner's tension per UAV, labelled by plate: the
 freed UAV's (dashed) stays in the plan until the planner finds the detach from its stretched rod 0.34\,s after the
 release (dotted line) and drops it at its next logged tick (cross); the three survivors then share the ring at
-3.2--3.3\,N each, from 2.1--3.9\,N before. Grey band: the path held for 1.5\,s from the detection. (c) Ring tilt and
-(d) ring height error (measured minus planned): the rig (gold, one run) against the twin flying the same
-configuration (grey band and line: two runs, nearly identical). The twin's tilt peaks once, at 6.0--7.3$^\circ$
-0.4\,s after the release; the rig's spikes to 6.4$^\circ$ at the same time and peaks at 8.1$^\circ$ 1.0\,s after
-it, against up to 6.0$^\circ$ away from the release (dashed). The ring dips 3.9\,cm against the twin's
-2.1--2.5\,cm.}
+3.2--3.3\,N each, from 2.1--3.9\,N before. Grey band: the path held for 1.5\,s from the detection. (c) The ring's
+tilt departure, the length of its tilt vector's difference from that vector's mean over the 5\,s before the
+release, and (d) ring height error (measured minus planned): the rig (gold, one run) against the twin flying the
+same configuration (grey band and line: two runs, nearly identical). The twin's departure peaks once, at
+4.0--5.4$^\circ$ 0.4\,s after the release (cut at the rig's hold); the rig's spikes to 5.7$^\circ$ at the same time
+and peaks at 8.0$^\circ$, its tilt rise $\Delta\theta$, 1.1\,s after it. Dashed: the band of the rig's own rocking
+before the release, twice its standard deviation (4.7$^\circ$); the triangle marks where the rig's departure is back
+inside it for a second, 3.9\,s after the release. The ring dips 3.9\,cm against the twin's 2.1--2.5\,cm.}
 \label{fig:rig_circle_detach}
 \end{figure}
 
