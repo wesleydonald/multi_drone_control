@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Mon 12 Oct 2026, 02:03 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Mon 12 Oct 2026, 02:44 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and the "since the 8 Oct rig" page
 (https://claude.ai/artifact/QwgP2oPSknLyWZacvDuh5T; source `$CLAUDE_JOB_DIR/tmp/resource/m1_since_rig.html`).
 
@@ -56,17 +56,13 @@ Updated: Mon 12 Oct 2026, 02:03 AEDT (from `date`). Only what a new session need
     - Supported: hover attach, hover take-back, no-catch hover, LAND during the proof.
     - Not supported: the circle take-back and the push abort (R1654 rod 0.094 m).
     - Corr rows for R1638/1639/1641/1654 and card §6.3a are committed in 898f775.
-  - The batch is complete; R1638-R1678 are all scored and committed (f145897).
-    - Full M1 orbit R1656: no reattach (his ATTACH_READY lost alignment twice, then the give-up).
-    - Tilt claim: T0 x2 baseline; T1 x2, F6b x2, F6c x2, C1 x2, C2 x2 (to the tip-over, 9.2), C3 x2, N1, N2 support.
-    - R1662 and R1678 carry an inert TAKE_BACK at the cut (the frozen T1 falsifier reads literally as met).
-    - F1: R1672 clean. R1673 is a REAL tumble in his nominal flight right after takeoff (climbed to 1.82 m; the cut
-      caught it), so it falsifies F1 by the text.
-  - Reviewer on the tilt table: running. Its verdict goes into the morning report and any -corr rows. The tilt card
-    lives on rig-wed, which stays pinned, so the verdict goes into the card when the card moves to week5.
-  - Diagnostic (exploratory, `$CLAUDE_JOB_DIR/tmp/lab_diag.txt`, monitor bw2nizspa): R1679/R1680 m1c_nocatch_orbit
-    on 2 slots (lab load vs the wave-1 confound), then tc_f1_hover x1 alone (R1673's tumble).
-  - Then the morning report: docs/morning_report_2026-10-12.md.
+  - DONE 02:44. R1638-R1681 are scored and committed. Both reviewers' corr rows are in, and the combined verdict is
+    in card §6.3a.
+    - Combined: NOT SUPPORTED overall (hover lines supported).
+    - Tilt: T1 and F1 1 of 2, N3 between the bars; the rest supported (some with corrections).
+    - Two OPEN lines in decisions.md: the claim's way forward, and the take-back race after a cut.
+  - Morning report: docs/morning_report_2026-10-12.md (45630c0).
+  - Lab PC idle. No loop running.
 - Laptop: idle. No helper is running. The full M1 on the circle is recorded and cut (R1633, the 11th clean full M1):
   results/videos/full_M1_twin_R1633_orbit_edit.mp4 (2 min 56 s, captioned; raw: _wide, _circle, _plate9). The recorder
   is on the candidate (adaf2c5).
