@@ -34,7 +34,8 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 
 ## Running
 - Lab PC: idle. The W4/W5 bands are frozen (R1626, R1627; freeze doc §2.4).
-- Laptop: idle. No helper is running (W is done).
+- Laptop: idle. Running: rig-port critic round 2 part A on the candidate (critic agent, read-only; id a50e0e275b6798a55).
+  Its output goes under "## Critic" in m1-comove docs/experiments/2026-10-21_combined_m1_rig.md (round 1 is there now).
 - The other chat (thesis lane, Wesley's prompt) may be working in its own worktrees `mdc_wt/thesis-work` and
   `mdc_wt/desk-ext`. It must stay off the lab, the laptop simulations, the registry and this file. Its hand-back note
   is `docs/thesis_work_2026-10-11.md` on its branch. Copy its "decisions for the record" into decisions.md.
