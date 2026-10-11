@@ -728,15 +728,71 @@ I. **Bars and order.** *Rev 3:*
    begun.
 7. **R1474 and `_abort`.** *Rev 4:* R1474 cited; the pickup push world to build.
 
-### Round 4 (rev 10: the take-back that moves with the ring, TB13, TB16): placeholder
-To come before the build (plan step 9). The challenge goes here, then the response; no TB6 run before both.
-Points to press:
-- geometry and orbit phase (R1565 failed and R1566 passed on the same code);
-- the plan-versus-measured ring frame and its lag;
-- the escape height and the overflight under the decouple;
-- the ramp value and the stopping-point rule;
-- LAND, the clock freezing, and faults or the tilt cut during the co-move;
-- the welded start with newcomer_fault_land off;
-- far take-backs on a circle that keep today's path;
-- the rig's slack tether;
-- the bars and the TB14 definition.
+### Round 4 (rev 10: the take-back that moves with the ring, TB13, TB16): the challenge (critic, 11 Oct)
+Verdict: GO WITH CHANGES. Build m1-comove once F1, F2, F5, F6's tests and F9's latch rule are written into §3b; fly
+TB6 once F4's TB5 (10 deg sweep on a kinematic formation) has passed and F5's time bound is frozen; settle F3 and F8
+before any rig circle. The response (applied / rejected, with Wesley's answers) follows below.
+
+- **F1 (high) The far exemption keeps R1565's mechanism.** §3b calls a take-back "far" by its distance from the ring
+  centre (>= 1.2 m, 1.79 m with the ball) and keeps it world-fixed, but the circle is centred at hover + (0, 0.5): QUAD4's
+  mat is 0.90 m and his ball 1.49 m from the path centre against a swept edge of 1.2 (1.4 with QUAD4's rotor) m, so
+  "transit, pickup and mat are far" is false on the circle; a near latch at the pickup would co-move and climb with the
+  tip or ball still on the floor; a latch under the formation's footprint would rise into the ring; the orbit rule drops
+  c6f2032's "only when the tip is down at the ring". Change: classify orbit take-backs by zone: (a) outside r_clear from
+  the path centre (orbit radius + 1.0 m) or QUAD4's lowest point above the highest carrier + 0.15 m: world-fixed, today's
+  path with TB13; (b) rotors below the ring and its net (body < ring z - 0.3 m: his takeoff and pickup): land where it is,
+  no sideways move, no rise; (c) else: co-move; rise only when the tip is at the ring (his rejoin phases) or QUAD4 is
+  >= 0.9 m from the ring centre; under the footprint, descend instead. A unit test per zone; TB5 adds three latches (his
+  DESCEND_TO_PICKUP at the ring's nearest phase, his LIFT_OBJECT climb with the ball, his TRANSIT_TO_REATTACH descent);
+  TB6 adds m1x_land_pickup_orbit (falsifiers: a sideways move with the tip within 5 cm of the floor, any rise, a TB4
+  falsifier).
+- **F2 (high) The escape height guards against a sweep the geometry rules out, and costs on the rig.** At the decouple
+  QUAD4 is 1.2 m from the ring centre; the formation's edge plus QUAD4's rotor needs 0.9 m to touch it; the path-clear
+  move runs straight out from the path centre and always increases the gap; the ring can close at <= 0.125 m/s only
+  during ~1 s of brake (back-of-envelope: closest ring centre after the decouple ~1.09-1.2 m at every phase). In the ring
+  frame the circle is the hover geometry, which passed 4 of 4. The extra 0.34 m buys a higher fall beside carriers 1-2
+  (F6), a dangling magnet 0.15 m over a carrier body centre (not its props), unchecked mocap at 2.3 m toward +y, ~2.3 s
+  more co-moving. Change: c6f2032's rise on the orbit too (delete the escape height); freeze a TB5 bar: after the
+  decouple the ring centre stays >= 0.9 m from QUAD4 in xy at every phase of a 10 deg sweep; if a phase fails, the
+  decouple waits and the ring-frame step continues along the corridor to r_clear - 0.1 m (a longer step, not a higher
+  rise); B2 then unnecessary. If the escape height is kept: tip margin >= 0.25 m, overflight = rotor disc over rotor
+  disc (centres < 0.4 m), a bar on the gap to the carrier's prop plane, only while the trajectory clock can advance.
+- **F3 (high, rig) His takeoff against the circle.** In the twin his TAKEOFF fires at the start of our 5 s hover hold;
+  on the rig it is typed by hand after "our planner flies the ring": typed after the hold, the ring centre can pass
+  0.40 m from his mat (rim 0.175 m in xy at 1.0 m) while he climbs; his avoidance models drones as spheres, not the
+  ring. Change: on the rig circle his TAKEOFF before the orbit starts (a rig traj_hold_s long enough, or the hold ends on
+  his phase passing APPROACH_ABOVE_PICKUP); one twin neighbour with his takeoff 12 s into the orbit; measure the rig's
+  mat and puck against the swept disc.
+- **F4 (medium-high) TB5 cannot run as written; TB6's phase arms do not set the phase.** R1565's carriers are valid
+  ~1.8 s after the give-up; the 1/4-3/4 lap shifts run past the data; traj_hold_s shifts the orbit start but the give-up
+  time varies more. Change: TB5 on a kinematic formation (planned ring point + each carrier's ring-frame offset and lag,
+  fitted on a clean lap, residual <= 2 cm); keep R1565's c6f2032 reproduction; sweep the give-up phase in 10 deg steps;
+  each TB6 row records its give-up and decouple phase and compares its minimum clearance with TB5's prediction (a gap
+  > 5 cm voids the replay for the gate); keep the phase arms, labelled "uncontrolled phase".
+- **F5 (medium) "High and stuck" is not a bar; the decouple conditions are ambiguous.** "At the rise height" and "the
+  step out reached its goal" must be REFERENCE conditions (p_hold within 0.02 m, as today); measured ones let a z offset
+  hold off the decouple and the descent indefinitely. Change: write "reference"; a unit test with the measured z 5 cm
+  under the reference; a TB4 falsifier frozen now: QUAD4 not "down" within 60 s of the take-back; under LAND skip the
+  path-clear move once the step-out is done.
+- **F6 (medium) The fault text is wrong for the co-move.** _tilt_fault_cb acts only while the mux reads partner or cut;
+  once ours flies QUAD4 our tracker's envelope cuts the motors, then newcomer_fault_land lands the fleet (subtest) or an
+  emergency stop (welded start); QUAD4 falls from the rise height 0.43 m in xy from carriers 1-2; tilt_cut is off on
+  21-22 Oct. Any new co-move state must join the explicit lists in _tilt_fault_cb and _drop_departed. Change: rewrite the
+  Faults bullet; an H3 test (no drone-3 reference after a tilt fault in the race window); optional TB6 arm MOCAP_LOSS on
+  QUAD4 mid-rise on the circle (falsifier: anything but a fleet LAND with every carrier landed).
+- **F7 (medium, rig only) A magnet that does not let go turns the rise into a ring lift.** After a false reject the
+  take-back sends OFF, waits 0.5 s and rises 0.34-0.68 m; nothing checks the tip left the plate; the _nocatch arms never
+  make the joint. Change (Wesley's call): gate the rise beyond the tether's slack on plate 9 not following (plate rise
+  > 2 cm, or the tip not RELEASE_SEEN_M off the plate in the ring frame): hold in the ring frame, re-send OFF, LAND the
+  fleet; a unit test.
+- **F8 (medium) §6.3/§6.5 against the rules.** §6.5's split condition is consistent: keep it. The rig card §5.6 still
+  scores the old path and its §7 keeps the removed two-fails rule: its take-back section needs the co-move path, the TB4
+  bars, F5's time bound and a stop rule before R11a-circle. Add m1c_nocatch_hover_2 (TB13 changes every take-back).
+  Wednesday: a wand walk at the rise height along the plate-9 corridor and around r_clear toward +y; the rig props' tip
+  radius (sets the 0.2 m).
+- **F9 (low) Values.** The 0.3 m/s^2 ramp is 1.75 deg quasi-static against a 2 deg bar (0.25 m/s^2 = 1.46 deg; constants
+  are Wesley's); blend the decouple brake and the path-clear start into one bounded velocity change; compute the ring
+  frame from the PLANNED ring point at the latch tick (a test that c(t) is continuous); report the ring's yaw change.
+- **F10 (low) TB14.** "Tilt passing 60 deg within 1 s" needs a reference: "within 1 s after its tip first reaches the
+  floor (tip z <= 0.03 m)"; claim_checks produces the count from the frozen definition (the hand list 12 of 48 must
+  match).
