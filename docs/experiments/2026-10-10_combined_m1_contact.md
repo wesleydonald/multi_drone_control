@@ -264,8 +264,12 @@ changes.
   | TIP_AT_RING_BELOW_M | 0.15 m |
   | TIP_OVER_FLOOR_M | 0.1 m |
   | BALL_DIAM_M | 0.16 m |
-  | GUARD_PLATE_RISE_M | 0.02 m |
-  | GUARD_WAIT_S | 2.0 s |
+  | GUARD_PLATE_RISE_M | 0.02 m (the plate-rise failure threshold) |
+  | GUARD_WAIT_S | 3.0 s (was 2.0; critic round 2 A1) |
+  | GUARD_RISE_ABOVE_SLACK_M | 0.05 m (the guard height above slack; was 0.02 via GUARD_PLATE_RISE_M) |
+  | GUARD_STAGE_VEL | 0.06 m/s (guard stage only) |
+  | GUARD_SLACK_M | 0.12 m (the follow-down after a failed guard) |
+  | GUARD_PASS_S / GUARD_PLATE_AVG_S / GUARD_TIP_BODY_M | 0.1 s / 0.2 s / ±0.03 m (the debounce) |
 
   The tip-at-ring band, the brake, the gain, the ball and the guard's rise go beyond the critic's values. They are
   Wesley's to confirm.

@@ -14,7 +14,7 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
   |---|---|---|
   | m1-rig | `0210a27` | the rig port, contact_still on, the take-back rises |
   | m1-tiltcut4 | `de91ba2` | tilt cut, every switch off; the claim-tree fallback if TB6 fails |
-  | m1-comove | `986ac0a` | the candidate base: co-moving take-back (TB6 passed, flown from `c53ae0c`), m1-guard merged, the committed scorers (tools/m1_score.py) |
+  | m1-comove | `793183d` | the candidate base: co-moving take-back (TB6 passed, flown from `c53ae0c`), m1-guard, the scorers, m1-harden (critic round 2 changes) |
   | m1-guard | `84a3ad7` | merged into m1-comove (31d9c75): delete once the candidate is on week5 |
 
 - **Side branches:**
@@ -44,13 +44,9 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 ## Running
 - Lab PC: idle. The W4/W5 bands are frozen (R1626, R1627; freeze doc §2.4).
 - Laptop: idle. Critic round 2 done: GO WITH CHANGES for hover R11a/R11b (rig card ## Critic; answers in decisions.md).
-  Hardening done on branch m1-harden (worktree mdc_wt/m1-harden; b8af32e + ac85597 + a70b1ec docs):
-  - A1 guard +0.05 above slack and 3 s; A4 plate 9 from the weld point; A5 debounce;
-  - A3/A9 launch refusals (weld_point_z, attach_cable_len typed; orbit only typed);
-  - A7 his drop wait, now the switch drop_puck_wait_s (Wednesday item 11 decides).
-  The short critic pass: GO WITH CHANGES (rig card, round 2 follow-up). Findings 1-5 committed (fff090a).
-  Running: the same helper (a8ee7aec9fdaab456) applies Wesley's constants: GUARD_SLACK_M 0.12 and a 0.06 m/s cap in the
-  guard stage.
+  Critic round 2 changes are on the candidate: m1-harden merged as 793183d (205 planner tests, gate pass). Guard
+  constants: wait 3 s, +0.05 above slack, guard-stage speed 0.06 m/s, follow-down slack 0.12. Next: the smoke on the
+  candidate (lab), then the QUAD4 record loader.
   Then merge m1-harden into m1-comove, then the QUAD4 record loader and the smoke.
 - The other chat (thesis lane) finished 11 Oct; its work is merged (see above).
 
