@@ -14,8 +14,8 @@ Updated: Sun 11 Oct 2026, ~17:50. Only what a new session needs to act. History:
   |---|---|---|
   | m1-rig | `0210a27` | the rig port, contact_still on, the take-back rises |
   | m1-tiltcut4 | `de91ba2` | tilt cut, every switch off; the claim-tree fallback if TB6 fails |
-  | m1-comove | `0c5fc69` | the co-moving take-back; TB6 flown from `c53ae0c`; the replay clock fix |
-  | m1-guard | `84a3ad7` | rig release-guard failure: follow the ring down, LAND at the slack (max 2 s); merging into m1-comove (Wesley 17:55) |
+  | m1-comove | `31d9c75` | the co-moving take-back (TB6 passed, flown from `c53ae0c`), the replay clock fix, m1-guard merged (185 tests, gate pass): the candidate base |
+  | m1-guard | `84a3ad7` | merged into m1-comove (31d9c75): delete once the candidate is on week5 |
 
 - **Side branches:**
   - m1-score (= `0210a27`, nothing written): the committed scorers.
@@ -55,10 +55,9 @@ Updated: Sun 11 Oct 2026, ~17:50. Only what a new session needs to act. History:
 - The plan's D10-D17 and D21, and the thesis plan's D8-D16, all still open (see the plans).
 
 ## Next, in order
-1. Merge m1-guard into m1-comove (Wesley 17:55). Then run the tests and the gate there.
-2. S, the scorers into `tools/` on m1-score: REWELD keying, rod-segment clearance, overflight, tilt readouts, the
+1. S, the scorers into `tools/` on m1-score: REWELD keying, rod-segment clearance, overflight, tilt readouts, the
    tip_metrics torque fix. They must reproduce R1573, R1579 and R1581. Resume helper abbe240cb54198744 or start fresh.
-3. W, the Wednesday paperwork (Mon 12, for Wesley's review):
+2. W, the Wednesday paperwork (Mon 12, for Wesley's review):
    - the concise measurement items in `docs/rig_2026-10-14_commands.md`;
    - the magnet spring-scale hold at 0/30/45/60 deg, video, W4/W5 held 15-20 s;
    - freeze the release metrics, the ledger band rule and the W4/W5 bands (one lab run each, week4);
@@ -68,7 +67,7 @@ Updated: Sun 11 Oct 2026, ~17:50. Only what a new session needs to act. History:
      unflown, the 0.25 s pose timeout;
    - the Tejen note: kT gate, coil gate, supervisor stop, QUAD2 values, tilt cut, his transit freezing after a mocap
      glitch, his object magnet left ON in a take-back.
-4. Tue 13 desk rehearsal and load test. Wed 14 rig. Thu 15 gate and R10a. Fri 16: smoke on the candidate, name the SHA,
+3. Tue 13 desk rehearsal and load test. Wed 14 rig. Thu 15 gate and R10a. Fri 16: smoke on the candidate, name the SHA,
    joint claim batch. Then the reviewers, then week5. Tue 20 rehearsal. 21-22 Oct: hover only unless TB6 passed and
    the reviewer has signed off.
 
