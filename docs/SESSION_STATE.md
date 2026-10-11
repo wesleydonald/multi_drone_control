@@ -27,7 +27,7 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
   - Thesis lane (11 Oct, done; hand-back `docs/thesis_work_2026-10-11.md` on thesis-rig): thesis-work is
     fast-forwarded into thesis-rig; desk-ext is merged into rig-prep (`tools/admissibility_map.py`,
     `release_transient.py`, `mission_value.py`, outputs in `results/analysis/`).
-    - Their two worktrees and branches can go: `$CLAUDE_JOB_DIR/tmp/cleanup_thesis_lane.sh`, for Wesley to run.
+    - Their worktrees and branches were removed 11 Oct (Wesley).
     - Open for that lane: switch `release_transient.py` to the signed T6 tilt-vector form (freeze doc §1.1); the
       14 Oct spring-scale number goes into the bar paragraph.
 - **Archive tags** for superseded attempts that registry rows cite: archive/m1-tiltcut, archive/m1-e0, archive/m1-full,
