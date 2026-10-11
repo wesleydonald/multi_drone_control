@@ -117,9 +117,22 @@ full M1 R1573 and R1579 for the errand). Findings:
   continuity; it pays when the mission cannot pause (a moving payload, a crossing) or when the ground swap is
   slow.
 
+## 1b. Wesley's answers, 11 Oct ~17:30 (applied)
+- Zeng 2025 stays. Lv 2026 (T-ITS review), Liu 2026 (TNSE), Antal 2026 (RA-L) and Xu 2026 (ACC) approved and
+  placed (commit c698f9a); Fu 2026 not taken.
+- Into the main text: the leaver rule in Section 3.4, extended with what control still sets after a four-to-three
+  loss (the statics fix the survivors' vertical shares; the planner sets the margin through the layout, the timing
+  and ramp of the step, the rods' directions and the ring's path): written, in reconfiguration.tex. The
+  resize-equals-statics result and the gap scaling go into Section 4.2 with the leave prose from Fri 16 (numbers
+  in results/analysis/release_transient/table.md). The r0013 over-step goes into the magnet paragraph: drafted as a
+  comment block in sim_detach.tex before "The circle detach", worded "preceded", for the Fri 16 rewrite.
+- Not taken: the newcomer-beside-a-carrier remark and the mission-value sentence (they stay in this note and in
+  the desk-ext outputs).
+- The 7 Oct rig releases (r0012, r0013) are dropped from the thesis tables; r0013 is cited in the text as the
+  magnet case; Wesley may repeat the 7 Oct tests once everything else works. No twin pair is asked for.
+
 ## 2. What needs Wesley
-1. Approve Zeng 2025 in the bibliography (added beyond the brief because the corrected claim needs it), and the
-   five sweep candidates above for the approval batch (Lv 2026 review first).
+1. (answered above)
 2. The T6 metric definitions and the W4/W5 bands (plan P1/D4, Mon 12): the transient table and the bar
    paragraph switch to them once signed.
 3. The 14 Oct spring-scale magnet hold at 0/30/45/60 deg (plan D6): it is the one number the bar paragraph
@@ -130,7 +143,14 @@ full M1 R1573 and R1579 for the errand). Findings:
 5. The r0013 step (2.75 N against 1.61 static) as evidence in F11 "magnet anatomy": it says the planned step,
    not only the geometry, was large before the magnet let go.
 
-## 3. Decisions for the record (none new; the brief's stand)
+## 3. Decisions for the record (the other session copies these into docs/decisions.md)
+- 11 Oct (Wesley, ~17:30): the 7 Oct rig releases r0012 and r0013 are not tabulated in the thesis; r0013 is cited in
+  the text as the magnet release; the 7 Oct tests may be repeated later once everything else works.
+- 11 Oct (Wesley): the leaver rule (a four-carrier layout admits at most two leavers, 1/3/5/9 one; any-single-loss
+  tolerance needs five) goes into Section 3.4 together with what control still sets after a four-to-three loss;
+  the resize-equals-statics result and the gap scaling into Section 4.2; the r0013 over-step into the magnet
+  paragraph as a precedent. The newcomer-beside-a-carrier remark and the mission-value sentence are not used.
+- 11 Oct (Wesley): Zeng 2025, Lv 2026, Liu 2026 (TNSE), Antal 2026 and Xu 2026 approved for the bibliography.
 - 11 Oct: the planner-against-network question is a scope paragraph plus Appendix F (earlier plant), done in
   the draft; no port, no re-fly.
 - 11 Oct: Q1 and Q2 folded into RQ1 in the draft's headings; the estimator comparisons move to Appendix D with
@@ -139,10 +159,7 @@ full M1 R1573 and R1579 for the errand). Findings:
   after Quan et al.'s full text (13 s rebalance, no attitude) and Zeng et al. (plot, no number).
 
 ## 4. Twin runs wanted (asked, not run)
-- None are needed for the three analyses. One would help the ledger: the twin pair at r0012/r0013's settings
-  (planned pull, 45 deg plan, reference integral) on the rig candidate tree, so the 7 Oct rig rows get a twin
-  cell in the transient table; the plan's F11 note quotes 5.5 deg for the r0013 settings, so if that run
-  exists its id is enough.
+- None. Wesley dropped the 7 Oct rows from the thesis tables rather than fill their twin cells.
 
 ## 5. Scripts for Wesley
 Nothing to delete. Both worktrees stay until merged or declined: `git -C /home/wesley/multi_drone_control

@@ -63,6 +63,31 @@ plates at 30, 90, 150 and 270$^\circ$, and detaching the UAV at 90$^\circ$ leave
 which the ring hangs level. With an uneven layout the planner's nominal tensions come from a moment
 balance at the actual attachment points, so they are unequal and the payload's reference stays level.
 
+\paragraph{Which carrier may leave, and what control still sets.} The condition also says which carriers a
+layout can afford to lose, and it can be checked before a flight from the plate angles alone. Removing one
+carrier merges the two angular gaps on either side of it, and the four gaps of a four-carrier layout sum to
+$360^\circ$, so some pair of adjacent gaps sums to at least $180^\circ$: no four-carrier layout on the ring can
+lose an arbitrary carrier and still hang level, and a layout admits at most two leavers. The carry layout
+1/3/5/9 admits exactly one, the carrier at $90^\circ$, whose loss leaves an equilateral triple with the centre
+of mass $r\cos 60^\circ = 112$\,mm inside the nearest edge of the survivors' triangle; losing the carrier at
+$30^\circ$ or $150^\circ$ puts the centre on an edge, and losing the one at $270^\circ$ puts it 112\,mm outside.
+The layout 1/3/6/9 admits the same leaver with a $150^\circ$ gap and a 58\,mm margin. A team that must tolerate
+the loss of any one carrier therefore needs five, and a four-carrier layout is designed for a known leaver,
+which is what the rejoin mission does.
+% The numbers: tools/admissibility_map.py on desk-ext (results/analysis/admissibility/), from metrics.cog_margin
+% and the planner's balanced_tensions; 0 of the 495 four-plate layouts admits every leaver (11 Oct).
+
+Once the leaver has gone, what control can still set is bounded by the same statics. With three survivors the
+vertical shares are fixed by the layout: the vertical force balance and the two moment balances are three
+equations in the three tensions, so no controller can change how the ring's weight is shared, and the
+planner's first solve after the resize hands the leaver's share to the survivors as the static balance says
+(Section~\ref{sec:sim_detach}). What the planner does set is the margin, through the choice of layout and
+leaver before the flight; when and how fast the survivors take up the step, since an announced leave can be
+ramped while an unannounced one is taken up at the detection; the rods' directions, which fix the horizontal
+balance and where the survivors fly; and the ring's position and height through the transient. With four or
+more carriers the tensions have a one-parameter family of solutions and the planner takes the split closest to
+equal shares, so there a level ring can be held with more than one distribution.
+
 \paragraph{Landing after a detach.} Touchdown is judged on the survivors only, so a departed UAV still
 descending elsewhere does not hold their references down; a departed UAV is judged down at its own
 resting height, and the fleet is declared landed only when it is down too. The cable feedforward is
