@@ -384,3 +384,11 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   (abbe240cb54198744; worktree mdc_wt/m1-score may exist, nothing written). Running: T = m1-tiltcut4 merge
   (af849859a862934a7). Queue after T: R10 -> critic on rev 10 -> C (m1-comove) -> S -> W (Wednesday paperwork, Mon).
   The thesis workflow keeps running. Lab B0 keeps running (no tokens).
+- 13:45: THESIS PLAN docs/thesis_plan_2026-10-11.md adopted (spine RQ1 carry / RQ2 leave / RQ3 join, ledger 4.4);
+  DUE DATE 20 NOV (CLAUDE.md fixed); Wednesday adds: magnet spring-scale hold, video, W4/W5 15-20 s hold, freeze
+  release metrics + ledger bands first (Mon 12), no W4ff. Registry: correction rows R1517-corr..R1579-corr appended.
+  m1-tiltcut4 merge committed de91ba2 (tilt rev 4: landing rule for later runs, N1-N3, C3). Tilt B0 scored
+  (R1588-R1592: C1, T6, T7, T8 pass; T7b info). Tilt WAVE B running on m1-tiltcut4 (22 runs,
+  $CLAUDE_JOB_DIR/tmp/lab_waveb.txt). One helper at a time: R10 card rev 10 resumed (a3b113f14e6f929ef).
+  Queue after R10: critic on rev 10 -> helper C m1-comove (from m1-tiltcut4) -> S scorers -> W Wednesday paperwork
+  (incl. the thesis plan's Wednesday additions and the Mon 12 freeze of release metrics / W4/W5 bands).
