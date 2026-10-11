@@ -20,7 +20,16 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 - **Side branches:**
   - m1-score `986ac0a`: the scorers, fast-forwarded into m1-comove (delete once the candidate is on week5).
   - m1-rec and m1-video: the Gazebo recorder, to merge into the candidate.
-  - thesis-rig (worktree `mdc_wt/thesis`): the thesis draft.
+  - thesis-rig `67cb4df` (worktree `mdc_wt/thesis`): the thesis draft, now with the thesis lane's work.
+    - Literature corrected against Quan's full text and Zeng; the spine structure; Appendix F; the bar rationale;
+      the leaver rule in Section 3.4.
+    - Prose from Fri 16.
+  - Thesis lane (11 Oct, done; hand-back `docs/thesis_work_2026-10-11.md` on thesis-rig): thesis-work is
+    fast-forwarded into thesis-rig; desk-ext is merged into rig-prep (`tools/admissibility_map.py`,
+    `release_transient.py`, `mission_value.py`, outputs in `results/analysis/`).
+    - Their two worktrees and branches can go: `$CLAUDE_JOB_DIR/tmp/cleanup_thesis_lane.sh`, for Wesley to run.
+    - Open for that lane: switch `release_transient.py` to the signed T6 tilt-vector form (freeze doc §1.1); the
+      14 Oct spring-scale number goes into the bar paragraph.
 - **Archive tags** for superseded attempts that registry rows cite: archive/m1-tiltcut, archive/m1-e0, archive/m1-full,
   archive/combined-m1.
 - **Not ours to judge** (Wesley): time-cascade, safety-defaults, add-drone, backup/*, cable-payload-controller,
@@ -36,9 +45,7 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 - Lab PC: idle. The W4/W5 bands are frozen (R1626, R1627; freeze doc §2.4).
 - Laptop: idle. Running: rig-port critic round 2 part A on the candidate (critic agent, read-only; id a50e0e275b6798a55).
   Its output goes under "## Critic" in m1-comove docs/experiments/2026-10-21_combined_m1_rig.md (round 1 is there now).
-- The other chat (thesis lane, Wesley's prompt) may be working in its own worktrees `mdc_wt/thesis-work` and
-  `mdc_wt/desk-ext`. It must stay off the lab, the laptop simulations, the registry and this file. Its hand-back note
-  is `docs/thesis_work_2026-10-11.md` on its branch. Copy its "decisions for the record" into decisions.md.
+- The other chat (thesis lane) finished 11 Oct; its work is merged (see above).
 
 ## TB6 (co-moving take-back, m1-comove c53ae0c; card rev 10 §6.2): COMPLETE, passes its gate criteria
 - **All 11 support:** R1615-R1625. R1624 is read on the commanded path (Wesley ~16:20).
