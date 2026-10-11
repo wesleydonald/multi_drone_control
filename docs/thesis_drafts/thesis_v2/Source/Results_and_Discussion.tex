@@ -11,10 +11,17 @@
 % the appendices (rig diary, negative results).
 
 Each section answers one question of Table~\ref{tab:rq_map}: it opens with the question, its baseline
-and its bar, and closes with the answer. Section~\ref{sec:res_carry} answers Q1,
-Section~\ref{sec:res_steady} Q2, Section~\ref{sec:sim_detach} RQ1a, Section~\ref{sec:sim_attach} RQ1b and
-Section~\ref{sec:sim_architecture} RQ2; Section~\ref{sec:discussion} discusses the answers in the same
-order.
+and its bar, and closes with the answer. Section~\ref{sec:res_carry} answers RQ1 (carrying, with the steady
+payload errors in Section~\ref{sec:res_steady}), Section~\ref{sec:sim_detach} RQ2 and
+Section~\ref{sec:sim_attach} RQ3; Section~\ref{sec:ledger} keeps the ledger of what the twin predicted, and
+Section~\ref{sec:discussion} discusses the answers in the same order.
+
+\paragraph{Scope.} The project plan's secondary question, whether a decentralised dissipative network or the
+trajectory-based planner better balances robustness and tracking on the same plant and trackers, was
+answered on the earlier simulation plant (a 0.6\,kg disc and then the ring on 0.5\,m rods with a linear
+thrust map) before the rig twin existed. On that plant the planner was better in tracking, in detach and in
+attach, and the network is not re-flown on the twin: Appendix~\ref{sec:app_network} records the method, the
+comparison and the measured reasons. Every result in this section is the planner's.
 
 \input{Source/src/res_carry}
 
@@ -24,7 +31,7 @@ order.
 
 \input{Source/src/sim_attach}
 
-\input{Source/src/sim_architecture}
+\input{Source/src/ledger}
 
 \input{Source/src/discussion}
 

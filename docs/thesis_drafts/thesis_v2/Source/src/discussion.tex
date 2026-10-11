@@ -9,7 +9,7 @@
 This section discusses the answers in question order, then the role of geometry, the twin against the
 rig, the literature and the limitations.
 
-\paragraph{Q1: carrying with a fixed team.} The cascade carries the ring with all control on the ground and
+\paragraph{RQ1: carrying with a fixed team.} The cascade carries the ring with all control on the ground and
 the UAVs' firmware unchanged: a planner that re-solves the coupled payload--rod problem at 10\,Hz and trackers
 that send rate commands over the radio are enough at lab speeds. What limited the carry on the rig was not the
 plan but what the trackers were told about the rods. The plan assumes massless rods at their planned angle;
@@ -19,7 +19,7 @@ until each tracker used the pull it measures and the rods were planned at 60$^\c
 force inversion of \cite{tudelft}, and it lets a plan made centrally hold on hardware that the planner does
 not model exactly.
 
-\paragraph{Q2: steady errors in a re-planned cascade.} Re-solving from the measured state at every tick closes a
+\paragraph{RQ1: steady errors in a re-planned cascade.} Re-solving from the measured state at every tick closes a
 loop on the payload's position with no integrator, of stiffness about 5\,N/m horizontally and 7\,N/m vertically
 in the twin, so a force of half a newton moves the payload by 7--10\,cm and stays. The payload's offsets had four
 kinds of cause (Table~\ref{tab:error_sources}): a bias in the cascade itself (the tracker's relaxed initial
@@ -37,7 +37,7 @@ thrust map but upset the landings, and on the rig, flown since 7 October, it rem
 model integral had been learning (Section~\ref{sec:res_rig_integral}). Integral action in the planner then
 removes what remains.
 
-\paragraph{RQ1a: leave.} In simulation the answer is yes, with a condition: a detach by OCP resize
+\paragraph{RQ2: leave.} In simulation the answer is yes, with a condition: a detach by OCP resize
 redistributes the load in the first solve after the release, and the payload settles level within a few
 seconds, provided the survivors' attachment points still surround its centre of mass. The centralised planner
 knows the whole attachment geometry, so it does not have to discover the new load distribution from the motion
@@ -57,12 +57,12 @@ the planner need not be told of a loss in advance, on one run per condition.
 % of the answer are not yet in. Neither reconfiguration has been flown on the rig, and the attach
 % results come from the earlier simulation geometry, before the rig twin.
 
-\paragraph{RQ1b: join.} The attach has been flown only in the rig twin, and its weld transient is not yet
+\paragraph{RQ3: join.} The attach has been flown only in the rig twin, and its weld transient is not yet
 measured against its bar (Section~\ref{sec:sim_attach}). What the twin does show is that the parts around the
 weld work: the newcomer's measured-tip loop removes the error of an assumed rod length, and the fleet lands
 from every phase of an attach, except in some runs within 2\,s of the weld, where the twin's rigid rod, which
 the rig's tether does not have, tips the newcomer.
-\redo{RQ1b: the weld transient of an attach by OCP resize in the full rejoin mission (Section~\ref{sec:sim_attach}).}
+\redo{RQ3: the weld transient of an attach by OCP resize in the full rejoin mission (Section~\ref{sec:sim_attach}).}
 
 \redo{the attach's hand-over faults (mux authority on an armed but idle stream, the newcomer's starting tension, the frozen target, the weld gate's clock), restated once the attach has flown on the twin.}
 % --- original text, flown before the rig twin; kept to refill this place:
@@ -73,8 +73,8 @@ the rig's tether does not have, tips the newcomer.
 % speed in the wrong clock. A joining UAV is a hand-over problem as much as a control problem, and
 % each interface needed an explicit rule for who commands the UAV and when.
 
-\paragraph{RQ2: trajectory-based against dissipative.}
-\redo{the answer to RQ2 (trajectory-based planner against the dissipative network in tracking, detach and attach), rewritten from the re-flown comparison of Section~\ref{sec:sim_architecture}.}
+% The planner-against-network paragraph (the old RQ2) is a scope statement since 11 Oct: Appendix F
+% (Section~\ref{sec:app_network}); the earlier-plant summary stays in the comments below.
 % --- original text, flown before the rig twin; kept to refill this place:
 % \paragraph{RQ2: trajectory-based against dissipative.} On this system the trajectory-based planner was
 % better in every test: tracking, detach and attach. The dissipative network did as well as the

@@ -36,3 +36,21 @@ events (TAKEOFF, the push, DETACH, LAND) from the run's event log.
     \item[Solver health] The number of planner solves that failed or did not converge.
 \end{description}
 Each table cell is the mean over its runs, with the number of runs in brackets.
+
+% 11 Oct: the physical rationale for the bars (health check, item 3). The metric definitions themselves (the
+% tilt-vector rise over a 5 s pre-window, the post-event band, event times) are frozen on Mon 12 per the thesis
+% plan's T6 (P1, D4) and replace the detach item above once signed.
+\paragraph{Why these bars.} Three physical limits say what a transient may do to the ring, and the bars of the
+results sections sit inside them. The first is the magnets. A plate holds its magnet straight off the face by
+about 9--10\,N and by less under shear, so a tilt that turns a rod's pull across its plate can let a magnet go:
+every ring lost on the rig began with an uncommanded magnet release, all of them with the rods planned at
+45$^\circ$, and the rods are planned at 60$^\circ$ since 7 October so that each pull stays closer to its plate's
+axis (Section~\ref{sec:sim_detach}). [The hold against the angle of pull, measured with a spring scale at 0, 30,
+45 and 60$^\circ$ off the axis on 14 October, gives this limit its number.] The second is the fleet's own rule:
+a ring tilt over 30$^\circ$, or a second loss, drops the ring and lands every UAV (Section~\ref{sec:safety}), so
+30$^\circ$ is where the controller gives up, not a value to design to. The third is the model: the planner's
+load--rod model and each tracker's rod pull assume a near-level ring, so a transient that stays within a few
+degrees stays inside the regime the plan was computed for, and a transient that leaves it is being flown on a
+plan that no longer describes the ring. The bars are therefore stated as a rise above the ring's own motion
+before the event, small against the first two limits and inside the third, and every run is reported with its
+measured rise so that a run that misses a bar is still read against the limits rather than against a number.

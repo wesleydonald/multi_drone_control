@@ -9,7 +9,8 @@
 The second reference generator is a port of the decentralised dissipative controller of Quan et
 al.\ \cite{quan2025swarm}, adapted to rigid rods, a ring payload and the same trackers. It compares the
 two approaches of the literature on the same plant (RQ2), and a member leaving or joining is its native
-mode: it needs no new solver and no hand-designed redistribution when the team changes.
+mode: it needs no new solver and no hand-designed redistribution when the team changes. It was built and
+compared on the earlier plant and is kept here, not in the main text.
 
 \paragraph{The network.} Every UAV is a node of a virtual spring--damper network, as in the
 table-mechanics analogy of \cite{quan2025swarm}, with two further nodes pinned: the payload node at the
@@ -36,16 +37,10 @@ UAV $i$ is placed one rod length out from its own attachment point along the dir
     \qquad \mathbf{a}_i = \mathbf{p}_L^{\mathrm{des}} + R_\psi \boldsymbol{\rho}_i,
 \end{equation}
 where $R_\psi$ is the payload's measured yaw only. Every spring hangs off the node's own attachment
-point on the rim, not the payload's centre. The cone stays vertical; tilting it onto the effective
-gravity, as the planner's references do, is a variant of Section~\ref{sec:sim_architecture}.
-
-\redo{the network's cone drawn from the payload's centre against from each UAV's own attachment point on the rim (offline network test): whether the rods can reach the geometry.}
-% --- original text, flown before the rig twin; kept to refill this place:
-% where $R_\psi$ is the payload's measured yaw only. Every spring hangs off the node's own attachment
-% point on the rim, not the payload's centre. A cone drawn from the centre of a 0.5\,m ring asks for a
-% geometry the rods cannot reach, and the payload fell in the offline tests. The cone stays vertical:
-% tilting it onto the effective gravity of the commanded acceleration, as the planner's references do,
-% was tried and gave no benefit (Section~\ref{sec:sim_architecture}).
+point on the rim, not the payload's centre. A cone drawn from the centre of a 0.5\,m ring asks for a
+geometry the rods cannot reach, and the payload fell in the offline tests. The cone stays vertical:
+tilting it onto the effective gravity of the commanded acceleration, as the planner's references do,
+was tried and gave no benefit (Section~\ref{sec:sim_architecture}).
 
 \paragraph{Cable feedforward.} The trackers need the rod's pull, which the paper's velocity-commanded
 robots do not. With $m$ UAVs attached, each gets an equal share $\lambda_i = m_L g / (m \sin\phi_i)$ at

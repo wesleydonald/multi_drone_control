@@ -13,19 +13,19 @@ through the departure and the mid-flight arrival of individual UAVs, with a cent
 planner based on \cite{tudelft} and a cable-aware tracking MPC per UAV, flown on Betaflight UAVs over
 their radio links with motion capture as the only sensing.
 
-\paragraph{Q1: carrying with a fixed team.} On hardware, three and then four UAVs carried the 0.86\,kg ring
+\paragraph{RQ1: carrying with a fixed team.} On hardware, three and then four UAVs carried the 0.86\,kg ring
 to 1.0\,m, around a circle and through a figure-eight, within 3\,cm of the path on average once the
 trackers used the rod pull they measure. The remaining gaps to simulation, a low hover and a steady
 horizontal offset, have identified causes or candidate causes.
 
-\paragraph{Q2: steady accuracy.} Steady payload errors in the re-planned cascade come from sources that look
+\paragraph{RQ1: steady accuracy.} Steady payload errors in the re-planned cascade come from sources that look
 alike at the payload (the tracker's relaxed initial condition, a breakaway pull cap held for the whole flight,
 model errors and external forces), and each needed a different remedy. Integral action in the planner's model
 removed the steady error from external forces in all three axes in simulation, and on the rig the trackers'
 measured rod pull removed most of the force the integral had been learning. A per-UAV thrust error is a moment
 that only a per-UAV correction removes.
 
-\paragraph{RQ1a: leave.} Reconfiguration can be handled by resizing the planner's optimal control problem,
+\paragraph{RQ2: leave.} Reconfiguration can be handled by resizing the planner's optimal control problem,
 because the attachment geometry is a runtime parameter. In simulation a detach this way left the payload level
 within seconds, and on the rig it held the ring in all four flights, announced and unannounced, with peak tilts
 of 6.5--17.8$^\circ$.
@@ -41,14 +41,13 @@ must remain inside the polygon of the surviving attachment points, which chooses
 % --- original text, flown before the rig twin; kept to refill this place:
 %     (plates 1/3/5/9 for four UAVs) and explains several earlier failures.
 
-\paragraph{RQ1b: join.} The attach by OCP resize has so far been flown only in the rig twin, where the
+\paragraph{RQ3: join.} The attach by OCP resize has so far been flown only in the rig twin, where the
 newcomer's measured-tip loop parks its magnet within 1\,cm of its setpoint over the plate and the fleet lands from every phase of
 an attach, except in some runs within 2\,s of the weld, on the twin's rigid rod. Its weld transient, against a network attach and
 in the rejoin mission, and the attach on the rig are not yet flown.
 \redo{the payload transient of an attach by OCP resize in the full rejoin mission (original text under RQ1a above).}
 
-\paragraph{RQ2: trajectory-based against dissipative.}
-\redo{the comparison finding: trajectory-based planner against the dissipative network in tracking, detach and attach (Section~\ref{sec:sim_architecture}).}
+% The planner-against-network paragraph (the old RQ2) is a scope statement since 11 Oct: Appendix F.
 % --- original text, flown before the rig twin; kept to refill this place:
 %     \item On this system the trajectory-based planner outperformed the dissipative network in
 %     tracking, detach and attach. The network's advantages did not carry over to rigid rods and a

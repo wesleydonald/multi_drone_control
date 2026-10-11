@@ -1,67 +1,71 @@
-% contributions.tex -- research questions and contributions (draft 4 Oct 2026). Follows the
-% introduction. The contributions list what has been built and shown so far, and are to be trimmed to
-% what the final results support.
-% Restructured 9 Oct (structure audit): question -> section table, six contributions each naming
-% its evidence section, outline.
-% 10 Oct (Wesley): the questions of the structure audit's proposal replace RQ1 and RQ2 as they were
-% (Q1 carry, Q2 steady accuracy, RQ1a leave, RQ1b join, RQ2 trajectory-based against dissipative);
-% each results section opens with its question, baseline and bar and closes with its answer, and the
-% contributions follow the questions' order. The proposal's experiment labels E1-E4 are not used: no
-% other part of the thesis refers to them.
+% contributions.tex -- research questions and contributions.
+% 4 Oct draft; restructured 9 Oct (structure audit); 10 Oct Wesley's five questions.
+% 11 Oct: the adopted spine (docs/thesis_plan_2026-10-11.md, Wesley 13:40): RQ1 carry, RQ2 leave, RQ3 join;
+% the prediction ledger is Section 4.4, not a question; the planner-against-network question of the project
+% plan is a scope paragraph plus Appendix F. Contributions C1-C3 and method items M1-M2 from the plan's
+% section 2.4. Numbers that are still moving (the join claim table, flown Fri 16; the rig attach, 21-22 Oct)
+% are left as bracketed placeholders, per the plan: prose starts Fri 16.
 
 \subsection{Research Questions}
 \label{sec:rq}
 
-The research question of this thesis is whether a centralised controller can manage the join and
-leave transients of individual UAVs in a multi-UAV payload system while keeping the payload
-stable. The payload is a 0.86\,kg ring carried on rigid rods (Section~\ref{sec:hardware}). The
-controller is a cascade: a centralised planner solves an optimal control problem (OCP) for the
-payload and every rod, and a tracking controller per UAV follows its share of the plan. A UAV leaving
-or joining resizes the planner's OCP to the new team (the OCP resize, Section~\ref{sec:reconfig}); a
-joining UAV is called the newcomer. Two questions establish the carry with a fixed team, and three
+The research question of this thesis is whether a centralised controller can let a quadcopter leave or join
+a team that is carrying a payload in flight, and what sets the payload's transient when it does. The payload
+is a 0.86\,kg ring carried on rigid rods (Section~\ref{sec:hardware}). The controller is a cascade: a
+centralised planner solves an optimal control problem (OCP) for the payload and every rod, and a tracking
+controller per UAV follows its share of the plan. A UAV leaving or joining resizes the planner's OCP to the
+new team, a switch to a pre-built problem with the attachment geometry as a runtime parameter
+(Section~\ref{sec:reconfig}); a joining UAV is called the newcomer. One question establishes the carry, two
 test the reconfiguration.
 \begin{itemize}[leftmargin=3.6em, labelwidth=3.0em, labelsep=0.6em, align=left]
-    \item[\textbf{Q1}] \textbf{Carry.} Can the cascade carry the ring with a fixed team, from the floor,
-    on the rig?
-    \item[\textbf{Q2}] \textbf{Steady accuracy.} What leaves a steady payload error, and what removes it?
-    \item[\textbf{RQ1a}] \textbf{Leave.} Does a detach by OCP resize keep the payload level?
-    \item[\textbf{RQ1b}] \textbf{Join.} Does an attach by OCP resize fold a newcomer in with a small
-    transient?
-    \item[\textbf{RQ2}] \textbf{Trajectory-based against dissipative.} Does a trajectory-based optimal
-    control approach \cite{tudelft} or a decentralised dissipative control law \cite{quan2025swarm}
-    better balance robustness and tracking, on the same plant and trackers?
+    \item[\textbf{RQ1}] \textbf{Carry.} What does feeding the trackers the rod pull measured from motion
+    capture buy on unmodified Betaflight firmware, and which sources of steady payload error does the rig
+    expose that the twin does not?
+    \item[\textbf{RQ2}] \textbf{Leave.} When a carrier leaves in flight, what sets the ring's transient, and what
+    keeps the ring from being lost?
+    \item[\textbf{RQ3}] \textbf{Join.} What must be observed before a quadcopter flown by another controller is
+    admitted to a carried ring, and what does admission cost the ring?
 \end{itemize}
-Q1 and Q2 are the baseline for the other three: a reconfiguration can only be judged against a team
-that carries the payload well before anything changes. The working hypothesis is that the centralised
-approach suits a change of team composition, because the coordinating node can recompute the force
-distribution for the new team at the moment of the event, rather than relying on the remaining UAVs
-to absorb it passively.
+RQ1 is the baseline for the other two: a reconfiguration can only be judged against a team that carries the
+payload well before anything changes. The working hypothesis is that the centralised approach suits a change
+of team composition because the coordinating node solves for the force distribution of the team it actually
+has in the first tick after the event, instead of leaving the survivors to find it from the motion that
+follows. Beside the three questions, Section~\ref{sec:ledger} keeps a ledger of what the rig twin predicted
+for each rig flight before it flew, and by how much it missed.
 
-Table~\ref{tab:rq_map} gives the experiments behind each question, flown in the rig twin (a Gazebo
-simulation of the lab rig, Section~\ref{sec:simulation}) and on the rig, and the section that answers it.
+The project plan's secondary question, whether a decentralised dissipative control law \cite{quan2025swarm} or
+the trajectory-based OCP \cite{tudelft} better balances robustness and tracking on the same plant and
+trackers, was answered on the earlier simulation plant, before the rig twin existed, and is not re-flown:
+Appendix~\ref{sec:app_network} records that comparison and the measured reasons the planner was kept.
+
+Table~\ref{tab:rq_map} gives the experiments behind each question, flown in the rig twin (a Gazebo simulation
+of the lab rig, Section~\ref{sec:simulation}) and on the rig, and the section that answers it.
 
 \begin{table}[h]
 \centering
 \small
 \caption{The research questions, the experiments behind them and the sections that answer them.}
 \label{tab:rq_map}
-\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}Xl}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}Xl}
 \toprule
 Question & Experiments & Answered in \\
 \midrule
-Q1 Carry & Floor start, hover, circle, figure-eight and landing with three and four UAVs, in the rig twin
-and on the rig; LAND in every phase of a flight in the twin & Section~\ref{sec:res_carry} \\ \addlinespace
-Q2 Steady accuracy & Pushes on the ring, wrong model values, the breakaway cap and estimators from the
-literature in the twin; the model integral, the measured rod pull and the pull towards $-x$ on the rig &
-Section~\ref{sec:res_steady} \\ \addlinespace
-RQ1a Leave & Detach of one UAV of four by OCP resize: the layout, and against a hand-off to the
-dissipative network, in the twin; announced and unannounced, in hover and on the circle, on the rig &
-Section~\ref{sec:sim_detach} \\ \addlinespace
-RQ1b Join & Attach by OCP resize against a network attach; the newcomer's approach to its plate; the
-rejoin mission; in the twin, and the attach on the rig & Section~\ref{sec:sim_attach} \\ \addlinespace
-RQ2 Trajectory-based against dissipative & The planner against the dissipative network on the same plant
-and trackers, in tracking, detach and attach & Section~\ref{sec:sim_architecture} \\ \addlinespace
-All five against the literature & -- & Section~\ref{sec:discussion} \\
+RQ1 Carry & Floor start, hover, circle, figure-eight and landing with three and four UAVs, in the twin and on
+the rig; the trackers' planned against measured rod pull; the thrust map; pushes, wrong model values and the
+breakaway cap in the twin; the steady errors the rig showed and their remedies & Section~\ref{sec:res_carry} \\
+\addlinespace
+RQ2 Leave & Releases of one UAV of four on the rig, announced and unannounced, in hover and on the circle,
+with the uncommanded magnet releases in the record; in the twin the levers on the transient: where the
+survivors learn of the change, the ramp, when the resize comes, the support margin & Section~\ref{sec:sim_detach} \\
+\addlinespace
+RQ3 Join & The admission contract with the collaborator's controller: contact, a proven lift, confirmation
+from motion capture alone, the hand-over and the fold-in, in the twin; the take-back when nothing is proven;
+the attach on the rig & Section~\ref{sec:sim_attach} \\
+\addlinespace
+What the twin predicted & Every rig flight against the twin's band for it, frozen before the flight &
+Section~\ref{sec:ledger} \\
+\addlinespace
+All three against the literature & -- & Section~\ref{sec:discussion} \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -69,55 +73,49 @@ All five against the literature & -- & Section~\ref{sec:discussion} \\
 \subsection{Contributions}
 \label{sec:contributions}
 
-This thesis contributes the following, in the order of the questions they answer.
+Three claims and two method items, in the order of the questions.
 \begin{enumerate}
-    \item \textbf{A centralised payload controller flown on commercial-grade hardware.} The
-    load--cable planner of \cite{tudelft} is combined with a cable-aware tracking model predictive
-    controller (MPC) per UAV that commands Betaflight flight controllers over their radio links,
-    with no changes to the UAVs' firmware, a floor start for rigid rods, a pretension and lift
-    procedure, and a thrust map identified on the rig (Sections~\ref{sec:controller}, \ref{sec:tracker}
-    and~\ref{sec:takeoff}). On the rig, three and then four UAVs carried the 0.86\,kg ring at up to
-    1.0\,m, around a circle and through a figure-eight (Section~\ref{sec:res_carry}; Q1).
-    \item \textbf{An analysis of steady errors in the cascade.} Four sources of steady payload error
-    were separated (a relaxed initial condition in the tracker, a breakaway pull cap held for the whole
-    flight, model errors in thrust and rod mass, and external forces), and integral action in the
-    planner's model and estimators from the literature were compared against them
-    (Section~\ref{sec:res_steady}; Q2).
-    \item \textbf{Reconfiguration by resizing the optimal control problem.} The attachment
-    geometry is a runtime parameter of the planner, so a detach or an attach becomes a switch to
-    a pre-built solver for the new team size, with each UAV kept on its real attachment point
-    (Section~\ref{sec:reconfig}). On the rig the three remaining UAVs carried the ring on through four
-    detaches, announced and unannounced, in hover and on the circle (Section~\ref{sec:sim_detach}; RQ1a);
-    the attach is in Section~\ref{sec:sim_attach} (RQ1b).
-    \redo{OCP resize against handing the payload to a dissipative network during the transient, on a detach and on an attach.}
-% --- original text, flown before the rig twin; kept to refill this place:
-%     (Section~\ref{sec:reconfig}). In simulation this outperforms handing the payload to a
-%     dissipative network during the transient.
-    \item \textbf{A geometric condition for a level detach.} Whether the payload can stay level
-    after a UAV leaves depends on whether its centre of mass stays inside the polygon of the
-    surviving attachment points. This sets the attachment layout for four UAVs
-    (Sections~\ref{sec:reconfig} and~\ref{sec:sim_detach}; RQ1a).
-    \item \textbf{Mid-flight attachment of a new UAV.} A free UAV welds onto the carried payload
-    through an electromagnet and is folded into the planner, in combination with a collaborator's
-    approach controller (Section~\ref{sec:sim_attach}; RQ1b).
-    \redo{the full sequence in simulation: a UAV leaves, completes a pick-up task and rejoins while the team flies an orbit (the rejoin mission).}
-% --- original text, flown before the rig twin; kept to refill this place:
-%     approach controller. The full sequence (a UAV leaves, completes a pick-up task and rejoins
-%     while the team flies an orbit) is demonstrated in simulation.
-    \item \textbf{A comparison of the trajectory-based and dissipative approaches} on the same
-    plant, tracker and test cases, including the tracking architecture the dissipative method
-    assumes (Section~\ref{sec:sim_architecture}; RQ2).
-    \redo{the comparison itself (Section~\ref{sec:sim_architecture}).}
+    \item \textbf{C1. Carrying with a measured rod pull on unmodified Betaflight firmware (RQ1).} The
+    load--cable planner of \cite{tudelft} is combined with a cable-aware tracking model predictive controller
+    (MPC) per UAV that commands Betaflight flight controllers over their radio links, with one affine thrust map
+    identified on the rig for all four airframes, a floor start for rigid rods, and each tracker fed the rod pull
+    it measures from motion capture (Sections~\ref{sec:controller}, \ref{sec:tracker} and~\ref{sec:takeoff}). On
+    the rig four UAVs carried the 0.86\,kg ring around a circle and through a figure-eight within 3\,cm of the
+    path on average once the trackers used the measured pull and the rods were planned at 60$^\circ$, against
+    about 8\,cm before (Section~\ref{sec:res_carry}). The steady errors the rig exposed are separated by their
+    signature at the payload and their remedy.
+    \item \textbf{C2. The leave transient on hardware, and the levers that set it (RQ2).} Six commanded
+    releases on the rig: the three remaining UAVs carried the ring on through five, with peak tilts of
+    4.6--17.8$^\circ$, and unannounced releases were found from the stretched rod in 0.33--0.42\,s. Every ring
+    lost on the rig began with a magnet letting go, with the rods planned at 45$^\circ$. The resize at the event
+    is the static redistribution of the leaver's share, and the transient grows with that step and shrinks with
+    the support margin the leaver leaves behind (Section~\ref{sec:sim_detach}). A geometric condition, checkable
+    before a flight, says which carrier a layout may lose: a four-carrier layout admits at most two leavers and
+    never all four, so a team that must tolerate any single loss needs five (Section~\ref{sec:reconfig}).
+    \item \textbf{C3. An admission contract for a drone flown by another controller (RQ3).} The other
+    controller descends to contact, lifts by a set amount from the latched contact height and holds; this work
+    observes the contact and the lift from motion capture alone, switches the radio to its own tracker on the
+    same tick, folds the newcomer in from a small starting tension, and takes it back and lands it if nothing
+    is proven. [Twin claim table and its numbers: the joint claim batch of Fri 16 October, then the reviewer.
+    Rig: R11a and R11b, 21--22 October.] (Section~\ref{sec:sim_attach}).
+    \item \textbf{M1. Reconfiguration and authority.} Notice, re-plan, redistribute, fall back: the attachment
+    geometry as a runtime parameter with one pre-built solver per team size, primed before it flies; exactly
+    one owner per UAV at every instant, and a tested way down from every phase: the take-back, the tilt cut,
+    LAND for every UAV, landing the fleet on a newcomer fault, dropping the ring on a second loss or a tilt
+    over 30$^\circ$, and the freed UAV disarmed alone (Sections~\ref{sec:reconfig} and~\ref{sec:safety}).
+    \item \textbf{M2. The claim protocol and the prediction ledger.} Every claim is flown against a named
+    baseline with its bars frozen before the runs, on one code tree, and every rig flight is predicted by the
+    twin before it flies and scored afterwards; the ledger says what the twin gets right (the reactive release)
+    and what it structurally cannot (the magnet's hold, rotor wake, loop latency), and the simulator artefacts
+    that had to be found before the twin could be trusted (Sections~\ref{sec:experiments} and~\ref{sec:ledger}).
 \end{enumerate}
-% Cut 9 Oct (structure audit): two further items, "A simulation and verification environment that
-% mirrors the rig" (now Section~\ref{sec:experiments}) and "Hardware results" (its claim is folded
-% into item 1).
 
 \subsection{Outline}
 
 Section~\ref{sec:lit} reviews the literature and states the gap. Section~\ref{sec:method} describes the
-rig, its model, the controller, the floor start and landing, the reconfiguration, the dissipative
-alternative and the experimental method. Section~\ref{sec:results} answers the questions in the order of
-Table~\ref{tab:rq_map} and discusses them against the literature, and Section~\ref{sec:conclusion}
-concludes. The appendices hold the software, the parameters, the rig operations, the negative results
-and further tests, and the timeline.
+rig, its model, the controller, the floor start and landing, the reconfiguration and its authority rules,
+and the experimental method. Section~\ref{sec:results} answers the questions in the order of
+Table~\ref{tab:rq_map}, keeps the twin's ledger and discusses the answers against the literature, and
+Section~\ref{sec:conclusion} concludes. The appendices hold the software, the parameters, the rig
+operations, the negative results and further tests, the development timeline, and the dissipative network
+with its comparison on the earlier plant.

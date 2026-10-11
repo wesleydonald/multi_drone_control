@@ -1,3 +1,6 @@
+% 11 Oct: Q1 (carry) and Q2 (steady accuracy) are one question, RQ1, so this file is a subsubsection of the carry
+% section and its subsubsections are paragraphs; the estimator comparisons are to move to Appendix D with the
+% results rewrite from Fri 16; the error taxonomy (tab:error_sources) stays as the one table.
 % res_steady.tex -- Results 4.2: the steady payload error, rig and twin.
 % Assembled 9 Oct (structure audit) from sim_results.tex (tracker initial condition, disturbance
 % rejection, other approaches), controller.tex (the box's effect, the damping ratio), rig_results.tex
@@ -14,16 +17,16 @@
 % FIGURE TODO (thesis-figure skill): 1 Oct ring height vs time for H1/H2/C1/H5 with the cap and the
 % integral; tilt vs ring height; plan view of the -x drift with the rotation test.
 
-\subsection{Steady payload error}
+\subsubsection{Steady payload error}
 \label{sec:res_steady}
 
-This section answers Q2: what leaves a steady error in the payload's position, and what removes it?
+This part of RQ1 asks: what leaves a steady error in the payload's position, and what removes it?
 Each source below is set against the same flight without its remedy, which is its baseline: the tracker's
 relaxed initial condition, the breakaway cap held for the whole flight, and no integral action for forces
 and wrong model values. The bar is the ring back within 1\,cm of its target, the band used for the
 recovery times below.
 
-\subsubsection{The tracker's initial condition}
+\paragraph{The tracker's initial condition}
 \label{sec:res_ic}
 
 An earlier version of the tracker relaxed its initial condition to a box with $\epsilon = 0.025$
@@ -74,7 +77,7 @@ it cut the horizontal error on the circle and the figure-8 by about a factor of 
 landing, not from the box.
 
 
-\subsubsection{The breakaway cap}
+\paragraph{The breakaway cap}
 \label{sec:res_cap}
 
 On the rig on 1 October (Table~\ref{tab:rig_oct1}), without the height integral the ring held 5\,cm low at 0.5\,m, and at
@@ -92,7 +95,7 @@ together with the pinned initial condition: without an integral the ring then he
 % fix): breakaway at 80 %, hold 0.968 -> 0.929 m with no integral (registry). Was "This fix has not yet
 % been flown" (stale since 7 Oct).
 
-\subsubsection{External forces}
+\paragraph{External forces}
 \label{sec:res_force}
 
 A constant force was applied to the ring for 15\,s in hover: 0.6\,N downward, about the weight of a
@@ -169,7 +172,7 @@ motion-capture ground plane tilted by about 1$^\circ$, which would put a compone
 the controller's frame, or air moving in the room; a plumb-line check of the calibration comes first at the
 next session.
 
-\subsubsection{On the rig: the model integral and the measured rod pull}
+\paragraph{On the rig: the model integral and the measured rod pull}
 \label{sec:res_rig_integral}
 % Rig 7 Oct: RIG-1007-r0001 (no integral), r002 (model integral, planned pull), r20004 (model integral +
 % measured pull); planner log.csv; figure tools/thesis_rig_figures.py rig_integral. Circle/figure-eight sd from
@@ -199,7 +202,7 @@ design while the ring moves faster than 0.05\,m/s vertically.}
 \label{fig:rig_integral}
 \end{figure}
 
-\subsubsection{Wrong model values}
+\paragraph{Wrong model values}
 \label{sec:sim_robustness}
 
 The controller is given the payload's mass, the rod lengths, the attachment radius and each UAV's thrust
@@ -212,7 +215,7 @@ the integral, waiting for every rod to read taut, does not help. A 2\,cm error i
 no visible effect, and all 28 flights landed.
 % Detail, Table tab:robust and the rod-length redo box moved 9 Oct (page trim) to Appendix D.
 
-\subsubsection{Estimators from the literature}
+\paragraph{Estimators from the literature}
 \label{sec:sim_methods}
 % Sources: docs/overnight_2026-10-04.md (report table), registry R0841-R0955; notes 2026-10-03_*,
 % 2026-10-04_* (offset_free_mpc = A, offset_free_innovation, indi_fext, kt_trim, pin_cable_rates,
@@ -227,7 +230,7 @@ turned out to be the tracker's initial condition. Second, a wrong thrust map on 
 ring, and only a correction of that UAV's own force (the measured cable force) removes the tilt it causes;
 a force on the ring, estimated or integrated, can only move the whole formation.
 
-\subsubsection{Tilt and height}
+\paragraph{Tilt and height}
 \label{sec:res_tilt}
 
 On the rig the ring's tilt fell with its height. Over the first three flights of
@@ -237,7 +240,7 @@ Table~\ref{tab:rig_oct1} the ring's mean tilt fell from
 recirculation off the floor, and flying higher was the most effective single change for a steady
 ring.
 
-\subsubsection{Sources of steady error}
+\paragraph{Sources of steady error}
 
 Table~\ref{tab:error_sources} collects the sources found, how each shows at the payload and what
 removes it.
@@ -270,7 +273,7 @@ that UAV's own force (measured cable force) & \ref{sec:res_force}, \ref{sec:sim_
 \end{tabularx}
 \end{table}
 
-\paragraph{Answer to Q2.} Four kinds of source leave a steady payload error: a bias in the cascade (the
+\paragraph{Answer to RQ1, steady errors.} Four kinds of source leave a steady payload error: a bias in the cascade (the
 tracker's relaxed initial condition), a wrong belief passed between levels (the breakaway cap), model
 errors (the rods' mass, the payload's mass, one UAV's thrust map) and external forces; each needs its own
 remedy (Table~\ref{tab:error_sources}): pinning node~0 and releasing the cap remove the first two at

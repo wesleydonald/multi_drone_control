@@ -11,7 +11,7 @@
 \subsection{Detach}
 \label{sec:sim_detach}
 
-This section answers RQ1a: does a detach by OCP resize keep the payload level when one UAV of four
+This section answers RQ2: does a detach by OCP resize keep the payload level when one UAV of four
 leaves? The baseline is a hand-off of the payload to the dissipative network on the same detach, and for
 the geometry the even layout; the bar is the ring's tilt back under the hover's own maximum plus
 0.5$^\circ$ (Table~\ref{tab:detach}).
@@ -65,38 +65,9 @@ the tensions are planned, since the rig twin does not measure them.}
 \label{fig:detach}
 \end{figure}
 
-\paragraph{OCP resize against network hand-off.}
-\redo{OCP resize against network hand-off on the same detach, four UAVs to three during a circle (and in hover): settled payload tilt and the survivors' tracking error; with it the network's hand-back to the planner, with and without the two fixes (no soft-start restart on an airborne hand-back, solver primed before it flies).}
-% --- original text, flown before the rig twin; kept to refill this place:
-% \paragraph{OCP resize against network hand-off.} Table~\ref{tab:detach_ab} compares the two detach
-% methods of Section~\ref{sec:reconfig} on the same flight: four UAVs flying a circle, one released
-% mid-way. The flights used an early payload (0.4\,kg, 0.5\,m cables, circle at 0.6\,m/s). With the OCP
-% resize the payload settled level and the survivors kept tracking their references. With the network
-% hand-off the payload settled tilted by 26--48$^\circ$, and the survivors were 0.06--0.91\,m off their
-% references while the network redistributed the load. Two fixes were needed for the network sequence
-% to hand back to the planner at all: the feedforward soft-start must not restart on an airborne
-% hand-back, and the new solver must be primed before it flies. Without them the payload dropped to
-% 0.07\,m above the floor after the detach; with them it stayed above 0.46\,m.
-%
-% \begin{table}[h]
-% \centering
-% \caption{Detach from four UAVs to three during a circle, Gazebo, early payload (0.4\,kg).}
-% \label{tab:detach_ab}
-% \begin{tabular}{lcc}
-% \toprule
-%  & OCP resize & Network hand-off \\
-% \midrule
-% settled payload tilt & about 1$^\circ$ & 26--48$^\circ$ \\
-% survivor tracking error & about 1\,mm & 60--910\,mm \\
-% \bottomrule
-% \end{tabular}
-% \end{table}
+% moved to the appendix on the dissipative network (earlier plant), 11 Oct.
 
-\redo{the same comparison on a plant that matches the controller's model (the software-in-the-loop bench, once it flies the twin), hover and circle: payload tilt after the detach with the network against the OCP resize.}
-% --- original text, flown before the rig twin; kept to refill this place:
-% On the 0.86\,kg ring the gap widened. In the software-in-the-loop bench the network aborted the
-% flight at 53--61$^\circ$ of payload tilt after a detach, both in hover and in the circle, while the
-% OCP resize held the survivors level to within 0.5--2$^\circ$.
+% moved to the appendix on the dissipative network (earlier plant), 11 Oct.
 
 \paragraph{On the rig.}\label{sec:res_detach_rig} The detach was flown on the rig on 8 October in four flights
 (Table~\ref{tab:rig_oct8}): announced, where the planner releases the magnet and resizes at once; unannounced,
@@ -231,7 +202,7 @@ a detach that would leave fewer than three UAVs.
 % --- original text, flown before the rig twin; kept to refill this place:
 % In the bench the payload capsized. The planner refuses a detach that would leave fewer than three
 
-\paragraph{Answer to RQ1a.} Yes, as far as it has been flown: in the twin a detach by OCP resize brought the
+\paragraph{Answer to RQ2.} Yes, as far as it has been flown: in the twin a detach by OCP resize brought the
 ring back within its hover band in 0.9--1.0\,s, and on the rig the three remaining UAVs carried the ring on
 through all four detaches, announced and unannounced, in hover and on the circle, with peak tilts of
 6.5--17.8$^\circ$, the largest with a 150$^\circ$ gap left in the ring; the layout study and the comparison

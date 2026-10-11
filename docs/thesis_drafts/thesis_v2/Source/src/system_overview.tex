@@ -52,7 +52,7 @@ The system has three layers.
     and the lift), the trajectory, LAND, and the reconfiguration events DETACH and ATTACH
     (Section~\ref{sec:reconfig}).
 \end{description}
-\paragraph{Safety.} Every tracker checks its own UAV against a flight envelope (tilt and payload tilt
+\paragraph{Safety.}\label{sec:safety} Every tracker checks its own UAV against a flight envelope (tilt and payload tilt
 both 60$^\circ$, speed 3\,m/s) and checks that its motion-capture pose (0.25\,s) and the planner's
 reference (1\,s) are fresh. Any violation disarms the whole fleet, not the one UAV: a single UAV losing
 thrust on a shared rigid payload drags the others with it. The exceptions are UAVs that are not on the payload: a fault on a newcomer
