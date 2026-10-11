@@ -48,8 +48,13 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
   - A1 guard +0.05 above slack and 3 s; A4 plate 9 from the weld point; A5 debounce;
   - A3/A9 launch refusals (weld_point_z, attach_cable_len typed; orbit only typed);
   - A7 his drop wait, now the switch drop_puck_wait_s (Wednesday item 11 decides).
-  Running: the short critic pass on that diff (id a78e3b824666dffb9). Then merge m1-harden into m1-comove, then the QUAD4
-  record loader and the smoke.
+  The short critic pass: GO WITH CHANGES (rig card, round 2 follow-up). Running: the same helper (a8ee7aec9fdaab456)
+  applies findings 1-5:
+  - the rod-length cross-check;
+  - the timeout reason;
+  - tests for the follow-down transient and the held-coil plate rise;
+  - the tip0 reset.
+  Then merge m1-harden into m1-comove, then the QUAD4 record loader and the smoke.
 - The other chat (thesis lane) finished 11 Oct; its work is merged (see above).
 
 ## TB6 (co-moving take-back, m1-comove c53ae0c; card rev 10 §6.2): COMPLETE, passes its gate criteria
