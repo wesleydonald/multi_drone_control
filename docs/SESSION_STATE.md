@@ -370,3 +370,12 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   claim re-fly on m1-rig with contact_still on + the co-moving take-back; the reviewer; tilt wave B (F6b decides H1/F6a);
   tell Tejen (draft note); ramped take-back hold.
 - Claim on c6f2032 (R1565-R1579): 11/12 core arms pass; R1565 circle take-back fails. Full M1: 9 clean runs.
+- 13:10: PLAN docs/plan_m1_remaining_2026-10-11.md (f3a2ee3); Wesley's answers in decisions.md (12:50): co-move only
+  (no fallback; hover-only rig if TB6 not passed by Thu 15), switches split, fly H1/F6a/F6a2, D19 ramp, D20 orbit
+  refusal, D4 bars first, week4 untouched -> new branch week5 for next week's tested work. CLAUDE.md locked line added.
+  Tilt wave A scored (R1580-R1587): T1 2/2, F6c 2/2, T0 baseline 2/2 as expected, F6b 0 clean of 2 (R1582 landing
+  tip-over; R1586 his transit froze after the injected attitude). Running now: lab batch B0 on m1-tiltcut3
+  (C1, T6, T7, T7b, T8; $CLAUDE_JOB_DIR/tmp/lab_b0.txt); helpers: T = m1-tiltcut4 merge + tilt rev 4 (worktree
+  mdc_wt/m1-tiltcut4), R10 = card rev 10 draft (main tree card), S = scorers into tools/ (worktree mdc_wt/m1-score);
+  thesis workflow wf_d29adf9f-262 (task w42da2lbx). Next per the plan: critic on rev 10, then m1-comove (helper C)
+  from m1-tiltcut4; wave B on m1-tiltcut4; Wednesday paperwork (Mon).
