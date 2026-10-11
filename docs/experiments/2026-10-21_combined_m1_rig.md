@@ -40,8 +40,14 @@ Between flights: relaunch T2, his nodes come with it (`partner_nodes:=true`).
 ## 4. The command (QUAD4 values from the record; R = contact radius, L = taut length)
 ```bash
 $A partner:=true partner_contact:=true partner_nodes:=true weld_radius:=R proof_taut_len:=<L-0.003> \
-   partner_args:='magnet_drop_below_quad:=<L> mpc_thrust_ratio:=<kT> [contact_dz:=0.03]' r11a
+   weld_point_z:=<W> attach_cable_len:=<L-0.04> \
+   partner_args:='magnet_drop_below_quad:=<L> mpc_thrust_ratio:=<kT> [contact_dz:=0.03] [drop_puck_wait_s:=0]' r11a
 ```
+**The values the launch now refuses untyped** (critic round 2 A3):
+- `weld_point_z` = W, the contact height from Wednesday 09:00 item 3.
+- `attach_cable_len` = L - 0.04 (QUAD4's rod; the pivot sits 4 cm below the body). The release guard's tip-to-body
+  check allows 3 cm either side of it: typed wrong by more than that, every real release times out and the fleet lands.
+- `drop_puck_wait_s:=0` only if Wednesday's item 11 showed the puck is not seen in the net.
 Order: his ARM (`/tejen/drone_command ARM`, QUAD4 armed idle on its mat) -> `fleet arm` -> `fleet takeoff` -> the ring
 at 1.0 m (T2: `our planner flies the ring`) -> his TAKEOFF. End of every flight: `fleet disarm` and his DISARM.
 
@@ -115,6 +121,8 @@ and lands, and the run is scored on the other bars.
   emergency, because a coil that holds plate 9 under LAND tilts the ring (critic round 2 A2).
 - After LANDED, if drone 4's mux still reads partner, clear the cage and press DISARM. This is accepted in writing by
   Wesley, 11 Oct (F6).
+- Known, not fixed for 21-22 Oct (with A2): right after a failed guard's LAND, the slack target sits up to 1.7 cm
+  above taut for ~0.5 s while the ring steps to its landing speed. A coil that still holds briefly tugs plate 9.
 - Any falsifier in 5.1, 5.6 or 5.7: no more combined flights today.
 - QUAD4 frozen more than 5 s outside a hold phase: LAND (F1).
 - A pose gap over 0.1 s on 14 / 24 / 8 with QUAD4 overhead ends M1 for the day.
