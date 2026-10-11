@@ -352,3 +352,21 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   removed from CLAUDE.md. c6f2032 claim done (R1565-R1579): 11/12 core arms pass, R1565 circle take-back fails;
   full M1 9 clean runs. Tilt wave A on the lab (R1580-R1587): T1 R1581 passes every bar. ULTRACODE planning workflow
   wf_e76df7b1-616 (task wo4a331p1) is drafting the plan for the rest (Wesley asked).
+
+## 11 Oct ~12:40 (before a compaction; loop STOPPED, Wesley at the machine)
+- Running (background, survive compaction): (1) workflow wf_e76df7b1-616 (task wo4a331p1) "m1-remaining-work-plan":
+  the execution plan for the rest of the combined M1; (2) workflow wf_d29adf9f-262 (task w42da2lbx)
+  "thesis-direction-and-document-plan": thesis direction + chapter-by-chapter document plan + critique (read-only);
+  (3) tilt wave A on the lab (lab_tc_a2.sh, $CLAUDE_JOB_DIR/tmp/lab_tc_a2.txt; m1-tiltcut3 ffa41ef): R1580 T0 baseline
+  (logged), R1581 T1 PASS (logged), R1583 F6c PASS (logged); R1582 F6b and R1584-R1587 (T0, T1, F6b, F6c repeats)
+  still to score with $CLAUDE_JOB_DIR/tmp/score/tilt_row.py. When the workflows finish: save their final plans to
+  docs/ (rig-prep) and present them to Wesley.
+- Trees: m1-rig 0210a27 (contact_still default ON; c6f2032 take-back rises over the carriers) = the claim + rig tree;
+  m1-tiltcut3 ffa41ef (tilt cut, older base: re-merge m1-rig before its claim arms count).
+- Wesley's decisions today: circle take-back MOVES WITH THE RING (to build: card + critic, then twin); contact_still
+  ON (done); Wednesday sheet: concise measurement items for his review (to do); tilt-cut arms fly; stop-after-two-fails
+  rule removed from CLAUDE.md.
+- To do (not started): the co-moving take-back; Wednesday measurement items in docs/rig_2026-10-14_commands.md; the
+  claim re-fly on m1-rig with contact_still on + the co-moving take-back; the reviewer; tilt wave B (F6b decides H1/F6a);
+  tell Tejen (draft note); ramped take-back hold.
+- Claim on c6f2032 (R1565-R1579): 11/12 core arms pass; R1565 circle take-back fails. Full M1: 9 clean runs.
