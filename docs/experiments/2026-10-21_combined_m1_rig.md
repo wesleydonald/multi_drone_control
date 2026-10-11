@@ -252,3 +252,20 @@ Wednesday measurements: weld_point_z x3 re-seated; contact radius from >= 10 han
   fleet action on the rig is the guard's LAND.
 - **The §4 launch line:** missing `weld_point_z`, QUAD4's `attach_cable_len`, `mpc_cable_length` and
   `anchor_offset_z`.
+
+### Round 2 follow-up: the hardening diff (m1-harden b8af32e + ac85597, 11 Oct evening), condensed
+**Verdict:** GO WITH CHANGES; merge into m1-comove. Findings 1, 2 and 5 land before 21-22 Oct; 3 and 4 are tests
+before Friday's claim. Each change does what A1/A3/A4/A5/A7/A9 asked, and nothing new cuts QUAD4. The twin is unaffected.
+`drop_puck_wait_s:=0` restores his old path exactly. A give-up at the drop is safe: his magnet goes NONE, our span has
+not begun, and our take-back flies the hover path.
+
+| # | severity | finding | fix |
+|---|---|---|---|
+| 1 | medium | The tip-to-body band is centred on `attach_cable_len` + 0.04 (derived), never checked against the measured taut length (`proof_taut_len` + 0.003). A mismatch over ~2 cm makes every no-contact take-back with the tip on the plate time out and land the fleet. | Launch only: refuse when \|attach_cable_len - pivot_offset_z - (proof_taut_len + 0.003)\| > 0.01. Also check against `magnet_drop_below_quad` when it is in partner_args. |
+| 2 | low-medium | Every timeout logs "tip has not left plate 9", whether the tip really held, the ring or the tip pose was stale, or the band missed. | Count ticks per cause and print them in the error line. |
+| 3 | low-medium | The follow-down's slack is now the designed 5 cm (it was ~7 cm by accident). At LAND the reference can lag the ring's step by up to 0.2^2/(2*0.25) = 8 cm, so a held coil goes taut for a moment. The follow test only checks after 2.7 s. | Assert the reference stays at or below plate + taut over the whole follow, with the lag model. If that fails, ask Wesley for GUARD_SLACK_M ~0.08. |
+| 4 | low | A held coil may lift plate 9 ~4.5-5 cm before the 2 cm check reacts (was ~3-3.5 cm): the reference now aims 0.10 m over taut. | A held-coil test that bounds the peak rise. Over 5 cm: slow the guard stage's speed, don't lower the height. |
+| 5 | low | `tip0` is latched at the take-back, before the hold. | Reset it when the guard starts. |
+
+**Nits:** GUARD_PASS_S and GUARD_PLATE_AVG_S are 2-3 planner ticks at 10 Hz. DETECT_STALE_S equals one planner
+period. Twin params.json carries NaN for the weld point. weld_point_z refuses only 0, with no range check.
