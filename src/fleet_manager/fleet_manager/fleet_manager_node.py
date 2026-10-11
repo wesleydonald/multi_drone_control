@@ -228,6 +228,8 @@ class CentralController(Node):
             i: self.create_publisher(ELRSCommand, f'/drone_{i}/ELRSCommand', 1)
             for i in range(self.num_drones)
         }
+        # latched: fleet_reach, preflight and rig_flight hear the manager on a fresh launch, before any fleet event
+        _announce(self, 'info', f'Fleet manager up: {self.num_drones} drones, waiting for ARM.')
     # ─────────────────────────────────────────────────────────────────────
     # Timer - master step broadcast
     # ─────────────────────────────────────────────────────────────────────

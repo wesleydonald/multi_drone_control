@@ -61,7 +61,7 @@ def _detect_repo_root():
     d = here
     while True:
         if (os.path.isdir(os.path.join(d, 'src'))
-                and os.path.isdir(os.path.join(d, '.git'))):
+                and os.path.exists(os.path.join(d, '.git'))):     # a git worktree's .git is a file
             return d
         parent = os.path.dirname(d)
         if parent == d:          # reached /
