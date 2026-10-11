@@ -14,11 +14,11 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
   |---|---|---|
   | m1-rig | `0210a27` | the rig port, contact_still on, the take-back rises |
   | m1-tiltcut4 | `de91ba2` | tilt cut, every switch off; the claim-tree fallback if TB6 fails |
-  | m1-comove | `31d9c75` | the co-moving take-back (TB6 passed, flown from `c53ae0c`), the replay clock fix, m1-guard merged (185 tests, gate pass): the candidate base |
+  | m1-comove | `986ac0a` | the candidate base: co-moving take-back (TB6 passed, flown from `c53ae0c`), m1-guard merged, the committed scorers (tools/m1_score.py) |
   | m1-guard | `84a3ad7` | merged into m1-comove (31d9c75): delete once the candidate is on week5 |
 
 - **Side branches:**
-  - m1-score (= `0210a27`, nothing written): the committed scorers.
+  - m1-score `986ac0a`: the scorers, fast-forwarded into m1-comove (delete once the candidate is on week5).
   - m1-rec and m1-video: the Gazebo recorder, to merge into the candidate.
   - thesis-rig (worktree `mdc_wt/thesis`): the thesis draft.
 - **Archive tags** for superseded attempts that registry rows cite: archive/m1-tiltcut, archive/m1-e0, archive/m1-full,
@@ -55,9 +55,7 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 - The plan's D10-D17 and D21, and the thesis plan's D8-D16, all still open (see the plans).
 
 ## Next, in order
-1. S, the scorers into `tools/` on m1-score: REWELD keying, rod-segment clearance, overflight, tilt readouts, the
-   tip_metrics torque fix. They must reproduce R1573, R1579 and R1581. Resume helper abbe240cb54198744 or start fresh.
-2. W, the Wednesday paperwork (Mon 12, for Wesley's review):
+1. W, the Wednesday paperwork (Mon 12, for Wesley's review):
    - the concise measurement items in `docs/rig_2026-10-14_commands.md`;
    - the magnet spring-scale hold at 0/30/45/60 deg, video, W4/W5 held 15-20 s;
    - freeze the release metrics, the ledger band rule and the W4/W5 bands (one lab run each, week4);
@@ -67,7 +65,7 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
      unflown, the 0.25 s pose timeout;
    - the Tejen note: kT gate, coil gate, supervisor stop, QUAD2 values, tilt cut, his transit freezing after a mocap
      glitch, his object magnet left ON in a take-back.
-3. Tue 13 desk rehearsal and load test. Wed 14 rig. Thu 15 gate and R10a. Fri 16: smoke on the candidate, name the SHA,
+2. Tue 13 desk rehearsal and load test. Wed 14 rig. Thu 15 gate and R10a. Fri 16: smoke on the candidate, name the SHA,
    joint claim batch. Then the reviewers, then week5. Tue 20 rehearsal. 21-22 Oct: hover only unless TB6 passed and
    the reviewer has signed off.
 
@@ -77,9 +75,9 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
   - Each batch runs from a script in a fresh `env -i` shell that sources ONE install (copy
     `$CLAUDE_JOB_DIR/tmp/lab_tb6.sh`). Two installs in one shell break the launch argument check.
   - Start it detached with `setsid nohup`. Kill exact PIDs only: `pkill -f` matches its own shell.
-- **Scorers** (`$CLAUDE_JOB_DIR/tmp/score/`): `tb6_score.py` + `tb6_rows.py` (source the m1-comove install for TB5);
-  `claim_row.py` (env TREE, REV; it prints date 10 Oct, so fix the date); `tilt_row.py`; `contact_score.py` keys on
-  WELD (the full M1 logs REWELD).
+- **Scorers:** `tools/m1_score.py claim|full|takeback|tilt RUN --rev N [--check]` and `tools/m1_score.py tb14
+  R1479-R1578` (in m1-comove / m1-score). Source that tree's install. It prints one LF row; append it yourself.
+  The old ephemeral scorers in `$CLAUDE_JOB_DIR/tmp/score/` are retired.
 - **Registry:** back it up, append, then diff the old lines.
 - **Untracked files:** `general/CLAUDE.md`, `.claude/agents/*` and `.claude/workflows/*` are local and untracked. Edit
   them in place and never `git add` them.

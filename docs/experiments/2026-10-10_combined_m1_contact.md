@@ -395,10 +395,14 @@ the swept disc, so it never overflies a carrier.
   - The circle fails: R1565 (and R1543 / R1549 / R1554 on earlier trees).
   - Hover passes: R1553, R1562, R1567, R1570.
   - The transit tilt step is 4.4-4.7 deg: R1495, R1524, R1542.
-- **Rev 10 scoring:** the committed scorers in tools/ (plan step 8, worktree m1-score: claim_row, contact_score and
-  claim_checks keyed on REWELD, plus the rod-segment, attitude-step, ring-tilt and overflight metrics in
-  attach_metrics). tools/m1_stages.py is not in the rig tree. The scorers must reproduce R1573, R1579 and R1581
-  before they score a rev 10 run.
+- **Rev 10 scoring:** `tools/m1_score.py` with `tools/m1_metrics.py`. Committed 986ac0a (m1-score), in the candidate
+  base m1-comove.
+  - Families: claim, full, take-back (TB4 plus the TB5 prediction), tilt, and the TB14 count.
+  - Keyed on WELD or REWELD.
+  - Rod clearance is segment to segment, with the ball while carried.
+  - `-corr` rows are read first.
+  - Before scoring any rev 10 run, it reproduced R1573, R1579, R1581, R1615, R1620, R1623 and R1624 field by field.
+  - tools/m1_stages.py is not in the rig tree.
 
 ## 5. Pass / fail numbers (per run; written 10 Oct before the code; d_ok / d_fail / h_plate frozen after E1)
 
@@ -596,6 +600,15 @@ run on the arm that failed.
 - the abort at least 5 s after LAND;
 - QUAD4's tip on the floor;
 - its tilt passing 60 deg within 1 s while its body is above its rest.
+
+**How it is measured** (Wesley 11 Oct, before any rev 10 claim run; `tools/m1_score.py tb14`).
+- **Why:** the round-4 F10 wording (tip z <= 0.03 m, within 1 s of the tip first reaching the floor) cannot be met.
+  The welded tip rests on plate 9 at 0.052-0.060 m with the ring on the floor, and the 60 deg crossing comes
+  1.5-2.6 s after touchdown. Read that way it finds 0 of the 12 known tip-overs.
+- **Tip on the floor:** ring z < 0.07 m and tip z < 0.10 m (the tilt card's §9.2 thresholds).
+- **Within 1 s:** QUAD4's tilt rises from under 10 deg to past 60 deg in at most 1 s. It took 0.17-0.34 s in all 12.
+- **Body above its rest:** more than 2 cm above its first logged z.
+- **Check:** this finds exactly the 12 of 48 above (and R1582), and none of the full M1 runs.
 
 Such a run is scored LAND "tip-over (TB14)" and does not hold the claim. Any other abort or disarm, or one before
 LAND, counts against the mission bar. On the rig the attached-QUAD4 landing is checked at R11b.
