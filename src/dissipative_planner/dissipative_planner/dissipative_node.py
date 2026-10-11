@@ -103,6 +103,7 @@ GUARD_WAIT_S = 3.0         # s for the tip to leave the plate before the guard l
 GUARD_PASS_S = 0.1
 GUARD_TIP_BODY_M = 0.03
 GUARD_PLATE_AVG_S = 0.2
+GUARD_WHY = ('ring', 'tip', 'body', 'plate', 'band')   # a guard tick's no-pass causes, counted for a timeout's line
 # a failed guard (the coil may still hold plate 9): QUAD4 follows the landing ring down this far below the taut
 # tether, then once the ring is down steps this far out from the plate and as far down, and lands alone (Wesley 11 Oct)
 GUARD_SLACK_M = 0.05
@@ -2029,9 +2030,19 @@ class DissipativeController(LoadPlanner):
         if tip0 is not None and float(np.linalg.norm(tip0 - self._weld_rho_of(j))) > 2.0 * RELEASE_SEEN_M:
             return                                 # the tip is not on the plate: nothing for the coil to hold
         z = max(float(st['hold'][2]), plate_z + self._attach_body_to_tip) + RELEASE_SEEN_M + GUARD_RISE_ABOVE_SLACK_M
-        # plate_z0: the plate's height averaged once the guard starts (after the hold), in _guard_check
+        # plate_z0: the plate's height averaged once the guard starts (after the hold), in _guard_check; why: the
+        # guard's ticks with no pass per cause, for the timeout's line
         st['guard'] = {'tip0': tip0, 'plate_z0': None, 'plate_zs': [], 'avg_t0': None, 'run_t': None,
-                       'z': min(z, float(goals[0][2])), 't0': None, 'landed': False}
+                       'z': min(z, float(goals[0][2])), 't0': None, 'landed': False, 'd_tb': None,
+                       'why': dict.fromkeys(GUARD_WHY, 0)}
+
+    def _guard_why(self, g):
+        """The guard's ticks with no pass per cause, and the last tip-to-body distance measured."""
+        w = g['why']
+        d = 'none' if g['d_tb'] is None else f'{g["d_tb"]:.3f} m'
+        return (f'ticks: ring pose stale {w["ring"]}, tip pose stale {w["tip"]}, body pose stale {w["body"]}, '
+                f'tip on the plate (< {RELEASE_SEEN_M:.2f} m off) {w["plate"]}, tip-to-body off '
+                f'{self._attach_body_to_tip:.3f} +- {GUARD_TIP_BODY_M:.2f} m {w["band"]} (last {d})')
 
     def _guard_check(self, j, g):
         """'pass' (GUARD_PASS_S of consecutive fresh samples with the tip RELEASE_SEEN_M off the plate and its body-to-
@@ -2040,6 +2051,7 @@ class DissipativeController(LoadPlanner):
         nor fails; the guard's wait still runs."""
         if not self._guard_ring_fresh():
             g['run_t'] = None
+            g['why']['ring'] += 1
             return None
         now = self.get_clock().now().nanoseconds * 1e-9
         tip, plate_z = self._guard_read(j)
@@ -2052,11 +2064,16 @@ class DissipativeController(LoadPlanner):
         if g['plate_z0'] is not None and plate_z - g['plate_z0'] > GUARD_PLATE_RISE_M:
             return 'fail'
         if tip is not None and g['tip0'] is None:
-            g['tip0'] = tip                        # no tip at the latch: measure from its first fresh pose
+            g['tip0'] = tip                        # measured from the guard's first fresh tip pose
             return None
         body = self._pos(self._n_carry0 + j)
-        if tip is None or body is None or float(np.linalg.norm(tip - g['tip0'])) < RELEASE_SEEN_M or \
-                abs(float(np.linalg.norm(self._tip_now[1] - body)) - self._attach_body_to_tip) > GUARD_TIP_BODY_M:
+        if body is not None and tip is not None:
+            g['d_tb'] = float(np.linalg.norm(self._tip_now[1] - body))
+        cause = ('tip' if tip is None else 'body' if body is None
+                 else 'plate' if float(np.linalg.norm(tip - g['tip0'])) < RELEASE_SEEN_M
+                 else 'band' if abs(g['d_tb'] - self._attach_body_to_tip) > GUARD_TIP_BODY_M else None)
+        if cause is not None:
+            g['why'][cause] += 1
             g['run_t'] = None
             return None
         # timed on the tip's own samples: one sample read on several ticks is not a run
@@ -2099,6 +2116,7 @@ class DissipativeController(LoadPlanner):
         if stage == 'hold' and wait <= 0.0 and reached(st['hold']):
             if st['guard'] is not None:
                 st['guard']['t0'] = self.get_clock().now().nanoseconds * 1e-9
+                st['guard']['tip0'] = None         # from the guard's first fresh tip pose, not the latch's
                 st['stage'] = stage = 'guard'
                 st['goal'] = np.array([st['hold'][0], st['hold'][1], st['guard']['z']])
             else:
@@ -2117,7 +2135,8 @@ class DissipativeController(LoadPlanner):
                 g['fail_t'] = self.get_clock().now().nanoseconds * 1e-9
                 self._magnet_cmd_pub.publish(String(data='OFF'))
                 self._off_resend_t = 0.0
-                why = 'plate 9 follows it' if res == 'fail' else f'tip has not left plate 9 in {GUARD_WAIT_S:.0f} s'
+                why = 'plate 9 follows it' if res == 'fail' else \
+                    f'tip has not left plate 9 in {GUARD_WAIT_S:.0f} s ({self._guard_why(g)})'
                 self.get_logger().error(f'[dissipative] RELEASE GUARD: {_who(d)}\'s {why}: down to its tether\'s '
                                         f'slack, then it follows the ring down; magnet OFF again, LAND the fleet '
                                         f'once it is at the slack (at most {GUARD_LAND_WAIT_S:.0f} s)')

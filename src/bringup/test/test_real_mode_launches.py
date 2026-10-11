@@ -9,6 +9,7 @@ modes must evaluate exactly as before, which the sim-graph tests pin.
 """
 import importlib.util
 import os
+import re
 
 import pytest
 pytest.importorskip('launch_ros')
@@ -820,11 +821,11 @@ def _combined_rig(**args):
 
 def test_partner_contact_rig_graph(dds):
     """Rig: no joint gate or bridge, no sim catch, the typed taut length."""
-    g = _combined_rig(proof_taut_len=0.587)
+    g = _combined_rig(proof_taut_len=0.583)
     assert g['/dissipative_planner']['params']['contact_joint_state_topic'] == ''
     mgr = g['/magnet_attachment_manager']['params']
     assert (mgr['confirm_mode'], mgr['sim_catch'], mgr['proof_taut_len']) == (
-        'contact_lift', False, 0.587)
+        'contact_lift', False, 0.583)
     assert g['/elrs_mux_3']['params']['take_back_topic'] == '/drone_3/take_back'
     assert not [n for n in g if 'joint_state' in n]
 
@@ -931,7 +932,7 @@ def test_full_m1_welded_start_graph(dds):
     """
     twin = _twin_partner(partner_contact=True, partner_attached=True)
     real = _by_name(rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True,
-                        partner_attached=True, proof_taut_len=0.587, **QUAD4_RECORD))
+                        partner_attached=True, proof_taut_len=0.583, **QUAD4_RECORD))
     for g, on_rig in ((twin, False), (real, True)):
         mux = g['/elrs_mux_3']['params']
         assert mux['start_ours'] is True and mux['release_topic'] == '/partner/release'
@@ -1137,3 +1138,25 @@ def test_a9_contact_rig_orbit_lifts_the_hover_refusal_only_when_typed(dds, tmp_p
         _combined_rig(load_traj='orbit', params_file=str(pf))     # a params_file value is not honoured
     g = _combined_rig(load_traj='orbit', contact_rig_orbit=True)  # typed on the command line: lifted
     assert g['/dissipative_planner']['params']['load_traj'] == 'orbit'
+
+
+# ── critic round 2 follow-up, 1: QUAD4's rod, his magnet drop and the measured taut length agree ─────────────────
+
+def test_combined_rig_accepts_a_rod_that_agrees_with_the_taut_length(dds):
+    """attach_cable_len 0.54 - pivot_offset_z -0.04 = 0.58 against proof_taut_len 0.577 + 0.003 = 0.58; within 1 cm."""
+    for rod in (0.54, 0.531, 0.549):
+        assert _combined_rig(attach_cable_len=rod)['/dissipative_planner']['params']['attach_cable_len'] == rod
+
+
+@pytest.mark.parametrize('rod,apart', [(0.56, '+2.0 cm'), (0.52, '-2.0 cm')])
+def test_combined_rig_refuses_a_rod_too_long_or_too_short_for_the_taut_length(dds, rod, apart):
+    with pytest.raises(RuntimeError, match=rf'attach_cable_len {rod:.3f} - pivot_offset_z -0.040 = .* proof_taut_len '
+                                           rf'0.577 \+ 0.003 = 0.580 m by {re.escape(apart)}'):
+        _combined_rig(attach_cable_len=rod)
+
+
+def test_combined_rig_refuses_his_magnet_drop_off_the_taut_length(dds):
+    with pytest.raises(RuntimeError, match=r'magnet_drop_below_quad 0.600 m disagrees .* 0.580 m by \+2.0 cm'):
+        _combined_rig(partner_nodes=True, partner_args='magnet_drop_below_quad:=0.600 mpc_thrust_ratio:=21.5')
+    g = _combined_rig(partner_nodes=True, partner_args='magnet_drop_below_quad:=0.585 mpc_thrust_ratio:=21.5')
+    assert g['/online_join_planner']['params']['magnet_drop_below_quad'] == 0.585

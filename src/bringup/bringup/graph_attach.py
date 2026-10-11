@@ -60,6 +60,10 @@ RIG_PUCK_MASS = 0.06
 PARTNER_DELAY_S = 5.0
 # what this launch decides for his rig launch (partner_args may not set them)
 PARTNER_OWNED = ('real', 'geometry', 'contact_attach', 'contact_target_z')
+# combined rig: proof_taut_len is the measured taut body-to-tip minus this; QUAD4's rod body-to-tip and his
+# magnet_drop_below_quad must agree with that taut length within QUAD4_LEN_TOL_M
+PROOF_TAUT_MARGIN_M = 0.003
+QUAD4_LEN_TOL_M = 0.01
 
 
 def _dds_guard():
@@ -108,6 +112,25 @@ def _combined_rig_quad4_refusals(context):
     if 'attach_cable_len' not in chosen or not rod or float(rod) <= 0.0:
         raise RuntimeError('partner_contact on the rig: type attach_cable_len:=<QUAD4\'s rod from its record> '
                            '(untyped it is the carriers\' cable_len)')
+    # one taut length (critic round 2 follow-up, 1): the release guard's tip-to-body band is centred on the rod's
+    # body-to-tip, so it must be the measured one; a proof_taut_len of 0 is refused by name further on
+    taut = float(LaunchConfiguration('proof_taut_len').perform(context).strip() or 0.0)
+    if taut <= 0.0:
+        return
+    length = taut + PROOF_TAUT_MARGIN_M
+    pivot = float(LaunchConfiguration('pivot_offset_z').perform(context))
+    btt = float(rod) - pivot
+    if round(abs(btt - length), 6) > QUAD4_LEN_TOL_M:
+        raise RuntimeError(f'partner_contact on the rig: QUAD4\'s body-to-tip attach_cable_len {float(rod):.3f} - '
+                           f'pivot_offset_z {pivot:+.3f} = {btt:.3f} m disagrees with the taut length proof_taut_len '
+                           f'{taut:.3f} + {PROOF_TAUT_MARGIN_M:.3f} = {length:.3f} m by '
+                           f'{100.0 * (btt - length):+.1f} cm (more than {100.0 * QUAD4_LEN_TOL_M:.0f} cm)')
+    drop = _partner_launch_args(context).get('magnet_drop_below_quad')
+    if drop is not None and round(abs(float(drop) - length), 6) > QUAD4_LEN_TOL_M:
+        raise RuntimeError(f'partner_contact on the rig: partner_args magnet_drop_below_quad {float(drop):.3f} m '
+                           f'disagrees with the taut length proof_taut_len {taut:.3f} + {PROOF_TAUT_MARGIN_M:.3f} = '
+                           f'{length:.3f} m by {100.0 * (float(drop) - length):+.1f} cm (more than '
+                           f'{100.0 * QUAD4_LEN_TOL_M:.0f} cm)')
 
 
 def _partner_launch_args(context):

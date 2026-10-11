@@ -3,6 +3,7 @@ his mission flies QUAD4 until our check confirms the attach. Our drone-3 tracker
 takeoff, the ring magnet span starts once he rejoins with QUAD4 airborne and the ring weld free, our own ON never
 starts an approach or holds the ring, and with no attach (his give-up, our LAND) we take QUAD4 back: a fixed hold,
 radially out (over the middle along plate 9's azimuth) and down alone. All behind partner_contact (off by default)."""
+import re
 import time
 from types import MethodType, SimpleNamespace
 
@@ -22,7 +23,7 @@ METHODS = ('_take_back', '_contact_span_tick', '_contact_warm_ref', '_publish_pe
            '_weld_refused', '_set_on_load', '_departed_down', '_drop_departed', '_start_approach',
            '_abort_newcomer', '_attach_ocp', '_capture_weld_rho', '_start_weld_joins_creep', '_do_attach',
            '_take_back_plan', '_take_back_tick', '_take_back_next', '_ring_moves', '_ring_plan', '_guard_setup',
-           '_guard_read', '_guard_check', '_guard_follow', '_guard_ring_fresh', '_weld_rho_of')
+           '_guard_read', '_guard_check', '_guard_follow', '_guard_ring_fresh', '_weld_rho_of', '_guard_why')
 
 
 class _Log:
@@ -1423,3 +1424,100 @@ def test_rig_guard_plate_baseline_is_averaged_over_its_first_samples():
     assert f._comove[3]['guard']['plate_z0'] < z + 0.02 + 0.02
     f.load_state[2] = z + 0.035                              # the coil holds: plate 9 follows QUAD4 up
     assert _gtick(f)[0] == 'guard_follow' and any('plate 9 follows it' in ln for ln in f.log.lines)
+
+
+# ── critic round 2 follow-up (rig card 2026-10-21_combined_m1_rig): 2 the timeout's causes, 3 the follow-down's
+# transient, 4 a held coil's lift, 5 tip0 from the guard's start ────────────────────────────────────────────────────
+
+def test_rig_guard_a_timeout_names_its_causes_a_band_miss():
+    """A tip off the plate but 0.4 m from the body for the whole wait: the timeout's line counts the band misses."""
+    f = _guard_node()
+    f._give_up_cb(Bool(data=True))
+    while _gtick(f)[0] != 'guard':
+        pass
+    _gtick(f)                                                  # the guard's first tip pose: on the plate (tip0)
+    stage = 'guard'
+    while stage == 'guard':
+        stage = _gtick(f, tip=f.attach_pos[0] - np.array([0.0, 0.0, 0.4]))[0]
+    line = next(ln for ln in f.log.lines if 'has not left plate 9' in ln)
+    m = re.search(r'ring pose stale (\d+), tip pose stale (\d+), body pose stale (\d+), tip on the plate '
+                  r'\(< 0\.05 m off\) (\d+), tip-to-body off 0\.590 \+- 0\.03 m (\d+) \(last 0\.400 m\)', line)
+    assert m, line
+    ring, tip, body, plate, band = map(int, m.groups())
+    assert (ring, tip, body, plate) == (0, 0, 0, 0) and band >= GUARD_WAIT_S * HZ - 2
+
+
+def test_rig_guard_measures_tip0_from_its_start_not_the_latch():
+    """The tip slid 6 cm along the plate during the hold (the coil holding it there): measured from the latch it would
+    read as a release; measured from the guard's start it does not, and the guard times out on the plate."""
+    f = _guard_node()
+    f._give_up_cb(Bool(data=True))
+    slid = np.array([0.06, 0.225, 1.02])
+    stage, tip0 = 'hold', None
+    while stage in ('hold', 'guard'):
+        f.attach_pos[0] = slid + np.array([0.0, 0.0, 0.59])     # QUAD4 over it, its tether taut (the ring stiff)
+        stage = _gtick(f, tip=slid)[0]
+        g = f._comove[3]['guard']
+        if stage == 'guard' and g['tip0'] is not None and tip0 is None:
+            tip0 = g['tip0'].copy()
+    np.testing.assert_allclose(tip0, [0.06, 0.225, 0.02], atol=1e-9)   # ring frame
+    assert stage == 'guard_follow' and not any('release seen' in ln for ln in f.log.lines)
+    assert any(re.search(r'tip on the plate \(< 0\.05 m off\) [1-9]', ln) for ln in f.log.lines)
+
+
+def _held_coil(lifts=False, ticks=250):
+    """His give-up with the coil still holding the tip on plate 9 (rig geometry, 1 cm of slack, QUAD4 flying its
+    reference with a LAG_S lag). lifts: once the tether is taut plate 9 follows QUAD4's body (the ring's stiffness
+    ignored) until the LAND, so the guard's plate-rise check fails it; else the ring is stiff and the guard times out.
+    From the LAND the carriers set the ring, stepping down at land_vel 0.2 m/s to its rest. Per tick until the follow
+    ends: (stage, reference z, body z, plate 9 z, the ring's own plate 9 z, LAND sent)."""
+    f = _guard_node(z=2.0, weld=(0.0, 0.225, WPZ), body_over_tip=TAUT - 0.01)
+    f._give_up_cb(Bool(data=True))
+    body = f.attach_pos[0].copy()
+    ring = float(f.load_state[2])
+    a = 1.0 - np.exp(-1.0 / (HZ * LAG_S))
+    rows = []
+    for _ in range(ticks):
+        landed = bool(f._fleet_cmd_pub.msgs)
+        own = ring + WPZ
+        plate = max(own, body[2] - TAUT) if lifts and not landed else own
+        stage, n, _ = _gtick(f, ring_vz=(plate - WPZ - float(f.load_state[2])) * HZ, tip=np.r_[0.0, 0.225, plate])
+        if stage not in ('hold', 'guard', 'guard_follow'):
+            break
+        rows.append((stage, float(n[0][2]), float(body[2]), plate, own, landed))
+        body = body + a * (n[0] - body)
+        f.attach_pos[0] = body.copy()
+        if landed:
+            ring = max(f.lift_z0, ring - f.land_vel / HZ)
+    return f, rows
+
+
+@pytest.mark.parametrize('slack_m', [
+    pytest.param(0.05, marks=pytest.mark.xfail(strict=True, reason=(
+        'GUARD_SLACK_M 0.05: through the LAND step the reference rises 2.7 cm and the lagged body 8.7 cm over the '
+        'taut tether; 0.08 keeps the reference under, 0.14 the body (critic round 2 follow-up, 3: Wesley decides)'))),
+    0.14])
+def test_rig_guard_follow_stays_under_the_taut_tether_through_the_land_step(slack_m, monkeypatch):
+    """A held coil on a stiff ring: the follow starts at the guard's height, over the taut tether; once back under it,
+    the reference and the lagged body stay at or below plate 9 + the taut length through the LAND's step to land_vel
+    and the whole descent."""
+    assert dn.GUARD_SLACK_M == 0.05                            # the tree's value; the case sets the arm's
+    monkeypatch.setattr(dn, 'GUARD_SLACK_M', slack_m)
+    f, rows = _held_coil()
+    follow = [r for r in rows if r[0] == 'guard_follow']
+    assert follow[0][1] > follow[0][4] + TAUT and follow[-1][4] < 0.2   # from the guard's height to the ring's rest
+    i = next(i for i, r in enumerate(follow) if max(r[1], r[2]) <= r[4] + TAUT)
+    assert not follow[i][5] and any(r[5] for r in follow[i:])  # back under before the LAND
+    for _, ref, body, _, own, _ in follow[i:]:
+        assert ref <= own + TAUT + 1e-9 and body <= own + TAUT + 1e-9
+
+
+def test_rig_guard_a_held_coil_lifts_plate_9_at_most_6_cm():
+    """Plate 9 following QUAD4 once the tether is taut: the 2 cm check reacts within a tick, then the reference
+    brakes at TAKE_BACK_BRAKE and the body lags it, so the plate peaks at 5.9 cm before QUAD4 comes down."""
+    f, rows = _held_coil(lifts=True)
+    lift = [r[3] - r[4] for r in rows]
+    i_fail = [r[0] for r in rows].index('guard_follow')
+    assert any('plate 9 follows it' in ln for ln in f.log.lines)
+    assert lift[i_fail - 1] <= dn.GUARD_PLATE_RISE_M < lift[i_fail] <= dn.GUARD_PLATE_RISE_M + 0.01   # its first over
+    assert max(lift) <= 0.06
