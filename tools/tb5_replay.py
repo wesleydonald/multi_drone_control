@@ -109,9 +109,14 @@ class Run:
         t = self.run.t.to_numpy()
         # the planner's clock against the runner's: fit the offset on the measured ring
         m = (self.pl.sim_time > self.pl.sim_time.iloc[-1] * 0.3).to_numpy()
-        best = min((float(np.mean((np.interp(self.pl.sim_time[m] - o, t, self.run.payload_x) - self.pl.load_x[m]) ** 2
-                                  + (np.interp(self.pl.sim_time[m] - o, t, self.run.payload_y)
-                                     - self.pl.load_y[m]) ** 2)), o) for o in np.arange(-10.0, 10.0, 0.01))
+
+        def err(o):
+            return float(np.mean((np.interp(self.pl.sim_time[m] - o, t, self.run.payload_x) - self.pl.load_x[m]) ** 2
+                                 + (np.interp(self.pl.sim_time[m] - o, t, self.run.payload_y)
+                                    - self.pl.load_y[m]) ** 2))
+        # coarse then fine: the offset was 5.4 s on R1565 and over 10 s on TB6's runs (the planner starts later)
+        o0 = min((err(o), o) for o in np.arange(-60.0, 60.0, 0.1))[1]
+        best = min((err(o), o) for o in np.arange(o0 - 0.15, o0 + 0.15, 0.01))
         self.clock_off = best[1]
         self.tau = np.interp(t + self.clock_off, self.pl.sim_time, self.pl.traj_t)
         ref = self.run[['payload_ref_x', 'payload_ref_y']].to_numpy()
