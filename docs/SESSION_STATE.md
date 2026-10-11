@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Mon 12 Oct 2026, 00:46 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Mon 12 Oct 2026, 01:15 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and the "since the 8 Oct rig" page
 (https://claude.ai/artifact/QwgP2oPSknLyWZacvDuh5T; source `$CLAUDE_JOB_DIR/tmp/resource/m1_since_rig.html`).
 
@@ -56,8 +56,14 @@ Updated: Mon 12 Oct 2026, 00:46 AEDT (from `date`). Only what a new session need
     - Supported: hover attach, hover take-back, no-catch hover, LAND during the proof.
     - Not supported: the circle take-back and the push abort (R1654 rod 0.094 m).
     - Corr rows for R1638/1639/1641/1654 and card §6.3a are committed in 898f775.
-  - Next: R1656-R1659 (full orbit, full nocatch orbit, r11a hover_wed, r11a circle), then the tilt arms R1660-R1678
-    (`tilt` rev 4). Monitor bo7ezsh3q.
+  - R1656-R1663 are scored.
+    - R1656 (full orbit): no reattach. His ATTACH_READY lost alignment twice, then he gave up; our take-back was OK.
+    - R1657 (full nocatch orbit): his 3 failed proofs, then the give-up.
+    - R11a hover and circle: supported.
+    - T0 x2: baseline as expected. T1 x2: every bar met, but R1662 logged an inert TAKE_BACK at the cut (a timing
+      race; the frozen "a take-back" falsifier reads as met). For Wesley in the morning.
+  - Next: R1664-R1678 (F6b, F6c, C1, C2, F1, C3 x2; N1-N3), `tilt` rev 4. Monitor bmvlq7xsf. Then the diagnostic
+    re-fly of m1c_nocatch_orbit x2 on 2 slots, and the morning report.
 - Laptop: idle. No helper is running. The full M1 on the circle is recorded and cut (R1633, the 11th clean full M1):
   results/videos/full_M1_twin_R1633_orbit_edit.mp4 (2 min 56 s, captioned; raw: _wide, _circle, _plate9). The recorder
   is on the candidate (adaf2c5).
