@@ -409,3 +409,10 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   a; constants as built. The one helper now: G = the guard follow-down on branch m1-guard (worktree mdc_wt/m1-guard,
   from c53ae0c; id ad9d5093ae5855c3c; no commit, I review). TB6 running (R1615 nocatch_orbit, R1616 lead030, R1617 ph11,
   R1618 ph175 first; monitor). Queue after G: S scorers -> W Wednesday paperwork (Mon).
+- 16:40: TB6 6 of 11 scored (R1615-R1619, R1621; registry): every arm supports its falsifier; between-bar values:
+  R1618 decouple attitude step 2.15 deg, R1621 transit take-back step 3.83 deg (peak 0.25 s after MUX:ours, ball on).
+  TB5 predicts the logged clearances within 1-6 mm (3 cm body on the LAND case) after the replay's clock-offset fix
+  (m1-comove 0c5fc69, tools only). Scorer: $CLAUDE_JOB_DIR/tmp/score/tb6_score.py + tb6_rows.py. Still flying:
+  R1620 m1_full_nocatch_orbit, R1622 m1c_nocatch_hover, R1623 m1x_r11a_circle, R1624 m1x_land_pickup_orbit, then
+  R1625 m1x_late_takeoff_orbit. m1-guard: b1cb2de (follow the ring down) + 84a3ad7 (LAND at the slack, max 2 s; Wesley
+  16:20), 185 tests, gate pass. Helper now: the "since the 8 Oct rig" resource page (draft -> I review and publish).
