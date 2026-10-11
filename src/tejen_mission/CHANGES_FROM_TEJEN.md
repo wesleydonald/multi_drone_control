@@ -216,3 +216,6 @@ supervisor's `stop_action` defaults to his `disarm`.
 |---|---|---|
 | `online_join_planner.py` | `DROP_PUCK_WAIT_S` (2.0 s, a module constant): under `drop_check_puck` (contact_attach only, default false; the rig launch sets it) an object or marker not measured after the release dwell no longer clears the drop zone. DROP_OBJECT waits up to 2 s more for fresh poses (the object away: clears; on the marker: the give-up), then gives up as for a stuck object (TAKEN_BACK, `/join_planner/give_up`); `update_measured_drop`. Off (his default): unchanged | rig-port critic round 2, A7: an unseen puck can ride the magnet to plate 9 |
 | `test/test_m1_contact_attach.py` (ours, appended) | the wait, a fresh pose away from or on the marker within it, the give-up at its end; the not-measured case no longer clears | tests first |
+- **11 Oct, the drop wait as a switch (Wesley, after critic round 2 A7).** `drop_puck_wait_s` is a node parameter and
+  a rig launch argument, rig default 2.0 s. Set to 0, an object not measured after the release dwell is trusted released,
+  his earlier behaviour. It is for a rig where Motive cannot see the puck in the net; Wednesday's mocap check decides.

@@ -856,6 +856,16 @@ def test_no_fresh_pose_within_the_wait_is_a_give_up_as_for_a_stuck_object():
     assert any('not measured 2.0 s after the release dwell' in w for w in p.warnings)
 
 
+def test_wait_zero_trusts_an_unseen_object_released_as_before():
+    p = _dropping([0.0, 0.0, -0.04], fresh=False)
+    p.drop_puck_wait_s = 0.0                          # launch drop_puck_wait_s:=0 (no puck pose in the net)
+    p.clock.t += p.drop_wait_time_s + 0.1
+    p.last_magnet_tip_pose_time = p.clock.t
+    p.update_state_machine()
+    assert p.phase == P.CLEAR_DROP_ZONE and not p.contact_gave_up
+    assert any('trusting the release' in w for w in p.warnings)
+
+
 def test_drop_without_the_switch_is_his():
     p = _dropping([0.0, 0.0, -0.04], check=False)
     tick(p)
