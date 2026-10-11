@@ -196,3 +196,42 @@ Wednesday measurements: weld_point_z x3 re-seated; contact radius from >= 10 han
   swaps, QUAD4 at 2.3-2.9 m on a pole, puck in the net, face on plate 9: gaps <= 0.1 s, no jumps > 1 cm); load and
   kill (full graph 10 min, F1 bars; DISARM from RViz and T3; kill his MPC alone; Ctrl-C T2: FC disarmed within 0.5 s);
   aux in Betaflight (AUX 5, 7-10 mid, no mode change).
+
+### Round 2, part A (code on the candidate m1-comove 3a259fe / 986ac0a, 11 Oct evening), condensed
+**Verdict:** GO WITH CHANGES for the hover flights R11a and R11b on 21-22 Oct.
+- **Before R11a:** A1 (constants), A3 and A4 done, and A2's sheet line on the sheet.
+- **The card's own gates still stand:** F1 (Wednesday load test), F5 (claim and reviewer on this SHA), F6 (written
+  acceptance, or warm_fault_not_live through its reviewer) and F8 (values from the QUAD4 record).
+
+**Round 1 state on this tree:**
+- **F1 open:** the radio still disarms after 0.5 s of silence; the mux has no silence takeover.
+- **Closed:** F2, F3, F4 and F9.
+- **F5 partly:** the release guard has never flown in Gazebo. It only runs with real:=true, and TB6 flew on c53ae0c,
+  before the guard merge.
+- **F6 open:** one QUAD4 pose gap over 0.25 s latches our drone-3 tracker. A later take-back then hovers until
+  DISARM.
+- **F7:** the code is closed. The vertical-speed gate is a slope over 0.15 s, so its noise is ~0.004-0.008 m/s against
+  the 0.02 limit. The values come from Wednesday.
+- **F8 partly:** `mpc_cable_length` 0.531 and `anchor_offset_z` -0.030 still default to his values, unrefused.
+- **F10:** closed in the card.
+
+**Findings, worst first:**
+
+| # | Severity | Finding | Fix | New flight-loop code? |
+|---|---|---|---|---|
+| A1 | high | The guard height uses `btt` = 0.59 (the carriers' rod) and the ring-origin plane. QUAD4's body-to-plate is 0.58, and R11b aims 1 cm low. The tip rises only ~5 cm against the 5 cm pass, with a 0.67 s carrot tail. A no-contact give-up with the tip on the plate then times out: a false RELEASE GUARD failure that the card scores as a stop. | For 21-22 Oct: rise +0.05 above slack (not +0.02) and `GUARD_WAIT_S` 3 s. The 2 cm plate-rise check still catches a held plate. Add a rig-geometry unit test. Later: the height from the measured tip0 + `proof_taut_len`. Split the falsifier: plate rising counts; a timeout with the plate still is reported. | constants: no; measured version: yes |
+| A2 | high consequence | LAND with a coil that doesn't release. LAND starts the ring down at once. The guard's plate-rise test is in world z, so it never fires on a descending ring; only the 2.5 s timeout catches it. The ring tilts far past 5 deg. | Sheet line now: stop his attach with his give-up (`/join_planner/give_up`), LAND only as an emergency. Code later: hold the ring's LAND descent while the guard is armed (at most 2.5 s), or measure plate 9 relative to the ring. | yes (later) |
+| A3 | medium-high | `weld_point_z` 0.0 reaches both stacks unrefused, and it is not a launch argument. `attach_cable_len` silently takes the carriers' `cable_len`. | On the combined rig, refuse `weld_point_z == 0` and an untyped `attach_cable_len`. Make `weld_point_z` a launch argument (or `quad4_record:=`). | no (launch) |
+| A4 | medium | The guard reads `net.rho[3]`, the gap-centre placeholder. With the carriers at 270/30/150 the three gaps tie; argmax picks plate 9 today only because gaps 0 and 2 are equal to the last bit and argmax takes the first. Another order or offset could switch the guard off silently. | A pytest with the rig azimuths now. Then give the guard the weld point (the attach offset, as `_reserved_plate_dir` does). | test: no; fix: small yes |
+| A5 | medium-low | The guard passes on a single tip sample. Its ring pose has no freshness check, and `plate_z0` is one sample. A tip-puck marker swap or a stale ring pose would give a false pass, then a full rise with the plate held. | Pass only after 0.1 s of consecutive fresh samples; ring pose within DETECT_STALE_S; tip-to-body within taut + 0.03; `plate_z0` averaged over 0.2 s. | yes |
+| A6 | gate | F6 above: Wesley's written acceptance of the DISARM line, or warm_fault_not_live through its reviewer. | | |
+| A7 | low-medium | His drop check trusts the release when the puck is unseen. The puck can ride to plate 9. | Wait up to N s for a fresh puck pose, then give up (his code, our fork). | his code, small |
+| A8 | low | R11a's +3 cm is relative to his MPC (no z integral; R1503 flew 11 cm low). | If R10a's height error is over 0.02, use +0.05. Score §5.2 on the measured tip height. | no |
+| A9 | low | `contact_rig_orbit` is honoured from a params file. | Honour it only when typed on the command line. | no (launch) |
+
+**Checks:**
+- **TB16:** no orbit reaches the rig launch without `contact_rig_orbit`, apart from A9.
+- **Tilt cut with its switches off:** inert. No subscription, parameter or publisher is created. The only new default
+  fleet action on the rig is the guard's LAND.
+- **The §4 launch line:** missing `weld_point_z`, QUAD4's `attach_cable_len`, `mpc_cable_length` and
+  `anchor_offset_z`.
