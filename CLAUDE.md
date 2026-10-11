@@ -50,7 +50,7 @@ current branch like any other file (it reaches main with the merges).
 
 ## Gazebo (twin)
 - Wesley at the machine: he flies, Claude reads the log. Interactive runs don't count.
-- Headless (`tools/run_experiment.py`): laptop one at a time, no cap; lab PC up to ~6 slots
+- Headless (`tools/run_experiment.py`): laptop one at a time, no cap; lab PC up to 4 slots, evenings only (Wesley 12 Oct),
   only when nobody else is on it (check `who`, load, containers first). `/report` per matrix.
 - **Keep the laptop idle for the first ~3 min of every run** (no tests, no analysis): a
   starved planner voided runs on 9 Oct. Never type `pgrep "gz sim"` (it trips clean_slate).
@@ -102,7 +102,7 @@ current branch like any other file (it reaches main with the merges).
 - The twin models every link as rigid, QUAD4's tether included (9 Oct); the rig's tethers go slack.
 - Combined M1 (11 Oct): `contact_still` is on by default (c0 from a still window). A take-back during a trajectory
   moves with the ring; until that is reviewed the rig refuses an orbit under `partner_contact` (hover only).
-  week4 stays as it is: next week's tested work goes on `week5`.
+  week4 stays as it is. `week5` (12 Oct: rig-wed + the take-back race fix) is the testing tree from Wed 14, rig and twin.
 - On the rig Tejen's controller does every QUAD4 attach, down to contact (the magnet only catches on the plate).
   Our motion-capture check alone confirms the attach; only then do we take QUAD4 over and fold it in (10 Oct).
   Our own approach (R8a/R8b/R9) is twin and thesis only.
