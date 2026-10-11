@@ -107,7 +107,7 @@ def _contact_manager_params(context, real):
     is false; the rig's proof also wants the taut body-to-tip length (proof_taut_len, 0 = off).
     """
     out = {'confirm_mode': 'contact_lift'}
-    # critic F7, off by default: c0 from the dwell's tail and a vertical-speed gate (thresholds: Wesley)
+    # critic F7, on by default (Wesley 11 Oct): c0 from the dwell's tail and a vertical-speed gate
     if truthy(context, 'contact_still'):
         out['contact_still'] = True
         for k in ('contact_vz_max', 'contact_c0_tail_s'):
