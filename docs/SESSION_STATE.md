@@ -347,3 +347,8 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   (as the attach hold does), then QUAD4 rises to carrier z + rod + 0.15 (~2.3 m), steps out, lands; (b) co-move with
   the ring during the rise; (c) no circle take-back on the rig until fixed (combined M1 on the rig = hover only).
   No third fix built. The c6f2032 batch keeps running (other arms), then tilt wave A.
+- 12:15: Wesley's answers (decisions.md 11 Oct): circle take-back MOVES WITH THE RING; contact_still ON (done m1-rig
+  0210a27); Wednesday sheet: concise measurement items for his review; tilt-cut arms fly; stop-after-two-fails rule
+  removed from CLAUDE.md. c6f2032 claim done (R1565-R1579): 11/12 core arms pass, R1565 circle take-back fails;
+  full M1 9 clean runs. Tilt wave A on the lab (R1580-R1587): T1 R1581 passes every bar. ULTRACODE planning workflow
+  wf_e76df7b1-616 (task wo4a331p1) is drafting the plan for the rest (Wesley asked).
