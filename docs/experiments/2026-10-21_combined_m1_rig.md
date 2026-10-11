@@ -19,7 +19,7 @@ QUAD4 back and land it?
 | F3 | the mux holds his throttle at armed idle until our planner flies the ring; ARM FAILED says "his ARM first" | built |
 | F4 | QUAD4's radio latch on a private topic only magnet_gate_3 writes; RViz MAGNET D4 hidden; no `/drone_3/magnet` line on a combined-day sheet | built |
 | F9 | after the pickup his OFF reaches the coil only at the pickup site (his retry) or in DROP_OBJECT / CLEAR_DROP_ZONE; gate switch and span wait for the puck released; the drop ends on the measured puck (stuck = give-up); his supervisor refused | built |
-| F7 | contact_still (c0 from the dwell's last 0.05 s + vertical speed gate) decided with Wednesday's hand ramps | built behind a switch, off; thresholds Wesley's |
+| F7 | contact_still (c0 from the dwell's last 0.05 s + vertical speed gate) decided with Wednesday's hand ramps | built; on by default since 0210a27 (Wesley 11 Oct); Wednesday's hand ramps check the default |
 | F8 | QUAD4's body-to-marker, marker-to-face, taut length, weld_point_z, contact radius (Wednesday) and his kT with and without the puck (Thursday R10a) typed from one QUAD4 record | values open |
 | F1 | the full combined graph at wall clock on the rig laptop, >= 10 min, passes the load bars (section 5.1) | Wednesday props-off, if Wesley OKs the combined item |
 | F6 | warm-tracker faults and his stuck TAKEN_BACK handled (the tilt-cut card), or accepted in writing with the sheet line "T2 says 'taken back, but our tracker is not flying yet': clear the cage, DISARM, QUAD4 falls" | another helper |
@@ -31,7 +31,9 @@ QUAD4 back and land it?
    his rejoin, the 30 s give-up and our take-back, and measures his hold error over the moving plate and plate 9's noise
    with QUAD4 overhead. Ring hovering.
 2. **R11b contact, hover**: `contact_dz` -0.01 (1 cm below the face); twice.
-3. **R11c contact, circle 0.125 m/s**: only after 2 of 2 R11b pass.
+3. **R11c contact, circle 0.125 m/s**: only after 2 of 2 R11b pass, and only with `contact_rig_orbit:=true`.
+   - That needs Wesley's word after the reviewer passes the final table with the co-moving take-back (TB6 passed 11 Oct).
+   - His TAKEOFF comes before the orbit starts. Twin R1625: otherwise the ring passes 0.12 m over QUAD4.
 Between flights: relaunch T2, his nodes come with it (`partner_nodes:=true`).
 
 ## 4. The command (QUAD4 values from the record; R = contact radius, L = taut length)
@@ -71,11 +73,33 @@ at 1.0 m (T2: `our planner flies the ring`) -> his TAKEOFF. End of every flight:
   >= 0.15 m, **falsifies** < 0.10 m.
 
 ### 5.6 Take-back (R11a always; any flight without an attach)
-- **Confirms**: `/drone_3/take_back` true within 0.1 s of his give-up or our LAND; the mux reads ours within 0.2 s;
-  coil OFF only after our span began (before it, the puck stays on); QUAD4 steps out to >= 1.2 m from the ring centre
-  (+ the tether with the puck on) at its height, lands and is disarmed alone; no carrier within 0.35 m on the way.
-- **Falsifies**: "taken back, but our tracker is not flying yet" for more than 1 s (F6); the coil OFF before the span;
-  QUAD4 closer than 0.30 m to a carrier.
+**The path as built** (combined card rev 10 §3b):
+- **Release guard first** (`real:=true`): the rise waits until the tip has left plate 9 and the plate has not followed.
+- **Hover:**
+  - It rises first if the tip is down at the ring: to the higher of the rim clearance and the highest carrier + 0.4 m.
+  - Then it steps out to 1.2 m from the ring centre (plus the tether while the puck is on).
+  - Then it comes down and is disarmed alone.
+- **Circle** (only under `contact_rig_orbit`): the zone rule and the move with the ring, then the decouple and the path
+  clear.
+
+**Confirms:**
+- `/drone_3/take_back` is true within 0.1 s of his give-up or our LAND, and the mux reads ours within 0.2 s.
+- The coil goes OFF only after our span began; before it, the puck stays on.
+- The TB4 bars:
+  - rod-segment clearance >= 0.15 m and body clearance >= 0.35 m to every carrier;
+  - attitude step <= 2 deg at the take-back and at the decouple;
+  - ring tilt <= 5 deg;
+  - QUAD4 down within 60 s.
+
+**Falsifies:**
+- "taken back, but our tracker is not flying yet" for more than 1 s (F6);
+- the coil OFF before the span;
+- rod < 0.10 m or body < 0.30 m;
+- an attitude step > 5 deg or ring tilt > 5 deg;
+- QUAD4 not down within 60 s;
+- a RELEASE GUARD failure. The fleet lands, with QUAD4 following the ring down at the tether's slack.
+
+**Reported, no bar:** the overflight time and the minimum tip-to-carrier gap. Rotor wash is a rig-only question.
 
 ### 5.7 Authority (every flight)
 - Zero `/drone_3/magnet_coil` writers but magnet_gate_3; zero his OFFs reaching the coil in the transit or over the
@@ -87,7 +111,7 @@ at 1.0 m (T2: `our planner flies the ring`) -> his TAKEOFF. End of every flight:
 - A pose gap over 0.1 s on 14 / 24 / 8 with QUAD4 overhead ends M1 for the day.
 
 ## 7. Repeats
-R11a once; R11b twice; R11c twice. A fix not shown in two runs: stop and report with the log.
+R11a once; R11b twice; R11c twice. The stop rules are in section 6 (the twin's "two fails" rule was removed 11 Oct).
 
 ## 8. The QUAD4 record (F8; not built)
 One YAML per measuring day, e.g. `configs/rig/quad4_2026-10-14.yaml`, signed by Wesley, read by one launch argument

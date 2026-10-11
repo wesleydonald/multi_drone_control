@@ -14,15 +14,18 @@ fleet() { python3 ~/multi_drone_control/tools/fleet_reach.py --send "$1"; }
 ```
 `tools/preflight.py` and `tools/rig_flight.sh` refuse the same way. Tejen's laptop cannot see this graph: his
 commands go in a terminal on this laptop (`ros2 topic pub --once /tejen/drone_command std_msgs/msg/String "{data: ARM}"`).
-No `/drone_3/magnet` line anywhere on a combined day: QUAD4's coil listens on `/drone_3/magnet_coil`, written only by
+No `/drone_3/magnet` line in the Part B terminals (Part A's W4/W5 release on the week4 install still uses it): QUAD4's coil listens on `/drone_3/magnet_coil`, written only by
 magnet_gate_3 (critic F4), and the RViz MAGNET D4 row is hidden.
+
+TB16's orbit refusal and the rig release guard are on the candidate (m1-comove), not on the m1-rig 0210a27 install.
+Neither can be checked props-off on Wednesday; a props-off guard check needs the candidate install (Tue 20).
 
 ## The measurements (props off, QUAD4 in hand with its pack in, ring on the floor; every value into the QUAD4 record)
 | what | how | gives |
 |---|---|---|
 | weld_point_z | item 3 three times, the magnet re-seated each time | the mean and spread |
 | contact radius and band | >= 10 hand catches: centre, +-2 cm radial and tangential, tilted +-15 deg with the tether slack; `ros2 topic echo /magnet/attach_proof` (distance) | band = max dz + 3 mm, radius = max dxy + 5 mm |
-| speed gate / c0 (F7) | hand ramps of the face onto the plate at about 3, 5, 8 cm/s, 3 each, once with `contact_still:=true` and once without; the CONTACT line's c0 | pass if c0 is within 1 mm of the rest point |
+| speed gate / c0 (F7) | hand ramps of the face onto the plate at about 3, 5, 8 cm/s, 3 each, with the default (contact_still is on: type nothing) and once with `contact_still:=false` for comparison; the CONTACT line's c0 | pass if c0 is within 1 mm of the rest point |
 | taut length and drop | QUAD4 hanging still; +-10 deg off vertical; a ~2 N pull on the caught magnet | proof_taut_len, magnet_drop_below_quad |
 | d_ok | caught face, QUAD4 rocked 0-20 deg | drift spread |
 | marker to face | the face flat on the floor | marker_to_face |
@@ -40,7 +43,7 @@ ros2 topic pub -t 3 /magnet/command std_msgs/msg/String "{data: 'ON'}"    # our 
 ```
 T2: `[magnet_gate] OURS from now (first ON from the ring-magnet manager)`. Watch `/magnet/attach_proof`.
 - (a) **Caught**: face onto plate 9 (it catches), QUAD4 lowered ~1 cm (tether slack), still 1 s: `CONTACT`; c0's z
-  should be ~0 (several mm = the contact latched while the face was still arriving: F7). Lift straight up at ~2 cm/s
+  should be ~0 (several mm = contact_still did not take c0 from a still window: F7). Lift straight up at ~2 cm/s
   until taut and the plate rises a few mm (< 1 cm), hold 1 s: `ATTACH: proven ...`, and `HOLDING approach authority`
   (expected: nothing flies). Three catches, one 1-2 cm off centre. OFF is then refused: Ctrl-C and relaunch.
 - (b) **No catch**: relaunch (`c7nc`), QUAD4's pack out (coil dead). Touch, lift: `PROOF FAILED (drift)`, never an
