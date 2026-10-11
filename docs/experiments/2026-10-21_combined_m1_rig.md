@@ -22,12 +22,13 @@ QUAD4 back and land it?
 | F7 | contact_still (c0 from the dwell's last 0.05 s + vertical speed gate) decided with Wednesday's hand ramps | built; on by default since 0210a27 (Wesley 11 Oct); Wednesday's hand ramps check the default |
 | F8 | QUAD4's body-to-marker, marker-to-face, taut length, weld_point_z, contact radius (Wednesday) and his kT with and without the puck (Thursday R10a) typed from one QUAD4 record | values open |
 | F1 | the full combined graph at wall clock on the rig laptop, >= 10 min, passes the load bars (section 5.1) | Wednesday props-off, if Wesley OKs the combined item |
-| F6 | warm-tracker faults and his stuck TAKEN_BACK handled (the tilt-cut card), or accepted in writing with the sheet line "T2 says 'taken back, but our tracker is not flying yet': clear the cage, DISARM, QUAD4 falls" | another helper |
+| F6 | warm-tracker faults and his stuck TAKEN_BACK handled (the tilt-cut card), or accepted in writing with the sheet line "T2 says 'taken back, but our tracker is not flying yet': clear the cage, DISARM, QUAD4 falls" | **accepted in writing** (Wesley 11 Oct): the DISARM sheet line; warm_fault_not_live stays off |
 | F1-new | new authority, NOT built (needs a card + critic): the mux takes QUAD4 back when his stream is silent > 0.2 s while our tracker is live; our planner takes it back when his MPC latches its reference fault | listed only |
 
 ## 3. The flights, in order (one variable each)
 1. **R11a no-catch rehearsal (F10)**: the whole mission with `partner_args:='contact_dz:=0.03 ...'`: his descent holds the
-   marker 3 cm above plate 9, so no catch is possible. It exercises the pickup, transit, drop, the coil hand-over at
+   marker 3 cm above plate 9, so no catch is possible. If R10a showed his height error over 2 cm, use
+   `contact_dz:=0.05` (critic round 2 A8). It exercises the pickup, transit, drop, the coil hand-over at
    his rejoin, the 30 s give-up and our take-back, and measures his hold error over the moving plate and plate 9's noise
    with QUAD4 overhead. Ring hovering.
 2. **R11b contact, hover**: `contact_dz` -0.01 (1 cm below the face); twice.
@@ -97,7 +98,11 @@ at 1.0 m (T2: `our planner flies the ring`) -> his TAKEOFF. End of every flight:
 - rod < 0.10 m or body < 0.30 m;
 - an attitude step > 5 deg or ring tilt > 5 deg;
 - QUAD4 not down within 60 s;
-- a RELEASE GUARD failure. The fleet lands, with QUAD4 following the ring down at the tether's slack.
+- a RELEASE GUARD failure with plate 9 rising 2 cm (the coil held it). The fleet lands, with QUAD4 following the ring
+  down at the tether's slack.
+
+**Reported, not a stop** (Wesley 11 Oct, critic round 2 A1): a guard timeout with plate 9 still. QUAD4 follows down
+and lands, and the run is scored on the other bars.
 
 **Reported, no bar:** the overflight time and the minimum tip-to-carrier gap. Rotor wash is a rig-only question.
 
@@ -106,6 +111,10 @@ at 1.0 m (T2: `our planner flies the ring`) -> his TAKEOFF. End of every flight:
   ring once the puck is taken (`[magnet_gate] his OFF held` lines are fine); zero "HOLDING approach authority" with QUAD4 airborne.
 
 ## 6. Stop rules (the sheet's, plus)
+- To stop his attach, publish his give-up (`/join_planner/give_up` true); the ring stays at hover. LAND only as an
+  emergency, because a coil that holds plate 9 under LAND tilts the ring (critic round 2 A2).
+- After LANDED, if drone 4's mux still reads partner, clear the cage and press DISARM. This is accepted in writing by
+  Wesley, 11 Oct (F6).
 - Any falsifier in 5.1, 5.6 or 5.7: no more combined flights today.
 - QUAD4 frozen more than 5 s outside a hold phase: LAND (F1).
 - A pose gap over 0.1 s on 14 / 24 / 8 with QUAD4 overhead ends M1 for the day.
