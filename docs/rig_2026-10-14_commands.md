@@ -86,6 +86,12 @@ python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_plan
 10. **Mat and puck:** QUAD4's mat centre and the puck (body 6) in Motive, with the ring at its start spot.
     - Record each xy and its distance from the circle centre.
     - The swept edge is 1.2 m, or 1.4 m with QUAD4's rotor. Twin: mat 0.90 m, puck 1.49 m.
+11. **Puck in the net** (decides `drop_puck_wait_s` for 21-22 Oct):
+    - Ring up on a stand at ~1 m, puck (body 6) in the net under it.
+    - Record whether body 6 streams, with gaps under 0.1 s, for 10 s.
+    - If it streams, 21-22 Oct keeps the default (his drop waits up to 2 s for a puck pose).
+    - If it doesn't, 21-22 Oct types `drop_puck_wait_s:=0` (trust the release), and Wesley checks by eye that the puck
+      dropped.
 
 ## Flights, in order
 
