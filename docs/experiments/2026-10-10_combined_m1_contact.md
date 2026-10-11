@@ -587,6 +587,48 @@ run on the arm that failed.
 - **If the co-move missed the Thu gate:** the claim tree is m1-tiltcut4 plus TB16. nocatch_orbit and lead030 still
   fly on the same bars and are reported as failing; the circle take-back is not claimed.
 
+### 6.3a The reviewer on the claim table (12 Oct ~01:00; rig-wed ba40bd0, R1638-R1654 + R1655)
+**Verdict overall: NOT SUPPORTED.** Per line:
+
+| claim line | verdict | runs |
+|---|---|---|
+| Attach, hover | **SUPPORTED** | R1644, R1645, R1650-R1652 (R1654 apart from its clearance) |
+| Attach, circle | SUPPORTED WITH CORRECTIONS | R1646, R1647 (n=2); his match gate stalled in 3 of 6 circle runs |
+| Take-back, hover | **SUPPORTED** | R1648, R1649, R1653, R1642, R1643 |
+| Take-back, circle | **NOT SUPPORTED** as a pass | R1639 falsifies (LAND path); only R1640 reached a give-up (n=1) |
+| No-catch, hover | **SUPPORTED** | R1648, R1649 |
+| No-catch, circle | SUPPORTED WITH CORRECTIONS | only "no attach declared"; no failed proof rejected |
+| LAND during the proof | **SUPPORTED** | R1653 (n=1) |
+| LAND in transit | SUPPORTED WITH CORRECTIONS | the step is under 2 deg in 1 of 2 runs (3.45 / 1.39) |
+| Push abort | **NOT SUPPORTED** as frozen | R1654: rod 0.094 m (< 0.10) during the push; the abort and the re-attach work |
+
+**Recomputation:** all 17 rows plus R1655 reproduce exactly with `--check`. An independent recomputation agrees
+within 10 %.
+
+**Rows corrected** (`-corr` rows, 12 Oct):
+- **R1639:** three falsifiers. TB4 ring tilt 8.62 deg; his approach rod 0.069 m; rejoin ring tilt 5.77 deg.
+- **R1641:** rejoin ring tilt 9.10 deg.
+- **R1654:** rod 0.094 m.
+- **R1638:** the _nocatch confirm condition is not met.
+
+**Confound, cause not established:** the first wave (R1638-R1641) differs from every other circle run on the same SHA.
+- Ring-tilt spikes of 4.6-9.1 deg.
+- Carrier reference age p99 0.122-0.128 s, against 0.099-0.110 s.
+- MATCH_VELOCITY stalled in 3 of 4 runs, against 0 of 7 in TB6.
+- No flight code changed between 793183d and ba40bd0.
+
+**The table must not say:**
+- "every circle take-back bar confirms";
+- "the circle give-up take-back is repeated";
+- "no clearance falsifier in his flight";
+- "the circle no-catch shows a failed catch is rejected";
+- "the ramp keeps the transit step under 2 deg";
+- "contact within 10 s" (2 of 9 runs);
+- "the hand-over attitude/yaw bars are confirmed" (only the throttle step is scored).
+
+It must state that R1649 (nocatch_hover_2) is outside the card's list of 16, and report TB15's first-contact timeout
+count.
+
 ### 6.4 TB14: the landing tip-over (twin artefact; Wesley 9 and 10 Oct)
 **The mechanism** (traces, 11 Oct 10:25):
 - the welded QUAD4 sits 0.5 m from the ring centre, outside the rim;
