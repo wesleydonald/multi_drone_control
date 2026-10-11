@@ -7,6 +7,23 @@ rungs R8a/R8b leave this sheet. Wednesday: W4, W5, R8a0, and our attach check te
 Plates clockwise 0-11 from +x. M1 layout: drone 1 (QUAD1, `/drone_0`) plate 3, drone 2 plate 11, drone 3 plate 7;
 QUAD4 (`/drone_3`, body 14, tip body 24) leaves from / welds onto plate 9 (ring +y). Ring body 8.
 
+## Order for the day (Wesley 11 Oct)
+1. **09:00, props off:**
+   - item 1: Motive, with the body-rate check;
+   - item 2: the mocap survey, the wand walk, and the tip at plate 9;
+   - items 3-4: the QUAD4 record (contact height x3, taut length, marker to face, d_ok noise);
+   - item 7: the attach check and >= 10 hand catches;
+   - items 9-11: the prop radius, the mat and puck, the puck in the net;
+   - Part B 1: the hand ramps.
+2. **Flights, Part A:** w4, then w5.
+3. **Load test, props off, rig laptop, both stacks, real radios, 10 min.** This is the go/no-go for Part C. Check the
+   Part C launch lines there too: they refuse with W or L missing or mismatched, and start when typed.
+4. **Part C:** R11a, then R11b, only under its go conditions.
+5. **Only if there is time:** item 8 (the magnet hold) and Part B 2-7 (tilt checks a-f).
+
+Dropped: r8a0 (R11a covers QUAD4 armed idle on its mat beside a carry). Tuesday's desk rehearsal is skipped; its
+launch-line check moves to step 3.
+
 ## Setup
 
 ```bash
@@ -98,7 +115,6 @@ python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_plan
 ```bash
 $R $D params_file:=$C/drop_and_land_gi.yaml w4                          # hover detach, unannounced, freed drone lands + disarmed alone
 $R $D $O params_file:=$C/detach_unannounced_orbit_drop_gi.yaml w5       # circle detach, same
-$A weld_radius:=0 r8a0                                                  # carry on 3, QUAD4 armed idle on the floor
 ```
 
 - **Every flight:**
@@ -114,8 +130,7 @@ $A weld_radius:=0 r8a0                                                  # carry 
   `[Drone 4] down at its rest off the ring`: `Drone 4 is down at its rest off the ring: disarmed alone.`, and its
   elrs_interface / fc_arm_state reading disarmed while the others fly on (card 2026-10-09_departed_disarm_alone,
   rig bar). If it stays above its rest (rod on the floor), it is held there and the fleet disarm takes it.
-- **r8a0:** ring 0.5 m toward -y of the cage centre; QUAD4 on its mat 1.2 m out on +y; 30 s hover, `fleet land`.
-  QUAD4 stays down and armed idle (never flew).
+- **r8a0:** dropped (Wesley 11 Oct): R11a covers it.
 
 ## Part B: after the W flights, in a fresh terminal on the pinned candidate install `~/mdc_wt/rig-wed` (Wesley 11 Oct)
 
@@ -196,7 +211,7 @@ $A partner:=true partner_contact:=true partner_nodes:=true weld_radius:=R proof_
   but our tracker is not flying yet'), clear the cage and press DISARM before anyone walks in. DISARM latches every
   mux, and QUAD4 falls. Record whether it was pressed, and QUAD4's height.
 
-## To check at the desk rehearsal (Tuesday)
+## To check at the desk rehearsal (Tuesday): SKIPPED (Wesley 11 Oct). The launch-line check moves to the load test (step 3)
 
 The tree: `git log -1` on week4 (b4e11f1 or later; rig-prep = week4 since 10 Oct, check runs R1454-R1460).
 The newcomer defaults on: `ros2 param get /dissipative_planner` newcomer_lifecycle / newcomer_fault_land / departed_ground_idle -> True
