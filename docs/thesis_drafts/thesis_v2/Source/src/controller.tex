@@ -9,10 +9,10 @@
 % Its references (francis1976internal, pannocchia2003disturbance, pannocchia2007combined,
 % maeder2009linear, verschueren2022acados) are in references.bib.
 
-\subsection{Load--cable planner}
+\subsubsection{Load--cable planner}
 \label{sec:controller}
 
-The controller is a two-level cascade of model predictive controllers (Figure~\ref{fig:cascade}).
+The controller is a two-level cascade of model predictive controllers (Figure~\ref{fig:owners}, Section~\ref{sec:safety}).
 A centralised planner on the model of Section~\ref{sec:model} plans the motion of the payload and of
 every rod over a horizon. Each UAV's tracking MPC follows the planner's reference for that UAV,
 accounting for the planned rod force, and sends a collective throttle and three body-rate commands
@@ -21,29 +21,36 @@ solved with acados
 \cite{verschueren2022acados} using a real-time iteration (RTI) scheme \cite{diehl2002rti}: one
 Gauss--Newton SQP step per tick, warm-started from the previous solution, with the QPs solved by
 HPIPM \cite{frison2020hpipm} (partial condensing in the planner, full condensing in the tracker).
-Both horizons have $N_h = 20$ nodes over $T_h = 2$\,s.
+Both horizons have $N_h = 20$ nodes over $T_h = 2$\,s. The team size selects the planner's solver and the
+attachment geometry is a runtime parameter of it, so that a UAV leaving or joining switches the planner to a
+pre-built problem of the new size (Section~\ref{sec:reconfig}); on the rig the planner runs inside the
+reconfiguration node, which adds the detection of a release and the resize to the same optimal control problem,
+and the rig's carry flights are that node's. On the rig the planner starts no new iteration after 60\,ms of its
+100\,ms tick, and a plan that has not converged by then is replaced by the previous one shifted by a tick; [the
+measured solve times, Section~\ref{sec:res_compute}].
 
-\begin{figure}[h]
-\centering
-\begin{tikzpicture}[node distance=1.0cm and 1.3cm, >=Stealth,
-    blk/.style={draw, thick, rounded corners=2pt, align=center, minimum height=1.0cm, font=\small},
-    lab/.style={font=\scriptsize, align=center}]
-  \node[blk, minimum width=3.2cm] (plan) {Load--cable planner\\ \scriptsize 10\,Hz, $N_h=20$, $T_h=2$\,s};
-  \node[blk, right=2.0cm of plan, minimum width=2.8cm] (trk) {Tracking MPC $i$\\ \scriptsize 50\,Hz, one per UAV};
-  \node[blk, right=1.3cm of trk, minimum width=2.2cm] (fc) {Flight controller\\ \scriptsize rate loop};
-  \node[blk, below=1.1cm of trk, minimum width=2.8cm] (sys) {UAVs, rods and payload};
-  \node[blk, below=1.1cm of plan, minimum width=3.2cm] (dist) {Payload state, $\mathbf{d}$\\ \scriptsize integral, estimate};
-  \draw[->, thick] (plan) -- node[lab, above] {$\mathbf{p}_i, \mathbf{v}_i,$\\ $\mathbf{f}_i/m_q, \mathbf{a}_{c,i}$} (trk);
-  \draw[->, thick] (trk) -- node[lab, above] {$u_T, \boldsymbol{\omega}_{\mathrm{cmd}}$} (fc);
-  \draw[->, thick] (fc) |- (sys);
-  \draw[->, thick] (sys) -- node[lab, right] {mocap:\\ UAV state} (trk);
-  \draw[->, thick] (sys) -- node[lab, below] {mocap:\\ payload pose} (dist);
-  \draw[->, thick] (dist) -- node[lab, left] {$\hat{\mathbf{x}}_L, \mathbf{d}$} (plan);
-\end{tikzpicture}
-\caption[Controller structure]{Controller structure. Motion capture closes both loops; the disturbance term enters the
-planner's model.}
-\label{fig:cascade}
-\end{figure}
+% 12 Oct: the cascade figure is superseded by fig:owners (authority.tex); its source is kept below.
+% \begin{figure}[h]
+% \centering
+% \begin{tikzpicture}[node distance=1.0cm and 1.3cm, >=Stealth,
+%     blk/.style={draw, thick, rounded corners=2pt, align=center, minimum height=1.0cm, font=\small},
+%     lab/.style={font=\scriptsize, align=center}]
+%   \node[blk, minimum width=3.2cm] (plan) {Load--cable planner\\ \scriptsize 10\,Hz, $N_h=20$, $T_h=2$\,s};
+%   \node[blk, right=2.0cm of plan, minimum width=2.8cm] (trk) {Tracking MPC $i$\\ \scriptsize 50\,Hz, one per UAV};
+%   \node[blk, right=1.3cm of trk, minimum width=2.2cm] (fc) {Flight controller\\ \scriptsize rate loop};
+%   \node[blk, below=1.1cm of trk, minimum width=2.8cm] (sys) {UAVs, rods and payload};
+%   \node[blk, below=1.1cm of plan, minimum width=3.2cm] (dist) {Payload state, $\mathbf{d}$\\ \scriptsize integral, estimate};
+%   \draw[->, thick] (plan) -- node[lab, above] {$\mathbf{p}_i, \mathbf{v}_i,$\\ $\mathbf{f}_i/m_q, \mathbf{a}_{c,i}$} (trk);
+%   \draw[->, thick] (trk) -- node[lab, above] {$u_T, \boldsymbol{\omega}_{\mathrm{cmd}}$} (fc);
+%   \draw[->, thick] (fc) |- (sys);
+%   \draw[->, thick] (sys) -- node[lab, right] {mocap:\\ UAV state} (trk);
+%   \draw[->, thick] (sys) -- node[lab, below] {mocap:\\ payload pose} (dist);
+%   \draw[->, thick] (dist) -- node[lab, left] {$\hat{\mathbf{x}}_L, \mathbf{d}$} (plan);
+% \end{tikzpicture}
+% \caption[Controller structure]{Controller structure. Motion capture closes both loops; the disturbance term enters the
+% planner's model.}
+% \label{fig:cascade}
+% \end{figure}
 
 \paragraph{Optimal control problem.} At each planner tick the planner solves
 \begin{equation}
@@ -90,8 +97,10 @@ the attitude reference, and the planned cable acceleration $\mathbf{a}_{c,i} = -
 twelve numbers per node. The tracker interpolates the whole horizon at its own rate, so a late or skipped
 planner tick does not leave it without a reference.
 
-\subsection{UAV tracking MPC and thrust map}
+\subsection{Tracker, thrust map, measured pull and model integral}
 \label{sec:tracker}
+
+\subsubsection{UAV tracking MPC and thrust map}
 
 Each UAV $i$ runs a tracking MPC on a 17-state model, in which the four stick channels sent to the
 flight controller are themselves states and their rates of change are the inputs:
@@ -146,7 +155,7 @@ starts from where the actuators are. An earlier version relaxed this to the box
 $\hat{\mathbf{x}}_i(1-\epsilon) \le \mathbf{x}_0 \le \hat{\mathbf{x}}_i(1+\epsilon)$ with $\epsilon = 0.025$
 (Section~\ref{sec:res_ic}).
 
-\subsection{Steady-error rejection}
+\subsubsection{The model integral}
 \label{sec:disturbance}
 
 Any error that remains constant, from a model mismatch or an external force, is represented by the

@@ -1,15 +1,20 @@
 \section{Methodology}
 \label{sec:method}
 
-% Restructured 9 Oct (structure audit): system and platform, the model once, planner, tracker and
-% thrust map, steady-error rejection, floor start and landing, reconfiguration, the dissipative
-% alternative, experimental method. hardware.tex was split: platform to system_overview.tex, the
-% thrust identification procedure to controller.tex, its fit to Section 4.1, the parameter table to
-% Appendix B, arming, preflight and flight procedure to Appendix C, the test ladder to simulation.tex.
+% Restructured 12 Oct 2026 to the thesis plan of 11 Oct (section 4, "3 System and method"): 3.1 rig, twin and
+% roles (system_overview.tex, with the twin from simulation.tex); 3.2 model and planner (model.tex, the planner
+% part of controller.tex); 3.3 tracker, thrust map, measured pull, model integral, takeoff and landing
+% (controller.tex, takeoff_landing.tex); 3.4 reconfiguration (reconfiguration.tex); 3.5 authority and safety
+% (authority.tex, new; the safety paragraph and the owners figure); 3.6 method and metrics (simulation.tex as the
+% protocol, trajectories.tex, metrics.tex). Earlier history: 9 Oct structure audit (hardware.tex split into
+% system_overview, controller, Section 4.1, Appendix B and C, simulation.tex).
 
-This section describes the rig and its model, the two levels of the controller, the procedures that
-take a flight from the floor into the regime the model covers and back, the reconfiguration, and the
-experimental method.
+This section describes the rig, its twin and who flies what (Section~\ref{sec:overview}); the model and the
+planner (Section~\ref{sec:model}); the tracker on each UAV, its thrust map, the measured rod pull, the model
+integral, and the procedures that take a flight from the floor into the regime the model covers and back
+(Section~\ref{sec:tracker}); the reconfiguration, in both directions (Section~\ref{sec:reconfig}); who owns each
+UAV and what keeps the fleet safe when a step fails (Section~\ref{sec:safety}); and the experimental method with
+the metrics every result is scored on (Section~\ref{sec:experiments}).
 
 \input{Source/src/system_overview}
 
@@ -20,13 +25,14 @@ experimental method.
 \input{Source/src/takeoff_landing}
 
 \input{Source/src/reconfiguration}
-% The dissipative alternative (dissipative.tex) is Appendix F since 11 Oct: an earlier-plant comparison.
 
-\subsection{Experimental method}
+\input{Source/src/authority}
+
+\subsection{Method and metrics}
 \label{sec:experiments}
 
-Every result is flown against a named baseline, in the rig twin first and on the rig after it. The
-parameters of the twin and of the rig are listed in Appendix~\ref{sec:app_params}.
+Every result is flown against a named baseline, in the rig twin first and on the rig after it, under a rule
+written before the runs. The parameters of the twin and of the rig are listed in Appendix~\ref{sec:app_params}.
 
 \input{Source/src/simulation}
 

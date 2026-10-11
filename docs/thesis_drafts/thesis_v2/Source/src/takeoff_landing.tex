@@ -3,68 +3,38 @@
 % breakaway, ff_cap_release_s, lift ramp, LAND, TouchdownDetector), bringup/config/*.yaml.
 % Evidence: 23 Sep rig non-lift (start_taut), 30 Sep rig review, R0817/R0818, R0834-R0839 (B2),
 % R0807-R0816 (hand-over angle in the twin), RIG-1001-* (hand-over and rods on the rig).
+% Condensed 12 Oct 2026 to the plan's half page; the detail is Appendix C "Floor start and landing in detail".
 % Restructured 9 Oct (structure audit): the outcomes (the hand-over angle flown, fig:flight) moved to
 % Section 4.1.
 
-\subsection{Takeoff, lift and landing}
+\subsubsection{Takeoff, lift and landing}
 \label{sec:takeoff}
 
-The planner assumes taut rods, but every flight starts and ends with the payload on the floor and the
-rods slack or flat. The procedures below take a flight from the floor into the regime the planner
-models, and back.
-
-\paragraph{Why the planner cannot start from the floor.} With the payload resting and the rods flat,
-the UAVs sit about 0.7\,m from the payload's centre, 18--22\,cm outside the 45$^\circ$ cone on which the
-planner's references put them. Started from rest, the planner pulled the UAVs inwards over the payload
-instead of lifting it, the cause of the first failed lifts on the rig.
-
-\paragraph{Rod sweep (creep).} On TAKEOFF each UAV is anchored where it rests, and its rod is swept about
-its own attachment point at a constant rate, from its measured elevation to the planned elevation, 45$^\circ$
-until 7 October and 60$^\circ$ since. The UAV's reference is the far end of the rod on that arc, so the rod stays
-straight and the UAV never moves over the payload. The planner takes over (the hand-over) once every rod has
-been within 8$^\circ$ of the planned elevation for 1\,s (at least 37$^\circ$ before 7 October), or 3\,s after
-the sweep ends. The hand-over is refused below 30$^\circ$, because from
-shallower rods the lift needs two to three times the tension, mostly sideways.
-
-\paragraph{Rod lengths.} At the hand-over the planner measures each rod from motion capture, from the
-UAV's pivot to its attachment point, and uses the measured lengths in its model and its tautness gate.
-A measurement is accepted if each rod is within 25\,\% of the typed length and the rods agree within
-8\,cm; otherwise the typed length is kept and the reason logged. Without this, a rod shorter than typed
-reads as partly slack to the gate (Section~\ref{sec:sim_robustness}).
-% --- original text, flown before the rig twin; kept to refill this place:
-% Without this, a rod 4\,cm shorter than typed reads as slack to the gate and the fleet flies only
-% part of the cable feedforward (Section~\ref{sec:sim_robustness}).
-
-\paragraph{Pretension.} The rods are then loaded before the payload leaves the floor: every UAV's share
-of the cable feedforward rises together from zero to its planned value over 3\,s, with the height target
-at the resting height. A step in the planned pull here launched the payload and released two magnets on
-the rig, and UAVs pulling one after another tilted it.
-
-\paragraph{Breakaway.} When the payload rises 1\,cm, or its vertical speed exceeds 0.03\,m/s, it has broken
-free of the floor, and the fraction of the planned pull reached at that moment is frozen as a cap on the
-feedforward; continuing the ramp with the payload in the air ran it upwards at 0.38\,m/s on the rig. Once
-the lift starts, the cap is released back to full pull over 2\,s. Holding it for the whole flight, as in
-the first rig flights, leaves the trackers believing the rods pull less than they do, and the payload
-settles low (Section~\ref{sec:res_cap}).
-
-\paragraph{Lift.} The height target then ramps from the resting height to the target height at 0.1\,m/s,
-easing in over the first 1.2\,s and out over the last 8\,cm, and the trajectory starts when the ramp
-completes.
-
-\paragraph{Landing.} On LAND the planner lowers the payload's height target at 0.2\,m/s, with the formation
-shape unchanged, until the payload rests on the floor. A rigid rod then constrains its UAV: a UAV
-descending straight down is pushed outward as its rod lengthens horizontally, by 16--20\,cm in the rig
-twin, and this tipped UAVs over in a few landings. Three measures remove this.
+The planner assumes taut rods, but every flight starts and ends with the ring on the floor and the rods slack or
+flat, where the UAVs sit about 0.7\,m from the ring's centre, outside the cone the planner's references put them
+on; started from rest, the planner pulled the UAVs inwards over the ring instead of lifting it, the cause of the
+first failed lifts on the rig. Four steps take a flight from the floor into the regime the planner models, and three
+measures take it back; Appendix~\ref{sec:app_floor} gives each with its numbers and the failure it answers.
 \begin{itemize}
-    \item \textbf{Unwind.} Each UAV's reference moves out along its rod's circle about the grounded
-    attachment point, at the landing speed, down to level, and then straight down. Below 0.25\,m the
-    horizontal reference follows the UAV. Twin only: the rig's slack tethers let it land straight down.
-    \item \textbf{Feedforward ramp.} The planner blends each UAV's thrust and cable feedforward to plain
-    hover over 1\,s, instead of dropping the cable term in one step at touchdown, which left the attitude
-    oscillating while the rods still acted.
-    \item \textbf{Ground idle.} A UAV that has flown and is back within 3\,cm of its resting height, with
-    the payload down and its reference at the floor, switches to armed idle until the fleet disarms;
-    otherwise a UAV that lands first tracks a reference below the floor and rocks on its feet.
+    \item \textbf{Rod sweep.} On TAKEOFF each UAV is anchored where it rests and its rod is swept about its own
+    attachment point from its measured elevation to the planned one (60$^\circ$ since 7 October), the UAV's
+    reference riding the far end of the rod, so that the rod stays straight and the UAV never crosses over the
+    ring. The planner takes over once every rod has held within 8$^\circ$ of the planned elevation for 1\,s, and
+    measures each rod's length from motion capture at that hand-over for its model and its tautness gate.
+    \item \textbf{Pretension and breakaway.} Every UAV's share of the planned pull then rises together from zero
+    over 3\,s with the ring's height target at its resting height; a step here launched the ring and released two
+    magnets on the rig. When the ring rises 1\,cm or faster than 0.03\,m/s it has broken free, and the fraction of
+    the planned pull reached at that moment is frozen as a cap on the trackers' feedforward, released back to the
+    full pull over 2\,s once the lift starts.
+    \item \textbf{Lift.} The height target ramps to the target height at 0.1\,m/s, eased in and out, and the
+    trajectory starts when the ramp completes.
+    \item \textbf{Landing.} On LAND the ring's height target descends at 0.2\,m/s with the formation unchanged
+    until the ring rests. A rigid rod then pushes a UAV descending straight down outward as the rod lengthens
+    horizontally, which tipped UAVs over in the twin, so each UAV's reference unwinds along its rod's circle about
+    the grounded attachment point before it descends (twin only: the rig's tethers go slack and it lands straight
+    down); the planner blends each UAV's thrust and rod feedforward to plain hover over 1\,s instead of dropping
+    the rod term at touchdown; and a UAV back at its resting height with the ring down idles armed until the fleet
+    disarms, so that a UAV that lands first does not track a reference below the floor. Touchdown is declared when
+    the UAVs stop following the descending reference for 1\,s after at least 5\,cm of descent, and the fleet
+    manager disarms the fleet.
 \end{itemize}
-Touchdown is detected when the UAVs stop following the descending reference for 1\,s, after descending at
-least 5\,cm; the planner then reports the fleet landed and the fleet manager disarms it.

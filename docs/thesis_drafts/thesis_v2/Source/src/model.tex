@@ -14,8 +14,10 @@
 %  - a constant force d on the payload is added for steady-error rejection.
 % The code (mpc_planner, after Sun et al.) uses s_i = -q_i and t_i = lambda_i.
 
-\subsection{System model}
+\subsection{Model and planner}
 \label{sec:model}
+
+\subsubsection{System model}
 
 The controller's model follows the load--cable formulation of \cite{tudelft} with the standard
 simplifications of Section~\ref{sec:lit_models}: the payload is a rigid body of known mass and inertia,

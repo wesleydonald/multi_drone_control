@@ -200,6 +200,66 @@ the figure-8; the detach; and the attach last. Each step is first flown in the r
 same launch commands.
 % Moved 9 Oct (page trim) from the method's experimental process (Section 3.9.1).
 
+\subsection{Floor start and landing in detail}
+\label{sec:app_floor}
+% Moved 12 Oct 2026 from Section 3.3 (takeoff_landing.tex), which keeps the half-page summary.
+
+\paragraph{Why the planner cannot start from the floor.} With the payload resting and the rods flat,
+the UAVs sit about 0.7\,m from the payload's centre, 18--22\,cm outside the 45$^\circ$ cone on which the
+planner's references put them. Started from rest, the planner pulled the UAVs inwards over the payload
+instead of lifting it, the cause of the first failed lifts on the rig.
+
+\paragraph{Rod sweep (creep).} On TAKEOFF each UAV is anchored where it rests, and its rod is swept about
+its own attachment point at a constant rate, from its measured elevation to the planned elevation, 45$^\circ$
+until 7 October and 60$^\circ$ since. The UAV's reference is the far end of the rod on that arc, so the rod stays
+straight and the UAV never moves over the payload. The planner takes over (the hand-over) once every rod has
+been within 8$^\circ$ of the planned elevation for 1\,s (at least 37$^\circ$ before 7 October), or 3\,s after
+the sweep ends. The hand-over is refused below 30$^\circ$, because from
+shallower rods the lift needs two to three times the tension, mostly sideways.
+
+\paragraph{Rod lengths.} At the hand-over the planner measures each rod from motion capture, from the
+UAV's pivot to its attachment point, and uses the measured lengths in its model and its tautness gate.
+A measurement is accepted if each rod is within 25\,\% of the typed length and the rods agree within
+8\,cm; otherwise the typed length is kept and the reason logged. Without this, a rod shorter than typed
+reads as partly slack to the gate (Section~\ref{sec:sim_robustness}).
+% --- original text, flown before the rig twin; kept to refill this place:
+% Without this, a rod 4\,cm shorter than typed reads as slack to the gate and the fleet flies only
+% part of the cable feedforward (Section~\ref{sec:sim_robustness}).
+
+\paragraph{Pretension.} The rods are then loaded before the payload leaves the floor: every UAV's share
+of the cable feedforward rises together from zero to its planned value over 3\,s, with the height target
+at the resting height. A step in the planned pull here launched the payload and released two magnets on
+the rig, and UAVs pulling one after another tilted it.
+
+\paragraph{Breakaway.} When the payload rises 1\,cm, or its vertical speed exceeds 0.03\,m/s, it has broken
+free of the floor, and the fraction of the planned pull reached at that moment is frozen as a cap on the
+feedforward; continuing the ramp with the payload in the air ran it upwards at 0.38\,m/s on the rig. Once
+the lift starts, the cap is released back to full pull over 2\,s. Holding it for the whole flight, as in
+the first rig flights, leaves the trackers believing the rods pull less than they do, and the payload
+settles low (Section~\ref{sec:res_cap}).
+
+\paragraph{Lift.} The height target then ramps from the resting height to the target height at 0.1\,m/s,
+easing in over the first 1.2\,s and out over the last 8\,cm, and the trajectory starts when the ramp
+completes.
+
+\paragraph{Landing.} On LAND the planner lowers the payload's height target at 0.2\,m/s, with the formation
+shape unchanged, until the payload rests on the floor. A rigid rod then constrains its UAV: a UAV
+descending straight down is pushed outward as its rod lengthens horizontally, by 16--20\,cm in the rig
+twin, and this tipped UAVs over in a few landings. Three measures remove this.
+\begin{itemize}
+    \item \textbf{Unwind.} Each UAV's reference moves out along its rod's circle about the grounded
+    attachment point, at the landing speed, down to level, and then straight down. Below 0.25\,m the
+    horizontal reference follows the UAV. Twin only: the rig's slack tethers let it land straight down.
+    \item \textbf{Feedforward ramp.} The planner blends each UAV's thrust and cable feedforward to plain
+    hover over 1\,s, instead of dropping the cable term in one step at touchdown, which left the attitude
+    oscillating while the rods still acted.
+    \item \textbf{Ground idle.} A UAV that has flown and is back within 3\,cm of its resting height, with
+    the payload down and its reference at the floor, switches to armed idle until the fleet disarms;
+    otherwise a UAV that lands first tracks a reference below the floor and rocks on its feet.
+\end{itemize}
+Touchdown is detected when the UAVs stop following the descending reference for 1\,s, after descending at
+least 5\,cm; the planner then reports the fleet landed and the fleet manager disarms it.
+
 \subsection{Rig days}
 
 The rig is available about two days a week, and each day followed the simulation work of the days
@@ -652,6 +712,50 @@ gate stays closed.}
 % \end{tabularx}
 % \end{table}
 
+\subsection{The twin's own approach and proximity weld}
+\label{sec:app_proximity_weld}
+% Moved 12 Oct 2026 from Section 3.4: the attach sequence flown in the twin before the admission contract,
+% where this work's own approach welded the magnet within 8 cm of the plate. On the rig the magnet catches on
+% contact only, so this approach is twin and thesis only (decision of 11 Oct).
+
+Before the admission contract of Section~\ref{sec:reconfig}, the twin flew an attach in which this work's own
+tracker approached the plate and the weld was declared from proximity rather than from contact and a lift. The
+sequence is kept here because the fold-in, the authority hand-over and their negatives were first found on it.
+
+\paragraph{Sequence.}
+\begin{enumerate}
+    \item \textbf{Target hold.} ATTACH freezes the payload's horizontal reference, or keeps it on its
+    trajectory when the payload is moving, shifted onto the measured payload position, so the newcomer
+    approaches where the payload actually is.
+    \item \textbf{Approach.} The newcomer flies to a point above its plate and descends onto it, flown by
+    the collaborator's approach controller or by its own tracker on an approach profile from this work.
+    The payload may keep moving, at up to 0.2\,m/s.
+    \redo{a weld onto a payload moving at 0.4\,m/s against 0.2\,m/s (the limit on the payload's speed during the approach).}
+% --- original text, flown before the rig twin; kept to refill this place:
+%     approach profile from this work. The payload may keep moving, at up to 0.2\,m/s; at 0.4\,m/s the
+%     weld flipped the payload in simulation.
+    \item \textbf{Weld.} A magnet manager welds when the magnet tip is within 8\,cm of the plate point,
+    computed from the payload's measured pose, and the relative speed is under 0.05\,m/s, both for 0.15\,s.
+    \item \textbf{Authority hand-over.} Until the weld, a multiplexer forwards the approach controller's
+    commands to the newcomer's radio; after it, the multiplexer switches to this work's tracker, only on a
+    command that is armed and above idle throttle, and latches. An abort latches the mux to a disarmed idle
+    command until it is restarted.
+    \redo{the authority hand-over at the weld with the mux switching on an armed but idle stream, against the armed-and-above-idle rule: whether the newcomer's motors cut at the weld.}
+% --- original text, flown before the rig twin; kept to refill this place:
+%     tracker, but only on a command that is armed and above idle throttle. A mux that handed authority
+%     to an armed but idle stream cut the newcomer's motors at every weld in early tests. The switch is
+%     latched. An abort latches the mux to a disarmed idle command until it is restarted.
+    \item \textbf{Fold-in.} The planner records the weld point in the payload frame and switches to
+    the solver for $N+1$ UAVs, with the newcomer's tension starting at 0.1\,N and every UAV's tension
+    blended to the balanced solution for the new geometry, as a dock blends thrust across the controller
+    switch \cite{sugihara2023trady}.
+    \redo{the fold-in with the newcomer's tension starting at 1\,N against 0.1\,N: payload tilt at the weld.}
+% --- original text, flown before the rig twin; kept to refill this place:
+%     blended to the balanced solution for the new geometry. A newcomer started at 1\,N of tension
+%     pulled the payload with a lever about the incumbents' cable apex and tilted it at the weld.
+    \item \textbf{Resume.} The trajectory continues with $N+1$ UAVs.
+\end{enumerate}
+
 \subsection{Ground join and hand-over}
 
 \redo{the ground join: the collaborator's controller joins four UAVs to the ring on the floor one at a time and hands them to this work's planner, which lifts, hovers and lands (joins completed, ring height, ring and UAV tilt); with it the hand-over bench under CPU load, body rates from the simulated gyro against differenced poses.}
@@ -700,6 +804,9 @@ ring on 0.5\,m rods, 0.64\,kg UAVs and a linear thrust map, before the rig twin 
 existed. None of it was re-flown on the twin, and the main text does not rest on it. It records the second
 reference generator built for the project plan's secondary question, the comparison that answered it, and the
 measured reasons the planner was kept; where a number is quoted, it is the earlier plant's.
+
+% 12 Oct: the architecture taxonomy and the distributed literature moved here from the review (plan: App F).
+\input{Source/src/app_network_lit}
 
 \input{Source/src/dissipative}
 

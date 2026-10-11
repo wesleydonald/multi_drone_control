@@ -49,12 +49,27 @@ events (TAKEOFF, the push, DETACH, LAND) from the run's event log.
     height below its pre-event mean), the detection time (from the magnet's OFF to the planner's resize), the
     steady offset, the landing lean, the clearances and the survivors' shares keep their scorers and are not
     part of the freeze.
-    \item[Attach] The peak payload tilt and the height loss (dip) after the weld, and whether the tilt
-    returns under 2$^\circ$ within 3\,s; for the rejoin mission, also the tilt at the detach, the mean tilt
-    over the orbit and the time from TAKEOFF to landed.
+    \item[Join metrics] For a newcomer admitted to the ring: the time from the last contact to the proof; the ring's
+    tilt rise, on the release metric above with the contact as the event, from the contact to 8\,s after the
+    confirmation; the ring dip over the same window; the hand-over step, the change in the newcomer's applied
+    throttle, roll, pitch and yaw-rate commands between the 0.1\,s before the switch of authority and the 0.3\,s
+    after it, as a fraction of its hover throttle and in degrees; the newcomer's tilt at the confirmation; and the
+    clearances of the newcomer's body and rod to every carrier body and rod through its approach and, when it is
+    taken back, through its take-back. For the full mission, also the tilt at the release, the mean tilt over the
+    circle and the time from TAKEOFF to every UAV landed.
+    \item[Magnet margin] For a release, the survivors' peak measured rod pull and the rate at which it rises,
+    against the magnet's hold at that rod angle (Section~\ref{sec:hardware}); the one metric that says how close a
+    transient came to letting a second magnet go.
+    \item[Switch validation] For every resize, the planner's solver status and residual at the first live solve
+    after the switch, the distance of that solve from an offline solve of the same logged problem run to
+    convergence, the solve time against the 60\,ms budget on the rig, and the step in each survivor's commanded
+    throttle across the switch.
     \item[Solver health] The number of planner solves that failed or did not converge.
 \end{description}
-Each table cell is the mean over its runs, with the number of runs in brackets.
+Each table cell is the mean over its runs, with the number of runs in brackets. Every arm of a lever table and
+every ledger row also reports the state the ring was in before its event, the steady offset, the tilt and the
+leaver's pull over the pre-window, so that a lever is read against the state it acted on and not only against
+the other arm.
 
 \paragraph{Resolving a lever pair.} A lever on the transient is tested as a one-variable pair of arms A and B,
 each with at least two runs and one value per run ($\Delta\theta$ unless the table says otherwise), with the

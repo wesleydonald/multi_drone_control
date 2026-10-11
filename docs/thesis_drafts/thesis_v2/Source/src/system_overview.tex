@@ -1,89 +1,107 @@
-% system_overview.tex -- Methodology: system and platform (draft 4 Oct 2026).
-% Restructured 9 Oct (structure audit): the platform paragraphs and fig:geometry moved here from
-% hardware.tex, so the geometry is defined before the model; the duplicate reference and takeoff
-% paragraphs cut (the interpolation sentence moved to the planner's output).
+% system_overview.tex -- Methodology 3.1: rig, twin and roles (rewritten 12 Oct 2026 to the thesis plan of
+% 11 Oct). The safety paragraph and its label sec:safety moved to authority.tex (3.5); the nodes figure is replaced
+% by fig:owners there. The twin's description moved here from simulation.tex with its label sec:simulation. T4 is the
+% plate numbering by angle; the rig sheets of 7 Oct number plates anticlockwise, those of 8 Oct clockwise.
 
-\subsection{System and platform}
+\subsection{Rig, twin and roles}
 \label{sec:overview}
 
-\subsubsection{Nodes and safety}
-
-All control runs centrally, on one ground computer under ROS~2 (Robot Operating System~2). Motion
-capture (OptiTrack) is the only sensing: it gives the pose of each UAV and of the payload, and nothing
-on the payload is instrumented. Each UAV's flight controller runs Betaflight in rate mode, receives a
-collective throttle and three body-rate stick commands over its own ExpressLRS (ELRS) radio link, and
-closes only its inner rate loop. Figure~\ref{fig:nodes} shows the nodes and what they exchange.
-
-\begin{figure}[h]
-\centering
-\begin{tikzpicture}[>=Stealth,
-    blk/.style={draw, thick, rounded corners=2pt, align=center, minimum height=0.95cm, font=\small},
-    lab/.style={font=\scriptsize, align=center}]
-  \node[blk, minimum width=2.4cm] (mocap) at (0,0) {Motion capture\\ \scriptsize poses};
-  \node[blk, minimum width=2.7cm] (plan) at (4.9,0) {Load--cable planner\\ \scriptsize 10\,Hz};
-  \node[blk, minimum width=2.4cm] (fm) at (9.5,0) {Fleet manager\\ \scriptsize phases, safety};
-  \node[blk, minimum width=1.9cm] (op) at (13.4,0) {Operator};
-  \node[blk, minimum width=2.7cm] (trk) at (4.9,-2.2) {Tracker $i$\\ \scriptsize 50\,Hz, one per UAV};
-  \node[blk, minimum width=2.7cm] (uav) at (4.9,-4.4) {UAV $i$\\ \scriptsize ELRS link, Betaflight rate loop};
-  \draw[->, thick] (mocap) -- node[lab, above] {payload\\ pose} (plan);
-  \draw[->, thick] (mocap.south) |- node[lab, pos=0.75, above] {UAV pose} (trk.west);
-  \draw[->, thick] (plan) -- node[lab, right] {horizon for UAV $i$} (trk);
-  \draw[->, thick] (trk) -- node[lab, right] {throttle, rate sticks, magnet} (uav);
-  \draw[->, thick] (fm) -- node[lab, above] {phase} (plan);
-  \draw[->, thick] (op) -- node[lab, above] {commands} (fm);
-  \draw[->, thick] ([xshift=-0.35cm]fm.south) |- node[lab, pos=0.75, above] {arm, disarm} ([yshift=0.18cm]trk.east);
-  \draw[->, thick, dashed] ([yshift=-0.18cm]trk.east) -| node[lab, pos=0.25, below] {fault} ([xshift=0.35cm]fm.south);
-\end{tikzpicture}
-\caption[Nodes and links]{Nodes and links. Solid: commands, references and poses; dashed: a tracker
-reporting a fault, which disarms the whole fleet. The operator's commands are ARM, TAKEOFF, LAND,
-DETACH and ATTACH.}
-\label{fig:nodes}
-\end{figure}
-
-The system has three layers.
-\begin{description}
-    \item[Planner.] The centralised load--cable MPC of Section~\ref{sec:controller} plans the motion of
-    the payload and of every rod at 10\,Hz and publishes each UAV's reference over the horizon. The
-    dissipative network of Section~\ref{sec:dissipative} can replace it in flight; both publish the
-    same reference format, so the trackers do not know which one is active.
-    \item[Trackers.] One tracking MPC per UAV at 50\,Hz turns its UAV's part of the plan into the radio
-    commands.
-    \item[Fleet manager.] It sequences ARM, TAKEOFF (the climb, the rod sweep to the working elevation
-    and the lift), the trajectory, LAND, and the reconfiguration events DETACH and ATTACH
-    (Section~\ref{sec:reconfig}).
-\end{description}
-\paragraph{Safety.}\label{sec:safety} Every tracker checks its own UAV against a flight envelope (tilt and payload tilt
-both 60$^\circ$, speed 3\,m/s) and checks that its motion-capture pose (0.25\,s) and the planner's
-reference (1\,s) are fresh. Any violation disarms the whole fleet, not the one UAV: a single UAV losing
-thrust on a shared rigid payload drags the others with it. The exceptions are UAVs that are not on the payload: a fault on a newcomer
-that is not yet welded disarms the newcomer alone and lands the fleet, and a UAV that has left the payload is
-pushed down to its resting height and disarmed alone (Figure~\ref{fig:disarm_lanes}). LAND lands every UAV,
-whatever it is doing. There is no geofence; the operator holds a
-kill switch. On the rig each UAV must confirm that its flight controller is armed before the fleet
-takes off, and a UAV that disarms between ARM and TAKEOFF grounds the fleet and TAKEOFF is refused,
-since three UAVs lifting a ring sized for four would drag it. On the rig the planner starts no new
-iteration after 60\,ms, and a plan that has not converged by then is replaced by the previous one, shifted
-by a tick.
-
-\subsubsection{Rig hardware}
+\subsubsection{The rig}
 \label{sec:hardware}
 
-\paragraph{UAVs.} Four UAVs run Betaflight in rate mode on six-cell batteries. Each has its own
-ELRS receiver and a ground transmitter on a USB serial port, so every UAV is commanded on its own link
-at 100\,Hz: the throttle, three rate sticks, the arm switch and an auxiliary channel that switches the
-UAV's magnet, held on from start-up so that a quiet link cannot drop the payload. The flight
-controller's telemetry (battery voltage, flight mode, link quality) comes back on the same link. As
-flown, each UAV weighs 0.55\,kg: an airframe and battery of 0.475\,kg, plus its rod and magnet.
+All control runs centrally, on one ground computer under ROS~2 (Robot Operating System~2), in a
+6\,$\times$\,6\,$\times$\,4\,m motion-capture cage. Motion capture (OptiTrack) is the only sensing: it gives the
+pose of each UAV, of the ring and of the newcomer's magnet tip, and nothing on the ring is instrumented; the
+velocities and body rates of the UAVs and of the ring are differentiated from the poses. Each UAV's flight
+controller runs Betaflight in rate mode, receives a collective throttle and three body-rate stick commands over
+its own ExpressLRS (ELRS) radio link at 100\,Hz, and closes only its inner rate loop; the arm switch and the
+magnet share the link, and the flight controller's telemetry (battery voltage, flight mode, link quality) comes
+back on it. Three nodes do the control (Figure~\ref{fig:owners}, Section~\ref{sec:safety}): a centralised planner
+that plans the ring's motion and every rod at 10\,Hz (Section~\ref{sec:controller}), one tracking controller per
+UAV at 50\,Hz that turns its share of the plan into radio commands (Section~\ref{sec:tracker}), and a fleet
+manager that sequences ARM, TAKEOFF, the trajectory, LAND and the reconfiguration events.
 
-\paragraph{Rods, payload and motion capture.} Each UAV carries a rigid rod of 0.55\,m and 0.075\,kg with
-a ball joint at both ends; the upper joint sits 4\,cm below the UAV's centre. The payload is a 0.86\,kg
-ring of 0.51\,m diameter and 40\,mm thickness, with twelve magnet plates every 30$^\circ$ on its top face
-at a radius of 0.225\,m. Each rod ends in an electromagnet that holds on a plate with 10--12\,N and
-releases under a jerk. A layout is named by its plate numbers, anticlockwise from plate 0 on the ring's
-$+x$ axis (Figure~\ref{fig:geometry}); Figure~\ref{fig:rig_photo} shows the rig. OptiTrack tracks one
-rigid body per UAV and one for the ring. Its poses are the only state measurement: the velocities and
-body rates of the UAVs and of the ring are differentiated from them.
+\paragraph{UAVs, rods and ring.} Four UAVs on six-cell batteries, each 0.55\,kg as flown: an airframe and battery of
+0.475\,kg plus its rod and magnet. Each carries a rigid rod of 0.55\,m and 0.075\,kg with a ball joint at both
+ends; the upper joint sits 4\,cm below the UAV's centre. The ring is 0.86\,kg, 0.51\,m across and 40\,mm thick, with
+twelve magnet plates every 30$^\circ$ on its top face at a radius of 0.225\,m. Each rod ends in an electromagnet
+that catches on a plate only on contact, holds about 9--10\,N straight off the face and less under a pull across
+it, and releases under a jerk rather than under a steady load; [the hold against the angle of pull, measured with
+a spring scale at 0, 30, 45 and 60$^\circ$ off the plate's axis on 14 October]. The magnets are held on from
+start-up so that a quiet radio link cannot drop the ring, and a magnet is switched off by a channel on its UAV's
+own link: that is how a release is commanded, and a release the planner is not told of is made the same way. The
+newcomer carries the same rod on a tether that goes slack on the rig once it is free of the ring; in the twin
+every link, that tether included, is rigid.
+
+\paragraph{Layouts and plate numbering.} A layout is named by the plates its UAVs stand on, counted anticlockwise
+from plate 0 on the ring's $+x$ axis, so that plate $k$ sits at $30k$ degrees (Figure~\ref{fig:geometry}). The rig
+sheets and the collaborator's code count differently, and Table~\ref{tab:plates} gives the map; the text and the
+tables of this thesis use angles wherever a plate matters, so that no reader needs the map. The carry layout puts
+UAVs at 30, 90, 150 and 270$^\circ$, and the UAV at 90$^\circ$ is the one that leaves and rejoins
+(Section~\ref{sec:reconfig}).
+
+\begin{table}[h]
+\centering
+\small
+\caption{Plate numbering. This thesis counts anticlockwise from the $+x$ axis; the rig's command sheets count
+clockwise from the same plate; the collaborator's stack counts anticlockwise.}
+\label{tab:plates}
+\begin{tabular}{cccc}
+\toprule
+This thesis (anticlockwise) & Angle & Rig sheets (clockwise) & Collaborator (anticlockwise) \\
+\midrule
+1 & 30$^\circ$ & 11 & 1 \\
+3 & 90$^\circ$ & 9 & 3 \\
+5 & 150$^\circ$ & 7 & 5 \\
+6 & 180$^\circ$ & 6 & 6 \\
+9 & 270$^\circ$ & 3 & 9 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \input{Source/src/fig_geometry}
 
-\pendingfig{fig:rig_photo}{The rig: four UAVs on rods, the ring with its twelve magnet plates, the motion-capture markers and the newcomer's magnet tip.}{photograph at the 14 Oct setup}
+\pendingfig{fig:rig_photo}{The rig: four UAVs on rods, the ring with its twelve magnet plates, the motion-capture
+markers and the newcomer's magnet tip, with a to-scale top and side view.}{photograph at the 14 October setup}
+
+\subsubsection{The rig twin}
+\label{sec:simulation}
+
+Every controller change is flown in simulation before it reaches the rig, with the same launch files and
+controller code. The physics simulator is Gazebo \cite{koenig2004gazebo}, connected to ROS~2
+\cite{macenski2022ros2} through bridges. The worlds are generated by a script from the rig's measured geometry
+and masses, and each flight starts with the ring on the floor. A flight controller emulator stands in for
+Betaflight: it maps the throttle to rotor speed so that thrust follows the rig's identified affine map
+(Section~\ref{sec:tracker}), with each UAV's own offset and a battery that sags under load, and closes a
+proportional--integral rate loop on the simulated gyro. A motion-capture emulator publishes the simulated poses
+on the rig's topics at 120\,Hz. The twin runs at about 0.3 of real time with the full stack on a laptop, under
+simulated time; wall-clock watchdogs fire when it falls further behind, and such runs are voided and flown again.
+The simulator effects that had to be removed before the twin could be trusted are discussed in
+Section~\ref{sec:discussion}, and a software-in-the-loop bench flies the same controllers against a plant that
+matches the controller's own model.
+
+\paragraph{What the twin does not model.} The twin is built from the rig's thrust map, geometry and masses, and
+it leaves out six things, each of which the results chapters name where it matters. (i) Loop latency: the rig's
+command path carries about 50\,ms through the radio and 30\,ms through the flight controller, and the twin cannot
+fly with that delay inserted (a UAV tipped 83$^\circ$ at takeoff when it was), so it flies without it. (ii) Solver
+timing: in the twin the planner always finishes before its next tick, because simulated time waits for it; on the
+rig it has 60\,ms. (iii) Motion-capture noise: the twin's poses are exact. (iv) Rotor wake on the ring and on the
+other UAVs. (v) The slack tether: every link is rigid in the twin. (vi) The magnet's holding limit: a twin magnet
+never lets go unless commanded. The rig's own measurement had one artefact of its own until the evening of
+8 October: body rates were rounded to 0.1\,rad/s on their way to the trackers, and rig flights are labelled before
+or after that fix wherever a rate-dependent quantity is compared.
+
+\subsubsection{Roles}
+\label{sec:roles}
+
+Two controllers fly in this work, and the division is the same in the twin and on the rig. This work's planner and
+trackers carry the ring: the floor start, the carry, the detection of a release, the resize and the redistribution,
+the confirmation of an attach from motion capture, the switch of the newcomer's radio, the fold-in, the take-back
+and the fault policy. The collaborator's controller flies a free UAV: the pickup of an object with the UAV's
+magnet, the transit, the drop into the ring, the descent onto a plate to contact, and the lift that proves the
+catch. Where this work's code runs inside the collaborator's stack (the lift from contact, the proof states, the
+retry of a pickup, the magnet switched off on a take-back, the check that the object was dropped) it is listed as
+this work's, [made with the collaborator's written agreement; the wording of the roles table in the introduction
+and of the originality statement is to be agreed with him and the supervisor]. The collaborator's thesis is cited as
+in preparation, and his controller is described in this thesis only as far as the admission contract needs
+(Section~\ref{sec:reconfig}).
