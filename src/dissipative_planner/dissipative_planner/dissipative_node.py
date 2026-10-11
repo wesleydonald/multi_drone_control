@@ -104,9 +104,13 @@ GUARD_PASS_S = 0.1
 GUARD_TIP_BODY_M = 0.03
 GUARD_PLATE_AVG_S = 0.2
 GUARD_WHY = ('ring', 'tip', 'body', 'plate', 'band')   # a guard tick's no-pass causes, counted for a timeout's line
+# m/s: the guard stage's reference speed (every other stage DETACH_STEP_VEL): a held coil lifted plate 9 ~6 cm at 0.15
+# before the 2 cm check and the braking caught it (Wesley 11 Oct, critic round 2 follow-up, 4)
+GUARD_STAGE_VEL = 0.06
 # a failed guard (the coil may still hold plate 9): QUAD4 follows the landing ring down this far below the taut
-# tether, then once the ring is down steps this far out from the plate and as far down, and lands alone (Wesley 11 Oct)
-GUARD_SLACK_M = 0.05
+# tether, then once the ring is down steps this far out from the plate and as far down, and lands alone (Wesley 11 Oct;
+# the slack 0.12 from 0.05: the reference lags the LAND's step to land_vel, critic round 2 follow-up, 3)
+GUARD_SLACK_M = 0.12
 GUARD_OUT_M = 0.35
 GUARD_FOLLOW_VEL = 0.3     # m/s: the most of the ring's measured descent fed forward (land_vel 0.2 + margin)
 GUARD_LAND_WAIT_S = 2.0    # s: the fleet LAND waits for QUAD4 at the slack, at most this long (Wesley 11 Oct)
@@ -2182,8 +2186,9 @@ class DissipativeController(LoadPlanner):
         if goal is None:
             goal = q
         v_g = np.array([0.0, 0.0, st['guard']['vz']]) if stage == 'guard_follow' else np.zeros(3)
+        vmax = GUARD_STAGE_VEL if stage == 'guard' else DETACH_STEP_VEL
         # a moving goal is aimed at from where it was a step back, so the step's end meets it rather than leads it
-        q, v, a = take_back_ramp(q, v, goal - v_g * dt, v_f, dt, v_g=v_g)
+        q, v, a = take_back_ramp(q, v, goal - v_g * dt, v_f, dt, vmax=vmax, v_g=v_g)
         st['q'], st['v'], st['a'] = q, v, a
         p_hold[:] = q + np.r_[st['D'], 0.0]
         nodes = [(p_hold.copy(), v.copy(), a_ff + a, a_c)]
@@ -2194,7 +2199,7 @@ class DissipativeController(LoadPlanner):
                 D_k = c_k - st['c0']
             else:
                 vf_k, D_k = np.zeros(2), st['D']
-            qk, vk, ak = take_back_ramp(qk, vk, goal + v_g * (self.dt * (k - 1)), vf_k, self.dt, v_g=v_g)
+            qk, vk, ak = take_back_ramp(qk, vk, goal + v_g * (self.dt * (k - 1)), vf_k, self.dt, vmax=vmax, v_g=v_g)
             nodes.append((qk + np.r_[D_k, 0.0], vk, a_ff + ak, a_c))
         self._publish_ref(d, nodes)
         return True
