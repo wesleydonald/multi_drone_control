@@ -43,8 +43,10 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 
 ## Running
 - Lab PC: idle. The W4/W5 bands are frozen (R1626, R1627; freeze doc §2.4).
-- Laptop: idle. Running: rig-port critic round 2 part A on the candidate (critic agent, read-only; id a50e0e275b6798a55).
-  Its output goes under "## Critic" in m1-comove docs/experiments/2026-10-21_combined_m1_rig.md (round 1 is there now).
+- Laptop: idle. Critic round 2 done: GO WITH CHANGES for hover R11a/R11b (rig card ## Critic; answers in decisions.md).
+  Running: helper H = the hardening (A1 constants, A3/A9 launch refusals, A4 weld-point plate, A5 debounce, A7 his drop
+  check) on branch m1-harden (worktree mdc_wt/m1-harden from m1-comove 5e70f54; id a8ee7aec9fdaab456; no commits).
+  Then: review, a short critic pass on the diff, merge into m1-comove; then the QUAD4 record loader and the smoke.
 - The other chat (thesis lane) finished 11 Oct; its work is merged (see above).
 
 ## TB6 (co-moving take-back, m1-comove c53ae0c; card rev 10 §6.2): COMPLETE, passes its gate criteria
