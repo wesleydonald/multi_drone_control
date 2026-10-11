@@ -1,5 +1,31 @@
 # Combined M1 subtest: Tejen flies QUAD4 from its mat through pickup, drop and a contact attach proved by a small lift; our check confirms; bumpless hand-over
 
+Rev 10 (11 Oct, written before any run on it; complete except the final tree SHA). Wesley's decisions of 11 Oct
+(decisions.md 11:55 and 12:50):
+- a take-back while the ring flies a trajectory moves with the ring (D1); co-move only, no pause-the-circle fallback;
+- the take-back hold ramps from the measured velocity, with no switch (D19);
+- partner_contact refuses trajectories other than hover and orbit, and anything but hover with `real:=true` until
+  the co-move is reviewed (D20);
+- every bar frozen before any run (D4);
+- contact_still on by default (0210a27).
+
+What rev 10 adds:
+- §3b: the take-back (TB3, TB13, TB16).
+- §5: the take-back bars (TB4).
+- §6: the desk replay (TB5), the twin arms (TB6), the claim on the final tree and the landing tip-over note (TB14).
+- §8: the new code, and a round-4 placeholder under "## Critic".
+
+- **Tree lineage:** week4 -> m1-rig 0210a27 -> m1-tiltcut4 de91ba2 (the tilt cut merged with 0210a27, every tilt
+  switch off) -> m1-comove (this rev's code, branched from m1-tiltcut4) -> the candidate -> week5. week4 stays as it
+  is (D5 as changed 11 Oct).
+- **Final tree SHA for the claim:** `________` (named before run 1; nothing else in rev 10 changes then).
+- **Thu 15 gate:** if the co-move has not passed TB6 (§6.2) by then, it stays out of the candidate. The claim tree
+  is then m1-tiltcut4 plus the TB16 refusals, the circle take-back arms are flown and reported as failing, and the
+  rig flies hover only on 21-22 Oct (D1, no fallback; §6.5).
+- **Record:** the c6f2032 rows (R1565-R1579) are the record.
+- **Unchanged:** the bars of earlier revs. §6's stop-after-two-fails sentence is deleted (the rule was removed
+  11 Oct).
+
 Rev 9 (11 Oct 10:30): on ae57bbb the rise-first take-back fixed the rim snag (R1553), but on the circle the step
 out at the rise height (1.78 m) passed 0.24 m over a carrier (R1554, under the 0.30 m bar). Fix c6f2032: the rise goes
 to the higher of the rim clearance and the highest carrier + 0.4 m before any sideways move. The claim is re-flown on
@@ -179,7 +205,8 @@ check stays the default; every timer on the sim clock):
     attach hand-over. Warming from ARM cost pose-timeout disarms on the laptop (dissipative_node.py:886-891); these
     runs are on the lab PC, and a zero-pose-timeout bar watches it.
   - **At the take-back** (his give-up, or our LAND before the attach): the mux goes to ours; a fixed hold latched at
-    the measured position; the solver re-seeded; then the departed path:
+    the measured position (rev 10: ramped from the measured velocity, and moving with the ring on a trajectory,
+    §3b); the solver re-seeded; then the departed path:
     - within 1.2 m of the ring centre: radially out to 1.2 m at its height, then land alone; over the middle
       (r < 0.225) the step goes out at plate 9's azimuth (+y, the gap between carriers 1 and 2);
     - further out (the pickup): land where it is.
@@ -196,6 +223,112 @@ check stays the default; every timer on the sim clock):
   - LAND at any time before the attach does the same take-back; the runner's WAIT_REWELD gets a timeout (120 s)
     followed by LAND.
 
+## 3b. The take-back that moves with the ring (rev 10; TB3, TB13, TB16)
+
+**Why.** On the circle the take-back has failed three ways, each with a world-fixed hold:
+- the step out at plate height hooked the rod on the rim (R1543, R1549);
+- a rise to rim height, then out, passed 0.24 m over carrier 1 (R1554);
+- a rise over the carriers while held world-fixed let the orbiting formation sweep carrier 2 into QUAD4's rod. Carrier
+  2 reached 66.7 deg and the fleet made an emergency stop (R1565). R1566 survived the same code at another phase.
+
+At each give-up QUAD4 was moving with the ring at 0.13-0.17 m/s, body at 1.60-1.63 m, tip at the ring (ring 1.0 m,
+carriers 1.53-1.54 m; run.csv of R1543, R1549, R1554, R1565). In `_land_transit` the fixed hold braked QUAD4 from
+0.26-0.34 m/s at 2.9-3.0 m in one step: a tilt step of 4.4-4.7 deg in 0.3 s (R1495, R1524, R1542).
+
+**The ring frame.** An orbit translates the formation without yawing it (`yaw_at` yaws only 'spin'), so the ring
+frame is the world axes moved with the ring's planned point:
+- `c(t) = hover_xy + traj.offset_at(traj_t)`, with velocity `v_c` from the same call;
+- the reference uses the plan, not the measured ring, so mocap noise and the ring's own disturbance response stay out
+  of QUAD4's reference;
+- the cost is the ring's lag behind its plan: 2.5-5 cm at 0.125 m/s (rig circle lag 0.20 s), small against the bars.
+
+**The take-back, step by step.** It starts on his give-up or on our LAND before the attach.
+1. **Latch, ramped (TB13).**
+   - The reference starts at QUAD4's measured position and velocity. Its velocity then moves toward the target
+     velocity (the frame velocity `v_c` plus the current step's carrot) by at most `TAKE_BACK_ACCEL` = 0.3 m/s² per
+     tick. There is no velocity step at the latch, when the ring stops, or at the decouple.
+   - 0.3 m/s² is a quasi-static tilt of 1.75 deg, under the 2 deg bar. It stops 0.34 m/s (R1542) in 1.1 s over
+     0.19 m.
+   - Every later decision uses the stopping point, not the latch point: step out or land where it is, and which way
+     (R1482 decided while still moving inward).
+   - On the circle QUAD4 already moves with the ring, so the ramp is nearly nothing. In hover and in his transit
+     `v_c` is 0, and it is the plain ramp.
+2. **Ring-relative hold.** The offset `delta = p_ref - c` is held in xy, so QUAD4 moves with the ring. z is absolute:
+   QUAD4 never follows the ring down. The magnet OFF and the release wait (`NEWCOMER_RELEASE_S` 0.5 s, today
+   world-fixed) run in this frame. The tracker's horizon carries `c(traj_t + k dt) + delta_k` with the velocity fed
+   forward (today zero), gated like the planner's own horizon: a frozen clock draws no motion.
+3. **Rise, straight up in the ring frame**, before any sideways move. The height is the higher of QUAD4's own height
+   and the targets below.
+   - **Hover:** c6f2032's rise, unchanged. It goes to the higher of the rim clearance (ring z + body-to-tip + 0.15 m)
+     and the highest carrier + 0.4 m, and only when the tip is down at the ring.
+   - **Orbit launch (whatever the clock reads):** the escape height, the highest carrier + body-to-tip + 0.15 m, plus
+     the ball's diameter while his ball is on.
+
+   | twin heights (ring 1.0 m, carriers 1.53-1.54 m, body-to-tip 0.59 m) | body | tip |
+   |---|---|---|
+   | rim clearance: ring z + 0.59 + 0.15 | 1.74 m | 1.15 m |
+   | c6f2032: highest carrier + 0.4 | 1.94 m | 1.35 m, **0.19 m below the carrier bodies** |
+   | escape (orbit): highest carrier + 0.59 + 0.15 | 2.28 m | 1.69 m, 0.15 m above them |
+
+   - **Must the rod clear the carriers' bodies? Yes, wherever a carrier can pass under QUAD4, which on a circle means
+     after the decouple.**
+     - While QUAD4 moves with the ring, nothing passes under it. The plate-9 corridor (+y in the ring frame)
+       keeps at least 0.43 m from the carrier bodies (30 / 150 deg at r 0.5) and about 0.2 m from their rods.
+     - After the decouple the formation keeps orbiting, so at c6f2032's height a carrier passing under would meet the
+       rod 0.19 m below its body (R1565's mechanism).
+     - In hover nothing moves under QUAD4, so the c6f2032 rise stays.
+   - The escape height is below his transit (2.3-2.9 m) and well under the 4 m cage.
+4. **Step out in the ring frame.**
+   - It goes to 1.2 m from the ring centre, plus body-to-tip while his ball is on (as today), at the rise height,
+     at `DETACH_STEP_VEL` 0.15 m/s.
+   - Over the middle (r < attach_radius) the direction is plate 9's azimuth, the gap between carriers 2 and 3.
+     Otherwise it is QUAD4's own offset direction (today's rule).
+5. **Decouple, bounded.** Only once:
+   - the release wait is over;
+   - QUAD4 is at the rise height;
+   - the step out has reached its goal.
+
+   Then the frame velocity ramps to zero at <= `TAKE_BACK_ACCEL`. There is no decouple below the escape height on an
+   orbit, and none inside the step-out radius.
+6. **Clear the path, then land alone.**
+   - At its height, QUAD4 moves to `_path_clear_point` (orbit radius + 1.0 m from the path centre), ramped at both
+     ends, then descends and lands alone. That is today's departed path: rest, press, disarmed alone.
+   - Already that far out, it descends where it stopped.
+   - **Overflight:** between the decouple and the path-clear point the formation can pass under QUAD4 inside its
+     swept disc (orbit radius + carrier radius ~0.5 m + props). The tip is then 0.15 m above the carrier bodies and
+     the body ~0.75 m above. The twin has no rotor wash, so the effect on the carriers and on a slack rig tether is a
+     rig finding. TB5 and TB6 report the overflight time and the minimum vertical gap.
+
+**Events during the take-back:**
+- **The ring stops:** a reconfiguration hold, the trajectory hold, LAND or the end of a circle freezes `traj_t`. `v_c`
+  then goes to 0 and QUAD4 follows through the same acceleration bound (overshoot <= 2.6 cm at 0.125 m/s). The
+  remaining steps run in the now-still frame.
+- **LAND mid-take-back:** the clock is frozen (the planner is descending), so the frame stops as above. The ring and
+  carriers descend away from QUAD4, whose z is absolute. The take-back finishes its rise, step out and path clear,
+  then lands alone. The `_taken_back` latch means a second take-back never starts.
+- **LAND before his give-up:** the take-back starts at LAND with the frame already stopping. The arm is
+  `m1x_land_rejoin_orbit`.
+- **Faults:** unchanged. With the tilt cut on, a QUAD4 tilt fault cancels the co-moving hold as it cancels today's
+  take-back (H3 race tests, written with the code on m1-comove). The welded start keeps newcomer_fault_land off, so
+  an envelope fault there is a fleet stop (the arm is `m1_full_nocatch_orbit`).
+- **Far take-backs** (latched >= the step-out radius from the ring centre: his transit, pickup, mat) do not move with
+  the ring. They keep today's path with the TB13 ramp. His transit (2.3-2.9 m) is above the escape height.
+
+**Hover is unchanged** (c6f2032): the same rise, the same step out through the gap, the same landing. With `v_c = 0`
+the frame is the world. The only change in hover is TB13's ramp (D19), which `m1c_land_transit` shows (hence
+`_land_transit_2` in the claim).
+
+**TB16, launch refusals** (in the attach graph; not dependent on the co-move, so the refusal is built either way):
+- `partner_contact` with `load_traj` other than hover or orbit is refused in the twin and on the rig.
+  `_path_clear_point` clears circles only, and the combined M1 has only flown hover and orbit.
+- With `real:=true`, orbit is refused too until the co-move is in a reviewed tree. Lifting it is a one-line change
+  with Wesley's word after the reviewer.
+
+**Recorded alternative (not a fallback): B2.** QUAD4 keeps moving with the ring through the gap until it is outside
+the swept disc, so it never overflies a carrier.
+- It costs up to two thirds of a lap (~17 s) and comes to about 2.2 m toward the +y cage side.
+- Switching to it needs Wesley's word, its own replay and TB6 before the Thu gate.
+
 ## 4. Baseline
 - **E0** (exploratory, running on the lab PC): the same subtest with today's ATTACH_READY hand-back. It finds what
   breaks in the takeoff, pickup, transit and drop on the rig twin, and gives the hand-back tilt on this world.
@@ -208,6 +341,14 @@ check stays the default; every timer on the sim clock):
   - R0640 / R0642 / R0645: a still-moving weld, 25-35 deg;
   - R1473: today's hand-back, 2.52 deg.
 - **Scoring:** tools/m1_stages.py (reproduces R0752's DETACH 2.80 / REWELD 2.74), extended for §5.
+- **Rev 10 take-back baseline:** c6f2032.
+  - The circle fails: R1565 (and R1543 / R1549 / R1554 on earlier trees).
+  - Hover passes: R1553, R1562, R1567, R1570.
+  - The transit tilt step is 4.4-4.7 deg: R1495, R1524, R1542.
+- **Rev 10 scoring:** the committed scorers in tools/ (plan step 8, worktree m1-score: claim_row, contact_score and
+  claim_checks keyed on REWELD, plus the rod-segment, attitude-step, ring-tilt and overflight metrics in
+  attach_metrics). tools/m1_stages.py is not in the rig tree. The scorers must reproduce R1573, R1579 and R1581
+  before they score a rev 10 run.
 
 ## 5. Pass / fail numbers (per run; written 10 Oct before the code; d_ok / d_fail / h_plate frozen after E1)
 
@@ -270,11 +411,32 @@ window ends at contact):
 - LAND -> every drone landed and disarmed;
 - his planner in RING_ATTACHED from the attach to the end.
 
+**Take-back (rev 10, TB4; frozen 11 Oct before any run on it).** These apply to every run with a take-back, from the
+take-back to QUAD4 down ("departed ... is down"). The window starts at the take-back, so the earlier windows do not
+cover it, and no run flown before rev 10 is re-scored with these.
+- **Rod-segment clearance:** QUAD4's rod segment (body to tip, and to the ball's far side while carried) to every
+  carrier body and every carrier rod segment.
+  - **Confirms:** >= 0.15 m.
+  - **Falsifies:** < 0.10 m.
+- **Body clearance:** QUAD4's body to any carrier body, with the values above (>= 0.35 m confirms, < 0.30 m
+  falsifies).
+- **Attitude step:** QUAD4's tilt over the first 0.3 s after the event, against its mean over the 0.1 s before,
+  maximum absolute change. Measured at the take-back and again at the decouple.
+  - **Confirms:** <= 2 deg.
+  - **Falsifies:** > 5 deg.
+- **Ring tilt:**
+  - **Confirms:** <= 5 deg.
+  - **Falsifies:** > 5 deg.
+- Values between the bars are reported as such, as R1552 was.
+- **Reported, no bar:** the overflight time (any part of a carrier's rotor disc, a 0.2 m radius about its body
+  centre, under QUAD4's body or rod in xy) and the minimum vertical gap from QUAD4's tip to a carrier body during
+  it. The twin has no rotor wash, so this is a rig finding.
+
 ## 6. Repeats and order (the critic's order)
 1. Tests (below), including the proof fed synthetic caught, uncaught, off-centre and sunk-tip traces.
 2. E1: one exploratory lift run on hover, the new code with loose thresholds and full logging (body rise, plate rise,
    drift, ring tilt, his throttle, the model integral). It sets d_ok / d_fail / h_plate, which are then frozen.
-3. Claim runs on one tree, in order:
+3. Claim runs on one tree, in order (revs 4-9; flown R1491-R1579, the record; rev 10 replaces this with §6.3):
    1. hover;
    2. `_nocatch` hover;
    3. orbit;
@@ -290,12 +452,119 @@ window ends at contact):
        with the generator's push mechanism).
 4. The reviewer on the table, then the rig plan.
 
-Between tweaks, one run on the arm that failed; a fix not shown in two runs: stop and report.
+Rev 10 order:
+1. The critic on rev 10 (round 4, under "## Critic") and the response.
+2. The build on m1-comove with its tests (§8).
+3. TB5, the desk replay (§6.1).
+4. TB6, the twin arms (§6.2).
+5. The Thu 15 gate.
+6. The claim on the final SHA (§6.3).
+7. The reviewer, then the rig card.
+
+Between tweaks, one run on the arm that failed.
+
+### 6.1 TB5: desk replay, before any lab time (no Gazebo)
+The method:
+- Feed the logged planned ring point (`payload_ref_x/y`, `traj_t`), the measured ring and the carriers' tracks into
+  the m1-comove take-back reference generator, from each logged give-up.
+- QUAD4 is placed on its reference, with its rod hanging straight down.
+- The replay first runs the c6f2032 generator on R1565 and must reproduce the logged failure (carrier 2 within about
+  0.28 m at about 119.4 s). Otherwise the replay is wrong.
+
+The cases:
+- R1565, and R1565 with the give-up shifted by a quarter, a half and three quarters of the 25.1 s lap;
+- R1554, R1566, R1549 and R1543.
+
+The report gives, for each case: the minimum rod-segment clearance and body clearance (§5 take-back bars), the
+overflight time and the minimum vertical gap, and the decouple point against the swept disc.
+
+**Acceptance:** rod-segment >= 0.15 m and body >= 0.35 m in every case. Otherwise fix the design before any lab run.
+Every overflight goes to Wesley with its duration and gap, as a rig finding (B2 is his call). The logged carriers
+do not react to QUAD4, so this checks geometry only; TB6 flies it.
+
+### 6.2 TB6: twin arms on m1-comove (exploratory, one each, registry rows with these falsifiers)
+"TB4" means the §5 take-back bars. Every arm also falsifies on a drone not landed. A TB14 landing tip-over (§6.4)
+is the one exception, and it applies only with QUAD4 attached.
+
+| # | arm (config) | what it tests | falsifier |
+|---|---|---|---|
+| 1 | m1c_nocatch_orbit | the arm that failed (R1565) | an attach declared; a TB4 falsifier |
+| 2 | m1c_lead030 | a give-up from his approach on the circle (R1543, R1566) | a TB4 falsifier in its take-back (an attach with the lead is reported, not a falsifier) |
+| 3 | m1c_nocatch_orbit_ph11 (own params file, traj_hold_s 11) | the give-up about 90 deg later in the lap | as 1 |
+| 4 | m1c_nocatch_orbit_ph175 (own params file, traj_hold_s 17.5) | about 180 deg later | as 1 |
+| 5 | m1x_land_rejoin_orbit (new: LAND in his DESCEND_TO_ATTACHMENT on the circle) | the take-back at LAND, the frame stopping with the clock | no take-back at LAND; a TB4 falsifier |
+| 6 | m1_full_nocatch_orbit (new: welded start, sim_catch false, circle) | the co-move after a detach and his whole mission, newcomer_fault_land off | an attach declared; a fleet stop; a TB4 falsifier |
+| 7 | m1c_land_transit | TB13, the ramp from transit speed (hover) | attitude step > 5 deg; a §5 or TB4 clearance falsifier; the ball not landed with QUAD4 |
+| 8 | m1c_nocatch_hover | hover regression | a §5 or TB4 falsifier; a path other than c6f2032's (the TAKE-BACK line and the track: rise to max(rim clearance, highest carrier + 0.4), out to 1.2 m, down) |
+| 9 | m1x_r11a_circle (new: `contact_dz +0.03` on the circle, a planned no-catch) | the rig's R11a-circle, rehearsed before R11c | a contact or attach declared; a TB4 falsifier |
+
+**TB6 passes, for the Thu gate,** when:
+- no arm meets its falsifier;
+- every circle take-back (arms 1-6 and 9) confirms both clearance bars.
+
+Between-bar values and the overflight list go to Wesley at the gate. The working rule applies: between tweaks, one
+run on the arm that failed.
+
+### 6.3 The claim on the final tree (rev 10; one tree, the SHA at the top)
+- **contact_still** is on, from the default (0210a27); the m1c configs do not pin it.
+- **Scoring:** every run against §5 as frozen, plus the take-back bars for every run with a take-back, with the
+  committed scorers (§4).
+- **Changed arms first, each with a second repeat:**
+  - m1c_nocatch_orbit, m1c_nocatch_orbit_2;
+  - m1c_lead030, m1c_lead030_2;
+  - m1c_land_transit, m1c_land_transit_2.
+- **Then the other ten:** hover, hover_2, orbit, orbit_2, nocatch_hover, high, low, offset, land_proof, abort.
+  That makes 16 runs in the table.
+- **`_lead030` scoring.** His 0.3 s lead has not made contact on the circle since e097a94 (R1525, R1543, R1552,
+  R1566; R1496 on e097a94 did).
+  - Its attach result is reported, not claimed: no contact supports lead 0, the design.
+  - Its take-back is claimed on the take-back bars and the §5 mission and clearance bars.
+  - If it does catch and prove, it is scored as a main arm.
+- **Beside the table** (exploratory, D8): full M1 x3 (m1_full_hover, m1_full_orbit, m1_full_nocatch_orbit), and the
+  R11a rehearsals (m1x_r11a_hover, m1x_r11a_circle). Their falsifiers are as R1503 and as §6.2.
+- **TB15:** the proof-time distribution and the count of first-contact timeouts are reported (no new bar; the 3 s bar
+  stands).
+- **Retired:** the m1x_still_* configs (contact_still is now the default); their rows R1533, R1540, R1548 and R1549
+  stay as the record.
+- **If the co-move missed the Thu gate:** the claim tree is m1-tiltcut4 plus TB16. nocatch_orbit and lead030 still
+  fly on the same bars and are reported as failing; the circle take-back is not claimed.
+
+### 6.4 TB14: the landing tip-over (twin artefact; Wesley 9 and 10 Oct)
+**The mechanism** (traces, 11 Oct 10:25):
+- the welded QUAD4 sits 0.5 m from the ring centre, outside the rim;
+- about 5 s into LAND its rod tip reaches the floor beside plate 9 while its body keeps descending 0.2-0.3 m;
+- the rigid twin rod cannot shorten, so it levers QUAD4 sideways (r 0.5 -> 0.74) and past 60 deg: FLEET_ABORT.
+- The rig tether goes slack (land_unwind false on the rig).
+
+**Count** (registry rows): 12 of the 48 subtest runs that landed with QUAD4 attached, R1479-R1578.
+- The runs: R1479, R1486, R1502, R1518, R1529, R1531, R1534, R1547, R1548, R1556, R1559, R1578.
+- 0 of the 9 full M1 runs (R1517-R1579).
+- Also R1582 on the tilt card.
+
+**Frozen definition, for every rev 10 run.** A TB14 tip-over needs all of:
+- QUAD4 welded at LAND;
+- the abort at least 5 s after LAND;
+- QUAD4's tip on the floor;
+- its tilt passing 60 deg within 1 s while its body is above its rest.
+
+Such a run is scored LAND "tip-over (TB14)" and does not hold the claim. Any other abort or disarm, or one before
+LAND, counts against the mission bar. On the rig the attached-QUAD4 landing is checked at R11b.
+
+### 6.5 The rig on 21-22 Oct
+- **Hover only (R11a, R11b)** unless the co-move has passed TB6 by the Thu 15 gate (it then goes into the
+  candidate) and the reviewer has passed the final table with it before the flight. The `real:=true` refusal of
+  orbit stands until then, so the circle cannot be launched by accident.
+- **If both hold:** R11a-circle flies before R11c, and R11c flies only after R11b has passed.
+- **If not:** R11c waits for 28-29 Oct (D1, no fallback).
 
 ## 7. Cost
 - E0 + E1: 2 runs.
 - Claim: 13 runs.
 - Lab PC whenever free (Wesley 10 Oct), ~15-20 min each.
+- Rev 10:
+  - TB5: 2 h of desk work.
+  - TB6: 9 runs, ~1.5 h wall on 4 lab slots.
+  - The claim: 16 runs plus 5 beside the table, inside the joint batch (plan step 28).
 
 ## 8. New code?
 Yes, behind `partner_contact` / `contact_attach` / `confirm_mode`, default off:
@@ -321,6 +590,34 @@ Tests first:
 - no double references.
 
 If it fails, everything behind the switches is deleted and the attach roles go back to Wesley with the logs.
+
+**Rev 10 (branch m1-comove from m1-tiltcut4 de91ba2; no new switch: the co-move replaces the take-back that failed
+on the circle, and hover keeps c6f2032's path, D19):**
+- **dissipative_node.py:**
+  - `_take_back` latches the offset and velocity against the planned ring, picks the heights and the ring-frame step;
+  - `_publish_departed_refs` gives the moving hold, the release wait and the step, a horizon with the velocity fed
+    forward, the ramp and the decouple;
+  - two new constants: `TAKE_BACK_ACCEL` 0.3 m/s² and `TAKE_BACK_ESCAPE_TIP_M` 0.15.
+- **Bringup attach graph:** the TB16 refusals.
+- **docs/design/m1_contact_contract.md:** updated.
+
+Tests first (src/dissipative_planner/test/test_partner_contact.py and the bringup launch tests):
+- the hold tracks the planned ring and feeds its velocity forward;
+- the latch starts at the measured velocity;
+- the velocity change per tick is bounded at the latch, at a ring stop and at the decouple;
+- on an orbit the rise height includes the rod;
+- no decouple below the escape height or inside the step-out radius;
+- LAND or a frozen clock stops the frame motion through the bound;
+- the transit take-back ramps and decides from its stopping point;
+- the hover path is c6f2032's (the existing tests at L615-645 pass unchanged);
+- TB16: hover and orbit accepted in the twin, the other kinds refused, and orbit refused with `real:=true`;
+- H3 races: a tilt fault during the co-move cancels it.
+
+Then `gate.sh --quick`, the planner tests and the launch gate: switches off, only the TB16 refusals change the
+accepted set. Then `prebuild_planner.py`.
+
+If the co-move does not pass TB6 by the Thu gate, m1-comove stays out of the candidate. The registry keeps the
+record; keeping the code needs Wesley's word.
 
 ## E0 / E1 results (exploratory, 10 Oct; rig twin, pickup world; registry R1475-R1490)
 
@@ -430,3 +727,16 @@ I. **Bars and order.** *Rev 3:*
 6. **The rig's one coil:** the abort's OFF releases the ball before his drop. *Rev 4:* OFF only after the ON span has
    begun.
 7. **R1474 and `_abort`.** *Rev 4:* R1474 cited; the pickup push world to build.
+
+### Round 4 (rev 10: the take-back that moves with the ring, TB13, TB16): placeholder
+To come before the build (plan step 9). The challenge goes here, then the response; no TB6 run before both.
+Points to press:
+- geometry and orbit phase (R1565 failed and R1566 passed on the same code);
+- the plan-versus-measured ring frame and its lag;
+- the escape height and the overflight under the decouple;
+- the ramp value and the stopping-point rule;
+- LAND, the clock freezing, and faults or the tilt cut during the co-move;
+- the welded start with newcomer_fault_land off;
+- far take-backs on a circle that keep today's path;
+- the rig's slack tether;
+- the bars and the TB14 definition.
