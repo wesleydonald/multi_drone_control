@@ -1,5 +1,5 @@
 name: tc_f6a_self_land
-description: 'F6a: his taken_back_self_land alone: our warm tracker latched as in H1; after the take-back the mux still reads partner, so 1 s later he flies out to 1.2 m, lands and disarms, magnet as it is (card 2026-10-11_quad4_tilt_cut rev 3; exploratory until the claim)'
+description: 'F6a: his taken_back_self_land alone: our warm tracker latched as in H1; after the take-back the mux still reads partner, so 1 s later he flies out to 1.2 m, lands and disarms; his object magnet is TAKEN_BACK''s own (OFF after the drop, no command while he carries the ball) (card 2026-10-11_quad4_tilt_cut rev 3; exploratory until the claim)'
 world: three_rigid_ground_rig_attach_pickup.sdf
 ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
 launch:

@@ -185,7 +185,7 @@ class MagnetAttachmentManager(Node):
         # rig: body-to-tip at least the taut length (Wednesday's record minus 3 mm); 0 = off (twin)
         self.proof_taut_len = float(self.declare_parameter('proof_taut_len', 0.0).value)
         self.proof_ma_s = float(self.declare_parameter('proof_ma_s', 0.1).value)
-        # contact_still (critic F7, default off; the thresholds are Wesley's): c0 from the dwell's last
+        # contact_still (critic F7; off here, on from the launch since 11 Oct: common.yaml): c0 from the dwell's last
         # contact_c0_tail_s and a vertical-speed gate contact_vz_max, so a tip still arriving does not set c0
         self.contact_still = bool(self.declare_parameter('contact_still', False).value)
         self.contact_vz_max = float(self.declare_parameter('contact_vz_max', 0.02).value)

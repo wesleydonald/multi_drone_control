@@ -127,8 +127,9 @@ of the Wednesday sheet lines, the frozen launch gate and the twin claim configs 
   warning) clears the drop zone.
 - **His throttle** (F3): the mux holds his stream at armed idle (throttle -1, rates 0) until our planner's
   `/fleet/status` reads PLANNER or NETWORK.
-- **Contact** (F7, `contact_still`, default off): c0 and z0 from the dwell's last 0.05 s, and the contact also needs
-  the tip's vertical speed relative to the plate <= `contact_vz_max` (0.02 proposed). Thresholds: Wesley.
+- **Contact** (F7, `contact_still`, on by default in the rig and the twin since 11 Oct, Wesley): c0 and z0 from the
+  dwell's last 0.05 s, and the contact also needs the tip's vertical speed relative to the plate <= `contact_vz_max`
+  (0.02 m/s).
 - **QUAD4's numbers** (F8): his launch refuses `magnet_drop_below_quad` and `mpc_thrust_ratio` untyped (his IRL
   defaults are QUAD2's); our planner models his puck at 0.06 kg. His supervisor is refused on the combined rig.
 - **His aux channels** (O6): the mux zeroes channels 5 and 7-10 of his stream (`zero_partner_aux`).
@@ -179,3 +180,18 @@ World three_rigid_ground_rig_attach_welded_pickup.sdf (generated); configs m1_fu
 - On the rig (m1-rig): the coil gate starts with ours (`start_ours`, the start weld's ON), hands the coil to him at
   `/partner/release` (his pickup) and takes it back at our span's first ON, as for the free start. The rig full M1 has
   no card yet.
+
+## The QUAD4 tilt cut (card 2026-10-11_quad4_tilt_cut; branch m1-tiltcut4, every switch off by default)
+With every switch off the launch graph is m1-rig 0210a27's. What crosses the builds:
+- `/drone_3/tilt_fault` (Bool, volatile, reliable; `partner_tilt_cut`): our drone-3 tracker -> the mux, our planner and
+  the fleet manager.
+- `/drone_3/mux_state` reading `cut` (ranked with the mux's abort latch). magnet_gate (`cut_state_topic`) writes the
+  coil OFF for good; our manager turns the magnet OFF even after a confirmed attach and refuses every later ON; his
+  planner (`mux_state_callback`) sends his landing disarm once and goes to LANDED_DISARMED; the fleet manager refuses
+  ARM while a mux reads `cut`.
+- `partner_stuck_guard`: `/drone_3/handover_blocked` (our planner -> our manager: a passing proof becomes a failed one)
+  and `/drone_3/mux_cut` (the fleet manager's cut at LANDED, QUAD4 down and still).
+- `fc_disarm_land`: `/drone_3/fc_arm_state` (rig: the arm flag our radio sends; twin: bf_comm's stand-in) -> the fleet
+  manager.
+- His `taken_back_self_land` (his launch arg): in TAKEN_BACK, the mux not reading ours 1 s later, he flies out to
+  1.2 m from the ring, lands and disarms (CHANGES_FROM_TEJEN.md, 11 Oct).

@@ -772,3 +772,14 @@ def test_the_take_back_rise_clears_the_highest_carrier():
     f._his_phase_cb(String(data='TAKEOFF'))
     f._take_back(0, 'his give-up')
     assert f._departed_step[3][2] == pytest.approx(1.8 + 0.4)
+
+
+def test_a_fault_during_the_rising_take_back_clears_both_legs():
+    """The merge of the tilt cut with the rise (m1-tiltcut4): the fault overrides a take-back that is still rising."""
+    f = _tc(_node(quad=(0.0, 0.3, 1.0 + 0.59 + 0.01)))
+    f._his_phase_cb(String(data='TAKEOFF'))
+    f._take_back(0, 'his give-up')
+    assert 3 in f._departed_step and 3 in f._departed_next
+    f._tilt_fault_cb(Bool(data=True))
+    assert f._newcomer_out == {0: 'fault'} and 3 not in f._departed_step and 3 not in f._departed_next
+    assert f._departed_hold == {} and f._departed_down()

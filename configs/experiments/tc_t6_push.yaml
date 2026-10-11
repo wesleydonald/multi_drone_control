@@ -1,5 +1,5 @@
 name: tc_t6_push
-description: 'T6: a 0.15 N m roll torque on QUAD4 for 0.3 s in his transit (one motor lost at hover; critic round 2 M-D): the envelope latches first (speed or tilt), the tilt cut still fires; QUAD4 never past 60 deg: void, re-fly as T6b (card 2026-10-11_quad4_tilt_cut rev 3; exploratory until the claim)'
+description: 'T6: a 0.15 N m roll torque on QUAD4 for 0.3 s in his transit (one motor lost at hover; critic round 2 M-D): the envelope latches first (speed or tilt), the tilt cut still fires; QUAD4 never past 60 deg: not void, the false-trip half (no TILT_FAULT), and T6b flies (card 2026-10-11_quad4_tilt_cut rev 3; exploratory until the claim)'
 world: three_rigid_ground_rig_attach_pickup_push.sdf
 ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
 launch:

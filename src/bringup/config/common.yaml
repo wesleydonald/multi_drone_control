@@ -177,22 +177,23 @@ partner:
   proof_fail_dwell_s: ''
   proof_timeout_s: ''
   proof_ma_s: ''
-  # critic F7 (default off; the thresholds are Wesley's): the contact's c0 from the dwell's last contact_c0_tail_s and
-  # a vertical-speed gate contact_vz_max ('' = the manager's 0.05 s / 0.02 m/s), so a tip still arriving sets no c0
-  contact_still: false
+  # the contact's c0 from the dwell's last contact_c0_tail_s and a vertical-speed gate contact_vz_max ('' = the
+  # manager's 0.05 s / 0.02 m/s), so a tip still arriving sets no c0 (critic F7; on by default, Wesley 11 Oct)
+  contact_still: true
   contact_vz_max: ''
   contact_c0_tail_s: ''
-  # QUAD4 tilt cut (card 2026-10-11_quad4_tilt_cut): its tilt over 60 deg (3 poses, glitch guard) while the partner
-  # flies it -> the mux disarms it alone (magnet OFF), the fleet lands; a mux still on the partner at LANDED is cut
-  # when that drone is at its rest; our drone-3 tracker latched while the partner flies it blocks the hand-over
+  # QUAD4 tilt cut (card 2026-10-11_quad4_tilt_cut): its tilt over 60 deg held 25 ms (a change faster than
+  # 3000 deg/s between two poses is a mis-solve, not counted for 0.5 s) while the partner flies it -> the mux disarms
+  # it alone, the coil OFF, his planner disarms, the fleet lands
   partner_tilt_cut: false
   tilt_slow_deg: 0.0            # the optional slow tier (critic round 1, M3): deg held tilt_slow_s; 0 = off
   # our drone-3 tracker latched while the partner flies it: the attach is not confirmed, and at LANDED a mux still on
-  # the partner is cut if that drone is at its rest (critic round 1, H1)
+  # the partner is cut if that drone is down and still (z < 0.25 m, < 0.1 m/s; critic round 1 H1, round 2 L-C)
   partner_stuck_guard: false
   # a warm drone-3 tracker's fault while the partner flies it: not live (armed idle), not latched (rig-port F6)
   warm_fault_not_live: false
-  # QUAD4's FC reports disarmed after it flew on the partner's stream: LAND every drone (rig-port F6)
+  # his stream's disarm of QUAD4 once it was airborne on it: LAND every drone (rig-port F6; on the rig the arm state
+  # is our radio's commanded flag, so an FC failure is not seen: critic round 2, M-B)
   fc_disarm_land: false
   # a welded start's /drone_3/on_load (False once its release is seen), so its disarm off the ring lands the fleet
   welded_on_load: false

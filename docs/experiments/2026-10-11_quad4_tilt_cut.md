@@ -1,5 +1,14 @@
 # QUAD4 off-nominal endings while Tejen's stream flies it: the tilt cut, the stuck take-back, the partner's own disarm
 
+**Rev 4** (11 Oct, after Wesley's 11 Oct decisions D5-D7 on docs/plan_m1_remaining_2026-10-11.md; written before any
+run on its tree).
+- **Tree:** branch m1-tiltcut4, a merge of m1-rig 0210a27 into m1-tiltcut3 ffa41ef (section 9.1). Its commit is named
+  here before the first run on it.
+- **What rev 4 changes:** a landing rule for later runs (9.2), H1, F6a and F6a2 in wave B whatever F6b scores (9.3),
+  and four new arms whose bars are written here before any of them flies: three neighbours of T1 and C3 (9.4).
+- **What it keeps:** rev 3's bars (section 5), its arms and its rows stay as written. The runs on ffa41ef (R1580-R1589
+  and batch B0) are a first look, scored by rev 3. The claim (6.7) is flown on the converged tree.
+
 **Rev 3** (11 Oct, after critic round 2: GO WITH CHANGES).
 - **Tree:** branch m1-tiltcut3, from m1-rig ead6afe. That is the rig port d4248af with m1-final d8c1b65 merged in, plus
   configs. It brings the pickup descent hold, the bounded pickup retry, TAKEN_BACK's object magnet OFF after the drop,
@@ -393,6 +402,107 @@ answers it.
   - 23 `tc_*` configs.
 
 If it fails, everything behind the failed switch is deleted, and the sheet keeps the operator's DISARM.
+
+## 9. Rev 4 (11 Oct; for runs flown after this text only)
+
+### 9.1 The tree: m1-tiltcut4
+- **A true merge, not cherry-picks:** m1-rig 0210a27 merged into ffa41ef, merge base ead6afe. The m1-rig side brings:
+  - ae57bbb and c6f2032, the take-back rise (the same patches as 20626d3 and ffa41ef here);
+  - 0210a27, contact_still on by default (Wesley 11 Oct).
+- **Conflicts:**
+  - One: `test_partner_contact.py`, where both sides appended tests. Both sets are kept.
+  - `dissipative_node.py` merged clean: the rise is identical on both sides.
+  - The tilt fault's override of an earlier take-back already clears the rise's second waypoint (`_departed_next`).
+    A new unit test covers a fault during a rising take-back.
+- **Stale texts fixed:**
+  - common.yaml: the rule is 60 deg held 25 ms with a 3000 deg/s rate guard (not 3 poses); the stuck guard's LANDED cut
+    is "down and still"; `fc_disarm_land` is his stream's disarm.
+  - The tc_f6a, tc_t6, tc_t6b, tc_t7 and tc_h1 descriptions.
+  - The magnet manager's contact_still comment.
+  - The contract doc: contact_still is on, and a tilt-cut interface section is added.
+- **Every switch off:** the launch graph is identical to m1-rig 0210a27 up to paths. Checked with `tools/launch_gate.py`
+  on the 360 frozen cases, and with dumps of every m1c_*, m1_full_* and m1x_* config (control and io launch) plus three
+  rig attach lines (our nodes: launch_dump does not follow his nodes' include).
+- **What differs for the arms:** contact_still is on. Rev 3's runs on ffa41ef flew with it off.
+  - The arms whose mission reaches a contact fly a changed contact check: F1, C2, C3, F2, F6b, H1, F6a2 and T3, and
+    T6, T7 and T7b when nothing trips.
+  - The arms whose fault ends the mission before any contact do not depend on it: T0, T1, C1, F6a, F6c, T2, T4,
+    T5a-c, T8, T9 and N1-N3.
+
+### 9.2 Scoring rule added: a QUAD4 tip-over in the LAND unwind after the attach (later runs only)
+- **What it is:** QUAD4's tilt passes 30 deg after the attach (WELD) and the fleet's LAND. At that moment:
+  - the ring is already down (payload z < 0.07 m);
+  - QUAD4's magnet tip is still at plate 9 (tip z < 0.10 m).
+- **What it also covers:** what follows from that tip-over: drone 3's envelope disarm, "drone 4 disarmed unexpectedly",
+  the FLEET_ABORT and the missing LANDED.
+- **Cause (traces R1534, R1556, R1559):**
+  - The rigid twin rod's tip, welded at plate 9, reaches floor level with the ring.
+  - QUAD4's body keeps descending in the unwind, so the rod levers it over.
+  - The signature in all four runs (R1582 too):
+    - the ring is down 4.8 s into LAND;
+    - QUAD4 passes 30 deg 6.4-7.2 s into LAND, with the body at 0.32-0.40 m and the tip at 0.057-0.060 m;
+    - the FLEET_ABORT follows about 0.1 s later.
+  - The rig's tether goes slack, so the rig lands straight down. This is the twin-artefact class of 9 and 10 Oct.
+- **How it is scored:**
+  - It goes in its own column (tip-over in the LAND unwind: yes / no) and is reported with no bar.
+  - It does not falsify "no FLEET_ABORT", "no drone-3 disarm" or "all disarmed after LANDED". Every other bar of the arm
+    is scored up to the tip-over.
+  - Any other drone-3 disarm or abort is scored as rev 3 writes: before the attach, before the ring is down, or with the
+    tip off the plate.
+- **Later runs only.** No run already seen is re-scored with it (the working rules: bars are frozen before the runs).
+- **F6b by the frozen rev 3 text has not passed 2 of 2:**
+  - R1582 falsifies ("a drone-3 disarm"), and only through this landing tip-over. The injection itself was handled:
+    "not live" once, no latch, ATTACH, MUX:ours. The artefact reading stands beside it for the reviewer.
+  - R1586 has the runner's PASS (exit 0), no drone-3 disarm and "not live" once. But his transit froze after the injected
+    attitude: no ATTACH before WAIT_WELD's timeout (208.7 s), and the LAND took QUAD4 back. By rev 3's confirm column
+    ("the mission completes") it neither confirms nor falsifies (registry row).
+  - The plan's "F6b is 1 of 2" counts R1586's runner PASS. By the frozen confirm column it is 0 clean of 2. Either way,
+    6.3's "2 of 2" is not met.
+
+### 9.3 Order: H1, F6a and F6a2 fly in wave B (Wesley 11 Oct, D7)
+- They fly in wave B on m1-tiltcut4 whatever F6b scores. 6.3's "if F6b passes 2 of 2" no longer gates them.
+- Their bars are section 5's, as written. They stay exploratory x1 (6.7).
+- Keep or delete `partner_stuck_guard` and `taken_back_self_land` is decided after these runs and after D6(a).
+  Until then, the sheet's DISARM line stands.
+
+### 9.4 New arms (bars written 11 Oct, before any of them flies; frozen)
+- **Where the neighbours come from:** the working rules say to fly an arm's neighbours once before repeating it. Every
+  T arm is in hover, and the rig replay's firings were all on the floor. The plan's TC-08 names three neighbours of T1:
+  a trajectory instead of hover, the other sign of the error, and a floor start.
+- **C3** is D6(a)'s one-variable arm: `warm_fault_not_live` alone on the nominal mission. D6(a) makes that switch a
+  21-22 Oct candidate after its reviewer.
+- **Every arm here:**
+  - the void rules of section 5;
+  - the landing rule 9.2;
+  - the tc harness criteria (`max_armed_tilt_deg` 60, `disarmed_after_landed_s` 2).
+
+| Arm (config) | Switch | Events | Confirms | Falsifies |
+|---|---|---|---|---|
+| N1 `tc_n1_circle_transit` | tilt_cut | as T1 with the ring on the circle (m1c_orbit: radius 0.5 m, 0.125 m/s, `traj_hold.yaml`): MOCAP_TILT 3 90 2 0.3, 2 s into TRANSIT_TO_DROP_POINT; LAND +20 s | T1's confirms. Also: no TAKE_BACK and no departed reference for drone 3 after TILT_FAULT (the cut takes QUAD4 out before any circle take-back); the fleet LANDs from the circle. Reported, no bar: QUAD4's minimum distance to each carrier body and rod during its fall, and the ring tilt peak | T1's falsifiers; a TAKE_BACK or a drone-3 reference after TILT_FAULT; an abort through drone 3's path. A carrier's own envelope abort after the falling QUAD4 came within 0.1 m of it is reported as physics (as T9), not scored |
+| N2 `tc_n2_transit_other_sign` | tilt_cut | as T1 with MOCAP_TILT 3 -90 2 0.3: the other way about body x, so his MPC drives QUAD4 the other way | as T1 | as T1 |
+| N3 `tc_n3_mat_topple` | tilt_cut | QUAD4 on its mat, his phase WAIT_FOR_TAKEOFF. MOCAP_TILT 3 90 2 0.3 1 s after WAIT_LIFT 0.3 (his TAKEOFF came 6.1 s after the ring passed 0.3 m in R1581 and R1586); LAND +20 s | TILT_FAULT <= 0.3 s after the injection (the rule's flight latch is set at our TAKEOFF); MUX:cut <= 0.1 s after it; PHASE:LANDED_DISARMED <= 0.5 s after MUX:cut; FAULT_LAND <= 0.5 s after TILT_FAULT; no PHASE:TAKEOFF of his after the injection; QUAD4 (d3_armed) never armed from the injection to the end; no FLEET_ABORT; carriers armed until LANDED; LANDED; criteria pass (ring peak >= 0.3 m); no TAKE_BACK | no TILT_FAULT within 1 s (the floor case is not covered); his TAKEOFF after the injection (his stream arms a toppled QUAD4); QUAD4 armed after the injection; FLEET_ABORT; a carrier disarmed before LANDED; no LAND within 2 s of TILT_FAULT. Void: his phase at the injection is not WAIT_FOR_TAKEOFF |
+| C3 `tc_c3_hover_not_live` | warm_fault_not_live alone (D6a) | nominal m1c_hover (WAIT_WELD 210, LAND 8 s after the attach) | the m1c claim bars of card 2026-10-10_combined_m1_contact section 5, as the claim batch's m1c_hover (MUX:ours 0-0.2 s after `/magnet/object_attached`, contact, proof, hand-over, clearance, ring tilt and dip, the mission). Also: zero "not live" lines; zero drone-3 disarms before LANDED; zero TILT_FAULT; criteria pass | any "not live" line (a false not-live in a nominal mission); a drone-3 disarm before LANDED; no MUX:ours within 0.2 s of the attach (a stuck hand-over); any m1c_hover falsifier |
+
+- **N3's physics:** in the twin QUAD4 stays upright on its mat. The injection is the mocap attitude, and his MPC is not
+  flying it yet. So N3 tests the rule and the consumers on the floor, not a fall.
+  - On the rig, N3 says that a QUAD4 knocked over on its mat after our TAKEOFF lands the fleet, and that his stream can
+    then never arm it.
+  - The rig replay's six firings all came after a drone's own disarm. N3 is the case where the latch is set and QUAD4
+    has not flown yet.
+- **N1's risk:** the falling QUAD4 can land near a carrier's path on the circle. That is the fall's physics, which is
+  why the carrier abort is reported, not scored.
+- **Runs:**
+  - N1-N3 x1 in wave B on m1-tiltcut4 (after H1, F6a and F6a2), then x1 in the joint batch beside the tilt claim.
+  - C3 x1 in wave B, then x2 in the claim batch (D6(a)).
+  - That is 4 configs and 9 runs (~15-20 min each on the lab PC).
+
+### 9.5 The rig (Wesley 11 Oct, D6), replacing rev 3's "W1 on m1-tiltcut3"
+- `tilt_cut` and `fc_disarm_land` stay OFF on 21-22 Oct.
+  - The props-off W1/W2 checks that morning are evidence only.
+  - They go on from 28-29 Oct if W1/W2 pass and Tejen agrees.
+  - The DISARM-after-LANDED sheet line stands until then.
+- `warm_fault_not_live` is a 21-22 Oct candidate after its reviewer, on C3 and F6b.
+- W1 runs on the converged tree, not on m1-tiltcut3.
 
 ## Wednesday (rig, props-off; a draft for Wesley, nothing on the sheet yet)
 **Without tilt-cut code** (round 2; measurements only, on the m1-rig tree):
