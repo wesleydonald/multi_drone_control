@@ -101,3 +101,42 @@ ros2 param get /magnet_attachment_manager attach_radius      # 0.01; object_z_of
 ros2 topic pub -t 3 /magnet/command std_msgs/msg/String "{data: 'ON'}"     # then 5 s: no ATTACH
 # Ctrl-C T1, then $F --tip-dz 0.0 (b): ATTACH d=0.000 and /magnet/object_attached true
 ```
+
+## PROPOSED 11 Oct (for Wesley's review; not on the sheet until he says)
+
+Drafted 11 Oct 17:16. One row per item, in his run order: where it goes, what to do, what to record.
+Sources:
+- thesis plan D5, D6, P5;
+- rig-port critic F8 (the QUAD4 record);
+- critic round 4 F3, F8;
+- tilt card rev 4 (a)-(f);
+- the thesis health check;
+- docs/freeze_2026-10-14.md (Q15).
+
+Part B rows run on the pinned m1-rig 0210a27 install, in a fresh terminal, after the W flights.
+
+| # | where | do | record |
+|---|---|---|---|
+| 1 | 09:00 item 1 | Body-rate fix live (96acbcf: in week4 and m1-rig, never flown): rock QUAD1 by hand, `ros2 topic echo --once /drone_0/motion_capture_state` | angular_velocity finer than 0.1 rad/s steps: yes/no |
+| 2 | 09:00 item 2 | In the survey, remember: any of our flying drones' poses older than 0.25 s disarms the whole fleet (rig pose_timeout_s) | longest gap per body (s) |
+| 3 | 09:00 item 2 | Wand walk: QUAD4 (14, 24) on a pole at ~1.9 m (the take-back rise height), along the plate-9 corridor out to 1.2 m from the ring centre, then round 1.5 m from the circle centre (0.5 m +y of the ring's start) on the +y half | longest gap on 14 and 24 (s; bar 0.1) |
+| 4 | 09:00 item 2 | Tip at plate 9: carriers on their plates, tip (24) held on plate 9 and moved within 10 cm of it (our contact check reads the tip) | longest gap on 24 (s) |
+| 5 | 09:00 item 3 | weld_point_z three times, the magnet re-seated each time | 3 values (m) |
+| 6 | 09:00 item 4 | QUAD4 hanging still with a ~2 N pull on the caught magnet; then the face flat on the floor | `body 14 to tip 24` = taut length (m); tip z with the face on the floor = marker to face (m) |
+| 7 | 09:00 item 4 | d_ok noise: face caught on plate 9, QUAD4 rocked 0-20 deg by hand | spread of the tip's drift from its contact point (mm) |
+| 8 | 09:00 item 7(b) | At least 10 hand catches: centre, +-2 cm radial and tangential, tilted +-15 deg, tether slack; `/magnet/attachment_state` after each | d and dz per catch; radius = max dxy + 5 mm, band = max dz + 3 mm |
+| 9 | 09:00, after item 7 | Magnet hold: a carrier's magnet ON (pack in), face caught on a plate, ring held down; pull through the rod with a spring scale at 0 / 30 / 45 / 60 deg from the plate's axis, 3 pulls each | N at release, per pull |
+| 10 | 09:00 | A carrier's prop tip, measured from the body centre (the twin's overflight uses 0.2 m) | m |
+| 11 | 09:00 | QUAD4's mat centre and the puck (body 6) in Motive, ring at its start spot | xy (m); distance of each from the circle centre (swept edge 1.2 m, 1.4 m with QUAD4's rotor; twin: mat 0.90, puck 1.49) |
+| 12 | Flights, every flight | Phone on a tripod, the whole cage in frame, from before ARM to after the disarm | file name per run name |
+| 13 | Flights, every flight | Packs and time (flights so far ~1 min; the full M1 needs ~2.5 min) | each pack's V at ARM and at LANDED; TAKEOFF to LANDED (s) |
+| 14 | w4, w5 | Release at the twin's timing (w4: 6-7 s after the ring reaches 1.0 m; w5: ~10 s after the circle starts), hold 15-20 s on three drones, then `fleet land` (freeze Q15, D5) | release and LAND times (s) |
+| 15 | Part B | Hand ramps of the face onto plate 9 at ~3, 5 and 8 cm/s, 3 each; contact_still is on by default (type nothing) | c0 against the rest point per ramp (mm); pass within 1 mm |
+| 16 | Part B | Tilt (a): bag 14 and 24 with QUAD4 on a pole at 2.3-2.9 m, over and beside the ring, puck on; replay later with `tools/tilt_replay.py` (m1-comove) | bag name |
+| 17 | Part B | Tilt (b): tumble QUAD4 by hand (disarmed) through 90 deg, fast | any attitude step over 3000 deg/s: yes/no; max rate |
+| 18 | Part B, his OK (his stream) | Tilt (c): arm props-off through the mux, then the fleet DISARM | abort, elrs disarmed, FC '*' telemetry: times (s) |
+| 19 | Part B | Tilt (d): power off QUAD4's RX (or pull its pack) while armed | fc_arm_state still 'armed' after 10 s: yes/no; how long |
+| 20 | Part B | Tilt (e): coil ON with the puck, then DISARM | the coil holds the puck: yes/no |
+| 21 | Part B | Tilt (f): QUAD4 held at 0 / 30 / 60 / 90 deg. week4 and m1-rig have no `fc_attitude` topic: read the `Attitude:` lines elrs_interface prints in T1 | line rate (Hz); FC minus mocap per angle (deg) |
+| 22 | Stop rules: every partner:=true run until 28-29 Oct | After LANDED, if drone 4's mux still reads partner (T2: 'taken back, but our tracker is not flying yet'), clear the cage and press DISARM before anyone walks in (it latches every mux; QUAD4 falls) | pressed: yes/no; QUAD4's height (m) |
+| 23 | Any combined circle day (not Wed 14) | His TAKEOFF comes before our orbit starts (a rig traj_hold_s long enough). Twin R1625: with his takeoff after the orbit start, the ring passed 0.12 m above QUAD4's body, 0.23 m from it in xy | his TAKEOFF and our orbit start (s) |
