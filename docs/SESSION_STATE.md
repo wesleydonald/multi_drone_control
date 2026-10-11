@@ -416,3 +416,11 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   R1620 m1_full_nocatch_orbit, R1622 m1c_nocatch_hover, R1623 m1x_r11a_circle, R1624 m1x_land_pickup_orbit, then
   R1625 m1x_late_takeoff_orbit. m1-guard: b1cb2de (follow the ring down) + 84a3ad7 (LAND at the slack, max 2 s; Wesley
   16:20), 185 tests, gate pass. Helper now: the "since the 8 Oct rig" resource page (draft -> I review and publish).
+- 16:55: Wesley forwarded the thesis health check (/home/wesley/.claude/plans/wild-scribbling-alpaca.md, advisory;
+  §7a/§9/§5A concern this session). Decided (decisions.md 16:50): no R8b fallback; old RQ2 -> Appendix F now; no
+  per-day control detach for now; due 20 Nov stands. To fold into W (Wednesday paperwork) from its §9: pack time vs
+  the ~2.5 min M1 (rig flights ~1 min), tip occlusion near plate 9 (our contact check reads the tip), the body-rate
+  rounding fix unflown, the 0.25 s pose timeout = fleet disarm; the 7 older mis-parsed registry rows (R1128, R1131,
+  R1134, R1136, R1137, R1186, R1324) still need '-corr' rows; CURRENT_STATE.md §3 is stale. The other chat may work in
+  parallel on a disjoint lane (literature, desk extensions 1/2/4, thesis structure in its own worktree; no lab, no
+  laptop sims, registry read-only, decisions via Wesley -> recorded here).
