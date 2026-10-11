@@ -796,3 +796,27 @@ before any rig circle. The response (applied / rejected, with Wesley's answers) 
 - **F10 (low) TB14.** "Tilt passing 60 deg within 1 s" needs a reference: "within 1 s after its tip first reaches the
   floor (tip z <= 0.03 m)"; claim_checks produces the count from the frozen definition (the hand list 12 of 48 must
   match).
+
+### Round 4: the response (Wesley 11 Oct 14:30; decisions.md)
+All ten findings applied; they change §3b, §5 and §6 as follows (written before any rev 10 run):
+- F1 applied: the zone rule replaces the far exemption (a) far/high: today's path + TB13; (b) below the ring: land where
+  it is; (c) else co-move, rising only when the tip is at the ring or QUAD4 is >= 0.9 m from the ring centre; under the
+  footprint descend. Unit test per zone; TB5 + the three latches; TB6 + m1x_land_pickup_orbit with F1's falsifiers.
+- F2 applied: no escape height; c6f2032's rise everywhere; TB5 bar frozen: after the decouple the ring centre stays
+  >= 0.9 m from QUAD4 in xy at every phase of a 10 deg sweep, else the decouple waits and the ring-frame step continues
+  to r_clear - 0.1 m.
+- F3 applied (rig): his TAKEOFF before the orbit starts (sheet + rig traj_hold_s); twin neighbour m1x_late_takeoff_orbit
+  (his takeoff 12 s into the orbit); the rig mat and puck measured against the swept disc.
+- F4 applied: TB5 on a kinematic formation (fit residual <= 2 cm), R1565 reproduction kept, 10 deg give-up sweep; TB6
+  rows record their give-up and decouple phase against TB5's prediction (a gap > 5 cm voids the replay for the gate);
+  phase arms labelled "uncontrolled phase".
+- F5 applied: reference conditions; a unit test with measured z 5 cm low; TB4 falsifier: QUAD4 not down within 60 s of
+  the take-back; under LAND no path-clear move after the step-out.
+- F6 applied: Faults bullet rewritten; H3 test (no drone-3 reference after a fault in the race window); new co-move
+  state joins _tilt_fault_cb's and _drop_departed's lists; optional TB6 arm MOCAP_LOSS mid-rise on the circle.
+- F7 applied (rig): the release guard before the rise, unit-tested.
+- F8 applied: rig card §5.6/§7 rewritten with the co-move path, TB4 bars, the 60 s bound and a stop rule before
+  R11a-circle; m1c_nocatch_hover_2 added to §6.3; Wednesday: the wand walk at the rise height and the props' tip radius.
+- F9 applied: ramp 0.25 m/s^2; one bounded velocity change at the decouple; the ring frame from the planned ring point at
+  the latch tick (continuity test); the ring's yaw change reported.
+- F10 applied: TB14 referenced to the tip first reaching the floor (tip z <= 0.03 m); claim_checks produces the count.
