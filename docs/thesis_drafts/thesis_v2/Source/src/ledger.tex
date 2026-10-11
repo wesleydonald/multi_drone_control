@@ -1,13 +1,65 @@
-% ledger.tex -- Results 4.4: what the twin predicted (outline, 11 Oct; per docs/thesis_plan_2026-10-11.md
-% section 4.4). No numbers until the bands are frozen (plan P1/D4, Mon 12) and the rig flights are scored.
+% ledger.tex -- Results 4.4: what the twin predicted. The band rule and the frozen 14 Oct bands are the signed
+% freeze (docs/freeze_2026-10-14.md sections 1.4 and 2.4, Wesley 11 Oct 17:24 and 17:35; code tools/release_bands.py).
+% The ledger's rows come after each rig day. No run ids: the twin sets are given by count and value.
 
 \subsection{What the twin predicted}
 \label{sec:ledger}
 
-Every rig flight from 14 October is predicted by the rig twin before it flies: the twin flies the same
-configuration on the same code tree, and its range over its runs, widened by the rig's own pre-event noise,
-is the band the rig value is then scored against. The band rule, the scoring (hit or miss, the band's width,
-and the ratio of the rig value to the twin's midpoint) and the two naive predictors the ledger is compared
-with (``the rig equals the twin'' and ``the rig equals its previous flight of the same cell'') are stated
-in Section~\ref{sec:experiments}. The 7--8 October flights, flown before the rule, appear as agreement, not
-as scored predictions. [Table and figure: the ledger, one row per rig flight, after 14 October.]
+Every rig flight from 14 October is predicted by the rig twin before it flies, and the prediction is scored
+afterwards. The rule was signed on 11 October, before the first flight it applies to, so no band is chosen by
+its outcome.
+
+\paragraph{The band.} For a rig cell the twin flies the same configuration on the same code tree, before the
+rig does, and gives a set of tilt rises $\{\Delta\theta_{\mathrm{twin}}\}$ (Section~\ref{sec:metrics}; cut at
+$t_e+15$\,s, the shortest hold the rig flies). The band is
+\begin{equation}
+  \Big[\,\max\big(0,\ \min\Delta\theta_{\mathrm{twin}}\,f_{\mathrm{lo}}-2\sigma_{\mathrm{rig}}\big),\quad
+  \max\Delta\theta_{\mathrm{twin}}\,f_{\mathrm{hi}}+2\sigma_{\mathrm{rig}}\,\Big].
+  \label{eq:band}
+\end{equation}
+The class factors come from the four 8 October rig flights and their twin pairs, each pair cut at the rig
+flight's own event-to-LAND: for each pair the ratio $\rho$ of the rig's $\Delta\theta$ to the twin pair's
+mean, and within a class, announced or unannounced releases, $f_{\mathrm{lo}}=\min\rho$ and
+$f_{\mathrm{hi}}=\max\rho$; a class with fewer than two pairs takes $f_{\mathrm{lo}}=f_{\mathrm{hi}}=1$.
+$\sigma_{\mathrm{rig}}$ is the pooled $\sigma_{\mathrm{pre}}$ of the four 8 October rig pre-windows, the
+ring's own rocking in hover. The factors are assumed to carry the rig-to-twin gap across one change of
+configuration: the 8 October pairs flew the reference integral, and the 14 October flights fly the model
+integral with the freed UAV disarmed alone.
+
+\paragraph{Scoring.} Only rows whose band was frozen before the flight are scored; the 8 October pairs appear
+as agreement, not as predictions. Each scored flight gets three readings: a hit or a miss; the band's width;
+and $\ln(\Delta\theta_{\mathrm{rig}}/\Delta\theta_{\mathrm{mid}})$, where the twin midpoint is the mean of the
+twin set's smallest and largest values. Two naive predictors are scored the same way, as bands of the same
+$\pm2\sigma_{\mathrm{rig}}$: ``the rig equals the twin'',
+$[\min\Delta\theta_{\mathrm{twin}}-2\sigma_{\mathrm{rig}},\ \max\Delta\theta_{\mathrm{twin}}+2\sigma_{\mathrm{rig}}]$,
+and ``the rig equals its previous flight of the same cell'', which for the 14 October hover and circle releases
+are the 8 October unannounced hover and circle flights, differing in the integral mode and in how the freed
+UAV lands. A twin arm clears a rig fix only if the twin reproduced the failure.
+
+\paragraph{The 14 October bands.} Frozen on 11 October from twin runs on the 14 October code tree, released at
+the twin's timing: the hover release 6--7\,s after the ring reaches 1.0\,m, the circle release about 10\,s into
+the circle (Table~\ref{tab:ledger_bands}).
+
+\begin{table}[h]
+\centering
+\small
+\caption{The frozen bands for the 14 October releases: unannounced, the freed UAV disarmed alone, the model
+integral. Factors from the three unannounced 8 October pairs (rig-to-twin ratios 0.85, 1.05 and 1.70); the one
+announced pair (1.71) leaves its class at $f=1$.}
+\label{tab:ledger_bands}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xccccc}
+\toprule
+Flight & Twin $\Delta\theta$ ($^\circ$) & Midpoint & $f_{\mathrm{lo}}$, $f_{\mathrm{hi}}$ & $\sigma_{\mathrm{rig}}$ ($^\circ$) & Band ($^\circ$) \\
+\midrule
+Hover release & 6.12, 5.74, 6.67 (3 runs) & 6.21 & 0.851, 1.704 & 1.568 & [1.75, 14.51] \\
+Circle release & 4.87, 5.91 (2 runs) & 5.39 & 0.851, 1.704 & 1.568 & [1.00, 13.20] \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The bands are wide by construction: the rig-to-twin ratios span a factor of two and $2\sigma_{\mathrm{rig}}$
+adds about $3^\circ$, so a hit alone says little and the three readings carry the claim. In the circle twin
+the three-UAV ring settles to a steady tilt of 2.7--3.2$^\circ$ after the release and reaches its band only
+after 9--14\,s, so its $\Delta\theta$ is set by the new steady tilt more than by the release itself, unlike
+the 8 October circle pair; the circle flight is read with that in mind. [The ledger table and figure, one row
+per rig flight, follow each rig day from 14 October.]

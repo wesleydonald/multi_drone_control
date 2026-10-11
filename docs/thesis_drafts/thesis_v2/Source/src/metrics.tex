@@ -20,16 +20,35 @@ events (TAKEOFF, the push, DETACH, LAND) from the run's event log.
     (while the force acts), overshoot (the largest excursion the other way after it ends) and time to
     recover (after which it stays within 1\,cm). \textbf{Stiffness:} the force over the steady displacement
     with no integral action.
-% SETTLED 10 Oct (was a CHECK): aligned with what Table tab:detach and Figure fig:detach measure
-% (tools/thesis_sim_tables.py detach_stats, multi_drone_control): peak in the 5 s after DETACH; back in
-% band = the tilt stays under the hover's own maximum over the 5 s before plus 0.5 deg; height change =
-% largest |z - mean of the 5 s before| in the 12 s after. Was: "the time until the tilt stays under
-% 2 deg, and the payload's height loss" (the pre-twin layout study's wording).
-    \item[Detach] The peak payload tilt in the 5\,s after DETACH; the time until the tilt stays under
-    the hover's own maximum over the 5\,s before DETACH plus 0.5$^\circ$ (back in band); and the largest
-    change of the payload's height from its mean over the 5\,s before, in the 12\,s after. On the rig, where
-    the ring rocks in hover, the rise of the peak above its mean over the 3\,s before the release is also
-    given.
+% 11 Oct: the release metrics are the signed freeze (docs/freeze_2026-10-14.md section 1.1, Wesley 11 Oct 17:24,
+% every question at its recommended option); the code is tools/release_bands.py. They replace the earlier "Detach"
+% item (peak in 5 s, back in the hover's band, height change in 12 s).
+    \item[Release metrics] For a UAV leaving the team, frozen on 11 October before the first flight they
+    score; one rule for the twin and the rig. The ring's tilt is kept as a vector: with $\mathbf{n}$ the ring's
+    body $z$ axis in the world frame, the tilt angle is $\arctan\!\big(\sqrt{n_x^2+n_y^2}\,/\,n_z\big)$ and
+    the tilt vector $\boldsymbol{\theta}$ is that angle along the horizontal direction of $\mathbf{n}$, so that
+    $|\boldsymbol{\theta}|$ is the scalar tilt above. The event time $t_e$ is the DETACH command for an announced
+    release, the magnet's OFF for an unannounced one (the runner's RELEASE in the twin, the first magnet OFF in
+    the rig's bag), and the first planner tick at which the leaver's planned tension falls for a ramped release;
+    LAND is the LAND command. Over the pre-window $[t_e-5\,\mathrm{s},\,t_e)$ the mean
+    $\bar{\boldsymbol{\theta}}_{\mathrm{pre}}$ and the spread
+    $\sigma_{\mathrm{pre}}=\sqrt{\overline{|\boldsymbol{\theta}-\bar{\boldsymbol{\theta}}_{\mathrm{pre}}|^2}}$
+    are taken. A row whose ring reference was not still for the 5\,s before the event (its height within
+    5\,mm of its value at $t_e$ and its speed within 0.02\,m/s of its median over the last 2\,s) is flagged and
+    still reported. \textbf{Tilt rise} $\Delta\theta$, the primary metric, is the maximum of
+    $|\boldsymbol{\theta}(t)-\bar{\boldsymbol{\theta}}_{\mathrm{pre}}|$ over $[t_e,\,\mathrm{LAND}]$; when two
+    runs are compared both are cut at the shorter hold, each 8 October pair at the rig flight's event-to-LAND
+    and the 14 October flights and their bands at $t_e+15$\,s. Beside it: the absolute peak,
+    $\max|\boldsymbol{\theta}|$ over the same window, and the scalar rise, the absolute peak minus the mean of
+    $|\boldsymbol{\theta}|$ over the pre-window. The 30$^\circ$ drop rule and the join bars stay on the
+    absolute tilt. \textbf{Time back in band:} with $\bar{\boldsymbol{\theta}}_{\mathrm{post}}$ the mean over
+    the last 5\,s before LAND, scored only when LAND comes at least 10\,s after $t_e$, and the half-width
+    $b=\max(2\sigma_{\mathrm{pre}},\,0.5^\circ)$, it is the earliest $t$ at or after the time of $\Delta\theta$
+    such that $|\boldsymbol{\theta}-\bar{\boldsymbol{\theta}}_{\mathrm{post}}|\le b$ for every sample in
+    $[t,\,t+1\,\mathrm{s}]$, reported as $t-t_e$, or ``not back''. The dip (the largest drop of the ring's
+    height below its pre-event mean), the detection time (from the magnet's OFF to the planner's resize), the
+    steady offset, the landing lean, the clearances and the survivors' shares keep their scorers and are not
+    part of the freeze.
     \item[Attach] The peak payload tilt and the height loss (dip) after the weld, and whether the tilt
     returns under 2$^\circ$ within 3\,s; for the rejoin mission, also the tilt at the detach, the mean tilt
     over the orbit and the time from TAKEOFF to landed.
@@ -37,9 +56,18 @@ events (TAKEOFF, the push, DETACH, LAND) from the run's event log.
 \end{description}
 Each table cell is the mean over its runs, with the number of runs in brackets.
 
-% 11 Oct: the physical rationale for the bars (health check, item 3). The metric definitions themselves (the
-% tilt-vector rise over a 5 s pre-window, the post-event band, event times) are frozen on Mon 12 per the thesis
-% plan's T6 (P1, D4) and replace the detach item above once signed.
+\paragraph{Resolving a lever pair.} A lever on the transient is tested as a one-variable pair of arms A and B,
+each with at least two runs and one value per run ($\Delta\theta$ unless the table says otherwise), with the
+sign of the difference written down before the runs. The pair is \emph{resolved} only if all three hold: the
+sign of $\bar{B}-\bar{A}$ is the frozen sign; the arms' ranges do not overlap; and $|\bar{B}-\bar{A}|$ is at
+least the larger of $1^\circ$ and twice the larger range. Otherwise it is \emph{unresolved}. A prediction of
+``no sign'' is confirmed when the second or the third condition fails and falsified when both hold, in either
+direction. Every row is labelled a \emph{replication} when both arms of a twin pair, or the rig flight of a
+ledger row, were flown and registered before the rule was signed on 11 October, and a \emph{new prediction}
+otherwise; the label is set at the signature and never changes.
+
+% 11 Oct: the physical rationale for the bars (health check, item 3); the metric definitions above are the signed
+% freeze of 11 Oct.
 \paragraph{Why these bars.} Three physical limits say what a transient may do to the ring, and the bars of the
 results sections sit inside them. The first is the magnets. A plate holds its magnet straight off the face by
 about 9--10\,N and by less under shear, so a tilt that turns a rod's pull across its plate can let a magnet go:
