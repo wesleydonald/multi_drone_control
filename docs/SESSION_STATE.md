@@ -46,8 +46,7 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 - Laptop: idle. Critic round 2 done: GO WITH CHANGES for hover R11a/R11b (rig card ## Critic; answers in decisions.md).
   Critic round 2 changes are on the candidate: m1-harden merged as 793183d (205 planner tests, gate pass). Guard
   constants: wait 3 s, +0.05 above slack, guard-stage speed 0.06 m/s, follow-down slack 0.12. Next: the smoke on the
-  candidate (lab), then the QUAD4 record loader.
-  Then merge m1-harden into m1-comove, then the QUAD4 record loader and the smoke.
+  candidate (lab), then the QUAD4 record loader. No helper is running.
 - The other chat (thesis lane) finished 11 Oct; its work is merged (see above).
 
 ## TB6 (co-moving take-back, m1-comove c53ae0c; card rev 10 §6.2): COMPLETE, passes its gate criteria
