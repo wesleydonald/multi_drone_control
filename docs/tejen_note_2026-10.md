@@ -8,8 +8,23 @@ our edits). The others stand.
 
 Hi Tejen,
 
-Before R10a on Thu 15 and the combined flights from 21 Oct, here is what we changed around your stack and what we need
-from you. Every edit to our fork of your code is logged in `src/tejen_mission/CHANGES_FROM_TEJEN.md` (branch m1-rig).
+We'd like to fly the combined M1 on **Wednesday 14 Oct in the afternoon**, after the morning measurements. Your
+controller takes QUAD4 from its mat through the pickup, the drop into the net and the attach onto plate 9 of our
+hovering ring. The plan:
+- **R11a first:** the whole mission with your attach target 5 cm above the plate, so it cannot catch. We check
+  everything around the attach, including our take-back.
+- **R11b next:** the real contact attach, at your rig aim 1 cm below the face.
+
+Can you be there, and are you OK with it?
+
+**Your logs.** Could you send the logs or bags of a couple of your recent full tests (takeoff, pickup, drop in the
+basket, attach)?
+- We'd read your height error at contact and your kT in flight. They set R11a's offset and confirm the kT 22 we
+  will type for QUAD4, which is built like QUAD2.
+- Which version of your code was it, and was the payload on the ground or carried?
+
+Below is what we changed around your stack, and what else we need from you. Every edit to our fork of your code is
+logged in `src/tejen_mission/CHANGES_FROM_TEJEN.md` (branch m1-rig).
 
 **1. Your kT estimator's height gate.**
 - Your MPC learns kT only 0.20 m above the height it armed at, and it re-checks that on every tick.
@@ -35,7 +50,7 @@ from you. Every edit to our fork of your code is logged in `src/tejen_mission/CH
 
 **4. Your rig values are QUAD2's.**
 - `irl_commissioning.yaml` has body 12, marker 22, marker-to-face -0.0225 m, magnet_drop_below_quad 0.575 m and kT 22.
-  QUAD4 is body 14, marker 24. The puck is 60 g.
+  QUAD4 is body 14, marker 24, and is built like QUAD2, so we use your values. The puck is 60 g.
 - Our rig launch refuses to start until the drop and kT are typed for QUAD4.
 - We measure QUAD4's marker-to-face, taut length and contact height on Wed 14.
 - Can you give us QUAD4's kT with and without the puck from R10a?
