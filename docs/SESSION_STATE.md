@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Mon 12 Oct 2026, 02:44 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Mon 12 Oct 2026, 07:03 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and the "since the 8 Oct rig" page
 (https://claude.ai/artifact/QwgP2oPSknLyWZacvDuh5T; source `$CLAUDE_JOB_DIR/tmp/resource/m1_since_rig.html`).
 
@@ -20,7 +20,8 @@ Updated: Mon 12 Oct 2026, 02:44 AEDT (from `date`). Only what a new session need
 - **Side branches:**
   - m1-score `986ac0a`: the scorers, fast-forwarded into m1-comove (delete once the candidate is on week5).
   - m1-rec and m1-video: the Gazebo recorder, to merge into the candidate.
-  - thesis-rig `67cb4df` (worktree `mdc_wt/thesis`): the thesis draft, now with the thesis lane's work.
+  - thesis-rig `a493c7d` (worktree `mdc_wt/thesis`): the thesis draft, with lane 3's Ch2/Ch3 rewrite (fast-forwarded
+    12 Oct 07:02; builds, 108 pp, no undefined refs; hand-back `docs/thesis_work_2026-10-12b.md`).
     - Literature corrected against Quan's full text and Zeng; the spine structure; Appendix F; the bar rationale;
       the leaver rule in Section 3.4.
     - Prose from Fri 16.
@@ -74,7 +75,10 @@ Updated: Mon 12 Oct 2026, 02:44 AEDT (from `date`). Only what a new session need
   - lanes 1 and 2 are merged: thesis-rig 5dc4eb1, rig-prep de41c93; their branches and worktrees are removed;
   - lane 2 built the supervisor deck https://claude.ai/artifact/TwjqA7ebTDrkgDK6nwutiR, the T6 metrics text and the
     three 8 Oct figures on the tilt rise;
-  - overnight it may draft Ch2/Ch3 (thesis-work3).
+  - lane 3 (Ch2/Ch3) is fast-forwarded into thesis-rig a493c7d. Wesley runs
+    `$CLAUDE_JOB_DIR/tmp/cleanup_thesis_lane3.sh` (retire modelling/control.tex on thesis-rig, remove the
+    thesis-work3 worktree and branch). Its open questions: the 17 citations to approve, and the magnet hold of
+    9-10 N.
 
 ## TB6 (co-moving take-back, m1-comove c53ae0c; card rev 10 §6.2): COMPLETE, passes its gate criteria
 - **All 11 support:** R1615-R1625. R1624 is read on the commanded path (Wesley ~16:20).
