@@ -68,11 +68,13 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 - The plan's D10-D17 and D21, and the thesis plan's D8-D16, all still open (see the plans).
 
 ## Next, in order (Wesley 11 Oct: the attach flights move to Wednesday afternoon, reviewer waived)
-1. **Pinned Wednesday install:** branch rig-wed (worktree mdc_wt/rig-wed, 0628d85 = the candidate adaf2c5 + the
-   R11a Wednesday config). Build it, then the twin rehearsal on the lab from it: m1x_r11a_hover_wed (contact_dz +0.05)
-   and m1c_low (the rig's -1 cm aim = R11b), two each.
-2. **Tuesday 13:** desk rehearsal on the rig-wed install (fake_mocap: the R11a and R11b sequences) and the F1 load test
-   with its bars. Prepare the commands Monday.
+1. **Pinned Wednesday install:** branch rig-wed (worktree mdc_wt/rig-wed, 0628d85; built). Twin rehearsal done:
+   - R11a (R1634, R1636): supports twice.
+   - R11b (R1635, R1637): the attach supports twice, with the proof under 1 s; each LAND was a TB14 tip-over, the twin
+     artefact.
+2. **Tuesday's desk rehearsal is skipped** (Wesley). A helper (id a815135d1399c4d2f) writes tools/load_check.py and
+   docs/rig_2026-10-14_load_test.md in rig-wed for Wednesday's step 3: the load test is the go/no-go and also checks the
+   launch lines.
 3. **Wednesday 14:**
    - the 09:00 measurements and Part A (W4/W5);
    - Part B props-off on rig-wed;
