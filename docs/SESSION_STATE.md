@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Mon 12 Oct 2026, 00:46 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and the "since the 8 Oct rig" page
 (https://claude.ai/artifact/QwgP2oPSknLyWZacvDuh5T; source `$CLAUDE_JOB_DIR/tmp/resource/m1_since_rig.html`).
 
@@ -37,8 +37,8 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 - **Plans:**
   - `docs/plan_m1_remaining_2026-10-11.md`: execution, D1-D21.
   - `docs/thesis_plan_2026-10-11.md`: spine RQ1 carry / RQ2 leave / RQ3 join; due **20 Nov**.
-- **Card:** `docs/experiments/2026-10-10_combined_m1_contact.md` rev 10. The §3b "as built" block is at the top of §3b;
-  the final SHA is still blank.
+- **Card:** `docs/experiments/2026-10-10_combined_m1_contact.md` rev 10; final SHA rig-wed ba40bd0 (filled 11 Oct). Reviewer
+  verdict in §6.3a.
 - **Reference:** `docs/reference.md` (architecture, negatives, traps, how to run). CURRENT_STATE.md is retired.
 
 ## Running
@@ -52,8 +52,12 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
     plate) stalled in 3 of 4 circle arms: his tracking sat 3-5 cm off. R1639 falsifies TB4's ring tilt in its LAND
     take-back. After the batch: re-fly m1c_nocatch_orbit x2 on 2 slots as a diagnostic (lab load?). Scoring wrapper:
     `$CLAUDE_JOB_DIR/tmp/sc.sh show|add RID family rev arm verdict notes`.
-  - 00:35: the 17 claim arms are scored (R1638-R1654); beside-the-table R1655 too. The reviewer is running on the
-    table (id a1706690b23ad8873). Its verdict goes into the card under §6.3.
+  - The 17 claim arms are scored (R1638-R1654), plus R1655 beside the table. Reviewer: **NOT SUPPORTED overall**.
+    - Supported: hover attach, hover take-back, no-catch hover, LAND during the proof.
+    - Not supported: the circle take-back and the push abort (R1654 rod 0.094 m).
+    - Corr rows for R1638/1639/1641/1654 and card §6.3a are committed in 898f775.
+  - Next: R1656-R1659 (full orbit, full nocatch orbit, r11a hover_wed, r11a circle), then the tilt arms R1660-R1678
+    (`tilt` rev 4). Monitor bo7ezsh3q.
 - Laptop: idle. No helper is running. The full M1 on the circle is recorded and cut (R1633, the 11th clean full M1):
   results/videos/full_M1_twin_R1633_orbit_edit.mp4 (2 min 56 s, captioned; raw: _wide, _circle, _plate9). The recorder
   is on the candidate (adaf2c5).
