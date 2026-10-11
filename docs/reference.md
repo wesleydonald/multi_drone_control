@@ -282,6 +282,14 @@ runs the geometry check; `fleet arm|takeoff|land|disarm|estop`.
 
 ---
 
+- **Lab: switching back to an older tree breaks the build** (11 Oct).
+  - The lab builds with `--symlink-install` into one `~/mdc`. Files that exist only in the newer tree (for example
+    tejen_mission's m1 launch and config files) leave dangling links in `build/` and `install/`, and colcon then
+    fails with "can't copy ... doesn't exist".
+  - Fix inside the container, where the links resolve:
+    `tools/remote/lab_run.sh --tag clean -- bash -c 'find build install -xtype l -delete'`. Then rerun the batch.
+  - From the host every link looks broken, so don't run the find there.
+
 ## 11. How to run and verify
 
 ```bash
