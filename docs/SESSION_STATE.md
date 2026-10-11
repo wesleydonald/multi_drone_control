@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Sun 11 Oct 2026, ~17:50. Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and the "since the 8 Oct rig" page
 (https://claude.ai/artifact/QwgP2oPSknLyWZacvDuh5T; source `$CLAUDE_JOB_DIR/tmp/resource/m1_since_rig.html`).
 
@@ -40,7 +40,7 @@ Updated: Sun 11 Oct 2026, ~17:50. Only what a new session needs to act. History:
   is `docs/thesis_work_2026-10-11.md` on its branch. Copy its "decisions for the record" into decisions.md.
 
 ## TB6 (co-moving take-back, m1-comove c53ae0c; card rev 10 §6.2): COMPLETE, passes its gate criteria
-- **All 11 support:** R1615-R1625. R1624 is read on the commanded path (Wesley 17:55).
+- **All 11 support:** R1615-R1625. R1624 is read on the commanded path (Wesley ~16:20).
 - **Circle take-backs:** rod 0.205-0.253 m, body 0.415-0.493 m. TB5 predicts them within about 1 cm.
 - **Between the bars, for the Thu 15 gate:**
   - R1618: attitude step at the decouple 2.15 deg.
@@ -84,5 +84,8 @@ Updated: Sun 11 Oct 2026, ~17:50. Only what a new session needs to act. History:
 - **Untracked files:** `general/CLAUDE.md`, `.claude/agents/*` and `.claude/workflows/*` are local and untracked. Edit
   them in place and never `git add` them.
 - **Deletions** (branches, worktrees) are refused by the permission check. Write a script for Wesley to run.
+- **Timestamps:** read `date` before writing any clock time. Times estimated from memory ran up to 1.5 h ahead on
+  11 Oct; commit times are exact.
+- **Papers:** `docs/papers/` is git-ignored and local. The Quan et al. copy is the full 33-page arXiv v1 (16:28).
 - **Branch rule:** delete a branch once its work is on week5 or the attempt failed. Archive-tag any unmerged SHA the
   registry cites.
