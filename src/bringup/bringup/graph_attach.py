@@ -32,7 +32,7 @@ four drones' and the ring's body ids, the prebuilt solver for the weighed masses
 import os
 import shlex
 
-from bringup.real_mode import (apply_rig_values, map_and_geometry, planner_options, rig_io,
+from bringup.real_mode import (_TYPED_KEY, apply_rig_values, map_and_geometry, planner_options, rig_io,
                                rig_magnet_latches, rig_thrust_ratio, truthy)
 from launch.actions import GroupAction, IncludeLaunchDescription, LogInfo, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -60,6 +60,10 @@ RIG_PUCK_MASS = 0.06
 PARTNER_DELAY_S = 5.0
 # what this launch decides for his rig launch (partner_args may not set them)
 PARTNER_OWNED = ('real', 'geometry', 'contact_attach', 'contact_target_z')
+# combined rig: proof_taut_len is the measured taut body-to-tip minus this; QUAD4's rod body-to-tip and his
+# magnet_drop_below_quad must agree with that taut length within QUAD4_LEN_TOL_M
+PROOF_TAUT_MARGIN_M = 0.003
+QUAD4_LEN_TOL_M = 0.01
 
 
 def _dds_guard():
@@ -79,10 +83,54 @@ def _contact_traj_refusals(context, real):
     if traj not in ('hover', 'orbit'):
         raise RuntimeError(f'partner_contact flies load_traj hover or orbit only, got {traj!r} (the take-back clears '
                            f'hover and the circle only)')
-    lifted = context.launch_configurations.get('contact_rig_orbit', '').strip().lower() in ('1', 'true', 'yes')
+    # only a value typed on the command line lifts it, never a params_file (rig-port critic round 2, A9)
+    lifted = 'contact_rig_orbit' in _typed(context) and \
+        context.launch_configurations.get('contact_rig_orbit', '').strip().lower() in ('1', 'true', 'yes')
     if real and traj != 'hover' and not lifted:
         raise RuntimeError('partner_contact on the rig flies hover only until the co-moving take-back is reviewed '
-                           '(contact_rig_orbit:=true lifts this, with Wesley\'s word)')
+                           '(contact_rig_orbit:=true typed on the command line lifts this, with Wesley\'s word)')
+
+
+def _typed(context):
+    """The launch arguments typed on the command line (bringup.real_mode.record_typed_args)."""
+    return {k for k in context.launch_configurations.get(_TYPED_KEY, '').split(',') if k}
+
+
+def _combined_rig_quad4_refusals(context):
+    """Rig-port critic round 2, A3: QUAD4's weld point height and rod length come from its record, never a default.
+    Left at the defaults, weld_point_z 0 puts our weld check and his contact target on the ring-origin plane, and
+    attach_cable_len takes the carriers' cable_len."""
+    from bringup.profiles import _load, flatten
+    wpz = LaunchConfiguration('weld_point_z').perform(context).strip()
+    if not wpz or float(wpz) == 0.0:
+        raise RuntimeError('partner_contact on the rig: type weld_point_z:=<the 09:00 record: the tip marker\'s height '
+                           'above the ring-origin plane with the face on plate 9>')
+    # typed, or in the params_file (as deliberate as typed, real_mode.apply_rig_values)
+    pf = LaunchConfiguration('params_file').perform(context).strip()
+    chosen = _typed(context) | (set(flatten(_load(pf))) if pf else set())
+    rod = LaunchConfiguration('attach_cable_len').perform(context).strip()
+    if 'attach_cable_len' not in chosen or not rod or float(rod) <= 0.0:
+        raise RuntimeError('partner_contact on the rig: type attach_cable_len:=<QUAD4\'s rod from its record> '
+                           '(untyped it is the carriers\' cable_len)')
+    # one taut length (critic round 2 follow-up, 1): the release guard's tip-to-body band is centred on the rod's
+    # body-to-tip, so it must be the measured one; a proof_taut_len of 0 is refused by name further on
+    taut = float(LaunchConfiguration('proof_taut_len').perform(context).strip() or 0.0)
+    if taut <= 0.0:
+        return
+    length = taut + PROOF_TAUT_MARGIN_M
+    pivot = float(LaunchConfiguration('pivot_offset_z').perform(context))
+    btt = float(rod) - pivot
+    if round(abs(btt - length), 6) > QUAD4_LEN_TOL_M:
+        raise RuntimeError(f'partner_contact on the rig: QUAD4\'s body-to-tip attach_cable_len {float(rod):.3f} - '
+                           f'pivot_offset_z {pivot:+.3f} = {btt:.3f} m disagrees with the taut length proof_taut_len '
+                           f'{taut:.3f} + {PROOF_TAUT_MARGIN_M:.3f} = {length:.3f} m by '
+                           f'{100.0 * (btt - length):+.1f} cm (more than {100.0 * QUAD4_LEN_TOL_M:.0f} cm)')
+    drop = _partner_launch_args(context).get('magnet_drop_below_quad')
+    if drop is not None and round(abs(float(drop) - length), 6) > QUAD4_LEN_TOL_M:
+        raise RuntimeError(f'partner_contact on the rig: partner_args magnet_drop_below_quad {float(drop):.3f} m '
+                           f'disagrees with the taut length proof_taut_len {taut:.3f} + {PROOF_TAUT_MARGIN_M:.3f} = '
+                           f'{length:.3f} m by {100.0 * (float(drop) - length):+.1f} cm (more than '
+                           f'{100.0 * QUAD4_LEN_TOL_M:.0f} cm)')
 
 
 def _partner_launch_args(context):
@@ -245,6 +293,7 @@ def attach(context, launch_dir, profile_vals):
         if float(LaunchConfiguration('weld_radius').perform(context)) <= 0.0:
             raise RuntimeError('partner_contact on the rig: weld_radius is the contact radius, > 0 (the 09:00 '
                                'calibration, e.g. 0.01)')
+        _combined_rig_quad4_refusals(context)
     # QUAD4 tilt cut (card 2026-10-11_quad4_tilt_cut): where the partner's stream can fly QUAD4
     tilt_cut = partner and truthy(context, 'partner_tilt_cut')
     stuck_guard = partner and truthy(context, 'partner_stuck_guard')
@@ -417,9 +466,11 @@ def attach(context, launch_dir, profile_vals):
                              '' if real else '/payload/detachable_joint_state'),
                          # rig: his 60 g puck, and no span while it reads attached (critic F8, F9)
                          # rig: the release guard before the take-back's rise (card 2026-10-10_combined_m1_contact
-                         # rev 10, critic round 4 F7)
+                         # rev 10, critic round 4 F7), reading plate 9 at the magnet manager's weld point (round 2, A4)
                          **({'contact_ball_mass': RIG_PUCK_MASS, 'contact_span_wait_ball': True,
-                             'take_back_release_guard': True} if real else {})}
+                             'take_back_release_guard': True, 'attach_x_offset': f('attach_x_offset'),
+                             'attach_y_offset': f('attach_y_offset'), 'weld_point_z': f('weld_point_z')}
+                            if real else {})}
                         if partner_contact else {}),
                      'start_attached': partner_attached,
                      'partner_release': partner_attached,

@@ -9,7 +9,7 @@ import pytest
 from tejen_mission.m1_pickup_recovery import PickupProgressStall, PickupRelease
 from tejen_mission.mission_definitions import mission_for_mode
 from tejen_mission.mission_types import MissionPhase as P
-from tejen_mission.online_join_planner import CONTACT_REJOIN_PHASES, OnlineJoinPlanner, RateProfile
+from tejen_mission.online_join_planner import CONTACT_REJOIN_PHASES, DROP_PUCK_WAIT_S, OnlineJoinPlanner, RateProfile
 from tejen_mission.payload_geometry import PayloadGeometryProfile
 
 CONTACT_Z = 0.0          # final_attach_offset_z under contact_attach (the launch sets it)
@@ -810,16 +810,60 @@ def test_drop_timeout_with_the_object_measured_on_the_magnet_is_a_give_up():
     assert [m.data for m in p.give_up_publisher.messages] == [True]
 
 
-def test_drop_clears_once_the_object_is_measured_away_or_not_measured():
+def test_drop_clears_once_the_object_is_measured_away():
     p = _dropping([0.0, 0.0, -0.6])
     p.clock.t += 0.5
     p.last_magnet_tip_pose_time = p.last_pickup_object_pose_time = p.clock.t
     tick(p)
     assert p.phase == P.CLEAR_DROP_ZONE
+
+
+# ---- rig-port critic round 2, A7: an object not measured is no longer trusted released ----
+
+def _unmeasured_drop(dt):
+    """The dwell over, then dt s with no fresh pose of the object (the marker fresh)."""
     p = _dropping([0.0, 0.0, -0.04], fresh=False)
-    p.clock.t += 0.5
+    p.clock.t += p.drop_wait_time_s + dt
+    p.last_magnet_tip_pose_time = p.clock.t
     p.update_state_machine()                          # not tick(): it refreshes every pose
+    return p
+
+
+def test_drop_with_the_object_not_measured_waits_for_a_fresh_pose():
+    p = _unmeasured_drop(DROP_PUCK_WAIT_S - 0.1)
+    assert p.phase == P.DROP_OBJECT and not p.contact_gave_up
+    assert any('waiting for a fresh pose' in w for w in p.warnings)
+
+
+def test_a_fresh_pose_away_from_the_magnet_within_the_wait_clears_the_drop():
+    p = _unmeasured_drop(1.0)
+    assert p.phase == P.DROP_OBJECT
+    p.pickup_object_position = p.measured_magnet_tip_position + np.array([0.0, 0.0, -0.6])
+    tick(p, 0.1)
     assert p.phase == P.CLEAR_DROP_ZONE and not p.contact_gave_up
+
+
+def test_a_fresh_pose_on_the_magnet_within_the_wait_is_a_give_up():
+    p = _unmeasured_drop(1.0)
+    tick(p, 0.1)                                      # fresh again, the object still on the marker
+    assert p.phase == P.TAKEN_BACK and p.contact_gave_up
+
+
+def test_no_fresh_pose_within_the_wait_is_a_give_up_as_for_a_stuck_object():
+    p = _unmeasured_drop(DROP_PUCK_WAIT_S)
+    assert p.phase == P.TAKEN_BACK and p.contact_gave_up
+    assert [m.data for m in p.give_up_publisher.messages] == [True]
+    assert any('not measured 2.0 s after the release dwell' in w for w in p.warnings)
+
+
+def test_wait_zero_trusts_an_unseen_object_released_as_before():
+    p = _dropping([0.0, 0.0, -0.04], fresh=False)
+    p.drop_puck_wait_s = 0.0                          # launch drop_puck_wait_s:=0 (no puck pose in the net)
+    p.clock.t += p.drop_wait_time_s + 0.1
+    p.last_magnet_tip_pose_time = p.clock.t
+    p.update_state_machine()
+    assert p.phase == P.CLEAR_DROP_ZONE and not p.contact_gave_up
+    assert any('trusting the release' in w for w in p.warnings)
 
 
 def test_drop_without_the_switch_is_his():

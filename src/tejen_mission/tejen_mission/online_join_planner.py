@@ -162,6 +162,9 @@ CONTACT_REJOIN_PHASES = frozenset({
 })
 # contact_attach: the phases after the drop released the object (the object magnet holds nothing)
 CONTACT_DROPPED_PHASES = CONTACT_REJOIN_PHASES | {MissionPhase.CLEAR_DROP_ZONE}
+# drop_check_puck: after the release dwell, how long the drop waits for fresh poses of the object and the marker before
+# it gives up as for an object stuck on the magnet (multi_drone_control rig-port critic round 2, A7)
+DROP_PUCK_WAIT_S = 2.0
 
 
 def _vec3_from_position(position) -> np.ndarray:
@@ -1819,6 +1822,9 @@ class OnlineJoinPlanner(Node):
             # multi_drone_control rig (critic F9): the object flag is inferred (it clears with the OFF), so the drop
             # ends on the MEASURED object leaving the marker; a drop that times out with it still there is a give-up
             self.drop_check_puck = bool(self.declare_parameter('drop_check_puck', False).value)
+            # 0 = an unseen object is trusted released (his earlier behaviour), for a rig where Motive cannot see the
+            # object in the net (Wesley 11 Oct: decided from Wednesday's mocap check)
+            self.drop_puck_wait_s = float(self.declare_parameter('drop_puck_wait_s', DROP_PUCK_WAIT_S).value)
             self.drop_stuck_radius_m = float(self.declare_parameter('drop_stuck_radius_m', 0.08).value)
             # taken_back_self_land (multi_drone_control card 2026-10-11_quad4_tilt_cut, rig-port critic F6; off): if
             # the fleet's mux has not taken the vehicle taken_back_mux_wait_s after TAKEN_BACK (its tracker cannot
@@ -6574,8 +6580,9 @@ class OnlineJoinPlanner(Node):
 
     def update_measured_drop(self, waited: bool) -> None:
         """DROP_OBJECT under drop_check_puck: the release dwell always runs; then the object measured away from the
-        marker (or not measured, with a warning) clears the drop zone, and one still on it is a give-up (the fleet
-        takes the vehicle back and lands it with the object on)."""
+        marker clears the drop zone, and one still on it is a give-up (the fleet takes the vehicle back and lands it
+        with the object on). Not measured, the drop waits up to DROP_PUCK_WAIT_S more for fresh poses and then gives
+        up the same way: an unseen object may still ride the magnet to the ring."""
         if not waited:
             return
         on_tip = self.measured_object_on_tip()
@@ -6583,9 +6590,19 @@ class OnlineJoinPlanner(Node):
             self.contact_give_up('the drop timed out with the object measured on the magnet')
             return
         if on_tip is None:
-            self.get_logger().warning('Drop: the object or the marker is not measured; trusting the release')
-        self.transition_to(MissionPhase.CLEAR_DROP_ZONE, 'object measured away from the magnet after the release dwell'
-                           if on_tip is False else 'release dwell completed (object not measured)')
+            wait_s = getattr(self, 'drop_puck_wait_s', DROP_PUCK_WAIT_S)
+            if wait_s <= 0.0:
+                self.get_logger().warning('Drop: the object or the marker is not measured; trusting the release')
+                self.transition_to(MissionPhase.CLEAR_DROP_ZONE, 'release dwell completed (object not measured)')
+                return
+            if self._physical_now_s() - self.drop_start_time - self.drop_wait_time_s < wait_s:
+                self.get_logger().warning('Drop: the object or the marker is not measured; waiting for a fresh pose',
+                                          throttle_duration_sec=0.5)
+                return
+            self.contact_give_up(f'the object or the marker not measured {wait_s:.1f} s after the release '
+                                 f'dwell')
+            return
+        self.transition_to(MissionPhase.CLEAR_DROP_ZONE, 'object measured away from the magnet after the release dwell')
 
     def enter_taken_back(self, reason: str) -> None:
         if self.phase in {MissionPhase.RING_ATTACHED, MissionPhase.TAKEN_BACK}:

@@ -47,7 +47,8 @@ combined_m1:
   partner_nodes: false
   partner_args: ''
   # partner_contact refuses load_traj orbit on the rig until the co-moving take-back is reviewed (card
-  # 2026-10-10_combined_m1_contact rev 10, TB16): true lifts the refusal, with Wesley's word
+  # 2026-10-10_combined_m1_contact rev 10, TB16): true typed on the command line lifts the refusal, with Wesley's
+  # word (a params_file value is ignored)
   contact_rig_orbit: false
 
 modes:

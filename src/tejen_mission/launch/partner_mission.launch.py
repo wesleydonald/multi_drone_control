@@ -564,6 +564,8 @@ def _rig_nodes(context):
                 'proof_rise_max': f('proof_rise_max', RIG['proof_rise_max']),
                 # the drop ends on the measured object leaving the marker; stuck = give-up (critic F9)
                 'drop_check_puck': True,
+                # 0 = trust an unseen object released (no puck pose in the net); set from Wednesday's mocap check
+                'drop_puck_wait_s': f('drop_puck_wait_s', 2.0),
                 'contact_topic': '/magnet/contact',
                 'ring_attached_topic': '/magnet/object_attached',
                 'give_up_topic': '/join_planner/give_up',
@@ -650,6 +652,7 @@ def _arguments():
         DeclareLaunchArgument('contact_lead', default_value='0.0'),   # contact_attach: his hold's reference lead (s)
         DeclareLaunchArgument('contact_dz', default_value='0.0'),     # contact_attach: tip target above the contact point (m)
         DeclareLaunchArgument('contact_dx', default_value='0.0'),     # contact_attach: tip target offset along x (m)
+        DeclareLaunchArgument('drop_puck_wait_s', default_value='2.0'),   # rig drop check: s to wait for a puck pose; 0 = trust the release
         DeclareLaunchArgument('confirm_pickup_release', default_value='false'),
         # contact_attach: no fleet switch 1 s after TAKEN_BACK -> out 1.2 m from the ring, land, disarm (card
         # 2026-10-11_quad4_tilt_cut); false = TAKEN_BACK holds where it is, as before

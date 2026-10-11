@@ -93,13 +93,37 @@ TIP_AT_RING_BELOW_M = 0.15  # the tip is at the ring from this far below the rin
 TIP_OVER_FLOOR_M = 0.1     # a co-moving descent under the formation stops with the tip this far above the floor
 BALL_DIAM_M = 0.16         # his twin ball (tejen payload_model.sdf, r 0.08), under the tip while he carries it
 GUARD_PLATE_RISE_M = 0.02  # rig release guard (critic F7): plate 9 rising this much means the coil still holds it
-GUARD_WAIT_S = 2.0         # s for the tip to leave the plate before the guard lands the fleet
+# the guard's height over the taut tether (plate + body-to-tip) + RELEASE_SEEN_M: QUAD4's taut length can be under the
+# planner's body-to-tip and his aim low, so +0.02 left the pass on the carrot's tail (rig-port critic round 2, A1)
+GUARD_RISE_ABOVE_SLACK_M = 0.05
+GUARD_WAIT_S = 3.0         # s for the tip to leave the plate before the guard lands the fleet
+# a pass needs this long of consecutive fresh samples with the tip off the plate, hanging from the body within
+# GUARD_TIP_BODY_M of the planner's body-to-tip (a tip-puck marker swap is not a release); plate 9's height is averaged
+# over the guard's first GUARD_PLATE_AVG_S (critic round 2, A5)
+GUARD_PASS_S = 0.1
+GUARD_TIP_BODY_M = 0.03
+GUARD_PLATE_AVG_S = 0.2
+GUARD_WHY = ('ring', 'tip', 'body', 'plate', 'band')   # a guard tick's no-pass causes, counted for a timeout's line
+# m/s: the guard stage's reference speed (every other stage DETACH_STEP_VEL): a held coil lifted plate 9 ~6 cm at 0.15
+# before the 2 cm check and the braking caught it (Wesley 11 Oct, critic round 2 follow-up, 4)
+GUARD_STAGE_VEL = 0.06
 # a failed guard (the coil may still hold plate 9): QUAD4 follows the landing ring down this far below the taut
-# tether, then once the ring is down steps this far out from the plate and as far down, and lands alone (Wesley 11 Oct)
-GUARD_SLACK_M = 0.05
+# tether, then once the ring is down steps this far out from the plate and as far down, and lands alone (Wesley 11 Oct;
+# the slack 0.12 from 0.05: the reference lags the LAND's step to land_vel, critic round 2 follow-up, 3)
+GUARD_SLACK_M = 0.12
 GUARD_OUT_M = 0.35
 GUARD_FOLLOW_VEL = 0.3     # m/s: the most of the ring's measured descent fed forward (land_vel 0.2 + margin)
 GUARD_LAND_WAIT_S = 2.0    # s: the fleet LAND waits for QUAD4 at the slack, at most this long (Wesley 11 Oct)
+
+
+def gap_centre_rho(rho, attach_radius, attach_z):
+    """A reserved slot's placeholder: the centre of the largest free gap of the ring rho (with 3/12/9 o'clock tethers
+    that is 6 o'clock); a weld overwrites it. Equal gaps tie, and argmax takes the first."""
+    azs = np.sort(np.mod([np.arctan2(r[1], r[0]) for r in rho], 2 * np.pi))
+    gaps = np.diff(np.r_[azs, azs[0] + 2 * np.pi])
+    k = int(np.argmax(gaps))
+    az = azs[k] + 0.5 * gaps[k]
+    return np.array([attach_radius * np.cos(az), attach_radius * np.sin(az), attach_z])
 
 
 def _ring_off_allowed(node):
@@ -398,14 +422,7 @@ class DissipativeController(LoadPlanner):
         # gap-centre placeholder that the weld capture in _do_attach overwrites.
         net_rho = [np.asarray(r, float) for r in self.rho]
         for j in range(self.reserved_attach):
-            # placeholder at the centre of the LARGEST free gap of the current ring
-            # (with 3/12/9 o'clock tethers that is 6 o'clock); the weld overwrites it
-            azs = np.sort(np.mod([np.arctan2(r[1], r[0]) for r in net_rho], 2 * np.pi))
-            gaps = np.diff(np.r_[azs, azs[0] + 2 * np.pi])
-            k = int(np.argmax(gaps))
-            az = azs[k] + 0.5 * gaps[k]
-            net_rho.append(np.array([self.attach_radius * np.cos(az),
-                                     self.attach_radius * np.sin(az), self.attach_z]))
+            net_rho.append(gap_centre_rho(net_rho, self.attach_radius, self.attach_z))
         self.net = DissipativeNetwork(
             self.n_net, net_rho, self.cable_len, self.drone_mass, self.load_mass,
             self.dyn.g, self.diss)
@@ -496,7 +513,14 @@ class DissipativeController(LoadPlanner):
         # rig (critic round 4, F7): before the take-back rises past the tether's slack, plate 9 must not follow and the
         # tip must leave it; else hold, OFF again and LAND the fleet
         self._release_guard = bool(p('take_back_release_guard', False).value) and self._partner_contact
+        # the newcomer's weld point in the ring frame: the magnet manager's (attach offset, weld_point_z); unset, the
+        # gap-centre placeholder stands in, which ties between equal gaps (critic round 2, A4)
+        wp = [float(p(k, float('nan')).value) for k in ('attach_x_offset', 'attach_y_offset', 'weld_point_z')]
+        self._weld_rho = np.array(wp) if np.all(np.isfinite(wp)) else None
         if self._release_guard:
+            if self._weld_rho is None:
+                raise ValueError('take_back_release_guard needs the weld point: attach_x_offset, attach_y_offset '
+                                 'and weld_point_z')
             self._fleet_cmd_pub = self.create_publisher(String, '/fleet/command', 10)
             if not (self._welded_on_load and self._newcomer_fault_land):
                 self.create_subscription(PoseStamped, '/magnet_tip_pose', self._tip_now_cb, 10)
@@ -1813,13 +1837,19 @@ class DissipativeController(LoadPlanner):
         self._span_t = now
         self._magnet_cmd_pub.publish(String(data='ON'))
 
+    def _weld_rho_of(self, j):
+        """Reserved drone j's weld point in the ring frame: the magnet manager's when the launch passed it (the one
+        newcomer's), else its network slot (the gap-centre placeholder until a weld)."""
+        w = getattr(self, '_weld_rho', None)
+        return np.asarray(w if w is not None else self.net.rho[self._n_carry0 + j], float)
+
     def _reserved_plate_dir(self, j, c):
-        """Unit xy from the ring centre c to reserved drone j's plate: the live attach target, else its slot."""
+        """Unit xy from the ring centre c to reserved drone j's plate: the live attach target, else its weld point."""
         t = self._attach_target
         if t is not None and float(np.linalg.norm(np.asarray(t[:2], float) - c)) > 1e-3:
             v = np.asarray(t[:2], float) - c
         else:
-            v = (quat_to_rot_np(self.load_state[3:7]) @ self.net.rho[self._n_carry0 + j])[:2]
+            v = (quat_to_rot_np(self.load_state[3:7]) @ self._weld_rho_of(j))[:2]
         return v / max(float(np.linalg.norm(v)), 1e-6)
 
     def _take_back(self, j, why):
@@ -1980,42 +2010,80 @@ class DissipativeController(LoadPlanner):
         return frame + where + ', then down'
 
     def _guard_read(self, j):
-        """(QUAD4's measured tip in the ring frame, or None when stale; plate j's world z) now."""
+        """(QUAD4's measured tip in the ring frame, or None when stale; the world z of plate j's weld point) now."""
         R = quat_to_rot_np(self.load_state[3:7])
         c = np.asarray(self.load_state[0:3], float)
-        plate_z = float((c + R @ np.asarray(self.net.rho[self._n_carry0 + j], float))[2])
+        plate_z = float((c + R @ self._weld_rho_of(j))[2])
         tip = None
         if self._tip_now is not None and \
                 self.get_clock().now().nanoseconds * 1e-9 - self._tip_now[0] <= NEWCOMER_POSE_STALE_S:
             tip = R.T @ (self._tip_now[1] - c)
         return tip, plate_z
 
+    def _guard_ring_fresh(self):
+        load_t = getattr(self, '_load_t', None)
+        return self.load_state is not None and load_t is not None and time.monotonic() - load_t <= DETECT_STALE_S
+
     def _guard_setup(self, j, d, st, off, goals):
-        """Rig release guard (critic round 4, F7): with our span begun and the tip on or near plate 9, the rise
-        stops at the tether's slack + RELEASE_SEEN_M + GUARD_PLATE_RISE_M until the tip has left the plate (ring
-        frame) and the plate has not followed."""
+        """Rig release guard (critic round 4, F7): with our span begun and the tip on or near plate 9's weld point,
+        the rise stops at the tether's slack + RELEASE_SEEN_M + GUARD_RISE_ABOVE_SLACK_M until the tip has left the
+        plate (ring frame) and the plate has not followed."""
         if not getattr(self, '_release_guard', False) or not off or self.load_state is None or not goals:
             return
-        tip0, plate_z0 = self._guard_read(j)
-        rho = np.asarray(self.net.rho[self._n_carry0 + j], float)
-        if tip0 is not None and float(np.linalg.norm(tip0 - rho)) > 2.0 * RELEASE_SEEN_M:
+        tip0, plate_z = self._guard_read(j)
+        if tip0 is not None and float(np.linalg.norm(tip0 - self._weld_rho_of(j))) > 2.0 * RELEASE_SEEN_M:
             return                                 # the tip is not on the plate: nothing for the coil to hold
-        z = max(float(st['hold'][2]), plate_z0 + self._attach_body_to_tip) + RELEASE_SEEN_M + GUARD_PLATE_RISE_M
-        st['guard'] = {'tip0': tip0, 'plate_z0': plate_z0, 'z': min(z, float(goals[0][2])), 't0': None,
-                       'landed': False}
+        z = max(float(st['hold'][2]), plate_z + self._attach_body_to_tip) + RELEASE_SEEN_M + GUARD_RISE_ABOVE_SLACK_M
+        # plate_z0: the plate's height averaged once the guard starts (after the hold), in _guard_check; why: the
+        # guard's ticks with no pass per cause, for the timeout's line
+        st['guard'] = {'tip0': tip0, 'plate_z0': None, 'plate_zs': [], 'avg_t0': None, 'run_t': None,
+                       'z': min(z, float(goals[0][2])), 't0': None, 'landed': False, 'd_tb': None,
+                       'why': dict.fromkeys(GUARD_WHY, 0)}
+
+    def _guard_why(self, g):
+        """The guard's ticks with no pass per cause, and the last tip-to-body distance measured."""
+        w = g['why']
+        d = 'none' if g['d_tb'] is None else f'{g["d_tb"]:.3f} m'
+        return (f'ticks: ring pose stale {w["ring"]}, tip pose stale {w["tip"]}, body pose stale {w["body"]}, '
+                f'tip on the plate (< {RELEASE_SEEN_M:.2f} m off) {w["plate"]}, tip-to-body off '
+                f'{self._attach_body_to_tip:.3f} +- {GUARD_TIP_BODY_M:.2f} m {w["band"]} (last {d})')
 
     def _guard_check(self, j, g):
-        """'pass' (the tip RELEASE_SEEN_M off the plate, the plate not risen), 'fail' (the plate rose
-        GUARD_PLATE_RISE_M) or None."""
+        """'pass' (GUARD_PASS_S of consecutive fresh samples with the tip RELEASE_SEEN_M off the plate and its body-to-
+        tip within GUARD_TIP_BODY_M of the planner's, the plate not risen), 'fail' (the plate rose GUARD_PLATE_RISE_M
+        over its height averaged across the guard's first GUARD_PLATE_AVG_S) or None. A stale ring pose neither passes
+        nor fails; the guard's wait still runs."""
+        if not self._guard_ring_fresh():
+            g['run_t'] = None
+            g['why']['ring'] += 1
+            return None
+        now = self.get_clock().now().nanoseconds * 1e-9
         tip, plate_z = self._guard_read(j)
-        if plate_z - g['plate_z0'] > GUARD_PLATE_RISE_M:
+        if g['plate_z0'] is None:
+            if g['avg_t0'] is None:
+                g['avg_t0'] = now
+            g['plate_zs'].append(plate_z)
+            if now - g['avg_t0'] >= GUARD_PLATE_AVG_S:
+                g['plate_z0'] = float(np.mean(g['plate_zs']))
+        if g['plate_z0'] is not None and plate_z - g['plate_z0'] > GUARD_PLATE_RISE_M:
             return 'fail'
         if tip is not None and g['tip0'] is None:
-            g['tip0'] = tip                        # no tip at the latch: measure from its first fresh pose
+            g['tip0'] = tip                        # measured from the guard's first fresh tip pose
             return None
-        if tip is not None and float(np.linalg.norm(tip - g['tip0'])) >= RELEASE_SEEN_M:
-            return 'pass'
-        return None
+        body = self._pos(self._n_carry0 + j)
+        if body is not None and tip is not None:
+            g['d_tb'] = float(np.linalg.norm(self._tip_now[1] - body))
+        cause = ('tip' if tip is None else 'body' if body is None
+                 else 'plate' if float(np.linalg.norm(tip - g['tip0'])) < RELEASE_SEEN_M
+                 else 'band' if abs(g['d_tb'] - self._attach_body_to_tip) > GUARD_TIP_BODY_M else None)
+        if cause is not None:
+            g['why'][cause] += 1
+            g['run_t'] = None
+            return None
+        # timed on the tip's own samples: one sample read on several ticks is not a run
+        if g['run_t'] is None:
+            g['run_t'] = self._tip_now[0]
+        return 'pass' if g['plate_z0'] is not None and self._tip_now[0] - g['run_t'] >= GUARD_PASS_S else None
 
     def _take_back_tick(self, d, p_hold, a_ff, a_c):
         """One tick of the take-back's reference: hold (brake to the stopping point; the release wait) -> [the rig
@@ -2052,6 +2120,7 @@ class DissipativeController(LoadPlanner):
         if stage == 'hold' and wait <= 0.0 and reached(st['hold']):
             if st['guard'] is not None:
                 st['guard']['t0'] = self.get_clock().now().nanoseconds * 1e-9
+                st['guard']['tip0'] = None         # from the guard's first fresh tip pose, not the latch's
                 st['stage'] = stage = 'guard'
                 st['goal'] = np.array([st['hold'][0], st['hold'][1], st['guard']['z']])
             else:
@@ -2070,7 +2139,8 @@ class DissipativeController(LoadPlanner):
                 g['fail_t'] = self.get_clock().now().nanoseconds * 1e-9
                 self._magnet_cmd_pub.publish(String(data='OFF'))
                 self._off_resend_t = 0.0
-                why = 'plate 9 follows it' if res == 'fail' else f'tip has not left plate 9 in {GUARD_WAIT_S:.0f} s'
+                why = 'plate 9 follows it' if res == 'fail' else \
+                    f'tip has not left plate 9 in {GUARD_WAIT_S:.0f} s ({self._guard_why(g)})'
                 self.get_logger().error(f'[dissipative] RELEASE GUARD: {_who(d)}\'s {why}: down to its tether\'s '
                                         f'slack, then it follows the ring down; magnet OFF again, LAND the fleet '
                                         f'once it is at the slack (at most {GUARD_LAND_WAIT_S:.0f} s)')
@@ -2116,8 +2186,9 @@ class DissipativeController(LoadPlanner):
         if goal is None:
             goal = q
         v_g = np.array([0.0, 0.0, st['guard']['vz']]) if stage == 'guard_follow' else np.zeros(3)
+        vmax = GUARD_STAGE_VEL if stage == 'guard' else DETACH_STEP_VEL
         # a moving goal is aimed at from where it was a step back, so the step's end meets it rather than leads it
-        q, v, a = take_back_ramp(q, v, goal - v_g * dt, v_f, dt, v_g=v_g)
+        q, v, a = take_back_ramp(q, v, goal - v_g * dt, v_f, dt, vmax=vmax, v_g=v_g)
         st['q'], st['v'], st['a'] = q, v, a
         p_hold[:] = q + np.r_[st['D'], 0.0]
         nodes = [(p_hold.copy(), v.copy(), a_ff + a, a_c)]
@@ -2128,7 +2199,7 @@ class DissipativeController(LoadPlanner):
                 D_k = c_k - st['c0']
             else:
                 vf_k, D_k = np.zeros(2), st['D']
-            qk, vk, ak = take_back_ramp(qk, vk, goal + v_g * (self.dt * (k - 1)), vf_k, self.dt, v_g=v_g)
+            qk, vk, ak = take_back_ramp(qk, vk, goal + v_g * (self.dt * (k - 1)), vf_k, self.dt, vmax=vmax, v_g=v_g)
             nodes.append((qk + np.r_[D_k, 0.0], vk, a_ff + ak, a_c))
         self._publish_ref(d, nodes)
         return True
@@ -2138,8 +2209,7 @@ class DissipativeController(LoadPlanner):
         body-to-tip - GUARD_SLACK_M), the ring's descent fed forward; a stale ring pose holds the last goal. True when
         the goal was set from a fresh pose."""
         g = st['guard']
-        load_t = getattr(self, '_load_t', None)
-        if self.load_state is None or load_t is None or time.monotonic() - load_t > DETECT_STALE_S:
+        if not self._guard_ring_fresh():
             g['vz'] = 0.0
             return False
         st['goal'][2] = self._guard_read(j)[1] + self._attach_body_to_tip - GUARD_SLACK_M

@@ -49,7 +49,7 @@ KEPT_COMMON = (
 KEPT_SIM = ('legacy', 'sil', 'sim_interface', 'ff_cap_force', 'sim_thrust_map', 'sim_thrust_offset',
             'sim_pack_v0', 'sim_catch')
 KEPT_REAL = ('real_io', 'rviz', 'magnet_channel', 'magnet_initial', 'attach_magnet_initial',
-             'require_fc_armed', 'detach_magnet', 'hover_z', 'proof_taut_len',
+             'require_fc_armed', 'detach_magnet', 'hover_z', 'proof_taut_len', 'weld_point_z',
              # Motive body ids, forwarded to real_io_launch.py by the graphs that include it
              'mocap_drone_body_ids', 'mocap_payload_body_id', 'mocap_magnet_tip_body_id',
              # combined M1 contact attach on the rig (partner_contact): more Motive bodies, his nodes

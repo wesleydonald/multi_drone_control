@@ -40,8 +40,14 @@ Between flights: relaunch T2, his nodes come with it (`partner_nodes:=true`).
 ## 4. The command (QUAD4 values from the record; R = contact radius, L = taut length)
 ```bash
 $A partner:=true partner_contact:=true partner_nodes:=true weld_radius:=R proof_taut_len:=<L-0.003> \
-   partner_args:='magnet_drop_below_quad:=<L> mpc_thrust_ratio:=<kT> [contact_dz:=0.03]' r11a
+   weld_point_z:=<W> attach_cable_len:=<L-0.04> \
+   partner_args:='magnet_drop_below_quad:=<L> mpc_thrust_ratio:=<kT> [contact_dz:=0.03] [drop_puck_wait_s:=0]' r11a
 ```
+**The values the launch now refuses untyped** (critic round 2 A3):
+- `weld_point_z` = W, the contact height from Wednesday 09:00 item 3.
+- `attach_cable_len` = L - 0.04 (QUAD4's rod; the pivot sits 4 cm below the body). The release guard's tip-to-body
+  check allows 3 cm either side of it: typed wrong by more than that, every real release times out and the fleet lands.
+- `drop_puck_wait_s:=0` only if Wednesday's item 11 showed the puck is not seen in the net.
 Order: his ARM (`/tejen/drone_command ARM`, QUAD4 armed idle on its mat) -> `fleet arm` -> `fleet takeoff` -> the ring
 at 1.0 m (T2: `our planner flies the ring`) -> his TAKEOFF. End of every flight: `fleet disarm` and his DISARM.
 
@@ -115,6 +121,8 @@ and lands, and the run is scored on the other bars.
   emergency, because a coil that holds plate 9 under LAND tilts the ring (critic round 2 A2).
 - After LANDED, if drone 4's mux still reads partner, clear the cage and press DISARM. This is accepted in writing by
   Wesley, 11 Oct (F6).
+- Known, not fixed for 21-22 Oct (with A2): right after a failed guard's LAND, the slack target sits up to 1.7 cm
+  above taut for ~0.5 s while the ring steps to its landing speed. A coil that still holds briefly tugs plate 9.
 - Any falsifier in 5.1, 5.6 or 5.7: no more combined flights today.
 - QUAD4 frozen more than 5 s outside a hold phase: LAND (F1).
 - A pose gap over 0.1 s on 14 / 24 / 8 with QUAD4 overhead ends M1 for the day.
@@ -244,3 +252,20 @@ Wednesday measurements: weld_point_z x3 re-seated; contact radius from >= 10 han
   fleet action on the rig is the guard's LAND.
 - **The §4 launch line:** missing `weld_point_z`, QUAD4's `attach_cable_len`, `mpc_cable_length` and
   `anchor_offset_z`.
+
+### Round 2 follow-up: the hardening diff (m1-harden b8af32e + ac85597, 11 Oct evening), condensed
+**Verdict:** GO WITH CHANGES; merge into m1-comove. Findings 1, 2 and 5 land before 21-22 Oct; 3 and 4 are tests
+before Friday's claim. Each change does what A1/A3/A4/A5/A7/A9 asked, and nothing new cuts QUAD4. The twin is unaffected.
+`drop_puck_wait_s:=0` restores his old path exactly. A give-up at the drop is safe: his magnet goes NONE, our span has
+not begun, and our take-back flies the hover path.
+
+| # | severity | finding | fix |
+|---|---|---|---|
+| 1 | medium | The tip-to-body band is centred on `attach_cable_len` + 0.04 (derived), never checked against the measured taut length (`proof_taut_len` + 0.003). A mismatch over ~2 cm makes every no-contact take-back with the tip on the plate time out and land the fleet. | Launch only: refuse when \|attach_cable_len - pivot_offset_z - (proof_taut_len + 0.003)\| > 0.01. Also check against `magnet_drop_below_quad` when it is in partner_args. |
+| 2 | low-medium | Every timeout logs "tip has not left plate 9", whether the tip really held, the ring or the tip pose was stale, or the band missed. | Count ticks per cause and print them in the error line. |
+| 3 | low-medium | The follow-down's slack is now the designed 5 cm (it was ~7 cm by accident). At LAND the reference can lag the ring's step by up to 0.2^2/(2*0.25) = 8 cm, so a held coil goes taut for a moment. The follow test only checks after 2.7 s. | Assert the reference stays at or below plate + taut over the whole follow, with the lag model. If that fails, ask Wesley for GUARD_SLACK_M ~0.08. |
+| 4 | low | A held coil may lift plate 9 ~4.5-5 cm before the 2 cm check reacts (was ~3-3.5 cm): the reference now aims 0.10 m over taut. | A held-coil test that bounds the peak rise. Over 5 cm: slow the guard stage's speed, don't lower the height. |
+| 5 | low | `tip0` is latched at the take-back, before the hold. | Reset it when the guard starts. |
+
+**Nits:** GUARD_PASS_S and GUARD_PLATE_AVG_S are 2-3 planner ticks at 10 Hz. DETECT_STALE_S equals one planner
+period. Twin params.json carries NaN for the weld point. weld_point_z refuses only 0, with no range check.
