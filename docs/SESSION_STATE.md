@@ -48,6 +48,10 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
   F6b, F6c, C1, C2, F1, C3, each x2) and N1-N3. Score each as it lands: tools/m1_score.py from rig-wed (claim/full/tilt,
   rev 10 / tilt rev 4), one row each. When the combined table is complete: the reviewer, its verdict into the card.
   Morning report by 08:00.
+  - Wave 1 (R1638-R1641) is scored. His contact-mode MATCH_VELOCITY gate (xy < 2.5 cm, < 0.08 m/s on the circling
+    plate) stalled in 3 of 4 circle arms: his tracking sat 3-5 cm off. R1639 falsifies TB4's ring tilt in its LAND
+    take-back. After the batch: re-fly m1c_nocatch_orbit x2 on 2 slots as a diagnostic (lab load?). Scoring wrapper:
+    `$CLAUDE_JOB_DIR/tmp/sc.sh show|add RID family rev arm verdict notes`.
 - Laptop: idle. No helper is running. The full M1 on the circle is recorded and cut (R1633, the 11th clean full M1):
   results/videos/full_M1_twin_R1633_orbit_edit.mp4 (2 min 56 s, captioned; raw: _wide, _circle, _plate9). The recorder
   is on the candidate (adaf2c5).
