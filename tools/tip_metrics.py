@@ -12,7 +12,7 @@ From the dissipative planner's tip.csv (node clock; rows end when the approach e
   invalid_share share of hold rows with an invalid tip
   frozen_dc     the correction's change over the runner's TIP_FREEZE window [t, t + its seconds] (arm F; m), the
                 tip.csv clock aligned on the approach's end (LAND or WELD in events.csv = tip.csv's last row)
-  push_dc       c's range from the runner's first nonzero WRENCH to + 6 s (arm S; m)
+  push_dc       c's range from the runner's first nonzero WRENCH (force or torque) to + 6 s (arm S; m)
   contact       the contact freeze latched
 """
 import glob
@@ -23,6 +23,9 @@ import sys
 import numpy as np
 import pandas as pd
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from experiment.config import wrench_arg  # noqa: E402  (the runner's own WRENCH grammar)
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WINDOW_S = 5.0
 
@@ -31,6 +34,16 @@ def run_dir(rid):
     if os.path.isdir(rid):
         return rid
     return glob.glob(os.path.join(REPO, 'results', '*', f'{rid}_*'))[0]
+
+
+def is_push(arg):
+    """A WRENCH that applies something: any of fx fy fz tx ty tz nonzero. '0 0 0 0.15 0 0 link' is a torque push,
+    not the push's removal ('0 0 0' or '0 0 0 0 0 0' [link])."""
+    try:
+        force, torque, _ = wrench_arg(arg)
+    except ValueError:
+        return False
+    return any(abs(x) > 0 for x in (*force, *torque))
 
 
 def tip_csv(d):
@@ -95,7 +108,7 @@ def analyse(rid):
                 upto = np.where(tn <= a0 + secs + 0.05)[0]
                 if len(before) and len(upto):
                     out['frozen_dc'] = round(float(c[upto[-1]] - c[before[-1]]), 4)
-            pw = ev[(ev.event == 'WRENCH') & ~ev.arg.astype(str).str.startswith('0 0 0')]
+            pw = ev[(ev.event == 'WRENCH') & ev.arg.map(is_push)]
             if len(pw):
                 a0 = float(pw.sim_time.iloc[0]) + off
                 w = (tn >= a0) & (tn <= a0 + 6.0)
