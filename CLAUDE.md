@@ -65,7 +65,6 @@ current branch like any other file (it reaches main with the merges).
   `docs/experiments/<date>_<name>.md` (challenge under "## Critic"), never chat-only.
 - **Reviewer**: once per feature, on the final table, before the thesis or the rig.
 - Wesley can waive either; note the waiver in the registry row.
-- If a fix has not shown its effect in two runs, stop and report with the log.
 
 ## What needs Wesley's word
 - A launch default, a world SDF, `params.py`, gate thresholds, the attach geometry (the hook
