@@ -1,5 +1,7 @@
 # Thesis direction and document plan (11 Oct; workflow wf_d29adf9f-262: 4 readers, 3 directions, 3 judges, document plan, 3 critics)
 
+> **11 Oct 13:40, Wesley:** spine adopted; the due date is **20 Nov** (title page), so the schedule after the 7 Nov freeze moves one week earlier (section 9, "If the due date is 20 Nov"). Decisions in docs/decisions.md.
+
 # Final thesis plan, 11 Oct 2026
 
 This plan merges the 11 Oct direction, the document plan and the three critiques. I checked the critics' factual claims against the repository before accepting them. Six of those checks changed the plan:

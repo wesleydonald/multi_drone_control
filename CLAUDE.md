@@ -1,7 +1,7 @@
 # multi_drone_control — working rules (read every session; the manual is general/CLAUDE.md)
 
 Thesis: quadcopters attaching to / detaching from a cooperatively carried cable-suspended
-ring payload, sim then rig. Deadline 27 Nov 2026. Owner: Wesley. Decisions are his.
+ring payload, sim then rig. Deadline 20 Nov 2026 (Wesley 11 Oct; the title page date). Owner: Wesley. Decisions are his.
 
 This repo is in rapid software and controller development: rules, defaults and locked
 decisions change often. Keep this file current: when a rule, default or decision changes,
