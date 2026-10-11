@@ -280,8 +280,6 @@ runs the geometry check; `fleet arm|takeoff|land|disarm|estop`.
   `/pickup/detach`; a bench without his mission uses a `_nopick` copy or GZ_PUB it (R0654–R0659 void).
 - **Runner events are time-sorted**: a WAIT placed before the event it waits for blocks forever (R0671).
 
----
-
 - **Lab: switching back to an older tree breaks the build** (11 Oct).
   - The lab builds with `--symlink-install` into one `~/mdc`. Files that exist only in the newer tree (for example
     tejen_mission's m1 launch and config files) leave dangling links in `build/` and `install/`, and colcon then
@@ -289,6 +287,8 @@ runs the geometry check; `fleet arm|takeoff|land|disarm|estop`.
   - Fix inside the container, where the links resolve:
     `tools/remote/lab_run.sh --tag clean -- bash -c 'find build install -xtype l -delete'`. Then rerun the batch.
   - From the host every link looks broken, so don't run the find there.
+
+---
 
 ## 11. How to run and verify
 
