@@ -225,6 +225,51 @@ check stays the default; every timer on the sim clock):
 
 ## 3b. The take-back that moves with the ring (rev 10; TB3, TB13, TB16)
 
+**As built on m1-comove c53ae0c, with the round-4 response.** Where the steps below differ, this block wins. No bar
+changes.
+- **Ramp:** 0.25 m/s² (not 0.3), starting from the measured velocity. The step's carrot brakes at 0.2 m/s² and
+  closes at 1.5/s near its goal.
+- **No escape height.** On an orbit the zone rule decides from the stopping point, in this order:
+  - **(b)** its body below ring z - 0.3 m (his takeoff, pickup, mat): it goes down where it stops, with no sideways
+    move and no rise;
+  - **(a)** outside r_clear (orbit radius + 1.0 m) from the path centre, or its lowest point (the tip, less the ball
+    while he carries it) above the highest carrier + 0.15 m: world-fixed, c6f2032's path with the ramp;
+  - **(c)** otherwise it moves with the ring: a ring-frame offset from the planned ring point latched at the
+    take-back, z absolute. It rises to c6f2032's height only when the tip is at the ring (0.15 m below the ring centre
+    or higher) or it is at least 0.9 m from the ring centre. Under the formation it descends with the ring instead,
+    to no lower than ring z - 0.3 m or the tip 0.1 m over the floor, then lands where it stops.
+  - **Why b comes before a:** a low QUAD4 far out (at his pickup) lands where it is instead of rising and moving
+    sideways. That is what the falsifiers of m1x_land_pickup_orbit require.
+- **The decouple:** each step counts as reached by its reference, within 0.02 m (F5). The decouple is one bounded
+  velocity change into the path-clear move. Under LAND or a drop there is no path-clear move after the step out.
+  - TB5 kept the ring centre at least 0.9 m from QUAD4 at every 10° phase after the decouple.
+  - So the "decouple waits" branch was not built.
+- **Rig release guard** (`take_back_release_guard`, on with `real:=true` only). It acts when our span has begun and
+  the tip is on plate 9.
+  - The rise stops 0.07 m above the higher of the hold and the tether's slack (the tip 5 cm off the plate, plus
+    2 cm). It waits there until the tip has left the plate by 5 cm in the ring frame.
+  - **If it fails** (plate 9 rises 2 cm, or the tip has not left within 2 s): QUAD4 is held in the ring frame, OFF is
+    re-sent and the fleet lands.
+- **Constants:**
+
+  | name | value |
+  |---|---|
+  | TAKE_BACK_ACCEL | 0.25 m/s² |
+  | TAKE_BACK_BRAKE | 0.2 m/s² |
+  | TAKE_BACK_K | 1.5/s |
+  | TAKE_BACK_REACHED_M | 0.02 m |
+  | ZONE_OVER_CARRIERS_M | 0.15 m |
+  | ZONE_BELOW_RING_M | 0.3 m |
+  | ZONE_RISE_FAR_M | 0.9 m |
+  | TIP_AT_RING_BELOW_M | 0.15 m |
+  | TIP_OVER_FLOOR_M | 0.1 m |
+  | BALL_DIAM_M | 0.16 m |
+  | GUARD_PLATE_RISE_M | 0.02 m |
+  | GUARD_WAIT_S | 2.0 s |
+
+  The tip-at-ring band, the brake, the gain, the ball and the guard's rise go beyond the critic's values. They are
+  Wesley's to confirm.
+
 **Why.** On the circle the take-back has failed three ways, each with a world-fixed hold:
 - the step out at plate height hooked the rod on the rim (R1543, R1549);
 - a rise to rim height, then out, passed 0.24 m over carrier 1 (R1554);
@@ -308,11 +353,16 @@ frame is the world axes moved with the ring's planned point:
   then lands alone. The `_taken_back` latch means a second take-back never starts.
 - **LAND before his give-up:** the take-back starts at LAND with the frame already stopping. The arm is
   `m1x_land_rejoin_orbit`.
-- **Faults:** unchanged. With the tilt cut on, a QUAD4 tilt fault cancels the co-moving hold as it cancels today's
-  take-back (H3 race tests, written with the code on m1-comove). The welded start keeps newcomer_fault_land off, so
-  an envelope fault there is a fleet stop (the arm is `m1_full_nocatch_orbit`).
-- **Far take-backs** (latched >= the step-out radius from the ring centre: his transit, pickup, mat) do not move with
-  the ring. They keep today's path with the TB13 ramp. His transit (2.3-2.9 m) is above the escape height.
+- **Faults** (rewritten after critic round 4, F6):
+  - Our tilt-fault callback acts on QUAD4 only while the mux reads partner or cut.
+  - Once ours flies QUAD4, as in every take-back, a fault makes our tracker's envelope cut QUAD4's motors. Then:
+    - in the subtest, newcomer_fault_land lands the fleet;
+    - with the welded start (newcomer_fault_land off), it is a fleet stop.
+  - Mid-rise, QUAD4 would fall from the rise height about 0.43 m in xy from carriers 1-2.
+  - The tilt cut is off on 21-22 Oct.
+  - The co-move state is in the explicit lists of `_tilt_fault_cb` and `_drop_departed` (c53ae0c). The H3 test
+    checks that drone 3 gets no reference after a tilt fault in the race window.
+- **Far take-backs:** the zone rule above decides them. There is no far exemption and no escape height.
 
 **Hover is unchanged** (c6f2032): the same rise, the same step out through the gap, the same landing. With `v_c = 0`
 the frame is the world. The only change in hover is TB13's ramp (D19), which `m1c_land_transit` shows (hence
@@ -597,7 +647,8 @@ on the circle, and hover keeps c6f2032's path, D19):**
   - `_take_back` latches the offset and velocity against the planned ring, picks the heights and the ring-frame step;
   - `_publish_departed_refs` gives the moving hold, the release wait and the step, a horizon with the velocity fed
     forward, the ramp and the decouple;
-  - two new constants: `TAKE_BACK_ACCEL` 0.3 m/s² and `TAKE_BACK_ESCAPE_TIP_M` 0.15.
+  - the constants as built are listed at the top of §3b. `TAKE_BACK_ESCAPE_TIP_M` went with the escape height
+    (F2).
 - **Bringup attach graph:** the TB16 refusals.
 - **docs/design/m1_contact_contract.md:** updated.
 
@@ -605,8 +656,10 @@ Tests first (src/dissipative_planner/test/test_partner_contact.py and the bringu
 - the hold tracks the planned ring and feeds its velocity forward;
 - the latch starts at the measured velocity;
 - the velocity change per tick is bounded at the latch, at a ring stop and at the decouple;
-- on an orbit the rise height includes the rod;
-- no decouple below the escape height or inside the step-out radius;
+- a test per zone (F1);
+- the decouple waits on the reference, not the measured body (F5);
+- the ring frame is continuous across the latch (F9);
+- the rig release guard (F7);
 - LAND or a frozen clock stops the frame motion through the bound;
 - the transit take-back ramps and decides from its stopping point;
 - the hover path is c6f2032's (the existing tests at L615-645 pass unchanged);

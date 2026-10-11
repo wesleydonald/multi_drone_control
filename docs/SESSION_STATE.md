@@ -398,3 +398,9 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   aa5b8d20e7a1c5f50) incl. TB5 desk replay (tools/tb5_replay.py) and the TB6 configs. Queue after C: TB6 on the lab (after
   wave B and TB5 pass) -> S scorers -> W Wednesday paperwork (+ thesis-plan Wednesday additions, Mon 12 freeze of release
   metrics / W4/W5 bands, F3/F8 rig sheet items). Wave B still flying.
+- 15:20: tilt wave B scored (R1593-R1614, ea69b03). m1-comove committed c53ae0c (helper C done: TB5 passes every case
+  incl. the 36 x 10 deg phase sweep; no helper running now; S paused). TB6 STARTED on the lab from m1-comove c53ae0c
+  (lab_tb6.sh pid 1167583 -> $CLAUDE_JOB_DIR/tmp/lab_tb6.txt; 11 runs: card §6.2 arms 1-9 + m1x_land_pickup_orbit +
+  m1x_late_takeoff_orbit). Card §3b: "as built" block (zone order b, a, c; no escape height; constants), Faults bullet
+  rewritten (F6), §8 constants/tests fixed; no bar changed. Open for Wesley: C's questions (R1565 reproduction, guard
+  failure behaviour, zone order, the new constants). Queue after TB6: S scorers -> W Wednesday paperwork (Mon).
