@@ -404,3 +404,8 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   m1x_late_takeoff_orbit). Card §3b: "as built" block (zone order b, a, c; no escape height; constants), Faults bullet
   rewritten (F6), §8 constants/tests fixed; no bar changed. Open for Wesley: C's questions (R1565 reproduction, guard
   failure behaviour, zone order, the new constants). Queue after TB6: S scorers -> W Wednesday paperwork (Mon).
+- 15:35: Wesley answered C's open points (decisions.md 15:30): R1565 reproduction counts; guard failure -> QUAD4
+  FOLLOWS THE RING DOWN (tether slack), then out by the slack and down beside it, disarmed alone; zone order b before
+  a; constants as built. The one helper now: G = the guard follow-down on branch m1-guard (worktree mdc_wt/m1-guard,
+  from c53ae0c; id ad9d5093ae5855c3c; no commit, I review). TB6 running (R1615 nocatch_orbit, R1616 lead030, R1617 ph11,
+  R1618 ph175 first; monitor). Queue after G: S scorers -> W Wednesday paperwork (Mon).
