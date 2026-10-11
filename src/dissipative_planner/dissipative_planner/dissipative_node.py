@@ -94,6 +94,11 @@ TIP_OVER_FLOOR_M = 0.1     # a co-moving descent under the formation stops with 
 BALL_DIAM_M = 0.16         # his twin ball (tejen payload_model.sdf, r 0.08), under the tip while he carries it
 GUARD_PLATE_RISE_M = 0.02  # rig release guard (critic F7): plate 9 rising this much means the coil still holds it
 GUARD_WAIT_S = 2.0         # s for the tip to leave the plate before the guard lands the fleet
+# a failed guard (the coil may still hold plate 9): QUAD4 follows the landing ring down this far below the taut
+# tether, then once the ring is down steps this far out from the plate and as far down, and lands alone (Wesley 11 Oct)
+GUARD_SLACK_M = 0.05
+GUARD_OUT_M = 0.35
+GUARD_FOLLOW_VEL = 0.3     # m/s: the most of the ring's measured descent fed forward (land_vel 0.2 + margin)
 
 
 def _ring_off_allowed(node):
@@ -112,18 +117,20 @@ def _free_drone_ff(node, d, g):
     return g + np.array([0.0, 0.0, b]), np.array([0.0, 0.0, -b])
 
 
-def take_back_ramp(q, v, goal, v_f, dt, vmax=DETACH_STEP_VEL):
+def take_back_ramp(q, v, goal, v_f, dt, vmax=DETACH_STEP_VEL, v_g=None):
     """One step of the take-back reference. q is its position in the ring frame (world axes, carried by the planned
     ring point), v its world velocity, v_f the frame's xy velocity. The carrot toward goal runs at most vmax, braking
-    at TAKE_BACK_BRAKE and closing linearly at TAKE_BACK_K near it; v moves toward v_f + carrot by at most
-    TAKE_BACK_ACCEL * dt, so no event (the latch, a ring stop, the decouple, a new goal) steps the velocity.
-    Returns (q, v, a)."""
+    at TAKE_BACK_BRAKE and closing linearly at TAKE_BACK_K near it; v moves toward v_f + v_g (the goal's own velocity,
+    fed forward) + carrot by at most TAKE_BACK_ACCEL * dt, so no event (the latch, a ring stop, the decouple, a new
+    goal) steps the velocity. Returns (q, v, a)."""
     q = np.asarray(q, float)
     v = np.asarray(v, float)
     vf = np.r_[np.asarray(v_f, float), 0.0]
     e = np.asarray(goal, float) - q
     n = float(np.linalg.norm(e))
     w = e * (min(vmax, TAKE_BACK_K * n, float(np.sqrt(2.0 * TAKE_BACK_BRAKE * n))) / n) if n > 1e-9 else 0.0 * e
+    if v_g is not None:
+        w = w + np.asarray(v_g, float)
     dv = vf + w - v
     m = float(np.linalg.norm(dv))
     if m > TAKE_BACK_ACCEL * dt:
@@ -2013,9 +2020,11 @@ class DissipativeController(LoadPlanner):
         """One tick of the take-back's reference: hold (brake to the stopping point; the release wait) -> [the rig
         release guard] -> the steps (rise, out; each reached by the REFERENCE within TAKE_BACK_REACHED_M) ->
         decouple from the ring frame -> clear the path (not under LAND) -> land, handed to the departed landing
-        (returns False). In zone c the goals are ring-frame offsets from the planned ring point latched at the
-        take-back; LAND, a held or finished trajectory freezes the clock, so the frame stops through the same bound
-        and the rest runs in the still frame. True while it publishes its own reference."""
+        (returns False). A failed guard instead follows the landing ring down at the tether's slack (guard_follow),
+        then once the ring is down steps out and down beside plate 9 and lands. In zone c the goals are ring-frame
+        offsets from the planned ring point latched at the take-back; LAND, a held or finished trajectory freezes the
+        clock, so the frame stops through the same bound and the rest runs in the still frame. True while it
+        publishes its own reference."""
         st = self._comove[d]
         j = d - self._n_carry0
         dt = 1.0 / PLANNER_HZ
@@ -2046,25 +2055,25 @@ class DissipativeController(LoadPlanner):
                 st['goal'] = np.array([st['hold'][0], st['hold'][1], st['guard']['z']])
             else:
                 stage = self._take_back_next(d, st, stop_goal)
-        elif stage in ('guard', 'guard_hold'):
+        elif stage == 'guard':
             g = st['guard']
             res = self._guard_check(j, g)
             if res == 'pass':
                 self.get_logger().warn(f'[dissipative] take-back of {_who(d)}: release seen (the tip off plate 9, '
                                        f'the plate still), it rises on')
                 stage = self._take_back_next(d, st, stop_goal)
-            elif stage == 'guard' and (res == 'fail' or
-                                       self.get_clock().now().nanoseconds * 1e-9 - g['t0'] >= GUARD_WAIT_S):
-                st['stage'] = stage = 'guard_hold'
+            elif res == 'fail' or self.get_clock().now().nanoseconds * 1e-9 - g['t0'] >= GUARD_WAIT_S:
+                st['stage'] = stage = 'guard_follow'
                 st['goal'] = q.copy()
+                g['vz'] = 0.0
                 self._magnet_cmd_pub.publish(String(data='OFF'))
                 self._off_resend_t = 0.0
                 if not g['landed']:
                     g['landed'] = True
                     self._fleet_cmd_pub.publish(String(data='LAND'))
                 why = 'plate 9 follows it' if res == 'fail' else f'tip has not left plate 9 in {GUARD_WAIT_S:.0f} s'
-                self.get_logger().error(f'[dissipative] RELEASE GUARD: {_who(d)}\'s {why}: held in the ring frame, '
-                                        f'magnet OFF again, LAND the fleet')
+                self.get_logger().error(f'[dissipative] RELEASE GUARD: {_who(d)}\'s {why}: follows the ring down '
+                                        f'with its tether slack, magnet OFF again, LAND the fleet')
         elif stage == 'move':
             goal = self._departed_step.get(d)
             if goal is None or reached(goal):
@@ -2076,6 +2085,16 @@ class DissipativeController(LoadPlanner):
         elif stage == 'clear' and (land or reached(st['goal'])):
             st['stage'], st['goal'] = 'land', stop_goal()       # under LAND it brakes where it is (F5)
             stage = 'land'
+        if stage == 'guard_follow':
+            if self._load_down() or getattr(self, '_touched_down', False):
+                # both ends inside the tether's reach of the plate, so the straight move between them is too
+                st['stage'] = stage = 'land'
+                st['goal'] = q + np.r_[GUARD_OUT_M * st['u'], -GUARD_OUT_M]
+                self.get_logger().warn(f'[dissipative] RELEASE GUARD: {_who(d)}: ring down, out by the tether\'s '
+                                       f'slack and down beside it ({GUARD_OUT_M:.2f} m out, {GUARD_OUT_M:.2f} m '
+                                       f'down), then it lands alone')
+            else:
+                self._guard_follow(j, st)
         if stage == 'land' and reached(st['goal']) and \
                 float(np.linalg.norm(v)) <= TAKE_BACK_ACCEL * dt + 1e-9:
             p_hold[:] = q + np.r_[st['D'], 0.0]
@@ -2085,7 +2104,9 @@ class DissipativeController(LoadPlanner):
         goal = {'hold': st['hold'], 'move': self._departed_step.get(d)}.get(stage, st.get('goal'))
         if goal is None:
             goal = q
-        q, v, a = take_back_ramp(q, v, goal, v_f, dt)
+        v_g = np.array([0.0, 0.0, st['guard']['vz']]) if stage == 'guard_follow' else np.zeros(3)
+        # a moving goal is aimed at from where it was a step back, so the step's end meets it rather than leads it
+        q, v, a = take_back_ramp(q, v, goal - v_g * dt, v_f, dt, v_g=v_g)
         st['q'], st['v'], st['a'] = q, v, a
         p_hold[:] = q + np.r_[st['D'], 0.0]
         nodes = [(p_hold.copy(), v.copy(), a_ff + a, a_c)]
@@ -2096,10 +2117,22 @@ class DissipativeController(LoadPlanner):
                 D_k = c_k - st['c0']
             else:
                 vf_k, D_k = np.zeros(2), st['D']
-            qk, vk, ak = take_back_ramp(qk, vk, goal, vf_k, self.dt)
+            qk, vk, ak = take_back_ramp(qk, vk, goal + v_g * (self.dt * (k - 1)), vf_k, self.dt, v_g=v_g)
             nodes.append((qk + np.r_[D_k, 0.0], vk, a_ff + ak, a_c))
         self._publish_ref(d, nodes)
         return True
+
+    def _guard_follow(self, j, st):
+        """A failed guard under LAND: the goal z follows the measured plate 9 at the tether's slack (plate +
+        body-to-tip - GUARD_SLACK_M), the ring's descent fed forward; a stale ring pose holds the last goal."""
+        g = st['guard']
+        load_t = getattr(self, '_load_t', None)
+        if self.load_state is None or load_t is None or time.monotonic() - load_t > DETECT_STALE_S:
+            g['vz'] = 0.0
+            return
+        st['goal'][2] = self._guard_read(j)[1] + self._attach_body_to_tip - GUARD_SLACK_M
+        # fed forward down only: a taut tether lifts the plate with QUAD4, and feeding that rise forward feeds itself
+        g['vz'] = min(0.0, max(-GUARD_FOLLOW_VEL, float(self.load_state[9])))
 
     def _take_back_next(self, d, st, stop_goal):
         """After the hold or a step: the next step, else decouple from the ring frame (one bounded velocity change

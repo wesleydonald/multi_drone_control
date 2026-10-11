@@ -3,6 +3,7 @@ his mission flies QUAD4 until our check confirms the attach. Our drone-3 tracker
 takeoff, the ring magnet span starts once he rejoins with QUAD4 airborne and the ring weld free, our own ON never
 starts an approach or holds the ring, and with no attach (his give-up, our LAND) we take QUAD4 back: a fixed hold,
 radially out (over the middle along plate 9's azimuth) and down alone. All behind partner_contact (off by default)."""
+import time
 from types import MethodType, SimpleNamespace
 
 import numpy as np
@@ -21,7 +22,7 @@ METHODS = ('_take_back', '_contact_span_tick', '_contact_warm_ref', '_publish_pe
            '_weld_refused', '_set_on_load', '_departed_down', '_drop_departed', '_start_approach',
            '_abort_newcomer', '_attach_ocp', '_capture_weld_rho', '_start_weld_joins_creep', '_do_attach',
            '_take_back_plan', '_take_back_tick', '_take_back_next', '_ring_moves', '_ring_plan', '_guard_setup',
-           '_guard_read', '_guard_check')
+           '_guard_read', '_guard_check', '_guard_follow')
 
 
 class _Log:
@@ -1071,18 +1072,52 @@ def test_the_transit_take_back_ramps_and_decides_from_its_stopping_point():
 
 # ── the rig release guard (critic round 4, F7) ───────────────────────────────────────────────────────────────────
 
-def _guard_node(z_plate_rise=0.0):
-    f = _node(quad=(0.0, 0.225, 1.02 + 0.59))                  # QUAD4 over plate 9, its tip on it
-    f.__dict__.update(_release_guard=True, _fleet_cmd_pub=_Pub())
-    _airborne_rejoin(f, z=1.61)
-    f.attach_pos[0] = np.array([0.0, 0.225, 1.61])
+# s from the guard's failure to its follow at the slack: the LAND's first seconds are the ring's step to land_vel
+# against the take-back's acceleration bound, from the guard's height
+SETTLE_S = 2.5
+
+
+def _guard_node(z=1.0):
+    """The ring at z (plate 9 at z + 0.02, the ring's rest at 0), QUAD4 over plate 9 with its tip on it."""
+    f = _node(quad=(0.0, 0.225, z + 0.02 + 0.59))
+    f.__dict__.update(_release_guard=True, _fleet_cmd_pub=_Pub(), lift_z0=0.0, _touched_down=False,
+                      _load_t=time.monotonic())
+    f._load_down = MethodType(D._load_down, f)
+    f.load_state[2] = z
+    _airborne_rejoin(f, z=z + 0.61)
+    f.attach_pos[0] = np.array([0.0, 0.225, z + 0.61])
     _tick(f)                                                   # the span began
-    f._tip_now = (f.now[0], np.array([0.0, 0.225, 1.02]))
+    f._tip_now = (f.now[0], np.array([0.0, 0.225, z + 0.02]))
     return f
 
 
 def _set_tip(f, tip):
     f._tip_now = (f.now[0], np.asarray(tip, float))
+
+
+def _gtick(f, ring_vz=0.0, fresh=True):
+    """One tick: the ring moves at ring_vz down to its rest, its pose fresh (or not), the coil holds the tip on plate 9
+    and QUAD4 flies its reference, never below its rest. Returns (stage, drone 3's node 0 or None, plate 9)."""
+    z = max(f.lift_z0, float(f.load_state[2]) + ring_vz / HZ)
+    f.load_state[9] = (z - float(f.load_state[2])) * HZ
+    f.load_state[2] = z
+    plate = np.array([0.0, 0.225, z + 0.02])
+    _set_tip(f, plate)
+    if fresh:
+        f._load_t = time.monotonic()
+    n0 = len(f.published)
+    _tick(f)
+    mine = [n for d, n in f.published[n0:] if d == 3]
+    if mine:
+        f.attach_pos[0] = np.maximum(mine[0][0][0], [-np.inf, -np.inf, f._rest_z[3]])
+    return f._comove[3]['stage'] if 3 in f._comove else None, mine[0][0] if mine else None, plate
+
+
+def _guard_lands(f, ticks):
+    """His give-up with the coil holding: the guard fails on its wait, then the ring descends at land_vel from the
+    LAND on (a step, the worst case) to its rest. [(stage, node 0, plate 9)] per tick."""
+    f._give_up_cb(Bool(data=True))
+    return [_gtick(f, -f.land_vel if f._fleet_cmd_pub.msgs else 0.0) for _ in range(ticks)]
 
 
 def test_rig_guard_lets_the_rise_on_once_the_tip_has_left_the_plate():
@@ -1100,20 +1135,96 @@ def test_rig_guard_lets_the_rise_on_once_the_tip_has_left_the_plate():
 
 
 @pytest.mark.parametrize('why', ['held', 'plate'])
-def test_rig_guard_holds_resends_off_and_lands_the_fleet(why):
+def test_rig_guard_comes_down_to_the_tethers_slack_resends_off_and_lands_the_fleet(why):
     f = _guard_node()
     f._give_up_cb(Bool(data=True))
     zg = f._comove[3]['guard']['z']
     n_off = f._magnet_cmd_pub.msgs.count('OFF')
-    for k in range(int((NEWCOMER_RELEASE_S + GUARD_WAIT_S) * HZ) + 30):
-        _set_tip(f, [0.0, 0.225, 1.02])                        # the tip stays on the plate
-        if why == 'plate' and k > 8:
+    zs = []
+    for k in range(int((NEWCOMER_RELEASE_S + GUARD_WAIT_S) * HZ) + 50):
+        if why == 'plate' and k == 9:
             f.load_state[2] = 1.0 + 0.03                       # plate 9 follows it up
-        _tick(f)
-    assert f._comove[3]['stage'] == 'guard_hold' and f._fleet_cmd_pub.msgs == ['LAND']
+        stage, n, plate = _gtick(f)                            # (the ring does not descend here)
+        zs.append(n[0][2])
+    assert stage == 'guard_follow' and f._fleet_cmd_pub.msgs == ['LAND']
     assert f._magnet_cmd_pub.msgs.count('OFF') > n_off
-    assert f._departed_hold[3][2] <= zg + 0.01                 # held: no rise past the slack
-    assert any('RELEASE GUARD' in ln for ln in f.log.lines)
+    assert max(zs) <= zg + 0.01                                # no rise past the slack
+    assert zs[-1] == pytest.approx(plate[2] + 0.59 - 0.05, abs=TAKE_BACK_REACHED_M)   # down to the tether's slack
+    assert any('RELEASE GUARD' in ln and 'follows the ring down with its tether slack' in ln for ln in f.log.lines)
+
+
+def test_rig_guard_follows_the_landing_ring_down_with_its_tether_slack():
+    f = _guard_node(z=2.0)
+    track = _guard_lands(f, 110)
+    follow = [(n, p) for s, n, p in track if s == 'guard_follow']
+    t_fail = next(i for i, (s, _, _) in enumerate(track) if s == 'guard_follow')
+    assert len(follow) > 60 and f.load_state[2] < 0.5             # 1.5 m of the ring's descent followed
+    settled = follow[int(SETTLE_S * HZ):]
+    assert len(settled) > 30                                   # the ring still descending at land_vel
+    for n, plate in settled:                                   # slack, never taut, never far below it
+        assert plate[2] + 0.59 - 0.05 - 0.03 <= n[0][2] <= plate[2] + 0.59
+        assert np.allclose(n[0][:2], [0.0, 0.225], atol=1e-6)  # xy held in the (still) ring frame
+    vs = [n[1] for s, n, _ in track[t_fail - 1:] if s in ('guard_follow', 'land')]
+    assert all(float(np.linalg.norm(b - a)) <= A_TICK for a, b in zip(vs, vs[1:]))
+
+
+def test_rig_guard_once_the_ring_is_down_steps_out_and_down_inside_the_tether_and_lands_alone():
+    f = _guard_node(z=2.0)
+    f.__dict__.update(_departed_gi=True, _departed_pubs={3: _Pub()}, _at_rest_t={}, _press_t={})
+    track = _guard_lands(f, 200)
+    stages = [s for s, _, _ in track]
+    i_out = stages.index('land')
+    assert stages[i_out - 1] == 'guard_follow' and None in stages[i_out:]
+    assert any('ring down, out by the tether\'s slack and down beside it' in ln for ln in f.log.lines)
+    out = [(n, p) for s, n, p in track[i_out:] if s == 'land']
+    pivot = np.array([0.0, 0.0, -0.04])
+    for n, plate in out:                                       # the tip stays on the plate: the tether never taut
+        assert float(np.linalg.norm(n[0] + pivot - plate)) < 0.55
+    start, end = out[0][0][0], out[-1][0][0]
+    assert end[1] - start[1] == pytest.approx(0.35, abs=0.03) and start[2] - end[2] == pytest.approx(0.35, abs=0.06)
+    vs = [n[1] for n, _ in out]
+    assert all(float(np.linalg.norm(b - a)) <= A_TICK for a, b in zip(vs, vs[1:]))
+    # handed to the departed landing: straight down beside the ring to its rest, then its tracker may idle there
+    assert 3 not in f._comove and 3 in f._land_alone and 3 in f._departed_landing
+    after = [n for s, n, _ in track[stages.index(None):]]
+    assert all(np.allclose(n[0][:2], after[0][0][:2]) for n in after)
+    assert f._departed_pubs[3].msgs == [True] and any('is down (at its rest)' in ln for ln in f.log.lines)
+
+
+def test_rig_guard_steps_out_on_the_survivors_touchdown_if_the_ring_never_reads_down():
+    f = _guard_node()
+    f._load_down = lambda: False                               # the ring at rest above its lift height + 0.05
+    assert _guard_lands(f, 90)[-1][0] == 'guard_follow' and f.load_state[2] == 0.0
+    f._touched_down = True                                     # the planner's survivors down
+    assert _gtick(f)[0] == 'land'
+
+
+def test_rig_guard_a_stale_ring_pose_holds_the_last_goal():
+    f = _guard_node(z=2.0)
+    track = _guard_lands(f, 60)
+    assert track[-1][0] == 'guard_follow'
+    st = f._comove[3]
+    goal = st['goal'].copy()
+    f._load_t = time.monotonic() - 1.0                         # no ring pose for 1 s
+    f.load_state[2] -= 0.3                                     # (a jump in it is not chased)
+    for _ in range(10):
+        stage, n, _ = _gtick(f, -f.land_vel, fresh=False)
+        assert stage == 'guard_follow' and np.allclose(st['goal'], goal) and st['guard']['vz'] == 0.0
+    assert abs(float(n[1][2])) < abs(float(track[-1][1][1][2]))    # braking to the held goal, not chasing
+    _gtick(f, -f.land_vel)
+    assert st['goal'][2] == pytest.approx(f.load_state[2] + 0.02 + 0.59 - 0.05)   # fresh again: following
+
+
+def test_rig_guard_a_tilt_fault_or_a_drop_during_the_follow_clears_it():
+    f = _tc(_guard_node(z=2.0))
+    assert _guard_lands(f, 40)[-1][0] == 'guard_follow'
+    f._tilt_fault_cb(Bool(data=True))
+    assert 3 not in f._comove and f._departed_hold == {} and 3 not in f._departed_step
+    assert all(_gtick(f, -f.land_vel)[1] is None for _ in range(5))
+    g = _guard_node(z=2.0)
+    assert _guard_lands(g, 40)[-1][0] == 'guard_follow'
+    g._drop_departed(3)
+    assert g._comove == {} and all(_gtick(g, -g.land_vel)[1] is None for _ in range(5))
 
 
 def test_without_the_guard_nothing_waits_for_the_tip():
