@@ -34,7 +34,9 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 
 ## Running
 - Lab PC: idle (TB6 finished).
-- Laptop: idle. No helper agent is running.
+- Laptop: idle. Helper running: W (Wednesday paperwork and the P1/P2 freeze; id ac032c28bb294f759; edits
+  docs/rig_2026-10-14_commands.md, new docs/tejen_note_2026-10.md and docs/freeze_2026-10-14.md; no commits; prepares
+  `$CLAUDE_JOB_DIR/tmp/lab_w45.sh` for me to launch on week4).
 - The other chat (thesis lane, Wesley's prompt) may be working in its own worktrees `mdc_wt/thesis-work` and
   `mdc_wt/desk-ext`. It must stay off the lab, the laptop simulations, the registry and this file. Its hand-back note
   is `docs/thesis_work_2026-10-11.md` on its branch. Copy its "decisions for the record" into decisions.md.
