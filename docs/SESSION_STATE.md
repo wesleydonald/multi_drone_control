@@ -435,3 +435,4 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   page is published: https://claude.ai/artifact/QwgP2oPSknLyWZacvDuh5T (republish from
   $CLAUDE_JOB_DIR/tmp/resource/m1_since_rig.html). Other chat: prompt given for a disjoint lane (thesis-work and
   desk-ext worktrees). No helper running. Queue: finish TB6 -> S scorers -> W Wednesday paperwork (Mon).
+- 17:40: Wesley ran the branch cleanup: 14 worktrees and 28 branches removed; archive/ tags m1-tiltcut, m1-e0, m1-full, combined-m1. week1-ready-for-testing kept by git (local commits not on its origin branch, all in week4): 'git branch -D' is Wesley's to run. Left: the live lineage (week4, m1-rig, m1-tiltcut4, m1-comove, m1-guard), rig-prep, main, thesis-rig, m1-score, m1-rec, m1-video, and the undecided time-cascade, safety-defaults, add-drone, backup/cable-payload-2026-08, backup/main-2026-08, cable-payload-controller, fixing-rviz.
