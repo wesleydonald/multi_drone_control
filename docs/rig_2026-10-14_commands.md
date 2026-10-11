@@ -16,8 +16,14 @@ QUAD4 (`/drone_3`, body 14, tip body 24) leaves from / welds onto plate 9 (ring 
    - items 9-11: the prop radius, the mat and puck, the puck in the net;
    - Part B 1: the hand ramps.
 2. **Flights, Part A:** w4, then w5.
-3. **Load test, props off, rig laptop, both stacks, real radios, 10 min.** This is the go/no-go for Part C. Check the
-   Part C launch lines there too: they refuse with W or L missing or mismatched, and start when typed.
+3. **Load test, props off, rig laptop, both stacks, real radios, 10 min.** This is the go/no-go for Part C. The
+   procedure is `~/mdc_wt/rig-wed/docs/rig_2026-10-14_load_test.md`:
+   - the refusal lines first;
+   - the 10 min window with no CLI calls inside it;
+   - the score with `tools/load_check.py`, where `F1 load bars: PASS` is the go.
+
+   Desk 11 Oct: PASS at normal priority, worst gap 0.095 s against the 0.15 s bar; FAIL when other work loaded the
+   laptop.
 4. **Part C:** R11a, then R11b, only under its go conditions.
 5. **Only if there is time:** item 8 (the magnet hold) and Part B 2-7 (tilt checks a-f).
 
@@ -162,8 +168,12 @@ The combined props-off items (the m1-rig draft) are not on this sheet.
 3. **Tejen is here and agrees.**
 4. **Item 11 has decided `drop_puck_wait_s`.**
 
-**Install:** fresh terminals on `~/mdc_wt/rig-wed` (pinned 0628d85), sourced; no week4 terminal open.
-`$A` as in Setup, but run from that tree.
+**Install:** fresh terminals on `~/mdc_wt/rig-wed` (pinned ba40bd0), sourced, with `C=$HOME/mdc_wt/rig-wed/configs/rig`;
+no week4 terminal open. `$A` as in Setup, but run from that tree.
+
+**Before every combined flight:** nothing else running on the laptop (no browser video, no builds, no analysis). Wait
+2 min after the T2 launch before his ARM. At the desk, one all-process stall of ~0.35 s came ~40 s after launch, and
+his 0.25 s pose watchdog disarmed QUAD4 on its mat.
 
 **Each flight, in order:**
 1. His ARM (QUAD4 armed idle on its mat).

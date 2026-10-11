@@ -43,7 +43,7 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 
 ## Running
 - Lab PC: idle. The smoke on the candidate 793183d passed, 4 of 4 support (R1628-R1631; the 10th clean full M1 is R1631).
-- Laptop: idle. The full M1 on the circle is recorded and cut (R1633, the 11th clean full M1):
+- Laptop: idle. No helper is running. The full M1 on the circle is recorded and cut (R1633, the 11th clean full M1):
   results/videos/full_M1_twin_R1633_orbit_edit.mp4 (2 min 56 s, captioned; raw: _wide, _circle, _plate9). The recorder
   is on the candidate (adaf2c5).
 - Critic round 2 done: GO WITH CHANGES for hover R11a/R11b (rig card ## Critic; answers in decisions.md).
@@ -68,13 +68,15 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 - The plan's D10-D17 and D21, and the thesis plan's D8-D16, all still open (see the plans).
 
 ## Next, in order (Wesley 11 Oct: the attach flights move to Wednesday afternoon, reviewer waived)
-1. **Pinned Wednesday install:** branch rig-wed (worktree mdc_wt/rig-wed, 0628d85; built). Twin rehearsal done:
+1. **Pinned Wednesday install:** branch rig-wed (worktree mdc_wt/rig-wed, ba40bd0: 0628d85 + the launch fixes and
+   load_check.py). Twin rehearsal done:
    - R11a (R1634, R1636): supports twice.
    - R11b (R1635, R1637): the attach supports twice, with the proof under 1 s; each LAND was a TB14 tip-over, the twin
      artefact.
-2. **Tuesday's desk rehearsal is skipped** (Wesley). A helper (id a815135d1399c4d2f) writes tools/load_check.py and
-   docs/rig_2026-10-14_load_test.md in rig-wed for Wednesday's step 3: the load test is the go/no-go and also checks the
-   launch lines.
+2. **Tuesday's desk rehearsal is skipped** (Wesley).
+   - The desk load test is done: it passes at normal priority and fails when the laptop is loaded.
+   - The launch fixes are in: the fleet manager announces at startup; the worktree root lookup works.
+   - Wednesday step 3 follows rig-wed `docs/rig_2026-10-14_load_test.md`.
 3. **Wednesday 14:**
    - the 09:00 measurements and Part A (W4/W5);
    - Part B props-off on rig-wed;
