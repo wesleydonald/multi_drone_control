@@ -117,7 +117,7 @@ $A weld_radius:=0 r8a0                                                  # carry 
 - **r8a0:** ring 0.5 m toward -y of the cage centre; QUAD4 on its mat 1.2 m out on +y; 30 s hover, `fleet land`.
   QUAD4 stays down and armed idle (never flew).
 
-## Part B: after the flights, in a fresh terminal on the pinned m1-rig 0210a27 install
+## Part B: after the W flights, in a fresh terminal on the pinned candidate install `~/mdc_wt/rig-wed` (Wesley 11 Oct)
 
 The combined props-off items (the m1-rig draft) are not on this sheet.
 
@@ -134,6 +134,57 @@ The combined props-off items (the m1-rig draft) are not on this sheet.
 6. **Tilt (e):** coil ON with the puck, then DISARM. Record whether the coil holds the puck.
 7. **Tilt (f):** hold QUAD4 at 0, 30, 60 and 90 deg. This install has no `fc_attitude` topic, so read the `Attitude:`
    lines elrs_interface prints in T1. Record the line rate (Hz) and FC minus mocap per angle (deg).
+
+## Part C: combined attach flights, afternoon (Wesley 11 Oct; the reviewer waived for these flights)
+
+**Go only if all of these hold:**
+1. **09:00 values are in hand:**
+   - W = `weld_point_z` (item 3);
+   - L = the taut length (item 4). It must be within 1 cm of his 0.575, or type the measured L everywhere;
+   - R = the contact radius from the hand catches, the max dxy + 5 mm (item 7(b)).
+2. **The props-off load test passed:** the full graph for at least 10 min. Max gap under 0.15 s on the ELRS command
+   topics, under 0.3 s on `/join_planner/reference`, and zero "External-reference fault latched".
+3. **Tejen is here and agrees.**
+4. **Item 11 has decided `drop_puck_wait_s`.**
+
+**Install:** fresh terminals on `~/mdc_wt/rig-wed` (pinned 0628d85), sourced; no week4 terminal open.
+`$A` as in Setup, but run from that tree.
+
+**Each flight, in order:**
+1. His ARM (QUAD4 armed idle on its mat).
+2. `fleet arm`, then `fleet takeoff`.
+3. The ring at 1.0 m (T2: `our planner flies the ring`).
+4. His TAKEOFF.
+
+End of every flight: `fleet disarm`, then his DISARM.
+```bash
+# R11a: the whole mission with a no-catch offset (his descent holds 5 cm above plate 9)
+$A partner:=true partner_contact:=true partner_nodes:=true weld_radius:=R proof_taut_len:=<L-0.003> \
+   weld_point_z:=W attach_cable_len:=<L-0.04> \
+   partner_args:='magnet_drop_below_quad:=L mpc_thrust_ratio:=22 contact_dz:=0.05 [drop_puck_wait_s:=0]' r11a
+# R11b: the contact attach (his rig aim, 1 cm below the face: contact_dz is the rig default)
+$A partner:=true partner_contact:=true partner_nodes:=true weld_radius:=R proof_taut_len:=<L-0.003> \
+   weld_point_z:=W attach_cable_len:=<L-0.04> \
+   partner_args:='magnet_drop_below_quad:=L mpc_thrust_ratio:=22 [drop_puck_wait_s:=0]' r11b
+```
+
+**Expect:**
+- **R11a:** pickup, drop into the net, his descent holds over plate 9, no contact. His give-up comes 30 s later. Then
+  our take-back: magnet OFF, the release guard, up, out to 1.2 m, down, QUAD4 disarmed alone. Then `fleet land`.
+- **R11b:** contact, a small lift proves the catch, `ATTACH` confirmed, the mux switches QUAD4 to ours and folds it
+  in. Hold 20 s on four, then `fleet land`. Fly R11b only after a clean R11a.
+
+**Stop rules:**
+- **Stopping his attach:** publish his give-up (`ros2 topic pub --once /join_planner/give_up std_msgs/msg/Bool
+  "{data: true}"`); the ring stays at hover. LAND only as an emergency.
+- **No more combined flights today** after any of: a load or authority falsifier (rig card §5.1, §5.7), a RELEASE
+  GUARD failure with plate 9 rising, or any fleet abort.
+- **After LANDED:** if drone 4's mux still reads partner, clear the cage and press DISARM.
+
+**Record per flight:**
+- the run name and video;
+- pack V at ARM and at LANDED;
+- for R11b: contact to `ATTACH` time (T2), ring tilt by eye, and QUAD4 at the landing.
 
 ## Stop rules
 
