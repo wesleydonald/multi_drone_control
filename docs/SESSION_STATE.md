@@ -44,9 +44,12 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 ## Running
 - Lab PC: idle. The W4/W5 bands are frozen (R1626, R1627; freeze doc §2.4).
 - Laptop: idle. Critic round 2 done: GO WITH CHANGES for hover R11a/R11b (rig card ## Critic; answers in decisions.md).
-  Running: helper H = the hardening (A1 constants, A3/A9 launch refusals, A4 weld-point plate, A5 debounce, A7 his drop
-  check) on branch m1-harden (worktree mdc_wt/m1-harden from m1-comove 5e70f54; id a8ee7aec9fdaab456; no commits).
-  Then: review, a short critic pass on the diff, merge into m1-comove; then the QUAD4 record loader and the smoke.
+  Hardening done on branch m1-harden (worktree mdc_wt/m1-harden; b8af32e + ac85597 + a70b1ec docs):
+  - A1 guard +0.05 above slack and 3 s; A4 plate 9 from the weld point; A5 debounce;
+  - A3/A9 launch refusals (weld_point_z, attach_cable_len typed; orbit only typed);
+  - A7 his drop wait, now the switch drop_puck_wait_s (Wednesday item 11 decides).
+  Running: the short critic pass on that diff (id a78e3b824666dffb9). Then merge m1-harden into m1-comove, then the QUAD4
+  record loader and the smoke.
 - The other chat (thesis lane) finished 11 Oct; its work is merged (see above).
 
 ## TB6 (co-moving take-back, m1-comove c53ae0c; card rev 10 §6.2): COMPLETE, passes its gate criteria
