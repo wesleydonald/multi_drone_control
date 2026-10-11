@@ -793,7 +793,7 @@ def test_a_fault_during_the_rising_take_back_clears_both_legs():
 
 from mpc_planner.load_trajectory import LoadTrajectory  # noqa: E402
 from dissipative_planner.dissipative_node import (  # noqa: E402
-    GUARD_WAIT_S, TAKE_BACK_ACCEL, TAKE_BACK_REACHED_M, ZONE_RISE_FAR_M)
+    GUARD_LAND_WAIT_S, GUARD_WAIT_S, TAKE_BACK_ACCEL, TAKE_BACK_REACHED_M, ZONE_RISE_FAR_M)
 
 A_TICK = TAKE_BACK_ACCEL / HZ + 1e-9          # the most the take-back's velocity may change in one tick
 AZ = (270.0, 30.0, 150.0)
@@ -1140,22 +1140,44 @@ def test_rig_guard_comes_down_to_the_tethers_slack_resends_off_and_lands_the_fle
     f._give_up_cb(Bool(data=True))
     zg = f._comove[3]['guard']['z']
     n_off = f._magnet_cmd_pub.msgs.count('OFF')
-    zs = []
+    zs, stages, lands = [], [], []
     for k in range(int((NEWCOMER_RELEASE_S + GUARD_WAIT_S) * HZ) + 50):
         if why == 'plate' and k == 9:
             f.load_state[2] = 1.0 + 0.03                       # plate 9 follows it up
         stage, n, plate = _gtick(f)                            # (the ring does not descend here)
         zs.append(n[0][2])
+        stages.append(stage)
+        lands.append(len(f._fleet_cmd_pub.msgs))
     assert stage == 'guard_follow' and f._fleet_cmd_pub.msgs == ['LAND']
     assert f._magnet_cmd_pub.msgs.count('OFF') > n_off
     assert max(zs) <= zg + 0.01                                # no rise past the slack
     assert zs[-1] == pytest.approx(plate[2] + 0.59 - 0.05, abs=TAKE_BACK_REACHED_M)   # down to the tether's slack
-    assert any('RELEASE GUARD' in ln and 'follows the ring down with its tether slack' in ln for ln in f.log.lines)
+    # LAND goes once QUAD4 is down at the slack, not at the failure, and within GUARD_LAND_WAIT_S of it
+    i_fail, i_land = stages.index('guard_follow'), lands.index(1)
+    assert 0 < i_land - i_fail < GUARD_LAND_WAIT_S * HZ
+    assert zs[i_land] <= plate[2] + 0.59 - 0.05 + TAKE_BACK_REACHED_M + 0.02
+    assert any('RELEASE GUARD' in ln and "down to its tether's slack" in ln for ln in f.log.lines)
+    assert any('RELEASE GUARD' in ln and 'at its tether slack: LAND the fleet' in ln for ln in f.log.lines)
+
+
+def test_rig_guard_lands_the_fleet_after_its_wait_when_the_slack_is_not_seen():
+    f = _guard_node()
+    f._give_up_cb(Bool(data=True))
+    stages, lands, stage = [], [], None
+    for k in range(int((NEWCOMER_RELEASE_S + GUARD_WAIT_S + GUARD_LAND_WAIT_S) * HZ) + 20):
+        if stage == 'guard_follow':
+            f._load_t = time.monotonic() - 1.0                 # no ring pose since the failure
+        stage, _, _ = _gtick(f, fresh=stage != 'guard_follow')
+        stages.append(stage)
+        lands.append(len(f._fleet_cmd_pub.msgs))
+    i_fail, i_land = stages.index('guard_follow'), lands.index(1)
+    assert i_land - i_fail == pytest.approx(GUARD_LAND_WAIT_S * HZ, abs=1)   # no fresh ring pose: the wait decides
+    assert any('not at its slack after 2 s: LAND the fleet' in ln for ln in f.log.lines)
 
 
 def test_rig_guard_follows_the_landing_ring_down_with_its_tether_slack():
     f = _guard_node(z=2.0)
-    track = _guard_lands(f, 110)
+    track = _guard_lands(f, 125)
     follow = [(n, p) for s, n, p in track if s == 'guard_follow']
     t_fail = next(i for i, (s, _, _) in enumerate(track) if s == 'guard_follow')
     assert len(follow) > 60 and f.load_state[2] < 0.5             # 1.5 m of the ring's descent followed
@@ -1194,7 +1216,7 @@ def test_rig_guard_once_the_ring_is_down_steps_out_and_down_inside_the_tether_an
 def test_rig_guard_steps_out_on_the_survivors_touchdown_if_the_ring_never_reads_down():
     f = _guard_node()
     f._load_down = lambda: False                               # the ring at rest above its lift height + 0.05
-    assert _guard_lands(f, 90)[-1][0] == 'guard_follow' and f.load_state[2] == 0.0
+    assert _guard_lands(f, 105)[-1][0] == 'guard_follow' and f.load_state[2] == 0.0
     f._touched_down = True                                     # the planner's survivors down
     assert _gtick(f)[0] == 'land'
 

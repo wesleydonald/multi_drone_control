@@ -99,6 +99,7 @@ GUARD_WAIT_S = 2.0         # s for the tip to leave the plate before the guard l
 GUARD_SLACK_M = 0.05
 GUARD_OUT_M = 0.35
 GUARD_FOLLOW_VEL = 0.3     # m/s: the most of the ring's measured descent fed forward (land_vel 0.2 + margin)
+GUARD_LAND_WAIT_S = 2.0    # s: the fleet LAND waits for QUAD4 at the slack, at most this long (Wesley 11 Oct)
 
 
 def _ring_off_allowed(node):
@@ -2066,14 +2067,13 @@ class DissipativeController(LoadPlanner):
                 st['stage'] = stage = 'guard_follow'
                 st['goal'] = q.copy()
                 g['vz'] = 0.0
+                g['fail_t'] = self.get_clock().now().nanoseconds * 1e-9
                 self._magnet_cmd_pub.publish(String(data='OFF'))
                 self._off_resend_t = 0.0
-                if not g['landed']:
-                    g['landed'] = True
-                    self._fleet_cmd_pub.publish(String(data='LAND'))
                 why = 'plate 9 follows it' if res == 'fail' else f'tip has not left plate 9 in {GUARD_WAIT_S:.0f} s'
-                self.get_logger().error(f'[dissipative] RELEASE GUARD: {_who(d)}\'s {why}: follows the ring down '
-                                        f'with its tether slack, magnet OFF again, LAND the fleet')
+                self.get_logger().error(f'[dissipative] RELEASE GUARD: {_who(d)}\'s {why}: down to its tether\'s '
+                                        f'slack, then it follows the ring down; magnet OFF again, LAND the fleet '
+                                        f'once it is at the slack (at most {GUARD_LAND_WAIT_S:.0f} s)')
         elif stage == 'move':
             goal = self._departed_step.get(d)
             if goal is None or reached(goal):
@@ -2094,7 +2094,18 @@ class DissipativeController(LoadPlanner):
                                        f'slack and down beside it ({GUARD_OUT_M:.2f} m out, {GUARD_OUT_M:.2f} m '
                                        f'down), then it lands alone')
             else:
-                self._guard_follow(j, st)
+                fresh = self._guard_follow(j, st)
+                g = st['guard']
+                # LAND once QUAD4 is down at the slack: sent at the failure, the ring would start down 0.07-0.12 m
+                # under a taut tether for ~2 s
+                waited = self.get_clock().now().nanoseconds * 1e-9 - g['fail_t']
+                if not g['landed'] and ((fresh and float(q[2]) <= float(st['goal'][2]) + TAKE_BACK_REACHED_M)
+                                        or waited >= GUARD_LAND_WAIT_S):
+                    g['landed'] = True
+                    self._fleet_cmd_pub.publish(String(data='LAND'))
+                    at = 'at its tether slack' if waited < GUARD_LAND_WAIT_S else \
+                        f'not at its slack after {GUARD_LAND_WAIT_S:.0f} s'
+                    self.get_logger().error(f'[dissipative] RELEASE GUARD: {_who(d)} {at}: LAND the fleet')
         if stage == 'land' and reached(st['goal']) and \
                 float(np.linalg.norm(v)) <= TAKE_BACK_ACCEL * dt + 1e-9:
             p_hold[:] = q + np.r_[st['D'], 0.0]
@@ -2124,15 +2135,17 @@ class DissipativeController(LoadPlanner):
 
     def _guard_follow(self, j, st):
         """A failed guard under LAND: the goal z follows the measured plate 9 at the tether's slack (plate +
-        body-to-tip - GUARD_SLACK_M), the ring's descent fed forward; a stale ring pose holds the last goal."""
+        body-to-tip - GUARD_SLACK_M), the ring's descent fed forward; a stale ring pose holds the last goal. True when
+        the goal was set from a fresh pose."""
         g = st['guard']
         load_t = getattr(self, '_load_t', None)
         if self.load_state is None or load_t is None or time.monotonic() - load_t > DETECT_STALE_S:
             g['vz'] = 0.0
-            return
+            return False
         st['goal'][2] = self._guard_read(j)[1] + self._attach_body_to_tip - GUARD_SLACK_M
         # fed forward down only: a taut tether lifts the plate with QUAD4, and feeding that rise forward feeds itself
         g['vz'] = min(0.0, max(-GUARD_FOLLOW_VEL, float(self.load_state[9])))
+        return True
 
     def _take_back_next(self, d, st, stop_goal):
         """After the hold or a step: the next step, else decouple from the ring frame (one bounded velocity change
