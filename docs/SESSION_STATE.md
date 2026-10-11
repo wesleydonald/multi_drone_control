@@ -379,3 +379,8 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   mdc_wt/m1-tiltcut4), R10 = card rev 10 draft (main tree card), S = scorers into tools/ (worktree mdc_wt/m1-score);
   thesis workflow wf_d29adf9f-262 (task w42da2lbx). Next per the plan: critic on rev 10, then m1-comove (helper C)
   from m1-tiltcut4; wave B on m1-tiltcut4; Wednesday paperwork (Mon).
+- 13:20 Wesley: only ONE general-purpose helper at a time (tokens). Paused (stopped, resumable by SendMessage with
+  their ids): R10 card rev 10 (a3b113f14e6f929ef; it had read the code, not yet written the card), S scorers
+  (abbe240cb54198744; worktree mdc_wt/m1-score may exist, nothing written). Running: T = m1-tiltcut4 merge
+  (af849859a862934a7). Queue after T: R10 -> critic on rev 10 -> C (m1-comove) -> S -> W (Wednesday paperwork, Mon).
+  The thesis workflow keeps running. Lab B0 keeps running (no tokens).
