@@ -130,3 +130,69 @@ quad4:                       # QUAD4 = /drone_3, Motive body 14, marker 24, /dev
   kt_his: 2x.x               # Thursday R10a, his kT on QUAD4 (with the puck: 2x.x)
   z_error_hover_m: 0.0x      # his steady height error (with the puck: 0.0x)
 ```
+
+## Critic
+
+### Round 1 (rig port m1-rig dd33dca, 10 Oct night), as written
+
+Verdict: Wednesday props-off GO WITH CHANGES (add the measurements; a combined props-off item needs Wesley's OK);
+21-22 Oct flight NO-GO on dd33dca until: F5 merge m1-final + reviewer; F2, F3, F4, F9 in code; F7 with Wednesday's
+numbers; F8 values typed from Wed/Thu; F1 load bars pass; F10 as the first flight; F6 built through the critic or
+accepted in writing.
+
+F1 High: his stream quiet >= 0.5 s -> elrs_interface (328-336) disarms QUAD4 mid-air; his MPC FAULT_LATCHED_HOLD on a
+  reference > 0.5 s old (main.py 232-235, 1041-1069) hovers until DISARM; the full graph never ran at wall clock on one
+  laptop. Wed props-off: full combined graph >= 10 min, bars frozen first: max gap < 0.15 s on /drone_3/ELRSCommand_tejen,
+  /drone_3/ELRSCommand, each /drone_i/ELRSCommand_diss; < 0.3 s on /join_planner/reference; zero "External-reference
+  fault latched". Fail -> no combined flight. New code (critic): mux takes QUAD4 back when his stream silent > 0.2 s and
+  our tracker live; our planner takes it back when his MPC latches its reference fault. Sheet: "QUAD4 frozen > 5 s
+  outside a hold phase: LAND".
+F2 High: DDS isolation checked only in T2 (graph_attach 57-63). T3 / his command terminal / any ros2 topic pub on the
+  default domain -> fleet disarm goes nowhere. Export both in mdc; fleet, preflight.py, rig_flight.sh refuse unless
+  `ros2 topic echo --once /fleet/manager_status` answers within 2 s; repeat item 5 kill path from T3 and his terminal;
+  sheet note: Tejen's laptop cannot see this graph.
+F3 High: his TAKEOFF before fleet takeoff -> take-back cannot switch; LAND before TAKEOFF only service-disarms our
+  trackers (fleet_manager 462-469); his MPC has no LAND (only ARM/DISARM/TAKEOFF). Mux clamps his throttle at idle
+  (armed idle allowed) until our planner's phase is planner/network. Fix the ARM FAILED message (433-435): "his ARM first".
+F4 High: elrs_interface listens on plain /drone_3/magnet (168); the RViz MAGNET D4 row publishes there (arm_panel.cpp
+  239-241, 473-487); Wednesday's W4/W5 `ros2 topic pub -t 3 /drone_3/magnet OFF` from shell history drops QUAD4 / the
+  puck. Remap drone 3's radio magnet input to a private topic only magnet_gate_3 writes; hide the D4 row; desk
+  `ros2 topic info -v` one publisher; no /drone_3/magnet lines on a combined-day sheet.
+F5 High blocker: rig tree lacks m1-final (lift from target, no pickup retry, 23f8873). Rig tree = m1-final merged with
+  m1-rig; twin claim launch dumps identical; one m1c_hover + one m1c_nocatch_hover on the merged tree; reviewer passes the
+  m1-final table first; rewrite the contract's rig lift paragraph (108-112).
+F6 Medium-high: warm drone-3 tracker runs the pose watchdog and envelope while not flying (tracker 1545-1561): a fault
+  latches, the mux holds his stream; his TAKEN_BACK ignores LAND, his MPC has no LAND -> hovers until DISARM. His MPC's
+  own disarm never lands the fleet (fleet manager 314-322; /drone_3/fc_arm_state has the signal). Behind switches, card +
+  critic (the tilt-cut card): his planner flies out 1.2 m and lands if the mux does not read ours 1 s after a take-back;
+  warm tracker fault = not live, latches only with authority; FC disarmed after his takeoff -> fleet LAND. Until built,
+  sheet line: "T2 says 'taken back, but our tracker is not flying yet': clear the cage, DISARM, QUAD4 falls" (Wesley
+  accepts in writing).
+F7 Medium-high: c0 = mean over the 0.15 s dwell opened at <= 0.05 m/s (contact_proof.py 167-190): at 0.05 m/s ~7 mm of
+  travel, c0 ~5 mm above rest -> every proof times out; at 0.08 m/s 0.9 mm margin left; his end-of-descent overshoot.
+  1 cm sphere vs 6 cm plate / his 2.5 cm gate / slack tilt. c0 from the last 0.05 s of the dwell + vertical speed
+  <= 0.02 m/s (or re-anchor until the plate rises); desk ramps 0.03/0.05/0.08 m/s pass if c0 within 1 mm of rest;
+  ring-frame vertical band + horizontal radius from Wednesday. Thresholds: Wesley.
+F8 Medium-high: his IRL values are QUAD2's (body 12 / marker 22: irl_commissioning.yaml:28, m1_ground_ring.yaml:11):
+  pickup values, marker-to-face -0.0225, kT 22 (twin 22 -> 18.1 still falling, R1476), drop 0.575 (twin 0.59);
+  contact_ball_mass 0.1 vs puck 0.060 kg; object_mass_kg 0 + no z integral. kT and z error with/without the puck from
+  Thursday R10a; body-to-tip and marker-to-face from Wednesday; refuse rig defaults for magnet_drop_below_quad and
+  mpc_thrust_ratio unless from one QUAD4 record file shared with weld_point_z and proof_taut_len; contact_ball_mass 0.06.
+F9 Medium: before our span every OFF of his reaches the coil; his LANDING sends OFF over the ring
+  (mission_definitions 204-210); supervisor land_now leads there; DROP_OBJECT exits on its timer with the puck attached
+  (online_join_planner 7010-7020); RViz ATTACH before the drop takes the coil with the puck. Gate forwards his OFF only
+  in DROP_OBJECT / CLEAR_DROP_ZONE or before the puck is attached; gate switch and our span wait for
+  /tejen/object_attached false; drop timeout with the puck attached = his give-up -> our take-back; supervisor stop
+  publishes give-up, not land_now; refuse supervisor:=true on the combined rig until then.
+F10 Process: first combined flight cannot catch: partner_args:='contact_dz:=0.03' (holds 3 cm above plate 9); exercises
+  the mission, coil handover, 30 s give-up, take-back; measures his hold error over the moving plate and plate-9 noise
+  with QUAD4 overhead. Then contact runs, hover first. A rig card with bars before the flight.
+Low: magnet_gate restores its state from its latched topic on restart; take-back steps out with the tip on the plate
+  (watch); two install spaces on Wednesday: run the combined item last.
+Wednesday measurements: weld_point_z x3 re-seated; contact radius from >= 10 hand catches (centre, +-2 cm radial and
+  tangential, tilted +-15 deg slack; band = max dz + 3 mm, radius = max dxy + 5 mm); speed gate / c0 hand ramps
+  3/5/8 cm/s x3 (c0 within 1 mm of rest); proof_taut_len and drop (hanging, +-10 deg, ~2 N pull); d_ok (rocking
+  0-20 deg); marker-to-face (face flat on the floor); coil 10/10 hold/release timed; mocap (puck on the magnet 24/6
+  swaps, QUAD4 at 2.3-2.9 m on a pole, puck in the net, face on plate 9: gaps <= 0.1 s, no jumps > 1 cm); load and
+  kill (full graph 10 min, F1 bars; DISARM from RViz and T3; kill his MPC alone; Ctrl-C T2: FC disarmed within 0.5 s);
+  aux in Betaflight (AUX 5, 7-10 mid, no mode change).
