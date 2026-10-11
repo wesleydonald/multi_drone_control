@@ -18,7 +18,7 @@ What rev 10 adds:
 - **Tree lineage:** week4 -> m1-rig 0210a27 -> m1-tiltcut4 de91ba2 (the tilt cut merged with 0210a27, every tilt
   switch off) -> m1-comove (this rev's code, branched from m1-tiltcut4) -> the candidate -> week5. week4 stays as it
   is (D5 as changed 11 Oct).
-- **Final tree SHA for the claim:** `________` (named before run 1; nothing else in rev 10 changes then).
+- **Final tree SHA for the claim:** `rig-wed ba40bd0` (named 11 Oct before run 1, the Wednesday install; nothing else in rev 10 changes now).
 - **Thu 15 gate:** if the co-move has not passed TB6 (§6.2) by then, it stays out of the candidate. The claim tree
   is then m1-tiltcut4 plus the TB16 refusals, the circle take-back arms are flown and reported as failing, and the
   rig flies hover only on 21-22 Oct (D1, no fallback; §6.5).
