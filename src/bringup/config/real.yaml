@@ -46,6 +46,9 @@ combined_m1:
   mocap_extra_bodies: ''
   partner_nodes: false
   partner_args: ''
+  # partner_contact refuses load_traj orbit on the rig until the co-moving take-back is reviewed (card
+  # 2026-10-10_combined_m1_contact rev 10, TB16): true lifts the refusal, with Wesley's word
+  contact_rig_orbit: false
 
 modes:
   mpc: {}

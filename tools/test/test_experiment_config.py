@@ -162,6 +162,12 @@ def test_partner_and_bench_events_are_known(tmp_path):
                                              'HANGER_RELEASE']
 
 
+def test_partner_go_loads(tmp_path):
+    """PARTNER_GO (his start gate from the runner: his takeoff late, card 2026-10-10 rev 10 F3) loads."""
+    doc = dict(BASE, events=BASE['events'] + [{'t': 25.0, 'do': 'PARTNER_GO'}])
+    assert ExperimentConfig.from_yaml(write(tmp_path, doc)).events[-1].do == 'PARTNER_GO'
+
+
 def test_m2_bench_events_load_and_wait_thrust_needs_the_drone_id(tmp_path):
     """FLEET_HANDOVER and WAIT_THRUST (M2 hand-over bench) load; a WAIT_THRUST topic
     without {i} would wait on one topic for every drone."""

@@ -1041,3 +1041,30 @@ def test_tilt_cut_needs_the_partner():
     """Wire nothing without the partner's stream."""
     assert not _new_keys(_by_name(sim('attach', legacy=False, num_drones=3,
                                       partner_tilt_cut=True)))
+
+
+# ── TB16 (card 2026-10-10_combined_m1_contact rev 10; Wesley 11 Oct, D20): partner_contact's trajectories ─────────
+
+@pytest.mark.parametrize('traj', ['hover', 'orbit'])
+def test_tb16_the_twin_accepts_hover_and_orbit(traj):
+    g = _twin_partner(partner_contact=True, load_traj=traj)
+    assert g['/dissipative_planner']['params']['load_traj'] == traj
+    assert 'take_back_release_guard' not in g['/dissipative_planner']['params']
+
+
+@pytest.mark.parametrize('traj', ['circle', 'spin', 'fig_8', 'line_x'])
+def test_tb16_the_twin_refuses_other_trajectories(traj):
+    with pytest.raises(RuntimeError, match='hover or orbit only'):
+        _twin_partner(partner_contact=True, load_traj=traj)
+    assert _twin_partner(load_traj=traj)                          # without partner_contact: as before
+
+
+def test_tb16_the_rig_flies_hover_only_until_the_co_move_is_reviewed(dds):
+    g = _combined_rig()
+    assert g['/dissipative_planner']['params']['take_back_release_guard'] is True
+    with pytest.raises(RuntimeError, match='hover only'):
+        _combined_rig(load_traj='orbit')
+    with pytest.raises(RuntimeError, match='hover or orbit only'):
+        _combined_rig(load_traj='circle', contact_rig_orbit=True)
+    g = _combined_rig(load_traj='orbit', contact_rig_orbit=True)    # lifted with Wesley's word
+    assert g['/dissipative_planner']['params']['load_traj'] == 'orbit'

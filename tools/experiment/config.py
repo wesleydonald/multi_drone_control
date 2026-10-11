@@ -54,6 +54,8 @@ EVENT_KINDS = {
                        # overrides the topic template
     'GZ_PUB',     # gz.msgs.Empty on the gz topic in arg, sent 3x (gz CLI one-shots drop):
                   # e.g. /pickup/detach, which the partner mission sends at its start
+    'PARTNER_GO',  # '{"running": true}' on /runner/partner_go for 3 s: his supervisor's start gate when his launch
+                   # has start_gate_topic:=/runner/partner_go (his takeoff late, card 2026-10-10 rev 10 F3)
     'FLEET_HANDOVER',  # /fleet/handover True for 1.5 s: the elrs_mux (partner_m2) hands each
                        # drone to our tracker on its first flying command (M2 bench)
     'WRENCH',     # persistent wrench on a Gazebo link, arg "fx fy fz [tx ty tz] [scoped link]" (N, N m, world

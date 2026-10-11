@@ -214,6 +214,8 @@ class ExperimentRunner(Node):
                                if any(e.do == 'TIP_FREEZE' for e in cfg.events) else None)
         self.handoff_pub = self.create_publisher(Bool, '/join_planner/handoff_ready', 10)
         self.fleet_handover_pub = self.create_publisher(Bool, '/fleet/handover', 10)
+        self.partner_go_pub = (self.create_publisher(String, '/runner/partner_go', 10)
+                               if any(e.do == 'PARTNER_GO' for e in cfg.events) else None)
         # HANGER_RELEASE publishers exist from the start: one created at the event has no
         # matched subscriber yet, and _publish would fail the run on its first send
         self._hanger_pubs = {}
@@ -685,6 +687,10 @@ class ExperimentRunner(Node):
             self._publish(self.handoff_pub, Bool(data=True), '/join_planner/handoff_ready',
                           exclude_self=True)
             self._repeats.append((self._rel() + 2.0, self.handoff_pub, Bool(data=True)))
+        elif ev.do == 'PARTNER_GO':
+            go = String(data='{"running": true}')
+            self._publish(self.partner_go_pub, go, '/runner/partner_go')
+            self._repeats.append((self._rel() + 3.0, self.partner_go_pub, go))
         elif ev.do == 'FLEET_HANDOVER':
             # the driver's 5 x 0.3 s (drive_m2_handover.py); the muxes latch the first True
             self._publish(self.fleet_handover_pub, Bool(data=True), '/fleet/handover')

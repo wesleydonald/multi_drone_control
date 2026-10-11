@@ -77,13 +77,40 @@ switches that default OFF: with them off, every node behaves exactly as today. B
 - Ring magnet span: ON (keepalive 1 s) once his phase reaches TRANSIT_TO_REATTACH, QUAD4 is above 0.3 m and the ring
   joint reads detached; this ON bypasses the ATTACH handler (no trajectory hold, no `_start_approach`).
 - Take-back (his give-up, or our LAND before the attach; also from his pickup: no ball on, no span begun, so no ring
-  magnet command): `/drone_3/take_back` true; fixed hold latched at the measured position; then the departed path:
-  within 1.2 m (xy) of the ring centre radially out to 1.2 m at its height (r < 0.225: out at the reserved plate's
-  azimuth), else land where it is; if its body is below ring z + body-to-tip + 0.15 m (the tip down at the ring),
-  it first rises straight up to the higher of that and the highest carrier + 0.4 m (R1554: 0.24 m over a carrier),
-  straight up to that height first, then out (R1543: the step out at plate height hooked the rim); land alone,
-  disarmed alone; ring magnet OFF only if the span began; while
-  `/tejen/object_attached` is true, drone 3's model mass + 0.1 kg.
+  magnet command): `/drone_3/take_back` true; ring magnet OFF only if the span began; while `/tejen/object_attached`
+  is true, drone 3's model mass + 0.1 kg. Rev 10 (card 2026-10-10_combined_m1_contact §3b with the round-4 response;
+  branch m1-comove, no switch):
+  - TB13: the reference starts at QUAD4's measured position and velocity and its velocity changes by at most
+    0.25 m/s^2 (no step at the latch, a ring stop, the decouple or a new goal); every decision uses its stopping point.
+  - Hover: c6f2032's path, world-fixed: within 1.2 m (xy) of the ring centre radially out at its height (r < 0.225:
+    out at the reserved plate's azimuth), first straight up to the higher of ring z + body-to-tip + 0.15 m and the
+    highest carrier + 0.4 m if the tip is down at the ring; else land where it is; land alone, disarmed alone.
+  - On a trajectory (orbit), the zone rule from the stopping point: (b) body below ring z - 0.3 m: land where it stops,
+    no sideways move, no rise; (a) outside r_clear (orbit radius + 1.0 m) of the path centre, or its lowest point
+    (tip, minus the ball while carried) above the highest carrier + 0.15 m: the hover path, world-fixed, then out past
+    the ring's path; (c) else it moves with the ring: a ring-frame offset from the PLANNED ring point (hover + the
+    trajectory's offset) latched at the take-back, z absolute, the frame velocity fed forward along the horizon (a
+    frozen clock draws no motion). In (c) it rises (c6f2032's height) when the tip is at the ring (ring z - 0.15 m to
+    ring z + 0.15 m) or it is >= 0.9 m from the ring centre; under the formation (within 0.9 m, tip below the ring)
+    it descends with the ring to ring z - 0.3 m (tip >= 0.1 m above the floor) instead; then out in the ring frame to
+    1.2 m (+ body-to-tip with the ball); it decouples only when the release wait is over and the rise and step-out
+    REFERENCES are reached (0.02 m), in one bounded velocity change into the path-clear move (orbit radius + 1.0 m
+    from the path centre), then lands alone.
+  - LAND, a reconfiguration hold or a finished trajectory freezes the clock: the frame stops through the same bound
+    and the rest runs in the still frame; under LAND (or a drop) no path-clear move after the step-out.
+  - Rig only (`take_back_release_guard`, passed with `real:=true partner_contact:=true`): with the span begun and the
+    tip on plate 9, the rise stops at max(its height, plate z + body-to-tip) + 0.07 m until the tip has moved 5 cm
+    off the plate (ring frame) with plate 9 risen < 2 cm; plate 9 risen 2 cm, or no release within 2 s: it holds in
+    the ring frame, the ring magnet OFF again, `LAND` on `/fleet/command` (once); a release seen later resumes it.
+  - Faults: with `partner_tilt_cut`, a QUAD4 tilt fault while the mux still reads partner or cut (the race window
+    after his give-up or our LAND) cancels the take-back, the co-moving state included (`_tilt_fault_cb`,
+    `_drop_departed` and `_newcomer_arming_cb` clear it), and drone 3 gets no reference. Once ours flies QUAD4 (the
+    mux reads ours) a fault is our drone-3 tracker's envelope: its motors cut and QUAD4 falls (from the rise height,
+    about 0.43 m in xy from carriers 1-2); `newcomer_fault_land` then lands the fleet in the subtest; the welded start
+    keeps it off, so there it is a fleet emergency stop. The tilt cut is off on 21-22 Oct.
+- TB16 (graph_attach): `partner_contact` refuses `load_traj` other than hover and orbit (twin and rig); with
+  `real:=true` it refuses orbit too until the co-move is reviewed (`contact_rig_orbit:=true`, real.yaml, default false,
+  lifts it with Wesley's word).
 - Lifecycle gates: `newcomer_lifecycle` / `newcomer_fault_land` / `departed_ground_idle` stay on under
   `partner_contact`; `_newcomer_arming_cb` acts only while `/drone_3/mux_state` reads "ours".
 - On `/magnet/object_attached`: the existing fold-in, with QUAD4's starting share seeded from the measured pull
@@ -102,6 +129,8 @@ switches that default OFF: with them off, every node behaves exactly as today. B
   wired.
 
 ## Runner
+- `PARTNER_GO` (rev 10, F3): `{"running": true}` on `/runner/partner_go` for 3 s; his launch with
+  `start_gate_topic:=/runner/partner_go` takes off then (m1x_late_takeoff_orbit: 12 s into the circle).
 - `WAIT_REWELD` takes an optional timeout (s): on expiry it logs and the script goes on (to LAND).
 
 ## The rig (branch m1-rig, 11 Oct): `real_control_launch.py mode:=attach partner:=true partner_contact:=true`

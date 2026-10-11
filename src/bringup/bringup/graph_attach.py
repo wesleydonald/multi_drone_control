@@ -71,6 +71,20 @@ def _dds_guard():
                            'terminal (T2, T3, RViz) first: no other machine may reach this graph')
 
 
+def _contact_traj_refusals(context, real):
+    """TB16 (card 2026-10-10_combined_m1_contact rev 10; Wesley 11 Oct, D20): the take-back clears hover and the circle
+    (orbit) only, so partner_contact refuses other trajectories; on the rig it refuses anything but hover until the
+    co-moving take-back is in a reviewed tree (contact_rig_orbit:=true lifts that, with Wesley's word)."""
+    traj = LaunchConfiguration('load_traj').perform(context).strip().lower()
+    if traj not in ('hover', 'orbit'):
+        raise RuntimeError(f'partner_contact flies load_traj hover or orbit only, got {traj!r} (the take-back clears '
+                           f'hover and the circle only)')
+    lifted = context.launch_configurations.get('contact_rig_orbit', '').strip().lower() in ('1', 'true', 'yes')
+    if real and traj != 'hover' and not lifted:
+        raise RuntimeError('partner_contact on the rig flies hover only until the co-moving take-back is reviewed '
+                           '(contact_rig_orbit:=true lifts this, with Wesley\'s word)')
+
+
 def _partner_launch_args(context):
     """{name: value} of partner_args ('k:=v k:=v'), refusing what this launch owns."""
     out = {}
@@ -224,6 +238,8 @@ def attach(context, launch_dir, profile_vals):
     if partner_nodes and not combined_rig:
         raise RuntimeError('partner_nodes starts his rig nodes for the combined M1 contact attach: real, '
                            'partner:=true partner_contact:=true')
+    if partner_contact:
+        _contact_traj_refusals(context, real)
     if combined_rig:
         _dds_guard()
         if float(LaunchConfiguration('weld_radius').perform(context)) <= 0.0:
@@ -400,7 +416,10 @@ def attach(context, launch_dir, profile_vals):
                          'contact_joint_state_topic': (
                              '' if real else '/payload/detachable_joint_state'),
                          # rig: his 60 g puck, and no span while it reads attached (critic F8, F9)
-                         **({'contact_ball_mass': RIG_PUCK_MASS, 'contact_span_wait_ball': True} if real else {})}
+                         # rig: the release guard before the take-back's rise (card 2026-10-10_combined_m1_contact
+                         # rev 10, critic round 4 F7)
+                         **({'contact_ball_mass': RIG_PUCK_MASS, 'contact_span_wait_ball': True,
+                             'take_back_release_guard': True} if real else {})}
                         if partner_contact else {}),
                      'start_attached': partner_attached,
                      'partner_release': partner_attached,

@@ -53,7 +53,7 @@ KEPT_REAL = ('real_io', 'rviz', 'magnet_channel', 'magnet_initial', 'attach_magn
              # Motive body ids, forwarded to real_io_launch.py by the graphs that include it
              'mocap_drone_body_ids', 'mocap_payload_body_id', 'mocap_magnet_tip_body_id',
              # combined M1 contact attach on the rig (partner_contact): more Motive bodies, his nodes
-             'mocap_extra_bodies', 'partner_nodes', 'partner_args')
+             'mocap_extra_bodies', 'partner_nodes', 'partner_args', 'contact_rig_orbit')
 # typed per drone by the rig modes (bringup.real_mode.rig_io, rig_magnet_latches)
 PER_DRONE = re.compile(r'drone\d+_(serial|magnet_initial)$')
 # decided by the side or the mode, never typed

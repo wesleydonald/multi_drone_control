@@ -19,7 +19,9 @@ METHODS = ('_take_back', '_contact_span_tick', '_contact_warm_ref', '_publish_pe
            '_newcomer_arming_cb', '_newcomer_off_tick', '_his_phase_cb', '_give_up_cb', '_joint_state_cb',
            '_ball_cb', '_mux_state_cb', '_pos', '_reserved_index', '_reserved_plate_dir', '_path_clear_point',
            '_weld_refused', '_set_on_load', '_departed_down', '_drop_departed', '_start_approach',
-           '_abort_newcomer', '_attach_ocp', '_capture_weld_rho', '_start_weld_joins_creep', '_do_attach')
+           '_abort_newcomer', '_attach_ocp', '_capture_weld_rho', '_start_weld_joins_creep', '_do_attach',
+           '_take_back_plan', '_take_back_tick', '_take_back_next', '_ring_moves', '_ring_plan', '_guard_setup',
+           '_guard_read', '_guard_check')
 
 
 class _Log:
@@ -59,7 +61,8 @@ def _node(quad=(0.0, 1.4, 0.1), ring_vel=(0.0, 0.0, 0.0), contact=True):
         _attach_target=np.array([0.0, 0.225, 1.05]), _attach_warm_radius=1.0,
         net=SimpleNamespace(rho=[None, None, None, np.array([0.0, 0.225, 0.02])]),
         _his_phase='', _his_took_off=False, _mux_state='partner', _joint_free=None, _ball_on=False,
-        _ball_mass=0.1, _span_t=None, _taken_back=False)
+        _ball_mass=0.1, _span_t=None, _taken_back=False, traj_t=0.0, _comove={}, _attach_vel=[None],
+        _traj_running=False, _release_guard=False, _tip_now=None)
     f.get_logger = lambda: log
     f.log = log
     f.now = [100.0]
@@ -783,3 +786,338 @@ def test_a_fault_during_the_rising_take_back_clears_both_legs():
     f._tilt_fault_cb(Bool(data=True))
     assert f._newcomer_out == {0: 'fault'} and 3 not in f._departed_step and 3 not in f._departed_next
     assert f._departed_hold == {} and f._departed_down()
+
+
+# ── the co-moving take-back (card rev 10 §3b with the critic's round 4 response; TB13, F1, F5, F6, F7, F9) ──────────
+
+from mpc_planner.load_trajectory import LoadTrajectory  # noqa: E402
+from dissipative_planner.dissipative_node import (  # noqa: E402
+    GUARD_WAIT_S, TAKE_BACK_ACCEL, TAKE_BACK_REACHED_M, ZONE_RISE_FAR_M)
+
+A_TICK = TAKE_BACK_ACCEL / HZ + 1e-9          # the most the take-back's velocity may change in one tick
+AZ = (270.0, 30.0, 150.0)
+
+
+def _place_ring(f):
+    """The ring and the carriers on the plan (the kinematic formation)."""
+    c, _ = f._ring_plan(f.traj_t)
+    f.load_state[0:2] = c
+    for i, a in enumerate(AZ):
+        f.drone_pos[i] = np.array([c[0] + 0.5 * np.cos(np.radians(a)), c[1] + 0.5 * np.sin(np.radians(a)), 1.53])
+
+
+def _orbit_node(rel=(0.0, 0.3), z=1.0 + 0.59 + 0.02, vrel=(0.0, 0.0, 0.0), t=10.0, ball=False):
+    """On the circle (orbit, r 0.5 at 0.125 m/s about hover + (0, 0.5)), QUAD4 at the ring-relative xy `rel`, moving
+    with the ring plus `vrel`; the clock ran on the last tick."""
+    f = _tc(_node())
+    f.traj = LoadTrajectory('orbit', 0.125, 0.0, 0.5)
+    f.hover_xy = (0.0, 0.0)
+    f.traj_t, f._t_tick, f._traj_running = t, t - 0.1, True
+    f._clock_runs = True
+    f.stages = []
+    _place_ring(f)
+    f._his_phase_cb(String(data='TAKEOFF'))
+    f._ball_on = ball
+    c, vc = f._ring_plan(t)
+    f.attach_pos[0] = np.array([c[0] + rel[0], c[1] + rel[1], z])
+    f._attach_vel[0] = np.r_[vc, 0.0] + np.asarray(vrel, float)
+    return f
+
+
+def _otick(f, low=0.0):
+    """_plan_inner's order on the circle: the clock flag, the references, then the planner's advance (none in LAND
+    or while the test holds the clock). QUAD4 flies its reference, `low` under it."""
+    f._traj_running = f.traj_t > f._t_tick + 1e-9
+    f._t_tick = f.traj_t
+    n0 = len(f.published)
+    _tick(f)
+    if f._clock_runs and not f._land_to_ground:
+        f.traj_t += 1.0 / HZ
+    _place_ring(f)
+    mine = [n for d, n in f.published[n0:] if d == 3]
+    assert len(mine) <= 1
+    if mine and 3 in f._departed_hold:
+        f.attach_pos[0] = mine[0][0][0] - np.array([0.0, 0.0, low])
+    if 3 in f._comove:
+        f.stages.append(f._comove[3]['stage'])
+    return mine[0] if mine else None
+
+
+def _fly(f, ticks, on_tick=None):
+    """[(traj_t, node 0 position, node 0 velocity)] of drone 3's reference per tick."""
+    out = []
+    for k in range(ticks):
+        if on_tick:
+            on_tick(f, k)
+        t = f.traj_t
+        n = _otick(f)
+        if n is not None:
+            out.append((t, n[0][0].copy(), n[0][1].copy()))
+    return out
+
+
+def _rel(f, t, p):
+    return p[:2] - f._ring_plan(t)[0]
+
+
+def _assert_bounded(track):
+    for (_, _, v0), (_, _, v1) in zip(track, track[1:]):
+        assert float(np.linalg.norm(v1 - v0)) <= A_TICK
+
+
+def test_zone_c_moves_with_the_ring_rises_steps_out_decouples_clears_the_path_and_lands():
+    f = _orbit_node()
+    f._give_up_cb(Bool(data=True))
+    st = f._comove[3]
+    assert st['zone'] == 'c' and st['coupled']
+    rise = 1.53 + 0.4                                          # c6f2032's rise: the highest carrier + 0.4
+    assert np.allclose(f._departed_step[3][2], rise) and np.allclose(f._departed_next[3][2], rise)
+    assert any('zone c, moving with the ring' in ln for ln in f.log.lines)
+    track = _fly(f, 400)
+    _assert_bounded(track)
+    t0, p0, _ = track[0]
+    hold = [_rel(f, t, p) for t, p, _ in track[:5]]
+    assert all(np.allclose(h, hold[0], atol=0.005) for h in hold)       # the release wait: still in the ring frame
+    i_dc = next(i for i, ln in enumerate(f.log.lines) if 'decoupled from the ring frame' in ln)
+    assert any('out past the ring\'s path to' in ln for ln in f.log.lines[i_dc:])
+    # up first, then out in the ring frame: at the step-out the ring-relative radius is the step-out radius
+    rels = [(float(np.linalg.norm(_rel(f, t, p))), p[2]) for t, p, _ in track]
+    first_out = next(i for i, (r, z) in enumerate(rels) if r > 0.35)
+    assert rels[first_out][1] > rise - 0.03                    # it rose before it moved sideways
+    i_clear = f.stages.index('clear')                          # the decouple: out at 1.2 m in the ring frame
+    assert rels[i_clear][0] == pytest.approx(1.2, abs=0.03) and rels[i_clear][1] == pytest.approx(rise, abs=0.02)
+    centre = np.array([0.0, 0.5])
+    assert float(np.linalg.norm(track[-1][1][:2] - centre)) >= 1.5 - 0.03   # past the path, then down alone
+    assert 3 not in f._comove and 3 in f._departed_landing
+
+
+def test_zone_a_far_from_the_path_is_world_fixed_todays_path_with_the_ramp():
+    f = _orbit_node(rel=(1.3, 1.2), z=1.6)                     # 1.8 m from the path centre (r_clear 1.5)
+    f._give_up_cb(Bool(data=True))
+    assert f._comove[3]['zone'] == 'a' and not f._comove[3]['coupled']
+    p_latch, v_latch = f.attach_pos[0].copy(), f._attach_vel[0].copy()
+    track = _fly(f, 60)
+    _assert_bounded(track)
+    stop = p_latch + v_latch * np.linalg.norm(v_latch) / (2 * 0.2)
+    assert np.allclose(track[-1][1][:2], stop[:2], atol=0.03)  # braked to its stopping point and stays there
+    assert track[-1][1][2] < 1.6 - 0.2                          # down where it stopped
+
+
+def test_zone_a_high_over_the_carriers_steps_out_world_fixed_then_clears_the_path():
+    f = _orbit_node(rel=(-0.6, 0.0), z=2.6)                    # his transit: lowest point 2.01 > 1.53 + 0.15
+    f._give_up_cb(Bool(data=True))
+    st = f._comove[3]
+    assert st['zone'] == 'a' and not st['coupled'] and f._departed_step[3][2] == pytest.approx(2.6, abs=0.01)
+    _fly(f, 300)
+    assert any('out past the ring\'s path to' in ln for ln in f.log.lines)
+
+
+def test_zone_b_below_the_ring_lands_where_it_stops_with_no_sideways_move_and_no_rise():
+    f = _orbit_node(rel=(0.6, 0.6), z=0.6)                     # his takeoff or pickup, under the ring's level
+    f._attach_vel[0] = np.zeros(3)
+    f._give_up_cb(Bool(data=True))
+    assert f._comove[3]['zone'] == 'b' and 3 not in f._departed_step
+    track = _fly(f, 40)
+    xy0 = track[0][1][:2]
+    assert all(np.allclose(p[:2], xy0, atol=1e-6) for _, p, _ in track)
+    assert all(p[2] <= 0.6 + 1e-9 for _, p, _ in track) and track[-1][1][2] < 0.4
+
+
+def test_zone_c_under_the_formation_descends_with_the_ring_then_lands():
+    f = _orbit_node(rel=(0.55, 0.1), z=1.1)                    # tip 0.51 m, under the ring's level, 0.56 m out
+    f._give_up_cb(Bool(data=True))
+    st = f._comove[3]
+    assert st['zone'] == 'c' and not st['clear'] and f._departed_step[3][2] == pytest.approx(0.7)
+    track = _fly(f, 120)
+    _assert_bounded(track)
+    assert all(p[2] <= 1.1 + 1e-6 for _, p, _ in track)        # never up
+    at = next(i for i, (_, p, _) in enumerate(track) if p[2] < 0.7 + TAKE_BACK_REACHED_M)
+    rel = [_rel(f, t, p) for t, p, _ in track[:at]]
+    assert all(np.allclose(r, rel[0], atol=0.02) for r in rel)   # down with the ring
+    assert not any('out past the ring\'s path to' in ln for ln in f.log.lines)
+
+
+def test_zone_c_far_from_the_ring_centre_rises_before_it_steps_out():
+    f = _orbit_node(rel=(0.0, 1.0), z=1.3)                     # 1.0 m from the ring centre, tip under the ring level
+    f._give_up_cb(Bool(data=True))
+    assert f._comove[3]['zone'] == 'c' and f._departed_step[3][2] == pytest.approx(1.93)
+    assert 1.0 >= ZONE_RISE_FAR_M
+
+
+def test_the_ring_frame_is_continuous_across_the_latch():
+    """F9: the frame from the planned ring point at the latch tick; no reference step at the latch."""
+    f = _orbit_node()
+    _airborne_rejoin(f, z=1.61)
+    c, vc = f._ring_plan(f.traj_t)
+    f.attach_pos[0] = np.array([c[0], c[1] + 0.3, 1.61])
+    f._attach_vel[0] = np.r_[vc, 0.0]
+    p_meas, v_meas = f.attach_pos[0].copy(), f._attach_vel[0].copy()
+    f._give_up_cb(Bool(data=True))
+    t, p, v = _fly(f, 1)[0]
+    assert float(np.linalg.norm(v - v_meas)) <= A_TICK
+    assert float(np.linalg.norm(p - p_meas)) <= float(np.linalg.norm(v_meas)) / HZ + 0.005
+    track = _fly(f, 30)
+    _assert_bounded(track)
+    rel = [_rel(f, t, p) for t, p, _ in track]
+    assert all(float(np.linalg.norm(b - a)) < 0.005 for a, b in zip(rel, rel[1:]))
+
+
+def test_the_decouple_waits_on_the_reference_not_the_measured_body():
+    """F5: with the measured body 5 cm under its reference all along, the decouple comes on the same tick."""
+    ticks = []
+    for low in (0.0, 0.05):
+        f = _orbit_node()
+        f._give_up_cb(Bool(data=True))
+        n = 0
+        for k in range(300):
+            _otick(f, low=low)
+            n += 1
+            if any('decoupled' in ln for ln in f.log.lines):
+                break
+        ticks.append(n)
+        st_goals = f._comove.get(3)
+        assert st_goals is not None and not st_goals['coupled']
+    assert ticks[0] == ticks[1] and ticks[0] < 300
+
+
+def test_land_mid_take_back_stops_the_frame_through_the_bound_and_skips_the_path_clear():
+    f = _orbit_node()
+    f._give_up_cb(Bool(data=True))
+
+    def land(f, k):
+        if k == 25:                                            # rising, the frame moving
+            f._land_to_ground = True
+    track = _fly(f, 300, land)
+    _assert_bounded(track)
+    assert not any('out past the ring\'s path to' in ln for ln in f.log.lines)
+    r = float(np.linalg.norm(track[-1][1][:2] - f.load_state[0:2]))
+    assert r == pytest.approx(1.2, abs=0.06)                   # out to the step-out radius in the still frame, down
+    assert track[-1][1][2] < 1.5
+
+
+def test_a_trajectory_stop_mid_take_back_stops_the_frame_and_the_path_clear_still_follows():
+    f = _orbit_node(t=27.0)                                    # the ring nearest -y: plate 9's way out is inward
+    f._give_up_cb(Bool(data=True))
+
+    def hold(f, k):
+        if k == 20:
+            f._clock_runs = False                              # a reconfiguration hold freezes traj_t
+    track = _fly(f, 400, hold)
+    _assert_bounded(track)
+    assert any('out past the ring\'s path to' in ln for ln in f.log.lines)
+
+
+def test_land_before_his_give_up_starts_the_take_back_with_the_frame_already_stopping():
+    f = _orbit_node()
+    f._newcomers_out_on_land('LAND')
+    f._land_to_ground = True
+    st = f._comove[3]
+    assert st['zone'] == 'c'
+    p_meas = f.attach_pos[0].copy()
+    track = _fly(f, 200)
+    _assert_bounded(track)
+    v = np.r_[f._ring_plan(10.0)[1], 0.0]
+    stop = p_meas + v * np.linalg.norm(v) / (2 * 0.2)          # braked from the ring's speed in the still frame
+    assert np.allclose(track[6][1][:2], stop[:2], atol=0.02)
+    assert not any('out past the ring\'s path to' in ln for ln in f.log.lines)
+
+
+@pytest.mark.parametrize('first', ['LAND', 'give-up'])
+def test_h3_a_tilt_fault_in_the_race_window_cancels_the_co_move_and_drone_3_gets_no_reference(first):
+    f = _orbit_node()
+    if first == 'LAND':
+        f._newcomers_out_on_land('LAND')
+    else:
+        f._give_up_cb(Bool(data=True))
+    _otick(f)                                                  # one co-moving reference went out
+    assert 3 in f._comove
+    f._tilt_fault_cb(Bool(data=True))                          # the mux still reads partner: the race window
+    assert 3 not in f._comove and f._departed_hold == {} and 3 not in f._departed_step
+    assert all(_otick(f) is None for _ in range(20))
+    g = _orbit_node()
+    g._tilt_fault_cb(Bool(data=True))                          # the fault first: no take-back at all
+    g._give_up_cb(Bool(data=True))
+    g._newcomers_out_on_land('LAND')
+    assert g._comove == {} and all(_otick(g) is None for _ in range(10))
+
+
+def test_the_new_state_is_dropped_with_the_departed_state():
+    f = _orbit_node()
+    f._give_up_cb(Bool(data=True))
+    f._drop_departed(3)
+    assert f._comove == {}
+
+
+def test_the_transit_take_back_ramps_and_decides_from_its_stopping_point():
+    """TB13 in hover (R1542: 0.34 m/s in his transit): no velocity step, and the step out is decided where it stops."""
+    f = _node(quad=(0.0, 0.95, 2.9))
+    f._his_phase_cb(String(data='TRANSIT_TO_DROP_POINT'))
+    f._attach_vel[0] = np.array([0.0, 0.34, 0.0])               # outward: it stops at r 1.24, past 1.2
+    f._take_back(0, 'LAND')
+    assert 3 not in f._departed_step
+    g = _node(quad=(0.0, 0.95, 2.9))
+    g._his_phase_cb(String(data='TRANSIT_TO_DROP_POINT'))
+    g._attach_vel[0] = np.array([0.0, -0.34, 0.0])              # inward: it stops at r 0.66, steps out from there
+    g._take_back(0, 'LAND')
+    assert g._departed_step[3][1] == pytest.approx(1.2)
+    vs = []
+    for _ in range(40):
+        n0 = len(g.published)
+        _tick(g)
+        vs += [n[0][1] for d, n in g.published[n0:] if d == 3]
+    assert float(np.linalg.norm(vs[0] - g._attach_vel[0])) <= A_TICK
+    assert all(float(np.linalg.norm(b - a)) <= A_TICK for a, b in zip(vs, vs[1:]))
+
+
+# ── the rig release guard (critic round 4, F7) ───────────────────────────────────────────────────────────────────
+
+def _guard_node(z_plate_rise=0.0):
+    f = _node(quad=(0.0, 0.225, 1.02 + 0.59))                  # QUAD4 over plate 9, its tip on it
+    f.__dict__.update(_release_guard=True, _fleet_cmd_pub=_Pub())
+    _airborne_rejoin(f, z=1.61)
+    f.attach_pos[0] = np.array([0.0, 0.225, 1.61])
+    _tick(f)                                                   # the span began
+    f._tip_now = (f.now[0], np.array([0.0, 0.225, 1.02]))
+    return f
+
+
+def _set_tip(f, tip):
+    f._tip_now = (f.now[0], np.asarray(tip, float))
+
+
+def test_rig_guard_lets_the_rise_on_once_the_tip_has_left_the_plate():
+    f = _guard_node()
+    f._give_up_cb(Bool(data=True))
+    g = f._comove[3]['guard']
+    assert g is not None and g['z'] == pytest.approx(1.02 + 0.59 + 0.05 + 0.02)
+    for k in range(60):
+        p = f._departed_hold[3]
+        _set_tip(f, p - np.array([0.0, 0.0, 0.59]) if p[2] - 0.59 > 1.02 else [0.0, 0.225, 1.02])
+        _tick(f)
+    assert f._comove[3]['stage'] == 'move' and f._fleet_cmd_pub.msgs == []
+    assert f._departed_hold[3][2] > g['z'] + 0.05                    # rising on past the slack
+    assert any('release seen' in ln for ln in f.log.lines)
+
+
+@pytest.mark.parametrize('why', ['held', 'plate'])
+def test_rig_guard_holds_resends_off_and_lands_the_fleet(why):
+    f = _guard_node()
+    f._give_up_cb(Bool(data=True))
+    zg = f._comove[3]['guard']['z']
+    n_off = f._magnet_cmd_pub.msgs.count('OFF')
+    for k in range(int((NEWCOMER_RELEASE_S + GUARD_WAIT_S) * HZ) + 30):
+        _set_tip(f, [0.0, 0.225, 1.02])                        # the tip stays on the plate
+        if why == 'plate' and k > 8:
+            f.load_state[2] = 1.0 + 0.03                       # plate 9 follows it up
+        _tick(f)
+    assert f._comove[3]['stage'] == 'guard_hold' and f._fleet_cmd_pub.msgs == ['LAND']
+    assert f._magnet_cmd_pub.msgs.count('OFF') > n_off
+    assert f._departed_hold[3][2] <= zg + 0.01                 # held: no rise past the slack
+    assert any('RELEASE GUARD' in ln for ln in f.log.lines)
+
+
+def test_without_the_guard_nothing_waits_for_the_tip():
+    f = _guard_node()
+    f._release_guard = False
+    f._give_up_cb(Bool(data=True))
+    assert f._comove[3]['guard'] is None
