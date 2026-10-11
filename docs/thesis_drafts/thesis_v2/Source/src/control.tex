@@ -117,7 +117,7 @@ Distributed and decentralised architectures have no central coordinator. A decen
 
 \subsubsection{Dissipative Control}
 
-Energy-based dissipative control is the most robust to changes in the team. In the fully decentralised controller of Quan et al.\ \cite{quan2025swarm}, inspired by table mechanics, each UAV damps the relative motion between itself and the payload from local measurements, with no communication. Any disturbance (wind, a cable perturbation, a UAV suddenly leaving) injects energy into the payload--swarm system, which damping forces proportional to the relative velocity errors remove. It is validated under varying UAV capability, cable-length uncertainty and payload weight, and depends on differential GPS, which limits it to outdoor flight.
+Energy-based dissipative control is the most robust to changes in the team. In the fully decentralised controller of Quan et al.\ \cite{quan2025swarm}, inspired by table mechanics, each UAV damps the relative motion between itself and the payload from local measurements, with no communication. Any disturbance (wind, a cable perturbation, a UAV suddenly leaving) injects energy into the payload--swarm system, which damping forces proportional to the relative velocity errors remove. It is validated under varying UAV capability, cable-length uncertainty and payload weight, and depends on differential GPS, which limits it to outdoor flight. The peer-reviewed form of the same idea, a virtual-passivity network of nodes, springs and dampers that separates the UAVs' internal coordination from the load's velocity tracking, carries a 6\,kg load with six UAVs in field tests and a 14\,kg load with ten in simulation \cite{liu2026passivity}.
 
 The work in \cite{liuVirtualTubeBasedCooperativeTransport2026} makes the framework distributed with a virtual tube, a corridor around the desired payload path inside which the formation adapts to avoid obstacles, with the tensions allocated by dissipative systems theory. Simulations with up to ten UAVs and outdoor experiments carry payloads through constrained spaces; real-time tube generation remains future work.
 
@@ -192,7 +192,7 @@ and Shankar et al.\ \cite{shankar2020inflight} come closest to joining a carried
 grasps a bar held aloft by another, confirms the grasp with a magnetic sensor before the first releases, and
 reschedules its gains for the new mass. Miyazaki et al.\ \cite{miyazaki2018airborne} dock a small multirotor onto a bar that a larger one lowers on a winch and then raises, clear of its downwash, and the LEGION units of Sugihara et al.\ \cite{sugihara2026legion} dock end to end in flight through latched joints, hold a zero-clearance interlock by controlling the contact force and torque, and then grasp and carry objects as one articulated body, outdoors. Each docks to a rigid structure or to a single carrier; none joins
 a payload hung from a team, where the newcomer's pull at the weld can tilt the payload and the team's
-tensions must be redistributed.
+tensions must be redistributed. Two further precedents take or shape a load from the air without docking to a vehicle: Antal et al.\ \cite{antal2026hook} pick a load from one moving platform and set it down on another with a hook and a robust adaptive MPC, on hardware, and Xu et al.\ \cite{xu2026hitches} control the hitch that two cables form around a payload in midair, in simulation; neither changes a carrying team.
 
 \subsection{Execution Layer and Steady-Error Rejection}
 \label{sec:lit_execution}
