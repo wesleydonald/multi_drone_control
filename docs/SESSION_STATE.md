@@ -392,3 +392,9 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   $CLAUDE_JOB_DIR/tmp/lab_waveb.txt). One helper at a time: R10 card rev 10 resumed (a3b113f14e6f929ef).
   Queue after R10: critic on rev 10 -> helper C m1-comove (from m1-tiltcut4) -> S scorers -> W Wednesday paperwork
   (incl. the thesis plan's Wednesday additions and the Mon 12 freeze of release metrics / W4/W5 bands).
+- 14:35: card rev 10 committed (2ea39eb) + critic round 4 (9dc7d82, GO WITH CHANGES) + response (a2d7b40) with Wesley's
+  answers (decisions.md 14:30): no escape height, zone rule, his takeoff before the orbit on the rig, release guard,
+  ramp 0.25. The one helper now: C = build m1-comove from m1-tiltcut4 de91ba2 (worktree mdc_wt/m1-comove; id
+  aa5b8d20e7a1c5f50) incl. TB5 desk replay (tools/tb5_replay.py) and the TB6 configs. Queue after C: TB6 on the lab (after
+  wave B and TB5 pass) -> S scorers -> W Wednesday paperwork (+ thesis-plan Wednesday additions, Mon 12 freeze of release
+  metrics / W4/W5 bands, F3/F8 rig sheet items). Wave B still flying.
