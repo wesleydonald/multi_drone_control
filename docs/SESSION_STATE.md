@@ -33,7 +33,7 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 - **Reference:** `docs/reference.md` (architecture, negatives, traps, how to run). CURRENT_STATE.md is retired.
 
 ## Running
-- Lab PC: the W4/W5 band runs on week4 a25c40d (`$CLAUDE_JOB_DIR/tmp/lab_w45.txt`, waiter bvvcpa1up). When they
+- Lab PC: the W4/W5 band runs on week4 a25c40d (`$CLAUDE_JOB_DIR/tmp/lab_w45.txt`, waiter bkw3tc18l; R1626 W4 first). When they
   land: one registry row each, then `tools/release_bands.py band W4 R1459 R1460 <new>` and `band W5 R1457 <new>`
   (the freeze is signed; flag defaults = Wesley's answers). Put the bands into docs/freeze_2026-10-14.md §2.3.
 - Laptop: idle. No helper is running (W is done).
