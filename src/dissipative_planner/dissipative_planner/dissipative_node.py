@@ -83,6 +83,9 @@ RELEASE_SEEN_M = 0.05      # m the welded start's tip moves off the plate (ring 
 # QUAD4's measured position and velocity and changes velocity by at most TAKE_BACK_ACCEL (1.46 deg quasi-static,
 # TB13); on a trajectory it moves with the planned ring point (zone c)
 TAKE_BACK_ACCEL = 0.25     # m/s^2
+# a tilt cut raises the fleet's LAND, and the two reach us in either order: the LAND's take-back waits this long so a
+# cut QUAD4 is never taken back (R1662, R1673, R1678 published one)
+LAND_TAKE_BACK_SETTLE_S = 0.1
 TAKE_BACK_BRAKE = 0.2      # m/s^2: the carrot's braking profile, under the bound so the ramp can follow it
 TAKE_BACK_K = 1.5          # 1/s: the carrot closes linearly near its goal (K * DETACH_STEP_VEL < TAKE_BACK_ACCEL)
 TAKE_BACK_REACHED_M = 0.02  # m: a goal is reached by the REFERENCE (critic round 4, F5)
@@ -507,6 +510,7 @@ class DissipativeController(LoadPlanner):
         self._span_wait_ball = bool(p('contact_span_wait_ball', False).value)
         self._span_t = None           # our ring magnet span: the last ON sent (None: not begun)
         self._taken_back = False
+        self._land_take_back_t = None   # our LAND's take-back, due LAND_TAKE_BACK_SETTLE_S after it
         self._comove = {}             # d -> the take-back's reference state (_take_back_tick)
         self._traj_running = False    # the trajectory clock advanced on the last tick (the ring frame moves)
         self._traj_t_tick = 0.0
@@ -789,6 +793,7 @@ class DissipativeController(LoadPlanner):
             return
         self._contact_release_tick()
         self._release_seen_tick()
+        self._land_take_back_tick()
         if self._departed_hold:
             self._publish_departed_refs()
         self._newcomer_off_tick()
@@ -1852,6 +1857,15 @@ class DissipativeController(LoadPlanner):
             v = (quat_to_rot_np(self.load_state[3:7]) @ self._weld_rho_of(j))[:2]
         return v / max(float(np.linalg.norm(v)), 1e-6)
 
+    def _land_take_back_tick(self):
+        if self._land_take_back_t is None or \
+                self.get_clock().now().nanoseconds * 1e-9 - self._land_take_back_t < LAND_TAKE_BACK_SETTLE_S:
+            return
+        self._land_take_back_t = None
+        for j in range(self.reserved_attach):
+            if self.attach_pending[j]:
+                self._take_back(j, 'LAND')
+
     def _take_back(self, j, why):
         """No attach (his give-up, or our LAND before it): QUAD4 goes to our tracker (/drone_3/take_back). Its
         reference starts at QUAD4's measured position and velocity and brakes to its stopping point at
@@ -1863,7 +1877,7 @@ class DissipativeController(LoadPlanner):
                 or not self.attach_pending[j]:
             return
         d = self._n_carry0 + j
-        if j in getattr(self, '_tilt_faulted', ()):
+        if j in getattr(self, '_tilt_faulted', ()) or getattr(self, '_mux_state', None) == 'cut':
             self.get_logger().warn(f'[dissipative] no take-back of {_who(d)} ({why}): it was cut on its tilt fault',
                                    throttle_duration_sec=2.0)
             return
@@ -2807,7 +2821,8 @@ class DissipativeController(LoadPlanner):
         for j in range(self.reserved_attach):
             if self.attach_pending[j]:
                 if getattr(self, '_partner_contact', False):
-                    self._take_back(j, 'LAND')     # his stream flies it: our approach never started
+                    if self._land_take_back_t is None:   # his stream flies it: taken back once the cut has had its say
+                        self._land_take_back_t = self.get_clock().now().nanoseconds * 1e-9
                 else:
                     self._abort_newcomer(j, 'LAND')
 

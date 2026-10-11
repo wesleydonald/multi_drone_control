@@ -12,11 +12,11 @@ import pytest
 
 pytest.importorskip('acados_template')
 from dissipative_planner.dissipative_node import (  # noqa: E402
-    CONTACT_SPAN_EVERY_S, DEPARTED_CLEAR_R, NEWCOMER_RELEASE_S, DissipativeController as D)
+    CONTACT_SPAN_EVERY_S, DEPARTED_CLEAR_R, LAND_TAKE_BACK_SETTLE_S, NEWCOMER_RELEASE_S, DissipativeController as D)
 from std_msgs.msg import Bool, String  # noqa: E402
 
 HZ = 10.0
-METHODS = ('_take_back', '_contact_span_tick', '_contact_warm_ref', '_publish_pending_attach_refs',
+METHODS = ('_take_back', '_land_take_back_tick', '_contact_span_tick', '_contact_warm_ref', '_publish_pending_attach_refs',
            '_publish_departed_refs', '_magnet_cmd_cb', '_magnet_attached_cb', '_newcomers_out_on_land',
            '_newcomer_arming_cb', '_newcomer_off_tick', '_his_phase_cb', '_give_up_cb', '_joint_state_cb',
            '_ball_cb', '_mux_state_cb', '_pos', '_reserved_index', '_reserved_plate_dir', '_path_clear_point',
@@ -63,7 +63,7 @@ def _node(quad=(0.0, 1.4, 0.1), ring_vel=(0.0, 0.0, 0.0), contact=True):
         _attach_target=np.array([0.0, 0.225, 1.05]), _attach_warm_radius=1.0,
         net=SimpleNamespace(rho=[None, None, None, np.array([0.0, 0.225, 0.02])]),
         _his_phase='', _his_took_off=False, _mux_state='partner', _joint_free=None, _ball_on=False,
-        _ball_mass=0.1, _span_t=None, _taken_back=False, traj_t=0.0, _comove={}, _attach_vel=[None],
+        _ball_mass=0.1, _span_t=None, _taken_back=False, _land_take_back_t=None, traj_t=0.0, _comove={}, _attach_vel=[None],
         _traj_running=False, _release_guard=False, _tip_now=None)
     f.get_logger = lambda: log
     f.log = log
@@ -78,12 +78,20 @@ def _node(quad=(0.0, 1.4, 0.1), ring_vel=(0.0, 0.0, 0.0), contact=True):
 
 def _tick(f):
     """The planner tick's order for these paths (_plan_inner)."""
+    f._land_take_back_tick()
     if f._departed_hold:
         f._publish_departed_refs()
     f._newcomer_off_tick()
     f._publish_pending_attach_refs()
     f._contact_span_tick()
     f.now[0] += 1.0 / HZ
+
+
+def _land(f):
+    """Our LAND, and the settle its take-back waits for (a tilt cut's fault can arrive just after its LAND)."""
+    f._newcomers_out_on_land('LAND')
+    f.now[0] += LAND_TAKE_BACK_SETTLE_S + 1e-3
+    f._land_take_back_tick()
 
 
 def _airborne_rejoin(f, z=1.6):
@@ -283,21 +291,21 @@ def test_his_give_up_at_the_pickup_takes_it_back_with_no_ring_magnet_command():
 def test_land_before_the_attach_is_a_take_back_not_the_approach_abort():
     f = _node()
     _airborne_rejoin(f)
-    f._newcomers_out_on_land('LAND')
+    _land(f)
     assert f._take_back_pub.msgs == [True] and f._newcomer_out == {0: 'LAND'} and 3 in f._departed_hold
-    f._newcomers_out_on_land('LAND')
+    _land(f)
     f._give_up_cb(Bool(data=True))
     assert f._take_back_pub.msgs == [True] and f._newcomer_out == {0: 'LAND'}   # once
     g = _node()
     _airborne_rejoin(g)
     g.attach_pending[0] = False
-    g._newcomers_out_on_land('LAND')
+    _land(g)
     assert g._take_back_pub.msgs == [] and g._departed_hold == {}               # folded in: a carrier now
 
 
 def test_before_his_takeoff_it_stays_on_its_mat_with_no_reference():
     f = _node()
-    f._newcomers_out_on_land('LAND')
+    _land(f)
     assert f._take_back_pub.msgs == [True] and f._departed_hold == {}
     _tick(f)
     assert f.published == [] and f._magnet_cmd_pub.msgs == []
@@ -533,7 +541,7 @@ def test_land_before_the_release_cancels_it_and_it_lands_as_a_departed_drone():
     f = _welded_node()
     for _ in range(10):
         _wtick(f)                                               # stepping out
-    f._newcomers_out_on_land('LAND')                            # not pending: no take-back
+    _land(f)                            # not pending: no take-back
     f._land_to_ground = True
     zs = []
     for _ in range(150):
@@ -550,7 +558,7 @@ def test_land_before_the_release_cancels_it_and_it_lands_as_a_departed_drone():
 def test_land_after_the_release_before_his_stream_flies_it_is_a_take_back_where_it_hovers():
     f = _welded_node()
     _release(f)
-    f._newcomers_out_on_land('LAND')
+    _land(f)
     assert f._take_back_pub.msgs == [True] and f._newcomer_out == {0: 'LAND'}
     assert np.allclose(f._departed_hold[3], STEP_OUT, atol=0.03) and 3 in f._land_alone   # held where it is
     step = f._departed_step[3]
@@ -649,10 +657,44 @@ def test_a_tilt_fault_off_the_ring_takes_quad4_out_with_no_take_back_and_no_refe
     for _ in range(5):
         _tick(f)
     assert f.published == []                                   # no warm reference, no departed hold
-    f._newcomers_out_on_land('LAND')
+    _land(f)
     f._give_up_cb(Bool(data=True))
     assert f._take_back_pub.msgs == [] and f._departed_hold == {}
     assert f._departed_down()                                  # the landed gate does not wait for it
+
+
+@pytest.mark.parametrize('cut_first', [False, True])
+def test_a_tilt_cut_and_the_land_it_raises_in_either_order_never_take_quad4_back(cut_first):
+    """R1662, R1673, R1678: the cut's fault and the fleet's LAND reach us together, in either order."""
+    f = _in_his_transit()
+    if cut_first:
+        f._tilt_fault_cb(Bool(data=True))
+        f._newcomers_out_on_land('LAND')
+    else:
+        f._newcomers_out_on_land('LAND')
+        f.now[0] += 0.002
+        f._tilt_fault_cb(Bool(data=True))
+    for _ in range(5):
+        _tick(f)
+    assert f._take_back_pub.msgs == [] and f._departed_hold == {} and f._newcomer_out == {0: 'fault'}
+
+
+def test_a_quad4_whose_mux_reads_cut_is_never_taken_back():
+    f = _in_his_transit()
+    f._mux_state_cb(String(data='cut'))
+    _land(f)
+    f._give_up_cb(Bool(data=True))
+    assert f._take_back_pub.msgs == [] and f._departed_hold == {}
+
+
+def test_with_no_fault_the_land_take_back_follows_after_the_settle():
+    f = _in_his_transit()
+    f._newcomers_out_on_land('LAND')
+    f._land_take_back_tick()
+    assert f._take_back_pub.msgs == []                         # not yet: a cut's fault may still be on its way
+    f.now[0] += LAND_TAKE_BACK_SETTLE_S + 1e-3
+    f._land_take_back_tick()
+    assert f._take_back_pub.msgs == [True] and f._newcomer_out == {0: 'LAND'} and 3 in f._departed_hold
 
 
 @pytest.mark.parametrize('first', ['LAND', 'give-up'])
@@ -660,7 +702,7 @@ def test_a_fault_after_the_take_back_overrides_it_and_clears_the_departed_state(
     """H3: the manager's LAND or his give-up can reach us before the fault."""
     f = _in_his_transit()
     if first == 'LAND':
-        f._newcomers_out_on_land('LAND')
+        _land(f)
     else:
         f._give_up_cb(Bool(data=True))
     assert f._take_back_pub.msgs == [True] and 3 in f._departed_hold and 3 in f._land_alone
@@ -1012,7 +1054,7 @@ def test_a_trajectory_stop_mid_take_back_stops_the_frame_and_the_path_clear_stil
 
 def test_land_before_his_give_up_starts_the_take_back_with_the_frame_already_stopping():
     f = _orbit_node()
-    f._newcomers_out_on_land('LAND')
+    _land(f)
     f._land_to_ground = True
     st = f._comove[3]
     assert st['zone'] == 'c'
@@ -1029,7 +1071,7 @@ def test_land_before_his_give_up_starts_the_take_back_with_the_frame_already_sto
 def test_h3_a_tilt_fault_in_the_race_window_cancels_the_co_move_and_drone_3_gets_no_reference(first):
     f = _orbit_node()
     if first == 'LAND':
-        f._newcomers_out_on_land('LAND')
+        _land(f)
     else:
         f._give_up_cb(Bool(data=True))
     _otick(f)                                                  # one co-moving reference went out
@@ -1040,7 +1082,7 @@ def test_h3_a_tilt_fault_in_the_race_window_cancels_the_co_move_and_drone_3_gets
     g = _orbit_node()
     g._tilt_fault_cb(Bool(data=True))                          # the fault first: no take-back at all
     g._give_up_cb(Bool(data=True))
-    g._newcomers_out_on_land('LAND')
+    _land(g)
     assert g._comove == {} and all(_otick(g) is None for _ in range(10))
 
 
