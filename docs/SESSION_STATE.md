@@ -424,3 +424,14 @@ at a time (lab_batch syncs the tree), at most 4 slots. Monitor: lab_m1c / lab_m1
   R1134, R1136, R1137, R1186, R1324) still need '-corr' rows; CURRENT_STATE.md §3 is stale. The other chat may work in
   parallel on a disjoint lane (literature, desk extensions 1/2/4, thesis structure in its own worktree; no lab, no
   laptop sims, registry read-only, decisions via Wesley -> recorded here).
+- 17:25: TB6 9 of 11 scored (R1620 full no-catch orbit and R1622 hover regression support); R1623 m1x_r11a_circle and
+  R1625 m1x_late_takeoff_orbit flying (monitor). R1624 needs Wesley's reading (commanded path straight down vs the
+  measured body levered 0.33 m by the rigid rod after his magnet caught the ball). Correction rows for all 14
+  misparsed registry rows. CURRENT_STATE.md retired (8a33e6b): unique parts in docs/reference.md; general/CLAUDE.md,
+  the critic and three workflows repointed in place (they are untracked local files: never git add them). Branch
+  cleanup was refused by the permission classifier: script $CLAUDE_JOB_DIR/tmp/branch_cleanup.sh waits for Wesley to
+  run it (archive tags for m1-tiltcut, m1-e0, m1-full, combined-m1; deletes merged branches and their worktrees).
+  Rule from now (Wesley): delete a branch once its work is on week5 or the attempt failed. The "since the 8 Oct rig"
+  page is published: https://claude.ai/artifact/QwgP2oPSknLyWZacvDuh5T (republish from
+  $CLAUDE_JOB_DIR/tmp/resource/m1_since_rig.html). Other chat: prompt given for a disjoint lane (thesis-work and
+  desk-ext worktrees). No helper running. Queue: finish TB6 -> S scorers -> W Wednesday paperwork (Mon).
