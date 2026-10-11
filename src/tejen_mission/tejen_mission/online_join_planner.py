@@ -162,6 +162,9 @@ CONTACT_REJOIN_PHASES = frozenset({
 })
 # contact_attach: the phases after the drop released the object (the object magnet holds nothing)
 CONTACT_DROPPED_PHASES = CONTACT_REJOIN_PHASES | {MissionPhase.CLEAR_DROP_ZONE}
+# drop_check_puck: after the release dwell, how long the drop waits for fresh poses of the object and the marker before
+# it gives up as for an object stuck on the magnet (multi_drone_control rig-port critic round 2, A7)
+DROP_PUCK_WAIT_S = 2.0
 
 
 def _vec3_from_position(position) -> np.ndarray:
@@ -6574,8 +6577,9 @@ class OnlineJoinPlanner(Node):
 
     def update_measured_drop(self, waited: bool) -> None:
         """DROP_OBJECT under drop_check_puck: the release dwell always runs; then the object measured away from the
-        marker (or not measured, with a warning) clears the drop zone, and one still on it is a give-up (the fleet
-        takes the vehicle back and lands it with the object on)."""
+        marker clears the drop zone, and one still on it is a give-up (the fleet takes the vehicle back and lands it
+        with the object on). Not measured, the drop waits up to DROP_PUCK_WAIT_S more for fresh poses and then gives
+        up the same way: an unseen object may still ride the magnet to the ring."""
         if not waited:
             return
         on_tip = self.measured_object_on_tip()
@@ -6583,9 +6587,14 @@ class OnlineJoinPlanner(Node):
             self.contact_give_up('the drop timed out with the object measured on the magnet')
             return
         if on_tip is None:
-            self.get_logger().warning('Drop: the object or the marker is not measured; trusting the release')
-        self.transition_to(MissionPhase.CLEAR_DROP_ZONE, 'object measured away from the magnet after the release dwell'
-                           if on_tip is False else 'release dwell completed (object not measured)')
+            if self._physical_now_s() - self.drop_start_time - self.drop_wait_time_s < DROP_PUCK_WAIT_S:
+                self.get_logger().warning('Drop: the object or the marker is not measured; waiting for a fresh pose',
+                                          throttle_duration_sec=0.5)
+                return
+            self.contact_give_up(f'the object or the marker not measured {DROP_PUCK_WAIT_S:.1f} s after the release '
+                                 f'dwell')
+            return
+        self.transition_to(MissionPhase.CLEAR_DROP_ZONE, 'object measured away from the magnet after the release dwell')
 
     def enter_taken_back(self, reason: str) -> None:
         if self.phase in {MissionPhase.RING_ATTACHED, MissionPhase.TAKEN_BACK}:

@@ -54,7 +54,8 @@ BASE_REV = 'de91ba2'         # m1-tiltcut4: c6f2032's take-back
 RUNS = ('R1565', 'R1554', 'R1566', 'R1549', 'R1543')
 METHODS = ('_take_back', '_publish_departed_refs', '_pos', '_reserved_index', '_reserved_plate_dir',
            '_path_clear_point', '_departed_down', '_drop_departed', '_take_back_plan', '_take_back_tick',
-           '_take_back_next', '_ring_moves', '_ring_plan', '_guard_setup', '_guard_read', '_guard_check')
+           '_take_back_next', '_ring_moves', '_ring_plan', '_guard_setup', '_guard_read', '_guard_check',
+           '_weld_rho_of')
 
 
 def results_roots():

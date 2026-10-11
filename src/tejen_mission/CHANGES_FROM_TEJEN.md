@@ -209,3 +209,10 @@ supervisor's `stop_action` defaults to his `disarm`.
 | `launch/partner_mission.launch.py` (ours) | `taken_back_self_land` launch argument (default false), passed to the planner only under `contact_attach` | as above |
 | `online_join_planner.py` | `mux_state_callback` (contact_attach; replaces the lambda that only stored the state): `/drone_3/mux_state` reading `cut` (the fleet has disarmed the vehicle in the air: its tilt, our switch `partner_tilt_cut`, or our cut at LANDED, `partner_stuck_guard`) publishes his `landing_disarm_command` once and goes to `LANDED_DISARMED`. The state only reads `cut` with one of our switches on | tilt-cut critic round 2 M-E: his MPC kept streaming armed after the cut, so a relaunched mux (which starts uncut) would forward it armed and the motors could restart on the floor |
 | `test/test_taken_back_self_land.py` (ours, new) | the wait, the fly-out and descent, one disarm; the object magnet OFF after the drop and no command while he carries the ball; a switched or cut mux holds; off holds; the launch switch; the mux's `cut`: one disarm, the mission ended | tests first |
+
+## 11 Oct 2026 (evening): the rig port's critic round 2 (branch m1-harden, from m1-comove 5e70f54; rig card docs/experiments/2026-10-21_combined_m1_rig.md, A7)
+
+| file | change | why |
+|---|---|---|
+| `online_join_planner.py` | `DROP_PUCK_WAIT_S` (2.0 s, a module constant): under `drop_check_puck` (contact_attach only, default false; the rig launch sets it) an object or marker not measured after the release dwell no longer clears the drop zone. DROP_OBJECT waits up to 2 s more for fresh poses (the object away: clears; on the marker: the give-up), then gives up as for a stuck object (TAKEN_BACK, `/join_planner/give_up`); `update_measured_drop`. Off (his default): unchanged | rig-port critic round 2, A7: an unseen puck can ride the magnet to plate 9 |
+| `test/test_m1_contact_attach.py` (ours, appended) | the wait, a fresh pose away from or on the marker within it, the give-up at its end; the not-measured case no longer clears | tests first |
