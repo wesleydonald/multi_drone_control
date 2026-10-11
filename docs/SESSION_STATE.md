@@ -33,9 +33,7 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 - **Reference:** `docs/reference.md` (architecture, negatives, traps, how to run). CURRENT_STATE.md is retired.
 
 ## Running
-- Lab PC: the W4/W5 band runs on week4 a25c40d (`$CLAUDE_JOB_DIR/tmp/lab_w45.txt`, waiter bkw3tc18l; R1626 W4 first). When they
-  land: one registry row each, then `tools/release_bands.py band W4 R1459 R1460 <new>` and `band W5 R1457 <new>`
-  (the freeze is signed; flag defaults = Wesley's answers). Put the bands into docs/freeze_2026-10-14.md §2.3.
+- Lab PC: idle. The W4/W5 bands are frozen (R1626, R1627; freeze doc §2.4).
 - Laptop: idle. No helper is running (W is done).
 - The other chat (thesis lane, Wesley's prompt) may be working in its own worktrees `mdc_wt/thesis-work` and
   `mdc_wt/desk-ext`. It must stay off the lab, the laptop simulations, the registry and this file. Its hand-back note
@@ -57,8 +55,7 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 - The plan's D10-D17 and D21, and the thesis plan's D8-D16, all still open (see the plans).
 
 ## Next, in order
-1. The W4/W5 bands, once the two runs land. Then Wesley reviews and sends `docs/tejen_note_2026-10.md` (before
-   Wed). The 14 Oct sheet already has all 23 additions.
+1. Wesley sends `docs/tejen_note_2026-10.md` (before Wed). The sheet, the freeze and the bands are done.
 2. Tue 13 desk rehearsal and load test. Wed 14 rig. Thu 15 gate and R10a. Fri 16: smoke on the candidate, name the SHA,
    joint claim batch. Then the reviewers, then week5. Tue 20 rehearsal. 21-22 Oct: hover only unless TB6 passed and
    the reviewer has signed off.

@@ -194,7 +194,7 @@ def sigma_rig(a):
 
 def choices(a):
     return (f'choices: pair_horizon={a.pair_horizon} classes={a.classes} ratio={a.ratio} sigma={a.sigma} '
-            f'band_horizon={a.band_horizon} (defaults = the recommendations, pending Wesley)')
+            f'band_horizon={a.band_horizon} (defaults = the answers signed 11 Oct)')
 
 
 def fmt(x, nd=2):
