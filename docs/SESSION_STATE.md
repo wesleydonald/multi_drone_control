@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Mon 12 Oct 2026, 07:03 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Mon 12 Oct 2026, 10:24 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and the "since the 8 Oct rig" page
 (https://claude.ai/artifact/QwgP2oPSknLyWZacvDuh5T; source `$CLAUDE_JOB_DIR/tmp/resource/m1_since_rig.html`).
 
@@ -57,13 +57,20 @@ Updated: Mon 12 Oct 2026, 07:03 AEDT (from `date`). Only what a new session need
     - Supported: hover attach, hover take-back, no-catch hover, LAND during the proof.
     - Not supported: the circle take-back and the push abort (R1654 rod 0.094 m).
     - Corr rows for R1638/1639/1641/1654 and card §6.3a are committed in 898f775.
-  - DONE 02:44. R1638-R1681 are scored and committed. Both reviewers' corr rows are in, and the combined verdict is
-    in card §6.3a.
-    - Combined: NOT SUPPORTED overall (hover lines supported).
-    - Tilt: T1 and F1 1 of 2, N3 between the bars; the rest supported (some with corrections).
-    - Two OPEN lines in decisions.md: the claim's way forward, and the take-back race after a cut.
-  - Morning report: docs/morning_report_2026-10-12.md (45630c0).
-  - Lab PC idle. No loop running.
+  - DONE 02:44: R1638-R1681 scored. Morning report docs/morning_report_2026-10-12.md.
+  - Wesley ~10:10 (decisions.md): hover lines claimed; the failed lines go to a week5 table; the race is fixed
+    (critic waived); the 17 citations are approved; magnet 9-10 N; R1673 not raised with Tejen yet.
+  - **m1-race** (worktree mdc_wt/m1-race, from rig-wed): 29b2d7b is the race fix (the LAND take-back waits
+    LAND_TAKE_BACK_SETTLE_S 0.1 s; a mux 'cut' drone is never taken back). 209 tests pass, gate --quick passes.
+    46ac389 adds the m1c_abort_negx config.
+  - Probes done offline:
+    - R1654's 0.094 m was the +x push carrying carrier 2 (150 deg) toward QUAD4 during his re-approach.
+    - His circle gate (results/analysis/circle_gate_probe_2026-10-12.txt): wave 1's tip error sat at the 2.5 cm gate
+      (median 2.0-2.4 cm, in gate 40-53 %), against 1.2-1.9 cm and 56-100 % in every later circle run.
+  - TONIGHT (`$CLAUDE_JOB_DIR/tmp/lab_tonight.sh`, from 19:00 if the lab is idle; timer task bql79lb74):
+    - A on rig-wed: m1c_abort x2, m1_full_orbit x4, nocatch_orbit x2, lead030 x2, m1x_land_rejoin_orbit x2.
+    - B on m1-race: m1c_abort_negx x2, tc_t1 x2, tc_n3, tc_c1.
+    - All exploratory; score each as it lands.
 - Laptop: idle. No helper is running. The full M1 on the circle is recorded and cut (R1633, the 11th clean full M1):
   results/videos/full_M1_twin_R1633_orbit_edit.mp4 (2 min 56 s, captioned; raw: _wide, _circle, _plate9). The recorder
   is on the candidate (adaf2c5).
