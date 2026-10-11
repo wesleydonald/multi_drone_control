@@ -43,6 +43,11 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 
 ## Running
 - Lab PC: idle. The smoke on the candidate 793183d passed, 4 of 4 support (R1628-R1631; the 10th clean full M1 is R1631).
+- OVERNIGHT LOOP (11 Oct 23:03, Wesley): the claim batch on rig-wed ba40bd0 (card rev 10 §6.3 + tilt rev 4), 41 runs,
+  `$CLAUDE_JOB_DIR/tmp/lab_claimwed.txt`. Order: the 17 m1c arms, the 3 full M1, the 2 R11a, then the tilt claim (T0, T1,
+  F6b, F6c, C1, C2, F1, C3, each x2) and N1-N3. Score each as it lands: tools/m1_score.py from rig-wed (claim/full/tilt,
+  rev 10 / tilt rev 4), one row each. When the combined table is complete: the reviewer, its verdict into the card.
+  Morning report by 08:00.
 - Laptop: idle. No helper is running. The full M1 on the circle is recorded and cut (R1633, the 11th clean full M1):
   results/videos/full_M1_twin_R1633_orbit_edit.mp4 (2 min 56 s, captioned; raw: _wide, _circle, _plate9). The recorder
   is on the candidate (adaf2c5).
