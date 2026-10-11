@@ -112,11 +112,11 @@ needs universal joints; and the wall-clock watchdogs fire when the simulation ru
 \paragraph{Against the literature.} Table~\ref{tab:lit_compare} sets this work against the closest works,
 in the numbers each reports. On a path the rig's ring stayed within 3\,cm of its reference on average, 3--6\,\%
 of the path's half-extent, the same order as Sun et al.'s 4.1\,\% at 1\,m/s and Wang et al.'s 4.7\,\%; but this
-work flew at a tenth of their speed, so the comparison places its accuracy at low speed only. No other work in
-the table reports the transient of a UAV leaving the team in flight: Quan et al.\ remove or lose a UAV with
-94\,\% success but give no transient, and none flies a UAV joining. The rig's detach, with peak tilts of
-6.5--17.8$^\circ$ and dips of 5--7\,cm, is the only such number in the table; the attach has yet to give its rig
-number.
+work flew at a tenth of their speed, so the comparison places its accuracy at low speed only. No work in
+the table reports a number for the payload's attitude through a departure, or flies a join: Quan et al.\ release one of four
+UAVs under a 4\,kg load and report the cable tensions rebalanced after 13\,s, not the load's attitude, and none
+flies a UAV joining. The rig's detach, with peak tilts of 6.5--17.8$^\circ$ and dips of 5--7\,cm, is the only
+attitude number for a departure in the table; the attach has yet to give its rig number.
 
 \begin{table}[htbp]
 \centering
@@ -158,8 +158,8 @@ $\pm2.5 \times \pm2$\,m; peak 1 to 5\,m/s & RMSE 10.2\,cm (4.1\,\%) at 1\,m/s, 1
 mean 15.3\,ms (3 UAVs) \\
 \addlinespace
 Quan \cite{quan2025swarm},\newline 2025 (preprint) & Real, outdoor; 4 to 6 & 5\,kg; cables 3 to 4.5\,m &
-34\,m delivery; -- & -- (sim: 20--68\,\% of the baselines' error) & -- & one UAV removed or failed: 94\,\%
-success, transient --; joining not flown & decentralised dissipative; -- \\
+34\,m delivery; -- & -- (sim: 20--68\,\% of the baselines' error) & -- & one UAV released on command (4 to 3, 4\,kg):
+tensions rebalanced after 13\,s, attitude --; 94\,\% success over failures and disconnections; joining not flown & decentralised dissipative; -- \\
 \midrule
 This work & Real (mocap), twin; 4 & 0.86\,kg ring; rigid rods 0.55\,m & circle, radius 0.5\,m,
 0.125\,m/s; figure-eight $\pm1.0 \times \pm0.5$\,m, peak 0.25\,m/s & circle: mean 2.9\,cm (5.8\,\%),
@@ -257,8 +257,11 @@ time; Klausen et al.\ and Quan et al.\ fly outdoors on satellite and onboard sen
 %   Wind (PDF 14), not in the table: RMSE 0.048 vs 0.055 m (3 UAVs), 0.048 vs 0.070 m (4 UAVs).
 %   UAV failure, removal or addition: not tested anywhere in the 46 pages.
 %
-% --- Quan et al. 2025, arXiv 2509.03563v1, preprint (quan2025_...pdf; the local copy ends at PDF 9,
-%     mid-Results: Fig. 3 and the Methods are missing, so absent numbers may exist in the full paper) ---
+% --- Quan et al. 2025, arXiv 2509.03563v1, preprint (quan2025_...pdf; the full 33-page copy since 11 Oct) ---
+%   Unplug-and-play experiment (PDF 15-17, Fig. 6E-H): four robots, 4 kg, each with a cable release; Robot 2 releases
+%   at 40 s; the other three rebalance to a near-equilateral layout, tensions balanced after 13 s; Robot 1's velocity
+%   plotted. NO load attitude or swing number anywhere in the paper. Joining: prose only (PDF 7-8 and 19, 'connected
+%   to the payload and its neighbors'); varying team sizes in simulation are referred to S5 (supplementary).
 %   Teams of four, five and six (PDF 8, Results); 5 kg payload with five robots (PDF 8); 94 % success
 %   "under single-robot failure, disconnection events" with six robots (abstract, PDF 1-2; trial
 %   count not given). Cable labels 3, 3.5, 4, 4.5 m in the cable-length-uncertainty panel (Fig. 2,

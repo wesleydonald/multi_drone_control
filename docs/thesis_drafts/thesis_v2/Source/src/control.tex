@@ -146,11 +146,13 @@ Reinforcement learning has compensated for actuator saturation on top of a dynam
 
 Most of the work above assumes a fixed team \cite{efficient, wahbaKinodynamicMotionPlanning2024, quan2025swarm}; a few works let the team or its formation change during a mission, and none adds a UAV to a carried payload.
 
-Quan et al.\ \cite{quan2025swarm} show experimentally that when a UAV drops out the others self-organise and continue the trajectory with little payload swing and no replanning, a robustness rare in experiments. It does not extend to addition: a joining UAV receives no information about force sharing or its attachment.
+Quan et al.\ \cite{quan2025swarm} remove a UAV from a carried load in flight on hardware: four UAVs carry a 4\,kg load, one releases its cable on command at 40\,s, and the other three rebalance their tensions within 13\,s, decentralised and without replanning, a robustness rare in experiments. They report the cable tensions and one UAV's velocity through the event, not the load's attitude, and they describe a joining UAV only as one already connected to the payload and its neighbours, with no experiment: a joining UAV receives no information about force sharing or its attachment. Zeng et al.\ \cite{zeng2025marl} switch one of three MAVs off in flight and leave it hanging from a 1.4\,kg load, and the other two keep five degrees of freedom of the load under a learned decentralised policy that observes only the load's pose; the load's position and attitude are plotted through the loss, with no transient number.
 
 Bacheti et al.\ \cite{tensionbased} handle removal explicitly: before a UAV releases, the others reposition to minimise the transient, and the same reconfiguration contracts and restores the formation for narrow corridors in experiments. It changes the formation, not the team, as does the offline planner of \cite{wahbaKinodynamicMotionPlanning2024}, but the idea could serve the addition or removal of UAVs.
 
 For joining, the event-triggered decentralised architecture of Tasooji et al.\ \cite{tasoojiCooperativeControlMultiQuadrotors} suggests better scalability through less communication and computation, but varying team sizes are not analysed and the join protocol has neither experimental validation nor explicit force reallocation. None of these recomputes the force allocation for the new team at the moment a UAV leaves or joins.
+
+A cable that fails rather than releases is treated as a fault, in simulation. Liang et al.\ \cite{liang2021fault} estimate the unmeasured cable tensions with finite-time disturbance observers and reassign the load among the remaining quadrotors after a cable breaks; Saiella et al.\ \cite{saiella2021fault} let a supervisor reconfigure the network topology and the control objectives of a passivity-based formation when a vehicle faults; and Hajieghrary and Schmitt \cite{hajieghrary2026passive} route each vehicle's measured cable tension straight into its thrust command, so that five vehicles recover from one or two severed cables within a payload-pendulum period, with a hybrid input-to-state stability certificate. None of the three flies, where a time is given it is the recovery and not the detection of the loss, and none adds a UAV.
 % Papers found with Undermind and approved by Wesley, 10 Oct (DOIs, abstracts and sources in
 % docs/thesis_drafts/refs_2026-10-10.md; alternates listed there).
 Plug-and-play model predictive control lets subsystems join or leave a running network without losing
@@ -188,7 +190,7 @@ disassembles through a switchable magnet and pegs, cut the altitude jump after a
 dock micro-UAVs with an electro-permanent magnet that holds without power and switches on a current pulse,
 and Shankar et al.\ \cite{shankar2020inflight} come closest to joining a carried payload: one multirotor
 grasps a bar held aloft by another, confirms the grasp with a magnetic sensor before the first releases, and
-reschedules its gains for the new mass. Each docks to a rigid structure or to a single carrier; none joins
+reschedules its gains for the new mass. Miyazaki et al.\ \cite{miyazaki2018airborne} dock a small multirotor onto a bar that a larger one lowers on a winch and then raises, clear of its downwash, and the LEGION units of Sugihara et al.\ \cite{sugihara2026legion} dock end to end in flight through latched joints, hold a zero-clearance interlock by controlling the contact force and torque, and then grasp and carry objects as one articulated body, outdoors. Each docks to a rigid structure or to a single carrier; none joins
 a payload hung from a team, where the newcomer's pull at the weld can tilt the payload and the team's
 tensions must be redistributed.
 
