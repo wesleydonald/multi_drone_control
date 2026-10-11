@@ -67,11 +67,24 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 - The between-bar values (R1618, R1621) at the Thu gate.
 - The plan's D10-D17 and D21, and the thesis plan's D8-D16, all still open (see the plans).
 
-## Next, in order
-1. Wesley sends `docs/tejen_note_2026-10.md` (before Wed). The sheet, the freeze and the bands are done.
-2. Tue 13 desk rehearsal and load test. Wed 14 rig. Thu 15 gate and R10a. Fri 16: smoke on the candidate, name the SHA,
-   joint claim batch. Then the reviewers, then week5. Tue 20 rehearsal. 21-22 Oct: hover only unless TB6 passed and
-   the reviewer has signed off.
+## Next, in order (Wesley 11 Oct: the attach flights move to Wednesday afternoon, reviewer waived)
+1. **Pinned Wednesday install:** branch rig-wed (worktree mdc_wt/rig-wed, 0628d85 = the candidate adaf2c5 + the
+   R11a Wednesday config). Build it, then the twin rehearsal on the lab from it: m1x_r11a_hover_wed (contact_dz +0.05)
+   and m1c_low (the rig's -1 cm aim = R11b), two each.
+2. **Tuesday 13:** desk rehearsal on the rig-wed install (fake_mocap: the R11a and R11b sequences) and the F1 load test
+   with its bars. Prepare the commands Monday.
+3. **Wednesday 14:**
+   - the 09:00 measurements and Part A (W4/W5);
+   - Part B props-off on rig-wed;
+   - Part C, R11a then R11b on hover, only under its go conditions (sheet).
+   - QUAD4 uses QUAD2's values: kT 22, drop 0.575 (L cross-checked).
+4. **Tejen:** Wesley sends `docs/tejen_note_2026-10.md` (his presence and OK Wednesday, his test logs). With his logs,
+   read his height error at contact and his kT. That decides R11a's +0.03 or +0.05.
+5. **After Wednesday:**
+   - the claim batch on the rig-wed SHA, then the reviewer;
+   - 21-22 Oct: repeats, and the circle only under its gates;
+   - the QUAD4 record loader is optional, since the values are typed;
+   - week5 from the reviewed tree.
 
 ## Working constraints (beyond CLAUDE.md)
 - **Helpers:** one general-purpose helper agent at a time (Wesley).
