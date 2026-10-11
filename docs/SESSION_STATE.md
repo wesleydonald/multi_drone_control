@@ -42,11 +42,12 @@ Updated: Sun 11 Oct 2026, 16:30 AEDT (from `date`). Only what a new session need
 - **Reference:** `docs/reference.md` (architecture, negatives, traps, how to run). CURRENT_STATE.md is retired.
 
 ## Running
-- Lab PC: idle. The W4/W5 bands are frozen (R1626, R1627; freeze doc §2.4).
+- Lab PC: the smoke on the candidate m1-comove 793183d (`$CLAUDE_JOB_DIR/tmp/lab_smoke.txt`, waiter b5jvtdrip): m1c_nocatch_orbit,
+  tc_c2_hover_default, m1c_hover, m1_full_orbit. Score with tools/m1_score.py (rev 10), one row each.
 - Laptop: idle. Critic round 2 done: GO WITH CHANGES for hover R11a/R11b (rig card ## Critic; answers in decisions.md).
   Critic round 2 changes are on the candidate: m1-harden merged as 793183d (205 planner tests, gate pass). Guard
-  constants: wait 3 s, +0.05 above slack, guard-stage speed 0.06 m/s, follow-down slack 0.12. Next: the smoke on the
-  candidate (lab), then the QUAD4 record loader. No helper is running.
+  constants: wait 3 s, +0.05 above slack, guard-stage speed 0.06 m/s, follow-down slack 0.12. Next: the smoke
+  (running), then the QUAD4 record loader. No helper is running.
 - The other chat (thesis lane) finished 11 Oct; its work is merged (see above).
 
 ## TB6 (co-moving take-back, m1-comove c53ae0c; card rev 10 §6.2): COMPLETE, passes its gate criteria
