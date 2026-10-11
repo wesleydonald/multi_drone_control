@@ -16,11 +16,14 @@ its resting height and disarmed alone 0.2 s after reaching it."
   twin/new, two changes at once.)
 
 F_rig_detach -- "On the rig a detach by OCP resize, announced or found unannounced from the stretched rod,
-held the ring: peak tilt 6.5-17.8 deg and a few cm of height, and the twin predicted the unannounced
-transients within its spread (the announced one tilted about twice the twin's)."
-  hero: the ring tilt after the release, rig (payload gold) against the two twin repeats (grey), one column
-  per detach; second row: the ring's height error. Left out: the UAVs, the tensions (F_detach shows them).
-  Window: 3 s before the release to 10 s after.
+held the ring: a tilt rise of 5-17 deg and a few cm of height, and the twin predicted the unannounced
+transients within its spread (the announced one rose about 1.7 times the twin's)."
+  hero: the ring's tilt from its pre-release mean after the release, rig (payload gold) against the two twin
+  repeats (grey), one column per detach; second row: the ring's height error. Left out: the UAVs, the tensions
+  (F_detach shows them). Window: 2 s before the release to the rig's LAND.
+  11 Oct: the tilt is the signed T6 form (docs/freeze_2026-10-14.md 1.1, tools/release_bands.py): the tilt
+  vector's departure from its mean over the 5 s before the release, so the labelled rise is the frozen metric
+  (the twin cut at the rig flight's hold, Q1) and the plotted peak is that number.
 
 F_solve_time -- "In flight on the rig the planner's optimisation finished inside its 100 ms budget at every
 tick: median 28 ms with three UAVs, 53-57 ms with four (worst 94 ms)."
@@ -48,6 +51,7 @@ sign, in about 2 s; the approach that flies the body plus a fixed rod length kee
 import csv
 import glob
 import os
+import re
 import sys
 
 import numpy as np
@@ -61,6 +65,7 @@ import plot_style as ps  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(REPO, 'docs', 'figures')
+RESULTS = os.environ.get('MDC_RESULTS_ROOT', os.path.join(REPO, 'results'))   # the run directories (read only)
 
 # QUAD4 (drone 4, /drone_3) landing by itself: rig r303_4 (freed by its magnet, landed with the fleet at LAND,
 # old rule); twin R1257 (taken out by OFF in its hold, landed by itself, old rule); twin R1306 (the same, departed
@@ -71,11 +76,11 @@ DEPARTED = dict(rig=dict(path='results/rig/2026-10-08/r303_4_run', drone=3),
 
 
 def run_dir(rid):
-    return glob.glob(os.path.join(REPO, 'results', '*', f'{rid}_*'))[0]
+    return glob.glob(os.path.join(RESULTS, '*', f'{rid}_*'))[0]
 
 
 def load(spec):
-    d = os.path.join(REPO, spec['path']) if 'path' in spec else run_dir(spec['run'])
+    d = os.path.join(os.path.dirname(RESULTS), spec['path']) if 'path' in spec else run_dir(spec['run'])
     run = pd.read_csv(os.path.join(d, 'logs', 'run.csv')).drop_duplicates('t').reset_index(drop=True)
     ev = {}
     for e in csv.DictReader(open(os.path.join(d, 'logs', 'events.csv'))):
@@ -252,22 +257,31 @@ RIG_DETACH = [
     ('Unannounced, even three left', dict(path='results/rig/2026-10-08/r303_4_run'), ('R1140', 'R1145'), 'RELEASE'),
     ('Unannounced, 150$^\\circ$ gap left', dict(path='results/rig/2026-10-08/r304_3_run'), ('R1206', 'R1211'), 'RELEASE'),
 ]
-DETACH_T0, DETACH_T1 = -2.0, 7.5
+DETACH_T0, DETACH_T1 = -2.0, 8.0
 
 
-def detach_trace(spec, event):
+def t6_tag(spec):
+    """release_bands' tag for a figure spec: 'rig:<date>/<run>' or 'R####'."""
+    if 'path' in spec:
+        m = re.search(r'results/rig/([^/]+)/(.+?)_run$', spec['path'])
+        return f'rig:{m.group(1)}/{m.group(2)}'
+    return spec['run']
+
+
+def detach_trace(spec, event, horizon=None):
+    """t after the event, the ring's tilt from its pre-event mean (the T6 form), the height error, the events and the
+    T6 metrics (the tilt rise over event..LAND, or cut at `horizon`)."""
+    os.environ.setdefault('MDC_RESULTS_ROOT', RESULTS)
+    import release_bands as rb
     run, ev = load(spec)
+    r6 = rb.Run(t6_tag(spec))
+    mean, _, _ = r6.pre()
+    dev = np.linalg.norm(r6.th - mean, axis=1)
     t0 = ev[event][0]
     t = run.t.to_numpy() - t0
-    return t, run.payload_tilt_deg.to_numpy(), (run.payload_z - run.payload_ref_z).to_numpy(), ev
-
-
-def _rise(t, y):
-    pre = (t >= -3.0) & (t < 0.0)
-    post = (t >= 0.0) & (t <= 3.0)
-    base = float(np.nanmean(y[pre]))
-    k = int(np.flatnonzero(post)[np.nanargmax(y[post])])
-    return base, float(y[k]), float(t[k])
+    dz = (run.payload_z - run.payload_ref_z).to_numpy()
+    dev_run = np.interp(run.t.to_numpy(), r6.t, dev)            # run.csv rows without a ring pose are dropped in r6
+    return t, dev_run, dz, ev, r6.metrics(horizon)
 
 
 def fig_rig_detach():
@@ -278,41 +292,55 @@ def fig_rig_detach():
     gold = ps.PAYLOAD_LINE
     for col, (title, rig, twins, event) in enumerate(RIG_DETACH):
         ax, axz = axs[0, col], axs[1, col]
-        t, tilt, dz, ev = detach_trace(rig, event)
+        t, tilt, dz, ev, m_rig = detach_trace(rig, event)
         t_land = ev['LAND'][0] - ev[event][0] if 'LAND' in ev else 99.0
         t1 = min(DETACH_T1, t_land)
         tw = []
         for rid in twins:
-            tt, ti, dzz, _ = detach_trace(dict(run=rid), event)
+            tt, ti, dzz, _, m_tw = detach_trace(dict(run=rid), event, horizon=t_land)   # Q1: cut at the rig's hold
             tw.append((tt, ti, dzz))
-            stats[f'{col}_{rid}'] = dict(zip(('base', 'peak', 't_peak'), _rise(tt, ti)), dz_min=float(np.nanmin(dzz[(tt >= 0) & (tt <= 3)])))
+            stats[f'{col}_{rid}'] = dict(rise=m_tw['dtheta'], t_peak=m_tw['t_peak'], abs_peak=m_tw['abs_peak'],
+                                         dz_min=float(np.nanmin(dzz[(tt >= 0) & (tt <= 3)])))
         grid = np.arange(DETACH_T0, t1, 0.02)
         for yi, a in ((1, ax), (2, axz)):
             ys = np.array([np.interp(grid, tr[0], tr[yi] * (100 if yi == 2 else 1)) for tr in tw])
-            a.fill_between(grid, ys.min(0), ys.max(0), color='0.7', lw=0, zorder=1)
+            a.fill_between(grid, ys.min(0), ys.max(0), color='0.66', lw=0, zorder=1)
             a.plot(grid, ys.mean(0), color='0.5', lw=0.7, zorder=1)
         w = (t >= DETACH_T0) & (t <= t1)
         ax.plot(t[w], tilt[w], color=gold, lw=1.1, zorder=2)
         axz.plot(t[w], dz[w] * 100, color=gold, lw=1.1, zorder=2)
-        base, peak, tp = _rise(t, tilt)
+        peak, tp = m_rig['dtheta'], m_rig['t_peak']
         post = (t >= 0) & (t <= 3)
-        stats[f'{col}_rig'] = dict(base=base, peak=peak, rise=peak - base, dz_min=float(np.nanmin(dz[post])))
-        tw_rise = [stats[f'{col}_{r}']['peak'] - stats[f'{col}_{r}']['base'] for r in twins]
+        stats[f'{col}_rig'] = dict(rise=peak, t_peak=tp, abs_peak=m_rig['abs_peak'], sigma_pre=m_rig['sigma_pre'],
+                                   window_s=m_rig['window_s'], dz_min=float(np.nanmin(dz[post])))
+        tw_rise = [stats[f'{col}_{r}']['rise'] for r in twins]
         stats[f'{col}_twin_rise'] = (min(tw_rise), max(tw_rise))
-        ax.plot(tp, peak, 'o', color=gold, ms=3, zorder=3)
+        stats[f'{col}_ratio'] = peak / float(np.mean(tw_rise))
+        ax.plot(tp, peak, 'o', color=gold, ms=2.8, mfc='white', mew=0.9, zorder=3)
         lo, hi = round(min(tw_rise)), round(max(tw_rise))
-        twin_txt = f'+{lo}' if lo == hi else f'+{lo}--{hi}'
-        ax.annotate(f'rise: rig +{peak - base:.0f}$^\\circ$,\ntwin {twin_txt}$^\\circ$', xy=(tp, peak),
-                    xytext=((0.30, 0.93), (0.45, 0.70), (0.30, 0.93))[col], textcoords='axes fraction', fontsize=8,
+        twin_txt = f'{lo}' if lo == hi else f'{lo}--{hi}'
+        ax.annotate(f'$\\Delta\\theta$: rig {peak:.0f}$^\\circ$,\ntwin {twin_txt}$^\\circ$', xy=(tp, peak),
+                    xytext=((0.30, 0.84), (0.40, 0.66), (0.34, 0.90))[col], textcoords='axes fraction', fontsize=8,
                     color='0.25', ha='left', va='top',
                     arrowprops=dict(arrowstyle='-', color='0.5', lw=0.5, shrinkA=1, shrinkB=2))
+        # the dip (the caption's number), marked and labelled like the rise
+        kd = int(np.flatnonzero(post)[np.nanargmin(dz[post])])
+        tw_dip = sorted(-100 * stats[f'{col}_{r}']['dz_min'] for r in twins)
+        axz.plot(t[kd], 100 * dz[kd], 'o', color=gold, ms=2.8, mfc='white', mew=0.9, zorder=3)
+        axz.annotate(f'dip: rig {-100 * dz[kd]:.1f}, twin {tw_dip[0]:.1f}--{tw_dip[-1]:.1f}\\,cm', xy=(t[kd], 100 * dz[kd]),
+                     xytext=(0.98, 0.06), textcoords='axes fraction', fontsize=8, color='0.25', ha='right', va='bottom',
+                     arrowprops=dict(arrowstyle='-', color='0.5', lw=0.5, shrinkA=1, shrinkB=2))
         for a in (ax, axz):
-            a.axvline(0.0, color='0.2', lw=0.6, ls=':', zorder=0)
+            a.axvline(0.0, color='0.5', lw=0.5, zorder=0)
+            a.axvline(t_land, color='0.5', lw=0.5, zorder=0)
+        stats[f'{col}_land_s'] = t_land
         if 'DETECTED' in ev and event == 'RELEASE':
             td = ev['DETECTED'][0] - ev[event][0]
             stats[f'{col}_detect_s'] = td
             for a in (ax, axz):
-                a.axvline(td, color='0.2', lw=0.6, ls=(0, (1, 2)), zorder=0)
+                a.axvline(td, color='0.5', lw=0.5, ls=(0, (1, 1.5)), zorder=0)
+            ax.annotate(f'found +{td:.2f}\\,s', xy=(td, 19.5), xytext=(2, 0), textcoords='offset points',
+                        fontsize=8, color='0.3', ha='left', va='top')
         axz.axhline(0.0, color='0.75', lw=0.5, zorder=0)
         ax.annotate(f"({'abc'[col]}) {title}", xy=(0, 1), xycoords='axes fraction', xytext=(0, 4),
                     textcoords='offset points', fontsize=8, ha='left', va='bottom')
@@ -320,19 +348,18 @@ def fig_rig_detach():
                      textcoords='offset points', fontsize=8, ha='left', va='bottom')
     axs[0, 1].annotate('release', xy=(0.0, 19.5), xytext=(-2, 0), textcoords='offset points', fontsize=8,
                        color='0.3', ha='right', va='top')
-    td = stats['1_detect_s']
-    axs[0, 1].annotate(f'found +{td:.2f}\\,s', xy=(td, 19.5), xytext=(2, 0), textcoords='offset points',
-                       fontsize=8, color='0.3', ha='left', va='top')
-    axs[0, 0].set_ylabel(r'Ring tilt (\si{\degree})')
+    axs[0, 0].annotate('LAND', xy=(stats['0_land_s'], 19.5), xytext=(-2, 0), textcoords='offset points', fontsize=8,
+                       color='0.3', ha='right', va='top')
+    axs[0, 0].set_ylabel(r'Tilt departure (\si{\degree})')
     axs[0, 0].set_ylim(0, 20)
     axs[0, 0].set_yticks([0, 5, 10, 15, 20])
     axs[1, 0].set_ylabel('Ring height error (cm)')
     axs[1, 0].set_ylim(-8, 4)
     axs[1, 0].set_yticks([-8, -4, 0, 4])
     axs[1, 0].set_xlim(DETACH_T0, DETACH_T1)
-    axs[1, 0].set_xticks([-2, 0, 2, 4, 6])
-    axs[0, 2].annotate('rig, one run', xy=(7.3, 12.5), fontsize=8, color=gold, ha='right', va='bottom')
-    axs[0, 2].annotate('twin, two runs', xy=(7.3, 10.3), fontsize=8, color='0.45', ha='right', va='bottom')
+    axs[1, 0].set_xticks([-2, 0, 2, 4, 6, 8])
+    axs[0, 2].annotate('rig, one run', xy=(7.5, 12.5), fontsize=8, color=gold, ha='right', va='bottom')
+    axs[0, 2].annotate('twin, two runs', xy=(7.5, 10.3), fontsize=8, color='0.45', ha='right', va='bottom')
     fig.supxlabel('$t$ after the release (s)', fontsize=9)
     fig.align_ylabels()
     stem = os.path.join(OUT, 'F_rig_detach', 'rig_detach')
