@@ -235,7 +235,7 @@ This mirrors Wesley's "one graph for sim and rig" answer (ladder Q6).
 | H1 | his fork | the same, and refuse an empty `serial_port` | elrs_interface_irl.py:200,209 | tell Tejen |
 | O4 | ours | real + partner_attached: refuse an empty `mocap_magnet_tip_body_id` (otherwise the rejoin weld can never fire: magnet_attachment_manager.py:437-441) | three_attach_launch.py near :575 | none |
 | O3 | ours | mocap node `extra_bodies` (`id:topic` list → MotionCaptureState); real_io arg `mocap_extra_bodies` | motion_capture_publisher_node.py:321-345, :468-484; real_io_launch.py:~76,:130-135 | none (defaults unchanged, test like P13) |
-| O1 | ours | elrs_mux `start_ours` param (boot `_attached=True`, policy switched); passed `partner_attached` | elrs_mux.py:66-122; three_attach_launch.py:643-649 | **Wesley** (authority rule; matches authority.md:74) |
+| O1 | ours | elrs_mux `start_ours` param (boot `_attached=True`, policy switched); passed `partner_attached` | elrs_mux.py:66-122; three_attach_launch.py:643-649 | **Wesley** (authority rule; matches the authority protocol, docs/archive/tejen_integration_notes_2026-09.md §4) |
 | O5 | ours | new `magnet_gate` node (drone_magnet); manager `magnet_latch_topic` → `/drone_3/magnet_ours`; gate in three_attach when real and partner | new file; three_attach_launch.py:814 | **Wesley** (P10 magnet path) + **Tejen** (his magnet goes through our gate) |
 | O7 | ours | `m1_rig_launch.py` + `configs/rig/m1_partner.yaml` | new | Wesley (attach geometry typed from the canonical config) |
 | O8 | ours | `tools/fake_mocap.py --udp HOST:PORT --tip-body 24 --pickup-body 6` (Motive text packets; SIGUSR1 moves the tip onto plate 3); `tools/graph_audit.py` (expected-publisher table → PASS/FAIL) | tools | none |
