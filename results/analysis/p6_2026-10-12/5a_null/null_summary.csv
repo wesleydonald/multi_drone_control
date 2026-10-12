@@ -1,0 +1,4 @@
+window_s,traj,pseudo_events,flights,flights_list,null_mean,null_sd,null_p95,null_max,sd_of_flight_means,sigma_pre_mean,mde_n2_normal,mde_n2_bootstrap,mde_n2_sigma_rig,mde_n3_normal,mde_n3_bootstrap,mde_n3_sigma_rig
+7.0,hover,23,4,r000014 r0007 r002 r2008e60,4.79,0.77,6.0,6.12,0.9,1.56,3.7,3.7,7.6,4.6,4.4,9.3
+7.0,path,107,5,r000014 r0005 r006 r206e60 r305,5.58,1.21,7.22,7.81,1.02,2.14,5.8,5.9,7.6,7.2,6.9,9.3
+15.0,path,43,3,r0005 r006 r206e60,6.27,1.52,8.32,8.46,1.74,1.99,7.3,7.4,7.6,9.0,8.4,9.3

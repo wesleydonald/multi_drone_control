@@ -19,7 +19,8 @@ magnets that let go with no command: r0013's two survivors and r200006's two), f
     flight's event-to-LAND (Q1), the absolute peak, the scalar rise, sigma_pre, the reference-still flag (Q12) and
     the time back in band (scored only when LAND comes 10 s or more after the event; t_back_note says why not);
   * beside the freeze, with their own scorers: the dip (the ring's lowest height against its pre-window mean,
-    event to the window end); the steady offset (the ring against its reference, xy and z, over the pre-window and
+    event to the window end; drop_below_ref_cm, its largest drop below its reference over the same window, is the
+    other reading in use); the steady offset (the ring against its reference, xy and z, over the pre-window and
     over the last 2 s of the window); the landing lean (the largest survivor tilt 1.2 s after the ring touches
     down, ring z within 5 cm of its rest: the 7 Oct cable_mocap card's reading); the survivors' support margin and
     largest gap after the leaver (metrics.cog_margin);
@@ -383,6 +384,7 @@ def analyse(spec, results, rig_runs, rb):
     pre5 = (t >= t_ev - 5.0) & (t < t_ev)
     win = (t >= t_ev) & (t <= t_end)
     out['dip_cm'] = round(100 * float(np.nanmean(z[pre5]) - np.nanmin(z[win])), 1)
+    out['drop_below_ref_cm'] = round(-100 * float(np.nanmin(z[win] - r.payload_ref_z.to_numpy(float)[win])), 1)
     out['offset_pre_xy_cm'], out['offset_pre_z_cm'] = offsets(r, t_ev - 5.0, t_ev)
     out['offset_post_xy_cm'], out['offset_post_z_cm'] = (offsets(r, t_end - POST2_S, t_end)
                                                          if t_end - t_ev >= POST2_MIN_S else ('', ''))
@@ -445,7 +447,7 @@ def plot(rows, out):
 SHOW = ['run', 'kind', 'path', 'pull', 'plan_deg', 'layout_deg', 'leaver_deg', 'gap_after_deg', 'margin_after_mm',
         'leaver_t_before_N', 'planned_step_max_N', 'static_step_max_N', 'detection_s', 'window_end', 'window_s',
         'dtheta_deg', 'dtheta_pairwin_deg', 'pair_window_s', 't_peak_s', 'abs_peak_deg', 'scalar_rise_deg',
-        'sigma_pre_deg', 'ref_still_s', 'pre_flag', 't_back_s', 't_back_note', 't_back_2s_s', 'dip_cm',
+        'sigma_pre_deg', 'ref_still_s', 'pre_flag', 't_back_s', 't_back_note', 't_back_2s_s', 'dip_cm', 'drop_below_ref_cm',
         'offset_pre_xy_cm', 'offset_pre_z_cm', 'offset_post_xy_cm', 'offset_post_z_cm', 'landing_lean_deg',
         'slips_after_event_s', 'old_scalar_rise_deg', 'note']
 
