@@ -17,19 +17,19 @@
 - Swap all four packs before R6 and again before R9, whatever they read.
 - If there are fewer than three sets, drop R2/R3 first (Thursday can fly them), not R4/R5.
 
-## Setup (every terminal, RViz too: `w5`, never `mdc`)
+## Setup (every terminal, RViz too: `w5`)
 
-`mdc` sources the main tree, which is not what flies today. The combined launch refuses to start without the two
-exports, so they are in `w5` all day.
+The main tree `~/multi_drone_control` is on week5 (12 Oct). `w5` is `mdc` plus the `cd` and the two exports the
+combined launch refuses to start without, so use it all day.
 
 ```bash
-alias w5='source ~/ros2_humble/install/setup.bash && cd ~/mdc_wt/week5 && source install/setup.bash && export ROS_LOCALHOST_ONLY=1 ROS_DOMAIN_ID=23'
+alias w5='source ~/ros2_humble/install/setup.bash && cd ~/multi_drone_control && source install/setup.bash && export ROS_LOCALHOST_ONLY=1 ROS_DOMAIN_ID=23'
 w5
-fleet() { python3 ~/mdc_wt/week5/tools/fleet_reach.py --send "$1"; }   # refuses unless the fleet manager answers
+fleet() { python3 ~/multi_drone_control/tools/fleet_reach.py --send "$1"; }   # refuses unless the fleet manager answers
 git log --oneline -1                     # 46ac389 or later on week5
 colcon build --symlink-install --packages-select bringup mpc_planner tracker fleet_manager dissipative_planner drone_magnet simulation_communication drone_communication utility_objects && source install/setup.bash
 python3 tools/prebuild_planner.py 2 3 4 --load-mass 0.86 --drone-mass 0.55 --cable-len 0.55
-C=$HOME/mdc_wt/week5/configs/rig
+C=$HOME/multi_drone_control/configs/rig
 W=0.031; L=0.58; R=0.012      # PLACEHOLDERS: type P3's W, P4's L, P7's R as you get them
 R="tools/rig_flight.sh real_control_launch.py num_drones:=4 target_z:=1.0 lift_ramp_vel:=0.15"
 D="mode:=dissipative attach_azimuths_deg:=30,90,150,270"
@@ -142,7 +142,7 @@ python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_plan
 
 ### P13 Load test (props off): the go for R6-R9
 
-Procedure: `~/mdc_wt/week5/docs/rig_2026-10-14_load_test.md`, run from week5. The full graph runs for 10 min, with no
+Procedure: `docs/rig_2026-10-14_load_test.md`. The full graph runs for 10 min, with no
 CLI calls inside the window. `tools/load_check.py` must print `F1 load bars: PASS`. After the window:
 `ros2 topic list | grep /tejen`, and note his MPC's state topics for the record list.
 

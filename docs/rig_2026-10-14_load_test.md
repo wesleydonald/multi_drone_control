@@ -3,7 +3,7 @@
 The full combined graph (both stacks, real radios, real Motive), props off, for 10 min. The F1 bars (rig card
 2026-10-21_combined_m1_rig §5.1, frozen in the card) decide whether R11a flies today. The same session checks the Part C
 launch lines (they refuse with W or L missing or wrong), the kill path, the coil gate and the mux.
-Install: `~/mdc_wt/week5` (the testing tree since 12 Oct; was rig-wed 0628d85). Order: the refusals, the 10 min, K1 and the score, then K2 and K3.
+Install: `~/multi_drone_control` on week5 (since 12 Oct; was rig-wed 0628d85). Order: the refusals, the 10 min, K1 and the score, then K2 and K3.
 
 ## 0. Set up (after W5)
 - Props off on all four, packs in (the radios and FCs must be powered). Ring at its start spot, carriers on plates
@@ -12,11 +12,11 @@ Install: `~/mdc_wt/week5` (the testing tree since 12 Oct; was rig-wed 0628d85). 
   every week4 terminal.
 - Three fresh terminals: T2 (launch), T3 (ours), T4 (his commands, on this laptop). Paste into each:
 ```bash
-source ~/ros2_humble/install/setup.bash && source ~/mdc_wt/week5/install/setup.bash && cd ~/mdc_wt/week5
+source ~/ros2_humble/install/setup.bash && source ~/multi_drone_control/install/setup.bash && cd ~/multi_drone_control
 export ROS_LOCALHOST_ONLY=1 ROS_DOMAIN_ID=23
-export MDC_REPO_ROOT=$HOME/mdc_wt/week5      # no longer required (the root lookup accepts a worktree since the fix), harmless
-fleet() { python3 ~/mdc_wt/week5/tools/fleet_reach.py --send "$1"; }
-C=$HOME/mdc_wt/week5/configs/rig
+export MDC_REPO_ROOT=$HOME/multi_drone_control      # no longer required (the root lookup accepts a worktree since the fix), harmless
+fleet() { python3 ~/multi_drone_control/tools/fleet_reach.py --send "$1"; }
+C=$HOME/multi_drone_control/configs/rig
 A="tools/rig_flight.sh real_control_launch.py mode:=attach target_z:=1.0 lift_ramp_vel:=0.15 enable_approach_mpc:=false mocap_magnet_tip_body_id:=24 params_file:=$C/attach_m1.yaml"
 W=0.031; L=0.58; R=0.012      # PLACEHOLDERS: type the 09:00 record (item 3 W, item 4 L, item 7(b) R)
 P=$(python3 -c "print(round($L-0.003,3))"); Q=$(python3 -c "print(round($L-0.04,3))")
@@ -105,7 +105,7 @@ python3 tools/load_check.py results/rig/2026-10-14/lt --log results/rig/2026-10-
   - Our side does nothing: the carriers stay armed and mux_state stays `partner`. The silence takeover (card F1-new)
     is not built. Desk 11 Oct: no fleet reaction.
   - Then Ctrl-C T2 with the carriers armed: every motor stops (the radios die with T2). Bar: within 0.5 s, by video.
-  - T3: `pgrep -af mdc_wt/week5/install` prints nothing.
+  - T3: `pgrep -af multi_drone_control/install` prints nothing.
 
 ## 4. Coil gate and mux (between `fleet arm` and his TAKEOFF; the his-stream check and our span after `E`)
 - **T2 at boot:**
