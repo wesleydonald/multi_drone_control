@@ -8,7 +8,7 @@ Where the rest went:
 - **What is running and what's next:** `docs/SESSION_STATE.md`.
 - **Decisions:** `docs/decisions.md`. The locked ones are in `CLAUDE.md`.
 - **Run results:** `results/registry.csv`.
-- **Plans:** `docs/plan_m1_remaining_2026-10-11.md` and `docs/thesis_plan_2026-10-11.md`.
+- **Plans:** `docs/archive/plan_m1_remaining_2026-10-11.md` and `docs/thesis_plan_2026-10-11.md`.
 - **The old sections 3 (status), 4 (results to 7 Oct), 5 (locked decisions), 7 (open problems) and 8 (plan):** in git,
   `git show 0e91d86:CURRENT_STATE.md`.
 
@@ -97,7 +97,7 @@ mocap (/drone_i, /payload motion_capture_state)
   `kt_trim` on, §4.10) are in `simulation_assets/old_worlds/` and fly on `sim_legacy.yaml`
   with `legacy:=true`, which `tools/run_experiment.py` infers from an `old_worlds/` or
   `tejen/` world path. The SIL bench and `mode:=attach` / `mode:=network` exist only on the
-  legacy profile until ported; what has to be flown again on the twin is `docs/redo_on_twin.md`.
+  legacy profile until ported; what has to be flown again on the twin is `docs/archive/redo_on_twin.md`.
 - **Detach** has two modes: `reconfig_mode:=network` (network redistributes, then hands
   back to a pre-built OCP for the new n) and `reconfig_mode:=ocp` (the OCP resizes
   directly; attach geometry is a runtime parameter so the survivors keep their true
@@ -152,7 +152,7 @@ the rig I/O itself. Defaults: `src/bringup/config/real.yaml` (§12); every rig m
 rig carry's thrust map and geometry since 2026-10-03 (M1/M2 and free_hover unflown on them).
 `tools/param_diff.py --sim-vs-real` shows the deltas. Desk test without the rig: `tools/fake_mocap.py`.
 Pre-arm checklist: `tools/preflight.py --real`. Rig checklist for attach:
-`docs/experimentation/real_attach_gap.md`.
+`docs/archive/experimentation/real_attach_gap.md`.
 
 Rig facts (updated 2026-09-29): our drones 0-3 = Tejen's quad1-4 = `/dev/QUAD1..4` (udev: four unique serials) =
 Motive bodies 11-14 (`mocap_drone_body_ids`), ring body 8, Tejen's pickup object 6 (Wesley 2026-09-29; the code defaults
@@ -358,14 +358,22 @@ ros2 launch bringup sim_control_launch.py mode:=attach load_traj:=circle traj_sp
 | `configs/experiments/*.yaml`, `configs/sil/*.yaml` | every flown configuration |
 | `tools/` | gate, runner, bench, metrics, plots, preflight, geometry and parameter checks |
 | `results/registry.csv`, `docs/decisions.md` | what has been tried; what was decided |
-| `docs/design/` | velocity loop, measured-force loop, SIL bench, fleet safety |
-| `docs/experimentation/` | control-methods survey, hybrid dwell, robustness table, rig gap, agenda |
+| `docs/` (top) | `SESSION_STATE.md`, `decisions.md`, this manual, the thesis plan and the figure plan: only what is current |
+| `docs/rig/` | the next rig day's sheet, load test and review; the freeze doc; the QUAD1 checklist |
+| `docs/tejen/` | the note to Tejen, his open questions, the classification of his sync |
+| `docs/reports/` | morning reports and briefs |
+| `docs/analysis/` | offline analysis write-ups (the P6 set, the counter-swing) |
+| `docs/experiments/` | every experiment card (registry rows cite them) |
+| `docs/figures/` | thesis figure outputs, captions and `PROVENANCE.md` |
+| `docs/design/` | velocity loop, measured-force loop, SIL bench, fleet safety, the M1 contact contract |
+| `docs/archive/` | finished plans, past rig sheets, reviews, overnight notes. A registry row's `docs/X.md` that is not at the top any more is `docs/archive/X.md` |
+| `docs/archive/experimentation/` | control-methods survey, hybrid dwell, robustness table, rig gap, agenda |
 | `results_archive/` | tracked data behind thesis figures; `configs/thesis_figures.yaml` + `tools/thesis_figures.py` regenerate them |
 | `src/tejen_mission`, `src/tejen_mpc`, `src/tejen_dynamic_planner`, `src/tejen_utility_objects` | Tejen's forked code (base a7524bae); our changes listed in `authority.md` §6 |
 | `simulation_assets/tejen/`, `simulation_assets/three_attach_partner*.sdf`, `simulation_assets/models/x3_drone3_magnet_rod_partner*.sdf` | his worlds; M1 worlds (incl. `_m100` 0.1 kg object, `_nopick` bench copies); the partner rod models |
 | `src/simulation_communication/.../rate_pid.py` | the sim rate PI shared by every sim bridge |
 | `tools/sim_test/` | M2 driver `drive_m2_handover.py`, stage-1/2 single-drone benches, his runner scripts |
-| `docs/GOALS.md`, `authority.md` | the integration loop's plan and status; Tejen integration notes |
+| `docs/archive/GOALS.md`, `authority.md` | the integration loop's plan and status; Tejen integration notes |
 
 ### Rename map (3 Oct 2026)
 

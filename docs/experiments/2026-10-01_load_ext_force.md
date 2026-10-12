@@ -1,6 +1,6 @@
 # 2026-10-01 measured external force on the carried system, fed to the planner (plan B4)
 
-Plan: `docs/plan_2026-10-02_rig_fixes.md` Part B, step B4.
+Plan: `docs/archive/plan_2026-10-02_rig_fixes.md` Part B, step B4.
 
 History, read before this card: `2026-09-23_effective_load_force.md`, deleted 09-23.
 - That estimator was a Kalman filter driven by the OCP's own planned node-0 acceleration.

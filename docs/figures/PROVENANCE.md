@@ -65,7 +65,7 @@ the run directories to the lists at the top of the script (`PARITY_ATTACH['rig']
 ## F_rig_detach, F_rig_circle_detach, F_twin_rig_parity on the signed release metric (11 Oct 2026)
 
 The tilt panels of the three figures moved from the scalar ring tilt to the signed T6 release metric
-(`docs/freeze_2026-10-14.md` 1.1, computed by `tools/release_bands.py`): the tilt departure is the length of the ring's
+(`docs/rig/freeze_2026-10-14.md` 1.1, computed by `tools/release_bands.py`): the tilt departure is the length of the ring's
 tilt vector minus its mean over the 5 s before the release, and the tilt rise is its peak from the release to LAND, the
 twin cut at the rig flight's hold. The parity figure's ratios are therefore the ledger's class factors (0.85, 1.05,
 1.70, 1.71); its attach placeholder is gone (the rig attach goes into the ledger figure when it flies), so R1404/R1410

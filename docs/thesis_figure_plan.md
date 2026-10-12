@@ -1,7 +1,7 @@
 # Thesis figures and tables: plan (4 Oct 2026, overnight)
 
 5 Oct 2026: the rig twin is the simulation. Every result flown on the legacy worlds or the SIL bench
-is a `\redo` box in the thesis; what to fly for each is `docs/redo_on_twin.md`. Rows below that rest on
+is a `\redo` box in the thesis; what to fly for each is `docs/archive/redo_on_twin.md`. Rows below that rest on
 legacy or SIL runs are superseded by that list.
 
 Rule: one figure per claim, built with the thesis-figure skill (print size, the RViz palette, no run ids;

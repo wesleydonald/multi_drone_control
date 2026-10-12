@@ -142,7 +142,7 @@ python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_plan
 
 ### P13 Load test (props off): the go for R6-R9
 
-Procedure: `docs/rig_2026-10-14_load_test.md`. The full graph runs for 10 min, with no
+Procedure: `docs/rig/rig_2026-10-14_load_test.md`. The full graph runs for 10 min, with no
 CLI calls inside the window. `tools/load_check.py` must print `F1 load bars: PASS`. After the window:
 `ros2 topic list | grep /tejen`, and note his MPC's state topics for the record list.
 

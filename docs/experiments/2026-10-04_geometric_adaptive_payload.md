@@ -130,7 +130,7 @@ assumptions our rods, pivot and Betaflight loop violate.
     transient and aborted 2 of 2.
   - Per-drone integrators: vel_ki 1 (R0077) tilted the ring to 60 deg.
   - Adaptive action on the ring: the L1 card, which "reduces to an integral-like linear controller".
-  - docs/experimentation/control_methods_survey.md:135 ruled out full SE(3) Lee control.
+  - docs/archive/experimentation/control_methods_survey.md:135 ruled out full SE(3) Lee control.
 - **Simplest explanation.** The +4.8 cm is the cascade's force balance (overnight; offset_free_ekf
   withdrawn). Lee's adaptive terms integrate the payload error, so "zero by construction" is z_ki in
   a new place. No arm separates the architecture from the integrator.

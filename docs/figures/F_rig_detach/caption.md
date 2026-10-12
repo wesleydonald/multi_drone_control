@@ -4,7 +4,7 @@ File: `rig_detach.pdf` (full width, 6.27 x 3.0 in; `\includegraphics[width=\text
 Script: `python3 -c "import tools.thesis_rig_figures as f; f.fig_rig_detach()"` with `MDC_RESULTS_ROOT` set to the
 results root (prints every number below in its stats).
 
-11 Oct: the tilt panels are on the signed T6 release metric (docs/freeze_2026-10-14.md 1.1): the tilt vector's departure
+11 Oct: the tilt panels are on the signed T6 release metric (docs/rig/freeze_2026-10-14.md 1.1): the tilt vector's departure
 from its mean over the 5 s before the release, and the labelled rise is the frozen tilt rise. The dips keep the 3 s window.
 
 ## Caption

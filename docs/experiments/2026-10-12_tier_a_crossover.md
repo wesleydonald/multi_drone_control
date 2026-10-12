@@ -3,7 +3,7 @@
 Card written 12 Oct 2026 (13:30 from `date`), before any config and before any run; rev 2 at 13:43 after the
 critic's round 1 (under "## Critic": the challenge verbatim, then what rev 2 changed and what is left for Wesley). Twin only (the lab PC, when free;
 not the laptop before Wednesday's rig day). Predictions and bars are the ones signed on 11 Oct in
-`docs/freeze_2026-10-14.md` (1.2 the resolution rule, 1.5 the 1-DOF signs); nothing here re-opens them. Labels per
+`docs/rig/freeze_2026-10-14.md` (1.2 the resolution rule, 1.5 the 1-DOF signs); nothing here re-opens them. Labels per
 freeze 1.3: T2, T3 and T4 are **new predictions** (no arm of either pair had flown at the signature).
 
 ## 1. Question
@@ -20,7 +20,7 @@ the size and the duration of the mismatch between the pull the survivors apply a
 
 - **Announced, ramped (soft v2):** the plan steps to the new shares as the leaver unloads over 3 s; the model is right
   (the twin's plant is the planner's). k = 0 applies the right pull at once; k = 1 applies it late by the measurement lag
-  and reports the ring's own rocking back into the thrust (`docs/counter_swing_2026-10-12.md`). **T2: planned <
+  and reports the ring's own rocking back into the thrust (`docs/analysis/counter_swing_2026-10-12.md`). **T2: planned <
   measured.**
 - **Unannounced:** the planner learns at detection, about 0.3 s after the magnet opens (0.27-0.42 s, 8 Oct twin and
   rig); k = 0 flies the old shares for that long and then steps; k = 1 follows the true pull from the first 80 ms. **T3:
@@ -159,7 +159,7 @@ Removal plan: the UNLOAD event is a log line and a lookup; if the card is droppe
 commit.
 
 **What the result cannot say.** The twin has no magnet hold, no slack tether, no mocap noise and none of the rig's
-1.4-1.7 Hz rocking (`docs/counter_swing_2026-10-12.md`); the measured pull's costs on the rig (the swing fed forward)
+1.4-1.7 Hz rocking (`docs/analysis/counter_swing_2026-10-12.md`); the measured pull's costs on the rig (the swing fed forward)
 are not in these runs. A twin crossover is a statement about the mechanism in the planner's own plant; the rig rows of
 the plan's P14 (28-29 Oct) decide whether it carries.
 

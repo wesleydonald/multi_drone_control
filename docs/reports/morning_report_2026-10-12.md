@@ -49,5 +49,5 @@ repo.
    default before decision 3 and Tejen's OK.
 5. **R1673's tumble.** Ask Tejen whether QUAD2/QUAD4 has ever oscillated after his takeoff. Ask for a log of one of his
    takeoffs if he has one.
-6. **Still open from before:** send the Tejen note (docs/tejen_note_2026-10.md; add item 5's question). Delete
+6. **Still open from before:** send the Tejen note (docs/tejen/tejen_note_2026-10.md; add item 5's question). Delete
    week1-ready-for-testing (`git branch -D`, yours).

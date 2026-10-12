@@ -3,7 +3,7 @@
 File: `twin_rig_parity.pdf` (full width, 6.27 x 1.95 in; `\includegraphics[width=\textwidth]{...}`).
 Script: `python3 tools/thesis_rig_twin_figures.py parity` (prints every number below, with the ratios).
 
-11 Oct: panel (a) is the signed T6 tilt rise (docs/freeze_2026-10-14.md 1.1; the twin cut at the rig flight's hold,
+11 Oct: panel (a) is the signed T6 tilt rise (docs/rig/freeze_2026-10-14.md 1.1; the twin cut at the rig flight's hold,
 Q1), so its ratios are the ledger's class factors (0.85, 1.05, 1.70, 1.71). The attach placeholder is gone (thesis
 plan: Fig 13 -> F16, placeholder point removed); the rig attach goes into the ledger figure when it flies.
 

@@ -1,7 +1,7 @@
 # Note to Tejen before Wednesday (final 12 Oct, for Wesley to send)
 
 Wesley: send it as it stands or cut it. This replaces items 4, 6 and 8 of the 9 Oct list
-(docs/tejen_questions_2026-10.md); the rest of that list stands.
+(docs/tejen/tejen_questions_2026-10.md); the rest of that list stands.
 
 ---
 

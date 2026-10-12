@@ -3,7 +3,7 @@
 File: `rig_circle_detach.pdf` (full width, 6.27 x 3.75 in; `\includegraphics[width=\textwidth]{...}`).
 Script: `python3 tools/thesis_rig_twin_figures.py circle` (prints every number below).
 
-11 Oct: panel (c) is on the signed T6 release metric (docs/freeze_2026-10-14.md 1.1): the tilt vector's departure from
+11 Oct: panel (c) is on the signed T6 release metric (docs/rig/freeze_2026-10-14.md 1.1): the tilt vector's departure from
 its mean over the 5 s before the release; the labelled rise is the frozen tilt rise (the twin cut at the rig's hold).
 
 ## Caption

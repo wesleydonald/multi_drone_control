@@ -1,6 +1,6 @@
 # QUAD4 off-nominal endings while Tejen's stream flies it: the tilt cut, the stuck take-back, the partner's own disarm
 
-**Rev 4** (11 Oct, after Wesley's 11 Oct decisions D5-D7 on docs/plan_m1_remaining_2026-10-11.md; written before any
+**Rev 4** (11 Oct, after Wesley's 11 Oct decisions D5-D7 on docs/archive/plan_m1_remaining_2026-10-11.md; written before any
 run on its tree).
 - **Tree:** branch m1-tiltcut4, a merge of m1-rig 0210a27 into m1-tiltcut3 ffa41ef (section 9.1). Its commit is named
   here before the first run on it.
