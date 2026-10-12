@@ -25,13 +25,31 @@ __pycache__/
 # Run logs
 logs/
 
-# Flight data, archived datasets, notes and write-ups: local only (2026-09-16)
+# Flight data and archived datasets: local only (2026-09-16). results/registry.csv and results/analysis/ are
+# tracked anyway (added with -f).
 results/
 results_archive/
 general/
-docs/
-CURRENT_STATE.md
 DISSIPATIVE_TRACKING_ISSUE.md
+# Local only: the papers we read (copyright, 72 MB) and his twin's run logs (generated, 96 MB)
+docs/papers/
+simulation_assets/tejen/logs/
+# LaTeX build output of the thesis drafts
+docs/thesis_drafts/**/*.aux
+docs/thesis_drafts/**/*.bbl
+docs/thesis_drafts/**/*.bcf
+docs/thesis_drafts/**/*.blg
+docs/thesis_drafts/**/*.fdb_latexmk
+docs/thesis_drafts/**/*.fls
+docs/thesis_drafts/**/*.lof
+docs/thesis_drafts/**/*.lot
+docs/thesis_drafts/**/*.nlo
+docs/thesis_drafts/**/*.out
+docs/thesis_drafts/**/*.run.xml
+docs/thesis_drafts/**/*.toc
+docs/thesis_drafts/**/main.log
+docs/thesis_drafts/**/main.pdf
+**/.pytest_cache/
 
 # Generated solver output for the approach MPC and the offline harness's PNGs
 c_generated_code_approach_mpc/
@@ -45,9 +63,6 @@ dissipative_verify/
 docs/claude-setup-proposal/
 .mcp.json
 thesis/
-
-configs/
-tools/
 
 # integration notes for Wesley (not committed)
 authority.md
