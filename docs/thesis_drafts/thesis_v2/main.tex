@@ -26,6 +26,13 @@
   \fcolorbox{redoframe}{redoback}{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\small\raggedright
   \textbf{To re-fly on the rig twin:} #1}}\par\smallskip}
 \makeatother
+\newcolumntype{Y}{>{\centering\arraybackslash}X}   % a centred wrapping column (Chapter 4 tables)
+% \skel{...}: the Chapter 4 skeleton (12 Oct): what a section still needs, from the thesis plan. Fold in, then delete.
+\makeatletter
+\newcommand{\skel}[1]{\if@noskipsec\leavevmode\fi\par\smallskip\noindent
+  \fcolorbox{redoframe}{redoback}{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\small\raggedright
+  \textbf{To complete:} #1}}\par\smallskip}
+\makeatother
 % \pendingfig{label}{caption}{run that fills it}: a figure whose data is not flown yet. The caption and
 % label are final, so the text can cite it now; the box says which run fills it.
 \newcommand{\pendingfig}[3]{%
