@@ -163,6 +163,25 @@ commit.
 are not in these runs. A twin crossover is a statement about the mechanism in the planner's own plant; the rig rows of
 the plan's P14 (28-29 Oct) decide whether it carries.
 
+## Results, pair T3 (12 Oct, first flights; week5 fc9fb04, LAB PC 4 slots; scored with tools/release_bands.py metrics, T6 window event to +15 s)
+
+| arm | run | release (s) | dtheta (deg) | abs peak (deg) | sigma_pre (deg) | still before (s) | back in band (s) |
+|---|---|---|---|---|---|---|---|
+| A1 measured | R1706 | 20.0 | 5.37 | 4.96 | 0.64 | 6.5 | 4.25 |
+| A1 measured | R1708 | 20.5 | 6.15 | 5.49 | 0.55 | 7.1 | 4.25 |
+| A1 measured | R1710 | 21.0 | 6.12 | 5.28 | 0.44 | 7.6 | 4.17 |
+| A2 planned | R1707 | 20.0 | 17.13 | 17.49 | 0.16 | 6.5 | 4.39 |
+| A2 planned | R1709 | 20.5 | 17.21 | 17.60 | 0.17 | 7.0 | 4.38 |
+| A2 planned | R1711 | 21.0 | 17.02 | 17.41 | 0.18 | 7.5 | 4.36 |
+
+A1 mean 5.88 deg, range 0.78; A2 mean 17.12 deg, range 0.19. Resolution rule: (1) sign(A2 - A1) = + (the frozen sign for
+T3, measured < planned); (2) the ranges do not overlap; (3) |17.12 - 5.88| = 11.24 deg >= max(1, 2 x 0.78) = 1.56.
+**T3 resolved with measured < planned: confirmed.** All six landed with no abort. Every run on one tree (week5
+fc9fb04); the configs are ta_a1_r1-3 and ta_a2_r1-3 (the W4 hover release with cable_source mocap / model). The twin's
+planned-pull arm had never flown before tonight. Reviewer: pending (run 12 Oct night).
+
+Not yet flown: A3, A4 (the announced ramped pair, T2) and T4; Wesley decides them after tonight (decisions.md 12 Oct).
+
 ## Critic
 
 ### Round 1 (rev 1, 12 Oct 13:34-13:44): the challenge, verbatim
