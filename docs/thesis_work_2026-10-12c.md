@@ -10,6 +10,7 @@ touched (reading only).
 |---|---|---|---|
 | `wed-review` | `/home/wesley/mdc_wt/wed-review` | rig-prep 9c9dcc2 | task 2: `docs/rig_2026-10-14_review.md` (commit 7df6834, 11:27) |
 | `thesis-figs` | `/home/wesley/mdc_wt/thesis-figs` | thesis-rig a493c7d | task 3: the figure tooling from rig-prep (da45990), then the four figures, the registry, the provenance and this note |
+| `thesis-cites` | `/home/wesley/mdc_wt/thesis-cites` | thesis-rig a493c7d | task 4: the seventeen citations into the bibliography, the placeholders replaced (one commit) |
 
 ## 1. The supervisor deck (done 11:13)
 
@@ -91,10 +92,21 @@ The F11 instants come from the 50 Hz run table with the pivot 4 cm below the bod
   "capsized"; only the planner's-pull hover row says "no twin pair").
 - F11: trimming the planned tensions at the latch is done; the "gated quantity" and a second y axis were not asked.
 
-## 4. The 17 citations (not done)
+## 4. The seventeen citations (done 12:20, branch thesis-cites)
 
-Not reached in the lane's time; the placeholders stand. The list is in decisions.md (12 Oct, Wesley ~10:10) and in
-`docs/thesis_work_2026-10-12b.md`.
+Every entry of the approved batch is in `references_extra.bib` with its DOI, venue, volume, pages and year checked
+against Crossref or OpenAlex (the preprint against its arXiv listing), and every bracketed placeholder in the
+Chapter 2 files and in Section 3.4 is replaced by the citation. The thesis builds with no undefined references or
+citations (110 pages). Two things to know:
+- Loianno and Kumar 2018 is cited for cooperative transport with no sensor on the payload (each quadrotor's camera and
+  inertial unit), not for "a sensed grasp": the abstract was not reachable to confirm a gripper sensor, so the
+  sentence does not claim one. Shankar 2020 carries the sensed-grasp point on its own.
+- The "Farina, Zhang and Scattolini 2020 (TCST)" of the plan is their hierarchical MPC with plug-and-play
+  capabilities, TCST 28(2), 2020 (online 2018); Gros et al. is International Journal of Control 93(1), 2020 (online
+  2016); RotorTM is T-RO 40, 2024 (online 2023). Print years are used.
+
+T3's cells from the full texts (plan C2-A: Bacheti, Liang, Saiella, Farras, Hajieghrary) are not done: the full texts
+are not on this machine (only Quan's is under docs/papers), and the lane did not fetch PDFs.
 
 ## Open questions for Wesley
 
@@ -113,5 +125,7 @@ git -C /home/wesley/multi_drone_control worktree remove /home/wesley/mdc_wt/wed-
 git -C /home/wesley/multi_drone_control branch -D wed-review
 git -C /home/wesley/multi_drone_control worktree remove /home/wesley/mdc_wt/thesis-figs
 git -C /home/wesley/multi_drone_control branch -D thesis-figs
+git -C /home/wesley/multi_drone_control worktree remove /home/wesley/mdc_wt/thesis-cites
+git -C /home/wesley/multi_drone_control branch -D thesis-cites
 # the 7 Oct conversions in the thesis-figs worktree go with it (untracked)
 ```
