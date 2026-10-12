@@ -23,7 +23,7 @@ P=$(python3 -c "print(round($L-0.003,3))"); Q=$(python3 -c "print(round($L-0.04,
 X="partner:=true partner_contact:=true partner_nodes:=true weld_radius:=$R"
 PA="magnet_drop_below_quad:=$L mpc_thrust_ratio:=22 contact_dz:=0.05"    # + drop_puck_wait_s:=0 if item 11 says so
 ```
-- T3: `git log -1 --format=%h` prints `0628d85`. Then `ls c_generated_code_load_planner/*.so
+- T3: `git branch --show-current` prints `week5`. Then `ls c_generated_code_load_planner/*.so
   c_generated_code_quad_load/c_generated_code/*.so` lists 4 files (built 11 Oct). If not, run
   `python3 tools/prebuild_planner.py 2 3 4 --load-mass 0.86 --drone-mass 0.55 --cable-len 0.55`.
 

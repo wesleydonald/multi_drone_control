@@ -83,7 +83,7 @@ if [ "$COMBINED" = true ]; then
            /join_planner/land_now /drone_3/take_back /drone_3/magnet_ours /drone_3/magnet_gate /drone_3/magnet_coil
            /drone_3/ELRSCommand_tejen /tejen/magnet/command /tejen/object_attached /tejen/pendulum_swing_state
            /tejen/magnet_tip_pose /pickup/motion_capture_state /fake_attachment_point/pose /fake_payload/pose
-           /payload/trajectory_state)
+           /payload/trajectory_state /tejen/drone_command)
 fi
 ros2 bag record -o "$D/$F" "${topics[@]}" > "$D/${F}_bag.txt" 2>&1 &
 BAG=$!

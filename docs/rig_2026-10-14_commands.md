@@ -10,7 +10,12 @@
   - QUAD4 (`/drone_3`, body 14, tip body 24) on plate 9 (ring +y);
   - the puck is body 6.
 
-**Order:** P1-P12 props off (09:00, packs charging) -> R1-R5 -> P13 load test -> R6-R9 with Tejen.
+**Order:** P1-P12 props off (09:00, packs charging) -> R1-R5 -> P13 load test -> P14 R9 prelude -> R6-R9 with Tejen.
+
+**Packs:** ___ charged per drone (count them before 09:00). The day is about 19 min of carrier flight and 15 min for QUAD4.
+- Charge between the morning block and R1, and during P13.
+- Swap all four packs before R6 and again before R9, whatever they read.
+- If there are fewer than three sets, drop R2/R3 first (Thursday can fly them), not R4/R5.
 
 ## Setup (every terminal, RViz too: `w5`, never `mdc`)
 
@@ -25,13 +30,18 @@ git log --oneline -1                     # 46ac389 or later on week5
 colcon build --symlink-install --packages-select bringup mpc_planner tracker fleet_manager dissipative_planner drone_magnet simulation_communication drone_communication utility_objects && source install/setup.bash
 python3 tools/prebuild_planner.py 2 3 4 --load-mass 0.86 --drone-mass 0.55 --cable-len 0.55
 C=$HOME/mdc_wt/week5/configs/rig
+W=0.031; L=0.58; R=0.012      # PLACEHOLDERS: type P3's W, P4's L, P7's R as you get them
 R="tools/rig_flight.sh real_control_launch.py num_drones:=4 target_z:=1.0 lift_ramp_vel:=0.15"
 D="mode:=dissipative attach_azimuths_deg:=30,90,150,270"
 O="load_traj:=orbit traj_radius:=0.5 traj_speed:=0.125"
 A="tools/rig_flight.sh real_control_launch.py mode:=attach target_z:=1.0 lift_ramp_vel:=0.15 enable_approach_mpc:=false mocap_magnet_tip_body_id:=24 params_file:=$C/attach_m1.yaml"
 ```
 
-- **R1-R5:** T1 `rio num_drones:=4 magnet_channel:=6 magnet_initial:=ON` stays up all the time they fly.
+- **P1-P12 and R1-R5:** T1 stays up all the time. It streams the tip (24) and the puck (6) too: without them P3, P4
+  and P10 have nothing to read.
+  ```bash
+  rio num_drones:=4 magnet_channel:=6 magnet_initial:=ON mocap_magnet_tip_body_id:=24 mocap_extra_bodies:=6:/pickup/motion_capture_state
+  ```
 - **R6-R9:** stop T1 first: `mode:=attach` starts its own radios and mocap.
 - **Each flight:** T2 line -> T3 preflight -> `fleet arm` -> `ARM sequence complete` -> `fleet takeoff`.
 
@@ -50,6 +60,9 @@ python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_plan
 - **P1 Motive.** Ring frame: origin, +x plate 0, +y plate 9. Bodies 11-14, 8, 24 and 6 streaming.
   - Body-rate check: rock QUAD1 by hand, then `ros2 topic echo --once /drone_0/motion_capture_state`.
   - Record whether the angular velocity is finer than 0.1 rad/s steps.
+- **P1b Still bag.** Ring on the floor, carriers on their plates, QUAD4 on its mat, puck in place, nobody moving: the
+  pose noise of every body (the thesis's noise sentence and the proof's noise band).
+  `timeout -s INT 60 ros2 bag record -o results/rig/2026-10-14/p1b /payload/motion_capture_state /drone_0/motion_capture_state /drone_1/motion_capture_state /drone_2/motion_capture_state /drone_3/motion_capture_state /magnet_tip_pose /pickup/motion_capture_state`
 - **P2 Mocap survey.** Record the longest gap on 14, 24 and 8 (bar 0.1 s; a gap over 0.25 s on a flying drone
   disarms the fleet).
   - Carry QUAD4 by hand along the climb, the transit and the descent over plate 9.
@@ -65,12 +78,15 @@ python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_plan
   - **L** = `body 14 to tip 24`, QUAD4 hanging still with a ~2 N pull on the caught magnet (the taut length).
   - Marker to face: the face flat on the floor; record the tip's z.
   - d_ok noise: face caught, rock QUAD4 0-20 deg by hand; record the tip's drift spread (mm).
+  - Slack: record the tip's z hanging, then under the ~2 N pull. The difference is the tether's slack.
 - **P5 Kill path.** RViz DISARM, T3 `fleet disarm`, Ctrl-C, the radio-loss failsafe, and the Betaflight status of QUAD1
   and QUAD4.
-- **P6 Arm check.** Using R4's line named `p6`: `fleet arm` -> complete -> `fleet disarm`, twice, then Ctrl-C.
-- **P7 Attach check and hand catches.** T1 stopped, ring on the floor, QUAD4 disarmed with its pack in.
+- **P6 Arm check.** Using R4's line named `p6`: `fleet arm` -> complete -> `fleet disarm`, twice, then Ctrl-C. If the
+  second ARM is refused, relaunch the line and count that as the second cycle.
+- **P7 Attach check and hand catches** (after P3: it needs W). T1 stopped, ring on the floor, QUAD4 disarmed with its
+  pack in. Put W into `configs/rig/attach_m1.yaml` too (yours to sign), so a line that forgets it fails loudly.
   ```bash
-  $A weld_radius:=0.01 p7
+  $A weld_radius:=0.01 weld_point_z:=$W p7
   ros2 topic pub -t 3 /magnet/command std_msgs/msg/String "{data: 'ON'}"
   ```
   - (a) Face 2 cm above plate 9 for 5 s: no `ATTACH:` line.
@@ -79,18 +95,23 @@ python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_plan
   - Then at least 10 catches: centre, ±2 cm radial, ±2 cm tangential, tilted ±15 deg. Record d and dz per catch from
     `/magnet/attachment_state`.
   - **R** = max dxy + 5 mm (the contact radius).
+  - Extra: 3 catches with the ring tilted ~10 deg (does the radius depend on the plate's tilt?).
 - **P8 Magnet hold.** A carrier's magnet ON, face caught on a plate, ring held down. Spring scale through the rod at 0,
-  30, 45 and 60 deg from the plate's axis, 3 pulls each. Record N at release. This number goes into the thesis.
+  30, 45, 60 and 90 deg (pure shear) from the plate's axis, 3 pulls each. Record N at release. Then the peel: with the
+  tip caught, tilt the ring by hand until the magnet lets go, and note the angle. These numbers go into the thesis.
 - **P9 Measures.** A carrier's prop tip radius from its body centre. QUAD4's mat centre and the puck (body 6) xy, with
   the ring at its start spot.
-- **P10 Puck in the net.** Ring on a stand at ~1 m, puck in the net. Does body 6 stream for 10 s, gaps under 0.1 s?
+- **P10 Puck in the net.** Ring on a stand at ~1 m, puck in the net. `ros2 topic hz /pickup/motion_capture_state` for
+  10 s: does it stream, gaps under 0.1 s?
   - Yes: R6-R9 keep the default.
   - No: R6-R9 add `drop_puck_wait_s:=0` inside partner_args, and you check the drop by eye.
 - **P11 Hand ramps.** Face onto plate 9 at ~3, 5 and 8 cm/s, 3 times each. Record c0 against the rest point; pass is
   within 1 mm.
 - **P12 Tilt checks** (QUAD4 disarmed):
-  - (a) bag 14 and 24 with QUAD4 on a pole at 2.3-2.9 m, over and beside the ring, puck on; record the bag name;
-  - (b) tumble it through 90 deg by hand, fast; record any step over 3000 deg/s and the max rate;
+  - (a) bag 14 and 24 with QUAD4 on a pole at 2.3-2.9 m, over and beside the ring, puck on:
+    `timeout -s INT 120 ros2 bag record -o results/rig/2026-10-14/p12a /drone_3/motion_capture_state /magnet_tip_pose /payload/motion_capture_state /pickup/motion_capture_state`;
+  - (b) tumble it through 90 deg by hand, fast, with the same record named p12b; note any step over 3000 deg/s and
+    the max rate;
   - (c) only with Tejen's OK: arm props-off through the mux, then the fleet DISARM; record the times of the abort,
     the elrs disarm and the FC '*' telemetry;
   - (d) power off QUAD4's RX while armed; record how long fc_arm_state still reads armed;
@@ -102,10 +123,10 @@ python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_plan
 | # | what | line (T2) | expect, record |
 |---|---|---|---|
 | R1 | 3-min ring hover, carry default | `$R mode:=mpc r1` | `fleet land` 3 min after the ring reaches 1.0 m. Pack V every minute. Says whether R9 (~3 min) fits a pack. |
-| R2 | circle, measured pull, 60 deg plan (r206e60 repeat) | `$R mode:=mpc $O params_file:=$C/traj_hold.yaml r2` | `fleet land` after one full lap (~25 s); 1.7 m clear on +y. |
+| R2 | circle, measured pull, 60 deg plan (r206e60 repeat) | `$R mode:=mpc $O params_file:=$C/traj_hold.yaml r2` | Two laps: `fleet land` ~50 s after T2's `hover hold done` (the falsifier needs a lap-to-lap sd). 1.7 m clear on +y. |
 | R3 | circle, **planned** pull, 60 deg plan | `$R mode:=mpc $O params_file:=$C/feedforward_60_hold.yaml r3` | As R2. One change from R2: the pull source. |
-| R4 | hover detach, unannounced; QUAD4 lands and disarms alone (was W4) | `$R $D params_file:=$C/drop_and_land_gi.yaml r4` | Release 6-7 s after the ring reaches 1.0 m. Hold 15-20 s on three, then `fleet land`. |
-| R5 | circle detach, same (was W5) | `$R $D $O params_file:=$C/detach_unannounced_orbit_drop_gi.yaml r5` | Release ~10 s after the circle starts. Hold 15-20 s on three, then `fleet land`. |
+| R4 | hover detach, unannounced; QUAD4 lands and disarms alone (was W4) | `$R $D params_file:=$C/drop_and_land_gi.yaml r4` | Release 6-7 s after the ring stops rising at 1.0 m (RViz or by eye), never under 5 s: the metric needs 5 s of still reference before it. Hold 15-20 s on three, then `fleet land`. |
+| R5 | circle detach, same (was W5) | `$R $D $O params_file:=$C/detach_unannounced_orbit_drop_gi.yaml r5` | Release ~10 s after T2's `hover hold done: orbit starts`. Hold 15-20 s on three, then `fleet land`. |
 
 - **R3's falsifier (frozen):** if its path error is within max(1 cm, the lap-to-lap sd) of 2.91 cm, the gain came from
   the rod angle, not the measured pull.
@@ -116,11 +137,23 @@ python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_plan
   - Expect `UNANNOUNCED DETACH`, QUAD4 out 0.5 m and down by itself.
   - Then in T2, within ~1 s: `Drone 4 is down at its rest off the ring: disarmed alone.`
   - Record the release and LAND times.
+- **R4/R5 bands** (frozen): from the week4 twin runs; week5's same-tree checks fly tonight. Read every rig value
+  against the rig's no-event floor too (4.8 deg in hover, 6.3 deg on a path; 12 Oct offline analyses).
 
 ### P13 Load test (props off): the go for R6-R9
 
 Procedure: `~/mdc_wt/week5/docs/rig_2026-10-14_load_test.md`, run from week5. The full graph runs for 10 min, with no
-CLI calls inside the window. `tools/load_check.py` must print `F1 load bars: PASS`.
+CLI calls inside the window. `tools/load_check.py` must print `F1 load bars: PASS`. After the window:
+`ros2 topic list | grep /tejen`, and note his MPC's state topics for the record list.
+
+### P14 R9 prelude (props off, ~5 min)
+
+R9 has two links never run on the rig. Rehearse the second here:
+1. Launch R9's line with props off: QUAD4 caught on plate 9, the ring on the floor.
+2. His ARM, then lift the ring and QUAD4 by hand to ~1 m and hold 60 s.
+3. Pass: T2 shows no disarm from his MPC, and `/drone_3/mux_state` stays `ours`.
+
+If it fails, R9 waits for Thursday.
 
 ### R6-R9 with Tejen (afternoon)
 
@@ -130,13 +163,13 @@ CLI calls inside the window. `tools/load_check.py` must print `F1 load bars: PAS
 - P10 has decided `drop_puck_wait_s`;
 - Tejen is here and agrees.
 
-**Before each:** nothing else running on the laptop. Wait 2 min after the T2 launch before his ARM.
+**Before each:** nothing else running on the laptop. Wait 2 min after the T2 launch before his ARM. Ask Tejen to
+keep his own logs for every flight.
 
 **Order:** his ARM (QUAD4 idle on its mat) -> `fleet arm` -> `fleet takeoff` -> ring at 1.0 m (T2: `our planner flies
 the ring`) -> his TAKEOFF. **End:** `fleet disarm`, then his DISARM.
 
 ```bash
-W=0.031; L=0.58; R=0.012      # PLACEHOLDERS: type P3's W, P4's L, P7's R
 P=$(python3 -c "print(round($L-0.003,3))"); Q=$(python3 -c "print(round($L-0.04,3))")
 M="partner:=true partner_contact:=true partner_nodes:=true weld_radius:=$R proof_taut_len:=$P weld_point_z:=$W attach_cable_len:=$Q"
 $A $M partner_args:="magnet_drop_below_quad:=$L mpc_thrust_ratio:=22 contact_dz:=0.05" r6      # R6
@@ -145,10 +178,10 @@ $A $M partner_args:="magnet_drop_below_quad:=$L mpc_thrust_ratio:=22" r7        
 
 | # | what | expect |
 |---|---|---|
-| R6 | his whole mission, no-catch: he stops 5 cm above plate 9 (was R11a) | Pickup, drop into the net, he holds over plate 9 with no contact, and gives up 30 s later. Our take-back: magnet OFF, the release guard, up, out to 1.2 m, down, QUAD4 disarmed alone. Then `fleet land`. |
+| R6 | his whole mission, no-catch: he stops 5 cm above plate 9 (was R11a) | Pickup, drop into the net, he holds over plate 9 with no contact, and gives up 30 s later. Our take-back: magnet OFF, the release guard, up, out to 1.2 m, down, QUAD4 disarmed alone. Then `fleet land`. The bag gives his hold height over plate 9 and the take-back timeline. |
 | R7 | the contact attach (was R11b); only after a clean R6 | Contact, a small lift proves the catch, `ATTACH`, the mux switches QUAD4 to us and folds it in. Hold 20 s on four, then `fleet land`. Record contact-to-ATTACH time, ring tilt by eye, and QUAD4 at the landing. |
 | R8 | R7 again | As R7. |
-| R9 | the full M1 on hover: QUAD4 starts attached, we detach it, he picks up the puck, drops it in the net and reattaches | **Last, gated: R7 and R8 clean, and R1 shows a pack lasts ~3 min.** First time on the rig; flies clean on hover in the twin. |
+| R9 | the full M1 on hover: QUAD4 starts attached, we detach it, he picks up the puck, drops it in the net and reattaches | **Last, gated: R7 and R8 clean, P14 passed, and R1 shows a pack lasts ~3 min.** First time on the rig; flies clean on hover in the twin. Camera on the pickup site and the ring together (the thesis's F1 insets). |
 
 **R9:** `$A $M partner_attached:=true partner_args:="magnet_drop_below_quad:=$L mpc_thrust_ratio:=22" r9`
 - QUAD4 starts on plate 9 with its magnet caught; the puck on the floor at its spot.
