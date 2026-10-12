@@ -40,6 +40,24 @@ Updated: Mon 12 Oct 2026, 18:48 AEDT (from `date`). Only what a new session need
   7. The L5 pair (w4_3915_release x2).
 - Score each as it lands (one registry row each), then the morning report for Tuesday's supervisor meeting.
 
+## Handoff (if a new session picks up tonight; scripts in `~/handoff_2026-10-12/`)
+1. Lab idle? `ssh drones@drones 'who; uptime; docker ps --format "{{.Names}}"'` (no wesley_slot containers, low load).
+2. Optional: clear the lab copy's stale folders `~/mdc/src/controller_quad_load` and `~/mdc/src/controller_dissipative`.
+3. Start detached, so it survives the session:
+   `setsid nohup ~/handoff_2026-10-12/lab_tonight.sh > ~/handoff_2026-10-12/lab_tonight.txt 2>&1 < /dev/null &`
+   Watch for `] R1xxx <config>: exit` lines in that log (32 runs, about 4 h).
+4. Score each run as it lands, one registry row each (back up, append, diff the old lines):
+   - m1c_* and m1x_*: `~/handoff_2026-10-12/sc.sh show|add RID claim 10 "<arm>" "<verdict>" "<notes>"`.
+   - m1_full_*: family `full`, rev 10. tc_*: family `tilt`, rev 4 (`t1chk.sh RID` lists the T1 items).
+   - w4_da_release_hover, w4_gi_g2_release_orbit, ta_*, w4_3915_release: `python3 tools/release_bands.py metrics RID`
+     (the T6 columns, as R1626's row).
+   - Card and arm: claim card rev 10 §6.3, tilt card rev 4, freeze P2 (W4/W5 checks), Tier A card rev 2 (T3).
+5. The morning report (docs/morning_report_2026-10-13.md) before Wesley's supervisor meeting, in the usual format
+   (table, one-line verdict, the decisions).
+   - Rig findings first.
+   - Also: a thesis lint on thesis-rig (no run ids, branch names or QUAD4 outside LaTeX comments), and a short brief
+     for the meeting.
+
 ## Open for Wesley
 - After Wednesday: the T6 amendments A1-A4 (explained again with Wednesday's numbers; decisions.md 12 Oct).
 - After tonight: Tier A's announced half (the measured soft release does not unload the leaver).
