@@ -5,7 +5,9 @@ Updated: Mon 12 Oct 2026, 11:50 AEDT (from `date`). Only what a new session need
 (https://claude.ai/artifact/QwgP2oPSknLyWZacvDuh5T; source `$CLAUDE_JOB_DIR/tmp/resource/m1_since_rig.html`).
 
 ## Where things are
-- Main tree `/home/wesley/multi_drone_control`: moving onto **week5** (code, docs, registry, working rules) with the 12 Oct tidy.
+- Main tree `/home/wesley/multi_drone_control`: still on rig-prep (OLD code; don't launch from it). The testing tree is
+  `~/mdc_wt/week5`, and the sheet points there. The push and the tree switch are blocked for the assistant: they wait for
+  Wesley at the laptop (backup_push.sh, then tidy_finish.sh), or for an allow rule.
 - **week4** `a25c40d`: Wednesday's rig tree (worktree `mdc_wt/week4fix`). It stays as it is. Next week's tested work
   goes on **week5**, created from the candidate.
 - **Candidate lineage** (each tree has its own worktree under `/home/wesley/mdc_wt/`):
