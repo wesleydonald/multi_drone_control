@@ -1,6 +1,6 @@
 % lit_execution.tex -- Literature 2.5: the execution layer and force estimation (drafted 12 Oct 2026 from the
 % thesis plan of 11 Oct; the steady-error paragraph is from control.tex). Entries the plan lists that are not yet in
-% the bibliography (Tagliabue 2019, de Marina and Smeur 2019, Bulka 2022) wait for the approval batch.
+% the bibliography were added 12 Oct (Tagliabue 2019, de Marina and Smeur 2019, Bulka 2022).
 
 \subsection{Execution layer and force estimation}
 \label{sec:lit_execution}
@@ -12,8 +12,7 @@ from the vehicle's own accelerometer, without a model of the cable: centralised 
 local execution, the fast dynamics handled onboard and the slow coordination centrally. Estimating the link's
 force rather than measuring it is the other route: an adaptive estimate of an unknown load in a decentralised
 passivity-based scheme \cite{klausen2020cooperative}, or a model-based observer of the external wrench
-[Tagliabue et al.\ 2019, pending the approval batch; de Marina and Smeur 2019 and Bulka et al.\ 2022 for
-onboard execution with a suspended load]. Each of these needs code on the vehicle.
+\cite{tagliabue2019robust}; de Marina and Smeur \cite{demarina2019flexible} and Bulka et al.\ \cite{bulka2022experiments} fly a shared load with the execution onboard each rotorcraft. Each of these needs code on the vehicle.
 
 The vehicles of this thesis run unmodified Betaflight, a hobby flight controller that closes a body-rate loop and
 accepts a collective throttle and three rate commands over a radio link, as a pilot would send them. Nothing can

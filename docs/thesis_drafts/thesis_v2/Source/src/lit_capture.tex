@@ -1,6 +1,6 @@
 % lit_capture.tex -- Literature 2.3: capture proof, docking and magnetic grasping (drafted 12 Oct 2026 from the
 % thesis plan of 11 Oct). Moved here from the docking paragraph of control.tex and extended. Entries the plan lists
-% that are not yet in the bibliography (Loianno 2018, Larsson 2020, Gawel 2017) wait for the approval batch.
+% that are not yet in the bibliography (Larsson 2020) wait for the approval batch; Loianno 2018 and Gawel 2017 added 12 Oct.
 
 \subsection{Capture proof, docking and magnetic grasping}
 \label{sec:lit_capture}
@@ -9,8 +9,9 @@ A join needs three things the leave does not: a mechanism that catches, a proof 
 of control at the proof. The literature on in-flight docking and aerial grasping supplies precedents for each.
 
 \paragraph{Proof of a catch.} A grasp can be proven by a sensor in the gripper or from the vehicles' motion. Shankar
-et al.\ \cite{shankar2020inflight} confirm a bar grasp with a magnetic sensor before the giving vehicle releases
-[Loianno 2018, pending the approval batch, for a sensed grasp of a static object]. ModQuad
+et al.\ \cite{shankar2020inflight} confirm a bar grasp with a magnetic sensor before the giving vehicle releases; Loianno and Kumar's small
+quadrotors carry a payload with no sensor on it at all, each estimating the shared state from its own camera and
+inertial unit \cite{loianno2018cooperative}. ModQuad
 \cite{saldana2018modquad} instead detects the new structure from motion capture, once the docked modules move as
 one body, and only then uploads a new force distribution to every module; LEGION \cite{sugihara2026legion} holds a
 zero-clearance interlock by controlling the contact force and torque and treats the latched joint as proven when
@@ -35,7 +36,7 @@ payload in midair, in simulation; neither changes a carrying team.
 
 \paragraph{Magnetic grasping.} A magnet holds best when pulled straight off its plate and loses hold as the pull
 turns across the face, so that the angle of pull, not only its magnitude, sets whether a magnetic grasp survives
-a transient [Gawel et al.\ 2017, pending the approval batch, for magnetic picking with a multirotor]. The
+a transient; Gawel et al.\ \cite{gawel2017magnetic} pick and deliver magnetic objects with a multirotor on exactly that reasoning. The
 rig's electromagnets catch on contact only and release under a jerk rather than under a steady load
 (Section~\ref{sec:overview}); every ring lost on the rig began with a magnet letting go
 (Section~\ref{sec:sim_detach}). That is why the rods are planned steep, why an announced change is ramped, and why

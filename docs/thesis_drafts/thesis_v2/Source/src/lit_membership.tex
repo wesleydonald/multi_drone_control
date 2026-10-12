@@ -2,8 +2,8 @@
 % from the thesis plan of 11 Oct). The facts on Quan et al. and Zeng et al. were verified from the full texts on
 % 11 Oct (hand-back docs/thesis_work_2026-10-11.md); the cells in brackets wait for a full-text read (plan C2-A:
 % Bacheti and Delbene were read from abstracts only) or for the October flights. Entries the plan lists for this
-% section that are not yet in the bibliography (Oishi 2023, Gao 2024, Delbene 2024/2025, Bacheti 2026, Fink 2011,
-% Tognon 2018, Xu 2025, Farina 2020) wait for the approval batch.
+% section that are not yet in the bibliography (Oishi 2023, Gao 2024, Delbene 2024/2025, Bacheti 2026, Xu 2025) wait for the approval batch;
+% Fink 2011, Tognon 2018 and Farina 2020 were added 12 Oct.
 % Papers found with Undermind and approved by Wesley, 10 Oct (DOIs, abstracts and sources in
 % docs/thesis_drafts/refs_2026-10-10.md; alternates listed there).
 
@@ -58,8 +58,7 @@ prepared before it happens. Riverso et al.\ \cite{riverso2013plug} redesign offl
 subsystems a newcomer couples to and refuse a change the redesign cannot certify, Zeilinger et al.\
 \cite{zeilinger2013plug} and Aboudonia et al.\ \cite{aboudonia2022reconfigurable} add a transition phase that
 prepares the network before the switch, and Saccani et al.\ \cite{saccani2023model} remove the request by having
-each robot also plan a safe trajectory that holds if others join within the horizon [Farina, Zhang and Scattolini
-2020, pending the approval batch]. All four are shown in simulation, on linear coupled subsystems such as power
+each robot also plan a safe trajectory that holds if others join within the horizon \cite{farina2020hierarchical}. All four are shown in simulation, on linear coupled subsystems such as power
 networks and coupled masses, or on ground robots coupled only through collision constraints. A suspended payload
 couples every vehicle through the load, and a magnet that lets go or a contact that catches happens at an instant
 the planner does not choose; this thesis therefore switches a centralised nonlinear problem to a pre-built one of
@@ -74,8 +73,7 @@ not unique for three or more robots and become finitely many for three once the 
 al.\ \cite{gabellieri2023equilibria} add that the internal force of non-vertical cables makes the load's attitude
 equilibrium stable and less sensitive to model error, for two robots and a beam on hardware, and Liu et al.\
 \cite{liu2025wrench} compute from the same balance how much wrench a platform on rigid links can still receive
-within the vehicles' thrust limits [Fink 2011 and Tognon 2018, pending the approval batch, for the planar case and
-its qualifier]. All four analyse a fixed team: none asks what the equilibrium becomes when one carrier leaves the
+within the vehicles' thrust limits; Fink et al.\ \cite{fink2011planning} give the planar statics of three robots on a payload, and Tognon et al.\ \cite{tognon2018internal} the qualifier that the shares are exact when the centre of mass lies in the attachment plane. All four analyse a fixed team: none asks what the equilibrium becomes when one carrier leaves the
 layout in flight. Section~\ref{sec:reconfig} takes the condition that the centre of mass stay inside the
 survivors' polygon and turns it into a margin that says which carrier a layout may lose and by how much.
 
