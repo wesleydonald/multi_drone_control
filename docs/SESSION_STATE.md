@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Mon 12 Oct 2026, 18:48 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Mon 12 Oct 2026, 21:10 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -31,19 +31,15 @@ Updated: Mon 12 Oct 2026, 18:48 AEDT (from `date`). Only what a new session need
 - **Twin evidence:** the claim batch on rig-wed (R1638-R1681, card §6.3a). The hover lines are supported; the circle
   take-back and the push abort are not. week5 adds only the take-back race fix (29b2d7b) and configs.
 
-## Tonight (12 Oct): lab batch on week5, 32 runs, exploratory
-- `$CLAUDE_JOB_DIR/tmp/lab_tonight.sh` from 19:00 if the lab is idle (timer task b1zmjvivl). It runs from whichever
-  tree is on week5 (now the main tree). First clean the lab copy's stale folders (src/controller_quad_load,
-  src/controller_dissipative).
-- **Order:**
-  1. Wednesday's rehearsals: R11a, R11b, a LAND in his transit, the full M1 on hover, the W4/W5 same-tree checks.
-  2. The push x2 and its other direction x2.
-  3. The full M1 circle x4.
-  4. The failed circle lines, x2 each.
-  5. Tilt T1 x2, N3, C1.
-  6. Tier A pair T3 (ta_a1_r1-3, ta_a2_r1-3).
-  7. The L5 pair (w4_3915_release x2).
-- Score each as it lands (one registry row each), then the morning report for Tuesday's supervisor meeting.
+## 12 Oct night: the lab batch is DONE (R1682-R1713, 32 of 32 scored and committed)
+- Morning report: docs/reports/morning_report_2026-10-13.md. Brief for the meeting: docs/reports/supervisor_brief_2026-10-13.md.
+- Headlines: Wednesday's rehearsals pass (5 of 6; R1683 is a tumble under his controller, the Tejen note's item 6);
+  the claim's failed circle lines pass 4 of 4 on week5; the race fix is clean in all four arms; Tier A pair T3
+  resolved with measured (5.4-6.2 deg) < planned (17.0-17.2 deg), reviewer pending; the full M1 circle 1 of 4
+  (his moving-plate alignment, marginal); the push clearance bar fails in both directions (it measures the push).
+- The lab PC is free. Rows R1682-R1711 say "week5 fc9fb04"; the manifests say 70d525f (docs-only commits between).
+- Waiting on Wesley: the Wednesday reorder (props-off W, R, load test -> R6-R9 -> the releases if time; the circles
+  and the spring scale Thursday). On his yes, rewrite docs/rig/rig_2026-10-14_commands.md in that order.
 
 ## Handoff (if a new session picks up tonight; scripts in `~/handoff_2026-10-12/`)
 1. Lab idle? `ssh drones@drones 'who; uptime; docker ps --format "{{.Names}}"'` (no wesley_slot containers, low load).
