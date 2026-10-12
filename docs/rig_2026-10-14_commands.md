@@ -145,13 +145,18 @@ $A $M partner_args:='magnet_drop_below_quad:=L mpc_thrust_ratio:=22 [drop_puck_w
 | R6 | his whole mission, no-catch: he stops 5 cm above plate 9 (was R11a) | Pickup, drop into the net, he holds over plate 9 with no contact, and gives up 30 s later. Our take-back: magnet OFF, the release guard, up, out to 1.2 m, down, QUAD4 disarmed alone. Then `fleet land`. |
 | R7 | the contact attach (was R11b); only after a clean R6 | Contact, a small lift proves the catch, `ATTACH`, the mux switches QUAD4 to us and folds it in. Hold 20 s on four, then `fleet land`. Record contact-to-ATTACH time, ring tilt by eye, and QUAD4 at the landing. |
 | R8 | R7 again | As R7. |
-| R9 | the full M1 on hover: QUAD4 starts attached, we detach it, he picks up the puck, drops it in the net and reattaches | **Last, gated: R7 and R8 clean, and R1 shows a pack lasts ~3 min.** **Not ready yet:** on the rig his mission still starts when our ring lifts, not on our release. The launch fix and a desk check are needed first; if they aren't done, R9 moves to Thursday. |
+| R9 | the full M1 on hover: QUAD4 starts attached, we detach it, he picks up the puck, drops it in the net and reattaches | **Last, gated: R7 and R8 clean, and R1 shows a pack lasts ~3 min.** First time on the rig; flies clean on hover in the twin. |
 
-**R9 line, once ready:** `$A $M partner_attached:=true partner_args:='magnet_drop_below_quad:=L mpc_thrust_ratio:=22' r9`.
-- **Order:** his ARM on the floor -> `fleet arm` -> `fleet takeoff` -> ring at 1.0 m, 10 s steady.
-- `ros2 topic pub -t 3 /fleet/detach std_msgs/msg/Int32 "{data: 3}"` -> QUAD4 steps out -> T2 shows the release ->
-  his TAKEOFF.
-- Then his pickup, drop and attach as in R7. Hold 20 s on four, then `fleet land`.
+**R9:** `$A $M partner_attached:=true partner_args:='magnet_drop_below_quad:=L mpc_thrust_ratio:=22 [drop_puck_wait_s:=0]' r9`
+- QUAD4 starts on plate 9 with its magnet caught; the puck on the floor at its spot.
+- **Order:**
+  1. His ARM, on the floor. His kT then learns once he flies; it doesn't learn while we fly QUAD4.
+  2. `fleet arm` -> `fleet takeoff` -> the ring at 1.0 m, 10 s steady.
+  3. `ros2 topic pub -t 3 /fleet/detach std_msgs/msg/Int32 "{data: 3}"`. QUAD4's magnet goes OFF and it steps out.
+  4. T2 shows the release to his stream. **Then his TAKEOFF**: the mux passes his stream once it is armed above idle.
+  5. His pickup, drop and attach as in R7. Hold 20 s on four, then `fleet land`.
+- **Stop:** if no release line within ~10 s of the detach, or his TAKEOFF doesn't take QUAD4 within 5 s, use `fleet land`.
+  The LAND takes QUAD4 back.
 
 ## Stop rules
 
