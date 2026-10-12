@@ -1,0 +1,7 @@
+# Thu-15 item moved to Wed 14 (C1 falsifier): the r206e60 circle with one change, the planner's planned pull instead
+# of the measured one. Same 60 deg plan and 5 s hold before the path.
+traj_hold_s: 5.0
+cable_source: 'model'
+cable_accel_cap: 6.0
+cable_elev_deg: 60.0
+handover_elev_deg: 60.0
