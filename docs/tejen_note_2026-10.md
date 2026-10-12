@@ -15,6 +15,9 @@ and our own flights. In order, each one only if the one before went well:
 - **R9, if R7 and R8 are clean:** the full M1. QUAD4 starts attached to the ring. We lift, detach QUAD4 in the air
   and hand it to your stream. You pick up the puck, drop it in the net and reattach.
 
+Before R6, with props off, we'd like 5 minutes to rehearse R9's first step: your ARM with QUAD4 caught on the ring,
+then we lift the ring and QUAD4 by hand for a minute and check your MPC stays armed.
+
 Thursday 15:00-18:00 is for retries of anything that needs a fix.
 
 Can you be there, and are you OK with this plan?

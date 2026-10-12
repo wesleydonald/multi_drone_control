@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Mon 12 Oct 2026, 11:50 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Mon 12 Oct 2026, 16:37 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and the "since the 8 Oct rig" page
 (https://claude.ai/artifact/QwgP2oPSknLyWZacvDuh5T; source `$CLAUDE_JOB_DIR/tmp/resource/m1_since_rig.html`).
 
@@ -78,6 +78,13 @@ Updated: Mon 12 Oct 2026, 11:50 AEDT (from `date`). Only what a new session need
   - After it: rebuild the main tree (colcon, prebuild_planner, gate --quick) before anything launches from it.
   - week5 holds the race fix (29b2d7b), the abort_negx config and feedforward_60_hold.yaml. R9's rig line is
     launch-checked clean.
+- **12 Oct afternoon:**
+  - Lane 5 and 6 are in. The Wednesday red-team is fixed on the sheet (2e3b1ce) and merged (4573cd4).
+  - The thesis is assembled on thesis-rig 1756cf6: F8/F10/F11/F14, T7/T8 filled after the reviewer; 122 pp.
+  - Merged into week5: wed-pipeline (tools/rig_night.py for Wednesday night), counter-swing (finding only; the
+    filter is NOT NOW) and tier-a-card.
+  - Tonight's batch is 32 runs: the 24 plus Tier A T3 (ta_a1/a2 r1-3) and the L5 pair (w4_3915_release x2).
+  - The T6 amendments (A1-A4) are explained again after Wednesday; Wednesday is scored on the frozen rules.
 - **Wednesday sheet** docs/rig_2026-10-14_commands.md (9c9dcc2): P1-P13 props off, R1-R9 flights, all on week5;
   `w5` exports ROS_LOCALHOST_ONLY=1 ROS_DOMAIN_ID=23.
 - **Tejen note** docs/tejen_note_2026-10.md (d208958): final, for Wesley to send (credit wording in).
