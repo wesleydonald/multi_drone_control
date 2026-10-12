@@ -1,11 +1,11 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Mon 12 Oct 2026, 11:18 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Mon 12 Oct 2026, 11:50 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and the "since the 8 Oct rig" page
 (https://claude.ai/artifact/QwgP2oPSknLyWZacvDuh5T; source `$CLAUDE_JOB_DIR/tmp/resource/m1_since_rig.html`).
 
 ## Where things are
-- Main tree `/home/wesley/multi_drone_control` on **rig-prep** (docs, registry, cards, plans). Nothing is pushed.
+- Main tree `/home/wesley/multi_drone_control`: moving onto **week5** (code, docs, registry, working rules) with the 12 Oct tidy.
 - **week4** `a25c40d`: Wednesday's rig tree (worktree `mdc_wt/week4fix`). It stays as it is. Next week's tested work
   goes on **week5**, created from the candidate.
 - **Candidate lineage** (each tree has its own worktree under `/home/wesley/mdc_wt/`):
@@ -64,11 +64,18 @@ Updated: Mon 12 Oct 2026, 11:18 AEDT (from `date`). Only what a new session need
     - week5 is the testing tree; the rig plan is front-loaded (ambitious Wed, Thu 15 for retries, the full M1 as
       a gated last flight);
     - the lab PC evenings only.
-- **week5** (worktree mdc_wt/week5) = rig-wed + 29b2d7b (the race fix) + 46ac389 (m1c_abort_negx) + 76594ba
-  (feedforward_60_hold.yaml, the load test pointed at week5).
-  - Built and prebuilt; gate --quick passes (585 tests).
-  - R9's rig line launch-checked clean (real_io false).
-  - m1-race is now the same as week5 (delete with the next cleanup script).
+- **Repo tidy (12 Oct, Wesley):** one tree for everything.
+  - rig-prep is merged into **week5** (4983d2d) and retired. .gitignore no longer hides docs/, configs/ and tools/.
+  - Never-committed work is saved: rig-prep 885ffbc, m1-rig df38269, now in week5.
+  - Removed: 25 unreferenced configs and tools/legacy. 11 finished docs moved to docs/archive/.
+  - The stale WRENCH test is updated. Gate: 596 tests pass.
+  - Backup: ~/backups/multi_drone_control_2026-10-12.bundle (verified). GitHub (public; Tejen OK): Wesley runs
+    `$CLAUDE_JOB_DIR/tmp/backup_push.sh` (every branch to backup-2026-10-12/*, tags; the push is his).
+  - Then Wesley runs `$CLAUDE_JOB_DIR/tmp/tidy_finish.sh`. It checks the backup, removes the finished worktrees,
+    moves ~/multi_drone_control onto week5, and deletes the merged branches (tag archive/m1-video for a cited SHA).
+  - After it: rebuild the main tree (colcon, prebuild_planner, gate --quick) before anything launches from it.
+  - week5 holds the race fix (29b2d7b), the abort_negx config and feedforward_60_hold.yaml. R9's rig line is
+    launch-checked clean.
 - **Wednesday sheet** docs/rig_2026-10-14_commands.md (9c9dcc2): P1-P13 props off, R1-R9 flights, all on week5;
   `w5` exports ROS_LOCALHOST_ONLY=1 ROS_DOMAIN_ID=23.
 - **Tejen note** docs/tejen_note_2026-10.md (d208958): final, for Wesley to send (credit wording in).
