@@ -33,7 +33,7 @@ NOTE: the payload is a RIGID BODY (mass + inertia) here, so it translates AND ro
 attitude simulation is what makes the post-attach tilt/bunching failures reproducible offline.
 
 Exit code is nonzero on any failure. A PNG (load height, drone elevations, tension,
-outward guards, 3D formation) is written to dissipative_verify/ (path printed).
+outward guards, 3D formation) is written to generated/dissipative_verify/ (path printed).
 
 Run:  python3 -m dissipative_planner.verify_dissipative
 """
@@ -619,9 +619,10 @@ def main(args=None):
     for name, ok, detail in results:
         print(f'  [{"PASS" if ok else "FAIL"}] {name:22s} {detail}')
 
+    # generated output lives under <repo>/generated (12 Oct 2026), not at the repo root
     out_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
-            os.path.abspath(__file__))))), 'dissipative_verify')
+            os.path.abspath(__file__))))), 'generated', 'dissipative_verify')
     try:
         os.makedirs(out_dir, exist_ok=True)
         path = os.path.join(out_dir, f'verify_{time.strftime("%Y%m%d_%H%M%S")}.png')

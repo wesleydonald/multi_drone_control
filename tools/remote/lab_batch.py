@@ -136,7 +136,7 @@ def synced_ignored_files():
                *[f':!{d.rstrip("/")}' for d in SYNC_EXCLUDED])
     code, other = [], []
     for f in out.splitlines():
-        if '__pycache__' in f or 'c_generated_code' in f or f.endswith('.pyc'):
+        if '__pycache__' in f or 'c_generated_code' in f or f.startswith('generated/') or f.endswith('.pyc'):
             continue
         (code if f.startswith(IGNORED_CODE_DIRS) and f.endswith(CODE_SUFFIXES) else other).append(f)
     return code, other

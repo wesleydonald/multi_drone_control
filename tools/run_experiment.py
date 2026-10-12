@@ -195,7 +195,7 @@ def undeclared_launch_args(cfg):
 
 def launch_cwd():
     """Working directory of the launches: the planner generates its solver relative to it
-    (planner_solver CODE_DIR), so parallel lab slots set MDC_LAUNCH_CWD to their own dir."""
+    (the solvers themselves follow MDC_ACADOS_ROOT), so parallel lab slots set MDC_LAUNCH_CWD to their own dir."""
     return os.environ.get('MDC_LAUNCH_CWD') or REPO
 
 

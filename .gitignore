@@ -7,14 +7,8 @@ log/
 # Ignore install directories
 install/
 
-c_generated_code/
-c_generated_code_load_planner/
-c_generated_code_load_planner_pr/
-c_generated_code_quad_load/
-acados_ocp.json
-acados_sim.json
-*_ocp.json
-*_sim.json
+# every generated acados solver (c_generated_code_* and the *_ocp.json / *_sim.json) lives under generated/ since 12 Oct 2026
+generated/
 
 __pycache__/
 *.py[cod]
@@ -48,10 +42,6 @@ docs/thesis_drafts/**/main.log
 docs/thesis_drafts/**/main.pdf
 **/.pytest_cache/
 
-# Generated solver output for the approach MPC and the offline harness's PNGs
-c_generated_code_approach_mpc/
-acados_ocp_approach_mpc.json
-dissipative_verify/
 
 **/CLAUDE.md
 !/CLAUDE.md

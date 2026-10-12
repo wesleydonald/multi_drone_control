@@ -9,7 +9,8 @@ Updated: Mon 12 Oct 2026, 18:48 AEDT (from `date`). Only what a new session need
 - **Layout (12 Oct):** `docs/` top = state, decisions, the manual, the plans; `docs/rig/`, `docs/tejen/`, `docs/reports/`,
   `docs/analysis/`, `docs/experiments/` (cards), `docs/figures/`, `docs/design/`, `docs/archive/` (everything finished;
   a registry row's `docs/X.md` is `docs/archive/X.md`). `configs/experiments/` = the 106 configs current cards, tonight's
-  batch or tests use; `configs/experiments/old/` the rest. `tools/old/` = one-off study scripts.
+  batch or tests use; `configs/experiments/old/` the rest. `tools/old/` = one-off study scripts. `generated/` = every acados solver and
+  the harness PNGs (was the repo root; MDC_ACADOS_ROOT on the lab).
 - **Other worktrees:**
   - `mdc_wt/thesis` (thesis-rig): the assembled thesis, 122 pp. Ch2/Ch3 rewritten; the Ch4 skeleton has F8/F10/F11/F14,
     and T7/T8 are filled after a reviewer.

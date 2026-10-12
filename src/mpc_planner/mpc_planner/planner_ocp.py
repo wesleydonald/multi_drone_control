@@ -17,7 +17,11 @@ Collision (Eq 11) / no-fly (Eq 12) are deferred until this converges.
 The load reference attitude q_ref is an acados parameter (set per solve by the
 node); the reference position/velocity/angular-velocity/tension are set via yref.
 """
+import os
+
 import numpy as np
+
+from utility_objects.run_context import acados_root
 import casadi as ca
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosModel
 
@@ -197,12 +201,12 @@ def generate_load_ocp(dyn: LoadCableDynamics, N=20, tf=2.0,
 
     # isolate codegen so it never clashes with controller_mpc_multi's
     # c_generated_code/ (different model, shared dir would race on the Makefile)
-    ocp.code_export_directory = 'c_generated_code_load_planner' + ('_pr' if pin_rates else '')
+    ocp.code_export_directory = os.path.join(acados_root(), 'c_generated_code_load_planner' + ('_pr' if pin_rates else ''))
 
     # generate=build=False loads the previously compiled shared library as-is
     # (the fast path when sources + geometry are unchanged; see the freshness check
     # in planner_node). Mirrors the tracker's solver cache.
-    solver = AcadosOcpSolver(ocp, json_file=f'{model.name}_ocp.json',
+    solver = AcadosOcpSolver(ocp, json_file=os.path.join(acados_root(), f'{model.name}_ocp.json'),
                              generate=generate, build=build)
     return ocp, solver
 

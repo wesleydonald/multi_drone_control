@@ -13,6 +13,8 @@ solver needs to know about. The node passes those in as callables, so this modul
 stays purely about the mechanics of seeding, solving and reading back the OCP.
 """
 import os
+
+from utility_objects.run_context import acados_root
 import time
 import hashlib
 
@@ -49,7 +51,7 @@ MAX_QP_DUMPS = 5        # of those with the last QP as JSON (~5 MB each at n=4)
 # acados solver cache: the .so bakes in the geometry (n, cable_len, load_mass, rho,
 # inertia) as compile-time constants, so a rebuild is needed when a SOURCE file
 # changes OR the geometry signature changes.
-CODE_DIR = 'c_generated_code_load_planner'
+CODE_DIR = os.path.join(acados_root(), 'c_generated_code_load_planner')   # <repo>/generated or MDC_ACADOS_ROOT
 SRC_FILES = [_planner_ocp.__file__, _lcd.__file__]
 
 

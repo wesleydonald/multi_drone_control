@@ -359,7 +359,8 @@ ros2 launch bringup sim_control_launch.py mode:=attach load_traj:=circle traj_sp
 | `src/simulation_communication`, `src/drone_communication` | sim bridges; real mocap and ELRS |
 | `simulation_assets/generate_rigid_world.py` | source of truth for every world; `tools/make_weld_variants.py` for the rod/seg2/rigid worlds |
 | `configs/experiments/*.yaml`, `configs/sil/*.yaml` | every flown configuration |
-| `tools/` | gate, runner, bench, metrics, plots, preflight, geometry and parameter checks |
+| `tools/` | gate, runner, bench, metrics, plots, preflight, geometry and parameter checks (`tools/old/`: one-off study scripts) |
+| `generated/` | every generated acados solver (`c_generated_code_*`, the `*_ocp.json` / `*_sim.json`) and the offline harness's PNGs; git-ignored, rebuilt by `tools/prebuild_planner.py` and the nodes; `MDC_ACADOS_ROOT` overrides it (the lab's slots) |
 | `results/registry.csv`, `docs/decisions.md` | what has been tried; what was decided |
 | `docs/` (top) | `SESSION_STATE.md`, `decisions.md`, this manual, the thesis plan and the figure plan: only what is current |
 | `docs/rig/` | the next rig day's sheet, load test and review; the freeze doc; the QUAD1 checklist |

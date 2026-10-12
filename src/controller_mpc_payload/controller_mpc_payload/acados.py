@@ -1,4 +1,6 @@
 import os
+
+from utility_objects.run_context import acados_root
 import numpy as np
 import scipy.linalg
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosModel
@@ -199,7 +201,7 @@ def generate_payload_ocp_controller():
     # solver artifacts never collide with the other acados solvers in this workspace (the
     # load planner and the per-drone trackers) -- a shared default 'c_generated_code' /
     # 'acados_ocp.json' can otherwise clobber another solver at launch.
-    ocp.code_export_directory = export_dir = 'c_generated_code_approach_mpc'
+    ocp.code_export_directory = export_dir = os.path.join(acados_root(), 'c_generated_code_approach_mpc')
 
     # Reuse the already-generated + compiled solver instead of regenerating C and recompiling
     # on every launch (that ~30-60 s codegen/make was running each start). We only build when
@@ -215,7 +217,7 @@ def generate_payload_ocp_controller():
     print(f'[approach_mpc] acados OCP: {"BUILD" if need_ocp_build else "reuse cached"}; '
           f'SIM: {"BUILD" if need_sim_build else "reuse cached"} (force_rebuild={force_rebuild})')
     ocp_solver = AcadosOcpSolver(
-        ocp, json_file='acados_ocp_approach_mpc.json',
+        ocp, json_file=os.path.join(acados_root(), 'acados_ocp_approach_mpc.json'),
         build=need_ocp_build, generate=need_ocp_build)
 
     # Create simulation integrator (shares the same export dir; only build it when we rebuild).
