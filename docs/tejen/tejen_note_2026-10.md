@@ -35,6 +35,11 @@ Can you be there, and are you OK with this plan?
    send OFF?
 5. **After a mocap glitch in transit** (a false 65 deg for 0.1 s), your planner stayed in TRANSIT_TO_DROP_POINT until
    our timeout, twice in the twin. Does it have a timeout of its own?
+6. **Two tumbles in the twin.** Twice in about 45 simulated flights QUAD4 tipped over under your controller near the
+   mat: once about 5 s after takeoff (it climbed to 1.8 m with a growing tilt oscillation), once right at the lift
+   after the pickup (level to 70 deg in 1.6 s). The twin is harsher than the rig in places, so this may be
+   twin-only. Has QUAD2 or QUAD4 ever oscillated or tipped after your takeoff or lift on the rig? Please keep your
+   nodes' logs for every flight on Wednesday, so we can check it there.
 
 **What we need from you:**
 - **Your OK on our fork of your code.** Every change is listed in `src/tejen_mission/CHANGES_FROM_TEJEN.md`. A reply
