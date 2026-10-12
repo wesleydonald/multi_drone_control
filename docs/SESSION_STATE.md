@@ -6,6 +6,10 @@ Updated: Mon 12 Oct 2026, 18:48 AEDT (from `date`). Only what a new session need
 ## Where things are (12 Oct tidy)
 - **One tree:** `~/multi_drone_control` on **week5**: code, docs, the registry and the working rules. Built, prebuilt,
   gate --quick passes (609 tests). rig-prep is retired (merged). week5 is the testing tree for the rig and the twin.
+- **Layout (12 Oct):** `docs/` top = state, decisions, the manual, the plans; `docs/rig/`, `docs/tejen/`, `docs/reports/`,
+  `docs/analysis/`, `docs/experiments/` (cards), `docs/figures/`, `docs/design/`, `docs/archive/` (everything finished;
+  a registry row's `docs/X.md` is `docs/archive/X.md`). `configs/experiments/` = the 106 configs current cards, tonight's
+  batch or tests use; `configs/experiments/old/` the rest. `tools/old/` = one-off study scripts.
 - **Other worktrees:**
   - `mdc_wt/thesis` (thesis-rig): the assembled thesis, 122 pp. Ch2/Ch3 rewritten; the Ch4 skeleton has F8/F10/F11/F14,
     and T7/T8 are filled after a reviewer.
