@@ -21,7 +21,7 @@ Updated: Mon 12 Oct 2026, 21:10 AEDT (from `date`). Only what a new session need
 - **Archive tags:** archive/m1-tiltcut, archive/m1-e0, archive/m1-full, archive/combined-m1, archive/m1-video.
 
 ## Wednesday 14 Oct (rig) and Thursday 15:00-18:00 (retries)
-- **Sheet:** `docs/rig/rig_2026-10-14_commands.md`, on week5 with the red-team's fixes in.
+- **Sheet:** `docs/rig/wed_2026-10-14.md`, on week5 with the red-team's fixes in.
   - P1-P14 are props off. R1-R9 are flights: the 3-min hover, the measured and planned 60 deg circles, W4/W5 as R4/R5,
     R11a/R11b as R6-R8, and the full M1 as gated R9.
   - Every terminal: `w5` (sources the main tree, exports ROS_LOCALHOST_ONLY=1 ROS_DOMAIN_ID=23).
@@ -39,7 +39,7 @@ Updated: Mon 12 Oct 2026, 21:10 AEDT (from `date`). Only what a new session need
   (his moving-plate alignment, marginal); the push clearance bar fails in both directions (it measures the push).
 - The lab PC is free. Rows R1682-R1711 say "week5 fc9fb04"; the manifests say 70d525f (docs-only commits between).
 - Waiting on Wesley: the Wednesday reorder (props-off W, R, load test -> R6-R9 -> the releases if time; the circles
-  and the spring scale Thursday). On his yes, rewrite docs/rig/rig_2026-10-14_commands.md in that order.
+  and the spring scale Thursday). On his yes, rewrite docs/rig/wed_2026-10-14.md in that order.
 
 ## Handoff (if a new session picks up tonight; scripts in `~/handoff_2026-10-12/`)
 1. Lab idle? `ssh drones@drones 'who; uptime; docker ps --format "{{.Names}}"'` (no wesley_slot containers, low load).
