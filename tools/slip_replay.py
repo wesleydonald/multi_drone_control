@@ -8,9 +8,11 @@
 1. The slip detector (tools/drop_trigger_replay.py, the record's source for "a survivor let go at +0.155 s"): at
    the bag's full mocap rate, each rod's pivot-to-plate distance against its own length (the plate nearest the
    drone's azimuth in the ring frame, the length the median over the first 1-3 s airborne). The rod is rigid, so
-   while the magnet holds the excess stays within a few mm. A release is the excess over 3 cm on 6 samples in a
-   row; its onset is the first sample of that run 3 mm over the 1.0-0.2 s baseline before it. Every episode is
-   kept (not only the first per drone), so a glitch that comes back shows up as a false alarm.
+   while the magnet holds the error stays within a few mm, and either sign means the magnet is off. A commanded
+   release is timed from its OFF (drop_trigger_replay.release_marks: the onset 3 mm off the 1 s baseline on 6
+   samples, and |rod error| > 3 cm on 6 samples, within 1.5 s); any other run of |rod error| > 3 cm on 6 samples
+   while the drone is still on its plate is an uncommanded release, or a glitch if it comes back within 0.5 s
+   under 10 cm. Every episode is kept, not only the first per drone.
 2. The stretch detector that flies (dissipative_node._detect_tick; identical at the 8 Oct code b811d90 and on
    rig-prep): at each planner tick, a cable over max(typed, measured rod) by detach_detect_m on two ticks in a row,
    having jumped 3 cm since its last tick within the threshold; nothing when every cable is over at once (a ring
@@ -24,7 +26,8 @@
    The node stamps a log row after its solve but reads its poses at the tick's start, 73-87 ms earlier on the
    8 Oct detection ticks; the bag replay uses that start (tick_starts), which leaves about 20 ms of jitter: on a
    rod stretching at 1-2 m/s that is 2-4 cm, enough to move a fire by one tick. The log replay has no such error.
-   A drone leaves the replay when the replay detects it or when the flight's log drops it (an announced DETACH).
+   A drone leaves the replay when the replay detects it, or after the planner's own magnet OFF for a drone it did
+   not detect (an announced DETACH). The replay stops at the fleet stop (disarm, abort, envelope fault).
 Ground truth: the magnet OFF commands in the bag (the operator's, or the planner's own, which the T2 console logs
 as 'magnet OFF ->'), plus the slip detector's releases that no OFF explains (uncommanded). A detection is a fire for
 a drone within 1.5 s after its release; a false alarm is a fire for a drone not released (or before its release);
@@ -216,7 +219,8 @@ def replay_stretch(rows, prm, rods_by_slot, mocap, detect_m, source, rest_z, una
     """Fires [(tick start, drone, over m)], the first count-of-1 tick per drone and the active ticks of the stretch
     detector, on the bag at the tick starts ('bag') or on the logged len columns ('log'). A drone leaves when the
     replay fires for it or after the flight's DETACH line (announced). The tick on which the flight itself fired is
-    logged without the leaver: the log replay takes the leaver's cable from the T2 line there, as the node printed it."""
+    logged without the leaver: the log replay takes the leaver's cable from the T2 line there, as the node printed
+    it."""
     az = [float(v) for v in str(prm.get('attach_azimuths_deg') or '').split(',') if v.strip()] or [0, 90, 180, 270]
     pl = [r for r in rows if r.get('phase') == 'planner']
     if not pl:

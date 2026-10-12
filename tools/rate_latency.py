@@ -251,7 +251,8 @@ def main():
             x, dd, tt = q('xcorr_lag_ms'), q('d_ms'), q('tau_ms')
             summary.append(dict(date=date, axis=ax, drone_flights=len(s), flights=len({r['run'] for r in s}),
                                 xcorr_lag_ms=f'{x[1]:.0f} ({x[0]:.0f}-{x[2]:.0f})',
-                                d_ms=f'{dd[1]:.0f} ({dd[0]:.0f}-{dd[2]:.0f})', tau_ms=f'{tt[1]:.1f} ({tt[0]:.1f}-{tt[2]:.1f})',
+                                d_ms=f'{dd[1]:.0f} ({dd[0]:.0f}-{dd[2]:.0f})',
+                                tau_ms=f'{tt[1]:.1f} ({tt[0]:.1f}-{tt[2]:.1f})',
                                 g=f"{np.median([r['g'] for r in s]):.2f}", r2=f"{np.median([r['r2'] for r in s]):.2f}"))
     with open(os.path.join(a.out, 'latency_summary.csv'), 'w', newline='') as f:
         w = csv.DictWriter(f, fieldnames=list(summary[0]))

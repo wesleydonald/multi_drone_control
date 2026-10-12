@@ -359,7 +359,8 @@ def analyse(spec, results, rig_runs, rb):
     # T6, one implementation (tools/release_bands.py)
     m = run.metrics(None)
     out.update(t_event_s=round(t_ev, 3), window_s=round(m['window_s'], 2), dtheta_deg=round(m['dtheta'], 2),
-               t_peak_s=round(m['t_peak'], 2), abs_peak_deg=round(m['abs_peak'], 2), scalar_rise_deg=round(m['rise'], 2),
+               t_peak_s=round(m['t_peak'], 2), abs_peak_deg=round(m['abs_peak'], 2),
+               scalar_rise_deg=round(m['rise'], 2),
                sigma_pre_deg=round(m['sigma_pre'], 2), n_pre=m['n_pre'], ref_still_s=round(m['ref_still'], 1),
                pre_flag='' if m['steady'] else 'FLAG')
     end_word = end_label.split()[0]
@@ -447,7 +448,8 @@ def plot(rows, out):
 SHOW = ['run', 'kind', 'path', 'pull', 'plan_deg', 'layout_deg', 'leaver_deg', 'gap_after_deg', 'margin_after_mm',
         'leaver_t_before_N', 'planned_step_max_N', 'static_step_max_N', 'detection_s', 'window_end', 'window_s',
         'dtheta_deg', 'dtheta_pairwin_deg', 'pair_window_s', 't_peak_s', 'abs_peak_deg', 'scalar_rise_deg',
-        'sigma_pre_deg', 'ref_still_s', 'pre_flag', 't_back_s', 't_back_note', 't_back_2s_s', 'dip_cm', 'drop_below_ref_cm',
+        'sigma_pre_deg', 'ref_still_s', 'pre_flag', 't_back_s', 't_back_note', 't_back_2s_s', 'dip_cm',
+        'drop_below_ref_cm',
         'offset_pre_xy_cm', 'offset_pre_z_cm', 'offset_post_xy_cm', 'offset_post_z_cm', 'landing_lean_deg',
         'slips_after_event_s', 'old_scalar_rise_deg', 'note']
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/rig_null.py -- the rig's dtheta null and the minimum detectable effect of a lever pair at n = 3 (thesis plan P6).
+"""tools/rig_null.py -- the rig's dtheta null and the minimum detectable effect of a lever pair at n = 3 (plan P6).
 
     python3 tools/rig_null.py [--windows 7 15] [--out DIR] [--rig-runs DIR] [--convert]
 
@@ -20,7 +20,6 @@ trajectory, raw and scaled by its own pre-window rocking (dtheta / sigma_pre).
 import argparse
 import csv
 import glob
-import json
 import os
 import sys
 
@@ -117,10 +116,12 @@ def releases_vs_null(df, table):
         g = g[g.window_s == W]
         ratio = g.dtheta_deg / g.sigma_pre_deg
         rr = float(r.dtheta_deg) / float(r.sigma_pre_deg)
-        out.append(dict(run=r.run, traj=cls, window_s=float(r.window_s), null_window_s=W, dtheta_deg=float(r.dtheta_deg),
+        out.append(dict(run=r.run, traj=cls, window_s=float(r.window_s), null_window_s=W,
+                        dtheta_deg=float(r.dtheta_deg),
                         share_of_null_at_or_above=round(float((g.dtheta_deg >= float(r.dtheta_deg)).mean()), 3),
                         sigma_pre_deg=float(r.sigma_pre_deg), dtheta_over_sigma_pre=round(rr, 2),
-                        null_ratio_median=round(float(ratio.median()), 2), null_ratio_p95=round(float(ratio.quantile(0.95)), 2),
+                        null_ratio_median=round(float(ratio.median()), 2),
+                        null_ratio_p95=round(float(ratio.quantile(0.95)), 2),
                         share_of_null_ratio_at_or_above=round(float((ratio >= rr).mean()), 3)))
     return out
 

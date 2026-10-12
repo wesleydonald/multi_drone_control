@@ -2,7 +2,7 @@
 """tools/resize_doublecount.py -- the double-count test at the resize tick (thesis plan P6; freeze 1.5, Q9: "the resize
 tick adds the load change a second time on the measured pull").
 
-    python3 tools/resize_doublecount.py [--runs 2026-10-08/r302_3 2026-10-08/r303_4 ... R1140 ...] [--rig DIR] [--out DIR]
+    python3 tools/resize_doublecount.py [--runs 2026-10-08/r302_3 ... R1140 ...] [--rig DIR] [--out DIR]
 
 On the measured pull (tracker cable_source mocap) a survivor's node-0 cable term is its measured rod pull; the plan's
 tension enters the tracker only through the references (positions, the attitude and throttle feedforward from the
@@ -119,7 +119,8 @@ def analyse(rig, tag):
             run=run, kind=kind, drone=d, plate_az=float(str(prm.get('attach_azimuths_deg')).split(',')[kb]),
             leaver=leaver, t_off=round(t_off, 3), t_resize=round(t_res, 3), t_plan_arrival=round(t_arr, 3),
             dtheta_deg=round(m['dtheta'], 2), dtheta_peak_minus_arrival_s=round(t_peak - t_arr, 2),
-            plan_t_before_N=round(plan_t0, 2), plan_t_after_N=round(plan_t1, 2), plan_step_N=round(plan_t1 - plan_t0, 2),
+            plan_t_before_N=round(plan_t0, 2), plan_t_after_N=round(plan_t1, 2),
+            plan_step_N=round(plan_t1 - plan_t0, 2),
             plan_vert_step_N=round(dv, 2),
             meas_vert_at_off_N=round(at(t_off, 'fz') - fz0, 2),
             meas_vert_at_resize_N=round(meas_res, 2),
@@ -139,7 +140,8 @@ def analyse(rig, tag):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--runs', nargs='+', default=RUNS)
-    ap.add_argument('--rig', default=RIG_DEFAULT, help='results/rig with <run>_run, <run>_logs and <run>.log (read only)')
+    ap.add_argument('--rig', default=RIG_DEFAULT,
+                    help='results/rig with <run>_run, <run>_logs and <run>.log (read only)')
     ap.add_argument('--out', default=os.path.join(REPO, 'results', 'analysis', 'p6_2026-10-12', '3_doublecount'))
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)

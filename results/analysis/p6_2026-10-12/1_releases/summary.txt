@@ -49,4 +49,4 @@ Changes against the 11 Oct table (results/analysis/release_transient, same scrip
 - r200006's two slips are new rows. Every other row is unchanged.
 - Quoting: the plan's "4.6-17.8 deg" and "6.5 never without 15.4" are absolute peaks from the older readings. On
   dtheta the five releases that carried on span 5.3-16.9 deg (r303_4 5.3 against r302_3 11.2); their absolute
-  peaks on the bag grid are 5.5-17.8 (r0012's 5.48 deg comes at +7.9 s, at LAND, not at the detach).
+  peaks on the bag grid are 5.5-17.8 (r0012's 5.48 deg comes at +7.9 s, 0.1 s before LAND, not from the detach; its first second peaks at 4.58, the registry's 4.6).
