@@ -1,0 +1,72 @@
+P6 item 2: the slip detector replayed over the 8 Oct bags (plan C2-A: "every ring loss began with a magnet
+letting go; pending: the slip detector replayed on the 8 Oct bags")
+
+Made by: python3 tools/slip_replay.py --dates 2026-10-08   (ROS sourced; read-only, rosbag2_py; branch p6-offline)
+         python3 tools/slip_replay.py --dates 2026-10-07 --out .../2_slip/check_2026-10-07   (the check against 7 Oct)
+Data: every bag in results/rig/2026-10-08 (13 bags), the planner and tracker logs beside them, the T2 consoles.
+Outputs: flights.csv, slip_detector.csv, stretch_detector.csv, tables_2026-10-08.md; check_2026-10-07/.
+
+Two detectors exist in the code, and both were replayed:
+1. The slip detector (tools/drop_trigger_replay.py, the source of "a survivor let go at +0.155 s"): at the bag's
+   full mocap rate (~90 Hz), each rod's pivot-to-plate distance against its own length. The rod is rigid, so a
+   magnet that holds keeps the error within a few mm. A release is |rod error| > 3 cm on 6 samples in a row; its
+   onset is the first sample 3 mm off the baseline. Commanded releases are timed from their magnet OFF; any other
+   sustained error of a drone still on its plate is an uncommanded release (or a glitch, if it comes back).
+2. The stretch detector that flies (dissipative_node._detect_tick, identical at the 8 Oct code b811d90 and on
+   rig-prep): at each 10 Hz planner tick, a cable over max(typed, measured rod) by 6 cm on two ticks in a row,
+   having jumped 3 cm. Replayed on the planner log's own distances (as flown) and on the bag (cross-check).
+
+8 Oct flights: 4 of the 13 bags flew the ring (r302_3, r303_4, r304_3, r305); the other 9 never lifted it (props-off
+check, ARM failures, the r303 creep timeout). No flight had a fleet stop (disarm, abort or envelope fault) before
+LAND.
+
+Slip detector, every 8 Oct release (times on the rig_to_run run clock, s):
+| flight | drone    | what                 | OFF    | onset  | rod error > 3 cm | onset - OFF (ms) | 3 cm - OFF (ms) |
+|--------|----------|----------------------|--------|--------|------------------|------------------|-----------------|
+| r302_3 | /drone_3 | magnet OFF (planner) | 32.124 | 32.366 | 32.379           | 242              | 255             |
+| r303_4 | /drone_3 | magnet OFF (operator)| 28.757 | 28.948 | 29.014           | 191              | 258             |
+| r304_3 | /drone_3 | magnet OFF (operator)| 28.821 | 28.918 | 28.984           | 97               | 163             |
+| r305   | /drone_3 | magnet OFF (operator)| 51.735 | 51.855 | 51.934           | 120              | 199             |
+- Detections 4 of 4 commanded releases; misses 0; false alarms 0; uncommanded releases 0.
+- The survivors' largest rod error while on their plates, over each flight's airborne time: 0.3-0.7 cm (flights.csv),
+  against the 3 cm release threshold. No survivor magnet let go on 8 Oct.
+
+Stretch detector at 6 cm (the flight's setting on r303_4, r304_3, r305; off on r302_3):
+| flight | release        | first tick over | fire (replay) | fire - release (ms) | over at fire (cm) | flight logged (ms after release) |
+|--------|----------------|-----------------|---------------|---------------------|-------------------|----------------------------------|
+| r303_4 | operator OFF   | 29.067          | 29.167        | 410                 | 14.1              | 418                              |
+| r304_3 | operator OFF   | 29.053          | 29.153        | 332                 | 20.5              | 332                              |
+| r305   | operator OFF   | 51.971          | 52.071        | 337                 | 15.3              | 345                              |
+| r302_3 | planner OFF    | -               | no fire       | -                   | -                 | announced: the planner knew      |
+- Detections 3 of 3 unannounced releases; false alarms 0; misses 0. The replay on the planner's own distances fires on
+  the same tick as each flight (the T2 line is stamped 0-8 ms later in the tick); the bag replay agrees on all three.
+- Delay, release to detection (0.33-0.42 s): the magnet opens 97-191 ms after the OFF, the rod passes 6 cm and the
+  next tick sees it (first tick over at 232-310 ms), and the two-tick rule adds exactly one tick (100 ms).
+
+Check on 7 Oct (the replay finds what drop_trigger_replay.py found; check_2026-10-07/):
+- Slip detector: r0012 leaver (OFF to onset 201 ms, 3 cm at 1293 ms: no step-out, the drone stayed near its
+  plate), r0013 leaver (162 / 225 ms) and two survivors with no OFF (+0.155 s and +0.397 s after the leaver's OFF),
+  r200006 two survivors with no OFF (2.79 s apart). Same releases and onsets as the 8 Oct replay card (r0013's
+  second survivor: +0.397 here, +0.386 there; the baseline window differs).
+- Stretch detector (not flown on 7 Oct; what it would have done): r200006 slip 1 fired 278 ms after the onset with
+  17.5 cm over (the 7 Oct card says 0.38 s and 17.5 cm: it timed the log row's stamp, which comes about 0.1 s after
+  the tick that read the poses); r0013's first survivor slip 155 ms after its onset; r0013's second survivor slipped
+  75 ms before the fleet abort (no two ticks fit); r200006's second slip came after LAND, when the node no longer
+  detects.
+
+What it means for C2: on 8 Oct no magnet let go without a command. Every uncommanded release in the bagged record
+is on 7 Oct, with the rods planned at 45 deg: r0013's two survivors and r200006's two. The detector that flies
+caught every unannounced release in 0.33-0.42 s with no false alarm, and the full-rate slip detector sees the
+same releases 0.10-0.24 s after the OFF.
+
+Caveats:
+- The record holds four uncommanded releases in two flights: r0013 lost two survivors (+0.155 s at 2.6 deg of
+  tilt, and +0.397 s at about 46 deg, inside the capsize) and r200006 two. The plan's "three in two flights"
+  counts r0013's second one out; if that is deliberate (a consequence, not a cause), the text should say so.
+- "Commanded" is judged from the OFF command alone; whether an OFF release took the magnet longer than usual
+  cannot be told apart from a slip at the same moment.
+- 30 Sep had no bags; its lift-phase releases (6 magnets in 3 flights) are not in any replay.
+- The bag replay reads the poses at the planner's tick start, estimated as the log stamp minus the solve and
+  30 ms (calibrated on the three 8 Oct detection ticks, where the bag then gives the cable lengths the T2 lines
+  printed). Its ~20 ms jitter can move a fire by one tick on a fast-stretching rod (r0013's first slip: 275 ms
+  on the bag against 155 ms on the planner's own distances); the replay on those distances has no such error.

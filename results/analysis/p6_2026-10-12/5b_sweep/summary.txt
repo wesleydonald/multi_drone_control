@@ -1,0 +1,38 @@
+P6 item 5b: the stretch-detector sweep (false alarms over all bags; delay against the threshold from the releases)
+
+Made by: python3 tools/slip_replay.py --sweep --dates 2026-10-07 2026-10-08   (ROS sourced; read-only)
+Data: the 45 bags of 7 and 8 Oct (17 flew the ring), with their planner logs. Outputs: sweep_false_alarms.csv,
+sweep_delays.csv, tables.md.
+Method: the flown rule (dissipative_node._detect_tick: over max(typed, measured rod) by the threshold on two ticks in a
+row, a 3 cm jump since the last tick within it, nothing when every cable is over at once) replayed on the planner's
+own logged distances at its 10 Hz ticks, with the threshold from 2 to 12 cm, over each flight's active time (the
+planner phase before LAND or the fleet stop; with drop_on_loss, until the load is down). The 3 cm jump guard is held.
+
+False alarms (fires for a drone that had not let go):
+| threshold (cm)       | 2 | 3 | 4 | 5 | 6 | 8 | 10 | 12 |
+|----------------------|---|---|---|---|---|---|----|----|
+| fires, 17 flights, 660 s active | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+The largest rod error of a drone still on its plate, at the bag's full rate (item 2's flights.csv): 2.3 cm in normal
+flight (r0005), 2.8 and 3.2 cm only inside the r200006 and r0013 capsizes.
+
+Delay from the release to the fire (ms; release = the OFF, or the slip onset for an uncommanded one):
+| threshold (cm) | r303_4 (OFF) | r304_3 (OFF) | r305 (OFF) | r0013 /drone_1 (slip) | r200006 /drone_1 (slip) |
+|----------------|--------------|--------------|------------|-----------------------|-------------------------|
+| 2-4            | 410          | 332          | 337        | 155                   | 169                     |
+| 5-6            | 410          | 332          | 337        | 155                   | 278                     |
+| 8              | 545          | 332          | 476        | 275                   | 278                     |
+| 10-12          | 545          | 454          | 476        | 275                   | 278                     |
+Not in the table: r0013 /drone_2 slipped 75 ms before the fleet abort (no two ticks fit); r200006 /drone_2 slipped
+after LAND (the node no longer detects); the announced leavers (r0012, r0013, r302_3) were already resized.
+
+What it means: no threshold from 2 to 12 cm made a false alarm in 660 s of rig flight, so 6 cm has margin to spare;
+but lowering it below 6 cm would not have caught the 8 Oct releases sooner: a released rod stretches from under 2 cm
+to over 6 cm within one 100 ms tick, so the delay is set by the magnet's opening (0.1-0.2 s), the tick and the
+two-tick rule (one more tick, 100 ms), not by the threshold. Raising it to 8 cm costs 0.13-0.14 s on two of the
+three. On the two slips, 2-4 cm would have fired one tick sooner on r200006.
+
+Caveats:
+- 17 flights, 660 s; a 0-of-660 s false-alarm count bounds the rate only loosely (one per 220 s at 95 %).
+- The jump guard is part of the rule held fixed here; without it a 2-3 cm threshold sits on the 2.3-3.2 cm errors above.
+- The replay uses the node's own logged distances, as flown; where the flight had already resized the leaver away, the
+  T2 line's cable and then the bag stand in (tools/slip_replay.py).

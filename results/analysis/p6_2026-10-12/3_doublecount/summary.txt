@@ -1,0 +1,64 @@
+P6 item 3: the double-count test at the resize tick (freeze 1.5, T9/T10, Q9: "the resize tick adds the load change
+a second time on the measured pull")
+
+Made by: python3 tools/resize_doublecount.py   (branch p6-offline; reads logs only, no bag)
+Data: the planner log (node-0 planned tension t and its vertical part -t s_z per slot), the trackers' logs (the cable
+term they applied at node 0, acx/acy/acz, which on cable_source mocap is the measured rod pull; the model throttle
+u2), the T2 console's FLEET RESIZED line, events.csv. Rig: r302_3 (announced), r303_4 (unannounced) as asked, plus
+r304_3 and r305; twin, measured pull, 7 Oct trees: R1118, R1121 (announced), R1140, R1145, R1139, R1141 (unannounced).
+Full table: doublecount.csv, table.md (one row per survivor).
+
+Method: per survivor, the plan's vertical step (first resized row against the 2 s before the release) beside the
+measured vertical pull's change from that same baseline, read at the resize; then the commanded thrust (m kT u2)
+across the resized plan's arrival at the tracker (mean over 0.08-0.12 s after the first resized log row's stamp,
+minus the 60 ms before it).
+
+The two asked flights (N; vertical parts):
+| flight | survivor (plate) | plan's step | measured change at the resize | share already in the measured term | thrust step at the plan's arrival |
+|--------|------------------|-------------|-------------------------------|------------------------------------|-----------------------------------|
+| r302_3 announced   | drone 1 (30)  | +0.93 | -0.09 | -0.09 | +0.18 |
+| r302_3 announced   | drone 2 (150) | +0.95 | +0.11 | +0.11 | -0.43 |
+| r302_3 announced   | drone 0 (270) | -0.45 | -0.07 | +0.15 | +0.37 |
+| r303_4 unannounced | drone 1 (30)  | +1.11 | +1.09 | 0.98  | -0.35 |
+| r303_4 unannounced | drone 2 (150) | +1.11 | +1.16 | 1.04  | -0.69 |
+| r303_4 unannounced | drone 0 (270) | -0.38 | -0.27 | 0.73  | +1.12 |
+
+All rows:
+| set               | survivors | share of the plan's step already in the measured term at the resize | thrust step at the plan's arrival / plan's step |
+|-------------------|-----------|---------------------------------------------------------------------|--------------------------------------------------|
+| rig, announced    | 3 (r302_3)                 | -0.09 to 0.15 (median 0.11)  | 0.19, -0.45, -0.82                          |
+| rig, unannounced  | 9 (r303_4, r304_3, r305)   | 0.60 to 1.52 (median 0.93)   | -3.18 to -0.09: against the step, 9 of 9 (0.14-1.40 N) |
+| twin, announced   | 6 (R1118, R1121)           | -0.02 to 0.01                | 0.59 to 0.76: with the step, 6 of 6          |
+| twin, unannounced | 12 (R1140, R1145, R1139, R1141) | 0.55 to 1.05 (median 0.69) | -0.41 to 0.26 (|step| <= 0.39 N)          |
+
+When the ring's T6 tilt rise peaked, against the resized plan's arrival: rig r303_4 -0.15 s and r304_3 -0.05 s
+(before it); r305 +0.58 s; r302_3 +0.57 s. Twin unannounced +0.02 to +0.23 s; twin announced +0.50 to +0.53 s.
+
+Answer:
+- Does the measured term already contain the change the plan adds? On an unannounced release, mostly yes: by the
+  resize (0.33-0.42 s after the release) the survivors' measured vertical pull had moved by 60-152 % of the plan's
+  step on the rig (median 93 %) and 55-105 % in the twin. On an announced release, no: the plan's step comes with the
+  OFF, and the measured term has not moved (rig -9 to 15 %, twin about 0 %).
+- Is the change then counted a second time? Not at the tick. On the unannounced releases the survivors' commanded
+  thrust did not take the plan's step again when the resized plan arrived: in the twin it moved by 0.39 N or less;
+  on the rig it moved by 0.14-1.40 N AGAINST the step's sign in all 9 survivors, the start of a swing of about 1 Hz
+  (in r303_4 and r305 the drone whose planned pull fell gains 1.0-1.3 N of measured pull within 0.14 s while the two
+  whose pull rose lose up to 0.5 N; 0.44 s later it has reversed). On the announced releases the plan's step reaches the thrust within 0.1 s, before the load does
+  (twin 59-76 % of it, 6 of 6; on the rig 0.2 s before the magnet opened, mixed in sign).
+- On the two rig hovers released unannounced, the tilt rise peaked before the resized plan reached the trackers, so
+  the resize cannot have set their dtheta.
+
+What it means for the thesis: the double-count variant frozen beside the 1-DOF model (T9 off < on, T10 unannounced <
+announced) does not have the mechanism it names in these logs. The frozen signs stand (they are frozen); the text
+should not explain a twin or rig order by a double count. What the logs show instead: an announced step leads the
+load (in the twin and on the rig), and on the rig a counter-swing starts at the plan's arrival.
+
+Caveats:
+- One rig flight per kind (two more unannounced flights as context); the twin rows are the 7 Oct trees, not the
+  candidate.
+- The measured term is the tracker's applied value (slew-limited, after the 80 ms filter); its vertical part is
+  compared, because the plan's horizontal pull and the rig's ~0.55 N inward force mix in the horizontal.
+- The rig's counter-swing is not explained here. A candidate: the resized plan lowers the reference of the drone
+  whose pull falls by about 4 cm (r303_4) and 5.6 cm (r305) within 0.35 s, and the measured term (the drone's
+  acceleration minus its thrust model) reads that motion back as rod pull. Not tested.
+- The twin console is on wall time, so the twin's resize is taken as 0.1 s before the plan's arrival.

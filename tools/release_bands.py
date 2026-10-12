@@ -70,7 +70,9 @@ def tilt_vector(q):
 
 
 class Run:
-    def __init__(self, tag):
+    def __init__(self, tag, te=None, kind=None, tland=None):
+        """te/kind and tland override the event and the window end for what the freeze does not time
+        (an uncommanded magnet release, a flight with no LAND); the caller labels such rows."""
         self.tag = tag
         d = locate(tag)
         r = pd.read_csv(os.path.join(d, 'run.csv'))
@@ -83,15 +85,20 @@ class Run:
         self.ev = {}
         for _, row in ev.iterrows():
             self.ev.setdefault(str(row['event']), float(row['sim_time']))
-        if 'RELEASE' in self.ev:
+        if te is not None:
+            self.kind, self.te = kind or 'given', float(te)
+        elif 'RELEASE' in self.ev:
             self.kind, self.te = 'unannounced', self.ev['RELEASE']
         elif 'DETACH' in self.ev:
             self.kind, self.te = 'announced', self.ev['DETACH']
         else:
             sys.exit(f'{tag}: no RELEASE or DETACH event (soft detaches: the ramp start is not implemented yet)')
-        if 'LAND' not in self.ev:
+        if tland is not None:
+            self.tland = float(tland)
+        elif 'LAND' not in self.ev:
             sys.exit(f'{tag}: no LAND event')
-        self.tland = self.ev['LAND']
+        else:
+            self.tland = self.ev['LAND']
 
     def win(self, a, b):
         return (self.t >= a) & (self.t < b)

@@ -1,0 +1,9 @@
+run,kind,window_end,dip_cm,old_dip_cm,drop_below_ref_cm,offset_pre_z_cm
+RIG-1007-r0012,announced,LAND,-2.7,-1.7,0.3,-3.0
+RIG-1007-r0013,announced,FLEET_ABORT (no LAND after the event),21.7,,22.9,-1.2
+RIG-1007-r200006 slip 1,uncommanded,LAND,12.5,,12.5,0.0
+RIG-1007-r200006 slip 2,uncommanded,FLEET_ABORT (no LAND after the event),68.1,,30.3,-2.0
+RIG-1008-r302_3,announced,LAND,6.9,7.0,6.9,0.0
+RIG-1008-r303_4,unannounced,LAND,3.1,3.4,3.7,-0.6
+RIG-1008-r304_3,unannounced,LAND,5.3,5.7,5.8,-0.5
+RIG-1008-r305,unannounced,LAND,3.7,3.6,3.9,-0.1

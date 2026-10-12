@@ -1,0 +1,9 @@
+threshold m,date,run,drone,fire (s),over (cm)
+0.02,all,17 flights,660 s active,0 false alarms,
+0.03,all,17 flights,660 s active,0 false alarms,
+0.04,all,17 flights,660 s active,0 false alarms,
+0.05,all,17 flights,660 s active,0 false alarms,
+0.06,all,17 flights,660 s active,0 false alarms,
+0.08,all,17 flights,660 s active,0 false alarms,
+0.10,all,17 flights,660 s active,0 false alarms,
+0.12,all,17 flights,660 s active,0 false alarms,

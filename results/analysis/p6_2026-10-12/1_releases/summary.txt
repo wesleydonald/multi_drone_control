@@ -1,0 +1,52 @@
+P6 item 1: the ring's transient at every rig release, on the signed T6 metrics (docs/freeze_2026-10-14.md 1.1)
+
+Made by: python3 tools/release_transient.py --convert --out results/analysis/p6_2026-10-12/1_releases
+         (ROS sourced for --convert; tools/release_bands.py is the one T6 implementation; branch p6-offline)
+Data: tools/rig_to_run.py run directories built with each flight's bag (50 Hz grid, ring pose from the bag):
+  r0012, r302_3, r303_4, r304_3, r305: the main tree's results/rig/<date>/<run>_run (re-converting r303_4 with
+  today's rig_to_run.py gives byte-identical run.csv and events.csv);
+  r0013, r200006: converted today into the p6-offline worktree's results/rig_runs/2026-10-07/ (not committed;
+  --convert rebuilds them from results/rig/2026-10-07/<run>, <run>_logs and <run>.log). Their events.csv gets a
+  SLIP row per rod that left its plate with no magnet OFF (tools/drop_trigger_replay.py's separation onset).
+Full table (twin pairs too): table.csv / table.md. Rig rows:
+
+| flight          | event        | pull, plan | margin mm | window        | dtheta | t peak | abs peak | sigma_pre | t back (frozen) | t back 2 s (not frozen) | dip cm | detect s | offset xy/z pre cm | offset xy/z post cm | landing lean |
+|-----------------|--------------|------------|-----------|---------------|--------|--------|----------|-----------|-----------------|-------------------------|--------|----------|--------------------|---------------------|--------------|
+| r0012           | announced    | planned 45 | 112.5     | LAND 8.0 s    | 6.07   | 0.69   | 5.48     | 1.95      | not scored      | 4.51                    | -2.7   | -        | 6.3 / -3.0         | 4.8 / +6.6          | 3.5          |
+| r0013           | announced    | planned 45 | 58.2      | abort 0.47 s  | 68.28  | 0.47   | 68.64    | 1.06      | not scored      | -                       | 21.7   | -        | 9.6 / -1.2         | -                   | -            |
+| r200006 slip 1  | uncommanded  | meas. 45   | 0.0       | LAND 0.59 s   | 30.93  | 0.57   | 30.55    | 0.76 FLAG | not scored      | -                       | 12.5   | -        | 2.5 / 0.0          | -                   | -            |
+| r200006 slip 2  | uncommanded  | meas. 45   | -225      | abort 0.43 s  | 63.18  | 0.40   | 65.46    | 8.64 FLAG | not scored      | -                       | 68.1   | -        | 15.5 / -2.0        | -                   | -            |
+| r302_3          | announced    | meas. 60   | 112.5     | LAND 6.58 s   | 11.21  | 0.61   | 15.35    | 1.39      | not scored      | not back                | 6.9    | -        | 6.4 / 0.0          | 4.7 / +0.2          | 2.5          |
+| r303_4          | unannounced  | meas. 60   | 112.5     | LAND 7.63 s   | 5.29   | 0.40   | 6.50     | 1.18      | not scored      | 4.80                    | 3.1    | 0.42     | 5.8 / -0.6         | 5.9 / +0.2          | 3.0          |
+| r304_3          | unannounced  | meas. 60   | 58.2      | LAND 7.74 s   | 16.88  | 0.42   | 17.82    | 1.03      | not scored      | 5.76                    | 5.3    | 0.33     | 5.2 / -0.5         | 7.0 / -1.3          | 3.3          |
+| r305 (circle)   | unannounced  | meas. 60   | 112.5     | LAND 14.0 s   | 8.02   | 1.07   | 8.09     | 2.33      | 3.93            | 3.91                    | 3.7    | 0.34     | 7.0 / -0.1         | 6.9 / -0.1          | 4.0          |
+(degrees and seconds unless marked; t peak and t back from the event; margin = survivors' support margin after the
+leaver, metrics.cog_margin; detect = DETECTED - RELEASE in the bag)
+
+What the freeze does not define, and what this table does instead (labelled in event_rule / window_end):
+- Uncommanded release (r200006): no magnet OFF and no DETACH exist, so the freeze has no event time. t_e is the
+  slip detector's onset in the bag (the rod's pivot-to-plate distance 3 mm over its baseline, in the run that
+  passes 3 cm). Not a frozen time.
+- No LAND after the event (r0013 capsized; r200006's second slip came 2.2 s after LAND, in the descent): the
+  freeze's window end (LAND) does not exist or precedes the event, so the window ends at the fleet abort.
+- Time back in band is scored only when LAND comes >= 10 s after the event (freeze Q2). Only r305 qualifies.
+  r0012 (8.0 s) and the 8 Oct hovers (6.6-7.7 s) landed too soon; the capsizes never landed. t_back_2s is a
+  labelled variant (post tilt over the last 2 s, end >= event + 4 s), not the frozen metric.
+- r200006: the pre-window is flagged (Q12): slip 1 came 3.8 s into the orbit, inside its 4 s speed ramp;
+  slip 2's pre-window holds slip 1 and its 30.6 deg excursion (sigma_pre 8.6 deg), so its dtheta is not a rise
+  from a steady state.
+
+Other releases in the rig data, outside this table:
+- 30 Sep lifts (registry RIG-0930-R3b0-f4: 3 magnets; lift-f5: 2; lift-f6: 1), all near the floor in the break-off
+  on the earlier controller. No bag was recorded on 30 Sep and the planner logs then had only the scalar tilt (no
+  ring quaternion, no rod lengths), so neither the tilt vector nor the release time can be computed.
+- 1 Oct and the other 7 Oct flights: none (tools/drop_trigger_replay.py over every bag).
+- 8 Oct: none besides the four leavers (item 2's slip detector over every 8 Oct bag).
+
+Changes against the 11 Oct table (results/analysis/release_transient, same script before this change):
+- r0013 now comes from its bag on the 50 Hz grid and ends at the fleet abort: dtheta 68.3 deg (was 91.3 from the
+  10 Hz planner log, whose window ran 23.7 s, past the abort onto the ring lying on the floor).
+- r200006's two slips are new rows. Every other row is unchanged.
+- Quoting: the plan's "4.6-17.8 deg" and "6.5 never without 15.4" are absolute peaks from the older readings. On
+  dtheta the five releases that carried on span 5.3-16.9 deg (r303_4 5.3 against r302_3 11.2); their absolute
+  peaks on the bag grid are 5.5-17.8 (r0012's 5.48 deg comes at +7.9 s, 0.1 s before LAND, not from the detach; its first second peaks at 4.58, the registry's 4.6).
