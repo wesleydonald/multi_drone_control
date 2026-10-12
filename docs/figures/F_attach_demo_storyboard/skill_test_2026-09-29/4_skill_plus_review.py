@@ -60,7 +60,7 @@ import plot_style as ps                                   # noqa: E402
 import metrics                                            # noqa: E402
 import matplotlib.pyplot as plt                           # noqa: E402
 
-RUN = os.path.join(REPO, 'results_archive', 'R0209_sim_gz_attach_circle_n3_fast')
+RUN = os.path.join(REPO, 'results', '2026-09-10', 'R0209_sim_gz_attach_circle_n3_fast')
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'storyboard')
 
 LEVEL_DEG = 10.0            # the caption's claim: "under 10 deg"

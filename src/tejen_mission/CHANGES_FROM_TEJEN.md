@@ -69,7 +69,7 @@ His `tools/sim_test/` and `tools/irl_test/` scripts live at the same paths in ou
 
 ### Sync 1, 10 Oct 2026: a7524bae..11a0683f (17 commits, 25 Sep to 8 Oct)
 
-Classification: `docs/tejen_sync_2026-10-08.md`. Wesley 10 Oct: "Start now, sim only"; branch `tejen-sync`,
+Classification: `docs/tejen/tejen_sync_2026-10-08.md`. Wesley 10 Oct: "Start now, sim only"; branch `tejen-sync`,
 nothing to the rig tree before 14 Oct. Every opt-in feature keeps his default (`attachment_policy`
 legacy, `pickup_alignment_mode` legacy, `target_alignment_mode` legacy, `trajectory_type` circle,
 `cooperative_shared_start_skew_s` 0).

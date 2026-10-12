@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # backup_results.sh — copy flight data off this machine.
 #
-# A lab session is not finished until this has run. See general/THESIS_PLAN.md §4.
+# A lab session is not finished until this has run. See docs/archive/thesis_plan_v2_2026-09.md §4.
 #
 #   ./tools/backup_results.sh                 # back up to every configured destination
 #   ./tools/backup_results.sh --dry-run       # show what would transfer
@@ -19,7 +19,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC_DIRS=("results" "results_archive")
+SRC_DIRS=("results")
 STAMP="$(date +%Y-%m-%dT%H:%M:%S)"
 LOGFILE="$REPO/results/.backup_history.log"
 

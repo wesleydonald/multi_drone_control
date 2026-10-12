@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt                                        # noqa: E
 from matplotlib.patches import FancyArrowPatch                        # noqa: E402
 from matplotlib.ticker import FormatStrFormatter                      # noqa: E402
 
-RUN = '/home/wesley/multi_drone_control/results_archive/R0209_sim_gz_attach_circle_n3_fast'
+RUN = '/home/wesley/multi_drone_control/results/2026-09-10/R0209_sim_gz_attach_circle_n3_fast'
 OUT = os.path.dirname(os.path.abspath(__file__))
 RUN_ID = 'R0209'
 

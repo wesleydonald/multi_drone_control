@@ -368,7 +368,7 @@ ros2 launch bringup sim_control_launch.py mode:=attach load_traj:=circle traj_sp
 | `docs/design/` | velocity loop, measured-force loop, SIL bench, fleet safety, the M1 contact contract |
 | `docs/archive/` | finished plans, past rig sheets, reviews, overnight notes. A registry row's `docs/X.md` that is not at the top any more is `docs/archive/X.md` |
 | `docs/archive/experimentation/` | control-methods survey, hybrid dwell, robustness table, rig gap, agenda |
-| `results_archive/` | tracked data behind thesis figures; `configs/thesis_figures.yaml` + `tools/thesis_figures.py` regenerate them |
+| `configs/thesis_figures.yaml`, `tools/thesis_figures.py` | the runs behind each thesis figure (in `results/`, local only) and the scripts that regenerate them |
 | `src/tejen_mission`, `src/tejen_mpc`, `src/tejen_dynamic_planner`, `src/tejen_utility_objects` | Tejen's forked code (base a7524bae); our changes listed in `authority.md` §6 |
 | `simulation_assets/tejen/`, `simulation_assets/three_attach_partner*.sdf`, `simulation_assets/models/x3_drone3_magnet_rod_partner*.sdf` | his worlds; M1 worlds (incl. `_m100` 0.1 kg object, `_nopick` bench copies); the partner rod models |
 | `src/simulation_communication/.../rate_pid.py` | the sim rate PI shared by every sim bridge |

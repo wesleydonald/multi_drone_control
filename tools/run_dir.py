@@ -112,13 +112,11 @@ def resolve(spec, roots=None):
     """A run id ('R0034'), a directory name or a path -> the run directory.
 
     Ids are how runs are cited in a caption, a commit message and a conversation, so
-    every tool takes them. `results_archive/` is searched FIRST: once a run is promoted,
-    the frozen copy is the one a figure should be built from, and silently preferring
-    the mutable original would defeat the archive."""
+    every tool takes them."""
     if os.path.isdir(spec) and os.path.exists(os.path.join(spec, 'manifest.json')):
         return os.path.abspath(spec)
     if roots is None:
-        roots = [os.path.join(repo_root(), 'results_archive'), results_root()]
+        roots = [results_root()]
     key = os.path.basename(spec.rstrip('/'))
     for root in roots:
         if not os.path.isdir(root):

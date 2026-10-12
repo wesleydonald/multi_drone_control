@@ -1,4 +1,4 @@
-# multi_drone_control — working rules (read every session; the manual is general/CLAUDE.md)
+# multi_drone_control — working rules (read every session; the manual is docs/reference.md)
 
 Thesis: quadcopters attaching to / detaching from a cooperatively carried cable-suspended
 ring payload, sim then rig. Deadline 20 Nov 2026 (Wesley 11 Oct; the title page date). Owner: Wesley. Decisions are his.

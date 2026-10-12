@@ -171,12 +171,11 @@ Several controllers call `DataLogger`, so if you change how it behaves, change i
 Runs land in **`results/`** at the repo root.
 
 - `results/` — every raw run. Not tracked, not backed up off-machine.
-- `results_archive/` — the quality runs behind thesis figures. **Tracked and pushed**.
+- `results/` — every run (local only; back it up with `tools/backup_results.sh`).
 
 Promote anything you care about as soon as it exists:
 ```bash
 ./tools/archive_run.sh results/2026-10-14/R0142_real_attach_circle "Fig 7.3 mid-flight attach"
-git add results_archive && git commit -m "Archive R0142" && git push
 ```
 
 Plot a run with `tools/plot_run.py R0234`; compare runs with `tools/compare_runs.py`. Start with `docs/SESSION_STATE.md` and `docs/reference.md`.

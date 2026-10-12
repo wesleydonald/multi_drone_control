@@ -21,7 +21,7 @@ A conditional ISS-style reading (arXiv 2605.05339): if every event's jump is bou
 the inter-event dwell exceeds T_dwell, the tilt excess contracts by rho per cycle and the
 sequence of events is stable. The numbers here are the measured inputs to that argument.
 
-    tools/hybrid_dwell.py results_archive/R0209_* results/2026-09-10/R0234_* ...
+    tools/hybrid_dwell.py results/2026-09-10/R0209_* results/2026-09-10/R0234_* ...
     tools/hybrid_dwell.py --eps 3 --md docs/archive/experimentation/hybrid_dwell.md <runs>
 """
 import argparse

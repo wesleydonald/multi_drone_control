@@ -76,7 +76,7 @@ Updated: Mon 12 Oct 2026, 18:48 AEDT (from `date`). Only what a new session need
   back up the registry, append the row yourself, then diff the old lines. Wrapper: `$CLAUDE_JOB_DIR/tmp/sc.sh`.
 - **Permissions:** deletions (branches, worktrees), git push and switching the main tree are refused for the
   assistant. Write a script for Wesley.
-- **Untracked local files:** `general/`, `.claude/*`. Edit them in place; never `git add` them.
+- **Untracked local files:** `.claude/*` and `docs/claude-setup-proposal/`. Edit them in place; never `git add` them.
 - **Timestamps:** read `date` before writing any clock time.
 - **Branch rule:** delete a branch once its work is on week5 or the attempt failed. Archive-tag any unmerged SHA the
   registry cites.

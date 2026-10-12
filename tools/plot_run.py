@@ -2,7 +2,7 @@
 """
 tools/plot_run.py — the auto-generated figures for one run (THESIS_PLAN §9.4)
 
-    ./tools/plot_run.py R0034                 # by run id, from results/ or results_archive/
+    ./tools/plot_run.py R0034                 # by run id, from results/
     ./tools/plot_run.py results/2026-08-05/R0034_sim_gz_attach_ring_45_gz
     ./tools/plot_run.py R0034 R0039 --quiet   # several
 

@@ -4,7 +4,7 @@
 # `tools/thesis_figures.py`, so a late data fix propagates everywhere instead of
 # leaving a stale PNG in the thesis.
 #
-# The runs a figure cites SHOULD live in results_archive/ (§4.3: promotion is the
+# The runs a figure cites live in results/ (local only; back them up:
 # moment data becomes safe). thesis_figures.py resolves the archive first and warns
 # loudly for any figure still built from the mutable results/ tree — treat that warning
 # as "archive this before writing the caption", not as noise.

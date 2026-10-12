@@ -1,4 +1,4 @@
-P6 item 1: the ring's transient at every rig release, on the signed T6 metrics (docs/freeze_2026-10-14.md 1.1)
+P6 item 1: the ring's transient at every rig release, on the signed T6 metrics (docs/rig/freeze_2026-10-14.md 1.1)
 
 Made by: python3 tools/release_transient.py --convert --out results/analysis/p6_2026-10-12/1_releases
          (ROS sourced for --convert; tools/release_bands.py is the one T6 implementation; branch p6-offline)

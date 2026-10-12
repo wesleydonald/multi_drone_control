@@ -28,8 +28,6 @@ logs/
 # Flight data and archived datasets: local only (2026-09-16). results/registry.csv and results/analysis/ are
 # tracked anyway (added with -f).
 results/
-results_archive/
-general/
 DISSIPATIVE_TRACKING_ISSUE.md
 # Local only: the papers we read (copyright, 72 MB) and his twin's run logs (generated, 96 MB)
 docs/papers/

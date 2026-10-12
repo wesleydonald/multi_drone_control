@@ -23,7 +23,7 @@ MODES = {'sim': ('mpc', 'free_hover', 'dissipative', 'network', 'attach'),
          'real': ('mpc', 'free_hover', 'dissipative', 'attach', 'm2')}
 DEFAULT_MODE = 'dissipative'     # Wesley 8 Oct (was mpc); legacy:=true keeps mpc
 LEGACY_DEFAULT_MODE = 'mpc'
-# sim modes with no rig-twin world or thrust-map plumbing yet (docs/redo_on_twin.md)
+# sim modes with no rig-twin world or thrust-map plumbing yet (docs/archive/redo_on_twin.md)
 LEGACY_ONLY = ('network',)          # attach flies the twin attach worlds since 8 Oct
 
 # launch arguments: knobs set in >= 3 configs or commands, then the structural ones

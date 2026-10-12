@@ -1,4 +1,4 @@
-# What changed when the transient table moved to the signed T6 metrics (11 Oct, docs/freeze_2026-10-14.md 1.1)
+# What changed when the transient table moved to the signed T6 metrics (11 Oct, docs/rig/freeze_2026-10-14.md 1.1)
 
 Old reading: the scalar tilt's peak over the 5 s after the event above its mean over the 3 s before. New: the
 tilt-vector rise dtheta (max |theta(t) - mean_pre| over event..LAND, 5 s pre-window), computed by
@@ -26,4 +26,4 @@ tools/release_bands.py's Run class; twin rows also cut at the paired rig flight'
 - The dip now runs event..LAND against the 5 s pre-window mean (8 Oct rig 3.1-6.9 cm; twin 2.1-4.7 cm).
 - The planned-step and static-step columns are unchanged.
 
-12 Oct (P6, docs/p6_offline_2026-10-12.md item 1): rows added for r200006's two uncommanded releases (t_e = the slip onset, labelled; the second slip's window ends at the fleet abort), and columns for the window end, the labelled t_back_2s variant, the steady offset and the landing lean. Every other number is unchanged.
+12 Oct (P6, docs/analysis/p6_offline_2026-10-12.md item 1): rows added for r200006's two uncommanded releases (t_e = the slip onset, labelled; the second slip's window ends at the fleet abort), and columns for the window end, the labelled t_back_2s variant, the steady offset and the landing lean. Every other number is unchanged.
