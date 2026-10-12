@@ -16,10 +16,10 @@ import sys
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # tools/
 from method_metrics import metrics  # noqa: E402
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # this file is in tools/old/
 METHODS = [('', 'z_ki 0 (none)'), ('zki', 'z_ki 0.4'), ('A', 'A (force balance)'), ('kt', 'kt_trim'),
            ('of', 'offset-free observer'), ('ofA', 'observer + A'), ('meas', 'INDI f_ext'),
            ('measzki', 'INDI f_ext + z_ki 0.4'), ('ofw', 'observer, window 1.0 s, tau 0.5'),

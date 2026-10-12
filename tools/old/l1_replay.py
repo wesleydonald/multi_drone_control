@@ -22,7 +22,7 @@ import os
 import numpy as np
 import pandas as pd
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # this file is in tools/old/
 XY = dict(k=5.41, c=4.71, m=1.20)        # push fit R0856 (card identification table)
 
 

@@ -62,7 +62,7 @@ figures:
     caption: >
       Effect of the tracker's initial condition without integral action (thesis/Source/src/sim_results.tex,
       fig:tracker_x0). (a) Gazebo hover from the floor, (b) Gazebo circle, first lap, epsilon 0.025
-      against 0. The SIL panel (R0956/R0957) was dropped on 5 Oct 2026 (docs/redo_on_twin.md, row 10).
+      against 0. The SIL panel (R0956/R0957) was dropped on 5 Oct 2026 (docs/archive/redo_on_twin.md, row 10).
 
   - id: F_disturbance
     kind: script            # tools/thesis_sim_figures.py (fig_disturbance)
@@ -110,7 +110,7 @@ figures:
       hover, LAND and unwind.
 
   # 9 Oct 2026: the rig detaches against the twin (tools/thesis_rig_figures.py; caption in docs/figures/F_rig_detach/caption.md).
-  # 11 Oct: the tilt panels on the signed release metric (docs/freeze_2026-10-14.md 1.1, tools/release_bands.py).
+  # 11 Oct: the tilt panels on the signed release metric (docs/rig/freeze_2026-10-14.md 1.1, tools/release_bands.py).
   - id: F_rig_detach
     kind: script            # tools/thesis_rig_figures.py (fig_rig_detach)
     runs: [results/rig/2026-10-08/r302_3_run, results/rig/2026-10-08/r303_4_run, results/rig/2026-10-08/r304_3_run,

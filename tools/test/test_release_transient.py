@@ -1,4 +1,4 @@
-"""The T6 release metrics (docs/freeze_2026-10-14.md 1.1) as tools/release_bands.py computes them and
+"""The T6 release metrics (docs/rig/freeze_2026-10-14.md 1.1) as tools/release_bands.py computes them and
 tools/release_transient.py times them, on a synthetic ring whose tilt vector is known in closed form."""
 import os
 import sys

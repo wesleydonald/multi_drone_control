@@ -3,7 +3,7 @@
 
     python3 tools/rig_null.py [--windows 7 15] [--out DIR] [--rig-runs DIR] [--convert]
 
-The null: dtheta (T6, docs/freeze_2026-10-14.md 1.1, computed by tools/release_bands.py's Run) at pseudo-events in rig
+The null: dtheta (T6, docs/rig/freeze_2026-10-14.md 1.1, computed by tools/release_bands.py's Run) at pseudo-events in rig
 flight where nothing happens: every 0.5 s at which the ring reference had been still for 5 s (the freeze's Q12 test:
 height within 5 mm, speed within 0.02 m/s) and stays so, with no release, slip, LAND or fleet stop, for the window W
 after it (W = 7 s, about the 8 Oct hovers' hold, and 15 s, the W4/W5 horizon). Hover and path (circle, figure-8, spin)

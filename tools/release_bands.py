@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/release_bands.py -- the release metrics (T6) and the W4/W5 ledger bands of docs/freeze_2026-10-14.md.
+"""tools/release_bands.py -- the release metrics (T6) and the W4/W5 ledger bands of docs/rig/freeze_2026-10-14.md.
 
     python3 tools/release_bands.py metrics R1459 rig:2026-10-08/r303_4    # T6 metrics per run
     python3 tools/release_bands.py factors                               # 8 Oct rig/twin factors per class

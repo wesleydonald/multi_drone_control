@@ -51,7 +51,7 @@ def _argv(items):
 def command_cases():
     """(id, old launch file, args) for the rig, Wednesday, driver, desk and bare cases."""
     c = []
-    # 1 Oct rig (docs/rig_2026-10-01_commands.md; typed args read back from params.json)
+    # 1 Oct rig (docs/archive/rig_2026-10-01_commands.md; typed args read back from params.json)
     c.append(('rig1001_io', 'real_io_launch.py', RIG_IO_0930))
     for tag, a in (('h1', {'target_z': 0.5, 'z_ki': 0.0}), ('h2', {'target_z': 0.8}),
                    ('h5', {'target_z': 1.0}),

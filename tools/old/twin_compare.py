@@ -9,7 +9,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # this file is in tools/old/
 R = os.path.join(REPO, 'results')
 
 

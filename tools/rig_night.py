@@ -3,13 +3,13 @@
     source ~/ros2_humble/install/setup.bash; source install/setup.bash       # only for the bag (conversion, attach traces)
     python3 tools/rig_night.py --date 2026-10-14 R2:r2 R3:r3 R4:r4 R5:r5 R7:r7 R8:r8 R9:r9
     python3 tools/rig_night.py --date 2026-10-08 R4:r303_4 R5:r305          # the 8 Oct flights as a test
-Each LABEL:NAME is a sheet line (docs/rig_2026-10-14_commands.md) and the flight's name under results/rig/<date>/
+Each LABEL:NAME is a sheet line (docs/rig/rig_2026-10-14_commands.md) and the flight's name under results/rig/<date>/
 (tools/rig_flight.sh: <name> the bag, <name>.log the T2 console, <name>_logs the node logs). The flight is converted
 with tools/rig_to_run.py when <name>_run is missing (the bag is needed for the ring's pose; ROS sourced), then by label:
   R1       the 3-min hover (T7 row K7): ring xy error, height sd, tilt, pack voltage per drone.
   R2, R3   the circle (T7 rows K3, K4): per lap the xy error mean and max, the along-track lag, the height sd, the
            ring tilt; the lap-to-lap sd; R3's frozen falsifier against 2.91 cm (the sheet).
-  R4, R5   the unannounced detach (T8 rows L8, L9; T13; the F16 ledger): the T6 metrics of docs/freeze_2026-10-14.md
+  R4, R5   the unannounced detach (T8 rows L8, L9; T13; the F16 ledger): the T6 metrics of docs/rig/freeze_2026-10-14.md
            (tools/release_bands.py) to LAND and cut at 15 s, the detection delay, the dip, the landing lean, the
            survivors' planned pull before and after, Delta-theta against the rig's no-event floor, and the score against
            the frozen W4/W5 band with the two naive predictors (freeze 1.4 and 2.4).
@@ -38,7 +38,7 @@ STAMP = re.compile(r'\[(\d{9,}\.\d+)\]')
 PLATE_R, PIVOT_DZ = 0.225, -0.04
 M_DRONE = 0.55
 
-# docs/freeze_2026-10-14.md section 2.4 (computed 11 Oct 17:35 after the signature) and 1.4: the frozen numbers.
+# docs/rig/freeze_2026-10-14.md section 2.4 (computed 11 Oct 17:35 after the signature) and 1.4: the frozen numbers.
 FROZEN = {
     'R4': dict(cell='W4', name='hover detach, unannounced', band=(1.75, 14.51),
                twin={'R1459': 6.12, 'R1460': 5.74, 'R1626': 6.67}, prev=('r303_4', 5.29), traj='hover'),

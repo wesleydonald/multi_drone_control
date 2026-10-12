@@ -235,7 +235,7 @@ class Scenario:
     def launch_argv(self, params_path=None):
         """Launch args; knobs that are not launch arguments go to params_path (launch_args.py).
         The bench plant is the legacy one (linear thrust, centre pivot, massless rods), so the
-        sim launch is pinned to legacy:=true until the plant is ported (docs/redo_on_twin.md)."""
+        sim launch is pinned to legacy:=true until the plant is ported (docs/archive/redo_on_twin.md)."""
         import launch_args
         args = dict(self.launch_args)
         if self.launch_file == 'sim_control_launch.py':

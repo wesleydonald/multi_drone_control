@@ -13,7 +13,7 @@ magnets that let go with no command: r0013's two survivors and r200006's two), f
   * the detection delay: on the rig the bag's DETECTED event against RELEASE; in the twin the planner's first
     smaller problem against RELEASE at the log's 10 Hz (an announced DETACH has none); and the time from the
     event to the resize in both;
-  * the ring's transient in the T6 form signed on 11 Oct (docs/freeze_2026-10-14.md section 1.1), computed by
+  * the ring's transient in the T6 form signed on 11 Oct (docs/rig/freeze_2026-10-14.md section 1.1), computed by
     tools/release_bands.py's Run class so that this table and the ledger bands use one implementation: the tilt
     vector, a 5 s pre-window, the tilt rise dtheta to LAND and, for the twin rows, also cut at the paired rig
     flight's event-to-LAND (Q1), the absolute peak, the scalar rise, sigma_pre, the reference-still flag (Q12) and
@@ -488,7 +488,7 @@ def main(argv=None):
         w.writeheader()
         w.writerows(rows)
     with open(os.path.join(a.out, 'table.md'), 'w') as f:
-        f.write('T6 release metrics (docs/freeze_2026-10-14.md 1.1, via tools/release_bands.py) beside the planned '
+        f.write('T6 release metrics (docs/rig/freeze_2026-10-14.md 1.1, via tools/release_bands.py) beside the planned '
                 'tension step, by tools/release_transient.py. dtheta_deg: event to the window end (LAND, or the '
                 'fleet abort where the flight had no LAND after the event); dtheta_pairwin_deg: twin rows cut at the '
                 'paired rig flight\'s event-to-LAND (Q1). t_back_2s_s is not the frozen metric (see the script). '

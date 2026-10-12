@@ -21,7 +21,7 @@ transients within its spread (the announced one rose about 1.7 times the twin's)
   hero: the ring's tilt from its pre-release mean after the release, rig (payload gold) against the two twin
   repeats (grey), one column per detach; second row: the ring's height error. Left out: the UAVs, the tensions
   (F_detach shows them). Window: 2 s before the release to the rig's LAND.
-  11 Oct: the tilt is the signed T6 form (docs/freeze_2026-10-14.md 1.1, tools/release_bands.py): the tilt
+  11 Oct: the tilt is the signed T6 form (docs/rig/freeze_2026-10-14.md 1.1, tools/release_bands.py): the tilt
   vector's departure from its mean over the 5 s before the release, so the labelled rise is the frozen metric
   (the twin cut at the rig flight's hold, Q1) and the plotted peak is that number.
 

@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # this file is in tools/old/
 COLORS = {'logged only': '#c0392b', 'applied': '#1f6fb2'}
 LAP_S = 27.2      # one lap of r 0.5 at 0.125 m/s (25.1 s) plus the 4 s smootherstep spin-up (about 2 s)
 
