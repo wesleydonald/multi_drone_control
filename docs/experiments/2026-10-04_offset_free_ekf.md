@@ -83,7 +83,7 @@ Configs: `*_ofekf.yaml`, one per arm, generated from tonight's arm configs, one 
 
 ## 4. Baseline
 
-Tonight's table (`docs/overnight_2026-10-04.md`), three-drone rig twin, Gazebo, cm:
+Tonight's table (`docs/archive/overnight_2026-10-04.md`), three-drone rig twin, Gazebo, cm:
 
 | arm | none | z_ki 0.4 | A + z_ki 0.4 (reviewer PARTLY) | window observer |
 |---|---|---|---|---|
