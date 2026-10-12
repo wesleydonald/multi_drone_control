@@ -163,22 +163,56 @@ commit.
 are not in these runs. A twin crossover is a statement about the mechanism in the planner's own plant; the rig rows of
 the plan's P14 (28-29 Oct) decide whether it carries.
 
-## Results, pair T3 (12 Oct, first flights; week5 fc9fb04, LAB PC 4 slots; scored with tools/release_bands.py metrics, T6 window event to +15 s)
+## Results, pair T3 (12 Oct, first flights; week5 70d525f, clean, the manifests' SHA (fc9fb04 has the same code; only docs differ); one lab batch, R1682-R1713, LAB PC 4 slots; T6 by tools/release_bands.py metrics, window event to +15 s; the section 5 side columns by tools/release_transient.py's scorers)
 
-| arm | run | release (s) | dtheta (deg) | abs peak (deg) | sigma_pre (deg) | still before (s) | back in band (s) |
-|---|---|---|---|---|---|---|---|
-| A1 measured | R1706 | 20.0 | 5.37 | 4.96 | 0.64 | 6.5 | 4.25 |
-| A1 measured | R1708 | 20.5 | 6.15 | 5.49 | 0.55 | 7.1 | 4.25 |
-| A1 measured | R1710 | 21.0 | 6.12 | 5.28 | 0.44 | 7.6 | 4.17 |
-| A2 planned | R1707 | 20.0 | 17.13 | 17.49 | 0.16 | 6.5 | 4.39 |
-| A2 planned | R1709 | 20.5 | 17.21 | 17.60 | 0.17 | 7.0 | 4.38 |
-| A2 planned | R1711 | 21.0 | 17.02 | 17.41 | 0.18 | 7.5 | 4.36 |
+| arm | run | RELEASE: config t / after the lift (s) | dtheta (deg) | abs peak (deg) | sigma_pre (deg) | ref still before (s) | Q12 flag | back in band (s) | detection (s, resize at 10 Hz) | dip (cm) | landing lean (deg) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| A1 measured | R1706 | 20.0 / 12.0 | 5.37 | 4.96 | 0.64 | 6.5 | none | 4.25 | 0.35 | 2.9 | 1.3 |
+| A1 measured | R1708 | 20.5 / 12.5 | 6.15 | 5.49 | 0.55 | 7.1 | none | 4.25 | 0.35 | 3.1 | 1.2 |
+| A1 measured | R1710 | 21.0 / 13.0 | 6.12 | 5.28 | 0.44 | 7.6 | none | 4.17 | 0.34 | 3.1 | 1.3 |
+| A2 planned | R1707 | 20.0 / 12.0 | 17.13 | 17.49 | 0.16 | 6.5 | none | 4.39 | 0.32 | 4.7 | 1.9 |
+| A2 planned | R1709 | 20.5 / 12.5 | 17.21 | 17.60 | 0.17 | 7.0 | none | 4.38 | 0.31 | 4.8 | 1.8 |
+| A2 planned | R1711 | 21.0 / 13.0 | 17.02 | 17.41 | 0.18 | 7.5 | none | 4.36 | 0.32 | 5.0 | 1.8 |
 
-A1 mean 5.88 deg, range 0.78; A2 mean 17.12 deg, range 0.19. Resolution rule: (1) sign(A2 - A1) = + (the frozen sign for
-T3, measured < planned); (2) the ranges do not overlap; (3) |17.12 - 5.88| = 11.24 deg >= max(1, 2 x 0.78) = 1.56.
-**T3 resolved with measured < planned: confirmed.** All six landed with no abort. Every run on one tree (week5
-fc9fb04); the configs are ta_a1_r1-3 and ta_a2_r1-3 (the W4 hover release with cable_source mocap / model). The twin's
-planned-pull arm had never flown before tonight. Reviewer: pending (run 12 Oct night).
+| resolution (freeze 1.2) | A1 measured | A2 planned | holds |
+|---|---|---|---|
+| mean dtheta (deg) | 5.88 | 17.12 | |
+| range (deg) | 0.78 | 0.19 | |
+| (1) sign(A2 - A1) = T3's frozen sign (measured < planned) | | + | yes |
+| (2) ranges do not overlap | max 6.15 | min 17.02 | yes |
+| (3) mean gap >= max(1, 2 x larger range) | | 11.24 >= 1.56 | yes |
+
+**T3 resolved with measured < planned: the frozen prediction is confirmed for this cell** (twin; hover at 1.0 m; the leaver at 90 deg carries the smallest share and the survivors are 30/150/270; detection on; model integral; every link rigid). The batch is exploratory (section 6); the claim is P13's re-fly on the frozen tree.
+
+One variable: the six configs differ from `w4_da_release_hover.yaml` only in `cable_source` and the RELEASE and LAND times, and each A1 repeat has an A2 repeat at the same times. The parameter read-back of the planner, the fleet manager and the four trackers differs only in the trackers' `cable_source`. All six landed with no abort. Neither the planner nor any tracker had a failed solve from 5 s before the event to 15 s after it. The ring reference held through the release.
+
+How the transient differs (section 5, reported, not scored):
+
+| | A1 measured | A2 planned |
+|---|---|---|
+| leaver's planned pull before the release (N) | 1.62-1.63 | 1.56-1.57 |
+| detection, the planner's detach line (s) | 0.33 | 0.28-0.30 |
+| leaver at detection: past its rod / climbed (cm) | 11-12 / 8 | 15-16 / 13 |
+| survivors' planned step at the resize, 30 and 150 / 270 deg (N) | +1.09-1.10 / -0.53 | +1.08-1.10 / -0.41 to -0.42 |
+| survivors' applied pull (tracker log) | follows the rod from +0.04-0.05 s, at most 0.27 m/s^2 per sample | four-drone shares, then one step of 1.94-2.07 m/s^2 at +0.39-0.40 s |
+| departure at +0.30 s (deg) | 4.7-5.4 | 8.9-9.2 |
+| time of the peak (s) | 0.40 | 0.53-0.54 |
+
+The planned pull flies the four-drone shares until the resized plan reaches the trackers, after detection; the measured pull follows the rod from the first samples. The planned-pull leaver, still flying its planned pull, climbs faster and is detected sooner, so the detection delay works against this result.
+
+The two arms do not reach the release from the same state, and the 1-DOF model has no term for that:
+
+| | A1 measured | A2 planned |
+|---|---|---|
+| rod elevation at the hand-over (deg) | 67.9-68.1 | 68.0-68.1 |
+| rod elevation over the pre-window, planner log (deg) | 60.6 | 67.0 |
+| ring tilt over the pre-window, mean (deg) | 0.4-0.8 | 2.0 |
+| ring height against its reference over the pre-window (cm) | -0.1 to -0.2 | -0.5 to -0.7 |
+| ring tilt over the last 5 s before LAND (deg) | 0.01-0.03 | 1.98-2.03 |
+
+The planned-pull ring holds a steady tilt before and after the release. So in this cell the twin's planned shares are not exact, and the pair settles the sign of T3, not its mechanism. The timing fits the planner's late view of the loss, but this pair cannot separate that from the steeper formation the planned pull hovers in. Reviewer (12 Oct night): supported, with these corrections.
+
+**The thesis must not write from this pair:** a general "the measured pull cuts the tilt to a third" (one twin cell); any rig statement or rig-sized number; the late-detection timing as the cause (the formations differ too); "even with a correct model the planned pull loses" (the planned shares are not exact here); "the twin confirms the crossover" (T2 and T4 have not flown); "T3 is confirmed" in a claim table without "exploratory twin batch" and the cell; "the measured pull detects the loss sooner" (it is the other way round).
 
 Not yet flown: A3, A4 (the announced ramped pair, T2) and T4; Wesley decides them after tonight (decisions.md 12 Oct).
 
