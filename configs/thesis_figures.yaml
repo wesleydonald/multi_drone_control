@@ -108,3 +108,100 @@ figures:
     caption: >
       One flight from the floor, three UAVs: heights and rod elevations through creep, pretension, lift,
       hover, LAND and unwind.
+
+  # 9 Oct 2026: the rig detaches against the twin (tools/thesis_rig_figures.py; caption in docs/figures/F_rig_detach/caption.md).
+  # 11 Oct: the tilt panels on the signed release metric (docs/freeze_2026-10-14.md 1.1, tools/release_bands.py).
+  - id: F_rig_detach
+    kind: script            # tools/thesis_rig_figures.py (fig_rig_detach)
+    runs: [results/rig/2026-10-08/r302_3_run, results/rig/2026-10-08/r303_4_run, results/rig/2026-10-08/r304_3_run,
+           R1207, R1212, R1140, R1145, R1206, R1211]
+    caption: >
+      The three hover detaches on the rig (announced, unannounced, unannounced with a 150 deg gap) against the twin:
+      the ring's tilt departure with the tilt rise marked, and the height error (sim_detach.tex, sec:res_detach_rig,
+      fig:rig_detach).
+
+  # 10 Oct 2026: rig against twin (tools/thesis_rig_twin_figures.py; captions in docs/figures/<ID>/caption.md).
+  # 11 Oct: the tilt panels on the signed release metric; the parity's attach placeholder removed (the rig attach goes
+  # into the ledger figure when it flies). PENDING parts fill when the run lists at the top of the script get the
+  # 14 Oct rig runs.
+  - id: F_rig_circle_detach
+    kind: script            # tools/thesis_rig_twin_figures.py circle
+    runs: [results/rig/2026-10-08/r305_run, R1208, R1213]
+    caption: >
+      Unannounced detach during the circle on the rig against the twin (sim_detach.tex, sec:res_detach_rig,
+      fig:rig_circle_detach): plan view at three instants, planned tensions, the ring's tilt departure with the
+      tilt rise and the time back in band, and the height error.
+
+  - id: F_twin_rig_parity
+    kind: script            # tools/thesis_rig_twin_figures.py parity
+    runs: [results/rig/2026-10-08/r302_3_run, results/rig/2026-10-08/r303_4_run, results/rig/2026-10-08/r304_3_run,
+           results/rig/2026-10-08/r305_run, R1207, R1212, R1140, R1145,
+           R1206, R1211, R1208, R1213]
+    caption: >
+      The rig against its twin for the 8 Oct detach flights: tilt rise (the signed release metric; its ratios are
+      the ledger's class factors), ring dip, detection delay, horizontal error (res_carry.tex, sec:sim_to_real,
+      fig:twin_rig_parity).
+
+  - id: F_disarm_lanes
+    kind: script            # tools/thesis_rig_twin_figures.py lanes
+    runs: [R1258, R1284, R1285, R1310, R1325, R1309, R1326]
+    pending: [rig w4, rig w5, 14 Oct]
+    caption: >
+      Who is disarmed when: a newcomer fault under the old and the new rule, a freed carrier in hover and in the
+      circle; the rig rows as placeholders (sim_detach.tex, sec:res_detach_rig, fig:disarm_lanes).
+
+  # 12 Oct 2026: the leave chapter's rig figures (tools/thesis_leave_figures.py) and the join chapter's proof
+  # timeline (tools/thesis_join_figures.py). Every script reads its runs from this file through tools/figure_runs.py,
+  # so Wednesday's flights only need a re-run. Rig run directories are the rig_to_run.py conversions of the flight
+  # (results/rig/<date>/<name>_run); the 7 Oct conversions are made by
+  #   python3 tools/rig_to_run.py --out results/rig/2026-10-07/<name>_run --trackers results/rig/2026-10-07/<name>_logs/logs/tracker/drone* --bag results/rig/2026-10-07/<name> --t2-log results/rig/2026-10-07/<name>.log
+  # The row conditions below are the registry's (plates, pull source, rod plan, event kind), not measurements.
+  - id: F_rig_carry             # F8, fig:F8: the circle on the rig, measured pull at 60 deg against the planned pull at 45 deg
+    kind: script                # tools/thesis_leave_figures.py carry
+    runs: [results/rig/2026-10-07/r206e60_run, results/rig/2026-10-07/r006_run]
+    rows:
+      - {run: results/rig/2026-10-07/r206e60_run, role: hero, label: "measured pull, rods planned at 60$^\\circ$", pull: measured, plan: 60}
+      - {run: results/rig/2026-10-07/r006_run, role: context, label: "planned pull, rods planned at 45$^\\circ$", pull: planned, plan: 45}
+    caption: >
+      The four-UAV circle on the rig (radius 0.5 m at 0.125 m/s): the ring's path, its along-track error and its
+      height error with the trackers on the measured rod pull and the rods planned at 60 deg, against the morning's
+      planned pull at 45 deg (res_carry.tex, fig:F8).
+
+  - id: F_releases              # F10, fig:F10: every release on the rig; panel (a) the hardware record now, (b) the twin crossover after Tier A
+    kind: script                # tools/thesis_leave_figures.py releases
+    runs: [results/rig/2026-10-08/r302_3_run, results/rig/2026-10-08/r303_4_run, results/rig/2026-10-08/r304_3_run,
+           results/rig/2026-10-08/r305_run, results/rig/2026-10-07/r0012_run, results/rig/2026-10-07/r0013_run,
+           results/rig/2026-10-07/r200006_run, R1207, R1212, R1140, R1145, R1206, R1211, R1208, R1213]
+    rows:                       # one per rig release event, in the figure's order (top to bottom)
+      - {run: results/rig/2026-10-08/r302_3_run, kind: announced, pull: measured, plan: 60, gap: 120, traj: hover, twin: [R1207, R1212]}
+      - {run: results/rig/2026-10-08/r303_4_run, kind: unannounced, pull: measured, plan: 60, gap: 120, traj: hover, twin: [R1140, R1145]}
+      - {run: results/rig/2026-10-08/r304_3_run, kind: unannounced, pull: measured, plan: 60, gap: 150, traj: hover, twin: [R1206, R1211]}
+      - {run: results/rig/2026-10-08/r305_run, kind: unannounced, pull: measured, plan: 60, gap: 120, traj: circle, twin: [R1208, R1213]}
+      - {run: results/rig/2026-10-07/r0012_run, kind: announced, pull: planned, plan: 45, gap: 120, traj: hover, twin: []}
+      - {run: results/rig/2026-10-07/r0013_run, kind: announced, pull: planned, plan: 45, gap: 150, traj: hover, twin: [], capsize: true, end_event: FLEET_ABORT}
+      - {run: results/rig/2026-10-07/r200006_run, kind: uncommanded, pull: measured, plan: 45, gap: 180, traj: circle, twin: [], event_index: 0, end_event: LAND}
+      - {run: results/rig/2026-10-07/r200006_run, kind: uncommanded, pull: measured, plan: 45, gap: 180, traj: circle, twin: [], event_index: 1, capsize: true, end_event: FLEET_ABORT}
+    pending: [the 14 Oct releases (rows), the twin crossover panel (Tier A)]
+    caption: >
+      Every release on the rig: the ring's tilt rise per event, the twin pair's range beside it where one exists,
+      with the two capsizes on the broken axis (sim_detach.tex, sec:res_detach_rig, fig:F10).
+
+  - id: F_magnet_anatomy        # F11, fig:F11: how the ring was lost
+    kind: script                # tools/thesis_leave_figures.py magnet
+    runs: [results/rig/2026-10-07/r0013_run, results/rig/2026-10-07/r200006_run]
+    rows:
+      - {run: results/rig/2026-10-07/r0013_run, logs: results/rig/2026-10-07/r0013_logs, bag: results/rig/2026-10-07/r0013, label: "announced release, planned pull, 45$^\\circ$ rods, 150$^\\circ$ gap"}
+      - {run: results/rig/2026-10-07/r200006_run, logs: results/rig/2026-10-07/r200006_logs, bag: results/rig/2026-10-07/r200006, label: "circle on the measured pull, 45$^\\circ$ rods, no command"}
+    caption: >
+      How the ring was lost, twice: the planned tension step and the survivor's magnet letting go 0.16 s after the
+      commanded release; two uncommanded releases on the circle, the first recovered from, the second during the
+      landing (sim_detach.tex, sec:res_detach_rig, fig:F11).
+
+  - id: F_proof_timeline        # F14, fig:F14: the admission contract's proof, twin
+    kind: script                # tools/thesis_join_figures.py proof
+    runs: [R1644, R1645]
+    pending: [the rig's plate-noise band from the proof replay over the rig bags]
+    caption: >
+      The contact-and-lift proof in the twin: the newcomer's lift, the tip's drift from its contact vector and the
+      plate's rise against the proof thresholds, the switch of authority on the proof tick with the newcomer's
+      throttle continuous, and the ring's tilt (sim_attach.tex, fig:F14).

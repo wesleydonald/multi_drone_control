@@ -108,19 +108,23 @@ def releases(magnet, t2_log, events):
     return out
 
 
-def on_grid(grid, t, values):
-    """Last sample at or before each grid tick (NaN before the first sample)."""
+def on_grid(grid, t, values, t_end=None):
+    """Last sample at or before each grid tick (NaN before the first sample, and after t_end when given)."""
     idx = np.searchsorted(np.asarray(t), grid, side='right') - 1
     out = np.asarray(values, float)[np.clip(idx, 0, None)]
-    return np.where(idx >= 0, out, np.nan)
+    out = np.where(idx >= 0, out, np.nan)
+    return out if t_end is None else np.where(grid <= t_end, out, np.nan)
 
 
 def convert(trackers, out, bag=None, t2_log=None):
     tr = {i: read_tracker(p) for i, p in enumerate(trackers)}
     mocap, armed, magnet = read_bag(bag) if bag else ({}, {}, {})
     t0 = max(d.sim_time.iloc[0] for d in tr.values())
-    t1 = min(d.sim_time.iloc[-1] for d in tr.values())
-    if t1 <= t0:
+    # the flight lasts as long as any tracker logs: a drone disarmed alone stops its own log early
+    # (w4/w5), and its tracker columns go NaN from there instead of repeating its last row
+    end = {i: d.sim_time.iloc[-1] + 0.5 / HZ for i, d in tr.items()}
+    t1 = max(d.sim_time.iloc[-1] for d in tr.values())
+    if min(d.sim_time.iloc[-1] for d in tr.values()) <= t0:
         raise ValueError('the tracker logs do not overlap in time')
     grid = np.arange(t0, t1, 1.0 / HZ)
     col = {'t': grid - t0, 'wall': grid - t0, 'step': np.arange(len(grid))}
@@ -132,31 +136,31 @@ def convert(trackers, out, bag=None, t2_log=None):
         col['payload_tilt_deg'] = tilt_deg(col['payload_qw'], col['payload_qx'], col['payload_qy'], col['payload_qz'])
     else:
         for k in ('x', 'y', 'z'):
-            col[f'payload_{k}'] = on_grid(grid, d0.sim_time, d0[f'payload_{k}']) if f'payload_{k}' in d0 else np.nan
+            col[f'payload_{k}'] = on_grid(grid, d0.sim_time, d0[f'payload_{k}'], end[0]) if f'payload_{k}' in d0 else np.nan
         for k in ('qw', 'qx', 'qy', 'qz', 'tilt_deg'):
             col[f'payload_{k}'] = np.full(len(grid), np.nan)
     for k in ('x', 'y', 'z'):
         c = f'payload_ref_{k}'
-        col[c] = on_grid(grid, d0.sim_time, d0[c]) if c in d0 else np.full(len(grid), np.nan)
+        col[c] = on_grid(grid, d0.sim_time, d0[c], end[0]) if c in d0 else np.full(len(grid), np.nan)
     for i, d in tr.items():
         mc = mocap.get(f'/drone_{i}/motion_capture_state')
         if mc is not None and len(mc):
-            src_t, get = mc.t, (lambda k, mc=mc: mc[k])
+            src_t, get, src_end = mc.t, (lambda k, mc=mc: mc[k]), None
         else:
-            src_t, get = d.sim_time, (lambda k, d=d: d[f'pose_{k}'] if k in ('x', 'y', 'z', 'qw', 'qx', 'qy', 'qz')
+            src_t, src_end, get = d.sim_time, end[i], (lambda k, d=d: d[f'pose_{k}'] if k in ('x', 'y', 'z', 'qw', 'qx', 'qy', 'qz')
                                       else d[f'x0_{k}'] if f'x0_{k}' in d else pd.Series(np.nan, index=d.index))
         for k in ('x', 'y', 'z'):
-            col[f'd{i}_{k}'] = on_grid(grid, src_t, get(k))
+            col[f'd{i}_{k}'] = on_grid(grid, src_t, get(k), src_end)
         for k in ('vx', 'vy', 'vz'):
-            col[f'd{i}_{k}'] = on_grid(grid, src_t, get(k))
-        q = [on_grid(grid, src_t, get(k)) for k in ('qw', 'qx', 'qy', 'qz')]
+            col[f'd{i}_{k}'] = on_grid(grid, src_t, get(k), src_end)
+        q = [on_grid(grid, src_t, get(k), src_end) for k in ('qw', 'qx', 'qy', 'qz')]
         col[f'd{i}_tilt_deg'] = tilt_deg(*q)
         for k in ('x', 'y', 'z'):
-            col[f'd{i}_ref_{k}'] = on_grid(grid, d.sim_time, d[f'ref_{k}'])
+            col[f'd{i}_ref_{k}'] = on_grid(grid, d.sim_time, d[f'ref_{k}'], end[i])
         col[f'd{i}_track_err'] = np.sqrt(sum((col[f'd{i}_{k}'] - col[f'd{i}_ref_{k}']) ** 2 for k in 'xyz'))
         for k in ('acm', 'tension', 'elev_deg'):
             col[f'd{i}_{k}'] = np.full(len(grid), np.nan)
-        col[f'd{i}_thr'] = on_grid(grid, d.sim_time, d['u2'])
+        col[f'd{i}_thr'] = on_grid(grid, d.sim_time, d['u2'], end[i])
         a = armed.get(f'/drone_{i}/ELRSCommand')
         col[f'd{i}_armed'] = on_grid(grid, a.t, a.armed) if a is not None and len(a) else np.full(len(grid), np.nan)
         col[f'd{i}_attached'] = np.full(len(grid), np.nan)
