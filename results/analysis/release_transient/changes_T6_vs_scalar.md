@@ -12,7 +12,7 @@ tools/release_bands.py's Run class; twin rows also cut at the paired rig flight'
 | r304_3 unannounced, 150 deg gap | 16.52 | 16.88 | +0.4 |
 | r305 unannounced circle | 5.39 | 8.02 | +2.6: the rig ring rocks 2.3 deg (sigma_pre) around a near-level mean vector, so the excursion from the mean vector is nearly the absolute peak (8.09), where the scalar rise subtracted the rocking's mean |
 | r0012 (7 Oct, not tabulated) | 2.41 | 6.07 | +3.7: the window runs to LAND (8 s) and the ring crossed its tilted pre-event mean |
-| r0013 (7 Oct, not tabulated) | 87.68 | 91.27 | the capsize, planner log at 10 Hz |
+| r0013 (7 Oct, not tabulated) | 87.68 | 91.27 | the capsize, planner log at 10 Hz. 12 Oct (P6): from its bag on the 50 Hz grid, window to the fleet abort (no LAND), dtheta 68.28; the 10 Hz window had run 23.7 s, onto the ring on the floor |
 
 - The rig/twin ratios on the new metric reproduce the freeze's factors exactly: 0.85 (r303_4), 1.05 (r304_3),
   1.70 (r305), 1.71 (r302_3).
@@ -25,3 +25,5 @@ tools/release_bands.py's Run class; twin rows also cut at the paired rig flight'
   3.9 s; the rig hover flights land under 10 s after the event and are not scored).
 - The dip now runs event..LAND against the 5 s pre-window mean (8 Oct rig 3.1-6.9 cm; twin 2.1-4.7 cm).
 - The planned-step and static-step columns are unchanged.
+
+12 Oct (P6, docs/p6_offline_2026-10-12.md item 1): rows added for r200006's two uncommanded releases (t_e = the slip onset, labelled; the second slip's window ends at the fleet abort), and columns for the window end, the labelled t_back_2s variant, the steady offset and the landing lean. Every other number is unchanged.

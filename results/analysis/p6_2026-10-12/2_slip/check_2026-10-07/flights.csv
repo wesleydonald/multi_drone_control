@@ -1,0 +1,33 @@
+date,run,ring flew,airborne s,"fleet stop (disarm, abort, fault)",detach_detect_m flown,largest rod excess while on (cm),|log len - bag| median / p95 (cm)
+2026-10-07,r000014,yes,65.0,none,0.0,/drone_0:0.9 /drone_1:1.0 /drone_2:1.3 /drone_3:1.8,0.00 / 0.25
+2026-10-07,r0001,yes,18.0,none,0.0,/drone_0:0.5 /drone_1:0.7 /drone_2:0.8 /drone_3:0.6,0.01 / 0.52
+2026-10-07,r00013,no (ring never airborne),,,,,
+2026-10-07,r00014,no (ring never airborne),,,,,
+2026-10-07,r0005,yes,46.4,none,0.0,/drone_0:0.7 /drone_1:0.9 /drone_2:1.3 /drone_3:2.3,0.01 / 0.34
+2026-10-07,r0007,yes,80.2,none,0.0,/drone_0:0.7 /drone_1:0.9 /drone_2:0.9 /drone_3:1.5,0.00 / 0.20
+2026-10-07,r001,no (ring never airborne),,,,,
+2026-10-07,r0012,yes,31.1,none,0.0,/drone_0:0.4 /drone_1:1.1 /drone_2:1.6 /drone_3:0.5,0.00 / 0.02
+2026-10-07,r0013,yes,14.4,tracker_1 ENVELOPE FAULT,0.0,/drone_0:3.2 /drone_1:0.4 /drone_2:1.2 /drone_3:0.5,0.00 / 0.14
+2026-10-07,r0014,no (ring never airborne),,,,,
+2026-10-07,r002,yes,32.1,none,0.0,/drone_0:1.0 /drone_1:0.9 /drone_2:1.5 /drone_3:1.8,0.00 / 0.05
+2026-10-07,r005,no (ring never airborne),,,,,
+2026-10-07,r006,yes,51.8,none,0.0,/drone_0:0.6 /drone_1:0.7 /drone_2:1.0 /drone_3:1.4,0.01 / 0.27
+2026-10-07,r007,no (ring never airborne),,,,,
+2026-10-07,r00_dry,no (ring never airborne),,,,,
+2026-10-07,r01,no (ring never airborne),,,,,
+2026-10-07,r011,yes,19.5,operator DISARM,0.0,/drone_0:0.4 /drone_1:1.4 /drone_2:2.2 /drone_3:2.0,0.01 / 0.47
+2026-10-07,r012,no (ring never airborne),,,,,
+2026-10-07,r013,no (ring never airborne),,,,,
+2026-10-07,r014,no (ring never airborne),,,,,
+2026-10-07,r02,no (ring never airborne),,,,,
+2026-10-07,r06,no (ring never airborne),,,,,
+2026-10-07,r200006,yes,19.9,tracker_3 ENVELOPE FAULT,0.0,/drone_0:2.8 /drone_1:0.5 /drone_2:0.8 /drone_3:2.2,0.00 / 0.07
+2026-10-07,r20004,yes,20.5,none,0.0,/drone_0:1.2 /drone_1:0.7 /drone_2:1.4 /drone_3:0.6,0.01 / 0.70
+2026-10-07,r20006,no (ring never airborne),,,,,
+2026-10-07,r2004,no (ring never airborne),,,,,
+2026-10-07,r2006,no (ring never airborne),,,,,
+2026-10-07,r2008e60,yes,80.5,none,0.0,/drone_0:1.0 /drone_1:0.6 /drone_2:1.0 /drone_3:0.6,0.00 / 0.14
+2026-10-07,r204,no (ring never airborne),,,,,
+2026-10-07,r206,no (ring never airborne),,,,,
+2026-10-07,r206e60,yes,47.5,none,0.0,/drone_0:1.3 /drone_1:0.7 /drone_2:1.1 /drone_3:0.5,0.00 / 0.02
+2026-10-07,r208e60,no (ring never airborne),,,,,
