@@ -79,3 +79,20 @@ re-audited). Scripts: `tools/thesis_rig_figures.py` (`fig_rig_detach`) and `tool
 | F_rig_detach | 11 (announced), 5 (unannounced), 17 (150 deg gap) | 6-7, 6, 15-17 | not drawn (hover holds end at LAND) |
 | F_rig_circle_detach | 8.0 (first spike 5.7) | 4.0-5.4 | 3.9 s, band 4.7 deg |
 | F_twin_rig_parity | ratios 1.71, 0.85, 1.05, 1.70 | | |
+
+
+## F_rig_carry, F_releases, F_magnet_anatomy, F_proof_timeline (12 Oct 2026; thesis plan F8, F10a, F11, F14)
+
+Built with the thesis-figure skill (`tools/thesis_leave_figures.py`, `tools/thesis_join_figures.py`; 6.27 in,
+Computer Modern; look rounds, audit, one blind critic each, accepted fixes applied, re-rendered and re-audited).
+Every run id is read from `configs/thesis_figures.yaml` through `tools/figure_runs.py`; a script holds none. Rig
+flights are read from their `rig_to_run.py` conversions (the 8 Oct ones exist; the 7 Oct ones, r006, r0013 and
+r200006, are converted by the command in the yaml's comment, under results/rig/2026-10-07/). Captions, sections and
+citing sentences in each `docs/figures/<ID>/caption.md`.
+
+| figure | runs | code |
+|---|---|---|
+| F_rig_carry | rig RIG-1007-r206e60 (measured pull, 60 deg) against RIG-1007-r006 (planned pull, 45 deg) | rig: main (7 Oct) |
+| F_releases | rig RIG-1008-r302_3, r303_4, r304_3, r305 with twin pairs R1207/R1212, R1140/R1145, R1206/R1211, R1208/R1213 (as F_twin_rig_parity); rig RIG-1007-r0012, r0013, r200006 (two events) with no twin pair | rig: week4 b811d90 (8 Oct), main (7 Oct); twin: drop-port 700a77b, week4 0e91d86 |
+| F_magnet_anatomy | rig RIG-1007-r0013 (planner log and bag) and RIG-1007-r200006 (planner log and bag); the release instants reproduce docs/experiments/2026-10-08_drop_trigger_replay.md within 0.02 s | rig: main (7 Oct) |
+| F_proof_timeline | twin R1644, R1645 (m1c_hover, the claim batch on rig-wed ba40bd0) | rig-wed ba40bd0 |
