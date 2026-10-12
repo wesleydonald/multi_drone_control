@@ -12,12 +12,13 @@
 
 **Order:** P1-P12 props off (09:00, packs charging) -> R1-R5 -> P13 load test -> R6-R9 with Tejen.
 
-## Setup (every terminal: `w5`, never `mdc`)
+## Setup (every terminal, RViz too: `w5`, never `mdc`)
 
-`mdc` sources the main tree, which is not what flies today.
+`mdc` sources the main tree, which is not what flies today. The combined launch refuses to start without the two
+exports, so they are in `w5` all day.
 
 ```bash
-alias w5='source ~/ros2_humble/install/setup.bash && cd ~/mdc_wt/week5 && source install/setup.bash'
+alias w5='source ~/ros2_humble/install/setup.bash && cd ~/mdc_wt/week5 && source install/setup.bash && export ROS_LOCALHOST_ONLY=1 ROS_DOMAIN_ID=23'
 w5
 fleet() { python3 ~/mdc_wt/week5/tools/fleet_reach.py --send "$1"; }   # refuses unless the fleet manager answers
 git log --oneline -1                     # 46ac389 or later on week5
@@ -84,7 +85,7 @@ python3 tools/preflight.py --drones 3 --attach --real --planner dissipative_plan
   the ring at its start spot.
 - **P10 Puck in the net.** Ring on a stand at ~1 m, puck in the net. Does body 6 stream for 10 s, gaps under 0.1 s?
   - Yes: R6-R9 keep the default.
-  - No: R6-R9 type `drop_puck_wait_s:=0` and you check the drop by eye.
+  - No: R6-R9 add `drop_puck_wait_s:=0` inside partner_args, and you check the drop by eye.
 - **P11 Hand ramps.** Face onto plate 9 at ~3, 5 and 8 cm/s, 3 times each. Record c0 against the rest point; pass is
   within 1 mm.
 - **P12 Tilt checks** (QUAD4 disarmed):
@@ -135,9 +136,11 @@ CLI calls inside the window. `tools/load_check.py` must print `F1 load bars: PAS
 the ring`) -> his TAKEOFF. **End:** `fleet disarm`, then his DISARM.
 
 ```bash
-M="partner:=true partner_contact:=true partner_nodes:=true weld_radius:=R proof_taut_len:=<L-0.003> weld_point_z:=W attach_cable_len:=<L-0.04>"
-$A $M partner_args:='magnet_drop_below_quad:=L mpc_thrust_ratio:=22 contact_dz:=0.05 [drop_puck_wait_s:=0]' r6      # R6
-$A $M partner_args:='magnet_drop_below_quad:=L mpc_thrust_ratio:=22 [drop_puck_wait_s:=0]' r7                       # R7, then r8
+W=0.031; L=0.58; R=0.012      # PLACEHOLDERS: type P3's W, P4's L, P7's R
+P=$(python3 -c "print(round($L-0.003,3))"); Q=$(python3 -c "print(round($L-0.04,3))")
+M="partner:=true partner_contact:=true partner_nodes:=true weld_radius:=$R proof_taut_len:=$P weld_point_z:=$W attach_cable_len:=$Q"
+$A $M partner_args:="magnet_drop_below_quad:=$L mpc_thrust_ratio:=22 contact_dz:=0.05" r6      # R6
+$A $M partner_args:="magnet_drop_below_quad:=$L mpc_thrust_ratio:=22" r7                       # R7, then r8
 ```
 
 | # | what | expect |
@@ -147,7 +150,7 @@ $A $M partner_args:='magnet_drop_below_quad:=L mpc_thrust_ratio:=22 [drop_puck_w
 | R8 | R7 again | As R7. |
 | R9 | the full M1 on hover: QUAD4 starts attached, we detach it, he picks up the puck, drops it in the net and reattaches | **Last, gated: R7 and R8 clean, and R1 shows a pack lasts ~3 min.** First time on the rig; flies clean on hover in the twin. |
 
-**R9:** `$A $M partner_attached:=true partner_args:='magnet_drop_below_quad:=L mpc_thrust_ratio:=22 [drop_puck_wait_s:=0]' r9`
+**R9:** `$A $M partner_attached:=true partner_args:="magnet_drop_below_quad:=$L mpc_thrust_ratio:=22" r9`
 - QUAD4 starts on plate 9 with its magnet caught; the puck on the floor at its spot.
 - **Order:**
   1. His ARM, on the floor. His kT then learns once he flies; it doesn't learn while we fly QUAD4.
