@@ -1,0 +1,37 @@
+P6 item 4: rig latency, the body rates the trackers commanded against the body rates the drones flew
+
+Made by: python3 tools/rate_latency.py --dates 2026-10-01 2026-10-07 2026-10-08   (ROS sourced; read-only, rosbag2_py)
+Data: every bag of 1, 7 and 8 Oct. 18 flights have both the commands and the drones' mocap (13 on 7 Oct, 5 on 8 Oct);
+the 1 Oct bags recorded no /drone_i/ELRSCommand, and the other bags never took off. Outputs: latency.csv (one row
+per flight, drone and axis), latency_summary.csv, tables.md.
+
+Method: the commanded rate is each ELRSCommand's stick through the tracker's Betaflight rate curve (from its
+params.json: centre 100, max 100 deg/s, so 100 deg/s per unit stick), held between packets; the measured rate is the
+body rate from the drone's mocap quaternions (central difference on the header stamps, ~90 Hz). Both on the bag's
+receive clock, airborne, TAKEOFF + 3 s to LAND, 250 Hz grid. Two estimates per drone and axis: the peak of the
+cross-correlation (lag 0-300 ms), and a first-order-plus-delay fit (delay d, lag tau, gain g).
+
+| axis  | drone-flights (r2 > 0.2) | cross-correlation lag ms, median (IQR) | fitted delay d ms | fitted lag tau ms | gain g | r2   |
+|-------|--------------------------|----------------------------------------|-------------------|-------------------|--------|------|
+| roll  | 69 of 69                 | 24 (20-24)                             | 20 (20-20)        | 2 (2-2)           | 0.98   | 0.52 |
+| pitch | 69 of 69                 | 24 (24-24)                             | 20 (20-25)        | 2 (2-5)           | 1.06   | 0.56 |
+| yaw   | 36 of 69                 | 102 (72-116)                           | 55 (39-75)        | 55 (20-100)       | 1.72   | 0.24 |
+7 Oct and 8 Oct alone give the same roll and pitch numbers (latency_summary.csv).
+
+What it means: from the moment a tracker publishes a command to the moment the mocap pose shows the drone turning,
+the rig takes about 20-25 ms (one 50 Hz tracker tick), with no measurable first-order lag after it (the fit sits at
+its 2 ms floor) and a gain of 1: Betaflight's rate loop follows the stick at once. The tracker's model assumes no
+delay and a first-order rate response with tau 0.12 s (est_params), so it models the rate loop as about five times
+slower than it is, and leaves out the 20 ms. This inner loop cannot account for the rig's path lag of 0.20 s against
+the twin's 0.04-0.11 s (plan C1): it is at most a quarter of that gap. A larger candidate, measured in item 2 and not
+here: the planner reads its poses at the start of a tick and publishes 73-87 ms later (solve plus ~30 ms of other
+work, on the 8 Oct detection ticks).
+
+Caveats:
+- The loop is closed: the command responds to the measured state, so the fit is read for the delay, not as a plant
+  model; r2 of 0.5-0.6 on roll and pitch reflects mocap noise in the differentiated rate (about 5 deg/s) against
+  commanded rates of 2.5-10 deg/s sd (median 5) in these flights.
+- The latency includes Motive and the mocap node (their share is not in the data: the header stamp is set on
+  receipt, 0.3 ms before the bag's receive time).
+- Yaw is barely excited in these flights (commanded sd median 0.6 deg/s); its numbers are not usable.
+- Resolution: 4 ms grid, 5 ms delay steps; the commands are 50 Hz, so a 20 ms delay is one command period.
