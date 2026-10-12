@@ -13,8 +13,6 @@ Updated: Mon 12 Oct 2026, 18:48 AEDT (from `date`). Only what a new session need
 - **Backups:** every branch and tag is on GitHub under `backup-2026-10-12/*` (verified), and in
   `~/backups/multi_drone_control_2026-10-12.bundle`. Flight data (`results/`, 34 GB), `docs/papers` and his twin logs
   are local only.
-- **Left for Wesley:** one command; all of these are merged and backed up (`-d` stopped on week1's GitHub copy):
-  `git -C ~/multi_drone_control branch -D week1-ready-for-testing thesis-work3 thesis-figs thesis-cites thesis-ch4 m1-rec m1-video`
 - **Archive tags:** archive/m1-tiltcut, archive/m1-e0, archive/m1-full, archive/combined-m1, archive/m1-video.
 
 ## Wednesday 14 Oct (rig) and Thursday 15:00-18:00 (retries)
