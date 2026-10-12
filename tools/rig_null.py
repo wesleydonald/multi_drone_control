@@ -14,6 +14,8 @@ resolution rule (freeze 1.2: the frozen sign, the ranges apart, |mean B - mean A
 range)) resolves in at least 80 % of 20000 simulated pairs, each run's dtheta = its arm's true value + noise drawn
 (a) from a normal with the null's sd, (b) from the null's own values about their mean (bootstrap), (c) from a normal
 with sigma_rig (freeze 2.4, the pooled pre-window spread, 1.568 deg) for comparison.
+Last, each rig release of tools/release_transient.py's table that reached LAND is set against the null of its
+trajectory, raw and scaled by its own pre-window rocking (dtheta / sigma_pre).
 """
 import argparse
 import csv
@@ -97,6 +99,32 @@ def mde(noise, n, rng, deltas=np.arange(0.0, 20.01, 0.1)):
     return (float(deltas[hit[0]]) if len(hit) else np.inf), dict(zip(np.round(deltas, 1), p))
 
 
+def releases_vs_null(df, table):
+    """Each rig release that reached LAND (tools/release_transient.py's table) against the null of its trajectory and
+    the nearest window: the share of pseudo-events with a dtheta at least as large, and the same on dtheta / sigma_pre
+    (the null scaled to the release's own pre-window rocking)."""
+    if not table or not os.path.exists(table):
+        return []
+    t = pd.read_csv(table)
+    t = t[(t.source == 'rig') & (t.window_end == 'LAND') & (t.kind != 'uncommanded')]
+    out = []
+    for _, r in t.iterrows():
+        cls = 'hover' if r.path == 'hover' else 'path'
+        g = df[df.traj == cls]
+        if g.empty:
+            continue
+        W = min(g.window_s.unique(), key=lambda w: abs(w - float(r.window_s)))
+        g = g[g.window_s == W]
+        ratio = g.dtheta_deg / g.sigma_pre_deg
+        rr = float(r.dtheta_deg) / float(r.sigma_pre_deg)
+        out.append(dict(run=r.run, traj=cls, window_s=float(r.window_s), null_window_s=W, dtheta_deg=float(r.dtheta_deg),
+                        share_of_null_at_or_above=round(float((g.dtheta_deg >= float(r.dtheta_deg)).mean()), 3),
+                        sigma_pre_deg=float(r.sigma_pre_deg), dtheta_over_sigma_pre=round(rr, 2),
+                        null_ratio_median=round(float(ratio.median()), 2), null_ratio_p95=round(float(ratio.quantile(0.95)), 2),
+                        share_of_null_ratio_at_or_above=round(float((ratio >= rr).mean()), 3)))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--results', default=RESULTS_DEFAULT)
@@ -104,6 +132,8 @@ def main():
     ap.add_argument('--convert', action='store_true')
     ap.add_argument('--windows', nargs='+', type=float, default=[7.0, 15.0])
     ap.add_argument('--out', default=os.path.join(REPO, 'results', 'analysis', 'p6_2026-10-12', '5a_null'))
+    ap.add_argument('--releases', default=os.path.join(REPO, 'results', 'analysis', 'release_transient', 'table.csv'),
+                    help='tools/release_transient.py table to set the rig releases against the null')
     a = ap.parse_args()
     os.environ['MDC_RESULTS_ROOT'] = a.results
     import release_bands as rb
@@ -144,12 +174,13 @@ def main():
                                    **{f'p_at_{k}': round(v, 3) for k, v in curve.items() if k in (0.8, 1.0, 2.0, 3.0,
                                                                                                     5.0, 8.0, 10.0)}))
         summ.append(row)
-    for name, data in (('null_summary.csv', summ), ('mde_power.csv', curves)):
+    vs = releases_vs_null(df, a.releases)
+    for name, data in (('null_summary.csv', summ), ('mde_power.csv', curves), ('releases_vs_null.csv', vs)):
         with open(os.path.join(a.out, name), 'w', newline='') as f:
             w = csv.DictWriter(f, fieldnames=list(data[0]))
             w.writeheader()
             w.writerows(data)
-    for data in (summ, curves):
+    for data in (summ, curves, vs):
         keys = list(data[0])
         print('| ' + ' | '.join(keys) + ' |')
         print('|' + '---|' * len(keys))
