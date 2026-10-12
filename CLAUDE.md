@@ -83,7 +83,8 @@ current branch like any other file (it reaches main with the merges).
   run, then the report. Append registry rows with LF; never rewrite the file (csv.writer
   changes every line's ending and quoting).
 - Close OPEN lines in `docs/decisions.md` the session they are decided, with the run ids.
-- Add files to commits by explicit path (`tools/`, `configs/`, `docs/` need `-f`).
+- Add files to commits by explicit path. Only `results/registry.csv` and `results/analysis/` need `-f` (12 Oct: `docs/`,
+  `configs/` and `tools/` are no longer git-ignored).
 
 ## Locked decisions (do not "fix")
 - No geofence. Fleet-wide disarm on any envelope fault, except: detach runs with
