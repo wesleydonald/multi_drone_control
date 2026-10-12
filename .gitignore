@@ -28,7 +28,6 @@ logs/
 # Flight data and archived datasets: local only (2026-09-16). results/registry.csv and results/analysis/ are
 # tracked anyway (added with -f).
 results/
-DISSIPATIVE_TRACKING_ISSUE.md
 # Local only: the papers we read (copyright, 72 MB) and his twin's run logs (generated, 96 MB)
 docs/papers/
 simulation_assets/tejen/logs/
@@ -62,8 +61,6 @@ docs/claude-setup-proposal/
 .mcp.json
 thesis/
 
-# integration notes for Wesley (not committed)
-authority.md
 
 # Lab Docker build context: copied/repacked from this laptop by tools/remote/lab_build.sh
 tools/remote/t_renderer
@@ -73,4 +70,3 @@ tools/remote/debs/
 shortcuts.md
 
 # Tejen/paper supplementary material (2.2 GB, not ours to track)
-agile_and_collective_supplementary/

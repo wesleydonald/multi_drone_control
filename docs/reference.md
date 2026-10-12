@@ -117,6 +117,9 @@ mocap (/drone_i, /payload motion_capture_state)
 
 ## 6. Negatives — measured, do not retry
 
+The dissipative network's own tried-and-rejected list (Aug-Sep 2026: per-drone integrators, gains, the velocity loop's
+variants) is in `docs/archive/dissipative_tracking_issue_2026-09.md` §3; the rows below are the ones that still bite.
+
 | idea | result | evidence |
 |---|---|---|
 | Terminal velocity reference (T1) | slightly worse on all four tracking metrics | R0054–R0059 vs R0061–R0065 |
@@ -369,11 +372,11 @@ ros2 launch bringup sim_control_launch.py mode:=attach load_traj:=circle traj_sp
 | `docs/archive/` | finished plans, past rig sheets, reviews, overnight notes. A registry row's `docs/X.md` that is not at the top any more is `docs/archive/X.md` |
 | `docs/archive/experimentation/` | control-methods survey, hybrid dwell, robustness table, rig gap, agenda |
 | `configs/thesis_figures.yaml`, `tools/thesis_figures.py` | the runs behind each thesis figure (in `results/`, local only) and the scripts that regenerate them |
-| `src/tejen_mission`, `src/tejen_mpc`, `src/tejen_dynamic_planner`, `src/tejen_utility_objects` | Tejen's forked code (base a7524bae); our changes listed in `authority.md` §6 |
+| `src/tejen_mission`, `src/tejen_mpc`, `src/tejen_dynamic_planner`, `src/tejen_utility_objects` | Tejen's forked code (base a7524bae); every change of ours is listed in `src/tejen_mission/CHANGES_FROM_TEJEN.md` (the 26 Sep integration decisions: `docs/archive/tejen_integration_notes_2026-09.md`) |
 | `simulation_assets/tejen/`, `simulation_assets/three_attach_partner*.sdf`, `simulation_assets/models/x3_drone3_magnet_rod_partner*.sdf` | his worlds; M1 worlds (incl. `_m100` 0.1 kg object, `_nopick` bench copies); the partner rod models |
 | `src/simulation_communication/.../rate_pid.py` | the sim rate PI shared by every sim bridge |
 | `tools/sim_test/` | M2 driver `drive_m2_handover.py`, stage-1/2 single-drone benches, his runner scripts |
-| `docs/archive/GOALS.md`, `authority.md` | the integration loop's plan and status; Tejen integration notes |
+| `docs/archive/GOALS.md` | the integration loop's plan and status (Sep-Oct) |
 
 ### Rename map (3 Oct 2026)
 

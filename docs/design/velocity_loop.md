@@ -8,7 +8,7 @@ lift (§8).** Design written before implementation, per D11.
 ## 1. Why
 
 The dissipative network's references are nearly right and the tracker is where the error
-is. `DISSIPATIVE_TRACKING_ISSUE.md §2`, re-measured on R0054 (2026-08-05):
+is. `docs/archive/dissipative_tracking_issue_2026-09.md` §2, re-measured on R0054 (2026-08-05):
 
 | stage | radius ratio | phase lag |
 |---|---|---|

@@ -90,7 +90,7 @@ central_controller emergency fast path (main.py:142-145, :358-362) -------------
 ```
 
 How the mux moves between states:
-- **With change O1 (`start_ours`), the mux starts in `ours`.** Drone 3 is a welded carrier, which is the FLEET row of authority.md:74.
+- **With change O1 (`start_ours`), the mux starts in `ours`.** Drone 3 is a welded carrier, which is the FLEET row of the authority protocol (docs/archive/tejen_integration_notes_2026-09.md §4).
 - **ours → partner:** after `/partner/release` `"running": true`, on his first armed command above idle (elrs_mux.py:180-183,199-210).
 - **partner → ours:**
   - on `/join_planner/handoff_ready` True, or on our `/magnet/object_attached` True;
@@ -112,7 +112,7 @@ Proposed: a new node **`magnet_gate_3`** (drone_magnet, ours) becomes the only c
 
 Gate rules:
 - It follows `/drone_3/mux_state`: `partner` → partner input; `ours` or `latched` → ours input.
-- On a switch it holds its last output until the newly selected input publishes. This avoids an OFF blip at the handoff, when his descent has the magnet ON (authority.md:64) and our ON is one message behind.
+- On a switch it holds its last output until the newly selected input publishes. This avoids an OFF blip at the handoff, when his descent has the magnet ON (docs/archive/tejen_integration_notes_2026-09.md §3) and our ON is one message behind.
 - It republishes at 2 Hz. Its boot value equals `drone3_magnet_initial` (ON for partner_attached; three_attach_launch.py:580-585).
 
 What this fixes:
