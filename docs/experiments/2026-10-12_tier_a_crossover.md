@@ -1,6 +1,6 @@
 # Tier A, the crossover: where the survivors learn of the change (thesis plan P11, freeze 1.5 T2/T3/T4)
 
-Card written 12 Oct 2026 (13:30 from `date`), before any config and before any run; rev 2 at 13:45 after the
+Card written 12 Oct 2026 (13:30 from `date`), before any config and before any run; rev 2 at 13:43 after the
 critic's round 1 (under "## Critic": the challenge verbatim, then what rev 2 changed and what is left for Wesley). Twin only (the lab PC, when free;
 not the laptop before Wednesday's rig day). Predictions and bars are the ones signed on 11 Oct in
 `docs/freeze_2026-10-14.md` (1.2 the resolution rule, 1.5 the 1-DOF signs); nothing here re-opens them. Labels per
@@ -199,7 +199,7 @@ the plan's P14 (28-29 Oct) decide whether it carries.
 
 CRITIC: rewrite the card. As written, a T2 "confirmed" cannot be told apart from a measured-pull "soft" detach that never unloads the leaver (7 Oct must-fix 1, a gate that passes on the planner's own tension), because the card does not measure the leaver's pull at release or split the ramp from the release. The fixes are analysis only.
 
-### Rev 2 (13:45): what changed, and what is Wesley's
+### Rev 2 (13:43): what changed, and what is Wesley's
 
 Taken into the card: the A3 history (no measured soft arm has flown; D4 was planned; R1133 a void); the ramped-release
 rule on the leaver's pull at the magnet opening (50 %); Delta-theta split at the opening and the detection delay per
