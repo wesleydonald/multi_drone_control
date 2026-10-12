@@ -64,10 +64,13 @@ import plot_style as ps  # noqa: E402
 
 REPO = os.path.dirname(TOOLS)
 OUT = os.path.join(REPO, 'docs', 'figures')
+RESULTS = os.environ.get('MDC_RESULTS_ROOT', os.path.join(REPO, 'results'))   # the run directories (read only)
+os.environ.setdefault('MDC_RESULTS_ROOT', RESULTS)
+import release_bands as rb  # noqa: E402  (the signed T6 release metrics, 11 Oct)
 
 INK = '0.1'
 GREY_TEXT = '0.3'
-TWIN_FILL, TWIN_LINE = '0.75', '0.35'
+TWIN_FILL, TWIN_LINE = '0.68', '0.35'
 
 # ── runs (rig: results/rig/<day>/<name>, converted to <name>_run; twin: R####) ─────────────────────────────────────
 
@@ -82,9 +85,9 @@ PARITY = [
     ('hover, unannounced, 150$^\\circ$ gap', '^', 'results/rig/2026-10-08/r304_3', ('R1206', 'R1211'), 'RELEASE'),
     ('circle path, unannounced', 'D', 'results/rig/2026-10-08/r305', ('R1208', 'R1213'), 'RELEASE'),
 ]
-# R8b, QUAD4's weld on plate 9 with the measured-tip approach: twin twin_tf_weld_on (rev 5, two runs).
-# PENDING: Wednesday 14 Oct r8b (x2-3), e.g. 'results/rig/2026-10-14/r8b', 'results/rig/2026-10-14/r8b_2'
-PARITY_ATTACH = dict(twin=('R1404', 'R1410'), rig=[])
+# The attach (our own approach's weld) left the rig plan on 10 Oct and the placeholder left this figure on 11 Oct
+# (thesis plan: Fig 13 -> F16, placeholder point removed); the ledger figure carries the rig attach when it flies.
+PARITY_ATTACH = dict(twin=(), rig=[])
 
 # who disarms when. fault: QUAD4 (/drone_3) loses its motion capture 2 s into its transit (twin_fs_c0, newcomer_fault_land
 # off: the old rule; twin_fs_c1 on the rig candidate tree). freed: a carrier released unannounced, the departed landing
@@ -103,12 +106,12 @@ class Run:
 
     def __init__(self, spec):
         if re.fullmatch(r'R\d{4}', spec):
-            hits = glob.glob(os.path.join(REPO, 'results', '*', f'{spec}_*'))
+            hits = glob.glob(os.path.join(RESULTS, '*', f'{spec}_*'))
             if not hits:
                 raise SystemExit(f'no twin run {spec}')
             self.dir, self.kind = hits[0], 'twin'
         else:
-            base = os.path.join(REPO, spec) if not os.path.isabs(spec) else spec
+            base = os.path.join(os.path.dirname(RESULTS), spec) if not os.path.isabs(spec) else spec
             self.dir, self.kind = base.rstrip('/') + '_run', 'rig'
             if not os.path.exists(os.path.join(self.dir, 'logs', 'run.csv')):
                 raise SystemExit(f'{spec}: no converted run; run  python3 tools/rig_summary.py {spec}  first')
@@ -179,6 +182,21 @@ class Run:
     def params(self):
         f = sorted(glob.glob(os.path.join(self.logs, '*planner', '*', 'params.json')), key=os.path.getsize)[-1]
         return json.load(open(f))
+
+    def t6(self):
+        """The same run through release_bands (the signed T6 metrics): tag 'R####' or 'rig:<date>/<run>'."""
+        if self.kind == 'twin':
+            return rb.Run(self.name)
+        m = re.search(r'results/rig/([^/]+)/([^/]+)$', self.name.rstrip('/'))
+        return rb.Run(f'rig:{m.group(1)}/{m.group(2)}')
+
+    def tilt_dev(self):
+        """(t, |theta - theta_pre|): the ring's tilt-vector departure from its mean over the 5 s before the event, on
+        the run.csv clock (the T6 form), interpolated onto this run's rows."""
+        r6 = self.t6()
+        mean, _, _ = r6.pre()
+        dev = np.linalg.norm(r6.th - mean, axis=1)
+        return self.run.t.to_numpy(), np.interp(self.run.t.to_numpy(), r6.t, dev)
 
 
 def released_drone(run):
@@ -270,6 +288,8 @@ def fig_circle():
     w = (t >= t_rel + T0) & (t <= t_land)
     P = d[['payload_x', 'payload_y', 'payload_z']].to_numpy()
     axp.plot(P[w, 0], P[w, 1], color=gold, lw=1.0, zorder=3)
+    hw = (t >= t_hold0) & (t <= t_hold1)                   # the 1.5 s path hold, on the ring's path
+    axp.plot(P[hw, 0], P[hw, 1], color=gold, lw=2.4, solid_capstyle='butt', zorder=3.5)
     k_start = int(np.flatnonzero(w)[0])
     axp.plot(P[k_start, 0], P[k_start, 1], 'o', ms=3.2, mfc='white', mec=gold, mew=0.8, zorder=6)
     ex = (t >= t_rel) & (t <= t_land)
@@ -377,29 +397,30 @@ def fig_circle():
     grid = np.arange(T0, T1, 0.02)
     tw_rel = [r.ev('RELEASE') for r in twins]
     twin_band(axt, twins, lambda r: r.run.t.to_numpy() - r.ev('RELEASE'),
-              lambda r: r.run.payload_tilt_deg.to_numpy(), grid)
+              lambda r: r.tilt_dev()[1], grid)
     twin_band(axz, twins, lambda r: r.run.t.to_numpy() - r.ev('RELEASE'),
               lambda r: 100 * (r.run.payload_z - r.run.payload_ref_z).to_numpy(), grid)
     tr = t - t_rel
     wr = (tr >= T0) & (tr <= T1)
-    tilt = d.payload_tilt_deg.to_numpy()
+    tilt = rig.tilt_dev()[1]                       # the T6 form: tilt from the pre-release mean vector
     dz = 100 * (d.payload_z - d.payload_ref_z).to_numpy()
     axt.plot(tr[wr], tilt[wr], color=gold, lw=1.2, zorder=3)
     axz.plot(tr[wr], dz[wr], color=gold, lw=1.2, zorder=3)
     after = (tr >= 0) & (tr <= 3.0)
-    kp = int(np.flatnonzero(after)[np.nanargmax(tilt[after])])
+    m6 = rig.t6().metrics(None)                     # the signed tilt rise, event to LAND
+    kp = int(np.argmin(np.abs(tr - m6['t_peak'])))
     kd = int(np.flatnonzero(after)[np.nanargmin(dz[after])])
-    stats['tilt_peak'] = float(tilt[kp])
-    stats['tilt_peak_t'] = float(tr[kp])
+    stats['tilt_peak'] = float(m6['dtheta'])
+    stats['tilt_peak_t'] = float(m6['t_peak'])
+    stats['tilt_abs_peak'] = float(m6['abs_peak'])
+    stats['sigma_pre'] = float(m6['sigma_pre'])
     early = (tr >= 0) & (tr < tr[kp] - 0.3)
     stats['tilt_first_spike'] = (float(tr[early][np.nanargmax(tilt[early])]), float(np.nanmax(tilt[early])))
-    tpk = []
-    for r, tr0 in zip(twins, tw_rel):
-        m = (r.run.t >= tr0) & (r.run.t <= tr0 + 3)
-        k = int(np.nanargmax(r.run.payload_tilt_deg[m].to_numpy()))
-        tpk.append((float(r.run.t[m].iloc[k] - tr0), float(r.run.payload_tilt_deg[m].iloc[k])))
+    hz = m6['window_s']                             # Q1: the twin cut at the rig flight's hold
+    tpk = [(mm['t_peak'], mm['dtheta']) for mm in (r.t6().metrics(hz) for r in twins)]
     stats['twin_tilt_peak'] = [v for _, v in tpk]
     stats['twin_tilt_peak_t'] = [t_ for t_, _ in tpk]
+    stats['ratio'] = stats['tilt_peak'] / float(np.mean(stats['twin_tilt_peak']))
     stats['dip_cm'] = float(dz[kd])
     stats['dip_t'] = float(tr[kd])
     stats['twin_dip_cm'] = [float(100 * np.nanmin((r.run.payload_z - r.run.payload_ref_z)[(r.run.t >= tr0) & (r.run.t <= tr0 + 3)]))
@@ -407,31 +428,40 @@ def fig_circle():
     outside = wr & ((tr < 0) | (tr > 3.0))
     stats['tilt_max_outside'] = float(np.nanmax(tilt[outside]))
     stats['dz_range_outside'] = (float(np.nanmin(dz[outside])), float(np.nanmax(dz[outside])))
-    axt.axhline(stats['tilt_max_outside'], color=gold, lw=0.6, ls=(0, (3.5, 2)), zorder=2)
-    axt.annotate(f"rig away from the release, up to {stats['tilt_max_outside']:.1f}$^\\circ$",
-                 (T1, stats['tilt_max_outside']), xytext=(-2, 2), textcoords='offset points', ha='right', va='bottom',
-                 fontsize=8, color=GREY_TEXT)
-    axt.plot(tr[kp], tilt[kp], 'o', color=gold, ms=3, zorder=4)
+    # the rig ring's own rocking: the time-back-in-band half-width b = max(2 sigma_pre, 0.5 deg) of the signed metric,
+    # and where the rig's departure is back inside it for a second
+    b = max(2 * stats['sigma_pre'], 0.5)
+    stats['band_deg'] = b
+    stats['t_back'] = m6['t_back']
+    axt.axhline(b, color=gold, lw=0.6, ls=(0, (3.5, 2)), zorder=2)
+    axt.annotate(f"band: $2\\sigma$ before the release, {b:.1f}$^\\circ$",
+                 (T1, b), xytext=(-2, 2), textcoords='offset points', ha='right', va='bottom', fontsize=8,
+                 color=GREY_TEXT)
+    if m6['t_back'] is not None:
+        axt.plot(m6['t_back'], b, marker='v', ms=3.5, color=gold, mec=gold, mfc=gold, ls='none', zorder=4, clip_on=False)
+        axt.annotate(f"back in band {m6['t_back']:.1f}\\,s", (m6['t_back'], b), xytext=(3, -3), textcoords='offset points',
+                     ha='left', va='top', fontsize=8, color=GREY_TEXT)
+    axt.plot(tr[kp], stats['tilt_peak'], 'o', color=gold, ms=3, zorder=4)
     lo, hi = min(stats['twin_tilt_peak']), max(stats['twin_tilt_peak'])
-    axt.annotate(f'peak {tilt[kp]:.1f}$^\\circ$ (twin {lo:.1f}--{hi:.1f}$^\\circ$)', (tr[kp], tilt[kp]), xytext=(5, 3),
-                 textcoords='offset points', ha='left', va='bottom', fontsize=8, color=GREY_TEXT)
+    axt.annotate(f'rise {stats["tilt_peak"]:.1f}$^\\circ$ (twin {lo:.1f}--{hi:.1f}$^\\circ$)', (tr[kp], stats['tilt_peak']),
+                 xytext=(5, 3), textcoords='offset points', ha='left', va='bottom', fontsize=8, color=GREY_TEXT)
     axz.plot(tr[kd], dz[kd], 'o', color=gold, ms=3, zorder=4)
     lo, hi = sorted(-v for v in stats['twin_dip_cm'])
-    axz.annotate(f'dip {-dz[kd]:.1f}\\,cm (twin {lo:.1f}--{hi:.1f}\\,cm)', (tr[kd], dz[kd]), xytext=(6, -1),
-                 textcoords='offset points', ha='left', va='center', fontsize=8, color=GREY_TEXT)
-    axt.set_ylabel(r'Ring tilt (\si{\degree})')
+    axz.annotate(f'dip {-dz[kd]:.1f}\\,cm (twin {lo:.1f}--{hi:.1f}\\,cm)', (tr[kd], dz[kd]), xytext=(6, 5),
+                 textcoords='offset points', ha='left', va='bottom', fontsize=8, color=GREY_TEXT)
+    axt.set_ylabel(r'Tilt departure (\si{\degree})')
     axt.set_ylim(0, 11)
     axt.set_yticks([0, 5, 10])
     axz.axhline(0.0, color='0.75', lw=0.5, zorder=0)
     axz.set_ylabel('Height error (cm)')
-    axz.set_ylim(-6, 4)
+    axz.set_ylim(-6.5, 4)
     axz.set_yticks([-4, 0, 4])
     axz.set_xlabel('$t$ after the release (s)')
     axz.set_xlim(T0, T1)
     axz.set_xticks([-2, 0, 2, 4, 6, 8])
-    axz.annotate('rig', (T1, -4.2), xytext=(-2, 0), textcoords='offset points', ha='right', va='center', fontsize=8,
+    axz.annotate('rig', (T1, -4.6), xytext=(-2, 0), textcoords='offset points', ha='right', va='center', fontsize=8,
                  color=gold)
-    axz.annotate('twin, two runs', (T1, -5.3), xytext=(-2, 0), textcoords='offset points', ha='right', va='center',
+    axz.annotate('twin, two runs', (T1, -5.7), xytext=(-2, 0), textcoords='offset points', ha='right', va='center',
                  fontsize=8, color=TWIN_LINE)
 
     # events and the path hold, on the three strips; named once on the top one
@@ -439,6 +469,7 @@ def fig_circle():
         a.axvspan(t_hold0 - t_rel, t_hold1 - t_rel, color='0.93', lw=0, zorder=0)
         a.axvline(0.0, color='0.5', lw=0.5, zorder=0)
         a.axvline(t_det - t_rel, color='0.5', lw=0.5, ls=(0, (1, 1.5)), zorder=0)
+        a.axvline(t_down - t_rel, color='0.5', lw=0.5, zorder=0)       # instant 2, the freed UAV starts landing
     names = ('release', 'freed UAV starts landing')
     for j, ts in enumerate(t_snap[:2]):
         badge(axT, (ts - t_rel, 1.0), j + 1, coords=('data', 'axes fraction'), dy=8, leader=True)
@@ -483,10 +514,11 @@ def transient(run, t_ev):
                 exy=float(np.nanmean(exy[(t >= -10.0) & (t < 0.0)])))
 
 
-def detach_metrics(spec, event):
+def detach_metrics(spec, event, horizon=None):
     r = Run(spec)
     t_ev = r.ev(event)
     m = transient(r, t_ev)
+    m['rise'] = r.t6().metrics(horizon)['dtheta']   # the signed T6 tilt rise (11 Oct); dip and exy keep their scorers
     if event == 'RELEASE':
         m['found'] = r.log_time(PAT_FOUND, t_ev) - t_ev
     return m
@@ -508,20 +540,23 @@ def spread(vals):
 
 def fig_parity():
     from matplotlib.lines import Line2D
-    from matplotlib.ticker import FixedLocator, FuncFormatter, NullLocator
+    from matplotlib.ticker import FixedLocator, FuncFormatter, LogLocator, NullFormatter
     ps.thesis()
     # key, panel name, unit, axis limits (log), ticks
-    keys = [('rise', 'Tilt rise', r'\si{\degree}', (1.0, 30.0), (1, 3, 10, 30)),
-            ('dip', 'Ring dip', 'cm', (0.1, 10.0), (0.1, 0.3, 1, 3, 10)),
-            ('found', 'Detection delay', 's', (0.2, 0.6), (0.2, 0.3, 0.4, 0.6)),
+    keys = [('rise', r'Tilt rise $\Delta\theta$', r'\si{\degree}', (3.0, 30.0), (3, 10, 30)),
+            ('dip', 'Ring dip', 'cm', (1.0, 10.0), (1, 3, 10)),
+            ('found', 'Detection delay', 's', (0.2, 0.8), (0.2, 0.3, 0.4, 0.6, 0.8)),
             ('exy', 'Horizontal error', 'cm', (1.0, 10.0), (1, 3, 10))]
+    draw_order = {'D': 0, '^': 1, 'o': 2, 's': 3}          # larger glyphs first, so a coincident smaller one shows
     rows = []
     for name, mk, rig, twins, event in PARITY:
-        rows.append(dict(name=name, mk=mk, rig=[detach_metrics(rig, event)],
-                         twin=[detach_metrics(r, event) for r in twins]))
+        rig_m = detach_metrics(rig, event)
+        hz = Run(rig).ev('LAND') - Run(rig).ev(event)          # Q1: the twin cut at the rig flight's hold
+        rows.append(dict(name=name, mk=mk, rig=[rig_m], twin=[detach_metrics(r, event, hz) for r in twins]))
     att = dict(name='attach', mk='p', rig=[attach_metrics(r) for r in PARITY_ATTACH['rig']],
                twin=[attach_metrics(r) for r in PARITY_ATTACH['twin']])
-    fig, axs = plt.subplots(1, 4, figsize=ps.size('full', height=2.1), layout='constrained')
+    att_rows = [att] if (att['rig'] or att['twin']) else []
+    fig, axs = plt.subplots(1, 4, figsize=ps.size('full', height=1.95), layout='constrained')
     stats = {}
     band = 0.25
     fmt = FuncFormatter(lambda v, _: f'${v:g}$')
@@ -532,7 +567,8 @@ def fig_parity():
         ax.fill_between(x, (1 - band) * x, (1 + band) * x, color='0.88', lw=0, zorder=0)
         ax.plot([lo, hi], [lo, hi], color='0.4', lw=0.7, ls=(0, (3.5, 2)), zorder=1)
         ax.plot([lo, hi / 2], [2 * lo, hi], color='0.45', lw=0.6, ls=(0, (1, 1.5)), zorder=1)
-        for row in rows + [att]:
+        labels = []                                     # (x, y, text) of the ratio labels to place in this panel
+        for row in sorted(rows, key=lambda r: draw_order.get(r['mk'], 9)) + att_rows:
             tw = [m[key] for m in row['twin'] if key in m]
             if not tw:
                 continue
@@ -544,40 +580,64 @@ def fig_parity():
                 stats[f'{key}:{row["name"]}'] = dict(twin=(round(xm, 3), round(x0, 3), round(x1, 3)), rig='pending')
                 continue
             ym, y0, y1 = spread(rg)
-            ax.errorbar(xm, ym, xerr=[[xm - x0], [x1 - xm]], yerr=[[ym - y0], [y1 - ym]], fmt=row['mk'], ms=4.6,
+            ax.errorbar(xm, ym, xerr=[[xm - x0], [x1 - xm]], yerr=[[ym - y0], [y1 - ym]], fmt=row['mk'], ms=4.0,
                         mfc=INK, mec='white', mew=0.5, ecolor=INK, elinewidth=0.7, capsize=0, zorder=4)
             stats[f'{key}:{row["name"]}'] = dict(twin=(round(xm, 3), round(x0, 3), round(x1, 3)),
                                                  rig=round(ym, 3), ratio=round(ym / xm, 2))
+            labels.append((xm, ym, f'{ym / xm:.2f}$\\times$'))
+        # the ratio beside each marker (the caption's numbers, readable): each label takes the first of six sides that
+        # overlaps neither another label nor a marker, in a points-based sketch of this square log panel
+        AX_PT, dec = 95.0, np.log10(hi / lo)
+        to_pt = lambda v: AX_PT * np.log10(v / lo) / dec
+        boxes = [(to_pt(x) - 3, to_pt(y) - 3, to_pt(x) + 3, to_pt(y) + 3) for x, y, _ in labels]   # the markers
+        for x, y, text in labels:
+            w, h = 0.6 * 7 * (len(text) - 7) + 3, 7.5                      # '$\times$' is one glyph
+            px, py = to_pt(x), to_pt(y)
+            for dx, dy, ha, va in ((5, 0, 'left', 'center'), (5, 7, 'left', 'bottom'), (-5, 0, 'right', 'center'),
+                                   (5, -7, 'left', 'top'), (-5, 7, 'right', 'bottom'), (-5, -7, 'right', 'top')):
+                x0 = px + dx if ha == 'left' else px + dx - w
+                y0 = py + dy - (h if va == 'top' else h / 2 if va == 'center' else 0)
+                box = (x0, y0, x0 + w, y0 + h)
+                inside = 0 <= box[0] and box[2] <= AX_PT and 0 <= box[1] and box[3] <= AX_PT
+                clash = any(not (box[2] < b[0] or b[2] < box[0] or box[3] < b[1] or b[3] < box[1]) for b in boxes)
+                if inside and not clash:
+                    break
+            boxes.append(box)
+            ax.annotate(text, (x, y), xytext=(dx, dy), textcoords='offset points', ha=ha, va=va, fontsize=7,
+                        color=GREY_TEXT, zorder=5)
         ax.set_xlim(lo, hi)
         ax.set_ylim(lo, hi)
         ax.set_aspect('equal', adjustable='box')
         for axis in (ax.xaxis, ax.yaxis):
             axis.set_major_locator(FixedLocator(ticks))
-            axis.set_minor_locator(NullLocator())
+            axis.set_minor_locator(LogLocator(base=10, subs=(2, 3, 4, 5, 6, 7, 8, 9), numticks=20))
+            axis.set_minor_formatter(NullFormatter())
             axis.set_major_formatter(fmt)
+        ax.tick_params(which='minor', length=1.5, width=0.4)
         ax.set_xlabel(f'Twin ({unit})')
         ax.set_ylabel(f'Rig ({unit})', labelpad=1)
         ax.annotate(f'({"abcd"[[k[0] for k in keys].index(key)]}) {label}', xy=(0, 1), xycoords='axes fraction',
                     xytext=(0, 4), textcoords='offset points', ha='left', va='bottom', fontsize=9)
     # the three references, named once, in (c) where there is room
-    axs[2].annotate(r'$1\times$', (0.5, 0.5), xytext=(-4, 3), textcoords='offset points', ha='right', va='bottom',
+    # the three references, named once, in (b) whose lower left is empty: each label on its own line
+    axs[1].annotate(r'$1\times$', (1.7, 1.7), xytext=(-3, 2), textcoords='offset points', ha='right', va='bottom',
                     fontsize=8, color=GREY_TEXT)
-    axs[2].annotate(r'$2\times$', (0.27, 0.54), xytext=(-3, 0), textcoords='offset points', ha='right', va='center',
+    axs[1].annotate(r'$2\times$', (1.25, 2.5), xytext=(-3, 1), textcoords='offset points', ha='right', va='bottom',
                     fontsize=8, color=GREY_TEXT)
-    axs[2].annotate(f'$\\pm${band * 100:.0f}\\,\\%', (0.5, (1 - band) * 0.5), xytext=(2, -2), textcoords='offset points',
+    axs[1].annotate(f'$\\pm${band * 100:.0f}\\,\\%', (2.8, (1 - band) * 2.8), xytext=(2, -2), textcoords='offset points',
                     ha='left', va='top', fontsize=8, color=GREY_TEXT)
-    if not att['rig']:
+    if att_rows and not att['rig']:
         xa = spread([m['rise'] for m in att['twin']])[0]
         axs[0].annotate('rig pending', (xa, xa), xytext=(6, -1), textcoords='offset points', ha='left', va='top',
                         fontsize=8, color=GREY_TEXT)
-    axs[2].annotate('announced: none', (0.97, 0.04), xycoords='axes fraction', ha='right', va='bottom', fontsize=8,
-                    color=GREY_TEXT)
     hs = [Line2D([], [], ls='none', marker=row['mk'], ms=4.6, mfc=INK, mec='white', mew=0.5) for row in rows]
-    hs.append(Line2D([], [], ls='none', marker=att['mk'], ms=5, mfc='white' if not att['rig'] else INK, mec='0.3',
-                     mew=0.8))
-    names = [row['name'] for row in rows] + ['attach, twin only (rig pending)' if not att['rig'] else 'attach']
-    fig.legend(hs, names, loc='outside upper center', ncol=3, frameon=False, fontsize=8, handletextpad=0.2,
-               columnspacing=1.2, borderaxespad=0.2)
+    names = [row['name'] for row in rows]
+    if att_rows:
+        hs.append(Line2D([], [], ls='none', marker=att['mk'], ms=5, mfc='white' if not att['rig'] else INK, mec='0.3',
+                         mew=0.8))
+        names.append('attach, twin only (rig pending)' if not att['rig'] else 'attach')
+    fig.legend(hs, names, loc='outside upper center', ncol=4 if not att_rows else 3, frameon=False, fontsize=8,
+               handletextpad=0.2, columnspacing=1.2, borderaxespad=0.2)
     stem = os.path.join(OUT, 'F_twin_rig_parity', 'twin_rig_parity')
     ps.save_print(fig, stem)
     return stem, stats

@@ -60,3 +60,22 @@ the run directories to the lists at the top of the script (`PARITY_ATTACH['rig']
 | F_rig_circle_detach | rig RIG-1008-r305 (circle, unannounced release of QUAD4 from the 90 deg plate); twin R1208/R1213 (w4_3915_release_orbit_drop) | rig: b811d90 (8 Oct); twin: drop-port 700a77b |
 | F_twin_rig_parity | rig RIG-1008-r302_3, r303_4, r304_3, r305; twin R1207/R1212, R1140/R1145, R1206/R1211, R1208/R1213; attach twin R1404/R1410 (twin_tf_weld_on); **pending: rig r8b, 14 Oct** | rig: b811d90; twin: drop-port 700a77b, week4 0e91d86 (R1140/R1145, 14 dirty files), rig-prep 1bbe1f8 (R1404/R1410) |
 | F_disarm_lanes | twin R1258 (twin_fs_c0, old rule), R1284/R1285 (twin_fs_c1), R1310/R1325 (w4_da_release_hover), R1309/R1326 (w4_gi_g2_release_orbit); **pending: rig w4, w5, 14 Oct** | rig-prep 38fa1f3 (R1258), c0604f7 (R1284/R1285), cb09b39 (R1309/R1310), 734f0f4 (R1325/R1326, 1 dirty file) |
+
+
+## F_rig_detach, F_rig_circle_detach, F_twin_rig_parity on the signed release metric (11 Oct 2026)
+
+The tilt panels of the three figures moved from the scalar ring tilt to the signed T6 release metric
+(`docs/freeze_2026-10-14.md` 1.1, computed by `tools/release_bands.py`): the tilt departure is the length of the ring's
+tilt vector minus its mean over the 5 s before the release, and the tilt rise is its peak from the release to LAND, the
+twin cut at the rig flight's hold. The parity figure's ratios are therefore the ledger's class factors (0.85, 1.05,
+1.70, 1.71); its attach placeholder is gone (the rig attach goes into the ledger figure when it flies), so R1404/R1410
+are no longer drawn. The dips keep their 3 s window. Same runs and code trees as the 9 and 10 Oct rows above; rebuilt
+through the thesis-figure loop (look rounds, audit, one blind critic each, accepted fixes applied, re-rendered and
+re-audited). Scripts: `tools/thesis_rig_figures.py` (`fig_rig_detach`) and `tools/thesis_rig_twin_figures.py` (`circle`,
+`parity`), with `MDC_RESULTS_ROOT` pointing at the results root.
+
+| figure | tilt rise, rig (deg) | tilt rise, twin (deg) | back in band |
+|---|---|---|---|
+| F_rig_detach | 11 (announced), 5 (unannounced), 17 (150 deg gap) | 6-7, 6, 15-17 | not drawn (hover holds end at LAND) |
+| F_rig_circle_detach | 8.0 (first spike 5.7) | 4.0-5.4 | 3.9 s, band 4.7 deg |
+| F_twin_rig_parity | ratios 1.71, 0.85, 1.05, 1.70 | | |

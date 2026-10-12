@@ -1,0 +1,7 @@
+errand,away_s,swap_s,pause_landing_s,pause_inflight_s,carrier_hover_s_inflight,carrier_hover_s_landing,extra_hover_s_inflight
+R1573 (hover),89.9,30.0,60.7,0.0,269.8,92.1,177.7
+R1573 (hover),89.9,60.0,90.7,0.0,269.8,92.1,177.7
+R1573 (hover),89.9,120.0,150.7,0.0,269.8,92.1,177.7
+R1579 (circle),115.7,30.0,60.7,0.0,347.0,92.1,254.9
+R1579 (circle),115.7,60.0,90.7,0.0,347.0,92.1,254.9
+R1579 (circle),115.7,120.0,150.7,0.0,347.0,92.1,254.9

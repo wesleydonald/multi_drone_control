@@ -1,0 +1,29 @@
+His circle MATCH_VELOCITY gate (xy < 2.5 cm and velocity error < 0.08 m/s, held for his dwell), rebuilt from run.csv
+(12 Oct, rig-wed ba40bd0 runs; exploratory, no flight). xy error: QUAD4's tip to plate 9 (ring pose + 0.225 m at +90 deg
+in the ring's yaw); velocity error: QUAD4 body velocity against the ring's (finite difference). Approximate: his gate
+may use a different reference point. Windows of PHASE:MATCH_VELOCITY.
+
+run    start  dur(s)  xy err med/p10 (cm)  vel err med/p10 (m/s)  both-in-gate %  next
+R1638  108.2  139.6     2.3/0.8          0.048/0.016            43.0      TAKEN_BACK (stalled)
+R1639  114.5  133.3     2.0/0.8          0.044/0.015            53.1      TAKEN_BACK (stalled)
+R1640  105.3   46.2     2.4/0.8          0.052/0.018            40.0      DESCEND_TO_ATTACHMENT
+R1640  153.7   27.8     1.9/0.8          0.042/0.017            56.0      TAKEN_BACK
+R1641  106.0  141.7     2.2/0.9          0.045/0.015            48.7      TAKEN_BACK (stalled)
+R1646  105.3    1.6     1.3/0.5          0.043/0.009            77.9      DESCEND_TO_ATTACHMENT
+R1647  105.2    1.9     1.3/0.7          0.037/0.012            87.2      DESCEND_TO_ATTACHMENT
+R1656  131.9    5.2     1.9/1.1          0.029/0.011            67.1      DESCEND_TO_ATTACHMENT
+R1656  142.2    1.2     1.6/1.1          0.017/0.006           100.0      DESCEND_TO_ATTACHMENT
+R1656  148.4   10.3     1.3/0.6          0.029/0.010            77.4      DESCEND_TO_ATTACHMENT
+R1657  131.6    6.4     1.4/0.6          0.027/0.012            89.3      DESCEND_TO_ATTACHMENT
+R1657  140.8    7.0     1.2/0.7          0.027/0.008            85.4      DESCEND_TO_ATTACHMENT
+R1659  105.2    1.9     1.7/0.7          0.042/0.013            68.6      DESCEND_TO_ATTACHMENT
+R1659  113.5   10.7     1.8/1.2          0.027/0.011            85.9      DESCEND_TO_ATTACHMENT
+R1659  131.7    5.3     1.9/0.6          0.027/0.009            56.5      DESCEND_TO_ATTACHMENT
+R1679  104.8    1.9     1.2/0.8          0.034/0.008            88.5      DESCEND_TO_ATTACHMENT
+R1680  105.1    1.6     1.2/0.5          0.040/0.012            74.3      DESCEND_TO_ATTACHMENT
+
+Reading: in wave 1 (R1638-R1641) the xy error sat at its 2.5 cm gate (median 2.0-2.4 cm) and both conditions held only
+40-53 % of the time, so his dwell never completed (stalls of 133-142 s). Every later circle run had a median of 1.2-1.9
+cm and held the gate 56-100 % of the time, passing in 1.2-10.7 s. The velocity error is well inside 0.08 m/s
+everywhere: the xy gate is the binding one. Wave 1's extra ~1 cm of tip error goes with its older carrier references
+(p99 0.12-0.13 s against 0.10-0.11 s); the cause of that is not established.

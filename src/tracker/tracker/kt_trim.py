@@ -17,7 +17,7 @@ which at a steady hover reduces to "the gain that makes the throttle I am flying
 the force I am holding". First-order filtered (tau), bounded to typed*(1 +- max), and
 only updated when the caller says the drone is in steady airborne flight; otherwise the
 last value is held. One scalar per drone, no coupling to the cable model's state: this
-is not the removed UKF (CURRENT_STATE §4.5), it is what PX4's hover-thrust estimator does.
+is not the removed UKF (CURRENT_STATE §4.5 at 0e91d86), it is what PX4's hover-thrust estimator does.
 
 Two rules from the two-drone Gazebo crash (2026-09-24 16:28, card 2026-09-23_kt_trim):
   * the throttle and attitude enter through the SAME 0.3 s filter as the acceleration.

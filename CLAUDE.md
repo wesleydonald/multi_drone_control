@@ -1,7 +1,7 @@
 # multi_drone_control — working rules (read every session; the manual is general/CLAUDE.md)
 
 Thesis: quadcopters attaching to / detaching from a cooperatively carried cable-suspended
-ring payload, sim then rig. Deadline 27 Nov 2026. Owner: Wesley. Decisions are his.
+ring payload, sim then rig. Deadline 20 Nov 2026 (Wesley 11 Oct; the title page date). Owner: Wesley. Decisions are his.
 
 This repo is in rapid software and controller development: rules, defaults and locked
 decisions change often. Keep this file current: when a rule, default or decision changes,
@@ -50,7 +50,7 @@ current branch like any other file (it reaches main with the merges).
 
 ## Gazebo (twin)
 - Wesley at the machine: he flies, Claude reads the log. Interactive runs don't count.
-- Headless (`tools/run_experiment.py`): laptop one at a time, no cap; lab PC up to ~6 slots
+- Headless (`tools/run_experiment.py`): laptop one at a time, no cap; lab PC up to 4 slots, evenings only (Wesley 12 Oct),
   only when nobody else is on it (check `who`, load, containers first). `/report` per matrix.
 - **Keep the laptop idle for the first ~3 min of every run** (no tests, no analysis): a
   starved planner voided runs on 9 Oct. Never type `pgrep "gz sim"` (it trips clean_slate).
@@ -65,7 +65,6 @@ current branch like any other file (it reaches main with the merges).
   `docs/experiments/<date>_<name>.md` (challenge under "## Critic"), never chat-only.
 - **Reviewer**: once per feature, on the final table, before the thesis or the rig.
 - Wesley can waive either; note the waiver in the registry row.
-- If a fix has not shown its effect in two runs, stop and report with the log.
 
 ## What needs Wesley's word
 - A launch default, a world SDF, `params.py`, gate thresholds, the attach geometry (the hook
@@ -101,6 +100,9 @@ current branch like any other file (it reaches main with the merges).
 - The network is yaw-only and open-loop in load pose except the bounded common-mode trim.
 - Attach at 0.2 m/s.
 - The twin models every link as rigid, QUAD4's tether included (9 Oct); the rig's tethers go slack.
+- Combined M1 (11 Oct): `contact_still` is on by default (c0 from a still window). A take-back during a trajectory
+  moves with the ring; until that is reviewed the rig refuses an orbit under `partner_contact` (hover only).
+  week4 stays as it is. `week5` (12 Oct: rig-wed + the take-back race fix) is the testing tree from Wed 14, rig and twin.
 - On the rig Tejen's controller does every QUAD4 attach, down to contact (the magnet only catches on the plate).
   Our motion-capture check alone confirms the attach; only then do we take QUAD4 over and fold it in (10 Oct).
   Our own approach (R8a/R8b/R9) is twin and thesis only.

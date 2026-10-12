@@ -1,117 +1,159 @@
-# Session state (read after every compaction; keep current at each milestone)
+# Session state (read after every compaction; keep it short and current)
 
-Updated: Sat 10 Oct 2026, late evening.
+Updated: Mon 12 Oct 2026, 11:18 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+`docs/decisions.md`, `results/registry.csv`, and the "since the 8 Oct rig" page
+(https://claude.ai/artifact/QwgP2oPSknLyWZacvDuh5T; source `$CLAUDE_JOB_DIR/tmp/resource/m1_since_rig.html`).
 
 ## Where things are
-- Main tree `/home/wesley/multi_drone_control` on **rig-prep** (see git log), clean. Nothing running.
-- rig-prep = week4 (6dd48d4) + creep fix, defaults, twin attach worlds, body-to-tip, and the three newcomer switches
-  (`newcomer_lifecycle`, `newcomer_fault_land`, `departed_ground_idle`, all default off; press limit 6 s).
-- week4: 33716be (forward fix) still unpushed by Wesley. Nothing pushed tonight.
-- Worktrees: `/home/wesley/mdc_wt/newcomer` (branch newcomer-fault-scope = rig-prep), `mdc_wt/twin-attach`,
-  `mdc_wt/combined-m1` (8c21fe8, old base: O1 mux start_ours + aux zeroing), `mdc_wt/thesis` (thesis-rig 63a54fe),
-  `mdc_wt/week4fix`, `mdc_wt/rig-prep-b`; old `mdc_drop`, `mdc_lag`, `mdc_safety` (remove only with Wesley's OK).
-- CLAUDE.md is tracked on rig-prep since b8509fb (Wesley, 9 Oct: it may go to main); commit edits on the current
-  branch. The orphan `working-rules` branch was deleted.
-- Last registry row: R1302. Morning report given 9 Oct ~07:30 (twin runs R1235-R1302).
+- Main tree `/home/wesley/multi_drone_control` on **rig-prep** (docs, registry, cards, plans). Nothing is pushed.
+- **week4** `a25c40d`: Wednesday's rig tree (worktree `mdc_wt/week4fix`). It stays as it is. Next week's tested work
+  goes on **week5**, created from the candidate.
+- **Candidate lineage** (each tree has its own worktree under `/home/wesley/mdc_wt/`):
 
-## Decided this session (all in docs/decisions.md)
-- Lab days Wed 14 Oct (8 h) and Thu 15 Oct 15:00-18:00, then every Wed/Thu to the 7 Nov results freeze.
-- QUAD4 = /drone_3 ("drone 4"), body 14, tip 24; M1 layout carriers on plates 3/11/7, weld on plate 9.
-- Newcomer abort: OFF or LAND before the weld -> magnet OFF, radially out to 1.2 m at its height, lands by itself.
-- A fault on an unwelded QUAD4 lands the fleet ("land everything"); DISARM disarms everything.
-- Body-to-tip is the rig default (twin confirmed the approach).
-- (superseded 9 Oct) Monday freeze -> no freeze, merge per item.
-- Wesley relaunches T2 between rig flights anyway (the creep sheet rule stays).
+  | branch | head | what |
+  |---|---|---|
+  | m1-rig | `0210a27` | the rig port, contact_still on, the take-back rises |
+  | m1-tiltcut4 | `de91ba2` | tilt cut, every switch off; the claim-tree fallback if TB6 fails |
+  | m1-comove | `793183d` | the candidate base: co-moving take-back (TB6 passed, flown from `c53ae0c`), m1-guard, the scorers, m1-harden (critic round 2 changes) |
+  | m1-guard | `84a3ad7` | merged into m1-comove (31d9c75): delete once the candidate is on week5 |
 
-## Wesley 9 Oct morning (answered; in docs/decisions.md)
-- No day deadlines: the plan is an order of work. LAND must land every drone safely whatever it is doing
-  (newcomer_lifecycle -> default after a LAND-in-every-phase twin matrix + reviewer).
-- Freed/departed drone: pushed down to its rest, then disarmed ALONE (expected disarm); no armed idle. New code.
-- Approach corrects on the measured mocap magnet tip (body 24) vs the target. New code (card + critic).
-- C1b (QUAD4 fault over the plate): accepted for R8b as is.
-- No freeze: merge each item into week4 when it passes (his OK per merge); rehearsal on the current tree, read-back
-  line re-run for anything merged after it.
+- **Side branches:**
+  - m1-score `986ac0a`: the scorers, fast-forwarded into m1-comove (delete once the candidate is on week5).
+  - m1-rec and m1-video: the Gazebo recorder, to merge into the candidate.
+  - thesis-rig `a493c7d` (worktree `mdc_wt/thesis`): the thesis draft, with lane 3's Ch2/Ch3 rewrite (fast-forwarded
+    12 Oct 07:02; builds, 108 pp, no undefined refs; hand-back `docs/thesis_work_2026-10-12b.md`).
+    - Literature corrected against Quan's full text and Zeng; the spine structure; Appendix F; the bar rationale;
+      the leaver rule in Section 3.4.
+    - Prose from Fri 16.
+  - Thesis lane (11 Oct, done; hand-back `docs/thesis_work_2026-10-11.md` on thesis-rig): thesis-work is
+    fast-forwarded into thesis-rig; desk-ext is merged into rig-prep (`tools/admissibility_map.py`,
+    `release_transient.py`, `mission_value.py`, outputs in `results/analysis/`).
+    - Their worktrees and branches were removed 11 Oct (Wesley).
+    - Open for that lane: switch `release_transient.py` to the signed T6 tilt-vector form (freeze doc §1.1); the
+      14 Oct spring-scale number goes into the bar paragraph.
+- **Archive tags** for superseded attempts that registry rows cite: archive/m1-tiltcut, archive/m1-e0, archive/m1-full,
+  archive/combined-m1.
+- **Not ours to judge** (Wesley): time-cascade, safety-defaults, add-drone, backup/*, cable-payload-controller,
+  fixing-rviz, and week1-ready-for-testing (`git branch -D` is his).
+- **Plans:**
+  - `docs/plan_m1_remaining_2026-10-11.md`: execution, D1-D21.
+  - `docs/thesis_plan_2026-10-11.md`: spine RQ1 carry / RQ2 leave / RQ3 join; due **20 Nov**.
+- **Card:** `docs/experiments/2026-10-10_combined_m1_contact.md` rev 10; final SHA rig-wed ba40bd0 (filled 11 Oct). Reviewer
+  verdict in §6.3a.
+- **Reference:** `docs/reference.md` (architecture, negatives, traps, how to run). CURRENT_STATE.md is retired.
 
-## In progress (9 Oct late evening)
-- rig-prep HEAD 53e1a66. Nothing flying. Last registry row R1451 (laptop) / R1446 (lab); gate smoke R1452/R1453.
-- DONE tonight: LAND re-fly R1413-R1446 (one tree 8588745 + keep-alive f330bd2): 16/17 phases 2 of 2; R1438 tipped
-  QUAD4 0.5 s after a weld in the unwind (3 of 11 within 2 s of a weld, twin rigid link) -> reviewer SUPPORTED with
-  corrections (in the card). Disarm-alone laptop re-fly R1411/R1412/R1447-R1451: P1-P4 hold, no stall (17/17).
-- DONE: the three newcomer switches ON by default (bfbd181; legacy off; CLAUDE.md lock line; decisions.md DONE line).
-  Gate 1-5 pass; SIL smoke fails its two peak bars identically with/without (pre-existing since R0840; the sil_smoke
-  re-baseline needs Wesley's word).
-- Known, harmless: R1418 race (alone-disarm request crossing the LANDED disarm keeps that tracker up until teardown);
-  tracker exits at the fleet disarm stall the graph ~1 s after LANDED.
-- Thesis (branch thesis-rig, /home/wesley/mdc_wt/thesis/docs/thesis_drafts/thesis_v2, HEAD c0fc6e8): restructure
-  (ebf1b3b), rig figures + 7-8 Oct tables + lit comparison (fa94166), cut to 50 pp main text (e5260a8: secondary
-  tables to appendices C/D), trim contradictions settled (c0fc6e8). Builds clean, 82 pp total; ~2 lines spare on
-  the conclusion page. Open CHECKs: new refs (plug-and-play MPC, static equilibrium, aerial docking), the "This
-  work" row's qualitative cells, the detach metric definition, the parameter tables, "twelve numbers per node",
-  the 1-of-21 vs 2-of-21 landing count; conclusion value statement not written.
-- Rig finding to report: on 7 Oct the integral-only hover bobbed +-7 cm at 0.2 Hz; with the measured pull it held
-  within 1 cm (one 7 s hover; the 36/68 s circle and figure-eight agree: z sd 4.8/4.7 -> 0.5/0.6 cm).
-- Tip feedback rev 5: SUPPORTED (earlier today). Rig: Wednesday sheet docs/rig_2026-10-14_commands.md.
+## Running
+- Lab PC: idle. The smoke on the candidate 793183d passed, 4 of 4 support (R1628-R1631; the 10th clean full M1 is R1631).
+- OVERNIGHT LOOP (11 Oct 23:03, Wesley): the claim batch on rig-wed ba40bd0 (card rev 10 §6.3 + tilt rev 4), 41 runs,
+  `$CLAUDE_JOB_DIR/tmp/lab_claimwed.txt`. Order: the 17 m1c arms, the 3 full M1, the 2 R11a, then the tilt claim (T0, T1,
+  F6b, F6c, C1, C2, F1, C3, each x2) and N1-N3. Score each as it lands: tools/m1_score.py from rig-wed (claim/full/tilt,
+  rev 10 / tilt rev 4), one row each. When the combined table is complete: the reviewer, its verdict into the card.
+  Morning report by 08:00.
+  - Wave 1 (R1638-R1641) is scored. His contact-mode MATCH_VELOCITY gate (xy < 2.5 cm, < 0.08 m/s on the circling
+    plate) stalled in 3 of 4 circle arms: his tracking sat 3-5 cm off. R1639 falsifies TB4's ring tilt in its LAND
+    take-back. After the batch: re-fly m1c_nocatch_orbit x2 on 2 slots as a diagnostic (lab load?). Scoring wrapper:
+    `$CLAUDE_JOB_DIR/tmp/sc.sh show|add RID family rev arm verdict notes`.
+  - The 17 claim arms are scored (R1638-R1654), plus R1655 beside the table. Reviewer: **NOT SUPPORTED overall**.
+    - Supported: hover attach, hover take-back, no-catch hover, LAND during the proof.
+    - Not supported: the circle take-back and the push abort (R1654 rod 0.094 m).
+    - Corr rows for R1638/1639/1641/1654 and card §6.3a are committed in 898f775.
+  - DONE 02:44: R1638-R1681 scored. Morning report docs/morning_report_2026-10-12.md.
+  - Wesley ~10:10-11:00 (decisions.md):
+    - the hover lines are claimed; the failed lines go to a week5 table;
+    - the race is fixed; the 17 citations are approved; the magnet hold stays 9-10 N;
+    - week5 is the testing tree; the rig plan is front-loaded (ambitious Wed, Thu 15 for retries, the full M1 as
+      a gated last flight);
+    - the lab PC evenings only.
+- **week5** (worktree mdc_wt/week5) = rig-wed + 29b2d7b (the race fix) + 46ac389 (m1c_abort_negx) + 76594ba
+  (feedforward_60_hold.yaml, the load test pointed at week5).
+  - Built and prebuilt; gate --quick passes (585 tests).
+  - R9's rig line launch-checked clean (real_io false).
+  - m1-race is now the same as week5 (delete with the next cleanup script).
+- **Wednesday sheet** docs/rig_2026-10-14_commands.md (9c9dcc2): P1-P13 props off, R1-R9 flights, all on week5;
+  `w5` exports ROS_LOCALHOST_ONLY=1 ROS_DOMAIN_ID=23.
+- **Tejen note** docs/tejen_note_2026-10.md (d208958): final, for Wesley to send (credit wording in).
+- **Ch4 skeleton** on branch thesis-ch4 (71bed15, worktree mdc_wt/thesis-ch4): skel_*.tex per section, the
+  placeholder tables T7/T8/T10-T13, pending figures under the final labels fig:F8-F16. It also adds the two
+  never-committed images. Merge into thesis-rig after the other chat's figures replace the pendingfigs.
+- **The other chat:** Wesley may give it lane 5 (the deck for Tue 13, a red-team of Wednesday on branch
+  wed-review, the thesis figures on thesis-figs, the citations). The prompt is in this session's chat.
+- **P6 offline analyses:** a helper agent on branch p6-offline (worktree mdc_wt/p6-offline); it returns a summary
+  doc docs/p6_offline_2026-10-12.md.
+- **TONIGHT** (`$CLAUDE_JOB_DIR/tmp/lab_tonight.sh`, 24 runs on week5, from 19:00 if the lab is idle; the timer is
+  b1zmjvivl):
+  - Wednesday's rehearsals first (R11a, R11b, a LAND in his transit, the full M1 on hover, the W4/W5 same-tree
+    checks);
+  - then the failed lines, the full M1 circle x4, the push and the push the other way, T1 x2, N3 and C1.
+  - All exploratory; score each as it lands.
+- Laptop: idle. No helper is running. The full M1 on the circle is recorded and cut (R1633, the 11th clean full M1):
+  results/videos/full_M1_twin_R1633_orbit_edit.mp4 (2 min 56 s, captioned; raw: _wide, _circle, _plate9). The recorder
+  is on the candidate (adaf2c5).
+- Critic round 2 done: GO WITH CHANGES for hover R11a/R11b (rig card ## Critic; answers in decisions.md).
+  Critic round 2 changes are on the candidate: m1-harden merged as 793183d (205 planner tests, gate pass). Guard
+  constants: wait 3 s, +0.05 above slack, guard-stage speed 0.06 m/s, follow-down slack 0.12. Next: the QUAD4
+  record loader. No helper is running.
+- The other chat (thesis lane):
+  - lanes 1 and 2 are merged: thesis-rig 5dc4eb1, rig-prep de41c93; their branches and worktrees are removed;
+  - lane 2 built the supervisor deck https://claude.ai/artifact/TwjqA7ebTDrkgDK6nwutiR, the T6 metrics text and the
+    three 8 Oct figures on the tilt rise;
+  - lane 3 (Ch2/Ch3) is fast-forwarded into thesis-rig a493c7d. Wesley runs
+    `$CLAUDE_JOB_DIR/tmp/cleanup_thesis_lane3.sh` (retire modelling/control.tex on thesis-rig, remove the
+    thesis-work3 worktree and branch). Its open questions: the 17 citations to approve, and the magnet hold of
+    9-10 N.
 
-## Sat 10 Oct (Wesley's answers this morning; all in docs/decisions.md)
-- Merge rig-prep -> week4 AFTER one check run each on rig-prep's tip (c2279cf): lab batch R1454-R1460 running
-  (twin_tf_weld_on, ck_r8a_land_loop, ck_r8a_off_loop, w4_gi_g2_release_orbit, twin_r8a0, w4_da_release_hover,
-  w4_defaults_acceptance). Then registry rows, reviewer on the R8a0/R8a/R8b twin table, merge (Wesley pushes).
-- Tejen port started, sim only: worktree /home/wesley/mdc_wt/tejen-sync, branch tejen-sync (agent). His repo has
-  nothing new since 11a0683f. Wesley says Tejen has "another thing for us to do": not in his repo; ask Wesley.
-- SIL smoke: agent finding the cause at R0840; re-baseline only if the change was intended (no threshold edits yet).
-- Thesis (agents): proposed RQs applied, paragraph spacing restored, value statement, CHECKs (text agent, commits on
-  thesis-rig); Undermind references -> docs/thesis_drafts/refs_2026-10-10.md (I integrate); new figures #2 r305
-  storyboard, #4 parity, #12 swimlanes (figure agent; no commits; I integrate). Page limit not enforced (Wesley).
-- DONE 10 Oct: check runs R1454-R1460 all within bars; reviewer SUPPORTED with corrections (registry + sheet fixed);
-  rig-prep MERGED into week4 (b4e11f1, then fast-forwarded with docs; rig-prep == week4 == 26d4227; Wesley pushes).
-  SIL smoke re-baselined (0.60 / 12.0; cause = 0.86 kg ring + 4 Oct LAND defaults; R1461-R1467). Tejen port on
-  tejen-sync (4 commits, builds, tests as his tree; M1 hand-over 0.12 m lower). Thesis: RQs, spacing, value statement,
-  CHECKs (c857460, e3831d0, a8c629c), references (30c7060; 12 papers to approve); main text ends p57, 88 pp.
-- R9 twin: held R1468 PASS (weld, 3.0 deg, dip 3 mm, circle resumes on four); moving R1469 FAILS (no tip hold on a
-  moving plate -> tip loop never runs -> tip 3 cm high, outside the 2.5 cm weld radius; QUAD4 0.311 m from a carrier
-  in transit). Thursday: R9 held only. Repeats + M1 partner baseline (rig-prep) running on the lab PC.
-- R9 repeats: held 2 of 2 supports (R1468/R1471), moving 2 of 2 falsifies (R1469/R1472): Thursday R9 held only.
-- M1 partner baseline R1470 (rig-prep, legacy) FAILS at the hand-back: QUAD4 gets no reference (approach_hold off for
-  partners + _attach_approach set by the hand-off; since bbce103). Fix on branch partner-handoff-fix (worktree
-  /home/wesley/mdc_wt/partner-fix, 0b50b40, unit test); check run R1473 from it (lab). Port check branch
-  tejen-sync-check (worktree /home/wesley/mdc_wt/tejen-check) = tejen-sync + the fix, for the port's M1 run.
-  Worktree batches need MDC_REPO_ROOT=<worktree> MDC_RESULTS_ROOT=/home/wesley/multi_drone_control/results.
-- R1473 (fix) PASS: detach 2.71 / reweld 2.52 deg, 98.5 s (R0752 2.80 / 2.74, 106.3). R1474 (port + fix): reweld 5.62 deg
-  (G1 bar 5), weld 0.29 s after a hand-off 0.12 m lower (the marker fix): port not mergeable as is; 1 run.
-- Evening: partner-handoff-fix MERGED into week4 (6049543; rig-prep == week4); papers approved (thesis 1659d7d);
-  Wesley to push week4 -> origin main. Q3 (port's lower hand-off) and Q4 (moving R9) re-asked with context.
-- Wesley 10 Oct evening (decisions.md, CLAUDE.md lock line): Tejen's controller does EVERY QUAD4 attach on the rig,
-  down to contact (the magnet only catches on the plate); OUR motion-capture check alone confirms it; then we take
-  QUAD4 over and fold in. R8a/R8b/R9 dropped from the rig sheets (Wed: W4, W5, R8a0 + a props-off attach check at
-  09:00 with weld_radius 0.01; Thu: R10a + carry follow-ups). Next work: the combined M1 stack on these roles (his
-  descent to contact, our check, mux + fold-in on object_attached, also on a moving ring), then twin.
-- rig_to_run fixed for w4/w5 (a09244b). Figures F_rig_circle_detach, F_twin_rig_parity, F_disarm_lanes in the thesis
-  (596f90a). Rig finding: carriers 9-16 cm above their start at LANDED on 7-8 Oct (stall test; thr ~0.24): ask Wesley.
-- Thursday: sheet draft docs/rig_2026-10-15_commands.md; card docs/experiments/2026-10-10_twin_r9.md with configs
-  twin_r9_held / twin_r9_moving (not flown yet). Tilt not built (waits for a later lab day).
+## TB6 (co-moving take-back, m1-comove c53ae0c; card rev 10 §6.2): COMPLETE, passes its gate criteria
+- **All 11 support:** R1615-R1625. R1624 is read on the commanded path (Wesley ~16:20).
+- **Circle take-backs:** rod 0.205-0.253 m, body 0.415-0.493 m. TB5 predicts them within about 1 cm.
+- **Between the bars, for the Thu 15 gate:**
+  - R1618: attitude step at the decouple 2.15 deg.
+  - R1621: transit take-back step 3.83 deg (the fixed hold gave 4.4-4.7).
+- **Rig finding (R1625):** with his takeoff after the orbit start, the ring passed over QUAD4 (0.23 m xy, 0.12 m
+  vertical). This confirms the rule "his TAKEOFF before the orbit" on the rig.
+- **Still needed:** the co-move goes into the candidate. A circle on 21-22 Oct also needs the reviewer on the final
+  table.
 
-## Sat 10 Oct, late
-- Wesley: not pushing week4 to main for now (week4 = rig-prep = 44da020, 128 ahead of origin/main).
-- Desk dry run of Wednesday's 09:00 props-off attach check against fake_mocap (new `--tip-plate/--tip-dz`):
-  radius 0.01 / contact height / plate offset read back; 2 cm above: no ATTACH; on the plate: ATTACH 0.17 s; stays
-  attached. Planner warning flood on the ground throttled (2 s). Sheet: fallback to /magnet/attachment_state for d,
-  the rehearsal commands. Mocap noise of still bodies (8 Oct r305): 0.01-0.02 m/s max, not a risk for the 0.05 gate.
-  Desk script lesson: a background `ros2 launch` in a script ignores SIGINT; use `set -m` and signal the group.
-- Wesley: the 9-16 cm drop at LANDED is fine (decisions.md); week4 fast-forwarded to d9490b3 (his OK). The week4fix
-  worktree was re-synced by Wesley (reset --hard, clean at d9490b3).
-- Combined M1 on the new roles: survey done (no HANDOFF phase: the hand-back is /join_planner/handoff_ready raised in
-  ATTACH_READY; the ring magnet ON comes only from our hand-off reaction; no tip-plate contact in either twin).
-  Wesley: rig aims the face 1 cm below the plate; twin aims at the plate and holds; old partner world first
-  (exploratory), rig twin for the claim (decisions.md). Card docs/experiments/2026-10-10_combined_m1_contact.md
-  (switch partner_contact / his contact_attach, both default off). Wesley's three goals (magnet ON through his
-  rejoin; contact + small lift proof by HIS controller; bumpless hand-over) -> card rev 2 after critic round 1
-  (GO WITH CHANGES: our tracker would fly the welded QUAD4 to the release step-out point; checked true). Critic
-  round 2 running (told: rig twin only, Wesley's later call; his join mode; card to be revised after round 2). tip_calibration prints body-to-tip (the taut length for the rig proof; Wednesday item 4). Build on a branch from
-  tejen-sync-check after the critic. Scoring script kept at $CLAUDE_JOB_DIR/tmp/m1_stages.py (to tools/ with the configs).
+## Open questions for Wesley
+- The between-bar values (R1618, R1621) at the Thu gate.
+- The plan's D10-D17 and D21, and the thesis plan's D8-D16, all still open (see the plans).
 
-## Open items / next steps (plan: /home/wesley/.claude/plans/whimsical-kindling-minsky.md)
-- Reviewer pass on the final newcomer tables Monday before the freeze (graded WEAK on 9 Oct; re-flies done since).
-- Unexplained: R1278 carrier flip in the creep (1 in 53). (Planner late ARM: explained, runner fixed e1c6e77.)
-- C workstream (combined M1 stack with Tejen's code), P (Tejen port), X (tilt card + critic), R (Wed/Thu sheets,
-  Tuesday desk rehearsal, send Tejen docs/tejen_questions_2026-10.md, QUAD1 checklist docs/rig_quad1_checklist.md).
-- Re-freeze the launch gate baseline at week4 (backlog).
+## Next, in order (Wesley 11 Oct: the attach flights move to Wednesday afternoon, reviewer waived)
+1. **Pinned Wednesday install:** branch rig-wed (worktree mdc_wt/rig-wed, ba40bd0: 0628d85 + the launch fixes and
+   load_check.py). Twin rehearsal done:
+   - R11a (R1634, R1636): supports twice.
+   - R11b (R1635, R1637): the attach supports twice, with the proof under 1 s; each LAND was a TB14 tip-over, the twin
+     artefact.
+2. **Tuesday's desk rehearsal is skipped** (Wesley).
+   - The desk load test is done: it passes at normal priority and fails when the laptop is loaded.
+   - The launch fixes are in: the fleet manager announces at startup; the worktree root lookup works.
+   - Wednesday step 3 follows rig-wed `docs/rig_2026-10-14_load_test.md`.
+3. **Wednesday 14:**
+   - the 09:00 measurements and Part A (W4/W5);
+   - Part B props-off on rig-wed;
+   - Part C, R11a then R11b on hover, only under its go conditions (sheet).
+   - QUAD4 uses QUAD2's values: kT 22, drop 0.575 (L cross-checked).
+4. **Tejen:** Wesley sends `docs/tejen_note_2026-10.md` (his presence and OK Wednesday, his test logs). With his logs,
+   read his height error at contact and his kT. That decides R11a's +0.03 or +0.05.
+5. **After Wednesday:**
+   - the claim batch on the rig-wed SHA, then the reviewer;
+   - 21-22 Oct: repeats, and the circle only under its gates;
+   - the QUAD4 record loader is optional, since the values are typed;
+   - week5 from the reviewed tree.
+
+## Working constraints (beyond CLAUDE.md)
+- **Helpers:** one general-purpose helper agent at a time (Wesley).
+- **Lab:** at most 4 slots, one tree at a time; check idle first (`who`, load, containers).
+  - Each batch runs from a script in a fresh `env -i` shell that sources ONE install (copy
+    `$CLAUDE_JOB_DIR/tmp/lab_tb6.sh`). Two installs in one shell break the launch argument check.
+  - Start it detached with `setsid nohup`. Kill exact PIDs only: `pkill -f` matches its own shell.
+- **Scorers:** `tools/m1_score.py claim|full|takeback|tilt RUN --rev N [--check]` and `tools/m1_score.py tb14
+  R1479-R1578` (in m1-comove / m1-score). Source that tree's install. It prints one LF row; append it yourself.
+  The old ephemeral scorers in `$CLAUDE_JOB_DIR/tmp/score/` are retired.
+- **Registry:** back it up, append, then diff the old lines.
+- **Untracked files:** `general/CLAUDE.md`, `.claude/agents/*` and `.claude/workflows/*` are local and untracked. Edit
+  them in place and never `git add` them.
+- **Deletions** (branches, worktrees) are refused by the permission check. Write a script for Wesley to run.
+- **Timestamps:** read `date` before writing any clock time. Times estimated from memory ran up to 1.5 h ahead on
+  11 Oct; commit times are exact.
+- **Papers:** `docs/papers/` is git-ignored and local. The Quan et al. copy is the full 33-page arXiv v1 (16:28).
+- **Branch rule:** delete a branch once its work is on week5 or the attempt failed. Archive-tag any unmerged SHA the
+  registry cites.
