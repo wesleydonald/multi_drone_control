@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Tue 13 Oct 2026, 20:32 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Tue 13 Oct 2026, 20:50 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -21,15 +21,19 @@ Updated: Tue 13 Oct 2026, 20:32 AEDT (from `date`). Only what a new session need
 - **Archive tags:** archive/m1-tiltcut, archive/m1-e0, archive/m1-full, archive/combined-m1, archive/m1-video.
 
 ## Wednesday 14 Oct (rig) and Thursday 15:00-18:00 (retries)
-- **Sheet:** `docs/rig/wed_2026-10-14.md`, on week5 with the red-team's fixes in.
-  - P1-P14 are props off. R1-R9 are flights: the 3-min hover, the measured and planned 60 deg circles, W4/W5 as R4/R5,
-    R11a/R11b as R6-R8, and the full M1 as gated R9.
+- **Sheet:** `docs/rig/wed_2026-10-14.md` (concise: setup, tests 1-12 with commands and what each shows).
+  - 1-4 props off: streams, the contact height W, the catch radius K from hand catches, the 10-min load test.
+  - 5-7 with Tejen: the no-catch mission, the contact attach twice, the full mission if clean.
+  - 8-9 if time: the hover and circle releases against the frozen bands. 10-12 Thursday: the two circles, the magnet hold.
   - Every terminal: `w5` (sources the main tree, exports ROS_LOCALHOST_ONLY=1 ROS_DOMAIN_ID=23).
-- **Wednesday night:** `python3 tools/rig_night.py --date 2026-10-14 R1:r1 ... R9:r9` turns each bag into its thesis
-  rows and figure inputs.
-- **Tejen note** `docs/tejen/tejen_note_2026-10.md`: final; Wesley sends it (the credit wording, the P14 rehearsal).
-- **Twin evidence:** the claim batch on rig-wed (R1638-R1681, card §6.3a). The hover lines are supported; the circle
-  take-back and the push abort are not. week5 adds only the take-back race fix (29b2d7b) and configs.
+  - The session multi-drone-control-02 is editing the sheet (13 Oct evening): it renamed the catch radius to K (the
+    launch variable was also R) and asks whether QUAD4's taut length L should be read in test 2 (Wesley typed 0.575).
+- **Wednesday night:** `python3 tools/rig_night.py --date 2026-10-14 R6:t5 R7:t6 R8:t6b R9:t7 R4:t8 R5:t9`.
+- **Changes since the rig last flew:** `docs/rig/changes_since_rig_2026-10-08.md`. The detailed sheet and the red-team
+  review: `docs/archive/`.
+- **Tejen note** `docs/tejen/tejen_note_2026-10.md`: final; Wesley sends it (the credit wording, the P14 rehearsal, item 6).
+- **Twin evidence:** the claim batch on rig-wed (R1638-R1681, card §6.3a) and the 12 Oct batch on week5 (R1682-R1713,
+  morning report 13 Oct). week5 adds only the take-back race fix (29b2d7b) and configs.
 
 ## 12 Oct night: the lab batch is DONE (R1682-R1713, 32 of 32 scored and committed)
 - Morning report: docs/reports/morning_report_2026-10-13.md. Brief for the meeting: docs/reports/supervisor_brief_2026-10-13.md.
