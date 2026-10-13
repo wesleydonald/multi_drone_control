@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Mon 12 Oct 2026, 21:10 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Tue 13 Oct 2026, 20:32 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -38,8 +38,11 @@ Updated: Mon 12 Oct 2026, 21:10 AEDT (from `date`). Only what a new session need
   resolved with measured (5.4-6.2 deg) < planned (17.0-17.2 deg), reviewer pending; the full M1 circle 1 of 4
   (his moving-plate alignment, marginal); the push clearance bar fails in both directions (it measures the push).
 - The lab PC is free. Rows R1682-R1711 say "week5 fc9fb04"; the manifests say 70d525f (docs-only commits between).
-- Waiting on Wesley: the Wednesday reorder (props-off W, R, load test -> R6-R9 -> the releases if time; the circles
-  and the spring scale Thursday). On his yes, rewrite docs/rig/wed_2026-10-14.md in that order.
+- Wednesday's sheet is the concise one, docs/rig/wed_2026-10-14.md (tests 1-12: 1-4 props off, 5-7 with Tejen, 8-9
+  the releases if time, 10-12 Thursday). The controller changes since 8 Oct: docs/rig/changes_since_rig_2026-10-08.md.
+  The long sheet and the red-team review are in docs/archive/.
+- Still open for Wesley (morning report §4): the push clearance bar, the circle reattach, Tier A's announced half,
+  sending the Tejen note. The T6 amendments wait for Wednesday's numbers.
 
 ## Handoff (if a new session picks up tonight; scripts in `~/handoff_2026-10-12/`)
 1. Lab idle? `ssh drones@drones 'who; uptime; docker ps --format "{{.Names}}"'` (no wesley_slot containers, low load).
