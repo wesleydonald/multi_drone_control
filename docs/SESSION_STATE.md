@@ -26,8 +26,8 @@ Updated: Tue 13 Oct 2026, 20:50 AEDT (from `date`). Only what a new session need
   - 5-7 with Tejen: the no-catch mission, the contact attach twice, the full mission if clean.
   - 8-9 if time: the hover and circle releases against the frozen bands. 10-12 Thursday: the two circles, the magnet hold.
   - Every terminal: `w5` (sources the main tree, exports ROS_LOCALHOST_ONLY=1 ROS_DOMAIN_ID=23).
-  - The session multi-drone-control-02 is editing the sheet (13 Oct evening): it renamed the catch radius to K (the
-    launch variable was also R) and asks whether QUAD4's taut length L should be read in test 2 (Wesley typed 0.575).
+  - 13 Oct evening (multi-drone-control-02, Wesley's word): the catch radius is K (the launch variable was also R, a
+    clash), and test 2 also reads QUAD4's taut length L; 0.575 is replaced only if the read is more than 1 cm off.
 - **Wednesday night:** `python3 tools/rig_night.py --date 2026-10-14 R6:t5 R7:t6 R8:t6b R9:t7 R4:t8 R5:t9`.
 - **Changes since the rig last flew:** `docs/rig/changes_since_rig_2026-10-08.md`. The detailed sheet and the red-team
   review: `docs/archive/`.
