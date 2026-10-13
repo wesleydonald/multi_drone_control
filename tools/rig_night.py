@@ -3,7 +3,7 @@
     source ~/ros2_humble/install/setup.bash; source install/setup.bash       # only for the bag (conversion, attach traces)
     python3 tools/rig_night.py --date 2026-10-14 R2:r2 R3:r3 R4:r4 R5:r5 R7:r7 R8:r8 R9:r9
     python3 tools/rig_night.py --date 2026-10-08 R4:r303_4 R5:r305          # the 8 Oct flights as a test
-Each LABEL:NAME is a sheet line (docs/rig/rig_2026-10-14_commands.md) and the flight's name under results/rig/<date>/
+Each LABEL:NAME is a sheet line (docs/rig/wed_2026-10-14.md) and the flight's name under results/rig/<date>/
 (tools/rig_flight.sh: <name> the bag, <name>.log the T2 console, <name>_logs the node logs). The flight is converted
 with tools/rig_to_run.py when <name>_run is missing (the bag is needed for the ring's pose; ROS sourced), then by label:
   R1       the 3-min hover (T7 row K7): ring xy error, height sd, tilt, pack voltage per drone.
