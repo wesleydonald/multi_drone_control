@@ -219,3 +219,48 @@ supervisor's `stop_action` defaults to his `disarm`.
 - **11 Oct, the drop wait as a switch (Wesley, after critic round 2 A7).** `drop_puck_wait_s` is a node parameter and
   a rig launch argument, rig default 2.0 s. Set to 0, an object not measured after the release dwell is trusted released,
   his earlier behaviour. It is for a rig where Motive cannot see the puck in the net; Wednesday's mocap check decides.
+
+## 14 Oct 2026: rig load cuts (Wesley, after the combined stack starved our trackers in RIG-1014-t5_2; docs/analysis/rig_load_2026-10-14.md)
+
+| file | change | why |
+|---|---|---|
+| `launch/partner_mission.launch.py` (ours), rig nodes only | the planner gets `visual_astar_enabled: false` | his visual-only A* (2 Hz, up to 150k expansions or 0.25 s each) only draws; the mission reference is unchanged |
+| `launch/partner_mission.launch.py` (ours), rig nodes only | the planner gets `log_every_n_updates: 6` | his CSV at 5 Hz instead of 30 Hz, as the sim launch already does |
+| `launch/partner_mission.launch.py` (ours), rig nodes only | the ring bridge gets `trail_seconds: 0.0` | no 20 s, 1000-point trail MarkerArray at 50 Hz; the bridge's 50 Hz outputs are unchanged |
+| `launch/partner_mission.launch.py` (ours), rig nodes only | the planner gets `pickup_alignment_low_xy_m 0.045` (was 0.025), `pickup_alignment_high_xy_m 0.06` (was 0.05), `pickup_alignment_low_dwell_s 1.0` (was 0.3) | his own suggestion after RIG-1014-t5_4: the tip swung a median 3-4 cm round the puck and sat inside the 2.5 cm low tube 14-35 % of the time, so the descent stalled 9 cm up; the first attempt's lift proof failed with the face ~2 cm off the puck. The capture gate (`pickup_alignment_capture_xy_m` 0.025) and the retry settings are unchanged |
+| `launch/partner_mission.launch.py` (ours), rig nodes only | after RIG-1014-t5_5 (Wesley): `pickup_alignment_low_xy_m 0.10`, `pickup_alignment_high_xy_m 0.12` (were 0.045 / 0.06 from t5_4) | with 0.045 the descent reached the bottom in 2 of 3 attempts and stalled once in HIGH; at the bottom the magnet sat 2.5-4.5 cm off the puck and the puck never rose (0.1 cm), so the catch, not the tube, is now the limit (Tejen to look at the final alignment) |
+
+## 14 Oct 2026: floor_join and delivery_rejoin (Wesley)
+
+| file | change | why |
+|---|---|---|
+| `mission_definitions.py`, `mission_types.py` | two missions from the mat, `mission_mode` `floor_join` / `delivery_rejoin` (also `floor-join` / `delivery-rejoin`): `floor_join` = his WAIT_FOR_TAKEOFF and TAKEOFF, then `join_only`'s rejoin (no pickup, no drop); `delivery_rejoin` = `pickup_delivery` without the five pickup phases, its WAIT_FOR_TAKEOFF and TAKEOFF magnet ON. `MissionDefinition.takeoff_exit` names the phase after TAKEOFF (`pickup_delivery`: APPROACH_ABOVE_PICKUP, as before) | his pickup keeps failing on the rig; `join` starts at APPROACH_ABOVE_TARGET with no takeoff, unsafe from the floor, and stays as it is |
+| `online_join_planner.py` | both TAKEOFF exits (the detection height in `drone_state_callback`, "Takeoff height reached") go to `mission.takeoff_exit`; for the new modes the TAKEOFF command latches a climb height (`latch_takeoff_climb`) and the detection-height exit does not apply. `floor_join`: straight up over the mat to the approach height (plate + `approach_offset_z` + rod, at least `takeoff_height`), then APPROACH_ABOVE_TARGET. `pickup_delivery` unchanged | his Python transfer to the plate has no collision avoidance: level at the approach height, as TRANSIT_TO_REATTACH is after a drop, not a diagonal from the floor with the rod hanging |
+| `online_join_planner.py` | `delivery_rejoin`: the climb ends where a loaded lift ends (tip `pickup_lift_height` above the mat), then `update_delivery_takeoff` runs LIFT_OBJECT's C1F.2b entry (object attached, object risen `lift_complete_object_clearance`, body within `loaded_lift_z_tolerance`), stationary hold, settle and C++ handoff inside TAKEOFF (`c1f2_prepare_phase` includes it); only the certified handoff enters TRANSIT_TO_DROP_POINT. Without C1F.2 the complete climb enters it directly. LIFT_OBJECT's own block is untouched | C1F.2 is on in both launch paths and TRANSIT_TO_DROP_POINT raises without the handoff; his backend plans only above `minimum_search_z_m` and with the object attached. The drop, its check (`drop_check_puck`) and the rejoin are pickup_delivery's own phase code |
+| `online_join_planner.py` | `delivery_rejoin` TAKEOFF without the object reading attached (fresh) or without a fresh object pose, and `floor_join` without a fresh attachment pose: refused on the mat (`refuse_takeoff`): his `landing_disarm_command` and LANDED_DISARMED; WAIT_FOR_TAKEOFF warns beforehand. The object lost during the climb: LANDING over the mat (C1F.2 state cleared) | his MPC takes off on the same TAKEOFF message, so a planner that only stays in WAIT_FOR_TAKEOFF would fly it on that phase's reference; on the mat nothing can fall on the ring and no take-back is needed. In the climb there is no pickup to retry and the C++ transit does not plan without the object |
+| `test/test_floor_join_delivery_rejoin.py` (ours, new) | the sequences, the TAKEOFF exits per mode, the magnet ON / OFF on the mat, the refusals, the loaded climb with and without C1F.2, the loss, the drop check, the launch's choices | tests first |
+
+## 14 Oct 2026: his MPC to d00934c1 behind `mpc_profile` (Wesley: "Port his HEAD, switch"; the twin first, the rig only with Tejen's OK)
+
+His `src/controller_mpc_payload` commits after 11a0683f: 26ff38be and e1e094ad (10 Oct), 7101b0f7 (12 Oct), 93fbf346
+and d2eaf41e (13 Oct), d00934c1 (14 Oct). `mpc_profile` `oct10` (the default everywhere) is his 11a0683f controller as
+flown to 14 Oct: the same weights, bounds and send path, and generated solver C identical to the cached solver flown
+to 14 Oct. `oct14` is his d00934c1 controller. Neither profile is flown on this tree yet.
+
+| file | change | why |
+|---|---|---|
+| `tejen_mpc/mpc_modes.py` | `MPC_PROFILES` (`oct10`, `oct14`) and `parse_mpc_profile` (anything else raises); `payload_input_rate_bounds(profile)`; `base_payload_cost_matrices(..., mpc_profile='oct10')`: `oct14` is his d00934c1 matrices (running position 200/200/80, velocity 3/3/4, swing 15/15, swing rates 4/4; terminal position 240/240/120, velocity 3/3/4, swing rates 4/4) | his 7101b0f7, 93fbf346, d2eaf41e and d00934c1 retunes, only their end values; one source for the OCP and the runtime mode matrices |
+| `tejen_mpc/acados.py` | `generate_payload_ocp_controller(..., mpc_profile='oct10')`: weights and u_dot bounds from the profile (`oct14`: roll, pitch and yaw rate +-3, throttle +-0.5 as before); the profile goes into the cache identity | his d2eaf41e bounds; they are generated into the solver |
+| `tejen_mpc/acados_cache.py` | `build_payload_mpc_cache_identity(..., mpc_profile='oct10')`: `mpc_profile` in the fingerprint and the manifest | the two profiles never load each other's solver; any edit to `acados.py` or `mpc_modes.py` is a new entry anyway, so both profiles need a prebuild before their first launch |
+| `tejen_mpc/command_execution.py` (his, new) | `command_at_elapsed_time`, his d2eaf41e file unchanged | |
+| `tejen_mpc/main.py` | parameter `mpc_profile` (default `oct10`; an unknown value logs FATAL and stops the node at startup), a startup line (INFO `oct10`, WARN `oct14`); `oct14` only: his d2eaf41e send path (the command state at the elapsed publication interval instead of the 0.1 s first-stage endpoint; the rounded sent command goes into the history), the interval timed on the node clock (his: `time.monotonic`); metadata `mpc_profile`, `command_execution`, `mpc_command_stage_duration_s` | his 30 Hz timing fix; the node clock because in the twin the plant runs on /clock (a wall interval there is a different command) and because his own P3 contract (`test_p3_sim_time_contract`, which his d00934c1 tree fails) keeps wall clocks out of the control path; on the rig the node clock is system time, the same interval to within NTP slew |
+| `tejen_mpc/main.py` | his 26ff38be: `lateral_disturbance_diagnostics_enabled` (default false: the observer runs and logs, nothing reaches the MPC) and its metadata line; his IRL launch and runner wiring for it not carried | log only, default off |
+| `launch/partner_mission.launch.py` (ours) | argument `mpc_profile` (default `oct10`, choices `oct10`/`oct14`) to `tejen_mpc` on the sim and the rig nodes; the rig takes it through bringup's `partner_args:="mpc_profile:=oct14"` | the switch reaches QUAD4 on both paths |
+| tests | `tejen_mpc/test/test_command_execution.py` (his d2eaf41e; adapted: the bounds come from the profile, the send path is run for both profiles), `test_lateral_disturbance_passive_diagnostic.py` (his 26ff38be without its launch-wiring test), `test_mpc_profile.py` (ours: the matrices and bounds per profile, the refusal, one cache entry per profile with the real OCP builder, the startup line), `test/test_partner_mission_mpc_profile.py` (ours) | |
+
+Not taken:
+
+| what | why |
+|---|---|
+| e1e094ad: `external_reference_validate_timing` (node default false; his M1 and M2 IRL launches turn it on): a reference whose source stamp is old, more than 0.1 s ahead, duplicated, or off the 30 Hz grid is rejected, and a missing or stale source stamp sends the controller to its C.1d latched hold; with it, two CSV columns and the reject reason | a new hold that could stop QUAD4 in flight; the logging comes only with it |
+| his test edits in `test_c1d_reference_fault_contract.py`, `test_c1e_logging_contract.py`, `test_p25_disarmed_reference_fast_path.py` | e1e094ad's |

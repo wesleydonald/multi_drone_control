@@ -111,6 +111,8 @@ BALL_MODEL, BALL_LINK = 'payload_model', 'payload_link'
 BALL_COPY = 'rig_pickup_ball.sdf'   # under models/
 BALL_BITMASK = '0x05'             # the floor (0x03), the ring (0x01), the net (0x04); not the tip (0x02)
 BALL_XY = (1.0, 1.6)              # (1.0, 1.4) was 1.06 m from carrier 1 at (0.67, 0.39)
+# delivery_rejoin (Wesley 14 Oct): the free pickup world with the ball on QUAD4's magnet tip, held from spawn
+HELD_PICKUP_WORLD = 'three_rigid_ground_rig_attach_held_pickup.sdf'
 BALL_CLEAR_CARRIER = 1.2          # m, ball centre to each carrier's centre
 BALL_CLEAR_NEWCOMER = 1.0         # m, ball centre to QUAD4's body and arm (laid out, or welded on plate 9)
 # the rig ring is open: its 60 mm rim centred on the plates, as ring_k_visual draws it
@@ -553,6 +555,19 @@ def pickup_world(world, base, ball_text, start='free'):
     return _replace_once(text, '  </world>\n</sdf>', block + '  </world>\n</sdf>', 'world end')
 
 
+def held_pickup_world(free_world, ball_r):
+    """The free pickup world with the ball moved onto QUAD4's magnet tip (resting on the floor at the tip, through
+    it: the ball's bitmask passes the magnet), so the spawn weld holds it and nothing frees it (delivery_rejoin)."""
+    (x, y, _), roll = spawn('free')
+    tip_y = y + CABLE_LEN * math.sin(roll)
+    old = f'      <pose>{_f(BALL_XY[0])} {_f(BALL_XY[1])} {_f(ball_r)} 0 0 0</pose>\n'
+    text = _replace_once(free_world, old, f'      <pose>{_f(x)} {_f(tip_y)} {_f(ball_r)} 0 0 0</pose>\n', 'ball pose')
+    return _replace_once(text, "<!-- ===== TEJEN'S BALL:", (
+        f"<!-- HELD VARIANT (mission_mode delivery_rejoin, Wesley 14 Oct): the ball sits on QUAD4's magnet tip at "
+        f"({x:g}, {tip_y:.3f}), welded from spawn and never freed at start; the note below is the free world's.\n"
+        "    ===== TEJEN'S BALL:"), 'ball comment')
+
+
 def generate(out_dir):
     """Write the newcomer models and the worlds under out_dir (same layout as ASSETS)."""
     os.makedirs(os.path.join(out_dir, 'models'), exist_ok=True)
@@ -567,6 +582,8 @@ def generate(out_dir):
         files[PICKUP_WORLDS[start]] = pickup_world(
             files[next(n for n, s in WORLDS.items() if s == start)], base,
             files[os.path.join('models', BALL_COPY)], start)
+    files[HELD_PICKUP_WORLD] = held_pickup_world(files[PICKUP_WORLDS['free']],
+                                                 ball(files[os.path.join('models', BALL_COPY)])[0])
     files.update({name: _replace_once(files[src], USER_COMMANDS, USER_COMMANDS + WRENCH_PLUGIN,
                                       'user commands plugin')
                   for name, src in PUSH_WORLDS.items()})

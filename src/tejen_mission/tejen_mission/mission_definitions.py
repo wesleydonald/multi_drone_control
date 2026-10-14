@@ -223,6 +223,55 @@ def pickup_delivery_mission(contact_attach: bool = False) -> MissionDefinition:
         name="pickup_delivery_reattach",
         initial_phase=MissionPhase.WAIT_FOR_TAKEOFF,
         phases={spec.phase: spec for spec in specs},
+        takeoff_exit=MissionPhase.APPROACH_ABOVE_PICKUP,
+    )
+
+
+PICKUP_PHASES = (
+    MissionPhase.APPROACH_ABOVE_PICKUP,
+    MissionPhase.SETTLE_ABOVE_PICKUP,
+    MissionPhase.DESCEND_TO_PICKUP,
+    MissionPhase.MAGNET_ATTACH_WAIT,
+    MissionPhase.LIFT_OBJECT,
+)
+
+
+def floor_join_mission(contact_attach: bool = False) -> MissionDefinition:
+    """floor_join (Wesley 14 Oct 2026): pickup_delivery's start on the mat, then join_only's rejoin; no pickup, no
+    drop. The planner's takeoff climbs to the approach height before the transfer to the plate."""
+    start = pickup_delivery_mission(contact_attach).phases
+    phases = {
+        MissionPhase.WAIT_FOR_TAKEOFF: start[MissionPhase.WAIT_FOR_TAKEOFF],
+        MissionPhase.TAKEOFF: start[MissionPhase.TAKEOFF],
+        **join_only_mission(contact_attach).phases,
+    }
+    return MissionDefinition(
+        name="floor_join",
+        initial_phase=MissionPhase.WAIT_FOR_TAKEOFF,
+        phases=phases,
+        takeoff_exit=MissionPhase.APPROACH_ABOVE_TARGET,
+    )
+
+
+def delivery_rejoin_mission(contact_attach: bool = False) -> MissionDefinition:
+    """delivery_rejoin (Wesley 14 Oct 2026): pickup_delivery without the pickup. The object starts on the magnet on
+    the mat, so the magnet is ON from boot; the planner's takeoff ends where a loaded lift ends and prepares the
+    loaded transit there, as LIFT_OBJECT does after a pickup."""
+    held = {
+        MissionPhase.WAIT_FOR_TAKEOFF: "Hold the measured start pose with the object on the magnet while takeoff "
+                                       "is owned externally.",
+        MissionPhase.TAKEOFF: "Rise with the object to the loaded-lift height, then prepare the loaded transfer.",
+    }
+    phases = {
+        phase: replace(spec, magnet_command="ON", description=held[phase]) if phase in held else spec
+        for phase, spec in pickup_delivery_mission(contact_attach).phases.items()
+        if phase not in PICKUP_PHASES
+    }
+    return MissionDefinition(
+        name="delivery_rejoin",
+        initial_phase=MissionPhase.WAIT_FOR_TAKEOFF,
+        phases=phases,
+        takeoff_exit=MissionPhase.TRANSIT_TO_DROP_POINT,
     )
 
 
@@ -327,10 +376,15 @@ def mission_for_mode(mode: str, *, attachment_policy: str = "legacy",
         return pickup_delivery_mission(contact_attach)
     if normalized in {"join", "join_only", "reattach"}:
         return join_only_mission(contact_attach)
+    if normalized in {"floor_join", "floor-join"}:
+        return floor_join_mission(contact_attach)
+    if normalized in {"delivery_rejoin", "delivery-rejoin"}:
+        return delivery_rejoin_mission(contact_attach)
     if normalized in {"m2b", "m2b_single_attachment", "single_attachment"}:
         if contact_attach:
             raise ValueError("contact_attach is an M1 rejoin mode; m2b has its own attachment phases.")
         return m2b_single_attachment_mission(attachment_policy)
     raise ValueError(
-        f"Unknown mission_mode={mode!r}; expected 'pickup_delivery', 'join', or 'm2b'."
+        f"Unknown mission_mode={mode!r}; expected 'pickup_delivery', 'join', 'floor_join', "
+        "'delivery_rejoin', or 'm2b'."
     )

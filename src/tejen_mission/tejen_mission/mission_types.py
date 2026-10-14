@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Iterable, Mapping
+from typing import Dict, Iterable, Mapping, Optional
 
 
 class MissionPhase(str, Enum):
@@ -108,12 +108,18 @@ class MissionDefinition:
     name: str
     initial_phase: MissionPhase
     phases: Mapping[MissionPhase, PhaseSpec]
+    # the phase the planner's takeoff guards hand over to (missions with a TAKEOFF phase)
+    takeoff_exit: Optional[MissionPhase] = None
 
     def __post_init__(self) -> None:
         phases: Dict[MissionPhase, PhaseSpec] = dict(self.phases)
         if self.initial_phase not in phases:
             raise ValueError(
                 f"Initial phase {self.initial_phase.value} is absent from mission {self.name!r}."
+            )
+        if (MissionPhase.TAKEOFF in phases) != (self.takeoff_exit in phases):
+            raise ValueError(
+                f"Mission {self.name!r} needs a takeoff_exit among its phases exactly when it has TAKEOFF."
             )
         for key, spec in phases.items():
             if key != spec.phase:

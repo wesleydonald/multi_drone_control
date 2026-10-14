@@ -138,6 +138,9 @@ def _nodes(context):
     if contact and G['contact_attach_z_m'] is None:
         raise RuntimeError(f'partner_mission: contact_attach:=true has no contact target for geometry:={geometry}')
     confirm_release = _flag(context, 'confirm_pickup_release')
+    # delivery_rejoin (14 Oct) starts holding the object: the ball's spawn weld stays, nothing frees it at start
+    held = LaunchConfiguration('mission_mode').perform(context).strip() == 'delivery_rejoin'
+    confirm_release = confirm_release and not held
     # his MPC arms where QUAD4 is (it re-latches its kT estimator's start height every disarmed tick) and learns kT
     # only 0.20 m above it: released in the air (our welded start, gate /partner/release) his mission never climbs
     # that far before the pickup, kT stays at its nominal 22 and he flies ~11 cm under his reference (R1503)
@@ -245,7 +248,7 @@ def _nodes(context):
                 'use_sim_time': True,
                 'vehicle_id': 'drone_0',
                 'assigned_attachment_id': 'attachment_0',
-                'mission_mode': 'pickup_delivery',
+                'mission_mode': L('mission_mode').perform(context),
                 'drone_state_topic': state,
                 'drone_command_topic': f'/{NS}/drone_command',
                 'pickup_object_pose_topic': OBJECT_POSE,
@@ -312,6 +315,7 @@ def _nodes(context):
                     **({'taken_back_self_land': True} if _flag(context, 'taken_back_self_land') else {}),
                     'final_attach_offset_z': ParameterValue(L('contact_dz'), value_type=float),
                     'approach_offset_x': ParameterValue(L('contact_dx'), value_type=float),
+                    'approach_offset_y': ParameterValue(L('contact_dy'), value_type=float),
                     'attach_ready_target_lead_time': ParameterValue(L('contact_lead'), value_type=float),
                     'pickup_hold_on_attach': True,
                     'pickup_retry_enabled': True,
@@ -357,6 +361,7 @@ def _nodes(context):
             # his gate is re-checked every tick, not only at the start: 0.0 paused the learning below the arm
             # height, i.e. through his whole pickup (R1505); -10 m never gates
             **({'thrust_ratio_ukf_min_height_above_start': -10.0} if learn_in_air else {}),
+            'mpc_profile': ParameterValue(L('mpc_profile'), value_type=str),
         }],
         remappings=[('motion_capture_state', state),
                     ('ELRSCommand', f'/drone_{DRONE}/ELRSCommand_tejen')])
@@ -418,7 +423,7 @@ def _nodes(context):
              *(CONTACT_TOPICS if contact else []), *([PICKUP_STATE] if confirm_release else [])],
         output='screen', condition=IfCondition(L('record')))
 
-    return [bag, release, object_bridge, *pickup_bridges, ring, pendulum, magnet, planner, backend, controller,
+    return [bag, *([] if held else [release]), object_bridge, *pickup_bridges, ring, pendulum, magnet, planner, backend, controller,
             supervisor]
 
 
@@ -493,6 +498,8 @@ def _rig_nodes(context):
             # his contact target = our weld point: the calibrated marker height, the full ring attitude
             'bridge_attach_z_m': float(target_z),
             'full_pose_attachment': True,
+            # 14 Oct load cut (Wesley): no 20 s trail MarkerArray at 50 Hz on the rig laptop
+            'trail_seconds': 0.0,
         }])
 
     # his inputs from our mocap node (the only Motive owner): his IRL publisher's outputs, under /tejen
@@ -535,7 +542,7 @@ def _rig_nodes(context):
                 'use_sim_time': False,
                 'vehicle_id': 'drone_0',
                 'assigned_attachment_id': 'attachment_0',
-                'mission_mode': 'pickup_delivery',
+                'mission_mode': val('mission_mode', 'pickup_delivery'),
                 'pickup_alignment_mode': 'measured_tip_tiered',
                 'drone_state_topic': state,
                 'drone_command_topic': f'/{NS}/drone_command',
@@ -560,6 +567,7 @@ def _rig_nodes(context):
                 'contact_attach': True,
                 'final_attach_offset_z': f('contact_dz', RIG['contact_dz']),
                 'approach_offset_x': f('contact_dx', 0.0),
+                'approach_offset_y': f('contact_dy', 0.0),
                 'attach_ready_target_lead_time': f('contact_lead', 0.0),
                 'proof_rise_max': f('proof_rise_max', RIG['proof_rise_max']),
                 # the drop ends on the measured object leaving the marker; stuck = give-up (critic F9)
@@ -571,6 +579,31 @@ def _rig_nodes(context):
                 'give_up_topic': '/join_planner/give_up',
                 'take_back_topic': f'/drone_{DRONE}/take_back',
                 'mux_state_topic': f'/drone_{DRONE}/mux_state',
+                # 14 Oct load cuts (Wesley): the visual-only A* (display; the mission reference is
+                # unchanged) off, and the CSV every 6th update (30 -> 5 Hz) as in the sim
+                'visual_astar_enabled': False,
+                'log_every_n_updates': 6,
+                # 14 Oct, Tejen's tuning after RIG-1014-t5_4 (Wesley): the tip swung a median 3-4 cm round the puck
+                # (QUAD4's wash off the floor), inside the 2.5 cm low tube 14-35 % of the time, so the descent stalled;
+                # a wider low tube and a longer dwell at the bottom (the final capture gate stays 2.5 cm)
+                'pickup_alignment_low_xy_m': 0.10,    # 14 Oct t5_5 (Wesley): 0.045 still stalled HIGH once
+                'pickup_alignment_high_xy_m': 0.12,
+                'pickup_alignment_low_dwell_s': 1.0,
+                # 14 Oct props-off check (RIG-1014-puck, Wesley): the puck catches anywhere on its face, but t5_4/t5_5
+                # lifted within 0.3 s of the proximity "attached" (12 cm), so the magnet barely touched or never did:
+                # sit 1.5 s at the bottom, lift only with the tip over the puck, and his 13 Oct overtravel
+                'pickup_lift_xy_dwell_s': 1.5,
+                'pickup_lift_xy_tolerance': 0.04,
+                'pickup_overtravel': 0.036,
+                'pickup_max_overtravel': 0.036,
+                'pickup_support_surface_overtravel_allowance_m': 0.024,
+                # 14 Oct RIG-1014-t6f (Wesley): the slack tether's tip swings a median 3.8 cm / 0.105 m/s over plate 9,
+                # so the 2.5 cm / 0.08 m/s match gate never held 1 s; the descent abort is widened past the new gate.
+                # The contact itself still has to land inside our weld radius.
+                'contact_match_xy_threshold': 0.05,
+                'contact_match_xy_velocity_threshold': 0.15,
+                'contact_abort_xy_threshold': 0.08,
+                'contact_abort_xy_velocity_threshold': 0.25,
             },
         ])
 
@@ -601,6 +634,7 @@ def _rig_nodes(context):
             'object_mass_kg': 0.0,
             'object_vehicle_mass_kg': G['vehicle_mass'],
             'object_attached_topic': ball_attached,
+            'mpc_profile': LaunchConfiguration('mpc_profile').perform(context),
         }],
         remappings=[('motion_capture_state', state),
                     ('ELRSCommand', f'/drone_{DRONE}/ELRSCommand_tejen'),
@@ -649,9 +683,14 @@ def _arguments():
         # '' = the geometry's; the all-attached start: '[150.0, 270.0, 30.0]', plate 3, gate /partner/release
         DeclareLaunchArgument('carrier_azimuths_deg', default_value=''),
         DeclareLaunchArgument('contact_attach', default_value='false'),
+        # 14 Oct (Wesley): floor_join takes off from the mat and goes straight to the ring rejoin (no pickup, no drop);
+        # delivery_rejoin takes off already holding the object (magnet ON from boot), drops it, then rejoins
+        DeclareLaunchArgument('mission_mode', default_value='pickup_delivery',
+                              choices=['pickup_delivery', 'floor_join', 'delivery_rejoin']),
         DeclareLaunchArgument('contact_lead', default_value='0.0'),   # contact_attach: his hold's reference lead (s)
         DeclareLaunchArgument('contact_dz', default_value='0.0'),     # contact_attach: tip target above the contact point (m)
         DeclareLaunchArgument('contact_dx', default_value='0.0'),     # contact_attach: tip target offset along x (m)
+        DeclareLaunchArgument('contact_dy', default_value='0.0'),     # contact_attach: tip target offset along y (m)
         DeclareLaunchArgument('drop_puck_wait_s', default_value='2.0'),   # rig drop check: s to wait for a puck pose; 0 = trust the release
         DeclareLaunchArgument('confirm_pickup_release', default_value='false'),
         # contact_attach: no fleet switch 1 s after TAKEN_BACK -> out 1.2 m from the ring, land, disarm (card
@@ -677,4 +716,7 @@ def _arguments():
         DeclareLaunchArgument('mpc_cable_length', default_value=''),     # '' = his MPC's 0.531
         DeclareLaunchArgument('anchor_offset_z', default_value=''),      # '' = his IRL -0.030
         DeclareLaunchArgument('supervisor', default_value='false'),      # his supervisor (manual, stops land)
+        # his MPC version, sim and rig (Wesley 14 Oct, twin first): oct10 = his 11a0683f controller, flown to
+        # 14 Oct; oct14 = his d00934c1 weights, attitude-rate bounds +-3 and partial-step command execution
+        DeclareLaunchArgument('mpc_profile', default_value='oct10', choices=['oct10', 'oct14']),
     ]

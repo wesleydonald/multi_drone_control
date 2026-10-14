@@ -544,6 +544,12 @@ class OnlineJoinPlanner(Node):
         # commissioned bootstrap/takeoff path; B1 adds the local attachment phases,
         # and B2 inserts the established C++ safe-transit authority before that same B1 logic.
         self.is_m2b = self.mission.name == "m2b_single_attachment"
+        # floor starts other than pickup_delivery (Wesley 14 Oct): TAKEOFF climbs to a height latched at the
+        # TAKEOFF command and leaves from there, not at the detection height
+        self.is_floor_join = self.mission.name == "floor_join"
+        self.is_delivery_rejoin = self.mission.name == "delivery_rejoin"
+        self.takeoff_climb_height: Optional[float] = None
+        self.delivery_object_start_z: Optional[float] = None
         self.m2b_commissioning_stage = str(
             self.declare_parameter("m2b_commissioning_stage", "b0").value
         ).strip().lower()
@@ -2681,11 +2687,12 @@ class OnlineJoinPlanner(Node):
         height_above_start = float(self.drone_position[2]) - self.initial_quad_z
         if (
             self.phase == MissionPhase.TAKEOFF
+            and getattr(self, 'takeoff_climb_height', None) is None
             and height_above_start >= self.takeoff_detection_height
         ):
             self.takeoff_detected_time = self.last_drone_time
             self.transition_to(
-                MissionPhase.APPROACH_ABOVE_PICKUP,
+                self.mission.takeoff_exit,
                 f"takeoff confirmed at {height_above_start:.2f} m above start",
             )
 
@@ -4197,10 +4204,15 @@ class OnlineJoinPlanner(Node):
                 self.phase == MissionPhase.WAIT_FOR_TAKEOFF
                 and self.drone_position is not None
             ):
+                refusal = self.floor_start_refusal()
+                if refusal is not None:
+                    self.refuse_takeoff(refusal)
+                    return
                 self.takeoff_start_position = self.drone_position.copy()
                 # The first mocap pose may have arrived while the disarmed quad
                 # was being carried. Ground height belongs to accepted TAKEOFF.
                 self.initial_quad_z = float(self.takeoff_start_position[2])
+                self.latch_takeoff_climb()
                 self.transition_to(
                     MissionPhase.TAKEOFF,
                     "takeoff command received",
@@ -4566,19 +4578,23 @@ class OnlineJoinPlanner(Node):
             and self.phase == MissionPhase.APPROACH_ABOVE_PICKUP
         )
 
-    def c1f2_prepare_phase_active(self) -> bool:
-        prepare_phase = bool(
+    def c1f2_prepare_phase(self) -> bool:
+        """The phase that holds the vehicle while C1F.2 prepares the C++ transit."""
+        return bool(
             self.phase == MissionPhase.LIFT_OBJECT
             or (
                 self.is_m2b
                 and self.m2b_commissioning_stage == "b2"
                 and self.phase == MissionPhase.M2_TAKEOFF_HOVER
             )
+            or (getattr(self, 'is_delivery_rejoin', False) and self.phase == MissionPhase.TAKEOFF)
         )
+
+    def c1f2_prepare_phase_active(self) -> bool:
         return bool(
             self.c1f1_shadow_transfer_enabled
             and self.c1f2_cpp_authority_enabled
-            and prepare_phase
+            and self.c1f2_prepare_phase()
             and self.c1f2_prepare_active
             and self.c1f2_prepare_settled
         )
@@ -6258,9 +6274,10 @@ class OnlineJoinPlanner(Node):
     def rate_profile(self, phase: Optional[MissionPhase] = None) -> RateProfile:
         phase = self.phase if phase is None else phase
         if phase in {MissionPhase.TAKEOFF, MissionPhase.M2_VERTICAL_TAKEOFF}:
+            climb = getattr(self, 'takeoff_climb_height', None)
             return RateProfile(
                 np.array([0.0, 0.0, 0.0]),
-                np.array([0.0, 0.0, self.takeoff_height]),
+                np.array([0.0, 0.0, self.takeoff_height if climb is None else climb]),
                 self.takeoff_speed,
             )
         if phase == MissionPhase.DESCEND_TO_PICKUP:
@@ -6706,6 +6723,149 @@ class OnlineJoinPlanner(Node):
         if self.take_back_requested and self.drone_position is not None:
             self.enter_taken_back('take-back from the fleet planner')
 
+    # ----------------------------------------------------------------------
+    # floor_join / delivery_rejoin takeoff (Wesley 14 Oct 2026)
+    # ----------------------------------------------------------------------
+    def floor_start_refusal(self) -> Optional[str]:
+        """Why a TAKEOFF must not leave the mat, or None. delivery_rejoin: the object must read attached (fresh) with a
+        fresh pose, or it would fly without it; floor_join: the climb height needs a fresh attachment pose."""
+        now = self._physical_now_s()
+
+        def fresh(value, stamp) -> bool:
+            return value is not None and stamp is not None and 0.0 <= now - stamp <= self.input_timeout_s
+
+        if getattr(self, 'is_delivery_rejoin', False):
+            if not (self.object_attached and fresh(True, self.last_object_attached_time)):
+                return 'the object does not read attached'
+            if not fresh(self.pickup_object_position, self.last_pickup_object_pose_time):
+                return 'the object has no fresh pose'
+        if getattr(self, 'is_floor_join', False) and not fresh(
+                self.attachment_position, self.last_attachment_pose_time):
+            return 'the attachment point has no fresh pose'
+        return None
+
+    def refuse_takeoff(self, reason: str) -> None:
+        """His MPC takes off on the same TAKEOFF command, so staying in WAIT_FOR_TAKEOFF would fly it on that phase's
+        reference: his landing disarm instead, while the vehicle is still on the mat, and the mission ends."""
+        self.get_logger().error(
+            f'{self.mission.name}: TAKEOFF refused on the mat ({reason}); {self.landing_disarm_command} sent')
+        self.drone_command_publisher.publish(String(data=self.landing_disarm_command))
+        self.landing_disarm_sent = True
+        self.transition_to(MissionPhase.LANDED_DISARMED, f'TAKEOFF refused on the mat: {reason}')
+
+    def latch_takeoff_climb(self) -> None:
+        """The TAKEOFF climb (body, above the takeoff start) for floor_join / delivery_rejoin; None keeps
+        pickup_delivery's takeoff_height and its exit at the detection height."""
+        self.takeoff_climb_height = None
+        rod = float(self.nominal_quad_from_tip_offset()[2])
+        if getattr(self, 'is_delivery_rejoin', False):
+            # the tip ends pickup_lift_height above the mat, where a loaded lift from the floor ends: the C++
+            # transit's search floor is set for that height
+            self.takeoff_climb_height = rod + self.pickup_lift_height
+            self.delivery_object_start_z = float(self.pickup_object_position[2])
+        elif getattr(self, 'is_floor_join', False):
+            # straight up over the mat to the approach height: the Python transfer to the plate has no collision
+            # avoidance, so it should be level, as TRANSIT_TO_REATTACH is after a drop
+            approach_z = float(self.attachment_position[2]) + self.approach_offset_z + rod
+            self.takeoff_climb_height = max(
+                self.takeoff_height, approach_z - float(self.takeoff_start_position[2]))
+        if self.takeoff_climb_height is not None:
+            self.get_logger().info(
+                f'{self.mission.name}: TAKEOFF climbs {self.takeoff_climb_height:.2f} m before '
+                f'{self.mission.takeoff_exit.value}')
+
+    def update_delivery_takeoff(self, elapsed: float) -> None:
+        """delivery_rejoin's TAKEOFF: the climb with the object, then LIFT_OBJECT's C1F.2b loaded hold, settle and
+        C++ handoff before TRANSIT_TO_DROP_POINT. LIFT_OBJECT's own block stays as it is (a source contract slices
+        it), so this mirrors it. The object lost on the way lands the vehicle over its mat: there is no pickup to
+        retry, and his C++ transit does not plan without the object."""
+        if not self.object_attached:
+            self.reset_c1f2_for_pickup_retry()
+            self.transition_to(MissionPhase.LANDING,
+                               'delivery_rejoin: the object no longer reads attached in the takeoff; landing')
+            return
+        now = self._physical_now_s()
+        profile_complete = self.rate_profile().complete(elapsed)
+        target_z = float(self.takeoff_start_position[2]) + self.takeoff_climb_height
+        object_airborne = bool(
+            self.pickup_object_position is not None
+            and self.last_pickup_object_pose_time is not None
+            and 0.0 <= now - self.last_pickup_object_pose_time <= self.input_timeout_s
+            and self.delivery_object_start_z is not None
+            and float(self.pickup_object_position[2]) - self.delivery_object_start_z
+            >= self.lift_complete_object_clearance
+        )
+        lifted = bool(
+            profile_complete
+            and object_airborne
+            and abs(float(self.drone_position[2]) - target_z) < self.loaded_lift_z_tolerance
+        )
+        if not self.c1f2_cpp_authority_enabled:
+            if lifted:
+                self.transition_to(self.mission.takeoff_exit, 'delivery_rejoin: loaded climb complete')
+            return
+
+        if not self.c1f2_prepare_active:
+            if not lifted or self.drone_velocity is None:
+                return
+            self.c1f2_prepare_active = True
+            self.c1f2_prepare_settled = False
+            self.c1f2_prepare_lift_end_position = self.drone_position.copy()
+            self.c1f2_prepare_hold_position = self.drone_position.copy()
+            self.c1f2_prepare_settle_start_time = None
+            self.c1f2_prepare_drift_m = 0.0
+            self.c1f2_prepare_speed_mps = float(np.linalg.norm(self.drone_velocity))
+            self.c1f2_handoff_ready = False
+            self.c1f2_authority_grant_pending = False
+            self.c1f2_authority_acknowledged = False
+            self.c1f2_authority_grant_time = None
+            self.c1f2_authority_grant_ros_time_s = None
+            self.c1f2_authority_ack_time = None
+            self.c1f2_publish_authority(False)
+            self.c1f2_prepare_start_time = now
+            self.c1f2_prepare_count += 1
+            self.get_logger().info(
+                'C1F.2b delivery_rejoin loaded climb complete; latched measured climb-end position '
+                'and holding there until the vehicle settles.')
+            return
+        if self.c1f2_prepare_start_time is not None:
+            self.c1f2_prepare_wait_s = max(0.0, now - self.c1f2_prepare_start_time)
+        if not self.c1f2_prepare_settled:
+            if (self.drone_velocity is None or self.drone_acceleration is None
+                    or self.c1f2_prepare_lift_end_position is None):
+                self.c1f2_prepare_settle_start_time = None
+                return
+            grant_state = stationary_grant_state(
+                lift_end_position=self.c1f2_prepare_lift_end_position,
+                measured_position=self.drone_position,
+                measured_velocity=self.drone_velocity,
+                measured_acceleration=self.drone_acceleration,
+                max_drift_m=self.c1f2_prepare_max_lift_drift_m,
+                settle_speed_mps=self.c1f2_prepare_settle_speed_mps,
+                settle_acceleration_mps2=self.c1f2_prepare_settle_acceleration_mps2,
+            )
+            self.c1f2_prepare_drift_m = grant_state.drift_m
+            self.c1f2_prepare_speed_mps = grant_state.speed_mps
+            if not grant_state.ready:
+                self.c1f2_prepare_settle_start_time = None
+                return
+            if self.c1f2_prepare_settle_start_time is None:
+                self.c1f2_prepare_settle_start_time = now
+                if self.c1f2_prepare_settle_dwell_s > 0.0:
+                    return
+            if now - self.c1f2_prepare_settle_start_time < self.c1f2_prepare_settle_dwell_s:
+                return
+            self.c1f2_prepare_hold_position = self.drone_position.copy()
+            self.c1f2_prepare_settled = True
+            self.get_logger().info(
+                'C1F.8c2 delivery_rejoin stationary handoff state settled: '
+                f'drift={self.c1f2_prepare_drift_m:.3f} m, speed={self.c1f2_prepare_speed_mps:.3f} m/s. '
+                'Re-latched measured hold position; enabling C++ preparation.')
+            return
+        if self.c1f2_handoff_ready:
+            self.transition_to(self.mission.takeoff_exit,
+                               'C1F.2b C++ transfer prepared from the stationary loaded climb hold')
+
     def update_state_machine(self) -> None:
         if getattr(self, 'contact_attach', False) and self.update_contact_attach():
             return
@@ -6778,13 +6938,23 @@ class OnlineJoinPlanner(Node):
         elapsed = self.phase_elapsed()
 
         if self.phase == MissionPhase.WAIT_FOR_TAKEOFF:
+            if getattr(self, 'is_delivery_rejoin', False) or getattr(self, 'is_floor_join', False):
+                refusal = self.floor_start_refusal()
+                if refusal is not None:
+                    self.get_logger().warning(f'{self.mission.name}: a TAKEOFF now would be refused: {refusal}',
+                                              throttle_duration_sec=2.0)
             return
 
         if self.phase == MissionPhase.TAKEOFF:
+            if getattr(self, 'is_delivery_rejoin', False):
+                self.update_delivery_takeoff(elapsed)
+                return
             profile = self.rate_profile()
+            climb = getattr(self, 'takeoff_climb_height', None)
 
             target_z = (
-                self.takeoff_start_position[2] + self.takeoff_height
+                self.takeoff_start_position[2]
+                + (self.takeoff_height if climb is None else climb)
             )
 
             reached = (
@@ -6795,7 +6965,7 @@ class OnlineJoinPlanner(Node):
 
             if reached:
                 self.transition_to(
-                    MissionPhase.APPROACH_ABOVE_PICKUP,
+                    self.mission.takeoff_exit,
                     "Takeoff height reached"
                 )
             return
@@ -7572,14 +7742,7 @@ class OnlineJoinPlanner(Node):
             return self.build_m2b_b1_reference()
 
         if (
-            (
-                self.phase == MissionPhase.LIFT_OBJECT
-                or (
-                    self.is_m2b
-                    and self.m2b_commissioning_stage == "b2"
-                    and self.phase == MissionPhase.M2_TAKEOFF_HOVER
-                )
-            )
+            self.c1f2_prepare_phase()
             and self.c1f2_cpp_authority_enabled
             and self.c1f2_prepare_active
             and self.c1f2_prepare_hold_position is not None
