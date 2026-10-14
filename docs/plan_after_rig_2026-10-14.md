@@ -10,8 +10,8 @@ itself (below the table) only changes when Wesley changes it; dated notes go in 
 | 0 | Tejen's attach logs | done | `~/tejen_attach_logs_2026-10-14.zip` (8 flights, README) |
 | 1 | WP0 commit 14 Oct work + FC request; `legacy` branch; the gate runs the attach tests | done | c15abc4, 19804fb, 4209c62, a0d3963; branch `legacy` at a0d3963; gate 1147 tests (6 drop tests had broken unseen on 14 Oct: fixed); docs/rig/fc_request.md ready to send |
 | 2 | WP6 plates counter-clockwise (moved first, revision 1) | in progress | |
-| 3 | WP8 arming, landing and small fixes | to do | |
-| 4 | WP3 attach: one plate point, Tejen's confirmation rules, bottom hold + quiet-miss retry, measured-tip trim | to do | |
+| 3 | WP8 arming, landing and small fixes | done (code); USB hub is hardware | 3297746 (tracker start-up crash, full-pack voltage fallback, radio_health, QUAD4 down a few cm above its rest, takeoff hold + climb from liftoff), dade70d (partner first, only refused drones named, DISARM stops ARM, one burst); re-arm after a refused ARM = LAND, not DISARM |
+| 4 | WP3 attach: one plate point, Tejen's confirmation rules, bottom hold + quiet-miss retry, measured-tip trim | in progress | |
 | 5 | WP5 RViz markers + WP2 quiet T2 and console | to do | |
 | 6 | WP4 scoring tool (attach_window) + proof replay tool | to do | |
 | 7 | Props-off session: FC acceptance, radio soak, magnet hold force, proof bench, load with the console | needs the rig | |
@@ -179,7 +179,9 @@ attach worlds regenerated; tests, docs, Tejen notes, a dated decisions line.
 
 ## Log
 - 14 Oct ~20:30: Tejen's logs zipped. Plan approved; WP0 started.
-- 14 Oct ~20:45: WP0 commits c15abc4, 19804fb, 4209c62, a0d3963. Revision 1 (cross-check), below.
+- 14 Oct ~20:37: WP0 commits c15abc4, 19804fb, 4209c62, a0d3963. Revision 1 (cross-check), below.
+- 14 Oct ~20:42: c1ebdc9 gate runs the attach tests (six drop tests had broken unseen on 14 Oct: fixed); branch legacy.
+- 14 Oct ~20:52: WP8 code done (3297746, dade70d); WP6 + WP5 with a helper; WP3 next.
 
 ## Revision 1 (14 Oct ~20:50, after a cross-check of the plan against the code and the 14 Oct bags)
 Wesley approved the plan above; a second reading against the code changed these points (the sections above stand
