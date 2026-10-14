@@ -175,3 +175,47 @@ def test_gui_space_disarms_and_buttons_never_take_focus():
     assert all(p == QtCore.Qt.NoFocus for p in seen['focus'].values())
     assert send.sent[0] == ('his', 'ARM') and ('fleet', 'ARM') not in send.sent
     assert send.sent[1:] == [('fleet', 'DISARM')] * con.DISARM_REPEATS
+
+
+# ── a console started mid-flight (the live twin probe, 14 Oct): the trackers announce their arm only on a change ──
+
+def test_started_mid_flight_it_still_knows_the_fleet_is_up():
+    s = con.ConsoleState(4, partner=3)
+    s.on_graph(ALL_NODES, set(con.HIS_NODES), 2, 1)
+    s.on_summary(summary(z=(1.0, 1.0, 1.0, 1.6)), NOW)                # first sample at hover: no rest learned
+    for i in range(4):
+        s.on_health(i, health(mode='AIR'), NOW)
+    s.on_manager('TAKEOFF: flying.')
+    assert [i for i, _ in con.airborne(s, NOW)] == [0, 1, 2, 3]
+    assert not [k for k in s.rest_z if k.startswith('drone_')] and con.in_flight(s, NOW) and not con.ours_down(s, NOW)
+    b = con.button_states(s, NOW, con.readiness(s, NOW))
+    assert b['land'] == (True, '') and b['give_up'] == (True, '')
+    assert b['his_disarm'][0] is False and b['his_takeoff'] == (True, '')    # the fleet flies: his TAKEOFF allowed
+
+
+def test_his_disarm_once_our_side_is_down_although_his_mpc_still_reads_armed():
+    s = ready_state()
+    s.on_his_armed(True)                                             # his MPC: still armed after our DISARM
+    s.on_health(3, health(mode='AIR*'), NOW)                         # QUAD4's FC: disarmed by the mux
+    s.on_manager('Disarm complete.')
+    b = con.button_states(s, NOW, con.readiness(s, NOW))
+    assert b['his_disarm'] == (True, '') and con.ours_down(s, NOW)
+
+
+def test_takeoff_does_not_wait_for_tracker_states_it_never_heard():
+    s = ready_state()
+    s.tracker_armed = [None] * 4                                     # started after the ARM: never heard them
+    s.on_health(3, health(mode='AIR'), NOW)
+    s.on_manager('ARM sequence complete: all 4 armed, ready for TAKEOFF.')
+    assert con.button_states(s, NOW, [])['takeoff'] == (True, '')
+    s.on_tracker_armed(1, False)
+    assert con.button_states(s, NOW, [])['takeoff'][0] is False
+
+
+def test_the_twin_summary_is_fresh_for_longer():
+    s = con.ConsoleState(4, partner=3, twin=True)
+    s.on_summary(summary(), NOW)
+    assert con.bodies(s, NOW + 2.0) is not None and con.bodies(s, NOW + 3.5) is None
+    r = con.ConsoleState(4, partner=3)
+    r.on_summary(summary(), NOW)
+    assert con.bodies(r, NOW + 2.0) is None

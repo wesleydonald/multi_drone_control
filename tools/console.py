@@ -17,7 +17,6 @@ so it costs little next to the controllers. tools/fleet_monitor.py stays the rea
 """
 import argparse
 import json
-import math
 import sys
 import threading
 import time
@@ -34,7 +33,11 @@ VOLT_MIN = 24.0            # the pre-flight rule, at rest
 ERR_REPLUG_S = 20.0        # '!ERR*' this long is not the short block after a boot or a disarm
 TILT_DOWN_DEG = 25.0       # the carriers rest at 11-13 deg on their rods; beyond this one is on its side (plan rev 1)
 FC_TILT_OFF_DEG = 10.0     # QUAD1's FC read 60-84 deg while it sat at 12 (14 Oct)
-AIRBORNE_M = 0.05          # above the lowest height seen
+AIRBORNE_M = 0.05          # above its rest height
+REST_Z_DEFAULT = 0.07      # m: the rig's drones rest at 0.05-0.07 (14 Oct); used until a rest is seen
+REST_LEARN_MAX_Z = 0.30    # m: rest heights are learned only below this (a console started mid-flight learns none)
+TWIN_STALE_X = 3.0         # the twin runs at ~0.2x real time: its 5 Hz summary arrives about once a wall second
+HIS_TAKEOFF_ACK_S = 2.0    # his planner must leave WAIT_FOR_TAKEOFF this soon after his TAKEOFF (Tejen, 15 Oct)
 DISARM_REPEATS, DISARM_PERIOD_MS = 5, 100      # as the RViz panel: one message can be lost
 FLEET_CMD, HIS_CMD, GIVE_UP = '/fleet/command', '/tejen/drone_command', '/join_planner/give_up'
 HIS_NODES = ('/tejen/tejen_mpc', '/online_join_planner')
@@ -130,7 +133,10 @@ class ConsoleState:
             self.summary, self.summary_t = doc, now
             for name, b in doc.get('bodies', {}).items():
                 z, age = b.get('z'), b.get('age_s')
-                if z is not None and age is not None and age <= POSE_STALE_S:
+                i = int(name.split('_')[1]) if name.startswith('drone_') else None
+                armed = i is not None and i < self.n and (
+                    self.tracker_armed[i] is True or fc_mode_state((self.health[i] or {}).get('mode')) == 'armed')
+                if z is not None and age is not None and age <= POSE_STALE_S and z < REST_LEARN_MAX_Z and not armed:
                     self.rest_z[name] = min(self.rest_z.get(name, z), z)
 
     def on_phase(self, text):
@@ -184,7 +190,7 @@ class ConsoleState:
 
 def bodies(st, now):
     """The summary's bodies, or None when the summary is stale."""
-    if st.summary_t is None or now - st.summary_t > SUMMARY_STALE_S:
+    if st.summary_t is None or now - st.summary_t > SUMMARY_STALE_S * (TWIN_STALE_X if st.twin else 1.0):
         return None
     return st.summary.get('bodies', {})
 
@@ -265,14 +271,33 @@ def readiness(st, now):
 
 
 def airborne(st, now):
-    """[(drone index, height above its lowest seen)] for the drones off the ground."""
+    """[(drone index, height above its rest)] for the drones off the ground."""
     bs = bodies(st, now) or {}
     out = []
     for i in range(st.n):
-        b, rest = bs.get(f'drone_{i}') or {}, st.rest_z.get(f'drone_{i}')
-        if b.get('z') is not None and rest is not None and b['z'] - rest > AIRBORNE_M:
+        b, rest = bs.get(f'drone_{i}') or {}, st.rest_z.get(f'drone_{i}', REST_Z_DEFAULT)
+        if b.get('z') is not None and b['z'] - rest > AIRBORNE_M:
             out.append((i, b['z'] - rest))
     return out
+
+
+def manager_flying(st):
+    return st.manager.startswith('TAKEOFF: flying') or st.manager.startswith('LAND: descending')
+
+
+def ours_down(st, now):
+    """Our side is down and disarmed: no tracker armed, no FC armed, nobody in the air, the manager not flying.
+    The trackers announce their arm only on a change, so a console started after ARM also reads the FCs, the
+    manager's latched status and the heights."""
+    if any(a is True for a in st.tracker_armed) or st.arm_complete or manager_flying(st):
+        return False
+    if not st.twin and any(fc_state(st, i, now) == 'armed' for i in range(st.n)):
+        return False
+    return not airborne(st, now)
+
+
+def in_flight(st, now):
+    return not ours_down(st, now) or bool(st.his_armed)
 
 
 def his_link(st):
@@ -299,8 +324,8 @@ def button_states(st, now, not_ready):
     his = st.partner is not None
     link_ok, link_why = his_link(st) if his else (False, 'no partner')
     p_armed = partner_armed(st, now)
-    fcs = [] if st.twin else [fc_state(st, i, now) for i in range(st.n)]
-    anything_armed = any(st.tracker_armed) or 'armed' in fcs or p_armed
+    anything_armed = in_flight(st, now) or p_armed
+    fleet_armed = st.arm_complete or manager_flying(st)
     manager = '/fleet_manager' in st.nodes
 
     def rule(*checks):
@@ -315,15 +340,14 @@ def button_states(st, now, not_ready):
     b['arm'] = rule((not not_ready, 'not READY'), (manager, 'fleet manager not running'),
                     (not st.arm_complete, 'armed'), (not his or p_armed, 'his ARM first'))
     b['takeoff'] = rule((st.arm_complete, f'after "{ARM_DONE}"'),
-                        (all(a is True for a in st.tracker_armed), 'a tracker is not armed'))
-    b['his_takeoff'] = rule((his, 'no partner'), (st.arm_complete, 'after the fleet ARM'),
+                        (all(a is not False for a in st.tracker_armed), 'a tracker is not armed'))
+    b['his_takeoff'] = rule((his, 'no partner'), (fleet_armed, 'after the fleet ARM'),
                             (p_armed, 'QUAD4 not armed'), (link_ok, link_why))
     b['give_up'] = rule((his, 'no partner'), (st.give_up_subs > 0, 'our planner not listening'),
                         (anything_armed, 'nothing armed'))
     b['land'] = rule((anything_armed, 'nothing armed'))
     b['his_disarm'] = rule((his, 'no partner'), (link_ok, link_why),
-                           (not any(st.tracker_armed) and 'armed' not in fcs and not (st.twin and p_armed),
-                            'fleet still armed: LAND or DISARM first'))
+                           (ours_down(st, now), 'fleet still armed or up: LAND or DISARM first'))
     return b
 
 
@@ -390,6 +414,13 @@ class RosLink:
     def spin(self):
         try:
             self.rclpy.spin(self.node)
+        except Exception:
+            pass
+
+    def shutdown(self):
+        """Stop spinning before the interpreter exits (a node destroyed under a spinning thread aborts)."""
+        try:
+            self.rclpy.shutdown()
         except Exception:
             pass
 
@@ -509,19 +540,27 @@ def gui(state, send, exit_after_ms=None, on_ready=None):
             send.give_up()
         else:
             send.his({'his_arm': 'ARM', 'his_takeoff': 'TAKEOFF', 'his_disarm': 'DISARM'}[key])
+            if key == 'his_takeoff':
+                ack['t'] = now
         note(f'sent {btns[key][1]}')
 
     for key, (b, _) in btns.items():
         b.clicked.connect(lambda _=False, key=key: press(key))
 
     shown = {'n': -1}
+    ack = {'t': None}         # his TAKEOFF sent: his planner must leave WAIT_FOR_TAKEOFF within HIS_TAKEOFF_ACK_S
 
     def refresh():
         now = time.time()
         st = state.snapshot()
+        if ack['t'] is not None and st.his_phase not in ('', 'WAIT_FOR_TAKEOFF'):
+            ack['t'] = None
+        elif ack['t'] is not None and now - ack['t'] > HIS_TAKEOFF_ACK_S:
+            ack['t'] = None
+            note(f'his planner did not enter TAKEOFF within {HIS_TAKEOFF_ACK_S:.0f} s of his TAKEOFF (still '
+                 f'{st.his_phase or "--"}): his MPC may lift alone. LAND if QUAD4 leaves its mat', alarm=True)
         why = readiness(st, now)
-        armed_any = any(st.tracker_armed) or partner_armed(st, now)
-        if armed_any:
+        if in_flight(st, now):
             ready.setText('IN FLIGHT (armed)')
             ready.setStyleSheet('font-size: 18px; padding: 6px; font-weight: bold; background: #ffe066;')
         elif not why:
@@ -616,8 +655,13 @@ def main(argv=None):
     a = ap.parse_args(argv)
     state = ConsoleState(a.drones, None if a.no_partner else a.partner, a.twin, a.small_angle)
     link = RosLink(state, a.drones)
-    threading.Thread(target=link.spin, daemon=True).start()
-    return gui(state, link)
+    spinner = threading.Thread(target=link.spin, daemon=True)
+    spinner.start()
+    try:
+        return gui(state, link)
+    finally:
+        link.shutdown()
+        spinner.join(timeout=2.0)
 
 
 if __name__ == '__main__':
