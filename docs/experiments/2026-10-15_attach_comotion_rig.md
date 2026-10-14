@@ -1,4 +1,4 @@
-# Card: QUAD4's attach on the rig with the 14 Oct fixes (15 Oct 2026, rev 3 after the critic's second round)
+# Card: QUAD4's attach on the rig with the 14 Oct fixes (15 Oct 2026, rev 4: the critic's two rounds and Tejen's review)
 
 Owner Wesley. Tree: week5 at the sheet's SHA (rev 2's fixes and the clockwise angles, re-flown in the twin first).
 Plan: `docs/plan_after_rig_2026-10-14.md` (WP3, with WP8 and WP2). Sheet: `docs/rig/thu_2026-10-15.md`. Run ids
@@ -17,8 +17,8 @@ the bars say which part failed if one did. A dry hold flies first (below).
 
 | Part | Commit | What |
 |---|---|---|
-| Confirmation | eacab58 + rev 2-3 | Co-motion: contact in the plate frame (xy <= K, normal -15..+12 mm, <= 0.03 m/s for 0.30 s); proven 1.0 s after his lift with the tip within 6 mm of its contact point and following the plate (drift at most half the plate's motion), the plate moving (5 mm range or 3 mm rise), the tether taut against this flight's free hang (-3 mm), the normal within 10 mm (15 in the twin); failed on separation or loss (45 mm for 0.12 s). Rev 2: the free hang is kept through the hold and retries and is measured with the coil OFF too; the CONTACT line says if the typed fallback was used. Rev 3: a gap over 0.3 s in the tip stream (a mocap dropout, not a laptop stall) restarts the contact hold; the restarts are counted in /magnet/attach_proof |
-| Bottom hold | eacab58 + rev 2 | His ATTACH_READY waits at the bottom with the magnet ON until contact; leaves on a gross error (0.35 m/s or 0.12 m for 0.3 s, or the face 20 mm below the plate for 0.12 s); his quiet-miss retry; give-up 45 s. Rev 2: the hold judges the tip against the plate point, not his offset target |
+| Confirmation | eacab58 + rev 2-3 | Co-motion: contact in the plate frame (xy <= K, normal -15..+12 mm, <= 0.03 m/s for 0.30 s); proven 1.0 s after his lift with the tip within 6 mm of its contact point and following the plate (drift at most half the plate's motion), the plate moving (5 mm range or 3 mm rise), the tether taut against this flight's free hang (-3 mm), the normal within 10 mm (15 in the twin); failed on separation or loss (45 mm for 0.12 s). Rev 2: the free hang is kept through the hold and retries and is measured with the coil OFF too; the CONTACT line says if the typed fallback was used. Rev 4 (Tejen): no hold spans missing data (a gap over 0.1 s or an invalid sample restarts the contact and the proof holds; counted in /magnet/attach_proof); with his planner the proof waits for his lift-done signal (6 s safety net) |
+| Bottom hold | eacab58 + rev 2, 4 | His ATTACH_READY waits at the bottom with the magnet ON until contact; leaves on a gross error (0.35 m/s or 0.12 m for 0.3 s, or the face 20 mm below the plate for 0.12 s); his quiet-miss retry; give-up 45 s. Rev 2: the hold judges the tip against the plate point, not his offset target. Rev 4 (Tejen): in the plate frame from the ring's pose (the face clearance along the plate normal); a quiet miss only while the tip is slow (0.03 m/s, his M2 value) on fresh data, stale data restarting its timer |
 | Coil on the climb back | rev 2 | After a descent our span sends OFF while he climbs back and matches, ON again for the next descent |
 | Drop | rev 2 | A ring drop releases QUAD4's coil even after a confirmed attach (the locked drop rule) |
 | Dry hold | rev 2 | `dry_hold:=true` (default off): the coil gate holds QUAD4's coil OFF; contacts and proofs run and are logged; a proof that passes is logged as a false proof and is never an attach |
@@ -182,3 +182,19 @@ dry hold on plate 9). 7 adopted (two stop rules). 8: the gap rule now restarts o
 Oct stalls were 0.16-0.25 s) and the restarts are counted in /magnet/attach_proof; header stamps not adopted (one clock
 for the proof's timers and its samples). 9 noted: the plate-motion and follow checks are tested by unit tests and the
 replay, not the twin.
+
+## Tejen's review (15 Oct, of the package with the proposed changes)
+
+His points, as Wesley relayed them, and what changed (rev 4, no bar changed):
+
+| His point | Rev 4 |
+|---|---|
+| The quiet-miss retry is not "quiet": eligibility ignores contact speed; stale input does not reset its timer | Eligible only while the tip moves at most 0.03 m/s over the plate on fresh data; stale data restarts the timer |
+| The proof dwell can span a short invalid-data interval | A gap over 0.1 s or an invalid sample restarts the contact and the proof holds (the critic's round 2 preferred 0.3 s to ride out laptop stalls; Tejen's rule kept: a 0.25 s stall costs itself plus the 1.0 s hold, inside the 3 s budget) |
+| The 2.5 s lift fallback can start the proof before his lift finishes | With his planner (which publishes the lift's end) the proof waits for his signal; 6 s only if it never comes |
+| The 20 mm below-the-plate exit uses the marker's world z, not the face clearance along the plate normal | The hold reads the ring's pose and measures the tip in the plate frame |
+| The package lacked the graph wiring that selects the co-motion rules | The next package carries graph_attach.py, profiles.py and the configs |
+
+His answers: trim learning at 0.20 m/s above contact is a reasonable experiment within the existing correction bounds,
+without relaxing the contact or proof speeds (aim B as built); keep the measured lift proof; do not copy M2 controller
+modes or change TAKEOFF here. Puck contact height: 37.9 and 36.2 mm against his assumed 34.5 mm (the pickup, later).
