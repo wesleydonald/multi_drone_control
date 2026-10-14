@@ -7606,7 +7606,11 @@ class OnlineJoinPlanner(Node):
                     f"ATTACH_READY timeout after {elapsed:.1f} s",
                 )
             elif getattr(self, 'contact_attach', False) and getattr(self, 'contact_bottom_hold', False):
-                self.update_bottom_hold(xy_error, xy_relative_velocity, z_error)
+                # the hold judges the tip against the plate point: the approach offset aims the body, so his tip target
+                # sits that far off the plate (contact_dx/dy 3.3 cm: a tip parked off the plate read 0; critic F3)
+                plate_rel = self.measured_contact_tip_offset()
+                self.update_bottom_hold(xy_error if plate_rel is None else float(np.linalg.norm(plate_rel[:2])),
+                                        xy_relative_velocity, z_error)
             elif xy_error > abort_xy or xy_relative_velocity > abort_velocity:
                 self.transition_to(
                     MissionPhase.APPROACH_ABOVE_TARGET,

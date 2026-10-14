@@ -22,6 +22,7 @@ def _hold(**kw):
     p.contact_first_descend_s = p.clock.t
     p.contact_give_up_s = 45.0
     p.transfer_generator.reset = lambda: None
+    p.measured_contact_tip_offset = lambda: None         # p.errors drive the hold (the plate-relative test sets it)
     for k, v in kw.items():
         setattr(p, k, v)
     return p
@@ -117,3 +118,22 @@ def test_lift_complete_without_a_measured_profile_uses_its_nominal_time():
     assert not p.contact_proof_lift_complete()
     p.clock.t += 0.2
     assert p.contact_proof_lift_complete()
+
+
+def test_the_hold_judges_the_tip_against_the_plate_not_the_offset_target():
+    """contact_dx/dy aim the body: his tip target then sits that far off the plate. A tip parked on that target 5 cm
+    off the plate read 0 and was held for the whole give-up time (critic 15 Oct, F3); now it is a quiet miss."""
+    p = _hold()
+    p.errors = (0.0, 0.05, 0.0)                           # on his (offset) tip target
+    p.measured_contact_tip_offset = lambda: np.array([0.05, 0.0, 0.01])
+    for _ in range(45):
+        tick(p, 0.1)
+        if p.phase != P.ATTACH_READY:
+            break
+    assert p.phase == P.APPROACH_ABOVE_TARGET and p.contact_misses == 1
+    q = _hold()
+    q.errors = (0.05, 0.05, 0.0)                          # 5 cm off his target but on the plate
+    q.measured_contact_tip_offset = lambda: np.array([0.01, 0.0, 0.01])
+    for _ in range(60):
+        tick(q, 0.1)
+    assert q.phase == P.ATTACH_READY and q.contact_misses == 0

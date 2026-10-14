@@ -65,8 +65,12 @@ class MagnetGate:
     partner(word) / ours(word) return the word to publish on the coil latch, or None (dropped).
     `events` collects one-line descriptions of every state change and first drop, for the log."""
 
-    def __init__(self, start_ours=False):
+    def __init__(self, start_ours=False, dry=False):
         self.source = OURS if start_ours else PARTNER
+        # dry hold (critic 15 Oct, F6): the coil OFF for the whole flight, both inputs only logged, so his bottom hold
+        # and our contacts and proofs can be watched with no catch possible
+        self.dry = bool(dry)
+        self._dry_said = False
         self._release_pending = bool(start_ours)     # the welded start hands the coil to him once
         self.last = None              # the last word forwarded to the coil
         self.events = []
@@ -107,10 +111,19 @@ class MagnetGate:
             self.events.append(f'{who} {w} ignored: the coil is cut')
         return None
 
+    def _dry_drop(self, who, w):
+        if not self._dry_said:
+            self._dry_said = True
+            self.events.append(f'DRY HOLD: {who} {w} ignored, the coil stays OFF for the whole flight')
+        self.last = 'OFF'
+        return None
+
     def partner(self, text):
         w = magnet_word(text)
         if w is None:
             return None
+        if self.dry:
+            return self._dry_drop('his', w)
         if self.source == CUT:
             return self._dropped_cut('his', w)
         if self.source != PARTNER:
@@ -130,6 +143,8 @@ class MagnetGate:
         w = magnet_word(text)
         if w is None:
             return None
+        if self.dry:
+            return self._dry_drop('our', w)
         if self.source == CUT:
             return self._dropped_cut('our', w)
         if self.source == PARTNER:
@@ -185,7 +200,8 @@ class MagnetGateNode(Node):
         start_ours = bool(self.declare_parameter('start_ours', False).value)
         release_topic = str(self.declare_parameter('release_topic', '').value)
         cut_state_topic = str(self.declare_parameter('cut_state_topic', '').value)
-        self.gate = MagnetGate(start_ours=start_ours)
+        dry = bool(self.declare_parameter('dry', False).value)
+        self.gate = MagnetGate(start_ours=start_ours, dry=dry)
         self._t0 = self.get_clock().now().nanoseconds * 1e-9
         self._restore_s = restore_s
         self._restoring = restore_s > 0.0
@@ -208,7 +224,13 @@ class MagnetGateNode(Node):
         if cut_state_topic:
             # the mux's latched state ('partner' | 'ours' | 'cut' | 'latched'): a cut acts at once, restoring or not
             self.create_subscription(String, cut_state_topic, self._mux_state_cb, GATE_STATE_QOS)
-        if self._restoring:
+        if dry:
+            self._restoring = False
+            self.pub.publish(String(data='OFF'))
+            self._dry_timer = self.create_timer(CUT_RESEND_S, lambda: self.pub.publish(String(data='OFF')))
+            self.get_logger().warn(f'[magnet_gate] DRY HOLD: {out_topic} stays OFF for the whole flight; his and our '
+                                   'magnet commands are only logged')
+        elif self._restoring:
             self._restore_timer = self.create_timer(restore_s, self._end_restore)
         else:
             self.state_pub.publish(String(data=self.gate.source))
@@ -244,7 +266,7 @@ class MagnetGateNode(Node):
         out = feed(value)
         for e in self.gate.events:
             # one severity per call site (rclpy refuses a logger call that changes it)
-            if 'OURS' in e or 'PARTNER' in e or 'held' in e:
+            if 'OURS' in e or 'PARTNER' in e or 'held' in e or 'DRY' in e:
                 self.get_logger().warn(f'[magnet_gate] {e}')
             else:
                 self.get_logger().info(f'[magnet_gate] {e}')

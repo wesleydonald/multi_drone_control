@@ -171,7 +171,7 @@ def _contact_manager_params(context, real):
     Card 2026-10-10_combined_m1_contact: the twin makes the gz joint at contact unless sim_catch
     is false; the rig's proof also wants the taut body-to-tip length (proof_taut_len, 0 = off).
     """
-    out = {'confirm_mode': 'contact_lift'}
+    out = {'confirm_mode': 'contact_lift', 'dry_run': truthy(context, 'dry_hold')}
     # critic F7, on by default (Wesley 11 Oct): c0 from the dwell's tail and a vertical-speed gate
     if truthy(context, 'contact_still'):
         out['contact_still'] = True
@@ -203,6 +203,12 @@ def _contact_manager_params(context, real):
         out['comotion_contact_xy'] = float(LaunchConfiguration('weld_radius').perform(context))
         if real:
             out['comotion_taut_fallback'] = out['proof_taut_len'] + PROOF_TAUT_MARGIN_M
+        else:
+            # the twin's catch is the joint made at contact, and its stiff ring hardly moves under his lift
+            # (R1719: -1.6 to +4.9 mm, three inconclusive proofs): no plate motion needed there; its welded tip
+            # sits 6-10 mm below the weld point (R1719 try 2 at -10.4 mm), so 15 mm there, 10 on the rig
+            out['comotion_require_motion'] = 0.0
+            out['comotion_normal_ok'] = 0.015
     return out
 
 
@@ -824,14 +830,16 @@ def attach(context, launch_dir, profile_vals):
                              **({'start_ours': True, 'release_topic': '/partner/release'}
                                 if partner_attached else {}),
                              # the tilt cut: the mux's 'cut' turns the coil OFF for good (critic round 2, H-B)
-                             **({'cut_state_topic': f'/drone_{d}/mux_state'} if tilt_cut or stuck_guard else {})}],
+                             **({'cut_state_topic': f'/drone_{d}/mux_state'} if tilt_cut or stuck_guard else {}),
+                             'dry': truthy(context, 'dry_hold')}],
                 output='screen'))
             lc = lambda k: float(LaunchConfiguration(k).perform(context))  # noqa: E731
             nodes.append(LogInfo(msg=(
                 f'[launch] COMBINED M1 (rig): contact radius {lc("weld_radius"):.3f} m at weld_point_z '
                 f'{lc("weld_point_z"):+.4f}, proof taut length {lc("proof_taut_len"):.3f} m. Order: his ARM (QUAD4 '
                 'armed idle, /tejen/drone_command) -> fleet arm -> fleet takeoff -> the ring at height -> his '
-                'TAKEOFF. No RViz ATTACH: an ON before his drop takes the coil.')))
+                'TAKEOFF. No RViz ATTACH: an ON before his drop takes the coil.'
+                + (' DRY HOLD: QUAD4\'s coil stays OFF, nothing is attached.' if truthy(context, 'dry_hold') else ''))))
             if partner_nodes:
                 nodes += _partner_nodes(context)
         return nodes

@@ -216,3 +216,87 @@ def test_config_is_checked():
         ComotionConfig(normal_min=0.01)
     with pytest.raises(ValueError):
         ComotionConfig(proof_dwell_s=0.0)
+
+
+# ── critic 15 Oct: the free hang through a long bottom hold and retries (F1), a plate moving under a still tip and
+# a gap in the tip stream (F7); the twin's still plate ──
+
+def test_a_long_bottom_hold_keeps_the_free_hang():
+    rig = Rig(_proof(taut_fallback=0.580), bob=0.0)
+    _hang(rig)
+    rig.run(10.0, [0.040, 0.0, 0.004], L_HANG - 0.004)              # 10 s at the bottom, just outside the gate
+    assert rig.run(0.5, CAUGHT, L_HANG - 0.002) == 'contact'
+    assert rig.p.l_hang == pytest.approx(L_HANG, abs=0.0005) and rig.p.l_hang_source == 'free hang'
+
+
+def test_a_failed_proof_keeps_the_free_hang_for_the_retry():
+    rig = Rig(_proof(taut_fallback=0.580), bob=0.0)
+    _hang(rig)
+    assert rig.run(0.5, CAUGHT, L_HANG - 0.010) == 'contact'
+    t0 = rig.t
+    rise = lambda t: CAUGHT + np.array([0.0, 0.0, min(0.020, 0.02 * (t - t0) / 0.5)])
+    assert rig.run(1.0, rise, L_HANG, lift=True) == 'failed'
+    rig.run(2.0, [0.040, 0.0, 0.004], L_HANG - 0.004)                # his retry, back at the bottom
+    assert rig.run(0.5, CAUGHT, L_HANG - 0.002) == 'contact'
+    assert rig.p.l_hang == pytest.approx(L_HANG, abs=0.0005) and rig.p.l_hang_source == 'free hang'
+
+
+def test_without_a_free_hang_the_typed_length_is_the_named_fallback():
+    rig = Rig(_proof(taut_fallback=0.575), bob=0.0)
+    assert rig.run(0.5, CAUGHT, L_HANG - 0.002) == 'contact'
+    assert rig.p.l_hang_source == 'fallback' and rig.p.l_hang == pytest.approx(0.575 - 0.005 + 0.003)
+
+
+def test_a_plate_moving_under_a_still_tip_is_not_proven():
+    """The tip hangs still in the world on a straight tether while the plate drops 5.5 mm under it: drift and plate
+    motion are the same size, so the tip does not follow the plate."""
+    rig = Rig(_proof(), bob=0.0)
+    _hang(rig)
+    assert rig.run(0.5, CAUGHT, L_HANG) == 'contact'
+    t0 = rig.t
+    drop = lambda t: min(0.0055, 0.0055 * (t - t0) / 2.0)
+    rig.plate = lambda: PLATE0 - np.array([0.0, 0.0, drop(rig.t)])
+    out = rig.run(3.5, lambda t: CAUGHT + np.array([0.0, 0.0, drop(t)]), L_HANG, lift=True)
+    assert out == 'failed' and 'proven' not in [e for _, e in rig.events]
+    assert rig.p.fails == 1 and rig.p.last_fail['reason'] == 'inconclusive'
+
+
+def test_the_twin_proves_a_welded_tip_on_a_still_plate_without_plate_motion():
+    assert Rig(_proof(), bob=0.0).run(0.0, CAUGHT, L_HANG) is None
+    rig = Rig(_proof(require_motion=0.0), bob=0.0)
+    _hang(rig)
+    assert rig.run(0.5, CAUGHT, L_HANG - 0.001) == 'contact'
+    assert rig.run(1.5, CAUGHT, L_HANG - 0.001, lift=True) == 'proven'
+    rig = Rig(_proof(), bob=0.0)                                     # the rig's rules: a still plate is no proof
+    _hang(rig)
+    assert rig.run(0.5, CAUGHT, L_HANG - 0.001) == 'contact'
+    assert rig.run(3.5, CAUGHT, L_HANG - 0.001, lift=True) == 'failed'
+
+
+def test_a_gap_in_the_tip_stream_restarts_the_contact_dwell():
+    rig = Rig(_proof(), bob=0.0)
+    _hang(rig)
+    assert rig.run(0.25, CAUGHT, L_HANG - 0.002) is None             # 0.25 s of the 0.30 s dwell
+    rig.t += 0.4                                                     # a mocap dropout: no tip samples for 0.4 s
+    assert rig.run(0.05, CAUGHT, L_HANG - 0.002) is None             # not a contact on the first samples after it
+    assert rig.p.gap_restarts == 1
+    assert rig.run(0.3, CAUGHT, L_HANG - 0.002) == 'contact'
+
+
+def test_a_short_executor_stall_keeps_the_dwell():
+    """Laptop stalls of 0.16-0.25 s (14 Oct) must not restart the proof's windows (critic round 2, finding 8)."""
+    rig = Rig(_proof(), bob=0.0)
+    _hang(rig)
+    assert rig.run(0.20, CAUGHT, L_HANG - 0.002) is None
+    rig.t += 0.2
+    assert rig.run(0.02, CAUGHT, L_HANG - 0.002) == 'contact' and rig.p.gap_restarts == 0
+
+
+def test_the_free_hang_is_measured_with_the_coil_off_too():
+    """The span is OFF while he climbs back and matches (critic F3): the tether length is still measured there."""
+    p = ComotionProof(ComotionConfig(lift_fallback_s=0.0, taut_fallback=0.580))
+    rig = Rig(p, bob=0.0)
+    _hang(rig)                                                       # coil OFF: no contact logic, but the free hang
+    p.magnet(True)
+    assert rig.run(0.5, CAUGHT, L_HANG - 0.002) == 'contact'
+    assert p.l_hang == pytest.approx(L_HANG, abs=0.0005) and p.l_hang_source == 'free hang'

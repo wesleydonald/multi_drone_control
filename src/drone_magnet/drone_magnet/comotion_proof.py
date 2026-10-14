@@ -37,7 +37,7 @@ class ComotionConfig:
     contact_dwell_s: float = 0.30
     c0_tail_s: float = 0.10          # s: the contact seed from the dwell's last samples
     hang_normal: float = 0.05        # m above the plate: a free-hang sample for the tether length
-    hang_window_s: float = 2.0
+    hang_window_s: float = 2.0       # s: the last free-hang samples, however long ago (kept through retries)
     taut_margin: float = 0.003       # m below the free-hang length that still reads taut
     taut_fallback: float = 0.0       # m, the typed taut length if no free hang was seen (minus 5 mm); 0 = no check
     lift_fallback_s: float = 2.5     # s after contact when no lift-done signal comes (0 = wait for the signal)
@@ -47,6 +47,12 @@ class ComotionConfig:
     proof_dwell_s: float = 1.0
     comotion_range: float = 0.005    # m, plate z range over the proof window ...
     h_plate: float = 0.003           # m ... or plate z above the contact's
+    follow_ratio: float = 0.5        # the drift at most this share of the plate's motion: a tip still in the world
+                                     # while the plate moves under it does not follow it (critic 15 Oct, F7)
+    require_motion: float = 1.0      # 0: no plate motion needed (the twin: its stiff ring hardly moves, and its catch
+                                     # is the joint made at contact)
+    gap_s: float = 0.3               # s between tip samples: a longer gap (a mocap dropout) restarts the contact dwell
+                                     # and the windows; shorter executor stalls (0.16-0.25 s on 14 Oct) do not
     sep_normal: float = 0.010        # m: after the lift, a tip this far above the plate rose with QUAD4
     sep_xy: float = 0.045
     sep_dwell_s: float = 0.2
@@ -89,6 +95,8 @@ class ComotionProof:
         self.rel_vz = math.nan
         self.body_to_tip = math.nan
         self.l_hang: Optional[float] = None
+        self.l_hang_source: Optional[str] = None    # 'free hang' (measured this flight) or 'fallback' (typed)
+        self.gap_restarts = 0                        # gaps over gap_s in the tip stream (each restarts the windows)
         self._hang = deque()      # (t, body-to-tip) while the tip hangs free above the plate
         self._near = deque()      # (t, rel, plate z) while inside the contact gate
         self._win = deque()       # (t, rel, plate z, body-to-tip) over ma_s
@@ -119,7 +127,6 @@ class ComotionProof:
             if self.state != OFF:
                 return None
             self.state = WATCH
-            self._hang.clear()
             return 'on'
         if self.state == ATTACHED:
             return 'refused'
@@ -153,6 +160,8 @@ class ComotionProof:
         'contact', 'proven', 'failed' or None."""
         cfg = self.config
         if self.state == OFF:
+            if fresh and tip is not None and plate is not None and body is not None:
+                self._free_hang(float(now), tip, plate, body, rotation)    # the tether length, with the coil OFF too
             return None
         now = float(now)
         if not fresh or tip is None or plate is None:
@@ -162,6 +171,9 @@ class ComotionProof:
             return self.tick(now)
         if self._last_t is not None and now <= self._last_t:
             return None
+        if self._last_t is not None and now - self._last_t > cfg.gap_s + _EPS:
+            self._forget_samples()           # no dwell or speed across a gap in the tip stream (critic F7)
+            self.gap_restarts += 1
         self._last_t = now
         tip = np.asarray(tip, dtype=float).reshape(3)
         plate = np.asarray(plate, dtype=float).reshape(3)
@@ -184,12 +196,22 @@ class ComotionProof:
             return None
         return self._prove(now, float(plate[2]), lift_done)
 
+    def _free_hang(self, now: float, tip, plate, body, rotation) -> None:
+        r_mat = np.eye(3) if rotation is None else np.asarray(rotation, dtype=float).reshape(3, 3)
+        normal = float((r_mat.T @ (np.asarray(tip, float).reshape(3) - np.asarray(plate, float).reshape(3)))[2])
+        btt = float(np.linalg.norm(np.asarray(tip, float).reshape(3) - np.asarray(body, float).reshape(3)))
+        if normal > self.config.hang_normal and math.isfinite(btt):
+            self._hang.append((now, btt))
+            while self._hang[0][0] < now - self.config.hang_window_s:
+                self._hang.popleft()
+
     def _watch(self, now: float, rel: np.ndarray, plate_z: float) -> Optional[str]:
         cfg = self.config
         if self.normal > cfg.hang_normal and math.isfinite(self.body_to_tip):
+            # pruned only by newer free-hang samples: a long bottom hold keeps the last ones (critic F1)
             self._hang.append((now, self.body_to_tip))
-        while self._hang and self._hang[0][0] < now - cfg.hang_window_s:
-            self._hang.popleft()
+            while self._hang[0][0] < now - cfg.hang_window_s:
+                self._hang.popleft()
         inside = self.xy <= cfg.contact_xy and cfg.normal_min <= self.normal <= cfg.normal_max
         if not inside:
             self._near.clear()
@@ -209,6 +231,7 @@ class ComotionProof:
         hang = [h[1] for h in self._hang]
         self.l_hang = (float(np.median(hang)) if hang
                        else cfg.taut_fallback - 0.005 + cfg.taut_margin if cfg.taut_fallback > 0.0 else None)
+        self.l_hang_source = 'free hang' if hang else 'fallback' if self.l_hang is not None else None
         self.t_contact = now
         self.t_lift = None
         self.tries += 1
@@ -248,8 +271,12 @@ class ComotionProof:
         if sep and now - self._sep_t0 >= cfg.sep_dwell_s - _EPS:
             return self._fail('separated', now)
         taut = self.l_hang is None or (math.isfinite(btt) and btt >= self.l_hang - cfg.taut_margin)
-        moved = self.comotion >= cfg.comotion_range or self.rise >= cfg.h_plate
-        ok = (self.drift <= cfg.d_ok and abs(normal) <= cfg.normal_ok and taut
+        if cfg.require_motion > 0.0:
+            moved = self.comotion >= cfg.comotion_range or self.rise >= cfg.h_plate
+            follows = self.drift <= cfg.follow_ratio * max(self.comotion, abs(self.rise))
+        else:
+            moved = follows = True
+        ok = (self.drift <= cfg.d_ok and follows and abs(normal) <= cfg.normal_ok and taut
               and math.isfinite(self.rel_speed) and self.rel_speed <= cfg.speed_ok)
         self._ok_t0 = _hold(self._ok_t0, ok, now)
         if ok and moved and now - self._ok_t0 >= cfg.proof_dwell_s - _EPS:
@@ -265,7 +292,6 @@ class ComotionProof:
                           'xy_m': self.xy, 'normal_m': self.normal}
         self.state = WATCH
         self._forget_contact()
-        self._hang.clear()
         return 'failed'
 
     def report(self, now: float) -> dict:
@@ -275,6 +301,7 @@ class ComotionProof:
         return {'rules': 'comotion', 'state': self.state, 'drift_m': num(self.drift),
                 'plate_rise_m': num(self.rise), 'comotion_m': num(self.comotion),
                 'body_to_tip_m': num(self.body_to_tip), 'l_hang_m': num(self.l_hang),
+                'l_hang_source': self.l_hang_source, 'gap_restarts': self.gap_restarts,
                 'xy_m': num(self.xy), 'normal_m': num(self.normal), 'tries': self.tries,
                 'contact_age_s': None if self.t_contact is None else num(now - self.t_contact),
                 'lift_done': self.t_lift is not None, 'fails': self.fails, 'reason': self.reason,

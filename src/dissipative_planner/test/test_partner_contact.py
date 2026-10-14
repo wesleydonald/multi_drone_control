@@ -1577,3 +1577,29 @@ def test_rig_guard_a_held_coil_lifts_plate_9_at_most_4_cm_and_is_down_before_the
     assert max(lift) <= 0.04 and lift[i_land] == 0.0
     brake = dn.GUARD_STAGE_VEL ** 2 / (2.0 * dn.TAKE_BACK_BRAKE)
     assert all(r[1] <= r[3] + TAUT + brake for r in rows[i_fail:])
+
+
+def test_the_span_goes_off_while_he_climbs_back_after_a_descent():
+    """Critic 15 Oct, F3: a bottom-hold exit or a retry climbs back to APPROACH_ABOVE_TARGET; with the coil ON an
+    unconfirmed edge catch would lift plate 9. The span is OFF there and in MATCH_VELOCITY, ON again for the descent;
+    before the first descent his approach keeps it ON, as before."""
+    f = _node()
+    _airborne_rejoin(f)
+    f._his_phase_cb(String(data='APPROACH_ABOVE_TARGET'))
+    _tick(f)
+    assert f._magnet_cmd_pub.msgs == ['ON']                    # first approach: ON, as before
+    f._his_phase_cb(String(data='DESCEND_TO_ATTACHMENT'))
+    _tick(f)
+    f._his_phase_cb(String(data='ATTACH_READY'))
+    _tick(f)
+    assert set(f._magnet_cmd_pub.msgs) == {'ON'}
+    f._his_phase_cb(String(data='APPROACH_ABOVE_TARGET'))     # the hold left: lifting clear to retry
+    _tick(f)
+    assert f._magnet_cmd_pub.msgs[-1] == 'OFF'                 # at once, not at the next keepalive
+    f._his_phase_cb(String(data='MATCH_VELOCITY'))
+    for _ in range(int(CONTACT_SPAN_EVERY_S * HZ) + 1):
+        _tick(f)
+    assert f._magnet_cmd_pub.msgs[-1] == 'OFF' and 'ON' not in f._magnet_cmd_pub.msgs[-2:]
+    f._his_phase_cb(String(data='DESCEND_TO_ATTACHMENT'))
+    _tick(f)
+    assert f._magnet_cmd_pub.msgs[-1] == 'ON'

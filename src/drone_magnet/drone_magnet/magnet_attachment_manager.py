@@ -239,6 +239,17 @@ class MagnetAttachmentManager(Node):
             self.create_subscription(String, cut_topic, self._cut_state_cb,
                                      QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
                                                 reliability=ReliabilityPolicy.RELIABLE))
+        # the planner's ring drop (locked: every magnet OFF, a welded QUAD4's coil too): its /magnet/command OFF is
+        # refused after a confirmed attach, so the latched drop flag releases the coil like the cut ('' = off)
+        self._dropped = False
+        # dry hold (critic 15 Oct, F6; the coil gate holds QUAD4's coil OFF): every proof still runs, and a proven
+        # one is a false proof by construction: logged as an error, never declared attached
+        self._dry_run = bool(self.declare_parameter('dry_run', False).value)
+        dropped_topic = str(self.declare_parameter('payload_dropped_topic', '/fleet/payload_dropped').value)
+        if dropped_topic:
+            self.create_subscription(Bool, dropped_topic, self._dropped_cb,
+                                     QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                                                reliability=ReliabilityPolicy.RELIABLE))
         block_topic = str(self.declare_parameter('handover_block_topic', '').value)
         if block_topic:
             self.create_subscription(Bool, block_topic, self._handover_block_cb,
@@ -341,7 +352,10 @@ class MagnetAttachmentManager(Node):
                 f'proof_rules=comotion: contact xy <= {c.contact_xy:.3f} m, normal {c.normal_min:+.3f}..'
                 f'{c.normal_max:+.3f} m, {c.speed:.3f} m/s for {c.contact_dwell_s:.2f} s; proven {c.proof_dwell_s:.1f} s '
                 f'after the lift: drift <= {c.d_ok:.3f} m, taut >= free hang - {c.taut_margin:.3f} m (fallback '
-                f'{c.taut_fallback:.3f}), plate moved >= {c.comotion_range:.3f} m; lost at {c.lost:.3f} m for '
+                f'{c.taut_fallback:.3f}), '
+                + (f'plate moved >= {c.comotion_range:.3f} m with the tip following (drift <= {c.follow_ratio:.1f} x '
+                   'the plate\'s motion); ' if c.require_motion > 0.0 else 'no plate motion needed (twin); ')
+                + f'lost at {c.lost:.3f} m for '
                 f'{c.lost_dwell_s:.2f} s; sim_catch={self.sim_catch}, body={self.body_pose_topic}')
         elif self._proof is not None:
             self.proof_timer = self.create_timer(0.1, self._publish_proof_state)
@@ -541,8 +555,9 @@ class MagnetAttachmentManager(Node):
         command = str(msg.data).strip().upper()
         self.last_magnet_command_time = time.time()
 
-        if command in ON_WORDS and getattr(self, '_cut', False):
-            self.get_logger().warn('Magnet ON refused: this drone was cut', throttle_duration_sec=2.0)
+        if command in ON_WORDS and (getattr(self, '_cut', False) or getattr(self, '_dropped', False)):
+            self.get_logger().warn('Magnet ON refused: this drone was cut or the ring was dropped',
+                                   throttle_duration_sec=2.0)
             return
         if command in ('ON', '1', 'TRUE', 'ENABLE', 'ENABLED'):
             if not self.magnet_on:
@@ -721,6 +736,20 @@ class MagnetAttachmentManager(Node):
             self.contact_pub.publish(Bool(data=False))
         self.magnet_command_callback(String(data='OFF'))
 
+    def _dropped_cb(self, msg: Bool) -> None:
+        if not bool(msg.data) or self._dropped:
+            return
+        self._dropped = True
+        if self._proof is not None:
+            self._proof.state = 'off'          # the drop overrides the confirmed attach's OFF refusal
+            self._proof._forget_contact()
+            self._proof._forget_samples()
+        self._start_weld = False
+        self.get_logger().error('PAYLOAD DROPPED: magnet OFF (a confirmed attach too), no ON from now on')
+        if self._proof is not None:
+            self.contact_pub.publish(Bool(data=False))
+        self.magnet_command_callback(String(data='OFF'))
+
     def _handover_block_cb(self, msg: Bool) -> None:
         if bool(msg.data) and not self._handover_blocked:
             self.get_logger().error('HAND-OVER BLOCKED: our tracker for this drone latched while the partner flies '
@@ -730,8 +759,9 @@ class MagnetAttachmentManager(Node):
     def _contact_command_callback(self, msg: String) -> None:
         """The arbiter in front of magnet_command_callback."""
         word = str(msg.data).strip().upper()
-        if self._cut and word in ON_WORDS:
-            self.get_logger().warn('Magnet ON refused: this drone was cut', throttle_duration_sec=2.0)
+        if (self._cut or self._dropped) and word in ON_WORDS:
+            self.get_logger().warn('Magnet ON refused: this drone was cut or the ring was dropped',
+                                   throttle_duration_sec=2.0)
             return
         if self._proof is not None:
             if word in OFF_WORDS and self._contact_off('magnet command OFF'):
@@ -784,7 +814,7 @@ class MagnetAttachmentManager(Node):
     def _proof_event(self, ev: Optional[str]) -> None:
         p = self._proof
         if ev == 'contact' and isinstance(p, ComotionProof):
-            hang = 'none' if p.l_hang is None else f'{p.l_hang:.4f} m'
+            hang = 'none (no taut check)' if p.l_hang is None else f'{p.l_hang:.4f} m ({p.l_hang_source})'
             self.get_logger().info(
                 f'CONTACT (try {p.tries}): xy {1000.0 * p.xy:.1f} mm, normal {1000.0 * p.normal:+.1f} mm, '
                 f'rel_speed={p.rel_speed:.3f} m/s, free-hang tether {hang}, plate z0={p.z0:.4f} m')
@@ -810,10 +840,16 @@ class MagnetAttachmentManager(Node):
             if self.sim_catch:
                 self._sim_joint(False, f'proof failed ({f["reason"]})')
             self.contact_pub.publish(Bool(data=False))
-        elif ev == 'proven' and (self._handover_blocked or self._cut):
-            # no hand-over can follow (our tracker latched, or the drone was cut): a failed proof, joint released
+        elif ev == 'proven' and (self._handover_blocked or self._cut or self._dropped or self._dry_run):
+            # no hand-over can follow (our tracker latched, the drone was cut, the ring dropped, a dry hold): failed
+            if self._dry_run:
+                self.get_logger().error(
+                    f'DRY HOLD: FALSE PROOF (try {p.tries}): proven with the coil OFF (drift {1000.0 * p.drift:.1f} mm, '
+                    f'normal {1000.0 * p.normal:+.1f} mm, plate moved {1000.0 * p.comotion:.1f} mm, tether '
+                    f'{p.body_to_tip:.4f} m): not attached')
             p.state = 'prove'
-            self._proof_event(p._fail('handover_blocked' if self._handover_blocked else 'cut', self._clock_s()))
+            self._proof_event(p._fail('handover_blocked' if self._handover_blocked else 'cut' if self._cut else
+                                      'dropped' if self._dropped else 'dry_run', self._clock_s()))
         elif ev == 'proven' and isinstance(p, ComotionProof):
             self._declare_attached(
                 f'proven (try {p.tries}): the tip stayed with the plate (drift {1000.0 * p.drift:.1f} mm, normal '

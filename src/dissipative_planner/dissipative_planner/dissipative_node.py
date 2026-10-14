@@ -80,6 +80,9 @@ REJOIN_PHASES = ('TRANSIT_TO_REATTACH', 'APPROACH_ABOVE_TARGET', 'MATCH_VELOCITY
 NOT_FLOWN_PHASES = ('', 'WAIT_FOR_TAKEOFF', 'LANDED_DISARMED')
 CONTACT_SPAN_MIN_Z = 0.3   # m: QUAD4 above this before the span's ON (no ON on the floor, near the spawn weld)
 CONTACT_SPAN_EVERY_S = 1.0  # s between the span's ON keepalives
+# after his first descent, his climb back and match: the span's coil OFF, so a catch nobody confirmed (an edge or side
+# catch) is not lifted with plate 3 (critic 15 Oct, F3); his own magnet goes OFF there too
+SPAN_OFF_PHASES = ('APPROACH_ABOVE_TARGET', 'MATCH_VELOCITY')
 RELEASE_SEEN_M = 0.05      # m the welded start's tip moves off the plate (ring frame) before its release counts as seen
 # the take-back (card 2026-10-10_combined_m1_contact rev 10 §3b with the round-4 response): its reference starts at
 # QUAD4's measured position and velocity and changes velocity by at most TAKE_BACK_ACCEL (1.46 deg quasi-static,
@@ -1841,7 +1844,8 @@ class DissipativeController(LoadPlanner):
     def _contact_span_tick(self):
         """Our ring magnet span: ON from his rejoin (TRANSIT_TO_REATTACH on) once QUAD4 is above
         CONTACT_SPAN_MIN_Z and the ring weld joint reads free, re-sent every CONTACT_SPAN_EVERY_S until the attach
-        or the take-back. Before it the one coil holds his ball on the rig."""
+        or the take-back; OFF while he climbs back and matches after a descent (SPAN_OFF_PHASES). Before it the one
+        coil holds his ball on the rig."""
         if not self._partner_contact or self._taken_back or not self.reserved_attach \
                 or not self.attach_pending[0] or 0 in self._newcomer_out:
             return
@@ -1857,10 +1861,18 @@ class DissipativeController(LoadPlanner):
                 return
             self.get_logger().warn(f'[dissipative] ring magnet span begins: ON (his {self._his_phase}, drone '
                                    f'{self._n_carry0} at z {float(pos[2]):.2f} m, the ring weld joint free)')
-        elif now - self._span_t < CONTACT_SPAN_EVERY_S:
+        if self._his_phase == 'DESCEND_TO_ATTACHMENT':
+            self._his_descended = True
+        word = 'OFF' if getattr(self, '_his_descended', False) and self._his_phase in SPAN_OFF_PHASES else 'ON'
+        changed = self._span_t is not None and word != getattr(self, '_span_word', 'ON')
+        if self._span_t is not None and not changed and now - self._span_t < CONTACT_SPAN_EVERY_S:
             return
+        if changed:
+            self.get_logger().warn(f'[planner] ring magnet span: {word} (his {self._his_phase})'
+                                   + (': he climbs back, an unconfirmed catch is not lifted' if word == 'OFF' else ''))
         self._span_t = now
-        self._magnet_cmd_pub.publish(String(data='ON'))
+        self._span_word = word
+        self._magnet_cmd_pub.publish(String(data=word))
 
     def _weld_rho_of(self, j):
         """Reserved drone j's weld point in the ring frame: the magnet manager's when the launch passed it (the one

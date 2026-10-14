@@ -172,6 +172,9 @@ partner:
   # plate frame within weld_radius, the tip staying with the plate on a taut tether after his lift, failure only on
   # evidence); 'contact_lift' = the 10 Oct rules (rejected the one real rig catch, RIG-1014-t6h_4)
   proof_rules: comotion
+  # dry hold (critic 15 Oct, F6): QUAD4's coil held OFF for the whole flight; his bottom hold, our contacts and proofs
+  # run and are logged, a proof that passes is a logged false proof and never an attach
+  dry_hold: false
   # the manager's contact and proof thresholds, '' = its default (E1 sets loose ones, then they are frozen)
   contact_dwell_s: ''
   proof_d_ok: ''

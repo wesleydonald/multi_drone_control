@@ -235,3 +235,11 @@ def test_node_cut_publishes_off_at_once_even_while_restoring_and_resends_it(monk
         n.destroy_node()
     finally:
         rclpy.shutdown()
+
+
+def test_dry_hold_keeps_the_coil_off_and_only_logs_both_inputs():
+    """Critic 15 Oct, F6: one bottom-hold flight with the coil OFF before any magnet-ON hold."""
+    g = MagnetGate(dry=True)
+    assert g.partner('ON') is None and g.ours('ON') is None and g.ours('OFF') is None
+    assert g.last == 'OFF' and len(g.events) == 1 and 'DRY HOLD' in g.events[0]
+    assert MagnetGate().partner('ON') == 'ON'                     # off by default: today's gate

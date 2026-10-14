@@ -11,7 +11,7 @@ import pytest
 pytest.importorskip('interfaces.msg')
 import rclpy  # noqa: E402
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped  # noqa: E402
-from std_msgs.msg import String  # noqa: E402
+from std_msgs.msg import Bool, String  # noqa: E402
 from interfaces.msg import MotionCaptureState  # noqa: E402
 
 from drone_magnet.magnet_attachment_manager import MagnetAttachmentManager  # noqa: E402
@@ -316,3 +316,47 @@ def test_comotion_voids_the_contact_when_his_planner_leaves_the_proof(manager):
 def test_an_unknown_proof_rule_is_refused(manager):
     with pytest.raises(ValueError):
         manager(confirm_mode='contact_lift', proof_rules='magic')
+
+
+def test_a_ring_drop_releases_a_proven_attach_and_refuses_on(manager):
+    """Locked rule (14 Oct): a drop turns every magnet OFF, a welded QUAD4's coil too. The planner's /magnet/command
+    OFF is refused after the confirmed attach, so the latched /fleet/payload_dropped releases it (critic F4)."""
+    n = manager(confirm_mode='contact_lift', proof_rules='comotion', comotion_lift_fallback_s=0.0)
+    assert '/fleet/payload_dropped' in _subs(n)
+    clock = _with_clock(n)
+    n._contact_command_callback(String(data='ON'))
+    trace = _co_trace(caught=True)
+    _until(n, clock, trace, lambda: n.contact_pub.msgs)
+    n._lift_done = True
+    _until(n, clock, trace, lambda: n.attached)
+    n._contact_command_callback(String(data='OFF'))           # the drop's OFF alone: refused, as before
+    assert n.attached and n.magnet_on
+    n._dropped_cb(Bool(data=True))
+    assert not n.attached and not n.magnet_on and n._proof.state == 'off'
+    assert n.contact_pub.msgs[-1].data is False
+    n._contact_command_callback(String(data='ON'))            # the span's keepalive: refused from now on
+    n.magnet_command_callback(String(data='ON'))
+    assert not n.magnet_on
+
+
+def test_a_ring_drop_during_a_proof_fails_it(manager):
+    n = manager(confirm_mode='contact_lift', proof_rules='comotion', comotion_lift_fallback_s=0.0)
+    clock = _with_clock(n)
+    n._contact_command_callback(String(data='ON'))
+    _until(n, clock, _co_trace(caught=True), lambda: n.contact_pub.msgs)
+    assert n._proof.state == 'prove'
+    n._dropped_cb(Bool(data=True))
+    assert n._proof.state == 'off' and not n.magnet_on and not n.attached
+
+
+def test_a_dry_hold_proof_is_a_logged_false_proof_never_an_attach(manager):
+    """dry_hold: the coil gate holds QUAD4's coil OFF, so a passing proof cannot be a catch: it fails as 'dry_run'."""
+    n = manager(confirm_mode='contact_lift', proof_rules='comotion', comotion_lift_fallback_s=0.0, dry_run=True)
+    clock = _with_clock(n)
+    n._contact_command_callback(String(data='ON'))
+    trace = _co_trace(caught=True)
+    _until(n, clock, trace, lambda: n.contact_pub.msgs)
+    n._lift_done = True
+    _until(n, clock, trace, lambda: n._proof.fails >= 1)
+    assert not n.attached and n._proof.last_fail['reason'] == 'dry_run'
+    assert n.contact_pub.msgs[-1].data is False

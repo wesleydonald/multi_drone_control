@@ -1187,3 +1187,12 @@ def test_attach_keeps_the_next_tick_throttle_off_for_quad4():
     nodes = _by_name(rig('attach', enable_approach_mpc=False))
     assert nodes['/tracker_3']['params']['cmd_next_tick'] is False
     assert 'cmd_next_tick' not in nodes['/tracker_0']['params']
+
+def test_dry_hold_holds_the_coil_off_and_never_attaches(dds):
+    """Critic 15 Oct, F6: dry_hold (default off) sets the coil gate's dry and the manager's dry_run together."""
+    g = _combined_rig()
+    assert g['/magnet_gate_3']['params']['dry'] is False
+    assert g['/magnet_attachment_manager']['params']['dry_run'] is False
+    g = _combined_rig(dry_hold=True)
+    assert g['/magnet_gate_3']['params']['dry'] is True
+    assert g['/magnet_attachment_manager']['params']['dry_run'] is True
