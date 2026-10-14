@@ -116,3 +116,17 @@ def test_a_departed_drone_above_its_rest_does_not_ask():
     s._departed = True
     _run(s, 2.0)
     assert s._down_alone_pub.msgs == []
+
+
+def test_a_departed_drone_held_a_few_cm_above_its_rest_idles_and_asks():
+    """14 Oct: QUAD4 stopped 4-7 cm above its mat height after every take-back; the planner now holds it there as
+    down, and its tracker idles and asks to be disarmed alone."""
+    s = _stub(z=0.16, ref_z=0.16, resting=False, airborne=True)
+    s._departed = True
+    sent = []
+    s._down_alone_pub = types.SimpleNamespace(publish=lambda m: sent.append(m.data))
+    s.get_logger = lambda: types.SimpleNamespace(warn=lambda *a, **k: None, info=lambda *a, **k: None)
+    assert _run(s, GROUND_IDLE_HOLD_S + 0.1) is True and sent == [True]
+    high = _stub(z=0.21, ref_z=0.21, resting=False, airborne=True)       # 11 cm up: not down
+    high._departed = True
+    assert _run(high, 1.0) is False

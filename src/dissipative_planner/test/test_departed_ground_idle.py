@@ -145,3 +145,13 @@ def test_takeoff_records_the_rest_from_a_stale_pose_too():
     assert f._pos(3) is None
     f._departed_flight_start('TAKEOFF')
     assert f._rest_z[3] == pytest.approx(0.10)
+
+
+def test_a_stall_a_few_cm_above_its_rest_is_down():
+    """14 Oct: QUAD4 stopped 4-7 cm above its rest after each take-back and was never disarmed alone."""
+    f = _node(z=0.60)
+    for z in np.linspace(0.60, 0.16, 20):                          # 6 cm above its 0.10 rest
+        _at(f, z, 1)
+    _at(f, 0.16, 20)
+    assert f._departed_td[3].stalled and f.published[-1][1][2] == pytest.approx(0.16)
+    assert f._departed_down() and any('is down (+0.06 m above its rest)' in m for m in f.log.lines)

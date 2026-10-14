@@ -45,17 +45,11 @@ fi
 step "2/6  unit tests"
 if python3 -m pytest src/utility_objects/test/test_safety.py \
                     src/bringup/test/test_rviz_config.py \
-                    src/tracker/test/test_planner_reference.py \
                     src/bringup/test/test_config_tools.py \
                     src/mpc_planner/test/test_creep_controller.py \
-                    src/tracker/test/test_velocity_loop.py \
                     src/mpc_planner/test/test_load_geometry_params.py \
-                    src/tracker/test/test_kt_trim.py \
                     src/mpc_planner/test/test_attach_azimuths.py \
                     src/mpc_planner/test/test_measured_rod.py \
-                    src/drone_communication/test/test_magnet_channel.py \
-                    src/drone_communication/test/test_velocity_filter.py \
-                    src/tracker/test/test_next_tick_command.py \
                     src/tejen_mpc/test/test_mpc_profile.py \
                     src/tejen_mpc/test/test_command_execution.py \
                     src/tejen_mission/test/test_partner_mission_mpc_profile.py \
@@ -65,7 +59,10 @@ if python3 -m pytest src/utility_objects/test/test_safety.py \
                     src/tejen_mission/test/test_m1_contact_attach.py \
                     src/tejen_mission/test/test_m1_contact_targets.py \
                     src/tejen_mission/test/test_floor_join_delivery_rejoin.py \
-                    src/tracker/test/test_thrust_model.py \
+                    src/tejen_mission/test/test_takeoff_hold.py \
+                    src/tejen_mission/test/test_partner_mission_geometry.py \
+                    src/tracker/test \
+                    src/drone_communication/test \
                     tools/test -q 2>&1 | tail -3; then
   :
 else

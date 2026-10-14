@@ -69,6 +69,8 @@ DEPARTED_PRESS_M = 0.35    # m: a landing departed drone's reference goes this f
 DEPARTED_REST_TOL_M = 0.03  # m: back at its resting height (the tracker's GROUND_IDLE_MARGIN)
 DEPARTED_AT_REST_S = 0.5   # s at its rest before its reference stops pressing (its tracker idles after 0.2 s)
 DEPARTED_PRESS_LIMIT_S = 6.0  # s of press after it stopped above its rest; then held at its own height
+DEPARTED_DOWN_HIGH_M = 0.10  # m: stalled no more than this above its rest is down too (QUAD4 stopped 4-7 cm above
+                            # its mat height after every 14 Oct take-back and was never disarmed alone)
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
 DROP_LAND_WAIT_S = 30.0    # s after a drop: /fleet/landed even if a drone never reads as down
 # partner_contact (card 2026-10-10_combined_m1_contact): his phases from the rejoin on, in which our ring magnet span
@@ -864,11 +866,12 @@ class DissipativeController(LoadPlanner):
             if pos is None:
                 return False
             rest = self._rest_z.get(d) if getattr(self, '_departed_gi', False) else None
+            td = self._departed_td.get(d)
             if rest is not None:
-                if float(pos[2]) > rest + DEPARTED_REST_TOL_M:
+                stalled_low = td is not None and td.stalled and float(pos[2]) <= rest + DEPARTED_DOWN_HIGH_M
+                if float(pos[2]) > rest + DEPARTED_REST_TOL_M and not stalled_low:
                     return False
                 continue
-            td = self._departed_td.get(d)
             stalled = td is not None and td.stalled
             if not stalled and float(pos[2]) > self._departed_down_z:
                 return False
@@ -976,11 +979,19 @@ class DissipativeController(LoadPlanner):
                         if self._press_t[d] >= DEPARTED_PRESS_LIMIT_S:
                             td.stalled = True                      # no endless press: held where it is
                             p_hold[2] = float(pos[2])
+                            low = float(pos[2]) <= rest + DEPARTED_DOWN_HIGH_M
                             self.get_logger().warn(
                                 f'[dissipative] departed {_who(d)} still {float(pos[2]) - rest:+.2f} m above its '
-                                f'rest after {DEPARTED_PRESS_LIMIT_S:.0f} s of press: held there (not down)')
+                                f'rest after {DEPARTED_PRESS_LIMIT_S:.0f} s of press: '
+                                + ('down there' if low else 'held there (not down)'))
                 if pos is not None and not td.stalled and td.update([float(pos[2])]):
-                    if rest is not None and float(pos[2]) > rest + DEPARTED_REST_TOL_M:
+                    if rest is not None and rest + DEPARTED_REST_TOL_M < float(pos[2]) <= rest + DEPARTED_DOWN_HIGH_M:
+                        # stopped a few cm above its rest (standing on its tether's magnet, or a higher floor): down
+                        td.stalled = True
+                        p_hold[2] = float(pos[2])
+                        self.get_logger().info(f'[dissipative] departed {_who(d)} is down '
+                                               f'({float(pos[2]) - rest:+.2f} m above its rest)')
+                    elif rest is not None and float(pos[2]) > rest + DEPARTED_REST_TOL_M:
                         # it stopped above its rest (light on its rod, or standing on it): not down, press on
                         td.reset()
                         self._press_t.setdefault(d, 0.0)

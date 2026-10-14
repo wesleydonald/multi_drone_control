@@ -126,6 +126,8 @@ TRACKER_W1_COLS = ('thr_out', 'thr_off', 'acx', 'acy', 'acz',
 # Soften the surge by raising takeoff_thrust_ratio, not by changing this margin.
 AIRBORNE_MARGIN = 0.04         # m above spawn z
 GROUND_IDLE_MARGIN = 0.03      # m above spawn z: back on the floor (ground_idle)
+DEPARTED_IDLE_MARGIN = 0.10    # m above spawn z: a departed drone the planner holds there is down (the planner's
+                               # DEPARTED_DOWN_HIGH_M; QUAD4 stopped 4-7 cm above its mat height on 14 Oct)
 GROUND_IDLE_HOLD_S = 0.2
 
 # Takeoff spool floor. The applied throttle eases from FLOOR*u to u over
@@ -264,6 +266,14 @@ class Controller(Node):
         self._safety_clock = self.get_clock()
         self.last_pose_update_time = self._safety_clock.now()
 
+        # ── State ─────────────────────────────────────────────────────────
+        # before the callback manager: its arming service is live while the node waits for its first pose
+        # (an ARM/DISARM in that window raised AttributeError and killed the tracker, RIG-1014-lt_9)
+        self.armed = False
+        self.takeoff_requested = False
+        self.shutdown_requested = False
+        self.step_counter = 0
+
         # ── Callbacks / subscriptions ─────────────────────────────────────
         self.cb = CallbackManagerMulti(self, drone_id=self.drone_id)
 
@@ -280,12 +290,6 @@ class Controller(Node):
         # during flight (see control_loop); the reference is streamed by the planner.
         self.trajectory_visualizer = TrajectoryVisualizer(
             self, frame_id="map", prefix=f"drone_{self.drone_id}")
-
-        # ── State ─────────────────────────────────────────────────────────
-        self.armed = False
-        self.takeoff_requested = False
-        self.shutdown_requested = False
-        self.step_counter = 0
 
         # fleet manager broadcasts the master step index, just follow it
         self.fleet_step_sub = self.create_subscription(
@@ -617,6 +621,10 @@ class Controller(Node):
         self.thrust_offset = float(self.declare_parameter('thrust_offset', 0.0).value)
         self.thrust_offset_v_slope = float(self.declare_parameter('thrust_offset_v_slope', 0.0).value)
         self.thrust_v_ref = float(self.declare_parameter('thrust_v_ref', 23.5).value)
+        # no pack voltage yet (or a bad frame): the last good one, else a full pack, so a missing reading errs low
+        # (RIG-1014-t6h hopped on fresh packs with no telemetry, read as 23.5 V)
+        self.thrust_v_full = float(self.declare_parameter('thrust_v_full', 25.2).value)
+        self._last_good_v = None
         # the model's own ceiling leaves room for the offset under the real cap
         self._model_thr_max = max(0.1, self.throttle_max - self.thrust_offset)
         self._model_cap_t = None
@@ -1130,8 +1138,14 @@ class Controller(Node):
         if self.thrust_offset <= 0.0:
             return 0.0
         v = self.battery_voltage
-        dv = (self.thrust_v_ref - float(v)) if (v is not None and 18.0 < float(v) < 27.0) else 0.0
-        return max(0.0, self.thrust_offset + self.thrust_offset_v_slope * dv)
+        if v is not None and 18.0 < float(v) < 27.0:
+            self._last_good_v = float(v)
+        elif self._last_good_v is None and not getattr(self, '_no_v_said', False):
+            self._no_v_said = True
+            self.get_logger().warn(f"[Drone {self.drone_id + 1}] no pack voltage yet: thrust offset for a full pack "
+                                   f"({self.thrust_v_full:.1f} V) until one arrives")
+        used = self._last_good_v if self._last_good_v is not None else self.thrust_v_full
+        return max(0.0, self.thrust_offset + self.thrust_offset_v_slope * (self.thrust_v_ref - used))
 
     def _output_throttle(self, thr, spool_frac=1.0):
         """Model throttle (above the offset) -> the throttle the flight controller gets."""
@@ -1308,8 +1322,10 @@ class Controller(Node):
         # so a drone still tied to the ring cannot idle on a wrong report)
         # (no airborne latch needed: the planner's flag comes only after TAKEOFF, and a newcomer taken out
         # before it rose 4 cm must idle too)
-        alone = (getattr(self, '_departed', False) and at_rest_ref
-                 and abs(z - self._kt_spawn_z) <= GROUND_IDLE_MARGIN)
+        vz = float(self.current_pose[9]) if len(self.current_pose) > 9 else 0.0
+        alone = (getattr(self, '_departed', False) and ref is not None
+                 and float(ref[2]) <= self._kt_spawn_z + DEPARTED_IDLE_MARGIN
+                 and -GROUND_IDLE_MARGIN <= z - self._kt_spawn_z <= DEPARTED_IDLE_MARGIN and abs(vz) <= 0.05)
         down = down or alone
         self._gi_ticks = self._gi_ticks + 1 if down else 0
         if self._gi_ticks >= GROUND_IDLE_HOLD_S * FREQUENCY_HZ:

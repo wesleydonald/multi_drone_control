@@ -24,6 +24,7 @@ def _node(follow=True, yaw_deg=90.0):
     h = math.radians(yaw_deg) / 2.0
     c = types.SimpleNamespace(
         thrust_offset=OFF, thrust_offset_v_slope=0.022, thrust_v_ref=23.5, battery_voltage=23.5,
+        thrust_v_full=25.2, _last_good_v=None,
         throttle_max=0.8, _model_thr_max=0.8 - OFF, takeoff_requested=True, takeoff_spool_s=0.5,
         _takeoff_step=None, drone_id=3, last_cmd_throttle=None, _yaw_hold=False,
         warm_follow_applied=follow, _in_authority=not follow, _applied_cmd=None, _applied_u=np.zeros(4),

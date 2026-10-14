@@ -136,6 +136,9 @@ DESCEND_TO_PICKUP = MissionPhase.DESCEND_TO_PICKUP.value
 MAGNET_ATTACH_WAIT = MissionPhase.MAGNET_ATTACH_WAIT.value
 LIFT_OBJECT = MissionPhase.LIFT_OBJECT.value
 TRANSIT_TO_DROP_POINT = MissionPhase.TRANSIT_TO_DROP_POINT.value
+WAIT_HOLD_GROUND_M = 0.05   # m above the lowest pose seen in WAIT_FOR_TAKEOFF: still on the ground (multi_drone_control)
+TAKEOFF_AIRBORNE_M = 0.03   # m above the TAKEOFF start: off the mat, the timed climb starts (multi_drone_control)
+TAKEOFF_LIFT_BY_FLOOR_M = 0.10  # m: min_reference_z this far above the start lifts the vehicle before the climb
 SETTLE_ABOVE_DROP_POINT = MissionPhase.SETTLE_ABOVE_DROP_POINT.value
 DESCEND_TO_DROP_HEIGHT = MissionPhase.DESCEND_TO_DROP_HEIGHT.value
 DROP_OBJECT = MissionPhase.DROP_OBJECT.value
@@ -4208,10 +4211,12 @@ class OnlineJoinPlanner(Node):
                 if refusal is not None:
                     self.refuse_takeoff(refusal)
                     return
-                self.takeoff_start_position = self.drone_position.copy()
+                # the ground hold, not the live pose: his MPC may already be climbing (14 Oct t6/t6f)
+                self.takeoff_start_position = self.wait_takeoff_hold().copy()
                 # The first mocap pose may have arrived while the disarmed quad
                 # was being carried. Ground height belongs to accepted TAKEOFF.
                 self.initial_quad_z = float(self.takeoff_start_position[2])
+                self.takeoff_airborne = False
                 self.latch_takeoff_climb()
                 self.transition_to(
                     MissionPhase.TAKEOFF,
@@ -6726,6 +6731,36 @@ class OnlineJoinPlanner(Node):
     # ----------------------------------------------------------------------
     # floor_join / delivery_rejoin takeoff (Wesley 14 Oct 2026)
     # ----------------------------------------------------------------------
+    def wait_takeoff_hold(self) -> np.ndarray:
+        """WAIT_FOR_TAKEOFF's reference: the pose the vehicle had while it sat on the ground. His MPC can take off on an
+        earlier copy of TAKEOFF than this planner gets (14 Oct t6: 0.8 s, t6f: 1.8 s); a reference that followed the
+        measured pose let it drift 0.4-0.5 m while it climbed."""
+        p = self.drone_position
+        ground = getattr(self, 'wait_ground_z', None)
+        if ground is None or float(p[2]) < ground:
+            self.wait_ground_z = ground = float(p[2])
+        if getattr(self, 'wait_hold_position', None) is None or float(p[2]) <= ground + WAIT_HOLD_GROUND_M:
+            self.wait_hold_position = p.copy()
+        return self.wait_hold_position
+
+    def takeoff_climb_started(self) -> bool:
+        """The TAKEOFF climb runs on time only once the vehicle is off its mat: his MPC can get TAKEOFF long after this
+        planner (14 Oct t6h_4: 18 s), and a climb timed from the command was far above it by then. Until then the
+        profile stays at its start; its reference is still raised to min_reference_z, so his MPC lifts."""
+        if getattr(self, 'takeoff_airborne', True):
+            return True
+        start_z = None if self.takeoff_start_position is None else float(self.takeoff_start_position[2])
+        if start_z is None or self.min_reference_z < start_z + TAKEOFF_LIFT_BY_FLOOR_M:
+            self.takeoff_airborne = True       # no reference floor to lift it: the timed climb must do it
+            return True
+        if (self.drone_position is not None
+                and float(self.drone_position[2]) - start_z >= TAKEOFF_AIRBORNE_M):
+            self.takeoff_airborne = True
+            self.get_logger().info('TAKEOFF: off the mat, the climb starts')
+            return True
+        self.phase_entry_time = self._physical_now_s()
+        return False
+
     def floor_start_refusal(self) -> Optional[str]:
         """Why a TAKEOFF must not leave the mat, or None. delivery_rejoin: the object must read attached (fresh) with a
         fresh pose, or it would fly without it; floor_join: the climb height needs a fresh attachment pose."""
@@ -6946,6 +6981,8 @@ class OnlineJoinPlanner(Node):
             return
 
         if self.phase == MissionPhase.TAKEOFF:
+            if not self.takeoff_climb_started():
+                elapsed = 0.0
             if getattr(self, 'is_delivery_rejoin', False):
                 self.update_delivery_takeoff(elapsed)
                 return
@@ -7798,8 +7835,10 @@ class OnlineJoinPlanner(Node):
             )
 
         if spec.target_source == TargetSource.CURRENT_POSE:
+            hold = (self.wait_takeoff_hold() if self.phase == MissionPhase.WAIT_FOR_TAKEOFF
+                    else self.drone_position)
             return stationary_regulation(
-                self.drone_position,
+                hold,
                 horizon_samples=self.horizon_samples,
                 min_reference_z=self.min_reference_z,
             )

@@ -264,3 +264,11 @@ Not taken:
 |---|---|
 | e1e094ad: `external_reference_validate_timing` (node default false; his M1 and M2 IRL launches turn it on): a reference whose source stamp is old, more than 0.1 s ahead, duplicated, or off the 30 Hz grid is rejected, and a missing or stale source stamp sends the controller to its C.1d latched hold; with it, two CSV columns and the reject reason | a new hold that could stop QUAD4 in flight; the logging comes only with it |
 | his test edits in `test_c1d_reference_fault_contract.py`, `test_c1e_logging_contract.py`, `test_p25_disarmed_reference_fast_path.py` | e1e094ad's |
+
+## 15 Oct 2026: takeoff from the mat on the rig (plan docs/plan_after_rig_2026-10-14.md, WP8)
+
+| file | change | why |
+|---|---|---|
+| `tejen_mission/online_join_planner.py` | `wait_takeoff_hold()`: WAIT_FOR_TAKEOFF's CURRENT_POSE reference holds the pose the vehicle had on the ground (updated while it is within 5 cm of the lowest pose seen), not the live pose; the accepted TAKEOFF starts from that hold | 14 Oct t6 / t6f: his MPC lifted 0.8 / 1.8 s before this planner heard TAKEOFF (another copy of a `ros2 topic pub -t 3`), and a reference that followed the measured pose let QUAD4 drift 0.4-0.5 m sideways while it climbed |
+| `tejen_mission/online_join_planner.py` | `takeoff_climb_started()`: the timed TAKEOFF climb starts once the vehicle is 3 cm above the TAKEOFF start; until then the profile stays at its start (its reference is still raised to min_reference_z, so the MPC lifts). Only where min_reference_z is at least 10 cm above the start (the rig and the twin); otherwise as before | 14 Oct t6h_4: this planner took TAKEOFF 18 s before his MPC flew, so the climb ran on time from the command |
+| tests | `test/test_takeoff_hold.py` (ours); `test_partner_mission_geometry.py` expects `approach_offset_y` (14 Oct `contact_dy`) | |

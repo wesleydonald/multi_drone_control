@@ -126,8 +126,8 @@ def test_contact_attach_on_the_rig_twin():
     base = _params('rig_twin')['online_join_planner']
     changed = {k for k in set(planner) | set(base) if planner.get(k) != base.get(k)}
     assert changed == {'contact_attach', 'final_attach_offset_z', 'attach_ready_target_lead_time', 'approach_offset_x',
-                       'pickup_retry_enabled', 'pickup_retry_clearance_m', 'pickup_hold_on_attach'}
-    assert planner['approach_offset_x'] == 0.0
+                       'approach_offset_y', 'pickup_retry_enabled', 'pickup_retry_clearance_m', 'pickup_hold_on_attach'}
+    assert planner['approach_offset_x'] == planner['approach_offset_y'] == 0.0
     # his bounded pickup retry (R1493, R1497): his wait and attempt budget, a ~0.10 m rise
     assert (planner['pickup_retry_enabled'], planner['pickup_retry_clearance_m']) == (True, 0.10)
     # his pickup descent ends on the ball weld (R1507), here where his object flag is the weld itself
