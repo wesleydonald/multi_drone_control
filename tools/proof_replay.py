@@ -102,7 +102,8 @@ def replay_full(bag, weld, lift_s, t_from=None, t_to=None, **cfg_kw):
     tip, ring, body = data['tip'], data['ring'], data['body']
     if not len(tip) or not len(ring):
         return [], data
-    proof = ComotionProof(ComotionConfig(**({} if data['lift'] else {'lift_fallback_s': lift_s}), **cfg_kw))
+    # with his signal in the bag, the manager's 6 s safety net (graph_attach); older bags time the lift from contact
+    proof = ComotionProof(ComotionConfig(lift_fallback_s=6.0 if data['lift'] else lift_s, **cfg_kw))
     events, phase_was, mag_was = [], None, None
     for t, x, y, z in tip:
         word = str(_latest(data['magnet'], t, 'ON' if not data['magnet'] else 'OFF')).strip().upper()

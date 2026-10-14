@@ -1831,6 +1831,14 @@ class OnlineJoinPlanner(Node):
             self.contact_quiet = QuietMissTracker(
                 wait_s=float(self.declare_parameter('contact_quiet_wait_s', 4.0).value),
                 improvement_m=float(self.declare_parameter('contact_quiet_improvement_m', 0.005).value))
+            # Tejen 15 Oct: a quiet miss only while the tip is slow on fresh data (his M2 rule: 0.03 m/s); and the hold
+            # judges the tip in the plate frame, from the ring's own pose ('' = the world frame, as before)
+            self.contact_quiet_speed = float(self.declare_parameter('contact_quiet_speed', 0.03).value)
+            self.ring_pose_topic = str(self.declare_parameter('ring_pose_topic', '').value)
+            self.ring_quaternion = None           # (w, x, y, z)
+            self.last_ring_pose_time = None
+            self.contact_tip_last = None          # (tip sample time, plate-frame offset)
+            self.contact_tip_vel = np.zeros(3)
             # the rejoin's own gates: match_xy_* also gate the drop settle, which stays as it was
             self.contact_match_xy_threshold = max(0., float(self.declare_parameter(
                 'contact_match_xy_threshold', 0.025).value))
@@ -2482,6 +2490,8 @@ class OnlineJoinPlanner(Node):
             self.create_subscription(String, self.mux_state_topic, self.mux_state_callback, latched)
             self.give_up_publisher = self.create_publisher(Bool, self.give_up_topic, latched)
             self.proof_lift_publisher = self.create_publisher(Bool, self.proof_lift_complete_topic, 10)
+            if self.ring_pose_topic:
+                self.create_subscription(MotionCaptureState, self.ring_pose_topic, self.ring_pose_callback, 10)
         self.create_subscription(
             Bool,
             self.operator_advance_override_topic,
@@ -2764,6 +2774,44 @@ class OnlineJoinPlanner(Node):
     def attachment_pose_callback(self, msg: PoseStamped) -> None:
         self.attachment_position = _vec3_from_position(msg.pose.position)
         self.last_attachment_pose_time = self._physical_now_s()
+
+    def ring_pose_callback(self, msg: MotionCaptureState) -> None:
+        q = msg.pose.orientation
+        self.ring_quaternion = (float(q.w), float(q.x), float(q.y), float(q.z))
+        self.last_ring_pose_time = self._physical_now_s()
+
+    def plate_frame_tip_offset(self) -> Optional[np.ndarray]:
+        """The measured tip relative to the plate point in the ring's frame (z = the clearance along the plate normal),
+        or the world-frame offset when no fresh ring pose is configured; None when the tip or the plate is stale."""
+        offset = self.measured_contact_tip_offset()
+        if offset is None:
+            return None
+        q, t = getattr(self, 'ring_quaternion', None), getattr(self, 'last_ring_pose_time', None)
+        if q is None or t is None or not 0. <= self._physical_now_s() - t <= self.input_timeout_s:
+            return offset
+        w, x, y, z = q
+        rot = np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+        return rot.T @ offset
+
+    def contact_tip_speed(self, rel: Optional[np.ndarray]) -> float:
+        """The tip's speed over the plate (plate-frame xy), smoothed as his tip alignment does; nan on stale data."""
+        stamp = getattr(self, 'last_magnet_tip_pose_time', None)
+        if rel is None or stamp is None:
+            self.contact_tip_last, self.contact_tip_vel = None, np.zeros(3)
+            return float('nan')
+        last = self.contact_tip_last
+        if last is not None and stamp > last[0] + 1e-6:
+            dt = stamp - last[0]
+            if dt > self.input_timeout_s:
+                self.contact_tip_last, self.contact_tip_vel = (stamp, rel.copy()), np.zeros(3)
+                return float('nan')
+            self.contact_tip_vel = .35 * (rel - last[1]) / dt + .65 * self.contact_tip_vel
+        elif last is not None:
+            return float(np.linalg.norm(self.contact_tip_vel[:2]))
+        self.contact_tip_last = (stamp, rel.copy())
+        return float(np.linalg.norm(self.contact_tip_vel[:2])) if last is not None else float('nan')
 
     def attachment_twist_callback(self, msg: TwistStamped) -> None:
         self.attachment_velocity = _vec3_from_linear(msg.twist.linear)
@@ -6551,7 +6599,8 @@ class OnlineJoinPlanner(Node):
             self.contact_lift_published, self.contact_lift_published_t = done, now
             pub.publish(Bool(data=done))
 
-    def update_bottom_hold(self, xy_error: float, xy_relative_velocity: float, z_error: float) -> None:
+    def update_bottom_hold(self, xy_error: float, xy_relative_velocity: float, z_error: float,
+                           plate_rel: Optional[np.ndarray] = None) -> None:
         """ATTACH_READY with contact_bottom_hold: stay at the bottom with the magnet ON until the contact. Leave only on
         a gross error (moving fast, far off, or the face sunk below the plate: off its edge) or on his quiet-miss rule
         (no 5 mm progress for contact_quiet_wait_s while off the plate), lifting clear to retry; contact_max_misses
@@ -6559,13 +6608,20 @@ class OnlineJoinPlanner(Node):
         now = self._physical_now_s()
         gross = xy_relative_velocity > self.contact_gross_speed or xy_error > self.contact_gross_xy
         self.contact_gross_t0 = (now if self.contact_gross_t0 is None else self.contact_gross_t0) if gross else None
-        below = z_error + self.final_attach_offset_z < -self.contact_face_below_m
+        # the face's clearance along the plate normal when the plate frame is known (Tejen 15 Oct), else world z
+        clearance = float(plate_rel[2]) if plate_rel is not None else z_error + self.final_attach_offset_z
+        below = clearance < -self.contact_face_below_m
         self.contact_below_t0 = (now if self.contact_below_t0 is None else self.contact_below_t0) if below else None
         why = ('moving or far off the plate' if gross and now - self.contact_gross_t0 >= 0.3 else
                'the tip sunk below the plate (off its edge)' if below and now - self.contact_below_t0 >= 0.12 else None)
-        if why is None and self.contact_quiet.step(
-                now=now, xy_error_m=xy_error, eligible=not self.contact_reported and xy_error > self.contact_quiet_min_xy,
-                key=self.contact_bottom_entries):
+        # a quiet miss only while the tip is slow on fresh data; stale data starts the quiet timer again (Tejen 15 Oct)
+        speed = self.contact_tip_speed(plate_rel)
+        if plate_rel is None:
+            self.contact_quiet.reset()
+        quiet = (plate_rel is not None and math.isfinite(speed) and speed <= self.contact_quiet_speed
+                 and not self.contact_reported and xy_error > self.contact_quiet_min_xy)
+        if why is None and self.contact_quiet.step(now=now, xy_error_m=xy_error, eligible=quiet,
+                                                   key=self.contact_bottom_entries):
             self.contact_misses += 1
             if self.contact_misses >= self.contact_max_misses:
                 self.contact_give_up(f'{self.contact_misses} quiet misses at the bottom')
@@ -7608,9 +7664,9 @@ class OnlineJoinPlanner(Node):
             elif getattr(self, 'contact_attach', False) and getattr(self, 'contact_bottom_hold', False):
                 # the hold judges the tip against the plate point: the approach offset aims the body, so his tip target
                 # sits that far off the plate (contact_dx/dy 3.3 cm: a tip parked off the plate read 0; critic F3)
-                plate_rel = self.measured_contact_tip_offset()
+                plate_rel = self.plate_frame_tip_offset()
                 self.update_bottom_hold(xy_error if plate_rel is None else float(np.linalg.norm(plate_rel[:2])),
-                                        xy_relative_velocity, z_error)
+                                        xy_relative_velocity, z_error, plate_rel)
             elif xy_error > abort_xy or xy_relative_velocity > abort_velocity:
                 self.transition_to(
                     MissionPhase.APPROACH_ABOVE_TARGET,

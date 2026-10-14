@@ -40,7 +40,8 @@ class ComotionConfig:
     hang_window_s: float = 2.0       # s: the last free-hang samples, however long ago (kept through retries)
     taut_margin: float = 0.003       # m below the free-hang length that still reads taut
     taut_fallback: float = 0.0       # m, the typed taut length if no free hang was seen (minus 5 mm); 0 = no check
-    lift_fallback_s: float = 2.5     # s after contact when no lift-done signal comes (0 = wait for the signal)
+    lift_fallback_s: float = 2.5     # s after contact when no lift-done signal comes (0 = wait for the signal); with
+                                     # his planner publishing it, a 6 s safety net only (graph_attach; Tejen 15 Oct)
     d_ok: float = 0.006              # m, drift from the contact seed
     normal_ok: float = 0.010
     speed_ok: float = 0.03           # m/s
@@ -51,8 +52,8 @@ class ComotionConfig:
                                      # while the plate moves under it does not follow it (critic 15 Oct, F7)
     require_motion: float = 1.0      # 0: no plate motion needed (the twin: its stiff ring hardly moves, and its catch
                                      # is the joint made at contact)
-    gap_s: float = 0.3               # s between tip samples: a longer gap (a mocap dropout) restarts the contact dwell
-                                     # and the windows; shorter executor stalls (0.16-0.25 s on 14 Oct) do not
+    gap_s: float = 0.1               # s between tip samples: a longer gap restarts the contact and proof dwells, so
+                                     # neither spans missing data (Tejen 15 Oct); a 0.25 s stall costs that + the dwell
     sep_normal: float = 0.010        # m: after the lift, a tip this far above the plate rose with QUAD4
     sep_xy: float = 0.045
     sep_dwell_s: float = 0.2
@@ -165,9 +166,7 @@ class ComotionProof:
             return None
         now = float(now)
         if not fresh or tip is None or plate is None:
-            self._win.clear()
-            self._spd.clear()
-            self._near.clear()
+            self._forget_samples()           # an invalid sample restarts the dwells too (Tejen 15 Oct)
             return self.tick(now)
         if self._last_t is not None and now <= self._last_t:
             return None

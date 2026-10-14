@@ -22,7 +22,12 @@ def _hold(**kw):
     p.contact_first_descend_s = p.clock.t
     p.contact_give_up_s = 45.0
     p.transfer_generator.reset = lambda: None
-    p.measured_contact_tip_offset = lambda: None         # p.errors drive the hold (the plate-relative test sets it)
+    # the measured tip, still, where p.errors puts it (a quiet miss needs a fresh, slow tip: Tejen 15 Oct)
+    p.measured_contact_tip_offset = lambda: (np.array([p.errors[0], 0.0, p.errors[2] + p.final_attach_offset_z])
+                                             if getattr(p, 'errors', None) else None)
+    p.last_magnet_tip_pose_time = p.clock.t
+    p.contact_quiet_speed, p.ring_quaternion, p.last_ring_pose_time = 0.03, None, None
+    p.contact_tip_last, p.contact_tip_vel = None, np.zeros(3)
     for k, v in kw.items():
         setattr(p, k, v)
     return p
@@ -137,3 +142,49 @@ def test_the_hold_judges_the_tip_against_the_plate_not_the_offset_target():
     for _ in range(60):
         tick(q, 0.1)
     assert q.phase == P.ATTACH_READY and q.contact_misses == 0
+
+
+def test_a_swinging_tip_is_not_a_quiet_miss_and_stale_data_restarts_the_timer():
+    """Tejen 15 Oct: a quiet miss needs the tip slow (0.03 m/s, his M2 value) on fresh data."""
+    p = _hold()
+    p.errors = (0.05, 0.05, 0.0)
+    off = {'x': 0.05}
+    p.measured_contact_tip_offset = lambda: np.array([off['x'], 0.0, 0.01])
+    for k in range(80):                                    # 8 s swinging 2 cm at 0.65 Hz around 5 cm off
+        off['x'] = 0.05 + 0.02 * np.sin(2 * np.pi * 0.65 * k * 0.1)
+        p.last_magnet_tip_pose_time = p.clock.t
+        tick(p, 0.1)
+    assert p.phase == P.ATTACH_READY and p.contact_misses == 0
+    q = _hold()
+    q.errors = (0.05, 0.05, 0.0)
+    for _ in range(30):                                    # 3 s still: quiet time earned
+        tick(q, 0.1)
+    q.measured_contact_tip_offset = lambda: None           # stale: the timer starts again
+    tick(q, 0.1)
+    q.measured_contact_tip_offset = lambda: np.array([0.05, 0.0, 0.01])
+    for _ in range(30):                                    # 3 s more: not 4 s since the stale sample
+        tick(q, 0.1)
+    assert q.phase == P.ATTACH_READY and q.contact_misses == 0
+
+
+def test_the_face_below_the_plate_is_measured_along_the_plate_normal():
+    """Tejen 15 Oct: on a ring tilted 10 deg about x, a tip 6 cm off the plate point along the ring's +y reads 1 cm
+    below it in world z but sits on the plate's own plane: no exit; 25 mm below the plane is one."""
+    p = _hold()
+    a = np.radians(10.0)
+    p.ring_quaternion = (np.cos(a / 2), np.sin(a / 2), 0.0, 0.0)
+    p.last_ring_pose_time = p.clock.t
+    p.errors = (0.06, 0.05, 0.0)
+    rot = np.array([[1, 0, 0], [0, np.cos(a), -np.sin(a)], [0, np.sin(a), np.cos(a)]])
+    on_plane = rot @ np.array([0.0, 0.06, 0.0])
+    p.measured_contact_tip_offset = lambda: on_plane
+    for _ in range(5):
+        p.last_ring_pose_time = p.clock.t
+        tick(p, 0.1)
+    assert p.phase == P.ATTACH_READY
+    below = rot @ np.array([0.0, 0.03, -0.025])
+    p.measured_contact_tip_offset = lambda: below
+    for _ in range(5):
+        p.last_ring_pose_time = p.clock.t
+        tick(p, 0.1)
+    assert p.phase == P.APPROACH_ABOVE_TARGET and any('below the plate' in m for m in p.infos)

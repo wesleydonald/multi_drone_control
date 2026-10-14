@@ -189,3 +189,9 @@ def test_typed_plate_and_carrier_angles_are_ours_clockwise_and_arrive_as_his():
     b = g['fake_cooperative_transport_world']['params']
     assert b['bridge_carrier_azimuths_deg'] == pytest.approx([270.0, 30.0, 150.0])
     assert b['ring_attachment_plate_index'] == 3
+
+
+def test_his_planner_gets_the_ring_pose_for_the_hold_plate_frame():
+    """Tejen 15 Oct: the bottom hold's below-the-plate exit and its distances are measured in the plate frame."""
+    g, _ = _nodes()
+    assert g['online_join_planner']['params']['ring_pose_topic'] == '/payload/motion_capture_state'

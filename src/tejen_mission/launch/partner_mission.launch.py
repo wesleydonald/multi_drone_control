@@ -318,6 +318,8 @@ def _nodes(context):
                 # after his contact wait -> magnet OFF, rise, re-approach the ball where it now is; his third
                 # failure gives up and we take QUAD4 back
                 **({'contact_attach': True,
+                    # the ring's own pose: the bottom hold judges the tip in the plate frame (Tejen 15 Oct)
+                    'ring_pose_topic': '/payload/motion_capture_state',
                     # card 2026-10-11_quad4_tilt_cut (rig-port critic F6): land here if the fleet cannot take it back
                     **({'taken_back_self_land': True} if _flag(context, 'taken_back_self_land') else {}),
                     'final_attach_offset_z': ParameterValue(L('contact_dz'), value_type=float),
@@ -577,6 +579,7 @@ def _rig_nodes(context):
                 # no auto-land from ATTACH_READY (its magnet OFF would drop QUAD4 off the ring)
                 'attach_ready_land_after_s': 0.0,
                 'contact_attach': True,
+                'ring_pose_topic': '/payload/motion_capture_state',     # the hold's plate frame (Tejen 15 Oct)
                 'final_attach_offset_z': f('contact_dz', RIG['contact_dz']),
                 'approach_offset_x': f('contact_dx', 0.0),
                 'approach_offset_y': f('contact_dy', 0.0),

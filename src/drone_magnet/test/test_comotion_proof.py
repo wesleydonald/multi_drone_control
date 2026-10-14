@@ -283,13 +283,29 @@ def test_a_gap_in_the_tip_stream_restarts_the_contact_dwell():
     assert rig.run(0.3, CAUGHT, L_HANG - 0.002) == 'contact'
 
 
-def test_a_short_executor_stall_keeps_the_dwell():
-    """Laptop stalls of 0.16-0.25 s (14 Oct) must not restart the proof's windows (critic round 2, finding 8)."""
+def test_no_dwell_spans_missing_data():
+    """Tejen 15 Oct: the contact hold and the 1.0 s proof hold never span a gap (here a 0.2 s laptop stall) or an
+    invalid sample; each restarts its hold, counted."""
     rig = Rig(_proof(), bob=0.0)
     _hang(rig)
     assert rig.run(0.20, CAUGHT, L_HANG - 0.002) is None
     rig.t += 0.2
-    assert rig.run(0.02, CAUGHT, L_HANG - 0.002) == 'contact' and rig.p.gap_restarts == 0
+    assert rig.run(0.05, CAUGHT, L_HANG - 0.002) is None and rig.p.gap_restarts == 1
+    assert rig.run(0.3, CAUGHT, L_HANG - 0.002) == 'contact'
+    rig = Rig(_proof(require_motion=0.0), bob=0.0)
+    _hang(rig)
+    assert rig.run(0.5, CAUGHT, L_HANG - 0.002) == 'contact'
+    assert rig.run(0.6, CAUGHT, L_HANG - 0.002, lift=True) is None   # 0.6 s of the 1.0 s proof hold
+    rig.t += 0.2
+    assert rig.run(0.5, CAUGHT, L_HANG - 0.002, lift=True) is None   # restarted: not proven 0.5 s after the gap
+    assert rig.run(0.6, CAUGHT, L_HANG - 0.002, lift=True) == 'proven'
+    rig = Rig(_proof(require_motion=0.0), bob=0.0)
+    _hang(rig)
+    assert rig.run(0.5, CAUGHT, L_HANG - 0.002) == 'contact'
+    assert rig.run(0.6, CAUGHT, L_HANG - 0.002, lift=True) is None
+    rig.run(0.02, CAUGHT, L_HANG - 0.002, lift=True, fresh=False)    # the plate stale for one sample
+    assert rig.run(0.6, CAUGHT, L_HANG - 0.002, lift=True) is None
+    assert rig.run(0.5, CAUGHT, L_HANG - 0.002, lift=True) == 'proven'
 
 
 def test_the_free_hang_is_measured_with_the_coil_off_too():

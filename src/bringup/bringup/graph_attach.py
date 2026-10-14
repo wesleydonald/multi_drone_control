@@ -201,6 +201,9 @@ def _contact_manager_params(context, real):
         # the contact radius is weld_radius in the plate plane; the measured free hang is the taut length, the typed
         # one only its fallback
         out['comotion_contact_xy'] = float(LaunchConfiguration('weld_radius').perform(context))
+        # his planner publishes when his proof lift is done: the proof waits for it (Tejen 15 Oct: 2.5 s could start
+        # it before his lift finished); 6 s only if the signal never comes
+        out['comotion_lift_fallback_s'] = 6.0
         if real:
             out['comotion_taut_fallback'] = out['proof_taut_len'] + PROOF_TAUT_MARGIN_M
         else:
