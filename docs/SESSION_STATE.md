@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Wed 14 Oct 2026, 23:29 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Wed 14 Oct 2026, 23:54 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -20,19 +20,18 @@ Updated: Wed 14 Oct 2026, 23:29 AEDT (from `date`). Only what a new session need
   are local only.
 - **Archive tags:** archive/m1-tiltcut, archive/m1-e0, archive/m1-full, archive/combined-m1, archive/m1-video.
 
-## Now (Wed 14 Oct, 23:29): ready for Thursday
+## Now (Wed 14 Oct, 23:54): ready for Thursday
 - **Plan:** `docs/plan_after_rig_2026-10-14.md` (status table current). Thursday 15 Oct 15:00-18:00: the sheet
-  `docs/rig/thu_2026-10-15.md`, the card `docs/experiments/2026-10-15_attach_comotion_rig.md` (rev 4), the morning
+  `docs/rig/thu_2026-10-15.md`, the card `docs/experiments/2026-10-15_attach_comotion_rig.md` (rev 5), the morning
   report `docs/reports/morning_report_2026-10-15.md`.
-- **Committed tonight (latest):** bfbd7a9 (plates clockwise), f035625 (critic fixes), 305e50c (typed/shown angles
-  clockwise), 33ceec4 (console), a5bf17d (records), 0e47f9b (Tejen's five review points), 496c11f (card rev 4, R1721,
-  morning report). Tree clean. Twin R1720, R1721 PASS (post-landing tip-over = the known artefact).
-- **Tejen:** package `~/tejen_review_package_2026-10-15.zip` rebuilt with his five points fixed, the graph wiring and
-  the replay checks (Wesley sends it). He OK'd the trim at 0.20 m/s above contact (aim B).
-- **Open for Wesley (morning report):** QUAD4's aim A or B; send docs/rig/fc_request.md and the package; next week's
-  hardware (90 mm discs first: 35 % vs 16 % inside the catch on the 14 Oct tracks).
-- **Not exercised in the twin:** the bottom hold (rig-only), so its quiet-miss and plate-frame changes are covered by unit
-  tests only; the RViz panel is compile-checked only (test 1 on Thursday).
+- **Latest commits:** 0e47f9b (Tejen's first review), 76180f8 (his second review: quiet-miss reset on his input-loss
+  return, the proof starts only on his lift signal, a stale ring pose pauses the plate-frame checks). Twin R1722 PASS
+  on 76180f8, clean landing too.
+- **Tejen:** `~/tejen_review_package_2026-10-15.zip` (19.5 MB) rebuilt at 76180f8 with the t6h_4 bag so he can rerun the
+  replay; ready for Wesley to send.
+- **Open for Wesley (morning report):** QUAD4's aim A or B (Tejen OK'd B, his trim at 0.20 m/s above contact); send
+  docs/rig/fc_request.md; next week's hardware (90 mm discs first).
+- **Not exercised in the twin:** the bottom hold (rig-only: unit tests only); the RViz panel (compile-checked; test 1).
 
 ## 14 Oct rig day in short (detail: registry RIG-1014-*, `git log -p` of this file)
 - 46 launches: 8 passed, 11 failed in flight, 11 arm refusals (QUAD1/QUAD2 FC attitude drift), the rest void.
