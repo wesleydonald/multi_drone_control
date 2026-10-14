@@ -248,6 +248,17 @@ class ELRSInterface(Node):
 
         # packet[4] (the arm switch) is set every tick in publish_message by the arm switch
 
+    def _tprint(self, ptype, text, force=False):
+        """Telemetry to the console at most once a second per frame type (every frame was 94 lines/s over four
+        radios on the loaded rig laptop, 14 Oct); force prints a change at once (the flight mode)."""
+        last = getattr(self, '_tprint_t', None)
+        if last is None:
+            last = self._tprint_t = {}
+        now = time.time()
+        if force or now - last.get(ptype, 0.0) >= 1.0:
+            last[ptype] = now
+            print(text)
+
     def handleCrsfPacket(self, ptype, data):
         if ptype == PacketsTypes.RADIO_ID and data[5] == 0x10:
             #print(f"OTX sync")
@@ -264,17 +275,17 @@ class ELRSInterface(Node):
             downlink_rssi = signed_byte(data[10])
             downlink_lq = data[11]
             downlink_snr = signed_byte(data[12])
-            print(f"RSSI={rssi1}/{rssi2}dBm LQ={lq:03} mode={mode} ant={antenna} snr={snr} power={power} drssi={downlink_rssi} dlq={downlink_lq} dsnr={downlink_snr}")
+            self._tprint(ptype, f"RSSI={rssi1}/{rssi2}dBm LQ={lq:03} mode={mode} ant={antenna} snr={snr} power={power} drssi={downlink_rssi} dlq={downlink_lq} dsnr={downlink_snr}")
             self.rssi = signed_byte(data[3])  # Update RSSI
         elif ptype == PacketsTypes.ATTITUDE:
             pitch = int.from_bytes(data[3:5], byteorder='big', signed=True) / 10000.0
             roll = int.from_bytes(data[5:7], byteorder='big', signed=True) / 10000.0
             yaw = int.from_bytes(data[7:9], byteorder='big', signed=True) / 10000.0
-            print(f"Attitude: Pitch={pitch:0.2f} Roll={roll:0.2f} Yaw={yaw:0.2f} (rad)")
+            self._tprint(ptype, f"Attitude: Pitch={pitch:0.2f} Roll={roll:0.2f} Yaw={yaw:0.2f} (rad)")
             self.fc_attitude_pub.publish(Float32MultiArray(data=[float(roll), float(pitch), float(yaw)]))
         elif ptype == PacketsTypes.FLIGHT_MODE:
             packet = ''.join(map(chr, data[3:-2]))
-            print(f"Flight Mode: {packet}")
+            self._tprint(ptype, f"Flight Mode: {packet}", force=(packet != self.mode))
             self.mode = ''.join(map(chr, data[3:-2]))  # Update mode
             self.mode_t = time.time()
         elif ptype == PacketsTypes.BATTERY_SENSOR:
@@ -282,7 +293,7 @@ class ELRSInterface(Node):
             curr = int.from_bytes(data[5:7], byteorder='big', signed=True) / 10.0
             mah = data[7] << 16 | data[8] << 7 | data[9]
             pct = data[10]
-            print(f"Battery: {vbat:0.2f}V {curr:0.1f}A {mah}mAh {pct}%")
+            self._tprint(ptype, f"Battery: {vbat:0.2f}V {curr:0.1f}A {mah}mAh {pct}%")
             self.battery_voltage = vbat  # Update battery voltage
             self.battery_mah_used = mah  # Update battery mAh used
         elif ptype == PacketsTypes.BARO_ALT:
@@ -312,8 +323,12 @@ class ELRSInterface(Node):
         self.packet[4] = self.idle + self.range if high else self.idle - self.range
         if state != self.fc_arm_state:
             self.fc_arm_state = state
-            log = self.get_logger().error if state.startswith('failed') else self.get_logger().info
-            log(f'arm ({self.serial_port or "radio"}): {state}')
+            # one call site per severity: rclpy raises if a call site changes severity (it killed the radio on a refused arm)
+            msg = f'arm ({self.serial_port or "radio"}): {state}'
+            if state.startswith('failed'):
+                self.get_logger().error(msg)
+            else:
+                self.get_logger().info(msg)
             self.fc_state_pub.publish(String(data=f'{state} [{self.serial_port}]'))
             self.fc_armed_pub.publish(Bool(data=state == 'armed'))
 

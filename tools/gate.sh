@@ -59,6 +59,12 @@ if python3 -m pytest src/utility_objects/test/test_safety.py \
                     src/drone_magnet/test/test_handover_policy.py \
                     src/drone_magnet/test/test_elrs_mux_magnet.py \
                     src/drone_communication/test/test_magnet_channel.py \
+                    src/drone_communication/test/test_velocity_filter.py \
+                    src/tracker/test/test_next_tick_command.py \
+                    src/tejen_mpc/test/test_mpc_profile.py \
+                    src/tejen_mpc/test/test_command_execution.py \
+                    src/tejen_mission/test/test_partner_mission_mpc_profile.py \
+                    src/bringup/test/test_real_mode_launches.py \
                     src/tracker/test/test_thrust_model.py \
                     tools/test -q 2>&1 | tail -3; then
   :

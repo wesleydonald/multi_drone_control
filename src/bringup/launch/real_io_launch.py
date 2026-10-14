@@ -150,6 +150,7 @@ def launch_setup(context, *args, **kwargs):
     extra = LaunchConfiguration('mocap_extra_bodies').perform(context).strip()
     if extra:
         mocap_params['extra_bodies'] = extra
+    mocap_params['publish_drone_tf'] = False     # RViz follows fleet_viz's drone_<i>_mocap frames (14 Oct load cut)
     nodes.append(Node(
         package='drone_communication',
         executable='motion_capture_publisher_node',
@@ -163,7 +164,10 @@ def launch_setup(context, *args, **kwargs):
     #    drone_i_mocap frames it broadcasts.
     nodes.append(Node(
         package='simulation_communication', executable='fleet_viz',
-        name='fleet_viz', parameters=[{'num_drones': n}], output='screen'))
+        name='fleet_viz', parameters=[{'num_drones': n,
+                                       # 14 Oct load cut: it drew on every mocap message (~450/s) and
+                                       # republished the whole ring track every 0.1 s (76 % CPU)
+                                       'viz_hz': 10.0, 'path_dt': 0.5}], output='screen'))
 
     # Per-drone ELRS TX serial args (default QUAD<i+1>, as real_mode.py) + a robot_state_publisher
     # serving that drone's coloured mesh, its root link renamed to the fleet_viz

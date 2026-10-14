@@ -86,6 +86,17 @@ USE_MOTION_CAPTURE = True
 FREQUENCY_HZ = 50.0
 DT = 1.0 / FREQUENCY_HZ
 
+
+def next_tick_command(u0, u_rate, dt):
+    """The command state one control tick after node 0: the first stage holds u_rate (piecewise-constant input
+    on the u_state integrator), so u(dt) = u0 + u_rate * dt."""
+    return np.asarray(u0, dtype=float) + np.asarray(u_rate, dtype=float) * float(dt)
+
+
+# RViz plan and path every VIZ_EVERY-th tick (10 Hz): drawn inside the control loop, they lengthened
+# every tick on the loaded rig laptop (14 Oct). Nothing but RViz reads them.
+VIZ_EVERY = 5
+
 # limits for the measured-f_ext path (cable_source=measured). feeding the raw
 # imu cable force straight in makes an imu->model->command->imu loop that blows
 # up at takeoff, so filter/clamp/ramp it.
@@ -479,6 +490,15 @@ class Controller(Node):
         # already sent (the rig's command and mocap delay; 7 Oct, card delay_comp). 0 = off
         self.delay_comp_s = float(self.declare_parameter(
             'delay_comp_s', float(os.environ.get('TRACKER_DELAY_COMP_S', '0.0'))).value)
+        # True: once airborne, send the THROTTLE for the next tick (node 0's u_state + the first-stage rate x DT)
+        # instead of node 1's (0.1 s ahead), which let it move 5x its modelled 0.5/s per tick; roll, pitch, yaw and
+        # the takeoff spool unchanged (card 2026-10-14_tracker_timing, critic must-fixes)
+        env = os.environ.get('TRACKER_CMD_NEXT_TICK', '0').strip()
+        if env not in ('0', '1', ''):
+            self.get_logger().warn(f"TRACKER_CMD_NEXT_TICK={env!r} is not 0 or 1: next-tick throttle OFF")
+        self.cmd_next_tick = bool(self.declare_parameter('cmd_next_tick', env == '1').value)
+        if self.cmd_next_tick:
+            self.get_logger().warn(f"[Drone {self.drone_id + 1}] next-tick throttle ON (card 2026-10-14_tracker_timing)")
         self._delay_pred = None
         if self.delay_comp_s > 0.0:
             from .dynamics import QuadLoadDynamics
@@ -1411,6 +1431,10 @@ class Controller(Node):
                 else self.takeoff_thrust_ratio)
         return base * self._battery_derate()
 
+    def _next_tick_live(self):
+        """cmd_next_tick in force: on, after TAKEOFF and off the stand (the spool keeps the node-1 throttle)."""
+        return self.cmd_next_tick and self.takeoff_requested and self._kt_airborne()
+
     def _kt_airborne(self):
         """True once the drone is clearly off its stand -- the switch from
         takeoff_thrust_ratio to thrust_ratio. On a taut air-start the stands carry
@@ -1849,6 +1873,8 @@ class Controller(Node):
             if self.first_solve:
                 set_initial_guess(self.ocp, self.N)
                 self.first_solve = False
+            elif self._next_tick_live():
+                pass      # 20 ms passed, not a 0.1 s stage: the previous solution is the closer guess unshifted
             else:
                 warm_start_from_previous_solution(self.ocp, self.N)
 
@@ -1883,6 +1909,9 @@ class Controller(Node):
             x = self.ocp.get(1, "x")
             u = x[-4:]
             u_rate = self.ocp.get(0, "u")
+            if self._next_tick_live():
+                u = np.array(u, dtype=float)
+                u[2] = next_tick_command(self.ocp.get(0, "x")[-4:], u_rate, DT)[2]
 
             # ~2 Hz planner diagnostic. ez = z error, thr = throttle (0.6=sat),
             # |aT| = thrust-ff accel (>9.81), |aC| = cable accel (0 = gate shut)
@@ -1957,13 +1986,15 @@ class Controller(Node):
             # "what if the throttle stayed at zero", but it never happens (the
             # drones rest on platforms and the throttle ramps at TAKEOFF), so
             # drawing it in RViz is just misleading.
-            if self.takeoff_requested:
-                self.trajectory_visualizer.publish_mpc_plan(mpc_trajectory)
-            # NOTE: the map -> drone_N_mocap TF is deliberately NOT broadcast
-            # here. simulation_communication/fleet_viz owns it, so the RViz
-            # stack can come up and show the fleet BEFORE any controller runs.
-            # Broadcasting from both would just spam TF_REPEATED_DATA.
-            self.trajectory_visualizer.publish_actual_path(self.current_pose)
+            self._viz_tick = getattr(self, '_viz_tick', -1) + 1
+            if self._viz_tick % VIZ_EVERY == 0:
+                if self.takeoff_requested:
+                    self.trajectory_visualizer.publish_mpc_plan(mpc_trajectory)
+                # NOTE: the map -> drone_N_mocap TF is deliberately NOT broadcast
+                # here. simulation_communication/fleet_viz owns it, so the RViz
+                # stack can come up and show the fleet BEFORE any controller runs.
+                # Broadcasting from both would just spam TF_REPEATED_DATA.
+                self.trajectory_visualizer.publish_actual_path(self.current_pose)
 
             # ── Logging ───────────────────────────────────────────────────
             sim_time_sec = self.get_clock().now().nanoseconds * 1e-9

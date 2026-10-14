@@ -67,6 +67,16 @@ tools/clean_slate.sh --rig || { echo "rig_flight: clean_slate failed" >&2; exit 
 # from this terminal once it starts (else T3, RViz and his terminal would command nothing): refuse otherwise
 python3 tools/fleet_reach.py --absent || { echo "rig_flight: REFUSED (see above)" >&2; exit 1; }
 export MDC_RUN_DIR="$PWD/$D/${F}_logs"
+# lean rclpy (Wesley 14 Oct): no default QoS event handlers in any Python node, -11 % CPU on the desk graph
+# (tools/lean_rclpy/sitecustomize.py, docs/analysis/rig_load_2026-10-14.md). MDC_LEAN_RCLPY=0 turns it off.
+export MDC_LEAN_RCLPY="${MDC_LEAN_RCLPY:-1}" PYTHONPATH="$REPO/tools/lean_rclpy${PYTHONPATH:+:$PYTHONPATH}"
+# card 2026-10-14_tracker_timing: twin first. A stray export of its switches must not reach the rig
+if [ "${RIG_TIMING_SWITCHES:-0}" != 1 ]; then
+  for v in TRACKER_CMD_NEXT_TICK MDC_MOCAP_VEL_FILTER MDC_MOCAP_VEL_FRAMES MDC_MOCAP_VEL_DRONES; do
+    [ -n "${!v:-}" ] && echo "rig_flight: $v=${!v} ignored (twin-only until the card says; RIG_TIMING_SWITCHES=1 keeps it)"
+    unset "$v"
+  done
+fi
 
 topics=(/payload/motion_capture_state /fleet/command /fleet/abort /fleet/status /fleet/landed
         /fleet/manager_status /rosout /fleet/detach /fleet/drop /fleet/payload_dropped
@@ -81,9 +91,10 @@ done
 if [ "$COMBINED" = true ]; then
   topics+=(/magnet/contact /magnet/attach_proof /join_planner/phase /join_planner/give_up /join_planner/reference
            /join_planner/land_now /drone_3/take_back /drone_3/magnet_ours /drone_3/magnet_gate /drone_3/magnet_coil
-           /drone_3/ELRSCommand_tejen /tejen/magnet/command /tejen/object_attached /tejen/pendulum_swing_state
-           /tejen/magnet_tip_pose /pickup/motion_capture_state /fake_attachment_point/pose /fake_payload/pose
-           /payload/trajectory_state /tejen/drone_command)
+           /drone_3/ELRSCommand_tejen /tejen/magnet/command /tejen/object_attached
+           /tejen/magnet_tip_pose /pickup/motion_capture_state /payload/trajectory_state /tejen/drone_command)
+  # not recorded (14 Oct load cut): /tejen/pendulum_swing_state, /fake_payload/pose, /fake_attachment_point/pose,
+  # 75 + 46 + 46 Hz copies made from our mocap that no tool reads
 fi
 ros2 bag record -o "$D/$F" "${topics[@]}" > "$D/${F}_bag.txt" 2>&1 &
 BAG=$!

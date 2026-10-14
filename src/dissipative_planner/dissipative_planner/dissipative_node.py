@@ -1407,9 +1407,15 @@ class DissipativeController(LoadPlanner):
 
     def _release_all_magnets(self):
         """Every tether OFF; re-sent each tick of a drop (one lost radio OFF would leave a drone
-        tied to a fallen ring)."""
+        tied to a fallen ring). A newcomer's coil is the magnet manager's: OFF there too, at most
+        once a second (the coil gate ignores it before our span, so his puck stays held)."""
         for pub in self._magnet_pubs:
             pub.publish(String(data='OFF'))
+        if self.reserved_attach > 0 and self._dropped is not None:
+            now = self.get_clock().now().nanoseconds * 1e-9
+            if now - getattr(self, '_drop_coil_off_t', -1e9) >= 1.0:
+                self._drop_coil_off_t = now
+                self._magnet_cmd_pub.publish(String(data='OFF'))
 
     def _drop_tick(self):
         self._release_all_magnets()

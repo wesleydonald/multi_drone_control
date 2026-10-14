@@ -1,0 +1,84 @@
+name: delay_sweep_lift3_d040
+description: 'Exploratory twin delay sweep (14 Oct, no card; docs/analysis/rig_load_2026-10-14.md, delay margin of the
+  lift), arm SIM_CMD_DELAY_S 0.04 s (+40 ms): the three-carrier lift that bobbed and crashed on the rig (RIG-1014-t5_2;
+  clean in RIG-1014-lift3_3). Mode dissipative, 3 carriers, target 1.0, lift_ramp_vel 0.15, int_mode model (the
+  default), drop_on_loss on, floor start, LAND about 20 s after the ramp reaches 1.0 m. The rig carriers sit on plates
+  3/11/7 (270/30/150 deg); this world has them at 0/120/240, the same layout turned 90 deg (the attach world with
+  270/30/150 welds the idle QUAD4 to the ring at spawn without the attach graph, so it cannot fly mode dissipative).
+  Falsifier: no growing bob (throttle sd < 0.06 in the first 4.4 s of the ramp) at +40 ms means delay alone does not
+  explain t5_2. Scored by ~/handoff_2026-10-14/score_delay.py.'
+# The arm's one variable. run_experiment.py does NOT read lab_env: ~/handoff_2026-10-14/delay_batch.py passes it to
+# the lab container (lab_run.sh --env), and score_delay.py checks the bridges' "[BFi] command delay" lines. On the
+# laptop, export it yourself: SIM_CMD_DELAY_S=0.04 tools/run_experiment.py <this file>.
+lab_env:
+  SIM_CMD_DELAY_S: '0.04'
+world: three_rigid_ground_rig.sdf
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    mode: dissipative
+    num_drones: 3
+    attach_azimuths_deg: 0,120,240
+    load_traj: hover
+    target_z: 1.0
+    lift_ramp_vel: 0.15
+    creep_vel: 0.2
+    pretension_s: 3.0
+    start_taut: false
+    cable_len: 0.55
+    attach_radius: 0.225
+    attach_z: 0.02
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    load_mass: 0.86
+    drone_mass: 0.55
+    measure_rod_len: true
+    rod_tol_frac: 0.25
+    rod_spread_m: 0.08
+    z_taut_gate: 0.9
+    z_i_gate: 0.25
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    reconfig_mode: ocp
+    thrust_ratio: 35.2
+    takeoff_thrust_ratio: 0.0
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    throttle_max: 0.8
+    kt_trim: false
+    departed_land: true
+    departed_ground_idle: true
+    params_file: /home/wesley/multi_drone_control/configs/rig/drop_and_land.yaml
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187
+    sim_pack_v0: 23.8
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 3
+    sim_thrust_map: rig
+    sim_pack_v0: 23.8
+fleet:
+  num_drones: 3
+  n_total: 3
+timing:
+  duration_s: 120.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+# shifted by the WAIT_LIFT wait: the ring passes 0.3 m ~2.7 s into the ramp and reaches 1.0 m ~5.4 s later
+- t: 34.0
+  do: LAND
+criteria:
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5

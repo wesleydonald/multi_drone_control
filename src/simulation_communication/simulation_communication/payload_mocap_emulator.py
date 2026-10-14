@@ -25,6 +25,7 @@ from geometry_msgs.msg import PoseArray, Pose, Twist, PoseStamped
 from std_msgs.msg import Float64, Float64MultiArray
 from interfaces.msg import MotionCaptureState
 from tf_transformations import quaternion_multiply, quaternion_inverse, quaternion_matrix
+from drone_communication.velocity_filter import VelocityFilter
 
 
 class PayloadMocapEmulator(Node):
@@ -50,6 +51,9 @@ class PayloadMocapEmulator(Node):
         # > 0: each sample is published this long after Gazebo produced it, standing in for the
         # rig's mocap, relay and network latency (default from SIM_MOCAP_DELAY_S; 0 = off)
         self.declare_parameter('mocap_delay_s', float(os.environ.get('SIM_MOCAP_DELAY_S', '0.0')))
+        # the rig mocap node's velocity filter (card 2026-10-14_tracker_timing): 'none' keeps the plain difference,
+        # 'ema' is the rig's alpha 0.2 (its ~45 ms lag), 'slope' the least-squares slope
+        self.declare_parameter('velocity_filter', os.environ.get('SIM_MOCAP_VEL_FILTER', 'none'))
 
         drone_id = self.get_parameter('drone_id').value
         drone_name = self.get_parameter('drone_name').value
@@ -61,6 +65,14 @@ class PayloadMocapEmulator(Node):
         self._drone_last_pub = None
         self._payload_last_pub = None
         self._delay = float(self.get_parameter('mocap_delay_s').value)
+        vmode = str(self.get_parameter('velocity_filter').value)
+        self._vfilt = None
+        if vmode != 'none':
+            # as the rig: the chosen filter on the listed carriers, the rig's ema on the ring and QUAD4
+            carriers = [int(v) for v in os.environ.get('MDC_MOCAP_VEL_DRONES', '0,1,2').split(',') if v.strip()]
+            dmode = vmode if (vmode == 'ema' or int(drone_id) in carriers) else 'ema'
+            self._vfilt = {'drone': VelocityFilter(dmode), 'payload': VelocityFilter('ema')}
+            self.get_logger().warn(f'[MOCAP{drone_id}] velocity filter {dmode} (ring ema)')
         self._queues = {}
         if self._delay > 0.0:
             self.get_logger().warn(f'[MOCAP{drone_id}] mocap delay {self._delay:.3f} s')
@@ -111,7 +123,7 @@ class PayloadMocapEmulator(Node):
             return -x, -y, -z, -w
         return x, y, z, w
 
-    def _compute_mcs(self, pos, ori, last_pos, last_ori, last_time):
+    def _compute_mcs(self, pos, ori, last_pos, last_ori, last_time, body=None):
         """Return (MotionCaptureState, pos, ori, time) or (None,...) on first call."""
         now = self.get_clock().now().to_msg()
         if last_pos is None:
@@ -127,6 +139,9 @@ class PayloadMocapEmulator(Node):
             (pos.y - last_pos.y) / dt,
             (pos.z - last_pos.z) / dt,
         ])
+        if self._vfilt is not None and body in self._vfilt:
+            v = self._vfilt[body].update(now.sec + now.nanosec * 1e-9, (pos.x, pos.y, pos.z))
+            lin_vel = lin_vel if v is None else v
 
         # Angular velocity (body frame)
         q1 = [last_ori.x, last_ori.y, last_ori.z, last_ori.w]
@@ -204,7 +219,7 @@ class PayloadMocapEmulator(Node):
 
         mcs, self._drone_last_pos, self._drone_last_ori, self._drone_last_time = \
             self._compute_mcs(pos, ori,
-                              self._drone_last_pos, self._drone_last_ori, self._drone_last_time)
+                              self._drone_last_pos, self._drone_last_ori, self._drone_last_time, body='drone')
         if mcs is not None:
             self._publish(self._drone_pub, mcs)
 
@@ -222,7 +237,7 @@ class PayloadMocapEmulator(Node):
 
         mcs, self._payload_last_pos, self._payload_last_ori, self._payload_last_time = \
             self._compute_mcs(pos, ori,
-                              self._payload_last_pos, self._payload_last_ori, self._payload_last_time)
+                              self._payload_last_pos, self._payload_last_ori, self._payload_last_time, body='payload')
         if mcs is not None:
             self._publish(self._payload_pub, mcs)
 

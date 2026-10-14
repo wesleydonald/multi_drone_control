@@ -33,7 +33,7 @@ import os
 import shlex
 
 from bringup.real_mode import (_TYPED_KEY, apply_rig_values, map_and_geometry, planner_options, rig_io,
-                               rig_magnet_latches, rig_thrust_ratio, truthy)
+                               rig_magnet_latches, rig_thrust_ratio, tracker_drop_options, truthy)
 from launch.actions import GroupAction, IncludeLaunchDescription, LogInfo, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -365,6 +365,7 @@ def attach(context, launch_dir, profile_vals):
                          'kt_print_period_s': f('kt_print_period_s'),
                          'pose_timeout_s': f('pose_timeout_s'),
                          'safety_ref_timeout_s': f('safety_ref_timeout_s'),
+                         **tracker_drop_options(context),
                          **map_tracker}],
             output='screen'))
 
@@ -483,10 +484,11 @@ def attach(context, launch_dir, profile_vals):
                      # rig: tether latches ON at ARM, OFF at their detach
                      **({'detach_magnet': True} if real else {}),
                      **map_planner}] + planner_options(context)
-                    # drop and land is not complete in attach (a welded newcomer's magnet is not in
-                    # the drop and the trackers' tilt rule is not wired): off here until it is. A
-                    # drone detached in M1 is handed to the partner, so it must not land by itself.
-                    + [{'drop_on_loss': False, 'departed_land': False}],
+                    # drop and land on in every mode (Wesley 14 Oct, after RIG-1014-t5_2): the carriers'
+                    # tilt rule is wired above and the drop releases a welded newcomer's coil. Still open:
+                    # a drop while the partner flies QUAD4 does not take it back. A drone detached in M1
+                    # is handed to the partner, so it must not land by itself.
+                    + [{'departed_land': False}],
         output='screen'))
 
     # ════════════════ APPROACH DRONE (x3_drone3) CHAIN ════════════════
@@ -693,6 +695,8 @@ def attach(context, launch_dir, profile_vals):
                      # (x*(1-eps), x*(1+eps)) inverts on its negative y, R0523/R0526
                      'x0_relax_symmetric': b('x0_relax_symmetric'),
                      'enable_diag_log': True,
+                     # the next-tick throttle is for the carriers only (card 2026-10-14_tracker_timing, critic)
+                     'cmd_next_tick': False,
                      # warm on his flight: its u-state is the mux output, its learned states hold
                      **({'warm_follow_applied': True} if partner_contact else {}),
                      **({'tilt_fault_topic': f'/drone_{d}/tilt_fault',
@@ -714,8 +718,9 @@ def attach(context, launch_dir, profile_vals):
     # attach target: republish the shared payload's mocap as the join planner's magnet-tip
     # target (PoseStamped + TwistStamped). Without this the planner never publishes a
     # reference and the approach MPC never arms. Partner mode needs it too: our tracker
-    # flies the last descent after the handoff.
-    if True:
+    # flies the last descent after the handoff. Not on the combined rig (14 Oct load cut): his
+    # contact attach has no hand-off, and the take-back falls back to the weld point.
+    if not (real and partner_contact):
       nodes.append(Node(
         package='drone_magnet', executable='attach_target_publisher', name='attach_target_publisher',
         parameters=[{'payload_state_topic': '/payload/motion_capture_state',

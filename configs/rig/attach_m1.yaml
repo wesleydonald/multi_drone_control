@@ -7,7 +7,8 @@ newcomer_fault_land: true
 departed_ground_idle: true
 approach_tip_feedback: true
 approach_tip_log: true
-# Wednesday 09:00 props-off calibration (face on plate 9, tether hanging): the tip marker's height above body 8's
-# origin plane minus today's +0.04 setpoint; the weld point the same height. Until then: today's values.
-attach_tip_dz: 0.0
-weld_point_z: 0.0
+# Wednesday props-off calibration (face on plate 9, tether hanging): the tip marker's height above body 8's
+# origin plane minus today's +0.04 setpoint; the weld point the same height. 14 Oct test 2: three catches
+# 0.0239 / 0.0244 / 0.0238 (results/rig/2026-10-14/tip_calibration.txt).
+attach_tip_dz: -0.016
+weld_point_z: 0.024

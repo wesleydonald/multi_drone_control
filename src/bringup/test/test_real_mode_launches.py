@@ -688,9 +688,14 @@ def test_default_mode_is_dissipative_with_detection_drop_and_departed_land_on():
     assert not {'detach_detect_m', 'drop_on_loss', 'departed_land'} & set(typed['/dissipative_planner']['params'])
 
 
-def test_attach_keeps_drop_and_departed_land_off_until_drop_covers_the_newcomer():
-    p = _by_name(rig('attach', enable_approach_mpc=False))['/dissipative_planner']['params']
-    assert p['drop_on_loss'] is False and p['departed_land'] is False
+def test_attach_flies_drop_and_land_but_not_departed_land():
+    """Wesley 14 Oct (RIG-1014-t5_2): drop and land in every mode, the carriers' tilt rule included; a drone
+    detached in M1 is handed to the partner, so departed_land stays off."""
+    nodes = _by_name(rig('attach', enable_approach_mpc=False))
+    p = nodes['/dissipative_planner']['params']
+    assert p['drop_on_loss'] is True and p['departed_land'] is False
+    for i in range(3):
+        assert nodes[f'/tracker_{i}']['params']['drop_on_loss'] is True
 
 
 def test_rig_attach_fleet_manager_checks_every_fc_armed():
@@ -1160,3 +1165,10 @@ def test_combined_rig_refuses_his_magnet_drop_off_the_taut_length(dds):
         _combined_rig(partner_nodes=True, partner_args='magnet_drop_below_quad:=0.600 mpc_thrust_ratio:=21.5')
     g = _combined_rig(partner_nodes=True, partner_args='magnet_drop_below_quad:=0.585 mpc_thrust_ratio:=21.5')
     assert g['/online_join_planner']['params']['magnet_drop_below_quad'] == 0.585
+
+
+def test_attach_keeps_the_next_tick_throttle_off_for_quad4():
+    """Card 2026-10-14_tracker_timing (critic): the switch is for the carriers; QUAD4's tracker pins it off."""
+    nodes = _by_name(rig('attach', enable_approach_mpc=False))
+    assert nodes['/tracker_3']['params']['cmd_next_tick'] is False
+    assert 'cmd_next_tick' not in nodes['/tracker_0']['params']
