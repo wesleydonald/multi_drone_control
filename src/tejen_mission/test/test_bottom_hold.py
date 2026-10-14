@@ -172,6 +172,7 @@ def test_the_face_below_the_plate_is_measured_along_the_plate_normal():
     below it in world z but sits on the plate's own plane: no exit; 25 mm below the plane is one."""
     p = _hold()
     a = np.radians(10.0)
+    p.ring_pose_topic = '/payload/motion_capture_state'
     p.ring_quaternion = (np.cos(a / 2), np.sin(a / 2), 0.0, 0.0)
     p.last_ring_pose_time = p.clock.t
     p.errors = (0.06, 0.05, 0.0)
@@ -188,3 +189,42 @@ def test_the_face_below_the_plate_is_measured_along_the_plate_normal():
         p.last_ring_pose_time = p.clock.t
         tick(p, 0.1)
     assert p.phase == P.APPROACH_ABOVE_TARGET and any('below the plate' in m for m in p.infos)
+
+
+def test_input_loss_restarts_the_quiet_timer_on_the_real_return_path():
+    """Tejen 15 Oct, round 2: his timer callback returns early on input loss; our quiet-miss time and tip speed must
+    not carry across it (QuietMissTracker credits the gap when data resumes)."""
+    p = _hold()
+    p.errors = (0.05, 0.05, 0.0)
+    for _ in range(30):                                   # 3 s still, off the plate: quiet time earned
+        tick(p, 0.1)
+    assert p.contact_quiet.elapsed_s > 2.5
+    p._last_planner_callback_start = None
+    p.planner_callback_budget_ms, p.planner_deadline_miss_count = 1e9, 0
+    p.publish_committed_trajectory = p.m2c_ground_reference_enabled = p.pickup_proof_enabled = False
+    p.inputs_ready = lambda: False
+    p.invalidate_pickup_alignment = p.invalidate_target_alignment = lambda: None
+    p.m2b_quiet_miss = None
+    p.timer_callback()                                    # the input-loss return
+    assert p.contact_quiet.elapsed_s == 0.0 and p.contact_tip_last is None
+    for _ in range(30):                                   # 3 s more: not 4 s since the loss
+        tick(p, 0.1)
+    assert p.phase == P.ATTACH_READY and p.contact_misses == 0
+
+
+def test_a_stale_ring_pose_pauses_the_plate_frame_checks():
+    """Tejen 15 Oct, round 2: with ring_pose_topic configured but stale, no world-axes fallback: the below-the-plate
+    exit and the quiet miss pause; the gross exits still run on his tracking errors."""
+    p = _hold()
+    p.ring_pose_topic = '/payload/motion_capture_state'
+    p.ring_quaternion, p.last_ring_pose_time = (1.0, 0.0, 0.0, 0.0), p.clock.t - 5.0     # stale
+    p.errors = (0.05, 0.05, -0.05)
+    p.measured_contact_tip_offset = lambda: np.array([0.05, 0.0, -0.05])                  # 5 cm "below" in world z
+    for _ in range(50):
+        tick(p, 0.1)
+    assert p.plate_frame_tip_offset() is None
+    assert p.phase == P.ATTACH_READY and p.contact_misses == 0
+    p.errors = (0.20, 0.05, 0.0)                          # far off: the gross exit still acts
+    for _ in range(5):
+        tick(p, 0.1)
+    assert p.phase == P.APPROACH_ABOVE_TARGET

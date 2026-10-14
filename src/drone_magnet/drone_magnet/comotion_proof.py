@@ -40,8 +40,8 @@ class ComotionConfig:
     hang_window_s: float = 2.0       # s: the last free-hang samples, however long ago (kept through retries)
     taut_margin: float = 0.003       # m below the free-hang length that still reads taut
     taut_fallback: float = 0.0       # m, the typed taut length if no free hang was seen (minus 5 mm); 0 = no check
-    lift_fallback_s: float = 2.5     # s after contact when no lift-done signal comes (0 = wait for the signal); with
-                                     # his planner publishing it, a 6 s safety net only (graph_attach; Tejen 15 Oct)
+    lift_fallback_s: float = 2.5     # s after contact when no lift-done signal comes (0 = wait for the signal: the
+                                     # wiring with his planner, which publishes it; Tejen 15 Oct)
     d_ok: float = 0.006              # m, drift from the contact seed
     normal_ok: float = 0.010
     speed_ok: float = 0.03           # m/s

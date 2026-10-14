@@ -873,6 +873,8 @@ def test_partner_contact_rig_graph(dds):
     # plan 2026-10-14 WP3: Tejen's co-motion rules; the contact radius in the plate plane is weld_radius, the typed
     # taut length only the fallback for the measured free hang
     assert (mgr['proof_rules'], mgr['comotion_contact_xy']) == ('comotion', 0.01)
+    # Tejen 15 Oct, round 2: his planner publishes the end of his proof lift; the proof waits for that signal only
+    assert mgr['comotion_lift_fallback_s'] == 0.0
     assert mgr['comotion_taut_fallback'] == pytest.approx(0.586)
     assert g['/elrs_mux_3']['params']['take_back_topic'] == '/drone_3/take_back'
     old_rules = _combined_rig(proof_rules='contact_lift')['/magnet_attachment_manager']['params']

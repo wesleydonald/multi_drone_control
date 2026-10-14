@@ -198,3 +198,12 @@ His points, as Wesley relayed them, and what changed (rev 4, no bar changed):
 His answers: trim learning at 0.20 m/s above contact is a reasonable experiment within the existing correction bounds,
 without relaxing the contact or proof speeds (aim B as built); keep the measured lift proof; do not copy M2 controller
 modes or change TAKEOFF here. Puck contact height: 37.9 and 36.2 mm against his assumed 34.5 mm (the pickup, later).
+
+Tejen's second review (15 Oct, of the rebuilt package): three points, fixed (rev 5, no bar changed):
+
+| His point | Rev 5 |
+|---|---|
+| The quiet-miss reset is bypassed by his planner's input-loss return, so stale time can count toward a retry | His timer callback's input-loss returns (both) reset our quiet-miss timer and the tip-speed estimate |
+| The 6 s lift fallback still assumes a lift nobody confirmed | With his planner wired, the proof starts only on his lift-done signal (no timed fallback); the manager warns once if the signal is 6 s late |
+| A stale configured ring attitude falls back to world axes | It pauses the plate-frame checks instead (the below-the-plate exit, the quiet miss); the gross exits still run |
+

@@ -2782,18 +2782,27 @@ class OnlineJoinPlanner(Node):
 
     def plate_frame_tip_offset(self) -> Optional[np.ndarray]:
         """The measured tip relative to the plate point in the ring's frame (z = the clearance along the plate normal),
-        or the world-frame offset when no fresh ring pose is configured; None when the tip or the plate is stale."""
+        or the world-frame offset when no ring pose is configured; None when the tip, the plate or a configured ring
+        pose is stale."""
         offset = self.measured_contact_tip_offset()
         if offset is None:
             return None
+        if not getattr(self, 'ring_pose_topic', ''):
+            return offset
         q, t = getattr(self, 'ring_quaternion', None), getattr(self, 'last_ring_pose_time', None)
         if q is None or t is None or not 0. <= self._physical_now_s() - t <= self.input_timeout_s:
-            return offset
+            return None          # configured but stale: the plate-frame checks pause (Tejen 15 Oct), no world axes
         w, x, y, z = q
         rot = np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
                         [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
                         [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
         return rot.T @ offset
+
+    def invalidate_contact_hold_evidence(self) -> None:
+        """Input loss: no quiet-miss time and no tip speed carry across it (Tejen 15 Oct)."""
+        if getattr(self, 'contact_quiet', None) is not None:
+            self.contact_quiet.reset()
+        self.contact_tip_last, self.contact_tip_vel = None, np.zeros(3)
 
     def contact_tip_speed(self, rel: Optional[np.ndarray]) -> float:
         """The tip's speed over the plate (plate-frame xy), smoothed as his tip alignment does; nan on stale data."""
@@ -6608,9 +6617,8 @@ class OnlineJoinPlanner(Node):
         now = self._physical_now_s()
         gross = xy_relative_velocity > self.contact_gross_speed or xy_error > self.contact_gross_xy
         self.contact_gross_t0 = (now if self.contact_gross_t0 is None else self.contact_gross_t0) if gross else None
-        # the face's clearance along the plate normal when the plate frame is known (Tejen 15 Oct), else world z
-        clearance = float(plate_rel[2]) if plate_rel is not None else z_error + self.final_attach_offset_z
-        below = clearance < -self.contact_face_below_m
+        # the face's clearance along the plate normal; paused while the plate frame is stale (Tejen 15 Oct)
+        below = plate_rel is not None and float(plate_rel[2]) < -self.contact_face_below_m
         self.contact_below_t0 = (now if self.contact_below_t0 is None else self.contact_below_t0) if below else None
         why = ('moving or far off the plate' if gross and now - self.contact_gross_t0 >= 0.3 else
                'the tip sunk below the plate (off its edge)' if below and now - self.contact_below_t0 >= 0.12 else None)
@@ -11494,6 +11502,7 @@ class OnlineJoinPlanner(Node):
                 self.invalidate_target_alignment()
                 if getattr(self, "m2b_quiet_miss", None) is not None:
                     self.m2b_quiet_miss.reset()
+                self.invalidate_contact_hold_evidence()
                 return
 
             self.update_pickup_tip_xy_compensation()
@@ -11516,6 +11525,7 @@ class OnlineJoinPlanner(Node):
                 self.invalidate_target_alignment()
                 if getattr(self, "m2b_quiet_miss", None) is not None:
                     self.m2b_quiet_miss.reset()
+                self.invalidate_contact_hold_evidence()
                 return
 
             spec = self.current_phase_spec()

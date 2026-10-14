@@ -888,6 +888,13 @@ class MagnetAttachmentManager(Node):
     def _publish_proof_state(self) -> None:
         if self._proof is not None:
             self.proof_state_pub.publish(String(data=json.dumps(self._proof.report(self._clock_s()))))
+        p = self._proof
+        # with his lift signal the only start (no timed fallback), a missing signal shows here instead of as a stall
+        if (isinstance(p, ComotionProof) and p.state == 'prove' and p.t_lift is None and p.t_contact is not None
+                and self._clock_s() - p.t_contact > 6.0 and getattr(self, '_lift_wait_warned', None) != p.tries):
+            self._lift_wait_warned = p.tries
+            self.get_logger().warn(f'PROOF (try {p.tries}): no lift-done signal from his planner '
+                                   f'{self._clock_s() - p.t_contact:.0f} s after the contact: still waiting')
 
     def timer_callback(self) -> None:
         now = time.time()
