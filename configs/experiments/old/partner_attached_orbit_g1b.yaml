@@ -16,7 +16,7 @@ launch:
     cable_len: 0.5
     load_mass: 0.86
     target_z: 0.6
-    attach_azimuths_deg: 150,270,30
+    attach_azimuths_deg: 210,90,330  # clockwise degrees since 15 Oct; was 150,270,30
     attach_central: false
     diss_balanced_tensions: true
     attach_handout: true
@@ -63,7 +63,8 @@ timing:
 events:
 - t: 1.0
   do: LAUNCH
-  arg: tejen_mission partner_mission.launch.py plate:=3 carrier_azimuths_deg:=[150.0,270.0,30.0] start_gate_topic:=/partner/release
+  # our plate number, clockwise degrees since 15 Oct; was plate:=3 [150.0,270.0,30.0]
+  arg: tejen_mission partner_mission.launch.py plate:=9 carrier_azimuths_deg:=[210.0,90.0,330.0] start_gate_topic:=/partner/release
 - t: 3.0
   do: ARM
 - t: 5.0

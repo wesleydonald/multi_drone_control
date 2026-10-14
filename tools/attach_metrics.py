@@ -36,6 +36,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+from run_dir import manifest_azimuths_ccw  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STAMP = re.compile(r'\[(\d{10}\.\d+)\]')
@@ -175,8 +176,9 @@ def analyse(rid):
     t_out = outs[0][0] if outs else t_land
     q = run[['payload_qw', 'payload_qx', 'payload_qy', 'payload_qz']].to_numpy()
     R = _rot(q)
-    man = json.load(open(os.path.join(d, 'manifest.json')))['launch_args']
-    az = [float(a) for a in str(man.get('attach_azimuths_deg') or '270,30,150').split(',')][:n]
+    full = json.load(open(os.path.join(d, 'manifest.json')))
+    man = full['launch_args']
+    az = (manifest_azimuths_ccw(man.get('attach_azimuths_deg'), full) or [270.0, 30.0, 150.0])[:n]
     attach_z = float(man.get('attach_z') or 0.02)
     if t_out is not None:
         wl = t >= t_out

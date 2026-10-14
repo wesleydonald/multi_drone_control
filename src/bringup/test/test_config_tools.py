@@ -124,7 +124,8 @@ def test_the_legacy_profile_is_the_sim_default_of_4_oct():
                                throttle_max='', thrust_offset='', sim_thrust_map='',
                                sim_pack_v0=''),
            'network': dict(num_drones='3', sim_thrust_map='linear'),
-           'attach': dict(num_drones='3', attach_azimuths_deg='330,90,210', start_taut='true',
+           # 330/90/210 counter-clockwise then, typed clockwise since 15 Oct
+           'attach': dict(num_drones='3', attach_azimuths_deg='30,270,150', start_taut='true',
                           handover_settle_s='0.75', creep_vel='0.1',
                           control_mode='velocity_after_handover', vel_ki='0.0',
                           pose_timeout_s='1.0', safety_ref_timeout_s='2.0', diss_ki_load='1.0')}
@@ -139,7 +140,7 @@ def test_network_is_refused_on_the_twin_and_attach_flies_it():
         profile_args('sim/network')
     assert profile_args('sim_legacy/network')['legacy'] == 'true'
     a = profile_args('sim/attach')
-    assert a['attach_azimuths_deg'] == '270,30,150' and a['legacy'] == 'false'
+    assert a['attach_azimuths_deg'] == '90,330,210' and a['legacy'] == 'false'     # typed clockwise: plates 3/11/7
     assert profile_args('sim_legacy/attach')['legacy'] == 'true'
 
 

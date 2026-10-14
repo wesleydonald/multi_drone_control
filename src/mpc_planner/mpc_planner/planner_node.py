@@ -38,7 +38,7 @@ from interfaces.msg import ELRSCommand, MotionCaptureState, Telemetry
 from .load_cable_dynamics import LoadCableDynamics, LOAD_DIM, CABLE_DIM
 from .geometry import (quat_to_rot_np, attach_points, nominal_cable_dirs,
                        azimuth_slot_assignment, yaw_from_quat, slot_azimuth_errors,
-                       slot_offset_warnings, rot_z)
+                       slot_error_text, slot_offset_report, cw_text, rot_z)
 from .load_trajectory import LoadTrajectory, ORBIT_RAMP_S
 from .planner_solver import PlannerSolver, HorizonFallback, PLAN_N, PLAN_TF, rod_accel_at
 from .params import PlannerConfig, load_inertia
@@ -1184,17 +1184,21 @@ class LoadPlanner(Node):
 
     def _check_slot_offsets(self):
         """Warn once when a drone sits more than 10 deg from its modelled slot: rig model-f1
-        had all four ~30 deg off (one plate), and every ring-quaternion flip then failed the solve."""
+        had all four ~30 deg off (one plate), and every ring-quaternion flip then failed the solve.
+        Past 30 deg the line is an error and names a mirrored typed list (clockwise since 15 Oct)."""
         self._slot_offsets_checked = True
         errs = slot_azimuth_errors(self.drone_pos, self.load_state[0:2], self.psi0, self.slot2drone,
                                    [np.arctan2(r[1], r[0]) for r in self.rho])
-        self.get_logger().info('[planner] slot azimuth error (deg): '
-                               + ', '.join(f'd{d + 1} {e:+.1f} (plate {p})' for d, e, p in errs))
-        warns = slot_offset_warnings(errs)
-        for text in warns:
-            self.get_logger().warn(f'[planner] SLOT OFFSET: {text}')
-        if warns:
-            self._status_pub.publish(String(data='SLOT OFFSET: ' + '; '.join(warns)))
+        self.get_logger().info('[planner] ' + slot_error_text(errs))
+        report = slot_offset_report(errs)
+        for severe, text in report:
+            # one call site per severity: rclpy refuses a call site that changes it
+            if severe:
+                self.get_logger().error(f'[planner] SLOT OFFSET: {text}')
+            else:
+                self.get_logger().warn(f'[planner] SLOT OFFSET: {text}')
+        if report:
+            self._status_pub.publish(String(data='SLOT OFFSET: ' + '; '.join(t for _, t in report)))
 
     def _latch_yaw_datum(self):
         """Latch the payload's measured yaw as the reference datum, once, before the
@@ -1694,8 +1698,7 @@ class LoadPlanner(Node):
             self._apply_load_force()
         self.get_logger().warn(
             f'[planner] FLEET RESIZED to n={self.n}; slot->drone {self.slot2drone}; '
-            f'attach azimuths '
-            f'{[round(float(np.degrees(np.arctan2(r[1], r[0]))), 1) for r in self.rho]} deg')
+            f'attach angles (cw) {cw_text([np.degrees(np.arctan2(r[1], r[0])) for r in self.rho], 1)} deg')
         return True
 
     def _set_ff_active(self, active):

@@ -59,6 +59,7 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 from metrics import cog_margin                       # noqa: E402
 import admissibility_map as am                       # noqa: E402
+from run_dir import manifest_azimuths_ccw                # noqa: E402
 
 G = 9.81
 RING_KG = 0.86
@@ -175,7 +176,7 @@ def planner_log(spec, results):
         la = man.get('launch_args', {})
         if not isinstance(la, dict):
             la = dict(a.split(':=', 1) for a in la if ':=' in a)
-        az = tuple(float(v) for v in str(la['attach_azimuths_deg']).split(','))
+        az = tuple(manifest_azimuths_ccw(la['attach_azimuths_deg'], man))
         P = pd.read_csv(glob.glob(os.path.join(d, 'logs', '*planner', '*', 'log.csv'))[0])
         return P, az
     base = os.path.join(results, 'rig', spec['date'], spec['name'] + '_logs', 'logs')

@@ -47,6 +47,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from mpc_planner.geometry import cw_to_ccw_deg, tejen_plate
 
 NS = 'tejen'
 DRONE = 3
@@ -58,9 +59,10 @@ OBJECT_POSE = '/model/payload_model/pose'
 # plates at r 0.225, 0.55 m rods at 60 deg, QUAD4 0.55 kg with a 0.55 m rod from a pivot 4 cm below the body
 # (body to tip 0.59), flown through the rig thrust map, so his MPC takes his rig values (thrust ratio 22 with
 # feedback, irl_commissioning.yaml) instead of the linear plant's 82.7.
-# His plates count counter-clockwise from +x every 30 deg. legacy: plate 9 = 270 deg = our old weld
-# point (attach_y_offset -0.25), carriers at 330/90/210. rig_twin: plate 3 = 90 deg = +y = rig plate 9
-# (attach_y_offset 0.225), carriers at 270/30/150 (rig plates 3/11/7). contact_attach_z_m: his contact
+# plate and carrier_azimuths_deg are typed as everywhere since 15 Oct (Wesley 14 Oct): our plate number, clockwise
+# from +x, and clockwise degrees (30 x plate). His nodes count counter-clockwise; _his_ring converts. legacy:
+# plate 3 (his 9) = -y = our old weld point (attach_y_offset -0.25), carriers at 30/270/150 cw. rig_twin: plate 9 (his
+# 3) = +y (attach_y_offset 0.225), carriers at 90/330/210 cw (plates 3/11/7). contact_attach_z_m: his contact
 # target above the ring origin, the tip sphere's centre on the plate (plate top 0.02 + 0.012 radius).
 GEOMETRY = {
     'legacy': {
@@ -68,14 +70,14 @@ GEOMETRY = {
         'ring_pitch_diameter': 0.50, 'ring_collision_outer_diameter': 0.56,
         'magnet_drop_below_quad': 0.49, 'mpc_cable_length': 0.49,
         'thrust_ratio': 82.7, 'thrust_ratio_feedback': False, 'vehicle_mass': 0.643,
-        'plate': '9', 'carrier_azimuths_deg': '[330.0, 90.0, 210.0]', 'contact_attach_z_m': None,
+        'plate': '3', 'carrier_azimuths_deg': '[30.0, 270.0, 150.0]', 'contact_attach_z_m': None,
     },
     'rig_twin': {
         'ring_radius': 0.225, 'ring_cable_len': 0.55, 'ring_cable_elev_deg': 60.0,
         'ring_pitch_diameter': 0.45, 'ring_collision_outer_diameter': 0.51,
         'magnet_drop_below_quad': 0.59, 'mpc_cable_length': 0.55,
         'thrust_ratio': 22.0, 'thrust_ratio_feedback': True, 'vehicle_mass': 0.55,
-        'plate': '3', 'carrier_azimuths_deg': '[270.0, 30.0, 150.0]', 'contact_attach_z_m': 0.032,
+        'plate': '9', 'carrier_azimuths_deg': '[90.0, 330.0, 210.0]', 'contact_attach_z_m': 0.032,
     },
     # real:=true only. The rig layout as rig_twin, his IRL values for QUAD4: body origin to magnet marker 0.575
     # (irl_commissioning.yaml, also his M2 QUAD4 geometry), his MPC's own cable length and kT (his IRL launches
@@ -86,7 +88,7 @@ GEOMETRY = {
         'ring_pitch_diameter': 0.45, 'ring_collision_outer_diameter': 0.51,
         'magnet_drop_below_quad': 0.575, 'mpc_cable_length': 0.531,
         'thrust_ratio': 22.0, 'thrust_ratio_feedback': True, 'vehicle_mass': 0.55,
-        'plate': '3', 'carrier_azimuths_deg': '[270.0, 30.0, 150.0]', 'contact_attach_z_m': None,
+        'plate': '9', 'carrier_azimuths_deg': '[90.0, 330.0, 210.0]', 'contact_attach_z_m': None,
     },
 }
 # real:=true: the rig's values where the sim launch has its own defaults (a typed value wins)
@@ -111,6 +113,12 @@ RELEASE_GATE = '/partner/release'    # our planner's release of a start-welded Q
 
 def _flag(context, name):
     return LaunchConfiguration(name).perform(context).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _his_ring(plate, carriers):
+    """(his plate index, his carrier azimuths) from the typed plate (our number, clockwise from +x: 9 is +y) and
+    carrier_azimuths_deg (clockwise degrees, '[90.0, 330.0, 210.0]'): his nodes count counter-clockwise."""
+    return tejen_plate(int(plate)), cw_to_ccw_deg([float(a) for a in yaml.safe_load(carriers)])
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -148,9 +156,8 @@ def _nodes(context):
     airborne = (LaunchConfiguration('start_gate_topic').perform(context).strip() == RELEASE_GATE
                 if airborne in ('', 'auto') else airborne in ('1', 'true', 'yes', 'on'))
     learn_in_air = airborne and G['thrust_ratio_feedback']
-    plate = int(LaunchConfiguration('plate').perform(context) or G['plate'])
-    azimuths = [float(a) for a in yaml.safe_load(
-        LaunchConfiguration('carrier_azimuths_deg').perform(context) or G['carrier_azimuths_deg'])]
+    plate, azimuths = _his_ring(LaunchConfiguration('plate').perform(context) or G['plate'],
+                                LaunchConfiguration('carrier_azimuths_deg').perform(context) or G['carrier_azimuths_deg'])
     share = Path(get_package_share_directory('tejen_mission'))
     dyn_share = Path(get_package_share_directory('tejen_dynamic_planner'))
     state = f'/drone_{DRONE}/motion_capture_state'
@@ -465,8 +472,7 @@ def _rig_nodes(context):
     if not target_z:
         raise RuntimeError('partner_mission real:=true: type contact_target_z:=<weld_point_z> (the 09:00 '
                            'calibration: the magnet marker above the ring-origin plane with the face on plate 9)')
-    plate = int(val('plate', G['plate']))
-    azimuths = [float(a) for a in yaml.safe_load(val('carrier_azimuths_deg', G['carrier_azimuths_deg']))]
+    plate, azimuths = _his_ring(val('plate', G['plate']), val('carrier_azimuths_deg', G['carrier_azimuths_deg']))
     share = Path(get_package_share_directory('tejen_mission'))
     dyn_share = Path(get_package_share_directory('tejen_dynamic_planner'))
     state = f'/drone_{DRONE}/motion_capture_state'
@@ -694,9 +700,10 @@ def _rig_nodes(context):
 def _arguments():
     return [
         DeclareLaunchArgument('geometry', default_value='legacy', choices=sorted(GEOMETRY)),
-        DeclareLaunchArgument('plate', default_value=''),   # '' = the geometry's
+        DeclareLaunchArgument('plate', default_value=''),   # our plate number (9 = +y; his 3); '' = the geometry's
         DeclareLaunchArgument('object_mass_kg', default_value='0.1'),   # the 0.1 kg object (payload_model.sdf)
-        # '' = the geometry's; the all-attached start: '[150.0, 270.0, 30.0]', plate 3, gate /partner/release
+        # clockwise degrees; '' = the geometry's; the all-attached start: '[210.0, 90.0, 330.0]', plate 9, gate
+        # /partner/release
         DeclareLaunchArgument('carrier_azimuths_deg', default_value=''),
         DeclareLaunchArgument('contact_attach', default_value='false'),
         # 14 Oct (Wesley): floor_join takes off from the mat and goes straight to the ring rejoin (no pickup, no drop);

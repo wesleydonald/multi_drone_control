@@ -45,6 +45,7 @@ for pkg in ('dissipative_planner', 'mpc_planner'):
     sys.path.insert(0, os.path.join(REPO, 'src', pkg))
 
 from mpc_planner.load_trajectory import LoadTrajectory  # noqa: E402
+from run_dir import manifest_azimuths_ccw  # noqa: E402
 
 HZ = 10.0
 SUB = 5                      # geometry sub-samples per planner tick
@@ -96,8 +97,9 @@ class Run:
         self.run = pd.read_csv(os.path.join(d, 'logs', 'run.csv')).drop_duplicates('t').reset_index(drop=True)
         self.ev = pd.read_csv(os.path.join(d, 'logs', 'events.csv'))
         self.pl = pd.read_csv(sorted(glob.glob(os.path.join(d, 'logs', 'dissipative_planner', '*', 'log.csv')))[-1])
-        man = json.load(open(os.path.join(d, 'manifest.json')))['launch_args']
-        self.az = [float(a) for a in str(man.get('attach_azimuths_deg') or '270,30,150').split(',')]
+        full = json.load(open(os.path.join(d, 'manifest.json')))
+        man = full['launch_args']
+        self.az = manifest_azimuths_ccw(man.get('attach_azimuths_deg'), full) or [270.0, 30.0, 150.0]
         self.n = int(man.get('num_drones') or 3)
         self.attach_r = float(man.get('attach_radius') or 0.225)
         self.attach_z = float(man.get('attach_z') or 0.02)

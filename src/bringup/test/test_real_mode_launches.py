@@ -37,7 +37,7 @@ SIM_ONLY = {'parameter_bridge', 'payload_betaflight_comm', 'betaflight_communica
 PARTNER_ATTACHED_ORBIT = {
     'num_drones': 3, 'reserved_attach': 1, 'start_taut': True, 'load_traj': 'orbit',
     'traj_speed': 0.125, 'traj_radius': 0.5, 'cable_len': 0.5, 'load_mass': 0.86,
-    'target_z': 0.6, 'attach_azimuths_deg': '150,270,30', 'attach_central': False,
+    'target_z': 0.6, 'attach_azimuths_deg': '210,90,330', 'attach_central': False,
     'diss_balanced_tensions': True, 'attach_handout': True, 'attach_t_handout': 12.0,
     'attach_x_offset': 0.0, 'attach_y_offset': 0.25, 'attach_elev_deg': 65.0,
     'attach_traj_hold_s': 10.0, 'attach_traj_hold_mode': 'timed',
@@ -49,7 +49,7 @@ PARTNER_ATTACHED_ORBIT = {
 # the M2 hand-over driver's args (tools/sim_test/drive_m2_handover.py, configs m2_bench.yaml)
 M2_DRIVER = {
     'num_drones': 4, 'sim_interface': False, 'partner_m2': True, 'partner_m2_part': 'all',
-    'cable_len': 0.515, 'attach_azimuths_deg': '90.0,0.0,180.0,270.0', 'attach_z': -0.005,
+    'cable_len': 0.515, 'attach_azimuths_deg': '270.0,0.0,180.0,90.0', 'attach_z': -0.005,
     'start_taut': False, 'handover_elev_deg': 45.0, 'cable_elev_deg': 45.0,
     'handover_settle_s': 1.0, 'creep_vel': 0.2, 'load_mass': 0.86, 'load_traj': 'hover',
     'target_z': 0.6, 'reconfig_mode': 'ocp', 'pose_timeout_s': 3.0,
@@ -328,7 +328,7 @@ def _muxes(g):
     return [v['params'] for k, v in g.items() if v['executable'] == 'elrs_mux']
 
 
-R8A = {'num_drones': 3, 'reserved_attach': 1, 'attach_azimuths_deg': '30,150,270',
+R8A = {'num_drones': 3, 'reserved_attach': 1, 'attach_azimuths_deg': '330,210,90',
        'attach_x_offset': 0.0, 'attach_y_offset': 0.25, 'reconfig_mode': 'ocp',
        'enable_approach_mpc': False, 'weld_radius': 0.0, 'start_taut': False}
 
@@ -717,7 +717,7 @@ def test_rig_attach_types_the_mocap_body_ids_and_refuses_without_the_tip():
 
 
 def test_rig_attach_flies_the_m1_layout_and_honours_a_params_file(tmp_path):
-    """M1 rig layout (Wesley 8 Oct): carriers 270/30/150, the weld at +y 0.225 (plate 9); a
+    """M1 rig layout (Wesley 8 Oct): carriers on plates 3/11/7, the weld at +y 0.225 (plate 9); a
     params_file value for a rig-default key is kept, not replaced by the rig default."""
     g = _by_name(rig('attach', enable_approach_mpc=False))
     p = g['/dissipative_planner']['params']
@@ -750,6 +750,45 @@ def test_legacy_attach_unchanged_by_the_twin_plumbing():
     p = g['/dissipative_planner']['params']
     assert 'attach_z' not in p and 'pivot_offset' not in p
     assert all('thrust_map' not in n['params'] for k, n in g.items() if '/bf_comm_' in k)
+
+
+# ── typed angles clockwise, node parameters counter-clockwise (Wesley 14 Oct) ─────────────────────────
+
+def _planner_az(nodes):
+    return {n['name']: n['params']['attach_azimuths_deg'] for n in nodes
+            if n['name'] in ('mpc_planner', 'dissipative_planner')}
+
+
+def test_the_profiles_layouts_reach_the_planner_counter_clockwise():
+    """The profiles type the M1 carriers on plates 3/11/7 as 90,330,210 deg clockwise; the planner's parameter, and
+    so every run's parameter dump, stays 270,30,150 as before 15 Oct (the legacy worlds' 330,90,210 alike)."""
+    assert _planner_az(sim('attach', legacy=False, num_drones=3)) == {'dissipative_planner': '270,30,150'}
+    assert _planner_az(rig('attach', enable_approach_mpc=False)) == {'dissipative_planner': '270,30,150'}
+    assert _planner_az(sim('attach', num_drones=3)) == {'dissipative_planner': '330,90,210'}
+
+
+@pytest.mark.parametrize('mode', ['mpc', 'dissipative'])
+@pytest.mark.parametrize('side', ['sim', 'rig'])
+def test_typed_clockwise_angles_reach_the_planner_counter_clockwise(side, mode, tmp_path):
+    """attach_azimuths_deg typed clockwise (330,270,210,90 = plates 11/9/7/3), on the command line or in a
+    params_file, reaches the planner as the counter-clockwise 30,90,150,270 it has always read, in the typed number
+    format; the even ring passes unchanged."""
+    run = sim if side == 'sim' else rig
+    assert set(_planner_az(run(mode, num_drones=4, attach_azimuths_deg='330,270,210,90')).values()) == \
+        {'30,90,150,270'}
+    assert set(_planner_az(run(mode, num_drones=4, attach_azimuths_deg='330.0,270.0,210.0,90.0')).values()) == \
+        {'30.0,90.0,150.0,270.0'}
+    pf = tmp_path / 'angles.yaml'
+    pf.write_text("attach_azimuths_deg: '0,240,120'\n")
+    assert set(_planner_az(run(mode, num_drones=3, params_file=str(pf))).values()) == {'0,120,240'}
+    assert set(_planner_az(run(mode, num_drones=4, attach_azimuths_deg='even')).values()) == {'even'}
+
+
+def test_an_old_counter_clockwise_list_arrives_mirrored():
+    """Same names, meaning flipped (Wesley 14 Oct): the old 270,30,150 typed today is the mirror image, 90,330,210
+    counter-clockwise. Nothing refuses it; the planner's slot check names it at start-up (mpc_planner tests)."""
+    assert _planner_az(rig('attach', enable_approach_mpc=False, attach_azimuths_deg='270,30,150')) == \
+        {'dissipative_planner': '90,330,210'}
 
 
 # ── combined M1 contact attach (card 2026-10-10_combined_m1_contact): partner_contact, off ─────
@@ -1188,6 +1227,7 @@ def test_attach_keeps_the_next_tick_throttle_off_for_quad4():
     assert nodes['/tracker_3']['params']['cmd_next_tick'] is False
     assert 'cmd_next_tick' not in nodes['/tracker_0']['params']
 
+
 def test_dry_hold_holds_the_coil_off_and_never_attaches(dds):
     """Critic 15 Oct, F6: dry_hold (default off) sets the coil gate's dry and the manager's dry_run together."""
     g = _combined_rig()
@@ -1196,3 +1236,12 @@ def test_dry_hold_holds_the_coil_off_and_never_attaches(dds):
     g = _combined_rig(dry_hold=True)
     assert g['/magnet_gate_3']['params']['dry'] is True
     assert g['/magnet_attachment_manager']['params']['dry_run'] is True
+
+
+def test_typed_attach_angles_are_clockwise_and_reach_the_planner_counter_clockwise(dds):
+    """Since 15 Oct (Wesley 14 Oct) attach_azimuths_deg is typed clockwise (angle = 30 x plate): the rig's M1 layout
+    (carriers on plates 3/11/7) reads 90,330,210 in real.yaml and arrives at the planner as 270,30,150."""
+    g = _combined_rig()
+    assert g['/dissipative_planner']['params']['attach_azimuths_deg'] == '270,30,150'
+    g = _combined_rig(attach_azimuths_deg='90,330,210')
+    assert g['/dissipative_planner']['params']['attach_azimuths_deg'] == '270,30,150'

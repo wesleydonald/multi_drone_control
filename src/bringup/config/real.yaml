@@ -58,9 +58,10 @@ modes:
   dissipative: {}
   attach:
     num_drones: 3
-    # M1 rig layout (Wesley 8 Oct): carriers on plates 3/11/7, QUAD4 welds onto plate 9 (+90 deg,
-    # ring +y) at the magnets' radius 0.225 (the sim's 0.25 / -y is the legacy weld at 270)
-    attach_azimuths_deg: '270,30,150'
+    # M1 rig layout (Wesley 8 Oct): carriers on plates 3/11/7 (angles typed clockwise, 30 x plate, since 15 Oct),
+    # QUAD4 welds onto plate 9 (270 deg cw, ring +y) at the magnets' radius 0.225 (the legacy sim's 0.25 / -y weld
+    # is at 90 deg cw)
+    attach_azimuths_deg: '90,330,210'
     attach_x_offset: 0.0
     attach_y_offset: 0.225
     control_mode: 'velocity_after_handover'

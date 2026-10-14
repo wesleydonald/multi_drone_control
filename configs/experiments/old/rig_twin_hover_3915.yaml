@@ -39,7 +39,7 @@ launch:
     sim_thrust_map: rig
     sim_thrust_offset: 0.181,0.185,0.187,0.187
     sim_pack_v0: 23.8
-    attach_azimuths_deg: 30,90,150,270
+    attach_azimuths_deg: 330,270,210,90  # clockwise degrees since 15 Oct; was 30,90,150,270
 io_launch:
   file: sim_io_launch.py
   args:

@@ -33,7 +33,7 @@ launch:
     drop_on_loss: false
     departed_land: false
     mode: dissipative
-    attach_azimuths_deg: 30,90,150,270
+    attach_azimuths_deg: 330,270,210,90  # clockwise degrees since 15 Oct; was 30,90,150,270
     cable_len: 0.5
     creep_vel: 0.2
     handover_elev_deg: 45.0

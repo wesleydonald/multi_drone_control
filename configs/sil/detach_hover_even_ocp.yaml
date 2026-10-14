@@ -18,7 +18,7 @@ geometry:
   attach_z: 0.025
   cable_len: 0.5
   load_mass: 0.86
-  attach_azimuths_deg: 0,90,180,270
+  attach_azimuths_deg: 0,270,180,90
 initial:
   elev_deg: 45.0
   load_z: 0.45
@@ -26,7 +26,7 @@ initial:
 launch:
   args:
     mode: attach
-    attach_azimuths_deg: 0,90,180,270
+    attach_azimuths_deg: 0,270,180,90
     cable_len: 0.5
     enable_approach: false
     kt_trim: true

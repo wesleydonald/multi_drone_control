@@ -72,7 +72,7 @@ modes:
     num_drones: 3
   attach:
     num_drones: 3
-    attach_azimuths_deg: '330,90,210'
+    attach_azimuths_deg: '30,270,150'      # clockwise (typed since 15 Oct): the old_worlds' 330/90/210 counter-clockwise
     start_taut: true
     handover_settle_s: 0.75
     creep_vel: 0.10

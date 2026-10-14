@@ -11,14 +11,14 @@ poses never move, so ARM/TAKEOFF must not be sent against it, except with --scri
 real_io:=false (no radios), which is what --script is for.
 
     tools/fake_mocap.py --num-drones 3 --attach          # 3 tethered + drone 3
-    tools/fake_mocap.py --num-drones 3 --cable-len 0.47 --azimuths-deg 30,150,270 \
+    tools/fake_mocap.py --num-drones 3 --cable-len 0.47 --azimuths-deg 330,210,90 \
         --yaw-deg 0 --drone-z 0.08 --load-z 0.05 --dry-run   # rig-like creep start, print only
-    tools/fake_mocap.py --rig --num-drones 3 --attach --tip --azimuths-deg 270,30,150 --drone-z 0.08
+    tools/fake_mocap.py --rig --num-drones 3 --attach --tip --azimuths-deg 90,330,210 --drone-z 0.08
         # the M1 desk rehearsal: rig geometry, QUAD4 on the floor with its magnet tip (/magnet_tip_pose)
-    tools/fake_mocap.py --rig --num-drones 3 --attach --tip --azimuths-deg 270,30,150 --drone-z 0.08 \
+    tools/fake_mocap.py --rig --num-drones 3 --attach --tip --azimuths-deg 90,330,210 --drone-z 0.08 \
         --tip-plate 9 --tip-dz 0.02     # the props-off attach check: QUAD4 held, its tip 2 cm above
                                         # plate 9's weld point (--tip-dz <weld_point_z>: on the plate)
-    tools/fake_mocap.py --rig --num-drones 3 --attach --tip --azimuths-deg 270,30,150 --load-z 1.0 \
+    tools/fake_mocap.py --rig --num-drones 3 --attach --tip --azimuths-deg 90,330,210 --load-z 1.0 \
         --tip-plate 9 --script caught --script-delay 1e9 --ball 1.0,1.6
         # the combined M1 contact attach (desk): carriers hovering on the cone, the ring at 1.0 m, QUAD4
         # hanging over plate 9; `kill -USR1 <pid>` starts the contact script (and restarts it)
@@ -50,10 +50,11 @@ import time
 
 
 def parse_azimuths(spec, n):
-    """'30,150,270' -> [30.0, 150.0, 270.0]; None/'' -> the even ring 360*i/n."""
+    """Typed clockwise degrees (as every launch argument since 15 Oct: '90,330,210' = plates 3/11/7) -> load-frame
+    counter-clockwise azimuths [270.0, 30.0, 150.0]; None/'' -> the even ring 360*i/n."""
     if spec is None or not str(spec).strip():
         return [360.0 * i / n for i in range(n)]
-    az = [float(t) for t in str(spec).replace(' ', '').split(',') if t]
+    az = [(-float(t)) % 360.0 for t in str(spec).replace(' ', '').split(',') if t]
     if len(az) != n:
         raise ValueError(f'--azimuths-deg has {len(az)} entries for --num-drones {n}')
     return az

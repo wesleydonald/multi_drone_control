@@ -32,3 +32,16 @@ def test_yawed_spawn_keeps_the_rods_taut_on_rotated_slots():
             assert abs(np.linalg.norm(p - (load + R @ rho)) - s.cable_len) < 1e-12
         p0, _ = _scn(0.0).initial_state()
         np.testing.assert_allclose(np.array(pos)[:, :2], np.array(p0)[:, :2] @ R[:2, :2].T, atol=1e-12)
+
+
+def test_typed_clockwise_azimuths_build_the_plant_counter_clockwise():
+    """configs/sil type attach_azimuths_deg clockwise (15 Oct), plant and launch alike: the plant's ring is the
+    counter-clockwise one the launch hands the controllers (attach_ring_45: 30,270,150 cw = 330/90/210 inside)."""
+    s = Scenario.from_yaml(os.path.join(REPO, 'configs/sil/attach_ring_45.yaml'))
+    assert s.attach_azimuths_deg == '30,270,150' and s.launch_args['attach_azimuths_deg'] == '30,270,150'
+    az = [np.degrees(np.arctan2(r[1], r[0])) % 360.0 for r in s.attach_rho()]
+    np.testing.assert_allclose(az, [330.0, 90.0, 210.0], atol=1e-9)
+    s = _scn(0.0)
+    assert s.attach_azimuths_deg in ('', 'even')
+    np.testing.assert_allclose([np.degrees(np.arctan2(r[1], r[0])) % 360.0 for r in s.attach_rho()],
+                               [0.0, 120.0, 240.0], atol=1e-9)

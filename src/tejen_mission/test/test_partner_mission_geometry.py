@@ -100,9 +100,23 @@ def test_the_geometry_owns_the_plate_and_carriers():
     legacy, rig = _params(None)['fake_cooperative_transport_world'], _params('rig_twin')['fake_cooperative_transport_world']
     assert (legacy['ring_attachment_plate_index'], legacy['bridge_carrier_azimuths_deg']) == (9, [330.0, 90.0, 210.0])
     assert (rig['ring_attachment_plate_index'], rig['bridge_carrier_azimuths_deg']) == (3, [270.0, 30.0, 150.0])
-    explicit = _params('rig_twin', plate='9', carrier_azimuths_deg='[150.0, 270.0, 30.0]')
+    # typed: our plate 3 (his 9), clockwise degrees (his 150/270/30 counter-clockwise)
+    explicit = _params('rig_twin', plate='3', carrier_azimuths_deg='[210.0, 90.0, 330.0]')
     ring = explicit['fake_cooperative_transport_world']
     assert (ring['ring_attachment_plate_index'], ring['bridge_carrier_azimuths_deg']) == (9, [150.0, 270.0, 30.0])
+
+
+@pytest.mark.parametrize('geometry', [None, 'rig_twin'])
+def test_typed_plate_and_carriers_are_ours_and_clockwise(geometry):
+    """Wesley 14 Oct: plate is our plate number (clockwise from +x, 9 = +y) and carrier_azimuths_deg clockwise degrees;
+    his ring bridge gets his counter-clockwise plate index, (12 - p) % 12, and azimuths. Typing the geometry's own
+    values changes nothing."""
+    ring = _params('rig_twin', plate='9', carrier_azimuths_deg='[90.0, 330.0, 210.0]')['fake_cooperative_transport_world']
+    assert (ring['ring_attachment_plate_index'], ring['bridge_carrier_azimuths_deg']) == (3, [270.0, 30.0, 150.0])
+    own = {None: ('3', '[30.0, 270.0, 150.0]'), 'rig_twin': ('9', '[90.0, 330.0, 210.0]')}[geometry]
+    assert _params(geometry, plate=own[0], carrier_azimuths_deg=own[1]) == _params(geometry)
+    ring = _params(geometry, plate='0', carrier_azimuths_deg='[0.0, 120.0, 240.0]')['fake_cooperative_transport_world']
+    assert (ring['ring_attachment_plate_index'], ring['bridge_carrier_azimuths_deg']) == (0, [0.0, 240.0, 120.0])
 
 
 @pytest.mark.parametrize('geometry', [None, 'rig_twin'])

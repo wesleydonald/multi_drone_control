@@ -13,7 +13,7 @@ launch:
     start_taut: true
     load_traj: hover
     cable_len: 0.5
-    attach_azimuths_deg: 30,90,150,270
+    attach_azimuths_deg: 330,270,210,90
     load_mass: 0.86
     target_z: 0.6
     kt_trim: false
@@ -29,7 +29,7 @@ geometry:
   load_mass: 0.86
   drone_mass: 1.0
   thrust_c: 21.8
-  attach_azimuths_deg: 30,90,150,270
+  attach_azimuths_deg: 330,270,210,90
 initial:
   stands: true
   load_z: 0.45

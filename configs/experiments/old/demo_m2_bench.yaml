@@ -22,7 +22,7 @@ launch:
     partner_m2: true
     partner_m2_part: all
     cable_len: 0.515
-    attach_azimuths_deg: 90.0,0.0,180.0,270.0
+    attach_azimuths_deg: 270.0,0.0,180.0,90.0  # clockwise degrees since 15 Oct; was 90.0,0.0,180.0,270.0
     attach_z: -0.005
     start_taut: false
     handover_elev_deg: 45.0

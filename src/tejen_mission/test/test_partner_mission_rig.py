@@ -112,6 +112,18 @@ def test_contact_target_is_our_weld_point_and_the_rig_values():
     assert g['partner_rig_state']['params']['anchor_offset_z'] == -0.030
 
 
+def test_typed_plate_and_carriers_are_ours_and_clockwise():
+    """Wesley 14 Oct: plate:=9 is our plate 9 (+y), his 3; carrier_azimuths_deg typed clockwise reach his ring bridge
+    counter-clockwise. The defaults are the same layout."""
+    g, _ = _nodes(plate='9', carrier_azimuths_deg='[90.0, 330.0, 210.0]')
+    ring = g['fake_cooperative_transport_world']['params']
+    assert (ring['ring_attachment_plate_index'], ring['bridge_carrier_azimuths_deg']) == (3, [270.0, 30.0, 150.0])
+    assert ring == _nodes()[0]['fake_cooperative_transport_world']['params']
+    g, _ = _nodes(plate='3', carrier_azimuths_deg='[270.0, 30.0, 150.0]')    # the old spelling: the mirror image
+    ring = g['fake_cooperative_transport_world']['params']
+    assert (ring['ring_attachment_plate_index'], ring['bridge_carrier_azimuths_deg']) == (9, [90.0, 330.0, 210.0])
+
+
 def test_typed_values_win():
     g, _ = _nodes(contact_dz='-0.005', magnet_drop_below_quad='0.582', proof_rise_max='0.02',
                   pickup_lift_height='2.0', mpc_thrust_ratio='24.5')
@@ -164,3 +176,16 @@ def test_trim_speed_gate_only_when_typed():
     assert 'target_alignment_max_relative_speed_mps' not in g['online_join_planner']['params']
     g, _ = _nodes(trim_speed_gate='0.20')
     assert g['online_join_planner']['params']['target_alignment_max_relative_speed_mps'] == 0.20
+
+
+def test_typed_plate_and_carrier_angles_are_ours_clockwise_and_arrive_as_his():
+    """Since 15 Oct (Wesley 14 Oct) plate is our number (clockwise, 9 = +y) and carrier_azimuths_deg clockwise
+    degrees; his nodes count counter-clockwise: his plate 3, his azimuths 270/30/150."""
+    g, _ = _nodes()
+    b = g['fake_cooperative_transport_world']['params']
+    assert b['bridge_carrier_azimuths_deg'] == pytest.approx([270.0, 30.0, 150.0])
+    assert b['ring_attachment_plate_index'] == 3
+    g, _ = _nodes(plate='9', carrier_azimuths_deg='[90.0, 330.0, 210.0]')
+    b = g['fake_cooperative_transport_world']['params']
+    assert b['bridge_carrier_azimuths_deg'] == pytest.approx([270.0, 30.0, 150.0])
+    assert b['ring_attachment_plate_index'] == 3

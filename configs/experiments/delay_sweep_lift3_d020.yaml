@@ -19,7 +19,7 @@ launch:
   args:
     mode: dissipative
     num_drones: 3
-    attach_azimuths_deg: 0,120,240
+    attach_azimuths_deg: 0,240,120
     load_traj: hover
     target_z: 1.0
     lift_ramp_vel: 0.15

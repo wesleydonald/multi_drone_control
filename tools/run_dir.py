@@ -128,6 +128,16 @@ def resolve(spec, roots=None):
     raise SystemExit(f'no run matching {spec!r} under ' + ' or '.join(roots))
 
 
+def manifest_azimuths_ccw(spec, manifest):
+    """A manifest's typed attach azimuths ('90,330,210', a list, '' / None) as counter-clockwise degrees, the
+    planner's convention: converted when the manifest says its typed angles are clockwise."""
+    if spec is None or (isinstance(spec, str) and not spec.strip()):
+        return []
+    vals = [float(v) for v in (spec if isinstance(spec, (list, tuple)) else str(spec).replace(' ', '').split(','))
+            if str(v).strip()]
+    return [(-v) % 360.0 for v in vals] if (manifest or {}).get('angles') == 'cw' else vals
+
+
 def write_manifest(run_path, **fields):
     """Write (or update) manifest.json. Safe to call twice -- the second call merges,
     so the runner can record the start immediately and the exit reason at the end even
@@ -147,6 +157,9 @@ def write_manifest(run_path, **fields):
             'operator': getpass.getuser(),
             'argv': sys.argv,
             'started_wall': time.strftime('%Y-%m-%dT%H:%M:%S'),
+            # typed ring angles (launch_args' attach_azimuths_deg and the like) are clockwise from 15 Oct (Wesley
+            # 14 Oct); older manifests have no key and typed them counter-clockwise (manifest_azimuths_ccw)
+            'angles': 'cw',
             **git_state(),
         }
     data.update(fields)

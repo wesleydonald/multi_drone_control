@@ -42,7 +42,7 @@ from dissipative_planner.approach import (ApproachProfile, TIP_FROZEN_N, TIP_STA
 
 from interfaces.msg import MotionCaptureState
 from mpc_planner.geometry import (quat_to_rot_np, attach_points, rot_z,
-                                  apex_direction, balanced_tensions)
+                                  apex_direction, balanced_tensions, ccw_to_cw_deg, plate_of_azimuth)
 from mpc_planner.planner_node import LoadPlanner, DRONE_MASS, PLANNER_HZ, TouchdownDetector
 from mpc_planner.reference_builder import unload_tensions
 
@@ -2617,7 +2617,8 @@ class DissipativeController(LoadPlanner):
             rho_new = np.array([self.attach_radius * np.cos(a),
                                 self.attach_radius * np.sin(a), float(self.attach_z)])
             self.get_logger().info(
-                f'[dissipative] drone {d} welded at start: plate at {np.degrees(a):.0f} deg')
+                f'[dissipative] drone {d} welded at start: plate at {ccw_to_cw_deg(np.degrees(a)):.0f} deg cw '
+                f'(plate {plate_of_azimuth(np.degrees(a))})')
         r_xy = float(np.hypot(rho_new[0], rho_new[1]))
         if r_xy > self.attach_radius + 0.10:
             rho_new[:2] *= (self.attach_radius + 0.10) / r_xy
@@ -2659,7 +2660,7 @@ class DissipativeController(LoadPlanner):
             self.get_logger().warn(
                 f'[dissipative] ATTACH drone {d} (start weld, joins the creep as carrier '
                 f'{self.n}): n={self.n}, '
-                f'plate at {np.degrees(np.arctan2(rho_new[1], rho_new[0])):.0f} deg, '
+                f'plate at {ccw_to_cw_deg(np.degrees(np.arctan2(rho_new[1], rho_new[0]))):.0f} deg cw, '
                 f'rods {[round(v, 2) for v in lens]} m, '
                 f'tensions {[round(v, 2) for v in self.refs._t_nom]}')
             return
@@ -2715,8 +2716,8 @@ class DissipativeController(LoadPlanner):
                                         else max(self._attach_traj_hold_s, self._reconfig_hold_s))
             hold = f'held {self._reconfig_hold_left:.1f} s'
         self.get_logger().warn(
-            f'[dissipative] ATTACH drone {d} (OCP resize): n={self.n}, weld at azimuth '
-            f'{az:.0f} deg (r={float(np.hypot(rho_new[0], rho_new[1])):.2f}), rod {lens[-1]:.2f} m, '
+            f'[dissipative] ATTACH drone {d} (OCP resize): n={self.n}, weld at {ccw_to_cw_deg(az):.0f} deg cw '
+            f'(plate {plate_of_azimuth(az)}, r={float(np.hypot(rho_new[0], rho_new[1])):.2f}), rod {lens[-1]:.2f} m, '
             f'tensions {[round(v, 2) for v in self.refs._t_nom]}; '
             f'trajectory {hold}; ring gap {gap:.0f} deg')
 

@@ -38,6 +38,7 @@ REPO = os.path.dirname(TOOLS)
 sys.path.insert(0, TOOLS)
 from experiment.config import wrench_arg  # noqa: E402  (the runner's own WRENCH grammar)
 from tip_metrics import is_push  # noqa: E402  (a WRENCH that applies a force or a torque)
+from run_dir import manifest_azimuths_ccw  # noqa: E402
 
 ROTOR_R = 0.2           # m, a carrier's rotor disc about its body centre (§5 take-back, reported)
 BALL_R = 0.08           # m, his twin ball (tejen payload_model.sdf)
@@ -135,7 +136,8 @@ class Run:
         self.man = self.manifest.get('launch_args', {})
         self.n = int(self.man.get('num_drones') or 3)
         self.k = f'd{self.n}_'
-        self.az = [float(a) for a in str(self.man.get('attach_azimuths_deg') or '270,30,150').split(',')][:self.n]
+        self.az = (manifest_azimuths_ccw(self.man.get('attach_azimuths_deg'), self.manifest)
+                   or [270.0, 30.0, 150.0])[:self.n]
         self.r_att = float(self.man.get('attach_radius') or 0.225)
         self.z_att = float(self.man.get('attach_z') or 0.02)
         self._log = None

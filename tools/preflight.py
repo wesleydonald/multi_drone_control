@@ -283,8 +283,9 @@ def main():
             lines.append(f'  payload yaw {yaw:+.1f} deg; slot->drone {[d + 1 for d in slot2drone]} (the planner\'s auto slot line '
                          f'should print the same)')
             for s_, d_ in enumerate(slot2drone):
-                check(abs(err[s_]) <= a.az_tol_deg, f'drone {d_ + 1} on typed azimuth {typed[s_]:.0f}',
-                      f'measured {meas[d_]:.1f} deg; '
+                # shown clockwise, as typed since 15 Oct (the planner's read-back is counter-clockwise)
+                check(abs(err[s_]) <= a.az_tol_deg, f'drone {d_ + 1} at {(-typed[s_]) % 360.0:.0f} deg cw (typed)',
+                      f'measured {(-meas[d_]) % 360.0:.1f} deg cw; '
                       + slot_offset_detail(d_, err[s_], typed[s_], a.az_tol_deg))
 
     # 2. geometry from mocap: drone-to-rim-point distance vs cable_len (slot by nearest rim point)

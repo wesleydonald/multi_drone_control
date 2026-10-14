@@ -113,7 +113,7 @@ current branch like any other file (it reaches main with the merges).
   Our own approach (R8a/R8b/R9) is twin and thesis only. The check is co-motion (14 Oct, `proof_rules comotion`):
   contact, his small lift, then the tip moving with the plate on a taut tether.
 - Plates count clockwise from the ring's +x seen from above: carriers on 3/11/7, QUAD4 on 9 (Tejen's 3). Angles that
-  are typed or shown are clockwise too, angle = 30 x plate (Wesley 14 Oct; being changed over from counter-clockwise
-  azimuths, `docs/rig/plate_numbering.md`); the maths inside stays counter-clockwise.
+  are typed or shown are clockwise too, angle = 30 x plate: carriers typed 90,330,210 (Wesley 14 Oct; the same argument
+  names, meaning flipped; `docs/rig/plate_numbering.md`); the maths inside stays counter-clockwise.
 - SPACE is an instant, unguarded DISARM in both the console (`tools/console.py`) and the RViz panel; both keep
   the flight buttons (Wesley 14 Oct).

@@ -13,7 +13,7 @@ launch:
     start_taut: true
     load_traj: hover
     cable_len: 0.5
-    attach_azimuths_deg: 0,90,180
+    attach_azimuths_deg: 0,270,180
     load_mass: 0.86
     target_z: 0.6
     kt_trim: false
@@ -26,7 +26,7 @@ geometry:
   attach_radius: 0.25
   attach_z: 0.025
   load_mass: 0.86
-  attach_azimuths_deg: 0,90,180
+  attach_azimuths_deg: 0,270,180
 initial:
   stands: true
   load_z: 0.45

@@ -29,7 +29,7 @@ io_launch:
   file: sim_io_launch.py
 launch:
   args:
-    attach_azimuths_deg: 30,90,150,270
+    attach_azimuths_deg: 330,270,210,90
     attach_radius: 0.225
     attach_z: 0.02
     cable_len: 0.55

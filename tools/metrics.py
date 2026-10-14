@@ -30,6 +30,7 @@ import re
 import numpy as np
 
 import run_logs
+from run_dir import manifest_azimuths_ccw
 
 SETTLE_S = 5.0            # steady window starts this long after the event
 THROTTLE_SAT = 0.59       # tracker_node's own saturation annotation threshold
@@ -1250,7 +1251,7 @@ def summarise_run(run_path):
         # a late mocap made R0676 fold drone 3 in after TAKEOFF at the clamped radius (VOID)
         try:
             man = json.load(open(os.path.join(run_path, 'manifest.json')))
-            az = [float(v) for v in str((man.get('launch_args') or {}).get('attach_azimuths_deg', '')).split(',') if v]
+            az = manifest_azimuths_ccw((man.get('launch_args') or {}).get('attach_azimuths_deg', ''), man)
             if az:
                 out['m1']['clearance'] = partner_clearance(t, d, ev_list, az)
         except Exception:

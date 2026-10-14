@@ -13,7 +13,7 @@ launch:
     departed_land: false
     mode: dissipative
     num_drones: 4
-    attach_azimuths_deg: 30,90,150,270
+    attach_azimuths_deg: 330,270,210,90  # clockwise degrees since 15 Oct; was 30,90,150,270
 io_launch:
   file: sim_io_launch.py
   args:

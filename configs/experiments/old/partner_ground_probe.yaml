@@ -16,7 +16,7 @@ launch:
     cable_len: 0.5
     load_mass: 0.86
     target_z: 0.6
-    attach_azimuths_deg: 330,90,210
+    attach_azimuths_deg: 30,270,150  # clockwise degrees since 15 Oct; was 330,90,210
     attach_central: false
     diss_balanced_tensions: true
     attach_handout: true

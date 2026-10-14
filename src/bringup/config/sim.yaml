@@ -46,8 +46,9 @@ modes:
     num_drones: 4
   attach:
     num_drones: 3
-    # the M1 rig layout (real.yaml modes.attach): carriers 270/30/150, the weld on plate 9 at +y 0.225
-    attach_azimuths_deg: '270,30,150'
+    # the M1 rig layout (real.yaml modes.attach): carriers on plates 3/11/7 (angles typed clockwise, 30 x plate),
+    # the weld on plate 9 at +y 0.225
+    attach_azimuths_deg: '90,330,210'
     attach_x_offset: 0.0
     attach_y_offset: 0.225
     enable_approach_mpc: false

@@ -82,7 +82,7 @@ def test_floor_start_weld_resizes_to_four_on_the_plate_before_takeoff():
     f.creep.step(f.load_state, f.drone_pos, [(0.0, 0.0)] * 3, False)   # latched for n=3
     f._do_attach(3)
     assert f.n == 4 and f.slot2drone == [0, 1, 2, 3]
-    # the PLATE at 90 deg on the ring, not the body-minus-arm point (0.4 m under the ring)
+    # the PLATE at +y (plate 9, 270 deg clockwise) on the ring, not the body-minus-arm point (0.4 m under the ring)
     assert np.allclose(f.rho[3], [0.0, R_RING, Z_ATT], atol=1e-6)
     assert f.cable_len_i == [CABLE, CABLE, CABLE, ARM]
     assert f.creep.n == 4 and np.allclose(f.creep.rho[3], f.rho[3])
@@ -90,7 +90,8 @@ def test_floor_start_weld_resizes_to_four_on_the_plate_before_takeoff():
     assert f.creep.arc_anchor is None                 # re-latched on the next creep step
     assert f.attach_pending == [False] and f._ocp_attached == {3: True}
     assert not f.refs.blend_active() and f._reconfig_hold_left == 0.0
-    assert any('welded at start: plate at 90' in m for m in log.lines)
+    # shown clockwise since 15 Oct: +y is 270 deg cw, plate 9
+    assert any('welded at start: plate at 270 deg cw (plate 9)' in m for m in log.lines)
     # the runner's FOLD_IN edge (runner_node _ROSOUT) keys on this line, as in the air start
     assert any(re.search(r'\] ATTACH drone 3 \(start weld', m) for m in log.lines)
     # next creep tick latches four anchors, drone 3 from its own resting pose

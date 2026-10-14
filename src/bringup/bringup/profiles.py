@@ -178,9 +178,13 @@ def apply(context, side):
 
     Typed arguments win. A typed knob that is not a launch argument of this side is refused
     (put it in params_file). Needs bringup.real_mode.record_typed_args to have run before
-    the declarations, which is how a typed value is told from a declared default."""
+    the declarations, which is how a typed value is told from a declared default.
+
+    attach_azimuths_deg is typed (command line, params_file, the profiles) in clockwise degrees
+    since 15 Oct and leaves here counter-clockwise, as every node reads it (azimuths_param_from_typed)."""
     from bringup.real_mode import _TYPED_KEY
     from launch.substitutions import LaunchConfiguration
+    from mpc_planner.geometry import azimuths_param_from_typed
     lc = context.launch_configurations
     if _TYPED_KEY not in lc:
         raise RuntimeError('profiles.apply: record_typed_args must run before the declarations')
@@ -199,6 +203,8 @@ def apply(context, side):
     for k, v in vals.items():
         if k not in typed:
             lc[k] = v
+    # the one boundary of the typed attach angles: the graph builders pass this value to the nodes
+    lc['attach_azimuths_deg'] = azimuths_param_from_typed(lc.get('attach_azimuths_deg', ''))
     lc['real'] = 'true' if side == 'real' else 'false'
     lc['reference'] = 'free_hover' if mode == 'free_hover' else 'planner'
     if side == 'real':

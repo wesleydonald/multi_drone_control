@@ -24,6 +24,7 @@ from std_msgs.msg import String
 
 from tejen_mission.fake_cooperative_transport_world import (
     FakeCooperativeTransportWorld, RigidBodyState)
+from mpc_planner.geometry import cw_text, tejen_plate
 from mpc_planner.load_trajectory import LoadTrajectory
 
 
@@ -52,11 +53,12 @@ class RingBridge(FakeCooperativeTransportWorld):
         self.create_subscription(String, '/payload/trajectory_state', self._traj_cb, 5)
         self.create_subscription(MotionCaptureState, '/payload/motion_capture_state',
                                  self._ring_cb, 10)
+        # shown as typed (clockwise degrees, our plate number); the parameters are his (counter-clockwise)
         self.get_logger().info(
-            f'[ring_bridge] carriers {self._carrier_azimuths()} deg, cable '
+            f'[ring_bridge] carriers (cw) {cw_text(self._carrier_azimuths())} deg, cable '
             f'{self.get_float_param("bridge_cable_len_m"):.2f} m at '
             f'{self.get_float_param("bridge_cable_elev_deg"):.0f} deg, target plate '
-            f'{self.ring_attachment_plate_index}')
+            f'{tejen_plate(self.ring_attachment_plate_index)} (his {self.ring_attachment_plate_index})')
 
     # ── inputs ────────────────────────────────────────────────────────────────
     def _traj_cb(self, msg: String) -> None:

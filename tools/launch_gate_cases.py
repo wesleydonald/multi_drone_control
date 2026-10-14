@@ -16,7 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
-AZ4 = '30,90,150,270'
+AZ4 = '330,270,210,90'          # typed clockwise (plates 11/9/7/3)
 RIG_IO_0930 = {'num_drones': 3, 'drone0_serial': '/dev/QUAD1', 'drone1_serial': '/dev/QUAD2',
                'drone2_serial': '/dev/QUAD4', 'mocap_drone_body_ids': '11,12,14',
                'magnet_channel': 6, 'magnet_initial': 'ON'}
@@ -25,17 +25,17 @@ RIG_IO_WED = {'num_drones': 4, 'drone0_serial': '/dev/QUAD1', 'drone1_serial': '
               'mocap_drone_body_ids': '11,12,13,14', 'magnet_channel': 6, 'magnet_initial': 'ON',
               'detach': True}
 M2_DRIVER = ['num_drones:=4', 'sim_interface:=false', 'partner_m2:=true', 'cable_len:=0.515',
-             'attach_azimuths_deg:=90.0,0.0,180.0,270.0', 'attach_z:=-0.005', 'start_taut:=false',
+             'attach_azimuths_deg:=270.0,0.0,180.0,90.0', 'attach_z:=-0.005', 'start_taut:=false',
              'handover_elev_deg:=45.0', 'cable_elev_deg:=45.0', 'handover_settle_s:=1.0',
              'creep_vel:=0.2', 'load_mass:=0.86', 'load_traj:=hover', 'target_z:=0.6',
              'reconfig_mode:=ocp', 'pose_timeout_s:=3.0', 'safety_ref_timeout_s:=3.0',
              'takeoff_spool_s:=0.0', 'airborne_start:=true', 'auto_slot_assign:=false']
 DESK_M2 = ['num_drones:=4', 'sim_interface:=false', 'partner_m2:=true', 'real:=false',
-           'cable_len:=0.515', 'attach_azimuths_deg:=30.0,120.0,210.0,300.0', 'start_taut:=false',
+           'cable_len:=0.515', 'attach_azimuths_deg:=330.0,240.0,150.0,60.0', 'start_taut:=false',
            'load_mass:=0.86', 'load_traj:=hover', 'target_z:=0.6', 'reconfig_mode:=ocp',
            'takeoff_spool_s:=0.0', 'airborne_start:=true', 'auto_slot_assign:=false']
 DESK_R0A_T2 = ('num_drones:=3 load_mass:=0.86 drone_mass:=0.64 cable_len:=0.47 attach_radius:=0.25 '
-               'attach_z:=0.0 attach_azimuths_deg:=30,150,270 thrust_ratio:=24.0 kt_trim:=false '
+               'attach_z:=0.0 attach_azimuths_deg:=330,210,90 thrust_ratio:=24.0 kt_trim:=false '
                'z_ki:=0.4 start_taut:=false handover_elev_deg:=45.0 handover_settle_s:=1.0 '
                'creep_vel:=0.2 target_z:=0.6 lift_ramp_vel:=0.0 load_traj:=hover').split()
 

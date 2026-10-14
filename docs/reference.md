@@ -40,8 +40,10 @@ join, hand-over to our OCP, lift, hover, LAND). Git: branch `integration` (from
 `tools/`, `docs/`, `configs/` stay untracked (backup `results/backups/pre_loop_2026-09-26.tgz`).
 
 Payload: Te-Jen's M2A ring (`simulation_assets/m2a_ring_fixture.sdf`): a 500 mm ring of
-24 segments carrying 12 magnet plates every 30 deg on its top face (plate 0 on +x), so
-attach azimuths are clock positions on the plates. Official mass 0.86 kg (2026-09-23).
+24 segments carrying 12 magnet plates every 30 deg on its top face (plate 0 on +x, numbered
+clockwise seen from above). Typed and shown angles are clockwise too, angle = 30 x plate (15 Oct;
+`docs/rig/plate_numbering.md`): the M1 carriers on plates 3/11/7 are typed `attach_azimuths_deg:=90,330,210`.
+The maths inside stays counter-clockwise. Official mass 0.86 kg (2026-09-23).
 Every world carries this model since 2026-09-23 (`generate_rigid_world.py`, ring inertia
 Ixx 0.0273 / Izz 0.0545 at 0.86 kg); the fixture's bench legs are left out because the
 flying payload rests on its ring (mocap origin 5 cm off the floor). RViz draws the same

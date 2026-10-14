@@ -31,7 +31,7 @@ launch:
   args:
     drop_on_loss: false   # pinned 8 Oct: the default before dissipative/detection/drop/departed_land became defaults
     departed_land: false
-    attach_azimuths_deg: 30,90,150,270
+    attach_azimuths_deg: 330,270,210,90
     attach_radius: 0.225
     attach_z: 0.02
     cable_len: 0.55

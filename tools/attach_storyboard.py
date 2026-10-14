@@ -71,7 +71,7 @@ TOOLS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, TOOLS)
 import plot_style as ps                                            # noqa: E402
 import metrics                                                     # noqa: E402
-from run_dir import resolve                                        # noqa: E402
+from run_dir import manifest_azimuths_ccw, resolve                  # noqa: E402
 import matplotlib.pyplot as plt                                    # noqa: E402
 from matplotlib.patches import FancyArrowPatch                     # noqa: E402
 
@@ -118,7 +118,7 @@ def load(run_dir):
              t_weld=t_weld, t_resume=t_weld + hold, t_land=t_land,
              t_handed=t_weld + float(args['attach_t_handout']),
              t_level=t[above[-1] + 1], slot=slot, rho=rho,
-             az=[float(a) for a in str(args['attach_azimuths_deg']).split(',')],
+             az=manifest_azimuths_ccw(args['attach_azimuths_deg'], run['manifest']),
              r_ring=float(re.search(r'attach_radius:\s*([0-9.]+)', par).group(1)),
              mass=float(args['load_mass']), rod=float(args['cable_len']),
              n=metrics.n_drones(d))

@@ -408,7 +408,8 @@ def main():
         spec = d.get('attach_azimuths_deg')
         n_w = len(g['attach_azimuths'])
         if spec:
-            want = sorted(round(float(v) % 360.0, 1) for v in str(spec).split(',') if v.strip())
+            # typed clockwise since 15 Oct; the world's stubs sit at counter-clockwise azimuths
+            want = sorted(round((-float(v)) % 360.0, 1) for v in str(spec).split(',') if v.strip())
         else:
             want = sorted(round(360.0 * k / n_w, 1) for k in range(n_w))
         have = g['attach_azimuths']
