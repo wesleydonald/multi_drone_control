@@ -615,6 +615,11 @@ def _rig_nodes(context):
                 'contact_bottom_hold': True,
                 'contact_give_up_s': f('contact_give_up_s', 45.0),
                 'target_alignment_mode': val('target_alignment_mode', 'measured_tip_trim'),
+                # his trim learns only while the tip moves slower than this (his 0.08 m/s): over plate 3 on 14 Oct the
+                # swinging tip read 0.16-0.20 m/s, so in replay it learned <= 1 cm in 7 s of MATCH; 0.20 learned the
+                # 4-5 cm offset in 2-4 s. Typed only (the sheet's choice), his value otherwise.
+                **({'target_alignment_max_relative_speed_mps': f('trim_speed_gate', 0.08)}
+                   if 'trim_speed_gate' in typed else {}),
             },
         ])
 
@@ -724,6 +729,7 @@ def _arguments():
         DeclareLaunchArgument('contact_target_xy', default_value=''),    # 'x,y' m in the ring frame: our weld point ('' = his nominal plate)
         DeclareLaunchArgument('contact_give_up_s', default_value=''),    # rig: s after the first descent ('' = 45)
         DeclareLaunchArgument('target_alignment_mode', default_value=''),  # rig: '' = measured_tip_trim
+        DeclareLaunchArgument('trim_speed_gate', default_value=''),      # rig: m/s, his trim's learning speed ('' = his 0.08)
         DeclareLaunchArgument('magnet_drop_below_quad', default_value=''),   # QUAD4's, typed (refused untyped)
         DeclareLaunchArgument('proof_rise_max', default_value=''),       # '' = the rig's 0.03
         DeclareLaunchArgument('mpc_thrust_ratio', default_value=''),     # QUAD4's, typed (refused untyped)

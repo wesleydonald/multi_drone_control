@@ -156,3 +156,11 @@ def test_rig_bottom_hold_trim_give_up_and_one_plate_point():
     assert (p['contact_give_up_s'], p['target_alignment_mode']) == (60.0, 'legacy')
     with pytest.raises(RuntimeError, match='contact_target_xy'):
         _nodes(contact_target_xy='0.013')
+
+
+def test_trim_speed_gate_only_when_typed():
+    """His trim's learning speed stays his (no parameter) unless the sheet types trim_speed_gate."""
+    g, _ = _nodes()
+    assert 'target_alignment_max_relative_speed_mps' not in g['online_join_planner']['params']
+    g, _ = _nodes(trim_speed_gate='0.20')
+    assert g['online_join_planner']['params']['target_alignment_max_relative_speed_mps'] == 0.20
