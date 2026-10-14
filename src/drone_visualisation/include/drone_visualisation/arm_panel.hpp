@@ -47,6 +47,12 @@ private Q_SLOTS:
   void onAttachPressed();
   void onDisarmRepeat();
   void refreshDroneLabels();
+  // Tejen's stack (his MPC in the graph): his ARM / TAKEOFF / DISARM on /tejen/drone_command and GIVE UP
+  void onHisArmPressed();
+  void onHisTakeoffPressed();
+  void onGiveUpPressed();
+  void onHisDisarmPressed();
+  void refreshGraph();
 
 private:
   void updateButtonState();
@@ -66,6 +72,9 @@ private:
   void sendArm();
   void sendDisarm();
   bool managerRunning() const;
+  void sendHis(const std::string& cmd);
+  void updatePartnerButtons();
+  void updateAirLabel();
 
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr command_pub_;
@@ -83,6 +92,13 @@ private:
   // start after them).
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr manager_status_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr phase_sub_;
+  // Tejen's commands and our give-up: long-lived publishers, so every subscriber has matched before a press
+  // (14 Oct's takeoff race came from a fresh `ros2 topic pub` each time).
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr his_cmd_pub_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr give_up_pub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr his_armed_sub_;
+  // /fleet/mocap_summary (fleet_viz, 5 Hz JSON): the heights for "in the air", without the 100 Hz poses
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr summary_sub_;
 
   QPushButton* arm_button_;
   QPushButton* takeoff_button_;
@@ -92,9 +108,16 @@ private:
   QWidget* detach_row_;
   QPushButton* attach_button_;
   QWidget* attach_row_;
+  QWidget* partner_row_;
+  QPushButton* his_arm_button_;
+  QPushButton* his_takeoff_button_;
+  QPushButton* give_up_button_;
+  QPushButton* his_disarm_button_;
   QShortcut* space_shortcut_;
   QLabel* status_label_;
   QLabel* phase_label_;
+  QLabel* air_label_;      // who is still in the air, so an end-of-flight DISARM is not pressed early
+  QTimer* graph_timer_;    // 1 Hz: his nodes and our planner in the graph
   // DISARM goes out DISARM_REPEATS times, DISARM_PERIOD_MS apart: one message can be lost.
   QTimer* disarm_timer_;
   int disarm_left_;
@@ -137,6 +160,14 @@ private:
   std::string status_message_;
   bool status_alarm_;      // red status line (a refusal or a fault from the manager)
   std::string phase_message_;
+  bool arm_complete_;      // the manager said "ARM sequence complete" and nothing disarmed since
+  bool partner_present_;   // his MPC (/tejen/tejen_mpc) is in the graph
+  bool his_armed_;         // his MPC's own arming feedback
+  bool his_link_ok_;       // his MPC and his planner subscribe to his command topic and have matched ours
+  std::string his_link_why_;
+  size_t give_up_subs_;
+  std::vector<double> drone_z_;       // NaN when the summary has no fresh pose for that drone
+  std::vector<double> drone_rest_z_;  // the lowest height seen (NaN until seen)
 };
 
 }  // namespace drone_visualisation

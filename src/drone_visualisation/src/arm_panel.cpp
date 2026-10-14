@@ -2,8 +2,12 @@
 #include <pluginlib/class_list_macros.hpp>
 #include <rviz_common/display_context.hpp>
 #include <QHBoxLayout>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QStringList>
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace drone_visualisation
 {
@@ -18,6 +22,11 @@ constexpr int DISARM_PERIOD_MS = 100;
 constexpr float THR_CAP_DEFAULT = 0.6f;
 constexpr float THR_CAP_MARGIN = 0.01f;
 constexpr double THR_CAP_HOLD_S = 2.0;
+// "In the air": above the lowest height seen; a pose older than the rig's pose timeout is not used.
+constexpr double AIRBORNE_M = 0.05;
+constexpr double POSE_STALE_S = 0.25;
+const char* const HIS_MPC = "/tejen/tejen_mpc";
+const char* const HIS_PLANNER = "/online_join_planner";
 
 double wallNow()
 {
@@ -36,12 +45,36 @@ bool isAlarm(const std::string& s)
   }
   return false;
 }
+
+// Manager messages after which the fleet is no longer armed for TAKEOFF.
+bool endsArm(const std::string& s)
+{
+  for (const char* key : {"DISARM", "EMERGENCY STOP", "ARM FAILED", "ARM REFUSED", "TAKEOFF REFUSED",
+                          "Disarm complete"}) {
+    if (s.find(key) != std::string::npos) {
+      return true;
+    }
+  }
+  return false;
+}
+
+QPushButton* flightButton(const char* text, const char* colour)
+{
+  auto b = new QPushButton(text);
+  b->setStyleSheet(QString("QPushButton { background-color: %1; color: white; font-weight: bold; }"
+                           "QPushButton:disabled { background-color: #e9ecef; color: #868e96; }").arg(colour));
+  b->setFixedHeight(60);
+  b->setEnabled(false);
+  b->setFocusPolicy(Qt::NoFocus);   // SPACE stays DISARM whatever was clicked last
+  return b;
+}
 }  // namespace
 
 ArmPanel::ArmPanel(QWidget* parent)
 : rviz_common::Panel(parent), disarm_left_(0), is_armed_(false), armed_count_(0), detach_used_(false),
   show_detach_(true), show_attach_(true), show_magnets_(false), magnet_initial_on_(true), num_drones_(1),
-  status_message_("Waiting for the fleet manager..."), status_alarm_(false)
+  status_message_("Waiting for the fleet manager..."), status_alarm_(false), arm_complete_(false),
+  partner_present_(false), his_armed_(false), his_link_ok_(false), give_up_subs_(0)
 {
   auto layout = new QVBoxLayout;
 
@@ -58,6 +91,11 @@ ArmPanel::ArmPanel(QWidget* parent)
   phase_label_->setAlignment(Qt::AlignCenter);
   phase_label_->setStyleSheet("font-size: 12px; padding: 3px; color: #495057;");
   layout->addWidget(phase_label_);
+
+  air_label_ = new QLabel("In the air: --");
+  air_label_->setAlignment(Qt::AlignCenter);
+  air_label_->setStyleSheet("font-size: 12px; padding: 3px; color: #495057;");
+  layout->addWidget(air_label_);
 
   // Per-drone rows (armed state, battery, throttle), one per drone. Populated by
   // rebuild() once NumDrones is known from the rviz config -- the fleet arms
@@ -128,6 +166,23 @@ ArmPanel::ArmPanel(QWidget* parent)
   attach_layout->addWidget(attach_button_, 1);
   layout->addWidget(attach_row_);
 
+  // Tejen's stack, shown while his MPC is in the graph. Flight order: his ARM, ARM, TAKEOFF, his TAKEOFF.
+  partner_row_ = new QWidget;
+  auto partner_layout = new QHBoxLayout(partner_row_);
+  partner_layout->setContentsMargins(0, 0, 0, 0);
+  his_arm_button_ = flightButton("his ARM", "#7048e8");
+  his_takeoff_button_ = flightButton("his TAKEOFF", "#7048e8");
+  give_up_button_ = flightButton("GIVE UP", "#495057");
+  his_disarm_button_ = flightButton("his DISARM", "#7048e8");
+  for (auto* b : {his_arm_button_, his_takeoff_button_, give_up_button_, his_disarm_button_}) {
+    partner_layout->addWidget(b, 1);
+  }
+  partner_row_->setVisible(false);
+  layout->addWidget(partner_row_);
+  for (auto* b : {arm_button_, takeoff_button_, land_button_, detach_button_, attach_button_}) {
+    b->setFocusPolicy(Qt::NoFocus);
+  }
+
   setLayout(layout);
 
   // Spacebar = DISARM, from anywhere in RViz.
@@ -139,6 +194,9 @@ ArmPanel::ArmPanel(QWidget* parent)
   refresh_timer_ = new QTimer(this);
   refresh_timer_->setInterval(250);
   refresh_timer_->start();
+  graph_timer_ = new QTimer(this);
+  graph_timer_->setInterval(1000);
+  graph_timer_->start();
 
   connect(space_shortcut_, &QShortcut::activated, this, &ArmPanel::onSpacePressed);
   connect(arm_button_, &QPushButton::clicked, this, &ArmPanel::onButtonPressed);
@@ -148,6 +206,11 @@ ArmPanel::ArmPanel(QWidget* parent)
   connect(attach_button_, &QPushButton::clicked, this, &ArmPanel::onAttachPressed);
   connect(disarm_timer_, &QTimer::timeout, this, &ArmPanel::onDisarmRepeat);
   connect(refresh_timer_, &QTimer::timeout, this, &ArmPanel::refreshDroneLabels);
+  connect(graph_timer_, &QTimer::timeout, this, &ArmPanel::refreshGraph);
+  connect(his_arm_button_, &QPushButton::clicked, this, &ArmPanel::onHisArmPressed);
+  connect(his_takeoff_button_, &QPushButton::clicked, this, &ArmPanel::onHisTakeoffPressed);
+  connect(give_up_button_, &QPushButton::clicked, this, &ArmPanel::onGiveUpPressed);
+  connect(his_disarm_button_, &QPushButton::clicked, this, &ArmPanel::onHisDisarmPressed);
   updateStatusLabel();
 }
 
@@ -168,13 +231,47 @@ void ArmPanel::onInitialize()
     [this](const std_msgs::msg::String::SharedPtr msg) {
       status_message_ = msg->data;
       status_alarm_ = isAlarm(msg->data);
-      updateStatusLabel();
+      if (msg->data.find("ARM sequence complete") != std::string::npos) {
+        arm_complete_ = true;
+      } else if (endsArm(msg->data)) {
+        arm_complete_ = false;
+      }
+      updateButtonState();
     });
   phase_sub_ = node_->create_subscription<std_msgs::msg::String>(
     "/fleet/phase", latched,
     [this](const std_msgs::msg::String::SharedPtr msg) {
       phase_message_ = msg->data;
       phase_label_->setText(QString("Phase: %1").arg(QString::fromStdString(msg->data)));
+    });
+  his_cmd_pub_ = node_->create_publisher<std_msgs::msg::String>("/tejen/drone_command", 10);
+  give_up_pub_ = node_->create_publisher<std_msgs::msg::Bool>("/join_planner/give_up", 10);
+  his_armed_sub_ = node_->create_subscription<std_msgs::msg::Bool>(
+    "/tejen/drone_arming_state_feedback", 5,
+    [this](const std_msgs::msg::Bool::SharedPtr msg) {
+      if (his_armed_ != msg->data) {
+        his_armed_ = msg->data;
+        updateButtonState();
+      }
+    });
+  summary_sub_ = node_->create_subscription<std_msgs::msg::String>(
+    "/fleet/mocap_summary", 2,
+    [this](const std_msgs::msg::String::SharedPtr msg) {
+      const auto bodies = QJsonDocument::fromJson(QByteArray::fromStdString(msg->data))
+                            .object().value("bodies").toObject();
+      for (int i = 0; i < static_cast<int>(drone_z_.size()); ++i) {
+        const auto b = bodies.value(QString("drone_%1").arg(i)).toObject();
+        const auto z = b.value("z");
+        const auto age = b.value("age_s");
+        if (!z.isDouble() || !age.isDouble() || age.toDouble() > POSE_STALE_S) {
+          drone_z_[i] = std::numeric_limits<double>::quiet_NaN();
+          continue;
+        }
+        drone_z_[i] = z.toDouble();
+        if (std::isnan(drone_rest_z_[i]) || drone_z_[i] < drone_rest_z_[i]) {
+          drone_rest_z_[i] = drone_z_[i];
+        }
+      }
     });
 
   // Subscriptions are per-drone and depend on NumDrones, which arrives via
@@ -205,6 +302,8 @@ void ArmPanel::rebuild()
   drone_cap_.assign(num_drones_, THR_CAP_DEFAULT);
   drone_seen_.assign(num_drones_, false);
   drone_volt_seen_.assign(num_drones_, false);
+  drone_z_.assign(num_drones_, std::numeric_limits<double>::quiet_NaN());
+  drone_rest_z_.assign(num_drones_, std::numeric_limits<double>::quiet_NaN());
 
   for (int i = 0; i < num_drones_; ++i) {
     auto* label = new QLabel;
@@ -321,6 +420,117 @@ void ArmPanel::refreshDroneLabels()
   for (int i = 0; i < static_cast<int>(drone_labels_.size()); ++i) {
     updateDroneLabel(i);
   }
+  updateAirLabel();
+}
+
+void ArmPanel::updateAirLabel()
+{
+  QStringList up;
+  for (int i = 0; i < static_cast<int>(drone_z_.size()); ++i) {
+    if (!std::isnan(drone_z_[i]) && !std::isnan(drone_rest_z_[i]) && drone_z_[i] - drone_rest_z_[i] > AIRBORNE_M) {
+      up << QString("QUAD%1 %2 m").arg(i + 1).arg(drone_z_[i] - drone_rest_z_[i], 0, 'f', 2);
+    }
+  }
+  air_label_->setText(up.isEmpty() ? QString("Nobody in the air") : "In the air: " + up.join(", "));
+  air_label_->setStyleSheet(up.isEmpty() ? "font-size: 12px; padding: 3px; color: #495057;"
+                                         : "font-size: 12px; padding: 3px; font-weight: bold; "
+                                           "background-color: #ffe066; color: #495057; border-radius: 3px;");
+}
+
+void ArmPanel::refreshGraph()
+{
+  if (!node_) {
+    return;
+  }
+  const auto names = node_->get_node_names();
+  const bool present = std::find(names.begin(), names.end(), HIS_MPC) != names.end();
+  bool mpc = false;
+  bool planner = false;
+  const auto infos = node_->get_subscriptions_info_by_topic("/tejen/drone_command");
+  for (const auto& e : infos) {
+    const std::string ns = e.node_namespace() == "/" ? "" : e.node_namespace();
+    mpc = mpc || ns + "/" + e.node_name() == HIS_MPC;
+    planner = planner || ns + "/" + e.node_name() == HIS_PLANNER;
+  }
+  const size_t matched = his_cmd_pub_ ? his_cmd_pub_->get_subscription_count() : 0;
+  if (!mpc || !planner) {
+    his_link_ok_ = false;
+    his_link_why_ = std::string("waiting for ") + (!mpc ? "tejen_mpc" : "online_join_planner");
+  } else if (matched < infos.size()) {
+    his_link_ok_ = false;
+    his_link_why_ = "matched " + std::to_string(matched) + " of " + std::to_string(infos.size());
+  } else {
+    his_link_ok_ = true;
+    his_link_why_.clear();
+  }
+  give_up_subs_ = node_->count_subscribers("/join_planner/give_up");
+  if (present != partner_present_) {
+    partner_present_ = present;
+    partner_row_->setVisible(present);
+  }
+  updateButtonState();
+}
+
+void ArmPanel::updatePartnerButtons()
+{
+  // each greyed-out button says why, as in tools/console.py
+  auto set = [](QPushButton* b, const char* label, bool ok, const std::string& why) {
+    b->setEnabled(ok);
+    b->setText(ok || why.empty() ? QString(label)
+                                 : QString("%1\n(%2)").arg(label).arg(QString::fromStdString(why)));
+  };
+  set(his_arm_button_, "his ARM", his_link_ok_ && !his_armed_ && !is_armed_,
+      !his_link_ok_ ? his_link_why_ : his_armed_ ? "QUAD4 armed" : "fleet armed");
+  set(his_takeoff_button_, "his TAKEOFF", arm_complete_ && his_armed_ && his_link_ok_,
+      !arm_complete_ ? "after the fleet ARM" : !his_armed_ ? "QUAD4 not armed" : his_link_why_);
+  set(give_up_button_, "GIVE UP", give_up_subs_ > 0 && is_armed_,
+      give_up_subs_ == 0 ? "our planner not listening" : "nothing armed");
+  set(his_disarm_button_, "his DISARM", his_link_ok_ && !is_armed_,
+      !his_link_ok_ ? his_link_why_ : "fleet still armed: LAND or DISARM first");
+}
+
+void ArmPanel::sendHis(const std::string& cmd)
+{
+  std_msgs::msg::String msg;
+  msg.data = cmd;
+  his_cmd_pub_->publish(msg);
+  status_message_ = "Sent his " + cmd;
+  status_alarm_ = false;
+  updateStatusLabel();
+}
+
+void ArmPanel::onHisArmPressed()
+{
+  if (his_cmd_pub_ && his_link_ok_ && !his_armed_ && !is_armed_) {
+    sendHis("ARM");
+  }
+}
+
+void ArmPanel::onHisTakeoffPressed()
+{
+  if (his_cmd_pub_ && arm_complete_ && his_armed_ && his_link_ok_) {
+    sendHis("TAKEOFF");
+  }
+}
+
+void ArmPanel::onHisDisarmPressed()
+{
+  if (his_cmd_pub_ && his_link_ok_ && !is_armed_) {
+    sendHis("DISARM");
+  }
+}
+
+void ArmPanel::onGiveUpPressed()
+{
+  if (!give_up_pub_ || give_up_subs_ == 0 || !is_armed_) {
+    return;
+  }
+  std_msgs::msg::Bool msg;
+  msg.data = true;
+  give_up_pub_->publish(msg);
+  status_message_ = "Sent GIVE UP (QUAD4 taken back, the ring stays up)";
+  status_alarm_ = false;
+  updateStatusLabel();
 }
 
 void ArmPanel::onButtonPressed()
@@ -396,7 +606,7 @@ void ArmPanel::onDisarmRepeat()
 
 void ArmPanel::onTakeoffPressed()
 {
-  if (!command_pub_ || armed_count_ < num_drones_) {
+  if (!command_pub_ || armed_count_ < num_drones_ || !arm_complete_) {
     return;
   }
   std_msgs::msg::String msg;
@@ -580,12 +790,16 @@ void ArmPanel::updateButtonState()
     arm_button_->setText("DISARM  (space)");
     arm_button_->setStyleSheet("background-color: #ff6b6b; color: white; font-weight: bold;");
   } else {
-    arm_button_->setText("ARM");
-    arm_button_->setStyleSheet("background-color: #51cf66; color: white; font-weight: bold;");
+    // with his stack up, his ARM comes first (the manager refuses the fleet ARM until QUAD4's FC is armed)
+    const bool his_first = partner_present_ && !his_armed_;
+    arm_button_->setText(his_first ? "ARM\n(his ARM first)" : "ARM");
+    arm_button_->setStyleSheet(his_first ? "background-color: #e9ecef; color: #868e96;"
+                                         : "background-color: #51cf66; color: white; font-weight: bold;");
     detach_used_ = false;        // a new flight may detach again
   }
-  // TAKEOFF only with the whole fleet armed (the manager refuses a partial one anyway).
-  takeoff_button_->setEnabled(armed_count_ == num_drones_ && num_drones_ > 0);
+  arm_button_->setEnabled(is_armed_ || !partner_present_ || his_armed_);
+  // TAKEOFF only after the manager's "ARM sequence complete" with the whole fleet armed.
+  takeoff_button_->setEnabled(arm_complete_ && armed_count_ == num_drones_ && num_drones_ > 0);
   land_button_->setEnabled(is_armed_);
   detach_button_->setEnabled(is_armed_ && !detach_used_);
   attach_button_->setEnabled(is_armed_);
@@ -594,6 +808,7 @@ void ArmPanel::updateButtonState()
     magnet_buttons_[i]->setEnabled(!is_armed_);
     updateMagnetButton(i);
   }
+  updatePartnerButtons();
   updateStatusLabel();
 }
 
@@ -621,6 +836,9 @@ void ArmPanel::armingStateCallback(const std_msgs::msg::Bool::SharedPtr msg, int
   const bool previous_drone_state = drone_armed_[i];
   drone_armed_[i] = msg->data;
   drone_seen_[i] = true;
+  if (!msg->data) {
+    arm_complete_ = false;
+  }
   updateDroneLabel(i);
 
   if (was_seen && previous_drone_state == drone_armed_[i]) {
