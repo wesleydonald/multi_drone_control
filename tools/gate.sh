@@ -54,6 +54,8 @@ if python3 -m pytest src/utility_objects/test/test_safety.py \
                     src/tejen_mpc/test/test_command_execution.py \
                     src/tejen_mission/test/test_partner_mission_mpc_profile.py \
                     src/bringup/test/test_real_mode_launches.py \
+                    src/bringup/test/test_fleet_viz_launch.py \
+                    src/simulation_communication/test/test_fleet_viz.py \
                     src/dissipative_planner/test \
                     src/drone_magnet/test \
                     src/tejen_mission/test/test_m1_contact_attach.py \

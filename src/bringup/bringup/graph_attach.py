@@ -104,7 +104,7 @@ def _combined_rig_quad4_refusals(context):
     wpz = LaunchConfiguration('weld_point_z').perform(context).strip()
     if not wpz or float(wpz) == 0.0:
         raise RuntimeError('partner_contact on the rig: type weld_point_z:=<the 09:00 record: the tip marker\'s height '
-                           'above the ring-origin plane with the face on plate 9>')
+                           'above the ring-origin plane with the face on plate 3>')
     # typed, or in the params_file (as deliberate as typed, real_mode.apply_rig_values)
     pf = LaunchConfiguration('params_file').perform(context).strip()
     chosen = _typed(context) | (set(flatten(_load(pf))) if pf else set())
@@ -480,7 +480,7 @@ def attach(context, launch_dir, profile_vals):
                              '' if real else '/payload/detachable_joint_state'),
                          # rig: his 60 g puck, and no span while it reads attached (critic F8, F9)
                          # rig: the release guard before the take-back's rise (card 2026-10-10_combined_m1_contact
-                         # rev 10, critic round 4 F7), reading plate 9 at the magnet manager's weld point (round 2, A4)
+                         # rev 10, critic round 4 F7), reading plate 3 at the magnet manager's weld point (round 2, A4)
                          **({'contact_ball_mass': RIG_PUCK_MASS, 'contact_span_wait_ball': True,
                              'take_back_release_guard': True, 'attach_x_offset': f('attach_x_offset'),
                              'attach_y_offset': f('attach_y_offset'), 'weld_point_z': f('weld_point_z')}
@@ -707,7 +707,7 @@ def attach(context, launch_dir, profile_vals):
                      # a free drone 1.2 m from the origin: the default node-0 box
                      # (x*(1-eps), x*(1+eps)) inverts on its negative y, R0523/R0526
                      'x0_relax_symmetric': b('x0_relax_symmetric'),
-                     'enable_diag_log': True,
+                     'enable_diag_log': not real,      # ~400 lines a minute on the rig (plan 2026-10-14 WP2)
                      # the next-tick throttle is for the carriers only (card 2026-10-14_tracker_timing, critic)
                      'cmd_next_tick': False,
                      # warm on his flight: its u-state is the mux output, its learned states hold

@@ -7201,7 +7201,7 @@ class OnlineJoinPlanner(Node):
                 > self.attach_wait_timeout_s
             ):
                 self.get_logger().warning(
-                    "Still waiting for magnetic attachment confirmation."
+                    "Still waiting for magnetic attachment confirmation.", throttle_duration_sec=2.0,
                 )
             return
 

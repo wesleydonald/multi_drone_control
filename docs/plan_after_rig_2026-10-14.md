@@ -9,10 +9,10 @@ itself (below the table) only changes when Wesley changes it; dated notes go in 
 |---|---|---|---|
 | 0 | Tejen's attach logs | done | `~/tejen_attach_logs_2026-10-14.zip` (8 flights, README) |
 | 1 | WP0 commit 14 Oct work + FC request; `legacy` branch; the gate runs the attach tests | done | c15abc4, 19804fb, 4209c62, a0d3963; branch `legacy` at a0d3963; gate 1147 tests (6 drop tests had broken unseen on 14 Oct: fixed); docs/rig/fc_request.md ready to send |
-| 2 | WP6 plates counter-clockwise (moved first, revision 1) | in progress | |
+| 2 | WP6 plates counter-clockwise (moved first, revision 1) | done | 4a60ca3 (plate k at +30k deg; QUAD4's plate 3; worlds regenerated, comments only; docs/rig/plate_numbering.md); the planner, launch and magnet texts follow in the WP2 commit |
 | 3 | WP8 arming, landing and small fixes | done (code); USB hub is hardware | 3297746 (tracker start-up crash, full-pack voltage fallback, radio_health, QUAD4 down a few cm above its rest, takeoff hold + climb from liftoff), dade70d (partner first, only refused drones named, DISARM stops ARM, one burst); re-arm after a refused ARM = LAND, not DISARM |
-| 4 | WP3 attach: one plate point, Tejen's confirmation rules, bottom hold + quiet-miss retry, measured-tip trim | in progress | |
-| 5 | WP5 RViz markers + WP2 quiet T2 and console | to do | |
+| 4 | WP3 attach: one plate point, Tejen's confirmation rules, bottom hold + quiet-miss retry, measured-tip trim | done (code + twin); card + critic before the rig flies it as a claim | eacab58: comotion proof (replay: the one real 14 Oct catch proven, no false proofs), lift-done signal, bottom hold + quiet miss, one plate point, rig overrides; tools/proof_replay.py. Twin R1718 PASS (contact, proven ~1.9 s sim later, fold-in; the post-landing tip-over is the known twin artefact). Which plate point (attach geometry) is Wesley's call (OPEN in decisions.md) |
+| 5 | WP5 RViz markers + WP2 quiet T2 and console | WP5 done; WP2 console + quiet T2 done; RViz arm panel rules next | 4a60ca3 (markers, /fleet/mocap_summary); the WP2 commit after it: tools/console.py (READY, who is airborne, the buttons in flight order, SPACE = DISARM), T2 shows the events only (RIG_FLIGHT_VERBOSE=1 for all), launches.csv, quieter sources |
 | 6 | WP4 scoring tool (attach_window) + proof replay tool | to do | |
 | 7 | Props-off session: FC acceptance, radio soak, magnet hold force, proof bench, load with the console | needs the rig | |
 | 8 | Next lab day: card first, then attach flights scored with the tools | needs the rig | |
@@ -182,6 +182,9 @@ attach worlds regenerated; tests, docs, Tejen notes, a dated decisions line.
 - 14 Oct ~20:37: WP0 commits c15abc4, 19804fb, 4209c62, a0d3963. Revision 1 (cross-check), below.
 - 14 Oct ~20:42: c1ebdc9 gate runs the attach tests (six drop tests had broken unseen on 14 Oct: fixed); branch legacy.
 - 14 Oct ~20:52: WP8 code done (3297746, dade70d); WP6 + WP5 with a helper; WP3 next.
+- 14 Oct ~21:04: WP3 code done (eacab58); twin smoke m1c_floorjoin_hover running.
+- 14 Oct ~21:27: R1718 PASS (the attach and the new proof in the twin). WP6 + WP5 committed (4a60ca3); the console
+  and the quiet T2 next in one commit; decisions.md has tonight's lines (plan, WP3, WP6, WP8; the aim point OPEN).
 
 ## Revision 1 (14 Oct ~20:50, after a cross-check of the plan against the code and the 14 Oct bags)
 Wesley approved the plan above; a second reading against the code changed these points (the sections above stand

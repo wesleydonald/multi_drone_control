@@ -31,7 +31,7 @@ his from /partner/release on (his pickup), and ours again from our span's first 
 
 The tilt cut (card docs/experiments/2026-10-11_quad4_tilt_cut.md, critic round 2 H-B; cut_state_topic '' = off): when
 QUAD4's mux reads 'cut' (it has disarmed the vehicle), the coil goes OFF at once and stays OFF, re-sent at 2 Hz, and
-both inputs are dropped until this node restarts: a dead QUAD4 must not hang on plate 9, and neither his rejoin's ON
+both inputs are dropped until this node restarts: a dead QUAD4 must not hang on plate 3, and neither his rejoin's ON
 nor ours may reach it. A restarted gate reads the mux's latched state and cuts again while the mux still reads 'cut'.
 """
 import rclpy

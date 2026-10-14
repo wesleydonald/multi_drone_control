@@ -28,7 +28,7 @@ ball weld made at spawn reads free (repeated /pickup/detach), instead of one gz 
 real:=true (the rig, combined M1; default false = everything above, unchanged): no Gazebo node, the wall
 clock, his IRL values (irl_commissioning.yaml blocks copied in with every topic written out; never the file
 as a whole: its root topics include our /magnet/object_attached), geometry 'rig', contact_attach required and
-contact_target_z typed (the 09:00 calibration's weld_point_z: the marker height with the face on plate 9).
+contact_target_z typed (the 09:00 calibration's weld_point_z: the marker height with the face on plate 3).
 His mocap inputs come from our mocap node through partner_rig_state; his ball manager is his IRL one (no
 radio output: QUAD4's one coil goes through our magnet_gate). ARM and TAKEOFF stay manual
 (/tejen/drone_command), as in his IRL launches; supervisor:=true adds his supervisor, whose stops request a
@@ -59,8 +59,8 @@ OBJECT_POSE = '/model/payload_model/pose'
 # (body to tip 0.59), flown through the rig thrust map, so his MPC takes his rig values (thrust ratio 22 with
 # feedback, irl_commissioning.yaml) instead of the linear plant's 82.7.
 # His plates count counter-clockwise from +x every 30 deg. legacy: plate 9 = 270 deg = our old weld
-# point (attach_y_offset -0.25), carriers at 330/90/210. rig_twin: plate 3 = 90 deg = +y = rig plate 9
-# (attach_y_offset 0.225), carriers at 270/30/150 (rig plates 3/11/7). contact_attach_z_m: his contact
+# point (attach_y_offset -0.25), carriers at 330/90/210. rig_twin: plate 3 = 90 deg = +y = rig plate 3
+# (attach_y_offset 0.225), carriers at 270/30/150 (rig plates 9/1/5). contact_attach_z_m: his contact
 # target above the ring origin, the tip sphere's centre on the plate (plate top 0.02 + 0.012 radius).
 GEOMETRY = {
     'legacy': {
@@ -464,7 +464,7 @@ def _rig_nodes(context):
         raise RuntimeError(f'contact_target_xy {xy_txt!r}: two numbers, x,y in the ring frame (m)')
     if not target_z:
         raise RuntimeError('partner_mission real:=true: type contact_target_z:=<weld_point_z> (the 09:00 '
-                           'calibration: the magnet marker above the ring-origin plane with the face on plate 9)')
+                           'calibration: the magnet marker above the ring-origin plane with the face on plate 3)')
     plate = int(val('plate', G['plate']))
     azimuths = [float(a) for a in yaml.safe_load(val('carrier_azimuths_deg', G['carrier_azimuths_deg']))]
     share = Path(get_package_share_directory('tejen_mission'))
@@ -603,7 +603,7 @@ def _rig_nodes(context):
                 'pickup_overtravel': 0.036,
                 'pickup_max_overtravel': 0.036,
                 'pickup_support_surface_overtravel_allowance_m': 0.024,
-                # 14 Oct RIG-1014-t6f (Wesley): the slack tether's tip swings a median 3.8 cm / 0.105 m/s over plate 9,
+                # 14 Oct RIG-1014-t6f (Wesley): the slack tether's tip swings a median 3.8 cm / 0.105 m/s over plate 3,
                 # so the 2.5 cm / 0.08 m/s match gate never held 1 s; the descent abort is widened past the new gate.
                 # The contact itself still has to land inside our weld radius.
                 'contact_match_xy_threshold': 0.05,

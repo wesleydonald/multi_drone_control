@@ -230,7 +230,7 @@ class MagnetAttachmentManager(Node):
         self._body_position: Optional[np.ndarray] = None
         self._t_body_clk: Optional[float] = None
         # tilt cut (card 2026-10-11_quad4_tilt_cut; '' = off): the mux's state 'cut' turns the magnet OFF even after
-        # a confirmed attach (a dead QUAD4 must not hang on plate 9) and refuses every ON after it; the planner's
+        # a confirmed attach (a dead QUAD4 must not hang on plate 3) and refuses every ON after it; the planner's
         # hand-over block (our drone-3 tracker latched while the partner flies it) refuses the confirmation
         self._cut = False
         self._handover_blocked = False
@@ -334,7 +334,16 @@ class MagnetAttachmentManager(Node):
                                        'OFF, which releases it); every contact after that is proved by the lift')
 
         self.timer = self.create_timer(1.0 / 30.0, self.timer_callback)
-        if self._proof is not None:
+        if isinstance(self._proof, ComotionProof):
+            self.proof_timer = self.create_timer(0.1, self._publish_proof_state)
+            c = self._proof.config
+            self.get_logger().info(
+                f'proof_rules=comotion: contact xy <= {c.contact_xy:.3f} m, normal {c.normal_min:+.3f}..'
+                f'{c.normal_max:+.3f} m, {c.speed:.3f} m/s for {c.contact_dwell_s:.2f} s; proven {c.proof_dwell_s:.1f} s '
+                f'after the lift: drift <= {c.d_ok:.3f} m, taut >= free hang - {c.taut_margin:.3f} m (fallback '
+                f'{c.taut_fallback:.3f}), plate moved >= {c.comotion_range:.3f} m; lost at {c.lost:.3f} m for '
+                f'{c.lost_dwell_s:.2f} s; sim_catch={self.sim_catch}, body={self.body_pose_topic}')
+        elif self._proof is not None:
             self.proof_timer = self.create_timer(0.1, self._publish_proof_state)
             self.get_logger().info(
                 f'confirm_mode=contact_lift: contact {self.attach_radius:.3f} m / '
@@ -519,7 +528,7 @@ class MagnetAttachmentManager(Node):
         self._last_elrs_publish_time = now
         changed = self._last_elrs_magnet_state is not magnet_on
         self._last_elrs_magnet_state = magnet_on
-        if changed or force:
+        if changed:      # forced re-sends (the planner's keepalive) are not logged: T2 noise, plan WP2
             state = 'ON' if magnet_on else 'OFF'
             suffix = f' ({reason})' if reason else ''
             where = (f'channel_{self.elrs_magnet_channel}={value:+.2f}'

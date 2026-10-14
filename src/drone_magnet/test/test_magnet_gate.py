@@ -127,7 +127,7 @@ def test_the_cut_turns_the_coil_off_and_drops_both_inputs_for_good(start_ours, s
     g = MagnetGate(start_ours=start_ours)
     g.partner('ON')
     if span:
-        g.ours('ON')                                  # our span began (his descent onto plate 9)
+        g.ours('ON')                                  # our span began (his descent onto plate 3)
     assert g.cut() == 'OFF' and g.source == 'cut' and g.last == 'OFF'
     assert g.partner('ON') is None and g.ours('ON') is None and g.ours('OFF') is None
     g.release()

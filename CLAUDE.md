@@ -110,4 +110,9 @@ current branch like any other file (it reaches main with the merges).
   week4 stays as it is. `week5` (12 Oct: rig-wed + the take-back race fix) is the testing tree from Wed 14, rig and twin.
 - On the rig Tejen's controller does every QUAD4 attach, down to contact (the magnet only catches on the plate).
   Our motion-capture check alone confirms the attach; only then do we take QUAD4 over and fold it in (10 Oct).
-  Our own approach (R8a/R8b/R9) is twin and thesis only.
+  Our own approach (R8a/R8b/R9) is twin and thesis only. The check is co-motion (14 Oct, `proof_rules comotion`):
+  contact, his small lift, then the tip moving with the plate on a taut tether.
+- Plates count counter-clockwise: plate k at +30k deg from the ring's +x, QUAD4's plate is 3, as Tejen's (14 Oct
+  evening). The 8-14 Oct sheets and RIG rows count clockwise (`docs/rig/plate_numbering.md`).
+- SPACE is an instant, unguarded DISARM in both the console (`tools/console.py`) and the RViz panel; both keep
+  the flight buttons (Wesley 14 Oct).

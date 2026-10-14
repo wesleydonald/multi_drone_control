@@ -85,14 +85,16 @@ topics=(/payload/motion_capture_state /fleet/command /fleet/abort /fleet/status 
 for ((i = 0; i < N; i++)); do
   topics+=("/drone_$i/motion_capture_state" "/drone_$i/ELRSCommand" "/drone_$i/telemetry"
            "/drone_$i/magnet" "/drone_$i/fc_arm_state" "/drone_$i/mux_state" "/drone_$i/ELRSCommand_diss"
-           "/drone_$i/departed" "/drone_$i/down_alone" "/drone_$i/on_load")
+           "/drone_$i/departed" "/drone_$i/down_alone" "/drone_$i/on_load" "/drone_$i/radio_health"
+           "/drone_$i/fc_attitude")
 done
 # combined M1 contact attach (partner_contact:=true): our check, the coil gate, his mission's side
 if [ "$COMBINED" = true ]; then
   topics+=(/magnet/contact /magnet/attach_proof /join_planner/phase /join_planner/give_up /join_planner/reference
            /join_planner/land_now /drone_3/take_back /drone_3/magnet_ours /drone_3/magnet_gate /drone_3/magnet_coil
            /drone_3/ELRSCommand_tejen /tejen/magnet/command /tejen/object_attached
-           /tejen/magnet_tip_pose /pickup/motion_capture_state /payload/trajectory_state /tejen/drone_command)
+           /tejen/magnet_tip_pose /pickup/motion_capture_state /payload/trajectory_state /tejen/drone_command
+           /join_planner/proof_lift_complete /fleet/mocap_summary)
   # not recorded (14 Oct load cut): /tejen/pendulum_swing_state, /fake_payload/pose, /fake_attachment_point/pose,
   # 75 + 46 + 46 Hz copies made from our mocap that no tool reads
 fi
@@ -105,7 +107,17 @@ summary() {
   setsid nohup python3 tools/rig_summary.py "$D/$F" > "$D/${F}_summary.txt" 2>&1 < /dev/null &
   echo "rig_flight: summary in ~20 s -> $D/figures/${F}_summary.png"
 }
-trap 'stop_bag; summary' EXIT
+# every launch gets a line in $D/launches.csv (armed? flew? refused?), so none is missing from the registry later
+launch_line() {
+  local log="$D/$F.log" armed=no flew=no refused=no
+  grep -q "ARM sequence complete" "$log" 2>/dev/null && armed=yes
+  grep -q "TAKEOFF: flying" "$log" 2>/dev/null && flew=yes
+  grep -qE "ARM FAILED|ARM REFUSED" "$log" 2>/dev/null && refused=yes
+  [ -s "$D/launches.csv" ] || echo "time,name,armed,flew,arm_refused,head,launch" > "$D/launches.csv"
+  printf '%s,%s,%s,%s,%s,%s,"%s"\n' "$(date +%H:%M:%S)" "$F" "$armed" "$flew" "$refused" \
+    "$(git rev-parse --short HEAD)" "$LAUNCH $*" >> "$D/launches.csv"
+}
+trap 'stop_bag; launch_line "$@"; summary' EXIT
 
 echo "rig_flight: F=$F  logs $MDC_RUN_DIR  bag $D/$F (${#topics[@]} topics)"
 SHELL_PID=$$
@@ -116,4 +128,19 @@ SHELL_PID=$$
     echo "rig_flight: REFUSED: the fleet manager never answered from this terminal in 120 s: stopping the launch" >&2
     pkill -INT -P "$SHELL_PID" -f "ros2 launch bringup" || true
   fi ) &
-ros2 launch bringup "$LAUNCH" "$@" 2>&1 | tee "$D/$F.log"
+# T2 shows the events only (plan 2026-10-14 WP2: ~3000 lines a minute on 14 Oct); $D/$F.log keeps everything.
+# RIG_FLIGHT_VERBOSE=1 shows it all, as before.
+EVENTS='process has died|Traceback|\[(WARN|ERROR|FATAL)\]|rig_flight:|COMBINED M1|Fleet manager up|ARM sequence|ARM FAILED|'\
+'ARM REFUSED|arm \(/dev/QUAD|TAKEOFF|LAND|Landed|pretension done|hover hold done|our planner flies the ring|'\
+'Planner phase:|ring magnet span|coil (ON|OFF)|OURS from now|his puck|CONTACT|PROOF|ATTACH|mux:|giving up|give-up|'\
+'TAKE-BACK|RELEASE GUARD|survivors down|is down|disarmed|EMERGENCY STOP|FLEET ABORT|Pose timeout|ENVELOPE|DROPPED|'\
+'UNANNOUNCED DETACH|bottom hold|quiet miss|MPC profile|proof_rules=|Serial connection lost|not available'
+NOISE='Still waiting for magnetic attachment|tracker not answering|/magnet/contact False|takeoff_requested'
+if [ "${RIG_FLIGHT_VERBOSE:-0}" = 1 ]; then
+  ros2 launch bringup "$LAUNCH" "$@" 2>&1 | tee "$D/$F.log"
+else
+  echo "rig_flight: T2 shows events only (full output: $D/$F.log; RIG_FLIGHT_VERBOSE=1 for everything)"
+  # tee -p: the log keeps everything even if the screen filter ends first
+  ros2 launch bringup "$LAUNCH" "$@" 2>&1 | tee -p "$D/$F.log" \
+    | grep --line-buffered -E "$EVENTS" | grep --line-buffered -vE "$NOISE"
+fi
