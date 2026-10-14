@@ -8,15 +8,15 @@ itself (below the table) only changes when Wesley changes it; dated notes go in 
 | # | Work package | Status | Done / evidence |
 |---|---|---|---|
 | 0 | Tejen's attach logs | done | `~/tejen_attach_logs_2026-10-14.zip` (8 flights, README) |
-| 1 | WP0 commit 14 Oct work + FC request | done | c15abc4, 19804fb, 4209c62 + records commit; docs/rig/fc_request.md (to send) |
-| 2 | WP3 attach: Tejen's confirmation rules, bottom hold + quiet-miss retry, measured-tip trim | in progress | |
+| 1 | WP0 commit 14 Oct work + FC request; `legacy` branch; the gate runs the attach tests | done | c15abc4, 19804fb, 4209c62, a0d3963; branch `legacy` at a0d3963; gate 1147 tests (6 drop tests had broken unseen on 14 Oct: fixed); docs/rig/fc_request.md ready to send |
+| 2 | WP6 plates counter-clockwise (moved first, revision 1) | in progress | |
 | 3 | WP8 arming, landing and small fixes | to do | |
-| 4 | WP2 quiet T2 + console | to do | |
-| 5 | WP4 wind: scoring tool, hover configs, hardware prep | to do | |
-| 6 | WP5 RViz markers (tip, tether, puck) | to do | |
-| 7 | WP6 plates counter-clockwise | to do | |
-| 8 | WP7 planner into mpc_planner, old controller to `legacy` | to do | |
-| 9 | WP9 pickup and the full mission | after the attach works | |
+| 4 | WP3 attach: one plate point, Tejen's confirmation rules, bottom hold + quiet-miss retry, measured-tip trim | to do | |
+| 5 | WP5 RViz markers + WP2 quiet T2 and console | to do | |
+| 6 | WP4 scoring tool (attach_window) + proof replay tool | to do | |
+| 7 | Props-off session: FC acceptance, radio soak, magnet hold force, proof bench, load with the console | needs the rig | |
+| 8 | Next lab day: card first, then attach flights scored with the tools | needs the rig | |
+| 9 | After the lab day: WP4 wind matrix (only if contacts stay rare), WP7 rename + legacy, WP9 pickup | to do | |
 
 Thursday 15 Oct 15:00-18:00 tests whatever is done by then; anything unfinished keeps 14 Oct names and numbering
 on that day's sheet.
@@ -179,3 +179,43 @@ attach worlds regenerated; tests, docs, Tejen notes, a dated decisions line.
 
 ## Log
 - 14 Oct ~20:30: Tejen's logs zipped. Plan approved; WP0 started.
+- 14 Oct ~20:45: WP0 commits c15abc4, 19804fb, 4209c62, a0d3963. Revision 1 (cross-check), below.
+
+## Revision 1 (14 Oct ~20:50, after a cross-check of the plan against the code and the 14 Oct bags)
+Wesley approved the plan above; a second reading against the code changed these points (the sections above stand
+where not overridden here):
+- **One plate point for both stacks.** The one real catch (t6h_4) sat at (-9.2, 218.5) mm in the ring frame: 11 mm
+  from his nominal plate centre (0, 225) and 23.8 mm from our hand-catch point (13, 210), so our 24 mm contact
+  radius registered it with 0.3 mm to spare. His target and our weld point become the same configurable point
+  (ring_bridge override). Which point (nominal, the t6h_4 catch, or a props-off map) is attach geometry: Wesley's
+  word. contact_dx/dy go back to 0; his measured-tip trim corrects QUAD4's own offset.
+- **Proof rules, tightened.** Contact: xy <= 35 mm, normal -15..+12 mm (marker vs weld point; no face offset, W
+  already is the marker height at contact), speed <= 0.03 m/s, 0.30 s. L_hang frozen at contact from the free hang
+  before it. Proven after "lift done" (a Bool from his planner when the LIFT_PROOF profile completes; a timer only
+  as fallback; never the body height, which cannot rise when caught) for 1.0 s: drift <= 6 mm, |normal| <= 10 mm,
+  speed <= 0.03, body-to-tip >= L_hang - 3 mm, co-motion (plate z range >= 5 mm in the window, or rise >= 3 mm).
+  Failed: separated (after lift done, normal > +10 mm or xy > 45 mm for 0.2 s), lost (45 mm for 0.12 s any time),
+  inconclusive (3.0 s after lift done), stale (> 0.5 s), aborted (his phase leaves LIFT_PROOF). The 45 mm-only
+  failure in the first version could never fire (an uncaught tip lifts only ~20 mm).
+- **Bottom hold (his planner).** ATTACH_READY aborts at once only on gross errors (relative speed > 0.35 m/s, tip
+  xy > 0.12 m for 0.3 s, face > 20 mm below the plate for 0.12 s); otherwise his quiet-miss retry after 4 s without
+  5 mm improvement while xy > 35 mm; 3 misses apart from proof failures; give-up 45 s. In the no-catch flights the
+  tip stayed at the bottom under 1 s.
+- **The gate runs none of the attach tests** (drone_magnet, the partner-contact tests, his contact-attach and
+  floor_join tests): added first.
+- **Radios.** All four FTDI radios share one USB hub; QUAD3's port dropped three times (12:22, 14:04, 16:21) and
+  three ports dropped together at 09:09. Hardware fix (separate or powered hub) and a 10-min radio soak before any
+  props-on flight; in software, close the old serial handle before reopening.
+- **Takeoff race, both ways.** In t6h_4 his planner climbed 18 s before his MPC flew. His planner's climb starts
+  when QUAD4 is airborne; the console checks his MPC and his planner by node name (the bag recorder alone can
+  satisfy `-w N`).
+- **Re-arm without a relaunch = LAND before TAKEOFF**, which already disarms cleanly without the abort latch.
+  After a flight the trackers exit by design, so one relaunch per flight stays; the READY light saves the wait.
+- **FC request.** Drop `gyro_cal_on_first_arm` (it delays the arm inside our confirm window); capture `status` for
+  `AIR*` refusals too (no disarm flag there); with small_angle 180, READY needs the mocap tilt under 25 deg.
+- **Battery.** Unknown voltage -> assume a full pack (errs low) plus a READY item, instead of a hard ARM refusal.
+- **Console.** Fed by low-rate summaries (/fleet/mocap_summary from fleet_viz at 5 Hz, /drone_i/radio_health at
+  1 Hz) to stay under ~5 % of a core; long-lived publishers, one message per press. SPACE = DISARM stays instant
+  in both surfaces (Wesley); the console also shows who is still airborne.
+- **Order.** Plates renumbered first (before new code prints plate numbers); the wind matrix only if contacts stay
+  rare after the attach fixes (every attach flight is scored with the same tool); WP7 after the lab day.

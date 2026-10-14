@@ -13,22 +13,24 @@
   Betaflight rate curve, so the FC's attitude estimate is not used in flight. It only gates arming.
 
 ## Please, per drone (Betaflight CLI)
-1. While the drone shows `!ERR`, run `status` and note the arming-disable flags (we expect ANGLE).
+1. While the drone shows `!ERR`, run `status` and note the arming-disable flags (we expect ANGLE). Do the same
+   once while it shows `AIR*` after a refused arm (no disable flag there, so that refusal has another cause).
 2. Calibrate the accelerometer on a level surface (Setup tab, "Calibrate Accelerometer").
-3. Run these and keep the output:
+3. Watch the attitude in the Configurator for 5 min on a level bench: a slow drift points at the estimator, a
+   steady wrong angle at the accelerometer.
+4. Run these and keep the output:
    - `get small_angle`
-   - `get gyro_cal_on_first_arm`
    - `get acc_calibration`
    - `get align_board_roll`, `get align_board_pitch`, `get align_board_yaw`
-4. Then:
+5. Then:
 ```
 set small_angle = 180
-set gyro_cal_on_first_arm = ON
 save
 ```
 - `small_angle = 180` lets it arm at any tilt. They sit tilted on their rods and fly rate mode, so this is safe for
-  us.
-- `gyro_cal_on_first_arm` re-measures the gyro bias at the arm, when the drone sits still on its plate.
+  us. Our console then checks the real (mocap) tilt before ARM instead, so a tipped-over drone still cannot be
+  armed.
+- Not `gyro_cal_on_first_arm`: it would delay the arm past our software's confirm window.
 
 ## Acceptance
 Leave the drone on its plate for 10 min, then arm and disarm. Repeat 5 times per drone with no refusal.

@@ -44,7 +44,7 @@ def _node(azimuths='30,90,150,270', detached=None, landing=False):
         drone_pos=pos, drone_vel=[np.zeros(3)] * 4, _departed_hold={}, _departed_step={},
         _departed_next={}, _departed_land=False, _landed=False,
         detach_pub=[_Pub() for _ in range(4)], _magnet_pubs=[_Pub() for _ in range(4)],
-        _dropped_pub=_Pub(), landed_pub=_Pub())
+        _dropped_pub=_Pub(), landed_pub=_Pub(), reserved_attach=0, _magnet_cmd_pub=_Pub())
     f.get_logger = lambda: log
     f.log = log
     f.now = [100.0]                        # the node clock (sim time in the twin)
@@ -139,3 +139,16 @@ def test_detection_drops_instead_of_a_resize_when_due():
     dists[3] = 0.70
     D._detect_tick(f)                      # drone 4 (plate 3, at 270): survivors 30/90/150
     assert f.calls == [] and f._dropped.startswith('unannounced loss of drone 4')
+
+
+def test_a_drop_switches_a_welded_newcomers_coil_off_at_most_once_a_second():
+    f = _node()
+    f.reserved_attach = 1
+    f._drop_and_land('test')
+    assert f._magnet_cmd_pub.msgs == ['OFF']
+    f._release_all_magnets()
+    assert f._magnet_cmd_pub.msgs == ['OFF']          # same second: not again
+    f.now[0] += 1.0
+    f._release_all_magnets()
+    assert f._magnet_cmd_pub.msgs == ['OFF', 'OFF']
+    assert _node()._magnet_cmd_pub.msgs == []         # no newcomer: the coil topic stays quiet
