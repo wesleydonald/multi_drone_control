@@ -14,6 +14,8 @@ current branch like any other file (it reaches main with the merges).
 - Keep it current at every milestone (a batch started or scored, a decision, a commit, a
   merge). Anything durable also goes where it belongs straight away: decisions in
   `docs/decisions.md`, run results in `results/registry.csv`, preferences here or in memory.
+- The current plan is `docs/plan_after_rig_2026-10-14.md` (approved 14 Oct). Its status table is how Wesley follows
+  progress: update the row (status, commits, run ids) the moment a work package moves.
 
 ## Working with Wesley
 - **Push back.** When a decision of his looks wrong or weaker than an alternative, say so
@@ -87,9 +89,11 @@ current branch like any other file (it reaches main with the merges).
   `configs/` and `tools/` are no longer git-ignored).
 
 ## Locked decisions (do not "fix")
-- No geofence. Fleet-wide disarm on any envelope fault, except: detach runs with
-  `drop_on_loss` (a second loss or ring tilt > 30 deg drops the ring and lands every drone,
-  8 Oct); and an unwelded QUAD4's fault lands the fleet with `newcomer_fault_land`.
+- No geofence. Fleet-wide disarm on any envelope fault, except: `drop_on_loss` is on in every
+  mode, attach included (Wesley 14 Oct after RIG-1014-t5_2, critic waived; detach since 8 Oct): a
+  loss leaving fewer than `min_survivors`, or ring tilt > 30 deg, drops the ring (every magnet OFF,
+  a welded QUAD4's coil too) and lands every drone; and an unwelded QUAD4's fault lands the fleet
+  with `newcomer_fault_land`. Open: a drop while Tejen flies QUAD4 does not take it back.
 - LAND lands every drone whatever it is doing; a freed drone off the ring is pushed to its own
   rest and disarmed alone. `newcomer_lifecycle`, `newcomer_fault_land` and `departed_ground_idle`
   are on by default (Wesley 9 Oct, after the LAND re-fly's reviewer); the legacy profile keeps them off.
