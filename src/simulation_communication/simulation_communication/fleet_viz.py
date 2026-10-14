@@ -434,10 +434,10 @@ class FleetViz(Node):
             c = ColorRGBA(r=1.0, g=0.35, b=0.15, a=1.0) if k == 0 else ColorRGBA(r=0.8, g=0.8, b=0.82, a=1.0)
             plates.colors.append(c)
         self.marker_pub.publish(plates)
-        # plate numbers, plate k at +30k deg counter-clockwise from +x (geometry.plate_of_azimuth)
+        # plate numbers, 0 on +x then clockwise like a clock (geometry.plate_of_azimuth)
         nums = MarkerArray()
         for k in range(12):
-            th = 2.0 * math.pi * k / 12
+            th = -2.0 * math.pi * k / 12
             t = Marker()
             t.header = ring.header
             t.ns = 'plate_number'

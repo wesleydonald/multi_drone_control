@@ -1,4 +1,4 @@
-# M1 attach rungs R8a0/R8a/R8b (Wed 14 Oct), QUAD4 = drone 4 (/drone_3) onto plate 3 (+y). Wesley 9 Oct:
+# M1 attach rungs R8a0/R8a/R8b (Wed 14 Oct), QUAD4 = drone 4 (/drone_3) onto plate 9. Wesley 9 Oct:
 # LAND lands every drone (newcomer_lifecycle), a fault on unwelded QUAD4 lands the fleet (newcomer_fault_land),
 # a drone off the ring is pushed to its rest and disarmed alone (departed_ground_idle), and QUAD4 corrects its
 # height from its measured tip (approach_tip_feedback, from the first R8b; card 2026-10-09_approach_tip_feedback).
@@ -7,8 +7,8 @@ newcomer_fault_land: true
 departed_ground_idle: true
 approach_tip_feedback: true
 approach_tip_log: true
-# Wednesday props-off calibration (face on plate 3, the 14 Oct sheet's plate 9; tether hanging): the tip
-# marker's height above body 8's origin plane minus today's +0.04 setpoint; the weld point the same height.
-# 14 Oct test 2: three catches 0.0239 / 0.0244 / 0.0238 (results/rig/2026-10-14/tip_calibration.txt).
+# Wednesday props-off calibration (face on plate 9, tether hanging): the tip marker's height above body 8's
+# origin plane minus today's +0.04 setpoint; the weld point the same height. 14 Oct test 2: three catches
+# 0.0239 / 0.0244 / 0.0238 (results/rig/2026-10-14/tip_calibration.txt).
 attach_tip_dz: -0.016
 weld_point_z: 0.024

@@ -2,7 +2,7 @@
 his mission flies QUAD4 until our check confirms the attach. Our drone-3 tracker is warm on its measured body from his
 takeoff, the ring magnet span starts once he rejoins with QUAD4 airborne and the ring weld free, our own ON never
 starts an approach or holds the ring, and with no attach (his give-up, our LAND) we take QUAD4 back: a fixed hold,
-radially out (over the middle along plate 3's azimuth) and down alone. All behind partner_contact (off by default)."""
+radially out (over the middle along plate 9's azimuth) and down alone. All behind partner_contact (off by default)."""
 import re
 import time
 from types import MethodType, SimpleNamespace
@@ -246,7 +246,7 @@ def test_give_up_takes_it_back_holds_then_moves_radially_out_at_its_height():
 def test_over_the_middle_it_steps_out_along_its_plate_azimuth():
     f = _node()
     _airborne_rejoin(f)
-    f.attach_pos[0] = np.array([0.05, -0.05, 1.9])             # r 0.07 < 0.225, on the far side of plate 3
+    f.attach_pos[0] = np.array([0.05, -0.05, 1.9])             # r 0.07 < 0.225, on the far side of plate 9
     f._take_back(0, 'LAND')
     assert np.allclose(f._departed_step[3], [0.0, DEPARTED_CLEAR_R, 1.9])
     g = _node()
@@ -461,7 +461,7 @@ def test_rig_span_waits_for_his_ball_released():
         assert f._magnet_cmd_pub.msgs[:1] == ['ON']
 
 
-# ── the full M1: QUAD4 welded on plate 3 from spawn, detached, stepped out and released to his mission ───────────
+# ── the full M1: QUAD4 welded on plate 9 from spawn, detached, stepped out and released to his mission ───────────
 
 STEP_OUT = np.array([0.0, 1.0, 1.78])     # 0.5 m out and 0.3 m up from its detach point (partner_release_out/up_m)
 
@@ -773,7 +773,7 @@ def test_our_tracker_latching_while_he_flies_it_blocks_the_hand_over_once():
 
 
 def test_welded_on_load_goes_false_only_once_the_tip_has_left_the_plate():
-    """M4: on the rig the tether is slack, so on_load False waits for the tip itself to leave plate 3."""
+    """M4: on the rig the tether is slack, so on_load False waits for the tip itself to leave plate 9."""
     f = _tc(_welded_node(), mux='ours')
     pub = _Pub()
     f._on_load_pubs, f._on_load_announced = {3: pub}, True
@@ -791,7 +791,7 @@ def test_welded_on_load_goes_false_only_once_the_tip_has_left_the_plate():
 
 def test_a_take_back_with_the_tip_at_the_ring_rises_before_it_steps_out():
     """R1543: taken back at ATTACH_READY, the step out at its height dragged the rod's tip through the rim."""
-    f = _node(quad=(0.0, 0.3, 1.0 + 0.59 + 0.01))               # body over plate 3, tip 1 cm above the ring
+    f = _node(quad=(0.0, 0.3, 1.0 + 0.59 + 0.01))               # body over plate 9, tip 1 cm above the ring
     f._his_phase_cb(String(data='TAKEOFF'))
     f._take_back(0, 'his give-up')
     rise = max(1.0 + 0.59 + 0.15, 1.5 + 0.4)                    # clear of the rim and over the carriers (R1554)
@@ -1041,7 +1041,7 @@ def test_land_mid_take_back_stops_the_frame_through_the_bound_and_skips_the_path
 
 
 def test_a_trajectory_stop_mid_take_back_stops_the_frame_and_the_path_clear_still_follows():
-    f = _orbit_node(t=27.0)                                    # the ring nearest -y: plate 3's way out is inward
+    f = _orbit_node(t=27.0)                                    # the ring nearest -y: plate 9's way out is inward
     f._give_up_cb(Bool(data=True))
 
     def hold(f, k):
@@ -1122,7 +1122,7 @@ SETTLE_S = 2.7
 
 
 def _guard_node(z=1.0, weld=None, body_over_tip=0.59):
-    """The ring at z (plate 3 at z + 0.02, the ring's rest at 0), QUAD4 body_over_tip over plate 3 with its tip on
+    """The ring at z (plate 9 at z + 0.02, the ring's rest at 0), QUAD4 body_over_tip over plate 9 with its tip on
     it. weld: the launch's weld point (ring frame); None, the network slot (0, 0.225, 0.02)."""
     f = _node()
     f._weld_rho = None if weld is None else np.asarray(weld, float)
@@ -1143,9 +1143,9 @@ def _set_tip(f, tip):
 
 
 def _gtick(f, ring_vz=0.0, fresh=True, tip=None):
-    """One tick: the ring moves at ring_vz down to its rest, its pose fresh (or not), the coil holds the tip on plate 3
+    """One tick: the ring moves at ring_vz down to its rest, its pose fresh (or not), the coil holds the tip on plate 9
     (or the tip is at `tip`) and QUAD4 flies its reference, never below its rest. Returns (stage, drone 3's node 0 or
-    None, plate 3)."""
+    None, plate 9)."""
     z = max(f.lift_z0, float(f.load_state[2]) + ring_vz / HZ)
     f.load_state[9] = (z - float(f.load_state[2])) * HZ
     f.load_state[2] = z
@@ -1163,7 +1163,7 @@ def _gtick(f, ring_vz=0.0, fresh=True, tip=None):
 
 def _guard_lands(f, ticks):
     """His give-up with the coil holding: the guard fails on its wait, then the ring descends at land_vel from the
-    LAND on (a step, the worst case) to its rest. [(stage, node 0, plate 3)] per tick."""
+    LAND on (a step, the worst case) to its rest. [(stage, node 0, plate 9)] per tick."""
     f._give_up_cb(Bool(data=True))
     return [_gtick(f, -f.land_vel if f._fleet_cmd_pub.msgs else 0.0) for _ in range(ticks)]
 
@@ -1193,7 +1193,7 @@ def test_rig_guard_comes_down_to_the_tethers_slack_resends_off_and_lands_the_fle
     zs, stages, lands = [], [], []
     for k in range(int((NEWCOMER_RELEASE_S + GUARD_WAIT_S) * HZ) + 50):
         if why == 'plate' and k == 9:
-            f.load_state[2] = 1.0 + 0.03                       # plate 3 follows it up
+            f.load_state[2] = 1.0 + 0.03                       # plate 9 follows it up
         stage, n, plate = _gtick(f)                            # (the ring does not descend here)
         zs.append(n[0][2])
         stages.append(stage)
@@ -1316,15 +1316,15 @@ from dissipative_planner.dissipative_network import DissipativeNetwork, Dissipat
 from dissipative_planner.dissipative_node import gap_centre_rho  # noqa: E402
 from mpc_planner.geometry import attach_points  # noqa: E402
 
-WPZ = 0.031          # weld_point_z: the tip marker over the ring-origin plane with the face on plate 3
+WPZ = 0.031          # weld_point_z: the tip marker over the ring-origin plane with the face on plate 9
 TAUT = 0.58          # QUAD4's real body-to-tip, taut (the planner's is 0.59)
 LAG_S = 0.3          # QUAD4 follows its reference with this first-order lag
 
 
 def _fly_released(slack, plane=False):
-    """A1: his give-up over plate 3 with the rig's geometry: the tip resting on the plate at WPZ, QUAD4 `slack` under
+    """A1: his give-up over plate 9 with the rig's geometry: the tip resting on the plate at WPZ, QUAD4 `slack` under
     its taut tether (his aim low), the coil released, so the tip stays on the plate until the tether is taut and then
-    follows the body; QUAD4 flies its reference with a LAG_S lag. plane: the guard reads plate 3 on the ring-origin
+    follows the body; QUAD4 flies its reference with a LAG_S lag. plane: the guard reads plate 9 on the ring-origin
     plane (the placeholder's attach_z, before A4). Returns (the stage after the guard, s from its start)."""
     f = _guard_node(weld=(0.0, 0.225, WPZ), body_over_tip=TAUT - slack)
     rest = f._tip_now[1].copy()
@@ -1354,7 +1354,7 @@ def test_rig_guard_passes_a_released_coil_with_rig_geometry_within_its_wait(slac
 
 @pytest.mark.parametrize('slack', [0.01, 0.02])
 def test_rig_guard_with_the_old_constants_had_no_margin(slack, monkeypatch):
-    """Before A1 and A4 (+0.02 over the slack, 2 s, plate 3 on the ring-origin plane, the stage at 0.15 m/s), the
+    """Before A1 and A4 (+0.02 over the slack, 2 s, plate 9 on the ring-origin plane, the stage at 0.15 m/s), the
     same release: with 1 cm of slack it passes at best one planner tick before the timeout (on A5's debounce), with
     2 cm it times out (a false RELEASE GUARD: the fleet LANDs)."""
     monkeypatch.setattr(dn, 'GUARD_RISE_ABOVE_SLACK_M', 0.02)
@@ -1363,15 +1363,15 @@ def test_rig_guard_with_the_old_constants_had_no_margin(slack, monkeypatch):
     f, stage, t = _fly_released(slack, plane=True)
     assert stage == 'guard_follow' or t >= 2.0 - 1.0 / HZ - 1e-6
     if slack == 0.02:
-        assert stage == 'guard_follow' and any('has not left plate 3 in 2 s' in ln for ln in f.log.lines)
+        assert stage == 'guard_follow' and any('has not left plate 9 in 2 s' in ln for ln in f.log.lines)
 
 
 @pytest.mark.parametrize('az', [(270.0, 30.0, 150.0), (30.0, 150.0, 270.0), (150.0, 270.0, 30.0),
                                 (271.0, 30.0, 150.0)])
-def test_rig_guard_reads_plate_3_at_the_weld_point_whatever_the_carrier_azimuths(az):
+def test_rig_guard_reads_plate_9_at_the_weld_point_whatever_the_carrier_azimuths(az):
     """A4: the planner's net with the rig's carriers; the reserved slot's placeholder is the centre of the largest gap.
-    At 270/30/150 (in any order: it sorts them) the three gaps tie and argmax's tie-break lands it on plate 3; one
-    carrier 1 deg off moves it to ~210 deg, and the guard read it would not arm with the tip on plate 3. The guard
+    At 270/30/150 (in any order: it sorts them) the three gaps tie and argmax's tie-break lands it on plate 9; one
+    carrier 1 deg off moves it to ~210 deg, and the guard read it would not arm with the tip on plate 9. The guard
     reads the launch's weld point (attach offset (0, 0.225), weld_point_z) instead."""
     rho = attach_points(3, 0.225, 0.0, ','.join(f'{a:g}' for a in az))
     net = DissipativeNetwork(4, rho + [gap_centre_rho(rho, 0.225, 0.0)], 0.55, 0.55, 0.86, 9.81, DissipativeParams())
@@ -1380,13 +1380,13 @@ def test_rig_guard_reads_plate_3_at_the_weld_point_whatever_the_carrier_azimuths
     f = _guard_node(weld=(0.0, 0.225, WPZ))
     f.net = net
     np.testing.assert_allclose(f._weld_rho_of(0), [0.0, 0.225, WPZ])
-    roll = np.radians(5.0)                                   # the ring rolled about x: plate 3 (+y) rises
+    roll = np.radians(5.0)                                   # the ring rolled about x: plate 9 (+y) rises
     f.load_state[3:7] = [np.cos(roll / 2.0), np.sin(roll / 2.0), 0.0, 0.0]
     _, plate_z = f._guard_read(0)
     assert plate_z == pytest.approx(f.load_state[2] + 0.225 * np.sin(roll) + WPZ * np.cos(roll))
     f.load_state[3:7] = [1.0, 0.0, 0.0, 0.0]
     f._give_up_cb(Bool(data=True))
-    assert f._comove[3]['guard'] is not None                 # armed: the tip is on plate 3
+    assert f._comove[3]['guard'] is not None                 # armed: the tip is on plate 9
     if az[0] == 271.0:                                       # the placeholder would have left it off
         g = _guard_node(weld=(0.0, 0.225, WPZ))
         g.net, g._weld_rho = net, None
@@ -1395,7 +1395,7 @@ def test_rig_guard_reads_plate_3_at_the_weld_point_whatever_the_carrier_azimuths
 
 
 def _in_guard(**kw):
-    """His give-up with the tip held on plate 3, ticked into the guard and past its plate baseline."""
+    """His give-up with the tip held on plate 9, ticked into the guard and past its plate baseline."""
     f = _guard_node(**kw)
     f._give_up_cb(Bool(data=True))
     while _gtick(f)[0] != 'guard':
@@ -1406,7 +1406,7 @@ def _in_guard(**kw):
 
 
 def _release_tick(f, up=0.06, fresh=True):
-    """One tick with the tip `up` off plate 3 on a taut tether, QUAD4's body over it. Returns the stage."""
+    """One tick with the tip `up` off plate 9 on a taut tether, QUAD4's body over it. Returns the stage."""
     tip = np.array([0.0, 0.0, float(f.load_state[2])]) + f._weld_rho_of(0) + np.array([0.0, 0.0, up])
     f.attach_pos[0] = tip + np.array([0.0, 0.0, 0.59])
     if not fresh:
@@ -1439,14 +1439,14 @@ def test_rig_guard_a_stale_ring_pose_neither_passes_nor_fails():
         assert _release_tick(f, fresh=False) == 'guard'
     assert _release_tick(f) == 'guard' and 'move' in [_release_tick(f) for _ in range(2)]   # fresh: it passes
     g = _in_guard()
-    g.load_state[2] += 0.05                                  # plate 3 risen 5 cm, its pose stale: no fail...
+    g.load_state[2] += 0.05                                  # plate 9 risen 5 cm, its pose stale: no fail...
     stage = 'guard'
     while stage == 'guard':
         g._load_t = time.monotonic() - 1.0
         stage = _gtick(g, fresh=False)[0]
     assert stage == 'guard_follow'                           # ...and the wait still runs
-    assert any(f'has not left plate 3 in {GUARD_WAIT_S:.0f} s' in ln for ln in g.log.lines)
-    assert not any('plate 3 follows it' in ln for ln in g.log.lines)
+    assert any(f'has not left plate 9 in {GUARD_WAIT_S:.0f} s' in ln for ln in g.log.lines)
+    assert not any('plate 9 follows it' in ln for ln in g.log.lines)
 
 
 def test_rig_guard_a_tip_puck_marker_swap_does_not_pass():
@@ -1469,8 +1469,8 @@ def test_rig_guard_plate_baseline_is_averaged_over_its_first_samples():
     while f._comove[3]['guard']['plate_z0'] is None:
         _gtick(f)
     assert f._comove[3]['guard']['plate_z0'] < z + 0.02 + 0.02
-    f.load_state[2] = z + 0.035                              # the coil holds: plate 3 follows QUAD4 up
-    assert _gtick(f)[0] == 'guard_follow' and any('plate 3 follows it' in ln for ln in f.log.lines)
+    f.load_state[2] = z + 0.035                              # the coil holds: plate 9 follows QUAD4 up
+    assert _gtick(f)[0] == 'guard_follow' and any('plate 9 follows it' in ln for ln in f.log.lines)
 
 
 # ── critic round 2 follow-up (rig card 2026-10-21_combined_m1_rig): 2 the timeout's causes, 3 the follow-down's
@@ -1486,7 +1486,7 @@ def test_rig_guard_a_timeout_names_its_causes_a_band_miss():
     stage = 'guard'
     while stage == 'guard':
         stage = _gtick(f, tip=f.attach_pos[0] - np.array([0.0, 0.0, 0.4]))[0]
-    line = next(ln for ln in f.log.lines if 'has not left plate 3' in ln)
+    line = next(ln for ln in f.log.lines if 'has not left plate 9' in ln)
     m = re.search(r'ring pose stale (\d+), tip pose stale (\d+), body pose stale (\d+), tip on the plate '
                   r'\(< 0\.05 m off\) (\d+), tip-to-body off 0\.590 \+- 0\.03 m (\d+) \(last 0\.400 m\)', line)
     assert m, line
@@ -1520,11 +1520,11 @@ TRACK_TAU_S = 0.3
 
 
 def _held_coil(lifts=False, slack=0.01, ticks=250):
-    """His give-up with the coil still holding the tip on plate 3 (rig geometry, QUAD4 `slack` under its taut tether,
-    tracking its reference as TRACK_FF and TRACK_TAU_S say). lifts: once the tether is taut plate 3 follows QUAD4's
+    """His give-up with the coil still holding the tip on plate 9 (rig geometry, QUAD4 `slack` under its taut tether,
+    tracking its reference as TRACK_FF and TRACK_TAU_S say). lifts: once the tether is taut plate 9 follows QUAD4's
     body (the ring's stiffness ignored) until the LAND, so the guard's plate-rise check fails it; else the ring is
     stiff and the guard times out. From the LAND the carriers set the ring, stepping down at land_vel 0.2 m/s to its
-    rest. Per tick until the follow ends: (stage, reference z, body z, plate 3 z, the ring's own plate 3 z, LAND
+    rest. Per tick until the follow ends: (stage, reference z, body z, plate 9 z, the ring's own plate 9 z, LAND
     sent)."""
     f = _guard_node(z=2.0, weld=(0.0, 0.225, WPZ), body_over_tip=TAUT - slack)
     f._give_up_cb(Bool(data=True))
@@ -1549,7 +1549,7 @@ def _held_coil(lifts=False, slack=0.01, ticks=250):
 def test_rig_guard_follow_stays_under_the_taut_tether_through_the_land_step():
     """A held coil on a stiff ring: the guard times out with QUAD4 at the guard's height, over the taut tether (the
     guard stage put it there, not the follow). The follow's reference only comes down from there, and is back at or
-    below plate 3 + the taut length before the LAND; from then on, through the LAND's step to land_vel and the whole
+    below plate 9 + the taut length before the LAND; from then on, through the LAND's step to land_vel and the whole
     descent, the reference and the tracking body stay at or below it."""
     f, rows = _held_coil()
     follow = [r for r in rows if r[0] == 'guard_follow']
@@ -1562,8 +1562,8 @@ def test_rig_guard_follow_stays_under_the_taut_tether_through_the_land_step():
 
 
 @pytest.mark.parametrize('slack', [0.0, 0.01, 0.02])
-def test_rig_guard_a_held_coil_lifts_plate_3_at_most_4_cm_and_is_down_before_the_land(slack):
-    """Plate 3 following QUAD4 once the tether is taut: the 2 cm check reacts on its first sample over it, then the
+def test_rig_guard_a_held_coil_lifts_plate_9_at_most_4_cm_and_is_down_before_the_land(slack):
+    """Plate 9 following QUAD4 once the tether is taut: the 2 cm check reacts on its first sample over it, then the
     reference brakes from the guard stage's GUARD_STAGE_VEL and the body trails it, so the plate peaks under 4 cm
     (~6 cm at the stage's old 0.15 m/s); QUAD4 has let it down before the fleet's LAND goes. Through the follow the
     reference asks at most its braking distance over the taut tether."""
@@ -1571,7 +1571,7 @@ def test_rig_guard_a_held_coil_lifts_plate_3_at_most_4_cm_and_is_down_before_the
     lift = [r[3] - r[4] for r in rows]
     i_fail = [r[0] for r in rows].index('guard_follow')
     i_land = [r[5] for r in rows].index(True)
-    assert any('plate 3 follows it' in ln for ln in f.log.lines)
+    assert any('plate 9 follows it' in ln for ln in f.log.lines)
     rise = [r[3] - f._comove[3]['guard']['plate_z0'] for r in rows]   # over its baseline (with no slack the lift
     assert rise[i_fail - 1] <= dn.GUARD_PLATE_RISE_M < rise[i_fail] <= dn.GUARD_PLATE_RISE_M + 0.01   # starts in it)
     assert max(lift) <= 0.04 and lift[i_land] == 0.0

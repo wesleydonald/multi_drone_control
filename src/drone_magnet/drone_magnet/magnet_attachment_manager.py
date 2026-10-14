@@ -230,7 +230,7 @@ class MagnetAttachmentManager(Node):
         self._body_position: Optional[np.ndarray] = None
         self._t_body_clk: Optional[float] = None
         # tilt cut (card 2026-10-11_quad4_tilt_cut; '' = off): the mux's state 'cut' turns the magnet OFF even after
-        # a confirmed attach (a dead QUAD4 must not hang on plate 3) and refuses every ON after it; the planner's
+        # a confirmed attach (a dead QUAD4 must not hang on plate 9) and refuses every ON after it; the planner's
         # hand-over block (our drone-3 tracker latched while the partner flies it) refuses the confirmation
         self._cut = False
         self._handover_blocked = False

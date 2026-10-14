@@ -2,7 +2,7 @@
 """tools/tilt_statics.py -- can three rods hold the ring when the survivors leave a gap >= 180 deg, if the
 ring is allowed to tilt? (Wesley 8 Oct: accept a non-zero steady ring tilt.)
 
-    python3 tools/tilt_statics.py --azimuths 0,180,270            # drone 2 on plate 0, drone 4 left from 3
+    python3 tools/tilt_statics.py --azimuths 0,180,270            # drone 2 on plate 0, drone 4 left from 9
     python3 tools/tilt_statics.py --azimuths 330,180,270 --min-elev 20
 
 Statics of the ring (mass M at its centre, anchors on the rim at radius r in the ring plane) hung on three

@@ -1,4 +1,4 @@
-"""The full M1 mux (QUAD4 welded on plate 3 from spawn, partner_contact): ours from boot (combined-stack O1,
+"""The full M1 mux (QUAD4 welded on plate 9 from spawn, partner_contact): ours from boot (combined-stack O1,
 branch combined-m1 8c21fe8), his stream only after /partner/release on its first flying command, then the
 contact attach or our take-back hands it back to ours. A take-back before his stream took over cancels the
 release. start_ours false (the default) keeps today's mux. Isolated ROS domain; callbacks called directly."""

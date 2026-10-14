@@ -41,8 +41,8 @@ Two cases the freeze does not time are labelled in event_rule and window_end, no
     descent): the window ends at the fleet abort.
 Clocks: rig rows use the run directory's t0_epoch (every rig node logs epoch time); twin rows align the planner
 log on the ring's lift-off, as tools/detach_tensions.py does. Rig layouts and leavers are typed here from the
-registry rows and the flights' params.json; plates are given as angles anticlockwise from the ring's +x (the 8-14 Oct
-sheets counted plates clockwise, so their plate 9 is 90 deg, plate 3 from 15 Oct).
+registry rows and the flights' params.json; plates are given as angles anticlockwise from the ring's +x (the 8 Oct
+sheets count plates clockwise, so rig plate 9 is 90 deg).
 """
 import argparse
 import csv
@@ -96,8 +96,8 @@ RUNS = [
     dict(run='RIG-1007-r200006 slip 2', source='rig', kind='uncommanded', path='LAND descent',
          azimuths=(0, 90, 180, 270), gone_deg=(270,), leaver_deg=180, date='2026-10-07', name='r200006', slip=2,
          pull='measured', plan_deg=45, integral='model', note='capsized; the pre-window holds slip 1'),
-    # rig, 8 Oct (registry RIG-1008-r302_3, r303_4, r304_3, r305: plates 3/11/7/9 and 3/11/6/9 clockwise, now
-    # 9/1/5/3 and 9/1/6/3; drone 4 leaves from 90 deg; measured pull, rods planned at 60 deg, reference integral)
+    # rig, 8 Oct (registry RIG-1008-r302_3, r303_4, r304_3, r305: plates 3/11/7/9 and 3/11/6/9 clockwise, drone 4
+    # leaves from plate 9 = 90 deg; measured pull, rods planned at 60 deg, reference integral)
     dict(run='RIG-1008-r302_3', source='rig', kind='announced', path='hover', azimuths=(30, 90, 150, 270),
          leaver_deg=90, date='2026-10-08', name='r302_3', pull='measured', plan_deg=60, integral='reference'),
     dict(run='RIG-1008-r303_4', source='rig', kind='unannounced', path='hover', azimuths=(30, 90, 150, 270),

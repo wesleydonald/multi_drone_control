@@ -26,7 +26,7 @@ import sys
 import numpy as np
 
 G = 9.81
-PLATE_XY = (0.013, 0.210)       # QUAD4's plate (plate 3) in the ring frame: test 3's catch centre (RIG-1014-t3)
+PLATE_XY = (0.013, 0.210)       # QUAD4's plate (plate 9, Tejen's 3) in the ring frame: test 3's catch centre (RIG-1014-t3)
 CATCH_K = 0.024                 # m, the catch radius K (RIG-1014-t3)
 SLOW = 0.10                     # m/s, tip speed relative to the plate for a catch
 HOLD_PHASES = ('MATCH_VELOCITY', 'DESCEND_TO_ATTACHMENT', 'ATTACH_READY', 'LIFT_PROOF')

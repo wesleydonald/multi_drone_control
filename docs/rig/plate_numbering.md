@@ -1,36 +1,34 @@
-# Plate numbering
+# Plate numbers and angles
 
-Plate k sits at +30k deg, counter-clockwise from the ring's +x (ring rigid body 8), seen from above: plate 0 on +x,
-plate 3 on +y, plate 6 on -x, plate 9 on -y. This matches the azimuths in every config (`attach_azimuths_deg`,
-`attach_x_offset` / `attach_y_offset`), Tejen's plate index, the thesis and the twin worlds' `plate_k_visual`.
-The code helper is `mpc_planner.geometry.plate_of_azimuth`, and RViz draws the numbers. The plates carry no
-physical labels.
+**Plates** count clockwise from the ring's +x (ring rigid body 8) seen from above, like a clock: plate 0 on +x,
+plate 3 on -y, plate 6 on -x, plate 9 on +y (Wesley 7 Oct, f3b3072). The plates carry no physical labels; RViz draws
+the numbers. QUAD4's plate (+y) is plate 9, which Tejen calls plate 3 (he counts counter-clockwise).
 
-Today's layout: carriers at 270/30/150 deg are plates 9/1/5 (drones 1/2/3 = `/drone_0..2`). QUAD4 (`/drone_3`)
-attaches on plate 3 (+y, `attach_y_offset` 0.225), which is Tejen's plate 3 too. The four-drone detach layout
-30/90/150/270 deg reads 1/3/5/9.
+**Angles** (Wesley 14 Oct): every angle that is typed (launch arguments, configs) or shown (log lines, the console,
+RViz, the sheets) is in clockwise degrees from +x, so the angle is 30 x the plate number: carriers on plates 3 / 11 / 7
+at 90 / 330 / 210 deg, QUAD4 on plate 9 at 270 deg. The maths inside (ROS frames, mocap, the optimiser, Tejen's code)
+keeps counter-clockwise azimuths, converted at one boundary. Until that change-over is finished (plan WP6), launch
+arguments and configs still take counter-clockwise azimuths: carriers 270 / 30 / 150, QUAD4 90.
+
+| Plate | Clockwise angle (typed, shown) | Counter-clockwise azimuth (inside; arguments until the change-over) | On it (M1 rig) | Tejen's plate |
+|---|---|---|---|---|
+| 0 | 0 | 0 | +x (the orange plate in RViz) | 0 |
+| 1 | 30 | 330 | | 11 |
+| 2 | 60 | 300 | | 10 |
+| 3 | 90 | 270 | carrier drone 1 (`/drone_0`) | 9 |
+| 4 | 120 | 240 | | 8 |
+| 5 | 150 | 210 | | 7 |
+| 6 | 180 | 180 | | 6 |
+| 7 | 210 | 150 | carrier drone 3 (`/drone_2`) | 5 |
+| 8 | 240 | 120 | | 4 |
+| 9 | 270 | 90 | QUAD4 (+y, `attach_y_offset` 0.225) | 3 |
+| 10 | 300 | 60 | | 2 |
+| 11 | 330 | 30 | carrier drone 2 (`/drone_1`) | 1 |
 
 ## History
 
-- Before 8 Oct 2026: counter-clockwise, as now (the 30 Sep, 1 Oct and 7 Oct rig days, RIG-0930/1001/1007).
-- 8-14 Oct: clockwise, plate k at -30k deg (commit f3b3072). The sheets, cards and logs of those days use it,
-  including the 14 Oct sheet (`wed_2026-10-14.md`) and the registry rows RIG-1008-* and RIG-1014-*. Their
-  plate 9 is today's plate 3, and their carriers on 3/11/7 are today's 9/1/5.
-- From 15 Oct: counter-clockwise again. Only the numbers changed; every azimuth stayed the same.
-
-Old to new: new = (12 - old) mod 12.
-
-| 8-14 Oct (clockwise) | from 15 Oct | azimuth (deg) | on it |
-|---|---|---|---|
-| 0 | 0 | 0 | +x (the orange plate in RViz) |
-| 1 | 11 | 330 | |
-| 2 | 10 | 300 | |
-| 3 | 9 | 270 | carrier drone 1 (`/drone_0`) |
-| 4 | 8 | 240 | |
-| 5 | 7 | 210 | |
-| 6 | 6 | 180 | |
-| 7 | 5 | 150 | carrier drone 3 (`/drone_2`) |
-| 8 | 4 | 120 | |
-| 9 | 3 | 90 | QUAD4's attach plate (+y) |
-| 10 | 2 | 60 | |
-| 11 | 1 | 30 | carrier drone 2 (`/drone_1`) |
+- Before 8 Oct: plates counted counter-clockwise (the 30 Sep, 1 Oct and 7 Oct rig days).
+- From 8 Oct: plates clockwise (f3b3072); angles stayed counter-clockwise azimuths. The 8-14 Oct sheets and the
+  RIG-1008-* and RIG-1014-* rows use this.
+- 14 Oct evening: the plates were renumbered counter-clockwise by mistake (4a60ca3, a73d9a4) and put back the same
+  evening; the angles change to clockwise instead.

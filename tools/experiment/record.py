@@ -15,10 +15,9 @@ import re
 
 TOPIC_PREFIX = '/mdc_rec/'
 
-# Rig-twin M1 scene: ring at the origin (1.0 m hover), carriers at 270/30/150 deg, QUAD4 on plate 3
+# Rig-twin M1 scene: ring at the origin (1.0 m hover), carriers at 270/30/150 deg, QUAD4 on plate 9
 # (+y, 0.225 m), Tejen's ball at (1.0, 1.6) and his transit up to ~3.1 m. wide: all of it, floor start
-# included; ring: the ring, the carriers, the drop into the net and the re-attach; plate9: the attach (named
-# in the 8-14 Oct clockwise numbering; the key stays for the recorded videos).
+# included; ring: the ring, the carriers, the drop into the net and the re-attach; plate9: the attach.
 DEFAULT_CAMERAS = {
     'wide': {'pos': [5.0, -3.1, 3.4], 'look_at': [0.1, 0.35, 1.6], 'hfov_deg': 58.0,
              'size': [1920, 1080]},

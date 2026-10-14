@@ -1,5 +1,5 @@
 """The magnet manager under the tilt cut (card 2026-10-11_quad4_tilt_cut, critic round 1 H1 and H4): the mux's
-'cut' turns the magnet OFF even after a confirmed attach (a dead QUAD4 must not hang on plate 3) and refuses every ON
+'cut' turns the magnet OFF even after a confirmed attach (a dead QUAD4 must not hang on plate 9) and refuses every ON
 after it; the planner's hand-over block (our drone-3 tracker latched while the partner flies it) turns a proof into
 a failed one, the twin joint released. Off ('' topics): today's manager."""
 import pytest

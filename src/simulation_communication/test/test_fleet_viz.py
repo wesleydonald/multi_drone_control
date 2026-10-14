@@ -1,5 +1,5 @@
 """fleet_viz: the swung magnet in RViz (the tip sphere coloured by the coil and the weld, the tether from QUAD4's
-body, the puck), the plate labels counter-clockwise, and /fleet/mocap_summary's per-body age, rate, gap and speed."""
+body, the puck), the plate labels clockwise, and /fleet/mocap_summary's per-body age, rate, gap and speed."""
 import json
 import math
 
@@ -162,7 +162,7 @@ def _state(x, y, z, q=(1.0, 0.0, 0.0, 0.0)):
     return MotionCaptureState(pose=_pose(x, y, z, q))
 
 
-def test_node_topics_markers_summary_and_ccw_plate_labels():
+def test_node_topics_markers_summary_and_clockwise_plate_labels():
     rclpy.init(args=['--ros-args', '-p', 'num_drones:=4'])
     try:
         node = FleetViz()
@@ -193,7 +193,7 @@ def test_node_topics_markers_summary_and_ccw_plate_labels():
         node._payload_cb(_state(0.0, 0.0, 1.0))
         labels = {m.id: m for a in node.id_pub.msgs for m in a.markers if m.ns == 'plate_number'}
         assert sorted(labels) == list(range(12))
-        for k, at in ((1, 30.0), (3, 90.0), (9, 270.0)):                   # plate k at +30k deg
+        for k, at in ((1, 330.0), (3, 270.0), (9, 90.0)):                  # plate k at 30k deg clockwise
             p = labels[k].pose.position
             assert labels[k].text == str(k)
             assert math.degrees(math.atan2(p.y, p.x)) % 360.0 == pytest.approx(at)

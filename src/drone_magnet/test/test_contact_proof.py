@@ -1,5 +1,5 @@
 """The contact-and-lift proof (card 2026-10-10_combined_m1_contact, Goal 2), fed synthetic 120 Hz
-traces: the tip rests on plate 3 from t=0, the body lifts from t=0.3 s at 0.02 m/s up to 1 cm. A
+traces: the tip rests on plate 9 from t=0, the body lifts from t=0.3 s at 0.02 m/s up to 1 cm. A
 caught tip carries the plate up with it; an uncaught tip rises alone."""
 import json
 import math

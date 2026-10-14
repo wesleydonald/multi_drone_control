@@ -72,8 +72,8 @@ def test_match_is_order_free_and_reports_the_error():
 
 
 def test_a_drone_on_the_wrong_plate_shows_a_large_error():
-    typed = [30, 150, 270]                              # plates 1/5/9 typed
-    meas = [30.0, 120.0, 270.0]                         # drone 1 put on plate 4
+    typed = [30, 150, 270]                              # 11/7/3 typed (clockwise numbering)
+    meas = [30.0, 120.0, 270.0]                         # drone 1 put on plate 8 (clockwise numbering)
     _, err = match_azimuths(meas, typed)
     assert max(abs(e) for e in err) == pytest.approx(30)
 
@@ -140,19 +140,19 @@ def test_fake_mocap_dry_run_prints_without_ros(capsys):
 
 def test_slot_offset_detail_names_the_plate_and_the_check():
     from preflight_geometry import slot_offset_detail
-    assert slot_offset_detail(2, 3.0, 90.0) == '3.0 deg anticlockwise of plate 3'   # plate k at +30k deg
+    assert slot_offset_detail(2, 3.0, 90.0) == '3.0 deg anticlockwise of plate 9'   # plates clockwise (7 Oct)
     msg = slot_offset_detail(1, -29.7, 330.0)                 # model-f1: one plate off
-    assert msg.startswith('drone 1 sits 30 deg clockwise of plate 11:')
+    assert msg.startswith('drone 1 sits 30 deg clockwise of plate 1:')
     assert 'ring rigid body (+x toward plate 0)' in msg and 'magnet plates' in msg
     assert 'sits' in slot_offset_detail(0, 10.5, 0.0) and 'sits' not in slot_offset_detail(0, 9.9, 0.0)
 
 
-def test_fake_mocap_tip_over_plate_3_sits_at_the_weld_point():
-    """The props-off attach check: plate 3 is the ring's +y (attach_y_offset 0.225 in real.yaml)
+def test_fake_mocap_tip_over_plate_9_sits_at_the_weld_point():
+    """The props-off attach check: plate 9 is the ring's +y (attach_y_offset 0.225 in real.yaml)
     and the tip sits --tip-dz above the ring origin plane, QUAD4 hanging straight above it."""
     for yaw in (0.0, 20.0):
         poses = FM.compute_poses(3, attach=True, radius=0.225, load_z=0.05, yaw_deg=yaw,
-                                 tip_len=0.58, tip_plate=3, tip_dz=0.02)
+                                 tip_len=0.58, tip_plate=9, tip_dz=0.02)
         (x, y, z), _ = poses[FM.TIP_TOPIC]
         a = math.radians(90 + yaw)
         assert (x, y, z) == pytest.approx((0.225 * math.cos(a), 0.225 * math.sin(a), 0.07))

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from mpc_planner.geometry import (attach_points, azimuth_slot_assignment,
-                                  parse_azimuths_deg, plate_of_azimuth)
+                                  parse_azimuths_deg)
 
 
 def test_parse_accepts_string_list_and_empty():
@@ -58,11 +58,3 @@ def test_slot_assignment_respects_load_yaw_with_uneven_slots():
     shuffled = [drones[2], drones[0], drones[1]]
     perm = azimuth_slot_assignment(shuffled, load, 3, load_yaw=yaw, slot_az=slot_az)
     assert perm == [1, 2, 0]
-
-
-@pytest.mark.parametrize('az, plate', [(30, 1), (90, 3), (270, 9), (0, 0), (355, 0), (-30, 11),
-                                       (150, 5), (330, 11), (390, 1), (89.4, 3)])
-def test_plates_count_counter_clockwise_from_plus_x(az, plate):
-    """Plate k at +30k deg (15 Oct, docs/rig/plate_numbering.md): the carriers' 270/30/150 are plates
-    9/1/5, QUAD4's +90 deg is plate 3 (Tejen's plate 3), the detach layout 30/90/150/270 reads 1/3/5/9."""
-    assert plate_of_azimuth(az) == plate

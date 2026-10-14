@@ -49,7 +49,7 @@ TB14_TILT_DEG = 60.0
 TB14_RISE_S = 1.0
 TB14_LEVEL_DEG = 10.0   # the rise is timed from QUAD4's last tilt under this before the 60 deg crossing
 RING_DOWN_Z = 0.07      # m, tilt card rev 4 9.2: the ring is down
-TIP_AT_PLATE_Z = 0.10   # m, tilt card rev 4 9.2: the welded tip still at plate 3 (it reads 0.05-0.06 m on the floor)
+TIP_AT_PLATE_Z = 0.10   # m, tilt card rev 4 9.2: the welded tip still at plate 9 (it reads 0.05-0.06 m on the floor)
 TIP_FLOOR_Z_F10 = 0.03  # m, critic round 4 F10's wording (the welded twin tip never gets this low)
 UNWIND_TILT_DEG = 30.0  # tilt card rev 4 9.2
 STAMP = re.compile(r'\[(\d{9,}\.\d+)\]')
@@ -645,7 +645,7 @@ def tb14(r):
 
     Read on the twin's logs as (each part reported):
       welded at LAND   an attach (timed WELD / REWELD) before LAND, no DETACH between, run.csv's attached flag at LAND
-      tip on the floor the ring down (payload z < 0.07 m) with the welded tip still at plate 3 (tip z < 0.10 m), the
+      tip on the floor the ring down (payload z < 0.07 m) with the welded tip still at plate 9 (tip z < 0.10 m), the
                        tilt card rev 4 9.2 thresholds: the welded tip reads 0.05-0.06 m with the ring on the floor
       within 1 s       QUAD4's tilt rises from its last value under 10 deg to past 60 deg in <= 1 s, the crossing after
                        the tip is down and before the abort (+ one row)
@@ -654,7 +654,7 @@ def tb14(r):
     tip z <= 0.03 m), kept beside it: no welded twin tip gets below its plate's height on the floor.
 
     Also the tilt card's rev 4 landing rule (9.2): QUAD4 passes 30 deg after the attach and the LAND with the ring
-    down (payload z < 0.07 m) and the tip at plate 3 (tip z < 0.10 m)."""
+    down (payload z < 0.07 m) and the tip at plate 9 (tip z < 0.10 m)."""
     tw, _ = r.attach()
     land, abort = r.t('LAND'), r.t('FLEET_ABORT')
     t = r.tt

@@ -97,22 +97,22 @@ ZONE_RISE_FAR_M = 0.9      # zone (c) rises from this far out of the ring centre
 TIP_AT_RING_BELOW_M = 0.15  # the tip is at the ring from this far below the ring centre up to TAKE_BACK_TIP_CLEAR_M
 TIP_OVER_FLOOR_M = 0.1     # a co-moving descent under the formation stops with the tip this far above the floor
 BALL_DIAM_M = 0.16         # his twin ball (tejen payload_model.sdf, r 0.08), under the tip while he carries it
-GUARD_PLATE_RISE_M = 0.02  # rig release guard (critic F7): plate 3 rising this much means the coil still holds it
+GUARD_PLATE_RISE_M = 0.02  # rig release guard (critic F7): plate 9 rising this much means the coil still holds it
 # the guard's height over the taut tether (plate + body-to-tip) + RELEASE_SEEN_M: QUAD4's taut length can be under the
 # planner's body-to-tip and his aim low, so +0.02 left the pass on the carrot's tail (rig-port critic round 2, A1)
 GUARD_RISE_ABOVE_SLACK_M = 0.05
 GUARD_WAIT_S = 3.0         # s for the tip to leave the plate before the guard lands the fleet
 # a pass needs this long of consecutive fresh samples with the tip off the plate, hanging from the body within
-# GUARD_TIP_BODY_M of the planner's body-to-tip (a tip-puck marker swap is not a release); plate 3's height is averaged
+# GUARD_TIP_BODY_M of the planner's body-to-tip (a tip-puck marker swap is not a release); plate 9's height is averaged
 # over the guard's first GUARD_PLATE_AVG_S (critic round 2, A5)
 GUARD_PASS_S = 0.1
 GUARD_TIP_BODY_M = 0.03
 GUARD_PLATE_AVG_S = 0.2
 GUARD_WHY = ('ring', 'tip', 'body', 'plate', 'band')   # a guard tick's no-pass causes, counted for a timeout's line
-# m/s: the guard stage's reference speed (every other stage DETACH_STEP_VEL): a held coil lifted plate 3 ~6 cm at 0.15
+# m/s: the guard stage's reference speed (every other stage DETACH_STEP_VEL): a held coil lifted plate 9 ~6 cm at 0.15
 # before the 2 cm check and the braking caught it (Wesley 11 Oct, critic round 2 follow-up, 4)
 GUARD_STAGE_VEL = 0.06
-# a failed guard (the coil may still hold plate 3): QUAD4 follows the landing ring down this far below the taut
+# a failed guard (the coil may still hold plate 9): QUAD4 follows the landing ring down this far below the taut
 # tether, then once the ring is down steps this far out from the plate and as far down, and lands alone (Wesley 11 Oct;
 # the slack 0.12 from 0.05: the reference lags the LAND's step to land_vel, critic round 2 follow-up, 3)
 GUARD_SLACK_M = 0.12
@@ -411,7 +411,7 @@ class DissipativeController(LoadPlanner):
         # confirms the attach; the newcomer lifecycle stays on (our take-back is the no-attach path)
         self._partner_contact = bool(p('partner_contact', False).value)
         # the newcomer's starting share at the fold-in: 'start' attach_t_start_new, 'ocp' its n+1 OCP share
-        # ('ocp' sagged plate 3 2.5-3.5 cm and tilted the ring 7.7-8.6 deg after the switch, 4 of 4; 'start'
+        # ('ocp' sagged plate 9 2.5-3.5 cm and tilted the ring 7.7-8.6 deg after the switch, 4 of 4; 'start'
         # 1.8-2.6 deg, 3 of 3: R1479-R1490)
         self._contact_fold_seed = str(p('contact_fold_seed', 'start').value)
         if self._contact_fold_seed not in ('ocp', 'start'):
@@ -516,7 +516,7 @@ class DissipativeController(LoadPlanner):
         self._comove = {}             # d -> the take-back's reference state (_take_back_tick)
         self._traj_running = False    # the trajectory clock advanced on the last tick (the ring frame moves)
         self._traj_t_tick = 0.0
-        # rig (critic round 4, F7): before the take-back rises past the tether's slack, plate 3 must not follow and the
+        # rig (critic round 4, F7): before the take-back rises past the tether's slack, plate 9 must not follow and the
         # tip must leave it; else hold, OFF again and LAND the fleet
         self._release_guard = bool(p('take_back_release_guard', False).value) and self._partner_contact
         # the newcomer's weld point in the ring frame: the magnet manager's (attach offset, weld_point_z); unset, the
@@ -1943,7 +1943,7 @@ class DissipativeController(LoadPlanner):
 
         Hover (and zone a): c6f2032's path, world-fixed: within the step-out radius of the ring centre, straight up
         first if the tip is down at the ring (to the higher of the rim clearance and the highest carrier + 0.4 m),
-        then radially out (over the middle along plate 3's azimuth), then out past the ring's path on a circle.
+        then radially out (over the middle along plate 9's azimuth), then out past the ring's path on a circle.
         On a trajectory (card rev 10 §3b with the round-4 response, F1):
           (b) its body below the ring and its net: down where it stops, no sideways move and no rise;
           (a) outside r_clear of the path centre, or its lowest point over the highest carrier + 0.15 m: as hover;
@@ -2059,7 +2059,7 @@ class DissipativeController(LoadPlanner):
         return self.load_state is not None and load_t is not None and time.monotonic() - load_t <= DETECT_STALE_S
 
     def _guard_setup(self, j, d, st, off, goals):
-        """Rig release guard (critic round 4, F7): with our span begun and the tip on or near plate 3's weld point,
+        """Rig release guard (critic round 4, F7): with our span begun and the tip on or near plate 9's weld point,
         the rise stops at the tether's slack + RELEASE_SEEN_M + GUARD_RISE_ABOVE_SLACK_M until the tip has left the
         plate (ring frame) and the plate has not followed."""
         if not getattr(self, '_release_guard', False) or not off or self.load_state is None or not goals:
@@ -2124,7 +2124,7 @@ class DissipativeController(LoadPlanner):
         release guard] -> the steps (rise, out; each reached by the REFERENCE within TAKE_BACK_REACHED_M) ->
         decouple from the ring frame -> clear the path (not under LAND) -> land, handed to the departed landing
         (returns False). A failed guard instead follows the landing ring down at the tether's slack (guard_follow),
-        then once the ring is down steps out and down beside plate 3 and lands. In zone c the goals are ring-frame
+        then once the ring is down steps out and down beside plate 9 and lands. In zone c the goals are ring-frame
         offsets from the planned ring point latched at the take-back; LAND, a held or finished trajectory freezes the
         clock, so the frame stops through the same bound and the rest runs in the still frame. True while it
         publishes its own reference."""
@@ -2163,7 +2163,7 @@ class DissipativeController(LoadPlanner):
             g = st['guard']
             res = self._guard_check(j, g)
             if res == 'pass':
-                self.get_logger().warn(f'[dissipative] take-back of {_who(d)}: release seen (the tip off plate 3, '
+                self.get_logger().warn(f'[dissipative] take-back of {_who(d)}: release seen (the tip off plate 9, '
                                        f'the plate still), it rises on')
                 stage = self._take_back_next(d, st, stop_goal)
             elif res == 'fail' or self.get_clock().now().nanoseconds * 1e-9 - g['t0'] >= GUARD_WAIT_S:
@@ -2173,8 +2173,8 @@ class DissipativeController(LoadPlanner):
                 g['fail_t'] = self.get_clock().now().nanoseconds * 1e-9
                 self._magnet_cmd_pub.publish(String(data='OFF'))
                 self._off_resend_t = 0.0
-                why = 'plate 3 follows it' if res == 'fail' else \
-                    f'tip has not left plate 3 in {GUARD_WAIT_S:.0f} s ({self._guard_why(g)})'
+                why = 'plate 9 follows it' if res == 'fail' else \
+                    f'tip has not left plate 9 in {GUARD_WAIT_S:.0f} s ({self._guard_why(g)})'
                 self.get_logger().error(f'[dissipative] RELEASE GUARD: {_who(d)}\'s {why}: down to its tether\'s '
                                         f'slack, then it follows the ring down; magnet OFF again, LAND the fleet '
                                         f'once it is at the slack (at most {GUARD_LAND_WAIT_S:.0f} s)')
@@ -2239,7 +2239,7 @@ class DissipativeController(LoadPlanner):
         return True
 
     def _guard_follow(self, j, st):
-        """A failed guard under LAND: the goal z follows the measured plate 3 at the tether's slack (plate +
+        """A failed guard under LAND: the goal z follows the measured plate 9 at the tether's slack (plate +
         body-to-tip - GUARD_SLACK_M), the ring's descent fed forward; a stale ring pose holds the last goal. True when
         the goal was set from a fresh pose."""
         g = st['guard']

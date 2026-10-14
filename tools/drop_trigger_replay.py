@@ -129,8 +129,8 @@ def rotm(q):
 
 
 def plate_of_azimuth(az_deg):
-    """As mpc_planner.geometry.plate_of_azimuth: plate k at +30k deg, counter-clockwise from the ring's +x."""
-    return int(round(float(az_deg) / 30.0)) % 12
+    """As mpc_planner.geometry.plate_of_azimuth: plate 0 on the ring's +x, counting clockwise."""
+    return int(round(-float(az_deg) / 30.0)) % 12
 
 
 # ── ring, drones, events ─────────────────────────────────────────────────────────

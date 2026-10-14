@@ -112,7 +112,8 @@ current branch like any other file (it reaches main with the merges).
   Our motion-capture check alone confirms the attach; only then do we take QUAD4 over and fold it in (10 Oct).
   Our own approach (R8a/R8b/R9) is twin and thesis only. The check is co-motion (14 Oct, `proof_rules comotion`):
   contact, his small lift, then the tip moving with the plate on a taut tether.
-- Plates count counter-clockwise: plate k at +30k deg from the ring's +x, QUAD4's plate is 3, as Tejen's (14 Oct
-  evening). The 8-14 Oct sheets and RIG rows count clockwise (`docs/rig/plate_numbering.md`).
+- Plates count clockwise from the ring's +x seen from above: carriers on 3/11/7, QUAD4 on 9 (Tejen's 3). Angles that
+  are typed or shown are clockwise too, angle = 30 x plate (Wesley 14 Oct; being changed over from counter-clockwise
+  azimuths, `docs/rig/plate_numbering.md`); the maths inside stays counter-clockwise.
 - SPACE is an instant, unguarded DISARM in both the console (`tools/console.py`) and the RViz panel; both keep
   the flight buttons (Wesley 14 Oct).

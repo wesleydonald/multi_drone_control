@@ -15,7 +15,7 @@ def _yaw(deg):
 
 def test_ring_frame_undoes_the_ring_pose():
     ring, q = (1.0, 2.0, 0.5), _yaw(90.0)
-    # plate 3 is ring +y; with the ring yawed 90 deg it lies along world -x
+    # plate 9 is ring +y; with the ring yawed 90 deg it lies along world -x
     rel = in_ring_frame((1.0 - 0.225, 2.0, 0.5 + 0.03), ring, q)
     assert np.allclose(rel, [0.0, 0.225, 0.03], atol=1e-9)
 

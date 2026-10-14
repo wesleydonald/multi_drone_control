@@ -9,13 +9,13 @@ itself (below the table) only changes when Wesley changes it; dated notes go in 
 |---|---|---|---|
 | 0 | Tejen's attach logs | done | `~/tejen_attach_logs_2026-10-14.zip` (8 flights, README) |
 | 1 | WP0 commit 14 Oct work + FC request; `legacy` branch; the gate runs the attach tests | done | c15abc4, 19804fb, 4209c62, a0d3963; branch `legacy` at a0d3963; gate 1147 tests (6 drop tests had broken unseen on 14 Oct: fixed); docs/rig/fc_request.md ready to send |
-| 2 | WP6 plates counter-clockwise (moved first, revision 1) | done | 4a60ca3 (plate k at +30k deg; QUAD4's plate 3; worlds regenerated, comments only; docs/rig/plate_numbering.md); the planner, launch and magnet texts follow in the WP2 commit |
+| 2 | WP6 clockwise angles (corrected by Wesley 14 Oct: the plates stay clockwise; typed and shown angles become clockwise, angle = 30 x plate) | renumbering reverted; the angle change-over in progress | 4a60ca3's renumbering (and a73d9a4's plate texts) put back, RViz markers and the summary kept; docs/rig/plate_numbering.md |
 | 3 | WP8 arming, landing and small fixes | done (code); USB hub is hardware | 3297746 (tracker start-up crash, full-pack voltage fallback, radio_health, QUAD4 down a few cm above its rest, takeoff hold + climb from liftoff), dade70d (partner first, only refused drones named, DISARM stops ARM, one burst); re-arm after a refused ARM = LAND, not DISARM |
 | 4 | WP3 attach: one plate point, Tejen's confirmation rules, bottom hold + quiet-miss retry, measured-tip trim | done (code + twin); card + critic before the rig flies it as a claim | eacab58: comotion proof (replay: the one real 14 Oct catch proven, no false proofs), lift-done signal, bottom hold + quiet miss, one plate point, rig overrides; tools/proof_replay.py. Twin R1718 PASS (contact, proven ~1.9 s sim later, fold-in; the post-landing tip-over is the known twin artefact). Which plate point (attach geometry) is Wesley's call (OPEN in decisions.md) |
 | 5 | WP5 RViz markers + WP2 quiet T2 and console | done; the RViz panel is compile-checked only (RViz cannot render headless): check it props-off | 4a60ca3 (markers, /fleet/mocap_summary); a73d9a4: tools/console.py (READY, who is airborne, the buttons in flight order, SPACE = DISARM), T2 shows the events only (RIG_FLIGHT_VERBOSE=1 for all), launches.csv, quieter sources; the RViz panel commit after it: his row (his ARM, his TAKEOFF, GIVE UP, his DISARM) while his MPC runs, ARM after his ARM, TAKEOFF after "ARM sequence complete", who is in the air; SPACE unchanged |
 | 6 | WP4 scoring tool (attach_window) + proof replay tool | done | tools/attach_window.py (per hold phase of his planner: tip error against the plate point, inside K and inside-and-slow, body wander, swing, plate motion, ring tilt, body vs air forcing; reproduces the 14 Oct numbers, e.g. t6g_2 5.6 cm / 7 % / 4 %); tools/proof_replay.py (eacab58). Hover-only configs wait for the wind matrix (after the lab day, revision 1) |
-| 7 | Props-off session: FC acceptance, radio soak, magnet hold force, proof bench, load with the console | needs the rig | |
-| 8 | Next lab day: card first, then attach flights scored with the tools | needs the rig | |
+| 7 | Props-off session: FC acceptance, radio soak, magnet hold force, proof bench, load with the console | sheet ready (Thursday tests 1-3) | docs/rig/thu_2026-10-15.md: console + RViz check, the confirmation bench by hand (partner_nodes:=false), FC acceptance if the FCs were changed |
+| 8 | Next lab day: card first, then attach flights scored with the tools | card written, critic running; sheet ready | docs/experiments/2026-10-15_attach_comotion_rig.md (bars frozen before the first flight); Thursday test 4, scored with tools/proof_replay.py and tools/attach_window.py. QUAD4's aim is Wesley's call (decisions.md OPEN: A recommended) |
 | 9 | After the lab day: WP4 wind matrix (only if contacts stay rare), WP7 rename + legacy, WP9 pickup | to do | |
 
 Thursday 15 Oct 15:00-18:00 tests whatever is done by then; anything unfinished keeps 14 Oct names and numbering
@@ -149,11 +149,12 @@ keep acting on /magnet/contact and /magnet/object_attached.
 `fleet_viz.py`: tip sphere (coloured by coil/contact), tether line body -> tip, puck cylinder, 5-10 Hz, 0.5 s
 lifetime; topics /magnet_tip_pose and /pickup/motion_capture_state (twin: /tejen/payload_world_state).
 
-## WP6 plates counter-clockwise
-Azimuths are already CCW; only the numbering flips (a revert of half of f3b3072): new = (12 - old) mod 12, so
-carriers 3/11/7 -> 9/1/5, QUAD4 9 -> 3 (= Tejen), detach 1/3/5/9 (= thesis). One helper
-(mpc_planner/geometry.py plate_of_azimuth) used everywhere; "plate 9" strings derived from the azimuth; the
-attach worlds regenerated; tests, docs, Tejen notes, a dated decisions line.
+## WP6 clockwise angles (corrected by Wesley, 14 Oct evening)
+The plates stay numbered clockwise (carriers 3/11/7, QUAD4 9). Every angle that is typed (launch arguments,
+configs) or shown (log lines, the console, RViz, the sheets) becomes clockwise degrees, angle = 30 x plate
+(carriers 90/330/210, QUAD4 270); the maths inside (ROS frames, mocap, the optimiser, Tejen's code) stays
+counter-clockwise, converted at one boundary. A twin re-fly checks it; Thursday flies it if done and checked, else
+the 14 Oct conventions. (The first version of WP6 renumbered the plates instead: wrong, reverted the same evening.)
 
 ## WP7 planner into mpc_planner, old controller to `legacy`
 - `legacy` branch from the WP0 commit keeps everything for the thesis comparison. Removed from week5: the network

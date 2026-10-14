@@ -198,7 +198,7 @@ def test_the_timeout_runs_on_the_timer_and_the_node_clock(manager):
 
 
 def test_attached_at_start_is_the_weld_check_until_the_detach(manager):
-    """The full M1 (QUAD4 welded on plate 3 from spawn): attached from t=0 with no proof, the first OFF (the
+    """The full M1 (QUAD4 welded on plate 9 from spawn): attached from t=0 with no proof, the first OFF (the
     detach) is accepted and releases the joint, and only the contacts after it need the lift proof."""
     n = manager(confirm_mode='contact_lift', attached_at_start=True)
     assert n._proof is not None and n._start_weld and n.attached and n.magnet_on

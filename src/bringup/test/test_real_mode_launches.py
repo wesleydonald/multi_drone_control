@@ -717,7 +717,7 @@ def test_rig_attach_types_the_mocap_body_ids_and_refuses_without_the_tip():
 
 
 def test_rig_attach_flies_the_m1_layout_and_honours_a_params_file(tmp_path):
-    """M1 rig layout (Wesley 8 Oct): carriers 270/30/150, the weld at +y 0.225 (plate 3); a
+    """M1 rig layout (Wesley 8 Oct): carriers 270/30/150, the weld at +y 0.225 (plate 9); a
     params_file value for a rig-default key is kept, not replaced by the rig default."""
     g = _by_name(rig('attach', enable_approach_mpc=False))
     p = g['/dissipative_planner']['params']
@@ -1124,7 +1124,7 @@ def test_combined_rig_refuses_an_untyped_quad4_rod(dds, rod):
 
 def test_combined_rig_takes_quad4s_typed_record_and_one_weld_point(dds, tmp_path):
     """Typed (or in the params_file, as deliberate): QUAD4's rod reaches the planner, and the planner's guard reads
-    plate 3 at the magnet manager's own weld point."""
+    plate 9 at the magnet manager's own weld point."""
     g = _combined_rig()
     p = g['/dissipative_planner']['params']
     assert p['attach_cable_len'] == 0.54 and p['take_back_release_guard'] is True

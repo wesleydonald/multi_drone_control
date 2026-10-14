@@ -97,7 +97,7 @@ FULL_EVENTS = [(np.nan, 'WELD', 'magnet/object_attached'), (np.nan, 'MUX:ours', 
 
 
 def full_run(tmp_path, rid='R9001'):
-    # QUAD4 welded at plate 3 (body 0.5 m out) until 26 s, then free at (-1.0, 0.25, 2.3) until his descent at 42 s
+    # QUAD4 welded at plate 9 (body 0.5 m out) until 26 s, then free at (-1.0, 0.25, 2.3) until his descent at 42 s
     def q4(x):
         if x < 26.0 or x >= 45.0:
             return (0.0, 0.5, 1.5)
@@ -139,7 +139,7 @@ def test_his_flight_clearance_windows(tmp_path):
     assert fl['from'] == 26.3 and fl['to'] == 45.6 and fl['rod_to'] == 45.0
     q4 = np.array([-1.0, 0.25, 2.3])
     # QUAD4's rod (body -> tip) against every carrier body and carrier rod (body -> plate), by brute force over the
-    # rod window's rows (the hover, then the descent towards plate 3, which passes nearest)
+    # rod window's rows (the hover, then the descent towards plate 9, which passes nearest)
     t = r.tt
     body, tip = r.xyz('d3_'), r.xyz('tip_')
     plates = [np.array([0.225 * np.cos(np.radians(a)), 0.225 * np.sin(np.radians(a)), 1.02]) for a in AZ]
@@ -298,7 +298,7 @@ def test_tip_metrics_reads_a_torque_push(tmp_path):
 # ── TB14 ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 def landing_run(tmp_path, rid, rise_from=56.9, abort=57.35):
-    """Welded at 40 s, LAND at 50 s: the ring down by 55 s, the tip on plate 3 (ring z + 0.037), QUAD4's body
+    """Welded at 40 s, LAND at 50 s: the ring down by 55 s, the tip on plate 9 (ring z + 0.037), QUAD4's body
     descending to 0.3 m by 57 s, its tilt rising 2 -> 70 deg from rise_from to 57.3 s, FLEET_ABORT at abort."""
     ring = lambda t: np.where(t < 50, 1.0, np.maximum(1.0 - (t - 50) * 0.196, 0.02))  # noqa: E731
 
