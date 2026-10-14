@@ -31,10 +31,12 @@ from scipy.linalg import cholesky
 from .thrust_ratio_ukf import ThrustRatioUKF
 from .thrust_ratio_vertical_ukf import VerticalThrustRatioUKF
 from .thrust_ratio_full_model_ukf import FullModelThrustRatioUKF
+from .command_execution import command_at_elapsed_time
 from .mpc_modes import (
     PayloadMpcMode,
     apply_payload_mpc_mode,
     base_payload_cost_matrices,
+    parse_mpc_profile,
     parse_payload_mpc_mode,
 )
 from .lateral_disturbance_observer import (
@@ -332,10 +334,14 @@ class Controller(Node):
                 'legacy_integral' if legacy_integral_enabled_param else 'none'
             )
         self.enable_xy_integral_action = self.xy_bias_mode == 'legacy_integral'
+        # Independent log-only observation does not select another compensator.
+        self.lateral_disturbance_diagnostics_enabled = bool(
+            self.declare_parameter('lateral_disturbance_diagnostics_enabled', False).value
+        )
         self.enable_lateral_disturbance_observer = self.xy_bias_mode in (
             'lateral_disturbance',
             'lateral_disturbance_shadow',
-        )
+        ) or self.lateral_disturbance_diagnostics_enabled
         self.enable_lateral_disturbance_compensation = (
             self.xy_bias_mode == 'lateral_disturbance'
         )
@@ -438,15 +444,37 @@ class Controller(Node):
                 f'Payload-MPC ACADOS artifact cache: {self.acados_cache_dir}'
             )
 
+        # his controller version (multi_drone_control fork, 14 Oct): oct10 = his 11a0683f controller;
+        # oct14 = his d00934c1 weights, attitude-rate bounds and partial-step command execution
+        try:
+            self.mpc_profile = parse_mpc_profile(
+                self.declare_parameter('mpc_profile', 'oct10').value)
+        except ValueError as exc:
+            self.get_logger().fatal(str(exc))
+            raise
+        self.mpc_partial_step_execution = self.mpc_profile == 'oct14'
+        if self.mpc_partial_step_execution:
+            self.get_logger().warn(
+                'MPC profile oct14 (his d00934c1): new weights, attitude-rate bounds +-3, '
+                'partial-step command execution')
+        else:
+            self.get_logger().info('MPC profile oct10 (his 11a0683f controller)')
+
         # self.ocp, self.sim_integrator = generate_ocp_controller()
         self.ocp, self.sim_integrator = generate_payload_ocp_controller(
             xy_integral_weight=integral_running_weight,
             xy_integral_terminal_weight=integral_terminal_weight,
             acados_cache_dir=self.acados_cache_dir or None,
+            mpc_profile=self.mpc_profile,
+        )
+        self.mpc_command_stage_duration_s = (
+            float(self.ocp.acados_ocp.solver_options.time_steps[0])
+            if self.mpc_partial_step_execution else None
         )
         self.base_payload_mpc_W, self.base_payload_mpc_W_e = base_payload_cost_matrices(
             integral_running_weight,
             integral_terminal_weight,
+            mpc_profile=self.mpc_profile,
         )
         # Subscribe only after the solver exists so a fast publisher cannot race
         # ACADOS construction. No callback rewrites the matrices at 30 Hz - mode
@@ -879,6 +907,7 @@ class Controller(Node):
             ),
             'thrust_ratio_feedback_enabled': self.enable_thrust_ratio_feedback,
             'xy_bias_mode': self.xy_bias_mode,
+            'lateral_disturbance_diagnostics_enabled': self.lateral_disturbance_diagnostics_enabled,
             'xy_integral_enabled': self.enable_xy_integral_action,
             'xy_integral_weight': self.xy_integral_weight,
             'xy_integral_terminal_weight': self.xy_integral_terminal_weight,
@@ -900,6 +929,12 @@ class Controller(Node):
                 self.lateral_disturbance_airborne_height_m
             ),
             'acados_cache_dir': self.acados_cache_dir,
+            'mpc_profile': self.mpc_profile,
+            'command_execution': (
+                'first_stage_partial_step' if self.mpc_partial_step_execution
+                else 'first_stage_endpoint'
+            ),
+            'mpc_command_stage_duration_s': self.mpc_command_stage_duration_s,
         }
         metadata_path = os.path.join(
             os.path.dirname(self.data_logger.csv_path), 'metadata.json'
@@ -910,6 +945,7 @@ class Controller(Node):
 
         self.observed_state_history = []       
         self.control_history = []
+        self.command_execution_last_publish_time = None
         self.estimated_state_history = []
 
         self.pendulum_state = np.zeros(4)
@@ -2448,12 +2484,35 @@ class Controller(Node):
             ### SEND COMMANDS
             # Only execute trajectory if takeoff has been requested
             if self.takeoff_requested:
+                if self.mpc_partial_step_execution:
+                    # Command states integrate the first-stage derivative linearly.
+                    # Execute only the publication interval, not the full OCP stage.
+                    # The node clock, not his time.monotonic: in the twin the plant runs on /clock.
+                    last_publish_s = self.command_execution_last_publish_time
+                    elapsed_s = (
+                        DT if last_publish_s is None
+                        else self._node_now_s() - last_publish_s
+                    )
+                    u = command_at_elapsed_time(
+                        control_state, u, elapsed_s, self.mpc_command_stage_duration_s
+                    )
                 msg = ELRSCommand(armed=True, channel_0=round(u[0], 3), channel_1=round(u[1], 3), channel_2=round((u[2]*2)-1, 3), channel_3=round(u[3], 3), channel_5=1.0, channel_6=1.0, channel_7=1.0, channel_8=1.0, channel_9=1.0, channel_10=1.0)
+                if self.mpc_partial_step_execution:
+                    # History/logs and the next initial state use the command sent,
+                    # including the existing ELRS channel rounding.
+                    u = np.array([
+                        msg.channel_0, msg.channel_1,
+                        (msg.channel_2 + 1.0) / 2.0, msg.channel_3,
+                    ], dtype=float)
             else:
                 # Stay armed but don't send thrust commands until takeoff
                 msg = ELRSCommand(armed=True, channel_0=0.0, channel_1=0.0, channel_2=-1.0, channel_3=0.0, channel_5=1.0, channel_6=1.0, channel_7=1.0, channel_8=1.0, channel_9=1.0, channel_10=1.0)
             
             self.cb.cmd_publisher_.publish(msg)
+            if self.mpc_partial_step_execution:
+                self.command_execution_last_publish_time = (
+                    self._node_now_s() if self.takeoff_requested else None
+                )
             
             # Extract MPC trajectory for visualization
             mpc_trajectory = np.zeros((13, self.N))
@@ -2580,6 +2639,7 @@ class Controller(Node):
         else:
             msg = ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0, channel_2=-1.0, channel_3=0.0, channel_5=0.0, channel_6=0.0, channel_7=0.0, channel_8=0.0, channel_9=0.0, channel_10=0.0)
             self.cb.cmd_publisher_.publish(msg)
+            self.command_execution_last_publish_time = None
             self.step_counter = 0
             self.xy_integral_error[:] = 0.0
             self.xy_integral_last_reference = None

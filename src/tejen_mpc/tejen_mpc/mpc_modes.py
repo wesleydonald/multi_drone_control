@@ -41,11 +41,61 @@ def parse_payload_mpc_mode(value) -> PayloadMpcMode:
         raise ValueError(f"Unknown payload MPC mode {value!r}; expected one of: {valid}") from exc
 
 
+# Controller profiles (multi_drone_control fork, 14 Oct): oct10 is his 11a0683f controller, the one
+# flown to 14 Oct; oct14 is his d00934c1 weights and attitude-rate bounds, with the partial-step
+# command execution in main.py.
+MPC_PROFILES = ("oct10", "oct14")
+DEFAULT_MPC_PROFILE = "oct10"
+
+
+def parse_mpc_profile(value) -> str:
+    text = str(value).strip()
+    if text not in MPC_PROFILES:
+        raise ValueError(
+            f"Unknown mpc_profile {value!r}; expected one of: {', '.join(MPC_PROFILES)}"
+        )
+    return text
+
+
+def payload_input_rate_bounds(
+    mpc_profile: str = DEFAULT_MPC_PROFILE,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return (lbu, ubu) for u_dot = [roll_dot, pitch_dot, throttle_dot, yaw_dot]."""
+    if parse_mpc_profile(mpc_profile) == "oct14":
+        # attitude slew 3/s goes with the partial-step execution; throttle keeps 0.5/s
+        return np.array([-3.0, -3.0, -0.5, -3.0]), np.array([3.0, 3.0, 0.5, 3.0])
+    return np.array([-1.0, -1.0, -0.5, -1.0]), np.array([1.0, 1.0, 0.5, 1.0])
+
+
 def base_payload_cost_matrices(
     xy_integral_weight: float = 15.0,
     xy_integral_terminal_weight: float = 30.0,
+    mpc_profile: str = DEFAULT_MPC_PROFILE,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return the exact canonical payload-OCP running and terminal weights."""
+    if parse_mpc_profile(mpc_profile) == "oct14":
+        W = np.diag([
+            200.0, 200.0, 80.0,
+            3.0, 3.0, 4.0,
+            0.2, 0.2, 0.2,
+            2e-4, 2e-4, 2e-4, 2e-4,
+            0.1, 0.1, 5.0, 0.1,
+            0.5, 0.5, 5.0,
+            15.0, 15.0,
+            4.0, 4.0,
+            float(xy_integral_weight), float(xy_integral_weight),
+        ])
+        W_e = np.diag([
+            240.0, 240.0, 120.0,
+            3.0, 3.0, 4.0,
+            0.2, 0.2, 0.2,
+            2e-4, 2e-4, 2e-4, 2e-4,
+            0.5, 0.5, 5.0,
+            20.0, 20.0,
+            4.0, 4.0,
+            float(xy_integral_terminal_weight), float(xy_integral_terminal_weight),
+        ])
+        return W, W_e
     W = np.diag([
         130.0, 130.0, 40.0,
         2.0, 2.0, 2.0,

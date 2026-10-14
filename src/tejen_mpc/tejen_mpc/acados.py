@@ -5,7 +5,11 @@ import numpy as np
 import scipy.linalg
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosModel
 from .dynamics import QuadDynamics, QuadPayloadDynamics
-from .mpc_modes import base_payload_cost_matrices
+from .mpc_modes import (
+    base_payload_cost_matrices,
+    parse_mpc_profile,
+    payload_input_rate_bounds,
+)
 from .reference_feedforward import acceleration_feedforward_reference
 import casadi as ca
 from acados_template import AcadosSim, AcadosSimSolver
@@ -45,7 +49,9 @@ def generate_payload_ocp_controller(
     xy_integral_weight=15.0,
     xy_integral_terminal_weight=30.0,
     acados_cache_dir=None,
+    mpc_profile='oct10',
 ):
+    mpc_profile = parse_mpc_profile(mpc_profile)
     quad_dynamics = QuadPayloadDynamics()
     dynamics_expr = quad_dynamics.quad_dynamics()
 
@@ -160,6 +166,7 @@ def generate_payload_ocp_controller(
     W, W_e = base_payload_cost_matrices(
         xy_integral_weight=xy_integral_weight,
         xy_integral_terminal_weight=xy_integral_terminal_weight,
+        mpc_profile=mpc_profile,
     )
 
     ocp.cost.W = W
@@ -217,8 +224,7 @@ def generate_payload_ocp_controller(
 
     # Input bounds:
     # u_dot = [roll_dot, pitch_dot, throttle_dot, yaw_dot]
-    ocp.constraints.lbu = np.array([-1.0, -1.0, -0.5, -1.0])
-    ocp.constraints.ubu = np.array([ 1.0,  1.0,  0.5,  1.0])
+    ocp.constraints.lbu, ocp.constraints.ubu = payload_input_rate_bounds(mpc_profile)
     ocp.constraints.idxbu = np.arange(nu)
 
     # The 21-state simulation integrator is configured below before either solver
@@ -275,6 +281,7 @@ def generate_payload_ocp_controller(
         ),
         xy_integral_weight=xy_integral_weight,
         xy_integral_terminal_weight=xy_integral_terminal_weight,
+        mpc_profile=mpc_profile,
     )
     force_rebuild = os.environ.get('PAYLOAD_MPC_REBUILD', '0').lower() in (
         '1', 'true', 'yes'
