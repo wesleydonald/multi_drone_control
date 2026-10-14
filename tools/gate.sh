@@ -63,6 +63,13 @@ if python3 -m pytest src/utility_objects/test/test_safety.py \
                     src/tejen_mission/test/test_partner_mission_geometry.py \
                     src/tracker/test \
                     src/drone_communication/test \
+                    src/fleet_manager/test/test_announce_real_logger.py \
+                    src/fleet_manager/test/test_arm_gate.py \
+                    src/fleet_manager/test/test_down_alone.py \
+                    src/fleet_manager/test/test_mux_abort_manager.py \
+                    src/fleet_manager/test/test_payload_dropped.py \
+                    src/fleet_manager/test/test_pre_takeoff_gate.py \
+                    src/fleet_manager/test/test_tilt_cut_manager.py \
                     tools/test -q 2>&1 | tail -3; then
   :
 else

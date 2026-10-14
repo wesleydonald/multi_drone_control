@@ -101,3 +101,57 @@ def test_fc_gate_refuses_unconfirmed_failed_or_silent(monkeypatch, st):
     assert m.CentralController._wait_fc_armed(f, timeout_s=0.05) is False
     assert f.aborts and f.aborts[0][0] is False
     assert any('replug drone 2' in s and 'relaunch T2 only if a drone moved' in s for s in f._log.lines)
+
+
+# ── 14 Oct: the partner's drone first, only the refused drones named, a DISARM stops the sequence, one burst ──
+
+def _rig(clients, fc):
+    f = _fake(clients)
+    f.require_fc_armed, f.fc_arm_state = True, dict(fc)
+    f._wait_fc_armed = lambda timeout_s=10.0, gen=None: m.CentralController._wait_fc_armed(f, 0.05, gen)
+    return f
+
+
+def test_partner_drone_not_armed_is_refused_at_once():
+    f = _rig({i: _Client(True) for i in range(4)}, {3: 'disarmed'})
+    f.mux_state = {3: 'partner'}
+    _arm(f)
+    assert any('ARM REFUSED: drone 4 flies the partner' in s for s in f._log.lines)
+    assert f.aborts == []                       # nothing armed yet, nothing to disarm
+
+
+def test_only_the_refused_drone_is_told_to_replug():
+    f = _rig({i: _Client(True) for i in range(3)},
+             {0: 'pending', 1: "failed: FC says '!ERR*' after 2 tries", 2: 'armed'})
+    _arm(f)
+    told = [s for s in f._log.lines if 'replug' in s]
+    assert len(told) == 1 and 'drone 2' in told[0]
+    assert any('still confirming' in s and '1' in s for s in f._log.lines)
+
+
+def test_a_disarm_stops_the_arm_sequence_quietly():
+    f = _rig({i: _Client(True) for i in range(3)}, {0: 'pending', 1: 'pending', 2: 'pending'})
+    f._disarm_gen = 0
+    real = m.CentralController._wait_fc_armed
+
+    def disarmed_meanwhile(timeout_s=10.0, gen=None):
+        f._disarm_gen += 1                      # the operator's DISARM arrives while the FCs confirm
+        return real(f, 0.05, gen)
+    f._wait_fc_armed = disarmed_meanwhile
+    _arm(f)
+    assert not any('replug' in s for s in f._log.lines) and f.aborts == []
+    assert any('stopped by a DISARM' in s for s in f._log.lines)
+
+
+def test_a_disarm_burst_reaches_the_radios_every_time_and_is_said_once(monkeypatch):
+    sent, said, threads = [], [], []
+    pub = types.SimpleNamespace(publish=sent.append)
+    f = types.SimpleNamespace(abort_pub=pub, elrs_publishers={0: pub, 1: pub}, num_drones=2,
+                              get_logger=lambda: _Log(), _disarm_fleet_thread=lambda: None)
+    monkeypatch.setattr(m, '_announce', lambda node, level, text: said.append(text))
+    monkeypatch.setattr(m.threading, 'Thread', lambda target, daemon: types.SimpleNamespace(
+        start=lambda: threads.append(target)))
+    for _ in range(5):
+        m.CentralController._disarm_fleet(f, emergency=True, reason='operator DISARM')
+    assert len(sent) == 5 * 3                   # abort + one stop per radio, every press
+    assert len(said) == 1 and len(threads) == 1

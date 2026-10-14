@@ -83,6 +83,9 @@ class CentralController(Node):
         # ── Fleet state ───────────────────────────────────────────────────
         self.master_step = 0
         self.flying = False          # True after TAKEOFF, False before/after
+        self._disarm_gen = 0           # bumped by every disarm: an ARM sequence in flight stops on it
+        self._last_estop = (None, 0.0)  # (reason, wall time): a burst of the same DISARM is handled once
+        self._flown = False            # a TAKEOFF happened since ARM: trackers exit after it by design
         self.fleet_armed = False     # True after ARM, before DISARM
         self.landing = False         # True after LAND, until the descent finishes
         self.shutdown_requested = False
@@ -401,9 +404,20 @@ class CentralController(Node):
                           if self.mux_state[i] == 'latched' else
                           f"ARM REFUSED: mux cut on drone {label(i)} (his DISARM, then relaunch T2)")
             return
+        if getattr(self, 'require_fc_armed', False):
+            # the partner's drone arms through his stream first (his ARM): refuse now, not 10 s later
+            unarmed = [i for i, st in self.mux_state.items()
+                       if st == 'partner' and not self.fc_arm_state.get(i, '').startswith('armed')]
+            if unarmed:
+                for i in unarmed:
+                    _announce(self, 'error', f"ARM REFUSED: drone {label(i)} flies the partner's stream and its FC "
+                                             f"is not armed: his ARM first (it arms idle on its mat), then ARM.")
+                return
         self.get_logger().debug("Arming all drones...")
         self.fleet_armed = False          # a repeat ARM must re-earn it
         self.shutdown_requested = False   # a refused ARM keeps the stack up for this retry
+        self._flown = False
+        gen = getattr(self, '_disarm_gen', 0)
 
         # Wait for all arming services to become available
         for i in range(self.num_drones):
@@ -455,18 +469,24 @@ class CentralController(Node):
             self._disarm_fleet(emergency=False, keep_alive=True,
                                reason=f"ARM failed for drone(s) {[label(i) for i in failed]}")
             return
-        if getattr(self, 'require_fc_armed', False) and not self._wait_fc_armed():
+        if getattr(self, '_disarm_gen', 0) != gen:
+            self.get_logger().info("ARM sequence stopped by a DISARM.")
+            return
+        if getattr(self, 'require_fc_armed', False) and not self._wait_fc_armed(gen=gen):
             return
         self.fleet_armed = True
         _announce(self, 'info', f"ARM sequence complete: all {self.num_drones} armed, ready for TAKEOFF.")
 
-    def _wait_fc_armed(self, timeout_s=10.0):
+    def _wait_fc_armed(self, timeout_s=10.0, gen=None):
         """Wait until every flight controller REPORTS armed (rig: require_fc_armed). 'unconfirmed'
         no longer passes: QUAD1 showed armed on the transmitter with its motors still (7 Oct,
         '!ERR*' arming disabled). A drone not armed within timeout_s disarms the fleet, names it,
         and leaves the stack up so the operator can replug it and ARM again."""
         deadline = time.time() + timeout_s
         while time.time() < deadline:
+            if gen is not None and getattr(self, '_disarm_gen', 0) != gen:
+                self.get_logger().info("ARM sequence stopped by a DISARM.")
+                return False
             states = {i: self.fc_arm_state.get(i, '') for i in range(self.num_drones)}
             if all(st.startswith('armed') for st in states.values()):
                 return True
@@ -476,6 +496,13 @@ class CentralController(Node):
         states = {i: self.fc_arm_state.get(i, '') or 'no arm state from its radio node'
                   for i in range(self.num_drones)}
         bad = {i: st for i, st in states.items() if not st.startswith('armed')}
+        failed = {i: st for i, st in bad.items() if st.startswith('failed')}
+        if failed:
+            # only the drones whose FC refused are told to replug; the rest were still confirming
+            pending = [label(i) for i in bad if i not in failed]
+            if pending:
+                self.get_logger().info(f"(drone(s) {pending} were still confirming their arm)")
+            bad = failed
         for i, st in bad.items():
             if self.mux_state.get(i) == 'partner':
                 # the partner's stream arms it through the mux (combined M1, critic F3): his ARM comes first
@@ -505,6 +532,7 @@ class CentralController(Node):
             return
         self.master_step = 0
         self.flying = True
+        self._flown = True
         _announce(self, 'info', "TAKEOFF: flying.")
         # Drones listen to /fleet/step and their own armed+takeoff_requested
         # flags.  We publish TAKEOFF via the per-drone command topic so each
@@ -616,6 +644,18 @@ class CentralController(Node):
                                          f"(z {z if z is None else round(z, 2)}): press DISARM once it is down.")
 
     def _disarm_fleet(self, emergency: bool = False, reason: str = '', keep_alive: bool = False):
+        self._disarm_gen = getattr(self, '_disarm_gen', 0) + 1
+        if emergency:
+            # the RViz panel sends DISARM 5 times at 100 ms: the radios get every one, the rest is said once
+            last_reason, last_t = getattr(self, '_last_estop', (None, 0.0))
+            now = time.time()
+            self._last_estop = (reason, now)
+            if last_reason == reason and now - last_t < 1.0:
+                self.abort_pub.publish(String(data=reason or 'emergency stop'))
+                stop = ELRSCommand(armed=False, channel_0=0.0, channel_1=0.0, channel_2=-1.0, channel_3=0.0)
+                for pub in self.elrs_publishers.values():
+                    pub.publish(stop)
+                return
         self.flying = False
         self.fleet_armed = False
         # on estop keep node alive for debug; keep_alive: a refused ARM, so the next ARM works
@@ -649,6 +689,9 @@ class CentralController(Node):
                 req = SetArming.Request()
                 req.arm = False
                 futures[i] = client.call_async(req)
+            elif getattr(self, '_flown', False):
+                # a tracker exits after its flight by design: its disarm went out on the radio
+                self.get_logger().debug(f"Drone {label(i)}: tracker gone after the flight (disarmed by radio).")
             else:
                 self.get_logger().warn(
                     f"Drone {label(i)}: tracker not answering, its disarm is not confirmed (the radio "
