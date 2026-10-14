@@ -13,7 +13,7 @@ itself (below the table) only changes when Wesley changes it; dated notes go in 
 | 3 | WP8 arming, landing and small fixes | done (code); USB hub is hardware | 3297746 (tracker start-up crash, full-pack voltage fallback, radio_health, QUAD4 down a few cm above its rest, takeoff hold + climb from liftoff), dade70d (partner first, only refused drones named, DISARM stops ARM, one burst); re-arm after a refused ARM = LAND, not DISARM |
 | 4 | WP3 attach: one plate point, Tejen's confirmation rules, bottom hold + quiet-miss retry, measured-tip trim | done (code + twin); card + critic before the rig flies it as a claim | eacab58: comotion proof (replay: the one real 14 Oct catch proven, no false proofs), lift-done signal, bottom hold + quiet miss, one plate point, rig overrides; tools/proof_replay.py. Twin R1718 PASS (contact, proven ~1.9 s sim later, fold-in; the post-landing tip-over is the known twin artefact). Which plate point (attach geometry) is Wesley's call (OPEN in decisions.md) |
 | 5 | WP5 RViz markers + WP2 quiet T2 and console | done; the RViz panel is compile-checked only (RViz cannot render headless): check it props-off | 4a60ca3 (markers, /fleet/mocap_summary); a73d9a4: tools/console.py (READY, who is airborne, the buttons in flight order, SPACE = DISARM), T2 shows the events only (RIG_FLIGHT_VERBOSE=1 for all), launches.csv, quieter sources; the RViz panel commit after it: his row (his ARM, his TAKEOFF, GIVE UP, his DISARM) while his MPC runs, ARM after his ARM, TAKEOFF after "ARM sequence complete", who is in the air; SPACE unchanged |
-| 6 | WP4 scoring tool (attach_window) + proof replay tool | to do | |
+| 6 | WP4 scoring tool (attach_window) + proof replay tool | done | tools/attach_window.py (per hold phase of his planner: tip error against the plate point, inside K and inside-and-slow, body wander, swing, plate motion, ring tilt, body vs air forcing; reproduces the 14 Oct numbers, e.g. t6g_2 5.6 cm / 7 % / 4 %); tools/proof_replay.py (eacab58). Hover-only configs wait for the wind matrix (after the lab day, revision 1) |
 | 7 | Props-off session: FC acceptance, radio soak, magnet hold force, proof bench, load with the console | needs the rig | |
 | 8 | Next lab day: card first, then attach flights scored with the tools | needs the rig | |
 | 9 | After the lab day: WP4 wind matrix (only if contacts stay rare), WP7 rename + legacy, WP9 pickup | to do | |
@@ -186,6 +186,7 @@ attach worlds regenerated; tests, docs, Tejen notes, a dated decisions line.
 - 14 Oct ~21:27: R1718 PASS (the attach and the new proof in the twin). WP6 + WP5 committed (4a60ca3); the console
   and the quiet T2 next in one commit; decisions.md has tonight's lines (plan, WP3, WP6, WP8; the aim point OPEN).
 - 14 Oct ~21:45: a73d9a4 (console, quiet T2); the RViz panel rules built (compile only; RViz needs a display). WP4 next.
+- 14 Oct ~22:00: f9d0b72 (RViz panel); WP4 scorer done. Next: the props-off checklist, the attach card + critic, Thursday's sheet.
 
 ## Revision 1 (14 Oct ~20:50, after a cross-check of the plan against the code and the 14 Oct bags)
 Wesley approved the plan above; a second reading against the code changed these points (the sections above stand
