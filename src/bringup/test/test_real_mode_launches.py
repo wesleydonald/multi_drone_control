@@ -831,7 +831,13 @@ def test_partner_contact_rig_graph(dds):
     mgr = g['/magnet_attachment_manager']['params']
     assert (mgr['confirm_mode'], mgr['sim_catch'], mgr['proof_taut_len']) == (
         'contact_lift', False, 0.583)
+    # plan 2026-10-14 WP3: Tejen's co-motion rules; the contact radius in the plate plane is weld_radius, the typed
+    # taut length only the fallback for the measured free hang
+    assert (mgr['proof_rules'], mgr['comotion_contact_xy']) == ('comotion', 0.01)
+    assert mgr['comotion_taut_fallback'] == pytest.approx(0.586)
     assert g['/elrs_mux_3']['params']['take_back_topic'] == '/drone_3/take_back'
+    old_rules = _combined_rig(proof_rules='contact_lift')['/magnet_attachment_manager']['params']
+    assert old_rules['proof_rules'] == 'contact_lift' and 'comotion_contact_xy' not in old_rules
     assert not [n for n in g if 'joint_state' in n]
 
 
@@ -901,6 +907,15 @@ def test_combined_rig_with_his_nodes(dds):
     assert p['contact_attach'] is True and p['ring_attached_topic'] == '/magnet/object_attached'
     assert (p['pickup_lift_height'], p['magnet_drop_below_quad'], p['final_attach_offset_z']) == (2.1, 0.582, -0.01)
     assert g['/fake_cooperative_transport_world']['params']['bridge_attach_z_m'] == 0.031
+    # one plate point for both stacks (plan 2026-10-14 WP3): his target is our weld point in x, y too
+    assert tuple(g['/fake_cooperative_transport_world']['params']['bridge_attach_xy_m']) == pytest.approx((0.0, 0.225))
+    moved = _by_name(rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01,
+                         weld_point_z=0.031, attach_cable_len=0.54, partner_nodes=True, proof_taut_len=0.577,
+                         attach_x_offset=0.013, attach_y_offset=0.21,
+                         partner_args='magnet_drop_below_quad:=0.582 mpc_thrust_ratio:=21.5'))
+    assert tuple(moved['/fake_cooperative_transport_world']['params']['bridge_attach_xy_m']) == pytest.approx(
+        (0.013, 0.21))
+    assert p['contact_bottom_hold'] is True and p['target_alignment_mode'] == 'measured_tip_trim'
     mpc = g['tejen/tejen_mpc']
     assert ('ELRSCommand', '/drone_3/ELRSCommand_tejen') in mpc['remappings']
     assert mpc['params']['thrust_ratio'] == 21.5

@@ -1817,6 +1817,20 @@ class OnlineJoinPlanner(Node):
             self.proof_rise_rate = float(self.declare_parameter('proof_rise_rate', 0.02).value)
             self.contact_max_failures = max(1, int(self.declare_parameter('contact_max_failures', 3).value))
             self.contact_give_up_s = float(self.declare_parameter('contact_give_up_s', 30.0).value)
+            # multi_drone_control (plan 2026-10-14 WP3): his lift's end for the co-motion proof, and a bottom hold
+            # (ATTACH_READY waits at the bottom with the magnet ON; it leaves only on a gross error or his quiet-miss
+            # rule): on 14 Oct the tip spent under 1 s at the bottom of every no-catch descent
+            self.proof_lift_complete_topic = str(self.declare_parameter(
+                'proof_lift_complete_topic', '/join_planner/proof_lift_complete').value)
+            self.contact_bottom_hold = bool(self.declare_parameter('contact_bottom_hold', False).value)
+            self.contact_gross_speed = float(self.declare_parameter('contact_gross_speed', 0.35).value)
+            self.contact_gross_xy = float(self.declare_parameter('contact_gross_xy', 0.12).value)
+            self.contact_face_below_m = float(self.declare_parameter('contact_face_below_m', 0.020).value)
+            self.contact_quiet_min_xy = float(self.declare_parameter('contact_quiet_min_xy', 0.035).value)
+            self.contact_max_misses = max(1, int(self.declare_parameter('contact_max_misses', 3).value))
+            self.contact_quiet = QuietMissTracker(
+                wait_s=float(self.declare_parameter('contact_quiet_wait_s', 4.0).value),
+                improvement_m=float(self.declare_parameter('contact_quiet_improvement_m', 0.005).value))
             # the rejoin's own gates: match_xy_* also gate the drop settle, which stays as it was
             self.contact_match_xy_threshold = max(0., float(self.declare_parameter(
                 'contact_match_xy_threshold', 0.025).value))
@@ -1854,6 +1868,11 @@ class OnlineJoinPlanner(Node):
         self.take_back_requested = False
         self.mux_state = ''
         self.contact_failures = 0
+        self.contact_misses = 0
+        self.contact_bottom_entries = 0
+        self.contact_gross_t0 = self.contact_below_t0 = None
+        self.contact_lift_published = None
+        self.contact_lift_published_t = None
         self.contact_first_descend_s = None
         self.contact_gave_up = False
         self.contact_give_up_sent_s = None
@@ -2462,6 +2481,7 @@ class OnlineJoinPlanner(Node):
             latched.durability = DurabilityPolicy.TRANSIENT_LOCAL
             self.create_subscription(String, self.mux_state_topic, self.mux_state_callback, latched)
             self.give_up_publisher = self.create_publisher(Bool, self.give_up_topic, latched)
+            self.proof_lift_publisher = self.create_publisher(Bool, self.proof_lift_complete_topic, 10)
         self.create_subscription(
             Bool,
             self.operator_advance_override_topic,
@@ -5287,6 +5307,9 @@ class OnlineJoinPlanner(Node):
     def transition_to(self, new_phase: MissionPhase, reason: str) -> None:
         if new_phase == self.phase:
             return
+        if new_phase == MissionPhase.ATTACH_READY:
+            # each bottom hold earns its own quiet-miss time (multi_drone_control, plan WP3)
+            self.contact_bottom_entries = getattr(self, 'contact_bottom_entries', 0) + 1
 
         # Evaluate the live geometry before changing phase.  Once DESCEND_TO_PICKUP
         # begins, the target must remain fixed even if mocap becomes stale or noisy.
@@ -6506,8 +6529,56 @@ class OnlineJoinPlanner(Node):
     # ----------------------------------------------------------------------
     # Mission transition guards
     # ----------------------------------------------------------------------
+    def contact_proof_lift_complete(self) -> bool:
+        """His proof lift has reached its goal (its profile complete), or without a measured profile its nominal
+        time has passed: the co-motion proof judges from here on."""
+        if self.phase != MissionPhase.LIFT_PROOF:
+            return False
+        profile = getattr(self, 'contact_proof_profile', None)
+        if profile is None:
+            return self.phase_elapsed() >= self.proof_rise_max / self.proof_rise_rate + 0.3
+        return profile.complete(self.phase_elapsed())
+
+    def publish_proof_lift(self) -> None:
+        """/join_planner/proof_lift_complete on a change and twice a second (multi_drone_control, plan WP3)."""
+        pub = getattr(self, 'proof_lift_publisher', None)
+        if pub is None:
+            return
+        done = self.contact_proof_lift_complete()
+        now = self._physical_now_s()
+        if done != self.contact_lift_published or self.contact_lift_published_t is None \
+                or now - self.contact_lift_published_t >= 0.5:
+            self.contact_lift_published, self.contact_lift_published_t = done, now
+            pub.publish(Bool(data=done))
+
+    def update_bottom_hold(self, xy_error: float, xy_relative_velocity: float, z_error: float) -> None:
+        """ATTACH_READY with contact_bottom_hold: stay at the bottom with the magnet ON until the contact. Leave only on
+        a gross error (moving fast, far off, or the face sunk below the plate: off its edge) or on his quiet-miss rule
+        (no 5 mm progress for contact_quiet_wait_s while off the plate), lifting clear to retry; contact_max_misses
+        misses give up. The contact itself (/magnet/contact) is taken by update_contact_attach."""
+        now = self._physical_now_s()
+        gross = xy_relative_velocity > self.contact_gross_speed or xy_error > self.contact_gross_xy
+        self.contact_gross_t0 = (now if self.contact_gross_t0 is None else self.contact_gross_t0) if gross else None
+        below = z_error + self.final_attach_offset_z < -self.contact_face_below_m
+        self.contact_below_t0 = (now if self.contact_below_t0 is None else self.contact_below_t0) if below else None
+        why = ('moving or far off the plate' if gross and now - self.contact_gross_t0 >= 0.3 else
+               'the tip sunk below the plate (off its edge)' if below and now - self.contact_below_t0 >= 0.12 else None)
+        if why is None and self.contact_quiet.step(
+                now=now, xy_error_m=xy_error, eligible=not self.contact_reported and xy_error > self.contact_quiet_min_xy,
+                key=self.contact_bottom_entries):
+            self.contact_misses += 1
+            if self.contact_misses >= self.contact_max_misses:
+                self.contact_give_up(f'{self.contact_misses} quiet misses at the bottom')
+                return
+            why = (f'quiet miss {self.contact_misses}/{self.contact_max_misses}: no 5 mm progress in '
+                   f'{self.contact_quiet.wait_s:.0f} s, {xy_error * 1000.0:.0f} mm off')
+        if why is not None:
+            self.contact_gross_t0 = self.contact_below_t0 = None
+            self.transition_to(MissionPhase.APPROACH_ABOVE_TARGET, f'bottom hold left: {why}; lifting clear to retry')
+
     def update_contact_attach(self) -> bool:
         """contact_attach transitions, ahead of every other guard. True: this tick is decided."""
+        self.publish_proof_lift()
         if self.phase == MissionPhase.RING_ATTACHED:
             if self.contact_hold_position is None and self.mux_state in {'ours', 'latched'}:
                 self.contact_hold_position = self.drone_position.copy()
@@ -7534,6 +7605,8 @@ class OnlineJoinPlanner(Node):
                     MissionPhase.LANDING,
                     f"ATTACH_READY timeout after {elapsed:.1f} s",
                 )
+            elif getattr(self, 'contact_attach', False) and getattr(self, 'contact_bottom_hold', False):
+                self.update_bottom_hold(xy_error, xy_relative_velocity, z_error)
             elif xy_error > abort_xy or xy_relative_velocity > abort_velocity:
                 self.transition_to(
                     MissionPhase.APPROACH_ABOVE_TARGET,

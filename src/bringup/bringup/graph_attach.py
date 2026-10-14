@@ -59,7 +59,7 @@ RIG_PUCK_MASS = 0.06
 # mid-load starved them, R0604)
 PARTNER_DELAY_S = 5.0
 # what this launch decides for his rig launch (partner_args may not set them)
-PARTNER_OWNED = ('real', 'geometry', 'contact_attach', 'contact_target_z')
+PARTNER_OWNED = ('real', 'geometry', 'contact_attach', 'contact_target_z', 'contact_target_xy')
 # combined rig: proof_taut_len is the measured taut body-to-tip minus this; QUAD4's rod body-to-tip and his
 # magnet_drop_below_quad must agree with that taut length within QUAD4_LEN_TOL_M
 PROOF_TAUT_MARGIN_M = 0.003
@@ -153,6 +153,9 @@ def _partner_nodes(context):
     from ament_index_python.packages import get_package_share_directory
     args = {'real': 'true', 'geometry': 'rig', 'contact_attach': 'true',
             'contact_target_z': LaunchConfiguration('weld_point_z').perform(context).strip(),
+            # his target is our weld point in x, y too (plan 2026-10-14 WP3: one plate point for both stacks)
+            'contact_target_xy': (LaunchConfiguration('attach_x_offset').perform(context).strip() + ','
+                                  + LaunchConfiguration('attach_y_offset').perform(context).strip()),
             **_partner_launch_args(context)}
     path = os.path.join(get_package_share_directory('tejen_mission'), 'launch', 'partner_mission.launch.py')
     return [LogInfo(msg=f'[launch] COMBINED M1: his rig nodes in {PARTNER_DELAY_S:.0f} s: '
@@ -190,6 +193,16 @@ def _contact_manager_params(context, real):
                                'minus 0.003> (without it a magnet resting on a rising plate counts as attached)')
     else:
         out['sim_catch'] = truthy(context, 'sim_catch')
+    rules = LaunchConfiguration('proof_rules').perform(context).strip() or 'contact_lift'
+    if rules not in ('contact_lift', 'comotion'):
+        raise RuntimeError(f'proof_rules {rules!r}: comotion or contact_lift')
+    out['proof_rules'] = rules
+    if rules == 'comotion':
+        # the contact radius is weld_radius in the plate plane; the measured free hang is the taut length, the typed
+        # one only its fallback
+        out['comotion_contact_xy'] = float(LaunchConfiguration('weld_radius').perform(context))
+        if real:
+            out['comotion_taut_fallback'] = out['proof_taut_len'] + PROOF_TAUT_MARGIN_M
     return out
 
 

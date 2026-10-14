@@ -126,13 +126,22 @@ class RingBridge(FakeCooperativeTransportWorld):
         return RigidBodyState(x=float(s['hover_x']) + dx, y=float(s['hover_y']) + dy,
                               z=z, yaw=yaw, vx=vx, vy=vy, vz=0.0, yaw_rate=0.0)
 
+    def _plate_xy(self):
+        """The attach plate's point in the ring frame: bridge_attach_xy_m when set (our weld point, so both stacks aim
+        at one point: on 14 Oct his nominal plate and our measured point were 2.4 cm apart), else his nominal."""
+        xy = [float(v) for v in self._param('bridge_attach_xy_m', [0.0])]
+        if len(xy) == 2:
+            return xy
+        plate = self.ring_geometry.plate_body_offset(self.ring_attachment_plate_index)
+        return [float(plate[0]), float(plate[1])]
+
     def compute_attachment_xyz(self, payload_state: RigidBodyState) -> Tuple[float, float, float]:
         z0 = float(self._param('bridge_attach_z_m', 0.025))
         if self._param('full_pose_attachment', False) and self._ring_q is not None:
             # the plate point as our magnet manager computes it (ring pose + R(q) @ offset): a
             # tilted ring moves the plate by r*sin(tilt), which a yaw-only target misses
-            plate = self.ring_geometry.plate_body_offset(self.ring_attachment_plate_index)
-            ox, oy, oz = _rotate(self._ring_q, (float(plate[0]), float(plate[1]), float(plate[2]) + z0))
+            px, py = self._plate_xy()
+            ox, oy, oz = _rotate(self._ring_q, (px, py, z0))
             return (payload_state.x + ox, payload_state.y + oy, payload_state.z + oz)
         x, y, z = super().compute_attachment_xyz(payload_state)
         return (x, y, z + z0)

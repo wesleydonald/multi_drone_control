@@ -60,6 +60,9 @@ if python3 -m pytest src/utility_objects/test/test_safety.py \
                     src/tejen_mission/test/test_m1_contact_targets.py \
                     src/tejen_mission/test/test_floor_join_delivery_rejoin.py \
                     src/tejen_mission/test/test_takeoff_hold.py \
+                    src/tejen_mission/test/test_bottom_hold.py \
+                    src/tejen_mission/test/test_partner_mission_rig.py \
+                    src/tejen_mission/test/test_m2_irl_progressive_policy.py \
                     src/tejen_mission/test/test_partner_mission_geometry.py \
                     src/tracker/test \
                     src/drone_communication/test \

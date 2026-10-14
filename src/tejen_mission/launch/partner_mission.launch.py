@@ -458,6 +458,10 @@ def _rig_nodes(context):
         raise RuntimeError('partner_mission real:=true: supervisor:=true is refused on the combined rig until its '
                            'give-up stop has been through the critic (critic F9); ARM and TAKEOFF stay manual')
     target_z = LaunchConfiguration('contact_target_z').perform(context).strip()
+    xy_txt = LaunchConfiguration('contact_target_xy').perform(context).strip()
+    target_xy = [float(v) for v in xy_txt.replace(',', ' ').split()] if xy_txt else []
+    if target_xy and len(target_xy) != 2:
+        raise RuntimeError(f'contact_target_xy {xy_txt!r}: two numbers, x,y in the ring frame (m)')
     if not target_z:
         raise RuntimeError('partner_mission real:=true: type contact_target_z:=<weld_point_z> (the 09:00 '
                            'calibration: the magnet marker above the ring-origin plane with the face on plate 9)')
@@ -497,6 +501,8 @@ def _rig_nodes(context):
             'shared_trajectory_refresh_period_s': 1.0,
             # his contact target = our weld point: the calibrated marker height, the full ring attitude
             'bridge_attach_z_m': float(target_z),
+            # one plate point for both stacks (plan 2026-10-14 WP3): our weld point's x, y in the ring frame
+            **({'bridge_attach_xy_m': target_xy} if target_xy else {}),
             'full_pose_attachment': True,
             # 14 Oct load cut (Wesley): no 20 s trail MarkerArray at 50 Hz on the rig laptop
             'trail_seconds': 0.0,
@@ -604,6 +610,11 @@ def _rig_nodes(context):
                 'contact_match_xy_velocity_threshold': 0.15,
                 'contact_abort_xy_threshold': 0.08,
                 'contact_abort_xy_velocity_threshold': 0.25,
+                # plan 2026-10-14 WP3: hold at the bottom for the contact (gross errors and his quiet-miss rule leave),
+                # three tries in the give-up time, and his measured-tip trim instead of hand-set contact_dx/dy
+                'contact_bottom_hold': True,
+                'contact_give_up_s': f('contact_give_up_s', 45.0),
+                'target_alignment_mode': val('target_alignment_mode', 'measured_tip_trim'),
             },
         ])
 
@@ -710,6 +721,9 @@ def _arguments():
         # real:=true only (the rig; the sim graph above does not read these)
         DeclareLaunchArgument('real', default_value='false'),
         DeclareLaunchArgument('contact_target_z', default_value=''),     # m, the calibrated weld_point_z
+        DeclareLaunchArgument('contact_target_xy', default_value=''),    # 'x,y' m in the ring frame: our weld point ('' = his nominal plate)
+        DeclareLaunchArgument('contact_give_up_s', default_value=''),    # rig: s after the first descent ('' = 45)
+        DeclareLaunchArgument('target_alignment_mode', default_value=''),  # rig: '' = measured_tip_trim
         DeclareLaunchArgument('magnet_drop_below_quad', default_value=''),   # QUAD4's, typed (refused untyped)
         DeclareLaunchArgument('proof_rise_max', default_value=''),       # '' = the rig's 0.03
         DeclareLaunchArgument('mpc_thrust_ratio', default_value=''),     # QUAD4's, typed (refused untyped)

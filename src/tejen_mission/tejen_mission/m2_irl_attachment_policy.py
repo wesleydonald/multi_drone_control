@@ -7,7 +7,8 @@ POLICY = "measured_contact_15deg"
 LEGACY = "legacy"
 
 class QuietMissTracker:
-    """One-shot no-progress timer; caller owns eligibility and existing recovery."""
+    """One-shot accumulated eligible-time timer; caller owns recovery. (His d2eaf41e version: time while ineligible is
+    paused, not a reset.)"""
 
     def __init__(self, *, wait_s=10., improvement_m=.005):
         if not all(math.isfinite(v) and v > 0 for v in (wait_s, improvement_m)):
@@ -21,18 +22,28 @@ class QuietMissTracker:
         self.elapsed_s = 0.
         self.fired = False
 
+    def pause(self):
+        """Retain earned time/baseline, but never credit the skipped interval."""
+        self.since = None
+
     def step(self, *, now, xy_error_m, eligible, key):
-        if not eligible or not math.isfinite(now) or not math.isfinite(xy_error_m):
-            self.reset()
-            return False
-        if key != self.key or (self.since is not None and now < self.since):
+        if key != self.key:
             self.reset()
         self.key = key
+        if not eligible or not math.isfinite(now) or not math.isfinite(xy_error_m):
+            self.pause()
+            return False
+        if self.since is not None and now < self.since:
+            self.reset()
+            self.key = key
         if self.fired:
             return False
-        if self.since is None or self.baseline - xy_error_m >= self.improvement_m:
-            self.since, self.baseline = now, xy_error_m
-        self.elapsed_s = max(0., now - self.since)
+        if self.baseline is None or self.baseline - xy_error_m >= self.improvement_m:
+            self.baseline = xy_error_m
+            self.elapsed_s = 0.
+        elif self.since is not None:
+            self.elapsed_s += max(0., now - self.since)
+        self.since = now
         self.fired = self.elapsed_s >= self.wait_s
         return self.fired
 

@@ -168,6 +168,10 @@ partner:
   contact_fold_seed: 'start'    # the newcomer's starting share at the fold-in: 'start' (0.1 N) or 'ocp' (its OCP share)
   sim_catch: true               # twin: the manager makes the gz joint at contact (false: the _nocatch arm)
   proof_taut_len: 0.0           # the proof's body-to-tip floor (m, Wednesday's taut length - 3 mm): required > 0 on the rig; 0 = off (twin)
+  # the attach confirmation (plan 2026-10-14 WP3): 'comotion' = Tejen's rules for the airborne ring (contact in the
+  # plate frame within weld_radius, the tip staying with the plate on a taut tether after his lift, failure only on
+  # evidence); 'contact_lift' = the 10 Oct rules (rejected the one real rig catch, RIG-1014-t6h_4)
+  proof_rules: comotion
   # the manager's contact and proof thresholds, '' = its default (E1 sets loose ones, then they are frozen)
   contact_dwell_s: ''
   proof_d_ok: ''

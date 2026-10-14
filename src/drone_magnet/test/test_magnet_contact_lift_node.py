@@ -252,3 +252,67 @@ def test_the_contact_level_repeats_at_1_hz(manager):
     n._last_contact_beat -= 1.0
     n.timer_callback()
     assert n.contact_pub.msgs[-1].data is True                      # in the proof: true
+
+
+# ── proof_rules comotion (plan 2026-10-14 WP3): Tejen's rules for the airborne ring ──
+
+def _co_trace(caught, t_end=4.0):
+    """A free hang 0.3 m above the plate for 2 s, the tip down on the plate, then (caught) the tip staying with a
+    plate that bobs while the tether is taut, or (not caught) the tip lifted 2 cm by QUAD4."""
+    for k in range(int(t_end * HZ) + 1):
+        t = k / HZ
+        plate = PLATE + [0.0, 0.0, 0.01 * np.sin(2.0 * np.pi * t / 1.0)]
+        if t < 2.0:
+            tip = plate + [0.0, 0.0, 0.30]
+        elif caught or t < 2.6:
+            tip = plate.copy()
+        else:
+            tip = plate + [0.0, 0.0, min(0.02, (t - 2.6) * 0.05)]
+        yield t, tip, plate, tip + [0.0, 0.0, 0.5698]
+
+
+def test_comotion_proves_a_caught_tip_after_his_lift_and_reports_the_plate_frame(manager):
+    n = manager(confirm_mode='contact_lift', proof_rules='comotion', comotion_lift_fallback_s=0.0)
+    assert type(n._proof).__name__ == 'ComotionProof'
+    subs = _subs(n)
+    assert '/join_planner/proof_lift_complete' in subs and '/join_planner/phase' in subs
+    clock = _with_clock(n)
+    n._contact_command_callback(String(data='ON'))
+    trace = _co_trace(caught=True)
+    _until(n, clock, trace, lambda: n.contact_pub.msgs)
+    assert [m.data for m in n.contact_pub.msgs] == [True] and not n.attached
+    n._lift_done = True                                      # his LIFT_PROOF profile is complete
+    _until(n, clock, trace, lambda: n.attached)
+    assert n.attached_pub.msgs[-1].data is True
+    n._publish_proof_state()
+    rec = json.loads(n.proof_state_pub.msgs[-1].data)
+    assert rec['rules'] == 'comotion' and rec['state'] == 'attached' and rec['l_hang_m'] == pytest.approx(0.5698)
+
+
+def test_comotion_fails_a_tip_that_rises_with_quad4(manager):
+    n = manager(confirm_mode='contact_lift', proof_rules='comotion', comotion_lift_fallback_s=0.0)
+    clock = _with_clock(n)
+    n._contact_command_callback(String(data='ON'))
+    trace = _co_trace(caught=False)
+    _until(n, clock, trace, lambda: n.contact_pub.msgs)
+    n._lift_done = True
+    _until(n, clock, trace, lambda: len(n.contact_pub.msgs) >= 2)
+    assert [m.data for m in n.contact_pub.msgs] == [True, False] and not n.attached
+    assert n._proof.last_fail['reason'] == 'separated'
+
+
+def test_comotion_voids_the_contact_when_his_planner_leaves_the_proof(manager):
+    n = manager(confirm_mode='contact_lift', proof_rules='comotion', comotion_lift_fallback_s=0.0)
+    clock = _with_clock(n)
+    n._contact_command_callback(String(data='ON'))
+    _until(n, clock, _co_trace(caught=True), lambda: n.contact_pub.msgs)
+    n._planner_phase_cb(String(data='LIFT_PROOF'))           # still proving: nothing
+    assert n._proof.state == 'prove'
+    n._planner_phase_cb(String(data='TAKEN_BACK'))
+    assert n._proof.state == 'watch' and n.contact_pub.msgs[-1].data is False
+    assert n._proof.last_fail['reason'] == 'aborted (TAKEN_BACK)'
+
+
+def test_an_unknown_proof_rule_is_refused(manager):
+    with pytest.raises(ValueError):
+        manager(confirm_mode='contact_lift', proof_rules='magic')

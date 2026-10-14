@@ -140,3 +140,19 @@ def test_drop_ends_on_the_measured_object():
 def test_refusals(typed, match):
     with pytest.raises(RuntimeError, match=match):
         _rig(**typed)
+
+
+def test_rig_bottom_hold_trim_give_up_and_one_plate_point():
+    """Plan 2026-10-14 WP3: on the rig his planner holds at the bottom, uses his measured-tip trim, gives up after
+    45 s, and his bridge aims at our weld point when bringup passes it."""
+    g, _ = _nodes()
+    p = g['online_join_planner']['params']
+    assert (p['contact_bottom_hold'], p['contact_give_up_s'], p['target_alignment_mode']) == (
+        True, 45.0, 'measured_tip_trim')
+    assert 'bridge_attach_xy_m' not in g['fake_cooperative_transport_world']['params']   # his nominal plate
+    g, _ = _nodes(contact_target_xy='0.013,0.210', contact_give_up_s='60', target_alignment_mode='legacy')
+    assert g['fake_cooperative_transport_world']['params']['bridge_attach_xy_m'] == [0.013, 0.210]
+    p = g['online_join_planner']['params']
+    assert (p['contact_give_up_s'], p['target_alignment_mode']) == (60.0, 'legacy')
+    with pytest.raises(RuntimeError, match='contact_target_xy'):
+        _nodes(contact_target_xy='0.013')

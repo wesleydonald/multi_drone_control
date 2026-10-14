@@ -42,7 +42,11 @@ from geometry_msgs.msg import Pose, PoseArray, PoseStamped
 from std_msgs.msg import Bool, Empty, String
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
+from drone_magnet.comotion_proof import ComotionConfig, ComotionProof
 from drone_magnet.contact_proof import ContactProof, ProofConfig
+
+# his rejoin phases in which a contact may be proven (tejen_mission MissionPhase values)
+CONTACT_PHASES = ('MATCH_VELOCITY', 'DESCEND_TO_ATTACHMENT', 'ATTACH_READY', 'LIFT_PROOF', 'RING_ATTACHED')
 
 ON_WORDS = ('ON', '1', 'TRUE', 'ENABLE', 'ENABLED')
 OFF_WORDS = ('OFF', '0', 'FALSE', 'DISABLE', 'DISABLED')
@@ -196,8 +200,24 @@ class MagnetAttachmentManager(Node):
         self.contact_topic = str(self.declare_parameter('contact_topic', '/magnet/contact').value)
         self.proof_state_topic = str(
             self.declare_parameter('proof_state_topic', '/magnet/attach_proof').value)
+        # proof_rules (plan 2026-10-14 WP3): 'contact_lift' = the rules above; 'comotion' = Tejen's for the airborne
+        # ring (comotion_proof.py: plate-frame contact gate, the tip staying with the plate on a taut tether after his
+        # lift, failure only on evidence); its knobs are the comotion_* parameters
+        self.proof_rules = str(self.declare_parameter('proof_rules', 'contact_lift').value).strip().lower()
+        if self.proof_rules not in ('contact_lift', 'comotion'):
+            raise ValueError(f'proof_rules {self.proof_rules!r}: contact_lift or comotion')
+        self.lift_done_topic = str(
+            self.declare_parameter('lift_done_topic', '/join_planner/proof_lift_complete').value)
+        self.planner_phase_topic = str(self.declare_parameter('planner_phase_topic', '/join_planner/phase').value)
+        self._lift_done = False
+        self._object_rot: Optional[np.ndarray] = None
         self._proof: Optional[ContactProof] = None
-        if self.confirm_mode == 'contact_lift':
+        if self.confirm_mode == 'contact_lift' and self.proof_rules == 'comotion':
+            defaults = ComotionConfig()
+            self._proof = ComotionProof(ComotionConfig(**{
+                k: float(self.declare_parameter(f'comotion_{k}', float(getattr(defaults, k))).value)
+                for k in defaults.__dict__}))
+        elif self.confirm_mode == 'contact_lift':
             self._proof = ContactProof(ProofConfig(
                 radius=self.attach_radius, speed=self.attach_speed_threshold,
                 contact_dwell_s=self.contact_dwell_s, d_ok=self.proof_d_ok, d_fail=self.proof_d_fail,
@@ -276,6 +296,12 @@ class MagnetAttachmentManager(Node):
                 Bool, self.contact_topic, QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
             self.proof_state_pub = self.create_publisher(String, self.proof_state_topic, 5)
             self.create_subscription(MotionCaptureState, self.body_pose_topic, self._body_callback, 10)
+            if isinstance(self._proof, ComotionProof):
+                self.create_subscription(Bool, self.lift_done_topic,
+                                         lambda msg: setattr(self, '_lift_done', bool(msg.data)), 10)
+                self.create_subscription(String, self.planner_phase_topic, self._planner_phase_cb,
+                                         QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                                                    reliability=ReliabilityPolicy.RELIABLE))
 
         # Gazebo's DetachableJoint is created ATTACHED at spawn, which would rigidly weld the
         # magnet to the payload from t=0 (before any ATTACH) and drag the payload around. Send
@@ -433,6 +459,8 @@ class MagnetAttachmentManager(Node):
         # the trigger point is the physical rim magnet even when the disc is tilted
         q = pose.orientation
         off = _quat_rot([q.w, q.x, q.y, q.z], [self.object_x_offset, self.object_y_offset, self.object_z_offset])
+        self._object_rot = np.column_stack([_quat_rot([q.w, q.x, q.y, q.z], e)
+                                            for e in ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0])])
         new_pos[0] += off[0]
         new_pos[1] += off[1]
         new_pos[2] += off[2]
@@ -736,12 +764,25 @@ class MagnetAttachmentManager(Node):
                        and now - self._t_object_clk <= self.proof_ma_s)
         body = (self._body_position if self._t_body_clk is not None
                 and now - self._t_body_clk <= self.proof_ma_s else None)
+        if isinstance(self._proof, ComotionProof):
+            self._proof_event(self._proof.step(now, self.magnet_tip_position, self.object_position, body=body,
+                                               fresh=plate_fresh, rotation=self._object_rot,
+                                               lift_done=self._lift_done))
+            return
         self._proof_event(self._proof.step(now, self.magnet_tip_position, self.object_position,
                                            body=body, fresh=plate_fresh))
 
     def _proof_event(self, ev: Optional[str]) -> None:
         p = self._proof
-        if ev == 'contact':
+        if ev == 'contact' and isinstance(p, ComotionProof):
+            hang = 'none' if p.l_hang is None else f'{p.l_hang:.4f} m'
+            self.get_logger().info(
+                f'CONTACT (try {p.tries}): xy {1000.0 * p.xy:.1f} mm, normal {1000.0 * p.normal:+.1f} mm, '
+                f'rel_speed={p.rel_speed:.3f} m/s, free-hang tether {hang}, plate z0={p.z0:.4f} m')
+            if self.sim_catch:
+                self._sim_joint(True, f'contact, try {p.tries}')
+            self.contact_pub.publish(Bool(data=True))
+        elif ev == 'contact':
             c0 = 1000.0 * p.c0
             self.get_logger().info(
                 f'CONTACT (try {p.tries}): d={p.distance:.4f} m, rel_speed={p.rel_speed:.3f} m/s, '
@@ -754,7 +795,8 @@ class MagnetAttachmentManager(Node):
             f = p.last_fail
             self.get_logger().warn(
                 f'PROOF FAILED (try {p.tries}, {f["reason"]}): drift {1000.0 * f["drift_m"]:.1f} mm, '
-                f'plate rise {1000.0 * f["plate_rise_m"]:.1f} mm, {f["contact_age_s"]:.2f} s after the contact')
+                f'plate rise {1000.0 * f["plate_rise_m"]:.1f} mm, {f["contact_age_s"]:.2f} s after the contact'
+                + (f', xy {1000.0 * f["xy_m"]:.1f} mm, normal {1000.0 * f["normal_m"]:+.1f} mm' if 'xy_m' in f else ''))
             # the joint goes before the contact false, so he never descends again while welded
             if self.sim_catch:
                 self._sim_joint(False, f'proof failed ({f["reason"]})')
@@ -763,10 +805,21 @@ class MagnetAttachmentManager(Node):
             # no hand-over can follow (our tracker latched, or the drone was cut): a failed proof, joint released
             p.state = 'prove'
             self._proof_event(p._fail('handover_blocked' if self._handover_blocked else 'cut', self._clock_s()))
+        elif ev == 'proven' and isinstance(p, ComotionProof):
+            self._declare_attached(
+                f'proven (try {p.tries}): the tip stayed with the plate (drift {1000.0 * p.drift:.1f} mm, normal '
+                f'{1000.0 * p.normal:+.1f} mm) while the plate moved {1000.0 * p.comotion:.1f} mm on a taut tether '
+                f'({p.body_to_tip:.4f} m, free hang {p.l_hang if p.l_hang is not None else float("nan"):.4f} m)')
         elif ev == 'proven':
             self._declare_attached(
                 f'proven (try {p.tries}): drift {1000.0 * p.drift:.1f} mm, plate rise '
                 f'{1000.0 * p.rise:.1f} mm, body-to-tip {p.body_to_tip:.3f} m')
+
+    def _planner_phase_cb(self, msg: String) -> None:
+        """His planner left the contact phases while we prove (a give-up, a take-back, a LAND): the contact is void."""
+        phase = msg.data.strip().upper()
+        if self._proof is not None and self._proof.state == 'prove' and phase not in CONTACT_PHASES:
+            self._proof_event(self._proof.abort(f'aborted ({phase})', self._clock_s()))
 
     def _declare_attached(self, reason: str) -> None:
         """The proven catch: attached, latched (an OFF is refused from now on). The twin's joint was

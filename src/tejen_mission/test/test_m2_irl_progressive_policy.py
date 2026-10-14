@@ -8,20 +8,22 @@ def sample(d, t, contact=(0,0,-.001), anchor=(0,0,.5565), **kw):
                     magnet_on=kw.pop("magnet_on",True), **kw)
 
 def test_quiet_miss_tracker_progress_resets_and_one_shot_expiry():
+    # his d2eaf41e test: ineligible time pauses the timer, it does not reset it
     from tejen_mission.m2_irl_attachment_policy import QuietMissTracker
     q = QuietMissTracker(wait_s=10., improvement_m=.005)
     def step(t, xy=.061, eligible=True, key=("LOW", 1)):
         return q.step(now=t, xy_error_m=xy, eligible=eligible, key=key)
-    assert not step(0) and not step(9.9)
-    assert step(10) and not step(11)
-    assert not step(12, key=("LOW", 2))
-    assert not step(21, xy=.055, key=("LOW", 2))  # meaningful improvement
-    assert not step(30, xy=.055, key=("LOW", 2))
-    assert step(31, xy=.055, key=("LOW", 2))
-    assert not step(32, eligible=False) and q.elapsed_s == 0
-    assert not step(33) and not step(42)
-    assert not step(43, xy=float("nan")) and q.elapsed_s == 0
-    assert not step(44) and not step(53, key=("SEARCH", 1))
+    assert not step(0) and not step(6)
+    assert not step(7, eligible=False) and q.elapsed_s == 6
+    assert not step(20, xy=float("nan")) and q.elapsed_s == 6
+    assert not step(21) and q.elapsed_s == 6  # reacquisition earns no catch-up
+    assert not step(24.9)
+    assert step(25) and not step(26)  # ten accumulated eligible seconds, one shot
+    assert not step(27, key=("LOW", 2)) and q.elapsed_s == 0
+    assert not step(35, xy=.055, key=("LOW", 2)) and q.elapsed_s == 0
+    assert not step(44, xy=.055, key=("LOW", 2))
+    assert step(45, xy=.055, key=("LOW", 2))
+    assert not step(46, key=("SEARCH", 2)) and q.elapsed_s == 0
 
 
 def test_quiet_miss_adapter_reuses_release_and_excludes_motion_contact_and_other_phases():
