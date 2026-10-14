@@ -16,11 +16,11 @@ the rig-matched twin instead of the legacy sim (Wesley, 8 Oct 2026; docs/decisio
                                            pose cannot be set per <include>, so the welded start
                                            needs its own file, as the legacy partner/_attached pair)
   three_rigid_ground_rig_attach.sdf        FREE start (R8a0/R8a/R8b/R9): the twin ring, three
-                                           carriers on the floor at 270/30/150 deg (rig plates
-                                           3/11/7), the newcomer on the floor at (0, 1.4), its
+                                           carriers on the floor at 270/30/150 deg (plates
+                                           9/1/5), the newcomer on the floor at (0, 1.4), its
                                            magnet on the floor 0.55 m further out (+y)
   three_rigid_ground_rig_attach_welded.sdf WELDED floor start (R10b/R11): the newcomer welded
-                                           on rig plate 9 (90 deg, the plate at (0, 0.225)),
+                                           on plate 3 (90 deg, the plate at (0, 0.225)),
                                            its tip on the plate, the arm at the carriers'
                                            ground-start elevation
   models/x3_rig_drone3_magnet_pickup.sdf   the free newcomer + the partner model's second weld
@@ -31,7 +31,7 @@ the rig-matched twin instead of the legacy sim (Wesley, 8 Oct 2026; docs/decisio
                                            with the pickup newcomer, an open ring (annulus + the
                                            partner world's net, scaled) and Tejen's ball on the
                                            floor; his controller takes QUAD4 off, picks the ball
-                                           up, drops it into the net, then attaches on plate 9
+                                           up, drops it into the net, then attaches on plate 3
   models/x3_rig_drone3_magnet_welded_pickup.sdf
                                            the welded newcomer + the same pickup weld
   three_rigid_ground_rig_attach_welded_pickup.sdf
@@ -39,7 +39,7 @@ the rig-matched twin instead of the legacy sim (Wesley, 8 Oct 2026; docs/decisio
                                            welded pickup newcomer, the open ring with its net and
                                            Tejen's ball; QUAD4 lifts the ring as the fourth carrier,
                                            detaches, is released to his controller (pickup, drop),
-                                           then attaches on plate 9 again
+                                           then attaches on plate 3 again
   three_rigid_ground_rig_attach_push.sdf   the free world + the runner's WRENCH tool (ApplyLinkWrench)
   three_rigid_ground_rig_attach_pickup_push.sdf
                                            the pickup world + the same tool (the combined M1
@@ -49,8 +49,8 @@ the rig-matched twin instead of the legacy sim (Wesley, 8 Oct 2026; docs/decisio
                                            push on QUAD4)
 
 The carriers and ring are generate_rigid_world.py with make_carry_worlds.RIG_ARGS, i.e. the
-same twin as the carry worlds. Rig plate labels run clockwise from +x (plate 9 at 90 deg);
-the ring's plate_k_visual are numbered counter-clockwise (plate_3_visual at 90 deg).
+same twin as the carry worlds. Plates count counter-clockwise from +x, plate k at +30k deg (plate 3 at
+90 deg), as the ring's plate_k_visual (docs/rig/plate_numbering.md; the 8-14 Oct sheets counted clockwise).
 
 The gz DetachableJoint welds at spawn. The free world relies on the magnet manager's
 detach_on_start (its default) to free the magnet; the welded world needs attached_at_start.
@@ -86,8 +86,8 @@ from make_weld_variants import arm_link
 
 ID = 3
 MODEL = 'x3_rig_drone3_magnet'
-CARRIER_AZIMUTHS = '270,30,150'   # drone_0/1/2 on rig plates 3/11/7 (decisions 8 Oct)
-WELD_Y = ATTACH_RADIUS            # rig plate 9 at 90 deg, (0, +0.225) (attach_y_offset)
+CARRIER_AZIMUTHS = '270,30,150'   # drone_0/1/2 on plates 9/1/5 (decisions 8 Oct)
+WELD_Y = ATTACH_RADIUS            # plate 3 at 90 deg, (0, +0.225) (attach_y_offset)
 FREE_XY = (0.0, 1.4)
 GROUND_Z = 0.10                   # every twin drone rests here (--ground-start)
 PLATE_Z = RING_THICKNESS          # plate top, ring on the floor (CoG t/2, plane t/2 up)
@@ -103,7 +103,7 @@ PICKUP_FLOOR_BITMASK = '0x03'     # the ring and the magnet rest on the floor, t
 # Combined M1 subtest (Wesley 10 Oct): Tejen's ball and the pickup weld of his partner model
 PICKUP_MODEL = f'{MODEL}_pickup.sdf'
 PICKUP_WORLD = 'three_rigid_ground_rig_attach_pickup.sdf'
-# the full M1 (Wesley 10 Oct): the same with QUAD4 welded on plate 9 from spawn
+# the full M1 (Wesley 10 Oct): the same with QUAD4 welded on plate 3 from spawn
 PICKUP_MODELS = {'free': PICKUP_MODEL, 'welded': f'{MODEL}_welded_pickup.sdf'}
 PICKUP_WORLDS = {'free': PICKUP_WORLD, 'welded': 'three_rigid_ground_rig_attach_welded_pickup.sdf'}
 BALL_SDF = 'tejen/payload_model.sdf'
@@ -114,7 +114,7 @@ BALL_XY = (1.0, 1.6)              # (1.0, 1.4) was 1.06 m from carrier 1 at (0.6
 # delivery_rejoin (Wesley 14 Oct): the free pickup world with the ball on QUAD4's magnet tip, held from spawn
 HELD_PICKUP_WORLD = 'three_rigid_ground_rig_attach_held_pickup.sdf'
 BALL_CLEAR_CARRIER = 1.2          # m, ball centre to each carrier's centre
-BALL_CLEAR_NEWCOMER = 1.0         # m, ball centre to QUAD4's body and arm (laid out, or welded on plate 9)
+BALL_CLEAR_NEWCOMER = 1.0         # m, ball centre to QUAD4's body and arm (laid out, or welded on plate 3)
 # the rig ring is open: its 60 mm rim centred on the plates, as ring_k_visual draws it
 RING_INNER_R = 2 * ATTACH_RADIUS - RING_OUTER_R
 ANNULUS_SEGMENTS = 16             # the partner world's; each box on the floor costs RTF
@@ -315,10 +315,10 @@ XML_DECL = '<?xml version="1.0" ?>\n'
 def _header(start):
     return ('<!-- GENERATED by tools/make_attach_worlds.py: do not edit. Rig-twin M1 attach world, '
             f'{start} start: carriers on the floor at {CARRIER_AZIMUTHS.replace(",", "/")} deg '
-            '(rig plates 3/11/7), newcomer x3_drone3 '
+            '(plates 9/1/5), newcomer x3_drone3 '
             + ('free on the floor at (0, 1.4), magnet on the floor further out (+y). -->\n'
                if start == 'free' else
-               'welded on rig plate 9 (90 deg, the plate at (0, 0.225)) from spawn. -->\n'))
+               'welded on plate 3 (90 deg, the plate at (0, 0.225)) from spawn. -->\n'))
 
 
 def attach_world(base, start):
@@ -333,7 +333,7 @@ def attach_world(base, start):
     where = ('Free start: on the floor at (0, 1.4), the arm laid out along +y with the magnet\n'
              '         on the floor; the magnet manager frees the spawn weld (detach_on_start).'
              if start == 'free' else
-             'Welded start: welded on rig plate 9 (90 deg) from spawn, the tip on the plate top\n'
+             'Welded start: welded on plate 3 (90 deg) from spawn, the tip on the plate top\n'
              '         and the rod at the carriers\' ground-start elevation; the magnet manager\n'
              '         starts attached (attached_at_start).')
     block = f"""    <!-- ===== NEWCOMER (QUAD4 = /drone_3): a free rig-twin drone with a {CABLE_LEN} m magnet rod =====
@@ -423,7 +423,7 @@ def ball(text):
 
 def ball_clearance(base, start='free'):
     """(nearest carrier, newcomer) from the ball centre on the floor: carrier centres, and QUAD4's
-    body-to-tip segment (laid out along +y, or welded: from its body in to plate 9)."""
+    body-to-tip segment (laid out along +y, or welded: from its body in to plate 3)."""
     carriers = re.findall(r'<name>x3_drone[0-2]</name>\s*<pose>(\S+) (\S+)', base)
     if len(carriers) != 3:
         raise SystemExit('carrier poses not found in the base world')
@@ -495,17 +495,17 @@ def _pickup_header(start):
     if start == 'free':
         return ('<!-- GENERATED by tools/make_attach_worlds.py: do not edit. Rig-twin combined M1 subtest '
                 '(Wesley 10 Oct): three carriers on the floor at '
-                f'{CARRIER_AZIMUTHS.replace(",", "/")} deg (rig plates 3/11/7) lift the ring; Tejen\'s '
+                f'{CARRIER_AZIMUTHS.replace(",", "/")} deg (plates 9/1/5) lift the ring; Tejen\'s '
                 'controller takes QUAD4 (x3_drone3, free on the floor at (0, 1.4)) off, picks up his ball '
                 f'(on the floor at ({BALL_XY[0]}, {BALL_XY[1]})), drops it into the ring\'s net, then '
-                'attaches on rig plate 9 (90 deg). The free-start attach world with the pickup newcomer, an '
+                'attaches on plate 3 (90 deg). The free-start attach world with the pickup newcomer, an '
                 f'open ring (annulus r {RING_INNER_R:.3f}-{RING_OUTER_R:.3f} + net, bit {NET_BITMASK}) '
                 f'and the floor at {PICKUP_FLOOR_BITMASK}. -->\n')
     return ('<!-- GENERATED by tools/make_attach_worlds.py: do not edit. Rig-twin full M1 (Wesley 10 Oct): '
-            f'three carriers on the floor at {CARRIER_AZIMUTHS.replace(",", "/")} deg (rig plates 3/11/7) and '
-            'QUAD4 (x3_drone3) welded on rig plate 9 (90 deg) lift the ring; QUAD4 detaches, steps clear and '
+            f'three carriers on the floor at {CARRIER_AZIMUTHS.replace(",", "/")} deg (plates 9/1/5) and '
+            'QUAD4 (x3_drone3) welded on plate 3 (90 deg) lift the ring; QUAD4 detaches, steps clear and '
             f'is released to Tejen\'s controller, which picks up his ball (on the floor at ({BALL_XY[0]}, '
-            f'{BALL_XY[1]})), drops it into the ring\'s net, then attaches on plate 9 again. The welded-start '
+            f'{BALL_XY[1]})), drops it into the ring\'s net, then attaches on plate 3 again. The welded-start '
             'attach world with the welded pickup newcomer, an open ring (annulus r '
             f'{RING_INNER_R:.3f}-{RING_OUTER_R:.3f} + net, bit {NET_BITMASK}) and the floor at '
             f'{PICKUP_FLOOR_BITMASK}. -->\n')

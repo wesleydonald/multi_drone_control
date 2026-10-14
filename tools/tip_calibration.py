@@ -3,7 +3,7 @@
 
     python3 tools/tip_calibration.py [--seconds 5] [--standoff 0.0]
 
-Props off, QUAD4's tether hanging, its magnet face held ON plate 9. Reads /magnet_tip_pose (body 24) and
+Props off, QUAD4's tether hanging, its magnet face held ON plate 3 (+y). Reads /magnet_tip_pose (body 24) and
 /payload/motion_capture_state (the ring, body 8) for --seconds and prints the tip marker in the ring frame
 (mean, sd), then the two launch values for configs/rig/attach_m1.yaml:
 

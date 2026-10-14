@@ -128,7 +128,15 @@ def launch_setup(context, *args, **kwargs):
     if LaunchConfiguration('fleet_viz').perform(context).lower() in ('1', 'true', 'yes'):
         nodes.append(Node(
             package='simulation_communication', executable='fleet_viz',
-            name='fleet_viz', parameters=[{'num_drones': n_viz, 'viz_hz': viz_hz}], output='screen'))
+            name='fleet_viz', parameters=[{'num_drones': n_viz, 'viz_hz': viz_hz,
+                                           # the swung magnet as on the rig; the twin has no coil latch, so
+                                           # the tip follows Tejen's magnet command and our weld
+                                           'tip_topic': '/magnet_tip_pose',
+                                           'puck_topic': '/tejen/payload_world_state',
+                                           'tether_drone': 3,
+                                           'coil_topic': '/tejen/magnet/command',
+                                           'attached_topic': '/magnet/object_attached',
+                                           'marker_hz': 5.0, 'summary_hz': 5.0}], output='screen'))
 
     # Placeholder Telemetry so the ArmPanel's per-drone battery rows populate in
     # sim exactly as they do on hardware (finding F7). On the rig this comes from

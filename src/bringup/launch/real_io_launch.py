@@ -167,7 +167,15 @@ def launch_setup(context, *args, **kwargs):
         name='fleet_viz', parameters=[{'num_drones': n,
                                        # 14 Oct load cut: it drew on every mocap message (~450/s) and
                                        # republished the whole ring track every 0.1 s (76 % CPU)
-                                       'viz_hz': 10.0, 'path_dt': 0.5}], output='screen'))
+                                       'viz_hz': 10.0, 'path_dt': 0.5,
+                                       # the swung magnet in RViz: QUAD4's tip, tether and coil (its
+                                       # radio latch's topic), his puck; /fleet/mocap_summary at 5 Hz
+                                       'tip_topic': '/magnet_tip_pose',
+                                       'puck_topic': '/pickup/motion_capture_state',
+                                       'tether_drone': 3,
+                                       'coil_topic': magnet_topics.get(3, '/drone_3/magnet'),
+                                       'attached_topic': '/magnet/object_attached',
+                                       'marker_hz': 5.0, 'summary_hz': 5.0}], output='screen'))
 
     # Per-drone ELRS TX serial args (default QUAD<i+1>, as real_mode.py) + a robot_state_publisher
     # serving that drone's coloured mesh, its root link renamed to the fleet_viz

@@ -15,7 +15,7 @@ Cases:
   - repro: c6f2032's take-back on R1565, on the LOGGED carriers and on the kinematic formation (the logged failure:
     carrier 2 within ~0.28 m at ~119.4 s);
   - the logged give-ups of R1565, R1554, R1566, R1549 and R1543 (this tree);
-  - R1565's give-up swept through the lap in 10 deg steps (QUAD4 kept on plate 9 relative to the planned point);
+  - R1565's give-up swept through the lap in 10 deg steps (QUAD4 kept on plate 3 relative to the planned point);
   - F1's three latches on R1565: his DESCEND_TO_PICKUP at the ring's nearest phase, his LIFT_OBJECT climb with the
     ball, his TRANSIT_TO_REATTACH descent; each as a give-up (the clock running) and at LAND (the clock frozen).
 
@@ -102,8 +102,8 @@ class Run:
         self.attach_r = float(man.get('attach_radius') or 0.225)
         self.attach_z = float(man.get('attach_z') or 0.02)
         self.btt = float(man.get('attach_cable_len') or 0.59) - float(man.get('pivot_offset_z') or -0.04)
-        self.plate9 = np.array([float(man.get('attach_x_offset') or 0.0), float(man.get('attach_y_offset') or 0.225),
-                                self.attach_z])
+        self.weld = np.array([float(man.get('attach_x_offset') or 0.0), float(man.get('attach_y_offset') or 0.225),
+                              self.attach_z])
         self.traj = LoadTrajectory(man.get('load_traj', 'orbit'), float(man.get('traj_speed') or 0.125), 0.0,
                                    float(man.get('traj_radius') or 0.5))
         self.lap = 2.0 * np.pi * self.traj.radius / self.traj.speed
@@ -236,7 +236,7 @@ def stand_in(mod, run, tau, p0, v0, ball):
         _attach_body_to_tip=run.btt, _magnet_cmd_pub=_Pub(), _take_back_pub=_Pub(), _fleet_cmd_pub=_Pub(),
         traj=run.traj, hover_xy=tuple(run.hover), _departed_gi=False, _rest_z={run.n: 0.1}, _departed_sent=set(),
         _departed_pubs={}, _attach_target=None,
-        net=SimpleNamespace(rho=[None] * run.n + [run.plate9]), _his_phase='DESCEND_TO_ATTACHMENT', _his_took_off=True,
+        net=SimpleNamespace(rho=[None] * run.n + [run.weld]), _his_phase='DESCEND_TO_ATTACHMENT', _his_took_off=True,
         _mux_state='partner', _joint_free=True, _ball_on=ball, _ball_mass=0.1, _span_t=0.0, _taken_back=False,
         traj_t=float(tau), _comove={}, _traj_running=True, _release_guard=False, _tip_now=None, _tilt_faulted=set(),
         _press_t={}, _at_rest_t={})

@@ -4,7 +4,7 @@
     python3 tools/admissibility_map.py [--out results/analysis/admissibility] [--elev 60] [--radius 0.225]
 
 A design-time check on the M2A ring (12 plates every 30 deg, attachment radius 0.225 m), with no flight and no
-simulation. Angles are anticlockwise from the ring's +x (thesis numbering: plate k at 30 k deg).
+simulation. Angles are anticlockwise from the ring's +x (plate k at 30 k deg, as the thesis and the rig number them).
 
 For each 4-carrier layout of record, every single removal:
   * the survivors' support margin, from metrics.cog_margin: the distance from the ring's centre of mass (the ring
@@ -40,7 +40,7 @@ PITCH = 360.0 / N_PLATES
 
 # Layouts of record, as plate angles (deg, anticlockwise from +x). Names are the thesis plate numbers.
 LAYOUTS_4 = {
-    '1/3/5/9': (30, 90, 150, 270),      # the M1 carry layout (rig plates 3/11/7/9 clockwise); the 8 Oct detaches
+    '1/3/5/9': (30, 90, 150, 270),      # the M1 carry layout (3/11/7/9 on the 8-14 Oct sheets); the 8 Oct detaches
     '0/3/6/9': (0, 90, 180, 270),       # the even ring: zero margin after any loss
     '1/3/6/9': (30, 90, 180, 270),      # the 150 deg gap case (rig r304_3) and the 7 Oct capsize r0013
 }

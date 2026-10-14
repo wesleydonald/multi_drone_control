@@ -74,7 +74,7 @@ TWIN_FILL, TWIN_LINE = '0.68', '0.35'
 
 # ── runs (rig: results/rig/<day>/<name>, converted to <name>_run; twin: R####) ─────────────────────────────────────
 
-# 8 Oct rig r305: four UAVs on plates 3/11/7/9 (30/90/150/270 deg), the 0.5 m circle at 0.125 m/s, the UAV on plate 9
+# 8 Oct rig r305: four UAVs on plates 1/3/5/9 (30/90/150/270 deg), the 0.5 m circle at 0.125 m/s, the UAV on plate 3
 # (90 deg) released unannounced ~21 s into the circle; twin: the same configuration (w4_3915_release_orbit_drop)
 CIRCLE = dict(rig='results/rig/2026-10-08/r305', twin=('R1208', 'R1213'))
 

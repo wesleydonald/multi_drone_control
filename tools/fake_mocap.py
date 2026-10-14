@@ -16,16 +16,16 @@ real_io:=false (no radios), which is what --script is for.
     tools/fake_mocap.py --rig --num-drones 3 --attach --tip --azimuths-deg 270,30,150 --drone-z 0.08
         # the M1 desk rehearsal: rig geometry, QUAD4 on the floor with its magnet tip (/magnet_tip_pose)
     tools/fake_mocap.py --rig --num-drones 3 --attach --tip --azimuths-deg 270,30,150 --drone-z 0.08 \
-        --tip-plate 9 --tip-dz 0.02     # the props-off attach check: QUAD4 held, its tip 2 cm above
-                                        # plate 9's weld point (--tip-dz <weld_point_z>: on the plate)
+        --tip-plate 3 --tip-dz 0.02     # the props-off attach check: QUAD4 held, its tip 2 cm above
+                                        # plate 3's weld point (--tip-dz <weld_point_z>: on the plate)
     tools/fake_mocap.py --rig --num-drones 3 --attach --tip --azimuths-deg 270,30,150 --load-z 1.0 \
-        --tip-plate 9 --script caught --script-delay 1e9 --ball 1.0,1.6
+        --tip-plate 3 --script caught --script-delay 1e9 --ball 1.0,1.6
         # the combined M1 contact attach (desk): carriers hovering on the cone, the ring at 1.0 m, QUAD4
-        # hanging over plate 9; `kill -USR1 <pid>` starts the contact script (and restarts it)
+        # hanging over plate 3; `kill -USR1 <pid>` starts the contact script (and restarts it)
 
-Azimuths are anticlockwise degrees in the LOAD frame, plate 0 on the payload's +x; the plates
-are numbered CLOCKWISE since 8 Oct (plate k at -30*k deg, so 30/90/150/270 are plates
-11/9/7/3). Drone i sits at the i-th azimuth; --yaw-deg rotates the payload and the whole ring
+Azimuths are anticlockwise degrees in the LOAD frame, plate 0 on the payload's +x and plate k at
++30*k deg, counter-clockwise like the azimuths (so 30/90/150/270 are plates 1/3/5/9; clockwise
+8-14 Oct). Drone i sits at the i-th azimuth; --yaw-deg rotates the payload and the whole ring
 with it. --drone-z puts the drones at that height with the rod still cable_len long (rods near
 flat, the creep floor start) instead of on the --elev-deg cone. --rig takes the rig geometry
 (rod 0.55, magnets at r 0.225, 60 deg); --tip adds the newcomer's magnet tip resting on the floor
@@ -89,7 +89,7 @@ def compute_poses(n, attach=False, cable_len=0.5, radius=0.25, elev_deg=45.0, lo
     if attach:
         poses[f'/drone_{n}/motion_capture_state'] = ((0.0, -1.2, 0.12), level)
         if tip_len and tip_plate is not None:
-            a = math.radians(-30.0 * tip_plate) + yaw          # plates clockwise from +x
+            a = math.radians(30.0 * tip_plate) + yaw
             tip = (radius * math.cos(a), radius * math.sin(a), load_z + tip_dz)
             poses[TIP_TOPIC] = (tip, level)
             poses[f'/drone_{n}/motion_capture_state'] = ((tip[0], tip[1], tip[2] + tip_len), level)
@@ -263,7 +263,7 @@ def main(argv=None):
     ap.add_argument('--tip', action='store_true', help='with --attach: also publish the newcomer magnet tip')
     ap.add_argument('--tip-len', type=float, default=0.58, help='body-to-tip length of the newcomer (m)')
     ap.add_argument('--tip-plate', type=int, default=None,
-                    help='with --tip: the tip over this plate (0-11, clockwise from +x), QUAD4 above it')
+                    help='with --tip: the tip over this plate (0-11, counter-clockwise from +x), QUAD4 above it')
     ap.add_argument('--tip-dz', type=float, default=0.0,
                     help='with --tip-plate: tip height above the ring origin plane (m)')
     ap.add_argument('--load-z', type=float, default=0.05)
@@ -310,7 +310,7 @@ def main(argv=None):
     if a.script:
         script = ContactScript(
             a.script, poses[LOAD_TOPIC][0], math.radians(a.yaw_deg), a.attach_radius,
-            math.radians(-30.0 * a.tip_plate), a.tip_dz, a.taut_len or a.tip_len,
+            math.radians(30.0 * a.tip_plate), a.tip_dz, a.taut_len or a.tip_len,
             approach_dz=a.approach_dz, descend_rate=a.descend_rate, overtravel=a.overtravel,
             rest_s=a.rest_s, rise_rate=a.rise_rate, lift=a.lift_mm / 1000.0, rise_max=a.rise_max)
     if a.dry_run:

@@ -137,11 +137,11 @@ def code_line(p):
 
 def conditions(p, prm, tprm):
     az = str(prm.get('attach_azimuths_deg', '')).replace(' ', '')
-    plates = [str(int(round((-float(a)) % 360 / 30))) for a in az.split(',') if a] if az else []
+    plates = [str(int(round(float(a) % 360 / 30)) % 12) for a in az.split(',') if a] if az else []
     srcs = sorted({v.get('cable_source', '?') for v in tprm.values()})
     return dict(mode=prm.get('mode', ''), cable_source='/'.join(srcs),
                 cable_elev_deg=prm.get('cable_elev_deg', prm.get('handover_elev_deg', '')),
-                int_mode=prm.get('int_mode', ''), attach_azimuths_deg=az, plates_clockwise=plates,
+                int_mode=prm.get('int_mode', ''), attach_azimuths_deg=az, plates=plates,
                 departed_land=prm.get('departed_land', ''), departed_ground_idle=prm.get('departed_ground_idle', ''),
                 drop_on_loss=prm.get('drop_on_loss', ''), detach_detect_m=prm.get('detach_detect_m', ''),
                 code=code_line(p))
@@ -323,7 +323,7 @@ def ledger(label, rm, date):
 
 
 # ---------------------------------------------------------------- attach (R6-R9)
-def bag_traces(p, t0_epoch, plate=9):
+def bag_traces(p, t0_epoch, plate=3):
     """Tip, ring, plate and QUAD4 at 50 Hz from the bag, plus every message on the attach's event topics."""
     try:
         import rosbag2_py
@@ -361,8 +361,8 @@ def bag_traces(p, t0_epoch, plate=9):
     for k, df in S.items():
         for c in cols[1:]:
             out[f'{k}_{c}'] = np.interp(grid, df.t, df[c])
-    # plate <plate> clockwise from +x in the ring frame, PLATE_R out, through the ring's quaternion
-    az = np.deg2rad(-30.0 * plate)
+    # plate <plate> at +30*plate deg from +x in the ring frame, PLATE_R out, through the ring's quaternion
+    az = np.deg2rad(30.0 * plate)
     local = np.array([PLATE_R * np.cos(az), PLATE_R * np.sin(az), 0.0])
     q = out[['ring_qw', 'ring_qx', 'ring_qy', 'ring_qz']].to_numpy(float)
     w, x, y, z = q.T
@@ -576,7 +576,7 @@ def process(label, name, date, out_root, no_bag=False):
             mx['notes'].append(err)
         if trace is not None:
             trace.to_csv(os.path.join(out, 'trace.csv'), index=False)
-            mx['files'].append('trace.csv (tip, ring, plate 9, QUAD4 at 50 Hz)')
+            mx['files'].append('trace.csv (tip, ring, plate 3, QUAD4 at 50 Hz)')
         if bag_ev is not None and len(bag_ev):
             bag_ev.to_csv(os.path.join(out, 'bag_events.csv'), index=False)
             mx['files'].append('bag_events.csv')

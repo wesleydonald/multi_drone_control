@@ -23,8 +23,8 @@ def _manager_plate(center, q, offset):
 
 
 def _script(kind, yaw_deg=0.0, plate_dz=0.0):
-    # plate 9 (load-frame +90 deg), the rig radius, the 8 Oct body-to-tip
-    return ContactScript(kind, (0.2, -0.1, 1.0), math.radians(yaw_deg), 0.225, math.radians(-270.0),
+    # plate 3 (load-frame +90 deg), the rig radius, the 8 Oct body-to-tip
+    return ContactScript(kind, (0.2, -0.1, 1.0), math.radians(yaw_deg), 0.225, math.radians(90.0),
                          plate_dz, 0.58)
 
 
@@ -72,7 +72,7 @@ def test_uncaught_the_tip_lifts_off_past_d_fail_and_the_plate_stays():
 
 def test_cli_dry_run_and_refusals(capsys):
     main(['--rig', '--num-drones', '3', '--attach', '--tip', '--azimuths-deg', '270,30,150', '--load-z', '1.0',
-          '--tip-plate', '9', '--script', 'caught', '--ball', '1.0,1.6', '--dry-run'])
+          '--tip-plate', '3', '--script', 'caught', '--ball', '1.0,1.6', '--dry-run'])
     out = capsys.readouterr().out
     assert BALL_TOPIC in out and 'script caught' in out
     with pytest.raises(SystemExit):

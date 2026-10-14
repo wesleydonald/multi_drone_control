@@ -1,9 +1,9 @@
 """Rig-twin attach newcomer and worlds (tools/make_attach_worlds.py): the generated files are
 current, the newcomer is QUAD4 on the twin's rod, and the worlds put the carriers on the M1
-layout with the newcomer free on the floor or welded on plate 9. The combined M1 subtest world
+layout with the newcomer free on the floor or welded on plate 3. The combined M1 subtest world
 (pickup) is the free world with the pickup newcomer, an open ring with a net, and Tejen's ball (a
 copy on collide bits 0x05, clear of QUAD4's magnet); its push variant adds the WRENCH tool. The full M1
-world (welded_pickup) is the same on the welded world: QUAD4 welded on plate 9 with the pickup weld.
+world (welded_pickup) is the same on the welded world: QUAD4 welded on plate 3 with the pickup weld.
 
     python3 -m pytest tools/test/test_make_attach_worlds.py -q
 """
@@ -174,7 +174,7 @@ def test_carriers_are_the_twin_on_the_m1_layout(world):
     assert g['attach_azimuths'] == [30.0, 150.0, 270.0]
     lift = next(m for m in ET.parse(ASSETS / world).getroot().find('world').findall('model')
                 if m.get('name') == 'lift_system')
-    for i, az in enumerate((270.0, 30.0, 150.0)):                    # rig plates 3/11/7
+    for i, az in enumerate((270.0, 30.0, 150.0)):                    # plates 9/1/5
         stub = _pose(lift.find(f"link[@name='stub_pay_{i}']"))
         assert math.degrees(math.atan2(stub[1], stub[0])) % 360 == pytest.approx(az, abs=1e-3)
         inc = next(c for c in lift.findall('include') if c.findtext('name') == f'x3_drone{i}')
@@ -205,13 +205,13 @@ def test_free_start_spawn():
     assert math.dist(pivot, tip) == pytest.approx(0.55)
 
 
-def test_welded_start_spawn_on_plate_9():
+def test_welded_start_spawn_on_plate_3():
     uri, pose = _newcomer(WELDED)
     assert uri == 'models/x3_rig_drone3_magnet_welded.sdf'
     assert pose[:2] == pytest.approx([0.0, 0.775], abs=1e-3)
     assert pose[2:] == pytest.approx([0.10, 0.0, 0.0, 0.0])
     pivot, tip = _tip_world(WELDED, 'welded')
-    assert tip == pytest.approx((0.0, 0.225, 0.04), abs=1e-5)        # plate 9 top, ring on floor
+    assert tip == pytest.approx((0.0, 0.225, 0.04), abs=1e-5)        # plate 3 top, ring on floor
     # the rod at the carriers' ground-start elevation, the drone on their circle
     lift = next(m for m in ET.parse(ASSETS / WELDED).getroot().find('world').findall('model')
                 if m.get('name') == 'lift_system')
@@ -257,22 +257,23 @@ LEGACY_WORLD = ASSETS / 'old_worlds' / 'three_attach_partner_attached.sdf'
 LEGACY_MODEL = ASSETS / 'models' / 'x3_drone3_magnet_rod_partner_attached.sdf'
 BALL = ASSETS / 'tejen' / 'payload_model.sdf'
 # the existing outputs when the pickup variant was added: it leaves them byte for byte. A deliberate
-# change to one of them updates its digest here.
+# change to one of them updates its digest here (14 Oct evening: the worlds' header comments renumber the
+# plates counter-clockwise, docs/rig/plate_numbering.md; nothing outside the comments changed).
 OLD_DIGESTS = {
-    FREE: '807924f97b3872f23efe38c88d6473b0de9dab332cfbd487d1bfe1872714f076',
-    WELDED: '587805ff1ce120845e0e61a7fceeb25e05aa881654993f10df8b2e3a528d830b',
+    FREE: '8cb3ee212f2d16738c96d660f65393568bd1a3a752cf05ac4d6e238c3ae53319',
+    WELDED: 'f79b82aeb4cee55915236641ffbda3d6e350df5bea427e7bd9a77846083ec617',
     'three_rigid_ground_rig_attach_push.sdf':
-        'aa2a7e30f41839aab8b4f4691f5acdfe52d02eec0e1a529c64f53990e7f80cd8',
+        '024d30e317826e3f58bb80a55aeb27943e24f198ba467a5936fa94bdbaf8b2d6',
     f"models/{MODELS['free']}": 'ff36ee07b5e489a5fe617b0d7dd65a68a992324f873430953828509716bf94f1',
     f"models/{MODELS['welded']}": '5839b65674a9cf31e03937a0a5940c2b13b219ef4bfaf33c75b410b306de3fd6',
 }
 # the combined M1 subtest's outputs when the welded pickup variant (the full M1) was added: it leaves them
 # byte for byte too
 SUBTEST_DIGESTS = {
-    PICKUP: 'ac07b0e1d68159ee91b48cdfde1c90d24d909939a34f498704c40fc4d7db02af',
+    PICKUP: 'b5adbf0e3bbc9189056480590fa8dabd7f04197f55007d9b85ec5570e35e353d',
     f'models/{PICKUP_MODEL}': 'ec0a10dc0d5146206cd970aa2611f48ab2d6e0ab0e53da1eb070a6d73f680569',
     BALL_COPY: '44c07dd5313a33d625b040a0a264faa21cbccc8b237f42abe2931c877a567ace',
-    PICKUP_PUSH: 'e5d4ddf1411c6b4ae76ad8e7bff200345f06aa67c1e38b83722ff4b9488d16b6',
+    PICKUP_PUSH: '8f245ac5f463b5b3993acb2ea162c142d50f6f69a64987e956ba83a0de4c0085',
 }
 
 
@@ -509,7 +510,7 @@ def test_the_pickup_push_world_is_the_pickup_world_plus_the_wrench_tool():
     ET.fromstring(push.split('\n', 1)[1].split('\n', 1)[1])          # well-formed below the two comment lines
 
 
-# ===== the full M1 world (Wesley 10 Oct): QUAD4 welded on plate 9 with the pickup weld =====
+# ===== the full M1 world (Wesley 10 Oct): QUAD4 welded on plate 3 with the pickup weld =====
 
 def test_welded_pickup_model_is_the_welded_model_plus_the_pickup_weld():
     welded = (ASSETS / 'models' / MODELS['welded']).read_text().splitlines()
@@ -548,9 +549,9 @@ def test_welded_pickup_world_is_the_welded_world_with_the_pickup_changes():
     assert "QUAD4's body and rod (welded)" in differ[-1]
 
 
-def test_full_m1_quad4_starts_on_plate_9_and_the_ball_weld_rides_its_tip():
+def test_full_m1_quad4_starts_on_plate_3_and_the_ball_weld_rides_its_tip():
     pivot, tip = _tip_world(WELDED_PICKUP, 'welded_pickup')
-    assert tip == pytest.approx((0.0, 0.225, 0.04), abs=1e-5)                 # plate 9 top, ring on floor
+    assert tip == pytest.approx((0.0, 0.225, 0.04), abs=1e-5)                 # plate 3 top, ring on floor
     assert _ball_include(_world(WELDED_PICKUP)).findtext('uri') == BALL_COPY
     ring, pickup = _welds(_model('welded_pickup'))
     assert ring['child_model'] == 'lift_system::payload' and pickup['child_model'] == 'payload_model'
@@ -571,7 +572,7 @@ def test_ball_clearance_is_measured_to_each_newcomers_own_rod():
 
 WELDED_PICKUP_PUSH = 'three_rigid_ground_rig_attach_welded_pickup_push.sdf'
 FULL_M1_DIGESTS = {   # the full M1's world and model when the push variant was added: byte for byte
-    WELDED_PICKUP: 'e8b9c5baf6e1f4697fd849c9636753a11376f344218ab2b6cd9195b3b58e6fef',
+    WELDED_PICKUP: 'a941beeae652615c09dda012f5a72a236694a7d70261d46e0a9023a7ea493085',
     f'models/{WELDED_PICKUP_MODEL}': '790dc75f8d161a8fc3f01f46e0433e917e335432a76aa6f67d08374deb1a3dc8',
 }
 

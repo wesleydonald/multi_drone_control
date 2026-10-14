@@ -235,9 +235,12 @@ PLATE_PITCH_DEG = 30.0      # M2A ring: 12 magnet plates, plate 0 on the ring bo
 
 
 def plate_of_azimuth(az_deg):
-    """Plate number (0-11) at a load-frame azimuth: plate 0 on the ring's +x, counting CLOCKWISE
-    seen from above like a clock (Wesley 7 Oct; was anticlockwise). Azimuths stay anticlockwise."""
-    return int(round(-float(az_deg) / PLATE_PITCH_DEG)) % int(360 / PLATE_PITCH_DEG)
+    """Plate number (0-11) at a load-frame azimuth: plate k at +30k deg, counter-clockwise from the
+    ring's +x seen from above, like the azimuths and Tejen's plates (15 Oct; clockwise 8-14 Oct,
+    docs/rig/plate_numbering.md)."""
+    return int(round(float(az_deg) / PLATE_PITCH_DEG)) % int(360 / PLATE_PITCH_DEG)
+
+
 SLOT_OFFSET_WARN_DEG = 10.0
 
 
@@ -261,6 +264,6 @@ def slot_offset_warnings(errors, tol_deg=SLOT_OFFSET_WARN_DEG):
 
 
 def offset_words(err_deg, fmt='.0f'):
-    """'30 deg clockwise' for an azimuth error (anticlockwise positive), seen from above: the
-    plates count clockwise, so a bare sign would read backwards against the plate numbers."""
+    """'30 deg clockwise' for an azimuth error (anticlockwise positive), seen from above: a named
+    direction reads the same on the rig whichever way a sheet numbers the plates."""
     return f'{abs(err_deg):{fmt}} deg {"anticlockwise" if err_deg > 0 else "clockwise"}'
