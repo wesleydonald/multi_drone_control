@@ -390,6 +390,9 @@ class LoadPlanner(Node):
         # and owns the reference-extraction functions + warm-start state (last_X).
         # node 0 also pins the measured rod rates (card 2026-10-04_pin_cable_rates)
         self.pin_cable_rates = bool(self.declare_parameter('pin_cable_rates', False).value)
+        # load-position and cable-direction weight multipliers (card 2026-10-16_corner_cutting; 1.0 = as compiled)
+        self._w_pos_scale = float(self.declare_parameter('plan_w_pos_scale', 1.0).value)
+        self._w_s_scale = float(self.declare_parameter('plan_w_s_scale', 1.0).value)
         self.solver = PlannerSolver(self.dyn, self.get_logger(), pin_rates=self.pin_cable_rates)
         self._configure_solver(self.solver)
         # Pre-built OCPs by fleet size, for handing back after a reconfiguration.
@@ -1148,6 +1151,10 @@ class LoadPlanner(Node):
         solver.solve_budget_s = self._solve_budget_s
         solver.pivot_offset = self.pivot_offset
         solver.fail_dump_dir = getattr(self, '_run_log_dir', None)
+        if self._w_pos_scale != 1.0 or self._w_s_scale != 1.0:
+            solver.scale_cost(self._w_pos_scale, self._w_s_scale)
+            self.get_logger().info(f'[planner] n={solver.dyn.n}: load-position weights x{self._w_pos_scale:g}, '
+                                   f'cable-direction weights x{self._w_s_scale:g}')
 
     def _solve_context(self):
         """Poses a failed solve is dumped with (planner_fail_<n>.npz)."""

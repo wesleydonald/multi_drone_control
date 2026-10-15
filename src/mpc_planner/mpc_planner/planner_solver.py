@@ -246,6 +246,18 @@ class PlannerSolver:
         self._geom = self.dyn.geom_values()
         return self._geom
 
+    def scale_cost(self, pos=1.0, cable_dir=1.0):
+        """Multiply the load-position and cable-direction weights of every stage and the terminal (card
+        2026-10-16_corner_cutting). acados sets NONLINEAR_LS weights at runtime: the compiled solver is unchanged."""
+        n = self.dyn.n
+        W, W_e = np.array(self.ocp.cost.W, float), np.array(self.ocp.cost.W_e, float)
+        for M in (W, W_e):
+            M[0:3, 0:3] *= pos                                  # y = [p, v, e_att, w, s(3n), t(n), r(3n), u]
+            M[12:12 + 3 * n, 12:12 + 3 * n] *= cable_dir
+        for k in range(self.N):
+            self.solver.cost_set(k, 'W', W)
+        self.solver.cost_set(self.N, 'W', W_e)
+
     def solve_horizon(self, yref_at, q_ref_at, x_init, reseed, context=None):
         """Set the per-node references + the pinned node-0 observed state, run the
         SQP iterations, and return (X, status): the converged horizon X (nx, N+1), or
