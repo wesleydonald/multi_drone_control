@@ -145,6 +145,30 @@ contact or 10 s):
 | Filter | R1819, R1822 | 1.16, 1.17 cm | +24 % | none (his give-up, both) |
 | Zero twist | R1820, R1823 | 0.88, 0.88 cm | -6 % | both |
 
-Together with rev 2 (1.8 Hz): the filter -35 % at 1.8 Hz but +24 % at 0.8 Hz (critic finding 5 confirmed); zero twist
--27 % at 1.8 Hz and -6 % at 0.8 Hz, and it removes the match-gate block when the plate moves sideways (rev 2's 3 cm
-neighbour). Candidate for a rig A/B: zero twist, after its own critic.
+Together with rev 2 (1.8 Hz): the filter -35 % at 1.8 Hz but worse at 0.8 Hz (consistent with critic finding 5, on an
+after-the-fact metric); zero twist -27 % at 1.8 Hz and no different from raw at 0.8 Hz; it removed the match-gate
+hold-up in rev 2's 3 cm neighbour (one run). See the reviewer below for what may be claimed.
+
+## Reviewer (16 Oct ~04:15): SUPPORTED WITH CORRECTIONS (weak at 0.8 Hz)
+
+- Every number in the rev 2 and rev 3 tables reproduces; the bars were frozen before their runs (rev 2 e9ff80a
+  01:31 < R1800 01:48; rev 3 83a2c75 03:21:31 < R1818 03:22:00) on one code tree, and applied as frozen. Exact
+  reductions at 1.8 Hz: -34.8 % (filter), -26.9 % (zero twist).
+- **1.8 Hz holds on a common window** (the first 3.6 s after DESCEND, before any contact in all 12 runs): baseline median
+  1.43 cm, filter 0.88 (-39 %), zero twist 1.01 (-29 %), all below the baseline median; in 1.2-2.5 Hz only, -40 % and
+  -36 %. Window length and detrending do not explain it.
+- **0.8 Hz (rev 3) moves with the window:** filter +24 % (card), +32 % (common 3.6 s), +17 % (matched 4.8 s): worse in
+  every window; zero twist -6 %, 0 %, -7 %: no different from raw. Each pair of twin runs samples one phase (R1820 and
+  R1823 contact at the same instant): effectively one run per arm.
+- Corrections: "inside the catch" adds nothing (xy <= 24 mm in every sample: the row is the slow fraction during the
+  descent); R1812/R1813 entered MATCH 6.8/6.5 s into the shake and stayed 36.4/36.7 s, to 3.2 s after it ended; bar 3
+  "none" is true as worded, but FLEET ABORT "drone 4 disarmed unexpectedly" fired after LAND in 9 of 10 welded runs.
+- Each comparison changes exactly the intended variable (configs and parameter read-backs).
+- **What may be said:** in the twin, under the rig's 1.8 Hz plate bounce, the filter and zero twist each cut the tip's
+  motion against the plate before the first contact by about a third (4 runs per arm, all below the baseline, bars
+  frozen before the runs); as frozen, the filter passed rev 2 and zero twist failed its confounded bar 2. Labelled
+  after the fact and from two near-identical runs per arm: at 0.8 Hz the filter makes it worse, zero twist no
+  different. **What may not be said:** that zero twist improves the 0.8 Hz case, that finding 5 was confirmed by a
+  frozen test, that either switch improves attaching (the weld counts are the twin's catch artefact), "no aborts",
+  that the twin's repeats measure spread, or anything about the rig without the slack-tether and downwash caveats.
+  Whether to A/B zero twist on the rig is Wesley's decision.

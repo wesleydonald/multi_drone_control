@@ -27,8 +27,8 @@ typed switch or a new file. The full gate passes on the branch.
 | Latency margin at 0.3 m/s | R1794-R1799 | 15 and 30 ms extra delay: as 0 ms; 45 ms: a carrier tips at takeoff (the limit is the takeoff, as on 7 Oct) |
 | Combined M1 attach with 1 m cables (carriers and QUAD4) | R1760, R1761 | both: contact, proof, fold-in, landed |
 | A ring drop during his flight, `drop_takes_back` (off by default) | 8 on, 4 off (R1753-R1759, R1779-R1781, R1815-R1816) | **Switch off:** it reproduces a2_2 every time: our tracker for QUAD4 faults 1 s after the drop, his planner flies on (down onto the fallen ring), the landing waits the 30 s timeout. GIVE UP after a drop cannot hand QUAD4 over either, so the operator rule on the sheets does not work. **Switch on:** QUAD4 is taken back on the drop tick, at least 0.5 m from every carrier, and down at its rest 14-17 s after the drop, with no fault. Every case passes (end of MATCH, early MATCH, DESCEND, a carrier release, at the plate), except one bar that did not fit a drop starting at the plate (R1759, scored a fail). Critic: fix first, done. Reviewer: supported with corrections (twin only). |
-| The ring shaken at the rig's bounce (0.85 cm at 1.8 Hz), his attach | R1800-R1811 (4 per arm, unseen when the bars froze) | Tip's bounce against the plate before contact: baseline 1.40 cm, **plate-height filter 0.91 cm (-35 %)**, **zero plate velocity 1.02 cm (-27 %)**. QUAD4's own 1.8 Hz height: 0.6 cm -> 0.1 cm with either. Earlier weld counts were withdrawn after the critic: the twin welds at the instant of contact. |
-| The same shake at 0.8 Hz (slow-bounce check) | R1812-R1814, plus rev 3: PENDING | at the same torque the plate moved 3 cm (4x the rig); the baseline and the filter stayed in MATCH for the whole shake (plate 0.094 m/s sideways: a3_2 again); zero velocity descended at once but found no contact. Rev 3 at the rig's amplitude: PENDING |
+| The ring shaken at the rig's bounce (0.85 cm at 1.8 Hz), his attach | R1800-R1811 (4 per arm, bars frozen before the runs) | Tip's motion against the plate before the first contact: baseline 1.40 cm, **plate-height filter 0.91 cm (-35 %)**, **zero plate velocity 1.02 cm (-27 %)**; all 8 runs below the baseline; -39 % / -29 % on a common window (reviewer). QUAD4's 1.8 Hz height 0.6 -> 0.1 cm with either. As frozen, the filter passed every bar; zero twist failed a confounded bar (the 3 cm, 0.8 Hz neighbour). Weld counts withdrawn (the twin welds at the instant of contact). |
+| A slow bounce (0.8 Hz), after the fact | R1812-R1814 (3 cm), R1818-R1823 (rig amplitude) | at 3 cm the baseline and the filter sat in MATCH ~36 s (plate 0.094 m/s sideways: a3_2 again), zero twist descended at once (one run). At the rig's amplitude (post-hoc metric, ~one effective run per arm): the filter worse (+17 to +32 %), zero twist no different (0 to -7 %). Reviewer: supported with corrections, weak at 0.8 Hz |
 | The filter with no shake | R1762-R1765, R1786-R1789 | attach unchanged; the QUAD4 landing tip-over after the fold-in hits both arms (twin artefact) |
 
 ## Decisions for you
@@ -38,12 +38,14 @@ typed switch or a new file. The full gate passes on the branch.
 2. **`drop_takes_back` for the rig** (closes the locked rules' "Open" line, which is yours to close). *Recommended: on
    for the next attach day, through `params_file:=configs/rig/drop_takes_back.yaml`, after a props-off check. Change
    the sheets' "GIVE UP after a drop" line in any case: without the switch it does not work.*
-3. **The bounce and the match check on the rig:** fly one change at a time as an A/B, alternating with today's bridge
-   (the critic: the draft sheet stacked six changes).
-   - *Recommended: zero plate velocity (`attach_twist:=zero`) first, if rev 3 confirms it.* It needs no change to his
-     bottom hold, and it frees the match check that held a3_2.
-   - The filter cut the bounce more, but it needs his bottom hold and proof lift moved to the raw plate first (critic
-     finding 3); that is Tejen's code.
+3. **The bounce and the match check on the rig** (one change at a time, alternating A/B with today's bridge; the critic:
+   the draft sheet stacked six changes). Your call; what the twin says:
+   - the filter cut the bounce most at 1.8 Hz and passed its frozen bars, but it is worse below 1 Hz and needs his bottom
+     hold and proof lift moved to the raw plate first (critic finding 3, Tejen's code);
+   - zero plate velocity (`attach_twist:=zero`) cut it by about a quarter at 1.8 Hz, was no worse at 0.8 Hz, and freed
+     the match check, but it failed one confounded frozen bar. Its own critic and no-regression runs: below.
+   *My recommendation: A/B zero plate velocity first, as an exploratory rig pair, if its critic finds nothing that
+   stops it.*
 4. **Hardware with Mitch:** 90 mm discs first; 1 m tethers at least on QUAD4; a carrier magnet pull test. Draft:
    `docs/reports/supervisor_brief_2026-10-16.md`.
 5. **Console `--slot-gate`** (READY refuses a layout more than 30 deg off its plates; a3 flew two plates off).
