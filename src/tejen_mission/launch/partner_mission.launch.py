@@ -79,6 +79,15 @@ GEOMETRY = {
         'thrust_ratio': 22.0, 'thrust_ratio_feedback': True, 'vehicle_mass': 0.55,
         'plate': '9', 'carrier_azimuths_deg': '[90.0, 330.0, 210.0]', 'contact_attach_z_m': 0.032,
     },
+    # rig_twin with 1 m cables (the carriers' rods and QUAD4's arm; plan 2026-10-15 A1): world
+    # three_rigid_ground_rig_attach_pickup_L100.sdf (tools/make_attach_worlds_L100.py)
+    'rig_twin_L100': {
+        'ring_radius': 0.225, 'ring_cable_len': 1.0, 'ring_cable_elev_deg': 60.0,
+        'ring_pitch_diameter': 0.45, 'ring_collision_outer_diameter': 0.51,
+        'magnet_drop_below_quad': 1.04, 'mpc_cable_length': 1.0,
+        'thrust_ratio': 22.0, 'thrust_ratio_feedback': True, 'vehicle_mass': 0.55,
+        'plate': '9', 'carrier_azimuths_deg': '[90.0, 330.0, 210.0]', 'contact_attach_z_m': 0.032,
+    },
     # real:=true only. The rig layout as rig_twin, his IRL values for QUAD4: body origin to magnet marker 0.575
     # (irl_commissioning.yaml, also his M2 QUAD4 geometry), his MPC's own cable length and kT (his IRL launches
     # set neither: the code defaults 0.531 and 22, with his UKF and kT feedback). The contact target is typed
