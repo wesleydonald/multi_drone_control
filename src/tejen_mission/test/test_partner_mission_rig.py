@@ -178,6 +178,16 @@ def test_trim_speed_gate_only_when_typed():
     assert g['online_join_planner']['params']['target_alignment_max_relative_speed_mps'] == 0.20
 
 
+def test_match_dwell_and_speed_only_when_typed():
+    """His gates' hold time stays his 1.0 s and the contact match speed 0.15 unless typed (a3_2, 15 Oct)."""
+    g, _ = _nodes()
+    p = g['online_join_planner']['params']
+    assert 'dwell_time_s' not in p and p['contact_match_xy_velocity_threshold'] == 0.15
+    g, _ = _nodes(match_dwell='0.5', match_speed='0.2')
+    p = g['online_join_planner']['params']
+    assert p['dwell_time_s'] == 0.5 and p['contact_match_xy_velocity_threshold'] == 0.2
+
+
 def test_attach_z_lowpass_only_when_typed():
     """The bridge's plate height stays raw (no parameter) unless attach_z_lowpass is typed (a1, 15 Oct)."""
     g, _ = _nodes()

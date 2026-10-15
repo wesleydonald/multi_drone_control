@@ -618,7 +618,10 @@ def _rig_nodes(context):
                 # so the 2.5 cm / 0.08 m/s match gate never held 1 s; the descent abort is widened past the new gate.
                 # The contact itself still has to land inside our weld radius.
                 'contact_match_xy_threshold': 0.05,
-                'contact_match_xy_velocity_threshold': 0.15,
+                'contact_match_xy_velocity_threshold': f('match_speed', 0.15) if 'match_speed' in typed else 0.15,
+                # his gates hold for dwell_time_s unbroken (his 1.0 s): a3_2 (15 Oct) sat 42 s in MATCH, both conditions
+                # true 36 % of the time, never a clean second; replayed, 0.5 s passes at 1.1 s. Typed only.
+                **({'dwell_time_s': f('match_dwell', 1.0)} if 'match_dwell' in typed else {}),
                 'contact_abort_xy_threshold': 0.08,
                 'contact_abort_xy_velocity_threshold': 0.25,
                 # plan 2026-10-14 WP3: hold at the bottom for the contact (gross errors and his quiet-miss rule leave),
@@ -743,6 +746,8 @@ def _arguments():
         DeclareLaunchArgument('target_alignment_mode', default_value=''),  # rig: '' = measured_tip_trim
         DeclareLaunchArgument('trim_speed_gate', default_value=''),      # rig: m/s, his trim's learning speed ('' = his 0.08)
         DeclareLaunchArgument('attach_z_lowpass', default_value=''),     # rig: Hz, his target's plate height low-passed ('' = raw)
+        DeclareLaunchArgument('match_dwell', default_value=''),          # rig: s, his gates' unbroken hold ('' = his 1.0)
+        DeclareLaunchArgument('match_speed', default_value=''),          # rig: m/s, his contact match speed gate ('' = 0.15)
         DeclareLaunchArgument('magnet_drop_below_quad', default_value=''),   # QUAD4's, typed (refused untyped)
         DeclareLaunchArgument('proof_rise_max', default_value=''),       # '' = the rig's 0.03
         DeclareLaunchArgument('mpc_thrust_ratio', default_value=''),     # QUAD4's, typed (refused untyped)
