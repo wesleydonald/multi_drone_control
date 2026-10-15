@@ -19,8 +19,8 @@ highest-curvature quarter of the path (`scratchpad/corner_chain.py`):
 | R1871 | orbit 0.3 | +10.0 | +13.0 | +21.5 | +21.7 |
 
 - **The trackers are not the cause:** the drones fly their references to within 0.5 mm across the path.
-- The drones fly inside the ring by design: the rods lean into the turn (about 20 mm at the figure-8's ends at
-  0.3 m/s, the formation tilt a/g times the rods' drop).
+- The drones fly inside the ring by design: the rods lean into the turn (about 20 mm at the figure-8's tight bends
+  at 0.3 m/s, the formation tilt a/g times the rods' drop).
 - **The planner plans the cut:** its own planned ring 0.5 s ahead is as far inside as the ring ends up.
 
 ## 2. Two mechanisms
@@ -31,8 +31,8 @@ but removes almost none over 0.5 s; whatever the fleet falls short by (a steady 
 not have) accumulates to ~1 cm at 0.3 m/s. Levers: a stronger position correction (position weight up, or the
 cable-direction pinning to the flatness reference down), and less delay.
 
-**b. Figure-8 lobes (tight, fast-changing curvature): the plan cuts the corner by choice.** At the lobe ends the
-plan goes from +10-14 mm (ring now) to +27-33 mm (node 5): it adds the cut. The cost pulls every rod's angular rate
+**b. Figure-8 lobes (tight, fast-changing curvature): the plan cuts the corner by choice.** At the lobes' tightest
+bends (near y = +-0.25 m, curvature above 4 /m; the lobe tips at x = +-0.5 are gentler, 2 /m) the plan goes from +10-14 mm (ring now) to +27-33 mm (node 5): it adds the cut. The cost pulls every rod's angular rate
 toward zero (`w_r` 3, reference 0, "damp cable swing"), but the flatness tilt the path demands turns at |jerk| / g:
 
 | cell | peak accel | peak jerk | rod rate needed | cut the w_r term alone predicts (order of magnitude: sqrt(3 r^2 / 60), one stage, statics) | planned cut at the ends |
