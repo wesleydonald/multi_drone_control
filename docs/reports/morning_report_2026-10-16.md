@@ -19,8 +19,8 @@
 | Three-carrier carry, 5 shapes x 3 speeds (your 15 Oct rig plan) | R1723-R1752 | 30/30 clean; path error 7-19 mm, tilt under 3.1 deg except the spin at 0.3 m/s (5.1); `docs/analysis/traj3_2026-10-15.md` |
 | The same with 1 m cables | R1769-R1778 | 10/10 clean, the same numbers as 0.55 m |
 | Combined M1 attach with 1 m cables (carriers and QUAD4) | R1760, R1761 | both: contact, proof, fold-in, landed (free hang read 1.0405 m) |
-| A drop during his flight (`drop_takes_back`, off by default) | R1753-R1759, R1779-R1781 | switch off reproduces a2_2 every time; switch on takes QUAD4 back and lands it in 14-17 s; one bar failed as frozen (R1759, explained); reviewer: PENDING |
-| The ring shaken like the rig (1.8 Hz) | R1766-R1768, R1782-R1785 | a 1 cm bounce stops the twin attach (no contact, his give-up); at 0.7 cm with the filter it attaches (2/2); baseline at 0.7 cm: PENDING |
+| A drop during his flight (`drop_takes_back`, off by default) | R1753-R1759, R1779-R1781 | switch off reproduces a2_2 every time (tracker fault 1 s after the drop, his planner flies on, 30 s timeout), and GIVE UP after a drop cannot hand QUAD4 over; switch on takes QUAD4 back on the drop tick and lands it in 14-17 s, >= 0.53 m from every carrier; R1759 failed the rev 2 bar as frozen (a bar that did not fit a drop at the plate); reviewer: SUPPORTED WITH CORRECTIONS (twin only) |
+| The ring shaken like the rig (1.8 Hz) | R1766-R1768, R1782-R1785 | a 1 cm bounce stops the twin attach (no contact, his give-up). Filter 2/2 vs baseline 0/2 welds at 0.85 cm, **withdrawn by the critic**: the twin welds at the instant of contact and the proof then measures the bounce's phase. On the mechanism (the tip's motion against the plate before contact) the filter did hold QUAD4 still (QUAD4's 1.8 Hz height 0.60 -> 0.12 cm; tip vs plate 1.4 -> 0.9 cm), but those runs had been seen; rev 2 on unseen runs, with a zero-twist arm: PENDING |
 | The plate-height filter, no shake | R1762-R1765, R1786-R1789 | attach unchanged; the twin's known QUAD4 landing tip-over hit: PENDING |
 | Latency margin (15-45 ms extra) at 0.3 m/s | PENDING | |
 
