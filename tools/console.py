@@ -17,6 +17,7 @@ so it costs little next to the controllers. tools/fleet_monitor.py stays the rea
 """
 import argparse
 import json
+import re
 import sys
 import threading
 import time
@@ -29,6 +30,7 @@ SUMMARY_STALE_S = 1.0
 HEALTH_STALE_S = 2.5       # radio_health comes once a second
 MODE_STALE_S = 5.0         # QUAD1 sends a flight-mode frame only every 2-3 s
 VOLT_STALE_S = 5.0
+SLOT_ERR_MAX_DEG = 30.0    # --slot-gate: the planner's own SLOT OFFSET error level
 VOLT_MIN = 22.6            # the pre-flight rule, at rest (Wesley 15 Oct; was 24.0)
 ERR_REPLUG_S = 20.0        # '!ERR*' this long is not the short block after a boot or a disarm
 TILT_DOWN_DEG = 25.0       # the carriers rest at 11-13 deg on their rods; beyond this one is on its side (plan rev 1)
@@ -75,8 +77,10 @@ def expected_nodes(n, partner, twin):
 class ConsoleState:
     """What the window shows, filled by ROS callbacks and read by the GUI timer (under self.lock)."""
 
-    def __init__(self, n, partner=3, twin=False, small_angle=25.0):
+    def __init__(self, n, partner=3, twin=False, small_angle=25.0, slot_gate=False):
         self.n, self.partner, self.twin, self.small_angle = n, partner, twin, small_angle
+        self.slot_gate = slot_gate
+        self.slot_err = None                 # this launch's largest plate (slot) error, deg; None until logged
         self.lock = threading.Lock()
         self.manager = ''
         self.arm_complete = False
@@ -173,6 +177,10 @@ class ConsoleState:
                 set(nodes), set(his_subs), int(his_matched), int(give_up_subs))
 
     def on_log(self, level, node, text):
+        if '[planner] slot error' in text:     # once per launch (INFO): a relaunch replaces the last one
+            errs = [abs(float(v)) for v in re.findall(r' d\d+ ([+-]?[0-9.]+) \(plate', text)]
+            with self.lock:
+                self.slot_err = max(errs) if errs else None
         if level < 30:                         # rcl_interfaces/Log: 30 WARN, 40 ERROR, 50 FATAL
             return
         with self.lock:
@@ -267,6 +275,10 @@ def readiness(st, now):
                 if not ok:
                     why.append(f'{quad(i)}: {text}')
     why += [f'{quad(i)}: mux latched by an abort (relaunch T2)' for i in range(st.n) if st.mux[i] == 'latched']
+    # --slot-gate: a carrier more than SLOT_ERR_MAX_DEG off its plate (a3, 15 Oct: two plates off, flown, the
+    # pretension stretched a rod and dropped the ring)
+    if st.slot_gate and st.slot_err is not None and st.slot_err > SLOT_ERR_MAX_DEG:
+        why.append(f'carriers {st.slot_err:.0f} deg off their plates (SLOT OFFSET): fix the layout, relaunch T2')
     return why
 
 
@@ -650,10 +662,12 @@ def main(argv=None):
     ap.add_argument('--partner', type=int, default=3, help="the drone Tejen's stack flies (default 3 = QUAD4)")
     ap.add_argument('--no-partner', action='store_true', help='our fleet alone')
     ap.add_argument('--twin', action='store_true', help='the twin: no radios, so no FC or pack checks')
+    ap.add_argument('--slot-gate', action='store_true',
+                    help=f'not READY while a carrier sits over {SLOT_ERR_MAX_DEG:.0f} deg off its plate (off by default)')
     ap.add_argument('--small-angle', type=float, default=25.0,
                     help="the FCs' small_angle (Betaflight default 25; 180 once docs/rig/fc_request.md is done)")
     a = ap.parse_args(argv)
-    state = ConsoleState(a.drones, None if a.no_partner else a.partner, a.twin, a.small_angle)
+    state = ConsoleState(a.drones, None if a.no_partner else a.partner, a.twin, a.small_angle, a.slot_gate)
     link = RosLink(state, a.drones)
     spinner = threading.Thread(target=link.spin, daemon=True)
     spinner.start()

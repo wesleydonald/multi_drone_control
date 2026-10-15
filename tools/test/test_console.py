@@ -219,3 +219,16 @@ def test_the_twin_summary_is_fresh_for_longer():
     r = con.ConsoleState(4, partner=3)
     r.on_summary(summary(), NOW)
     assert con.bodies(r, NOW + 2.0) is None
+
+
+def test_slot_gate_holds_ready_on_a_layout_off_its_plates():
+    """--slot-gate (off by default): the planner's per-launch slot line over 30 deg holds READY (a3, 15 Oct)."""
+    off = ('[planner] slot error (deg, + = clockwise): d2 +53.3 (plate 3), d1 +55.8 (plate 11), d3 +51.0 (plate 7)')
+    ok = ('[planner] slot error (deg, + = clockwise): d3 +0.6 (plate 3), d2 +4.0 (plate 11), d1 -2.2 (plate 7)')
+    s = ready_state()
+    s.on_log(20, 'dissipative_planner', off)
+    assert con.readiness(s, NOW) == []                       # the switch is off by default
+    s.slot_gate = True
+    assert any('56 deg off their plates' in w for w in con.readiness(s, NOW))
+    s.on_log(20, 'dissipative_planner', ok)                  # the relaunch's line replaces it
+    assert con.readiness(s, NOW) == []
