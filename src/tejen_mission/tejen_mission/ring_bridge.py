@@ -154,6 +154,15 @@ class RingBridge(FakeCooperativeTransportWorld):
             z = self._lowpass_z(z)
         return (x, y, z)
 
+    def finite_difference_attachment_twist(self, t, payload_state, attachment_xyz):
+        """attach_twist 'zero' (typed only; '' = the base's 50 Hz finite difference): a zero attachment twist, as his
+        measured-ring mode publishes. His reference extrapolates this twist over its horizon and his match gate compares
+        QUAD4's velocity with it; differenced from the raw ring pose it carried the 1.8 Hz bounce (+-0.13 m/s, RIG-1015-a1)
+        and 0.09 m/s of sideways jitter (a3_2). Hover only: a moving ring needs its velocity."""
+        if str(self._param('attach_twist', '')).strip().lower() == 'zero':
+            return 0.0, 0.0, 0.0, 0.0
+        return FakeCooperativeTransportWorld.finite_difference_attachment_twist(self, t, payload_state, attachment_xyz)
+
     def _lowpass_z(self, z: float) -> float:
         """attach_z_lowpass_hz > 0 (0 = off): the plate height through two first-order lags at that cutoff. On
         15 Oct (a1) the ring bounced ~0.8 cm at 1.8 Hz, his reference copied it and QUAD4 followed half a cycle late,

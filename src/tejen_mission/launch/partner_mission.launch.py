@@ -209,6 +209,8 @@ def _nodes(context):
             # the plate height low-passed (Hz), typed only, as on the rig (twin check of RIG-1015-a3's switch)
             **({'attach_z_lowpass_hz': float(LaunchConfiguration('attach_z_lowpass').perform(context))}
                if LaunchConfiguration('attach_z_lowpass').perform(context).strip() else {}),
+            **({'attach_twist': LaunchConfiguration('attach_twist').perform(context).strip()}
+               if LaunchConfiguration('attach_twist').perform(context).strip() else {}),
         }])
 
     pendulum = Node(
@@ -532,6 +534,8 @@ def _rig_nodes(context):
             'trail_seconds': 0.0,
             # the plate height his reference follows, low-passed (Hz; '' / 0 = raw, the default): a1 15 Oct
             **({'attach_z_lowpass_hz': f('attach_z_lowpass', 0.0)} if 'attach_z_lowpass' in typed else {}),
+            # a zero attachment twist ('' = raw finite difference; card 2026-10-16_plate_height_filter, critic F4)
+            **({'attach_twist': val('attach_twist', '')} if 'attach_twist' in typed else {}),
         }])
 
     # his inputs from our mocap node (the only Motive owner): his IRL publisher's outputs, under /tejen
@@ -764,6 +768,7 @@ def _arguments():
         DeclareLaunchArgument('attach_z_lowpass', default_value=''),     # rig: Hz, his target's plate height low-passed ('' = raw)
         DeclareLaunchArgument('match_dwell', default_value=''),          # rig: s, his gates' unbroken hold ('' = his 1.0)
         DeclareLaunchArgument('match_xy', default_value=''),             # twin: m, his contact match xy gate ('' = his)
+        DeclareLaunchArgument('attach_twist', default_value=''),         # 'zero': the bridge's attachment twist zero ('' = raw)
         DeclareLaunchArgument('match_speed', default_value=''),          # rig: m/s, his contact match speed gate ('' = 0.15)
         DeclareLaunchArgument('magnet_drop_below_quad', default_value=''),   # QUAD4's, typed (refused untyped)
         DeclareLaunchArgument('proof_rise_max', default_value=''),       # '' = the rig's 0.03

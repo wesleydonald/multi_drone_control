@@ -56,3 +56,20 @@ def test_only_the_present_plate_is_filtered():
     z_ahead = RingBridge.compute_attachment_xyz(s, ahead)[2]
     assert z_now < 1.05 + 0.024 - 0.01                             # lagged
     assert abs(z_ahead - (1.05 + 0.024)) < 1e-9                    # the predicted path is not filtered
+
+
+def test_zero_twist_only_when_typed():
+    """attach_twist 'zero' (card 2026-10-16_plate_height_filter, critic F4): the bridge's attachment twist is zero;
+    otherwise the base's finite difference."""
+    from tejen_mission.fake_cooperative_transport_world import FakeCooperativeTransportWorld as Base
+    state = RigidBodyState(x=0.0, y=0.0, z=1.0, yaw=0.0, vx=0.0, vy=0.0, vz=0.0, yaw_rate=0.0)
+    for mode, zero in (('', False), ('zero', True)):
+        s, _ = _stub(0.0)
+        s._param = lambda name, default, mode=mode: mode if name == 'attach_twist' else default
+        s.last_attachment_xyz, s.last_payload_state, s.last_time_sec = (0.0, 0.0, 1.0), state, 1.0
+        got = RingBridge.finite_difference_attachment_twist(s, 1.02, state, (0.0, 0.0, 1.002))
+        if zero:
+            assert got == (0.0, 0.0, 0.0, 0.0)
+        else:
+            assert abs(got[2] - Base.finite_difference_attachment_twist(s, 1.02, state, (0.0, 0.0, 1.002))[2]) < 1e-12
+            assert abs(got[2] - 0.1) < 1e-9

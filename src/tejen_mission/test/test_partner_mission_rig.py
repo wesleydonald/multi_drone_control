@@ -255,3 +255,11 @@ def test_the_twin_takes_the_rigs_match_gate_only_when_typed():
     assert 'dwell_time_s' not in p and 'contact_match_xy_threshold' not in p
     p = planner(match_xy='0.05', match_speed='0.15', match_dwell='0.5')
     assert (p['contact_match_xy_threshold'], p['contact_match_xy_velocity_threshold'], p['dwell_time_s']) == (0.05, 0.15, 0.5)
+
+
+def test_zero_twist_reaches_both_bridges_only_when_typed():
+    """attach_twist (critic F4 of card 2026-10-16_plate_height_filter): rig and twin bridges, typed only."""
+    g, _ = _nodes()
+    assert 'attach_twist' not in g['fake_cooperative_transport_world']['params']
+    g, _ = _nodes(attach_twist='zero')
+    assert g['fake_cooperative_transport_world']['params']['attach_twist'] == 'zero'

@@ -72,3 +72,27 @@ card records the correction). Not a default; if it flies again it flies alone as
 Next: a zero-twist switch (finding 4) in the bridge, typed only, and a rev 2 test that scores the mechanism (the
 tip's motion against the plate before the first contact, inside-and-slow time) on unseen runs, with a slow-shake
 neighbour (finding 5).
+
+## Rev 2 (16 Oct ~02:05; frozen before any of its runs start)
+
+**Question.** Under a rig-sized plate bounce, does QUAD4's tip move less against the plate before the first contact
+with (a) the plate-height filter or (b) a zero attachment twist (`attach_twist:=zero`, critic F4: raw position, no
+extrapolated bounce), than with the raw bridge? The sim weld is not the outcome (critic F1).
+
+**Arms** (twin, his floor join, the rig's match gate typed, 0.17 N m square-wave torque about world x, 40 s from his
+APPROACH): `n6_arm_base`, `n6_arm_zlp08`, `n6_arm_twist0` at 1.8 Hz, 4 runs each, all new (R1782-R1785 and batch 4's
+N6 runs are excluded); neighbour at 0.8 Hz (critic F5): `n6s08_base`, `n6s08_zlp08`, `n6s08_twist0`, 1 run each.
+
+**Metric** (from run.csv, the window from his first DESCEND to the first CONTACT, or 10 s if none): the tip's motion
+against plate 9's point along the ring normal, `rel = tip_z - plate_z`, band-passed 0.3-3 Hz, its sd (the mechanism);
+reported with it: QUAD4's height sd in 1.2-2.5 Hz, the time inside the catch (xy <= 24 mm) and slow (|d rel/dt| <=
+0.03 m/s), CONTACTs per bottom second, welds and proof outcomes.
+
+**Bars.**
+1. At 1.8 Hz an arm helps if its median rel sd is at least 25 % below the baseline's median and all four of its runs
+   are below the baseline's median.
+2. At 0.8 Hz an arm's rel sd is no more than 20 % above the baseline's (single runs: reported as a check, not a claim).
+3. No arm aborts before the fold-in or a take-back (the landing tip-over is scored apart).
+
+Falsifier for each arm: bar 1 failing. Only an arm passing bars 1-3 goes on to a rig A/B (alone, alternating with
+raw), and the filter only after critic finding 3 (the hold and the proof base on the raw plate).
