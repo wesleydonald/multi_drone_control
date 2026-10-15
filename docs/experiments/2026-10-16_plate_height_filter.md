@@ -103,3 +103,31 @@ Rev 1 bar 1 (welds): the filter welded in 2 of 4 (R1783, R1785 yes; R1791, R1793
 as frozen (needs 3 of 4), the outcome the critic predicted for a weld count. The mechanism metric favoured the filter
 in all four pairs (tip vs plate 0.88-0.97 vs 1.37-1.41 cm; QUAD4 1.8 Hz height 0.12 vs 0.61 cm; inside and slow 20-22
 vs 9 %), but these runs were seen before rev 2 and are excluded from it.
+
+## Rev 2 result (batch 5, R1800-R1814; scored as frozen)
+
+| Bar | Baseline | Filter (0.8 Hz low-pass) | Zero twist |
+|---|---|---|---|
+| 1: tip vs plate sd at 1.8 Hz, before the first contact (4 runs) | 1.37, 1.40, 1.39, 1.43 cm (median 1.40) | 0.90, 0.88, 0.95, 0.92 (median 0.91, -35 %): PASS | 0.93, 1.01, 1.05, 1.03 (median 1.02, -27 %): PASS |
+| QUAD4 height 1.2-2.5 Hz (reported) | 0.59-0.63 cm | 0.12-0.14 | 0.08-0.10 |
+| Inside the catch and slow (reported) | 9-10 % | 17-20 % | 15-18 % |
+| 2: 0.8 Hz neighbour (1 run each) | 0.48 cm | 0.39: PASS | 3.94: FAIL |
+| 3: no abort before the fold-in / take-back | none | none: PASS | none: PASS |
+
+(R1800 hit the lab's 30 min wall cap after its LAND; its pre-contact window is complete. Welds, not a bar: baseline
+0/4, filter 3/4, zero twist 3/4.)
+
+**Bar 2 is confounded.** The 0.8 Hz shake at the same torque moved plate 9 by 3.0 cm sd (0.5-1.2 Hz; ring tilt up to
+13 deg), four times the rig's bounce. The baseline and the filter stayed in MATCH for the whole 40 s shake (the plate's
+sideways speed 0.094 m/s kept his match gate shut, the a3_2 symptom) and descended only after it, so their windows saw
+a still ring; zero twist descended 1 s after MATCH and sat 26 s at the bottom of a ring still moving 3 cm, without a
+contact. As frozen: the filter passes bars 1-3; zero twist fails bar 2.
+
+## Rev 3 (16 Oct ~03:30, frozen before its runs): the low-frequency check at the rig's amplitude
+
+0.8 Hz square-wave torque scaled to ~0.8 cm of plate motion (0.045 N m; the 0.17 N m run gave 3.0 cm), 40 s from his
+APPROACH, rig match gate typed: `n6s08b_base`, `n6s08b_zlp08`, `n6s08b_twist0`, 2 runs each. Reported per run: plate z
+sd 0.5-1.2 Hz over the shake; time from MATCH to the first descent; QUAD4 height against the plate in his MATCH (rel sd
+0.5-1.2 Hz: how well QUAD4 follows a slow bounce while it waits); the weld.
+Bar: an arm's MATCH-phase rel sd at 0.8 Hz is no more than 20 % above the baseline's (the mean of its two runs);
+the arm that passes rev 2 bar 1 and this bar is the one to fly as a rig A/B.
