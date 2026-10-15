@@ -63,6 +63,7 @@ flights scored with `tools/proof_replay.py --catch` and `tools/attach_window.py`
 
 - A drop: with `drop_takes_back` on, nothing to press (QUAD4 is taken back and landed). Without it GIVE UP does not
   hand QUAD4 over either (card 2026-10-16): his LAND only once QUAD4 is clear of the fallen ring (it lands straight
-  down), or DISARM QUAD4 once it is low and clear of the ring.
+  down: in the twin it put the tip on the fallen ring every time and, after a drop at the plate, left QUAD4 armed on
+  top of it, R1844-R1846), or DISARM QUAD4 once it is low and clear of the ring.
 - Two carrier releases in one session: stop and check every carrier magnet's hold (QUAD2 let go on 15 Oct at 21.9 V).
 - QUAD4 hanging ~0.3 m above its mat on its own landing: DISARM it.
