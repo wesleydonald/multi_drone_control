@@ -94,7 +94,7 @@ if [ "$COMBINED" = true ]; then
            /join_planner/land_now /drone_3/take_back /drone_3/magnet_ours /drone_3/magnet_gate /drone_3/magnet_coil
            /drone_3/ELRSCommand_tejen /tejen/magnet/command /tejen/object_attached
            /tejen/magnet_tip_pose /pickup/motion_capture_state /payload/trajectory_state /tejen/drone_command
-           /join_planner/proof_lift_complete /fleet/mocap_summary)
+           /join_planner/proof_lift_complete /fleet/mocap_summary /fake_attachment_point/twist)
   # not recorded (14 Oct load cut): /tejen/pendulum_swing_state, /fake_payload/pose, /fake_attachment_point/pose,
   # 75 + 46 + 46 Hz copies made from our mocap that no tool reads
 fi

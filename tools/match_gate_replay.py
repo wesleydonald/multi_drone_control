@@ -51,11 +51,13 @@ def hold(arr, tq):
     return arr[np.clip(np.searchsorted(arr[:, 0], tq, side='right') - 1, 0, None)]
 
 
-def replay(ring, q4, tip, a, b, plate, gates):
+def replay(ring, q4, tip, a, b, plate, gates, zero_twist=False):
     tb = np.arange(a - 0.1, b, BRIDGE_DT)
     rr = hold(ring, tb)
     p = rr[:, 1:4] + Rot.from_quat(rr[:, 4:8]).apply(plate)
     vt = np.vstack([[0.0, 0.0, 0.0], np.diff(p, axis=0) / BRIDGE_DT])
+    if zero_twist:                     # attach_twist:=zero: the gate compares QUAD4's own velocity
+        vt = np.zeros_like(vt)
     th = np.arange(a, b + 0.05, HIS_DT)          # past the phase's end: the check that passed it
     k = np.clip(np.searchsorted(tb, th, side='right') - 1, 0, None)
     err = np.linalg.norm(hold(tip, th)[:, 1:3] - p[k, :2], axis=1)
@@ -81,6 +83,7 @@ def main(argv=None):
     ap.add_argument('--gate', nargs=3, type=float, action='append', metavar=('XY', 'SPEED', 'DWELL'),
                     help='a gate to replay (m, m/s, s); default his rig gate 0.05 0.15 1.0 and three looser ones')
     ap.add_argument('--plate', nargs=3, type=float, default=PLATE, metavar=('X', 'Y', 'Z'))
+    ap.add_argument('--zero-twist', action='store_true', help='replay with a zero target velocity (attach_twist:=zero)')
     a = ap.parse_args(argv)
     gates = a.gate or [(0.05, 0.15, 1.0), (0.05, 0.15, 0.5), (0.05, 0.20, 1.0), (0.07, 0.15, 1.0)]
     for run in a.runs:
@@ -90,7 +93,7 @@ def main(argv=None):
             if name != 'MATCH_VELOCITY':
                 continue
             t1 = phases[i + 1][0] if i + 1 < len(phases) else t0 + 5.0
-            rows, vrms = replay(ring, q4, tip, t0, t1, a.plate, gates)
+            rows, vrms = replay(ring, q4, tip, t0, t1, a.plate, gates, a.zero_twist)
             print(f'  MATCH {t1 - t0:5.1f} s (then {phases[i + 1][1] if i + 1 < len(phases) else "end"}), '
                   f'target speed rms {vrms:.3f} m/s')
             for xy, speed, dwell, first, passes, longest, frac in rows:

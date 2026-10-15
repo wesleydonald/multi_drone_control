@@ -768,7 +768,7 @@ def _arguments():
         DeclareLaunchArgument('attach_z_lowpass', default_value=''),     # rig: Hz, his target's plate height low-passed ('' = raw)
         DeclareLaunchArgument('match_dwell', default_value=''),          # rig: s, his gates' unbroken hold ('' = his 1.0)
         DeclareLaunchArgument('match_xy', default_value=''),             # twin: m, his contact match xy gate ('' = his)
-        DeclareLaunchArgument('attach_twist', default_value=''),         # 'zero': the bridge's attachment twist zero ('' = raw)
+        DeclareLaunchArgument('attach_twist', default_value='', choices=['', 'zero']),   # 'zero': the bridge's twist zero in hover ('' = raw)
         DeclareLaunchArgument('match_speed', default_value=''),          # rig: m/s, his contact match speed gate ('' = 0.15)
         DeclareLaunchArgument('magnet_drop_below_quad', default_value=''),   # QUAD4's, typed (refused untyped)
         DeclareLaunchArgument('proof_rise_max', default_value=''),       # '' = the rig's 0.03

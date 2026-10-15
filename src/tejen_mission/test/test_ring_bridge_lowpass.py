@@ -73,3 +73,15 @@ def test_zero_twist_only_when_typed():
         else:
             assert abs(got[2] - Base.finite_difference_attachment_twist(s, 1.02, state, (0.0, 0.0, 1.002))[2]) < 1e-12
             assert abs(got[2] - 0.1) < 1e-9
+
+
+def test_zero_twist_never_while_the_ring_flies_a_trajectory():
+    """Critic F3 (zero twist): a moving ring keeps its velocity (his references need it); zero only in hover."""
+    state = RigidBodyState(x=0.0, y=0.0, z=1.0, yaw=0.0, vx=0.0, vy=0.0, vz=0.0, yaw_rate=0.0)
+    s, _ = _stub(0.0)
+    s._param = lambda name, default: 'zero' if name == 'attach_twist' else default
+    s.last_attachment_xyz, s.last_payload_state, s.last_time_sec = (0.0, 0.0, 1.0), state, 1.0
+    s._traj_state = {'running': True}
+    assert abs(RingBridge.finite_difference_attachment_twist(s, 1.02, state, (0.0, 0.0, 1.002))[2] - 0.1) < 1e-9
+    s._traj_state = {'running': False}
+    assert RingBridge.finite_difference_attachment_twist(s, 1.02, state, (0.0, 0.0, 1.002)) == (0.0, 0.0, 0.0, 0.0)

@@ -61,6 +61,10 @@ class RingBridge(FakeCooperativeTransportWorld):
             f'{self.get_float_param("bridge_cable_len_m"):.2f} m at '
             f'{self.get_float_param("bridge_cable_elev_deg"):.0f} deg, target plate '
             f'{tejen_plate(self.ring_attachment_plate_index)} (his {self.ring_attachment_plate_index})')
+        # the typed switches, so a run's log says which arm it flew (RIG-1015-a2_2 flew without its intended filter)
+        self.get_logger().info(
+            f"[ring_bridge] attachment twist: {str(self._param('attach_twist', '')).strip() or 'raw'}; plate height "
+            f"low-pass: {float(self._param('attach_z_lowpass_hz', 0.0)) or 'off'}")
 
     # ── inputs ────────────────────────────────────────────────────────────────
     def _traj_cb(self, msg: String) -> None:
@@ -159,7 +163,8 @@ class RingBridge(FakeCooperativeTransportWorld):
         measured-ring mode publishes. His reference extrapolates this twist over its horizon and his match gate compares
         QUAD4's velocity with it; differenced from the raw ring pose it carried the 1.8 Hz bounce (+-0.13 m/s, RIG-1015-a1)
         and 0.09 m/s of sideways jitter (a3_2). Hover only: a moving ring needs its velocity."""
-        if str(self._param('attach_twist', '')).strip().lower() == 'zero':
+        moving = bool((getattr(self, '_traj_state', None) or {}).get('running', False))
+        if str(self._param('attach_twist', '')).strip().lower() == 'zero' and not moving:
             return 0.0, 0.0, 0.0, 0.0
         return FakeCooperativeTransportWorld.finite_difference_attachment_twist(self, t, payload_state, attachment_xyz)
 
