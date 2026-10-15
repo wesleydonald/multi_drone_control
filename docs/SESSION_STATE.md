@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Fri 16 Oct 2026, 02:26 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Fri 16 Oct 2026, 04:20 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -37,6 +37,13 @@ Updated: Fri 16 Oct 2026, 02:26 AEDT (from `date`). Only what a new session need
   FAILS bar 2 as frozen (starting geometry; rev 3 relative bar for later runs: bottom_tb x2 + bottom_off x1 queued).
   1 m attach R1760: contact, proof, fold-in, landed (free-hang 1.0405 m). Slide finding in the plan (tip off the
   plate's edge 3.3-4.3 cm along the ring).
+- **04:20:** filter card rev 2 PASS for the filter (-35 % at 1.8 Hz), zero twist passes bar 1 (-27 %) but fails the
+  confounded bar 2; rev 3 (0.8 Hz at rig amplitude) inconclusive as frozen, reported: filter worse (+17..+32 %), zero
+  twist no different; reviewer SUPPORTED WITH CORRECTIONS (weak at 0.8 Hz). Zero-twist critic: fix first -> done
+  (efb9b5d: moving-ring guard, choices, start-up log, rig bag records the twist); its rig falsifier passes
+  (`match_gate_replay.py --zero-twist`: a3_2's gate opens at 4.9 s). No regression R1824-R1826. drop_takes_back: 8 on
+  runs pass incl. early MATCH / DESCEND (R1815/R1816). Running: n6drift_{base,twist0} (0.25 Hz sideways drift,
+  lab_batch8.log). Morning report nearly final; decisions: merge, drop_takes_back on, zero-twist A/B after Tejen.
 - **02:26:** full gate (all 6 stages, SIL smoke included) PASSES on the branch (HEAD 3507fce). drop_takes_back reviewer:
   SUPPORTED WITH CORRECTIONS (applied, 0a3ac30). Filter critic: N6's 2/2 vs 0/2 withdrawn (sim weld + slope gate
   artefact); zero-twist switch built (attach_twist:=zero, e9ff80a); card rev 2 bars on the mechanism
