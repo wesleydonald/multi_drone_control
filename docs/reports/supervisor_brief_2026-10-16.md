@@ -26,4 +26,6 @@
 ## What would help most
 1. Bigger discs first (the clearest effect on the catch).
 2. 1 m tethers, at least on QUAD4.
-3. The carriers' magnet hold measured once (one let go mid-flight on 15 Oct).
+3. The carriers' magnet hold measured once (one let go mid-flight on 15 Oct): a spring-scale pull per carrier, cold
+   and after ~20 min switched ON, on a full and a low pack (the coils stay ON from each launch, and nothing records
+   their current or temperature).

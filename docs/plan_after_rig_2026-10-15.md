@@ -34,6 +34,9 @@ Deadline 20 Nov. Branch `overnight-1015` (from week5 48ccad6; today's rig work c
    The one hold that went on to the proof (t6h_4) arrived 2.2 cm off. A 90 mm disc (45 mm radius) would have had all
    three slides on the plate. (scratchpad slide_scan.py; the a1 registry row's "cause not known" is superseded.)
 4. **Carrier release** (a2_2, QUAD2 on plate 7, packs at 21.9 V): not explained; the magnets' hold was never measured.
+   The carrier coils are ON from each launch onward (rig_magnet_latches) and nothing records their current or
+   temperature (readiness review 29 Sep): a low pack and a warm coil both weaken an electromagnet. A spring-scale pull
+   test per carrier, cold and after ~20 min ON, at a full and a low pack, separates the two (props off).
 5. **Operations:** layout errors get flown (a3); QUAD4's straight path can cross a carrier (a1); a drop during his
    flight does not take QUAD4 back on LAND (a2_2); QUAD1/QUAD2 FC `!ERR*` (fc_request, supervisor's OK pending).
 
