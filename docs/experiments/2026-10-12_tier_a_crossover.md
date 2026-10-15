@@ -340,3 +340,102 @@ Left for Wesley (the card does not decide them):
    the alternative is T3 alone (A1, A2: 6 runs), which is the pair that can resolve and the one the C2-B sentence rests
    on.
 3. When: after decisions 178 and 182's lab evenings, from Sat 17 (P11).
+
+## Result, rev 3 (Fri 16 Oct, 10:52 AEDT from `date`): the detach freeze claim batch
+
+**Runs:** R1887-R1898 (T3, T8, T9, K1) and R1909-R1912 (T15), lab batch 15.
+- Tree: 8c468bd (day-1016, clean); its flight code is week5 4b3560e's. Lab PC, 4 slots.
+- Each config differs from its partner only in the one line (`detach_detect_m: 0.0` or `cable_source: model`) plus its
+  name and description (checked with diff).
+- No Q12 flag: the reference was still for 6.5-7.5 s before every event.
+- No solver failure line. The only SLOW TICK lines are in the end-of-run teardown.
+
+**Scorers:**
+- Delta-theta: `tools/release_bands.py metrics`, event to +15 s.
+- Detection, dip and landing lean: `tools/release_transient.py`'s functions, imported (the tool is not edited).
+- T15: `tools/rig_night.py` `carry_metrics`, `plus4_to_land.exy_mean_cm`.
+- Reviewer: not yet.
+
+| arm (pull, detection) | run | RELEASE (config s) | dtheta (deg) | t peak (s) | abs peak (deg) | sigma_pre (deg) | ref still (s) | post tilt (deg) | back in band (s) | detection (s) | dip (cm) | landing lean: tool / survivors only (deg) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| A1 measured, on | R1887 | 20.0 | 6.05 | 0.41 | 5.64 | 0.64 | 6.5 | 0.02 | 3.87 | 0.34 | 3.2 | 1.6 / 1.6 |
+| A1 measured, on | R1891 | 20.5 | 7.68 | 0.40 | 7.06 | 0.53 | 7.0 | 0.02 | 4.17 | 0.28 | 3.8 | 1.3 / 1.3 |
+| A1 measured, on | R1895 | 21.0 | 5.46 | 0.40 | 4.62 | 0.46 | 7.5 | 0.02 | 4.21 | 0.37 | 2.7 | 1.2 / 1.2 |
+| A2 planned, on | R1888 | 20.0 | 16.68 | 0.52 | 17.03 | 0.17 | 6.5 | 2.00 | 2.72 | 0.30 | 4.6 | 2.0 / 2.0 |
+| A2 planned, on | R1892 | 20.5 | 16.64 | 0.51 | 16.96 | 0.18 | 7.0 | 2.02 | 4.35 | 0.32 | 4.5 | 1.9 / 1.9 |
+| A2 planned, on | R1896 | 21.0 | 17.08 | 0.54 | 17.48 | 0.18 | 7.5 | 2.00 | 4.40 | 0.32 | 5.2 | 1.8 / 1.8 |
+| A5 measured, off | R1889 | 20.0 | 5.44 | 0.40 | 5.00 | 0.64 | 6.5 | 0.22 | 2.19 | off | 2.8 | 4.8 / 1.8 |
+| A5 measured, off | R1893 | 20.5 | 4.64 | 0.38 | 4.00 | 0.54 | 7.0 | 0.24 | 2.89 | off | 2.5 | 4.9 / 1.7 |
+| A5 measured, off | R1897 | 21.0 | 6.66 | 0.40 | 5.85 | 0.47 | 7.5 | 0.29 | 3.82 | off | 3.2 | 4.7 / 1.9 |
+| A6 planned, off | R1890 | 20.0 | 28.17 | 10.74 | 28.50 | 0.16 | 6.5 | 27.95 | 10.91 | off | 12.8 | 3.4 / 2.4 |
+| A6 planned, off | R1894 | 20.5 | 28.20 | 9.83 | 28.54 | 0.17 | 7.0 | 28.03 | 10.01 | off | 13.2 | 3.9 / 2.4 |
+| A6 planned, off | R1898 | 21.0 | 28.18 | 9.49 | 28.51 | 0.18 | 7.5 | 27.96 | 9.81 | off | 13.3 | 5.4 / 2.4 |
+
+| T15 arm | run | mean xy error, orbit + 4 s to LAND (cm) | max (cm) | lag, best shift (s) | ring height sd (cm) | tilt max (deg) | lap-to-lap sd of the mean (cm) |
+|---|---|---|---|---|---|---|---|
+| A7 measured | R1909 | 0.87 | 2.2 | 0.05 | 0.10 | 0.98 | 0.06 |
+| A7 measured | R1911 | 0.98 | 2.5 | 0.07 | 0.10 | 1.05 | 0.05 |
+| A8 planned | R1910 | 0.58 | 1.3 | 0.03 | 0.41 | 2.13 | 0.05 |
+| A8 planned | R1912 | 0.49 | 1.3 | 0.01 | 0.42 | 2.18 | 0.04 |
+
+**Against the frozen bars** (freeze 1.2: (1) the frozen sign, (2) no overlap, (3) gap >= max(floor, 2 x the larger range)):
+
+| bar | A: mean [min, max] | B: mean [min, max] | B - A | needed | (1) / (2) / (3) | verdict |
+|---|---|---|---|---|---|---|
+| T3: A1 against A2, measured < planned | 6.40 [5.46, 7.68] | 16.80 [16.64, 17.08] | +10.40 | 4.44 | yes / yes / yes | **confirmed** |
+| T9: A1 (on) against A5 (off), no sign | 6.40 [5.46, 7.68] | 5.58 [4.64, 6.66] | -0.82 | 4.44 | - / no / no | **confirmed (no sign)**. The double-count sign off < on holds on the means but is unresolved: reported, not credited |
+| T8: A2 (on) against A6 (off), on < off | 16.80 [16.64, 17.08] | 28.18 [28.17, 28.20] | +11.38 | 1.00 | yes / yes / yes | **confirmed** |
+| K1 measured: A1 (on) against A5 (off), the tool's landing lean | 1.37 [1.2, 1.6] | 4.80 [4.7, 4.9] | +3.43 | 1.00 | yes / yes / yes | **confirmed** (the tool's reading; see below) |
+| K1 planned: A2 (on) against A6 (off), the tool's landing lean | 1.90 [1.8, 2.0] | 4.23 [3.4, 5.4] | +2.33 | 4.00 | yes / yes / no | **unresolved** |
+| T15: A8 (planned) against A7 (measured), planned < measured | 0.53 [0.49, 0.58] cm | 0.93 [0.87, 0.98] cm | +0.39 cm | 0.30 cm | yes / yes / yes | **confirmed** |
+
+**K1 reads the freed drone, not the survivors.**
+- With detection off there is no resize. `release_transient`'s no-resize branch then counts every drone as a survivor,
+  the freed one too.
+- So in all six detection-off runs the tool's maximum is the freed drone, drone 1.
+- The bar's 7 Oct baseline is the same reading: R1144's 5.4 deg is drone 1, and its three survivors read at most 1.7 deg.
+  R1140/R1145 ("2.0") recompute today as 1.3/1.1.
+- Scored as frozen, on the tool. On the three drones still on the ring, both pull sources are unresolved:
+  - measured: 1.37 against 1.80 (gap 0.43 deg);
+  - planned: 1.90 against 2.40 (gap 0.50 deg);
+  - both gaps are under the 1 deg floor.
+- What detection buys at landing in this twin cell is the freed drone's own lean. With detection off it never learns that
+  it left: on the measured pull it stays in the formation and lands with the ring.
+
+**A6: FLEET ABORT 6.7-6.9 s after LAND, in all three runs.**
+- With detection off on the planned pull, the planner never learns of the release. The ring tilted to about 23 deg in
+  1 s and sagged 13 cm. The model integral then restored the height, and the tilt crept to 27.6-28.5 deg from +10 s until
+  LAND: 1.5-2.4 deg under the 30 deg drop line. The planner warned that its ring integral was near its bound (y +0.21 of
+  0.30 m) 6.2-6.6 s after the release.
+- The freed drone kept its planned-pull feed-forward with no load (tracker log: about 2.7 m/s² toward the ring and
+  1.5 m/s² down). That held it 1.55 m from the ring centre, 0.85 m outside its reference and about 0.45 m above it.
+- At LAND it came down about 1.55 m from the ring centre and slid inward to 1.2-1.3 m (up to 0.59-0.70 m/s sideways),
+  and went to armed idle. It then tipped to 77.6-84.2 deg, and its 60 deg drone envelope disarmed the fleet. The survivors were then at 0.40-0.53 m, on rods
+  above the landed ring.
+- This comes after every scored window: Delta-theta ends at +15 s, and the landing lean is read about 0.5 s before the
+  abort.
+- It is the same in 3 of 3 runs, and it is a consequence of the arm's own setting (a freed drone flying a share of a load
+  it no longer carries), not a random twin fault. So it is recorded as a result and **not re-flown**: a re-fly on the
+  same tree would repeat it and change no scored number. If Wesley reads it as the TB14 artefact, the card allows one
+  re-fly.
+
+**T15:**
+- The gap of 0.39 cm is just over the 0.30 cm floor.
+- The planned pull tracks the circle better but holds height less evenly: ring height sd 0.41-0.42 against 0.10 cm, and
+  tilt max 2.1-2.2 against 1.0 deg.
+- Per the card: in a twin whose model is exact, the planned pull tracks the 60 deg circle better. T15 is not the rig
+  falsifier K4.
+- The even ring flew, as the card's open line says. Freeze 1.5's shared conditions name the 120 deg layout: Wesley's call.
+
+**Also seen:**
+- A1's range is 2.22 deg (12 Oct: 0.78). R1891's 7.68 deg is the highest twin Delta-theta in this cell so far. All three
+  sit inside the W4 band (departed_disarm_alone card).
+- T3's 12 Oct values reproduce: A1 5.37-6.15 and A2 17.02-17.21 then; 5.46-7.68 and 16.64-17.08 now.
+
+**Must not say, added to the 12 Oct list:**
+- "detection lowers the survivors' landing lean" (it is the freed drone's);
+- "the planned pull holds the ring after an undetected loss" (28 deg, 2 deg from the drop line, then a fleet abort at
+  landing);
+- any rig number from T15's 0.39 cm.
+
+**Re-fly needed:** none. There was no solver fault, and the A6 abort is a result (above).

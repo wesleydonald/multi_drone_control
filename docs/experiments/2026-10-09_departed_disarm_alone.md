@@ -228,3 +228,47 @@ The twin's freed drone reached its rest in every run above, so P1's 0.03 m band 
 rest is reported as that rule firing in the twin: a change in behaviour to read, not a P1 pass.
 
 Reported for T13: the absolute peak, time back in band, post tilt, detection delay and dip.
+
+## Result, detach freeze re-fly (Fri 16 Oct, 10:52 AEDT from `date`)
+
+**Runs:**
+- W4 pooled on Tier A's A1, as chosen at 08:41: R1887, R1891, R1895.
+- W5: R1913, R1914.
+- Tree: 8c468bd (day-1016, clean); its flight code is week5 4b3560e's. Lab PC, 4 slots, lab batch 15.
+- `ta_a1_r1` is byte-identical to `w4_da_release_hover` apart from its name and description. `ta_a1_r2` and `_r3` also
+  move RELEASE/LAND by +0.5 and +1.0 s (the Tier A dither), so two of the three W4 runs are not the same config bytes.
+
+**Scorers:**
+- F1: `tools/release_bands.py metrics`, event to +15 s.
+- P1-P4: `tools/departed_metrics.py`, from run.csv.
+- As on 9 Oct, idle_t is empty: the throttle reaches 0 on the same row as the armed edge. P1 is therefore read as the
+  disarm edge minus first at rest, an upper bound (the 9 Oct reviewer's note 1).
+- Reviewer: not yet.
+
+| cell | run | dtheta (deg) | frozen band | abs peak (deg) | back in band (s) | post tilt (deg) | detection (s) | dip (cm) | first at rest (s) | disarm edge - at rest (s) | before LANDED | dz (m) | P3 max abs(z - rest) after (m) | P2 aborts | P4 carrier disarms before LANDED |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| W4 | R1887 | 6.05 | [1.75, 14.51] | 5.64 | 3.87 | 0.02 | 0.34 | 3.2 | 37.67 | 0.28 | yes | 0.002 | 0.002 | none | 0 |
+| W4 | R1891 | 7.68 | [1.75, 14.51] | 7.06 | 4.17 | 0.02 | 0.28 | 3.8 | 38.10 | 0.27 | yes | 0.002 | 0.002 | none | 0 |
+| W4 | R1895 | 5.46 | [1.75, 14.51] | 4.62 | 4.21 | 0.02 | 0.37 | 2.7 | 38.77 | 0.43 | yes | 0.001 | 0.002 | none | 0 |
+| W5 | R1913 | 6.70 | [1.00, 13.20] | 6.03 | 14.04 | 2.74 | 0.31 | 3.4 | 48.06 | 0.28 | yes | 0.000 | 0.000 | none | 0 |
+| W5 | R1914 | 7.11 | [1.00, 13.20] | 6.40 | 13.52 | 2.72 | 0.35 | 3.3 | 48.23 | 0.27 | yes | 0.000 | 0.000 | none | 0 |
+
+| bar | verdict |
+|---|---|
+| F1, W4: every run inside [1.75, 14.51] | **confirmed** (5.46-7.68) |
+| F1, W5: every run inside [1.00, 13.20] | **confirmed** (6.70, 7.11) |
+| P1: disarm edge within 0.5 s, before LANDED, dz within 0.03 m | **confirmed** (0.27-0.43 s, all before LANDED, dz <= 0.002 m) |
+| P2: no abort, every run reaches LANDED | **confirmed** |
+| P3: the drone stays within 0.05 m after its edge | **confirmed** (<= 0.002 m) |
+| P4: no carrier disarmed before LANDED | **confirmed** (0 in 5) |
+
+**Notes:**
+- **The disarm is slower than on 9 Oct.** The edge comes 0.27-0.43 s after first at rest, against 0.19-0.22 s on 9 Oct;
+  this batch's drop runs read 0.17-0.21 s. R1895's 0.43 s is 0.07 s from P1's 0.5 s bar. Its first in-band sample
+  (38.77 s) falls while it is still descending at 0.4 m/s; it touches down about 0.09 s later. The tracker logs the
+  idle and the "down at its rest" line together. This is worth a look before the rig day, not a fail.
+- **The 3297746 drift did not fire.** No freed drone was disarmed 0.03-0.10 m above its rest.
+- **The W5 circle again holds about 2.7 deg after the release.** It is back in band only at 13.5-14.0 s, as on 12 Oct
+  (R1687: 14.1 s).
+
+**Re-fly needed:** none.

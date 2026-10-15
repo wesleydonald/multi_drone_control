@@ -86,9 +86,10 @@ A 90 mm disc doubles the time the magnet can catch. It also forgives the inward 
 | C1 | Disc size and cable/basket numbers for Mitch | his questions | done (tables above) | |
 | D1 | his LAND console button (Wesley 16 Oct) | a drop during his flight; drop_takes_back on at the rig as well | built + twin: after a drop it lands QUAD4 on the fallen ring (R1844-R1846); use only clear of the ring | 5375333, e836cf3 |
 | D2 | Carry claim on the freeze tree (card bars frozen 16 Oct) | thesis T7t/F8t | flown: 39/40 pass; spin at 0.3 m/s fails bar 3 once (R1875, 6.31 deg): outside the envelope; 1 m arm passes (R1847-R1886); reviewer running | 5375333, e836cf3 |
-| D3 | Detach freeze: Tier A rev 3 (T3, T8, T9, K1, T15), Tier B, W4/W5, D1/D4 | thesis T3/T9/T13, F12 | running: lab batch 15 (33 runs, tree 8c468bd) | 83a7088 |
+| D3 | Detach freeze: Tier A rev 3 (T3, T8, T9, K1, T15), Tier B, W4/W5, D1/D4 | thesis T3/T9/T13, F12 | flown and scored (R1887-R1919): every bar confirmed except K1 planned (unresolved); B4 holds on the measured pull (G150p reached 30.9 deg); A6 (planned, detection off) holds the ring at 28 deg and aborts at landing 3/3; reviewer next | 83a7088, 8c468bd |
 | D4 | N2: twin bands on the 1 m worlds | the next rig day's ledger rows | configs ready; the band rule needs Wesley's word (`docs/experiments/2026-10-16_bands_1m.md`) | 83a7088 |
 | D5 | Appendix re-fly on the freeze tree and the tables regenerated | thesis appendix | card + 33 app_* configs, bars frozen; flies after D3 (54 runs) | 48d93d7, 8c468bd |
+| D6 | Corner cutting at speed (Wesley 16 Oct ~10:00) | carry tracking at 0.3 m/s | analysis: the plan cuts, the trackers follow; 5 single-switch arms queued (batch 17) | 63e4b52, baf50e1, 98a2b8e, 7281a3c |
 
 ## Overnight queue (15-16 Oct; the loop works down it)
 
