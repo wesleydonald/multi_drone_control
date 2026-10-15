@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Thu 15 Oct 2026, 23:21 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Fri 16 Oct 2026, 00:10 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -32,7 +32,12 @@ Updated: Thu 15 Oct 2026, 23:21 AEDT (from `date`). Only what a new session need
   twin bridge + m1c_floorjoin_hover_zlp08; cca8803 three_rigid_ground_rig_L100.sdf + traj3_L100_*; 6856cf8
   tools/make_attach_worlds_L100.py, his geometry rig_twin_L100, m1c_floorjoin_hover_L100; bad76e3 drop_takes_back
   (card docs/experiments/2026-10-16_drop_takes_back.md rev 2 after the critic: fix first -> fixed).
-- **Next lab batch (when B1 ends):** w4_drop_his_match_{off,tb} x2, w4_release_his_match_{off,tb} x1,
+- **Done:** B1 30/30 clean (registry R1723-R1752, docs/analysis/traj3_2026-10-15.md). drop_takes_back card rev 2:
+  MATCH/release arms PASS (R1754/R1756/R1758), off arms reproduce a2_2 (R1753/R1755/R1757), bottom neighbour R1759
+  FAILS bar 2 as frozen (starting geometry; rev 3 relative bar for later runs: bottom_tb x2 + bottom_off x1 queued).
+  1 m attach R1760: contact, proof, fold-in, landed (free-hang 1.0405 m). Slide finding in the plan (tip off the
+  plate's edge 3.3-4.3 cm along the ring).
+- **Batch 2 running (b7ctlzpk9, scratchpad lab_batch2.log), R1753-R1778:** w4_drop_his_match_{off,tb} x2, w4_release_his_match_{off,tb} x1,
   w4_drop_his_bottom_tb x1, m1c_floorjoin_hover x2 + _zlp08 x2, m1c_floorjoin_hover_L100 x2, traj3_L100_* x2.
 - **Background agent:** sim results inventory -> docs/analysis/sim_results_inventory_2026-10-16.md.
 - **Wesley's chat (15 Oct evening):** four quads 98 dB(A): lab stopped them; Mitch aims at four-drone approval by
