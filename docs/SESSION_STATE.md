@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Thu 15 Oct 2026, 23:05 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Thu 15 Oct 2026, 23:21 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -25,7 +25,16 @@ Updated: Thu 15 Oct 2026, 23:05 AEDT (from `date`). Only what a new session need
   d4f8ce8 (traj3 configs). Plan: `docs/plan_after_rig_2026-10-15.md` (situation, ranked blockers, Mitch's numbers,
   work packages A1-A6 / B1-B3 / C1, the overnight queue). Loop: self-paced (ScheduleWakeup), morning report by 07:30.
 - **Running:** B1 on the lab PC (tools/remote/lab_batch.py, background task bj5riimyy, log in the session scratchpad
-  lab_traj3.log): traj3_{circle,spin,fig8,linex,orbit}_v{125,200,300} x2 = R1723-R1752.
+  lab_traj3.log): traj3_{circle,spin,fig8,linex,orbit}_v{125,200,300} x2 = R1723-R1752 (first 8: RMSE 8-19 mm, tilt
+  < 2.6 deg, all landed). Scorer: scratchpad score_traj3.py.
+- **Built tonight (all off by default, gate --quick 1464 pass):** 35d2b86 console --slot-gate; ab6fd18 his
+  match_dwell/match_speed typed args + tools/match_gate_replay.py (reproduces a1's descents); 8d2036c filter in the
+  twin bridge + m1c_floorjoin_hover_zlp08; cca8803 three_rigid_ground_rig_L100.sdf + traj3_L100_*; 6856cf8
+  tools/make_attach_worlds_L100.py, his geometry rig_twin_L100, m1c_floorjoin_hover_L100; bad76e3 drop_takes_back
+  (card docs/experiments/2026-10-16_drop_takes_back.md rev 2 after the critic: fix first -> fixed).
+- **Next lab batch (when B1 ends):** w4_drop_his_match_{off,tb} x2, w4_release_his_match_{off,tb} x1,
+  w4_drop_his_bottom_tb x1, m1c_floorjoin_hover x2 + _zlp08 x2, m1c_floorjoin_hover_L100 x2, traj3_L100_* x2.
+- **Background agent:** sim results inventory -> docs/analysis/sim_results_inventory_2026-10-16.md.
 - **Wesley's chat (15 Oct evening):** four quads 98 dB(A): lab stopped them; Mitch aims at four-drone approval by
   Wed 21 Oct (early slots), no flying Fri; next hardware: bigger discs, 1 m cables, maybe a smaller basket.
 

@@ -67,14 +67,14 @@ A 90 mm disc doubles the time the magnet can catch. It also forgives the inward 
 
 | # | Package | Why | Status | Evidence |
 |---|---|---|---|---|
-| A1 | Next week's hardware in the twin: 1 m cables (carriers, QUAD4), bigger catch | the next rig day flies them; the stack's geometry, his parameters and the gates must be ready | to do | |
-| A2 | A drop during his flight takes QUAD4 back (behind a switch, critic, twin) | a2_2: QUAD4 flew on toward the dropped ring | to do | |
-| A3 | The console refuses ARM on a SLOT OFFSET over 30 deg | a3 flew two plates off | to do | |
-| A4 | His match gate: typed-only dwell (default his 1.0 s) | a3_2: 42 s without a descent; replay: 0.5 s passes at 1.1 s | to do (Wesley skipped it on the day; build, ask) | |
-| A5 | The plate-height filter (attach_z_lowpass) through the twin | flown on the rig with critic and twin waived | to do | |
+| A1 | Next week's hardware in the twin: 1 m cables (carriers, QUAD4), bigger catch | the next rig day flies them; the stack's geometry, his parameters and the gates must be ready | worlds + configs built; runs queued | cca8803, 6856cf8 |
+| A2 | A drop during his flight takes QUAD4 back (behind a switch, critic, twin) | a2_2: QUAD4 flew on toward the dropped ring | built, critic addressed (rev 2); runs queued | bad76e3 |
+| A3 | The console refuses ARM on a SLOT OFFSET over 30 deg | a3 flew two plates off | done (`--slot-gate`, off by default) | 35d2b86 |
+| A4 | His match gate: typed-only dwell (default his 1.0 s) | a3_2: 42 s without a descent; replay: 0.5 s passes at 1.1 s | done (`match_dwell`, `match_speed` typed only; replay tool) | ab6fd18 |
+| A5 | The plate-height filter (attach_z_lowpass) through the twin | flown on the rig with critic and twin waived | wired into the twin bridge; runs queued | 8d2036c |
 | A6 | Rig sheet for the next lab day (four quads, early slot, new hardware) | | after A1-A5 | |
-| B1 | Carry on every trajectory x 3 speeds, three carriers (twin) | Wesley's rig plan for 15 Oct, thesis carry table | running (R1723-R1752, lab PC) | |
-| B2 | Inventory of thesis-ready sim results, stale vs current code, figure plan | thesis | to do | |
+| B1 | Carry on every trajectory x 3 speeds, three carriers (twin) | Wesley's rig plan for 15 Oct, thesis carry table | running (R1723-R1752, lab PC) | d4f8ce8 |
+| B2 | Inventory of thesis-ready sim results, stale vs current code, figure plan | thesis | running (background agent) | |
 | B3 | Carry with 1 m cables vs 0.55 (twin) | design result for the thesis and Mitch | after A1's worlds | |
 | C1 | Disc size and cable/basket numbers for Mitch | his questions | done (tables above) | |
 
