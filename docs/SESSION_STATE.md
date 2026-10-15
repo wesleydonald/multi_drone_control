@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Fri 16 Oct 2026, 08:47 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Fri 16 Oct 2026, 09:37 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -38,12 +38,15 @@ Updated: Fri 16 Oct 2026, 08:47 AEDT (from `date`). Only what a new session need
   (detach freeze cards + configs + 3 Tier B worlds, bars frozen 08:41 while Wesley is at work; N2 1 m configs and
   band draft), e836cf3 (sheet). Registry rows to R1856 (uncommitted).
 - **Results:** his LAND after a drop (R1844-R1846): straight down onto the fallen ring; after a drop at the plate QUAD4
-  stays armed on top of it: use it only clear of the ring. Carry claim 0.125 m/s: 10/10 bars PASS (R1847-R1856).
-- **Running:** lab batch 14 (bcy3nvay1, scratchpad lab_batch14.log): carry claim 0.2/0.3 x2 + the 1 m arm x2 (30
-  runs, R1857-R1886), tree e836cf3 (flight code = 4b3560e). Helper: appendix re-fly plan (card + app_* configs).
-- **Next:** score batch 14 (bars 1-4; the 1 m arm also RMSE <= 1.5x its 0.55 m cell); then the detach freeze batch
-  (Tier A rev 3 12 runs, Tier B 10 (+1 optional), circle60 4, W5 2, D1/D4 4; W4 pooled with A1); then N2 (35 runs);
-  then the appendix re-fly. Reviewer on each final table. Check the lab PC before every batch.
+  stays armed on top of it: use it only clear of the ring. **Carry claim done** (R1847-R1886): 39/40 pass; spin at
+  0.3 m/s fails the tilt bar once (R1875 6.31 deg): outside the envelope; 1 m arm passes; reviewer SUPPORTED WITH
+  CORRECTIONS (applied: payload_rmse_m is takeoff+5 s to LAND, the tilt peak is whole-flight; must-not-say list).
+- **Running:** lab batch 15 (bhpzc5mh0, scratchpad lab_batch15.log, tree 8c468bd clean): the detach freeze, 33 runs
+  from R1887. R1890 (A6 r1, planned pull, detection off) FLEET ABORT at landing: the freed drone tipped 80.9 deg 7 s
+  after LAND (after the Delta-theta window): judge with its repeats (card rule: a twin artefact is re-flown once).
+- **Next:** score batch 15 (release_bands metrics, release_transient landing lean, rig_night carry_metrics for T15,
+  drop_metrics, departed_metrics), registry rows, card results, the reviewer; then the appendix batch (54 runs: card
+  2026-10-16_appendix_refly, order in its section 7), then N2 (35 runs). Check the lab PC before every batch.
 - **For Wesley tonight:** the 3 Tier B world files (new, via make_carry_worlds.py); the 1 m band rule; T15's layout
   (even ring chosen); the bars set in his absence (he may change them for later runs).
 
