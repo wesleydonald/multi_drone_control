@@ -340,7 +340,11 @@ def _nodes(context):
                     'attach_ready_target_lead_time': ParameterValue(L('contact_lead'), value_type=float),
                     'pickup_hold_on_attach': True,
                     'pickup_retry_enabled': True,
-                    'pickup_retry_clearance_m': 0.10}
+                    'pickup_retry_clearance_m': 0.10,
+                    # typed only (his twin values otherwise): the rig's match gate in the twin (plan 2026-10-15 N6)
+                    **{k: float(L(arg).perform(context)) for arg, k in (
+                        ('match_xy', 'contact_match_xy_threshold'), ('match_speed', 'contact_match_xy_velocity_threshold'),
+                        ('match_dwell', 'dwell_time_s')) if L(arg).perform(context).strip()}}
                    if contact else {}),
             },
         ])
@@ -759,6 +763,7 @@ def _arguments():
         DeclareLaunchArgument('trim_speed_gate', default_value=''),      # rig: m/s, his trim's learning speed ('' = his 0.08)
         DeclareLaunchArgument('attach_z_lowpass', default_value=''),     # rig: Hz, his target's plate height low-passed ('' = raw)
         DeclareLaunchArgument('match_dwell', default_value=''),          # rig: s, his gates' unbroken hold ('' = his 1.0)
+        DeclareLaunchArgument('match_xy', default_value=''),             # twin: m, his contact match xy gate ('' = his)
         DeclareLaunchArgument('match_speed', default_value=''),          # rig: m/s, his contact match speed gate ('' = 0.15)
         DeclareLaunchArgument('magnet_drop_below_quad', default_value=''),   # QUAD4's, typed (refused untyped)
         DeclareLaunchArgument('proof_rise_max', default_value=''),       # '' = the rig's 0.03

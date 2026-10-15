@@ -233,3 +233,25 @@ def test_the_twin_bridge_takes_the_plate_height_filter_only_when_typed():
                 return params
     assert 'attach_z_lowpass_hz' not in bridge()
     assert bridge(attach_z_lowpass='0.8')['attach_z_lowpass_hz'] == 0.8
+
+
+def test_the_twin_takes_the_rigs_match_gate_only_when_typed():
+    """N6 (plan 2026-10-15): match_xy / match_speed / match_dwell reach his twin planner only when typed."""
+    def planner(**typed):
+        mod = _module()
+        ctx = LaunchContext()
+        ctx.launch_configurations.update({'geometry': 'rig_twin', 'contact_attach': 'true', **typed})
+        mod._record_typed(ctx)
+        for a in mod._arguments():
+            if isinstance(a, DeclareLaunchArgument) and a.name not in ctx.launch_configurations:
+                ctx.launch_configurations[a.name] = a.default_value[0].text if a.default_value else ''
+        for e in mod._nodes(ctx):
+            if isinstance(e, Node) and e._Node__node_name == 'online_join_planner':
+                params = {}
+                for p in evaluate_parameters(ctx, e._Node__parameters or []):
+                    params.update(p if isinstance(p, dict) else {})
+                return params
+    p = planner()
+    assert 'dwell_time_s' not in p and 'contact_match_xy_threshold' not in p
+    p = planner(match_xy='0.05', match_speed='0.15', match_dwell='0.5')
+    assert (p['contact_match_xy_threshold'], p['contact_match_xy_velocity_threshold'], p['dwell_time_s']) == (0.05, 0.15, 0.5)
