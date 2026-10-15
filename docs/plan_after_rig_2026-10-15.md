@@ -28,7 +28,11 @@ Deadline 20 Nov. Branch `overnight-1015` (from week5 48ccad6; today's rig work c
    1.8 Hz) and QUAD4's wander (2-4 cm) are each about the catch size.
 2. **The ring moves the target.** His reference copies the plate's bounce and QUAD4 follows it 0.25 s late (tip vs
    plate 1.6 cm, twice the plate's own); the plate's sideways speed (0.09 m/s rms) keeps his match gate shut.
-3. **At plate height the tip slides off the inner edge** (a1, twice, coil ON): cause not known.
+3. **At plate height the tip falls off the plate's edge.** Every bottom hold on 14-15 Oct (his ATTACH_READY, ring frame,
+   plates 60 mm): the slides (a1 x2, t6h5_3) came with the tip at plate height 3.3-4.3 cm along the ring (+x)
+   from the plate point, past the plate's 30 mm edge; it dropped 4-5 cm and swung toward the ring's hollow centre.
+   The one hold that went on to the proof (t6h_4) arrived 2.2 cm off. A 90 mm disc (45 mm radius) would have had all
+   three slides on the plate. (scratchpad slide_scan.py; the a1 registry row's "cause not known" is superseded.)
 4. **Carrier release** (a2_2, QUAD2 on plate 7, packs at 21.9 V): not explained; the magnets' hold was never measured.
 5. **Operations:** layout errors get flown (a3); QUAD4's straight path can cross a carrier (a1); a drop during his
    flight does not take QUAD4 back on LAND (a2_2); QUAD1/QUAD2 FC `!ERR*` (fc_request, supervisor's OK pending).
