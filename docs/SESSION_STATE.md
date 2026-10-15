@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Fri 16 Oct 2026, 09:37 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Fri 16 Oct 2026, 10:58 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -41,12 +41,18 @@ Updated: Fri 16 Oct 2026, 09:37 AEDT (from `date`). Only what a new session need
   stays armed on top of it: use it only clear of the ring. **Carry claim done** (R1847-R1886): 39/40 pass; spin at
   0.3 m/s fails the tilt bar once (R1875 6.31 deg): outside the envelope; 1 m arm passes; reviewer SUPPORTED WITH
   CORRECTIONS (applied: payload_rmse_m is takeoff+5 s to LAND, the tilt peak is whole-flight; must-not-say list).
-- **Running:** lab batch 15 (bhpzc5mh0, scratchpad lab_batch15.log, tree 8c468bd clean): the detach freeze, 33 runs
-  from R1887. R1890 (A6 r1, planned pull, detection off) FLEET ABORT at landing: the freed drone tipped 80.9 deg 7 s
-  after LAND (after the Delta-theta window): judge with its repeats (card rule: a twin artefact is re-flown once).
-- **Next:** score batch 15 (release_bands metrics, release_transient landing lean, rig_night carry_metrics for T15,
-  drop_metrics, departed_metrics), registry rows, card results, the reviewer; then the appendix batch (54 runs: card
-  2026-10-16_appendix_refly, order in its section 7), then N2 (35 runs). Check the lab PC before every batch.
+- **Detach freeze scored** (R1887-R1919, 2c1985a): T3, T8, T9 (no sign), T15, B1-B3, B5, W4/W5 F1+P1-P4, D1/D4 all
+  confirmed; K1 planned unresolved (K1 measured confirmed on the tool's reading, which with detection off is the freed
+  drone's lean); B4 holds on the measured pull (G150p reached 30.9 before its drop); A6 (planned, detection off) holds
+  the ring at 28 deg and aborts at landing 3/3 (scored as the arm's result). Reviewer running on the four cards.
+- **Corner cutting (Wesley ~10:00, card 2026-10-16_corner_cutting.md):** the plan cuts, the trackers follow (dact =
+  dref within 0.5 mm); circle: the plan carries a ~1 cm shortfall uncorrected; figure-8 shoulders: the plan adds the
+  cut (w_r pulls the rod rate to 0 while the path needs up to 0.27 rad/s at 0.3 m/s). Switches built, off by default:
+  plan_w_pos_scale, plan_w_s_scale, plan_w_r_scale, plan_rate_ff (+ existing ref_time_shift). **Running:** N2 batch 16
+  (blsovaydh, R1920-R1954, tree 98a2b8e), then batch 17 queued (btz7ga08o: base + 5 arms x fig8/circle/orbit
+  at 0.3, 18 runs). Scorer: scratchpad score_cc.py (base R1859/R1863/R1871: ring cut 9.6/29.9/13.0 mm).
+- **Next:** score batch 17 -> report to Wesley; winners: neighbours (0.125/0.2, lift, landing, detach, attach), card,
+  critic, reviewer, his word. Then the appendix batch (54) and N2 scoring (band rule needs his word).
 - **For Wesley tonight:** the 3 Tier B world files (new, via make_carry_worlds.py); the 1 m band rule; T15's layout
   (even ring chosen); the bars set in his absence (he may change them for later runs).
 
