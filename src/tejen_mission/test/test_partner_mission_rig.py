@@ -213,3 +213,23 @@ def test_his_planner_gets_the_ring_pose_for_the_hold_plate_frame():
     """Tejen 15 Oct: the bottom hold's below-the-plate exit and its distances are measured in the plate frame."""
     g, _ = _nodes()
     assert g['online_join_planner']['params']['ring_pose_topic'] == '/payload/motion_capture_state'
+
+
+def test_the_twin_bridge_takes_the_plate_height_filter_only_when_typed():
+    """The sim graph's ring bridge gets attach_z_lowpass_hz as the rig's does (twin check of RIG-1015-a3's switch)."""
+    def bridge(**typed):
+        mod = _module()
+        ctx = LaunchContext()
+        ctx.launch_configurations.update({'geometry': 'rig_twin', 'contact_attach': 'true', **typed})
+        mod._record_typed(ctx)
+        for a in mod._arguments():
+            if isinstance(a, DeclareLaunchArgument) and a.name not in ctx.launch_configurations:
+                ctx.launch_configurations[a.name] = a.default_value[0].text if a.default_value else ''
+        for e in mod._nodes(ctx):
+            if isinstance(e, Node) and e._Node__node_name == 'fake_cooperative_transport_world':
+                params = {}
+                for p in evaluate_parameters(ctx, e._Node__parameters or []):
+                    params.update(p if isinstance(p, dict) else {})
+                return params
+    assert 'attach_z_lowpass_hz' not in bridge()
+    assert bridge(attach_z_lowpass='0.8')['attach_z_lowpass_hz'] == 0.8

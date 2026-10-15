@@ -197,6 +197,9 @@ def _nodes(context):
             'shared_trajectory_refresh_period_s': 1.0,
             # the contact target, rotated by the full ring attitude like our weld point
             **({'bridge_attach_z_m': G['contact_attach_z_m'], 'full_pose_attachment': True} if contact else {}),
+            # the plate height low-passed (Hz), typed only, as on the rig (twin check of RIG-1015-a3's switch)
+            **({'attach_z_lowpass_hz': float(LaunchConfiguration('attach_z_lowpass').perform(context))}
+               if LaunchConfiguration('attach_z_lowpass').perform(context).strip() else {}),
         }])
 
     pendulum = Node(
