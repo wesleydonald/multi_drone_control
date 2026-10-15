@@ -199,3 +199,13 @@ hold-up in rev 2's 3 cm neighbour (one run). See the reviewer below for what may
 - Primary (resolvable in 3 v 3): QUAD4's height response to the plate in 1.2-2.5 Hz per DESCEND / bottom window
   (gain), and MATCH -> first descent time; secondary: tip vs plate sd before the first contact, contacts, proofs.
 - Stop rules as the attach card.
+
+## Zero twist under a slow sideways drift (critic F4; 04:40, exploratory, single runs)
+
+| Drift (0.25 Hz square wave along x) | Raw | Zero twist |
+|---|---|---|
+| 0.4 N (plate range 15 cm) R1827/R1828 | MATCH 35 s; tip vs plate xy median 6.5, p90 9.8 cm | MATCH 35 s; 6.1 / 10.0 cm |
+| 0.05 N (3 cm, rig-like) R1829/R1830 | MATCH 1.0 s; 0.9 / 1.6 cm | MATCH 1.0 s; 1.1 / 2.2 cm |
+
+Falsifier (1.5x the raw error) not met; at the rig-like drift zero twist trails it by 1.2x (median) / 1.4x (p90), the lag
+the critic expected, with the p90 near today's 24 mm catch. A low-passed twist (critic F2) would keep the slow motion.
