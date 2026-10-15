@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Thu 15 Oct 2026, 16:35 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Thu 15 Oct 2026, 23:05 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -19,6 +19,15 @@ Updated: Thu 15 Oct 2026, 16:35 AEDT (from `date`). Only what a new session need
   `~/backups/multi_drone_control_2026-10-12.bundle`. Flight data (`results/`, 34 GB), `docs/papers` and his twin logs
   are local only.
 - **Archive tags:** archive/m1-tiltcut, archive/m1-e0, archive/m1-full, archive/combined-m1, archive/m1-video.
+
+## Overnight 15-16 Oct (Wesley away until the morning: no questions, best option, note why)
+- **Branch `overnight-1015`** (from week5 48ccad6): 1057c7e (the rig day's code, docs, registry rows RIG-1015-*),
+  d4f8ce8 (traj3 configs). Plan: `docs/plan_after_rig_2026-10-15.md` (situation, ranked blockers, Mitch's numbers,
+  work packages A1-A6 / B1-B3 / C1, the overnight queue). Loop: self-paced (ScheduleWakeup), morning report by 07:30.
+- **Running:** B1 on the lab PC (tools/remote/lab_batch.py, background task bj5riimyy, log in the session scratchpad
+  lab_traj3.log): traj3_{circle,spin,fig8,linex,orbit}_v{125,200,300} x2 = R1723-R1752.
+- **Wesley's chat (15 Oct evening):** four quads 98 dB(A): lab stopped them; Mitch aims at four-drone approval by
+  Wed 21 Oct (early slots), no flying Fri; next hardware: bigger discs, 1 m cables, maybe a smaller basket.
 
 ## Now (Thu 15 Oct, 06:59): ready for today's lab (15:00-18:00)
 - **Tree:** week5 at 8862e6d, clean; quick gate passes (1453). Plan `docs/plan_after_rig_2026-10-14.md`: rows 0-8 done
