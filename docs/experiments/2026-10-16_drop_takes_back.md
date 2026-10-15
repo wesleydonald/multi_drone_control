@@ -87,7 +87,7 @@ Falsifier: any bar failing in any switch-on run.
 |---|---|---|---|---|
 | R1753, R1755 | off, drop in MATCH | tracker fault 1.06 s after; his planner flew on (DESCEND, ATTACH_READY); 0.53 m up at the end | 30 s (timeout) | (baseline) |
 | R1757 | off, carrier release in MATCH | fault 1.05 s after; he flew on; 0.50 m up at the end | 30 s | (baseline) |
-| R1754, R1756 | on, drop in MATCH | taken back on the drop's tick, out in 6.7-6.8 s; carrier >= 0.56 m, rods 0.44 m, ring >= 0.29 m; down at its rest | 14.1-14.3 s | 1-4 PASS |
+| R1754, R1756 | on, drop in MATCH | taken back on the drop's tick, out in 6.7-6.8 s; carrier >= 0.56 m, rods 0.31 m [reviewer; 0.44 was the scorer's vertical rods], ring >= 0.29 m; down at its rest | 14.1-14.3 s | 1-4 PASS |
 | R1758 | on, carrier release in MATCH | as above (carrier 0.53 m, ring 0.30 m) | 14.1 s | 1-4 PASS |
 | R1759 | on, drop in ATTACH_READY | taken back; down at its rest, no fault | 17.0 s | 1, 3, 4 PASS; **2 FAIL** |
 
@@ -109,11 +109,42 @@ once the tip is more than 0.15 m from the ring it stays so. Bars 1, 3, 4 unchang
 
 | Run | Arm | At the drop | Until 1.1 m out | End | Bars |
 |---|---|---|---|---|---|
-| R1779, R1780 | on, drop in ATTACH_READY | carrier 0.45 m, tip-rod 0.44 m | never closer; tip never back near the ring | down at its rest, landed 16.9-17.1 s after, no fault | 1, 2 (rev 3), 3, 4 PASS |
+| R1779, R1780 | on, drop in LIFT_PROOF (0.25 s after CONTACT) | carrier 0.45 m, tip-rod 0.22 m [reviewer] | never closer; tip never back near the ring | down at its rest, landed 16.9-17.1 s after, no fault | 1, 2 (rev 3), 3, 4 PASS |
 | R1781 | off, same | same | his planner flew the tip back toward the fallen ring | fault, 30 s timeout, QUAD4 0.52 m up at the end | (baseline) |
 
-**Verdict.** Switch on: 7 runs, every bar passes except R1759's bar 2 as frozen in rev 2 (a bar that did not fit a drop
+**Verdict.** Switch on: 6 runs [reviewer; 7 was a miscount], every bar passes except R1759's bar 2 as frozen in rev 2 (a bar that did not fit a drop
 starting at the plate; scored as a fail, explained above). Switch off (4 runs): the a2_2 hazard every time (tracker
-fault ~1.05 s after the drop, his planner flying QUAD4 on, toward the fallen ring in the bottom case, QUAD4 still
+fault 0.97-1.03 s after the drop [reviewer; 1.05-1.06 s is the reference's age at the fault], his planner flying QUAD4 on, toward the fallen ring in the bottom case, QUAD4 still
 airborne at the 30 s timeout). Next: the reviewer; then Wesley decides the default, the rig use and the locked
 rules' "Open" line.
+
+## Reviewer (16 Oct ~01:35): SUPPORTED WITH CORRECTIONS
+
+Its independent re-score matches the card's mux, out times, carrier and ring clearances, rest and disarm heights,
+faults and drop -> LANDED times. Corrections (applied above where marked):
+1. Tip to the nearest rod: 0.31 m in the MATCH arms (R1754 0.315, R1756 0.313, R1758 0.315) and 0.22 m in the bottom
+   arm (plates 7 and 11 are 0.225 m from plate 9), not 0.44 m: the scorer modelled the rods as hanging straight down.
+   Re-modelled as free pendulums driven by the logged carrier motion, the closest approach is still at the release.
+2. Six switch-on runs, not seven.
+3. The switch-off fault came 0.97-1.03 s after the drop (R1753, R1755, R1781; R1757 1.05 s after the detected drop).
+4. The nearest carrier dipped after the bottom drops (0.45 -> 0.71 -> 0.63 -> 0.99 m) but never below its drop value.
+5. The "ATTACH_READY" drops fired 0.25 s into LIFT_PROOF, after CONTACT (R1759, R1779, R1780).
+6. On this tree MATCH lasted 1.03 s, so "1.0 s into MATCH" fell 21-35 ms before his DESCEND; a drop partway through a
+   long MATCH (a2_2: 1.32 s into a 5.3 s MATCH) was not flown. In R1758 the take-back came after DESCEND.
+7. R1779 and R1780 also fail rev 2's bar 2: the bottom arm's pass rests on rev 3.
+8. In the switch-off MATCH arms too (R1753, R1755) his planner set the tip down on the fallen ring from about +4 s.
+9. On the rig (a2_2) the second LAND came 14.85 s and the DISARM 16.97 s after the drop.
+10. **Twin evidence for critic F1:** in R1781 (switch off) his own GIVE_UP fired 4.4 s before LANDED; a TAKE_BACK was
+    logged but no MUX:ours, and QUAD4 stayed 0.63 m up with its tip on the ring. With the switch off, a GIVE UP after
+    a drop cannot hand QUAD4 over: the operator rule on the sheets does not work.
+11. After the bars' window: QUAD4's rigid twin tether touches the floor at body z 0.60 m and is levered ~0.45 m along it
+    ("still pressing down", R1758); tilt <= 3 deg, no tip-over (a twin landing artefact of the rigid tether).
+12. Not exercised: slack tethers, undamped rod swings, a drop in DESCEND or early in a long MATCH, the rig's release
+    guard (rig only, stands down after any drop), the 60 s /fleet/landed path. The release arm and the bottom
+    switch-off arm are single runs.
+
+What the claim may say (twin only): with drop_takes_back on, in three drop cases (end of MATCH x2, a carrier release
+caught by the tilt rule x1, LIFT_PROOF with the tip on the plate x2 under rev 3, plus R1759 under rev 2), the take-back
+takes QUAD4 on the drop tick, keeps it >= 0.53 m from every carrier and its tip >= 0.31 m (MATCH) / 0.22 m (bottom)
+from the rods until 1.1 m out, and lands it at its rest 14-17 s after the drop with no fault; with the switch off the
+twin reproduces a2_2. It may not say the card passed as frozen (R1759 falsifies rev 2), nor anything about the rig.
