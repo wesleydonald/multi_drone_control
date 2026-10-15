@@ -43,6 +43,7 @@ trajectory:
   plan_w_pos_scale: ''         # '' = 1: multiplier on the planner's load-position weights (card 2026-10-16_corner_cutting)
   plan_w_s_scale: ''           # '' = 1: multiplier on the planner's cable-direction weights (same card)
   plan_w_r_scale: ''           # '' = 1: multiplier on the planner's cable angular-rate weights (same card)
+  plan_rate_ff: ''             # '' = off: zero cable angular-rate reference; true = the rate the flatness directions turn at (same card)
   int_mode: 'auto'             # auto = model where allowed, else reference (bringup real_mode.planner_options; Wesley 5 Oct)
   int_k_xy: 5.26               # N/m, model mode: ring force per metre of integral (rig twin, card 2026-10-04_z_int_model)
   int_k_z: 7.13
