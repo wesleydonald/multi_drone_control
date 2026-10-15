@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Fri 16 Oct 2026, 00:10 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Fri 16 Oct 2026, 01:25 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -37,7 +37,14 @@ Updated: Fri 16 Oct 2026, 00:10 AEDT (from `date`). Only what a new session need
   FAILS bar 2 as frozen (starting geometry; rev 3 relative bar for later runs: bottom_tb x2 + bottom_off x1 queued).
   1 m attach R1760: contact, proof, fold-in, landed (free-hang 1.0405 m). Slide finding in the plan (tip off the
   plate's edge 3.3-4.3 cm along the ring).
-- **Batch 2 running (b7ctlzpk9, scratchpad lab_batch2.log), R1753-R1778:** w4_drop_his_match_{off,tb} x2, w4_release_his_match_{off,tb} x1,
+- **01:25:** batches 2-3 scored (registry to R1789). drop_takes_back: rev 3 bottom runs PASS (R1779/R1780), off
+  arm shows the hazard (R1781); reviewer running. 1 m carry = 0.55 m (R1769-R1778); 1 m attach 2/2. N6: at the rig's
+  0.85 cm plate bounce the filter attached 2/2, the baseline 0/2 (R1782-R1785); card
+  docs/experiments/2026-10-16_plate_height_filter.md (bars frozen 01:20), critic running. Landing tip-over = twin
+  artefact in both arms. Batch 4 running (b7epuuj91, via ~/handoff_2026-10-14/delay_batch.py, scratchpad
+  lab_batch4.log): n6_arm_base/zlp08 x2 more, traj3d_{circle,fig8}_v300_d{015,030,045}. Morning report draft
+  committed (docs/reports/morning_report_2026-10-16.md). Draft carry card 2026-10-16_carry_speed_envelope.md.
+- **Batch 2 (done; b7ctlzpk9, scratchpad lab_batch2.log), R1753-R1778:** w4_drop_his_match_{off,tb} x2, w4_release_his_match_{off,tb} x1,
   w4_drop_his_bottom_tb x1, m1c_floorjoin_hover x2 + _zlp08 x2, m1c_floorjoin_hover_L100 x2, traj3_L100_* x2.
 - **Background agent:** sim results inventory -> docs/analysis/sim_results_inventory_2026-10-16.md.
 - **Wesley's chat (15 Oct evening):** four quads 98 dB(A): lab stopped them; Mitch aims at four-drone approval by
