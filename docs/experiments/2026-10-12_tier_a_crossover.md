@@ -216,6 +216,77 @@ The planned-pull ring holds a steady tilt before and after the release. So in th
 
 Not yet flown: A3, A4 (the announced ramped pair, T2) and T4; Wesley decides them after tonight (decisions.md 12 Oct).
 
+## Rev 3 (Fri 16 Oct, 08:40 AEDT; bars frozen 08:41): the detach freeze claim batch (configs prepared, no runs)
+
+What this revision covers:
+- **Tree:** the detach tables freeze on week5 4b3560e's flight code, flown from day-1016 (decisions.md 16 Oct, (1)).
+- **This batch is the claim** (P13). The 12 Oct T3 runs stay exploratory and are not pooled with it.
+- **What flies:** the T3 re-fly, plus the no-new-code cells of Tier A (inventory N5; decision (10)).
+- **What waits:** the announced pair A3/A4 (T2, T4), for Wesley's leaver rule.
+- **Bars:** the frozen texts stand: T6 (freeze 1.1), the resolution rule (1.2) and the signs (1.5). What is new here is
+  marked new below; FROZEN Fri 16 Oct 08:41, before the runs (set while Wesley is at work; he may change them for later runs only).
+
+| pair | arms (configs) | one variable against the base | n | frozen sign (freeze 1.5), label |
+|---|---|---|---|---|
+| T3 | A1 `ta_a1_r1-3` against A2 `ta_a2_r1-3` (unchanged since 12 Oct) | `cable_source` | 3 + 3 | measured < planned; new prediction |
+| T9 | A5 `ta_a5_r1-3` against A1 | `detach_detect_m: 0.0` (detection off), measured pull | 3 + A1's 3 | pure model: no sign; double-count variant: off < on (Q9); replication |
+| T8 | A6 `ta_a6_r1-3` against A2 | `detach_detect_m: 0.0`, planned pull | 3 + A2's 3 | on < off; new prediction |
+| T15 | A8 `ta_a8_circle60` against A7 `ta_a7_circle60` | `cable_source`, on the 60 deg circle with no event | 2 + 2 | planned < measured (in the twin); replication |
+
+Configs:
+- A5 and A6 are A1 and A2 plus the one line `detach_detect_m: 0.0`. The release dither is the same: 20.0/20.5/21.0 s,
+  with LAND 20 s after.
+- A7 and A8 are the W4 base flown as the rig carry cell RIG-1007-r206e60:
+  - `four_rigid_ground_rig.sdf` (the even ring), orbit r 0.5 m at 0.125 m/s, `traj_hold_s` 5;
+  - rods planned and handed over at 60 deg (the defaults), no event, LAND at 76 s (about two laps).
+- All pass `run_experiment.py --check`. Their typed azimuths were checked against the worlds by hand: the check does
+  not compare them.
+
+**Baselines (run ids, the numbers recomputed with the scorers named below):**
+
+| arm | runs | tree, integral | value |
+|---|---|---|---|
+| A1, A2 | R1706/R1708/R1710; R1707/R1709/R1711 | week5 70d525f, model | Delta-theta 5.37/6.15/6.12; 17.13/17.21/17.02 deg |
+| A5 | R1144 (detection off) against R1140/R1145 (on) | week4 7 Oct, reference | Delta-theta 5.18 against 6.00/6.44 deg; landing lean 5.4 against 2.0 deg |
+| A6 | none (planned pull without a resize never flown) | | |
+| A7 | R1171/R1174 (`w4_orbit_0125_diss`, 60 deg, measured) | safety-defaults 8 Oct | mean xy path error 0.97/0.96 cm |
+| A8 | none at 60 deg; R1105 planned at 45 deg (against R1106 measured at 45 deg) | 7 Oct | 0.72 (against 1.51) cm |
+
+**Pass / fail (new rows frozen 16 Oct 08:41, before the runs):**
+
+| # | bar | rule | why (existing runs) |
+|---|---|---|---|
+| T3 | Delta-theta, event to +15 s | frozen: freeze 1.2 at n = 3 | 12 Oct gap 11.24 deg against a required 1.56 deg |
+| T8, T9 | Delta-theta, event to +15 s | frozen: freeze 1.2. "No sign" (T9) is confirmed when condition 2 or 3 fails, falsified when both hold | R1144 against R1140/R1145 would resolve "off < on" at n = 1 (diff 1.04 deg, ranges 0.44), so T9's no-sign is at risk. P6 (decisions.md 12 Oct (3)) found no double count in the rig logs, so the variant is reported, not credited |
+| K1 (new) | what knowing buys: landing lean (`tools/release_transient.py`, the largest survivor tilt 1.2 s after the ring touches down), on < off, for each pull source (A1 against A5, A2 against A6) | freeze 1.2 with a 1 deg floor | 2.0 against 5.4 deg on 7 Oct |
+| T15 (new metric and floor) | mean xy path error from orbit start + 4 s to LAND: the rig's T7 window, `tools/rig_night.py` `carry_metrics` -> `plus4_to_land.exy_mean_cm`, which reads twin run dirs as they are | freeze 1.2 with the floor in cm: max(0.3 cm, 2 x the larger range) | twin repeat spread today 0.01 cm (R1171/R1174) to 0.24 cm (R1732/R1747); the 7 Oct gap was 0.79 cm |
+
+Reported, not scored:
+- post tilt (`release_bands`);
+- the freed drone's end position outside the rim (with detection off it stays in the formation);
+- the detection delay;
+- the survivors' planned step;
+- for T15, the lap-to-lap sd, the lag (best shift) and the ring height sd.
+
+Exceptions and limits:
+- **Drops and resolution.** An A2 or A6 run that drops the ring (the trackers' 30 deg rule) is scored at the drop,
+  marked ">=". It supports T3 or T8. An unresolved pair is reported as unresolved and is not re-flown.
+- **Twin artefacts.** A solver fault or a twin artefact (the TB14 landing tip-over) is re-flown once.
+- **What T15 can say.** T15 confirmed: in a twin whose model is exact, the planned pull tracks the circle better, so
+  the rig's 8.25 -> 2.91 cm (two changes at once) owes the measured pull to rig-only forces (about 0.55 N inward).
+  T15 unresolved: no twin difference at 60 deg. Either way, T15 is not the rig falsifier K4, which still needs the
+  rig's planned 60 deg circle.
+- **The "must not say" list** under the 12 Oct results still holds for T3 on the freeze tree.
+
+**Open for Wesley (not decided here):**
+- Freeze 1.5's shared conditions name the 120 deg layout. T15's row does not override it, but its replication
+  evidence (R1105/R1106) and the rig cell (r206e60) fly the even ring.
+- A7/A8 fly the even ring. The 3915 layout is one config edit.
+
+Cost, about 50 min of slot time on the lab PC (about 13 min of wall at 4 slots):
+- 6 T3 runs and 6 detection-off runs, at about 4.3 min each;
+- 4 circle runs, at about 5.5 min each.
+
 ## Critic
 
 ### Round 1 (rev 1, 12 Oct 13:34-13:44): the challenge, verbatim

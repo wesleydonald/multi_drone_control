@@ -56,6 +56,11 @@ WORLDS = {
     'four_rigid_ground_rig_3915.sdf': ['--n', '4', '--azimuths', '30,90,150,270'],
     # plates 1/3/6/9: the rig layout r0013 capsized on (soft-detach card, 7 Oct)
     'four_rigid_ground_rig_3969.sdf': ['--n', '4', '--azimuths', '30,90,180,270'],
+    # Tier B (card 2026-10-16_tier_b_support_margin): drone 1 at 90 leaves, survivors 30 / S / 270, so the
+    # survivors' largest gap is S - 30: 120 = _3915, 135, 150 = _3969, 165, 180 (165 and 195 are twin-only azimuths)
+    'four_rigid_ground_rig_gap135.sdf': ['--n', '4', '--azimuths', '30,90,165,270'],
+    'four_rigid_ground_rig_gap165.sdf': ['--n', '4', '--azimuths', '30,90,195,270'],
+    'four_rigid_ground_rig_gap180.sdf': ['--n', '4', '--azimuths', '30,90,210,270'],
     'three_rigid_ground_rig.sdf': ['--n', '3'],
     # ring-mass mismatch neighbours: the planner keeps 0.86 (card A, rig_twin_hover_mismatch*)
     'four_rigid_ground_rig_m070.sdf': ['--n', '4', '--payload-mass', '0.70'],

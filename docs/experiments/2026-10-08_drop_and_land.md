@@ -369,3 +369,43 @@ layout is 11.8 deg unannounced, 10.0 deg announced.
 
 The rig risks are still the ones listed above: the magnet delay, slack and snatch, glitches, and
 whether 30 deg is recoverable.
+
+## Revision v3 (Fri 16 Oct, 08:40 AEDT): D1 and D4 re-flown for the detach freeze (configs prepared, no runs)
+
+Why: the detach tables freeze on week5 4b3560e's flight code, flown from day-1016 (decisions.md 16 Oct). The inventory
+(D4) asks for D1 and D4, 2 each, on the freeze tree.
+
+The configs are new and fly today's defaults. They are the W4 base (`w4_da_release_hover`: departed_land,
+departed_ground_idle, `drop_and_land.yaml`, model integral) with the arm's events:
+
+| arm | config | events | n | 8 Oct runs |
+|---|---|---|---|---|
+| D1 second loss | `dl_d1_second_loss` | RELEASE drone 1 (90 ccw) at 20 s, drone 0 (30 ccw) at 26 s, LAND 46 s | 2 | R1191, R1192 (7ed29c9); R1204, R1209 (week4 port) |
+| D4 bad leaver, 240 deg gap | `dl_d4_gap240` | RELEASE drone 3 (270 ccw, plate 3) at 20 s, LAND 45 s | 2 | R1195, R1196 (7ed29c9) |
+
+How these differ from the 8 Oct configs (`old/w4_3915_release2_drop`, `old/w4_3915_release3_drop`):
+- departed_land is on, as on the rig; the 8 Oct configs pinned it off. So in D1 the first freed drone steps out and
+  lands, and is disarmed alone, before the second loss.
+- departed_ground_idle is on.
+- These are today's defaults, not a new variable: the bars are absolute, and B0 is not re-flown (the reviewer: B0 was
+  never a one-variable baseline).
+
+**Pass / fail: the v2 bars, unchanged (FROZEN Fri 16 Oct 08:41, before the runs (set while Wesley is at work; he may change them for later runs only)).** Each is checked from the trigger
+to the end of the window (`tools/drop_metrics.py`).
+
+| bar | must hold | 8 Oct (R1191, R1192, R1195, R1196, R1204, R1209) |
+|---|---|---|
+| any drone disarmed above 0.2 m | none | none (largest height at disarm 0.13 m) |
+| tracker fault latch before the stand-down | none | none |
+| drone tilt after the trigger | <= 30 deg | <= 13.6 deg |
+| climb after the trigger | <= 0.3 m | <= 0.16 m |
+| every drone down (z < 0.15 m), then /fleet/landed and the disarm | within 15 s | 8.6-8.9 s |
+| the drop fires | D1 at the second loss; D4 at the first | 0.20-0.25 s after the loss |
+
+Reported:
+- which rule fired first (the planner's min_survivors or gap rule, or the trackers' tilt request);
+- peak speed and the closest pair;
+- in D1, the first freed drone's disarm (departed_disarm_alone P1).
+
+The reviewer's caveats stand: "down" means z < 0.15 m, and the margin to the 60 deg latch is thin (0.06-0.12 s in the
+twin).

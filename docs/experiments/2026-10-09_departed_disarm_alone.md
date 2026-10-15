@@ -195,3 +195,36 @@ between them): W4 and W5 twice each, and once each for the rod-tip press, the fo
 P1-P4 hold in all seven. In each run the tracker logs "staying up (disarmed alone; the fleet still flies)", and
 it exits only in the end-of-run teardown. The largest sim step in the 3 s after the disarm is 0.035 s (R1378: 0.54 s).
 The departed drone does not move after its edge (P3: at most 2 mm).
+
+## Detach freeze re-fly (Fri 16 Oct, 08:40 AEDT): the W4 and W5 cells (configs prepared, no runs)
+
+Why: the detach tables freeze on week5 4b3560e's flight code, flown from day-1016 (decisions.md 16 Oct). These runs
+give three things:
+- thesis T13/F16's twin column on the freeze tree;
+- a check that the frozen W4/W5 bands still stand on it;
+- this card's P1-P4 on it.
+
+One variable: none. This is a same-config re-fly on the freeze tree.
+
+| cell | config (unchanged) | n | earlier runs (Delta-theta, event to +15 s, deg) | frozen band (freeze 2.4) |
+|---|---|---|---|---|
+| W4 hover | `w4_da_release_hover` | 2 | R1459 6.12, R1460 5.74, R1626 6.67 (week4); R1686 4.61 (week5) | [1.75, 14.51] |
+| W5 circle | `w4_gi_g2_release_orbit` | 2 | R1457 4.87, R1627 5.91 (week4); R1687 7.36 (week5) | [1.00, 13.20] |
+
+`w4_da_release_hover` is byte-identical to Tier A's `ta_a1_r1` apart from its name and description. The two W4 runs
+may be pooled with A1 r1 (n = 3 at the band's timing); the alternative is to count A1 r1 as one W4 run and fly W4 once.
+**Chosen (08:41): pooled.** W4 is not flown separately; its F1 and P1-P4 are read on A1's three runs (`ta_a1_r1-3`,
+the same config bytes), so the batch saves two runs.
+
+**Pass / fail (FROZEN Fri 16 Oct 08:41, before the runs (set while Wesley is at work; he may change them for later runs only)):**
+
+| # | bar | confirms | falsifies | why |
+|---|---|---|---|---|
+| F1 | Delta-theta (`tools/release_bands.py metrics`) inside its frozen band | every run inside | any run outside: reported in T13 as "the band does not stand on the freeze tree"; the band itself is never recomputed from these runs | 7 of 7 earlier runs inside (4.61-7.36 deg) |
+| P1-P4 | section 5 unchanged (`tools/departed_metrics.py`) | as section 5 | as section 5 | R1411, R1412, R1450, R1451, R1457, R1459: disarm edge 0.19-0.21 s after at rest, z 0.000-0.002 m above rest |
+
+A drift to watch since 3297746 (14 Oct): a departed drone that stalls at most 10 cm above its rest now counts as down.
+The twin's freed drone reached its rest in every run above, so P1's 0.03 m band stays. A disarm 0.03-0.10 m above
+rest is reported as that rule firing in the twin: a change in behaviour to read, not a P1 pass.
+
+Reported for T13: the absolute peak, time back in band, post tilt, detection delay and dip.
