@@ -19,7 +19,8 @@
 | Smaller basket (radius 0.225 -> 0.15 m) with 1 m cables | costs only 0.04 m of QUAD4's room, but the neighbouring rods come 0.23 -> 0.15 m from QUAD4's tether at the ring; twelve 90 mm discs need a radius of at least ~0.18 m (only plates 3, 7, 9 and 11 are used, so fewer plates would allow less) |
 
 ## Simulation, overnight
-- **1 m cables:** the three carriers fly every path at 0.125-0.3 m/s as well as on today's 0.55 m rods, and the full
+- **1 m cables:** the three carriers fly the paths tried (circle, figure-8, line, orbit at 0.125-0.2 m/s) as well as on
+  today's 0.55 m rods (which fly every path up to 0.3 m/s), and the full
   attach (contact, proof, fold-in, landing) works with 1 m cables on all four drones.
 - **Latency:** the carry tolerates 30 ms of extra command delay at 0.3 m/s; 45 ms tips a drone at takeoff.
 
