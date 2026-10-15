@@ -230,7 +230,7 @@ def card_runs(card):
 
 
 def table_land():
-    from land_metrics import land
+    from land_touchdown import land
     sets = [('straight descent', STRAIGHT),
             ('unwind', card_runs('2026-10-04_land_matrix')),
             ('unwind, feedforward ramp, ground idle', card_runs('2026-10-04_land_fix'))]
@@ -278,7 +278,7 @@ def target_shift(rid):
 
 def table_robust():
     """T9. Every cell is the mean of two Gazebo runs (the caption says so; a cell with another n fails)."""
-    from land_metrics import land
+    from land_touchdown import land
     lines = []
     for name, arm, mark in ROBUST:
         r0, r1 = robust_runs(arm, False), robust_runs(arm, True)
