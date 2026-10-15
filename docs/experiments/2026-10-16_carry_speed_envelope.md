@@ -76,7 +76,7 @@ the flight is complete and scored (after the fleet disarmed).
 Against the exploratory read (R1723-R1752): the same picture; its spin at 0.3 m/s peaked at 5.1 deg, so that cell
 sat closest to the bar then too.
 
-## Reviewer (16 Oct ~09:45): SUPPORTED WITH CORRECTIONS (applied above)
+## Reviewer (16 Oct ~09:36): SUPPORTED WITH CORRECTIONS (applied above)
 
 - Every value recomputed from run.csv/events.csv matches; flight code, worlds, configs (sha256) and the parameter
   read-back are one tree; bars unchanged from the draft to the freeze; no abort/drop/fault line in any log; R1875 is a
