@@ -104,3 +104,16 @@ Bar 2 for a drop that starts with QUAD4 at the ring (ATTACH_READY, LIFT_PROOF): 
 out, its body never comes closer to any carrier, and its tip never closer to any rod, than at the drop minus 0.02 m;
 once the tip is more than 0.15 m from the ring it stays so. Bars 1, 3, 4 unchanged. Runs: `w4_drop_his_bottom_tb` x2,
 `w4_drop_his_bottom_off` x1 (record).
+
+## Result (rev 3 runs, 16 Oct ~01:05)
+
+| Run | Arm | At the drop | Until 1.1 m out | End | Bars |
+|---|---|---|---|---|---|
+| R1779, R1780 | on, drop in ATTACH_READY | carrier 0.45 m, tip-rod 0.44 m | never closer; tip never back near the ring | down at its rest, landed 16.9-17.1 s after, no fault | 1, 2 (rev 3), 3, 4 PASS |
+| R1781 | off, same | same | his planner flew the tip back toward the fallen ring | fault, 30 s timeout, QUAD4 0.52 m up at the end | (baseline) |
+
+**Verdict.** Switch on: 7 runs, every bar passes except R1759's bar 2 as frozen in rev 2 (a bar that did not fit a drop
+starting at the plate; scored as a fail, explained above). Switch off (4 runs): the a2_2 hazard every time (tracker
+fault ~1.05 s after the drop, his planner flying QUAD4 on, toward the fallen ring in the bottom case, QUAD4 still
+airborne at the 30 s timeout). Next: the reviewer; then Wesley decides the default, the rig use and the locked
+rules' "Open" line.
