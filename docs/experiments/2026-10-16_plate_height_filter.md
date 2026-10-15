@@ -131,3 +131,20 @@ sd 0.5-1.2 Hz over the shake; time from MATCH to the first descent; QUAD4 height
 0.5-1.2 Hz: how well QUAD4 follows a slow bounce while it waits); the weld.
 Bar: an arm's MATCH-phase rel sd at 0.8 Hz is no more than 20 % above the baseline's (the mean of its two runs);
 the arm that passes rev 2 bar 1 and this bar is the one to fly as a rig A/B.
+
+## Rev 3 result (batch 6, R1818-R1823; 04:00)
+
+As frozen: **inconclusive.** At the rig's amplitude (plate 0.77 cm sd at 0.8 Hz) every arm left MATCH 1.0 s after
+entering it (the slow plate no longer blocks his match gate), so the frozen MATCH-phase metric had ~1 s of data and
+is not computable. Reported instead (not a frozen bar), the rev 2 metric (tip vs plate, his first descent to the first
+contact or 10 s):
+
+| Arm | 0.8 Hz runs | tip vs plate (sd) | vs baseline | contact / weld |
+|---|---|---|---|---|
+| Baseline | R1818, R1821 | 0.96, 0.92 cm | - | none (his give-up, both) |
+| Filter | R1819, R1822 | 1.16, 1.17 cm | +24 % | none (his give-up, both) |
+| Zero twist | R1820, R1823 | 0.88, 0.88 cm | -6 % | both |
+
+Together with rev 2 (1.8 Hz): the filter -35 % at 1.8 Hz but +24 % at 0.8 Hz (critic finding 5 confirmed); zero twist
+-27 % at 1.8 Hz and -6 % at 0.8 Hz, and it removes the match-gate block when the plate moves sideways (rev 2's 3 cm
+neighbour). Candidate for a rig A/B: zero twist, after its own critic.
