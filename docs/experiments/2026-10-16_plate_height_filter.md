@@ -40,6 +40,35 @@ The twin's tether is a rigid rod (the rig's goes slack and its magnet can rest o
 torque, not downwash; QUAD4 in the twin does not wander like the rig's. The claim is: under a rig-sized plate bounce,
 holding QUAD4's height still beats following the bounce late, in the twin.
 
-## Critic
+## Critic (16 Oct ~01:50): rewrite the card. N6's 2/2 vs 0/2 is not evidence.
 
-(below)
+1. **N6's outcome is an artefact, not a better catch.** The twin welds at the instant CONTACT is declared (sim_catch);
+   the contact gate is a 0.3 s least-squares slope (about half a 1.8 Hz period), so it fires near bounce extremes
+   with tip and plate moving fast relative to each other (R1782 ~0.24 m/s, R1785 ~0.1 m/s); the proof's "drift" is
+   then the welded offset minus c0 (the dwell's last 0.1 s mean), against d_ok 6 mm: R1785 passed by 0.6 mm (5.4),
+   R1783's first try failed at 5.5, R1782 inconclusive at 9.7. The arm difference is the bounce phase at the gate.
+   The registry rows' "contacts lost in the proof" (R1782, R1784) is wrong: the logs say PROOF FAILED
+   (inconclusive) with the sim joint attached.
+2. Bars 2 and 3 cannot fail (the filter is a no-op on a still plate; the twin welds at every contact); bar 1 counted
+   R1782-R1785, already seen when it was frozen, and 2 v 2 more passes it with p ~ 0.56 under no effect.
+3. **Rig regression:** his bottom hold's plate-frame tip offset and its "tip sunk below the plate" exit (-0.02 m for
+   0.12 s), and his proof lift's base, read the same attachment_position: the filter's lag (0.5 cm rms, 1.8 max) plus
+   the bounce can make false exits and phase-dependent proof lifts. Rig-only; no twin run exercises it. Fix: filter
+   only the reference (or leave the position raw).
+4. **Untested alternative: the twist.** The bridge publishes a raw 50 Hz finite difference of the plate point as the
+   attachment twist; his reference extrapolates it over a 3 s horizon and his match gate uses it (1.8 Hz, 1.1 cm ->
+   +-0.13 m/s, ~6 cm of reference 0.5 s ahead). His own measured-ring mode publishes a zero twist. One-variable arm:
+   raw position, zero twist.
+5. Below ~1 Hz the filter makes the tip move more against the plate (QUAD4 gain 0.81, 0.25 s delay: 1.31 vs 1.29 at
+   1 Hz, 1.39 vs 0.91 at 0.66 Hz, 1.31 vs 0.71 at 0.5 Hz); N6 shakes only at 1.8 Hz; 1 m cables lower the modes.
+6. Spurious contacts on the rig: a still tip over a bouncing plate is where the slope gate fires at extremes.
+7. The shake is an external square wave; the twin's QUAD4 follows ~1x, not the rig's 2x; the twin differs from the
+   rig in every setting the filter touches (proof_rise_max, contact_dz, bottom hold, catch, require_motion, tether).
+8. Minor: the unit test uses 0.6 Hz (0.8 flies); no ramp-lag test; vz becomes a late derivative.
+9. Process: trees mixed; bars frozen after half the runs; the next-day draft stacks six changes.
+
+**Response (loop, 01:55):** the N6 result is withdrawn as evidence (registry rows R1782-R1785 keep their numbers; this
+card records the correction). Not a default; if it flies again it flies alone as an A/B, and only after finding 3.
+Next: a zero-twist switch (finding 4) in the bridge, typed only, and a rev 2 test that scores the mechanism (the
+tip's motion against the plate before the first contact, inside-and-slow time) on unseen runs, with a slow-shake
+neighbour (finding 5).
