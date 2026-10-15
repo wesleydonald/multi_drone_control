@@ -40,12 +40,18 @@ The 15 Oct sheet's setup block, then these differences (all Wesley's call; the m
 |---|---|---|---|
 | Aim | B (`trim_speed_gate:=0.20`) | B | descents 1.8-3.8 cm median (a1) |
 | Catch radius `K` | 0.024 | 0.045 with 90 mm discs | 22 % -> 49 % of the bottom time inside (8 flights) |
-| QUAD4 tether `L` | 0.575 | the measured length (1 m: `magnet_drop_below_quad`, `mpc_cable_length`, `L` all follow) | room from the carriers 0.45 -> 0.7 m; QUAD4 0.4 m higher over the ring |
-| His match hold | 1.0 s | `match_dwell:=0.5` in `partner_args` | a3_2: 42 s in MATCH without a descent; replay: 0.5 s passes at 1.1 s |
-| Plate height filter | flown once, untested | `attach_z_lowpass:=0.8` in `partner_args` if the twin check (N6) is clean | QUAD4 followed the 1.8 Hz bounce 0.25 s late |
-| Drop take-back | off ("GIVE UP after a drop", which does not work: card 2026-10-16) | `params_file` with `drop_takes_back: true`, if the twin card passes | a2_2 |
+| QUAD4 tether `L` | 0.575 | the measured length (1 m: `magnet_drop_below_quad`, `mpc_cable_length`, `L` all follow) | room from the carriers 0.45 -> 0.7 m; QUAD4 0.4 m higher over the ring; the twin attach passes with 1 m |
+| Drop take-back | off ("GIVE UP after a drop", which does not work: card 2026-10-16) | `params_file:=$C/drop_takes_back.yaml` | a2_2; twin: 8 drop cases pass |
 | Console | READY ignores the layout | `python3 tools/console.py --slot-gate` | a3 flew two plates off |
 | QUAD4's mat | where it was | straight out from plate 9, 1.2 m or more from the ring centre | a1's tether passed 0.10 m from QUAD2 |
+
+**The software change, one at a time (A/B, alternating flights):** zero plate velocity, `attach_twist:=zero` in
+`partner_args`, against today's bridge. Twin (filter card rev 2/3): the tip's bounce against the plate -27 %, QUAD4's
+1.8 Hz height 0.6 -> 0.1 cm, and his match check no longer blocked by the plate's sideways jitter. The plate-height
+filter (`attach_z_lowpass:=0.8`) cut more (-35 %) but must wait until his bottom hold and proof lift read the raw plate
+(critic finding 3, Tejen's code). His match hold (`match_dwell`) stays his 1.0 s.
+
+The hardware rows (discs, tether) change the baseline itself: fly them first, then the A/B on top.
 
 Order as on 15 Oct: props-off console check (c1), then the bench (b2, b2d) if the hardware changed, then attach
 flights scored with `tools/proof_replay.py --catch` and `tools/attach_window.py` (`--catch` = the new K) and
@@ -53,6 +59,7 @@ flights scored with `tools/proof_replay.py --catch` and `tools/attach_window.py`
 
 ## Stop rules (unchanged, plus)
 
-- A drop: GIVE UP at once (or nothing, with drop_takes_back on); never LAND first.
+- A drop: with `drop_takes_back` on, nothing to press (QUAD4 is taken back and landed). Without it GIVE UP does not
+  hand QUAD4 over either (card 2026-10-16): DISARM QUAD4 once it is low and clear of the ring.
 - Two carrier releases in one session: stop and check every carrier magnet's hold (QUAD2 let go on 15 Oct at 21.9 V).
 - QUAD4 hanging ~0.3 m above its mat on its own landing: DISARM it.
