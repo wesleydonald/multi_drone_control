@@ -6,7 +6,8 @@
 - the ring's bounce reaches QUAD4 a quarter of a second late.
 
 The twin has a safe answer for a ring drop during his flight. Nothing tonight changes a default; every change is a
-typed switch or a new file. The full gate passes on the branch.
+typed switch or a new file. The full gate passes on the branch. One bug caught before it reached the rig: from 04:11 to
+05:10 the zero plate velocity switch did nothing in a hover (fixed in 9c04ee3, the affected runs re-flown).
 
 ## Rig findings first (yesterday's bags, re-read overnight)
 
@@ -29,7 +30,8 @@ typed switch or a new file. The full gate passes on the branch.
 | A ring drop during his flight, `drop_takes_back` (off by default) | 8 on, 4 off (R1753-R1759, R1779-R1781, R1815-R1816) | **Switch off:** it reproduces a2_2 every time: our tracker for QUAD4 faults 1 s after the drop, his planner flies on (down onto the fallen ring), the landing waits the 30 s timeout. GIVE UP after a drop cannot hand QUAD4 over either, so the operator rule on the sheets does not work. **Switch on:** QUAD4 is taken back on the drop tick, at least 0.5 m from every carrier, and down at its rest 14-17 s after the drop, with no fault. Every case passes (end of MATCH, early MATCH, DESCEND, a carrier release, at the plate), except one bar that did not fit a drop starting at the plate (R1759, scored a fail). Critic: fix first, done. Reviewer: supported with corrections (twin only). |
 | The ring shaken at the rig's bounce (0.85 cm at 1.8 Hz), his attach | R1800-R1811 (4 per arm, bars frozen before the runs) | Tip's motion against the plate before the first contact: baseline 1.40 cm, **plate-height filter 0.91 cm (-35 %)**, **zero plate velocity 1.02 cm (-27 %)**; all 8 runs below the baseline; -39 % / -29 % on a common window (reviewer). QUAD4's 1.8 Hz height 0.6 -> 0.1 cm with either. As frozen, the filter passed every bar; zero twist failed a confounded bar (the 3 cm, 0.8 Hz neighbour). Weld counts withdrawn (the twin welds at the instant of contact). |
 | Zero plate velocity on a still ring | R1824-R1826 | attach as the baseline (0.55 m x2, 1 m x1): contact, weld, fold-in; no regression |
-| Zero plate velocity under a slow sideways drift (0.25 Hz) | R1827-R1830 | at a 15 cm swing no worse; at a rig-like 3 cm it trails the plate a little (tip error median 1.1 vs 0.9 cm, p90 2.2 vs 1.6): the lag its critic expected; a low-passed twist would keep the slow motion |
+| Zero plate velocity under a slow sideways drift (0.25 Hz, rig-like 3 cm) | R1837, R1840 against 4 raw runs | a little behind the plate: tip error median 1.2-1.3 cm vs raw 0.9-1.1, p90 1.7-2.1 vs 1.6-2.2; both descended after 1.0 s and welded. (The 04:40 drift result was void: the guard bug made both arms raw) |
+| A low-passed plate velocity (0.5 Hz), to keep a slow drift | R1835, R1836, R1839 | at 1.8 Hz as zero twist; under the drift worse than zero twist (median 1.5-1.6 cm): **code removed** (did not beat zero twist) |
 | A slow bounce (0.8 Hz), after the fact | R1812-R1814 (3 cm), R1818-R1823 (rig amplitude) | at 3 cm the baseline and the filter sat in MATCH ~36 s (plate 0.094 m/s sideways: a3_2 again), zero twist descended at once (one run). At the rig's amplitude (post-hoc metric, ~one effective run per arm): the filter worse (+17 to +32 %), zero twist no different (0 to -7 %). Reviewer: supported with corrections, weak at 0.8 Hz |
 | The filter with no shake | R1762-R1765, R1786-R1789 | attach unchanged; the QUAD4 landing tip-over after the fold-in hits both arms (twin artefact) |
 
@@ -44,7 +46,8 @@ typed switch or a new file. The full gate passes on the branch.
    the draft sheet stacked six changes). Your call; what the evidence says:
    - **Zero plate velocity** (`attach_twist:=zero`): replayed on the rig bags with his exact gate, it opens 3 of the 4
      rig MATCH windows that never descended (a3_2: first pass at 4.9 s instead of never). Twin: the tip's bounce
-     against the plate -27 % at 1.8 Hz, no worse at 0.8 Hz, no regression on a still ring (0.55 m and 1 m). Its critic
+     against the plate -27 % at 1.8 Hz, no worse at 0.8 Hz, no regression on a still ring (0.55 m and 1 m), a little
+     behind a slow 3 cm drift (+0.2 cm median). Its critic
      said fix first: done (never zeroed while the ring flies a trajectory, the argument checked, the bridge logs its
      mode, the rig bag records the twist). **Caught at 05:10:** that trajectory guard also fired in a lifted hover, so
      from efb9b5d to 05:10 the switch did nothing, in the twin and on the rig (an A/B would have flown raw against raw).

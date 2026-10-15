@@ -47,7 +47,7 @@ The 15 Oct sheet's setup block, then these differences (all Wesley's call; the m
 
 **The software change, one at a time (A/B, alternating flights), only if the go/no-go in the filter card holds and
 Tejen agrees:** zero plate velocity, `attach_twist:=zero` in `partner_args`, against today's bridge (check the bridge's
-start-up line names the arm). Evidence: on the rig bags it opens a3_2's match check at 4.9 s (raw: never); twin: the
+start-up line names the arm; the tree must contain 9c04ee3: before it the switch did nothing in a lifted hover). Evidence: on the rig bags it opens a3_2's match check at 4.9 s (raw: never); twin: the
 tip's bounce against the plate -27 % at 1.8 Hz, no worse at 0.8 Hz, no regression on a still ring. Draft bars: the
 card (`docs/experiments/2026-10-16_plate_height_filter.md`, "Draft rig A/B"). The plate-height filter waits for his
 bottom hold and proof lift to read the raw plate. His match hold (`match_dwell`) stays his 1.0 s.

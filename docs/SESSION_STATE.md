@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Fri 16 Oct 2026, 05:15 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Fri 16 Oct 2026, 05:48 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -27,10 +27,10 @@ Updated: Fri 16 Oct 2026, 05:15 AEDT (from `date`). Only what a new session need
 - **05:15:** BUG fixed (9c04ee3): efb9b5d's moving-ring guard read the planner's `running` (true in a lifted hover),
   so attach_twist did nothing from 04:11 on, twin and rig. R1824-R1826 (before the guard) valid; R1828, R1830,
   R1831-R1834 flew raw (registry rows say so; the drift 'lag' was spread). attach_twist:=lowpass added (e85bb17).
-  **Running:** lab batch 11 (task bfpt9vtqo, scratchpad lab_batch11.log) on the fixed guard: R1835 n6_arm_twistlp,
-  R1836 n6driftb_twistlp, R1837 n6driftb_twist0, R1838 m1c_floorjoin_hover_twist0 (~05:45). Score: tools/n6_mechanism.py
-  (R1835 vs R1800-R1811), scratchpad score_drift.py (R1836/R1837 vs raw R1829-R1831), events for R1838. Then registry,
-  card + morning report rows, commit, stop the loop (ScheduleWakeup stop + PushNotification) before 07:30.
+  **05:48:** re-fly on the fixed guard: lowpass = zero twist at 1.8 Hz (R1835), worse under a 3 cm drift (R1836,
+  R1839: median 1.5-1.6 vs raw 0.9-1.1, zero 1.2-1.3 in R1837/R1840); lowpass code REMOVED (rule: did not beat), zero
+  twist no regression (R1838). Lab batch 12 (bpjbrawag): R1839-R1841 done, R1842 (lowpass 1.8 Hz repeat, old tree)
+  finishing; then registry R1839-R1842, quick gate, commit, morning report final, stop the loop. No more lab runs.
 - **Built tonight (all off by default, gate --quick 1464 pass):** 35d2b86 console --slot-gate; ab6fd18 his
   match_dwell/match_speed typed args + tools/match_gate_replay.py (reproduces a1's descents); 8d2036c filter in the
   twin bridge + m1c_floorjoin_hover_zlp08; cca8803 three_rigid_ground_rig_L100.sdf + traj3_L100_*; 6856cf8

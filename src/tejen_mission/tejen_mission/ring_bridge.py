@@ -51,8 +51,6 @@ class RingBridge(FakeCooperativeTransportWorld):
         self._ring_q = None              # its attitude (w, x, y, z)
         self._zf = None                  # attach_z_lowpass_hz: the two filter stages, and when they ran
         self._zf_t = None
-        self._vf = None                  # attach_twist 'lowpass': the twist's two filter stages, and when they ran
-        self._vf_t = None
         super().__init__()
         self.create_subscription(String, '/payload/trajectory_state', self._traj_cb, 5)
         self.create_subscription(MotionCaptureState, '/payload/motion_capture_state',
@@ -65,8 +63,7 @@ class RingBridge(FakeCooperativeTransportWorld):
             f'{tejen_plate(self.ring_attachment_plate_index)} (his {self.ring_attachment_plate_index})')
         # the typed switches, so a run's log says which arm it flew (RIG-1015-a2_2 flew without its intended filter)
         self.get_logger().info(
-            f"[ring_bridge] attachment twist: {str(self._param('attach_twist', '')).strip() or 'raw'}"
-            f"{' at %.2f Hz' % float(self._param('attach_twist_hz', 0.5)) if str(self._param('attach_twist', '')).strip() == 'lowpass' else ''}; plate height "
+            f"[ring_bridge] attachment twist: {str(self._param('attach_twist', '')).strip() or 'raw'}; plate height "
             f"low-pass: {float(self._param('attach_z_lowpass_hz', 0.0)) or 'off'}")
 
     # ── inputs ────────────────────────────────────────────────────────────────
@@ -165,37 +162,15 @@ class RingBridge(FakeCooperativeTransportWorld):
         """attach_twist 'zero' (typed only; '' = the base's 50 Hz finite difference): a zero attachment twist, as his
         measured-ring mode publishes. His reference extrapolates this twist over its horizon and his match gate compares
         QUAD4's velocity with it; differenced from the raw ring pose it carried the 1.8 Hz bounce (+-0.13 m/s, RIG-1015-a1)
-        and 0.09 m/s of sideways jitter (a3_2). 'lowpass' keeps a slow drift (below). Hover only: a moving ring needs its
-        velocity."""
+        and 0.09 m/s of sideways jitter (a3_2). Hover only: a moving ring needs its velocity."""
         mode = str(self._param('attach_twist', '')).strip().lower()
-        # 'running' is also true in a hover once the lift tops out (the trajectory clock runs): R1824-R1834 flew raw
+        # 'running' is also true in a hover once the lift tops out (the trajectory clock runs): R1828-R1834 flew raw
         st = getattr(self, '_traj_state', None) or {}
         moving = (bool(st.get('running', False)) and str(st.get('kind', 'hover')) != 'hover'
                   and float(st.get('speed', 0.0) or 0.0) > 0.0)
         if mode == 'zero' and not moving:
             return 0.0, 0.0, 0.0, 0.0
-        raw = FakeCooperativeTransportWorld.finite_difference_attachment_twist(self, t, payload_state, attachment_xyz)
-        if mode == 'lowpass' and not moving:
-            return self._lowpass_twist(t, raw)
-        self._vf = None
-        return raw
-
-    def _lowpass_twist(self, t, raw):
-        """attach_twist 'lowpass': the twist's x, y, z through two first-order lags at attach_twist_hz (0.5): the 1.8 Hz
-        bounce and the jitter go, a slow ring drift stays in his feed-forward and gates (zero-twist critic F2)."""
-        fc = float(self._param('attach_twist_hz', 0.5))
-        v = [float(c) for c in raw[:3]]
-        if self._vf is None or t - self._vf_t > 0.5 or t <= self._vf_t:
-            self._vf, self._vf_t = [list(v), list(v)], t
-            return raw
-        dt = t - self._vf_t
-        a = dt / (1.0 / (2.0 * math.pi * fc) + dt)
-        f1, f2 = self._vf
-        for i in range(3):
-            f1[i] += a * (v[i] - f1[i])
-            f2[i] += a * (f1[i] - f2[i])
-        self._vf_t = t
-        return f2[0], f2[1], f2[2], raw[3]
+        return FakeCooperativeTransportWorld.finite_difference_attachment_twist(self, t, payload_state, attachment_xyz)
 
     def _lowpass_z(self, z: float) -> float:
         """attach_z_lowpass_hz > 0 (0 = off): the plate height through two first-order lags at that cutoff. On

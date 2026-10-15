@@ -87,37 +87,3 @@ def test_zero_twist_never_while_the_ring_flies_a_trajectory():
                   {'running': True, 'kind': 'hover', 'speed': 0.0}):      # a lifted hover: the trajectory clock runs
         s._traj_state = hover
         assert RingBridge.finite_difference_attachment_twist(s, 1.02, state, (0.0, 0.0, 1.002)) == (0.0, 0.0, 0.0, 0.0)
-
-
-def test_lowpass_twist_keeps_a_slow_drift_and_cuts_the_bounce():
-    """attach_twist 'lowpass' at 0.5 Hz (zero-twist critic F2): a 1.8 Hz velocity is cut to under a fifth, a 0.1 Hz
-    drift velocity passes at over 0.9."""
-    for f, lo, hi in ((1.8, 0.0, 0.2), (0.1, 0.9, 1.05)):
-        s, _ = _stub(0.0)
-        s._vf, s._vf_t = None, None
-        s._param = lambda name, default: 'lowpass' if name == 'attach_twist' else default
-        out = []
-        for k in range(int(40.0 / DT)):
-            t = 100.0 + k * DT
-            v = math.sin(2 * math.pi * f * t)
-            out.append(RingBridge._lowpass_twist(s, t, (v, 0.0, 0.0, 0.0))[0])
-        tail = np.array(out[len(out) // 2:])
-        amp = tail.std() * math.sqrt(2)
-        assert lo <= amp <= hi, (f, amp)
-
-
-def test_lowpass_twist_only_in_hover():
-    """attach_twist 'lowpass' leaves the twist raw while the ring flies a trajectory."""
-    from tejen_mission.fake_cooperative_transport_world import FakeCooperativeTransportWorld as Base
-    raw = (0.1, -0.2, 0.05, 0.0)
-    orig = Base.finite_difference_attachment_twist
-    Base.finite_difference_attachment_twist = lambda self, t, p, a: raw
-    try:
-        s, _ = _stub(0.0)
-        s._vf, s._vf_t = None, None
-        s._param = lambda name, default: 'lowpass' if name == 'attach_twist' else default
-        s._traj_state = {'running': True, 'kind': 'circle', 'speed': 0.125}
-        for k in range(50):
-            assert RingBridge.finite_difference_attachment_twist(s, 100.0 + k * DT, None, None) == raw
-    finally:
-        Base.finite_difference_attachment_twist = orig

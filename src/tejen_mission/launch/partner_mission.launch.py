@@ -211,8 +211,6 @@ def _nodes(context):
                if LaunchConfiguration('attach_z_lowpass').perform(context).strip() else {}),
             **({'attach_twist': LaunchConfiguration('attach_twist').perform(context).strip()}
                if LaunchConfiguration('attach_twist').perform(context).strip() else {}),
-            **({'attach_twist_hz': float(LaunchConfiguration('attach_twist_hz').perform(context))}
-               if LaunchConfiguration('attach_twist_hz').perform(context).strip() else {}),
         }])
 
     pendulum = Node(
@@ -538,7 +536,6 @@ def _rig_nodes(context):
             **({'attach_z_lowpass_hz': f('attach_z_lowpass', 0.0)} if 'attach_z_lowpass' in typed else {}),
             # a zero attachment twist ('' = raw finite difference; card 2026-10-16_plate_height_filter, critic F4)
             **({'attach_twist': val('attach_twist', '')} if 'attach_twist' in typed else {}),
-            **({'attach_twist_hz': f('attach_twist_hz', 0.5)} if 'attach_twist_hz' in typed else {}),
         }])
 
     # his inputs from our mocap node (the only Motive owner): his IRL publisher's outputs, under /tejen
@@ -771,8 +768,7 @@ def _arguments():
         DeclareLaunchArgument('attach_z_lowpass', default_value=''),     # rig: Hz, his target's plate height low-passed ('' = raw)
         DeclareLaunchArgument('match_dwell', default_value=''),          # rig: s, his gates' unbroken hold ('' = his 1.0)
         DeclareLaunchArgument('match_xy', default_value=''),             # twin: m, his contact match xy gate ('' = his)
-        DeclareLaunchArgument('attach_twist', default_value='', choices=['', 'zero', 'lowpass']),   # the bridge's twist: zero in hover, or low-passed ('' = raw)
-        DeclareLaunchArgument('attach_twist_hz', default_value=''),      # attach_twist lowpass cutoff ('' = 0.5 Hz)
+        DeclareLaunchArgument('attach_twist', default_value='', choices=['', 'zero']),   # 'zero': the bridge's twist zero in hover ('' = raw)
         DeclareLaunchArgument('match_speed', default_value=''),          # rig: m/s, his contact match speed gate ('' = 0.15)
         DeclareLaunchArgument('magnet_drop_below_quad', default_value=''),   # QUAD4's, typed (refused untyped)
         DeclareLaunchArgument('proof_rise_max', default_value=''),       # '' = the rig's 0.03
