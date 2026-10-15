@@ -6,7 +6,7 @@
 - the ring's bounce reaches QUAD4 a quarter of a second late.
 
 The twin has a safe answer for a ring drop during his flight. Nothing tonight changes a default; every change is a
-typed switch or a new file. The full gate passes on the branch. One bug caught before it reached the rig: from 04:11 to
+typed switch or a new file. The full gate (SIL included) passes on the final tree (99ad8c7, 05:53). One bug caught before it reached the rig: from 04:11 to
 05:10 the zero plate velocity switch did nothing in a hover (fixed in 9c04ee3, the affected runs re-flown).
 
 ## Rig findings first (yesterday's bags, re-read overnight)

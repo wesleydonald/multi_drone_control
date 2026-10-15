@@ -30,7 +30,7 @@ Updated: Fri 16 Oct 2026, 05:55 AEDT (from `date`). Only what a new session need
   **05:55 (overnight done):** re-fly on the fixed guard: lowpass = zero twist at 1.8 Hz (R1835, R1842), worse under
   a 3 cm drift (R1836, R1839: median 1.5-1.6 vs raw 0.9-1.1 in R1829-R1831/R1841, zero 1.2-1.3 in R1837/R1840):
   lowpass code removed (b0398f6); zero twist no regression (R1838). Registry to R1842. No lab runs left; the lab PC is
-  free. Full gate on the final tree running (bro6z1kzh, scratchpad gate_full_0550.log). Morning report final:
+  free. Full gate PASSES on the final tree (99ad8c7, 05:53). Loop stopped. Morning report final:
   `docs/reports/morning_report_2026-10-16.md` (8 decisions). Next: Wesley's decisions; nothing runs.
 - **Built tonight (all off by default, gate --quick 1464 pass):** 35d2b86 console --slot-gate; ab6fd18 his
   match_dwell/match_speed typed args + tools/match_gate_replay.py (reproduces a1's descents); 8d2036c filter in the
