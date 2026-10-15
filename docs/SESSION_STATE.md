@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Fri 16 Oct 2026, 04:20 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Fri 16 Oct 2026, 04:43 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -24,9 +24,11 @@ Updated: Fri 16 Oct 2026, 04:20 AEDT (from `date`). Only what a new session need
 - **Branch `overnight-1015`** (from week5 48ccad6): 1057c7e (the rig day's code, docs, registry rows RIG-1015-*),
   d4f8ce8 (traj3 configs). Plan: `docs/plan_after_rig_2026-10-15.md` (situation, ranked blockers, Mitch's numbers,
   work packages A1-A6 / B1-B3 / C1, the overnight queue). Loop: self-paced (ScheduleWakeup), morning report by 07:30.
-- **Running:** B1 on the lab PC (tools/remote/lab_batch.py, background task bj5riimyy, log in the session scratchpad
-  lab_traj3.log): traj3_{circle,spin,fig8,linex,orbit}_v{125,200,300} x2 = R1723-R1752 (first 8: RMSE 8-19 mm, tilt
-  < 2.6 deg, all landed). Scorer: scratchpad score_traj3.py.
+- **Running (04:43):** lab batch 10 (task b4sp6rou2, scratchpad lab_batch10.log): attach_twist:=lowpass (new, typed
+  only, 0.5 Hz, hover only; critic F2) on the rig-like drift, the 1.8 Hz and 0.8 Hz shakes and a still ring =
+  R1831-R1834 (scorers: drift = scratchpad drift scorer as R1829/R1830, score_n6.py, score_rev3.py). Quick gate on the
+  laptop (bj0mway6y). Then: score, registry rows, card note, commit, finalise the morning report, stop the loop
+  (ScheduleWakeup stop + PushNotification) before 07:30; lab PC free by 06:30.
 - **Built tonight (all off by default, gate --quick 1464 pass):** 35d2b86 console --slot-gate; ab6fd18 his
   match_dwell/match_speed typed args + tools/match_gate_replay.py (reproduces a1's descents); 8d2036c filter in the
   twin bridge + m1c_floorjoin_hover_zlp08; cca8803 three_rigid_ground_rig_L100.sdf + traj3_L100_*; 6856cf8

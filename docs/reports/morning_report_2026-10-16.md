@@ -64,17 +64,18 @@ typed switch or a new file. The full gate passes on the branch.
    (`docs/experiments/2026-10-16_carry_speed_envelope.md`) needs your bars.
 8. **Back up `results/`** (34 GB, laptop only), before the freeze batch.
 
-## What is on the branch (from 48ccad6)
+## What is on the branch (from 48ccad6; about 50 commits, the main ones)
 
 | Commit(s) | What |
 |---|---|
 | 1057c7e | 15 Oct rig work: free_hover circle, plate-height filter, console 22.6 V rule, QUAD4 FC backup, the day's registry rows |
 | 33334ea, 53dcca3, ba6c97d | Plan after 15 Oct: blockers ranked from the data, Mitch's numbers, the queue |
 | 35d2b86 | Console `--slot-gate` (off by default) |
-| ab6fd18 | His match hold and speed as typed args; `tools/match_gate_replay.py` |
+| ab6fd18, 66a701c | His match hold and speed as typed args (rig and twin); `tools/match_gate_replay.py` |
 | cca8803, 6856cf8 | Twin worlds and configs with 1 m cables (new files only), his geometry `rig_twin_L100` |
 | bad76e3, 0038c1a, 42d81fe, 0a3ac30, 8694f95 | `drop_takes_back` (off by default) and its card (critic, three revisions, reviewer) |
-| 8d2036c, 66a701c, e9ff80a | The filter, the match gate and a zero plate velocity typed into his twin and rig launch; `tools/n6_mechanism.py` |
+| 8d2036c, e9ff80a, efb9b5d | The plate-height filter and the zero plate velocity, typed into his twin and rig launch; after the critic: never zero while the ring flies, the bridge logs its mode, the rig bag records the twist; `tools/n6_mechanism.py` |
+| 83a2c75, 8ded848, 6f26708, 040341b, 13e6ee2 | The filter card: revs 2 and 3, the reviewer, the zero-twist critic and the drift check |
 | d4f8ce8, e96ae68, b786e8f, 9ac6232 | The trajectory, 1 m and latency matrices and their notes |
 | 26ac24f | The thesis sim-results inventory |
-| d34c421, 7af0260, 217c5d7 | Drafts: the next lab day's sheet, the carry claim card, the brief for Mitch |
+| d34c421, 9ca9b28, 44cf72c, 7af0260, 217c5d7 | Drafts: the next lab day's sheet, the carry claim card, the brief for Mitch |

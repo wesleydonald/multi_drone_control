@@ -75,11 +75,11 @@ A 90 mm disc doubles the time the magnet can catch. It also forgives the inward 
 | # | Package | Why | Status | Evidence |
 |---|---|---|---|---|
 | A1 | Next week's hardware in the twin: 1 m cables (carriers, QUAD4), bigger catch | the next rig day flies them; the stack's geometry, his parameters and the gates must be ready | done: 1 m carry = 0.55 m (R1769-R1778), 1 m attach 2/2 (R1760, R1761) | cca8803, 6856cf8 |
-| A2 | A drop during his flight takes QUAD4 back (behind a switch, critic, twin) | a2_2: QUAD4 flew on toward the dropped ring | twin card done (rev 3): on passes, off = a2_2's hazard; reviewer running | bad76e3, 42d81fe |
+| A2 | A drop during his flight takes QUAD4 back (behind a switch, critic, twin) | a2_2: QUAD4 flew on toward the dropped ring | done (twin): 8 on runs pass, off = a2_2's hazard; reviewer SUPPORTED WITH CORRECTIONS; rig use is Wesley's decision (morning report 2) | bad76e3, 42d81fe, 0a3ac30, 8694f95 |
 | A3 | The console refuses ARM on a SLOT OFFSET over 30 deg | a3 flew two plates off | done (`--slot-gate`, off by default) | 35d2b86 |
 | A4 | His match gate: typed-only dwell (default his 1.0 s) | a3_2: 42 s without a descent; replay: 0.5 s passes at 1.1 s | done (`match_dwell`, `match_speed` typed only; replay tool) | ab6fd18 |
-| A5 | The plate-height filter (attach_z_lowpass) through the twin | flown on the rig with critic and twin waived | no regression unshaken; at the rig's bounce 2/2 vs 0/2 (N6); card + critic | 8d2036c, 38ce97c |
-| A6 | Rig sheet for the next lab day (four quads, early slot, new hardware) | | after A1-A5 | |
+| A5 | The plate-height filter (attach_z_lowpass) through the twin | flown on the rig with critic and twin waived | twin done: -35 % tip bounce at 1.8 Hz, worse at 0.8 Hz (reviewer: weak there); needs his bottom hold on the raw plate first: not for the next lab day. Zero plate velocity (`attach_twist:=zero`): -27 % at 1.8 Hz, opens a3_2's gate on the bag, critic fixes done; a low-passed twist (critic F2) in the twin (R1831-R1834) | 8d2036c, e9ff80a, efb9b5d, 13e6ee2 |
+| A6 | Rig sheet for the next lab day (four quads, early slot, new hardware) | | draft: `docs/rig/next_lab_day_draft.md` (date, hardware and Wesley's decisions to fill in) | d34c421, 9ca9b28, 44cf72c |
 | B1 | Carry on every trajectory x 3 speeds, three carriers (twin) | Wesley's rig plan for 15 Oct, thesis carry table | done: 30/30 clean (docs/analysis/traj3_2026-10-15.md); draft claim card | d4f8ce8, e96ae68, 7af0260 |
 | B2 | Inventory of thesis-ready sim results, stale vs current code, figure plan | thesis | done: docs/analysis/sim_results_inventory_2026-10-16.md | 26ac24f |
 | B3 | Carry with 1 m cables vs 0.55 (twin) | design result for the thesis and Mitch | done: same within noise | b786e8f |

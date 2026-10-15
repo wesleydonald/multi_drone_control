@@ -182,7 +182,8 @@ hold-up in rev 2's 3 cm neighbour (one run). See the reviewer below for what may
    reproduced the block at the rig's amplitude (no mocap jitter there).
 2. With a zero twist the relative-velocity guards (match gate, descent abort, the hold's gross exit) become QUAD4-speed
    guards; ring motion is then caught only by the xy limits (R1814 sat 26 s over a ring moving 3 cm). Open; the
-   better variable may be a low-passed twist (keeps slow ring motion). Not built.
+   better variable may be a low-passed twist (keeps slow ring motion). Built 04:40, typed only (`attach_twist:=lowpass`,
+   `attach_twist_hz`, 0.5 Hz, two first-order lags, hover only): see the end of the card.
 3. Moving ring: fixed (efb9b5d): never zero while the ring's trajectory runs; unit test.
 4. The slow end (ring drift ~0.25 Hz, the 1 m hardware's lower modes) is untested: open (twin follow-ups).
 5. The A/B had no frozen bars: draft below, for Wesley to freeze before the lab day.
