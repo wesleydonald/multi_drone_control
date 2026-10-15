@@ -96,3 +96,10 @@ reported with it: QUAD4's height sd in 1.2-2.5 Hz, the time inside the catch (xy
 
 Falsifier for each arm: bar 1 failing. Only an arm passing bars 1-3 goes on to a rig A/B (alone, alternating with
 raw), and the filter only after critic finding 3 (the hold and the proof base on the raw plate).
+
+## Rev 1 result (batch 4, R1790-R1793; superseded, recorded)
+
+Rev 1 bar 1 (welds): the filter welded in 2 of 4 (R1783, R1785 yes; R1791, R1793 no), the baseline in 0 of 4: FAIL
+as frozen (needs 3 of 4), the outcome the critic predicted for a weld count. The mechanism metric favoured the filter
+in all four pairs (tip vs plate 0.88-0.97 vs 1.37-1.41 cm; QUAD4 1.8 Hz height 0.12 vs 0.61 cm; inside and slow 20-22
+vs 9 %), but these runs were seen before rev 2 and are excluded from it.
