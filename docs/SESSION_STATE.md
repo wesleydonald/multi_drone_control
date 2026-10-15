@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Fri 16 Oct 2026, 08:20 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Fri 16 Oct 2026, 08:47 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -34,11 +34,18 @@ Updated: Fri 16 Oct 2026, 08:20 AEDT (from `date`). Only what a new session need
   twin column R1712/R1713 (against the recommendation: different integral from the rig flight, caption says so);
   push-abort bar = QUAD4's own clearance (new runs only).
 - **Lab PC:** usable now, but someone may need it soon: check `who`/load/containers before every batch and yield.
-- **Built (uncommitted until the gate):** console his LAND button (+2 tests), harness event HIS_LAND, configs
-  w4_drop_his_match_hisland / w4_drop_his_bottom_hisland (exploratory, switch off, his LAND 1 s after the drop).
-- **Order of work:** commit; lab batch: the two his-LAND runs + the carry claim (traj3 x2 per cell + traj3_L100 x2,
-  card 2026-10-16_carry_speed_envelope, bars frozen); then Tier A cells (card rev first), Tier B (worlds, card), N2 1 m
-  bands, N3/appendix re-fly; T11/T12 wait for the join tree.
+- **Commits on day-1016:** 5375333 (decisions, his LAND button, HIS_LAND harness event, his-LAND configs), 83a7088
+  (detach freeze cards + configs + 3 Tier B worlds, bars frozen 08:41 while Wesley is at work; N2 1 m configs and
+  band draft), e836cf3 (sheet). Registry rows to R1856 (uncommitted).
+- **Results:** his LAND after a drop (R1844-R1846): straight down onto the fallen ring; after a drop at the plate QUAD4
+  stays armed on top of it: use it only clear of the ring. Carry claim 0.125 m/s: 10/10 bars PASS (R1847-R1856).
+- **Running:** lab batch 14 (bcy3nvay1, scratchpad lab_batch14.log): carry claim 0.2/0.3 x2 + the 1 m arm x2 (30
+  runs, R1857-R1886), tree e836cf3 (flight code = 4b3560e). Helper: appendix re-fly plan (card + app_* configs).
+- **Next:** score batch 14 (bars 1-4; the 1 m arm also RMSE <= 1.5x its 0.55 m cell); then the detach freeze batch
+  (Tier A rev 3 12 runs, Tier B 10 (+1 optional), circle60 4, W5 2, D1/D4 4; W4 pooled with A1); then N2 (35 runs);
+  then the appendix re-fly. Reviewer on each final table. Check the lab PC before every batch.
+- **For Wesley tonight:** the 3 Tier B world files (new, via make_carry_worlds.py); the 1 m band rule; T15's layout
+  (even ring chosen); the bars set in his absence (he may change them for later runs).
 
 ## 14 Oct rig day in short (detail: registry RIG-1014-*, `git log -p` of this file)
 - 46 launches: 8 passed, 11 failed in flight, 11 arm refusals (QUAD1/QUAD2 FC attitude drift), the rest void.
