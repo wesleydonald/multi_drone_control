@@ -172,3 +172,30 @@ hold-up in rev 2's 3 cm neighbour (one run). See the reviewer below for what may
   frozen test, that either switch improves attaching (the weld counts are the twin's catch artefact), "no aborts",
   that the twin's repeats measure spread, or anything about the rig without the slack-tether and downwash caveats.
   Whether to A/B zero twist on the rig is Wesley's decision.
+
+## Critic on zero twist as a rig A/B (16 Oct ~04:20): fix first. Response (04:35)
+
+1. *The free rig falsifier was never run* -> run (`tools/match_gate_replay.py --zero-twist`, his exact gate on the
+   rig bags): zero target velocity opens 3 of the 4 long-blocked rig MATCH windows: a3_2 (42 s, raw: at best one
+   marginal pass) first pass at 4.9 s, 8 passes; t6f2_4's third (16.7 s, raw: never) at 1.0 s; t6g_2's second (27.8 s,
+   raw: never) at 20.7 s; not t6h5_3's second (16.2 s: the xy half fails, both true 11 -> 26 %). The twin never
+   reproduced the block at the rig's amplitude (no mocap jitter there).
+2. With a zero twist the relative-velocity guards (match gate, descent abort, the hold's gross exit) become QUAD4-speed
+   guards; ring motion is then caught only by the xy limits (R1814 sat 26 s over a ring moving 3 cm). Open; the
+   better variable may be a low-passed twist (keeps slow ring motion). Not built.
+3. Moving ring: fixed (efb9b5d): never zero while the ring's trajectory runs; unit test.
+4. The slow end (ring drift ~0.25 Hz, the 1 m hardware's lower modes) is untested: open (twin follow-ups).
+5. The A/B had no frozen bars: draft below, for Wesley to freeze before the lab day.
+6. Mislabelling: fixed (efb9b5d): `choices` on the argument, the bridge's start-up line names both switches, the rig
+   bags record /fake_attachment_point/twist.
+7. It changes what his gates measure: logged in CHANGES_FROM_TEJEN.md; Tejen should agree before it flies.
+
+### Draft rig A/B (not frozen; Wesley freezes before the lab day)
+
+- Go/no-go, on the new hardware's first two attach flights with the raw bridge: fly the A/B only if (a) plate 9 still
+  bounces >= 0.5 cm sd in 1.2-2.5 Hz with QUAD4's height following it (gain >= 0.5), or (b) a MATCH window over 10 s
+  where the speed half of his gate fails more often than the xy half (replay).
+- Arms alternate raw / zero twist, 3 flights each, the same packs order.
+- Primary (resolvable in 3 v 3): QUAD4's height response to the plate in 1.2-2.5 Hz per DESCEND / bottom window
+  (gain), and MATCH -> first descent time; secondary: tip vs plate sd before the first contact, contacts, proofs.
+- Stop rules as the attach card.
