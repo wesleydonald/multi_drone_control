@@ -60,7 +60,11 @@ WORLDS = {
     # ring-mass mismatch neighbours: the planner keeps 0.86 (card A, rig_twin_hover_mismatch*)
     'four_rigid_ground_rig_m070.sdf': ['--n', '4', '--payload-mass', '0.70'],
     'four_rigid_ground_rig_m100.sdf': ['--n', '4', '--payload-mass', '1.0'],
+    # 1 m cables (the supervisor's hardware for the week of 19 Oct; plan 2026-10-15 A1)
+    'three_rigid_ground_rig_L100.sdf': ['--n', '3'],
 }
+# per-world options that override RIG_ARGS (passed after them)
+WORLD_OVERRIDES = {'three_rigid_ground_rig_L100.sdf': ['--cable-len', '1.0']}
 RIG_ARGS = ['--cable-len', str(CABLE_LEN), '--detachable', '--ground-start',
             '--attach-radius', str(ATTACH_RADIUS), '--pivot-dz', str(PIVOT_DZ),
             '--rod-mass', str(ROD_MASS), '--magnet-mass', str(MAGNET_MASS),
@@ -104,7 +108,7 @@ def generate(out_dir):
             f.write(text)
         written.append(rel)
     for name, args in WORLDS.items():
-        subprocess.run([sys.executable, GEN, *args, *RIG_ARGS,
+        subprocess.run([sys.executable, GEN, *args, *RIG_ARGS, *WORLD_OVERRIDES.get(name, []),
                         '--out', os.path.join(out_dir, name)],
                        check=True, cwd=ASSETS, stdout=subprocess.DEVNULL)
         written.append(name)

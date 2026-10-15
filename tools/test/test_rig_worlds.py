@@ -51,7 +51,9 @@ def test_rig_world_reads_back_the_rig_geometry(name):
     g = world_geometry(ASSETS / name)
     args = mcw.WORLDS[name]
     mass = float(args[args.index('--payload-mass') + 1]) if '--payload-mass' in args else 0.86
-    for k, v in dict(mcw.EXPECT, load_mass=mass).items():
+    late = mcw.WORLD_OVERRIDES.get(name, [])
+    cable = float(late[late.index('--cable-len') + 1]) if '--cable-len' in late else mcw.CABLE_LEN
+    for k, v in dict(mcw.EXPECT, load_mass=mass, cable_len=cable).items():
         assert abs(g[k] - v) < 1e-4, f'{name}: {k} {g[k]:.4f} != {v}'
     assert not [k for k in g if k.startswith('_warn')], g
     # ring inertia from load_mass: outer 0.255, inner 0.195, 40 mm
