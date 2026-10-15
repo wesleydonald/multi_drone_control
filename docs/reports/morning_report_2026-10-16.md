@@ -1,33 +1,71 @@
 # Morning report, Fri 16 Oct (overnight 15-16 Oct; branch `overnight-1015`, not merged, not pushed)
 
-**Verdict:** DRAFT (filled in through the night).
+**Verdict:** the next rig day can be prepared now. Three findings point at the attach's real problems:
+- the tip falls off the edge of the 60 mm plates, so bigger discs matter most;
+- the bridge's raw plate velocity keeps his match check shut;
+- the ring's bounce reaches QUAD4 a quarter of a second late.
+
+The twin has a safe answer for a ring drop during his flight. Nothing tonight changes a default; every change is a
+typed switch or a new file. The full gate passes on the branch.
 
 ## Rig findings first (yesterday's bags, re-read overnight)
 
 | Finding | Number | Why it matters |
 |---|---|---|
-| The "slide toward the ring centre" at the bottom is the tip falling off the plate's edge | the three slides (a1 twice, t6h5_3) reached plate height 3.3-4.3 cm along the ring from the plate point, past the 60 mm plate's 30 mm edge; the one hold that went on to a proof (t6h_4) arrived 2.2 cm off | a 90 mm disc (45 mm radius) would have had all three on the plate |
-| Bigger disc, 8 rig attach flights | magnet inside the catch at the bottom: 22 % (24 mm) -> 49 % (45 mm); inside and slow 14 % -> 28 % | Mitch's bigger discs roughly double the chance |
-| Longer cables (geometry) | QUAD4 to the nearest carrier 0.45 -> ~0.7 m with either 1 m cable; a 1 m QUAD4 tether puts QUAD4 1.06 m above the ring (0.64 today) | room on the way in; less downwash on the ring (14 Oct: 5-8 deg tilt with QUAD4 overhead, 1-3 without) |
-| His match gate is what held a3_2 (42 s, no descent) | both conditions true 36 % of the time, longest unbroken 1.0 s (replay of his exact gate, `tools/match_gate_replay.py`, reproduces a1's descents) | a 0.5 s hold would have descended at 1.1 s (6 chances in 42 s) |
-| QUAD2 let go of plate 7 in a2_2 | rod 0.57 -> 0.76 m in 0.1 s, radio fine, pack 21.9 V | not explained; the carrier magnets' hold has never been measured |
+| The tip "sliding toward the ring centre" at the bottom was the tip falling off the plate's edge | the three slides (a1 twice, t6h5_3) reached plate height 3.3-4.3 cm along the ring from the plate point, past the 60 mm plate's 30 mm edge; the one hold that led to a proof (t6h_4) arrived 2.2 cm off | a 90 mm disc would have had all three on the plate |
+| Disc size, 8 rig attach flights | magnet inside the catch at the bottom 22 % (24 mm) -> 49 % (45 mm, a 90 mm disc); inside and slow 14 % -> 28 % | the bigger discs roughly double the chance |
+| Longer cables (geometry) | QUAD4's room from the nearest carrier 0.45 -> ~0.7 m with either 1 m cable; a 1 m QUAD4 tether puts QUAD4 1.06 m above the ring (0.64 today) | room on the way in; less downwash on the ring (14 Oct: 5-8 deg ring tilt with QUAD4 overhead, 1-3 without) |
+| What held a3_2 in MATCH for 42 s | his match check (tip within 5 cm and speed within 0.15 m/s of the plate, both unbroken for 1.0 s) held at best 1.0 s; the plate's sideways speed as the bridge reports it, 0.09 m/s rms, was the limit (`tools/match_gate_replay.py` reproduces a1's descents) | the twin reproduced it tonight (below), and a zero plate velocity removes it |
+| QUAD2 let go of plate 7 (a2_2) | rod 0.57 -> 0.76 m in 0.1 s, radio fine, pack 21.9 V; the coils stay ON from each launch and nothing records their current or temperature | a props-off pull test (cold and warm, full and low pack) separates the two causes |
 
-## Overnight twin results (lab PC, every row in the registry)
+## Overnight twin results (lab PC; every row in the registry)
 
 | What | Runs | Result |
 |---|---|---|
-| Three-carrier carry, 5 shapes x 3 speeds (your 15 Oct rig plan) | R1723-R1752 | 30/30 clean; path error 7-19 mm, tilt under 3.1 deg except the spin at 0.3 m/s (5.1); `docs/analysis/traj3_2026-10-15.md` |
+| Three-carrier carry, 5 shapes x 3 speeds (your 15 Oct rig plan) | R1723-R1752 | 30/30 clean; path error 7-19 mm; tilt under 3.1 deg except the spin at 0.3 m/s (5.1); `docs/analysis/traj3_2026-10-15.md` |
 | The same with 1 m cables | R1769-R1778 | 10/10 clean, the same numbers as 0.55 m |
-| Combined M1 attach with 1 m cables (carriers and QUAD4) | R1760, R1761 | both: contact, proof, fold-in, landed (free hang read 1.0405 m) |
-| A drop during his flight (`drop_takes_back`, off by default) | R1753-R1759, R1779-R1781 | switch off reproduces a2_2 every time (tracker fault 1 s after the drop, his planner flies on, 30 s timeout), and GIVE UP after a drop cannot hand QUAD4 over; switch on takes QUAD4 back on the drop tick and lands it in 14-17 s, >= 0.53 m from every carrier; R1759 failed the rev 2 bar as frozen (a bar that did not fit a drop at the plate); reviewer: SUPPORTED WITH CORRECTIONS (twin only) |
-| The ring shaken like the rig (1.8 Hz) | R1766-R1768, R1782-R1785 | a 1 cm bounce stops the twin attach (no contact, his give-up). Filter 2/2 vs baseline 0/2 welds at 0.85 cm, **withdrawn by the critic**: the twin welds at the instant of contact and the proof then measures the bounce's phase. On the mechanism (the tip's motion against the plate before contact) the filter did hold QUAD4 still (QUAD4's 1.8 Hz height 0.60 -> 0.12 cm; tip vs plate 1.4 -> 0.9 cm), but those runs had been seen; rev 2 on unseen runs, with a zero-twist arm: PENDING |
-| The plate-height filter, no shake | R1762-R1765, R1786-R1789 | attach unchanged; the twin's known QUAD4 landing tip-over hit: PENDING |
-| Latency margin (15-45 ms extra) at 0.3 m/s | PENDING | |
+| Latency margin at 0.3 m/s | R1794-R1799 | 15 and 30 ms extra delay: as 0 ms; 45 ms: a carrier tips at takeoff (the limit is the takeoff, as on 7 Oct) |
+| Combined M1 attach with 1 m cables (carriers and QUAD4) | R1760, R1761 | both: contact, proof, fold-in, landed |
+| A ring drop during his flight, `drop_takes_back` (off by default) | 8 on, 4 off (R1753-R1759, R1779-R1781, R1815-R1816) | **Switch off:** it reproduces a2_2 every time: our tracker for QUAD4 faults 1 s after the drop, his planner flies on (down onto the fallen ring), the landing waits the 30 s timeout. GIVE UP after a drop cannot hand QUAD4 over either, so the operator rule on the sheets does not work. **Switch on:** QUAD4 is taken back on the drop tick, at least 0.5 m from every carrier, and down at its rest 14-17 s after the drop, with no fault. Every case passes (end of MATCH, early MATCH, DESCEND, a carrier release, at the plate), except one bar that did not fit a drop starting at the plate (R1759, scored a fail). Critic: fix first, done. Reviewer: supported with corrections (twin only). |
+| The ring shaken at the rig's bounce (0.85 cm at 1.8 Hz), his attach | R1800-R1811 (4 per arm, unseen when the bars froze) | Tip's bounce against the plate before contact: baseline 1.40 cm, **plate-height filter 0.91 cm (-35 %)**, **zero plate velocity 1.02 cm (-27 %)**. QUAD4's own 1.8 Hz height: 0.6 cm -> 0.1 cm with either. Earlier weld counts were withdrawn after the critic: the twin welds at the instant of contact. |
+| The same shake at 0.8 Hz (slow-bounce check) | R1812-R1814, plus rev 3: PENDING | at the same torque the plate moved 3 cm (4x the rig); the baseline and the filter stayed in MATCH for the whole shake (plate 0.094 m/s sideways: a3_2 again); zero velocity descended at once but found no contact. Rev 3 at the rig's amplitude: PENDING |
+| The filter with no shake | R1762-R1765, R1786-R1789 | attach unchanged; the QUAD4 landing tip-over after the fold-in hits both arms (twin artefact) |
 
 ## Decisions for you
 
-PENDING
+1. **Merge `overnight-1015` into week5?** Nothing changes a default; the full gate passes. *Recommended: yes, after a
+   look at the plan (`docs/plan_after_rig_2026-10-15.md`).*
+2. **`drop_takes_back` for the rig** (closes the locked rules' "Open" line, which is yours to close). *Recommended: on
+   for the next attach day, through `params_file:=configs/rig/drop_takes_back.yaml`, after a props-off check. Change
+   the sheets' "GIVE UP after a drop" line in any case: without the switch it does not work.*
+3. **The bounce and the match check on the rig:** fly one change at a time as an A/B, alternating with today's bridge
+   (the critic: the draft sheet stacked six changes).
+   - *Recommended: zero plate velocity (`attach_twist:=zero`) first, if rev 3 confirms it.* It needs no change to his
+     bottom hold, and it frees the match check that held a3_2.
+   - The filter cut the bounce more, but it needs his bottom hold and proof lift moved to the raw plate first (critic
+     finding 3); that is Tejen's code.
+4. **Hardware with Mitch:** 90 mm discs first; 1 m tethers at least on QUAD4; a carrier magnet pull test. Draft:
+   `docs/reports/supervisor_brief_2026-10-16.md`.
+5. **Console `--slot-gate`** (READY refuses a layout more than 30 deg off its plates; a3 flew two plates off).
+   *Recommended: on at the rig.*
+6. **His match hold** (`match_dwell`, typed only). *Recommended: leave at his 1.0 s.* Zero plate velocity addresses
+   the same block without touching his gate; keep it as a fallback.
+7. **The thesis inventory's 12 decisions** (`docs/analysis/sim_results_inventory_2026-10-16.md`, end of the file).
+   The first is the freeze tree for the carry and detach tables. The draft carry card
+   (`docs/experiments/2026-10-16_carry_speed_envelope.md`) needs your bars.
+8. **Back up `results/`** (34 GB, laptop only), before the freeze batch.
 
-## What is on the branch
+## What is on the branch (from 48ccad6)
 
-PENDING
+| Commit(s) | What |
+|---|---|
+| 1057c7e | 15 Oct rig work: free_hover circle, plate-height filter, console 22.6 V rule, QUAD4 FC backup, the day's registry rows |
+| 33334ea, 53dcca3, ba6c97d | Plan after 15 Oct: blockers ranked from the data, Mitch's numbers, the queue |
+| 35d2b86 | Console `--slot-gate` (off by default) |
+| ab6fd18 | His match hold and speed as typed args; `tools/match_gate_replay.py` |
+| cca8803, 6856cf8 | Twin worlds and configs with 1 m cables (new files only), his geometry `rig_twin_L100` |
+| bad76e3, 0038c1a, 42d81fe, 0a3ac30, 8694f95 | `drop_takes_back` (off by default) and its card (critic, three revisions, reviewer) |
+| 8d2036c, 66a701c, e9ff80a | The filter, the match gate and a zero plate velocity typed into his twin and rig launch; `tools/n6_mechanism.py` |
+| d4f8ce8, e96ae68, b786e8f, 9ac6232 | The trajectory, 1 m and latency matrices and their notes |
+| 26ac24f | The thesis sim-results inventory |
+| d34c421, 7af0260, 217c5d7 | Drafts: the next lab day's sheet, the carry claim card, the brief for Mitch |
