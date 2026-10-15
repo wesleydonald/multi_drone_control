@@ -148,3 +148,14 @@ caught by the tilt rule x1, LIFT_PROOF with the tip on the plate x2 under rev 3,
 takes QUAD4 on the drop tick, keeps it >= 0.53 m from every carrier and its tip >= 0.31 m (MATCH) / 0.22 m (bottom)
 from the rods until 1.1 m out, and lands it at its rest 14-17 s after the drop with no fault; with the switch off the
 twin reproduces a2_2. It may not say the card passed as frozen (R1759 falsifies rev 2), nor anything about the rig.
+
+## The reviewer's untested cases (16 Oct ~03:35, rev 3 bars)
+
+| Run | Drop | At the drop: nearest carrier | Until 1.1 m out | End | Bars |
+|---|---|---|---|---|---|
+| R1815 | 0.3 s into his MATCH | 0.58 m | never below 0.56 m; tip never back at the ring | at its rest, landed 14.1 s after, no fault | 1, 2, 3, 4 PASS |
+| R1816 | 1.5 s into his DESCEND | 0.51 m | never below 0.50 m | at its rest, landed 16.0 s after, no fault | 1, 2, 3, 4 PASS |
+
+(Tip-to-rod numbers from the scorer use hanging rods; the reviewer's pendulum model put the closest approach at the
+release instant in every earlier run. Single runs each.) Switch on: 8 runs, every bar passes except R1759's rev 2
+bar 2 as frozen.
