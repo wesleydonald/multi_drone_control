@@ -1,4 +1,4 @@
-# Request: flight-controller settings on QUAD1, QUAD2, QUAD3 (and QUAD4 with Tejen)
+# Request: flight-controller settings on QUAD1, QUAD2, QUAD3 (and QUAD4)
 
 **From Wesley, 14 Oct 2026.** Arming refusals cost 11 of 46 launches on 14 Oct (registry rows RIG-1014-*, "ARM FAILED
 ... FC says '!ERR*'").
@@ -36,4 +36,8 @@ save
 Leave the drone on its plate for 10 min, then arm and disarm. Repeat 5 times per drone with no refusal.
 
 ## For QUAD4
-QUAD4 is Tejen's. The same settings would help (it also showed `!ERR*` while waiting), but only with his OK.
+The same settings would help (it also showed `!ERR*` while waiting).
+
+All four quads are Wesley's; any FC change needs the supervisor's OK first (Wesley, 15 Oct). Backups before any
+change: `docs/rig/fc/QUADn_diff_<date>.txt` (QUAD4's of 15 Oct: Betaflight 4.3.1, T-Motor F7 AIO, blackbox on
+the onboard flash, accelerometer calibrated, small_angle at its default 25).

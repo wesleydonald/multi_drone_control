@@ -309,7 +309,11 @@ def real_free_hover(context, launch_dir, profile_vals):
                      'hover_z': f('hover_z'),
                      'climb_vel': f('climb_vel'),
                      'land_vel': f('land_vel'),
-                     'land_tol': f('land_tol')}],
+                     'land_tol': f('land_tol'),
+                     'circle_radius': f('circle_radius'),
+                     'circle_period_s': f('circle_period_s'),
+                     'circle_laps': ParameterValue(LaunchConfiguration('circle_laps'), value_type=int),
+                     'circle_hold_s': f('circle_hold_s')}],
         output='screen'))
 
     return nodes

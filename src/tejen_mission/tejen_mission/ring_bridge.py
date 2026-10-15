@@ -49,6 +49,8 @@ class RingBridge(FakeCooperativeTransportWorld):
         self._traj_rx_s = None           # node time it arrived
         self._ring = None                # latest measured ring RigidBodyState
         self._ring_q = None              # its attitude (w, x, y, z)
+        self._zf = None                  # attach_z_lowpass_hz: the two filter stages, and when they ran
+        self._zf_t = None
         super().__init__()
         self.create_subscription(String, '/payload/trajectory_state', self._traj_cb, 5)
         self.create_subscription(MotionCaptureState, '/payload/motion_capture_state',
@@ -144,9 +146,31 @@ class RingBridge(FakeCooperativeTransportWorld):
             # tilted ring moves the plate by r*sin(tilt), which a yaw-only target misses
             px, py = self._plate_xy()
             ox, oy, oz = _rotate(self._ring_q, (px, py, z0))
-            return (payload_state.x + ox, payload_state.y + oy, payload_state.z + oz)
-        x, y, z = super().compute_attachment_xyz(payload_state)
-        return (x, y, z + z0)
+            x, y, z = payload_state.x + ox, payload_state.y + oy, payload_state.z + oz
+        else:
+            x, y, z = super().compute_attachment_xyz(payload_state)
+            z += z0
+        if payload_state is getattr(self, "_ring", None):   # the present, measured plate (not the predicted path)
+            z = self._lowpass_z(z)
+        return (x, y, z)
+
+    def _lowpass_z(self, z: float) -> float:
+        """attach_z_lowpass_hz > 0 (0 = off): the plate height through two first-order lags at that cutoff. On
+        15 Oct (a1) the ring bounced ~0.8 cm at 1.8 Hz, his reference copied it and QUAD4 followed half a cycle late,
+        doubling the tip's bounce against the plate; x and y stay raw (QUAD4 barely followed them)."""
+        fc = float(self._param('attach_z_lowpass_hz', 0.0))
+        if fc <= 0.0:
+            return z
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if self._zf is None or now - self._zf_t > 0.5:
+            self._zf, self._zf_t = [z, z], now
+            return z
+        dt = now - self._zf_t
+        a = dt / (1.0 / (2.0 * math.pi * fc) + dt)
+        self._zf[0] += a * (z - self._zf[0])
+        self._zf[1] += a * (self._zf[0] - self._zf[1])
+        self._zf_t = now
+        return self._zf[1]
 
 
 def main(args=None) -> None:

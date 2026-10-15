@@ -6,7 +6,7 @@
     python3 tools/console.py --twin          # the twin (no radios, so no FC or pack checks)
 
 READY (top) replaces the fixed wait after the T2 launch: every node up, every body's mocap fresh, a fresh pack
-voltage >= 24.0 V from every radio, every FC ready to arm (flight mode ending in '*', not '!ERR*'), no drone on its
+voltage >= 22.6 V from every radio, every FC ready to arm (flight mode ending in '*', not '!ERR*'), no drone on its
 side, no mux latched. Each reason it is not ready is listed, with what to do.
 Buttons, in flight order: his ARM, ARM, TAKEOFF, his TAKEOFF, GIVE UP, LAND, and his DISARM once every FC is
 disarmed. A button that cannot be used says why. SPACE is DISARM from anywhere in the window and is never blocked,
@@ -29,7 +29,7 @@ SUMMARY_STALE_S = 1.0
 HEALTH_STALE_S = 2.5       # radio_health comes once a second
 MODE_STALE_S = 5.0         # QUAD1 sends a flight-mode frame only every 2-3 s
 VOLT_STALE_S = 5.0
-VOLT_MIN = 24.0            # the pre-flight rule, at rest
+VOLT_MIN = 22.6            # the pre-flight rule, at rest (Wesley 15 Oct; was 24.0)
 ERR_REPLUG_S = 20.0        # '!ERR*' this long is not the short block after a boot or a disarm
 TILT_DOWN_DEG = 25.0       # the carriers rest at 11-13 deg on their rods; beyond this one is on its side (plan rev 1)
 FC_TILT_OFF_DEG = 10.0     # QUAD1's FC read 60-84 deg while it sat at 12 (14 Oct)

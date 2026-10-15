@@ -55,6 +55,12 @@ modes:
   mpc: {}
   free_hover:
     land_vel: 0.15
+    # one drone circles its takeoff point after the hover (tracker/free_hover.py); 0 = off.
+    # configs/rig/free_hover_circle.yaml turns it on
+    circle_radius: 0.0
+    circle_period_s: 6.0
+    circle_laps: 3
+    circle_hold_s: 5.0
   dissipative: {}
   attach:
     num_drones: 3

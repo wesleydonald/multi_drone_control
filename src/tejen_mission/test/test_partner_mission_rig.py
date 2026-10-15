@@ -178,6 +178,14 @@ def test_trim_speed_gate_only_when_typed():
     assert g['online_join_planner']['params']['target_alignment_max_relative_speed_mps'] == 0.20
 
 
+def test_attach_z_lowpass_only_when_typed():
+    """The bridge's plate height stays raw (no parameter) unless attach_z_lowpass is typed (a1, 15 Oct)."""
+    g, _ = _nodes()
+    assert 'attach_z_lowpass_hz' not in g['fake_cooperative_transport_world']['params']
+    g, _ = _nodes(attach_z_lowpass='0.8')
+    assert g['fake_cooperative_transport_world']['params']['attach_z_lowpass_hz'] == 0.8
+
+
 def test_typed_plate_and_carrier_angles_are_ours_clockwise_and_arrive_as_his():
     """Since 15 Oct (Wesley 14 Oct) plate is our number (clockwise, 9 = +y) and carrier_azimuths_deg clockwise
     degrees; his nodes count counter-clockwise: his plate 3, his azimuths 270/30/150."""

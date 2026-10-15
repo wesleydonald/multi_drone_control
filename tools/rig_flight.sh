@@ -134,7 +134,7 @@ EVENTS='process has died|Traceback|\[(WARN|ERROR|FATAL)\]|rig_flight:|COMBINED M
 'ARM REFUSED|arm \(/dev/QUAD|TAKEOFF|LAND|Landed|pretension done|hover hold done|our planner flies the ring|'\
 'Planner phase:|ring magnet span|coil (ON|OFF)|OURS from now|his puck|CONTACT|PROOF|ATTACH|mux:|giving up|give-up|'\
 'TAKE-BACK|RELEASE GUARD|survivors down|is down|disarmed|EMERGENCY STOP|FLEET ABORT|Pose timeout|ENVELOPE|DROPPED|'\
-'UNANNOUNCED DETACH|bottom hold|quiet miss|MPC profile|proof_rules=|Serial connection lost|not available'
+'UNANNOUNCED DETACH|bottom hold|quiet miss|MPC profile|proof_rules=|Serial connection lost|not available|CIRCLE'
 NOISE='Still waiting for magnetic attachment|tracker not answering|/magnet/contact False|takeoff_requested'
 if [ "${RIG_FLIGHT_VERBOSE:-0}" = 1 ]; then
   ros2 launch bringup "$LAUNCH" "$@" 2>&1 | tee "$D/$F.log"

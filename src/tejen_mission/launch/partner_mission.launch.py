@@ -514,6 +514,8 @@ def _rig_nodes(context):
             'full_pose_attachment': True,
             # 14 Oct load cut (Wesley): no 20 s trail MarkerArray at 50 Hz on the rig laptop
             'trail_seconds': 0.0,
+            # the plate height his reference follows, low-passed (Hz; '' / 0 = raw, the default): a1 15 Oct
+            **({'attach_z_lowpass_hz': f('attach_z_lowpass', 0.0)} if 'attach_z_lowpass' in typed else {}),
         }])
 
     # his inputs from our mocap node (the only Motive owner): his IRL publisher's outputs, under /tejen
@@ -740,6 +742,7 @@ def _arguments():
         DeclareLaunchArgument('contact_give_up_s', default_value=''),    # rig: s after the first descent ('' = 45)
         DeclareLaunchArgument('target_alignment_mode', default_value=''),  # rig: '' = measured_tip_trim
         DeclareLaunchArgument('trim_speed_gate', default_value=''),      # rig: m/s, his trim's learning speed ('' = his 0.08)
+        DeclareLaunchArgument('attach_z_lowpass', default_value=''),     # rig: Hz, his target's plate height low-passed ('' = raw)
         DeclareLaunchArgument('magnet_drop_below_quad', default_value=''),   # QUAD4's, typed (refused untyped)
         DeclareLaunchArgument('proof_rise_max', default_value=''),       # '' = the rig's 0.03
         DeclareLaunchArgument('mpc_thrust_ratio', default_value=''),     # QUAD4's, typed (refused untyped)

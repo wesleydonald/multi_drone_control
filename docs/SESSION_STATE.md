@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Thu 15 Oct 2026, 06:59 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Thu 15 Oct 2026, 16:35 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -48,6 +48,51 @@ Updated: Thu 15 Oct 2026, 06:59 AEDT (from `date`). Only what a new session need
 - **Supervisor answers already given (chat 14 Oct night):** FC accelerometer logs help the arming issue more than the
   attach (mocap gives the body acceleration); 90 mm discs: inside the catch 35 % vs 16 % of the 14 Oct hold time.
 - **Scratchpad:** the earlier session's scratchpad is gone; temp files go to /tmp.
+- **Supervisor, 15 Oct morning (chat):** he makes 1 m tethers for next week, looks for bigger discs and a non-flat
+  shape, suggests 50 g taped on QUAD4's magnet (Wesley: the magnet, not the ring; ring mass stays 0.86 kg). Wesley
+  records Betaflight blackbox logs himself (FC accelerometer vs mocap; the supervisor could add live accel in ~1 week
+  if it helps). Laptop: Chrome 155 installed 15 Oct (for app.betaflight.com), ModemManager active (stop it before plugging
+  an FC), wesley in dialout, no log decoder yet. He may do `docs/rig/fc_request.md` himself in the same Configurator
+  session. Next week's hardware touches the tether length (taut fallback, his planner, the twin), the disc radius (K)
+  and shape (contact band): attach geometry and gate thresholds, Wesley's word.
+- **Quads and FCs (Wesley 15 Oct):** all four quads are Wesley's (QUAD4 too); any FC setting change needs the
+  supervisor's OK first. FC backups in `docs/rig/fc/` (QUAD4 read 08:2x: 4.3.1, TMOTORF7_AIO, blackbox SPIFLASH,
+  NORMAL mode = logs while armed, so the supervisor's FC-vs-mocap comparison needs no change).
+- **QUAD4 solo, FC vs mocap (RIG-1015-q4solo, 08:53, exploratory):** free_hover alone, hover 0.83 m. FC log
+  `results/rig/2026-10-15/q4solo_fc/q4solo_QUAD4.bbl` (starts ~0.4 s after our ARM; 16 MB = ~5.5 min at 2 kHz). FC accel
+  agrees with mocap to ~0.1 m/s^2 rms after a constant offset; the offset is the FC's z axis (+2.5 %: 1.022 g on the mat,
+  1.027 g in hover, not the cable); x/y offsets ~1 deg (board or Motive axes); QUAD4's FC attitude within 0.5 deg of mocap.
+  Hover gives little sideways signal. Landing stalled at 0.28 m (operator DISARM, ~0.24 m drop): expect it again.
+  Decoder + comparison scripts are in the session scratchpad only (`tools/` if Wesley wants them kept).
+- **Circle for that comparison (Wesley 11:5x: 0.5 m, 6 s laps, no twin, he tests it on the rig):** free_hover
+  `circle_radius` etc. (real.yaml modes.free_hover, 0 = off; one drone only), on via
+  `params_file:=configs/rig/free_hover_circle.yaml` (0.52 m/s, 0.55 m/s^2, 3 laps + one period spiralling out and in
+  around the takeoff point, ccw from above, 5 s after hover_z; LAND mid-circle descends where it is). Unit test +
+  desk check (isolated domain: full circle, LAND mid-circle, /fleet/landed) + gate --quick pass. Uncommitted.
+- **Circle flown (RIG-1015-q4circle_2, 12:43; q4circle VOID: no mocap until the mocap PC side was fixed ~12:40):**
+  laps 0.50 m/s, radius 0.477 (sd 0.006), z sd 5 mm. FC accel rotated to the world by the mocap attitude vs mocap
+  d2p/dt2: x/y corr 0.97/0.95, rms 0.09/0.10 m/s^2 at 5 Hz (0.05-0.07 at 2 Hz); z offset +0.22 again. Landing stalled at
+  0.29 m again (DISARM). FC log `results/rig/2026-10-15/q4circle_2_fc/q4circle_2_QUAD4.bbl`. Wesley: don't commit yet.
+- **Lab 15 Oct afternoon:** Tejen set up (ring turned, yaw now -22 deg; carriers QUAD1/2/3 on plates 3/7/11 after
+  two moves; QUAD1/QUAD2 `!ERR*` cleared by replugging packs). c1_3 passed (all four armed 2.8 s, SPACE). Wesley: aim B
+  (decisions.md), bench and dry hold skipped, straight to a1. **a1:** no CONTACT (tip slid 6-8 cm inward off plate 9 at
+  the bottom twice, coil ON), QUAD4's tether passed 0.10 m from QUAD2 on the way in (his planner has no avoidance; mat
+  moved for a2 to straight out from plate 9). Zip for Tejen `~/a1_2026-10-15_for_tejen.zip`. Ring bounce: plate 0.8 cm
+  at 1.8 Hz copied into his reference; QUAD4 followed 0.25 s late -> tip vs plate 1.6 cm. Built `attach_z_lowpass`
+  (ring_bridge, partner_args, Hz, off by default; unit tests, gate --quick 1457 pass); replay on a1: 0.8 Hz cuts the
+  bounce 0.82 -> 0.13 cm, slow lag error rms 0.5 cm (max 1.8). Critic and twin not run (lab): Wesley's waiver needed.
+  Wesley waived critic + twin for 0.8 Hz; console pack rule lowered 24.0 -> 22.6 V (Wesley). **a2** launched, not
+  armed; **a2_2** flew WITHOUT the filter (not in partner_args): at +20.9 s after his TAKEOFF (his MATCH, QUAD4 0.57 m
+  above the ring, nothing touching) QUAD2 let go of plate 7 (rod 0.57 -> 0.76 m in 0.1 s, LQ 97-99, pack 21.9 V);
+  tilt 36.8 deg -> drop rule (all magnets OFF, carriers landed alone). LAND (not GIVE UP) left QUAD4 on his mission
+  for 14 s toward the dropped ring (the card's open item). Card stop rule: tilt > 30 deg = no more combined flights.
+  Wesley (~16:15): keeps the 22.6 V rule, replaces the packs and flies on (overrides the tilt stop rule), filter on.
+  **a3** (16:14, filter on): carriers ~2 plates off (slot errors +51..+56 deg, flown anyway): pretension stretched QUAD2's
+  rod 9 cm -> unannounced detach -> drop with the ring still on the floor. **a3_2** (layout within 4 deg, filter 0.8
+  confirmed on the bridge): 42 s in his MATCH, never descended: his gate (tip xy < 5 cm AND rel speed < 0.15 m/s for
+  1.0 s) held both only 36 % of the time, longest 1.03 s (replay reproduces a1's pass times exactly). Plate target
+  speed rms 0.09 m/s (ring rocking + the bridge's raw 50 Hz finite difference). Offered dwell 0.5 s / 0.20 m/s
+  (replay: a3_2 12 / 8 chances): Wesley skipped it for now.
 
 ## 14 Oct rig day in short (detail: registry RIG-1014-*, `git log -p` of this file)
 - 46 launches: 8 passed, 11 failed in flight, 11 arm refusals (QUAD1/QUAD2 FC attitude drift), the rest void.
