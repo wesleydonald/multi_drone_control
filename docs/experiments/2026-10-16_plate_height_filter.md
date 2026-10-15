@@ -184,7 +184,11 @@ hold-up in rev 2's 3 cm neighbour (one run). See the reviewer below for what may
    guards; ring motion is then caught only by the xy limits (R1814 sat 26 s over a ring moving 3 cm). Open; the
    better variable may be a low-passed twist (keeps slow ring motion). Built 04:40, typed only (`attach_twist:=lowpass`,
    `attach_twist_hz`, 0.5 Hz, two first-order lags, hover only): see the end of the card.
-3. Moving ring: fixed (efb9b5d): never zero while the ring's trajectory runs; unit test.
+3. Moving ring: fixed (efb9b5d): never zero while the ring's trajectory runs; unit test. **Bug (found 05:10 from
+   R1832):** the guard read the planner's `running`, which is also true in a lifted hover, so from efb9b5d on
+   `attach_twist` did nothing in the twin or on the rig. Fixed: moving = running, a kind other than hover and a speed
+   above zero; unit test for the lifted hover. R1824-R1826 flew before the guard (valid); R1828, R1830 and R1831-R1834
+   flew raw.
 4. The slow end (ring drift ~0.25 Hz, the 1 m hardware's lower modes) is untested: open (twin follow-ups).
 5. The A/B had no frozen bars: draft below, for Wesley to freeze before the lab day.
 6. Mislabelling: fixed (efb9b5d): `choices` on the argument, the bridge's start-up line names both switches, the rig
@@ -208,5 +212,6 @@ hold-up in rev 2's 3 cm neighbour (one run). See the reviewer below for what may
 | 0.4 N (plate range 15 cm) R1827/R1828 | MATCH 35 s; tip vs plate xy median 6.5, p90 9.8 cm | MATCH 35 s; 6.1 / 10.0 cm |
 | 0.05 N (3 cm, rig-like) R1829/R1830 | MATCH 1.0 s; 0.9 / 1.6 cm | MATCH 1.0 s; 1.1 / 2.2 cm |
 
-Falsifier (1.5x the raw error) not met; at the rig-like drift zero twist trails it by 1.2x (median) / 1.4x (p90), the lag
-the critic expected, with the p90 near today's 24 mm catch. A low-passed twist (critic F2) would keep the slow motion.
+~~Falsifier (1.5x the raw error) not met; at the rig-like drift zero twist trails it by 1.2x (median) / 1.4x (p90).~~
+**Void (05:10):** R1828 and R1830 flew raw (the guard bug in item 3), so both columns are raw runs and the 1.2x / 1.4x
+is run-to-run spread (a third raw run, R1831: 1.0 / 1.6 cm). Re-flown on the fixed guard: below.

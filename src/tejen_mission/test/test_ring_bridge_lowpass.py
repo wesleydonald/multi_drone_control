@@ -81,10 +81,12 @@ def test_zero_twist_never_while_the_ring_flies_a_trajectory():
     s, _ = _stub(0.0)
     s._param = lambda name, default: 'zero' if name == 'attach_twist' else default
     s.last_attachment_xyz, s.last_payload_state, s.last_time_sec = (0.0, 0.0, 1.0), state, 1.0
-    s._traj_state = {'running': True}
+    s._traj_state = {'running': True, 'kind': 'circle', 'speed': 0.125}
     assert abs(RingBridge.finite_difference_attachment_twist(s, 1.02, state, (0.0, 0.0, 1.002))[2] - 0.1) < 1e-9
-    s._traj_state = {'running': False}
-    assert RingBridge.finite_difference_attachment_twist(s, 1.02, state, (0.0, 0.0, 1.002)) == (0.0, 0.0, 0.0, 0.0)
+    for hover in ({'running': False, 'kind': 'circle', 'speed': 0.125},
+                  {'running': True, 'kind': 'hover', 'speed': 0.0}):      # a lifted hover: the trajectory clock runs
+        s._traj_state = hover
+        assert RingBridge.finite_difference_attachment_twist(s, 1.02, state, (0.0, 0.0, 1.002)) == (0.0, 0.0, 0.0, 0.0)
 
 
 def test_lowpass_twist_keeps_a_slow_drift_and_cuts_the_bounce():
@@ -114,7 +116,7 @@ def test_lowpass_twist_only_in_hover():
         s, _ = _stub(0.0)
         s._vf, s._vf_t = None, None
         s._param = lambda name, default: 'lowpass' if name == 'attach_twist' else default
-        s._traj_state = {'running': True}
+        s._traj_state = {'running': True, 'kind': 'circle', 'speed': 0.125}
         for k in range(50):
             assert RingBridge.finite_difference_attachment_twist(s, 100.0 + k * DT, None, None) == raw
     finally:

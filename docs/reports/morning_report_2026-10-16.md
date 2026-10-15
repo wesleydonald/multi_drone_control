@@ -46,7 +46,9 @@ typed switch or a new file. The full gate passes on the branch.
      rig MATCH windows that never descended (a3_2: first pass at 4.9 s instead of never). Twin: the tip's bounce
      against the plate -27 % at 1.8 Hz, no worse at 0.8 Hz, no regression on a still ring (0.55 m and 1 m). Its critic
      said fix first: done (never zeroed while the ring flies a trajectory, the argument checked, the bridge logs its
-     mode, the rig bag records the twist). Still open: it turns his relative-velocity guards into QUAD4-speed guards (a
+     mode, the rig bag records the twist). **Caught at 05:10:** that trajectory guard also fired in a lifted hover, so
+     from efb9b5d to 05:10 the switch did nothing, in the twin and on the rig (an A/B would have flown raw against raw).
+     Fixed, unit-tested, the affected runs re-flown (below). Still open: it turns his relative-velocity guards into QUAD4-speed guards (a
      moving ring is then caught only by the xy limits), and it changes what his gates measure: **Tejen should agree**.
      A draft A/B with a hardware go/no-go is in the card for you to freeze.
    - **Plate-height filter:** -35 % at 1.8 Hz and passed its frozen bars, but worse below 1 Hz, and it needs his bottom

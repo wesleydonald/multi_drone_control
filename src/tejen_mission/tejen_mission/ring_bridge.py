@@ -168,7 +168,10 @@ class RingBridge(FakeCooperativeTransportWorld):
         and 0.09 m/s of sideways jitter (a3_2). 'lowpass' keeps a slow drift (below). Hover only: a moving ring needs its
         velocity."""
         mode = str(self._param('attach_twist', '')).strip().lower()
-        moving = bool((getattr(self, '_traj_state', None) or {}).get('running', False))
+        # 'running' is also true in a hover once the lift tops out (the trajectory clock runs): R1824-R1834 flew raw
+        st = getattr(self, '_traj_state', None) or {}
+        moving = (bool(st.get('running', False)) and str(st.get('kind', 'hover')) != 'hover'
+                  and float(st.get('speed', 0.0) or 0.0) > 0.0)
         if mode == 'zero' and not moving:
             return 0.0, 0.0, 0.0, 0.0
         raw = FakeCooperativeTransportWorld.finite_difference_attachment_twist(self, t, payload_state, attachment_xyz)
