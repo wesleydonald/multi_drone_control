@@ -213,6 +213,8 @@ class ExperimentRunner(Node):
         self.tip_freeze_pub = (self.create_publisher(Float64, '/magnet_tip_publisher/freeze', 5)
                                if any(e.do == 'TIP_FREEZE' for e in cfg.events) else None)
         self.handoff_pub = self.create_publisher(Bool, '/join_planner/handoff_ready', 10)
+        self.his_land_pub = (self.create_publisher(Bool, '/join_planner/land_now', 10)
+                             if any(e.do == 'HIS_LAND' for e in cfg.events) else None)
         self.fleet_handover_pub = self.create_publisher(Bool, '/fleet/handover', 10)
         self.partner_go_pub = (self.create_publisher(String, '/runner/partner_go', 10)
                                if any(e.do == 'PARTNER_GO' for e in cfg.events) else None)
@@ -687,6 +689,8 @@ class ExperimentRunner(Node):
             self._publish(self.handoff_pub, Bool(data=True), '/join_planner/handoff_ready',
                           exclude_self=True)
             self._repeats.append((self._rel() + 2.0, self.handoff_pub, Bool(data=True)))
+        elif ev.do == 'HIS_LAND':
+            self._publish(self.his_land_pub, Bool(data=True), '/join_planner/land_now')
         elif ev.do == 'PARTNER_GO':
             go = String(data='{"running": true}')
             self._publish(self.partner_go_pub, go, '/runner/partner_go')

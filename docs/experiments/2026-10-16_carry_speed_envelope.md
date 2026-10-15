@@ -1,7 +1,8 @@
-# Card (DRAFT, for Wesley): the three-carrier carry's speed envelope in the rig twin
+# Card: the three-carrier carry's speed envelope in the rig twin
 
 Drafted 16 Oct night from the exploratory read (R1723-R1752, R1769-R1778; `docs/analysis/traj3_2026-10-15.md`).
-Not frozen: the bars freeze when Wesley approves the card and the freeze tree (inventory decision 1). Thesis place:
+**Bars frozen 16 Oct ~08:05 (Wesley: as drafted), before any claim run.** Freeze tree: week5 4b3560e's flight code,
+flown from branch day-1016 (its first commit adds only a console button, a harness event and docs). Thesis place:
 the new twin carry table and figure for Section 4.1 (inventory T7t/F8t), replacing the 4-5 Oct appendix trajectory
 table flown on the old stack.
 

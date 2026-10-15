@@ -8,8 +8,9 @@
 READY (top) replaces the fixed wait after the T2 launch: every node up, every body's mocap fresh, a fresh pack
 voltage >= 22.6 V from every radio, every FC ready to arm (flight mode ending in '*', not '!ERR*'), no drone on its
 side, no mux latched. Each reason it is not ready is listed, with what to do.
-Buttons, in flight order: his ARM, ARM, TAKEOFF, his TAKEOFF, GIVE UP, LAND, and his DISARM once every FC is
-disarmed. A button that cannot be used says why. SPACE is DISARM from anywhere in the window and is never blocked,
+Buttons, in flight order: his ARM, ARM, TAKEOFF, his TAKEOFF, GIVE UP, LAND, his LAND, and his DISARM once every
+FC is disarmed. his LAND is his planner's own LAND (/join_planner/land_now): a straight-down descent where QUAD4 is,
+magnet OFF, so over a fallen ring it lands on it (with drop_takes_back on, a drop takes QUAD4 back by itself). A button that cannot be used says why. SPACE is DISARM from anywhere in the window and is never blocked,
 as in the RViz panel. The publishers live as long as the console, so every subscriber has matched long before a
 press (14 Oct's takeoff race came from a fresh `ros2 topic pub` each time).
 It reads only low-rate topics (/fleet/mocap_summary at 5 Hz, /drone_i/radio_health at 1 Hz, states and phases),
@@ -42,6 +43,9 @@ TWIN_STALE_X = 3.0         # the twin runs at ~0.2x real time: its 5 Hz summary 
 HIS_TAKEOFF_ACK_S = 2.0    # his planner must leave WAIT_FOR_TAKEOFF this soon after his TAKEOFF (Tejen, 15 Oct)
 DISARM_REPEATS, DISARM_PERIOD_MS = 5, 100      # as the RViz panel: one message can be lost
 FLEET_CMD, HIS_CMD, GIVE_UP = '/fleet/command', '/tejen/drone_command', '/join_planner/give_up'
+HIS_LAND = '/join_planner/land_now'
+HIS_LAND_IGNORED = {'LANDING': 'his planner is already landing', 'LANDED_DISARMED': 'QUAD4 landed',
+                    'RING_ATTACHED': 'ours flies QUAD4: LAND', 'TAKEN_BACK': 'ours flies QUAD4: LAND'}
 HIS_NODES = ('/tejen/tejen_mpc', '/online_join_planner')
 ARM_DONE = 'ARM sequence complete'
 ARM_RESET = ('DISARM', 'EMERGENCY STOP', 'ARM FAILED', 'ARM REFUSED', 'TAKEOFF REFUSED', 'Disarm complete')
@@ -95,6 +99,7 @@ class ConsoleState:
         self.rest_z = {}
         self.nodes = set()
         self.his_subs, self.his_matched, self.give_up_subs = set(), 0, 0
+        self.his_land_subs = 0
         self.alerts = deque(maxlen=200)      # (wall time, level, node, text, why)
 
     def on_manager(self, text):
@@ -171,10 +176,11 @@ class ConsoleState:
         with self.lock:
             self.mux[i] = text
 
-    def on_graph(self, nodes, his_subs, his_matched, give_up_subs):
+    def on_graph(self, nodes, his_subs, his_matched, give_up_subs, his_land_subs=0):
         with self.lock:
             self.nodes, self.his_subs, self.his_matched, self.give_up_subs = (
                 set(nodes), set(his_subs), int(his_matched), int(give_up_subs))
+            self.his_land_subs = int(his_land_subs)
 
     def on_log(self, level, node, text):
         if '[planner] slot error' in text:     # once per launch (INFO): a relaunch replaces the last one
@@ -358,6 +364,9 @@ def button_states(st, now, not_ready):
     b['give_up'] = rule((his, 'no partner'), (st.give_up_subs > 0, 'our planner not listening'),
                         (anything_armed, 'nothing armed'))
     b['land'] = rule((anything_armed, 'nothing armed'))
+    b['his_land'] = rule((his, 'no partner'), (st.his_land_subs > 0, 'his planner not listening'),
+                         (p_armed, 'QUAD4 not armed'),
+                         (st.his_phase not in HIS_LAND_IGNORED, HIS_LAND_IGNORED.get(st.his_phase, '')))
     b['his_disarm'] = rule((his, 'no partner'), (link_ok, link_why),
                            (ours_down(st, now), 'fleet still armed or up: LAND or DISARM first'))
     return b
@@ -413,6 +422,7 @@ class RosLink:
         self.fleet_pub = node.create_publisher(String, FLEET_CMD, 10)
         self.his_pub = node.create_publisher(String, HIS_CMD, 10)
         self.give_up_pub = node.create_publisher(Bool, GIVE_UP, 10)
+        self.his_land_pub = node.create_publisher(Bool, HIS_LAND, 10)
         self.state = state
         node.create_timer(1.0, self._graph)
 
@@ -421,7 +431,7 @@ class RosLink:
         subs = {f"{e.node_namespace.rstrip('/')}/{e.node_name}"
                 for e in self.node.get_subscriptions_info_by_topic(HIS_CMD)}
         self.state.on_graph(names, subs, self.his_pub.get_subscription_count(),
-                            self.node.count_subscribers(GIVE_UP))
+                            self.node.count_subscribers(GIVE_UP), self.node.count_subscribers(HIS_LAND))
 
     def spin(self):
         try:
@@ -445,10 +455,14 @@ class RosLink:
     def give_up(self):
         self.give_up_pub.publish(self.Bool(data=True))
 
+    def his_land(self):
+        self.his_land_pub.publish(self.Bool(data=True))
+
 
 BUTTONS = [('his_arm', 'his ARM', '#7048e8'), ('arm', 'ARM', '#2f9e44'), ('takeoff', 'TAKEOFF', '#1c7ed6'),
            ('his_takeoff', 'his TAKEOFF', '#7048e8'), ('give_up', 'GIVE UP', '#495057'),
-           ('land', 'LAND', '#e8590c'), ('disarm', 'DISARM  (space)', '#c92a2a'), ('his_disarm', 'his DISARM', '#7048e8')]
+           ('land', 'LAND', '#e8590c'), ('his_land', 'his LAND (straight down)', '#7048e8'),
+           ('disarm', 'DISARM  (space)', '#c92a2a'), ('his_disarm', 'his DISARM', '#7048e8')]
 
 
 def gui(state, send, exit_after_ms=None, on_ready=None):
@@ -550,6 +564,8 @@ def gui(state, send, exit_after_ms=None, on_ready=None):
             send.fleet('LAND')
         elif key == 'give_up':
             send.give_up()
+        elif key == 'his_land':
+            send.his_land()
         else:
             send.his({'his_arm': 'ARM', 'his_takeoff': 'TAKEOFF', 'his_disarm': 'DISARM'}[key])
             if key == 'his_takeoff':

@@ -110,6 +110,30 @@ def test_buttons_follow_the_flight_order():
     assert con.button_states(s, NOW, [])['his_takeoff'] == (False, 'matched 1 of 2 subscribers')
 
 
+def test_his_land_needs_his_planner_listening_quad4_armed_and_a_phase_he_lands_from():
+    s = ready_state()
+    assert con.button_states(s, NOW, [])['his_land'] == (False, 'his planner not listening')
+    s.on_graph(ALL_NODES, set(con.HIS_NODES), 2, 1, 1)
+    assert con.button_states(s, NOW, [])['his_land'] == (False, 'QUAD4 not armed')
+    s.on_health(3, health(mode='AIR'), NOW)                 # QUAD4's FC armed
+    s.on_his_phase('MATCH_VELOCITY')
+    assert con.button_states(s, NOW, [])['his_land'] == (True, '')
+    s.on_his_phase('TAKEN_BACK')
+    assert con.button_states(s, NOW, [])['his_land'] == (False, 'ours flies QUAD4: LAND')
+
+
+def test_gui_his_land_sends_land_now():
+    os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+    pytest.importorskip('PyQt5.QtWidgets')
+    s = ready_state(now=time.time() + 30.0)
+    s.on_graph(ALL_NODES, set(con.HIS_NODES), 2, 1, 1)
+    s.on_health(3, health(mode='AIR'), time.time() + 30.0)
+    s.on_his_phase('DESCEND_TO_ATTACHMENT')
+    send = FakeSend()
+    assert con.gui(s, send, exit_after_ms=500, on_ready=lambda w, btns, space: btns['his_land'][0].click()) == 0
+    assert send.sent == [('his_land', True)]
+
+
 def test_a_disarm_closes_takeoff_and_opens_his_disarm():
     s = ready_state()
     for i in range(4):
@@ -150,6 +174,9 @@ class FakeSend:
 
     def give_up(self):
         self.sent.append(('give_up', True))
+
+    def his_land(self):
+        self.sent.append(('his_land', True))
 
 
 def test_gui_space_disarms_and_buttons_never_take_focus():

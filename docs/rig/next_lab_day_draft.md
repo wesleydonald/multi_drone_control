@@ -41,8 +41,9 @@ The 15 Oct sheet's setup block, then these differences (all Wesley's call; the m
 | Aim | B (`trim_speed_gate:=0.20`) | B | descents 1.8-3.8 cm median (a1) |
 | Catch radius `K` | 0.024 | 0.045 with 90 mm discs | 22 % -> 49 % of the bottom time inside (8 flights) |
 | QUAD4 tether `L` | 0.575 | the measured length (1 m: `magnet_drop_below_quad`, `mpc_cable_length`, `L` all follow) | room from the carriers 0.45 -> 0.7 m; QUAD4 0.4 m higher over the ring; the twin attach passes with 1 m |
-| Drop take-back | off ("GIVE UP after a drop", which does not work: card 2026-10-16) | `params_file:=$C/drop_takes_back.yaml` | a2_2; twin: 8 drop cases pass |
-| Console | READY ignores the layout | `python3 tools/console.py --slot-gate` | a3 flew two plates off |
+| Drop take-back | off ("GIVE UP after a drop", which does not work: card 2026-10-16) | **decided (Wesley 16 Oct):** `params_file:=$C/drop_takes_back.yaml` | a2_2; twin: 8 drop cases pass |
+| Console | READY ignores the layout | **decided (Wesley 16 Oct):** `python3 tools/console.py --slot-gate` | a3 flew two plates off |
+| his LAND (console button, new) | none | his planner's own LAND: straight down where QUAD4 is, magnet OFF | to land QUAD4 when it is clear of the ring; over a fallen ring it lands on it |
 | QUAD4's mat | where it was | straight out from plate 9, 1.2 m or more from the ring centre | a1's tether passed 0.10 m from QUAD2 |
 
 **The software change, one at a time (A/B, alternating flights), only if the go/no-go in the filter card holds and
@@ -61,6 +62,7 @@ flights scored with `tools/proof_replay.py --catch` and `tools/attach_window.py`
 ## Stop rules (unchanged, plus)
 
 - A drop: with `drop_takes_back` on, nothing to press (QUAD4 is taken back and landed). Without it GIVE UP does not
-  hand QUAD4 over either (card 2026-10-16): DISARM QUAD4 once it is low and clear of the ring.
+  hand QUAD4 over either (card 2026-10-16): his LAND only once QUAD4 is clear of the fallen ring (it lands straight
+  down), or DISARM QUAD4 once it is low and clear of the ring.
 - Two carrier releases in one session: stop and check every carrier magnet's hold (QUAD2 let go on 15 Oct at 21.9 V).
 - QUAD4 hanging ~0.3 m above its mat on its own landing: DISARM it.

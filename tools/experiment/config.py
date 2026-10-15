@@ -39,6 +39,7 @@ EVENT_KINDS = {
                   # (an unannounced detach, a magnet failing mid-mission; 7 Oct)
     'DROP',       # /fleet/drop "<arg>": ask the planner to drop the ring and land every drone, as a
                   # tracker's ring-tilt rule does (card 2026-10-08_drop_and_land)
+    'HIS_LAND',   # /join_planner/land_now True: his planner's own LAND, as the console's his LAND button
     'WAIT_WELD',  # not published: block until /magnet/object_attached goes True
     'WAIT_LIFT',  # not published: block until the payload is above arg m (default 0.5), then
                   # shift every later event by the wait (a creep lift varies by ~10 s, R0553);

@@ -93,7 +93,9 @@ current branch like any other file (it reaches main with the merges).
   mode, attach included (Wesley 14 Oct after RIG-1014-t5_2, critic waived; detach since 8 Oct): a
   loss leaving fewer than `min_survivors`, or ring tilt > 30 deg, drops the ring (every magnet OFF,
   a welded QUAD4's coil too) and lands every drone; and an unwelded QUAD4's fault lands the fleet
-  with `newcomer_fault_land`. Open: a drop while Tejen flies QUAD4 does not take it back.
+  with `newcomer_fault_land`. A drop while Tejen flies QUAD4: on the rig `drop_takes_back` is on
+  through `params_file:=configs/rig/drop_takes_back.yaml` (we take QUAD4 back and land it; code
+  default off), and the console's his LAND asks his planner to land it straight down (Wesley 16 Oct).
 - LAND lands every drone whatever it is doing; a freed drone off the ring is pushed to its own
   rest and disarmed alone. `newcomer_lifecycle`, `newcomer_fault_land` and `departed_ground_idle`
   are on by default (Wesley 9 Oct, after the LAND re-fly's reviewer); the legacy profile keeps them off.
