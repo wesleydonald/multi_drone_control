@@ -225,7 +225,7 @@ slow drift that zero twist drops. Code at e85bb17 + 9c04ee3; **removed** after t
 |---|---|---|---|
 | Raw | 1.37-1.43 / 0.59-0.63 cm (R1800, R1803, R1806, R1809, R1832) | 0.9 / 1.6, 1.1 / 2.2, 1.0 / 1.6, 1.0 / 1.8 cm (R1829, R1830, R1831, R1841) | baseline |
 | Zero twist | 0.93-1.05 / 0.08-0.10 cm (R1802, R1805, R1808, R1811) | 1.3 / 2.1, 1.2 / 1.7 cm (R1837, R1840) | no regression (R1824-R1826, R1838) |
-| Low-pass 0.5 Hz | 1.04 / 0.12 cm (R1835; R1842 below) | 1.6 / 2.4, 1.5 / 2.3 cm (R1836, R1839) | (R1834 flew raw) |
+| Low-pass 0.5 Hz | 1.04 / 0.12, 0.98 / 0.11 cm (R1835, R1842) | 1.6 / 2.4, 1.5 / 2.3 cm (R1836, R1839) | (R1834 flew raw) |
 
 Every drift run descended after 1.0-1.1 s of MATCH and welded. Reading: at 1.8 Hz the low-pass acts as zero twist; under
 a slow drift its 0.5 Hz lag costs more than no feed-forward at all (median +0.5 cm on raw, zero twist +0.2 cm). Zero

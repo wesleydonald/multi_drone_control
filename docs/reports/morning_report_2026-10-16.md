@@ -47,13 +47,13 @@ typed switch or a new file. The full gate passes on the branch. One bug caught b
    - **Zero plate velocity** (`attach_twist:=zero`): replayed on the rig bags with his exact gate, it opens 3 of the 4
      rig MATCH windows that never descended (a3_2: first pass at 4.9 s instead of never). Twin: the tip's bounce
      against the plate -27 % at 1.8 Hz, no worse at 0.8 Hz, no regression on a still ring (0.55 m and 1 m), a little
-     behind a slow 3 cm drift (+0.2 cm median). Its critic
-     said fix first: done (never zeroed while the ring flies a trajectory, the argument checked, the bridge logs its
-     mode, the rig bag records the twist). **Caught at 05:10:** that trajectory guard also fired in a lifted hover, so
-     from efb9b5d to 05:10 the switch did nothing, in the twin and on the rig (an A/B would have flown raw against raw).
-     Fixed, unit-tested, the affected runs re-flown (below). Still open: it turns his relative-velocity guards into QUAD4-speed guards (a
-     moving ring is then caught only by the xy limits), and it changes what his gates measure: **Tejen should agree**.
-     A draft A/B with a hardware go/no-go is in the card for you to freeze.
+     behind a slow 3 cm drift (+0.2 cm median). Its critic said fix first: done (not while the ring flies a trajectory,
+     the argument checked, the bridge logs its mode, the rig bag records the twist). **Caught at 05:10:** that
+     trajectory guard also fired in a lifted hover, so from 04:11 the switch did nothing, in the twin and on the rig (an
+     A/B would have flown raw against raw); fixed in 9c04ee3, unit-tested, the affected runs re-flown. Still open: it
+     turns his relative-velocity guards into QUAD4-speed guards (a moving ring is then caught only by the xy limits)
+     and changes what his gates measure: **Tejen should agree**. A draft A/B with a hardware go/no-go is in the card
+     for you to freeze. A low-passed velocity (to keep slow drift) was tried and removed: no better.
    - **Plate-height filter:** -35 % at 1.8 Hz and passed its frozen bars, but worse below 1 Hz, and it needs his bottom
      hold and proof lift moved to the raw plate first (Tejen's code). Not for the next lab day.
    *Recommended: put the hardware (discs, 1 m tether) first; then an alternating zero-twist A/B if the go/no-go holds and
@@ -84,3 +84,4 @@ typed switch or a new file. The full gate passes on the branch. One bug caught b
 | d4f8ce8, e96ae68, b786e8f, 9ac6232 | The trajectory, 1 m and latency matrices and their notes |
 | 26ac24f | The thesis sim-results inventory |
 | d34c421, 9ca9b28, 44cf72c, 7af0260, 217c5d7 | Drafts: the next lab day's sheet, the carry claim card, the brief for Mitch |
+| e85bb17, 9c04ee3, b0398f6 | The zero-twist guard fix (it also fired in a hover); a low-passed twist tried and removed; the re-fly |
