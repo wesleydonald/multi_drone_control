@@ -38,16 +38,19 @@ only (`traj3d_*`, 15-45 ms extra, is the latency check); the rig carried the rin
 
 On the final table, before the thesis.
 
-## Result (16 Oct 08:22-09:27; lab PC; trees 5375333 (0.125 m/s) and e836cf3 (the rest), both week5 4b3560e's flight
-code; registry R1847-R1886)
+## Result (16 Oct 08:22-09:27; lab PC; registry R1847-R1886)
+
+One flight-code tree (week5 4b3560e; parameter read-back identical in all 40 runs), flown from 5375333 and e836cf3,
+which differ only in docs, unused configs and worlds, the console, and a runner event these runs do not use.
 
 **Verdict: 39 of 40 runs pass every bar. The spin at 0.3 m/s fails bar 3 in one run (R1875: peak tilt 6.31 deg,
 mid-spin; its repeat R1876 3.76): as frozen, that cell is outside the envelope, and it is not re-flown.** Every other
-cell is inside at 0.125, 0.2 and 0.3 m/s. The 1 m arm passes bars 1-5 (RMSE at most 1.27x its 0.55 m cell's mean).
+cell is inside at 0.125, 0.2 and 0.3 m/s. The 1 m arm passes bars 1-5: RMSE at most 1.27x its 0.55 m cell's mean on the frozen window (1.35x on the path
+alone); the 1 m configs also LAND 5 s later, so the comparison is not one variable.
 No abort, drop or fault in any run. R1880's harness stopped on a stalled sim clock 1.8 s after LANDED (teardown):
-the flight is complete and scored.
+the flight is complete and scored (after the fleet disarmed).
 
-| cell | runs | path RMSE (mm) | peak tilt (deg) | radius ratio | bars |
+| cell | runs | ring position RMSE, takeoff + 5 s to LAND (mm) | peak ring tilt over the whole flight, lift-off and landing included (deg) | radius ratio | bars |
 |---|---|---|---|---|---|
 | circle_v125 | R1847 R1848 | 8.8 / 10.6 | 1.84 / 1.86 | 0.997 / 0.997 | pass |
 | circle_v200 | R1857 R1858 | 9.2 / 12.4 | 1.73 / 1.73 | 0.995 / 0.991 | pass |
@@ -71,4 +74,22 @@ the flight is complete and scored.
 | L100_orbit_v200 | R1885 R1886 | 11.9 / 13.2 | 2.84 / 2.18 | 0.985 / 0.982 | pass |
 
 Against the exploratory read (R1723-R1752): the same picture; its spin at 0.3 m/s peaked at 5.1 deg, so that cell
-sat closest to the bar then too. Next: the reviewer on this table, before the thesis.
+sat closest to the bar then too.
+
+## Reviewer (16 Oct ~09:45): SUPPORTED WITH CORRECTIONS (applied above)
+
+- Every value recomputed from run.csv/events.csv matches; flight code, worlds, configs (sha256) and the parameter
+  read-back are one tree; bars unchanged from the draft to the freeze; no abort/drop/fault line in any log; R1875 is a
+  real fail (above 6 deg for about 0.3 s, t 32.1 s, inside the path); R1880 is a complete flight.
+- **The metrics' windows:** `payload_rmse_m` runs from TAKEOFF + 5 s to LAND (floor, lift, hovers and, for circle,
+  fig-8 and spin, the planner's own descent included); the path-only `payload_rmse_sweep_m` reads 4.3 mm (circle
+  0.125) to 20.9 mm (fig-8 0.3). `payload_tilt_peak_deg` is over the whole run: 20 of 40 peaks fall in the lift, 8 on
+  the path, 12 in the descent or LAND; at 0.125 m/s every peak is the lift-off (path-only 0.86-1.11 deg). Bars 2 and 3
+  give the same verdicts on path-only windows.
+- **The thesis must not say:** "path-tracking RMSE" or "tilt during the carry" for these columns; any speed or shape
+  trend read from the peak-tilt column; that the twin carries at 0.3 m/s on every shape; the 1 m arm "within 1.27x"
+  without the window and LAND caveat; a plain "m/s" (write "peak path speed": circle and spin are one eased lap whose
+  mean speed is speed/1.875, line_x's speed is a sinusoid's peak); for line_x, the "radius ratio" is an amplitude
+  ratio about the line's centre.
+- The thesis table should show the path-only columns (`payload_rmse_sweep_m` and a path-window tilt) beside the
+  frozen ones, labelled as reported, not scored.
