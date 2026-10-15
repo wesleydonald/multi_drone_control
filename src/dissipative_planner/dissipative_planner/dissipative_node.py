@@ -73,6 +73,7 @@ DEPARTED_DOWN_HIGH_M = 0.10  # m: stalled no more than this above its rest is do
                             # its mat height after every 14 Oct take-back and was never disarmed alone)
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
 DROP_LAND_WAIT_S = 30.0    # s after a drop: /fleet/landed even if a drone never reads as down
+DROP_TAKE_BACK_EXTRA_S = 30.0  # s more while a drop's take-back flies QUAD4 out and down (15-25 s; critic F2)
 # partner_contact (card 2026-10-10_combined_m1_contact): his phases from the rejoin on, in which our ring magnet span
 # may begin (tejen_mission MissionPhase; LIFT_PROOF and RING_ATTACHED are the contact attach's own)
 REJOIN_PHASES = ('TRANSIT_TO_REATTACH', 'APPROACH_ABOVE_TARGET', 'MATCH_VELOCITY', 'DESCEND_TO_ATTACHMENT',
@@ -683,6 +684,9 @@ class DissipativeController(LoadPlanner):
             self.get_logger().error('[dissipative] drop_on_loss needs reconfig_mode ocp: '
                                     'turned off')
             self._drop_on_loss = False
+        # a drop also takes a pending newcomer back from his stream (card 2026-10-16_drop_takes_back; RIG-1015-a2_2:
+        # his planner flew QUAD4 on toward the dropped ring). Off by default.
+        self._drop_takes_back = bool(self.declare_parameter('drop_takes_back', False).value)
         self._dropped = None            # the reason, once dropped
         self._drop_centre = None        # ring xy at the drop: the clear-out centre
         self._drop_t = None
@@ -1102,8 +1106,8 @@ class DissipativeController(LoadPlanner):
         for j in range(self.reserved_attach):
             if not self.attach_pending[j] or self.attach_pos[j] is None:
                 continue
-            if (self._n_carry0 + j) in self._departed_hold:
-                continue                  # released partner drone: its fixed hold flies it
+            if self._departed_hold.get(self._n_carry0 + j) is not None:
+                continue                  # released partner drone: its fixed hold flies it (a drop's None: not yet)
             if getattr(self, '_partner_contact', False):
                 self._contact_warm_ref(j, load_p, g)
                 continue
@@ -1414,6 +1418,10 @@ class DissipativeController(LoadPlanner):
         self._departed_land = True
         self._dropped_pub.publish(Bool(data=True))
         self._release_all_magnets()
+        if getattr(self, '_drop_takes_back', False):
+            for j in range(self.reserved_attach):
+                if self.attach_pending[j]:
+                    self._take_back(j, 'DROP')
 
     def _cancel_unload_quietly(self):
         if getattr(self, '_unload', None) is not None:
@@ -1433,16 +1441,21 @@ class DissipativeController(LoadPlanner):
 
     def _drop_tick(self):
         self._release_all_magnets()
+        takes_back = getattr(self, '_drop_takes_back', False)
+        if takes_back and getattr(self, '_partner_contact', False):
+            # QUAD4 on his stream until a take-back owns it: our tracker stays warm (RIG-1015-a2_2: it faulted on a
+            # stale reference 1 s after the drop, so a later GIVE UP could not hand it over; critic F1)
+            self._publish_pending_attach_refs()
         self._publish_departed_refs()
         if self._landed:
             return
-        late = self.get_clock().now().nanoseconds * 1e-9 - self._drop_t > DROP_LAND_WAIT_S
+        wait = DROP_LAND_WAIT_S + (DROP_TAKE_BACK_EXTRA_S if takes_back and self._taken_back else 0.0)
+        late = self.get_clock().now().nanoseconds * 1e-9 - self._drop_t > wait
         if self._departed_down() or late:
             self._landed = True
             self.landed_pub.publish(Bool(data=True))
             self.get_logger().warn('[dissipative] after the drop every drone is down - announcing '
-                                   '/fleet/landed' + (f' (timed out after {DROP_LAND_WAIT_S:.0f} s)'
-                                                      if late else ''))
+                                   '/fleet/landed' + (f' (timed out after {wait:.0f} s)' if late else ''))
 
     def _start_unload(self, d):
         """Soft detach, phase 1: in the n-drone OCP blend the leaver's tension down to
@@ -2074,8 +2087,9 @@ class DissipativeController(LoadPlanner):
         """Rig release guard (critic round 4, F7): with our span begun and the tip on or near plate 9's weld point,
         the rise stops at the tether's slack + RELEASE_SEEN_M + GUARD_RISE_ABOVE_SLACK_M until the tip has left the
         plate (ring frame) and the plate has not followed."""
-        if not getattr(self, '_release_guard', False) or not off or self.load_state is None or not goals:
-            return
+        if not getattr(self, '_release_guard', False) or not off or self.load_state is None or not goals \
+                or getattr(self, '_dropped', None) is not None:
+            return                                 # (after a drop every coil is OFF and the plate falls: no guard)
         tip0, plate_z = self._guard_read(j)
         if tip0 is not None and float(np.linalg.norm(tip0 - self._weld_rho_of(j))) > 2.0 * RELEASE_SEEN_M:
             return                                 # the tip is not on the plate: nothing for the coil to hold

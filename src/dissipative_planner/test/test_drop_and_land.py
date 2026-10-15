@@ -152,3 +152,45 @@ def test_a_drop_switches_a_welded_newcomers_coil_off_at_most_once_a_second():
     f._release_all_magnets()
     assert f._magnet_cmd_pub.msgs == ['OFF', 'OFF']
     assert _node()._magnet_cmd_pub.msgs == []         # no newcomer: the coil topic stays quiet
+
+
+def test_drop_takes_a_pending_newcomer_back_only_when_switched_on():
+    """Card 2026-10-16_drop_takes_back (RIG-1015-a2_2): with drop_takes_back on, the drop runs the take-back for a
+    newcomer still pending (his stream flying it); off (the default), or after its attach, it does not."""
+    for on, pending, want in ((False, True, []), (True, True, [(0, 'DROP')]), (True, False, [])):
+        f = _node()
+        f.reserved_attach, f.attach_pending, f._drop_takes_back = 1, [pending], on
+        calls = []
+        f._take_back = lambda j, why, calls=calls: calls.append((j, why))
+        f._drop_and_land('test')
+        assert calls == want, (on, pending)
+
+
+def test_drop_tick_keeps_a_pending_newcomer_warm_and_waits_longer_for_its_take_back_only_when_switched_on():
+    """Card 2026-10-16_drop_takes_back rev 2 (critic F1, F2): with the switch on, the drop tick keeps publishing the
+    pending newcomer's warm reference (its tracker stays able to take it), and /fleet/landed waits
+    DROP_TAKE_BACK_EXTRA_S longer while a take-back flies it; off, both as before."""
+    from dissipative_planner.dissipative_node import DROP_LAND_WAIT_S, DROP_TAKE_BACK_EXTRA_S
+    for on in (False, True):
+        f = _node()
+        f._drop_takes_back, f._partner_contact, f._taken_back = on, True, False
+        warm = []
+        f._publish_pending_attach_refs = lambda warm=warm: warm.append(1)
+        f._drop_and_land('test')
+        f._drop_tick()
+        assert bool(warm) == on
+        f._taken_back = True
+        f.now[0] += DROP_LAND_WAIT_S + 1.0
+        f._drop_tick()
+        assert f._landed == (not on)                    # on: still waiting for the take-back
+        f.now[0] += DROP_TAKE_BACK_EXTRA_S
+        f._drop_tick()
+        assert f._landed
+
+
+def test_no_release_guard_after_a_drop():
+    """Critic F3: after a drop every coil is OFF and the plate falls, so the rig's release guard does not arm."""
+    st = {'hold': np.array([0.0, 0.2, 1.6])}
+    f = SimpleNamespace(_release_guard=True, load_state=np.zeros(13), _dropped='test')
+    D._guard_setup(f, 0, 3, st, True, [np.array([0.0, 1.2, 1.6])])
+    assert 'guard' not in st
