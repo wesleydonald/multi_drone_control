@@ -85,10 +85,10 @@ A 90 mm disc doubles the time the magnet can catch. It also forgives the inward 
 | B3 | Carry with 1 m cables vs 0.55 (twin) | design result for the thesis and Mitch | done: same within noise | b786e8f |
 | C1 | Disc size and cable/basket numbers for Mitch | his questions | done (tables above) | |
 | D1 | his LAND console button (Wesley 16 Oct) | a drop during his flight; drop_takes_back on at the rig as well | built + twin: after a drop it lands QUAD4 on the fallen ring (R1844-R1846); use only clear of the ring | 5375333, e836cf3 |
-| D2 | Carry claim on the freeze tree (card bars frozen 16 Oct) | thesis T7t/F8t | running: 0.125 m/s 10/10 PASS (R1847-R1856); 0.2/0.3 and the 1 m arm in batch 14 | 5375333 |
-| D3 | Detach freeze: Tier A rev 3 (T3, T8, T9, K1, T15), Tier B, W4/W5, D1/D4 | thesis T3/T9/T13, F12 | cards and configs ready, bars frozen; next lab batch | 83a7088 |
+| D2 | Carry claim on the freeze tree (card bars frozen 16 Oct) | thesis T7t/F8t | flown: 39/40 pass; spin at 0.3 m/s fails bar 3 once (R1875, 6.31 deg): outside the envelope; 1 m arm passes (R1847-R1886); reviewer running | 5375333, e836cf3 |
+| D3 | Detach freeze: Tier A rev 3 (T3, T8, T9, K1, T15), Tier B, W4/W5, D1/D4 | thesis T3/T9/T13, F12 | running: lab batch 15 (33 runs, tree 8c468bd) | 83a7088 |
 | D4 | N2: twin bands on the 1 m worlds | the next rig day's ledger rows | configs ready; the band rule needs Wesley's word (`docs/experiments/2026-10-16_bands_1m.md`) | 83a7088 |
-| D5 | Appendix re-fly on the freeze tree and the tables regenerated | thesis appendix | to plan | |
+| D5 | Appendix re-fly on the freeze tree and the tables regenerated | thesis appendix | card + 33 app_* configs, bars frozen; flies after D3 (54 runs) | 48d93d7, 8c468bd |
 
 ## Overnight queue (15-16 Oct; the loop works down it)
 
