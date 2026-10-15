@@ -81,6 +81,26 @@ Falsifier: any bar failing in any switch-on run.
 9. The out-step's tip passes ~0.18 m under the carriers' rotor plane: bar 2 measures it.
 10. Non-partner newcomers out of scope (above).
 
-## Result
+## Result (rev 2 runs, 16 Oct ~00:05; tree 66a701c, lab PC)
 
-(after the runs)
+| Run | Arm | QUAD4 after the drop | Drop -> LANDED | Bars |
+|---|---|---|---|---|
+| R1753, R1755 | off, drop in MATCH | tracker fault 1.06 s after; his planner flew on (DESCEND, ATTACH_READY); 0.53 m up at the end | 30 s (timeout) | (baseline) |
+| R1757 | off, carrier release in MATCH | fault 1.05 s after; he flew on; 0.50 m up at the end | 30 s | (baseline) |
+| R1754, R1756 | on, drop in MATCH | taken back on the drop's tick, out in 6.7-6.8 s; carrier >= 0.56 m, rods 0.44 m, ring >= 0.29 m; down at its rest | 14.1-14.3 s | 1-4 PASS |
+| R1758 | on, carrier release in MATCH | as above (carrier 0.53 m, ring 0.30 m) | 14.1 s | 1-4 PASS |
+| R1759 | on, drop in ATTACH_READY | taken back; down at its rest, no fault | 17.0 s | 1, 3, 4 PASS; **2 FAIL** |
+
+The switch-off arm reproduces RIG-1015-a2_2 (fault, his planner flying on, the 30 s timeout), so the twin tests the
+right thing. **As frozen the card is falsified by R1759's bar 2**: at the drop instant QUAD4 sat 0.45 m from a
+carrier with its tip on the plate, which is the bottom hold's own geometry (0.45 m is the body clearance at the plate
+with 0.55 m rods). Within 0.5 s the ring had fallen 1 m and every distance only grew (carrier 0.45 -> 1.0 m in 4 s);
+the take-back made nothing closer. The bar was wrong for a drop that starts at the plate; per the working rules
+R1759 stays scored against it, and rev 3's bar applies to later runs only.
+
+## Rev 3 (16 Oct ~00:10, before the runs it scores)
+
+Bar 2 for a drop that starts with QUAD4 at the ring (ATTACH_READY, LIFT_PROOF): from the drop until QUAD4 is 1.1 m
+out, its body never comes closer to any carrier, and its tip never closer to any rod, than at the drop minus 0.02 m;
+once the tip is more than 0.15 m from the ring it stays so. Bars 1, 3, 4 unchanged. Runs: `w4_drop_his_bottom_tb` x2,
+`w4_drop_his_bottom_off` x1 (record).
