@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Fri 16 Oct 2026, 01:25 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Fri 16 Oct 2026, 02:26 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -37,6 +37,12 @@ Updated: Fri 16 Oct 2026, 01:25 AEDT (from `date`). Only what a new session need
   FAILS bar 2 as frozen (starting geometry; rev 3 relative bar for later runs: bottom_tb x2 + bottom_off x1 queued).
   1 m attach R1760: contact, proof, fold-in, landed (free-hang 1.0405 m). Slide finding in the plan (tip off the
   plate's edge 3.3-4.3 cm along the ring).
+- **02:26:** full gate (all 6 stages, SIL smoke included) PASSES on the branch (HEAD 3507fce). drop_takes_back reviewer:
+  SUPPORTED WITH CORRECTIONS (applied, 0a3ac30). Filter critic: N6's 2/2 vs 0/2 withdrawn (sim weld + slope gate
+  artefact); zero-twist switch built (attach_twist:=zero, e9ff80a); card rev 2 bars on the mechanism
+  (tools/n6_mechanism.py), unseen runs. Batch 4: latency 15/30 ms = 0 ms, 45 ms tips at takeoff; registry to R1799.
+  Batch 5 running (byl7adruz, scratchpad lab_batch5.log): rev 2 arms base/zlp08/twist0 x4, n6s08 x3, the two new drop
+  cases (R1800-R1816), ~03:45. Supervisor brief draft docs/reports/supervisor_brief_2026-10-16.md.
 - **01:25:** batches 2-3 scored (registry to R1789). drop_takes_back: rev 3 bottom runs PASS (R1779/R1780), off
   arm shows the hazard (R1781); reviewer running. 1 m carry = 0.55 m (R1769-R1778); 1 m attach 2/2. N6: at the rig's
   0.85 cm plate bounce the filter attached 2/2, the baseline 0/2 (R1782-R1785); card
