@@ -12,10 +12,15 @@ part of a circle or figure-8 (from ORBIT_RAMP_S + 1 s after the path starts to L
   s   the shortfall the fleet then adds: the L0 measured 0.5 s later minus this tick's L5
   D   per drone (tracker log.csv): the time its pose leads its logged node-0 reference (the
       shift that best matches pose(t - D) to ref(t)), the plan's latency as the tracker flies it
-  A0  the ring's lag on ONE clock for every arm (time-cascade critic, must-fix 2): the node clock
-      minus t_start (the first planner tick with traj_t > 0) minus the path time nearest the ring
-      (tracker 0's payload pose). Independent of how traj_t is counted, so a change of that
-      convention cannot move it; L0 - A0 is the reference lead the OCP sees (0.1 s today).
+  A0  the ring's lag on ONE clock for every arm (time-cascade critic, must-fix 2): the planner's
+      schedule at that moment minus the path time nearest the ring (tracker 0's payload pose). The
+      schedule is the planner's own clock, traj_t less its one-tick advance (the point it publishes
+      as the desired), interpolated between ticks: a clock hold or a late rig tick moves the
+      schedule with it (16 Oct; until then t - t_start, which read r305 0.6 s late across its
+      post-detach hold). L0 - A0 is the reference lead the OCP sees.
+  L0' L0 less plan_ref_lag_s: the gap net of a lead the run removed (16 Oct switch).
+Window: the orbit from ORBIT_RAMP_S + 1 s; the circle where its eased speed is above half the
+peak; the figure-8 over its constant-speed part (until 16 Oct 4 s of its 14 s lap).
 The reference is rebuilt from the trajectory parameters in the planner's params.json and the
 captured hover point (the ring's first logged position).
 """
@@ -72,7 +77,11 @@ def planner_lags(path):
     traj = LoadTrajectory(prm.get('load_traj', 'orbit'), float(prm.get('traj_speed', 0.125)),
                           float(prm.get('traj_distance', 1.0)), float(prm.get('traj_radius', 0.5)))
     hover = L[['load_x', 'load_y']].dropna().iloc[0].to_numpy(float)
-    run = L[(L.traj_t >= ORBIT_RAMP_S + 1.0) & (L.land.astype(str).isin(['0', 'False', '0.0']))]
+    ref_lag = float(prm.get('plan_ref_lag_s') or 0.0)
+    ticks = L[L.traj_t > 0].drop_duplicates('traj_t')
+    clock = (ticks.sim_time.to_numpy(float), ticks.traj_t.to_numpy(float) - 0.1)
+    lo = ORBIT_RAMP_S + 1.0 if traj.kind not in ('circle', 'spin') else 0.0
+    run = L[(L.traj_t >= lo) & (L.land.astype(str).isin(['0', 'False', '0.0']))]
     end = runner_end(path, L)
     if end is not None:
         # the node logs run on past the runner (post-landing rows, the stack's shutdown):
@@ -80,7 +89,10 @@ def planner_lags(path):
         run = run[run.sim_time <= end]
     if traj.kind == 'fig_8':
         end = traj._fig8_theta(0.0)[3]
-        run = run[run.traj_t <= end - ORBIT_RAMP_S - 1.0]
+        run = run[run.traj_t <= end - ORBIT_RAMP_S]
+    elif traj.kind in ('circle', 'spin'):
+        sp = np.array([np.hypot(*traj.offset_at(tt)[2:4]) for tt in run.traj_t])
+        run = run[sp >= 0.5 * (sp.max() if sp.size else 0.0)]
     run = run.iloc[::2]                                  # 5 Hz is plenty, halves the search
     L0, L5 = [], []
     for _, r in run.iterrows():
@@ -94,18 +106,21 @@ def planner_lags(path):
     t_start = float(L.sim_time[L.traj_t > 0].iloc[0])
     return {'kind': traj.kind, 'speed': traj.speed, 'ticks': len(run), 'traj': traj, 'hover': hover,
             't_start': t_start,
+            'clock': clock, 'ref_lag': ref_lag,
             'L0': float(np.nanmean(L0)), 'L5': float(np.nanmean(L5)),
             'c': float(np.nanmean(L0 - L5) / np.nanmean(L0)), 's': float(np.nanmean(s)),
             'window': (float(run.sim_time.iloc[0]), float(run.sim_time.iloc[-1])) if len(run) else None}
 
 
 def absolute_lag(path, pl):
-    """A0: mean of (t - t_start) - path time nearest the ring, over the planner window."""
+    """A0: mean of the planner's schedule (traj_t less its advance, between ticks) minus the
+    path time nearest the ring, over the planner window."""
     f = sorted(run_logs.node_csvs(path, 'tracker'), key=lambda f: run_logs.drone_of(f) or 0)[0]
     T = pd.read_csv(f).drop_duplicates('sim_time').dropna(subset=['payload_x'])
     T = T[(T.sim_time >= pl['window'][0]) & (T.sim_time <= pl['window'][1])].iloc[::10]
-    lags = [(t - pl['t_start']) - _nearest_time(pl['traj'], pl['hover'], np.array([x, y]), t - pl['t_start'])
-            for t, x, y in zip(T.sim_time, T.payload_x, T.payload_y)]
+    sched = np.interp(T.sim_time.to_numpy(float), *pl['clock'])
+    lags = [tau - _nearest_time(pl['traj'], pl['hover'], np.array([x, y]), tau)
+            for tau, x, y in zip(sched, T.payload_x, T.payload_y)]
     return float(np.mean(lags)) if lags else float('nan')
 
 
@@ -139,7 +154,8 @@ def main(args):
                      'speed': pl['speed'], 'ticks': pl['ticks'],
                      'D (s)': round(float(np.mean(list(D.values()))), 3) if D else None,
                      'D per drone': {k: round(v, 3) for k, v in sorted(D.items())},
-                     'A0 (s)': round(A0, 3), 'L0 (s)': round(pl['L0'], 3), 'L5 (s)': round(pl['L5'], 3),
+                     'A0 (s)': round(A0, 3), 'L0 (s)': round(pl['L0'], 3),
+                     "L0' (s)": round(pl['L0'] - pl['ref_lag'], 3), 'L5 (s)': round(pl['L5'], 3),
                      'c': round(pl['c'], 3), 's (s)': round(pl['s'], 3)})
     keys = list(rows[0]) if rows else []
     print('| ' + ' | '.join(keys) + ' |')
