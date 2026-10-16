@@ -173,3 +173,33 @@ no delay and an exact model the planner's own figure-8 error is ~5 mm; the 20-30
 model mismatch), not the OCP's intent. The 5 iterations were set for the slack-to-taut lift ("one RTI step cannot
 track the transition"): the twin runs include the floor start and the lift. Switch `plan_sqp_iters` (e843065; a cold
 reseed keeps its 15 iterations; unit-tested). Running on the laptop: `cc_it2_fig8_v300` x2 and a base.
+
+## Iterations and the timing combination (laptop, 12:24-13:00; R1983-R1991)
+
+**2 SQP iterations (R1983, R1985 against the laptop bases R1982, R1984):** the solve on the path halves (p50 26-28 against
+49-51 ms, p95 57-63 against 93-96), no solve failure, the lift unchanged (23 ms). But the plan's age as flown drops only
+0.083-0.088 -> 0.073-0.077 s (the 10 Hz hold dominates), and the cut stays inside the base spread (8.8, 24.8 against
+18.4, 20.1 mm).
+
+**The combination: ref_time_shift + plan_ref_lag_s 0.05 + 2 iterations (D 0.022-0.025 s against 0.085-0.088):**
+
+| shape (0.3 m/s) | run | across-path mean (+ inside) / rms (mm) | along-path rms (mm) | path RMSE (mm) | ring tilt on the path (deg) |
+|---|---|---|---|---|---|
+| figure-8 | base R1984 | +8.2 / 14.9 | 12.7 | 19.1 | 2.8 |
+| figure-8 | combination R1986, R1987 | -3.5, -4.6 / 15.4, 13.7 | 20.7, 20.7 | 24.7, 23.9 | 4.6, 4.3 |
+| circle | base R1989 | +7.9 / 12.2 | 12.5 | 16.7 | 3.2 |
+| circle | combination R1988 | -3.1 / 8.3 | 25.0 | 24.6 | 3.3 |
+| orbit | base R1991 | +13.7 / 19.1 | 15.8 | 26.3 | 5.1 |
+| orbit | combination R1990 | -5.0 / 13.0 | 31.8 | 34.5 | 4.1 |
+
+**Reading:** the corner cutting is a latency effect and the timing fix removes it on every shape (inside 8-14 mm ->
+slightly outside 3-5 mm; the across-path rms falls). But the error moves along the path (rms roughly doubles), so the
+total path error does not improve, and gets worse on the circle and orbit. The planner's weights were tuned with the
+latency in the loop; taking it out changes the along-path dynamics, which would need its own re-tune (the clock lead
+per shape, the velocity weight) with n >= 3 per arm on the lab, or the state-prediction fix (rung c).
+
+**Recommendation:** keep every switch off (today's flight unchanged); report the corner cutting with its mechanism (the
+8 Oct decision stands): ~1 cm at 0.125 m/s, 1.5-3 cm at the figure-8's tight bends at 0.3 m/s, from the ~0.08 s plan
+age in the loop, not from the trackers or a cost term. Separately, 2 SQP iterations halve the planner's solve at no
+cost to the plan: worth a claim card as a CPU measure for the rig (its solve reaches the 60 ms budget), with the lift,
+the attach and a detach as neighbours.
