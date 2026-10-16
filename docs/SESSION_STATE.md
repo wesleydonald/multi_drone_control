@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Fri 16 Oct 2026, 10:58 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Fri 16 Oct 2026, 11:33 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -33,7 +33,7 @@ Updated: Fri 16 Oct 2026, 10:58 AEDT (from `date`). Only what a new session need
   under a card, circle exploratory (OPEN line closed); Tier B 120/150/180 + 135/165; Tier A no-code cells now; L5
   twin column R1712/R1713 (against the recommendation: different integral from the rig flight, caption says so);
   push-abort bar = QUAD4's own clearance (new runs only).
-- **Lab PC:** usable now, but someone may need it soon: check `who`/load/containers before every batch and yield.
+- **Lab PC: DO NOT USE** (Wesley ~11:20: someone else wants it; batch 17 stopped, my containers removed, nothing of mine left). Wait for his word. Twin runs go on the laptop, one at a time, idle for the first ~3 min.
 - **Commits on day-1016:** 5375333 (decisions, his LAND button, HIS_LAND harness event, his-LAND configs), 83a7088
   (detach freeze cards + configs + 3 Tier B worlds, bars frozen 08:41 while Wesley is at work; N2 1 m configs and
   band draft), e836cf3 (sheet). Registry rows to R1856 (uncommitted).
@@ -51,8 +51,11 @@ Updated: Fri 16 Oct 2026, 10:58 AEDT (from `date`). Only what a new session need
   plan_w_pos_scale, plan_w_s_scale, plan_w_r_scale, plan_rate_ff (+ existing ref_time_shift). **Running:** N2 batch 16
   (blsovaydh, R1920-R1954, tree 6cd87ed: 25 ok, 10 VOID at RTF 0.24-0.29, re-fly), then batch 17 queued (btz7ga08o: base + 5 arms x fig8/circle/orbit
   at 0.3, 18 runs). Scorer: scratchpad score_cc.py (base R1859/R1863/R1871: ring cut 9.6/29.9/13.0 mm).
-- **Next:** score batch 17 -> report to Wesley; winners: neighbours (0.125/0.2, lift, landing, detach, attach), card,
-  critic, reviewer, his word. Then the appendix batch (54) and N2 scoring (band rule needs his word).
+- **Corner cutting now:** lab batch 17 stopped after 4 figure-8 runs (R1955-R1958; R1959-R1972 VOID, not flown):
+  ref_time_shift kills the cut (2.2 mm) but the ring runs 0.07 s ahead (the clock's one-tick lead); position x3 a
+  little better; cable direction x0.3 worse. Built plan_ref_lag_s (482a710). Laptop queue running (bf6kxd6jp,
+  scratchpad laptop_cc1.log): cc_rtslag, cc_rff, cc_wr01 on the figure-8 at 0.3. Then circle/orbit for what helps,
+  then report to Wesley. Appendix (54) and N2 re-fly (10) wait for the lab.
 - **For Wesley tonight:** the 3 Tier B world files (new, via make_carry_worlds.py); the 1 m band rule; T15's layout
   (even ring chosen); the bars set in his absence (he may change them for later runs).
 
