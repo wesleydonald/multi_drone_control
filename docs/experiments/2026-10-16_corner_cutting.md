@@ -81,3 +81,18 @@ The winner(s) go through the neighbours (0.125 and 0.2 m/s, hover, the lift and 
 a claim card with frozen bars, the critic (a planner reference or cost change is in the flight loop), the reviewer,
 and Wesley's word (a launch default). On the rig, `ref_time_shift` was planned as a figure-8 A/B on 8 Oct (r302) and
 never flown.
+
+## First results (lab batch 17, stopped at ~11:20 for another user; figure-8 at 0.3 m/s only, one run per arm)
+
+| arm | run | ring inside at the tight bends, mean / max (mm) | plan node 5 there | path-only RMSE (mm) | D / A0 (s) | note |
+|---|---|---|---|---|---|---|
+| base | R1955 (+ R1863, R1864) | 20.7 / 34.8 (29.9, 26.9) | 22.3 | 16.9 (20.9, 20.2) | 0.075 / +0.013 | base spread is wide |
+| ref_time_shift | R1956 | **2.2** / 20.0 | 6.9 | 31.5 | 0.023 / **-0.069** | the cut is gone, but the ring runs 0.07 s AHEAD: along-path rms 31.9 against 12.5 mm |
+| position weight x3 | R1957 | 16.4 / 26.9 | 19.3 | 16.4 | 0.078 / +0.003 | a little better on both; throttle peak 0.671 against 0.648 |
+| cable-direction weight x0.3 | R1958 | 37.1 / 64.6 | 37.9 | 26.4 | | worse: falsified |
+
+**Why ref_time_shift overshoots:** the planner's clock steps one tick (0.1 s) before each solve, a lead that offset the
+trackers' 0.075 s plan age. With the age removed (D 0.023 s) the lead is no longer cancelled and the ring runs ahead.
+The 8 Oct card named removing the lead as the next variable. Switch built: `plan_ref_lag_s` (482a710; 0.1 cancels the
+lead; unit-tested). Next, on the laptop (one at a time): ref_time_shift + plan_ref_lag_s 0.1, the rate reference,
+the rate weight x0.1 (figure-8 0.3 m/s), then the circle and orbit for the arms that help.
