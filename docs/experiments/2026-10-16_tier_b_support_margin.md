@@ -142,7 +142,7 @@ files.
 | B1 curve on rig plates | G120 6.40 [5.46, 7.68] -> G150 16.82 [16.65, 16.99]: +10.42 against 4.44, resolved. G150 -> G180 >= 61.22 [60.71, 61.72]: +44.40 against 2.02, resolved. Both have the sign "smaller margin, larger Delta-theta" | **confirmed** |
 | B2 shape (neighbours in margin order) | G120 -> G135 8.44 [7.81, 9.07]: +2.04 against 4.44, unresolved (right sign, no overlap). G135 -> G150 +8.38 against 2.52, resolved. G150 -> G165 28.02 [27.93, 28.12]: +11.20 against 1.00, resolved. G165 -> G180 +33.19 against 2.02, resolved. No pair inverted | **confirmed** |
 | B3 pull source at 150 deg (measured < planned) | G150 16.82 [16.65, 16.99] -> G150p >= 29.54 [28.46, 30.61]: +12.71 against 4.30, resolved | **confirmed** |
-| B4 the 30 deg line, G120-G150 (the measured-pull arms) | abs peaks 4.62-7.06 (G120), 7.48-8.65 (G135) and 16.42-16.86 (G150), all < 30 | **confirmed** (see the reading note) |
+| B4 the 30 deg line, G120-G150 | G150p (planned pull, 150 deg): 2 of 2 at the drop line (R1905 abs peak 30.90 at the drop); the measured-pull arms 4.62-16.86, all < 30 | **falsified as written** (G150p); on the measured-pull arms every peak is < 30 (max 16.86): reported, a reading set after the runs [reviewer] |
 | B5 safety, G120-G165 | 9 runs: no abort, no fault latch, every drone landed, and the freed drone disarmed alone 0.25-0.43 s after first at rest, before LANDED, dz <= 0.002 m | **confirmed** |
 
 **Reported, not scored:**
@@ -165,3 +165,20 @@ The card's ">=" rule counts that drop as B3 support. Wesley's call.
 
 **Re-fly needed:** none. There was no solver fault or twin artefact. The G180 faults and the G150p drops are the cases
 the card scores at the instant.
+
+## Reviewer (16 Oct ~11:05): SUPPORTED WITH CORRECTIONS (applied above)
+
+- B1, B2, B3 and B5 recompute (G135 8.44, G150 16.82, G165 28.02, G180 >= 61.22, G150p >= 29.54); the ">=" scoring
+  follows the card; B5 holds with G150p included.
+- B4: the frozen text names gaps, not a pull source, and lists only G165 and G180 as reported-only: G150p belongs to it,
+  so B4 is falsified as written; the measured-pull-only reading was chosen after G150p crossed 30 deg.
+- The G150-G180 pair also differs in drop_on_loss (off at G180, declared before the runs): inert at G150 (peak 16.86,
+  the gap rule needs 180), but G180's >= 60.71 / 61.72 are the 60 deg fault threshold, which exists only with
+  drop_on_loss off; on the defaults (G180d, R1919) the same layout scores >= 24.08 at +0.315 s.
+- G150p's >= 28.46 / 30.61 are set by the 30 deg drop line, not by the ring's own peak. R1908's "ref still" is 6.9 s.
+
+**The thesis must not say:** "no run at gaps up to 150 deg reached the drop line" without "with the measured pull" (the
+planned pull at 150 deg dropped the ring 2 of 2); G180's ~61 deg or G150p's ~29.5 deg as the ring's tilt (they are
+">=" values cut at the fault or the drop); "the gap rule drops the ring before it passes 30 deg" (R1917: it won the
+race in 1 of 2 runs, after the ring had passed 30 deg).
+

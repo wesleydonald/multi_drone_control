@@ -255,7 +255,7 @@ Reported for T13: the absolute peak, time back in band, post tilt, detection del
 
 | bar | verdict |
 |---|---|
-| F1, W4: every run inside [1.75, 14.51] | **confirmed** (5.46-7.68) |
+| F1, W4: every run inside [1.75, 14.51] | **confirmed on R1887** (6.05), the only run at the W4 config: T13's W4 twin column is R1887, n = 1 on the freeze tree (under the 2-repeat rule); R1891 and R1895 release +0.5 / +1.0 s later (7.68, 5.46, also inside) [reviewer] |
 | F1, W5: every run inside [1.00, 13.20] | **confirmed** (6.70, 7.11) |
 | P1: disarm edge within 0.5 s, before LANDED, dz within 0.03 m | **confirmed** (0.27-0.43 s, all before LANDED, dz <= 0.002 m) |
 | P2: no abort, every run reaches LANDED | **confirmed** |
@@ -272,3 +272,9 @@ Reported for T13: the absolute peak, time back in band, post tilt, detection del
   (R1687: 14.1 s).
 
 **Re-fly needed:** none.
+
+**Reviewer (16 Oct ~11:05): SUPPORTED WITH CORRECTIONS (applied above).** F1 holds for W4 and W5 and P1-P4 hold
+(R1895's 0.43 s is 0.07 s inside the 0.5 s bar, an upper bound). The pooling was mislabelled: only `ta_a1_r1` is the W4
+config ("the same config bytes" at 08:41 was already false for r2/r3, whose reference was still 7.0 and 7.5 s before
+the release against the rig's 6-7 s). **The thesis must not say** "W4 n = 3 on the freeze tree".
+

@@ -385,9 +385,9 @@ Left for Wesley (the card does not decide them):
 | T3: A1 against A2, measured < planned | 6.40 [5.46, 7.68] | 16.80 [16.64, 17.08] | +10.40 | 4.44 | yes / yes / yes | **confirmed** |
 | T9: A1 (on) against A5 (off), no sign | 6.40 [5.46, 7.68] | 5.58 [4.64, 6.66] | -0.82 | 4.44 | - / no / no | **confirmed (no sign)**. The double-count sign off < on holds on the means but is unresolved: reported, not credited |
 | T8: A2 (on) against A6 (off), on < off | 16.80 [16.64, 17.08] | 28.18 [28.17, 28.20] | +11.38 | 1.00 | yes / yes / yes | **confirmed** |
-| K1 measured: A1 (on) against A5 (off), the tool's landing lean | 1.37 [1.2, 1.6] | 4.80 [4.7, 4.9] | +3.43 | 1.00 | yes / yes / yes | **confirmed** (the tool's reading; see below) |
+| K1 measured: A1 (on) against A5 (off), the tool's landing lean | 1.37 [1.2, 1.6] | 4.80 [4.7, 4.9] | +3.43 | 1.00 | yes / yes / yes | **unresolved on the frozen quantity (survivors: 1.37 against 1.80, gap 0.43 < 1.00); the tool's number includes the freed drone: reported, not credited** [reviewer] |
 | K1 planned: A2 (on) against A6 (off), the tool's landing lean | 1.90 [1.8, 2.0] | 4.23 [3.4, 5.4] | +2.33 | 4.00 | yes / yes / no | **unresolved** |
-| T15: A8 (planned) against A7 (measured), planned < measured | 0.53 [0.49, 0.58] cm | 0.93 [0.87, 0.98] cm | +0.39 cm | 0.30 cm | yes / yes / yes | **confirmed** |
+| T15: A8 (planned) against A7 (measured), planned < measured | 0.53 [0.49, 0.58] cm | 0.93 [0.87, 0.98] cm | +0.39 cm | 0.30 cm | yes / yes / yes | **confirmed, even ring, n = 2, 0.09 cm over the floor; the 120 deg cell not flown** [reviewer] |
 
 **K1 reads the freed drone, not the survivors.**
 - With detection off there is no resize. `release_transient`'s no-resize branch then counts every drone as a survivor,
@@ -414,8 +414,10 @@ Left for Wesley (the card does not decide them):
   above the landed ring.
 - This comes after every scored window: Delta-theta ends at +15 s, and the landing lean is read about 0.5 s before the
   abort.
-- It is the same in 3 of 3 runs, and it is a consequence of the arm's own setting (a freed drone flying a share of a load
-  it no longer carries), not a random twin fault. So it is recorded as a result and **not re-flown**: a re-fly on the
+- It is the same in 3 of 3 runs. [reviewer] The sideways touchdown is the arm's result (a freed drone flying a share
+  of a load it no longer carries); the tip-over of a drone carrying a rigid rod is twin floor contact (the twin's joint
+  lets go between the plate and the rod, so the rod stays on the drone), not shown for the rig. It is not TB14 (that
+  needs a welded QUAD4). Recorded as a result and **not re-flown**: a re-fly on the
   same tree would repeat it and change no scored number. If Wesley reads it as the TB14 artefact, the card allows one
   re-fly.
 
@@ -423,8 +425,8 @@ Left for Wesley (the card does not decide them):
 - The gap of 0.39 cm is just over the 0.30 cm floor.
 - The planned pull tracks the circle better but holds height less evenly: ring height sd 0.41-0.42 against 0.10 cm, and
   tilt max 2.1-2.2 against 1.0 deg.
-- Per the card: in a twin whose model is exact, the planned pull tracks the 60 deg circle better. T15 is not the rig
-  falsifier K4.
+- [reviewer] The planned pull tracks the 60 deg circle better in the twin (not "a twin whose model is exact": A8 holds
+  height and tilt worse, and the 12 Oct pair found the planned shares not exact). T15 is not the rig falsifier K4.
 - The even ring flew, as the card's open line says. Freeze 1.5's shared conditions name the 120 deg layout: Wesley's call.
 
 **Also seen:**
@@ -439,3 +441,16 @@ Left for Wesley (the card does not decide them):
 - any rig number from T15's 0.39 cm.
 
 **Re-fly needed:** none. There was no solver fault, and the A6 abort is a result (above).
+
+## Reviewer, rev 3 result (16 Oct ~11:05): SUPPORTED WITH CORRECTIONS (applied above)
+
+Every Delta-theta and peak recomputed to 0.01 deg; one tree (8c468bd, src = week5 4b3560e); bars committed 08:43:19
+(83a7088), first run 09:28:49; read-backs differ only in the named variable. T3, T8, T9 (no sign) stand. K1 measured
+is not credited (above). T15 confirmed narrowly (a 0.24 cm repeat spread would raise the bar to 0.48 cm).
+
+**The thesis must not say:** "detection lowers the survivors' landing lean" or "K1 confirmed"; any rig reading of A6's
+tip-over or fleet abort, or "the planned pull holds the ring after an undetected loss" (28 deg, 1.5-2.4 deg under the
+drop line); "in a twin whose model is exact"; any rig number from T15's 0.39 cm, or "T15 explains the rig's 8.25 ->
+2.91 cm by the 0.55 N inward force"; T15 without "even ring, n = 2"; T9 as "detection makes no difference on the
+measured pull" (only no resolvable difference at n = 3, with A1's range 2.22 deg). The 12 Oct list still stands.
+

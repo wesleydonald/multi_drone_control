@@ -447,3 +447,9 @@ twin).
 - **The reviewer's caveats stand:** "down" means z < 0.15 m, and the margin to the 60 deg latch is thin.
 
 **Re-fly needed:** none.
+
+**Reviewer, v3 result (16 Oct ~11:05): SUPPORTED.** Every v2 bar recomputes (trigger 0.22-0.23 s after the loss, 0
+faults, drone tilt <= 13.6 deg, climb <= 0.18 m, all down in 8.5-8.9 s, height at disarm 0.100-0.107 m). The planner's
+gap rule won the race against the trackers in R1917 only (8.7 ms of wall, ~2 ms of sim, with the ring already at 33.7
+deg); in R1918 the trackers fired first.
+
