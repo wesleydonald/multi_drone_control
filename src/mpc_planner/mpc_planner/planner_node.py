@@ -396,6 +396,8 @@ class LoadPlanner(Node):
         self._w_r_scale = float(self.declare_parameter('plan_w_r_scale', 1.0).value)
         self._rate_ff = bool(self.declare_parameter('plan_rate_ff', False).value)
         self._ref_lag_s = float(self.declare_parameter('plan_ref_lag_s', 0.0).value)
+        # warm-start SQP iterations per tick (card 2026-10-16_corner_cutting; 0 = the compiled default, 5)
+        self._sqp_iters = int(self.declare_parameter('plan_sqp_iters', 0).value)
         self.solver = PlannerSolver(self.dyn, self.get_logger(), pin_rates=self.pin_cable_rates)
         self._configure_solver(self.solver)
         # Pre-built OCPs by fleet size, for handing back after a reconfiguration.
@@ -1156,6 +1158,9 @@ class LoadPlanner(Node):
         solver.solve_budget_s = self._solve_budget_s
         solver.pivot_offset = self.pivot_offset
         solver.fail_dump_dir = getattr(self, '_run_log_dir', None)
+        if self._sqp_iters > 0:
+            solver.steady_iters = self._sqp_iters
+            self.get_logger().info(f'[planner] n={solver.dyn.n}: {self._sqp_iters} SQP iterations per tick')
         if (self._w_pos_scale, self._w_s_scale, self._w_r_scale) != (1.0, 1.0, 1.0):
             solver.scale_cost(self._w_pos_scale, self._w_s_scale, self._w_r_scale)
             self.get_logger().info(f'[planner] n={solver.dyn.n}: load-position weights x{self._w_pos_scale:g}, '

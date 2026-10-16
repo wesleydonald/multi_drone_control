@@ -121,6 +121,7 @@ PLANNER_OPTIONAL = {'land_unwind': 'bool', 'dist_est': 'str', 'dist_tau': 'float
                     'offset_free': 'str', 'of_tau': 'float', 'of_window': 'float',
                     'pin_cable_rates': 'bool', 'plan_w_pos_scale': 'float', 'plan_w_s_scale': 'float',
                     'plan_w_r_scale': 'float', 'plan_rate_ff': 'bool', 'plan_ref_lag_s': 'float',
+                    'plan_sqp_iters': 'int',
                     'int_mode': 'str', 'int_k_xy': 'float', 'int_k_z': 'float',
                     'int_settle_s': 'float', 'land_ff_ramp': 'bool',
                     'traj_hold_s': 'float', 'detach_step_out_m': 'float',
@@ -146,7 +147,7 @@ def planner_options(context):
         v = LaunchConfiguration(k).perform(context).strip()
         if v:
             opts[k] = (truthy(context, k) if kind == 'bool' else float(v) if kind == 'float'
-                       else v.lower())
+                       else int(v) if kind == 'int' else v.lower())
     if opts.get('offset_free') == 'on' and truthy(context, 'kt_trim'):
         raise RuntimeError('offset_free on with kt_trim on: two adaptive loops on one vertical residual')
     if opts.get('int_mode') in ('model', 'auto'):

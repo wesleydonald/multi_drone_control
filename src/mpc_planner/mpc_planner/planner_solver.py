@@ -132,6 +132,7 @@ class PlannerSolver:
             write_solver_signature(code_dir, n, dyn, PLAN_N, PLAN_TF, logger)
         self.N = self.ocp.solver_options.N_horizon
         self.dt = self.ocp.solver_options.tf / self.N
+        self.steady_iters = STEADY_ITERS     # warm-start SQP iterations per tick (planner option plan_sqp_iters)
         # Current attachment geometry, sent with every solve. Starts at the nominal
         # ring this dyn was built with, so behaviour is unchanged until something
         # calls set_geometry().
@@ -293,7 +294,7 @@ class PlannerSolver:
         # A single RTI iteration cannot track the stiff cable transition online, so
         # take several SQP iterations per cycle (more on a cold reseed). A failed step
         # ends the solve: the steps after it only cost time (replay: 500 ms ticks).
-        n_max = COLD_ITERS if reseed else STEADY_ITERS
+        n_max = COLD_ITERS if reseed else getattr(self, 'steady_iters', STEADY_ITERS)
         n_min = STEADY_ITERS if reseed else 1
         status = 0
         qp_iter = 0

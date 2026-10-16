@@ -274,3 +274,15 @@ def test_the_bridge_is_bounded_even_when_every_failing_tick_overruns():
         clock[0] = t
         p._solve_and_publish()
     assert [t for t, _ in p.published] == [0.0]
+
+
+def test_plan_sqp_iters_sets_the_warm_iterations_only():
+    fake = _FakeAcados([0] * 40)
+    s = _solver(fake)
+    s.solve_budget_s = 0.0
+    s.steady_iters = 2
+    _solve(s, False)
+    assert fake.solves == 2
+    fake.solves = 0
+    _solve(s, True)                                  # a cold reseed keeps its own count
+    assert fake.solves == 15
