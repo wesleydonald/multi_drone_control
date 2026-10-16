@@ -203,3 +203,87 @@ per shape, the velocity weight) with n >= 3 per arm on the lab, or the state-pre
 age in the loop, not from the trackers or a cost term. Separately, 2 SQP iterations halve the planner's solve at no
 cost to the plan: worth a claim card as a CPU measure for the rig (its solve reaches the 60 ms budget), with the lift,
 the attach and a detach as neighbours.
+
+## Correction (16 Oct, ~17:00): the along-path reading above was the ruler, not the ring
+
+The "path RMSE" and "along-path rms" above score the ring against `run.csv payload_ref`. That is the desired the
+planner publishes once per 10 Hz tick (`planner_node.py`, before `traj_t` steps) and the runner holds between ticks: a
+staircase 0.04-0.06 s behind the schedule. Two consequences:
+- **An on-time ring is charged v x 0.1/sqrt(3).** That is 17 mm at 0.3 m/s; unit test in
+  `tools/test/test_metrics.py`.
+- **A ring ~0.05 s late scores best.** So the timing fix, which brings the ring onto the schedule, read as "the error
+  moved along the path".
+
+Wesley chose the ruler for this work (decisions.md, 16 Oct ~17:20):
+- the ring's signed distance to the path it was sent, which needs no clock;
+- the lag in seconds on the planner's own schedule, separately;
+- `metrics.contour_lag` and `tools/corner_metrics.py` (commit 6970467).
+
+The frozen metrics and every frozen carry bar stay as they are. Re-scored:
+
+| shape (0.3 m/s) | arm | run | cut at the tight bends (mm) | across mean / rms (mm) | lag (s, + late) | plan node 5 cut (mm) | schedule RMSE (mm) | frozen RMSE (mm) |
+|---|---|---|---|---|---|---|---|---|
+| figure-8 | lab base | R1863 | +31.1 | +15.7 / 20.6 | +0.025 | +34.6 | 22.4 | 20.9 |
+| figure-8 | lab base | R1864 | +28.5 | +12.7 / 17.9 | +0.015 | +27.6 | 19.1 | 20.2 |
+| figure-8 | lab base | R1955 | +22.1 | +8.4 / 13.7 | +0.016 | +24.8 | 15.3 | 16.9 |
+| figure-8 | laptop base | R1982 | +21.9 | +9.4 / 15.2 | +0.010 | +26.7 | 24.2 | 25.1 |
+| figure-8 | laptop base | R1984 | +19.6 | +9.8 / 16.2 | +0.034 | +23.5 | 20.8 | 19.1 |
+| figure-8 | ref_time_shift (lab) | R1956 | +3.1 | -4.1 / 9.6 | -0.057 | +9.0 | 22.3 | 31.5 |
+| figure-8 | rts + lag 0.1 (laptop) | R1976 | +15.2 | +3.8 / 15.1 | +0.077 | +17.8 | 27.4 | 18.3 |
+| figure-8 | rts + lag 0.05 (laptop) | R1979 | +18.8 | +3.0 / 14.7 | +0.007 | +14.3 | 18.0 | 21.1 |
+| figure-8 | rts + lag 0.05 (laptop) | R1980 | +5.6 | -1.7 / 11.2 | -0.001 | +10.9 | 20.7 | 23.8 |
+| figure-8 | combination | R1986 | +2.7 | -4.2 / 16.5 | +0.006 | +7.9 | 22.6 | 24.7 |
+| figure-8 | combination | R1987 | +7.3 | -4.7 / 14.3 | -0.011 | +6.0 | 18.0 | 23.9 |
+| circle | lab base | R1859 | +13.0 | +13.2 / 14.6 | +0.056 | +10.4 | 21.1 | 13.4 |
+| circle | lab base | R1860 | +14.3 | +14.2 / 15.8 | +0.054 | +14.9 | 21.8 | 14.3 |
+| circle | laptop base | R1989 | +11.6 | +9.5 / 14.5 | +0.055 | +12.0 | 23.2 | 16.7 |
+| circle | combination | R1988 | -5.6 | -4.9 / 10.1 | -0.064 | -7.2 | 22.3 | 24.6 |
+| orbit | lab base | R1871 | +12.7 | +13.2 / 15.2 | +0.034 | +14.6 | 19.6 | 19.3 |
+| orbit | lab base | R1872 | +11.6 | +11.7 / 13.2 | +0.027 | +11.0 | 17.0 | 18.3 |
+| orbit | laptop base | R1991 | +14.0 | +14.0 / 19.3 | +0.047 | +13.0 | 27.4 | 26.3 |
+| orbit | combination | R1990 | -4.5 | -4.9 / 13.1 | -0.042 | -5.8 | 22.6 | 34.5 |
+
+Over the fast part of the path (schedule speed above half its peak). "Cut" is the mean signed distance inside the
+curve over the path's tightest quarter. "Lag" is the time since the schedule passed the ring's point.
+
+**Corrected reading:**
+- **The combination removes the cut on every shape** (tight bends +20..+31 -> +3..+7 mm on the figure-8, -5 mm on the
+  circle and orbit) and lowers the across rms on the circle and orbit.
+- **It turns the lag into a lead.** The figure-8 is centred (+0.006 / -0.011 s); the circle and orbit run 0.04-0.06 s
+  ahead.
+- **The schedule RMSE (both errors in one number) is neutral, not worse.**
+- **The plan's node 5 carries the cut in every arm.**
+
+What is left is the fixed 0.1 s clock lead, which matches neither the twin's delay nor the rig's. The superseded
+sentences above ("the error moves along the path", "gets worse on the circle and orbit") are kept as they were scored.
+Correction rows R1986c-R1991c are in the registry. Next (plan of 16 Oct): the lead sweep on the orbit (G2: is the
+leftover lead pure delay?), the offline delayed-loop bench, then the one-clock predictor or the direction-at-the-ring
+reference.
+
+## G2: is the leftover lead pure delay? (laptop, 17:38-18:19; R1992-R1999)
+
+Orbit at 0.3 m/s with ref_time_shift and 2 SQP iterations (the timing combination), sweeping the lead it removes
+(`plan_ref_lag_s`). Bases in the same session, scored with `tools/corner_metrics.py --chain --D`. Pure delay predicts
+a lag of 0 at 0.1 - D = 0.075 s (D 0.025 s measured with ref_time_shift).
+
+| plan_ref_lag_s | runs | cut at the tight bends (mm) | across rms (mm) | lag (s, + late) | schedule RMSE (mm) | frozen RMSE (mm) |
+|---|---|---|---|---|---|---|
+| base (no shift) | R1991, R1992, R1996 | +14.0, +11.1, +15.0 | 19.3, 17.4, 18.2 | +0.047, +0.044, +0.054 | 27.4, 26.0, 26.3 | 26.3, 25.4, 22.7 |
+| 0.05 | R1990 | -4.5 | 13.1 | -0.042 | 22.6 | 34.5 |
+| 0.065 | R1994, R1998 | -0.4, -0.2 | 11.2, 11.8 | -0.013, -0.007 | 17.3, 16.7 | 26.6, 25.8 |
+| 0.075 | R1993, R1997 | -0.7, -2.7 | 13.2, 11.2 | -0.003, -0.003 | 19.0, 15.9 | 26.9, 24.4 |
+| 0.085 | R1995, R1999 | -2.3, -2.9 | 11.5, 12.4 | +0.012, +0.003 | 18.2, 16.8 | 23.4, 24.3 |
+
+**Reading:**
+- The lag crosses zero at about 0.078 s (n = 2 per point), within 0.01 s of the pure-delay prediction: G2 passes on
+  the orbit.
+- The cut is gone at every lead (-0.2..-2.9 mm) and the across rms falls from 17-19 to 11-13 mm.
+- With the lag centred, the one-clock total falls from 26-27 to 16-19 mm. The frozen RMSE does not move (23-27 mm
+  everywhere), as its staircase predicts.
+- Caveat: the figure-8 was already centred at 0.05 (R1986/R1987, R1979/R1980), so the lead may depend on the shape.
+  The figure-8 and circle at 0.075 are flying (laptop, from 18:34).
+
+R1999's runner FAIL is the simulator stalling 0.7 s after LANDED; its path data are complete.
+
+The offline bench (`tools/latency_bench.py`) failed its validation gate G1: its catch-up is about six times weaker
+than the twin's (see the tool's docstring). It is kept for code paths and solve time only.

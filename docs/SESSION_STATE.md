@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Fri 16 Oct 2026, 11:30 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Fri 16 Oct 2026, 17:38 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -45,17 +45,18 @@ Updated: Fri 16 Oct 2026, 11:30 AEDT (from `date`). Only what a new session need
   confirmed; K1 planned unresolved (K1 measured confirmed on the tool's reading, which with detection off is the freed
   drone's lean); B4 holds on the measured pull (G150p reached 30.9 before its drop); A6 (planned, detection off) holds
   the ring at 28 deg and aborts at landing 3/3 (scored as the arm's result). Reviewer running on the four cards.
-- **Corner cutting (Wesley ~10:00, card 2026-10-16_corner_cutting.md):** the plan cuts, the trackers follow (dact =
-  dref within 0.5 mm); circle: the plan carries a ~1 cm shortfall uncorrected; figure-8 shoulders: the plan adds the
-  cut (w_r pulls the rod rate to 0 while the path needs up to 0.27 rad/s at 0.3 m/s). Switches built, off by default:
-  plan_w_pos_scale, plan_w_s_scale, plan_w_r_scale, plan_rate_ff (+ existing ref_time_shift). **Running:** N2 batch 16
-  (blsovaydh, R1920-R1954, tree 6cd87ed: 25 ok, 10 VOID at RTF 0.24-0.29, re-fly), then batch 17 queued (btz7ga08o: base + 5 arms x fig8/circle/orbit
-  at 0.3, 18 runs). Scorer: scratchpad score_cc.py (base R1859/R1863/R1871: ring cut 9.6/29.9/13.0 mm).
-- **Corner cutting now:** lab batch 17 stopped after 4 figure-8 runs (R1955-R1958; R1959-R1972 VOID, not flown):
-  ref_time_shift kills the cut (2.2 mm) but the ring runs 0.07 s ahead (the clock's one-tick lead); position x3 a
-  little better; cable direction x0.3 worse. Built plan_ref_lag_s (482a710). Laptop queue running (bf6kxd6jp,
-  scratchpad laptop_cc1.log): cc_rtslag, cc_rff, cc_wr01 on the figure-8 at 0.3. Then circle/orbit for what helps,
-  then report to Wesley. Appendix (54) and N2 re-fly (10) wait for the lab.
+- **Corner cutting (card 2026-10-16_corner_cutting.md; fix plan approved ~17:20: `~/.claude/plans/kind-snacking-pinwheel.md`):**
+  the frozen path RMSE scores against the 10 Hz HELD desired, so an on-time ring pays 17 mm at 0.3 m/s. Wesley chose the
+  ruler: clock-free distance to the path + lag in seconds (decisions.md 16 Oct). On it the timing combination removes the
+  cut (figure-8 bends +20..+31 -> +3..+7 mm) and turns the lag into a 0.04-0.06 s lead on the circle/orbit (R1986c-R1991c).
+  Tools (6970467): `metrics.contour_lag` (new metrics.json keys payload_contour_*, payload_lag_s, payload_rmse_sched_m),
+  `tools/corner_metrics.py R1847-R1991 [--chain] [--D]`, lag_metrics A0 on the planner's own clock. Timing fix back in play
+  in the twin (rig needs his word: reopens the 8 Oct lag decision).
+  **Running (laptop, b70fhk5sf, scratchpad laptop_g2.log):** G2 lead sweep, orbit 0.3: base, cc_lead075/065/085 x2
+  (8 runs, from ~17:36). Pure delay predicts lag 0 at plan_ref_lag_s ~0.077. Then: registry rows, the offline bench
+  (`tools/latency_bench.py`), 3A (predictor) or 3B (direction at the ring).
+- **Laptop rebooted ~15:59: `/tmp` wiped** (scratchpad scorers, figures, batch logs, registry.bak17-28). Scorers restored
+  into tools/ (above); the old figure scripts are in the scratchpad `restored/` folder only.
 - **For Wesley tonight:** the 3 Tier B world files (new, via make_carry_worlds.py); the 1 m band rule; T15's layout
   (even ring chosen); the bars set in his absence (he may change them for later runs).
 
