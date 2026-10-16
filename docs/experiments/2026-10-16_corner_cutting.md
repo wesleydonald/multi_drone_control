@@ -307,3 +307,26 @@ than the twin's (see the tool's docstring). It is kept for code paths and solve 
   also scatters most (0.010-0.064 s). That part is not delay; its source is open (the figure-8's changing curvature
   and speed profile are candidates).
 - A lead chosen per shape stays a band-aid, never a default.
+
+## Figure-8 repeats in one session (laptop, 16 Oct 21:03-21:37; R2016-R2022, ABCABCA)
+
+Flown to settle the reviewer's "weak" on the figure-8's extra ~0.03 s (afternoon claim C3: the same-session base was
+n = 1 and the figure-8 base lag drifts between sessions). Tree c3bf628, RTF 0.44 throughout.
+
+| figure-8 at 0.3 m/s | runs | cut at the tight bends (mm) | across rms (mm) | lag (s, + late) | lag sd (s) | schedule RMSE (mm) |
+|---|---|---|---|---|---|---|
+| base | R2016, R2019, R2022 | +26.2, +25.1, +20.5 | 18.0, 20.3, 17.2 | +0.031, +0.054, +0.040 | 0.032, 0.043, 0.022 | 21.6, 28.0, 21.3 |
+| plan_ref_lag_s 0.05 | R2017, R2020 | +5.2, +5.2 | 10.4, 20.1 | -0.015, -0.004 | 0.059, 0.037 | 20.0, 21.7 |
+| plan_ref_lag_s 0.075 | R2018, R2021 | -8.8, -2.4 | 15.5, 12.8 | +0.032, +0.006 | 0.056, 0.077 | 24.4, 26.2 |
+
+**Reading:**
+- **At 0.05 the figure-8 repeats:** cut +2.7, +7.3 (other session), +5.2, +5.2 (this one). It is centred both times.
+- **At 0.075 it does not repeat across sessions:**
+  - the cut was +15.5 / +9.6 at 18:34 and -8.8 / -2.4 tonight;
+  - R2018 reads the ring outside the bends (-8.8 mm) while its lag reads +0.032 s late.
+- **The figure-8 lag is not a usable discriminator at this n:**
+  - its within-run sd (0.04-0.08 s) is larger than the differences between arms;
+  - its sign disagrees with the cut in R2018.
+- **So the "figure-8 needs ~0.03 s less" point is not supported.** On the cut, both leads remove most of the bend cut
+  against the same-session base (+20.5..+26.2). 0.075 scatters around zero, 0.05 sits ~5 mm inside.
+- **Taken with the orbit and circle:** one lead (0.075, = 0.1 - D) does not leave a resolved figure-8 residual.

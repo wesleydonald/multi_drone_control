@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Fri 16 Oct 2026, 18:57 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Sat 17 Oct 2026, 02:49 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -58,6 +58,32 @@ Updated: Fri 16 Oct 2026, 18:57 AEDT (from `date`). Only what a new session need
   (catch-up 6x weaker than the twin): code paths only. Reviewer on the afternoon claims running; then /report and
   Wesley's decision on the next build (recommended: a measured lead, plan_ref_lag_s from the measured plan age, with
   ref_time_shift; then the figure-8 residual).
+- **Evening queue done (20:25-01:42, laptop, c3bf628, R2006-R2076, 71 runs):**
+  - **N2 voids re-flown** (R2006-R2015), all landed, no faults. 7 lab "passes" were starved too (RTF 0.28-0.29,
+    RMSE 48-68 mm, tilt 10-15 deg): correction rows R1921c..R1936c VOID; re-fly of those 7 queued after the appendix scoring.
+  - **Figure-8 repeats** (R2016-R2022) are in the card. On the cut both leads remove most of the bend cut. The 0.075 arm
+    scatters across sessions (+15.5/+9.6 then -8.8/-2.4). The figure-8 lag is too noisy to rank leads, so
+    "figure-8 needs 0.03 s less" is NOT supported.
+  - **Appendix scored** (R2023-R2076, rows appended; docs/analysis/appendix_refly_2026-10-17.md; generator edits in
+    tools/thesis_sim_tables.py / thesis_sim_figures.py, regenerated to the scratchpad only):
+    - S: 54/54 pass, no voids.
+    - A: 29/60 cells agree. C: 10 confirmed, 3 falsified, 2 unresolved.
+    - Falsified C-D2/C-D3/C-D5: on the freeze stack the vertical push and the mass errors leave ~0 cm with no integral
+      (measured pull, cable_source mocap; checked R2066 load_mass 1.03 reached the planner).
+    - Relaxed box hover +13 cm (was +4.8); rods +5 not measured +17 cm (was +8).
+    - Radius +2 cm: int_fz winds to +0.76 N while the height error stays at +0.85 cm (R2061/R2076): look before the rig day.
+    - Reviewer next, then Wesley: the thesis text for the vertical claims.
+  - **N2 re-fly of the 7 starved runs done** (R2077-R2083, 01:58-02:33): all landed, no in-flight faults. R2080's FAIL
+    happened after landing. spin_v300 tilt 6.16 deg, over the carry bar, as at 0.55 m (R1875). Every N2 cell is now clean;
+    the band rule still needs Wesley.
+  - **Reviewer on the appendix: weak.**
+    - False touchdown: R2032, R2044, R2045 disarmed 0.46-0.53 m up and the drones fell; R2033 0.26 m. The stall
+      detector reads a drone that is stronger than its map as stalled. RIG FINDING; a fix needs card + critic.
+    - Correction rows R2032c/R2033c/R2044c/R2045c. C-L1 not supported.
+    - Vertical push absorbed by the measured pull (0.61 N within ~1 s).
+    - Morning report: docs/reports/morning_report_2026-10-17.md (decisions: touchdown fix, cable_source model pair,
+      measured lead, band rule, merge).
+  - Lab PC checked 20:22: someone else's 12-sim batch, not used.
 - **Laptop rebooted ~15:59: `/tmp` wiped** (scratchpad scorers, figures, batch logs, registry.bak17-28). Scorers restored
   into tools/ (above); the old figure scripts are in the scratchpad `restored/` folder only.
 - **For Wesley tonight:** the 3 Tier B world files (new, via make_carry_worlds.py); the 1 m band rule; T15's layout
