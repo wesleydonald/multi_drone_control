@@ -96,3 +96,16 @@ trackers' 0.075 s plan age. With the age removed (D 0.023 s) the lead is no long
 The 8 Oct card named removing the lead as the next variable. Switch built: `plan_ref_lag_s` (482a710; 0.1 cancels the
 lead; unit-tested). Next, on the laptop (one at a time): ref_time_shift + plan_ref_lag_s 0.1, the rate reference,
 the rate weight x0.1 (figure-8 0.3 m/s), then the circle and orbit for the arms that help.
+
+## Laptop runs (16 Oct 11:48-12:00, figure-8 at 0.3 m/s, one each; R1973-R1975 VOID: launched without the acados path)
+
+| arm | run | ring inside at the tight bends, mean / max (mm) | path-only RMSE (mm) | ring tilt on the path (deg) | D / A0 (s) | solve p95 (ms) | verdict |
+|---|---|---|---|---|---|---|---|
+| ref_time_shift + plan_ref_lag_s 0.1 | R1976 | 14.9 / 44.2 | 18.3 | 2.7 | 0.040 / +0.074 | 84 | the lead over-cancelled: the ring 0.07 s behind |
+| rod-rate reference (plan_rate_ff) | R1977 | 29.7 / 39.1 | 19.4 | 3.6 | 0.088 / +0.045 | 95 | **falsified**: no lower cut, more tilt, solve near the 100 ms budget |
+| rod-rate weight x0.1 | R1978 | 22.6 / 37.6 | 19.4 | 3.4 | 0.088 / +0.023 | 84 | **falsified**: no lower cut, more tilt |
+
+**Mechanism b (the rod-rate cost) is refuted:** freeing the rod rate, or giving it the flatness rate, does not shrink
+the figure-8's cut. What moves it is timing: ref_time_shift removes the cut (R1956: 2.2 mm) but leaves the clock's
+one-tick lead uncancelled (ring 0.07 s ahead); cancelling the whole lead (R1976) leaves it 0.07 s behind. Next:
+plan_ref_lag_s 0.05 (x2), and repeats of position x3 and the base (laptop queue, 12:0x).
