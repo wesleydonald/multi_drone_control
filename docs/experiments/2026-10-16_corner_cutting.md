@@ -287,3 +287,23 @@ R1999's runner FAIL is the simulator stalling 0.7 s after LANDED; its path data 
 
 The offline bench (`tools/latency_bench.py`) failed its validation gate G1: its catch-up is about six times weaker
 than the twin's (see the tool's docstring). It is kept for code paths and solve time only.
+
+## G2 follow-up: the figure-8 and the circle at 0.075 (laptop, 18:34-18:56; R2000-R2005)
+
+| shape (0.3 m/s) | arm | runs | cut at the tight bends (mm) | across rms (mm) | lag (s, + late) | schedule RMSE (mm) |
+|---|---|---|---|---|---|---|
+| circle | base | R2002 (R1989) | +10.0 (+11.6) | 10.2 (14.5) | +0.049 (+0.055) | 17.8 (23.2) |
+| circle | plan_ref_lag_s 0.075 | R2003, R2005 | +0.5, -2.1 | 13.4, 5.2 | +0.008, -0.003 | 19.6, 13.8 |
+| figure-8 | base | R2000 (R1982, R1984) | +32.7 (+21.9, +19.6) | 21.5 (15.2, 16.2) | +0.064 (+0.010, +0.034) | 29.5 (24.2, 20.8) |
+| figure-8 | plan_ref_lag_s 0.075 | R2001, R2004 | +15.5, +9.6 | 12.7, 11.3 | +0.038, +0.033 | 19.1, 17.6 |
+| figure-8 | plan_ref_lag_s 0.05 | R1986, R1987 | +2.7, +7.3 | 16.5, 14.3 | +0.006, -0.011 | 22.6, 18.0 |
+
+**Reading:**
+- **Circle and orbit (constant curvature) centre at the same lead, 0.075-0.078.** That is the pure-delay value
+  0.1 - D; the cut is gone and the lag is ~0.
+- **The figure-8 centres at ~0.05.** At 0.075 it runs 0.033-0.038 s late and the cut is partly back (+10..+16 against
+  +20..+33).
+- So the leftover lead is pure delay on steady curves, plus a further ~0.03 s on the figure-8. The figure-8's base lag
+  also scatters most (0.010-0.064 s). That part is not delay; its source is open (the figure-8's changing curvature
+  and speed profile are candidates).
+- A lead chosen per shape stays a band-aid, never a default.

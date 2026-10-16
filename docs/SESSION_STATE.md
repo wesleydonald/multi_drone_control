@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Fri 16 Oct 2026, 17:38 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Fri 16 Oct 2026, 19:00 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -52,9 +52,12 @@ Updated: Fri 16 Oct 2026, 17:38 AEDT (from `date`). Only what a new session need
   Tools (6970467): `metrics.contour_lag` (new metrics.json keys payload_contour_*, payload_lag_s, payload_rmse_sched_m),
   `tools/corner_metrics.py R1847-R1991 [--chain] [--D]`, lag_metrics A0 on the planner's own clock. Timing fix back in play
   in the twin (rig needs his word: reopens the 8 Oct lag decision).
-  **Running (laptop, b70fhk5sf, scratchpad laptop_g2.log):** G2 lead sweep, orbit 0.3: base, cc_lead075/065/085 x2
-  (8 runs, from ~17:36). Pure delay predicts lag 0 at plan_ref_lag_s ~0.077. Then: registry rows, the offline bench
-  (`tools/latency_bench.py`), 3A (predictor) or 3B (direction at the ring).
+  **G2 done (R1992-R2005, 391bd9a + this commit):** with ref_time_shift + 2 iterations, the lead that centres the
+  ring is 0.075-0.078 on the orbit and circle (= 0.1 - D: pure delay; cut gone, across rms 11-13 vs 17-19 mm) but
+  ~0.05 on the figure-8 (at 0.075 it runs 0.033-0.038 s late). Offline bench `tools/latency_bench.py` FAILED G1
+  (catch-up 6x weaker than the twin): code paths only. Reviewer on the afternoon claims running; then /report and
+  Wesley's decision on the next build (recommended: a measured lead, plan_ref_lag_s from the measured plan age, with
+  ref_time_shift; then the figure-8 residual).
 - **Laptop rebooted ~15:59: `/tmp` wiped** (scratchpad scorers, figures, batch logs, registry.bak17-28). Scorers restored
   into tools/ (above); the old figure scripts are in the scratchpad `restored/` folder only.
 - **For Wesley tonight:** the 3 Tier B world files (new, via make_carry_worlds.py); the 1 m band rule; T15's layout
