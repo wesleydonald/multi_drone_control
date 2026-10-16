@@ -120,7 +120,7 @@ PLANNER_OPTIONAL = {'land_unwind': 'bool', 'dist_est': 'str', 'dist_tau': 'float
                     'rod_mass': 'float', 'rod_com': 'float',
                     'offset_free': 'str', 'of_tau': 'float', 'of_window': 'float',
                     'pin_cable_rates': 'bool', 'plan_w_pos_scale': 'float', 'plan_w_s_scale': 'float',
-                    'plan_w_r_scale': 'float', 'plan_rate_ff': 'bool',
+                    'plan_w_r_scale': 'float', 'plan_rate_ff': 'bool', 'plan_ref_lag_s': 'float',
                     'int_mode': 'str', 'int_k_xy': 'float', 'int_k_z': 'float',
                     'int_settle_s': 'float', 'land_ff_ramp': 'bool',
                     'traj_hold_s': 'float', 'detach_step_out_m': 'float',

@@ -395,6 +395,7 @@ class LoadPlanner(Node):
         self._w_s_scale = float(self.declare_parameter('plan_w_s_scale', 1.0).value)
         self._w_r_scale = float(self.declare_parameter('plan_w_r_scale', 1.0).value)
         self._rate_ff = bool(self.declare_parameter('plan_rate_ff', False).value)
+        self._ref_lag_s = float(self.declare_parameter('plan_ref_lag_s', 0.0).value)
         self.solver = PlannerSolver(self.dyn, self.get_logger(), pin_rates=self.pin_cable_rates)
         self._configure_solver(self.solver)
         # Pre-built OCPs by fleet size, for handing back after a reconfiguration.
@@ -415,6 +416,7 @@ class LoadPlanner(Node):
         # trajectory (fed the schedule via refs.update() before each planner solve).
         self.refs = ReferenceBuilder(self.dyn, self.n, self._s_nom, self.dt, self.traj)
         self.refs.rate_ff = self._rate_ff
+        self.refs.ref_lag_s = self._ref_lag_s
 
         # state
         self.load_state = None                 # [p(3), q(4 wxyz), v(3), w(3)]
@@ -1687,6 +1689,7 @@ class LoadPlanner(Node):
         self.refs = ReferenceBuilder(self.dyn, self.n, self._s_nom, self.dt,
                                      self.traj)
         self.refs.rate_ff = getattr(self, '_rate_ff', False)
+        self.refs.ref_lag_s = getattr(self, '_ref_lag_s', 0.0)
         # The new builder starts at yaw 0; keep the placement datum or a ring placed
         # rotated is pulled toward world yaw 0 at every detach and attach.
         if self._yaw_datum_latched:

@@ -47,3 +47,10 @@ def test_on_gives_the_turning_rate_across_each_rod_and_tracks_the_jerk():
     assert 0.1 < max(peak.values()) < 0.6
     c = builder('circle', True, 6.0)
     assert float(np.linalg.norm(r_part(c.yref_at(0)), axis=1).max()) < 0.05      # a circle barely needs any
+
+
+def test_ref_lag_evaluates_the_path_that_much_earlier():
+    a, b = builder('fig_8', False, 6.0), builder('fig_8', False, 6.1)
+    b.ref_lag_s = 0.1
+    assert np.allclose(a.yref_at(4), b.yref_at(4))
+    assert not np.allclose(builder('fig_8', False, 6.1).yref_at(4), b.yref_at(4))

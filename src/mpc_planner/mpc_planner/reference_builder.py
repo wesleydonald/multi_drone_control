@@ -127,6 +127,9 @@ class ReferenceBuilder:
         # cable angular-rate reference: False = zero (the compiled behaviour); True = the rate the flatness
         # directions turn at, s x ds/dt between nodes (card 2026-10-16_corner_cutting)
         self.rate_ff = False
+        # s the trajectory reference is evaluated behind the planner's clock: 0 = the one-tick lead the clock has had
+        # (it steps before the solve, which offsets the trackers' plan age); 0.1 cancels it, for ref_time_shift
+        self.ref_lag_s = 0.0
 
     def start_blend(self, s_from, t_from, blend_s):
         """Slew the cable references from (s_from, t_from) -- per slot, s in the same
@@ -206,7 +209,7 @@ class ReferenceBuilder:
         # climb; the trajectories start from rest so the first active cycle is smooth.
         dx = dy = vx = vy = yaw_rate = 0.0
         if self.traj_t > 0.0:
-            t_k = self.traj_t + self.dt * k
+            t_k = self.traj_t + self.dt * k - self.ref_lag_s
             dx, dy, vx, vy = self.traj.offset_at(t_k)
             _, yaw_rate = self.traj.yaw_at(t_k)             # 'spin' only, else 0
         # p, v, e_att, w. The load yaw REFERENCE goes on the q_ref parameter (set per
@@ -228,7 +231,7 @@ class ReferenceBuilder:
         """Stage-k flatness cable directions (n arrays) and tensions (list)."""
         ax = ay = yaw = 0.0
         if self.traj_t > 0.0:
-            t_k = self.traj_t + self.dt * k
+            t_k = self.traj_t + self.dt * k - self.ref_lag_s
             ax, ay = self.traj.accel_at(t_k)
             yaw, _ = self.traj.yaw_at(t_k)
         # Flatness cable references. A load accelerating at a_load must have its cables
@@ -257,7 +260,7 @@ class ReferenceBuilder:
         attitude while the yaw-rate term in yref_at drives the rotation."""
         yaw = 0.0
         if self.traj_t > 0.0:
-            yaw, _ = self.traj.yaw_at(self.traj_t + self.dt * k)
+            yaw, _ = self.traj.yaw_at(self.traj_t + self.dt * k - self.ref_lag_s)
         return yaw_quat(self.psi0 + yaw)
 
     def hold_yref(self, load_state):
