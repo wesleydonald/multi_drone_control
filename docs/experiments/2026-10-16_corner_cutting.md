@@ -141,3 +141,35 @@ The laptop's planner solves slower (base p95 99.7 ms against 75-78 on the lab), 
    of shifting the trackers' reference; new code in the flight loop: card and critic first.
 3. A faster planner solve (75-100 ms p95 at 10 Hz is most of the delay): fewer SQP iterations or a shorter horizon.
 4. Or report it (the 8 Oct decision): 1.5-3 cm inside at the figure-8's tight bends at 0.3 m/s, ~1 cm at 0.125.
+
+## Faster planner solve (Wesley ~12:20: "faster planner solve")
+
+**What the solve costs.** The planner log's `solve_ms` holds its last value after the path ends (the figure-8 and the
+circle end before LAND), so whole-run percentiles read ~75 ms (lab) / ~100 ms (laptop) for those shapes. On the path
+alone (unique ticks):
+
+| host | runs | solve p50 / p95 / max (ms) | share over 50 ms |
+|---|---|---|---|
+| lab twin (4 slots) | R1955, R1859, R1871, R1863 | 21-26 / 78-83 / 86-88 | 0.39-0.45 |
+| laptop twin | R1982, R1979 | 50-51 / 96-97 / 120-128 | 0.49-0.54 |
+| rig laptop (14-15 Oct, planner phase) | a1, a2_2, a3_2, t5_*, t6* | 31-46 / 46-65 (the rig's 0.06 s budget) / 67-116 | 0.01-0.25 |
+| offline, the solver alone (laptop) | `scratchpad/solve_bench.py`, figure-8 0.3 | 20.6 / 21.0 / 21.7 | 0 |
+
+So in the stack the solve is 2-4 times slower than alone, and bimodal: CPU contention with Gazebo and the other nodes
+(acados runs outside the GIL; the node's Python work and the other processes compete for the cores).
+
+**Iterations (offline, the planner flying the figure-8 on its own model, no delay):**
+
+| SQP iterations per tick | solve p50 (ms) | acados alone (ms) | plan error on the model, p50 / max (mm) |
+|---|---|---|---|
+| 1 | 7.4 | 3.2 | 5.7 / 12.4 |
+| 2 | 10.8 | 6.5 | 5.2 / 12.4 |
+| 3 | 13.8 | 9.5 | 5.0 / 12.0 |
+| 5 (today) | 20.6 | 16.1 | 4.7 / 11.3 |
+| 8 | 30.4 | 25.7 | 4.4 / 10.9 |
+
+Two iterations halve the solve for 0.5 mm of plan quality on the model (the orbit: 0.9 against 0.8 mm). Note also: with
+no delay and an exact model the planner's own figure-8 error is ~5 mm; the 20-30 mm in the twin is the loop (delay and
+model mismatch), not the OCP's intent. The 5 iterations were set for the slack-to-taut lift ("one RTI step cannot
+track the transition"): the twin runs include the floor start and the lift. Switch `plan_sqp_iters` (e843065; a cold
+reseed keeps its 15 iterations; unit-tested). Running on the laptop: `cc_it2_fig8_v300` x2 and a base.
