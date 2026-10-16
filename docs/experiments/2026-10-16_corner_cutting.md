@@ -109,3 +109,35 @@ the rate weight x0.1 (figure-8 0.3 m/s), then the circle and orbit for the arms 
 the figure-8's cut. What moves it is timing: ref_time_shift removes the cut (R1956: 2.2 mm) but leaves the clock's
 one-tick lead uncancelled (ring 0.07 s ahead); cancelling the whole lead (R1976) leaves it 0.07 s behind. Next:
 plan_ref_lag_s 0.05 (x2), and repeats of position x3 and the base (laptop queue, 12:0x).
+
+## Repeats (laptop, 12:00-12:16; R1979-R1982) and where this stands
+
+| arm | runs (host) | ring cut at the tight bends (mm) | path-only RMSE (mm) | A0 (s) |
+|---|---|---|---|---|
+| base | R1863, R1864, R1955 (lab); R1982 (laptop) | 29.9, 26.9, 20.7; 20.1 | 20.9, 20.2, 16.9; 25.1 | +0.024, -, +0.013; -0.030 |
+| ref_time_shift | R1956 (lab) | 2.2 | 31.5 | -0.069 |
+| + plan_ref_lag_s 0.05 | R1979, R1980 (laptop) | 17.3, 4.5 | 21.1, 23.8 | -0.008, -0.036 |
+| + plan_ref_lag_s 0.1 | R1976 (laptop) | 14.9 | 18.3 | +0.074 |
+| position x3 | R1957 (lab); R1981 (laptop) | 16.4; 14.9 | 16.4; 21.8 | +0.003; -0.013 |
+| cable direction x0.3 | R1958 (lab) | 37.1 | 26.4 | |
+| rod-rate weight x0.1 | R1978 (laptop) | 22.6 | 19.4 | +0.023 |
+| rod-rate reference | R1977 (laptop) | 29.7 | 19.4 | +0.045 |
+
+The laptop's planner solves slower (base p95 99.7 ms against 75-78 on the lab), so compare within a host.
+
+**Reading (exploratory, n = 1-2 per arm):**
+- Weights are not the fix. The trackers already fly their plan; the planner weights tried either do nothing
+  resolvable (position x3: a little lower on both hosts, inside the base spread) or make it worse (cable direction
+  x0.3, the two rod-rate arms).
+- The cut is a timing effect of the chain: the trackers fly a plan ~0.08 s old. ref_time_shift removes the cut, but
+  then the planner clock's one-tick lead has to be re-tuned (0 s: 0.07 s ahead; 0.1 s: 0.07 s behind; 0.05 s: centred
+  on the means, but with a wide spread). The total path error does not yet drop below the base's spread.
+- The base itself scatters 17-25 mm (path) and 20-30 mm (cut) at 0.3 m/s; resolving a 3-5 mm gain needs n >= 3 per arm
+  per shape, on one host (the lab, when it is free).
+
+**Candidates for the next step (Wesley's call):**
+1. Repeats on the lab: base, ref_time_shift + lag 0.05, position x3; figure-8, circle, orbit at 0.3; n = 3 (27 runs).
+2. The principled timing fix (8 Oct "rung c"): predict the planner's start state forward by the measured delay instead
+   of shifting the trackers' reference; new code in the flight loop: card and critic first.
+3. A faster planner solve (75-100 ms p95 at 10 Hz is most of the delay): fewer SQP iterations or a shorter horizon.
+4. Or report it (the 8 Oct decision): 1.5-3 cm inside at the figure-8's tight bends at 0.3 m/s, ~1 cm at 0.125.
