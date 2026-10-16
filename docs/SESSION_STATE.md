@@ -49,7 +49,7 @@ Updated: Fri 16 Oct 2026, 10:58 AEDT (from `date`). Only what a new session need
   dref within 0.5 mm); circle: the plan carries a ~1 cm shortfall uncorrected; figure-8 shoulders: the plan adds the
   cut (w_r pulls the rod rate to 0 while the path needs up to 0.27 rad/s at 0.3 m/s). Switches built, off by default:
   plan_w_pos_scale, plan_w_s_scale, plan_w_r_scale, plan_rate_ff (+ existing ref_time_shift). **Running:** N2 batch 16
-  (blsovaydh, R1920-R1954, tree 98a2b8e), then batch 17 queued (btz7ga08o: base + 5 arms x fig8/circle/orbit
+  (blsovaydh, R1920-R1954, tree 6cd87ed: 25 ok, 10 VOID at RTF 0.24-0.29, re-fly), then batch 17 queued (btz7ga08o: base + 5 arms x fig8/circle/orbit
   at 0.3, 18 runs). Scorer: scratchpad score_cc.py (base R1859/R1863/R1871: ring cut 9.6/29.9/13.0 mm).
 - **Next:** score batch 17 -> report to Wesley; winners: neighbours (0.125/0.2, lift, landing, detach, attach), card,
   critic, reviewer, his word. Then the appendix batch (54) and N2 scoring (band rule needs his word).
