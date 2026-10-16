@@ -149,3 +149,35 @@ figures:
     caption: >
       Who is disarmed when: a newcomer fault under the old and the new rule, a freed carrier in hover and in the
       circle; the rig rows as placeholders (sim_detach.tex, sec:res_detach_rig, fig:disarm_lanes).
+
+  # 16 Oct 2026: the lever figures and the T10/T13 tables from the detach freeze tree (day-1016 8c468bd = week5
+  # 4b3560e's flight code, lab batch 15, R1887-R1919). Scripts: tools/thesis_lever_figures.py (figures) and
+  # tools/thesis_freeze_tables.py (tables -> docs/figures/tables/). Captions in docs/figures/<ID>/caption.md (no run ids).
+  - id: F10b_crossover
+    kind: script            # tools/thesis_lever_figures.py crossover
+    runs: [R1887, R1891, R1895, R1888, R1892, R1896]
+    caption: >
+      Where the survivors learn of an unannounced release, one twin cell (Tier A T3 on the freeze tree): the ring's
+      tilt departure against time from the release, measured rod pull against the planner's pull, three runs each,
+      with the planner's detection instants; and the scored tilt rise per run with the frozen resolution rule's gap.
+      No rig flight of this cell yet (RIG_F10B in the script).
+
+  - id: F12_levers
+    kind: script            # tools/thesis_lever_figures.py levers
+    runs: [R1887, R1891, R1895, R1888, R1892, R1896, R1889, R1893, R1897, R1890, R1894, R1898,
+           R1899, R1904, R1900, R1905, R1901, R1906, R1902, R1907, R1903, R1908, R1919,
+           results/rig/2026-10-08/r303_4_run, results/rig/2026-10-08/r304_3_run,
+           RIG-1007-r0013 (results/analysis/p6_2026-10-12/1_releases/table.csv)]
+    caption: >
+      The other levers: (a) one-variable pairs on the freeze tree (pull source at 120 and 150 deg gaps, detection off
+      on each pull source), every run, lower bounds where a drop or a latch cut the window; (b) tilt rise against the
+      support margin (Tier B, measured pull; the planner's pull at 150 deg; 180 deg with the drop rule off and on the
+      defaults), with the 8 Oct rig releases at 120 and 150 deg and the 7 Oct magnet release off scale.
+
+  # tables (tools/thesis_freeze_tables.py -> docs/figures/tables/):
+  #   T10_switch: twin R1887-R1919 (every run whose planner resized: R1887, R1888, R1891, R1892, R1895, R1896,
+  #     R1899-R1908, R1913-R1916; the no-switch control R1889/R1893/R1897, R1890/R1894/R1898); rig 7 Oct r0012,
+  #     r0013 and 8 Oct r302_3, r303_4, r304_3, r305 (planner and tracker log.csv); the 14-15 Oct rig planner logs
+  #     (no switch flown).
+  #   T13_parity: W4 twin R1887, W5 twin R1913/R1914 (freeze tree); band sets R1459/R1460/R1626 and R1457/R1627
+  #     (freeze 2.4); 8 Oct pairs r302_3/R1207/R1212, r303_4/R1140/R1145, r304_3/R1206/R1211, r305/R1208/R1213.

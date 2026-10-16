@@ -79,3 +79,20 @@ re-audited). Scripts: `tools/thesis_rig_figures.py` (`fig_rig_detach`) and `tool
 | F_rig_detach | 11 (announced), 5 (unannounced), 17 (150 deg gap) | 6-7, 6, 15-17 | not drawn (hover holds end at LAND) |
 | F_rig_circle_detach | 8.0 (first spike 5.7) | 4.0-5.4 | 3.9 s, band 4.7 deg |
 | F_twin_rig_parity | ratios 1.71, 0.85, 1.05, 1.70 | | |
+
+
+## F10b_crossover, F12_levers, tables T10 and T13 (16 Oct 2026)
+
+From the detach freeze batch (lab batch 15, 4 slots): tree day-1016 8c468bd, clean, whose flight code is week5
+4b3560e's. Figures built with the thesis-figure skill (`tools/thesis_lever_figures.py`, 6.27 in, Computer Modern; look
+rounds, audit, one blind critic each); tables by `tools/thesis_freeze_tables.py` into `docs/figures/tables/` (complete
+table floats for `\input`, captions generated). Captions and the citing sentences in `docs/figures/<ID>/caption.md`;
+numbers, runs and caveats in `docs/analysis/thesis_tables_T10_T13_2026-10-16.md`. Data in results/ only.
+
+| item | runs | code |
+|---|---|---|
+| F10b_crossover | Tier A T3: A1 R1887, R1891, R1895 (measured pull); A2 R1888, R1892, R1896 (planner's pull) | 8c468bd |
+| F12_levers (a) | T3 as above; T9 A5 R1889, R1893, R1897; T8 A6 R1890, R1894, R1898; B3 G150 R1899, R1904 against G150p R1900, R1905 | 8c468bd |
+| F12_levers (b) | Tier B G120 = A1; G135 R1902, R1907; G150 R1899, R1904; G165 R1903, R1908; G180 (drop rule off) R1901, R1906; G180d R1919; G150p R1900, R1905; rig RIG-1008-r303_4, r304_3 (their own hold to LAND); RIG-1007-r0013 from `results/analysis/p6_2026-10-12/1_releases/table.csv` | 8c468bd; rig b811d90 (8 Oct), 8f4fb2b + uncommitted changes (7 Oct, results/rig/2026-10-07/code.txt) |
+| T10 | twin: every freeze-batch run whose planner resized (R1887, R1888, R1891, R1892, R1895, R1896, R1899-R1908, R1913-R1916); no-switch control A5/A6; rig RIG-1007-r0012, r0013, RIG-1008-r302_3, r303_4, r304_3, r305 (planner and tracker log.csv); the 14-15 Oct rig planner logs for the "no switch flown" count | 8c468bd; rig as above |
+| T13 | W4 twin R1887 (n = 1, the reviewer); W5 twin R1913, R1914; band sets R1459, R1460, R1626 / R1457, R1627 (freeze 2.4, rig-prep c2279cf / week4 a25c40d); 8 Oct pairs r302_3 R1207/R1212, r303_4 R1140/R1145 (week4 0e91d86, 14 dirty files), r304_3 R1206/R1211, r305 R1208/R1213 | as listed |
