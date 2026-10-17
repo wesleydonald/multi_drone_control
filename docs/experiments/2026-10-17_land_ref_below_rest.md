@@ -153,7 +153,7 @@ Notes:
 - the dose arm: A alone leaves drone 1 at 15.8 cm (error 0.03) and 22.3 cm (0.045), and it tips over at 0.045; with the
   switch both are 0.
 
-## Reviewer (17 Oct ~18:00): (a) supported, (b) not supported
+## Reviewer (17 Oct ~17:45): (a) supported, (b) not supported
 
 1. Every number reproduces (repeats within 0.1 cm / 0.1 deg); the reference depth was wrong (fixed above).
 2. (a) drone 1 at 0.0 cm in all six T1/T1b/T2 runs against 15.8 / 22.3 cm; tilt after 0.0-0.1 against 25.2-90.4; each

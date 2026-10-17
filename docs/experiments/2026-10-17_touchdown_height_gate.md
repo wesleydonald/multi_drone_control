@@ -244,7 +244,7 @@ Scored with `tools/land_touchdown.py` and the per-drone floor scorer of the land
 - The 10-11 deg end tilt on that path: 1 of 3 A-alone runs on 0a77fa1 (R2134), 2 of 2 A+B on b7ab074; 0 of 2 normal off landings.
 - With A + `land_descend_to_stall` on the same path (R2144, R2163; land card) the end tilt is 0.4 / 1.0.
 
-## Reviewer on the re-fly (17 Oct ~17:55): supported (twin default)
+## Reviewer on the re-fly (17 Oct ~17:43): supported (twin default)
 
 1. Counts and trees reproduced; A-alone runs on 0a77fa1, the configs differ by the one key; no fault in the 9 re-fly runs.
 2. Off 2/4 against A 0/5: one-sided Fisher p 0.17 (final tree alone 1/2 against 0/3, p 0.40). The claim stands on the
