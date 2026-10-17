@@ -128,6 +128,12 @@ Updated: Sat 17 Oct 2026, 11:06 AEDT (from `date`). Only what a new session need
 - **Wesley ~19:45 (decisions.md):** A on in the twin (sim.yaml, gate --quick passed); rig after a critic
   look at the wall-clock pose check. No-floor: re-card (one-sided height bar + contact-speed bar) and re-fly. Corner
   cutting CLOSED (defaults stay, lag reported). N2 bands FROZEN ~19:54 (tools/n2_bands.py, card 2026-10-16_bands_1m). Rig sheet updated (43cfd13). Critic on A: go with must-fixes; welded-QUAD4 stamp fixed (9d30665); QUAD4-folded-in LAND x2 flying (task b3ko1376i, scratchpad/laptop_q4.log). Then the no-floor rev 3 batch (scratchpad/laptop_r3.sh, 27 runs; card rev 3, bars frozen ~20:00).
+- **Overnight (Wesley ~20:10):** task b8uawb0oz runs scratchpad/laptop_night.sh after the QUAD4 LAND pair (b3ko1376i):
+  no-floor rev 3 (27), the 0.55 m band cells (15, one per cell to make 3; freeze the 0.55 m bands after),
+  radius +2 cm wind-up (4: base, cable_source model x2, a 160 s hold), the join re-fly on today's tree (18,
+  exploratory; the thesis joins still fly after the rig day). Log scratchpad/laptop_night.log. Then score each,
+  registry, reviewers, morning report docs/reports/morning_report_2026-10-18.md.
+  Thesis writing goes to a separate session: brief docs/thesis_rewrite_brief_2026-10-17.md (Opus 5.5, high).
 - **(4) Band rule signed** (f = 1 +- 2 sigma_rig). Compute and freeze the bands (sigma_rig from RIG-1014-lift3).
 
 ## 14 Oct rig day in short (detail: registry RIG-1014-*, `git log -p` of this file)
