@@ -133,6 +133,8 @@ Updated: Sat 17 Oct 2026, 11:06 AEDT (from `date`). Only what a new session need
   radius +2 cm wind-up (4: base, cable_source model x2, a 160 s hold), the join re-fly on today's tree (18,
   exploratory; the thesis joins still fly after the rig day). Log scratchpad/laptop_night.log. Then score each,
   registry, reviewers, morning report docs/reports/morning_report_2026-10-18.md.
+  QUAD4 rejoin LAND pair R2172/R2173 never reached LAND (his mission stalled / QUAD4 fault in his descent); the A
+  critic re-fly is now q4_welded_land (+ no-floor), 4 runs chained after the night batch (task b3c2thf2x).
   Thesis writing goes to a separate session: brief docs/thesis_rewrite_brief_2026-10-17.md (Opus 5.5, high).
 - **(4) Band rule signed** (f = 1 +- 2 sigma_rig). Compute and freeze the bands (sigma_rig from RIG-1014-lift3).
 
