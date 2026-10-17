@@ -165,6 +165,43 @@ Notes:
 5. Floor: no pressing only because ground idle cuts the throttle; contact speed rises to 0.17-0.23 m/s (0.29-0.35 on the
    rig path), uncovered by any bar. Must not say: drone 0 reaching rest, or "no R0997 tip", as rig results.
 
+## Rev 3 (Wesley 17 Oct ~19:45: "re-card and re-fly"; written ~20:00, bars frozen before the rev-3 runs)
+
+Rev 2's runs (R2138-R2163) stay scored against rev 2's bars (F2 fired). These bars apply only to new runs.
+No code change: the switch is the same. What changed: the height bars are one-sided (a drone landing LOWER, at its
+rest, is the aim), a contact-speed bar is added (the reviewer: no bar covered it), the bases are A-only on the same
+tree (A is now the twin default), and QUAD4 folded in gets an arm (the A critic: with this switch the reference sinks
+1.5 m below the anchors if the stall never fires).
+
+**Contact speed, the rig's own range:** each drone's mean descent speed over the 0.2 s before it comes within 3 cm of
+its rest, after LAND. Rig landings 14 Oct: t5_4 0.14-0.18, t5_5 0.17-0.29, t6f 0.10-0.38 m/s. Twin, switch off:
+0.02-0.13 (0.79 for the strong drone that dropped, R2088). Rev 2 with the switch: 0.18-0.20, rig LAND path 0.29-0.32.
+
+| # | bar (rev 3) | pass | fail |
+|---|---|---|---|
+| F1 | residual gone | T1, T1b, T2: each drone's height above rest at LANDED at most its normal-landing value + 2 cm (drone 0 6.7, drones 1-2 3.6 cm); tilt after LANDED at most 12.2 deg | any drone higher, any tilt larger |
+| F2 | normal landings unchanged | every other arm: LANDED within 1.0 s of its same-tree A-only base's time after ring touchdown; the highest drone at LANDED at most the base's + 2 cm | slower by more than 1.0 s, faster by more than 1.0 s, or higher |
+| F3 | no pressing | as rev 2 (floor tilt at most the bases' + 2 deg; slide at most 3 cm) | as rev 2 |
+| F4 | never hangs, no new faults | as rev 2, plus: the exit is the stall in every arm (never the max drop) | any |
+| F5 | contact speed | every drone at most 0.40 m/s (the rig's landings reach 0.38) | any drone faster |
+
+**Runs (laptop, one at a time; same tree; switch run then its A-only base, ABAB where n = 2):**
+
+| arm | switch config | A-only base | n |
+|---|---|---|---|
+| T1 error 0.03 | `td_nf_mapneg_ref` | `td_a_mapneg_ref` | 2 + 1 |
+| T1b error 0.045 | `td_nf_mapneg45_ref` | `td_a_mapneg45_ref` | 2 + 1 |
+| T2 model integral | `td_nf_mapneg_model` | `td_a_mapneg_model` | 2 + 1 |
+| T3 hover | `td_nf_hold` | `td_a_hold` | 2 + 1 |
+| T4 orbit 0.125 | `td_nf_orbit_v125` | `traj3_orbit_v125` (A by default) | 2 + 1 |
+| T5 rig LAND path | `td_nf_hold_unwind0` | `td_a_hold_unwind0` | 2 + 1 |
+| weak map | `td_nf_mappos_ref` | `td_a_mappos_ref` (new) | 1 + 1 |
+| detach | `td_nf_detach` | `ta_a1_r1` | 1 + 1 |
+| creep | `td_nf_creep` | `td_a_creep` | 1 + 1 |
+| QUAD4 folded in (combined M1) | `td_nf_partner_attached_orbit` (new) | `partner_attached_orbit` | 2 + 2 (the A critic's re-fly) |
+
+**Falsifier:** F1 fails on T1 or T1b, or any of F2-F5 fails.
+
 ## Rig
 
 Only after the twin, the reviewer and Wesley's word. It goes in through a `configs/rig/` params file, with A.

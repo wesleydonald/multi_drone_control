@@ -127,7 +127,7 @@ Updated: Sat 17 Oct 2026, 11:06 AEDT (from `date`). Only what a new session need
   - Reviewers: A supported (twin default; rig needs critic + Wesley); no-floor (a) supported, (b) not supported (F2, contact speed 0.17-0.35 m/s); lead075 weak (spin N5 one lap); spin repeat R2168-R2171: fails N5 in 2 of 3 pairs, falsifier stands, exploratory.
 - **Wesley ~19:45 (decisions.md):** A on in the twin (sim.yaml, gate --quick passed); rig after a critic
   look at the wall-clock pose check. No-floor: re-card (one-sided height bar + contact-speed bar) and re-fly. Corner
-  cutting CLOSED (defaults stay, lag reported). N2 bands FROZEN ~19:54 (tools/n2_bands.py, card 2026-10-16_bands_1m). Next: the rig-day sheet; critic on A (rig path) running.
+  cutting CLOSED (defaults stay, lag reported). N2 bands FROZEN ~19:54 (tools/n2_bands.py, card 2026-10-16_bands_1m). Rig sheet updated (43cfd13). Critic on A: go with must-fixes; welded-QUAD4 stamp fixed (9d30665); QUAD4-folded-in LAND x2 flying (task b3ko1376i, scratchpad/laptop_q4.log). Then the no-floor rev 3 batch (scratchpad/laptop_r3.sh, 27 runs; card rev 3, bars frozen ~20:00).
 - **(4) Band rule signed** (f = 1 +- 2 sigma_rig). Compute and freeze the bands (sigma_rig from RIG-1014-lift3).
 
 ## 14 Oct rig day in short (detail: registry RIG-1014-*, `git log -p` of this file)
