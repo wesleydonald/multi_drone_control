@@ -158,3 +158,55 @@ Should-fix:
 5. A land_unwind false arm.
 6. Neighbours: the weak map, two survivors n = 2, LAND in creep and in lift, combined M1.
 7. Use the filtered velocity if a dz/dt test survives.
+
+## Results (17 Oct, laptop, tree b7ab074; R2088-R2108; scored with tools/land_touchdown.py past LANDED)
+
+Bars as frozen (rev 2). H1 tilt bar: the worst post-LANDED drone tilt over the 80 normal landings is 7.2 deg (R2049),
+so the bar is 12.2 deg.
+
+| arm | runs | LANDED - ring down (s) | highest drone above rest at LANDED (cm) | drone tilt after LANDED, max / end (deg) | exit |
+|---|---|---|---|---|---|
+| T1 base (off) | R2032 / R2044 | 1.03 / 1.09 | 43.8 / 43.0 | 127 / 123, end 90 / 90 | (stall, not logged) |
+| T1 A | R2088 / R2099 | 4.38 / 4.44 | 15.8 / 15.8 | 25.6 / 26.3 (end the same) | stall |
+| T1 A+B | R2089 / R2100 | 4.39 / 4.37 | 15.8 / 15.8 | 29.9 / 27.7 | stall |
+| T2 base (off) | R2033 / R2045 | 4.46 / 1.02 | 15.7 / 43.5 | 25.4 / 125 | (stall) |
+| T2 A | R2090 / R2101 | 4.27 / 4.41 | 15.8 / 15.8 | 25.2 / 27.8 | stall |
+| T2 A+B | R2091 / R2102 | 4.45 / 4.40 | 15.7 / 15.8 | 23.6 / 24.5 | stall |
+| T3 base (off) | R2023 / R2035 | 4.40 / 4.44 | 4.7 / 4.6 | 1.9 / 1.3 | |
+| T3 A+B | R2092 / R2103 | 4.36 / 4.35 | 4.6 / 4.7 | 2.7 / 2.3 | stall |
+| T4 base (off, same session) | R2109 / R2113 | 4.29 / 4.35 | 4.8 / 4.7 | 2.5 / 2.3 | |
+| T4 A+B | R2093 / R2104 | 4.28 / 4.31 | 4.9 / 4.8 | 1.9 / 2.5 | stall |
+| T5 base (off, land_unwind false) | R2094 / R2105 | **1.08** / 5.33 | **42.0** / 0.1 | **142** / 1.5 | |
+| T5 A+B | R2095 / R2106 | 4.89 / 4.54 | 0.9 / 2.9 | 10.0 / 11.2 (end 10.0 / 10.6) | stall |
+| weak map (A+B) | R2096 / R2107 | 4.45 / 4.33 | 4.7 / 4.7 | 0.9 / 1.9 | stall |
+| two survivors after a detach: base / A+B | R1706, R1887 / R2097, R2108 | 4.35, 4.49 / 4.49, 4.36 | 4.8, 4.3 / 4.3, 4.8 | 1.8, 1.9 / 1.7, 2.3 | stall |
+| LAND in the creep: base / A+B | R1414, R1431 / R2098 | 3.41, 3.47 / 3.45 | 4.7, 4.7 / 4.7 | 2.6, 1.4 / 0.8 | stall |
+
+R2098: the sim clock froze at 11.5 s, after LANDED (10.95 s); the landing is scored. No arm has a fault its base did
+not have (the detach arm's UNANNOUNCED DETACH is the scenario's, in R1706/R1887 too).
+
+**Verdicts against the frozen bars:**
+- **H1 FAILS** (A+B on T1, T2): height 15.7-15.8 cm, within the 30 cm gate; exit by the gated stall; but drone tilt
+  after LANDED 23.6-29.9 deg against the 12.2 bar.
+- **H1a (A alone):** the same as A+B to the millimetre. The gate never acted (15.8 < 30), so B adds nothing on these
+  arms.
+- **H2 passes** on T3 and T4. On T5, within 1.0 s and 5 cm of R2105, but the end tilt is 10-11 deg against 1.5.
+- **H3 passes**: LANDED 4.3-4.9 s after ring touchdown, everywhere.
+- **H4 passes.**
+
+**Why the strong drone still stops 16 cm up** (R2088, drone 1's tracker log):
+- After ring touchdown the tracker is `grounded` and its cable feedforward is off (`ff_active` 0). The measured pull,
+  which had absorbed the thrust-map error in the carry, is gone.
+- The reference goes to z = 0, but drone 1 holds at 0.258 m with throttle 0.427 (its true hover) and u2 0.22, well
+  above the OCP's 0.05 floor. This reads as a steady-state error: a 0.26 m error balancing the drone's ~1 m/s^2
+  thrust surplus (offset 0.155 against 0.185, gain 35.2). Whether any integral is live while grounded is not yet
+  checked in the tracker code.
+- The stall the detector sees is real, so re-arming it cannot help; Wesley's 30 cm gate lets the disarm through.
+- The normal drone 0 does the same on a small scale: 4.7 cm above rest at LANDED in every normal landing.
+- The 25 deg end tilt is the drone lying on its rigid rod after the 16 cm drop. The rig's tethers go slack, so the
+  rig would see the drop but maybe not the tilt.
+
+**New, rig-relevant: R2094.** With the switches off, normal thrust maps and the rig's LAND path (`land_unwind`
+false), LAND disarmed the fleet 0.42 m up, 1.08 s after ring touchdown, and the drones ended at 142 deg. This is the
+blend-second stall with no thrust error at all. R2105 (the same config) landed normally, so it happens 1 in 2 here. A
+fixes it in both runs (R2095, R2106). Open: why T5 with A+B ends one drone at 10-11 deg (R2105, off: 1.5).

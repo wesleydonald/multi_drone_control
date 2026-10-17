@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Sat 17 Oct 2026, 10:45 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Sat 17 Oct 2026, 11:06 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -91,16 +91,24 @@ Updated: Sat 17 Oct 2026, 10:45 AEDT (from `date`). Only what a new session need
 
 ## Now (Sat 17 Oct, ~10:45): Wesley's answers to the morning report (decisions.md 17 Oct)
 - Figures page for him: https://claude.ai/artifact/2MuafaZQuWTusdeLxJLukT (script: scratchpad/make_figs.py).
-- **(1) Touchdown:** stall AND within 0.30 m of rest.
-  - Card `docs/experiments/2026-10-17_touchdown_height_gate.md`, rev 2 after the critic.
-  - Arm A `land_rearm_touchdown` (re-arm at ring touchdown, probably the real cause); arm B `land_height_gate`
-    (implies A). Max-drop exit = the fallback.
-  - Code written in planner_node + bringup + `test_touchdown_gate.py`. NOT built or tested yet (batch running).
-- **(2) Vertical claims:** modelled-pull check flying (task b5kirrkjm, R2084..R2087, app_pushz_none_cm /
-  app_rob_m+20_z0_cm ABAB).
-- **(3) Measured lead:** the critic says rewrite. Solve ms is wall time (~0.011 s sim at RTF 0.44), so the
-  decomposition is unproven, and on the rig it may move the lead the wrong way. It proposes a stamped shift
-  (wire-format change, needs Wesley). Next: offline must-fix 1 from the G2 logs, then back to Wesley. No code.
+- **(1) Touchdown:** card rev 2 (`docs/experiments/2026-10-17_touchdown_height_gate.md`).
+  - Code committed b1be021, configs b7ab074: arm A `land_rearm_touchdown`, arm B `land_height_gate`; 167 planner
+    tests and the gate pass.
+  - `tools/land_touchdown.py` now reads past LANDED (landed_dz_cm, post/end tilt, exit); committed 8009445.
+- **(2) Vertical claims:** cause confirmed. With cable_source model the push leaves -7.95 cm and +20 % mass +22.2 cm
+  (R2084-R2087; measured pull ~0). Next: rewrite the thesis text around the measured pull.
+- **(3) Corner cutting:** Wesley ~11:00, sweeps first (decisions.md).
+  - Offline: plan tick -> tracker arrival is 0.018 s (2 iterations) / 0.026 s (5) in sim time, which plus pose age is
+    the 0.025 s leftover. Only the tracker can measure it, which favours the stamped shift.
+- **Batch bppon3jkw done 13:40 (R2088-R2124), scored (results in the touchdown card):**
+  - touchdown: A fixes the 0.5 m case (also R2094: the rig LAND path, switches off, normal maps, disarmed 0.42 m
+    up). The strong-map drone still stops 15.8 cm up (steady-state height error once the ring rests) and tips
+    24-30 deg: H1 FAILS. B never acted. Decision for Wesley.
+  - orbit 0.125 sweep: lag crosses zero at lead ~0.064 (0.078 at 0.3); 0.075 centres both speeds within 0.011 s.
+  - delayed twin R2117-R2124: all flipped in the takeoff creep (FAIL setup). Twin switch SIM_MOCAP_DELAY_FROM_S
+    added (8009445).
+- **Running (13:48, task bwkh1fgoz, scratchpad/laptop_dly.log, ~45 min, 8 runs from R2125):** delayed twin re-fly,
+  delay + ema from 20 s: orbit 0.3 base / 0 / 0.04 / 0.075, x2.
 - **(4) Band rule signed** (f = 1 +- 2 sigma_rig). Compute and freeze the bands (sigma_rig from RIG-1014-lift3).
 
 ## 14 Oct rig day in short (detail: registry RIG-1014-*, `git log -p` of this file)
