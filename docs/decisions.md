@@ -240,3 +240,8 @@ DECIDED 2026-10-17  Corner-cutting build (Wesley ~11:00, after the measured-lead
   No new code. Fixed leads 0 / 0.04 / 0.075 (ref_time_shift + plan_sqp_iters 2) on the orbit at 0.125 m/s, and on a
   delayed twin (orbit 0.3, SIM_MOCAP_DELAY_S 0.035 + SIM_MOCAP_VEL_FILTER ema). This tests lead = delay against
   lead = kappa x delay. Options afterwards: the stamped shift (wire format, his word), the measured lead, rung c.
+DECIDED 2026-10-17  Touchdown (card docs/experiments/2026-10-17_touchdown_height_gate.md, twin R2088-R2108; Wesley ~14:00):
+  keep A (`land_rearm_touchdown`, re-arm at ring touchdown) and delete B (`land_height_gate`: it never acted, 15.8 cm
+  < 30). A becomes the default, rig included, once the reviewer supports it. The residual (a drone 3 % stronger than its
+  map hovers 16 cm above rest with the target at the floor, then disarms and tips) gets a new card + critic: after ring
+  touchdown the LAND target keeps descending below rest so the position loop brings it down, ground_idle idles it.

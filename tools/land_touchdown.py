@@ -11,7 +11,7 @@ Per run: the worst drone pushed OUTSIDE its reference radially (the rod shove) a
 (cm, about the ring centre at load-down); the worst drone tilt after the 1.2 s feedforward blend; the
 ring's xy shift; and the outcome (landed / ABORT with its reason). Window: load-down to LANDED (or the
 abort). After LANDED, to the end of the log: the highest drone above its rest at LANDED, the worst drone tilt after it
-and at the end, and which touchdown exit fired (logged only with land_rearm_touchdown / land_height_gate).
+and at the end, and which touchdown exit fired (logged only with land_rearm_touchdown / land_descend_to_stall).
 """
 import csv
 import glob

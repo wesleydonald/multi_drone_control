@@ -179,3 +179,26 @@ the end).
 - Must-fix 1 (offline, from the G2 logs) is next and needs no code.
 - The choice between this card, the stamped shift (must-fix 7: a wire-format change) and rung c goes back to Wesley
   with that result.
+
+## Sweeps (critic must-fix 4 and 5; Wesley 17 Oct: sweeps first, then decide)
+
+Each arm is ref_time_shift + plan_sqp_iters 2 + a fixed plan_ref_lag_s; base = defaults. Laptop, same session per
+cell. Lag in s (+ = late); cut = mean signed distance inside the curve at the tightest quarter (mm).
+
+| cell | base: cut / lag | lead 0 | lead 0.04 | lead 0.075 | lag zero at | runs |
+|---|---|---|---|---|---|---|
+| orbit 0.125 | +4.0, +3.5 / +0.088, +0.075 | +0.9, +0.7 / -0.051, -0.059 | +0.7, +0.6 / -0.019, -0.029 | +0.1, +0.2 / +0.011, +0.007 | ~0.064 | R2109-R2116 |
+| orbit 0.3 (G2, for reference) | +13.4 / +0.049 | | | -1.7 / -0.003 | ~0.078 | R1991-R1999 |
+| orbit 0.3, delayed twin (pose delay 0.035 s + ema from 20 s) | +21.5, +21.3 / +0.036, +0.044 | +7.6, +5.2 / -0.075, -0.084 | +7.0, +8.5 / -0.040, -0.040 | +6.8 / -0.006 | ~0.081 | R2125-R2132 (R2128 void) |
+
+**What they say:**
+- **Lead = measured delay is falsified.** 0.035 s more pose delay moved the crossing by ~0.003 s (0.078 -> ~0.081).
+  A lead computed from the measured delay would have moved it by 0.035.
+- The crossing depends on speed (0.064 at 0.125, 0.078 at 0.3), but a fixed 0.075 holds |lag| <= 0.011 s in all three
+  cells.
+- On the delayed twin the extra delay shows up as cut, not lag: +21 mm at base, and +5..+8.5 mm remains with the lag
+  centred. Timing removes about 2/3 of it there; on the plain twin it removes all of it.
+- The delayed twin flips a drone in LAND with the delay on (4 of 7 scored runs, the base R2129 at the path end too),
+  and at takeoff when the delay starts at 0 (R2117-R2124). Its landings say nothing about the timing arms.
+
+**Status:** the card is not built (its premise failed). The build choice goes back to Wesley.

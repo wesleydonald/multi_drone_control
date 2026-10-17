@@ -107,6 +107,12 @@ Updated: Sat 17 Oct 2026, 11:06 AEDT (from `date`). Only what a new session need
   - orbit 0.125 sweep: lag crosses zero at lead ~0.064 (0.078 at 0.3); 0.075 centres both speeds within 0.011 s.
   - delayed twin R2117-R2124: all flipped in the takeoff creep (FAIL setup). Twin switch SIM_MOCAP_DELAY_FROM_S
     added (8009445).
+- **Wesley ~13:55:** keep A, delete B; A default (rig too) once the reviewer supports it; card the residual.
+  Card `docs/experiments/2026-10-17_land_ref_below_rest.md` rev 2 after the critic: Step 0 done (drone 1 = steady-state
+  height error, its rod in tension; drone 0's 4.7 cm = rigid rod + xy freeze, twin only). Switch
+  `land_descend_to_stall` (no floor after ring touchdown) and B deleted: coded, UNCOMMITTED, tests written but NOT RUN
+  (laptop busy). Configs td_nf_* + td_a_mapneg45_ref; td_ab_* moved to configs/experiments/old/.
+  Next after the batch: pytest + gate --quick + prebuild, reviewer on A, then fly the card's arms.
 - **Running (13:48, task bwkh1fgoz, scratchpad/laptop_dly.log, ~45 min, 8 runs from R2125):** delayed twin re-fly,
   delay + ema from 20 s: orbit 0.3 base / 0 / 0.04 / 0.075, x2.
 - **(4) Band rule signed** (f = 1 +- 2 sigma_rig). Compute and freeze the bands (sigma_rig from RIG-1014-lift3).
