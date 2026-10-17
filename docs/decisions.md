@@ -236,3 +236,7 @@ DECIDED 2026-10-17  Morning answers (Wesley ~10:30, docs/reports/morning_report_
       behind an off-by-default switch, card + critic first.
   (4) N2 band rule signed as drafted: band = [max(0, min_twin - 2 sigma_rig), max_twin + 2 sigma_rig], f = 1,
       sigma_rig from RIG-1014-lift3 (docs/experiments/2026-10-16_bands_1m.md).
+DECIDED 2026-10-17  Corner-cutting build (Wesley ~11:00, after the measured-lead critic said rewrite): sweeps first, then decide.
+  No new code. Fixed leads 0 / 0.04 / 0.075 (ref_time_shift + plan_sqp_iters 2) on the orbit at 0.125 m/s, and on a
+  delayed twin (orbit 0.3, SIM_MOCAP_DELAY_S 0.035 + SIM_MOCAP_VEL_FILTER ema). This tests lead = delay against
+  lead = kappa x delay. Options afterwards: the stamped shift (wire format, his word), the measured lead, rung c.

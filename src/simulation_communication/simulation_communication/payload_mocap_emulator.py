@@ -54,6 +54,10 @@ class PayloadMocapEmulator(Node):
         # the rig mocap node's velocity filter (card 2026-10-14_tracker_timing): 'none' keeps the plain difference,
         # 'ema' is the rig's alpha 0.2 (its ~45 ms lag), 'slope' the least-squares slope
         self.declare_parameter('velocity_filter', os.environ.get('SIM_MOCAP_VEL_FILTER', 'none'))
+        # sim time (s) from which the delay and the filter apply (default from SIM_MOCAP_DELAY_FROM_S; 0 = from the
+        # start). The drones flip in the takeoff creep with the delay on (R1100, R2117): starting it after the lift
+        # lets the rig-latency twin carry.
+        self.declare_parameter('mocap_delay_from_s', float(os.environ.get('SIM_MOCAP_DELAY_FROM_S', '0.0')))
 
         drone_id = self.get_parameter('drone_id').value
         drone_name = self.get_parameter('drone_name').value
@@ -65,6 +69,7 @@ class PayloadMocapEmulator(Node):
         self._drone_last_pub = None
         self._payload_last_pub = None
         self._delay = float(self.get_parameter('mocap_delay_s').value)
+        self._delay_from = float(self.get_parameter('mocap_delay_from_s').value)
         vmode = str(self.get_parameter('velocity_filter').value)
         self._vfilt = None
         if vmode != 'none':
@@ -75,7 +80,7 @@ class PayloadMocapEmulator(Node):
             self.get_logger().warn(f'[MOCAP{drone_id}] velocity filter {dmode} (ring ema)')
         self._queues = {}
         if self._delay > 0.0:
-            self.get_logger().warn(f'[MOCAP{drone_id}] mocap delay {self._delay:.3f} s')
+            self.get_logger().warn(f'[MOCAP{drone_id}] mocap delay {self._delay:.3f} s from t {self._delay_from:.1f} s')
 
         pose_topic_override = str(self.get_parameter('pose_topic').value)
         drone_pose_topic = (pose_topic_override if pose_topic_override
@@ -141,7 +146,7 @@ class PayloadMocapEmulator(Node):
         ])
         if self._vfilt is not None and body in self._vfilt:
             v = self._vfilt[body].update(now.sec + now.nanosec * 1e-9, (pos.x, pos.y, pos.z))
-            lin_vel = lin_vel if v is None else v
+            lin_vel = lin_vel if v is None or not self._timing_on() else v
 
         # Angular velocity (body frame)
         q1 = [last_ori.x, last_ori.y, last_ori.z, last_ori.w]
@@ -241,6 +246,9 @@ class PayloadMocapEmulator(Node):
         if mcs is not None:
             self._publish(self._payload_pub, mcs)
 
+    def _timing_on(self):
+        return self._delay_from <= 0.0 or self.get_clock().now().nanoseconds * 1e-9 >= self._delay_from
+
     def _publish(self, pub, mcs):
         """Publish now, or after mocap_delay_s (restamped on release, as the rig stamps on receipt)."""
         if self._delay <= 0.0:
@@ -249,7 +257,10 @@ class PayloadMocapEmulator(Node):
         now = self.get_clock().now()
         q = self._queues.setdefault(id(pub), collections.deque())
         q.append((now.nanoseconds * 1e-9, mcs))
-        while q and q[0][0] <= now.nanoseconds * 1e-9 - self._delay:
+        # ramped in over 2 s from mocap_delay_from_s, so the stream slows instead of stopping for the delay
+        delay = self._delay * min(1.0, max(0.0, (now.nanoseconds * 1e-9 - self._delay_from) / 2.0)) \
+            if self._delay_from > 0.0 else self._delay
+        while q and q[0][0] <= now.nanoseconds * 1e-9 - delay:
             _, m = q.popleft()
             m.header.stamp = now.to_msg()
             pub.publish(m)

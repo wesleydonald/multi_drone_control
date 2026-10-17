@@ -10,7 +10,8 @@ scorer since 9 Oct (0400066).
 Per run: the worst drone pushed OUTSIDE its reference radially (the rod shove) and LAGGING INSIDE it
 (cm, about the ring centre at load-down); the worst drone tilt after the 1.2 s feedforward blend; the
 ring's xy shift; and the outcome (landed / ABORT with its reason). Window: load-down to LANDED (or the
-abort).
+abort). After LANDED, to the end of the log: the highest drone above its rest at LANDED, the worst drone tilt after it
+and at the end, and which touchdown exit fired (logged only with land_rearm_touchdown / land_height_gate).
 """
 import csv
 import glob
@@ -62,11 +63,25 @@ def land(rid):
     shift = float(np.hypot(w.payload_x - cx, w.payload_y - cy).max())
     out.update(n=n, outside_cm=100 * max(outside), inside_cm=100 * max(inside),
                tilt_deg=max(tilt), ring_shift_cm=100 * shift, window_s=float(w.t.iloc[-1] - t_down))
+    # after LANDED, to the end of the log (card 2026-10-17_touchdown_height_gate: R2032 disarmed 0.5 m up and the
+    # drones fell after the window above): each drone's height above its rest at LANDED, and its tilt at the end
+    t_landed = [float(e['sim_time']) for e in ev if e['event'] == 'LANDED']
+    if t_landed:
+        at = df[df.t >= t_landed[0]]
+        rest = [float(df[f'd{i}_z'].iloc[:20].median()) for i in range(n)]
+        if len(at):
+            out['landed_dz_cm'] = 100 * max(float(at[f'd{i}_z'].iloc[0]) - rest[i] for i in range(n))
+            out['end_tilt_deg'] = max(float(at[f'd{i}_tilt_deg'].iloc[-1]) for i in range(n))
+            out['post_tilt_deg'] = max(float(at[f'd{i}_tilt_deg'].max()) for i in range(n))
+    log = os.path.join(d, 'logs', 'launch.log')
+    m = re.search(r'touchdown by (stall|max drop)', open(log, errors='replace').read()) if os.path.exists(log) else None
+    out['exit'] = m.group(1) if m else ''
     return out
 
 
 def main():
-    keys = ['run', 'config', 'n', 'outside_cm', 'inside_cm', 'tilt_deg', 'ring_shift_cm', 'outcome']
+    keys = ['run', 'config', 'n', 'outside_cm', 'inside_cm', 'tilt_deg', 'ring_shift_cm', 'landed_dz_cm',
+            'post_tilt_deg', 'end_tilt_deg', 'exit', 'outcome']
     print('| ' + ' | '.join(keys) + ' |')
     print('|' + '---|' * len(keys))
     for rid in sys.argv[1:]:
