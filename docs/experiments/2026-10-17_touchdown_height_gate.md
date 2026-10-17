@@ -255,3 +255,30 @@ Scored with `tools/land_touchdown.py` and the per-drone floor scorer of the land
    A+B on b7ab074 and R2165 ends at 4.0 deg against 0.7.
 5. A's fresh-pose test uses wall time (0.2 s); the twin ran at RTF 0.23-0.41, so that branch has not run at RTF 1.
 Must not say: "ready for the rig". The rig needs the critic's look at the code path and Wesley's word.
+
+## Critic (rig path, 17 Oct evening, ~19:50): go with must-fixes
+
+1. Tried before? The re-arm is new; the combined-M1 LAND with QUAD4 folded in was left out of the card.
+2. Stale poses: a stale pose only zeroes `_stall_ct` (planner_node.py:1036); it cannot hang the fleet, since the max-drop
+   exit counts planner ticks (planner_node.py:1400, 1415), ~7.5 s after the ring's rest height. Freshness is arrival
+   time (planner_node.py:969): if Motive repeats a lost body's last pose, the frozen pose passes (= A off). The hold
+   path has no solve, so ticks are cheap after ring touchdown.
+3. A ring that never reads down (tilted, on a mat, z above lift_z0 + 0.05, planner_node.py:1131): no reset, A does
+   nothing; z noise latches one harmless reset. The max-drop exit is a real backstop.
+4. Unwelded QUAD4, departed drones, `_drop_tick`, his LAND: untouched; the 15 s departed wait starts up to ~1.5 s later.
+5. A cannot cause a disarm in the air, and does not prevent R2088's real 16 cm stall.
+
+Must-fix:
+1. **A welded QUAD4 is never stamped:** `_attach_drone_cb` (dissipative_node.py:727-740) writes `drone_pos[d]` but not
+   `_drone_t[d]`, so with A on every tick reads stale: no stall touchdown, LAND only by max drop (~7.5 s pressing z 0;
+   with `land_descend_to_stall` the reference sinks 1.5 m below the anchors). Fly one combined-M1 LAND with QUAD4 folded in.
+2. The stale-pose unit test the card promised (none existed; test_touchdown_gate.py only replays R2032).
+
+Should-fix: the count of stale resets in the touchdown log line (planner_node.py:1422); before the rig, read one rig
+log through a dropout (does Motive skip a lost body or repeat it?).
+
+**Taken (17 Oct ~19:55):** must-fix 1: `_attach_drone_cb` stamps `_drone_t[d]` for an OCP-attached newcomer
+(dissipative_node.py). It was live in the twin default (sim.yaml) from 7468bb7 until this fix; no run flew in between.
+Must-fix 2: `src/mpc_planner/test/test_touchdown_stale.py` (fresh poses reach the stall; one stale pose holds the count;
+an unstamped slot reads stale; a welded QUAD4 is stamped). 387 planner tests and gate --quick pass. Combined-M1 LAND
+with QUAD4 folded in: `partner_attached_orbit` x2 with A on (below). Should-fixes: open, for before the rig.

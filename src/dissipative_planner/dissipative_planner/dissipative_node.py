@@ -738,6 +738,7 @@ class DissipativeController(LoadPlanner):
             self.drone_vel[d] = np.array([lv.x, lv.y, lv.z])
             o = msg.pose.orientation
             self.drone_quat[d] = np.array([o.w, o.x, o.y, o.z])     # _pivot_at tilts the pivot with it
+            self._drone_t[d] = time.monotonic()     # else land_rearm_touchdown reads a welded QUAD4 as always stale
 
     def _reserved_index(self, d):
         """j for a reserved (magnet) drone id d, else None. Reserved ids are counted
