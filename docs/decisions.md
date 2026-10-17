@@ -245,3 +245,8 @@ DECIDED 2026-10-17  Touchdown (card docs/experiments/2026-10-17_touchdown_height
   < 30). A becomes the default, rig included, once the reviewer supports it. The residual (a drone 3 % stronger than its
   map hovers 16 cm above rest with the target at the floor, then disarms and tips) gets a new card + critic: after ring
   touchdown the LAND target keeps descending below rest so the position loop brings it down, ground_idle idles it.
+DECIDED 2026-10-17  Corner cutting build (Wesley ~14:29, after the sweeps R2109-R2132): no new code. The combination
+  ref_time_shift + plan_sqp_iters 2 + plan_ref_lag_s 0.075 becomes the twin default candidate: neighbours (hover,
+  lift and LAND, detach, attach on the orbit, figure-8), the reviewer, then Wesley's word for the rig. The measured
+  lead is dropped (lead = delay falsified: 0.035 s more delay moved the crossing ~0.003 s). Pushed back once on the
+  7 Oct "no bandaid" point; his call.

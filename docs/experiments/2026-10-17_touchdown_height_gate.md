@@ -210,3 +210,19 @@ not have (the detach arm's UNANNOUNCED DETACH is the scenario's, in R1706/R1887 
 false), LAND disarmed the fleet 0.42 m up, 1.08 s after ring touchdown, and the drones ended at 142 deg. This is the
 blend-second stall with no thrust error at all. R2105 (the same config) landed normally, so it happens 1 in 2 here. A
 fixes it in both runs (R2095, R2106). Open: why T5 with A+B ends one drone at 10-11 deg (R2105, off: 1.5).
+
+## Reviewer (17 Oct ~14:40): weak
+
+- 1 [weak]: the strong-map part holds (3 of 4 bases fired at 43-44 cm, 0 of 8 with A). The rig-path part rests on
+  one event: with the switches off the 0.42 m fire is 1 of 2 (R2094 / R2105, same params), so two clean A runs
+  happen 25 % of the time by chance. Its support is the mechanism: the +1.08 s fire falls inside the 1.5 s grace A
+  restarts. A alone was never flown on that path.
+- 2 [supported]: 15.7-15.8 cm and 23.6-29.9 deg in all 8; B blocked nothing.
+- 3 [weak]: H3/H4 hold in all 21. The detach and creep bases are older trees; the creep has n = 1; "LAND during the
+  lift" was not flown; T5 has one normal base.
+- 4: the 10-11 deg on the rig path is most likely A: LANDED comes 0.4-0.8 s earlier and disarms drone 0 2.9-3.9 cm
+  up while it is still rocking. It is above the worst normal landing (7.2 deg), 2 of 2: it matters for the default.
+- Tree: the runs are on b7ab074; A is unchanged at 3edeb04, but the rule asks for a re-fly on the final tree.
+
+Re-fly queued (17 Oct afternoon batch): the rig path off / A ABAB plus one more A (2 + 3), A alone on hover and the
+creep, LAND in the lift with its base. A stays off by default until the reviewer supports it.
