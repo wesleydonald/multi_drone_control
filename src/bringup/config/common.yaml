@@ -46,6 +46,9 @@ trajectory:
   plan_rate_ff: ''             # '' = off: zero cable angular-rate reference; true = the rate the flatness directions turn at (same card)
   plan_ref_lag_s: ''           # '' = 0: s the trajectory reference is evaluated behind the planner's clock (0.1 cancels its one-tick lead; same card)
   plan_sqp_iters: ''           # '' = 5: warm-start SQP iterations per planner tick (same card)
+  land_rearm_touchdown: ''     # '' = off: re-arm the LAND stall test at ring touchdown (card 2026-10-17_touchdown_height_gate)
+  land_height_gate: ''         # '' = off: the stall counts only with every survivor within land_gate_dz of its rest (same card)
+  land_gate_dz: ''             # '' = 0.30 m
   int_mode: 'auto'             # auto = model where allowed, else reference (bringup real_mode.planner_options; Wesley 5 Oct)
   int_k_xy: 5.26               # N/m, model mode: ring force per metre of integral (rig twin, card 2026-10-04_z_int_model)
   int_k_z: 7.13

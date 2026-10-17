@@ -85,6 +85,7 @@ LAND_MIN_DESCENT = 0.05       # m the fleet must actually drop first
 LAND_GRACE_S  = 1.5           # s to ignore the stall test after LAND, while the
                               # drones are still catching up to the new reference
 LAND_MAX_DROP = 1.50          # m safety floor below the handover height
+LAND_POSE_FRESH_S = 0.2       # s: land_rearm_touchdown / land_height_gate read only poses this fresh
 
 # Cable-FF soft-start. The payload sits on the GROUND through the handover settle,
 # so stepping the full tension feedforward on at handover makes the drones lurch to
@@ -162,9 +163,10 @@ class TouchdownDetector:
         self._stall_ct = 0
         self._cycles = 0
 
-    def update(self, zs):
+    def update(self, zs, rest=None, gate_dz=None):
         """One planner tick with the heights of the drones being landed. True once
-        they have all stopped descending."""
+        they have all stopped descending and, with rest (per drone, None = ungated), each
+        is at most gate_dz above its rest height."""
         if not zs or any(z is None for z in zs):
             return False
         max_dz = max(float(z) for z in zs)
@@ -184,7 +186,9 @@ class TouchdownDetector:
             self._stall_ct += 1
         else:
             self._stall_ct = 0
-        return self._stall_ct >= int(LAND_STALL_S * self.hz)
+        if self._stall_ct < int(LAND_STALL_S * self.hz):
+            return False
+        return rest is None or all(r is None or float(z) - r <= gate_dz for z, r in zip(zs, rest))
 
 
 def land_arc_ref(attach, radial, rod, theta0, centre_off, s, v):
@@ -398,6 +402,11 @@ class LoadPlanner(Node):
         self._ref_lag_s = float(self.declare_parameter('plan_ref_lag_s', 0.0).value)
         # warm-start SQP iterations per tick (card 2026-10-16_corner_cutting; 0 = the compiled default, 5)
         self._sqp_iters = int(self.declare_parameter('plan_sqp_iters', 0).value)
+        # LAND touchdown (card 2026-10-17_touchdown_height_gate): re-arm the stall test at ring touchdown; the height
+        # gate (implies the re-arm) also needs every survivor within land_gate_dz of its TAKEOFF rest height
+        self._land_gate = bool(self.declare_parameter('land_height_gate', False).value)
+        self._land_rearm = self._land_gate or bool(self.declare_parameter('land_rearm_touchdown', False).value)
+        self._land_gate_dz = float(self.declare_parameter('land_gate_dz', 0.30).value)
         self.solver = PlannerSolver(self.dyn, self.get_logger(), pin_rates=self.pin_cable_rates)
         self._configure_solver(self.solver)
         # Pre-built OCPs by fleet size, for handing back after a reconfiguration.
@@ -1022,7 +1031,17 @@ class LoadPlanner(Node):
             if d is None:
                 return False
             zs.append(float(d[2]))
-        return self._touchdown.update(zs)
+        if not self._land_rearm:
+            return self._touchdown.update(zs)
+        now = time.monotonic()
+        if any(now - self._drone_t.get(d, -1e9) > LAND_POSE_FRESH_S for d in self.slot2drone[:self.n]):
+            self._touchdown._stall_ct = 0                  # a frozen pose reads as a stall
+            return False
+        rest = None
+        if self._land_gate:
+            rz = getattr(self, '_rest_z', {})
+            rest = [rz.get(d) for d in self.slot2drone[:self.n]]
+        return self._touchdown.update(zs, rest, self._land_gate_dz)
 
     def _land_hold_refs(self):
         """LAND with the load already resting: the rods are slack and the OCP has no
@@ -1033,6 +1052,8 @@ class LoadPlanner(Node):
         cable term, at land_vel, until the stall detector sees it on the floor. The
         creep in reverse. Frozen once the survivors have touched down."""
         if self._land_anchor is None:
+            if self._land_rearm:
+                self._touchdown.reset()                    # the hover-blend second must not read as a stall
             self._land_anchor = {}
             for i in range(self.n):
                 p = self._drone_at(i)
@@ -1391,8 +1412,16 @@ class LoadPlanner(Node):
                     # would only end when lift_progress bottoms out, grinding the
                     # drones into the platform for ~10 s. Works either way.
                     if not self._touched_down:
-                        self._touched_down = (self._touchdown_stalled()
-                                              or self.lift_progress <= floor + 1e-6)
+                        stalled = self._touchdown_stalled()
+                        self._touched_down = stalled or self.lift_progress <= floor + 1e-6
+                        if self._touched_down and self._land_rearm:
+                            rz = getattr(self, '_rest_z', {})
+                            hs = ', '.join(
+                                f'd{d} z {float(self.drone_pos[d][2]):.2f}'
+                                + (f' (+{float(self.drone_pos[d][2]) - rz[d]:.2f})' if d in rz else '')
+                                for d in self.slot2drone[:self.n] if self.drone_pos[d] is not None)
+                            self.get_logger().info(
+                                f'[planner] touchdown by {"stall" if stalled else "max drop"}: {hs}')
                         if self._touched_down and not self._departed_down():
                             self.get_logger().info(
                                 '[planner] survivors down — reference held, waiting '

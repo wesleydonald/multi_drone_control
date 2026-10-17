@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Sat 17 Oct 2026, 02:49 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Sat 17 Oct 2026, 10:45 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -88,6 +88,20 @@ Updated: Sat 17 Oct 2026, 02:49 AEDT (from `date`). Only what a new session need
   into tools/ (above); the old figure scripts are in the scratchpad `restored/` folder only.
 - **For Wesley tonight:** the 3 Tier B world files (new, via make_carry_worlds.py); the 1 m band rule; T15's layout
   (even ring chosen); the bars set in his absence (he may change them for later runs).
+
+## Now (Sat 17 Oct, ~10:45): Wesley's answers to the morning report (decisions.md 17 Oct)
+- Figures page for him: https://claude.ai/artifact/2MuafaZQuWTusdeLxJLukT (script: scratchpad/make_figs.py).
+- **(1) Touchdown:** stall AND within 0.30 m of rest.
+  - Card `docs/experiments/2026-10-17_touchdown_height_gate.md`, rev 2 after the critic.
+  - Arm A `land_rearm_touchdown` (re-arm at ring touchdown, probably the real cause); arm B `land_height_gate`
+    (implies A). Max-drop exit = the fallback.
+  - Code written in planner_node + bringup + `test_touchdown_gate.py`. NOT built or tested yet (batch running).
+- **(2) Vertical claims:** modelled-pull check flying (task b5kirrkjm, R2084..R2087, app_pushz_none_cm /
+  app_rob_m+20_z0_cm ABAB).
+- **(3) Measured lead:** the critic says rewrite. Solve ms is wall time (~0.011 s sim at RTF 0.44), so the
+  decomposition is unproven, and on the rig it may move the lead the wrong way. It proposes a stamped shift
+  (wire-format change, needs Wesley). Next: offline must-fix 1 from the G2 logs, then back to Wesley. No code.
+- **(4) Band rule signed** (f = 1 +- 2 sigma_rig). Compute and freeze the bands (sigma_rig from RIG-1014-lift3).
 
 ## 14 Oct rig day in short (detail: registry RIG-1014-*, `git log -p` of this file)
 - 46 launches: 8 passed, 11 failed in flight, 11 arm refusals (QUAD1/QUAD2 FC attitude drift), the rest void.
