@@ -1,0 +1,77 @@
+\section{Introduction}
+
+An unmanned aerial vehicle (UAV) is an aircraft with no onboard pilot, flown autonomously or by remote control. A quadcopter is a UAV with four horizontal rotors; it is underactuated, with four control inputs for six degrees of freedom \cite{kotaruDifferentialflatnessControlQuadrotors2018}. In this thesis, UAV means a quadcopter. Low-cost microcontrollers and sensors have taken UAVs from hobby and videography uses to package delivery, search and rescue, construction and agriculture \cite{kardaszDronesPossibilitiesTheir2016, olleroPresentFutureAerial2022}, helped by their agility, vertical takeoff and landing, and ability to operate in confined or GPS-denied spaces. Many of these tasks require carrying a payload \cite{thusooQUADROTORSPRESENTERA2021, choiOverviewDroneApplications2023}, and UAV payload transport has received significant research attention over the past two decades.
+
+A single UAV's thrust-to-weight ratio limits the payload it can carry, and a suspended load adds pendulum-like swing that can destabilise the vehicle and costs control effort to reject \cite{geronelDynamicResponsesDue2023}. In cooperative multi-UAV transport several UAVs lift one load \cite{Carney_2022}. This raises the liftable mass, constrains the load's swing through several attachment points, can give full six-degree-of-freedom control of the payload's pose, and avoids building one large vehicle \cite{tudelft, mohammadiDecentralizedMotionControl2018}.
+
+The payload is commonly attached through flexible cables, which are mechanically simple and safer in a collision than rigid links. Cable tension must stay positive for a cable to stay taut, and in a team each UAV's share of it must be allocated so that no vehicle is overloaded; formation constraints and inter-UAV collision avoidance complicate the problem further \cite{kotaruDynamicsControlQuadrotor2017}.
+
+A large body of work addresses trajectory tracking, formation control, tension allocation and disturbance rejection for fixed teams \cite{wangRobustCooperativeTransportation2024, gimenezMultiobjectiveControlCooperative2018, wahbaKinodynamicMotionPlanning2024}, reviewed most recently by Lv et al.\ \cite{lv2026review}. Most of it is validated in simulation; fewer papers show hardware results, and very few fly outdoors, where most applications are \cite{estevezReviewAerialTransportation2024}.
+
+Changes in team composition during a mission have received much less attention than disturbances such as wind and payload uncertainty. In this thesis, reconfiguration means a change of team membership, a UAV leaving or joining while the payload is carried; it is distinct from a fixed team changing its formation, as when a team reshapes itself to pass a doorway \cite{jackson2020scalable}. A UAV leaving a carried load has been flown \cite{quan2025swarm, zeng2025marl}, but no hardware work read in full gives a number for the load's attitude through the event, and no work has shown a UAV attaching to a payload that a team is already carrying in flight, in simulation or on hardware (Section~\ref{sec:lit_team}). A joining UAV must localise its attachment point accurately, the load must be reallocated smoothly across the team, and the existing system must stay stable through the joining transient.
+
+Adding UAVs mid-flight would have practical value. A UAV may need to leave the formation because of a low battery, a mechanical failure or a new assignment, which reduces the team's lift and can compromise the mission \cite{farrasFaultTolerantControlMultiQuadcopter2024}. A replacement that joins mid-flight lets the mission continue without landing the whole team. A lighter team could also pass through a narrow space, a task explored in \cite{tudelft, tensionbased}, with UAVs joining afterwards to restore stability and capacity.
+
+A mission could also start with the fewest UAVs and add more only when needed, saving energy. Adding UAVs is thus both a robustness feature and a way to widen the operating envelope of cooperative transport (Figure~\ref{fig:mission_profile}).
+
+\tikzset{
+  block/.style={
+    rectangle, rounded corners=4pt,
+    minimum width=5.3cm, minimum height=0.85cm,
+    draw, thick, align=center,
+    font=\small
+  },
+  transport/.style={block, fill=blue!6, draw=blue!40},
+  event/.style={block, fill=orange!12, draw=orange!60},
+  docking/.style={block, fill=purple!8, draw=purple!45},
+  arrow/.style={-Stealth, thick},
+  phase/.style={font=\footnotesize\color{gray}}
+}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=0.6cm and 1.2cm]
+
+\node (p1) [transport]
+{\textbf{Initial transport}\\[-2pt]\scriptsize $N$ UAVs follow the planned trajectory};
+
+\node (ev) [event, below=of p1]
+{\textbf{UAV departure}\\[-2pt]\scriptsize failure / low battery};
+
+\node (p2) [transport, below=of ev]
+{\textbf{Reduced team}\\[-2pt]\scriptsize $N\!-\!1$ UAVs maintain stability};
+
+\node[phase, left=0.4cm of p1] {Phase 1};
+\node[phase, left=0.4cm of ev] {Phase 2};
+\node[phase, left=0.4cm of p2] {Phase 3};
+
+\draw[arrow] (p1) -- (ev);
+\draw[arrow] (ev) -- (p2);
+
+\node (p3) [docking, right=1.2cm of p1]
+{\textbf{Replacement approach}\\[-2pt]\scriptsize localises docking point};
+
+\node (p4) [docking, below=of p3]
+{\textbf{Attachment}\\[-2pt]\scriptsize guided electromagnetic docking};
+
+\node (p5) [transport, below=of p4]
+{\textbf{Full team resumes}\\[-2pt]\scriptsize load redistributed to $N$ UAVs};
+
+\node[phase, right=0.4cm of p3] {Phase 4};
+\node[phase, right=0.4cm of p4] {Phase 5};
+\node[phase, right=0.4cm of p5] {Phase 6};
+
+\draw[arrow] (p3) -- (p4);
+\draw[arrow] (p4) -- (p5);
+
+\draw[arrow, thick] (p2.east) -- ++(0.8,0) |- (p3.west);
+
+\end{tikzpicture}
+
+\caption{Mission profile for dynamic UAV replacement during transport.}
+\label{fig:mission_profile}
+\end{figure}
+
+This thesis addresses the multi-UAV control problem of keeping the payload stable through a departure and a mid-mission addition, Phases 2, 4 and 6 of Figure~\ref{fig:mission_profile}. The docking mechanism of Phases 4 and 5 is developed by a collaborating student.
+
+The contribution of this thesis is therefore the control around the docking: redistributing the load, re-stabilising the formation and recovering coordinated transport. Validation is in simulation and on a hardware rig.

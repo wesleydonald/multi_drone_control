@@ -1,0 +1,103 @@
+% authority.tex -- Methodology 3.5: authority and safety as runtime assurance (drafted 12 Oct 2026 from the thesis
+% plan of 11 Oct). The safety paragraph moved here from system_overview.tex (its label sec:safety comes with it);
+% fig:owners (F5) replaces the old nodes and cascade figures. The rig switch states in brackets follow plan D6 and
+% the M1 plan's D6(a)/(b): they are set per lab day and are not results.
+
+\subsection{Authority and safety}
+\label{sec:safety}
+
+Every UAV in the air has exactly one controller sending it commands at every instant, and every phase has a way
+down that ends with the UAV disarmed on the floor. Figure~\ref{fig:owners} shows the cascade and who owns what.
+The planner owns the ring: it plans the ring's motion and every rod, and hands each carrier's share to that
+carrier's tracker. A tracker owns its UAV's radio link; nothing else writes to it. A UAV that is not on the ring
+is owned either by its own tracker (a freed carrier landing by itself, a newcomer being taken back) or by the
+collaborator's controller (the newcomer through its pickup, transit, drop and descent to contact), and the
+multiplexer in front of the newcomer's radio is the one place where ownership changes hands: it forwards the
+collaborator's commands until the attach is confirmed, switches to this work's tracker on that tick, and latches.
+Below the trackers each flight controller closes only its body-rate loop and arms, disarms and switches its magnet
+on channels the tracker sets; the operator holds a disarm button that overrides everything.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[>=Stealth, font=\small,
+    blk/.style={draw, thick, rounded corners=2pt, align=center, minimum height=0.85cm, font=\small},
+    ours/.style={blk, fill=blue!6, draw=blue!50!black},
+    his/.style={blk, fill=orange!10, draw=orange!60!black},
+    fc/.style={blk, fill=gray!12, draw=gray!60},
+    lab/.style={font=\scriptsize, align=center}]
+  \node[blk]  (op)   at (5.6,1.7)   {Operator\\ \scriptsize disarm button};
+  \node[ours] (fm)   at (5.6,0)     {Fleet manager\\ \scriptsize phases, faults, LAND};
+  \node[ours] (plan) at (0,0)       {Load--rod planner\\ \scriptsize 10\,Hz; owns the ring};
+  \node[ours] (trk)  at (0,-2.5)    {Tracker $i$ (carrier)\\ \scriptsize 50\,Hz; owns UAV $i$};
+  \node[ours] (trkn) at (5.6,-2.5)  {Tracker (newcomer)\\ \scriptsize from the attach, or take-back};
+  \node[his]  (tej)  at (11.3,-2.5) {Collaborator's controller\\ \scriptsize pickup, transit, drop,\\ \scriptsize descent to contact, lift};
+  \node[ours] (mux)  at (5.6,-4.6)  {Mux\\ \scriptsize one owner, latched};
+  \node[fc]   (bf)   at (0,-4.6)    {Flight controller $i$\\ \scriptsize Betaflight rate loop, magnet};
+  \node[fc]   (bfn)  at (5.6,-6.3)  {Flight controller (newcomer)\\ \scriptsize Betaflight rate loop, magnet};
+  \draw[->, thick] (op) -- node[lab, right] {commands} (fm);
+  \draw[->, thick] (fm) -- node[lab, above] {phase} (plan);
+  \draw[->, thick] (plan) -- node[lab, left] {reference,\\ rod pull} (trk);
+  \draw[->, thick] (plan.south east) -- node[lab, sloped, above, pos=0.55] {once folded in} (trkn.north west);
+  \draw[->, thick] (trk) -- node[lab, left] {throttle, rates,\\ arm, magnet} (bf);
+  \draw[->, thick] (trkn) -- (mux);
+  \draw[->, thick] (tej.south) -- ++(0,-1.25) -- node[lab, above] {until the attach} (mux.east);
+  \draw[->, thick] (mux) -- node[lab, right] {one command stream} (bfn);
+  \draw[->, thick, dashed] (trk) -- node[lab, above] {fault} (trkn);
+  \draw[->, thick, dashed] (fm) -- node[lab, right] {LAND, drop, disarm} (trkn);
+  \draw[->, thick, dashed] (fm.north west) -- ++(0,0.5) -| node[lab, pos=0.25, above] {arm, disarm, LAND} ([xshift=-0.5cm]plan.north west) |- (trk.west);
+  \draw[<->, thick, dotted] (fm.east) -| node[lab, pos=0.25, above] {attach confirmed, give-up} (tej.north);
+\end{tikzpicture}
+\caption[The cascade and its owners]{The cascade and its owners. Blue: this work; orange: the collaborator's
+controller; grey: the unmodified flight controllers. The planner owns the ring and the carriers' references; each
+tracker owns one UAV's radio link; the newcomer's link is owned by the collaborator's controller until the attach
+is confirmed and by this work's tracker from that tick, through a multiplexer that latches. Dashed: faults and the
+fleet manager's commands; dotted: the confirmation and the give-up exchanged with the collaborator's stack. The
+operator's disarm overrides everything.}
+\label{fig:owners}
+\end{figure}
+
+\paragraph{The envelope and the fleet disarm.} Every tracker checks its own UAV against a flight envelope (UAV tilt
+and ring tilt both 60$^\circ$, speed 3\,m/s) and checks that its motion-capture pose (0.25\,s) and the planner's
+reference (1\,s) are fresh. A violation on a carrier disarms the whole fleet, not the one UAV: a single UAV losing
+thrust on a shared rigid payload drags the others with it, and three UAVs cannot hold a ring hung for four. There
+is no geofence. The argument for a fleet disarm rather than a geofenced recovery is the lab itself: the ring flies
+at 1\,m inside a 6\,$\times$\,6\,$\times$\,4\,m cage, so a falling ring is a short fall onto a padded floor, where an
+armed UAV flying on a wrong reference is not. The exceptions are UAVs that are not on the ring. A fault on a
+newcomer that is not yet attached disarms the newcomer alone and lands the fleet, and a UAV that has left the ring
+is pushed down to its own resting height and disarmed alone (Section~\ref{sec:reconfig}). LAND lands every UAV,
+whatever it is doing. On the rig each UAV must confirm that its flight controller is armed before the fleet takes
+off, and a UAV that disarms between ARM and TAKEOFF grounds the fleet, since three UAVs lifting a ring sized for
+four would drag it.
+
+\paragraph{The fall-backs, as runtime assurance.} The planner and the admission chain are the high-performance
+controllers of a Simplex-style arrangement (Section~\ref{sec:lit_switching}); the fall-backs are simple, each has
+its own monitor, and each ends with every UAV owned and down.
+\begin{itemize}
+    \item \textbf{Take-back.} A newcomer whose contact proves nothing, or whose owner gives up, is taken over by this
+    work's tracker, moved clear of the ring and landed by itself (Section~\ref{sec:reconfig}).
+    \item \textbf{Tilt cut.} A newcomer whose tilt passes its limit while it is not carrying the ring has its motors
+    cut, so that a UAV caught on the rim or on a rod does not drag the ring; in the twin the fault was caught
+    0.23--0.25\,s after an injected upset (exploratory), and the cut stays off on the rig
+    (Section~\ref{sec:res_join_faults}).
+    \item \textbf{LAND for every UAV.} LAND lands the carriers with the ring, a freed carrier where it is, and a
+    newcomer wherever it is in its mission, each on its own path down.
+    \item \textbf{Landing the fleet on a newcomer fault.} A fault on an unattached newcomer disarms it alone and
+    lands the carriers at once, where the earlier rule disarmed all four in the air.
+    \item \textbf{Dropping the ring.} A loss that leaves fewer than three carriers, or a ring tilt over 30$^\circ$,
+    releases every magnet, a newcomer's included, and lands every UAV: 30$^\circ$ is where the controller gives up a
+    ring it can no longer hold level, not a value to design to. It is on in every mode, the attach included, and it
+    fired on the rig on 15 October after a carrier's magnet let go with no command (Section~\ref{sec:res_drop}).
+    \item \textbf{The freed UAV disarmed alone.} A carrier that has left the ring lands by itself and is disarmed at
+    its rest without waiting for the fleet, so that the fleet's disarm at the end of a landing never drops it.
+\end{itemize}
+
+\paragraph{What is tested where.} ``A tested way down in every phase'' holds in the twin, where every fall-back
+above has been flown from the phase it guards, the attach phases on the earlier attach sequence
+(Appendix~\ref{sec:app_faults}). On the rig it holds only for the
+exits flown there. The drop rule has fired on the rig, after an uncommanded magnet release in a hover, and every
+carrier then landed by itself and was disarmed alone; LAND and the take-back have also flown there; the tilt cut and the flight controller's own
+disarm-to-land stay off on the rig until each has passed its review, so until then a take-back that sticks ends in
+the operator's disarm. When a ring drop comes while the collaborator's controller flies the newcomer, the rig takes
+the newcomer back and lands it (twin-tested), and the operator can ask the collaborator's planner to land it straight
+down. Redistribution after a release has flown on the rig; the policy for a true fault on a carrier stays the fleet
+stop and the drop rule.

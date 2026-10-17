@@ -1,0 +1,66 @@
+% fig_geometry.tex -- M3: payload and rod geometry (TikZ). Dimensions from the rig (30 Sep 2026):
+% plates at r 0.225 m on a 500 mm ring, 12 plates every 30 deg, rod 0.55 m, pivot 4 cm below the UAV centre.
+% 17 Oct: plates numbered clockwise from +x seen from above (angle = 30 x plate, Wesley 14 Oct); the side view at
+% the planned elevation of 60 deg (since 7 Oct). Drawn to scale (1 m = 9 cm).
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[x=9cm, y=9cm, >=Stealth, font=\small]
+  % ---------------- (a) top view ----------------
+  \begin{scope}
+    \fill[gray!12] (0,0) circle (0.25);
+    \fill[white] (0,0) circle (0.19);
+    \draw[gray!60, thin] (0,0) circle (0.25) (0,0) circle (0.19);
+    % the even triangle left after plate 9 leaves
+    \draw[densely dashed, gray!70] (30:0.225) -- (150:0.225) -- (270:0.225) -- cycle;
+    % plates, numbered clockwise from +x
+    \foreach \k in {0,...,11} {
+      \pgfmathsetmacro{\a}{-30*\k}
+      \node[draw, fill=white, minimum size=0.11cm, inner sep=0pt, rotate=\a] at (\a:0.225) {};
+      \node[font=\scriptsize, text=gray!70!black] at (\a:0.29) {\k};
+    }
+    % the four carrying plates: 3, 7, 9 and 11
+    \foreach \k in {3,7,9,11} { \fill[black] (-30*\k:0.225) circle (0.012); }
+    \draw[thick, black] (-270:0.225) circle (0.022);
+    % centre, axes, rho
+    \fill (0,0) circle (0.008);
+    \draw[->, thin, gray] (0,0) -- (0.09,0) node[below, font=\scriptsize, text=black] {$x_L$};
+    \draw[->, thin, gray] (0,0) -- (0,0.09) node[left, font=\scriptsize, text=black] {$y_L$};
+    \draw[->, thick] (0,0) -- (30:0.213) node[pos=0.62, above left, inner sep=1pt] {$\boldsymbol{\rho}_i$};
+    \draw[->, gray] (-12:0.335) arc (-12:-48:0.335);
+    \node[font=\scriptsize, text=gray!70!black, anchor=west] at (-30:0.345) {clockwise};
+    \node[font=\scriptsize, align=left, anchor=north] at (0,-0.33) {$\bullet$ carrying plates 3, 7, 9, 11\quad $\bigcirc$ plate 9 leaves};
+    \node[anchor=north west] at (-0.36,0.36) {(a)};
+  \end{scope}
+  % ---------------- (b) side view of one rod (A plate, P pivot, C UAV centre), elevation 60 deg ----------------
+  \begin{scope}[shift={(0.72,-0.33)}]
+    \fill[gray!12] (-0.06,0) rectangle (0.0,0.03);
+    \draw[gray!60, thin] (-0.06,0) rectangle (0.0,0.03);
+    \fill[black] (-0.012,0.03) rectangle (0.012,0.038);
+    \coordinate (A) at (0,0.034);
+    \coordinate (P) at (0.275,0.5103);
+    \coordinate (C) at (0.275,0.5503);
+    \draw[very thick] (A) -- (P);
+    \fill (A) circle (0.007) (P) circle (0.007);
+    \draw[thick] (0.185,0.5503) -- (0.365,0.5503);
+    \draw[gray] (0.185,0.5563) ellipse (0.035 and 0.006) (0.365,0.5563) ellipse (0.035 and 0.006);
+    \fill (C) circle (0.006);
+    \draw[->, thick] (A) -- (0.08,0.1726) node[pos=0.55, above left, inner sep=1pt] {$\mathbf{q}_i$};
+    \draw[gray] (0.16,0.034) arc (0:60:0.16);
+    \draw[gray, thin] (A) -- (0.22,0.034);
+    \node[font=\scriptsize] at (0.20,0.095) {60$^\circ$};
+    \node[font=\scriptsize, anchor=north west] at (0.16,0.30) {$l_i = 0.55$\,m};
+    \draw[gray, thin, densely dotted] (P) -- (0.455,0.5103) (C) -- (0.455,0.5503);
+    \draw[<->, thin] (0.455,0.5103) -- (0.455,0.5503) node[midway, right, font=\scriptsize] {$\boldsymbol{\delta}$: 4\,cm};
+    \node[font=\scriptsize, anchor=north] at (-0.03,-0.005) {ring};
+    \node[font=\scriptsize, anchor=south] at (0.275,0.575) {UAV $i$};
+    \node[anchor=north west] at (-0.08,0.69) {(b)};
+  \end{scope}
+\end{tikzpicture}
+\caption[Payload and rod geometry]{Payload and rod geometry, to scale. (a) Top view of the 0.86\,kg ring
+with its twelve magnet plates at a radius of 0.225\,m, numbered clockwise from the $x_L$ axis seen from above, so
+that plate $k$ sits $30k$ degrees clockwise from $x_L$. The four-UAV layout uses plates 3, 7, 9 and 11; when the
+UAV on plate 9 leaves, the three on plates 3, 7 and 11 form an even triangle (dashed), under which the ring hangs
+level. (b) Side view of one rod at the planned elevation of 60$^\circ$: the rod direction $\mathbf{q}_i$ points
+from the plate to the UAV, and the rod pivots $\boldsymbol{\delta}$ = 4\,cm below the UAV's centre.}
+\label{fig:geometry}
+\end{figure}

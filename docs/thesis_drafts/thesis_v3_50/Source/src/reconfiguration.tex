@@ -1,0 +1,159 @@
+% reconfiguration.tex -- Methodology 3.4: reconfiguration (rewritten 12 Oct 2026 to the thesis plan of 11 Oct:
+% notice, re-plan, redistribute, fall back; the three-equation statics; the support margin with its qualifier; the
+% constants table; the admission contract; the state machine). 17 Oct (v3): the join is noticed by the co-motion
+% confirmation (the default since 14 Oct, proof_rules comotion; card docs/experiments/2026-10-15_attach_comotion_rig.md
+% rev 4, Tejen's review); the old contact-and-lift proof is history. Plates clockwise (angle = 30 x plate).
+% Code: the planner's detach mode (detection, resize), drone_magnet (contact proof, attachment manager, radio mux),
+% the take-back in the tracker; the collaborator's stack carries the lift from contact.
+
+\subsection{Reconfiguration}
+\label{sec:reconfig}
+
+A reconfiguration changes the number of UAVs carrying the ring in the air. Both directions are handled by the same
+four steps: the planner \emph{notices} the change from an observation, \emph{re-plans} by switching to a solver
+built for the new team, \emph{redistributes} the ring's weight across it, and \emph{falls back} to a simple exit
+when a step fails. Figure~\ref{fig:reconfig_states} shows the two lanes and their exits; the constants every step
+uses are in Table~\ref{tab:constants} (Appendix~\ref{sec:app_reconfig}), each with the reason for its value.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[>=Stealth, font=\small,
+    st/.style={draw, thick, rounded corners=3pt, align=center, minimum height=0.8cm, minimum width=2.2cm, font=\small},
+    ours/.style={st, fill=blue!6, draw=blue!50!black},
+    his/.style={st, fill=orange!10, draw=orange!60!black},
+    exit/.style={st, fill=gray!14, draw=gray!60},
+    ev/.style={font=\scriptsize, align=center}]
+  % leave lane (top)
+  \node[ours] (carry)   at (0,0)      {Carry, $N$ UAVs\\ \scriptsize planner owns the ring};
+  \node[ours] (resize)  at (4.8,0)    {Resize to $N-1$\\ \scriptsize warm start, free tensions};
+  \node[ours] (carry3)  at (9.6,0)   {Carry, $N-1$\\ \scriptsize statics sets the shares};
+  \node[ours] (freed)   at (4.8,-1.7) {Freed UAV\\ \scriptsize steps out 0.5\,m};
+  \node[exit] (dland)   at (9.6,-1.7){Lands by itself\\ \scriptsize disarmed alone at rest};
+  \draw[->, thick] (carry) -- node[ev, above] {DETACH, or\\ rod stretch} (resize);
+  \draw[->, thick] (resize) -- (carry3);
+  \draw[->, thick] (resize) -- node[ev, right] {the leaver} (freed);
+  \draw[->, thick] (freed) -- (dland);
+  % join lane (middle)
+  \node[his]  (mission) at (0,-3.6)   {Newcomer, free\\ \scriptsize collaborator's controller};
+  \node[his]  (contact) at (4.8,-3.6) {Descent to contact\\ \scriptsize then a small lift};
+  \node[ours] (proof)   at (9.6,-3.6){Confirmed by mocap\\ \scriptsize tip moves with the plate};
+  \node[ours] (takeback) at (4.8,-5.3){Take-back\\ \scriptsize moved clear, lands alone};
+  \node[ours] (fold)    at (9.6,-5.3){Mux switch, fold in\\ \scriptsize seed 0.1\,N, resize to $N+1$};
+  \draw[->, thick] (mission) -- node[ev, above] {transit\\ to the plate} (contact);
+  \draw[->, thick] (contact) -- node[ev, above] {contact} (proof);
+  \draw[->, thick] (proof) -- node[ev, right] {confirmed} (fold);
+  \draw[->, thick, dashed] (contact) -- node[ev, right] {give-up} (takeback);
+  \draw[->, thick, dashed] (proof.south west) -- node[ev, sloped, above, pos=0.45] {not confirmed} (takeback.north east);
+  \draw[->, thick] (fold.east) -- ++(0.55,0) |- node[ev, pos=0.25, right] {carry, $N+1$} (carry3.east);
+  % exits (bottom)
+  \node[exit] (drop) at (0,-7.0)    {Drop and land\\ \scriptsize second loss, or tilt $>$ 30$^\circ$};
+  \node[exit] (cut)  at (4.8,-7.0)  {Tilt cut\\ \scriptsize newcomer's motors off};
+  \node[exit] (land) at (9.6,-7.0) {LAND\\ \scriptsize every UAV, from any phase};
+  \draw[->, thick, dashed] (takeback) -- node[ev, right] {stuck, tilting} (cut);
+\end{tikzpicture}
+\caption[Leave and join lanes and their exits]{The leave lane (top), the join lane (middle) and the exits
+(bottom). Blue: this work's planner and trackers; orange: the collaborator's controller; grey: an exit that ends
+with every UAV owned and on the floor. A leave is noticed from the DETACH command or from the leaver's rod reading
+longer than itself; a join from a contact and, after the collaborator's lift, the magnet tip seen moving with the
+plate on a taut tether, from motion capture alone. Every exit is reachable from every state: LAND and the drop rule
+are not drawn into each.}
+\label{fig:reconfig_states}
+\end{figure}
+
+\subsubsection{Notice}
+
+\paragraph{A leave.} An \emph{announced} leave is the DETACH command: the leaver's magnet is switched off on its
+radio channel and the planner resizes on the same tick, or, for a \emph{ramped} release, its planned tension is run
+down over a short ramp before the magnet is released, so that the survivors take up the share before the rod goes.
+An \emph{unannounced} leave is a magnet switched off without the planner being told. The planner notices it from the
+rod: a rigid rod on its plate cannot measure longer than itself, so when the leaver's rod reads more than 0.06\,m over
+its length for two consecutive ticks, the planner drops that UAV from its problem, with no force sensor and no message
+from the leaver.
+
+\paragraph{A join.} A join is noticed in two steps, both read from motion capture and nothing else, with the
+magnet tip expressed in the plate's own frame. A \emph{contact} is the tip inside the catch radius of the plate
+point (24\,mm on the rig), between 15\,mm below and 12\,mm above the plate's face, and slower than 0.03\,m/s for
+0.3\,s. A contact is only a candidate: a tip resting on the plate and a magnet that has caught look alike. The
+\emph{confirmation} uses the collaborator's small lift: 1.0\,s after its controller signals the lift done, the catch
+is confirmed if the tip has stayed within 6\,mm of its contact point while the plate has moved with it (a range of
+5\,mm or a rise of 3\,mm), and the tether reads taut against the free hang measured on the same flight (within
+3\,mm). A separation of 45\,mm for 0.12\,s fails it, and no hold spans missing data: a gap of more than 0.1\,s
+restarts the contact and the confirmation. In the twin, whose stiff ring hardly moves and whose magnet catches at the
+instant of contact, the plate-motion condition is waived. This co-motion confirmation replaced, on 14 October, a proof
+that rejected the rig's one catch on its taut check.
+
+\subsubsection{Re-plan}
+
+The attachment points $\boldsymbol{\rho}_i$ and rod lengths $l_i$ are runtime parameters of the model, so only the team
+size fixes the problem's dimensions, and one solver per team size, built in advance and primed on the measured state,
+covers any layout. At the event the planner swaps to the solver for the new size, keeps the survivors on their actual
+plates (for a newcomer, the plate it caught), and warm-starts the new problem from the measured state with the tensions
+and rod directions free at its first node: the first solve redistributes the load, with no separate hand-off phase. An
+announced leave is refused during LAND and when it would leave fewer than three UAVs, a pendulum on two rim points; an
+unannounced loss that leaves fewer than three is a fault, which drops the ring (Section~\ref{sec:safety}).
+
+\subsubsection{Redistribute}
+
+\paragraph{What statics fixes.} With three carriers the vertical shares are not the planner's to choose. Take the
+ring's centre of mass as the origin of its frame and the survivors' plates at $\boldsymbol{\rho}_i = r(\cos\alpha_i,
+\sin\alpha_i, 0)$; with $f_i$ the vertical component of rod $i$'s pull on a level ring, the force balance and the
+two moment balances about the horizontal axes are three equations in three unknowns,
+\begin{equation}
+    \sum_{i=1}^{3} f_i = m_L g, \qquad \sum_{i=1}^{3} f_i \cos\alpha_i = 0, \qquad \sum_{i=1}^{3} f_i \sin\alpha_i = 0,
+    \label{eq:statics}
+\end{equation}
+whose solution is unique whenever the three plates do not lie on a line: each share is the weight times the
+barycentric coordinate of the centre of mass in the survivors' triangle. The rods' horizontal components, which the
+planner does set through the rod directions, balance one another and make no moment about the centre of mass when
+the centre lies in the plates' plane \cite{michael2011cooperative, tognon2018internal}; on the
+ring the plates sit 2\,cm above the centre of mass, so the shares of \eqref{eq:statics} hold to within a few per
+cent. After a leave the planner's first solve therefore hands the leaver's share to the survivors as
+\eqref{eq:statics} says (Figure~\ref{fig:detach}, Appendix~\ref{sec:app_secondary}). A level ring is possible only when every $f_i$ is positive, which
+is the condition of the next paragraph.
+
+\paragraph{Support margin.} A rigid payload can hang level from three or more rim points only if its centre of mass
+lies inside the polygon of the attachment points \cite{michael2011cooperative}. For plates on a ring of radius $r$
+the nearest edge of the survivors' polygon is the chord across their largest angular gap $g_{\max}$, and the
+distance from the centre to that chord,
+\begin{equation}
+    m = r \cos\!\big(g_{\max}/2\big),
+    \label{eq:margin}
+\end{equation}
+is the support margin: positive inside, zero on the edge, negative outside. On the 0.225\,m plate radius a gap of
+120, 135, 150, 165 or 180$^\circ$ leaves a margin of 112, 86, 58, 29 or 0\,mm. Removing one carrier from an even
+ring of $N$ leaves a largest gap of $4\pi/N$, which keeps the centre inside only for $N \ge 5$; an even ring of
+four sits exactly on the boundary after any loss, which is why the four-UAV flights use plates 3, 7, 9 and 11,
+where the loss of the carrier on plate 9 leaves an even triangle with a 112\,mm margin. The margin is the lever the
+results chapter varies in the twin (Section~\ref{sec:res_leave}).
+
+\paragraph{Which carrier may leave, and what control still sets.} The condition also says which carriers a layout
+can afford to lose, and it can be checked before a flight from the plate angles alone. Removing one carrier merges
+the two angular gaps on either side of it, and the four gaps of a four-carrier layout sum to $360^\circ$, so some
+pair of adjacent gaps sums to at least $180^\circ$: no four-carrier layout on the ring can lose an arbitrary
+carrier and still hang level, and a layout admits at most two leavers. The carry layout admits exactly one, the
+carrier on plate 9; losing the carrier on plate 7 or plate 11 puts the centre on an edge, and losing the one on plate
+3 puts it 112\,mm outside. The layout on plates 3, 6, 9 and 11 admits the same leaver with a $150^\circ$ gap and a
+58\,mm margin. A team that must tolerate the loss of any one carrier therefore needs five, and a four-carrier layout
+is designed for a known leaver, which is what the rejoin mission does.
+% The numbers: tools/admissibility_map.py (results/analysis/admissibility/), from metrics.cog_margin and the
+% planner's balanced_tensions; 0 of the 495 four-plate layouts admits every leaver (11 Oct).
+With three survivors no controller can change how the
+ring's weight is shared; what the planner still sets is the margin, through the layout and the leaver chosen before
+the flight, when and how fast the survivors take up the step, and the rods' directions.
+
+\paragraph{Fall back.} After a release the freed UAV steps 0.5\,m out and lands by itself, and is disarmed alone at
+its rest; a newcomer whose catch is not confirmed is taken back by this work's tracker and landed; the drop rule, the
+tilt cut and LAND are the exits of Section~\ref{sec:safety}. An announced release can be ramped, and a newcomer is
+seeded at 0.1\,N and blended to its share. Appendix~\ref{sec:app_reconfig} gives these steps in detail and the constants
+of every step with their reasons (Table~\ref{tab:constants}).
+
+\subsubsection{The admission contract}
+\label{sec:admission}
+
+The join is a contract between two controllers, written so that nothing on the newcomer's side has to be trusted. The
+collaborator's controller must descend onto its plate to contact with the magnet on, lift by a small set amount and
+hold, signal that the lift is done, and give up its authority when the catch is confirmed, or give up and go home. This
+work must observe the contact and the lift from motion capture only, switch the newcomer's radio to its own tracker on
+the tick of the confirmation (through a multiplexer that switches only onto an armed command above idle throttle, and
+latches), fold the newcomer in from 0.1\,N, and take it back if nothing is confirmed. The full mission, in which the
+released UAV flies the collaborator's errand and rejoins, is built on the same contract (Appendix~\ref{sec:app_reconfig}).

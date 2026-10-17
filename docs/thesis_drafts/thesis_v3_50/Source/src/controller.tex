@@ -1,0 +1,154 @@
+% controller.tex -- draft of the controller as flown (4 Oct 2026), input from Methodology.tex.
+% Notation follows Source/src/model.tex: q_i points from the payload attachment to UAV i and
+% T_i = lambda_i q_i. The code (mpc_planner, after Sun et al.) uses s_i = -q_i and t_i = lambda_i.
+% Restructured 9 Oct (structure audit): the model moved to model.tex; planner, tracker and steady-error
+% rejection are subsections of their own; the result numbers (the box's effect, K's measured values,
+% the damping ratio) moved to Section 4.2; the thrust identification procedure moved here from
+% hardware.tex; the cost weights moved to Appendix B. Notation: the horizon has N_h nodes over T_h
+% (were N and T, which also named the team size and the tension).
+% Its references (francis1976internal, pannocchia2003disturbance, pannocchia2007combined,
+% maeder2009linear, verschueren2022acados) are in references.bib.
+
+\subsubsection{Load--cable planner}
+\label{sec:controller}
+
+The controller is a two-level cascade of model predictive controllers (Section~\ref{sec:safety}; Figure~\ref{fig:owners}, Appendix~\ref{sec:app_method}).
+A centralised planner on the model of Section~\ref{sec:model} plans the motion of the payload and of
+every rod over a horizon. Each UAV's tracking MPC follows the planner's reference for that UAV,
+accounting for the planned rod force, and sends a collective throttle and three body-rate commands
+over the radio link to the flight controller, whose inner rate loop is not modified. Both levels are solved with acados
+\cite{verschueren2022acados} in real-time iterations \cite{diehl2002rti}, warm-started from the previous solution,
+with the QPs solved by HPIPM \cite{frison2020hpipm}.
+Both horizons have $N_h = 20$ nodes over $T_h = 2$\,s. The team size selects the planner's solver and the
+attachment geometry is a runtime parameter of it, so that a UAV leaving or joining switches the planner to a
+pre-built problem of the new size (Section~\ref{sec:reconfig}). On the rig the planner starts no new iteration after 60\,ms of its
+100\,ms tick, and a plan that has not converged by then is replaced by the previous one shifted by a tick (the measured
+solve times are in Section~\ref{sec:res_compute}).
+
+\paragraph{Optimal control problem.} At each planner tick the planner solves
+\begin{equation}
+\begin{aligned}
+    \min_{\mathbf{x}_{0:N_h},\, \mathbf{u}_{0:N_h-1}} \quad & \sum_{k=0}^{N_h-1} \big\| \mathbf{y}(\mathbf{x}_k, \mathbf{u}_k) - \mathbf{y}_k^{\mathrm{ref}} \big\|_{W}^{2}
+    + \big\| \mathbf{y}_{N_h}(\mathbf{x}_{N_h}) - \mathbf{y}_{N_h}^{\mathrm{ref}} \big\|_{W_{N_h}}^{2} \\
+    \text{s.t.} \quad & \mathbf{x}_{k+1} = \mathbf{F}(\mathbf{x}_k, \mathbf{u}_k; \mathbf{d}), \\
+    & C_0 \mathbf{x}_0 = C_0 \hat{\mathbf{x}}(t), \\
+    & \lambda_{\min} \le \lambda_{i,k} \le \lambda_{\max}, \quad f_{\min} \le \|\mathbf{f}_{i,k}\| \le f_{\max}, \\
+    & |\boldsymbol{\gamma}_{i,k}| \le \gamma_{\max}, \quad |\eta_{i,k}| \le \eta_{\max},
+\end{aligned}
+\label{eq:plan_ocp}
+\end{equation}
+with the output
+$\mathbf{y} = [\mathbf{p}_L, \mathbf{v}_L, \mathbf{e}_R, \boldsymbol{\omega}_L, \{\mathbf{q}_i\}, \{\lambda_i\}, \{\mathbf{r}_i\}, \mathbf{u}]$,
+where $\mathbf{e}_R = 2\,\mathrm{vec}(\mathbf{q}_L^{\mathrm{ref}} \otimes \mathbf{q}_L^{*})$ is the sign-invariant
+attitude error. The thrust bounds are softened with slack. $\mathbf{F}$ is the integrated dynamics
+over one node of $T_h/N_h = 0.1$\,s.
+
+The initial condition pins only what motion capture measures ($C_0$ selects the payload pose and twist and each rod
+direction); the rod rates and the tensions are free at node~0, warm-started from the previous solution.
+
+\paragraph{References.} The payload reference $(\mathbf{p}_L^{\mathrm{ref}}, \mathbf{v}_L^{\mathrm{ref}},
+\mathbf{a}_L^{\mathrm{ref}})$ comes from the lift schedule and the trajectory, and the rod references
+follow from it by flatness. Holding the payload against gravity, its acceleration and the force
+$\mathbf{d}$ needs the rods to support the effective gravity
+\begin{equation}
+    \mathbf{g}_{\mathrm{eff}} = g\mathbf{e}_3 + \mathbf{a}_{L,xy}^{\mathrm{ref}} - \mathbf{d}/m_L ,
+\end{equation}
+where $\mathbf{a}_{L,xy}^{\mathrm{ref}}$ is the horizontal part of the reference acceleration (the
+trajectories are level). The nominal formation (each rod at the planned elevation, 45$^\circ$ until 7 October and 60$^\circ$ since, tensions
+$\lambda_i^{0}$ balancing the payload weight) is rotated so that its vertical axis lies along
+$\mathbf{g}_{\mathrm{eff}}$, and the tensions are scaled to $\lambda_i^{\mathrm{ref}} = \lambda_i^{0}\,
+\|\mathbf{g}_{\mathrm{eff}}\| / g$. Of the weights (Table~\ref{tab:weights}, Appendix~\ref{sec:app_params}),
+the one on the rod directions holds the formation's shape and the one on the rod rates damps rod swing.
+
+The planner sends each tracker, at every node, its reference position and velocity from \eqref{eq:rod_kin}, the
+planned thrust per unit mass from \eqref{eq:thrust_req} and the planned cable acceleration
+$\mathbf{a}_{c,i} = -\lambda_i \mathbf{q}_i / m_q$, and the tracker interpolates the whole horizon at its own rate.
+
+\subsection{Tracker, thrust map, measured pull and model integral}
+\label{sec:tracker}
+
+\subsubsection{UAV tracking MPC and thrust map}
+
+Each UAV $i$ runs a tracking MPC on a 17-state model, in which the four stick channels sent to the
+flight controller are themselves states and their rates of change are the inputs:
+\begin{equation}
+    \mathbf{x}_i = [\mathbf{p},\ \mathbf{q},\ \mathbf{v},\ \boldsymbol{\omega},\ \mathbf{c}], \qquad
+    \mathbf{c} = [c_\phi, c_\theta, u_T, c_\psi], \qquad \mathbf{u}_i = \dot{\mathbf{c}},
+\end{equation}
+with
+\begin{align}
+    \dot{\mathbf{p}} &= \mathbf{v}, &
+    \dot{\mathbf{q}} &= \tfrac{1}{2}\, \Omega(\boldsymbol{\omega})\, \mathbf{q}, \\
+    \dot{\mathbf{v}} &= R(\mathbf{q})\, k_T u_T \mathbf{e}_3 - g\mathbf{e}_3 - c_z v_z \mathbf{e}_3 + \mathbf{a}_{c,i}, &
+    \dot{\boldsymbol{\omega}} &= \frac{1}{\tau_\omega}\big(\boldsymbol{\omega}_{\mathrm{cmd}}(\mathbf{c}) - \boldsymbol{\omega}\big),
+    \label{eq:trk_model}
+\end{align}
+where $\boldsymbol{\omega}_{\mathrm{cmd}}(\mathbf{c})$ is the flight controller's rate curve applied to the
+roll, pitch and yaw sticks, and $\tau_\omega$ the time constant of its rate loop. Thrust is affine in
+throttle: the throttle sent is $u_T + u_0(V)$, with the offset $u_0(V) = u_0 + \kappa (V_{\mathrm{ref}} - V)$
+correcting for the battery voltage $V$ and $k_T$ the gain above it. The map was identified on the rig from free
+hovers with hung masses and fitted against the mass carried and the voltage (Section~\ref{sec:thrust_id}).
+
+The planned cable acceleration $\mathbf{a}_{c,i}$ enters the model as a known, time-varying parameter
+along the horizon, so the tracker anticipates the rod's pull instead of reacting to it. The planned pull
+is only as good as the planner's model of the rods. On the rig the rods flew at about 60$^\circ$ from
+horizontal where the plan assumed 45$^\circ$, so each tracker now measures the pull and uses the plan only
+for its shape along the horizon. The measured pull is the UAV's acceleration from motion capture (the
+least-squares slope of its velocity over 80\,ms, low-pass filtered at 50\,ms) minus the modelled thrust,
+gravity and drag, with the thrust passed through the same filter so that a throttle change does not read
+as a change of pull. The horizon's planned pull is shifted by the difference between the measured and the
+planned pull at its first node, capped at 12\,m/s$^2$, and the planner plans the rods at 60$^\circ$ to
+match (effect on the rig: Section~\ref{sec:res_rig_integral}).
+
+The tracker solves its own problem every 20\,ms over the same 2\,s horizon, with the throttle and the three stick
+channels bounded and rate-limited and the attitude reference the direction of the planned thrust
+(Appendix~\ref{sec:app_integral} gives it in full); only the first command of each solution is sent. Node~0 equals the
+measured state, with the stick states taken from the commands actually sent; an earlier version relaxed it to the box
+$\hat{\mathbf{x}}_i(1-\epsilon) \le \mathbf{x}_0 \le \hat{\mathbf{x}}_i(1+\epsilon)$, $\epsilon = 0.025$
+(Section~\ref{sec:res_ic}).
+
+\subsubsection{The model integral}
+\label{sec:disturbance}
+
+Any error that remains constant, from a model mismatch or an external force, is represented by the
+constant force $\mathbf{d}$ on the payload in \eqref{eq:plan_trans}. $\mathbf{d}$ is a lumped disturbance:
+for an external force (wind, a push, an unmodelled object in the basket) it is that force; for an
+internal error (a thrust-map error, the rods' mass) it is the force that would have the same effect on
+the payload, which need not exist physically. In the offset-free MPC literature this is an input
+disturbance model \cite{pannocchia2003disturbance, maeder2009linear}.
+
+\paragraph{Integral action through the model.} $\mathbf{d}$ is formed from the integral of the payload's
+position error $\mathbf{e}_k = \mathbf{p}_L^{\mathrm{ref}} - \mathbf{p}_L$, updated at each planner tick
+$k$ (period $T_s = 0.1$\,s):
+\begin{equation}
+    \mathbf{b}_{k+1} = \mathrm{sat}_{\bar{b}}\!\big(\mathbf{b}_k + k_i T_s\, G_k\, \mathbf{e}_k\big), \qquad
+    \mathbf{d}_k = -K \mathbf{b}_k, \qquad K = \mathrm{diag}(K_{xy}, K_{xy}, K_z).
+    \label{eq:lumped_int}
+\end{equation}
+Here $\mathrm{sat}_{\bar{b}}$ bounds each component to $\pm\bar{b}$, and the gate $G_k = \mathrm{diag}(g_{xy},
+g_{xy}, g_z) \in \{0,1\}^3$ integrates only in steady, taut flight: lift complete, not descending or
+landing, every rod taut, a fresh pose, the payload slow ($<0.05$\,m/s) and the miss under 0.25\,m. The
+vertical component also integrates through a slow level orbit; the horizontal components require a
+stationary reference, so a value learned in hover is held through a trajectory. A low payload ($e_z > 0$)
+makes $d_z$ negative: the planner then believes the payload is heavier and plans more rod tension. Once
+the payload rests on the floor at landing, $\mathbf{d}$ is set to zero. $K$ converts the integral from
+metres to newtons and is set to the closed-loop stiffness of the cascade to a force on the payload,
+measured from the steady displacement under a known force with the planned rod pull (Appendix~\ref{sec:app_params});
+the integral's loop gain is then $k_i$, as in the reference-shift form below.
+
+$\mathbf{d}_k$ is a parameter of the planner's problem, constant over the horizon and refreshed at every
+tick. It enters the payload's translational dynamics \eqref{eq:plan_trans}, so the plan predicts the
+payload's motion with the force included and chooses tensions and UAV positions that counter it. It also
+enters the reference formation through $\mathbf{g}_{\mathrm{eff}}$, so the formation the cost draws the
+solution towards is already tilted and tensioned to balance $\mathbf{d}$ and the cost does not oppose the
+force balance.
+
+\paragraph{What it does.} At an equilibrium with the gate open and no component of $\mathbf{b}$ saturated,
+$\mathbf{b}_{k+1} = \mathbf{b}_k$ gives $\mathbf{e} = \mathbf{0}$ whatever the constant cause, by the internal model
+principle \cite{francis1976internal}; with $K$ at the cascade's stiffness the believed force converges to the applied
+one with time constant $1/k_i = 2.5$\,s, and when the force goes the payload overshoots by the displacement the force
+caused at onset (Appendix~\ref{sec:app_integral}). With the measured rod pull, a constant vertical force is taken up at
+each UAV within about a second, before the integral can act, so in the twin the integral is left with the horizontal
+axes (Section~\ref{sec:res_force}). The bound $\bar{b} = 0.3$\,m, with a warning at 70\,\% of it, stops a wind-up, and a
+force on the payload cannot represent a moment such as one UAV's thrust-map error, which that UAV's own tracker takes up.
+An earlier form added the height integral to the height target instead; it flew on the rig on 1 and 8 October.

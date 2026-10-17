@@ -1,0 +1,21 @@
+% trajectories.tex -- Methodology: payload trajectories and computation (draft 4 Oct 2026).
+% Definitions: mpc_planner/load_trajectory.py. Solve times measured from the planner logs
+% (solve_ms column): rig 1 Oct flights h5_z100_rot120, c1_z100, f8_z100 (three UAVs, laptop,
+% no Gazebo); Gazebo R0978/R0979 (three UAVs), R0931/R0935 (four UAVs), laptop at RTF ~0.3.
+% Restructured 9 Oct (structure audit): the computation results moved to Section 4.1.
+
+\subsubsection{Test references}
+\label{sec:trajectories}
+
+The payload reference is the lift schedule in height plus a horizontal offset from a trajectory, which moves the
+whole formation; the planner evaluates it at every horizon node, and its analytic second derivative is
+$\mathbf{a}_L^{\mathrm{ref}}$. Paths that start and end at rest sweep the path angle by a smootherstep,
+$\theta(t) = 2\pi s(t/T)$ with $s(u) = 6u^5 - 15u^4 + 10u^3$, so the payload takes no step in velocity or
+acceleration. \emph{Hover} holds the target height; the \emph{line} is a shuttle along $x$; the \emph{circle} is one
+lap from the lift point; the \emph{figure-eight} is one Gerono lemniscate, $\Delta x = a\sin\theta$,
+$\Delta y = \tfrac{a}{2}\sin 2\theta$; the \emph{spin} is the circle with one turn of the payload's yaw; and the
+\emph{orbit} is the circle flown continuously at constant speed until LAND. The twin's carry claim flies the five
+paths with a radius of 0.5\,m ($a = 0.5$\,m) and a 1\,m line at peak path speeds of 0.125, 0.2 and 0.3\,m/s (a speed in
+this thesis is the peak path speed: the circle and the spin are one eased lap, whose mean speed is the peak divided by
+1.875). The rig flew the orbit of radius 0.5\,m at 0.125\,m/s and a figure-eight of $a = 1.0$\,m at a peak of
+0.25\,m/s, sized for the 6\,$\times$\,6\,m area.

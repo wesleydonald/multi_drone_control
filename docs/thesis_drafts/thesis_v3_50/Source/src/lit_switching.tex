@@ -1,0 +1,18 @@
+% lit_switching.tex -- Literature 2.4 (v3_50: condensed).
+
+\subsection{Switching, bumpless transfer and runtime assurance}
+\label{sec:lit_switching}
+
+A membership change is a switch between two plants and so between two controllers. When control passes from one to
+another, the second must start from the first's output or the plant takes a step; the classical remedy keeps the idle
+controller tracking the active one \cite{graebe1996transfer, peng1996antiwindup}. Here the new problem is warm-started
+from the measured state with the tensions free at its first node, an announced change is ramped, and a newcomer is
+folded in from a small tension (Section~\ref{sec:reconfig}). Nonlinear MPC in flight runs the real-time iteration of
+Diehl et al.\ \cite{diehl2002rti, verschueren2022acados}, whose accuracy rests on the previous solution being close to
+the next; a switch to a problem of a different size breaks that chain \cite{gros2020rti}, so each solver is built in
+advance and primed before it flies, and the first live solve after a switch is reported as the switch's validation
+(Section~\ref{sec:res_switch}). A complex controller can be flown inside a simple safety envelope: the Simplex
+architecture hands control to a verified baseline when a monitor trips \cite{sha2001simplicity}, and the fall-backs of
+Section~\ref{sec:safety} are framed the same way. A system whose agents join and leave while it runs is an open
+multi-agent system \cite{hendrickx2017open, sekercioglu2026open}; on a carried payload the agents are coupled through
+one rigid body, so a change of membership is also a change of plant.

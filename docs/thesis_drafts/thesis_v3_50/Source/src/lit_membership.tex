@@ -1,0 +1,113 @@
+% lit_membership.tex -- Literature 2.2: changes of team membership, with the numeric table T3 (drafted 12 Oct 2026
+% from the thesis plan of 11 Oct). The facts on Quan et al. and Zeng et al. were verified from the full texts on
+% 11 Oct (hand-back docs/thesis_work_2026-10-11.md); the cells in brackets wait for a full-text read (plan C2-A:
+% Bacheti and Delbene were read from abstracts only) or for the October flights. Entries the plan lists for this
+% section that are not yet in the bibliography (Oishi 2023, Gao 2024, Delbene 2024/2025, Bacheti 2026, Xu 2025) wait for the approval batch;
+% Fink 2011, Tognon 2018 and Farina 2020 were added 12 Oct.
+% Papers found with Undermind and approved by Wesley, 10 Oct (DOIs, abstracts and sources in
+% docs/thesis_drafts/refs_2026-10-10.md; alternates listed there).
+
+\subsection{Changes of team membership}
+\label{sec:lit_team}
+
+In this thesis a reconfiguration is a change of team membership: a vehicle leaving or joining while the payload
+is carried. The word is also used for a fixed team changing its shape, as when a team contracts to pass a doorway
+\cite{jackson2020scalable, tensionbased}; that is a formation change, and the team's force allocation keeps its
+dimension. A membership change does not. Most of the work of Section~\ref{sec:lit_models} assumes a fixed team
+\cite{efficient, wahbaKinodynamicMotionPlanning2024, quan2025swarm}; the few works that change it are set out in
+Table~\ref{tab:membership}, with the detection of the change kept apart from the recovery from it, because the
+two are often reported as one time.
+
+\paragraph{A vehicle leaving, on hardware.} Quan et al.\ \cite{quan2025swarm} remove a vehicle from a carried
+load in flight: four robots carry a 4\,kg load, one releases its cable on command, and the other three
+reorganise to a near-equilateral layout and rebalance their tensions within 13\,s, decentralised and without
+replanning. They report the cable tensions and one robot's velocity through the event, not the load's attitude.
+Zeng et al.\ \cite{zeng2025marl} switch one of three vehicles off in flight and leave it hanging from a 1.4\,kg
+load; the other two keep five degrees of freedom of the load under a learned decentralised policy that observes
+only the load's pose, and the load's position and attitude are plotted through the loss with no transient
+number. Bacheti et al.\ \cite{tensionbased} handle a removal by repositioning the remaining vehicles before the
+release so that the transient is small, on hardware with a point-mass payload; [whether the agent count changes
+in their experiments is to be verified from the full text]. So on hardware a vehicle has been released from a
+carried load and a vehicle has been lost from one, and in neither case is the load's attitude through the event
+given as a number.
+
+\paragraph{A link that fails, in simulation.} A cable that breaks rather than releases is treated as a fault: the
+remaining tensions are estimated and the load reassigned \cite{liang2021fault}, a supervisor reconfigures a
+passivity-based formation \cite{saiella2021fault}, or each vehicle's measured tension is routed into its thrust so
+that five vehicles recover from one or two severed cables within a pendulum period \cite{hajieghrary2026passive}; see
+also \cite{farrasFaultTolerantControlMultiQuadcopter2024}. None flies, where a time is given it is the recovery and not
+the detection, and none adds a vehicle.
+
+\paragraph{A vehicle joining.} No work attaches a vehicle to a payload that a team is already carrying. Quan et al.\
+describe a joining robot only in prose \cite{quan2025swarm}, and the event-triggered architecture of Tasooji et al.\
+\cite{tasoojiCooperativeControlMultiQuadrotors} is argued to scale but not analysed for a varying team. The closest
+hardware precedent is a payload handed from one multirotor to another, the grasp confirmed by a magnetic sensor before
+the giver releases \cite{shankar2020inflight}; the team does not grow and the payload is not shared.
+
+\paragraph{Prepared changes and statics.} Plug-and-play MPC lets subsystems join or leave a running network without
+losing stability, provided each change is prepared before it happens \cite{riverso2013plug, zeilinger2013plug,
+aboudonia2022reconfigurable, saccani2023model}, all on linear coupled subsystems or ground robots; a suspended payload
+couples every vehicle through the load, and a magnet that lets go happens at an instant the planner does not choose, so
+this thesis switches to a pre-built problem of the new size at the event and shows the first solve in flight rather
+than certifying it. Static equilibrium decides which layouts can hold a payload at all: three robots are the fewest,
+their attachment points must span its centre of mass \cite{michael2011cooperative, jiang2013inverse}, and the shares
+are exact when the centre lies in the attachment plane \cite{tognon2018internal}; see also
+\cite{gabellieri2023equilibria, liu2025wrench, fink2011planning}. All analyse a fixed team; Section~\ref{sec:reconfig}
+turns the condition into a margin that says which carrier a layout may lose.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\caption[Changes of team membership under a carried payload]{Changes of team membership under a carried
+payload, as each work reports them. Announced: the controller is told before it happens. Leaver: whether the vehicle
+leaves the load or stays attached. Detection: from the event to the controller acting on it; recovery: to a settled
+state. ``--'': not reported; brackets: to fill from the full texts.}
+\label{tab:membership}
+\begin{tabularx}{\textwidth}{@{}
+  >{\raggedright\arraybackslash\hsize=0.86\hsize}X
+  >{\raggedright\arraybackslash\hsize=1.04\hsize}X
+  >{\raggedright\arraybackslash\hsize=0.78\hsize}X
+  >{\raggedright\arraybackslash\hsize=0.90\hsize}X
+  >{\raggedright\arraybackslash\hsize=1.04\hsize}X
+  >{\raggedright\arraybackslash\hsize=1.14\hsize}X
+  >{\raggedright\arraybackslash\hsize=1.24\hsize}X@{}}
+\toprule
+Work & Event; mechanism & Announced & Leaver & Plant; team; payload & Attitude or sag through the event &
+Detection; recovery \\
+\midrule
+Quan\newline \cite{quan2025swarm}, 2025 & release on command; cable released at the load & yes & removed, flies off with
+its cable & hardware, outdoor; 4 to 3; 4\,kg & -- (tensions and one robot's velocity plotted) & --; tensions
+balanced after 13\,s \\
+\addlinespace
+Zeng\newline \cite{zeng2025marl}, 2025 & motors switched off & no & left hanging from the load & hardware; 3 to 2;
+1.4\,kg & plotted, no number & none explicit (learned policy); -- \\
+\addlinespace
+Bacheti\newline \cite{tensionbased}, 2023 & planned release; the team repositions first & yes & [removed; count to
+verify] & hardware; [3 to 2 to 3]; point mass & -- & --; -- \\
+\addlinespace
+Liang\newline \cite{liang2021fault}, 2021 & cable breaks & no & removed & simulation; [team]; [mass] & [from the paper] &
+disturbance observers; [from the paper] \\
+\addlinespace
+Saiella\newline \cite{saiella2021fault}, 2021 & vehicle fault; the supervisor reconfigures & no & [from the paper] &
+simulation; [team] & -- & supervisor; -- \\
+\addlinespace
+Hajieghrary\newline \cite{hajieghrary2026passive}, 2026 (preprint) & one or two cables severed & no & removed &
+simulation; 5 to 4 and 5 to 3 & [from the preprint] & none (passive feed-forward); within a pendulum period
+[0.32\,s] \\
+\addlinespace
+Farras\newline \cite{farrasFaultTolerantControlMultiQuadcopter2024}, 2024 & [fault, from the paper] & no & [from the
+paper] & simulation; [team] & [from the paper] & [from the paper] \\
+\addlinespace
+Shankar\newline \cite{shankar2020inflight}, 2020 & a bar handed from one multirotor to another & yes & the giver releases
+after the grasp is confirmed & hardware; 1 to 1 & -- & magnetic sensor at the grasp; gains rescheduled \\
+\addlinespace
+ModQuad\newline \cite{saldana2018modquad}, TRADY \cite{sugihara2023trady}, LEGION \cite{sugihara2026legion}, Miyazaki \cite{miyazaki2018airborne} & vehicles docking to one another; no payload & yes & n/a & hardware; 1 to 1 per dock &
+TRADY: altitude jump 0.39\,m, 0.065\,m with the thrust blend & motion capture, contact force or a latch; -- \\
+\midrule
+This work & magnet off, commanded or not (leave); contact and co-motion (join) & both & removed; lands by itself
+& hardware and twin; 4 to 3, 3 to 4 (twin); 0.86\,kg ring on rods & tilt rise 5.3--16.9$^\circ$ over five rig
+releases & 0.33--0.42\,s (rig); join: [join tree] \\
+\bottomrule
+\end{tabularx}
+\end{table}

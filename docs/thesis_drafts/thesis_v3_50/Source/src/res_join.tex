@@ -1,0 +1,129 @@
+% res_join.tex -- Results 4.3: joining the team (RQ3). 17 Oct (v3_full): sim_attach.tex and skel_join.tex merged.
+% The join tables fly on a second code tree after the 21-22 Oct rig day (Wesley 16 Oct, inventory decisions (1), (2),
+% (9), (11)): T11 and F14 re-flown on the co-motion confirmation; T12 two hover runs under a card, the circle
+% exploratory; the push-abort clearance bar is the newcomer's own clearance. The 12 Oct contact-and-lift T11 and F14 are
+% STALE-MECH (one line of history in App D). Tonight's exploratory join re-fly (17-18 Oct) is not thesis evidence.
+% Rig record: docs/reports/supervisor_brief_2026-10-16.md and morning_report_2026-10-16.md (rig bags re-read), registry
+% RIG-1014-t6h_4, RIG-1015-a1, a2_2, a3_2; the offline replay: card docs/experiments/2026-10-15_attach_comotion_rig.md
+% (baseline; tools/proof_replay.py). Fault coverage: drop_takes_back card (16 Oct, twin, SUPPORTED WITH CORRECTIONS),
+% quad4_tilt_cut rev 4 (week5 R1702-R1705, 4 of 4, exploratory), land_every_phase (9 Oct), newcomer_land_abort.
+
+\subsection{Joining the team}
+\label{sec:res_join}
+
+This section answers RQ3: what must be observed before a UAV flown by another controller is admitted to a carried
+ring, and what does admission cost the ring? It is the least complete of the three. The confirmation was rewritten on
+14 October, after the rig's first catch was rejected by the proof of the day, and the twin claim for the new
+confirmation flies on the join code tree after the rig day of 21--22 October; its tables and figures below are
+placeholders sized for that batch. What is in hand is the contract itself (Section~\ref{sec:admission}), an offline
+replay of the new confirmation on the rig's one catch, the rig's attach record so far, and the fall-backs.
+
+\subsubsection{The admission contract in the twin}
+\label{sec:res_contract}
+
+Figure~\ref{fig:F14} and Table~\ref{tab:T11} will give the contract on the join code tree: the collaborator's
+controller flies the newcomer down onto plate 9 of a carried ring, and this work confirms the catch from motion
+capture, switches the radio and folds the newcomer in, or takes it back. Smoke runs of the co-motion confirmation in
+the twin admitted the newcomer, folded it in and landed (exploratory, one run per code tree); the twin's rigid tether
+cannot go slack, so the rig's thresholds stay on the rig side.
+
+\pendingfig{fig:F14}{The co-motion confirmation in the twin: a newcomer flown by the collaborator's controller comes
+down onto plate 9 of a hovering ring and the catch is confirmed from motion capture alone. (a) Heights of the
+newcomer's body, its magnet tip and the plate point; (b) the tip's drift from its contact point in the plate frame,
+against the 6\,mm confirmation and the 45\,mm loss; (c) the newcomer's throttle across the switch of its radio; (d) the
+ring's tilt departure against the 5$^\circ$ bar.}{the hover attach runs of the join claim, on the join code tree}
+
+\begin{table}[htbp]
+  \centering
+  \footnotesize
+  \caption[The twin claim for the join]{The twin claim for the join (T11): the collaborator's controller flies the
+  newcomer to contact and this work's co-motion confirmation admits it. Ranges over $n$ runs on one code tree; the
+  ring's tilt rise on the release metric with the contact as the event; clearance: the newcomer's body and rod to every
+  carrier, and in the push abort the newcomer's own. [Every cell: the join claim on the join code tree, after the
+  21--22 October rig day, then the reviewer.]}
+  \label{tab:T11}
+  \begin{tabularx}{\textwidth}{XcYYYYl}
+    \toprule
+    Claim line & $n$ & Contact to confirmation (s) & Throttle step (\%) & Ring tilt rise ($^\circ$) & Clearance (m)
+      & Reviewer \\
+    \midrule
+    Attach, hover & [\dots] & [\dots] & [\dots] & [\dots] & [\dots] & [\dots] \\
+    Take-back, hover & [\dots] & -- & -- & [\dots] & [\dots] & [\dots] \\
+    No catch, hover & [\dots] & -- & -- & [\dots] & [\dots] & [\dots] \\
+    LAND during the confirmation & [\dots] & -- & -- & [\dots] & [\dots] & [\dots] \\
+    No catch, circle & [\dots] & -- & -- & [\dots] & [\dots] & [\dots] \\
+    LAND take-back, circle & [\dots] & -- & -- & [\dots] & [\dots] & [\dots] \\
+    Push abort & [\dots] & -- & -- & [\dots] & [\dots] & [\dots] \\
+    Re-attach & [\dots] & [\dots] & [\dots] & [\dots] & [\dots] & [\dots] \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\paragraph{Counterfactuals.} [On the join code tree: the newcomer seeded at its full share against 0.1\,N; the
+confirmation without its plate-motion condition; the hand-over step against a thrust blend of the kind TRADY uses
+\cite{sugihara2023trady}.]
+
+\subsubsection{The confirmation on rig noise}
+
+The twin's magnet catches at the instant of contact and its ring hardly moves, so the confirmation's plate-motion and
+taut-tether conditions can only be judged on rig data. Replayed offline over the flights of 14 October with the rig's
+thresholds (a 24\,mm catch radius and each flight's own free hang), the co-motion rules confirm the one catch of that
+day 2.81\,s after its contact, the tip drifting 1.1\,mm in the plate frame while the plate moved 16\,mm, and find no
+contact and no false confirmation in the other descents. [False accepts and rejects over every rig recording with a
+descent, and the rig thresholds set from them.]
+
+\subsubsection{On the rig}
+\label{sec:res_join_rig}
+
+Eight attach flights on 14 and 15 October, the collaborator's controller flying the newcomer from its mat to plate 9
+of a ring held at 1.0\,m by three carriers, gave one contact and no fold-in (exploratory). In that contact the magnet
+held plate 9 through three lifts, and the proof of the day rejected it on its taut check; the co-motion confirmation
+that replaced it confirms it offline (above). In the other descents the magnet was inside the catch radius at the
+bottom only 22\,\% of the time; three bottom holds ended with the tip at plate height 3.3--4.3\,cm along the ring from
+the plate point, past the edge of the 60\,mm plate; and the ring bounced about 0.8\,cm at 1.8\,Hz under the newcomer,
+which followed the bounce 0.25\,s late. One of these flights also lost the ring when a carrier's magnet let go (L11). The attach on the rig is
+therefore limited by getting the magnet onto the plate, which is the collaborator's controller's task and the plate's
+size, before any admission is tested. The response is hardware first: 90\,mm plates, inside whose catch radius the
+magnet would have been 49\,\% of the time at the bottom on these flights instead of 22\,\%, and 1\,m tethers, which give
+the newcomer 0.70\,m of room from the nearest carrier instead of 0.45\,m; both are planned for the next rig day.
+
+\pendingfig{fig:F15}{The first attaches on the rig: the newcomer's descent onto plate 9, the contact, the
+confirmation, the switch of its radio and the fold-in, with the ring's tilt against the 5$^\circ$ bar for the thesis
+and the 10$^\circ$ safety limit.}{the attach flights of the 21--22 October rig day}
+
+\subsubsection{Fault coverage and authority}
+\label{sec:res_join_faults}
+
+Every fall-back of Section~\ref{sec:safety} has been flown in the twin from the phase it guards, the attach
+phases on the earlier attach sequence (Appendix~\ref{sec:app_faults}). When the ring is dropped while the collaborator's controller flies the
+newcomer, the newcomer is now taken back on the drop tick and set down at its rest 14--17\,s later (twin only), where
+without that switch it flew on towards the fallen ring. The tilt cut caught an
+injected upset on a newcomer under the collaborator's controller and disarmed it in four of four runs (exploratory);
+it stays off on the rig. On the rig, a LAND in the collaborator's match phase ended in a take-back with every UAV
+landed (15 October).
+
+\subsubsection{The full mission}
+
+\begin{table}[htbp]
+  \centering
+  \footnotesize
+  \caption[The full mission]{The full mission (T12): the UAV on plate 9 is released, picks up and drops the object
+  with the collaborator's controller, and rejoins. [Two hover runs under the full mission's card on the join code
+  tree; the circle reported as exploratory.]}
+  \label{tab:T12}
+  \begin{tabularx}{\textwidth}{lcYYYY}
+    \toprule
+    Path & $n$ & Release tilt rise ($^\circ$) & Reattached & Contact to confirmation (s) & Ring tilt rise at the attach ($^\circ$) \\
+    \midrule
+    Hover & [\dots] & [\dots] & [\dots] & [\dots] & [\dots] \\
+    Circle (exploratory) & [\dots] & [\dots] & [\dots] & [\dots] & [\dots] \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\paragraph{Answer to RQ3.} [After the join code tree and the rig day: the twin claim, the counterfactuals and the rig
+attach.] What can be said now is that what must be observed is defined and observable from motion capture alone: a
+contact in the plate's frame and, after the other controller's lift, the tip moving with the plate on a taut tether,
+which confirms the rig's one catch offline where the earlier proof rejected it; and that on the rig the attach is
+limited before admission, by the magnet reaching the plate. What admission costs the ring is not yet measured on the
+current confirmation.

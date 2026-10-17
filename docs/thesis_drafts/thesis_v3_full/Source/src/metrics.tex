@@ -1,0 +1,111 @@
+% metrics.tex -- Methodology: metrics (draft 4 Oct 2026). The definitions are the ones used by the
+% analysis tools (multi_drone_control/tools/method_metrics.py, push_metrics.py).
+% 9 Oct (structure audit): the unused "carried fraction" metric cut; "every Gazebo case is flown at
+% least twice" replaced, since several cells are single runs (marked (1)).
+
+\subsubsection{Metrics}
+\label{sec:metrics}
+
+All metrics are computed from the logged motion-capture poses of the payload and the UAVs, with the
+events (TAKEOFF, the push, DETACH, LAND) from the run's event log.
+\begin{description}
+    \item[Height error] $e_z = z_L - z_L^{\mathrm{ref}}$, positive with the payload high; in hover, averaged
+    over the 15\,s before LAND. \textbf{Heave:} its peak-to-peak over the hover window.
+    \item[Horizontal error] $\|\mathbf{e}_{xy}\|$, the horizontal distance between the payload's centre and
+    its reference; on a trajectory, its mean over the first lap or the whole figure, and its maximum.
+    \item[Path error and lag] On a trajectory the error is split three ways, because a single number mixes
+    them. The \textbf{ring RMSE} frozen for the carry claim is the ring's distance from the planner's reference as
+    published once per 10\,Hz tick and held between ticks, from 5\,s after TAKEOFF to LAND (the \textbf{path RMSE} is
+    the same over the path alone); the held reference is a
+    staircase behind the schedule, so a ring exactly on schedule pays $v \cdot 0.1/\sqrt{3}$, 17\,mm at
+    0.3\,m/s. The \textbf{clock-free error} is the ring's signed distance to the path it was sent, positive inside
+    a curve: its mean over the path's tightest quarter (the \emph{cut}) and its rms over the fast part of the path,
+    where the schedule's speed is above half its peak (the \emph{across-path error}). The \textbf{lag} is the time
+    since the schedule passed the ring's point, positive late. The claim is scored on the frozen ring RMSE and the frozen
+    tilt; the clock-free error and the lag are reported beside them.
+    \item[Payload tilt] The angle between the ring's axis and the vertical: its mean over the hover and its
+    peak after an event. The carry claim's peak tilt is over the whole flight, lift-off and landing included, and
+    a peak over the path alone is reported beside it.
+    \item[Disturbance response] For a constant force applied for a fixed time, the displacement along the
+    force relative to its mean over the 5\,s before: steady (mean over the last 5\,s of the force), peak
+    (while the force acts), overshoot (the largest excursion the other way after it ends) and time to
+    recover (after which it stays within 1\,cm). \textbf{Stiffness:} the force over the steady displacement
+    with no integral action.
+% 11 Oct: the release metrics are the signed freeze (docs/freeze_2026-10-14.md section 1.1, Wesley 11 Oct 17:24,
+% every question at its recommended option); the code is tools/release_bands.py. They replace the earlier "Detach"
+% item (peak in 5 s, back in the hover's band, height change in 12 s).
+    \item[Release metrics] For a UAV leaving the team, frozen on 11 October before the first flight they
+    score; one rule for the twin and the rig. The ring's tilt is kept as a vector: with $\mathbf{n}$ the ring's
+    body $z$ axis in the world frame, the tilt angle is $\arctan\!\big(\sqrt{n_x^2+n_y^2}\,/\,n_z\big)$ and
+    the tilt vector $\boldsymbol{\theta}$ is that angle along the horizontal direction of $\mathbf{n}$, so that
+    $|\boldsymbol{\theta}|$ is the scalar tilt above. The event time $t_e$ is the DETACH command for an announced
+    release, the magnet's OFF for an unannounced one (the runner's RELEASE in the twin, the first magnet OFF in
+    the rig's bag), and the first planner tick at which the leaver's planned tension falls for a ramped release;
+    LAND is the LAND command. Over the pre-window $[t_e-5\,\mathrm{s},\,t_e)$ the mean
+    $\bar{\boldsymbol{\theta}}_{\mathrm{pre}}$ and the spread
+    $\sigma_{\mathrm{pre}}=\sqrt{\overline{|\boldsymbol{\theta}-\bar{\boldsymbol{\theta}}_{\mathrm{pre}}|^2}}$
+    are taken. A row whose ring reference was not still for the 5\,s before the event (its height within
+    5\,mm of its value at $t_e$ and its speed within 0.02\,m/s of its median over the last 2\,s) is flagged and
+    still reported. \textbf{Tilt rise} $\Delta\theta$, the primary metric, is the maximum of
+    $|\boldsymbol{\theta}(t)-\bar{\boldsymbol{\theta}}_{\mathrm{pre}}|$ over $[t_e,\,\mathrm{LAND}]$; when two
+    runs are compared both are cut at the shorter hold, each 8 October pair at the rig flight's event-to-LAND,
+    and the ledger's bands and the flights they score at $t_e+15$\,s. Beside it: the absolute peak,
+    $\max|\boldsymbol{\theta}|$ over the same window, and the scalar rise, the absolute peak minus the mean of
+    $|\boldsymbol{\theta}|$ over the pre-window. The 30$^\circ$ drop rule and the join bars stay on the
+    absolute tilt. \textbf{Time back in band:} with $\bar{\boldsymbol{\theta}}_{\mathrm{post}}$ the mean over
+    the last 5\,s before LAND, scored only when LAND comes at least 10\,s after $t_e$, and the half-width
+    $b=\max(2\sigma_{\mathrm{pre}},\,0.5^\circ)$, it is the earliest $t$ at or after the time of $\Delta\theta$
+    such that $|\boldsymbol{\theta}-\bar{\boldsymbol{\theta}}_{\mathrm{post}}|\le b$ for every sample in
+    $[t,\,t+1\,\mathrm{s}]$, reported as $t-t_e$, or ``not back''. The dip (the largest drop of the ring's
+    height below its pre-event mean), the detection time (from the magnet's OFF to the planner's resize), the
+    steady offset, the landing lean, the clearances and the survivors' shares keep their scorers and are not
+    part of the freeze.
+    \item[Join metrics] For a newcomer admitted to the ring: the time from the last contact to the confirmation; the ring's
+    tilt rise, on the release metric above with the contact as the event, from the contact to 8\,s after the
+    confirmation; the ring dip over the same window; the hand-over step, the change in the newcomer's applied
+    throttle, roll, pitch and yaw-rate commands between the 0.1\,s before the switch of authority and the 0.3\,s
+    after it, as a fraction of its hover throttle and in degrees; the newcomer's tilt at the confirmation; and the
+    clearances of the newcomer's body and rod to every carrier body and rod through its approach and, when it is
+    taken back, through its take-back. For the full mission, also the tilt at the release, the mean tilt over the
+    circle and the time from TAKEOFF to every UAV landed.
+    \item[Magnet margin] For a release, the survivors' peak measured rod pull and the rate at which it rises,
+    against the magnet's hold at that rod angle (Section~\ref{sec:hardware}); the one metric that says how close a
+    transient came to letting a second magnet go.
+    \item[Switch validation] For every resize, the planner's solver status and residual at the first live solve
+    after the switch, the distance of that solve from an offline solve of the same logged problem run to
+    convergence (not computed so far: the planner keeps a problem only when its solve fails), the solve time against the 60\,ms budget on the rig, and the step in each survivor's commanded
+    throttle across the switch.
+    \item[Solver health] The number of planner solves that failed or did not converge.
+\end{description}
+Each table cell is the mean over its runs, with the number of runs in brackets. Every arm of a lever table and
+every ledger row also reports the state the ring was in before its event, the steady offset, the tilt and the
+leaver's pull over the pre-window, so that a lever is read against the state it acted on and not only against
+the other arm.
+
+\paragraph{Resolving a lever pair.} A lever on the transient is tested as a one-variable pair of arms A and B,
+each with at least two runs and one value per run ($\Delta\theta$ unless the table says otherwise), with the
+sign of the difference written down before the runs. The pair is \emph{resolved} only if all three hold: the
+sign of $\bar{B}-\bar{A}$ is the frozen sign; the arms' ranges do not overlap; and $|\bar{B}-\bar{A}|$ is at
+least the larger of $1^\circ$ and twice the larger range. Otherwise it is \emph{unresolved}. A prediction of
+``no sign'' is confirmed when the second or the third condition fails and falsified when both hold, in either
+direction. Every row is labelled a \emph{replication} when both arms of a twin pair, or the rig flight of a
+ledger row, were flown and registered before the rule was signed on 11 October, and a \emph{new prediction}
+otherwise; the label is set at the signature and never changes.
+
+% 11 Oct: the physical rationale for the bars (health check, item 3); the metric definitions above are the signed
+% freeze of 11 Oct.
+\paragraph{Why these bars.} Three physical limits say what a transient may do to the ring, and the bars of the
+results sections sit inside them. The first is the magnets. A plate holds its magnet straight off the face by
+about 9--10\,N and by less under shear, so a tilt that turns a rod's pull across its plate can let a magnet go:
+every ring lost on the rig began with a magnet letting go with no command, two with the rods planned at
+45$^\circ$ and two since the rods have been planned at 60$^\circ$ to keep each pull closer to its plate's axis
+(Section~\ref{sec:res_leave}). [The hold against the angle of pull, still to be measured with a spring scale,
+gives this limit its number.] The second is the fleet's own rule:
+a ring tilt over 30$^\circ$, or a loss that leaves fewer than three carriers, drops the ring and lands every UAV
+(Section~\ref{sec:safety}), so
+30$^\circ$ is where the controller gives up, not a value to design to. The third is the model: the planner's
+load--rod model and each tracker's rod pull assume a near-level ring, so a transient that stays within a few
+degrees stays inside the regime the plan was computed for, and a transient that leaves it is being flown on a
+plan that no longer describes the ring. The bars are therefore stated as a rise above the ring's own motion
+before the event, small against the first two limits and inside the third, and every run is reported with its
+measured rise so that a run that misses a bar is still read against the limits rather than against a number.

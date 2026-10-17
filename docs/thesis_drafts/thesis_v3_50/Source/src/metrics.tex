@@ -1,0 +1,51 @@
+% metrics.tex -- Methodology: metrics (draft 4 Oct 2026). The definitions are the ones used by the
+% analysis tools (multi_drone_control/tools/method_metrics.py, push_metrics.py).
+% 9 Oct (structure audit): the unused "carried fraction" metric cut; "every Gazebo case is flown at
+% least twice" replaced, since several cells are single runs (marked (1)).
+
+\subsubsection{Metrics}
+\label{sec:metrics}
+
+All metrics are computed from the logged motion-capture poses of the payload and the UAVs, with the
+events (TAKEOFF, the push, DETACH, LAND) from the run's event log.
+\begin{description}
+    \item[Height and horizontal error] $e_z = z_L - z_L^{\mathrm{ref}}$, positive high, in hover averaged over the
+    15\,s before LAND; $\|\mathbf{e}_{xy}\|$, the horizontal distance from the reference.
+\item[Path error and lag] On a trajectory the error is split three ways. The \textbf{ring RMSE} frozen for the
+    carry claim is the ring's distance from the planner's reference as published once per 10\,Hz tick and held, from
+    5\,s after TAKEOFF to LAND (the \textbf{path RMSE} is the same over the path alone); the held reference lags the schedule, so a ring exactly on schedule pays 17\,mm at
+    0.3\,m/s. The \textbf{clock-free error} is the ring's signed distance to the path it was sent, positive inside
+    a curve: its mean over the path's tightest quarter (the \emph{cut}) and its rms over the fast part of the path,
+    where the schedule's speed is above half its peak (the \emph{across-path error}). The \textbf{lag} is the time
+    since the schedule passed the ring's point, positive late. The claim is scored on the frozen ring RMSE and the frozen
+    tilt; the clock-free error and the lag are reported beside them.
+    \item[Payload tilt] The angle between the ring's axis and the vertical; the carry claim's peak is over the whole
+    flight, with a peak over the path alone beside it.
+    \item[Disturbance response] For a constant force applied for a fixed time, the displacement along the
+    force relative to its mean over the 5\,s before: steady, peak, overshoot after it ends, and the time after which it
+    stays within 1\,cm.
+% 11 Oct: the release metrics are the signed freeze (docs/freeze_2026-10-14.md section 1.1, Wesley 11 Oct 17:24,
+% every question at its recommended option); the code is tools/release_bands.py. They replace the earlier "Detach"
+% item (peak in 5 s, back in the hover's band, height change in 12 s).
+    \item[Release metrics] Frozen on 11 October before the first flight they score, one rule for the twin and the
+    rig. The ring's tilt is kept as a vector $\boldsymbol{\theta}$: the tilt angle along the horizontal direction of the
+    ring's axis. The \textbf{tilt rise} $\Delta\theta$, the primary metric, is the largest departure of
+    $\boldsymbol{\theta}$ from its mean over the 5\,s before the event, from the event to LAND (both runs of a compared
+    pair cut at the shorter hold). Beside it: the absolute peak, the dip of the ring's height, the detection time (from
+    the magnet's OFF to the planner's resize) and the time back in band. Appendix~\ref{sec:app_metrics} gives every
+    definition in full, and the join, magnet-margin and switch metrics.
+\end{description}
+Each table cell is the mean over its runs, with the number of runs in brackets, or the range.
+
+\paragraph{Resolving a lever pair.} A lever on the transient is tested as a one-variable pair of arms A and B,
+each with at least two runs and one value per run ($\Delta\theta$ unless the table says otherwise), with the
+sign of the difference written down before the runs. The pair is \emph{resolved} only if all three hold: the
+sign of $\bar{B}-\bar{A}$ is the frozen sign; the arms' ranges do not overlap; and $|\bar{B}-\bar{A}|$ is at
+least the larger of $1^\circ$ and twice the larger range. Otherwise it is \emph{unresolved}. A prediction of
+``no sign'' is confirmed when the second or the third condition fails and falsified when both hold, in either
+direction. 
+
+% 11 Oct: the physical rationale for the bars (health check, item 3); the metric definitions above are the signed
+% freeze of 11 Oct.
+\paragraph{Why these bars.} The bars sit inside three physical limits: the magnets' hold, the 30$^\circ$ drop rule,
+where the controller gives up, and the near-level ring the planner's model assumes (Appendix~\ref{sec:app_metrics}).

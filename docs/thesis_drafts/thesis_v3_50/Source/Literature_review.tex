@@ -1,0 +1,44 @@
+\section{Literature Review}
+\label{sec:lit}
+
+% Rebuilt 12 Oct 2026 to the thesis plan of 11 Oct (section 4, "2 Literature"): 2.1 transport and link models,
+% 2.2 membership change with the numeric table, 2.3 capture proof and docking, 2.4 switching and runtime assurance,
+% 2.5 the execution layer, 2.6 simulation to reality, 2.7 the gap. modelling.tex and control.tex are no longer
+% input: their link-model and centralised text is condensed into lit_transport.tex, their membership and docking
+% text into lit_membership.tex and lit_capture.tex, and the distributed detail with the architecture figure is
+% Appendix F (app_network_lit.tex). The old comparison table (tab:control_comparison) is replaced by the
+% membership-change table (tab:membership). Template note: develop from the previous reports and the supervisors'
+% feedback; flow logically, not necessarily chronologically; end with the major work, its relevance, and the gaps.
+
+This section reviews how a team carries a suspended payload and models its links
+(Section~\ref{sec:lit_models}), what is known about a vehicle leaving or joining a carrying team
+(Section~\ref{sec:lit_team}), how a catch is proven and vehicles dock in flight (Section~\ref{sec:lit_capture}), how
+control is switched safely (Section~\ref{sec:lit_switching}), the execution layer on an unmodified flight controller
+(Section~\ref{sec:lit_execution}) and what a simulator can be trusted to predict (Section~\ref{sec:lit_sim}), and ends
+with the gap (Section~\ref{sec:lit_gap}).
+
+\input{Source/src/lit_transport}
+
+\input{Source/src/lit_membership}
+
+\input{Source/src/lit_capture}
+
+\input{Source/src/lit_switching}
+
+\input{Source/src/lit_execution}
+
+\input{Source/src/lit_sim}
+
+\subsection{The gap}
+\label{sec:lit_gap}
+
+Three things are missing from the literature above, and the three research questions of Section~\ref{sec:rq}
+follow from them. No work attaches a vehicle to a payload that a team is already carrying, in simulation or on
+hardware: the docking literature joins vehicles to vehicles or to a structure, and the transport literature
+describes a joining vehicle in prose at most. No hardware work read in full reports the peak attitude transient of
+a true release from a team-carried payload, and where a time is given it is the time to recover, not the time to
+detect; the simulation work on severed cables reports recovery too, and none of it flies. And no work scores its
+simulator as a predictor of its own hardware flights, with the prediction written down before the flight: the
+usual practice is to report agreement afterwards. This thesis flies the leave on hardware and measures the ring's
+attitude through it, builds and tests an admission contract for a vehicle flown by another controller, and freezes
+the twin's prediction for each rig flight before it flies.

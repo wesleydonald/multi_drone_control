@@ -1,0 +1,776 @@
+\appendix
+% 17 Oct (v3_full): A software; B parameters and weights; C rig operations and log; D secondary results, negative
+% results and history (the approaches to model error, further twin tests, wrong model values, the lever table, the 1 m
+% bands, corner cutting, fault coverage, the twin's own approach, dated history one line each); E timeline; F the
+% network controller of the earlier plant, condensed to dated history.
+
+\section{Software architecture}
+\label{sec:app_software}
+
+Table~\ref{tab:app_nodes} lists the nodes of a flight and Table~\ref{tab:app_topics} the main
+topics between them. The same nodes run in simulation and on the rig; only the input and output
+nodes differ (the Gazebo bridges and emulators against the radio and motion-capture nodes).
+
+\begin{table}[H]
+\centering
+\small
+\caption{Nodes of a flight.}
+\label{tab:app_nodes}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+Package & Node & Role \\
+\midrule
+\texttt{mpc\_planner} & planner & Load--cable planner (10\,Hz): rod sweep, pretension, lift, trajectory, LAND; one reference per UAV \\
+ & reconfiguration node & The planner in detach mode: the detection of a release, the resize for a leave and a join, the drop rule, the fold-in \\
+\texttt{tracker} & \texttt{tracker\_}$i$ & Per-UAV tracking MPC (50\,Hz) with the measured rod pull; the freed UAV's landing and the take-back \\
+\texttt{fleet\_manager} & \texttt{fleet\_manager} & ARM, TAKEOFF, LAND, DISARM, ESTOP; fleet-wide abort; the pre-takeoff gate \\
+\texttt{drone\_communication} & \texttt{elrs\_interface} & One per UAV: CRSF frames to the radio at 100\,Hz, telemetry back, arming confirmed by the flight controller, magnet channel \\
+\texttt{drone\_communication} & \texttt{motion\_capture\_publisher} & OptiTrack rigid bodies to per-body pose and velocity topics \\
+\texttt{drone\_magnet} & magnet manager, \texttt{elrs\_mux} & The attach confirmation (contact and co-motion) and the radio hand-over at an attach \\
+\texttt{drone\_visualisation} & panel, \texttt{fleet\_viz} & Operator panel (ARM, TAKEOFF, LAND, DISARM, magnets) and RViz scene \\
+\texttt{simulation\_communication} & bridges, emulators & Gazebo only: flight controller and motion-capture emulators, clock \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[H]
+\centering
+\small
+\caption{Main topics.}
+\label{tab:app_topics}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+Topic & Content \\
+\midrule
+\texttt{/drone\_}$i$\texttt{/motion\_capture\_state}, \texttt{/payload/...} & Pose and velocity of each UAV and of the payload \\
+% SETTLED 10 Oct (was a CHECK): twelve numbers per node (mpc_planner planner_node.py _publish_ref; tracker_node.py
+% _planner_ref_callback): position, velocity, the planned thrust per unit mass f_i/m_q and the cable
+% acceleration. The throttle feedforward is not a thirteenth number: it is the magnitude of f_i/m_q.
+\texttt{/drone\_}$i$\texttt{/reference\_trajectory} & The planner's horizon for UAV $i$: node count, time step, then per node position, velocity, planned thrust per unit mass (its magnitude is the throttle feedforward, its direction the attitude reference) and planned cable acceleration (twelve numbers per node) \\
+\texttt{/drone\_}$i$\texttt{/ELRSCommand} & The tracker's command: armed flag, throttle, three rate sticks, auxiliary channels \\
+\texttt{/drone\_}$i$\texttt{/telemetry} & Battery voltage, flight mode, link quality \\
+\texttt{/drone\_}$i$\texttt{/fc\_arm\_state} & The flight controller's own arm state and the reason for a refusal \\
+\texttt{/drone\_}$i$\texttt{/magnet} & Magnet on or off \\
+\texttt{/fleet/command} & ARM, TAKEOFF, LAND, DISARM, ESTOP \\
+\texttt{/fleet/detach}, \texttt{/magnet/command} & DETACH of UAV $i$; ATTACH (magnet on) \\
+\texttt{/fleet/abort} & Fleet-wide disarm on any fault \\
+\texttt{/fleet/landed}, \texttt{/fleet/cable\_ff\_active} & Planner to fleet: landed; cable feedforward on \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Parameters and weights}
+\label{sec:app_params}
+
+Table~\ref{tab:app_params} sets the parameters of the rig twin against those of the rig, and
+Table~\ref{tab:weights} gives the cost weights of the planner and the trackers.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption[Parameters of the rig twin and the rig]{Parameters of the rig twin and the rig, from the launch
+profiles of the final code. A value spanning both columns is flown by both; a letter marks a value that changed
+during the work (notes below the table). The twin's time-outs run on simulation time.}
+\label{tab:app_params}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X>{\centering\arraybackslash}p{2.9cm}>{\centering\arraybackslash}p{2.9cm}}
+\toprule
+Parameter & Rig twin & Rig \\
+\midrule
+\multicolumn{3}{l}{\textit{Fleet and payload}} \\
+\quad UAV mass, with rod and magnet (kg) & \multicolumn{2}{c}{0.55} \\
+\quad payload mass (kg) & \multicolumn{2}{c}{0.86} \\
+\quad rod length (m) & \multicolumn{2}{c}{0.55} \\
+\quad rod pivot below the UAV centre (m) & \multicolumn{2}{c}{0.04} \\
+\quad attachment radius (m) & \multicolumn{2}{c}{0.225} \\
+\multicolumn{3}{l}{\textit{Thrust map}} \\
+\quad throttle offset $a_i$, shared & \multicolumn{2}{c}{0.185} \\
+\quad voltage slope about 23.5\,V (1/V) & \multicolumn{2}{c}{0.022} \\
+\quad gain above the offset, $k_T$ (m/s$^2$) & \multicolumn{2}{c}{35.2} \\
+\quad throttle cap & \multicolumn{2}{c}{0.8} \\
+\quad per-UAV thrust trim & \multicolumn{2}{c}{off} \\
+\multicolumn{3}{l}{\textit{Takeoff and lift}} \\
+\quad rod sweep (creep) speed (m/s) & \multicolumn{2}{c}{0.2} \\
+\quad planned rod elevation & \multicolumn{2}{c}{60$^\circ$\,$^a$} \\
+\quad hand-over: every rod within 8$^\circ$ of it for (s) & \multicolumn{2}{c}{1.0} \\
+\quad pretension (s) & \multicolumn{2}{c}{3.0} \\
+\quad breakaway cap on the pull & 0.75 at lift-off & at breakaway \\
+\quad cap release (s) & \multicolumn{2}{c}{2.0} \\
+\quad rod tautness gate, measured over typed length & \multicolumn{2}{c}{0.9} \\
+\quad lift ramp (m/s) & 0.1 & 0.1\,$^b$ \\
+\multicolumn{3}{l}{\textit{Height integral and tracker}} \\
+\quad integral gain $k_i$ (1/s), bound (m), gate (m) & \multicolumn{2}{c}{0.4, 0.3, 0.25} \\
+\quad integral conversion $K_{xy}$, $K_z$ (N/m) & \multicolumn{2}{c}{5.3, 7.1$^g$} \\
+\quad tracker initial-condition box $\epsilon$ & \multicolumn{2}{c}{0\,$^c$} \\
+\multicolumn{3}{l}{\textit{Landing}} \\
+\quad descent speed (m/s) & \multicolumn{2}{c}{0.2} \\
+\quad unwind along the rods & yes & no \\
+\quad touchdown test re-armed at ring touchdown & yes & no$^f$ \\
+\multicolumn{3}{l}{\textit{Reconfiguration}} \\
+\quad fewest UAVs after a detach & \multicolumn{2}{c}{3} \\
+\quad unannounced detach: rod over its length, 0.2\,s (m) & \multicolumn{2}{c}{0.06} \\
+\quad step-out of the freed UAV (m) & \multicolumn{2}{c}{0.5} \\
+\quad catch radius of the attach confirmation (mm) & [\dots] & 24 \\
+\quad plate-motion condition in the confirmation & waived & yes \\
+\quad drop the ring: fewer than three carriers, or ring tilt over & \multicolumn{2}{c}{30$^\circ$, every mode} \\
+\multicolumn{3}{l}{\textit{Watchdogs}} \\
+\quad motion-capture time-out (s) & 0.25\,$^d$ & 0.25 \\
+\quad reference time-out (s) & 1.0\,$^d$ & 1.0 \\
+\quad planner solve budget (s) & none & 0.06 \\
+\quad flight controller confirms arming & no & yes \\
+\bottomrule
+\end{tabularx}
+
+\smallskip
+\parbox{\textwidth}{\footnotesize\raggedright
+$^a$\,45$^\circ$ before 7 October, so the hand-over came at 37$^\circ$.
+$^b$\,The rig flights of 7 and 8 October lifted at 0.15\,m/s.
+$^c$\,0.025 before 4 October (Section~\ref{sec:res_ic}).
+$^d$\,1.0 and 2.0\,s in the twin before 7 October.
+$^f$\,After a review of its pose-freshness check.
+$^g$\,Measured on the earlier stack with the planned pull.}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Cost weights.}
+\label{tab:weights}
+\begin{tabular}{lll}
+\toprule
+Level & Term & Weight \\
+\midrule
+Planner & payload position $(x, y, z)$ & 60, 60, 80 \\
+        & payload velocity & 18, 18, 22 \\
+        & attitude error, angular velocity & 5, 1 \\
+        & rod direction, tension, rod rate & 25, 5, 3 \\
+        & inputs $\boldsymbol{\gamma}_i$, $\eta_i$ & $10^{-3}$, $5\times10^{-3}$ \\
+\midrule
+Tracker & position $(x, y, z)$ & 80, 80, 40 \\
+        & velocity, body rate & 2, 0.2 \\
+        & stick states & $2\times10^{-4}$ \\
+        & stick rates (roll, pitch, throttle, yaw) & 0.1, 0.1, 5, 0.1 \\
+        & attitude error (roll, pitch, yaw) & 0.5, 0.5, 5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Rig operations and log}
+\label{sec:app_rig}
+
+\subsection{Arming, preflight checks and flight procedure}
+
+\paragraph{Arming.} Betaflight refuses to arm while any of its arming checks fails, and then waits
+for the arm switch to go low and high again. A switch raised at such a moment is ignored until it is
+toggled, which is the likely reason two of the UAVs often failed to arm on the first attempt on the
+rig and armed after a power cycle. Each UAV's radio node therefore holds the arm switch low for
+0.3\,s before raising it, confirms the arm from the flight mode the flight controller reports, and
+retries with a fresh switch edge up to three times. This has been tested against a simulated flight
+controller, not yet on the rig. The fleet manager waits
+for every flight controller to report armed and names any UAV that did not, with the reason it
+reported, before TAKEOFF is accepted.
+
+\paragraph{Preflight checks.} Before each flight a script checks, from the live topics:
+motion capture for every UAV and the payload (fresh, above 20\,Hz, no missing values); each UAV
+resting level (under 20$^\circ$) and the payload resting level (under 25$^\circ$); every battery
+above 23.6\,V and its telemetry present; the same magnet channel on every radio; the parameters the
+controllers actually loaded (masses, rod length, attachment radius, thrust map, throttle cap);
+each UAV within tolerance of its typed attachment azimuth; and each rod length from motion capture.
+It reports GO or NO-GO.
+
+\paragraph{Flight procedure.} Each flight is started with one command that clears leftover
+processes, records every relevant topic and writes the logs to a per-flight folder, so that every
+flight can be read back before the next. The operator holds a disarm button on the ground station;
+a disarm or a fault on any UAV disarms the whole fleet.
+
+\paragraph{Test ladder.} New behaviour is flown in an order that isolates one effect at a time:
+free hover, to check the thrust map; then the payload held at its lift height; hover; the circle and
+the figure-8; the detach; and the attach last. Each step is first flown in the rig twin with the
+same launch commands.
+% Moved 9 Oct (page trim) from the method's experimental process (Section 3.9.1).
+
+\subsection{Floor start and landing in detail}
+\label{sec:app_floor}
+
+\paragraph{Why the planner cannot start from the floor.} With the payload resting and the rods flat,
+the UAVs sit about 0.7\,m from the payload's centre, 18--22\,cm outside the 45$^\circ$ cone on which the
+planner's references put them. Started from rest, the planner pulled the UAVs inwards over the payload
+instead of lifting it, the cause of the first failed lifts on the rig.
+
+\paragraph{Rod sweep (creep).} On TAKEOFF each UAV is anchored where it rests, and its rod is swept about
+its own attachment point at a constant rate, from its measured elevation to the planned elevation, 45$^\circ$
+until 7 October and 60$^\circ$ since. The UAV's reference is the far end of the rod on that arc, so the rod stays
+straight and the UAV never moves over the payload. The planner takes over (the hand-over) once every rod has
+been within 8$^\circ$ of the planned elevation for 1\,s (at least 37$^\circ$ before 7 October), or 3\,s after
+the sweep ends. The hand-over is refused below 30$^\circ$, because from
+shallower rods the lift needs two to three times the tension, mostly sideways.
+
+\paragraph{Rod lengths.} At the hand-over the planner measures each rod from motion capture, from the
+UAV's pivot to its attachment point, and uses the measured lengths in its model and its tautness gate.
+A measurement is accepted if each rod is within 25\,\% of the typed length and the rods agree within
+8\,cm; otherwise the typed length is kept and the reason logged. Without this, a rod shorter than typed
+reads as partly slack to the gate (Section~\ref{sec:sim_robustness}).
+% --- original text, flown before the rig twin; kept to refill this place:
+% Without this, a rod 4\,cm shorter than typed reads as slack to the gate and the fleet flies only
+% part of the cable feedforward (Section~\ref{sec:sim_robustness}).
+
+\paragraph{Pretension.} The rods are then loaded before the payload leaves the floor: every UAV's share
+of the cable feedforward rises together from zero to its planned value over 3\,s, with the height target
+at the resting height. A step in the planned pull here launched the payload and released two magnets on
+the rig, and UAVs pulling one after another tilted it.
+
+\paragraph{Breakaway.} When the payload rises 1\,cm, or its vertical speed exceeds 0.03\,m/s, it has broken
+free of the floor, and the fraction of the planned pull reached at that moment is frozen as a cap on the
+feedforward; continuing the ramp with the payload in the air ran it upwards at 0.38\,m/s on the rig. Once
+the lift starts, the cap is released back to full pull over 2\,s. Holding it for the whole flight, as in
+the first rig flights, leaves the trackers believing the rods pull less than they do, and the payload
+settles low (Section~\ref{sec:res_cap}).
+
+\paragraph{Lift.} The height target then ramps from the resting height to the target height at 0.1\,m/s,
+easing in over the first 1.2\,s and out over the last 8\,cm, and the trajectory starts when the ramp
+completes.
+
+\paragraph{Landing.} On LAND the planner lowers the payload's height target at 0.2\,m/s, with the formation
+shape unchanged, until the payload rests on the floor. A rigid rod then constrains its UAV: a UAV
+descending straight down is pushed outward as its rod lengthens horizontally, by 16--20\,cm in the rig
+twin, and this tipped UAVs over in a few landings. Three measures remove this.
+\begin{itemize}
+    \item \textbf{Unwind.} Each UAV's reference moves out along its rod's circle about the grounded
+    attachment point, at the landing speed, down to level, and then straight down. Below 0.25\,m the
+    horizontal reference follows the UAV. Twin only: the rig's slack tethers let it land straight down.
+    \item \textbf{Feedforward ramp.} The planner blends each UAV's thrust and cable feedforward to plain
+    hover over 1\,s, instead of dropping the cable term in one step at touchdown, which left the attitude
+    oscillating while the rods still acted.
+    \item \textbf{Ground idle.} A UAV that has flown and is back within 3\,cm of its resting height, with
+    the payload down and its reference at the floor, switches to armed idle until the fleet disarms;
+    otherwise a UAV that lands first tracks a reference below the floor and rocks on its feet.
+\end{itemize}
+Touchdown is detected when the UAVs stop following the descending reference for 1\,s, after descending at
+least 5\,cm; the planner then reports the fleet landed and the fleet manager disarms it. In the twin the test is
+re-armed when the ring touches down (Section~\ref{sec:sim_landing}), and it reads only poses fresher than 0.2\,s,
+so that a frozen pose cannot read as a stall.
+
+\subsection{Rig days}
+
+The rig is available about two days a week, and each day followed the simulation work of the days
+before it, so each is summarised with what it showed and what changed as a result
+(Table~\ref{tab:rig_days}).
+
+\begin{table}[h]
+\centering
+\small
+\caption{Rig sessions with the payload, to 15 October.}
+\label{tab:rig_days}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+Date & What was flown and what it showed \\
+\midrule
+3 Aug & First flights of the planner stack on the rig. Fixed: attachment slots matched in the
+payload's frame (a yawed payload made the problem infeasible), a latched payload yaw datum, a latched
+heading per UAV (one UAV turned a full circle on takeoff), trackers on the correct clock. \\
+16 Sep & First carry attempts with the planner from the floor: the payload did not lift. One UAV per
+flight spun in yaw at spool-up, later traced to the tracker's yaw command on a tilted floor rest. The planner's references assumed taut rods and sat inside
+the UAVs (Section~\ref{sec:takeoff}). \\
+23 Sep & Two UAVs, rods typed 0.50\,m against a real 0.46\,m, thrust gain typed: the payload did not
+leave the floor and the UAVs drifted in over it. One battery sagged from 21.2 to 17\,V. Found: battery
+thresholds set for a smaller battery, and the need for the rod sweep. \\
+30 Sep & Four UAVs, 0.86\,kg ring. First lifts and the first sustained carry (12.6\,s at 0.28\,m). Seven
+bugs fixed on the day. The thrust map identified (Section~\ref{sec:thrust_id}). Breakaway at 60--80\,\%
+of the planned pull. Last flight: ring held 16\,cm low with a 14\,cm heave at 0.17\,Hz, and 25 planner
+solve failures. \\
+1 Oct & Three UAVs (one airframe out of service), six flights to 1.0\,m including a circle and a
+figure-eight, with no solve failures (Table~\ref{tab:rig_oct1}). \\
+7 Oct & Four UAVs: the cap release, the pinned initial condition and the model integral in hover
+(Figure~\ref{fig:rig_integral}); the circle and the figure-eight on the planner's and then the measured pull with
+the rods planned at 60$^\circ$ (Table~\ref{tab:T7}); two announced releases, one carried through and one lost when two
+magnets let go; on the even ring a magnet let go in the circle (Table~\ref{tab:T8a}). \\
+8 Oct & Four releases of one UAV of four on the measured pull, announced and unannounced, in hover and on the
+circle, all carried through; the body rates sent at full precision from the evening. \\
+14 Oct & 46 launches with the collaborator's controller and the combined stack: the first attach flights, with one
+contact rejected by the proof of the day; a three-carrier lift that lost the ring when a carrier's magnet let go
+(L10); arm refusals from two flight controllers' attitude drift; the drop rule turned on in every mode, and the
+co-motion confirmation written that evening. \\
+15 Oct & Attach flights on the co-motion confirmation, no contact; a carrier's magnet let go in hover and the drop
+rule landed the fleet (L11); a LAND in the collaborator's match phase ended in a take-back; the lab asked for flights
+of four UAVs at once to stop until a noise approval. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Rig flights on 1 October, three UAVs on plates 0, 4 and 8. Breakaway: fraction of the planned
+pull at which the ring left the floor; it was held for the whole flight. Height integral bound
+0.15\,m. Tilt and the horizontal offset are over the hold; $^{\dagger}$ marks the mean distance from
+the trajectory reference over the manoeuvre. Orbit: radius 0.5\,m at 0.125\,m/s; figure-eight:
+$a = 0.5$\,m at 0.2\,m/s. Rotated: the whole system turned by 124$^\circ$; moved: shifted 1.1\,m
+towards $+x$.}
+\label{tab:rig_oct1}
+\footnotesize
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xcccccc}
+\toprule
+Flight & Target & Held & Integral & Tilt & Offset & Break- \\
+ & (m) & (m) & & mean / max & (cm) & away \\
+\midrule
+Hover & 0.5 & 0.45 & off & 5.0 / 13.8$^\circ$ & 5.7 & 80\,\% \\
+Hover & 0.8 & 0.67 & at bound & 2.5 / 6.7$^\circ$ & 11.8 & 73\,\% \\
+Orbit & 1.0 & 0.94 & at bound & 1.6 / 4.1$^\circ$ & 15.1$^{\dagger}$ & 83\,\% \\
+Figure-eight & 1.0 & 0.67 & never on & 3.2 / 9.0$^\circ$ & 18.8$^{\dagger}$ & 73\,\% \\
+Hover, rotated & 1.0 & 1.01 & at bound & 3.8 / 6.6$^\circ$ & 8.1 & 93\,\% \\
+Hover, moved & 1.0 & 0.89 & at bound & 2.2 / 4.1$^\circ$ & 3--5 & 77\,\% \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{30 September.} The day went from a ring that would not leave the floor to sustained
+carries. The bugs found on the day each had a clear signature in the logs. The creep fed the UAVs to the
+wrong plates, so the fleet flew into the middle of the ring. The cable feedforward was zeroed while the
+ring rested, so the lift deadlocked. Only one UAV received the pull flag. The pull arrived as a step
+and launched the ring, releasing two magnets. Each was fixed and then flown, which is how the
+pretension and breakaway procedure of Section~\ref{sec:takeoff} came about. Two problems remained at
+the end of the day: the ring was held low (Section~\ref{sec:res_cap}), and the planner failed to solve 25 times in the last
+flight.
+A replay of the planner on the logged states traced the failures to two faults acting
+together. The UAVs sat 30$^\circ$ round from the attachment points the planner modelled, one plate off,
+and the payload's measured quaternion changed sign when its yaw crossed 180$^\circ$. Removing either
+removed every failure in the replay. The planner now keeps the quaternion's sign continuous and
+warns before ARM if a UAV sits more than 10$^\circ$ from its slot. None of the 1 October flights had a
+solve failure.
+
+\section{Secondary results, negative results and history}
+\label{sec:app_negatives}
+
+\subsection{Approaches to model error on the earlier stack}
+\label{sec:app_methods}
+
+Before the tracker's initial-condition fix and the measured rod pull, five approaches to model error were flown in
+the three-UAV twin against the hover, one UAV's thrust map wrong in either direction, a 1\,N push and a 0.4\,m/s wind
+(Table~\ref{tab:methods}). Three cases represent the internal errors: the hover itself, and one UAV whose thrust map
+is wrong in each direction (its real offset 0.03 above or below the 0.185 its tracker assumes). Two represent external
+forces: a 1\,N horizontal push on the ring, and a 0.4\,m/s wind during the orbit. All of them were flown with the
+tracker's relaxed initial condition, so the hover without any correction sits 4.8\,cm high; the comparisons between
+rows still hold, and the measured cable force of this table is the one that became the trackers' measured pull.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\caption{Approaches to model error in the Gazebo rig twin (three UAVs, 1.0\,m, floor start; flown
+with $\epsilon = 0.025$). Height and horizontal errors in cm, tilt in degrees; one run per cell
+unless noted; a dash: not flown. $^{a}$ A UAV tipped during the landing, after the hover, and the fleet
+disarmed. $^{b}$ Two runs, agreeing within 0.1.}
+\label{tab:methods}
+\begin{tabular}{lccccc}
+\toprule
+ & Hover & One UAV weaker & One UAV stronger & 1\,N push & Wind \\
+ & $e_z$ & $e_z$ / $e_{xy}$ / tilt & $e_z$ / $e_{xy}$ / tilt & $e_{xy}$ & $e_{xy}$ \\
+\midrule
+None & +4.8 & $-$3.0 / 3.8 / 6.7 & +12.8 / 3.5 / 6.0 & 18.0 & 17.9 \\
+Height integral (target) & +0.1 & 0.0 / 3.8 / 6.7 & 0.0 / 3.5 / 6.0 & 17.9 & 18.0 \\
+Force balance & +3.8 & +3.9 / 1.3 / 9.0 & -- & 0.3 & 3.9 \\
+Force balance + height int. & +0.1$^{b}$ & 0.0 / 1.3 / 9.0$^{b}$ & -- & 0.4$^{b}$ & 3.9$^{b}$ \\
+Offset-free observer & +1.6 & +1.0 / 0.2 / 8.0 & +2.4 / 0.1 / 7.5 & 2.6$^{b}$ & 7.8$^{b}$ \\
+Measured cable force & +4.2$^{a}$ & +3.8 / 3.1 / 0.8$^{a}$ & +4.5 / 0.6 / 0.3 & -- & -- \\
+Measured force + height int. & 0.0$^{a}$ & 0.0 / 3.1 / 0.8 & 0.0 / 0.6 / 0.3$^{a}$ & -- & -- \\
+Thrust-gain trim & +3.7 & +4.1 / 1.3 / 2.3 & -- & -- & -- \\
+Rod mass in the planner & +5.0 & -- & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{description}
+    \item[Height integral on the target.] Zeroes the height in every case and does nothing
+    horizontally: the push and the wind still move the ring 18\,cm.
+    \item[Force balance.] Estimates a constant force on the ring and one shared by the UAVs from
+    the measured motion and the delivered thrust, and gives them to the planner's model
+    \cite{muske2002disturbance}. It removes the push and most of the wind. It cannot see the internal
+    height offset: by Newton's law, a force that the system exerts on itself does not appear in its
+    total. It books a UAV's thrust-map error as a force on the ring, and leans the formation into
+    it, which tilts the ring further. Combined with the height integral it was the best on height and
+    external forces. Its transients were not small: on the push it peaked at 14.5\,cm, and on release
+    it overshot by 14.8\,cm and tilted the ring 7.1$^\circ$.
+    \item[Offset-free observer.] Estimates the force from the planner's own prediction error, as in
+    offset-free MPC \cite{pannocchia2003disturbance}. It helped everywhere but converged slowly and left
+    residuals, because a small offset shows up in the plan's rod states rather than in the payload's
+    predicted motion.
+    \item[Measured cable force.] Each tracker takes its rod's force from its measured acceleration
+    and delivered thrust, the ground-side counterpart of the compensation from inertial measurements of
+    \cite{tudelft}. It was the only approach that levelled the ring against one UAV's wrong thrust
+    map (0.3--0.8$^\circ$ against 6--7$^\circ$), because it corrects each UAV's own force. In four of
+    six runs, however, a UAV tipped during the landing.
+    \item[Thrust-gain trim.] A per-UAV estimate of the throttle-to-acceleration gain, from the UAV's
+    own measured acceleration and its static share of the rod force. It partly corrects a wrong map.
+    \item[Rod mass in the planner.] Corrected the rods' elevation (49.7 to 42.8$^\circ$ against a planned
+    45$^\circ$) but not the height.
+\end{description}
+Further candidates were rejected before flying, because tests on logged flights showed they would
+not work. These were pinning the rod rates at node~0, a thrust reference weight in the
+tracker, and an $\mathcal{L}_1$ adaptive force estimate \cite{hovakimyan2010l1} at the planner's
+10\,Hz rate. Raising the planner's weight on the ring's horizontal position by three and by ten times
+cut the push displacement only by 23 and 38\,\% (18.5 to 14.3 and 11.4\,cm), and the higher weight
+rocked the ring by 6$^\circ$. Aiming the rods at the hand-over angle instead of 45$^\circ$ made it
+worse (20.7\,cm). Both were removed.
+
+\subsection{Further tests in the rig twin}
+\label{sec:app_tests}
+
+\paragraph{Trajectories at the rig's speed.} Table~\ref{tab:traj} gives the three-carrier hover and the five load
+paths at 0.125\,m/s from the carry claim on the planner's own 10\,Hz reference, with the height error and, for the
+spin, the yaw.
+\begin{table}[htbp]
+\centering
+\caption[Trajectories at the rig's speed]{Trajectories in the rig twin at 0.125\,m/s peak path speed: three
+carriers, ring at 1.0\,m, floor start, the default controller, two runs each from the carry claim (the hover from the
+model-error study's baseline). Horizontal error per sample against the planner's reference at its 10\,Hz updates, over
+the motion (the orbit's first lap) or the 15\,s before LAND (hover); height error and tilt: means over the same window.
+The circle starts from the lift point; the orbit is flown continuously.}
+\label{tab:traj}
+\input{Source/src/tables/traj}
+\end{table}
+
+\paragraph{The tracker's initial condition.} Table~\ref{tab:x0} gives the means behind Section~\ref{sec:res_ic}.
+\begin{table}[h]
+\centering
+\caption{Ring error with the relaxed and the pinned initial condition, no integral action, on the freeze code tree
+(two runs each).}
+\label{tab:x0}
+\input{Source/src/tables/x0}
+\end{table}
+
+\paragraph{Integral gain and gate.} Table~\ref{tab:gain} gives the gain and the gate on the 0.6\,N vertical push. On
+the measured pull the push hardly reaches the integral, and neither doubling the gain nor keeping the speed gate only
+for the first 5\,s after the lift makes a difference the resolution rule resolves.
+\begin{table}[h]
+\centering
+\caption{Integral gain and gate on the 0.6\,N vertical push, model integral, the measured pull. Peak: largest
+displacement during the push; overshoot and settling (to within 1\,cm): after it ends. Brackets: number of runs.}
+\label{tab:gain}
+\input{Source/src/tables/gain}
+\end{table}
+
+\paragraph{Landings.} Table~\ref{tab:land} gives every landing of the freeze code tree in the rig twin
+(Section~\ref{sec:sim_landing}). The re-armed touchdown test was flown afterwards on its own card: on the rig's
+landing path with correct thrust maps the false touchdown came in 2 of 4 runs without it and 0 of 5 with it; with one
+UAV's throttle offset 0.03 below its map's (about 1\,m/s$^2$ of surplus thrust) it removed the 0.4--0.5\,m case but left that UAV 15.7--15.8\,cm above its rest at the
+disarm, leaning 24--30$^\circ$ on its rod afterwards (eight runs).
+\begin{table}[h]
+\centering
+\caption{Every landing of the freeze code tree in the rig twin, from load-down until the fleet is declared landed and
+after it.}
+\label{tab:land}
+\input{Source/src/tables/land}
+\end{table}
+
+\subsection{Wrong model values}
+\label{sec:app_robust}
+
+Table~\ref{tab:robust} gives the twin's hover at 1.0\,m, three UAVs from a floor start, with one wrong value in the
+controller while the simulated rig keeps the true ones, each case flown without and with the integral
+(Section~\ref{sec:sim_robustness}). The rows tested on the earlier stack that this table does not have (rods typed
+short, the radius typed short, and the combination with a mass error) were not re-flown.
+\begin{table}[htbp]
+\centering
+\caption[Hover with a wrong model]{Hover at 1.0\,m with one wrong value in the controller's model, rig twin, three
+UAVs, $\epsilon = 0$, the measured pull, floor start, freeze code tree. Height error: the mean of two runs over the 15\,s
+before LAND. Integral force at LAND: the vertical component. Tilt: mean over the four runs. Landed: flights that
+landed without a fault.}
+\label{tab:robust}
+\input{Source/src/tables/robust}
+\end{table}
+
+\subsection{The levers on a release, pair by pair}
+\label{sec:app_levers}
+
+Table~\ref{tab:T9} gives every lever pair flown on the detach freeze code tree with its frozen sign, its label and its
+verdict under the resolution rule of Section~\ref{sec:metrics}: the sign as frozen, the ranges apart, and the gap at
+least the larger of the floor and twice the larger range.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\caption[The lever pairs]{The lever pairs on a release in the twin (T9): unannounced hover releases unless stated, the
+model integral, every link rigid. Values: $\Delta\theta$ ($^\circ$), the arm mean and [range]; $\geq$: a lower bound cut
+at the drop or the latch. Needed: max(floor, twice the larger range). Labels: R, replication; N, new prediction.
+$^a$\,The tool's reading counts the freed UAV, which with detection off stays in the formation; on the three UAVs still
+on the ring, 1.37 against 1.80$^\circ$, unresolved. $^b$\,Mean path error on the even ring's 60$^\circ$ circle (cm),
+floor 0.3\,cm. $^c$\,The drop rule off at 180$^\circ$, declared before the runs, so the pair also differs in that setting,
+and the $\geq$ values are the 60$^\circ$ latch that exists only with it off; on the default rules the gap rule dropped
+the ring at detection ($\geq$24.08$^\circ$). $^d$\,Falsified as written by the planner's pull at 150$^\circ$ (both runs at the
+drop line); every measured-pull peak was under 30$^\circ$ (largest 16.9$^\circ$).}
+\label{tab:T9}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{1.7cm}c>{\raggedright\arraybackslash}p{1.85cm}>{\raggedright\arraybackslash}p{1.85cm}>{\raggedright\arraybackslash}p{1.2cm}>{\raggedright\arraybackslash}p{1.7cm}}
+\toprule
+Pair (one variable) & Frozen sign & Label & Arm A & Arm B & Gap / needed & Verdict \\
+\midrule
+Pull source, 120$^\circ$ gap & measured $<$ planned & N & 6.40 [5.46, 7.68] & 16.80 [16.64, 17.08] & 10.40 / 4.44 & confirmed \\
+Detection, planner's pull & on $<$ off & N & 16.80 [16.64, 17.08] & 28.18 [28.17, 28.20] & 11.38 / 1.00 & confirmed \\
+Detection, measured pull & no sign & R & 6.40 [5.46, 7.68] & 5.58 [4.64, 6.66] & $-$0.82 / 4.44 & confirmed (no sign) \\
+Landing lean, detection, measured pull & on $<$ off & N & 1.37 [1.2, 1.6] & 4.80 [4.7, 4.9] & 3.43 / 1.00 & not credited$^a$ \\
+Landing lean, detection, planner's pull & on $<$ off & N & 1.90 [1.8, 2.0] & 4.23 [3.4, 5.4] & 2.33 / 4.00 & unresolved \\
+Pull source, 60$^\circ$ circle, no event$^b$ & planned $<$ measured & R & 0.53 [0.49, 0.58] & 0.93 [0.87, 0.98] & 0.39 / 0.30 & confirmed, even ring, $n = 2$ \\
+\midrule
+Margin 112 to 58\,mm (gap 120 to 150$^\circ$) & smaller margin, larger & R & 6.40 [5.46, 7.68] & 16.82 [16.65, 16.99] & 10.42 / 4.44 & confirmed \\
+Margin 58 to 0\,mm (150 to 180$^\circ$)$^c$ & smaller margin, larger & N & 16.82 [16.65, 16.99] & $\geq$61.22 [60.71, 61.72] & 44.40 / 2.02 & confirmed \\
+Margin 112 to 86\,mm & smaller margin, larger & N & 6.40 [5.46, 7.68] & 8.44 [7.81, 9.07] & 2.04 / 4.44 & unresolved, right sign \\
+Margin 86 to 58\,mm & smaller margin, larger & N & 8.44 [7.81, 9.07] & 16.82 [16.65, 16.99] & 8.38 / 2.52 & confirmed \\
+Margin 58 to 29\,mm & smaller margin, larger & N & 16.82 [16.65, 16.99] & 28.02 [27.93, 28.12] & 11.20 / 1.00 & confirmed \\
+Pull source, 150$^\circ$ gap & measured $<$ planned & N & 16.82 [16.65, 16.99] & $\geq$29.54 [28.46, 30.61] & 12.71 / 4.30 & confirmed \\
+Every absolute peak under 30$^\circ$, gaps 120--150$^\circ$ & -- & -- & \multicolumn{3}{>{\raggedright\arraybackslash}p{5.3cm}}{the planner's pull at 150$^\circ$ reached the drop line in 2 of 2} & falsified$^d$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{The carry bands for the next rig day}
+\label{sec:app_bands}
+
+Table~\ref{tab:bands1m} gives the bands frozen on 17 October for the carry cells on 1\,m cables, under the rule of
+Section~\ref{sec:ledger}: three twin runs per cell, $2\sigma_{\mathrm{rig}}$ of 20.6\,mm and 3.0$^\circ$, no class
+factor, both metrics from the path's start to LAND.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption[The frozen carry bands, 1\,m cables]{The frozen carry bands for the next rig day: three carriers on 1\,m
+cables, the 0.86\,kg ring at 1.0\,m, three twin runs per cell. Path RMSE: the ring's distance from its published
+reference; tilt: the peak ring tilt. A rig flight is scored only against a band frozen before it.}
+\label{tab:bands1m}
+\begin{tabular}{llcccc}
+\toprule
+ & Speed & \multicolumn{2}{c}{Path RMSE (mm)} & \multicolumn{2}{c}{Peak tilt ($^\circ$)} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+Path & (m/s) & twin runs & band & twin runs & band \\
+\midrule
+Circle & 0.125 & 8.3, 9.3, 8.3 & 0.0--29.9 & 1.77, 1.49, 1.67 & 0.00--4.76 \\
+ & 0.2 & 11.7, 11.5, 11.0 & 0.0--32.3 & 1.72, 1.57, 1.57 & 0.00--4.72 \\
+ & 0.3 & 13.4, 15.9, 19.4 & 0.0--40.0 & 1.94, 2.88, 3.94 & 0.00--6.94 \\
+Figure-eight & 0.125 & 10.1, 15.0, 13.6 & 0.0--35.6 & 1.14, 1.72, 1.44 & 0.00--4.72 \\
+ & 0.2 & 14.4, 16.4, 17.0 & 0.0--37.6 & 2.34, 1.66, 1.56 & 0.00--5.34 \\
+ & 0.3 & 16.4, 20.9, 21.4 & 0.0--42.0 & 3.02, 3.31, 2.97 & 0.00--6.31 \\
+Line & 0.125 & 5.0, 6.5, 9.1 & 0.0--29.7 & 0.97, 1.22, 1.60 & 0.00--4.59 \\
+ & 0.2 & 11.2, 9.6, 9.7 & 0.0--31.8 & 3.01, 1.65, 1.64 & 0.00--6.00 \\
+ & 0.3 & 13.8, 14.8, 18.7 & 0.0--39.3 & 2.18, 2.81, 3.81 & 0.00--6.81 \\
+Orbit & 0.125 & 7.0, 9.8, 9.5 & 0.0--30.4 & 1.13, 1.46, 1.78 & 0.00--4.78 \\
+ & 0.2 & 11.5, 12.6, 14.3 & 0.0--34.9 & 1.77, 1.76, 1.54 & 0.00--4.77 \\
+ & 0.3 & 23.0, 21.5, 24.3 & 0.9--44.9 & 2.81, 3.30, 4.39 & 0.00--7.39 \\
+Spin & 0.125 & 9.2, 13.5, 12.5 & 0.0--34.1 & 1.60, 3.30, 2.73 & 0.00--6.30 \\
+ & 0.2 & 11.6, 16.5, 20.6 & 0.0--41.2 & 2.18, 3.35, 5.25 & 0.00--8.25 \\
+ & 0.3 & 17.8, 18.3, 25.4 & 0.0--46.0 & 4.95, 4.14, 6.16 & 1.14--9.15 \\
+\bottomrule
+\end{tabular}
+\end{table}
+% docs/experiments/2026-10-16_bands_1m.md, frozen 17 Oct ~19:54 (tools/n2_bands.py; results/analysis/n2_bands_2026-10-17.json).
+
+\subsection{Corner cutting and the timing fix}
+\label{sec:app_corner}
+
+The ring's cut at speed (Section~\ref{sec:res_envelope}) was studied on the 0.3\,m/s cells, exploratory throughout.
+Raising the planner's weight on the ring's position, loosening its pull towards the flatness rod directions, or
+freeing the rods' angular rate did not remove the cut in the one or two runs each arm had. What removes it is timing: shifting the trackers' references by the age of the plan they fly, with two SQP
+iterations per tick and the planner's clock lead reduced by 0.075\,s (to 0.025\,s), took the figure-eight's cut at its tight bends
+from 20--33\,mm to between $-$9 and +16\,mm, scattering across sessions, and centred the circle and the orbit on their
+schedule. The same lead did
+not hold on the spin: the lag there ran ahead in 2 of 3 pairs. A test of whether the needed shift is the loop's delay failed (0.035\,s more delay moved
+it by about 0.003\,s), so the cut's source is open; a lead chosen per shape would be a band-aid, so the defaults stay
+and the lag is reported. The frozen path RMSE does not see any of this, because it scores against the held
+10\,Hz reference (Section~\ref{sec:metrics}).
+% Sources: docs/experiments/2026-10-16_corner_cutting.md (closed 17 Oct, Wesley ~19:45: defaults stay, lag reported);
+% 2026-10-17_lead075_default.md (N5 fails on spin in 2 of 3 pairs; exploratory).
+
+\subsection{Fault coverage}
+\label{sec:app_faults}
+
+Table~\ref{tab:faults} gives, for each fault and phase, the exit that covers it and where that exit has flown.
+Figure~\ref{fig:land_phases} presses LAND in every phase in the twin, and Figure~\ref{fig:disarm_lanes} shows who is
+disarmed when.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption[Fault coverage]{Fault coverage: each fault and phase, the exit that covers it, and where it has flown. Twin
+evidence on the code tree named; rig evidence as flown.}
+\label{tab:faults}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
+\toprule
+Fault, phase & Exit & Twin & Rig \\
+\midrule
+One carrier lost, unannounced & detect, resize; the freed UAV lands and is disarmed alone & freeze tree: carried in every run; freed UAV disarmed alone 0.27--0.43\,s after reaching its rest (5 runs) & 8 October: three carried through (the freed UAV's landing then stalled, old rule) \\
+A loss leaving fewer than three, or a gap of 180$^\circ$ or more & drop the ring, land every UAV & freeze tree: dropped 0.22--0.23\,s after the loss, all down in 8.5--8.9\,s (4 runs) & 15 October: the loss left two carriers, but the tilt rule fired first (next row) \\
+Ring tilt over 30$^\circ$ & drop the ring, land every UAV & freeze tree: the planner's pull at a 150$^\circ$ gap, dropped in 2 of 2, all landed & 15 October: fired at 36.8$^\circ$ after an uncommanded release; every carrier landed and was disarmed alone \\
+Carrier loss with the drop rule off & fleet disarm in the air & freeze tree, 180$^\circ$ gap: latched at 60$^\circ$, disarm 1.45--1.62\,m up (2 runs) & 14 October: fleet disarmed about 1\,m up; the drop rule on in every mode since \\
+Newcomer fault in transit & newcomer disarmed alone, carriers land & 9 October tree: 2 of 2 (Figure~\ref{fig:disarm_lanes}a) & not flown \\
+Newcomer tilting while free & tilt cut & current tree: 4 of 4 (exploratory) & off \\
+Nothing confirmed, or the collaborator gives up & take-back & the contact-and-lift tree (12 October); [the join code tree] & 15 October: a LAND in the match phase ended in a take-back, all landed \\
+Ring dropped while the collaborator flies the newcomer & take-back on the drop tick & 16 October: taken back on the drop tick and down at its rest 14--17\,s later with no fault; one run failed a bar that did not fit a drop at the plate, and two pass only on a revised bar (reviewed, twin only) & on through a parameters file; not yet exercised \\
+LAND in any phase & every UAV lands & 9 October tree: 33 of 34 (Figure~\ref{fig:land_phases}) & flown in carry, release and attach flights \\
+Touchdown read too early & re-armed touchdown test & 0 of 5 false touchdowns with it, 2 of 4 without (rig landing path) & after review \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{Images/land_phases.pdf}
+\caption[LAND in every phase of a flight]{LAND pressed in each phase of a flight in the rig twin, two runs per
+phase on the code tree of 9 October, before the collaborator's controller flew the attach and before the co-motion
+confirmation (the attach phases, ``weld'' included, are of that earlier sequence). (a) The largest tilt of any UAV
+between LAND and its disarm, against the 30$^\circ$ bar. (b) The time from LAND until the fleet is landed and disarmed.
+Every UAV landed and was disarmed in 33 of 34 runs, within 15\,s and with no UAV past 16$^\circ$. In the other run
+(LAND 0.5\,s after the newcomer's weld) the newcomer, on the twin's rigid rod, tipped while the carriers unwound after
+the ring was down, and the fleet stopped; its tilt is drawn at the edge of the axis with its value. Armed on the floor,
+LAND disarms the fleet at once.}
+\label{fig:land_phases}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{Images/disarm_lanes.pdf}
+\caption[Who is disarmed when]{Which UAV is disarmed when, one lane per UAV: dark, carrying the ring; mid (or the
+UAV's own colour), flying off it; light and thin, landing; cross, disarmed in the air; bar, disarmed at rest. The UAV
+off the ring is drawn in its own colour once it is off, the carriers in grey; times in brackets are the repeat run's.
+(a) The newcomer loses its motion capture 2\,s into its transit to the ring, in the twin. Old rule (one run): its pose
+timeout disarms it and the fleet-wide stop disarms all four in the air, 0.25\,s after the loss. New rule (a fault on
+the newcomer lands the fleet; two runs): it alone is disarmed, 0.24\,s after the loss and 1.8\,m above its rest, and
+the carriers land the ring at once and are disarmed at rest 9.7\,s after the loss. (b) A carrier released without
+warning from plate 9, in hover and in the circle (twin, two runs each): it steps out, lands by itself and is disarmed
+alone at rest 7.9\,s (hover) and 8.5\,s (circle) after the release, while the three others carry the ring on until the
+LAND 20\,s after the release (dashed) and are disarmed together 29.5--29.6\,s after the release. The repeats' disarms
+are within 0.2\,s. Hatched: the same two flights on the rig, planned for 14 October and not yet flown.}
+\label{fig:disarm_lanes}
+\end{figure}
+
+\subsection{The twin's own approach and proximity weld}
+\label{sec:app_proximity_weld}
+
+Before the admission contract, the twin flew an attach in which this work's own tracker approached the plate and the
+weld was declared from proximity rather than from contact. On the rig the magnet catches only on contact, so this
+approach is twin-only; it is kept because the fold-in, the authority hand-over and their negatives were first found on
+it. ATTACH froze the payload's horizontal reference, or kept it on its trajectory shifted onto the measured payload,
+and the newcomer flew to a point above its plate and descended; a magnet manager welded when the tip was within 8\,cm
+of the plate point and the relative speed under 0.05\,m/s for 0.15\,s; a multiplexer switched the newcomer's radio to
+this work's tracker only on an armed command above idle throttle, and latched; and the planner recorded the weld point
+and switched to the solver for $N+1$, the newcomer seeded at 0.1\,N with every tension blended to the balanced
+solution. On the earlier plant a newcomer started at 1\,N pulled the ring with a lever about the incumbents' rod apex
+and tilted it at the weld, and a multiplexer that switched onto an armed but idle stream cut the newcomer's motors at
+every weld.
+
+The approach flies the newcomer's body to its target plus an assumed rod length, so a wrong length parks the magnet
+tip above or below the plate. A slow, bounded loop on the measured tip height corrects the body goal, integrating only
+while the newcomer holds still over the plate and freezing inside a 5\,mm deadband, on a contact and on an invalid tip
+measurement. In the twin, with the assumed rod length 4\,cm wrong in either direction, the tip parks 4\,cm high or low
+with the loop off; with the loop on (two runs per sign) it comes within 1\,cm of its setpoint 1.2--2.1\,s after the
+hold begins and then to within 0.1--6.3\,mm after 3.6--11.7\,s (Figure~\ref{fig:tip_feedback}; the code tree of 9
+October, never flown on the rig).
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{Images/tip_feedback.pdf}
+\caption[Steering the measured magnet tip]{Steering the measured magnet tip in the rig twin (dry approach to the
+plate, this work's own approach, twin only). The approach flies the UAV's body to the target plus an assumed rod
+length; with that length 4\,cm wrong either way (solid: assumed long, dashed: assumed short) the measured tip parks
+4\,cm high or low with the loop off (black). With the measured-tip loop on (red, two runs per sign) a slow, bounded
+correction of the body goal brings the tip within 1\,cm of its setpoint (shaded) 1.2--2.1\,s after the still hold over
+the plate begins (dots). (a) Tip height error: the measured tip height minus its setpoint. (b) The correction $c$ added
+to the body goal; dashed black: the injected rod error. The loop integrates only in the still hold and freezes inside a
+5\,mm deadband, on a contact and on an invalid tip.}
+\label{fig:tip_feedback}
+\end{figure}
+
+\subsection{Dated history}
+\label{sec:app_history}
+
+Results flown on earlier code or earlier plants, superseded by the results above and kept one line each so that they
+are not repeated.
+\begin{itemize}
+    \item \textbf{Trajectories, 4--5 October} (integral off, the earlier stack): three and four UAVs on hover, line,
+    circle, figure-eight and spin, mean error 0.5--0.9\,cm; replaced by the carry claim (Table~\ref{tab:T7t}).
+    \item \textbf{The resize in hover, 4--5 October}: peak 2.8--4.0$^\circ$, back in band in 0.9--1.0\,s on an
+    announced detach; replaced by the unannounced release on the freeze tree (Figure~\ref{fig:detach}).
+    \item \textbf{Landings, 4--5 October}: the unwind, ramp and idle tipped 0 of 18 against 2 of 21 straight descents;
+    replaced by Table~\ref{tab:land}.
+    \item \textbf{Layouts, 25 September} (earlier plant): after a release the even ring of four peaked at
+    25.6--28.5$^\circ$ against 3.0--3.3$^\circ$ on plates 3, 7, 9 and 11; replaced by the support-margin curve
+    (Figure~\ref{fig:F12}).
+    \item \textbf{Hover, twin against the rig, 3 October}: holding the breakaway cap reproduced the rig's height
+    shortfall (Section~\ref{sec:res_cap}).
+    \item \textbf{The measured pull in the twin, 7 October} (exploratory): no abort or tip-over; superseded by the
+    carry claim.
+    \item \textbf{Command delay, 7 October} (exploratory): 0.05\,s or more of delay tipped UAVs at takeoff; the 15--45\,ms
+    check of Section~\ref{sec:simulation} supersedes it.
+    \item \textbf{The weld joint ladder, August} (earlier plant): a ball joint, a rod with inertia and a mid-span joint
+    behaved alike, and a rigid weld capsized the ring in 5 of 5; compliance was not the cause of the weld transient.
+    \item \textbf{The ground join, September} (earlier plant): the collaborator's controller joined four UAVs to the ring
+    on the floor in two runs, then rocked it in four of the next five until the emulated rate loop used the gyro.
+    \item \textbf{The rejoin mission, late September} (earlier plant): completed in two runs with a peak tilt at the
+    rejoin of 1.6--1.7$^\circ$; in the rig twin before the co-motion confirmation the full mission reattached in hover
+    in 2 of 2 runs and on the circle in 7 of 11 across code trees.
+    \item \textbf{The join claim on the contact-and-lift proof, 12 October}: in hover the twin admitted the newcomer in
+    5 of 5 runs with a ring tilt of 1.8--2.4$^\circ$; superseded by the co-motion confirmation of 14 October
+    (Section~\ref{sec:res_join}).
+\end{itemize}
+
+\section{Development timeline}
+\label{sec:app_timeline}
+
+\begin{table}[H]
+\centering
+\small
+\caption{Main steps of the work, 2026.}
+\label{tab:app_timeline}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+When & Step \\
+\midrule
+Feb--Apr & ROS~2 and Gazebo environment; four-UAV formation flight in simulation; one UAV with a tethered load \\
+Jun & Cable models (spring--damper, then rigid rods); first port of the load--cable planner \\
+Jul & Three UAVs carrying a payload with rigid rods in simulation; first rig flights; the network controller and the first mid-flight detach \\
+Aug & Experiment runner; OCP resize against the network's hand-off; attach integration and the weld-joint ladder \\
+early Sep & Runtime attachment geometry and detach by OCP resize; layout studies \\
+mid Sep & The 0.86\,kg ring in every model; measured rod lengths; rod sweep from the floor; height integral; first carry attempts on the rig \\
+late Sep & Attach by OCP resize; integration with the collaborator's controllers; rig days with the first lifts and the thrust identification; the rig twin \\
+1--4 Oct & Three-UAV rig flights to 1.0\,m; the breakaway cap and its release; the tracker initial-condition fix; integral action in the planner's model \\
+5--8 Oct & The rig twin becomes the simulation; the measured rod pull and rods planned at 60$^\circ$; four-UAV carries and releases on the rig; drop and land \\
+9--12 Oct & The freed UAV disarmed alone; LAND in every phase; the newcomer's fall-backs; the release metrics, the resolution rule and the ledger bands frozen \\
+14--15 Oct & The first attach flights on the rig; the co-motion confirmation; the drop rule in every mode \\
+16--17 Oct & Freeze batches: the carry envelope, the levers on a release, drop and land, the re-flown appendix tables; the touchdown re-arm \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{The network controller on the earlier plant}
+\label{sec:app_network}
+
+Everything in this appendix was flown on the earlier simulation plant (the 0.6\,kg disc and then the 0.86\,kg ring on
+0.5\,m rods, 0.64\,kg UAVs and a linear thrust map), before the rig twin existed; none of it is re-flown, and the main
+text does not rest on it. It answers the project plan's secondary question, whether a decentralised network controller
+or the trajectory-based planner better balances robustness and tracking, and is kept as dated history.
+
+The second reference generator was a port of the decentralised passivity-based controller of Quan et al.\
+\cite{quan2025swarm} to rigid rods, the ring and the same trackers. Each UAV was a node of a virtual spring--damper
+network, joined to a payload node at the desired payload position, to an anchor above it and to its neighbours, and
+damped relative to all of them; the node's position, carried out one rod length from the UAV's own attachment point,
+was the UAV's reference. A member leaving or joining is the network's native mode: it needs no new solver and no
+redistribution designed by hand. Table~\ref{tab:detach_ab} gives the comparison that decided the question. Tracking:
+with the network flying a circle the payload traced a circle 18\,\% too small and 0.68\,s late, most of it lost in a
+stiff position tracker that the network's own architecture does not have; a velocity loop in its place restored the
+radius at the cost of more tilt after the manoeuvre (5.4 against 1.4$^\circ$). Reconfiguration: Table~\ref{tab:detach_ab}.
+The reasons the planner was kept are three: with rigid rods the payload is held by geometry, which the network can only
+approximate; its damping acts on virtual nodes rather than on the payload; and it could not use the measured payload
+pose without destabilising itself.
+
+\begin{table}[h]
+\centering
+\small
+\caption{The planner's OCP resize against the network on the earlier plant (Gazebo and the software-in-the-loop
+bench).}
+\label{tab:detach_ab}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xcc}
+\toprule
+ & OCP resize & Network \\
+\midrule
+Detach, 4 to 3 on a circle, 0.4\,kg payload: settled payload tilt & about 1$^\circ$ & 26--48$^\circ$ \\
+\quad survivors' tracking error & about 1\,mm & 60--910\,mm \\
+Detach, 0.86\,kg ring, bench & survivors level within 0.5--2$^\circ$ & aborted at 53--61$^\circ$ \\
+Attach, 0.86\,kg ring, bench & weld peak about 10$^\circ$ & capsized within about 8\,s of every weld \\
+\bottomrule
+\end{tabularx}
+\end{table}

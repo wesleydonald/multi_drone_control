@@ -1,0 +1,25 @@
+\section{Results and Discussion}
+\label{sec:results}
+
+% No run ids in the text; they are in the LaTeX comments, configs/thesis_figures.yaml and docs/figures/PROVENANCE.md in
+% the code repository. 17 Oct (v3_full): ordered by question; the Chapter 4 skeletons merged; the network question is
+% history (Appendix F).
+
+Each section answers one question of Table~\ref{tab:rq_map}: it opens with the question, its baseline and its bar, and
+closes with the answer. Section~\ref{sec:res_carry} answers RQ1, the carry and its steady errors;
+Section~\ref{sec:res_leave} RQ2; and Section~\ref{sec:res_join} RQ3. Section~\ref{sec:ledger} keeps the ledger of what
+the twin predicted, and Section~\ref{sec:discussion} discusses the answers in the same order. Every result is the
+planner's; the network controller of the project plan's secondary question is recorded in
+Appendix~\ref{sec:app_network}.
+
+\input{Source/src/res_carry}
+
+\input{Source/src/res_steady}
+
+\input{Source/src/res_leave}
+
+\input{Source/src/res_join}
+
+\input{Source/src/ledger}
+
+\input{Source/src/discussion}

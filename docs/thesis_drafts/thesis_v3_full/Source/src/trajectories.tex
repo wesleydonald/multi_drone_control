@@ -1,0 +1,35 @@
+% trajectories.tex -- Methodology: payload trajectories and computation (draft 4 Oct 2026).
+% Definitions: mpc_planner/load_trajectory.py. Solve times measured from the planner logs
+% (solve_ms column): rig 1 Oct flights h5_z100_rot120, c1_z100, f8_z100 (three UAVs, laptop,
+% no Gazebo); Gazebo R0978/R0979 (three UAVs), R0931/R0935 (four UAVs), laptop at RTF ~0.3.
+% Restructured 9 Oct (structure audit): the computation results moved to Section 4.1.
+
+\subsubsection{Test references}
+\label{sec:trajectories}
+
+The payload reference is the lift schedule in height plus a horizontal offset from a trajectory, which
+starts once the lift has reached the target height and moves the whole formation, so the UAVs keep their
+places around the payload. The planner evaluates the trajectory at every horizon node, so the plan sees
+the next two seconds of the path, and $\mathbf{a}_L^{\mathrm{ref}}$ (Section~\ref{sec:controller}) is its
+analytic second derivative. Trajectories that start and end at rest use a smootherstep sweep of the path
+angle,
+\begin{equation}
+    \theta(t) = 2\pi\, s\!\left(\tfrac{t}{T}\right), \qquad s(u) = 6u^5 - 15u^4 + 10u^3, \quad u \in [0,1],
+\end{equation}
+whose first and second derivatives vanish at both ends, so the suspended payload takes no step in
+velocity or acceleration as a kick; $T$ makes the peak tangential speed equal the commanded speed $v$.
+\emph{Hover} holds the target height until LAND. \emph{Line} is a shuttle along $x$,
+$\Delta x = \tfrac{d}{2}\left(1 - \cos\tfrac{2vt}{d}\right)$, repeated until LAND. \emph{Circle} is one lap,
+$\Delta x = r\sin\theta$, $\Delta y = r(1-\cos\theta)$, $T = 1.875 \cdot 2\pi r / v$, from the lift point
+heading $+x$ back to rest there. \emph{Figure-eight} is one Gerono lemniscate, $\Delta x = a\sin\theta$,
+$\Delta y = \tfrac{a}{2}\sin 2\theta$, $T = 1.875 \cdot 2\pi a\sqrt{2} / v$ (the peak speed is at the
+crossing). \emph{Spin} is the circle with one full turn of the payload's yaw, synchronised with the path.
+\emph{Orbit} is the circle flown continuously at constant speed until LAND, keeping the payload moving for
+as long as a reconfiguration takes; its angular rate $v/r$ is reached through a 4\,s smootherstep ramp and
+the angle is its exact integral, so position, velocity and acceleration are continuous. The twin's carry
+claim flies the circle, figure-eight, line, orbit and spin with a radius of 0.5\,m (the figure-eight's $a = 0.5$\,m,
+a $1 \times 0.5$\,m path) and a 1\,m line, at peak path speeds of 0.125, 0.2 and 0.3\,m/s. A speed in this thesis
+is the peak path speed: the circle and the spin are one eased lap, whose mean speed is the peak divided by 1.875,
+and the line's speed is a sinusoid's peak. The rig flew the orbit of radius 0.5\,m at 0.125\,m/s (one lap in
+25\,s) and a figure-eight of $a = 1.0$\,m at a peak of 0.25\,m/s (67\,s, a $2 \times 1$\,m path), sized for the
+6\,$\times$\,6\,m flight area with the UAVs about 0.7\,m outside the payload's path.

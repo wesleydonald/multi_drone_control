@@ -1,0 +1,12 @@
+% lit_sim.tex -- Literature 2.6 (v3_50: condensed).
+
+\subsection{Simulation to reality}
+\label{sec:lit_sim}
+
+The most faithful simulation reviewed runs the platform's own estimator, controllers and motor firmware inside Gazebo
+\cite{distributedNMPC, koenig2004gazebo}; linearised rigid-rod models allow rapid iteration but miss the large attitudes
+of a transient \cite{DistributedMPC}. Simulators built for suspended loads report their fidelity per axis against
+hardware \cite{li2024rotortm, furrer2016rotors, cruz2017cable}. This thesis uses a Gazebo twin of the rig built from the
+rig's identified thrust map, geometry and masses, with an emulated flight controller, and adds two things to the usual
+practice: the twin's omissions are stated before the results, and the twin is to be scored as a predictor, each rig cell
+against a band frozen before it flies (Section~\ref{sec:ledger}).

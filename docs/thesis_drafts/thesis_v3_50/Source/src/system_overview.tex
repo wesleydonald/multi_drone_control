@@ -1,0 +1,73 @@
+% system_overview.tex -- Methodology 3.1: rig, twin and roles (rewritten 12 Oct 2026 to the thesis plan of
+% 11 Oct). The safety paragraph and its label sec:safety moved to authority.tex (3.5); the nodes figure is replaced
+% by fig:owners there. The twin's description moved here from simulation.tex with its label sec:simulation. T4 is the
+% 17 Oct: plates clockwise from +x, angle = 30 x plate (Wesley 14 Oct; docs/rig/plate_numbering.md); the 7 Oct
+% registry rows number plates anticlockwise (old p is (12 - p) mod 12 here).
+
+\subsection{Rig, twin and roles}
+\label{sec:overview}
+
+\subsubsection{The rig}
+\label{sec:hardware}
+
+All control runs on one ground computer under ROS~2 in a 6\,$\times$\,6\,$\times$\,4\,m motion-capture cage.
+Motion capture is the only sensing: it gives the pose of each UAV, of the ring and of the newcomer's magnet tip, and
+nothing on the ring is instrumented. Each UAV's flight controller runs Betaflight in rate mode and receives a throttle
+and three body-rate commands over its own ExpressLRS radio link at 100\,Hz; the arm switch and the magnet share the
+link. A centralised planner plans the ring and every rod at 10\,Hz (Section~\ref{sec:controller}), a tracking
+controller per UAV turns its share into radio commands at 50\,Hz (Section~\ref{sec:tracker}), and a fleet manager
+sequences ARM, TAKEOFF, the trajectory, LAND and the reconfiguration events.
+
+\paragraph{UAVs, rods and ring.} Four UAVs on six-cell batteries, each 0.55\,kg as flown with its rod and magnet. Each carries a rigid rod of 0.55\,m and 0.075\,kg with a ball joint at both
+ends; the upper joint sits 4\,cm below the UAV's centre. The ring is 0.86\,kg, 0.51\,m across and 40\,mm thick, with
+twelve magnet plates every 30$^\circ$ on its top face at a radius of 0.225\,m. Each rod ends in an electromagnet
+that catches on a plate only on contact, holds about 9--10\,N straight off the face and less under a pull across
+it, and releases under a jerk rather than under a steady load; [the hold against the angle of pull, to be measured
+with a spring scale at 0, 30, 45 and 60$^\circ$ off the plate's axis]. The magnets are held on from
+start-up so that a quiet radio link cannot drop the ring, and a magnet is switched off by a channel on its UAV's
+own link: that is how a release is commanded, and a release the planner is not told of is made the same way. The
+newcomer carries the same rod on a tether that goes slack on the rig once it is free of the ring; in the twin
+every link, that tether included, is rigid.
+
+\paragraph{Layouts and plate numbering.} A layout is named by the plates its UAVs stand on, counted clockwise
+from plate 0 on the ring's $+x$ axis seen from above, so that plate $k$ sits $30k$ degrees clockwise from $+x$
+(Figure~\ref{fig:geometry}); every plate number and angle in this thesis follows that rule. (The collaborator's
+code counts anticlockwise: his plate 3 is plate 9 here.) The carriers stand on plates 3, 7 and 11, and the fourth
+UAV, the one that leaves and rejoins, on plate 9; its departure leaves an even triangle
+(Section~\ref{sec:reconfig}).
+
+\input{Source/src/fig_geometry}
+
+\pendingfig{fig:rig_photo}{The rig: four UAVs on rods, the ring with its twelve magnet plates, the motion-capture
+markers and the newcomer's magnet tip, with a to-scale top and side view.}{a photograph of the rig, on the next rig day}
+
+\subsubsection{The rig twin}
+\label{sec:simulation}
+
+Every controller change is flown in simulation before it reaches the rig, with the same launch files and controller
+code. The simulator is Gazebo \cite{koenig2004gazebo}, bridged to ROS~2 \cite{macenski2022ros2}; the worlds are
+generated from the rig's measured geometry and masses, and each flight starts with the ring on the floor. A flight
+controller emulator maps the throttle to thrust through the rig's identified affine map, with each UAV's own offset
+and a sagging battery, and closes a rate loop on the simulated gyro; a motion-capture emulator publishes the poses at
+120\,Hz. The twin runs at 0.3--0.45 of real time under simulated time, and runs that fall further behind are voided.
+
+\paragraph{What the twin does not model.} The twin leaves out six things, each named where it matters. (i) Loop latency: the rig's
+command path carries about 50\,ms through the radio and 30\,ms through the flight controller, and the twin has only
+the latency its own bridges model; in an exploratory check, 15 and 30\,ms of command delay added in the twin left the carry at 0.3\,m/s
+as it was, and 45\,ms tipped a carrier at takeoff. (ii) Solver
+timing: in the twin the planner always finishes before its next tick, because simulated time waits for it; on the
+rig it has 60\,ms. (iii) Motion-capture noise: the twin's poses are exact. (iv) Rotor wake on the ring and on the
+other UAVs. (v) The slack tether: every link is rigid in the twin. (vi) The magnet's holding limit: a twin magnet
+never lets go unless commanded. Until the evening of 8 October the rig's body rates were rounded to 0.1\,rad/s on their way to the
+trackers; rig flights are labelled before or after that fix where it matters.
+
+\subsubsection{Roles}
+\label{sec:roles}
+
+Two controllers fly in this work, the same in the twin and on the rig. This work's planner and trackers carry the
+ring: the floor start, the carry, the detection of a release, the resize, the confirmation of an attach from motion
+capture, the switch of the newcomer's radio, the fold-in, the take-back and the fault policy. The collaborator's
+controller flies a free UAV: the pickup of an object, the transit, the drop into the ring, the descent onto a plate to
+contact, and the lift that the confirmation reads. Where this work's code runs inside the collaborator's stack it is
+listed as this work's, [made with the collaborator's written agreement; the wording to be agreed with him and the
+supervisor]; his thesis is cited as in preparation.

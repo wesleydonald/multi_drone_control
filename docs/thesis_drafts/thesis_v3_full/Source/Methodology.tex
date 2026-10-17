@@ -1,0 +1,36 @@
+\section{Methodology}
+\label{sec:method}
+
+% 3.1 rig, twin and roles; 3.2 model and planner; 3.3 tracker, thrust map, measured pull, model integral, takeoff and
+% landing; 3.4 reconfiguration; 3.5 authority and safety; 3.6 method and metrics (17 Oct: the clock-free carry ruler).
+
+This section describes the rig, its twin and who flies what (Section~\ref{sec:overview}); the model and the
+planner (Section~\ref{sec:model}); the tracker on each UAV, its thrust map, the measured rod pull, the model
+integral, and the procedures that take a flight from the floor into the regime the model covers and back
+(Section~\ref{sec:tracker}); the reconfiguration, in both directions (Section~\ref{sec:reconfig}); who owns each
+UAV and what keeps the fleet safe when a step fails (Section~\ref{sec:safety}); and the experimental method with
+the metrics every result is scored on (Section~\ref{sec:experiments}).
+
+\input{Source/src/system_overview}
+
+\input{Source/src/model}
+
+\input{Source/src/controller}
+
+\input{Source/src/takeoff_landing}
+
+\input{Source/src/reconfiguration}
+
+\input{Source/src/authority}
+
+\subsection{Method and metrics}
+\label{sec:experiments}
+
+Every result is flown against a named baseline, in the rig twin first and on the rig after it, under a rule
+written before the runs. The parameters of the twin and of the rig are listed in Appendix~\ref{sec:app_params}.
+
+\input{Source/src/simulation}
+
+\input{Source/src/trajectories}
+
+\input{Source/src/metrics}

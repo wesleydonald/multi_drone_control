@@ -1,0 +1,20 @@
+% lit_execution.tex -- Literature 2.5 (v3_50: condensed).
+
+\subsection{Execution layer and force estimation}
+\label{sec:lit_execution}
+
+In cooperative transport the execution layer between a planner's references and each vehicle's motors has one job
+the single-vehicle case does not: the link's pull. In Sun et al.\ \cite{tudelft} an onboard INDI controller
+\cite{smeur2016indi} compensates the cable force from the vehicle's own accelerometer; estimating the force is the other
+route \cite{klausen2020cooperative, tagliabue2019robust}, and shared loads have been flown with the execution onboard
+each rotorcraft \cite{demarina2019flexible, bulka2022experiments}. Each needs code on the vehicle. The vehicles of this
+thesis run unmodified Betaflight, which closes a body-rate loop and accepts a throttle and three rate commands over a
+radio link, so the execution layer is a tracking MPC per vehicle on the ground, with the rod's pull entering its model
+as a known input: from the planner's tensions, or measured from the vehicle's motion-capture acceleration minus its
+modelled thrust (Section~\ref{sec:tracker}). What the measured pull buys is the first research question.
+
+\paragraph{Steady-error rejection.} Offset-free MPC removes the steady error of a constant disturbance by adding it to
+the prediction model and estimating it from the measurements \cite{muske2002disturbance, pannocchia2003disturbance,
+maeder2009linear}; by the internal model principle \cite{francis1976internal} a constant is then rejected, and whether
+it is modelled at the input or the output changes the transient, not the steady state \cite{pannocchia2007combined}.
+Section~\ref{sec:disturbance} builds the planner's integral action on this.

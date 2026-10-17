@@ -1,0 +1,39 @@
+% authority.tex -- Methodology 3.5: authority and safety as runtime assurance (drafted 12 Oct 2026 from the thesis
+% plan of 11 Oct). The safety paragraph moved here from system_overview.tex (its label sec:safety comes with it);
+% fig:owners (F5) replaces the old nodes and cascade figures. The rig switch states in brackets follow plan D6 and
+% the M1 plan's D6(a)/(b): they are set per lab day and are not results.
+
+\subsection{Authority and safety}
+\label{sec:safety}
+
+Every UAV in the air has exactly one controller sending it commands at every instant, and every phase has a way
+down that ends with the UAV disarmed on the floor (Figure~\ref{fig:owners}, Appendix~\ref{sec:app_method}). The planner owns the ring; a tracker owns
+its UAV's radio link; a UAV off the ring is owned by its own tracker or by the collaborator's controller, and the
+multiplexer in front of the newcomer's radio is the one place where ownership changes hands, latched at the
+confirmation. The operator holds a disarm button that overrides everything.
+
+
+
+\paragraph{The envelope and the fall-backs.} Every tracker checks its own UAV against a flight envelope (UAV and
+ring tilt 60$^\circ$, speed 3\,m/s) and checks that its motion-capture pose (0.25\,s) and the planner's reference
+(1\,s) are fresh. A violation on a carrier disarms the whole fleet: one UAV losing thrust on a shared rigid payload drags
+the others with it, and in a 6\,$\times$\,6\,$\times$\,4\,m cage a falling ring is a short fall onto a padded floor,
+where an armed UAV flying on a wrong reference is not; there is no geofence. The planner and the admission chain are
+the high-performance controllers of a Simplex-style arrangement (Section~\ref{sec:lit_switching}), and each fall-back
+is simple, has its own monitor and ends with every UAV owned and down: the \textbf{take-back} of a newcomer whose catch
+is not confirmed; the \textbf{tilt cut} of a newcomer tilting while it is not carrying the ring; \textbf{LAND}, which
+lands every UAV whatever it is doing; \textbf{landing the fleet on a newcomer fault}, with the newcomer disarmed alone;
+the \textbf{drop rule}, which releases every magnet and lands every UAV when a loss leaves fewer than three carriers or
+the ring tilts past 30$^\circ$, on in every mode since 14 October and fired on the rig on 15 October
+(Section~\ref{sec:res_drop}); and the \textbf{freed UAV disarmed alone} at its rest.
+
+\paragraph{What is tested where.} ``A tested way down in every phase'' holds in the twin, where every fall-back
+above has been flown from the phase it guards, the attach phases on the earlier attach sequence
+(Appendix~\ref{sec:app_faults}). On the rig it holds only for the
+exits flown there. The drop rule has fired on the rig, after an uncommanded magnet release in a hover, and every
+carrier then landed by itself and was disarmed alone; LAND and the take-back have also flown there; the tilt cut and the flight controller's own
+disarm-to-land stay off on the rig until each has passed its review, so until then a take-back that sticks ends in
+the operator's disarm. When a ring drop comes while the collaborator's controller flies the newcomer, the rig takes
+the newcomer back and lands it (twin-tested), and the operator can ask the collaborator's planner to land it straight
+down. Redistribution after a release has flown on the rig; the policy for a true fault on a carrier stays the fleet
+stop and the drop rule.

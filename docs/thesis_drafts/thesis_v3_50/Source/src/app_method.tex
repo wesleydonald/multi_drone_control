@@ -1,0 +1,259 @@
+\section{Method details}
+\label{sec:app_method}
+
+This appendix holds the detail of Section~\ref{sec:method} that the main text summarises.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[>=Stealth, font=\small,
+    blk/.style={draw, thick, rounded corners=2pt, align=center, minimum height=0.85cm, font=\small},
+    ours/.style={blk, fill=blue!6, draw=blue!50!black},
+    his/.style={blk, fill=orange!10, draw=orange!60!black},
+    fc/.style={blk, fill=gray!12, draw=gray!60},
+    lab/.style={font=\scriptsize, align=center}]
+  \node[blk]  (op)   at (5.6,1.7)   {Operator\\ \scriptsize disarm button};
+  \node[ours] (fm)   at (5.6,0)     {Fleet manager\\ \scriptsize phases, faults, LAND};
+  \node[ours] (plan) at (0,0)       {Load--rod planner\\ \scriptsize 10\,Hz; owns the ring};
+  \node[ours] (trk)  at (0,-2.5)    {Tracker $i$ (carrier)\\ \scriptsize 50\,Hz; owns UAV $i$};
+  \node[ours] (trkn) at (5.6,-2.5)  {Tracker (newcomer)\\ \scriptsize from the attach, or take-back};
+  \node[his]  (tej)  at (11.3,-2.5) {Collaborator's controller\\ \scriptsize pickup, transit, drop,\\ \scriptsize descent to contact, lift};
+  \node[ours] (mux)  at (5.6,-4.6)  {Mux\\ \scriptsize one owner, latched};
+  \node[fc]   (bf)   at (0,-4.6)    {Flight controller $i$\\ \scriptsize Betaflight rate loop, magnet};
+  \node[fc]   (bfn)  at (5.6,-6.3)  {Flight controller (newcomer)\\ \scriptsize Betaflight rate loop, magnet};
+  \draw[->, thick] (op) -- node[lab, right] {commands} (fm);
+  \draw[->, thick] (fm) -- node[lab, above] {phase} (plan);
+  \draw[->, thick] (plan) -- node[lab, left] {reference,\\ rod pull} (trk);
+  \draw[->, thick] (plan.south east) -- node[lab, sloped, above, pos=0.55] {once folded in} (trkn.north west);
+  \draw[->, thick] (trk) -- node[lab, left] {throttle, rates,\\ arm, magnet} (bf);
+  \draw[->, thick] (trkn) -- (mux);
+  \draw[->, thick] (tej.south) -- ++(0,-1.25) -- node[lab, above] {until the attach} (mux.east);
+  \draw[->, thick] (mux) -- node[lab, right] {one command stream} (bfn);
+  \draw[->, thick, dashed] (trk) -- node[lab, above] {fault} (trkn);
+  \draw[->, thick, dashed] (fm) -- node[lab, right] {LAND, drop, disarm} (trkn);
+  \draw[->, thick, dashed] (fm.north west) -- ++(0,0.5) -| node[lab, pos=0.25, above] {arm, disarm, LAND} ([xshift=-0.5cm]plan.north west) |- (trk.west);
+  \draw[<->, thick, dotted] (fm.east) -| node[lab, pos=0.25, above] {attach confirmed, give-up} (tej.north);
+\end{tikzpicture}
+\caption[The cascade and its owners]{The cascade and its owners. Blue: this work; orange: the collaborator's
+controller; grey: the unmodified flight controllers. The planner owns the ring and the carriers' references; each
+tracker owns one UAV's radio link; the newcomer's link is owned by the collaborator's controller until the attach
+is confirmed and by this work's tracker from that tick, through a multiplexer that latches. Dashed: faults and the
+fleet manager's commands; dotted: the confirmation and the give-up exchanged with the collaborator's stack. The
+operator's disarm overrides everything.}
+\label{fig:owners}
+\end{figure}
+
+\subsection{The tracker's problem and the model integral in detail}
+\label{sec:app_integral}
+
+The tracker solves, every 20\,ms,
+\begin{equation}
+\begin{aligned}
+    \min \quad & \sum_{k=0}^{N_h-1} \big\| \mathbf{h}(\mathbf{x}_k, \mathbf{u}_k) - \mathbf{h}_k^{\mathrm{ref}} \big\|_{Q}^{2} + \big\| \mathbf{h}_{N_h}(\mathbf{x}_{N_h}) - \mathbf{h}_{N_h}^{\mathrm{ref}} \big\|_{Q_{N_h}}^{2} \\
+    \text{s.t.} \quad & \mathbf{x}_{k+1} = \mathbf{F}_i(\mathbf{x}_k, \mathbf{u}_k; \mathbf{a}_{c,i,k}), \qquad \mathbf{x}_0 = \hat{\mathbf{x}}_i(t), \\
+    & 0.05 \le u_{T,k} \le u_{T,\max}, \quad |c_{\phi,k}|, |c_{\theta,k}|, |c_{\psi,k}| \le 1, \quad |\mathbf{u}_k| \le \overline{\mathbf{u}},
+\end{aligned}
+\label{eq:trk_ocp}
+\end{equation}
+with $\mathbf{h} = [\mathbf{p}, \mathbf{v}, \boldsymbol{\omega}, \mathbf{c}, \mathbf{u}, \mathbf{e}_R]$, the
+attitude reference being the direction of the planned thrust \eqref{eq:thrust_req}. The stick states
+are normalised to $[-1, 1]$, and $\overline{\mathbf{u}}$ limits how fast each may change (throttle
+0.5\,s$^{-1}$). Only the first command of each solution is sent.
+
+
+
+
+\paragraph{Properties.} At an equilibrium with the gate open ($G = I$) and no component of $\mathbf{b}$
+saturated, $\mathbf{b}_{k+1} = \mathbf{b}_k$ gives $\mathbf{e} = \mathbf{0}$, whatever the constant cause:
+by the internal model principle \cite{francis1976internal}, the integrator is the model of a constant.
+This assumes stability; it does not give it. Approximating the cascade's response to $\mathbf{d}$ by a
+first-order lag with time constant $\tau$, each axis becomes
+\begin{equation}
+    \tau s^2 + s + k_i = 0, \qquad \zeta = \frac{1}{2\sqrt{k_i \tau}},
+\end{equation}
+so a faster integral costs damping, and delays through the planner and the radio link reduce the margin
+further. Let an unmodelled constant force
+$\mathbf{F}$ act on the payload and let the cascade, of actual stiffness $K_c$, be quasi-static (fast
+compared with the integral). The plan cancels the force it believes in, so the payload settles at
+$\mathbf{e} = -K_c^{-1}(\mathbf{F} - \mathbf{d}) = -K_c^{-1}(\mathbf{F} + K\mathbf{b})$, and in continuous time
+\begin{equation}
+    \dot{\mathbf{b}} = k_i\,\mathbf{e} = -k_i K_c^{-1}\big(K\mathbf{b} + \mathbf{F}\big)
+    \quad\Rightarrow\quad \mathbf{b} \to -K^{-1}\mathbf{F}, \qquad \mathbf{d} \to \mathbf{F},
+\end{equation}
+a first-order convergence at the rate $k_i K K_c^{-1}$ on each axis, with time constant $1/k_i = 2.5$\,s when
+$K = K_c$. The believed force converges to the applied one whatever $K$ is: $K$ sets only the speed, and
+too large a $K$ costs damping as too large a $k_i$ does. When the force is removed, $\mathbf{b}$ still holds
+$-K^{-1}\mathbf{F}$, so the payload overshoots by $K_c^{-1}\mathbf{F}$, the displacement the force caused at
+onset, and the overshoot decays at the same rate. This analysis assumes that the force reaches the payload's
+position error. With the measured rod pull (Section~\ref{sec:tracker}) a constant vertical force is taken up at
+each UAV within about a second, before the integral can act, so in the twin the integral is left with the
+horizontal axes (Section~\ref{sec:res_force}).
+
+\paragraph{Reference-shift form.} An earlier version added the height integral to the payload's height
+target instead, $z_L^{\mathrm{ref}} \leftarrow z_L^{\mathrm{ref}} + b_z$. Both forms reach the same steady
+state; in offset-free MPC they are output and input disturbance models, which differ in the transient, not
+in the steady state \cite{pannocchia2007combined}. The model form keeps the target fixed, so its plan
+predicts a payload held at the target, which is what happens; the reference-shift form plans a move towards
+a shifted target that never comes. The model form also extends to the horizontal axes, and it is the
+default everywhere, a resizing fleet included (the integral's force is kept through the resize). The
+reference-shift form, on the height only, flies where the model form cannot, and flew on the rig on 1 and
+8 October ($k_i = 0.4$\,s$^{-1}$); the 7 October carry flights flew the model form.
+% Model integral through a resize since 8 Oct (896aff2; bringup real_mode.planner_options).
+% STATUS 5 Oct 2026: int_mode auto (model where allowed, else reference): reference with kt_trim on,
+% a resizing fleet, z_ki 0, offset_free on or dist_est ring/full (bringup real_mode.planner_options).
+
+\paragraph{Bound and limits.} $\bar{b} = 0.3$\,m bounds the force the integral can supply to $K\bar{b}$
+(2.1\,N vertically), enough for an unmodelled 0.1\,kg object. A larger error is a fault, not a disturbance,
+and a warning at 70\,\% of the bound reports it rather than covering it silently; the bound and the warning are
+also what stop an integral that winds up without effect, as the vertical integral does on a wrong attachment
+radius in the twin (Section~\ref{sec:sim_robustness}). A force on the payload cannot represent a moment: one UAV's
+thrust-map error is a moment on the ring, which that UAV's own tracker takes up through its measured pull. A miss
+larger than the gate is never integrated. The integral is also slow ($1/k_i = 2.5$\,s): it removes constant and
+slowly varying forces, not impacts or gusts. Five other ways to remove a steady error were built and flown on the
+earlier stack (a force balance \cite{muske2002disturbance}, an offset-free observer
+\cite{pannocchia2003disturbance}, the measured cable force, a per-UAV thrust-gain trim, and the rods' mass in the
+planner); Appendix~\ref{sec:app_methods} records them, and the measured cable force became the trackers' measured
+pull.
+
+\subsection{Reconfiguration: the ramp, the seed, the fall-backs and the constants}
+\label{sec:app_reconfig}
+
+\paragraph{The ramp and the seed.} Where the planner is told of a change it can shape the step. For a ramped
+release the leaver's planned tension is run down and the survivors' run up over a short ramp before the magnet is
+released, in place of a step at the resize tick; the first version of the ramp, which ran the leaver's tension
+down but let the survivors' step, is the negative that defined it. For a join the newcomer is seeded at 0.1\,N and
+every tension is blended to the balanced solution for the new geometry, as a dock blends thrust across its
+controller switch \cite{sugihara2023trady}: on the earlier plant a newcomer started at a full share pulled the ring
+with a lever about the incumbents' rod apex and tilted it at the weld (Appendix~\ref{sec:app_proximity_weld}).
+
+
+
+\paragraph{The freed UAV.} After a release the freed UAV steps 0.5\,m out radially at its height, clear of the ring
+and the survivors, and lands by itself while the survivors carry on: its height reference is pressed below its own
+resting height until it is there, and it is then disarmed alone, without waiting for the fleet
+(Section~\ref{sec:res_freed}). Touchdown for the fleet is judged on the survivors only, so a freed UAV still
+descending elsewhere does not hold their references down, and the fleet is declared landed only when it is down
+too; the rod feedforward is switched off once the ring rests, because its sideways component pushes a grounded
+survivor across the floor.
+
+\paragraph{The take-back.} A newcomer whose contact is not confirmed within its timeout, or whose controller gives
+up, is taken back: this work's tracker latches onto its measured position and velocity, ramps its reference at
+0.25\,m/s$^2$ so that the latch makes no step, lifts it clear of the rim and the carriers, moves it out and lands it
+by itself. On the circle the hold moves with the ring in the ring's planned frame, so that an orbiting formation
+cannot sweep a carrier into the newcomer's rod; where the newcomer is low and far out, it lands where it stops. On
+the rig the take-back first rises only 5\,cm above the tether's slack and waits for the tip to leave the plate, so
+that a magnet that has caught after all is not torn off; if the plate rises instead, the magnet is switched off
+again and the fleet lands. The tilt cut, the drop rule and LAND are the exits of Section~\ref{sec:safety}.
+
+\paragraph{The rejoin mission.} The full mission is assembled with the collaborator's mission planner. Four UAVs
+carry the ring in hover or round the circle; the one on plate 9 is released and flies the collaborator's errand
+(picking up an object with its magnet and dropping it into the ring) and comes back to its plate; it is admitted
+under the contract above, folded in, and the fleet lands. On the rig the collaborator's controller does every
+attach down to contact, since the magnet catches only on the plate; this work's own approach, which steered the
+measured magnet tip and welded on proximity, flies in the twin only (Appendix~\ref{sec:app_proximity_weld}).
+
+
+\begin{table}[htbp]
+\centering
+\small
+\caption[Reconfiguration constants and their reasons]{The constants of the reconfiguration and the reason for each
+value: a noise floor times a factor, or a physical bound. [Bracketed reasons wait for the offline sweeps over the rig
+recordings.]}
+\label{tab:constants}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}X}
+\toprule
+Constant & Value & Reason \\
+\midrule
+Rod stretch for an unannounced leave & 0.06\,m, two ticks & A rod on its plate cannot read longer than itself; the
+threshold sits above the scatter of a rod length measured from motion capture, and two ticks reject a single bad
+pose. [False alarms over the rig recordings and delay against threshold from the rig releases.] \\
+Contact & catch radius 24\,mm (rig); face $-15$ to $+12$\,mm; under 0.03\,m/s for 0.3\,s & The magnet catches only on
+the plate: the tip must be over the plate's face and at it, and still for 36 motion-capture samples, which excludes a
+pass over the plate. \\
+Confirmation, 1.0\,s after the lift & tip within 6\,mm of its contact point; plate range 5\,mm or rise 3\,mm; taut
+within 3\,mm & A caught tip moves with the plate and a missed one is left behind by it; the free hang is measured on
+each flight, so the taut check reads this flight's tether. \\
+Confirmation fails & 45\,mm for 0.12\,s; any data gap over 0.1\,s restarts & A tip that leaves the plate has not
+caught; no hold is judged across missing poses. \\
+Newcomer's seed tension & 0.1\,N & Small against the newcomer's balanced share (1.6\,N on plate 9 of the carry
+layout), so the fold-in's blend and not the weld sets the step. \\
+Step-out after a release & 0.5\,m radially & Clears the rim (0.255\,m) and the survivors' rods from the leaver's
+plate. \\
+Take-back ramp & 0.25\,m/s$^2$ & A quasi-static tilt of 1.5$^\circ$ on the newcomer, under the 2$^\circ$ bar on its
+attitude step, and it stops 0.34\,m/s in 1.4\,s. \\
+Take-back clearances & 0.15\,m over the carriers; 0.3\,m under the ring; 0.9\,m from the ring's centre & The
+newcomer's body and rod stay a rotor disc clear of the carriers; a low newcomer lands where it is rather than
+rising through the formation. \\
+Ring tilt that drops the ring & 30$^\circ$ & Beyond the planner's near-level model and about where a rod's pull turns
+across its plate; where the controller gives up, not a value to design to (Section~\ref{sec:safety}). \\
+Fewest carriers & 3 & Two rim points make the ring a pendulum about the line between them. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Metrics in full}
+\label{sec:app_metrics}
+
+\begin{description}
+\item[Release metrics] For a UAV leaving the team, frozen on 11 October before the first flight they
+    score; one rule for the twin and the rig. The ring's tilt is kept as a vector: with $\mathbf{n}$ the ring's
+    body $z$ axis in the world frame, the tilt angle is $\arctan\!\big(\sqrt{n_x^2+n_y^2}\,/\,n_z\big)$ and
+    the tilt vector $\boldsymbol{\theta}$ is that angle along the horizontal direction of $\mathbf{n}$, so that
+    $|\boldsymbol{\theta}|$ is the scalar tilt above. The event time $t_e$ is the DETACH command for an announced
+    release, the magnet's OFF for an unannounced one (the runner's RELEASE in the twin, the first magnet OFF in
+    the rig's bag), and the first planner tick at which the leaver's planned tension falls for a ramped release;
+    LAND is the LAND command. Over the pre-window $[t_e-5\,\mathrm{s},\,t_e)$ the mean
+    $\bar{\boldsymbol{\theta}}_{\mathrm{pre}}$ and the spread
+    $\sigma_{\mathrm{pre}}=\sqrt{\overline{|\boldsymbol{\theta}-\bar{\boldsymbol{\theta}}_{\mathrm{pre}}|^2}}$
+    are taken. A row whose ring reference was not still for the 5\,s before the event (its height within
+    5\,mm of its value at $t_e$ and its speed within 0.02\,m/s of its median over the last 2\,s) is flagged and
+    still reported. \textbf{Tilt rise} $\Delta\theta$, the primary metric, is the maximum of
+    $|\boldsymbol{\theta}(t)-\bar{\boldsymbol{\theta}}_{\mathrm{pre}}|$ over $[t_e,\,\mathrm{LAND}]$; when two
+    runs are compared both are cut at the shorter hold, each 8 October pair at the rig flight's event-to-LAND,
+    and the ledger's bands and the flights they score at $t_e+15$\,s. Beside it: the absolute peak,
+    $\max|\boldsymbol{\theta}|$ over the same window, and the scalar rise, the absolute peak minus the mean of
+    $|\boldsymbol{\theta}|$ over the pre-window. The 30$^\circ$ drop rule and the join bars stay on the
+    absolute tilt. \textbf{Time back in band:} with $\bar{\boldsymbol{\theta}}_{\mathrm{post}}$ the mean over
+    the last 5\,s before LAND, scored only when LAND comes at least 10\,s after $t_e$, and the half-width
+    $b=\max(2\sigma_{\mathrm{pre}},\,0.5^\circ)$, it is the earliest $t$ at or after the time of $\Delta\theta$
+    such that $|\boldsymbol{\theta}-\bar{\boldsymbol{\theta}}_{\mathrm{post}}|\le b$ for every sample in
+    $[t,\,t+1\,\mathrm{s}]$, reported as $t-t_e$, or ``not back''. The dip (the largest drop of the ring's
+    height below its pre-event mean), the detection time (from the magnet's OFF to the planner's resize), the
+    steady offset, the landing lean, the clearances and the survivors' shares keep their scorers and are not
+    part of the freeze.
+    \item[Join metrics] For a newcomer admitted to the ring: the time from the last contact to the confirmation; the ring's
+    tilt rise, on the release metric above with the contact as the event, from the contact to 8\,s after the
+    confirmation; the ring dip over the same window; the hand-over step, the change in the newcomer's applied
+    throttle, roll, pitch and yaw-rate commands between the 0.1\,s before the switch of authority and the 0.3\,s
+    after it, as a fraction of its hover throttle and in degrees; the newcomer's tilt at the confirmation; and the
+    clearances of the newcomer's body and rod to every carrier body and rod through its approach and, when it is
+    taken back, through its take-back. For the full mission, also the tilt at the release, the mean tilt over the
+    circle and the time from TAKEOFF to every UAV landed.
+    \item[Magnet margin] For a release, the survivors' peak measured rod pull and the rate at which it rises,
+    against the magnet's hold at that rod angle (Section~\ref{sec:hardware}); the one metric that says how close a
+    transient came to letting a second magnet go.
+    \item[Switch validation] For every resize, the planner's solver status and residual at the first live solve
+    after the switch, the distance of that solve from an offline solve of the same logged problem run to
+    convergence (not computed so far: the planner keeps a problem only when its solve fails), the solve time against the 60\,ms budget on the rig, and the step in each survivor's commanded
+    throttle across the switch.
+    \item[Solver health] The number of planner solves that failed or did not converge.
+\end{description}
+
+Every arm of a lever table and every ledger row is labelled a \emph{replication} when both arms of a twin pair, or the
+rig flight of a ledger row, were flown and registered before the rule was signed on 11 October, and a \emph{new
+prediction} otherwise; the label is set at the signature and never changes.
+
+\paragraph{Why these bars.} Three physical limits say what a transient may do to the ring, and the bars of the
+results sections sit inside them. The first is the magnets. A plate holds its magnet straight off the face by
+about 9--10\,N and by less under shear, so a tilt that turns a rod's pull across its plate can let a magnet go:
+every ring lost on the rig began with a magnet letting go with no command, two with the rods planned at
+45$^\circ$ and two since the rods have been planned at 60$^\circ$ to keep each pull closer to its plate's axis
+(Section~\ref{sec:res_leave}). [The hold against the angle of pull, still to be measured with a spring scale,
+gives this limit its number.] The second is the fleet's own rule:
+a ring tilt over 30$^\circ$, or a loss that leaves fewer than three carriers, drops the ring and lands every UAV
+(Section~\ref{sec:safety}), so
+30$^\circ$ is where the controller gives up, not a value to design to. The third is the model: the planner's
+load--rod model and each tracker's rod pull assume a near-level ring, so a transient that stays within a few
+degrees stays inside the regime the plan was computed for, and a transient that leaves it is being flown on a
+plan that no longer describes the ring. The bars are therefore stated as a rise above the ring's own motion
+before the event, small against the first two limits and inside the third, and every run is reported with its
+measured rise so that a run that misses a bar is still read against the limits rather than against a number.

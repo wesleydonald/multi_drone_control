@@ -1,0 +1,32 @@
+% lit_execution.tex -- Literature 2.5: the execution layer and force estimation (drafted 12 Oct 2026 from the
+% thesis plan of 11 Oct; the steady-error paragraph is from control.tex). Entries the plan lists that are not yet in
+% the bibliography were added 12 Oct (Tagliabue 2019, de Marina and Smeur 2019, Bulka 2022).
+
+\subsection{Execution layer and force estimation}
+\label{sec:lit_execution}
+
+An execution layer sits between a planner's references and each vehicle's actuation, and in cooperative transport
+it has one job the single-vehicle case does not: the link's pull. In Sun et al.\ \cite{tudelft} an onboard INDI
+controller \cite{smeur2016indi} turns the planned trajectories into motor commands and compensates the cable force
+from the vehicle's own accelerometer, without a model of the cable: centralised planning paired with robust
+local execution, the fast dynamics handled onboard and the slow coordination centrally. Estimating the link's
+force rather than measuring it is the other route: an adaptive estimate of an unknown load in a decentralised
+passivity-based scheme \cite{klausen2020cooperative}, or a model-based observer of the external wrench
+\cite{tagliabue2019robust}; de Marina and Smeur \cite{demarina2019flexible} and Bulka et al.\ \cite{bulka2022experiments} fly a shared load with the execution onboard each rotorcraft. Each of these needs code on the vehicle.
+
+The vehicles of this thesis run unmodified Betaflight, a hobby flight controller that closes a body-rate loop and
+accepts a collective throttle and three rate commands over a radio link, as a pilot would send them. Nothing can
+be added onboard, so the execution layer is a tracking MPC per vehicle on the ground, with the rod's pull entering
+its model as a known input along the horizon: from the planner's own tensions, or measured from the vehicle's
+motion-capture acceleration minus its modelled thrust (Section~\ref{sec:tracker}). What the measured pull buys
+over the planned one on this hardware is the first research question (Section~\ref{sec:rq}).
+
+\paragraph{Steady-error rejection.} Without an integrating element, a constant disturbance or a model error
+leaves a steady error in what the planner controls. Offset-free MPC removes it by adding a constant disturbance
+to the prediction model and estimating it from the measurements \cite{muske2002disturbance,
+pannocchia2003disturbance, maeder2009linear}; by the internal model principle \cite{francis1976internal} a
+constant disturbance is then rejected with no steady error. The disturbance can be modelled at the input or at
+the output, which changes the transient and not the steady state \cite{pannocchia2007combined}.
+Section~\ref{sec:disturbance} builds the planner's integral action on this, as a force on the payload in the
+planner's own model, and Appendix~\ref{sec:app_methods} records the estimators that were built and flown against
+it.

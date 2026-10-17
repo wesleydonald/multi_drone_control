@@ -1,0 +1,43 @@
+% takeoff_landing.tex -- Methodology: takeoff from the floor, lift and landing (draft 4 Oct 2026).
+% Code: mpc_planner/creep_controller.py (arc creep, hand-over latch), planner_node.py (pretension,
+% breakaway, ff_cap_release_s, lift ramp, LAND, TouchdownDetector), bringup/config/*.yaml.
+% Evidence: 23 Sep rig non-lift (start_taut), 30 Sep rig review, R0817/R0818, R0834-R0839 (B2),
+% R0807-R0816 (hand-over angle in the twin), RIG-1001-* (hand-over and rods on the rig).
+% Condensed 12 Oct 2026 to the plan's half page; the detail is Appendix C "Floor start and landing in detail".
+% Restructured 9 Oct (structure audit): the outcomes (the hand-over angle flown, fig:flight) moved to
+% Section 4.1.
+
+\subsubsection{Takeoff, lift and landing}
+\label{sec:takeoff}
+
+The planner assumes taut rods, but every flight starts and ends with the ring on the floor and the rods slack or
+flat, where the UAVs sit about 0.7\,m from the ring's centre, outside the cone the planner's references put them
+on; started from rest, the planner pulled the UAVs inwards over the ring instead of lifting it, the cause of the
+first failed lifts on the rig. Four steps take a flight from the floor into the regime the planner models, and three
+measures take it back; Appendix~\ref{sec:app_floor} gives each with its numbers and the failure it answers.
+\begin{itemize}
+    \item \textbf{Rod sweep.} On TAKEOFF each UAV is anchored where it rests and its rod is swept about its own
+    attachment point from its measured elevation to the planned one (60$^\circ$ since 7 October), the UAV's
+    reference riding the far end of the rod, so that the rod stays straight and the UAV never crosses over the
+    ring. The planner takes over once every rod has held within 8$^\circ$ of the planned elevation for 1\,s, and
+    measures each rod's length from motion capture at that hand-over for its model and its tautness gate.
+    \item \textbf{Pretension and breakaway.} Every UAV's share of the planned pull then rises together from zero
+    over 3\,s with the ring's height target at its resting height; a step here launched the ring and released two
+    magnets on the rig. When the ring rises 1\,cm or faster than 0.03\,m/s it has broken free, and the fraction of
+    the planned pull reached at that moment is frozen as a cap on the trackers' feedforward, released back to the
+    full pull over 2\,s once the lift starts.
+    \item \textbf{Lift.} The height target ramps to the target height at 0.1\,m/s, eased in and out, and the
+    trajectory starts when the ramp completes.
+    \item \textbf{Landing.} On LAND the ring's height target descends at 0.2\,m/s with the formation unchanged
+    until the ring rests. A rigid rod then pushes a UAV descending straight down outward as the rod lengthens
+    horizontally, which tipped UAVs over in the twin, so each UAV's reference unwinds along its rod's circle about
+    the grounded attachment point before it descends (twin only: the rig's tethers go slack and it lands straight
+    down); the planner blends each UAV's thrust and rod feedforward to plain hover over 1\,s instead of dropping
+    the rod term at touchdown; and a UAV back at its resting height with the ring down idles armed until the fleet
+    disarms, so that a UAV that lands first does not track a reference below the floor. Touchdown is declared when
+    the UAVs stop following the descending reference for 1\,s after at least 5\,cm of descent, and the fleet
+    manager disarms the fleet. In the twin this stall test is re-armed when the ring touches down, so that the
+    second in which the UAVs blend from carrying to free hover cannot read as a stall: without the re-arm a
+    landing could disarm the fleet with the UAVs 0.4--0.5\,m up (Section~\ref{sec:sim_landing}). On the rig the
+    re-arm waits for a review of its pose-freshness check.
+\end{itemize}

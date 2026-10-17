@@ -1,0 +1,100 @@
+\documentclass[12pt]{article}
+% Paragraphs: no indent and a visible blank space between them (Wesley, 10 Oct). The parskip package
+% sets both and keeps lists and headings consistent with the gap.
+\usepackage[skip=12pt plus 2pt minus 1pt]{parskip}
+\usepackage[a4paper, margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{pgfgantt}
+\usepackage{booktabs}
+\usepackage{mathtools}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{tabularx}
+\usepackage[normalem]{ulem}   % normalem: keep \emph italic (ulem alone underlines it)
+\usepackage{titlesec}
+\usepackage{siunitx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{nomencl}
+\definecolor{darkblue}{rgb}{0.0,0.0,0.55}
+% Placeholder boxes (pendingfig) share these colours.
+\definecolor{redoframe}{rgb}{0.80,0.40,0.00}
+\definecolor{redoback}{rgb}{1.00,0.95,0.85}
+% \pendingfig{label}{caption}{run that fills it}: a figure whose data is not flown yet. The caption and
+% label are final, so the text can cite it now; the box says which run fills it.
+\newcommand{\pendingfig}[3]{%
+  \begin{figure}[htbp]
+  \centering
+  \fcolorbox{redoframe}{redoback}{\parbox[c][0.32\textwidth][c]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{%
+    \centering\small\textbf{Pending:} #3}}%
+  \caption{#2}\label{#1}
+  \end{figure}}
+\usepackage{amsfonts}
+\usepackage{tikz}
+\usetikzlibrary{angles, quotes, decorations.pathreplacing, shapes.geometric, arrows.meta, positioning, backgrounds, fit}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage[backend=biber,style=ieee]{biblatex}
+\addbibresource{references.bib}
+\addbibresource{references_extra.bib}
+\usepackage{url}
+\usepackage{microtype}
+\setlength{\emergencystretch}{5em}
+\tolerance=2000
+\hbadness=2000
+\usepackage[colorlinks=true,
+            linkcolor=darkblue,
+            urlcolor=darkblue,
+            citecolor=blue,
+            pdfborder={0 0 0}]{hyperref}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{enumitem}
+\setlist[itemize]{itemsep=-4pt}
+\setlist[enumerate]{itemsep=-4pt}
+% Float placement (9 Oct, page trim): let a large figure share a page with text instead of sitting
+% alone, half empty, on a float page.
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.8}
+\setcounter{topnumber}{3}
+\setcounter{totalnumber}{4}
+
+\newcolumntype{Y}{>{\centering\arraybackslash}X}   % a centred wrapping column (Chapter 4 tables)
+\makenomenclature
+\renewcommand{\nompreamble}{(The nomenclature must respect the following order: latin symbols, Greek symbols, acronyms. Within each category of symbols, follow alphabetic order. An example is provided below)}
+
+\begin{document}
+
+\input{Source/title_page}
+
+\input{Source/src/intro}
+\input{Source/src/contributions}
+
+\input{Source/Literature_review}
+
+\newpage
+\input{Source/Methodology}
+
+\newpage
+\input{Source/Results_and_Discussion}
+
+\newpage
+\input{Source/Conclusion}
+
+\newpage
+
+\allowbreak
+
+\DeclareFieldFormat{title}{\sloppy#1\par}
+\DeclareFieldFormat{booktitle}{\sloppy#1\par} 
+
+\phantomsection
+\addcontentsline{toc}{section}{References}
+\printbibliography[title={References}]
+
+\newpage
+\input{Source/Appendices}
+
+\end{document}

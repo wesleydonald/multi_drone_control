@@ -1,0 +1,24 @@
+% takeoff_landing.tex -- Methodology: takeoff from the floor, lift and landing (draft 4 Oct 2026).
+% Code: mpc_planner/creep_controller.py (arc creep, hand-over latch), planner_node.py (pretension,
+% breakaway, ff_cap_release_s, lift ramp, LAND, TouchdownDetector), bringup/config/*.yaml.
+% Evidence: 23 Sep rig non-lift (start_taut), 30 Sep rig review, R0817/R0818, R0834-R0839 (B2),
+% R0807-R0816 (hand-over angle in the twin), RIG-1001-* (hand-over and rods on the rig).
+% Condensed 12 Oct 2026 to the plan's half page; the detail is Appendix C "Floor start and landing in detail".
+% Restructured 9 Oct (structure audit): the outcomes (the hand-over angle flown, fig:flight) moved to
+% Section 4.1.
+
+\subsubsection{Takeoff, lift and landing}
+\label{sec:takeoff}
+
+The planner assumes taut rods, but every flight starts and ends with the ring on the floor and the rods slack, where
+the UAVs sit outside the cone the planner's references put them on; started from rest, the planner pulled them inwards
+over the ring, the cause of the first failed lifts on the rig. On TAKEOFF each rod is therefore swept about its own
+attachment point up to the planned elevation, 60$^\circ$ since 7 October, and the planner takes over once every rod
+has held within 8$^\circ$ of it for 1\,s, measuring each rod's length at that hand-over. The planned pull then rises
+over 3\,s with the ring still on the floor; the fraction reached when the ring breaks free is a cap on the trackers'
+feedforward, released over 2\,s once the lift starts; and the ring's height target ramps up at 0.1\,m/s. On LAND the
+target descends at 0.2\,m/s until the ring rests; in the twin each UAV then unwinds along its rod's circle (the rig's
+tethers go slack and it lands straight down), the rod feedforward blends to hover over 1\,s, and a UAV back at its rest
+idles armed. Touchdown is declared when the UAVs stop following the descending reference for 1\,s after at least
+5\,cm of descent; in the twin this test is re-armed when the ring touches down (Section~\ref{sec:sim_landing}), and on
+the rig after a review. Appendix~\ref{sec:app_floor} gives each step with its numbers and the failure it answers.

@@ -1,0 +1,50 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+% 17 Oct (v3_full): rewritten on the freeze results; one paragraph per question in their order, then the value
+% statement and the future work. The join paragraph waits for the join code tree (after the 21-22 Oct rig day).
+
+This thesis set out to test whether a centralised controller can let a UAV leave or join a team that is carrying a
+cable-suspended payload in flight, and what sets the payload's transient when it does, with a centralised
+load--cable planner based on \cite{tudelft} and a cable-aware tracking MPC per UAV, flown on unmodified Betaflight
+UAVs over their radio links with motion capture as the only sensing.
+
+\paragraph{RQ1: carrying with a fixed team.} On the rig four UAVs carried the 0.86\,kg ring around a circle and
+through a figure-eight within 3\,cm of the path on average with the measured rod pull and the rods planned at
+60$^\circ$, against about 8\,cm before; in the rig twin three UAVs carried it along five paths at peak path speeds up
+to 0.3\,m/s inside frozen bars in 39 of 40 runs. In the rigid-rod twin the measured pull is also what holds the ring's
+height (separated in an exploratory one-variable pair): it takes up a vertical force and an error in the typed mass at the UAVs, which leaves the planner's integral
+the horizontal forces. Of the other steady errors, the two that are not forces are removed at their source and rods
+typed long must be measured at the hand-over; a wrong attachment radius and the rig's pull towards $-x$ remain open.
+
+\paragraph{RQ2: leave.} A leave is handled by resizing the planner's optimal control problem, because the attachment
+geometry is a runtime parameter, and the switch is clean: no solve failed at 26 switches. On the rig three UAVs
+carried the ring on through five of six commanded releases, with tilt rises of 5.3--16.9$^\circ$. In the twin the
+transient grew as the support margin the leaver leaves shrank, a margin a condition checkable before the flight gives,
+and in two hover cells it was smaller on the measured pull than on the planner's pull. What loses a ring is a magnet letting go, and a rule that drops the ring and lands every UAV turned the last
+such loss on the rig into a controlled landing.
+
+\paragraph{RQ3: join.} [After the join code tree and the 21--22 October rig day.] A UAV flown by another controller is
+admitted on a confirmation this work observes from motion capture alone, the magnet tip moving with the plate on a
+taut tether after the other controller's lift, which confirms the rig's one catch offline. On the rig the attach is
+so far limited by the magnet reaching the plate, not by the admission.
+
+\paragraph{Value added.} What is new is a centralised way to change the team under a carried payload, flown on
+hardware: a detach or an attach is a switch to a pre-built solver with the attachment geometry as a runtime parameter,
+so in the first tick after the event the planner solves for the load distribution of the team it actually has. On the
+rig this carried the ring on through every commanded release that left an even triangle, announced and unannounced,
+in hover and on a circle, an attitude transient that none of the closest works reports as a number
+(Table~\ref{tab:lit_compare}). Three further results transfer beyond this rig: a geometric condition, checkable before a
+flight, for whether a layout can lose a given UAV and keep the payload level, with the twin's tilt rise growing as its
+margin shrinks; a map of the steady payload errors of a re-planned cascade on commercial flight controllers, with the
+measured rod pull as the remedy that matters most; and a prediction ledger whose bands are frozen before the rig flights they
+will score. They are of use to groups that build cooperative transport on commercial UAVs, where onboard force
+control is not available, and to work on fault tolerance. What the result still lacks is scale, repeats and the join on
+the rig.
+
+\paragraph{Future work.} The immediate steps are the attach on the rig with larger plates and longer tethers, then the
+full rejoin with the collaborator's hardware; the hover and circle releases on the current defaults, scored against
+their frozen bands; the magnets' hold against the angle of pull and their temperature; and the touchdown re-arm on the
+rig. Beyond this thesis: a model of slack cables, so the planner can take over before the rods are taut; force sensing
+at the UAVs, the onboard equivalent of the incremental inversion of \cite{tudelft}; outdoor flight without motion
+capture; and larger teams, for which a pre-built solver per team size becomes a memory and build-time cost.

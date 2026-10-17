@@ -1,0 +1,24 @@
+% lit_sim.tex -- Literature 2.6: simulation to reality (drafted 12 Oct 2026 from the thesis plan of 11 Oct; the
+% first two paragraphs are from Literature_review.tex's "Simulation Fidelity"). Entries the plan lists that are not
+% yet in the bibliography were added 12 Oct (RotorTM, RotorS, Cruz and Fierro 2017).
+
+\subsection{Simulation to reality}
+\label{sec:lit_sim}
+
+Simulation tests a controller before it flies, and its fidelity sets how far the results can be trusted on
+hardware. The most faithful configuration reviewed is the software-in-the-loop setup of De Carli et al.\
+\cite{distributedNMPC}, which runs the platform's own state estimator, control architecture and motor-controller
+firmware inside Gazebo \cite{koenig2004gazebo}, with mass-spring-damper cables. Linearised dynamics with rigid
+rods in MATLAB \cite{DistributedMPC} allow rapid iteration but hold only near the linearisation point and miss the
+geometric effects of large attitudes, which a leave or join transient has. Simulators built for suspended-load
+transport, on vehicle and link models of the kind RotorS \cite{furrer2016rotors} and Cruz and Fierro
+\cite{cruz2017cable} supply, report their fidelity per axis against hardware \cite{li2024rotortm}, and that per-axis
+format is the one Section~\ref{sec:ledger} adopts for the twin against the rig.
+
+This thesis follows the software-in-the-loop idea with an emulated flight controller in place of the firmware,
+in a Gazebo twin of the rig built from the rig's own identified thrust map, geometry and masses
+(Section~\ref{sec:overview}). Two things are added to the usual practice. The twin's omissions are stated before
+the results: the rig's loop latency (the twin has only its bridges' modelled latency), solver timing, motion-capture noise, rotor wake, the slack tether and the magnet's
+holding limit are not modelled. And the twin is to be scored as a predictor: from 14 October each rig cell gets a twin band frozen before it
+flies, to be scored afterwards (Section~\ref{sec:ledger}), so that what the twin gets right and what it structurally
+cannot get right go on record.

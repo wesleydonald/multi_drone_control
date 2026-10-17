@@ -1,0 +1,38 @@
+% lit_transport.tex -- Literature 2.1 (v3_50: condensed from v3_full).
+
+\subsection{Cooperative transport and link models}
+\label{sec:lit_models}
+
+Several quadcopters carrying one suspended payload raise the mass a team can lift and can control its full pose, at
+the price of a coupled system in which every vehicle feels the others through the load \cite{tudelft,
+mohammadiDecentralizedMotionControl2018}. Most of the field, reviewed by Lv et al.\ \cite{lv2026review} and Estevez
+et al.\ \cite{estevezReviewAerialTransportation2024}, concerns tracking, tension allocation and disturbance rejection
+for a team whose membership never changes, validated mostly in simulation.
+
+\paragraph{Link models.} The common choice is the rigid massless rod: a link of fixed length along a unit vector,
+carrying a tension $\lambda_i \ge 0$, so that it can pull but not push \cite{efficient, wahbaKinodynamicMotionPlanning2024}.
+It is exact for a taut cable under a hovering vehicle \cite{michael2011cooperative}, and the non-negativity of the
+tension is a modelling choice about when the link is believed \cite{six2018flying}. Mass-spring-damper chains capture
+sag at six states per element \cite{distributedNMPC}; a slack link, a unilateral constraint, is still open
+\cite{efficient}. The rig of this thesis carries its ring on rigid rods, so the rod model is the hardware's own, except
+for the newcomer's tether (Section~\ref{sec:overview}).
+
+\paragraph{Centralised and distributed control.} A central node with the global state can impose tension limits,
+collision avoidance and a force allocation directly, at the cost of a solve that grows with the team and a single point
+of failure \cite{nathanReviewAutonomousMultiagent2011, dimakosStudyCentralisedDecentralised2021}. The benchmark for
+this thesis is Sun et al.\ \cite{tudelft}, who solve a centralised optimal control problem over the full
+load--cable--vehicle dynamics at 10\,Hz and track the plans onboard with incremental nonlinear dynamic inversion (INDI),
+which compensates the cable force from inertial measurements; three and four vehicles reach 5\,m/s. Two things are left
+open there that matter here: the solve time grows exponentially with the team, and the results do not separate what the
+INDI force compensation contributes from what the planner does. Full-pose MPC scales to ten vehicles in simulation
+\cite{sunNonlinearMPCFullPose2023}, and allocation can be separated as quadratic programs
+\cite{efficient, vazquez-soquiSQPBasedCableTensionAllocation2026}; all of these hold the team fixed. Without a central
+node each vehicle solves for itself from what it measures or what its neighbours send
+\cite{scattoliniArchitecturesDistributedHierarchical2009, distributedNMPC, tasoojiEventTriggeredNonlinearModel}. Closest
+in spirit to a changing team is the passivity-based control of Quan et al.\ \cite{quan2025swarm, liu2026passivity}, in
+which each vehicle damps its motion relative to the payload from local measurements, so that a member leaving injects
+energy that the damping removes. The project plan asked whether such a network or the trajectory-based planner better
+balances robustness and tracking; that was answered on an earlier plant and is recorded in
+Appendix~\ref{sec:app_network}. This thesis takes the optimal control problem of Sun et al.\ as its planner, with the
+team size and the attachment geometry made runtime parameters (Section~\ref{sec:model}), and a tracking controller per
+vehicle on the ground in place of INDI, because the flight controllers are unmodified (Section~\ref{sec:lit_execution}).

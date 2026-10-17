@@ -1,0 +1,17 @@
+% lit_capture.tex -- Literature 2.3 (v3_50: condensed).
+
+\subsection{Capture proof, docking and magnetic grasping}
+\label{sec:lit_capture}
+
+A join needs a mechanism that catches, a proof that it has caught, and a switch of control at the proof. A grasp can
+be proven by a sensor in the gripper \cite{shankar2020inflight}, or from the vehicles' motion: ModQuad
+\cite{saldana2018modquad} detects the new structure from motion capture once the docked modules move as one body, and
+LEGION \cite{sugihara2026legion} treats a latched joint as proven when the contact wrench settles. A proof from pose is
+the only kind available here, since nothing on the ring or the magnet is instrumented (Section~\ref{sec:reconfig}).
+Modular vehicles dock to one another in flight, often through magnets, and the controller switch matters as much as
+the mechanism: TRADY \cite{sugihara2023trady} cut the altitude jump after assembly sixfold by blending thrust from the old
+controller to the new one; see also \cite{zhang2026epm, miyazaki2018airborne, antal2026hook, xu2026hitches}. Each
+docks to a rigid structure or a single carrier; none joins a payload hung from a team. A magnet holds best when pulled
+straight off its plate and loses hold as the pull turns across the face \cite{gawel2017magnetic}; the rig's magnets catch
+on contact only and every ring lost on the rig began with a magnet letting go (Section~\ref{sec:res_leave}), which is why
+the rods are planned steep, announced changes are ramped and a newcomer is folded in from a small tension.

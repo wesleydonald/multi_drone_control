@@ -1,0 +1,30 @@
+% simulation.tex -- Methodology 3.6: the experimental protocol (rewritten 12 Oct 2026 to the thesis plan of 11 Oct,
+% "3.6 Method"). The rig twin's description moved to system_overview.tex (3.1) with its label sec:simulation.
+% Sources: tools/run_experiment.py, results/registry.csv, docs/experiments/*.md (the cards), the critic and reviewer
+% agents of the working rules, docs/freeze_2026-10-14.md (the signed rules). Counts (runs, tests) are left in
+% brackets to be filled at the results freeze.
+
+\subsubsection{Protocol}
+\label{sec:protocol}
+
+\paragraph{Experiment cards, frozen bars and one code tree.} A result that supports a claim, a thesis table or a
+go/no-go for the rig, is flown under an experiment card written before the runs: the question, the one variable, the
+baseline, the hypothesis with its sign, the pass and fail numbers and the repeats. The bars are frozen before the runs,
+and a bar found wrong applies only to later runs. Every arm of a claim table is flown on one code tree. Exploratory runs,
+which find a failure rather than prove a fix, carry no card and are marked as such; every run, voided ones included, is
+recorded in a register. The rig flies on the tree of its lab day, so each rig row carries its own tree and its twin pair
+is flown on that tree before the flight.
+
+\paragraph{Checks before and after the runs.} Two automated checks sit around every claim, and neither is an
+independent review. Before a card runs, a critic reads it against the code and the register and challenges the
+variable, the baseline and the bars; its challenge and the answer are kept on the card. After the runs, a reviewer
+reads the claim against the run data and the frozen bars and may pass it, fail it or send it back, and no number
+reaches a thesis table without that pass. Both are large-language-model agents run against pre-frozen bars and
+the logged data, and the author decides what they contest. [The disclosure of AI assistance, in the form the
+University requires, stands before this section.]
+
+\paragraph{Runner and ladder.} A twin run is a configuration file (the world, the launch arguments, a timed list of
+events and the pass and fail criteria) that a runner flies headless from a clean machine, reading back the
+parameters every node loaded and computing the metrics from the logs. Changes climb a ladder from unit tests to a
+quick check script, headless twin runs and only then the rig. Cases are flown twice in the twin, and tables give the
+number of runs; rig cells are flown as often as a lab day allows and say so.
