@@ -99,6 +99,8 @@ current branch like any other file (it reaches main with the merges).
 - LAND lands every drone whatever it is doing; a freed drone off the ring is pushed to its own
   rest and disarmed alone. `newcomer_lifecycle`, `newcomer_fault_land` and `departed_ground_idle`
   are on by default (Wesley 9 Oct, after the LAND re-fly's reviewer); the legacy profile keeps them off.
+  `land_rearm_touchdown` (re-arm the LAND stall test at ring touchdown) is on in the twin (sim.yaml; Wesley 17 Oct);
+  the rig gets it after a critic look at its wall-clock pose check.
 - Thrust: the rig and the rig twin use the identified affine map (offset 0.185 + 0.507*mass
   - 0.022*(V - 23.5), gain 35.2 above it; 30 Sep) with `kt_trim` off.
 - The rig twin is the simulation (5 Oct). Old worlds live in `simulation_assets/old_worlds/`

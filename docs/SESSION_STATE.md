@@ -125,6 +125,9 @@ Updated: Sat 17 Oct 2026, 11:06 AEDT (from `date`). Only what a new session need
     (drone 0 lands at rest, 4.7 cm lower than the base: two-sided bar). With A on the rig path the end tilt is 0.4/1.0.
   - lead075 neighbours: N5 fails on spin (lag -0.045); the rest pass. Stays exploratory.
   - Reviewers: A supported (twin default; rig needs critic + Wesley); no-floor (a) supported, (b) not supported (F2, contact speed 0.17-0.35 m/s); lead075 weak (spin N5 one lap); spin repeat R2168-R2171: fails N5 in 2 of 3 pairs, falsifier stands, exploratory.
+- **Wesley ~19:45 (decisions.md):** A on in the twin (sim.yaml, gate --quick passed); rig after a critic
+  look at the wall-clock pose check. No-floor: re-card (one-sided height bar + contact-speed bar) and re-fly. Corner
+  cutting CLOSED (defaults stay, lag reported). Next: N2 bands, then the rig-day sheet.
 - **(4) Band rule signed** (f = 1 +- 2 sigma_rig). Compute and freeze the bands (sigma_rig from RIG-1014-lift3).
 
 ## 14 Oct rig day in short (detail: registry RIG-1014-*, `git log -p` of this file)

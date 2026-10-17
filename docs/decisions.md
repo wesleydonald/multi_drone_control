@@ -250,3 +250,14 @@ DECIDED 2026-10-17  Corner cutting build (Wesley ~14:29, after the sweeps R2109-
   lift and LAND, detach, attach on the orbit, figure-8), the reviewer, then Wesley's word for the rig. The measured
   lead is dropped (lead = delay falsified: 0.035 s more delay moved the crossing ~0.003 s). Pushed back once on the
   7 Oct "no bandaid" point; his call.
+DECIDED 2026-10-17  Evening answers (Wesley ~19:45, after the batch R2133-R2171 and its reviewers):
+  (1) Touchdown re-arm A (`land_rearm_touchdown`): default ON in the twin now (src/bringup/config/sim.yaml); the rig
+      after a critic look at its wall-clock fresh-pose check (LAND_POSE_FRESH_S 0.2 s, never run at RTF 1), then
+      through a configs/rig/ params file. Reviewer: supported for the twin (rig LAND path off 2 of 4 false touchdowns,
+      A 0 of 5; R2133-R2137, R2164-R2167).
+  (2) `land_descend_to_stall`: re-card and re-fly. The residual is gone (F1), but F2 fired as written (drone 0 lands
+      at rest, 4.7 cm below the base) and floor contact speed rose to 0.17-0.35 m/s (0.04-0.14 off). New revision: a
+      one-sided height bar and a contact-speed bar, then fresh runs. Stays off.
+  (3) Corner cutting closed: today's defaults stay, the lag is reported (8 Oct decision stands). The fixed-lead
+      combination failed N5 on spin in 2 of 3 pairs (R2150/R2151, R2168-R2171); its switches stay exploratory.
+  (4) Next: freeze the N2 1 m bands (signed rule), then the 21-22 Oct rig-day sheet with today's LAND findings.
