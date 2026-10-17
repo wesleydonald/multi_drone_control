@@ -226,3 +226,32 @@ fixes it in both runs (R2095, R2106). Open: why T5 with A+B ends one drone at 10
 
 Re-fly queued (17 Oct afternoon batch): the rig path off / A ABAB plus one more A (2 + 3), A alone on hover and the
 creep, LAND in the lift with its base. A stays off by default until the reviewer supports it.
+
+## Re-fly (17 Oct 14:45-17:37, laptop, final tree 0a77fa1; R2133-R2137, R2164-R2167)
+
+Scored with `tools/land_touchdown.py` and the per-drone floor scorer of the land card (registry rows hold each value).
+
+| arm | runs | LANDED - ring down (s) | highest drone at LANDED (cm) | tilt at the end (deg) | false touchdown |
+|---|---|---|---|---|---|
+| rig LAND path, switches off | R2094, R2105, R2133, R2135 | 1.08 / 5.33 / 5.05 / 1.08 | 42.0 / 0.1 / 0.1 / 42.1 | 142 / 1.5 / 2.3 / 90 | 2 of 4 |
+| rig LAND path, A (A+B, B never acted) | R2095, R2106 | 4.89 / 4.54 | 0.9 / 2.9 | 10.0 / 10.6 | 0 of 2 |
+| rig LAND path, A alone | R2134, R2136, R2137 | 5.14 / 4.63 / 4.56 | 1.0 / 4.6 / 4.6 | 11.0 / 1.5 / 1.9 | 0 of 3 |
+| hover, off / A | R2023, R2035 / R2164 | 4.40, 4.44 / 4.42 | 4.7, 4.6 / 4.7 | 0.4, 0.3 / 0.2 | 0 / 0 |
+| LAND in the creep, A+B / A | R2098 / R2165 | 3.45 / 3.38 | 4.7 / 4.5 | 0.7 / 4.0 | 0 / 0 |
+| LAND in the lift, off / A | R2166 / R2167 | 4.50 / 4.40 | 4.1 / 5.1 | 0.4 / 1.1 | 0 / 0 |
+
+- Off, the rig LAND path fires the false touchdown in 2 of 4 runs (0.42 m up, the fleet falls). With A: 0 of 5.
+- The 10-11 deg end tilt on that path: 1 of 3 A-alone runs on 0a77fa1 (R2134), 2 of 2 A+B on b7ab074; 0 of 2 normal off landings.
+- With A + `land_descend_to_stall` on the same path (R2144, R2163; land card) the end tilt is 0.4 / 1.0.
+
+## Reviewer on the re-fly (17 Oct ~17:55): supported (twin default)
+
+1. Counts and trees reproduced; A-alone runs on 0a77fa1, the configs differ by the one key; no fault in the 9 re-fly runs.
+2. Off 2/4 against A 0/5: one-sided Fisher p 0.17 (final tree alone 1/2 against 0/3, p 0.40). The claim stands on the
+   mechanism: the fire comes 1.08 s after ring touchdown, and the reset makes a fire before 1.5 s impossible by construction.
+3. End tilt on the final tree is 1 of 3 (fixed above); 11 deg is under the 12.2 bar and far from the 90-144 deg falls.
+   With A, drone 0 is 4.6 cm up at LANDED (R2136/R2137): H2's 5 cm bar passes by 0.4 cm.
+4. "Lands as its base" is same-tree only for the lift pair (R2166/R2167); the hover base is on c3bf628, the creep base is
+   A+B on b7ab074 and R2165 ends at 4.0 deg against 0.7.
+5. A's fresh-pose test uses wall time (0.2 s); the twin ran at RTF 0.23-0.41, so that branch has not run at RTF 1.
+Must not say: "ready for the rig". The rig needs the critic's look at the code path and Wesley's word.

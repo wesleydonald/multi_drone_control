@@ -113,6 +113,58 @@ bases (R2023/R2035, R2105).
 - the twin's rods are rigid and the rig's tethers go slack, so the tilt after a drop is a twin number;
 - two map errors on one drone.
 
+## Results (17 Oct 14:45-17:37, laptop, tree 0a77fa1; R2138-R2147, R2158-R2163; bases R2088-R2108, R2133-R2137, R2139, R2164)
+
+Scored per drone (`scratchpad f_score.py`: height above rest at LANDED; floor tilt and xy slide from ring down to LANDED
+while the drone is within 3 cm of rest) and with `tools/land_touchdown.py` (tilt after LANDED).
+
+| arm | base (A only): runs / LANDED - ring down (s) / per-drone height (cm) / tilt after (deg) | switch on: runs / s / cm / deg | ref depth (m) |
+|---|---|---|---|
+| T1 error 0.03 | R2088, R2099 / 4.38, 4.44 / 4.7, 15.8, 0.0 / 25.6, 26.3 | R2138, R2158 / 4.94, 5.04 / 0, 0, 0 / 0.1, 0.1 | 1.08 |
+| T1b error 0.045 | R2139 / 4.32 / 4.7, 22.3, 0.0 / 90.4 | R2140, R2159 / 5.41, 5.42 / 0, 0, 0 / 0.0, 0.1 | 1.16 |
+| T2 model integral | R2090, R2101 / 4.27, 4.41 / 4.8, 15.8, 0.0 / 25.2, 27.8 | R2141, R2160 / 5.13, 4.99 / 0, 0, 0 / 0.1, 0.0 | 1.08 |
+| T3 hover | R2092, R2103, R2164 / 4.36, 4.35, 4.42 / 4.6-4.7, 0, 0 / 2.7, 2.3, 1.7 | R2142, R2161 / 4.55, 4.51 / 0, 0, 0 / 0.1, 0.1 | 0.94 |
+| T4 orbit 0.125 | R2093, R2104 / 4.28, 4.31 / 4.8-4.9, 0, 0 / 1.9, 2.5 | R2143, R2162 / 4.47, 4.50 / 0, 0, 0 / 0.0, 0.1 | 0.94 |
+| T5 rig LAND path | A R2095, R2106, R2134, R2136, R2137 / 4.54-5.14 / 0.9-4.6 / 3.1-11.2; off R2105, R2133 / 5.33, 5.05 / 0.1 / 1.5, 2.3 | R2144, R2163 / 4.15, 4.26 / 0, 0, 0 / 0.4, 1.0 | 0.86, 0.88 |
+| weak map | R2096, R2107 / 4.45, 4.33 / 4.7, 0, 0 / 0.9, 1.9 | R2145 / 4.50 / 0, 0, 0 / 0.2 | 0.94 |
+| detach | R2097, R2108 / 4.49, 4.36 / 4.3-4.8 / 1.7, 2.3 | R2146 / 4.49 / 0 x4 / 0.2 | 0.94 |
+| creep | R2098, R2165 / 3.45, 3.38 / 4.5-4.7 / 0.8, 4.1 | R2147 / 3.48 / 0 x4 / 0.2 | 0.68 |
+
+Floor tilt max / slide max (switch on): 0.4-1.1 deg / 0.2-0.3 cm off the rig path; 6.2, 6.9 deg / 0.9, 1.4 cm on it
+(bases there: off 7.2-8.6 deg / 0.6-1.1 cm, A 4.3-11.6 deg / 0.5-1.3 cm).
+
+| bar | result |
+|---|---|
+| F1 | **pass.** T1, T1b, T2 (6 runs): every drone at rest at LANDED; tilt after 0.0-0.1 deg |
+| F2 | **fails as written** on the height clause: timing passes (T3, T4 +0.2 s; T5 0.3-0.9 s sooner than A; the neighbours within 0.2 s; T1/T1b/T2, not under F2, take 0.6-1.1 s longer), but drone 0 lands at rest (0.0) where the base has 4.3-4.9 cm, which is outside the two-sided 2 cm. The reference no longer stops at z 0, so drone 0 reaches the floor (r 0.775, z 0.100) before its xy freezes, instead of hanging on its rigid rod at 0.147 m (Step 0 (b)). T5 passes (A bases 0.9-4.6) |
+| F3 | **pass.** Floor tilt within the bases + 2 deg on every arm, slide at most 1.4 cm |
+| F4 | **pass.** LANDED 3.5-5.4 s after ring touchdown; no fault the base did not have (the detach's UNANNOUNCED DETACH is the scenario). The runner FAILs on the map arms are its in-flight ring-tilt check (9.0-12.7 deg), as in the A bases |
+
+**Verdict against the frozen bars: the falsifier fires (F2).** It fires because drone 0 now lands lower, at its rest.
+Re-scoring with a one-sided height bar would break the rule (bars frozen, runs seen), so a default needs Wesley's word on
+the bar and fresh runs scored against it.
+
+Notes:
+- the logged reference z ends at -0.34..-0.36 m (T1) and -0.42..-0.44 m (T1b), up to 0.53 m below a drone's rest
+  (0.10). Every drone's throttle was already 0 there (the tracker's ground idle), so nothing pressed and the R0997
+  tip-over did not appear; in the twin ground idle is instant, so this is not a rig result;
+- **contact speed (no bar covers it):** a drone meets the floor at 0.17-0.23 m/s with the switch against 0.04-0.14 in
+  the bases, 0.29-0.35 m/s on the rig LAND path (R2144, R2163);
+- the dose arm: A alone leaves drone 1 at 15.8 cm (error 0.03) and 22.3 cm (0.045), and it tips over at 0.045; with the
+  switch both are 0.
+
+## Reviewer (17 Oct ~18:00): (a) supported, (b) not supported
+
+1. Every number reproduces (repeats within 0.1 cm / 0.1 deg); the reference depth was wrong (fixed above).
+2. (a) drone 1 at 0.0 cm in all six T1/T1b/T2 runs against 15.8 / 22.3 cm; tilt after 0.0-0.1 against 25.2-90.4; each
+   config differs from its A-only one in the switch only.
+3. F2 fires as written. F1's pass text is two-sided per drone too, so drone 0 at 0.0 also misses it; F1 passes only on its
+   one-sided fail column. T5's final-tree A bases disagree (R2134 1.0 cm, R2136/R2137 4.6).
+4. Controls: the T3, T4, weak-map, detach and creep bases are A+B on b7ab074; T4, weak map and detach have no A-only base
+   on the final tree (switch off, the flight code differs only by B's removal).
+5. Floor: no pressing only because ground idle cuts the throttle; contact speed rises to 0.17-0.23 m/s (0.29-0.35 on the
+   rig path), uncovered by any bar. Must not say: drone 0 reaching rest, or "no R0997 tip", as rig results.
+
 ## Rig
 
 Only after the twin, the reviewer and Wesley's word. It goes in through a `configs/rig/` params file, with A.

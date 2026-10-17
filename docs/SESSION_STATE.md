@@ -113,8 +113,18 @@ Updated: Sat 17 Oct 2026, 11:06 AEDT (from `date`). Only what a new session need
   `land_descend_to_stall` (no floor after ring touchdown) and B deleted: coded, UNCOMMITTED, tests written but NOT RUN
   (laptop busy). Configs td_nf_* + td_a_mapneg45_ref; td_ab_* moved to configs/experiments/old/.
   Next after the batch: pytest + gate --quick + prebuild, reviewer on A, then fly the card's arms.
-- **Running (13:48, task bwkh1fgoz, scratchpad/laptop_dly.log, ~45 min, 8 runs from R2125):** delayed twin re-fly,
-  delay + ema from 20 s: orbit 0.3 base / 0 / 0.04 / 0.075, x2.
+- Delayed twin R2125-R2132 scored: lead = delay falsified (crossing 0.078 -> ~0.081 with +0.035 s delay).
+  **Wesley ~14:29: fixed 0.075, no new code** -> card `2026-10-17_lead075_default.md` (neighbour bars frozen).
+- Code committed 3edeb04 (land_descend_to_stall, B deleted; 20 + 316 tests, gate --quick pass), 0a77fa1 (configs).
+- Reviewer on A: **weak** (rig path 1 of 2 base; A alone not flown there; 10 deg end tilt on the rig path).
+  A stays off until a re-fly supports it.
+- **Batch b3k2h4x1c done 17:37 (R2133-R2167, tree 0a77fa1), scored, rows appended (bak39), cards updated:**
+  - A re-fly: rig LAND path off fires the false touchdown 2 of 4 (R2094, R2135), A 0 of 5; A ends drone 0 at
+    10-11 deg in 3 of 5. A on hover/creep/lift lands as its base.
+  - land_descend_to_stall: strong-map residual gone (F1 pass, also at error 0.045), F3/F4 pass; F2 fails as written
+    (drone 0 lands at rest, 4.7 cm lower than the base: two-sided bar). With A on the rig path the end tilt is 0.4/1.0.
+  - lead075 neighbours: N5 fails on spin (lag -0.045); the rest pass. Stays exploratory.
+  - Reviewers: A supported (twin default; rig needs critic + Wesley); no-floor (a) supported, (b) not supported (F2, contact speed 0.17-0.35 m/s); lead075 weak (spin N5 one lap, under 1 SE). Spin repeat next.
 - **(4) Band rule signed** (f = 1 +- 2 sigma_rig). Compute and freeze the bands (sigma_rig from RIG-1014-lift3).
 
 ## 14 Oct rig day in short (detail: registry RIG-1014-*, `git log -p` of this file)
