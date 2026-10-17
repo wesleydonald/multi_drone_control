@@ -282,3 +282,31 @@ log through a dropout (does Motive skip a lost body or repeat it?).
 Must-fix 2: `src/mpc_planner/test/test_touchdown_stale.py` (fresh poses reach the stall; one stale pose holds the count;
 an unstamped slot reads stale; a welded QUAD4 is stamped). 387 planner tests and gate --quick pass. Combined-M1 LAND
 with QUAD4 folded in: `partner_attached_orbit` x2 with A on (below). Should-fixes: open, for before the rig.
+
+## Critic must-fix 1 re-fly: LAND with QUAD4 folded in (18 Oct, flight code 9d30665, scored ~06:30)
+
+**What flew with A and what did not.** The QUAD4 configs on an old-worlds SDF (`partner_attached_orbit`,
+`q4_welded_land`, their `td_nf_` twins) make the runner type `legacy:=true`, and `sim_legacy.yaml` does not set A: the
+planner read back `land_rearm_touchdown: false` in R2172, R2173, R2192, R2193, R2200 and R2237-R2240. They do not
+test A (correction rows R2172c, R2173c, R2192c2, R2193c, R2200c2). The combined-M1 join configs (`m1c_*`, the rig-twin
+pickup world) fly the twin profile, A on (read back true in every one).
+
+| run | scenario | QUAD4 at LAND | exit | heights at the stall (cm above rest) |
+|---|---|---|---|---|
+| R2220 | m1c_hover | welded, folded in | stall | 4, 0, 0, QUAD4 0 |
+| R2221 | m1c_high | welded, folded in | stall | 5, 0, 0, QUAD4 1 |
+| R2222 | m1c_low | welded, folded in | stall | 5, 3, 0, QUAD4 0 |
+| R2223 | m1c_offset | welded, folded in | stall | 4, 0, 0, QUAD4 3 |
+| R2228 | m1c_nocatch_hover_2 (a false proof, below) | folded in, not caught | stall | 4, 0, 0, QUAD4 0 |
+| R2233 | m1c_abort | welded, folded in | stall | 4, 0, 0, QUAD4 6 |
+| R2234 | m1c_abort | welded, folded in | stall | 5, 0, 0, QUAD4 3 |
+| R2224-R2227, R2232 | QUAD4 taken back, not folded in | - | stall | carriers 0-5 |
+| R2235, R2236 | m1c_abort_negx | welded, folded in | TB14 tip-over 2 s after ring touchdown (abort before the 1.5 s grace + 1.0 s stall can act) | - |
+
+**Must-fix 1: met.** In all 7 landings with QUAD4 folded in under A, the stall fired with QUAD4 in the list, never the
+max drop: the stamp fix works on the twin's combined-M1 path. The TB14 tip-overs (R2235/R2236) are the known rigid-rod
+landing artefact (combined-M1 card 6.4, 12 of 48 in October; the rig's tether goes slack); they start 2 s after ring
+touchdown, before A can act. The join runs are exploratory for the mission itself (not thesis evidence).
+
+**Open:** the legacy profile has no A. Whether `sim_legacy.yaml` should get it is a launch default (Wesley). The
+should-fixes (the stale-reset count in the log line; a rig log through a Motive dropout) are still open before the rig.

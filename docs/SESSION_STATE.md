@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Sat 17 Oct 2026, 11:06 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Sun 18 Oct 2026, 06:35 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -137,6 +137,18 @@ Updated: Sat 17 Oct 2026, 11:06 AEDT (from `date`). Only what a new session need
   critic re-fly is now q4_welded_land (+ no-floor), 4 runs chained after the night batch (task b3c2thf2x).
   Thesis writing goes to a separate session: brief docs/thesis_rewrite_brief_2026-10-17.md (Opus 5.5, high).
 - **(4) Band rule signed** (f = 1 +- 2 sigma_rig). Compute and freeze the bands (sigma_rig from RIG-1014-lift3).
+
+## Now (Sun 18 Oct, 06:35): overnight done, scored; morning report docs/reports/morning_report_2026-10-18.md
+- Batches b8uawb0oz (night, R2174-R2236) and b3c2thf2x (welded QUAD4, R2237-R2240) finished 06:30; nothing running.
+- Registry to R2240 + corrections (bak42-45 in the scratchpad, each cmp-checked).
+- 0.55 m bands FROZEN (card 2026-10-16_bands_1m, `tools/n2_bands.py --rod 0.55`, results/analysis/n2_bands_055_2026-10-18.json).
+- No-floor rev 3: F3 fails once (R2199, 0.6 deg); reviewer not supported; stays off. Decision for Wesley (re-card F3 or park).
+- A critic must-fix 1 met: stall exit with QUAD4 folded in, 7/7 rig-twin joins. Legacy-world QUAD4 configs fly
+  `legacy:=true` and sim_legacy.yaml has no A (A off in R2172/R2173/R2192/R2193/R2200/R2237-R2240): decision (launch default).
+- Radius wind-up: the integral saturates at 2.14 N (~99 s), ring unchanged; the planned pull keeps it at 0.
+- Joins (exploratory): twin false proof R2228 (twin waives plate motion); orbit joins drop the ring 3/4 (cause open);
+  TB14 x2 (R2235/R2236). m1c_hover_2.yaml does not exist (17 of 18 flew).
+- Decisions waiting (morning report): A on the rig after the should-fixes; no-floor F3; A in sim_legacy.yaml; orbit drops; merge.
 
 ## 14 Oct rig day in short (detail: registry RIG-1014-*, `git log -p` of this file)
 - 46 launches: 8 passed, 11 failed in flight, 11 arm refusals (QUAD1/QUAD2 FC attitude drift), the rest void.

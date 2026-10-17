@@ -202,6 +202,56 @@ its rest, after LAND. Rig landings 14 Oct: t5_4 0.14-0.18, t5_5 0.17-0.29, t6f 0
 
 **Falsifier:** F1 fails on T1 or T1b, or any of F2-F5 fails.
 
+## Rev 3 results (17 Oct 21:04-23:36, laptop, flight code 9d30665; R2174-R2200)
+
+Scored per drone with `f_score.py` / `contact.py` (scratchpad) and `tools/land_touchdown.py`, as rev 2. Bases are the
+A-only arms on the same tree.
+
+| arm | base (A only): run / LANDED - ring down (s) / height at LANDED (cm) / tilt after (deg) / contact (m/s) | switch: runs / s / cm / tilt after / contact | exit |
+|---|---|---|---|---|
+| T1 error 0.03 | R2175 / 4.33 / 4.7, 15.8, 0.0 / 29.2 / 0.17, 0.74, 0.09 | R2174, R2194 / 5.03, 5.05 / 0, 0, 0 / 0.1, 0.1 / 0.18-0.21 | stall |
+| T1b error 0.045 | R2177 / 4.29 / 4.7, 22.3, 0.0 / 90.0 (drone 1 tips over) / 0.00, 14.9 (falls), 0.07 | R2176, R2195 / 5.37, 5.42 / 0, 0, 0 / 0.1, 0.1 / 0.17-0.20 | stall |
+| T2 model integral | R2179 / 4.27 / 4.7, 15.9, 0.0 / 28.4 / 0.14, 0.70, 0.08 | R2178, R2196 / 4.98, 5.00 / 0, 0, 0 / 0.0, 0.0 / 0.18-0.21 | stall |
+| T3 hover | R2181 / 4.31 / 4.7, 0, 0 / 1.9 / 0.01-0.12 | R2180, R2197 / 4.48, 4.54 / 0, 0, 0 / 0.0, 0.1 / 0.18-0.20 | stall |
+| T4 orbit 0.125 | R2183 / 4.42 / 4.8, 0, 0 / 2.3 / 0.02-0.11 | R2182, R2198 / 4.52, 4.56 / 0, 0, 0 / 0.0, 0.0 / 0.18-0.20 | stall |
+| T5 rig LAND path | R2185 / 4.59 / 4.5, 0, 0.1 / 4.5 / 0.03-0.11 | R2184, R2199 / 4.20, 4.45 / 0, 0, 0 / 0.7, 0.4 / 0.28-0.31 | stall |
+| weak map | R2187 / 4.31 / 4.7, 0, 0 / 2.0 / 0.08-0.22 | R2186 / 4.49 / 0, 0, 0 / 0.1 / 0.18-0.21 | stall |
+| detach | R2189 / 4.39 / 5.1, 0, 0, 0.1 / 2.4 / 0.06-0.12 | R2188 / 4.54 / 0 x4 / 0.3 / 0.17-0.18 | stall |
+| creep | R2191 / 3.47 / 4.7, 0, 0, 0 / 1.2 / 0.04-0.09 | R2190 / 3.39 / 0 x4 / 0.2 / 0.18-0.20 | stall |
+| QUAD4 folded in (after his rejoin) | R2193 / 2.58 / 0, 0, 0, QUAD4 4.4 / 11.8 / 0.17-0.18 | R2192, R2200 / 2.40, 2.63 / 0, 0, 0, QUAD4 3.7, 2.8 / 16.1, 10.0 / 0.17-0.27 | stall |
+
+Floor tilt max / xy slide max with the switch: 0.3-1.4 deg / 0.1-0.5 cm off the rig path; rig path R2184 5.3 deg / 0.9
+cm, R2199 7.1 deg (drone 0) / 1.1 cm. Bases there: A-only R2185 4.5 deg (drone 0 never comes within 3 cm of its rest,
+so it has no floor-tilt reading); switch-off R2105, R2133 7.2-8.6 deg.
+
+| bar | result |
+|---|---|
+| F1 | **pass.** T1, T1b, T2 (6 runs): every drone at its rest at LANDED; tilt after 0.0-0.1 deg (bases: drone 1 at 15.8-22.3 cm, 28-90 deg) |
+| F2 | **pass.** Every other arm lands within 0.4 s of its base (-0.39..+0.23 s; T5 0.14-0.39 s sooner); the highest drone at LANDED 0 cm (bases 4.5-5.1), QUAD4 3.7 / 2.8 cm against 4.4 |
+| F3 | **FAILS as written** (reviewer): the bar is the A-only AND switch-off bases + 2 deg, and rev 3's A-only base is the same-tree run R2185 (4.5 deg). R2199's drone 0 at 7.1 deg is over 6.5 (R2184's 5.2/5.3 passes). It is under the switch-off bases + 2 (R2105/R2133 7.2-8.6), and in R2185 drone 0 never reached the floor, so the comparison is drone 0 on the floor against drones 1-2. Slide at most 1.1 cm. QUAD4: no reading and no base (in R2192 and R2193 it never comes within 3 cm of its rest); only R2200 reads, 10.0 deg |
+| F4 | **pass.** Exit = stall in all 17 switch runs; LANDED 2.4-5.4 s after ring touchdown; no fault the base lacked (the detach arm's UNANNOUNCED DETACH is the scenario). The runner's FAILs on the map arms are its in-flight ring-tilt check (9.2-9.4 deg on T1/T2, 12.3-12.9 on T1b, > 5), as in the bases; R2194 also flags drone 0's mocap stale 2.23 s at t 70.79, after LANDED (68.51) |
+| F5 | **pass for the carriers:** every carrier at most 0.31 m/s (T5 0.28-0.31); QUAD4 has one reading (R2200 0.27; R2192 none). Under the bar, but 0.17-0.21 m/s against 0.01-0.12 in the bases off the rig path and 3-9x the base on it (0.28-0.31 against 0.03-0.11) |
+
+**Verdict against the frozen rev 3 bars: the falsifier fires (F3, R2199 on the rig LAND path, 0.6 deg over).** F1 (the
+residual) passes in all 6 map runs; F2, F4 and the carriers' F5 pass. R2193's exit line is missing from its launch log
+(not flushed), so the A-only QUAD4 base has no exit reading.
+
+Not rig results (the twin): nothing presses on the floor only because the twin's ground idle cuts the throttle at once;
+"drone 0 reaches its rest" and "no R0997 tip" are twin numbers; drone 0's 7-9 deg once on the floor (switch and switch-off
+runs alike) is the rigid rod's.
+
+## Reviewer (18 Oct ~06:28): not supported
+
+F3 fails as written on R2199 (same-tree A base, the bar's AND); the earlier reading dropped the A clause. QUAD4's F3/F5
+are no reading / no base, not passes. Corrected above: the 17-run count, the runner tilt peaks, R2194's post-LANDED mocap
+flag, the contact-speed rise, and the ground-idle caveat carried over from rev 2. Correction rows R2192c, R2199c, R2200c.
+
+**Also (18 Oct ~06:30):** the QUAD4 arm (R2192, R2200 vs R2193) flew the legacy profile (an old-worlds SDF), where A is
+not set: A was OFF in all three, so that arm compared the switch alone against no switches, not against A. Rows R2192c2,
+R2193c, R2200c2. The stall still fired with QUAD4 folded in in both switch runs.
+The runs are not re-scored. A default needs Wesley's word: a new bar (drone 0 on the floor has no A-only reading) and
+fresh runs.
+
 ## Rig
 
 Only after the twin, the reviewer and Wesley's word. It goes in through a `configs/rig/` params file, with A.

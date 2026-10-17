@@ -3,6 +3,7 @@
 
     python3 tools/n2_bands.py                       # the band table from the twin runs (registry, voids dropped)
     python3 tools/n2_bands.py --score <run_dir> <cell>   # one rig flight (tools/rig_to_run.py output) against its band
+    python3 tools/n2_bands.py --rod 0.55 [...]            # the 0.55 m rods (frozen 18 Oct): the carry claim + one more each
 
 Rule (Wesley 17 Oct): band = [max(0, min_twin - 2 sigma_rig), max_twin + 2 sigma_rig], f = 1, per metric:
 - path RMSE: the ring's 3-D distance to its published reference, from the path's first moving sample
@@ -55,23 +56,28 @@ def sigma_rig():
     return float(np.linalg.norm(e, axis=1).std(ddof=1)), float(w.payload_tilt_deg.std(ddof=1))
 
 
-def twin_runs():
+def twin_runs(rod='1'):
     rows = list(csv.DictReader(open(os.path.join(REPO, 'results', 'registry.csv'))))
     void = {r['run'] for r in rows if r['verdict'].startswith('VOID')}
     void |= {r['run'][:-1] for r in rows if re.fullmatch(r'R\d{4}c', r['run']) and 'VOID' in r['verdict'] + r['notes']}
     out = {}
     for r in rows:
         cfg = r['config'].split()[0] if r['config'] else ''
-        # the 16 Oct tree onwards (R1877, the carry claim's 1 m arm); older 1 m runs are another tree
-        if re.fullmatch(r'R\d{4}', r['run']) and cfg.startswith('traj3_L100_') and int(r['run'][1:]) >= 1877 \
-                and r['run'] not in void:
+        if not re.fullmatch(r'R\d{4}', r['run']) or r['run'] in void:
+            continue
+        k = int(r['run'][1:])
+        # 1 m: the 16 Oct tree onwards (R1877, the carry claim's 1 m arm); older 1 m runs are another tree
+        if rod == '1' and cfg.startswith('traj3_L100_') and k >= 1877:
             out.setdefault(cfg[len('traj3_L100_'):], []).append(r['run'])
+        # 0.55 m: the carry claim's two per cell (R1847-R1876) and the third flown 17-18 Oct (R2201-R2215)
+        elif rod == '0.55' and cfg[len('traj3_'):] in CELLS and (1847 <= k <= 1876 or 2201 <= k <= 2215):
+            out.setdefault(cfg[len('traj3_'):], []).append(r['run'])
     return out
 
 
-def bands():
+def bands(rod='1'):
     s_r, s_t = sigma_rig()
-    runs, table = twin_runs(), {}
+    runs, table = twin_runs(rod), {}
     for c in CELLS:
         vals = [path_metrics(glob.glob(os.path.join(REPO, 'results', '*', f'{r}_*'))[0]) for r in runs.get(c, [])]
         rm, tl = [v[0] for v in vals], [v[1] for v in vals]
@@ -85,8 +91,9 @@ def main(argv):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--score', nargs=2, metavar=('RUN_DIR', 'CELL'))
     ap.add_argument('--json', help='write the bands here')
+    ap.add_argument('--rod', choices=('1', '0.55'), default='1', help='the carriers\' tether length (m)')
     a = ap.parse_args(argv)
-    s_r, s_t, table = bands()
+    s_r, s_t, table = bands(a.rod)
     if a.score:
         c = table[a.score[1]]
         rm, tl = path_metrics(a.score[0])

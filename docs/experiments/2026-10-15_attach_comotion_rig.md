@@ -207,3 +207,16 @@ Tejen's second review (15 Oct, of the rebuilt package): three points, fixed (rev
 | The 6 s lift fallback still assumes a lift nobody confirmed | With his planner wired, the proof starts only on his lift-done signal (no timed fallback); the manager warns once if the signal is 6 s late |
 | A stale configured ring attitude falls back to world axes | It pauses the plate-frame checks instead (the below-the-plate exit, the quiet miss); the gross exits still run |
 
+
+## Twin note (18 Oct, exploratory join re-fly R2220-R2236, flight code 9d30665)
+
+- **A false proof in the twin (R2228, `m1c_nocatch_hover_2`, `sim_catch` false):** contact tries 1-2 failed (separated,
+  inconclusive); try 3 was proven 9 s after the contact: tip drift 4.6 mm, tether 0.5890 m against a free hang of 0.5906
+  (taut within 3 mm), the plate moving 0.2 mm. The twin waives plate motion ("no plate motion needed (twin)"), so an
+  uncaught magnet resting still on the plate passes. QUAD4 was folded in uncaught and the fleet landed. The rig rule
+  needs the plate to move with the tip, plus `proof_taut_len`, so this is not a rig failure. It does mean the twin's
+  no-catch arms cannot test a false proof under comotion. The other no-catch hover (R2227) rejected its 3 contacts.
+- **Orbit joins (twin only; the rig refuses an orbit under partner_contact):** 3 of 4 dropped the ring (tilt > 30) in
+  his approach (R2229-R2231), and R2232 held at 20 deg. Before each drop all three rod tensions rose (3.1 -> 3.5-4.7 N) at
+  even throttle, with the planner ticking normally: something pulled the ring down. The cause is open. On 12 Oct, on the
+  older tree, the same configs passed (R1694, R1695, R1699).
