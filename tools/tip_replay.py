@@ -13,8 +13,9 @@ glitch guard _tip_ring_sample (no ROS). Before LAND
 body-to-marker length), the largest deviation after arming against tip_detect_m, and every would-fire (a release
 acted on, or a lone marker's logged WOULD-FIRE). Exit status 1 if anything would have fired.
 
-Typed angles are the sheet's (clockwise, as the launch takes them); slot i is drone i in that order. Not modelled:
-the planner's slot re-assignment, detachments, the unload; a flight with a release is not a false-fire check.
+Typed angles are the sheet's (clockwise, as the launch takes them); the drones are matched to them by position at
+the start, as the planner does. Not modelled: detachments, the unload; a flight with a release is not a false-fire
+check.
 """
 import argparse
 import re
@@ -59,6 +60,25 @@ def read(bag):
 RUN_BAR_S = 0.05      # critic round 3, N2: no in-band run past both tests may last this long in a flight without a release
 
 
+def match_slots(events, azimuths_cw, n):
+    """slot -> drone as the planner matches them at takeoff (geometry.azimuth_slot_assignment, every permutation for
+    n <= 6): the quads may stand in the typed slots in any order (22 Oct: QUAD3 and QUAD4 stood mirrored)."""
+    import math
+    from mpc_planner.geometry import azimuth_slot_assignment
+    ring, pos = None, {}
+    for t, kind, i, xyz, extra in events:
+        if kind == 'ring':
+            ring = (xyz, extra[0])
+        elif kind == 'drone' and 0 <= i < n:
+            pos[i] = xyz
+        if ring is not None and len(pos) == n:
+            w, x, y, z = ring[1]
+            yaw = math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+            slot_az = [math.radians(-a) for a in azimuths_cw]
+            return list(azimuth_slot_assignment([pos[j] for j in range(n)], ring[0][:2], n, yaw, slot_az=slot_az))
+    return list(range(n))
+
+
 def replay(events, azimuths_cw, attach_z, tip_m=0.04, target_z=1.0, radius=0.225, cable_len=0.55, pivot_z=-0.04,
            rider=None, stats=None):
     """Run the planner's check over the events; returns (node stub, would-fires [(t, drone, line)], max deviation
@@ -99,6 +119,7 @@ def replay(events, azimuths_cw, attach_z, tip_m=0.04, target_z=1.0, radius=0.225
     f._on_unannounced = fired
     for name in ('_tip_learn_step', '_tip_ring_sample', '_tip_rod'):
         setattr(f, name, (lambda fn: lambda *a: fn(f, *a))(getattr(D, name)))
+    f.slot2drone = match_slots(events, azimuths_cw, n)
     lifted = False
     for t, kind, i, xyz, extra in events:
         f.t = t

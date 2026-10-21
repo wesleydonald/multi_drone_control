@@ -350,3 +350,21 @@ def test_the_offline_replay_runs_the_same_check_over_recorded_samples():
     stats = {}
     f, fires, devmax = tr.replay(ev, [0.0, 90.0, 180.0], 0.02, stats=stats)
     assert [d for _, d, _ in fires] == [2] and stats[2]['run'][0] >= tr.RUN_BAR_S
+
+
+def test_the_replay_matches_slots_by_position_as_the_planner_does():
+    """22 Oct bench: QUAD3 and QUAD4 stood on plates 4 and 8 with Part A typed 0,240,120 (drone_1 on plate 8). The
+    planner's matcher sorts that out; the replay must too, or both read 34 cm off their plates."""
+    import importlib.util
+    import pathlib
+    spec = importlib.util.spec_from_file_location(
+        'tip_replay', pathlib.Path(__file__).resolve().parents[3] / 'tools' / 'tip_replay.py')
+    tr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tr)
+    def at(cw_deg, r=0.72):
+        a = np.radians(-cw_deg)
+        return np.array([r * np.cos(a), r * np.sin(a), 0.05])
+    ev = [(0.0, 'ring', -1, np.array([0.0, 0.0, 0.0275]), (Q0, np.zeros(3)))]
+    ev += [(0.0, 'drone', d, at(cw), None) for d, cw in enumerate((0.0, 120.0, 240.0))]
+    assert tr.match_slots(ev, [0.0, 240.0, 120.0], 3) == [0, 2, 1]
+    assert tr.match_slots(ev, [0.0, 120.0, 240.0], 3) == [0, 1, 2]
