@@ -283,3 +283,10 @@ DECIDED 2026-10-21  The supervisor's results spec (Wesley ~18:50, plan docs/plan
       evening reel; state logs are deleted once their video is checked; disk space from a delete list he approves.
   (8) Lab: every Wed/Thu 8-11 am, a couple of Fridays if needed; results freeze Sat 7 Nov. Tomorrow's first
       priority: the offset check and the 3-quad baselines.
+DECIDED 2026-10-21  Evening answers (Wesley ~22:45-23:00, after the chain card's runs R2249-R2258):
+  (1) The T to the pair stays on Thu 22's rig sheet (Part C, last), gated on the ring centre-of-mass fix first
+      (Motive pivot down to the ring's centre, attach_z / payload_rest_z typed), B1 clean, and the detector branch.
+  (2) A carrier magnet switched off on the rig detaches at once ("because of the angle the quad would be at"), so the
+      magnet-marker check should see a release within tens of ms (card 2026-10-21_tip_detect rev 2).
+  (3) The trackers' measured cable-pull cap goes from 6.6 to 8 N: cable_accel_cap 12 -> 14.5 m/s^2 (common.yaml), a
+      default, applied after the overnight batch; the trackers also log the raw measured pull (acm_x/y/z).
