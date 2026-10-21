@@ -308,3 +308,6 @@ DECIDED 2026-10-21  The magnet-marker check after critic round 2 (Wesley ~23:30,
       work; it would be nice to have both available": the check goes onto the rig tree as a switch (tip_detect_m,
       default off).
   (3) The twin's rod-pose marker publishers go into the existing T, 2-quad and 4-quad worlds (0.55 m and 1 m).
+  (4) Overnight work on the laptop runs until 07:30 (Wesley ~23:55; supersedes the 06:30 halt), so the queue goes on
+      after the comparison: tomorrow's A/B flights in the twin with the check on, the check's neighbours, then the
+      videos and the morning reel.
