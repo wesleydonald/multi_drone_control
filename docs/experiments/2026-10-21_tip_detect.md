@@ -300,3 +300,34 @@ in-band swaps.** The stream is cut at every frame step over 3 cm, which gives 48
   check off 34 times in 45 s: the twin's ring stream repeats a sample or two. The rule is now time-based: the same
   ring pose for 50 ms or more (`TIP_RING_FROZEN_S`). The rig repeats 150 ms or more when it loses the ring.
 - The comparison restarts from its first run on this tree. R2287-R2291 are void for the comparison.
+
+## Results: the comparison (22 Oct 01:33-02:13, tree 367c98f, laptop)
+
+| Run | Arm | Detection after RELEASE (stamped lines x RTF / planner's first n-1 row) | Outcome | Tilt peak, whole flight | Pair roll p-p, lean (last 10 s) |
+|---|---|---|---|---|---|
+| R2292 | T hover, on | none (3 armed at 0.0 cm; 6 frozen-ring holds) | landed | 7.4 | - |
+| R2293 | T hover + three 12 deg ring glitches, on | none (held at each step) | landed | 14.3 (measured, glitches included) | - |
+| R2294 / R2295 | T to pair, on | magnet: +0.27 / +0.25 s (rows +0.31 / +0.20) | resized to the pair, no drop | 8.8 / 9.6 | 3.6, 1.1 / 3.7, 1.1 |
+| R2296 / R2297 | T to pair, off | none: the stretch check missed both | the T model flown to LAND, no drop | 7.4 / 11.1 | 3.0, 1.0 / 3.3, 1.1 |
+| R2298 | square to T, on | magnet (rows +0.31) | dropped at 45.5 deg (peak 56.1) | 56.1 | - |
+| R2299 | square to T, off | stretch (rows +0.21) | dropped at 46.1 deg (peak 81.3) | 81.3 | - |
+
+Against the frozen bars:
+- **Passed:** the unit tests; `t3_hover_tip`; `t3_hover_tip_glitch`.
+- **`t3_pair_release_tip`, detection:** the magnet within 0.3 s, the resize, no drop or abort, no other drone's
+  detection, the tilt peak under the off arm's 11.1: passed in both runs.
+- **`t3_pair_release_tip`, rocking: MISSED in both.** The pair rocked 3.6 / 3.7 deg p-p against the off arm's worse
+  run, 3.3. The off arm never detected the release and flew the T model on, so the arms differed in more than the
+  check.
+- **Load (round 3), passed:** over the flight, LIFTED to LANDED, no planner row came more than 0.15 s after the last.
+  Solves over 100 ms before the release: 47 / 43 of 220 (on) against 50 / 46 (off). The whole-log count first read
+  55 gaps in R2294: all of them after LANDED, while the runner read parameters back.
+- **S8 (timing):** as in the table.
+
+Verdict: the check does what it was built for. It catches the zero-share release that the stretch check missed
+twice, and it does not fire on hover, glitches or load. It missed one frozen bar by 0.3-0.4 deg of rocking against
+an arm that never resized. Under this card's rule Part C defaults to OFF; Wesley decides (the sheet recommends ON,
+if the A/B replay is clean).
+- **Square to T:** neither arm saves the ring. The release transient is the problem, not the detection (chain step
+  2b).
+- **Twin:** markers here are perfect, as round 3 noted. The rig's own false-fire evidence comes from the A/B replay.
