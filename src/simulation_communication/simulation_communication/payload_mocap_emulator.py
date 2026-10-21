@@ -120,6 +120,8 @@ class PayloadMocapEmulator(Node):
         tether_topic = str(self.declare_parameter('tether_pose_topic', '').value)
         self._tether_half = 0.5 * float(self.declare_parameter('tether_len', 0.55).value)
         self._tip_last_pub = None
+        self._tip_noise = float(self.declare_parameter('tether_tip_noise_m', 0.0005).value)   # Motive marker jitter
+        self._tip_rng = np.random.default_rng(int(drone_id))
         if tether_topic:
             self._tip_pub = self.create_publisher(MotionCaptureState, f'/drone_{drone_id}/magnet_tip_state', 5)
             self.create_subscription(PoseArray, tether_topic, self._tether_cb, 10)
@@ -252,7 +254,8 @@ class PayloadMocapEmulator(Node):
         if not due:
             return
         p, o = msg.poses[-1].position, msg.poses[-1].orientation
-        tip = self.rod_end((p.x, p.y, p.z), (o.x, o.y, o.z, o.w), self._tether_half)
+        tip = self.rod_end((p.x, p.y, p.z), (o.x, o.y, o.z, o.w), self._tether_half) \
+            + self._tip_rng.normal(0.0, self._tip_noise, 3)
         mcs = MotionCaptureState()
         mcs.header.stamp = self.get_clock().now().to_msg()
         mcs.header.frame_id = 'map'

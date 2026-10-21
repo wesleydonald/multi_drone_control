@@ -118,3 +118,31 @@ Should-fix 7-15:
 
 **Decision for tonight:** the detector stays on branch `tip-detect`, not merged, and is not flown. Tomorrow's rig
 only records the markers (detector off) for the evidence in item 1.
+
+## Rev 2 (21 Oct ~23:15), after the critic and Wesley
+
+**Wesley (23:00) on the critic's main point:** a magnet switched off on the rig "will instantly be noticeable and
+absolutely detach because of the angle the quad would be at". So on the rig the released magnet is expected to leave
+its plate at once, as in the twin.
+
+| Must-fix | Rev 2 |
+|---|---|
+| 1. Rig evidence | The sheet routes markers 22-24 on every flight with the check OFF, and `rig_flight.sh` bags `/drone_<i>/magnet_tip_state` (main tree cf556ff). Bench: each magnet moved by hand, each marker covered, 3 re-seats. Part C uses the check only if this card passes tonight; the B flights' bags are the first false-fire evidence |
+| 2. Invalid samples | Non-finite samples are dropped. A sample whose body-to-marker length is off the learnt one by more than 3 cm (`TIP_BAND_M`) is not this magnet: an untracked body at 0,0,0, or a swap. A ring-pose jump moves every armed marker at once and is not a release (tested by moving the ring's pose) |
+| 3. Scalar distance | Now the ring-frame vector from the plate point (`R^T (tip - ring) - rho`), against the learnt vector |
+| 4. The learnt offset | Learnt once: the median over `TIP_LEARN_S` 1.0 s of still ring (< 0.05 m/s) after the lift, then fixed. A drone is not armed, with a loud WARN, if its offset is over 6 cm from its plate or its body-to-marker length is over 6 cm from the rod. Counts are in seconds: `TIP_DETECT_S` 0.03 s contiguous, a gap over `TIP_GAP_S` 0.05 s restarts it |
+| 5. Rig wiring | `configs/rig/chain_pair_tip.yaml` (`tip_detect_m` 0.04). T1 routes the markers. Each drone logs one "armed: offset ..." line after the lift |
+| 6. Prediction and the operator's branch | Prediction (Wesley): the marker leaves at once, so detection within ~0.1 s. Rig falsifier: a would-fire in A/B (from their bags) or no detection within 0.2 s of the OFF. The sheet keeps the `/fleet/detach 0` branch, Wesley's call |
+| 11. LAND and the lift | The check is OFF in LAND (the stretch check still runs) and cannot arm before the lift is done |
+| 8. Twin realism | 0.5 mm marker noise in the emulator |
+| 9. Control | `t3_pair_release_tipoff`: the markers emulated, the check off |
+
+**Bars (rev 2, frozen 23:15):**
+- `t3_hover_tip` x1: every drone armed, no detection.
+- `t3_pair_release_tip` x2: "UNANNOUNCED DETACH ... magnet" within 0.2 s of the RELEASE, and the resize to n=2.
+- `t3_pair_release_tipoff` x1: no magnet detection, by construction.
+- `c4_release9_tip` x1: informational, the detection time against R2249's +0.21 s.
+- Unit tests: 21 pass (`test_tip_detect.py` rev 2, `test_drop_and_land.py`); the tracker log test passes.
+
+**Also on this branch:** the tracker logs the raw measured cable accel (`acm_x/y/z`) beside the applied one, so peak
+pulls above the 6.6 N cap show (Wesley 21 Oct).
