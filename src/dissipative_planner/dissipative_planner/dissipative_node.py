@@ -72,6 +72,8 @@ DEPARTED_PRESS_LIMIT_S = 6.0  # s of press after it stopped above its rest; then
 DEPARTED_DOWN_HIGH_M = 0.10  # m: stalled no more than this above its rest is down too (QUAD4 stopped 4-7 cm above
                             # its mat height after every 14 Oct take-back and was never disarmed alone)
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
+TIP_DETECT_N = 3           # magnet-marker samples in a row past tip_detect_m: a release (~25 ms at 120 Hz)
+TIP_BASE_ALPHA = 0.02      # per in-band sample: the marker's attached offset from its plate point, learnt slowly
 DROP_LAND_WAIT_S = 30.0    # s after a drop: /fleet/landed even if a drone never reads as down
 DROP_TAKE_BACK_EXTRA_S = 30.0  # s more while a drop's take-back flies QUAD4 out and down (15-25 s; critic F2)
 # partner_contact (card 2026-10-10_combined_m1_contact): his phases from the rejoin on, in which our ring magnet span
@@ -419,6 +421,18 @@ class DissipativeController(LoadPlanner):
         self._detect_count = {}
         self._detect_ok = {}          # each drone's excess on its last tick within the threshold
         self._detect_refused = set()  # detected but refused (min_survivors): do not re-fire
+        # > 0: the magnet-marker check (Wesley 21 Oct, card 2026-10-21_tip_detect). A carrier's magnet marker
+        # (/drone_<d>/magnet_tip_state: on the rig Motive bodies 21-24 through mocap_extra_bodies, in the twin the end
+        # of its rod) that sits this much further from its plate than its attached offset, TIP_DETECT_N samples in a
+        # row, has let go. It catches a quad carrying nothing (the T's opposite quad), whose cable never stretches.
+        self._tip_detect_m = float(p('tip_detect_m', 0.0).value)
+        self._tip_base = {}           # d -> its marker's attached distance from the plate point (EMA, in band only)
+        self._tip_over = {}           # d -> samples in a row past the threshold
+        self._tip_last = {}           # d -> (monotonic t, its latest tip-to-plate distance)
+        if self._tip_detect_m > 0.0:
+            for d in range(self.n):          # the carriers; a reserved newcomer's tip is his /magnet_tip_pose
+                self.create_subscription(MotionCaptureState, f'/drone_{d}/magnet_tip_state',
+                                         (lambda dd: lambda m: self._tip_cb(dd, m))(d), 10)
         handoff_topic = str(p('partner_handoff_topic', '').value)
         # combined M1 contact attach (card 2026-10-10_combined_m1_contact): his mission flies QUAD4 until our check
         # confirms the attach; the newcomer lifecycle stays on (our take-back is the no-attach path)
@@ -1591,19 +1605,68 @@ class DissipativeController(LoadPlanner):
                     f'[dissipative] UNANNOUNCED DETACH: {_who(d)} cable {dist:.3f} m, '
                     f'{100.0 * over:.0f} cm over its length (up {100.0 * rise:.0f} cm) - resizing')
                 self._detect_count = {}
-                why = self._drop_due(d) if self._drop_on_loss else None
-                if why is not None:
-                    self._drop_and_land(f'unannounced loss of {_who(d)}: {why}')
-                    return
-                self._detach_ocp(d)
-                if not self.detached[d]:
-                    if self._drop_on_loss and getattr(self, '_drop_gap_deg', 0.0) > 0.0:
-                        # under drop_gap_deg the ring may be on its edge: a resize that did not happen must drop,
-                        # not fly on with the leaver still in the model
-                        self._drop_and_land(f'unannounced loss of {_who(d)}: no resize to the survivors')
-                        return
-                    self._detect_refused.add(d)
+                self._on_unannounced(d)
                 return
+
+    def _on_unannounced(self, d):
+        """A release found without being told (a stretched cable or a magnet off its plate): drop the ring, or resize
+        to the survivors, as drop_on_loss and the drop rule say."""
+        why = self._drop_due(d) if self._drop_on_loss else None
+        if why is not None:
+            self._drop_and_land(f'unannounced loss of {_who(d)}: {why}')
+            return
+        self._detach_ocp(d)
+        if not self.detached[d]:
+            if self._drop_on_loss and getattr(self, '_drop_gap_deg', 0.0) > 0.0:
+                # under drop_gap_deg the ring may be on its edge: a resize that did not happen must drop,
+                # not fly on with the leaver still in the model
+                self._drop_and_land(f'unannounced loss of {_who(d)}: no resize to the survivors')
+                return
+            self._detect_refused.add(d)
+
+    def _tip_cb(self, d, msg):
+        p = msg.pose.position
+        self._tip_check(d, np.array([p.x, p.y, p.z], float), time.monotonic())
+
+    def _tip_check(self, d, tip, now):
+        """tip_detect_m: d's magnet marker against its plate point on the ring (its slot's attach point, ring pose
+        applied). The attached distance is the marker's offset from that point, learnt in band; TIP_DETECT_N samples
+        in a row past it by tip_detect_m are a release, unless every carrier's marker is past at once (the ring's
+        pose jumped)."""
+        landing = self._land_to_ground and not (self._drop_on_loss and not self._load_down())
+        if (self._tip_detect_m <= 0.0 or self.phase != 'planner' or self._reconfig_mode != 'ocp' or landing
+                or self._unload is not None or not self.takeoff_seen or d not in self.slot2drone
+                or self.detached[d] or d in self._detect_refused):
+            return
+        load_t = getattr(self, '_load_t', None)
+        if self.load_state is None or load_t is None or now - load_t > DETECT_STALE_S:
+            self._tip_over[d] = 0
+            return
+        sl = self.slot2drone.index(d)
+        plate = self.load_state[0:3] + quat_to_rot_np(self.load_state[3:7]) @ np.asarray(self.rho[sl], float)
+        dist = float(np.linalg.norm(tip - plate))
+        self._tip_last[d] = (now, dist)
+        base = self._tip_base.get(d)
+        if base is None:
+            self._tip_base[d] = dist
+            return
+        if dist - base <= self._tip_detect_m:
+            self._tip_over[d] = 0
+            self._tip_base[d] = base + TIP_BASE_ALPHA * (dist - base)
+            return
+        self._tip_over[d] = self._tip_over.get(d, 0) + 1
+        if self._tip_over[d] < TIP_DETECT_N:
+            return
+        others = [x for x in self.slot2drone if x != d and not self.detached[x] and x in self._tip_base
+                  and x in self._tip_last and now - self._tip_last[x][0] <= DETECT_STALE_S]
+        if others and all(self._tip_last[x][1] - self._tip_base[x] > self._tip_detect_m for x in others):
+            self._tip_over = {}          # every marker off at once: the ring's pose jumped, not every magnet
+            return
+        self.get_logger().warn(
+            f'[dissipative] UNANNOUNCED DETACH: {_who(d)} magnet {100.0 * (dist - base):.0f} cm off its plate '
+            f'(attached offset {100.0 * base:.0f} cm) - resizing')
+        self._tip_over = {}
+        self._on_unannounced(d)
 
     def _cancel_unload(self, why):
         """Abandon a soft detach: the tensions blend back to the full split and the magnet

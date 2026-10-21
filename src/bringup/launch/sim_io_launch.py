@@ -111,18 +111,29 @@ def launch_setup(context, *args, **kwargs):
         name='payload_pose_bridge',
         arguments=[f'/model/{parent}/model/payload/pose'
                    f'@geometry_msgs/msg/PoseArray[ignition.msgs.Pose_V']))
+    # the rig's magnet markers (Motive bodies 21-24): the payload end of each rod, from the rod model's pose, which
+    # the chain's worlds publish (card 2026-10-21_tip_detect)
+    tips = LaunchConfiguration('tether_tips').perform(context).lower() in ('1', 'true', 'yes')
+    tether_len = float(LaunchConfiguration('tether_len').perform(context))
     for i in range(n):
         nodes.append(Node(
             package='ros_gz_bridge', executable='parameter_bridge',
             name=f'drone_pose_bridge_{i}',
             arguments=[f'/model/{parent}/model/x3_drone{i}/pose'
                        f'@geometry_msgs/msg/PoseArray[ignition.msgs.Pose_V']))
+        tether_topic = f'/model/{parent}/model/tether_{i}/pose' if tips else ''
+        if tips:
+            nodes.append(Node(
+                package='ros_gz_bridge', executable='parameter_bridge',
+                name=f'tether_pose_bridge_{i}',
+                arguments=[f'{tether_topic}@geometry_msgs/msg/PoseArray[ignition.msgs.Pose_V']))
         nodes.append(Node(
             package='simulation_communication', executable='payload_mocap_emulator',
             name=f'mocap_{i}',
             parameters=[{'drone_id': i, 'drone_name': f'x3_drone{i}',
                          'parent_model': parent, 'publish_payload': (i == 0),
-                         'max_publish_hz': mocap_hz}]))
+                         'max_publish_hz': mocap_hz, 'tether_pose_topic': tether_topic,
+                         'tether_len': tether_len}]))
 
     # TF for every drone + the payload, plus the payload box and its track
     if LaunchConfiguration('fleet_viz').perform(context).lower() in ('1', 'true', 'yes'):
@@ -233,6 +244,10 @@ def generate_launch_description():
         # (300-500 Hz) into every tracker; fleet_viz redraws per message. Defaults (Wesley, 2026-09-23) measured on R0329 vs R0330: RTF 0.29 -> 0.45 in flight, hover unchanged. 0 = unthrottled.
         DeclareLaunchArgument('clock_hz', default_value='500'),
         DeclareLaunchArgument('mocap_hz', default_value='120'),
+        # true: each carrier's magnet marker as on the rig (/drone_<i>/magnet_tip_state), from its rod's pose; the
+        # world must publish the rods (the chain's worlds do), tether_len = their length (card 2026-10-21_tip_detect)
+        DeclareLaunchArgument('tether_tips', default_value='false'),
+        DeclareLaunchArgument('tether_len', default_value='0.55'),
         DeclareLaunchArgument('viz_hz', default_value='30'),
         # RViz-only TF/markers; off for headless batches (26 % of a core, 2026-09-26)
         DeclareLaunchArgument('fleet_viz', default_value='true'),

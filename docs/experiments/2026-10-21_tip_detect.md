@@ -1,0 +1,81 @@
+# Card: catch a release from the magnet marker (21 Oct; chain step 1b)
+
+Wesley (21 Oct): a release "should detect it based on either the swung electromagnet being in the wrong place, or
+the quad being too far away". The planner had only the second check (the cable stretched 6 cm past its length, 2
+planner ticks). That check cannot see a quad that carries nothing, such as the T's quad opposite the gap: its release
+moves nothing. Every carrier has a magnet marker on the rig (Motive bodies 21, 22, 23, 24 for QUAD1-4). **Bars
+FROZEN 21 Oct 20:00**, before any run with the check.
+
+## 1. Question
+Does a magnet-marker check catch an unannounced release within about 0.1 s, including the unloaded quad's, without
+firing in a normal flight?
+
+## 2. Hypothesis
+- **Detection.** A released magnet swings off its plate at once: on 0.55 m cables it hangs ~0.28 m out and ~7 cm
+  lower within ~0.4 s, so it passes 4 cm beyond its attached offset in well under 0.1 s. Three samples in a row at
+  60 Hz is 50 ms.
+  - In the T, `t3_pair_release_tip` is detected within 0.5 s and the fleet resizes to the pair. Without the marker it
+    is likely never detected (`t3_pair_release`, R2250+).
+  - In the square, the marker catches the release ~0.15 s earlier than the stretch did (R2249: +0.21 s).
+- **No false detection.** The attached marker sits at a fixed offset from its plate point, learnt while in band, and
+  mocap noise is mm. So a whole floor-start flight never fires.
+
+## 3. The one variable
+`tip_detect_m` 0.04 (off by default):
+- the planner subscribes `/drone_<d>/magnet_tip_state` for each carrier;
+- it measures the distance from the marker to the plate point (the slot's attach point with the ring's pose
+  applied), against the marker's attached offset, learnt in band (EMA 0.02 per sample);
+- 3 samples in a row past it by 4 cm are a release. The action is the same as the stretch check's (drop or resize,
+  per the drop rule).
+- **Guards:** a stale ring pose (> 0.1 s); every fresh marker past at once (the ring's pose jumped); LAND (unless
+  the drop rule needs it); the creep and lift phases and an unload, as the stretch check.
+
+The stretch check stays on beside it.
+- **Twin:** the chain's worlds publish each rod's pose (`--tether-pose-hz` 60), and the mocap emulator reports the
+  rod's payload end on `/drone_<i>/magnet_tip_state` (`sim_io` `tether_tips:=true tether_len:=0.55`).
+- **Rig:** `real_io_launch.py mocap_extra_bodies:=22:/drone_0/magnet_tip_state,23:/drone_1/magnet_tip_state,24:/drone_2/magnet_tip_state`,
+  in drone order. No rig code changes.
+
+Configs: `t3_pair_release_tip`, `t3_hover_tip`, `c4_release9_tip`. Each is its parent config plus `tip_detect_m` and
+the emulated markers.
+
+## 4. Baseline
+- `t3_pair_release` (R2250/R2251, tonight): the stretch check only.
+- `c4_release9_base` (R2249): stretch detection at +0.21 s; ring peak 57.1 deg at +0.6 s.
+
+## 5. Pass / fail numbers (frozen 20:00)
+
+| Run | Confirms | Falsifies |
+|---|---|---|
+| Unit tests | noise, a blip, a slow drift, a ring-pose jump, a stale ring pose, off, detached and LAND never fire; a 5.5 cm swing fires on the 3rd sample | any of these fails |
+| `t3_hover_tip` x1 | no UNANNOUNCED DETACH from TAKEOFF to LANDED | any detection |
+| `t3_pair_release_tip` x2 | "UNANNOUNCED DETACH ... magnet" within 0.5 s of the RELEASE, the resize to n=2, no drop or abort, tilt peak < 15 deg over the whole flight, the pair's roll < 5 deg p-p and lean < 5 deg over its last 10 s | no detection, a drop or abort, or a bar missed in either run |
+| `c4_release9_tip` x1 | informational: the detection time against R2249's +0.21 s, and the roll peak | - |
+
+**Rig go/no-go for Part C:**
+- the unit tests and `t3_hover_tip` pass;
+- `t3_pair_release_tip` passes;
+- tomorrow's bench reads every marker in Motive (bodies 22, 23, 24) and `/drone_<i>/magnet_tip_state` streams while
+  props are off;
+- plus the drop-rule card's own conditions.
+
+## 6. Repeats
+`t3_pair_release_tip` x2; the others x1.
+
+## 7. Cost
+4 laptop runs (~5 min each), recorded.
+
+## 8. New code?
+Yes:
+- `dissipative_node`: `_tip_check`, `_tip_cb`, and `_on_unannounced` (shared with the stretch check, behaviour
+  unchanged);
+- the `tip_detect_m` knob (`common.yaml`, `real_mode.PLANNER_OPTIONAL`);
+- `generate_rigid_world --tether-pose-hz` (the chain's worlds regenerated);
+- `payload_mocap_emulator` `tether_pose_topic` / `tether_len` and `rod_end`;
+- `sim_io_launch` `tether_tips` / `tether_len`;
+- tests: `test_tip_detect.py`, `test_magnet_tip_emulation.py`.
+
+If it fails, the knob stays off and the code is removed.
+
+## Critic
+(pending)

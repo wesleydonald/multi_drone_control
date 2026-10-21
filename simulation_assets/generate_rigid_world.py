@@ -112,7 +112,7 @@ def _rod_body(idx, radius, mass, L, cx, cy, cz, pitch, yaw, magnet_mass=0.0):
 
 def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
                  damping=0.1, detachable=False, pivot_dz=0.0, magnet_mass=0.0,
-                 stub_mass=None):
+                 stub_mass=None, pose_hz=0.0):
     """One rigid tether (payload bottom -> drone top). Both ends are ball joints (a
     two-force rigid link: the paper model), so the drone's ATTITUDE is decoupled from
     the rod at the top AND the rod swings freely at the payload -- the MPC tilts the
@@ -135,7 +135,11 @@ def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
     the drone-end ball) fly off together; only the tiny stub stays on the payload.
 
     pivot_dz > 0 puts the drone-end ball that far below the drone centre (base_link -z,
-    the rig's hinge): the rod runs attach -> pivot and the joint is posed in base_link."""
+    the rig's hinge): the rod runs attach -> pivot and the joint is posed in base_link.
+
+    pose_hz > 0 (detachable only) publishes the rod model's pose at that rate
+    (/model/lift_system/model/tether_{idx}/pose): its payload end is the magnet, which the
+    mocap emulator reports as the rig's magnet marker (card 2026-10-21_tip_detect)."""
     top = (drone[0], drone[1], drone[2] - pivot_dz) if pivot_dz else drone
     dx = top[0] - attach[0]
     dy = top[1] - attach[1]
@@ -176,7 +180,7 @@ def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
       <model name="tether_{idx}">
         <pose>0 0 0 0 0 0</pose>
         <link name="rod">{rod}
-        </link>
+        </link>{_pose_publisher(pose_hz)}
       </model>
       <joint name="tether_{idx}_to_drone{idx}" type="ball">
         <parent>tether_{idx}::rod</parent>
@@ -203,6 +207,18 @@ def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
         <axis><xyz>1 0 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis>
         <axis2><xyz>0 1 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis2>
       </joint>"""
+
+
+def _pose_publisher(hz):
+    """A PosePublisher for a nested model's links (as the drones'), or '' at hz <= 0."""
+    if hz <= 0:
+        return ''
+    return f"""
+        <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+          <publish_link_pose>true</publish_link_pose>
+          <use_pose_vector_msg>true</use_pose_vector_msg>
+          <update_frequency>{hz:g}</update_frequency>
+        </plugin>"""
 
 
 def detachable_joint_block(idx):
@@ -382,6 +398,8 @@ def build_world(n, placement, detachable=False, legs=False, geom=None):
         tkw.update(mass=geom['rod_mass'], stub_mass=0.001)
     if geom.get('magnet_mass'):
         tkw['magnet_mass'] = geom['magnet_mass']
+    if geom and geom.get('tether_pose_hz'):
+        tkw['pose_hz'] = geom['tether_pose_hz']
     px, py, pz, pyaw = placement['payload']
     attaches = placement['attaches']
     drones = placement['drones']
@@ -546,6 +564,9 @@ def main():
                           'plates flush with the top face at --attach-radius)')
     rig.add_argument('--ring-thickness', type=float, default=None,
                      help='rig ring thickness m (switches to the rig ring)')
+    rig.add_argument('--tether-pose-hz', type=float, default=0.0,
+                     help='> 0 (with --detachable): publish each rod model\'s pose at this rate, for the '
+                          'magnet-marker emulation (card 2026-10-21_tip_detect)')
     rig.add_argument('--drone-model', choices=('x3', 'x3_rig'), default='x3',
                      help='models/x3_drone{i}.sdf (legacy 0.64 kg) or models/x3_rig_drone{i}.sdf '
                           '(0.475 kg airframe)')
@@ -563,6 +584,8 @@ def main():
         geom['rod_mass'] = a.rod_mass
     if a.magnet_mass:
         geom['magnet_mass'] = a.magnet_mass
+    if a.tether_pose_hz:
+        geom['tether_pose_hz'] = a.tether_pose_hz
     if a.drone_model != 'x3':
         geom['drone_model'] = a.drone_model
     ring = geom.get('ring')

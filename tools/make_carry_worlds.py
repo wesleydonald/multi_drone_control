@@ -78,6 +78,11 @@ WORLDS = {
 }
 # per-world options that override RIG_ARGS (passed after them)
 WORLD_OVERRIDES = {w: ['--cable-len', '1.0'] for w in WORLDS if w.endswith('_L100.sdf')}
+# the 90 deg chain's worlds publish each rod's pose, which the mocap emulator turns into the rig's magnet marker
+# (card 2026-10-21_tip_detect; 60 Hz keeps the planner's callbacks light)
+for w in ('four_rigid_ground_rig.sdf', 'three_rigid_ground_rig_T.sdf', 'two_rigid_ground_rig.sdf',
+          'four_rigid_ground_rig_L100.sdf', 'three_rigid_ground_rig_T_L100.sdf', 'two_rigid_ground_rig_L100.sdf'):
+    WORLD_OVERRIDES[w] = WORLD_OVERRIDES.get(w, []) + ['--tether-pose-hz', '60']
 RIG_ARGS = ['--cable-len', str(CABLE_LEN), '--detachable', '--ground-start',
             '--attach-radius', str(ATTACH_RADIUS), '--pivot-dz', str(PIVOT_DZ),
             '--rod-mass', str(ROD_MASS), '--magnet-mass', str(MAGNET_MASS),

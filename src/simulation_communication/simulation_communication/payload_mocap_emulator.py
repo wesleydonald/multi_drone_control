@@ -13,6 +13,8 @@ Parameters (ROS):
 Topics produced:
   /drone_{drone_id}/motion_capture_state   — for the drone_controller
   /payload/motion_capture_state            — for the planner (drone 0 only)
+  /drone_{drone_id}/magnet_tip_state       — tether_pose_topic set: the rig's magnet marker, the payload end of
+                                             this drone's rod (card 2026-10-21_tip_detect)
 """
 
 import collections
@@ -113,6 +115,14 @@ class PayloadMocapEmulator(Node):
         self._payload_last_pos = None
         self._payload_last_ori = None
         self._payload_last_time = None
+        # the magnet marker the rig has on every carrier (Motive bodies 21-24): the payload end of this drone's rod,
+        # from the rod model's pose (the world publishes it for the chain's worlds); off with tether_pose_topic ''
+        tether_topic = str(self.declare_parameter('tether_pose_topic', '').value)
+        self._tether_half = 0.5 * float(self.declare_parameter('tether_len', 0.55).value)
+        self._tip_last_pub = None
+        if tether_topic:
+            self._tip_pub = self.create_publisher(MotionCaptureState, f'/drone_{drone_id}/magnet_tip_state', 5)
+            self.create_subscription(PoseArray, tether_topic, self._tether_cb, 10)
         if publish_payload:
             self._payload_pub = self.create_publisher(
                 MotionCaptureState, '/payload/motion_capture_state', 5)
@@ -227,6 +237,28 @@ class PayloadMocapEmulator(Node):
                               self._drone_last_pos, self._drone_last_ori, self._drone_last_time, body='drone')
         if mcs is not None:
             self._publish(self._drone_pub, mcs)
+
+    @staticmethod
+    def rod_end(pos, ori_xyzw, half):
+        """The payload end of a rod whose link frame sits at its middle with z along it (generate_rigid_world: the
+        magnet is at -L/2 on the rod's z)."""
+        R = quaternion_matrix(ori_xyzw)[:3, :3]
+        return np.asarray(pos, float) + R @ np.array([0.0, 0.0, -half])
+
+    def _tether_cb(self, msg: PoseArray):
+        if not msg.poses:
+            return
+        due, self._tip_last_pub = self._due(self._tip_last_pub)
+        if not due:
+            return
+        p, o = msg.poses[-1].position, msg.poses[-1].orientation
+        tip = self.rod_end((p.x, p.y, p.z), (o.x, o.y, o.z, o.w), self._tether_half)
+        mcs = MotionCaptureState()
+        mcs.header.stamp = self.get_clock().now().to_msg()
+        mcs.header.frame_id = 'map'
+        mcs.pose.position.x, mcs.pose.position.y, mcs.pose.position.z = (float(v) for v in tip)
+        mcs.pose.orientation = o
+        self._publish(self._tip_pub, mcs)
 
     def _payload_cb(self, msg: PoseArray):
         if not msg.poses or self._payload_pub is None:
