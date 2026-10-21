@@ -210,13 +210,18 @@ def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
 
 
 def _pose_publisher(hz):
-    """A PosePublisher for a nested model's links (as the drones'), or '' at hz <= 0."""
+    """A PosePublisher for a tether model, or '' at hz <= 0. Gazebo publishes each pose relative to its parent: the
+    rod (the model's canonical link) never moves in its model, so the message also carries the model's own pose in
+    lift_system (world-anchored), and the rod's world pose is the two composed (22 Oct: without it the twin's marker
+    stayed where the rod lay at spawn). Message: [rod in the model, the model in lift_system]."""
     if hz <= 0:
         return ''
     return f"""
         <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
           <publish_link_pose>true</publish_link_pose>
+          <publish_nested_model_pose>true</publish_nested_model_pose>
           <use_pose_vector_msg>true</use_pose_vector_msg>
+          <static_publisher>false</static_publisher>
           <update_frequency>{hz:g}</update_frequency>
         </plugin>"""
 

@@ -30,6 +30,7 @@ def test_the_generator_publishes_each_detachable_rod_only_when_asked(tmp_path):
     plain, pub = world(), world('--tether-pose-hz', '60')
     tethers = re.findall(r'<model name="tether_\d">.*?</model>', pub, re.S)
     assert len(tethers) == 2 and all('PosePublisher' in t and '<update_frequency>60</update_frequency>' in t
+                                     and '<publish_nested_model_pose>true</publish_nested_model_pose>' in t
                                      for t in tethers)
     assert not any('PosePublisher' in t for t in re.findall(r'<model name="tether_\d">.*?</model>', plain, re.S))
 
@@ -45,3 +46,19 @@ def test_the_ring_tilt_fault_turns_about_the_rings_y_and_the_drones_about_x():
     assert np.degrees(2 * np.arccos(half[3])) == pytest.approx(6.0)
     Rx = quaternion_matrix(E._axis_q((0.0, 12.0, 0.0), 1.0, 0))[:3, :3]
     assert np.allclose(Rx @ [1.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+
+
+def test_the_rod_world_pose_is_the_model_pose_times_the_rods():
+    """22 Oct: Gazebo sends [the rod in its model, the model in lift_system]; the rod alone never moves (it is the
+    model's canonical link), so the marker stayed where the rod lay at spawn until the two were composed. The numbers
+    are tether_0's in three_rigid_ground_rig_T.sdf, as gz printed them."""
+    from types import SimpleNamespace as N
+
+    def pose(xyz, xyzw):
+        return N(position=N(x=xyz[0], y=xyz[1], z=xyz[2]), orientation=N(x=xyzw[0], y=xyzw[1], z=xyzw[2], w=xyzw[3]))
+    rod = pose((0.499818, 0.0, 0.05), (0.0, 0.69413136, 0.0, 0.71984835))
+    at_spawn = E.rod_world([rod, pose((0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0))])
+    assert np.allclose(E.rod_end(*at_spawn, 0.275), (0.225, 0.0, 0.040), atol=2e-3)      # on plate 0
+    lifted = E.rod_world([rod, pose((0.0, 0.0, 1.0), (0.0, 0.0, np.sin(np.pi / 4), np.cos(np.pi / 4)))])
+    assert np.allclose(E.rod_end(*lifted, 0.275), (0.0, 0.225, 1.040), atol=2e-3)       # carried up and round
+    assert np.allclose(E.rod_world([rod])[0], (0.499818, 0.0, 0.05))     # a lone pose is taken as is

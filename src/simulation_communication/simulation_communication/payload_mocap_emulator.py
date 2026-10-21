@@ -261,6 +261,19 @@ class PayloadMocapEmulator(Node):
             self._publish(self._drone_pub, mcs)
 
     @staticmethod
+    def rod_world(poses):
+        """The rod link's pose in lift_system (world-anchored), (xyz, xyzw): the tether's PosePublisher sends [the rod
+        in its model, the model in lift_system] (generate_rigid_world._pose_publisher), so model x rod; a lone pose
+        is taken as is."""
+        def xyz_q(p):
+            return (np.array([p.position.x, p.position.y, p.position.z], float),
+                    np.array([p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w], float))
+        if len(poses) < 2:
+            return xyz_q(poses[-1])
+        (lp, lq), (mp, mq) = xyz_q(poses[0]), xyz_q(poses[-1])
+        return mp + quaternion_matrix(mq)[:3, :3] @ lp, np.asarray(quaternion_multiply(mq, lq), float)
+
+    @staticmethod
     def rod_end(pos, ori_xyzw, half):
         """The payload end of a rod whose link frame sits at its middle with z along it (generate_rigid_world: the
         magnet is at -L/2 on the rod's z)."""
@@ -273,9 +286,8 @@ class PayloadMocapEmulator(Node):
         due, self._tip_last_pub = self._due(self._tip_last_pub)
         if not due:
             return
-        p, o = msg.poses[-1].position, msg.poses[-1].orientation
-        tip = self.rod_end((p.x, p.y, p.z), (o.x, o.y, o.z, o.w), self._tether_half) \
-            + self._tip_rng.normal(0.0, self._tip_noise, 3)
+        pos, ori = self.rod_world(msg.poses)
+        tip = self.rod_end(pos, ori, self._tether_half) + self._tip_rng.normal(0.0, self._tip_noise, 3)
         mcs = MotionCaptureState()
         mcs.header.stamp = self.get_clock().now().to_msg()
         mcs.header.frame_id = 'map'
