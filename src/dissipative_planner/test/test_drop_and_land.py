@@ -51,7 +51,7 @@ def _node(azimuths='30,90,150,270', detached=None, landing=False):
     f.now = [100.0]                        # the node clock (sim time in the twin)
     f.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=int(f.now[0] * 1e9)))
     for m in ('_drop_due', '_drop_and_land', '_release_all_magnets', '_drop_tick',
-              '_cancel_unload_quietly', '_drop_request_cb'):
+              '_cancel_unload_quietly', '_drop_request_cb', '_on_unannounced'):
         setattr(f, m, (lambda name: lambda *a, **k: getattr(D, name)(f, *a, **k))(m))
     f._publish_departed_refs = lambda: None
     f.down = False

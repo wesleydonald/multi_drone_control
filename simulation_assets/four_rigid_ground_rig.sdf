@@ -237,6 +237,11 @@
           <material><ambient>0.5 0.5 0.55 1</ambient><diffuse>0.6 0.6 0.65 1</diffuse></material>
         </visual>
         </link>
+        <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+          <publish_link_pose>true</publish_link_pose>
+          <use_pose_vector_msg>true</use_pose_vector_msg>
+          <update_frequency>60</update_frequency>
+        </plugin>
       </model>
       <joint name="tether_0_to_drone0" type="ball">
         <parent>tether_0::rod</parent>
@@ -281,6 +286,11 @@
           <material><ambient>0.5 0.5 0.55 1</ambient><diffuse>0.6 0.6 0.65 1</diffuse></material>
         </visual>
         </link>
+        <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+          <publish_link_pose>true</publish_link_pose>
+          <use_pose_vector_msg>true</use_pose_vector_msg>
+          <update_frequency>60</update_frequency>
+        </plugin>
       </model>
       <joint name="tether_1_to_drone1" type="ball">
         <parent>tether_1::rod</parent>
@@ -325,6 +335,11 @@
           <material><ambient>0.5 0.5 0.55 1</ambient><diffuse>0.6 0.6 0.65 1</diffuse></material>
         </visual>
         </link>
+        <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+          <publish_link_pose>true</publish_link_pose>
+          <use_pose_vector_msg>true</use_pose_vector_msg>
+          <update_frequency>60</update_frequency>
+        </plugin>
       </model>
       <joint name="tether_2_to_drone2" type="ball">
         <parent>tether_2::rod</parent>
@@ -369,6 +384,11 @@
           <material><ambient>0.5 0.5 0.55 1</ambient><diffuse>0.6 0.6 0.65 1</diffuse></material>
         </visual>
         </link>
+        <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+          <publish_link_pose>true</publish_link_pose>
+          <use_pose_vector_msg>true</use_pose_vector_msg>
+          <update_frequency>60</update_frequency>
+        </plugin>
       </model>
       <joint name="tether_3_to_drone3" type="ball">
         <parent>tether_3::rod</parent>

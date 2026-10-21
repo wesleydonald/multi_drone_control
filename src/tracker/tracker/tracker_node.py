@@ -110,7 +110,9 @@ MODEL_CAP_PERIOD_S = 1.0       # the model throttle cap follows the pack voltage
 # thr_out = real throttle sent, thr_off = offset in use (voltage term included),
 # acx/acy/acz = node-0 cable accel the model was given, ref_age = s since the last reference.
 TRACKER_W1_COLS = ('thr_out', 'thr_off', 'acx', 'acy', 'acz',
-                   'ff_active', 'grounded', 'ref_age')
+                   'ff_active', 'grounded', 'ref_age',
+                   'acm_x', 'acm_y', 'acm_z')   # the raw measured cable accel, before the cap and the slew limit
+                                                 # (x the drone's mass = the cable's pull on it; Wesley 21 Oct)
 
 # Height above spawn z at which the drone counts as AIRBORNE, which is when kT
 # switches from takeoff_thrust_ratio to thrust_ratio.
@@ -1198,11 +1200,13 @@ class Controller(Node):
             except (TypeError, ValueError, AttributeError, IndexError):
                 return float('nan')
         ac = getattr(self, '_applied_cable_xyz', None)
+        raw = getattr(self, '_raw_cable_meas', None)
         last = getattr(self, '_last_ref_wall', None)
         return [num(lambda: self._thr_out), num(lambda: self._thr_off),
                 num(lambda: ac[0]), num(lambda: ac[1]), num(lambda: ac[2]),
                 num(lambda: self._planner_ff_active), num(lambda: self._load_grounded()),
-                num(lambda: (self._safety_clock.now() - last).nanoseconds * 1e-9)]
+                num(lambda: (self._safety_clock.now() - last).nanoseconds * 1e-9),
+                num(lambda: raw[0]), num(lambda: raw[1]), num(lambda: raw[2])]
 
     def _publish_channels(self, u, u_rate):
         """Send [roll, pitch, throttle, yaw] to the FC, or armed-idle before TAKEOFF.
@@ -1781,6 +1785,7 @@ class Controller(Node):
             # (Frozen while another stream flies the drone: the planned term, no measurement history.)
             if self.cable_source in ("measured", "mocap") and self._in_authority:
                 ac_meas = self.measured_cable_accel()
+                self._raw_cable_meas = ac_meas
                 if self._load_grounded() or not self._kt_airborne():
                     # on the stand or with the ring resting the imu reads the floor's support:
                     # fly the planned term and restart the slew from it once airborne

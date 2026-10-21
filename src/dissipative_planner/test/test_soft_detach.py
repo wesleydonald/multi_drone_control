@@ -116,6 +116,7 @@ def _detect_node(dists, detect_m=0.06):
         f.calls.append(d)
         f.detached[d] = True
     f._detach_ocp = _det
+    f._on_unannounced = lambda d: D._on_unannounced(f, d)
     return f
 
 

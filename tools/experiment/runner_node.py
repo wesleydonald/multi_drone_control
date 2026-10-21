@@ -48,6 +48,11 @@ def _xyz(msg):
     return (float(p.x), float(p.y), float(p.z))
 
 
+def _tilt_topic(d):
+    """MOCAP_TILT's input: drone d's emulator, or the ring's for d -1."""
+    return '/payload/mocap_tilt' if d < 0 else f'/drone_{d}/mocap_tilt'
+
+
 def _tilt_deg(q):
     """Angle of body +z from world +z, from a (w, x, y, z) quaternion."""
     w, x, y, z = q
@@ -200,7 +205,7 @@ class ExperimentRunner(Node):
             for e in cfg.events if e.do == 'MOCAP_LOSS'}
         # MOCAP_TILT: the emulator's attitude-offset input, made at start for the same reason
         self.tilt_pubs = {mocap_tilt_arg(e.arg)[0]: self.create_publisher(
-            Float64MultiArray, f'/drone_{mocap_tilt_arg(e.arg)[0]}/mocap_tilt', 5)
+            Float64MultiArray, _tilt_topic(mocap_tilt_arg(e.arg)[0]), 5)
             for e in cfg.events if e.do == 'MOCAP_TILT'}
         # the tilt cut's fault (card 2026-10-11_quad4_tilt_cut), logged as TILT_FAULT
         if self.tilt_pubs or str(cfg.launch_args.get('partner_tilt_cut', '')).lower() in ('true', '1'):
@@ -679,7 +684,7 @@ class ExperimentRunner(Node):
         elif ev.do == 'MOCAP_TILT':
             d, deg, secs, ramp = mocap_tilt_arg(ev.arg)
             self._publish(self.tilt_pubs[d], Float64MultiArray(data=[deg, secs, ramp]),
-                          f'/drone_{d}/mocap_tilt {deg:.0f} deg over {ramp:.2f} s, held {secs:.2f} s')
+                          f'{_tilt_topic(d)} {deg:.0f} deg over {ramp:.2f} s, held {secs:.2f} s')
         elif ev.do == 'TIP_FREEZE':
             self._publish(self.tip_freeze_pub, Float64(data=float(ev.arg)), f'/magnet_tip_publisher/freeze {ev.arg:.1f} s')
         elif ev.do == 'HANDOFF':
