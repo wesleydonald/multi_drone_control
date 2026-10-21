@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Thu 22 Oct 2026, 01:35 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Thu 22 Oct 2026, 01:34 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (21 Oct)
@@ -20,7 +20,7 @@ Updated: Thu 22 Oct 2026, 01:35 AEDT (from `date`). Only what a new session need
   - `~/mdc_wt/thesis` (thesis-rig): the thesis.
 - **Lab PC:** full all evening (Ryan's 11-12 Gazebo sims, load ~107-129 on 24 cores). Everything ran on the laptop.
 
-## Now (Thu 22 Oct, 01:35): Wesley asleep; the 20-min loop (cron job 73b7592d) runs the overnight queue to 07:30
+## Now (Thu 22 Oct, 01:34): Wesley asleep; the 20-min loop (cron job 73b7592d) runs the overnight queue to 07:30
 - **day-1021 at 367c98f:** tip-detect merged, the 8 N cap, the gate passed at badb4a5 (1512 tests). Since then:
   - b42227c: the twin's markers come from the rod's world pose (model x rod; R2287's never armed);
   - f5f9086: the tether callback crash;
