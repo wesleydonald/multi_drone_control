@@ -1,0 +1,4 @@
+# 22 Oct rig (plan 2026-10-21 §2): the offset check after the ring's Motive pivot fix. The model integral acts on
+# the height only (int_k_xy 0), so the hover shows the raw sideways offset with no lean (expect 0.5-2 cm; over 2 cm
+# the pivot explanation, RIG-1021-offsetc, is wrong). The xy integral still counts up and warns at 70 %: no effect.
+int_k_xy: 0.0

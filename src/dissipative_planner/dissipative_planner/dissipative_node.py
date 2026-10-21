@@ -192,6 +192,15 @@ def _largest_gap_deg(rho):
     return float(np.degrees(np.max(np.diff(np.r_[a, a[0] + 2 * np.pi]))))
 
 
+def _survivor_gap_deg(rho):
+    """The survivors' largest empty arc around the ring, degrees: _largest_gap_deg for three or more, the larger arc
+    for two (180 for an opposite pair), 360 for one."""
+    if len(rho) != 2:
+        return _largest_gap_deg(rho)
+    a0, a1 = (np.arctan2(float(r[1]), float(r[0])) for r in rho)
+    return 360.0 - abs(np.degrees((a1 - a0 + np.pi) % (2 * np.pi) - np.pi))
+
+
 class DissipativeController(LoadPlanner):
     def __init__(self):
         super().__init__('dissipative_planner')   # builds the OCP planner (creep -> OCP -> hover)
@@ -642,6 +651,10 @@ class DissipativeController(LoadPlanner):
         # from two rim points (a pendulum about their chord; capsizes in SIL) and the
         # RViz DETACH spinbox auto-increments, so a double press must not get there.
         self._min_survivors = int(p('min_survivors', 3).value)
+        # the 90 deg chain (Wesley 21 Oct, card 2026-10-21_chain_release): > 0 = after the lift, a loss keeps flying
+        # while the survivors' largest empty arc (a pair: its larger arc) is at most this, so the T and the opposite
+        # pair fly on at 200; 0 = the rule before (a gap of 180 or more drops). A pair also needs min_survivors 2.
+        self._drop_gap_deg = float(p('drop_gap_deg', 0.0).value)
         # Where each departed drone was parked, so it keeps getting a reference after
         # an OCP resize (the resized OCP plans only for the drones still on the load,
         # and a tracker with no reference trips ref_stale and disarms the fleet).
@@ -1270,7 +1283,22 @@ class DissipativeController(LoadPlanner):
         rho_of = {self.slot2drone[sl]: self.rho[sl]
                   for sl in range(len(self.slot2drone))}
         rho_new = [rho_of[x] for x in survivors]
+        if len(rho_new) == 2 and not (getattr(self, '_drop_gap_deg', 0.0) > 0.0 and self._gap_flies(rho_new)):
+            # min_survivors 2 alone would fly any pair (a double DETACH press): only one drop_gap_deg allows
+            self.get_logger().error(
+                f'[dissipative] refusing to detach {d}: the two left span a {_survivor_gap_deg(rho_new):.0f} deg '
+                f'gap (drop_gap_deg {self._drop_gap_deg:g}, CoG off their line)')
+            return None
         return survivors, rho_new, _largest_gap_deg(rho_new)
+
+    def _gap_flies(self, rho_s):
+        """drop_gap_deg: the survivors' largest empty arc is at most drop_gap_deg and the lift is done (a false
+        detection in the creep or lift still drops)."""
+        lz0 = getattr(self, 'lift_z0', None)
+        if (getattr(self, '_drop_gap_deg', 0.0) <= 0.0 or lz0 is None
+                or self.lift_progress < (self.target_z - lz0) - 1e-6):
+            return False
+        return _survivor_gap_deg(rho_s) <= self._drop_gap_deg + 1e-6
 
     def _resize_and_release(self, d, survivors, rho_new, gap, post_blend=None):
         """Resize the OCP to the survivors and open d's magnet. `post_blend` = (t_from,
@@ -1363,9 +1391,13 @@ class DissipativeController(LoadPlanner):
         if len(survivors) < max(2, self._min_survivors):
             return f'{len(survivors)} would remain (min_survivors {self._min_survivors})'
         rho_of = {self.slot2drone[sl]: self.rho[sl] for sl in range(len(self.slot2drone))}
-        gap = _largest_gap_deg([rho_of[x] for x in survivors])
+        rho_s = [rho_of[x] for x in survivors]
+        gap = _largest_gap_deg(rho_s)
         if gap >= 180.0 - 1e-6:
-            return f'the survivors span a {gap:.0f} deg gap (CoG on or outside them)'
+            if getattr(self, '_drop_gap_deg', 0.0) <= 0.0:
+                return f'the survivors span a {gap:.0f} deg gap (CoG on or outside them)'
+            if not self._gap_flies(rho_s):
+                return f'the survivors span a {_survivor_gap_deg(rho_s):.0f} deg gap (CoG on or outside them)'
         return None
 
     def _drop_request_cb(self, msg):
@@ -1565,6 +1597,11 @@ class DissipativeController(LoadPlanner):
                     return
                 self._detach_ocp(d)
                 if not self.detached[d]:
+                    if self._drop_on_loss and getattr(self, '_drop_gap_deg', 0.0) > 0.0:
+                        # under drop_gap_deg the ring may be on its edge: a resize that did not happen must drop,
+                        # not fly on with the leaver still in the model
+                        self._drop_and_land(f'unannounced loss of {_who(d)}: no resize to the survivors')
+                        return
                     self._detect_refused.add(d)
                 return
 

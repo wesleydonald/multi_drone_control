@@ -5,7 +5,7 @@ Approved by Wesley 21 Oct ~18:50. This is the current plan (CLAUDE.md). Status p
 | Section | Status | Commits / runs |
 |---|---|---|
 | Housekeeping (commits, branch day-1021) | done 21 Oct | 410f0f1 (day-1016), 6483d90 (tejen-sync2) |
-| 1. Tonight for Thu 22 | in progress | |
+| 1. Tonight for Thu 22 | in progress: disk freed (Wesley's list), line_spin + 2q/T worlds (5fbdaba), batch 1 flying 19:12 (R2242-), drop-rule card at the critic | 5fbdaba; R2242 line_spin 3q: 15.7 mm, tilt peak 3.4 deg at the end of the return leg, yaw err mean 0.6 max 5.3 deg |
 | 2. Thu 22 rig | to do | |
 | 3. 1 m switch and the re-fly (R) | to do | |
 | 4. Chain in the twin (N) | to do | |

@@ -44,7 +44,8 @@ SHOWN = ('TAKEOFF', 'HANDOVER', 'RELEASE', 'DETACH', 'DETECTED', 'DROP', 'LAND',
 EVENT_HEX = {'RELEASE': '#377eb8', 'DETACH': '#ff7f00', 'DETECTED': '#ff7f00', 'DROP': '#e41a1c',
              'FLEET_ABORT': '#e41a1c', 'GROUNDED': '#e41a1c'}
 PART_HEX = {'along': '#e41a1c', 'off': '#377eb8', 'height': '#4daf4a'}
-PATHS = {'orbit': 'circle', 'circle': 'circle', 'fig_8': 'figure-8', 'hover': 'hover'}
+PATHS = {'orbit': 'circle', 'circle': 'circle', 'fig_8': 'figure-8', 'hover': 'hover', 'line_x': 'line',
+         'spin': 'spin', 'line_spin': 'spinny line'}
 MOVING_MPS = 0.02           # reference speed above which the error has an along-the-path part
 
 
@@ -304,8 +305,10 @@ def summarise(arg):
     plt.setp(ax_tilt.get_xticklabels(), visible=False)
 
     path = PATHS.get(kind, kind)
-    if kind in ('orbit', 'circle', 'fig_8'):
+    if kind in ('orbit', 'circle', 'fig_8', 'spin'):
         path += f' r {float(pp.get("traj_radius", 0)):.2g} m at {float(pp.get("traj_speed", 0)):.3g} m/s'
+    elif kind in ('line_x', 'line_spin'):
+        path += f' {float(pp.get("traj_distance", 1.0)):.2g} m at {float(pp.get("traj_speed", 0)):.3g} m/s'
     mode = {'mpc_planner': 'mpc', 'dissipative_planner': 'detach mode'}.get(planner, planner or '?')
     rts = tp.get('ref_time_shift')
     head = f'{label}   {mode}, {path}' + (f', ref_time_shift {"on" if rts else "off"}' if rts is not None else '')

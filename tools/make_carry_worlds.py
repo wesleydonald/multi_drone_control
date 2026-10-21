@@ -71,9 +71,13 @@ WORLDS = {
     # (generator azimuths count counter-clockwise, so clockwise plate 3 is 270)
     'two_rigid_ground_rig.sdf': ['--n', '2'],
     'three_rigid_ground_rig_T.sdf': ['--n', '3', '--azimuths', '0,270,180'],
+    # ... and the same at 1 m: the thesis baseline B and the chain N (every link a ~1 m cable from 22 Oct)
+    'two_rigid_ground_rig_L100.sdf': ['--n', '2'],
+    'four_rigid_ground_rig_L100.sdf': ['--n', '4'],
+    'three_rigid_ground_rig_T_L100.sdf': ['--n', '3', '--azimuths', '0,270,180'],
 }
 # per-world options that override RIG_ARGS (passed after them)
-WORLD_OVERRIDES = {'three_rigid_ground_rig_L100.sdf': ['--cable-len', '1.0']}
+WORLD_OVERRIDES = {w: ['--cable-len', '1.0'] for w in WORLDS if w.endswith('_L100.sdf')}
 RIG_ARGS = ['--cable-len', str(CABLE_LEN), '--detachable', '--ground-start',
             '--attach-radius', str(ATTACH_RADIUS), '--pivot-dz', str(PIVOT_DZ),
             '--rod-mass', str(ROD_MASS), '--magnet-mass', str(MAGNET_MASS),

@@ -1,0 +1,8 @@
+# Card 2026-10-21_chain_release, neighbour: as chain_pair.yaml with the gap rule OFF (min_survivors 2 kept), so a
+# detected release down to the pair must still be dropped by the planner's gap rule.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 0.0
+min_survivors: 2
+drop_tilt_deg: 45.0

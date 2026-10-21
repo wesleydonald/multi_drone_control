@@ -9,7 +9,8 @@ import numpy as np
 import pytest
 
 pytest.importorskip('acados_template')
-from dissipative_planner.dissipative_node import DEPARTED_CLEAR_R, DissipativeController as D  # noqa: E402
+from dissipative_planner.dissipative_node import (DEPARTED_CLEAR_R, DissipativeController as D,  # noqa: E402
+                                                  _survivor_gap_deg)
 from mpc_planner.geometry import attach_points  # noqa: E402
 
 
@@ -194,3 +195,54 @@ def test_no_release_guard_after_a_drop():
     f = SimpleNamespace(_release_guard=True, load_state=np.zeros(13), _dropped='test')
     D._guard_setup(f, 0, 3, st, True, [np.array([0.0, 1.2, 1.6])])
     assert 'guard' not in st
+
+
+def _gap(f, deg=200.0, lifted=True):
+    """drop_gap_deg, the lift state and the rule's helpers on a stub node."""
+    f._drop_gap_deg = deg
+    f.lift_z0, f.target_z, f.lift_progress = 0.02, 1.0, (0.98 if lifted else 0.4)
+    f._gap_flies = lambda rho: D._gap_flies(f, rho)
+    f._detach_plan = lambda d: D._detach_plan(f, d)
+    return f
+
+
+def test_the_survivor_gap_counts_a_pair_by_its_larger_arc():
+    assert _survivor_gap_deg(attach_points(2, 0.225, 0.0, '0,180')) == pytest.approx(180.0)
+    assert _survivor_gap_deg(attach_points(2, 0.225, 0.0, '0,150')) == pytest.approx(210.0)
+    assert _survivor_gap_deg(attach_points(2, 0.225, 0.0, '350,170')) == pytest.approx(180.0)
+    assert _survivor_gap_deg(attach_points(3, 0.225, 0.0, '0,90,180')) == pytest.approx(180.0)
+    assert _survivor_gap_deg(attach_points(1, 0.225, 0.0, '0')) == 360.0
+
+
+def test_drop_gap_deg_flies_the_t_and_the_opposite_pair_after_the_lift_and_nothing_else():
+    """The 90 deg chain (card 2026-10-21_chain_release, Wesley's 200 deg rule): after the lift a loss keeps flying while
+    the survivors' largest empty arc is at most 200 deg; anything wider, one quad, a loss in LAND or before the lift
+    still drops, and with the knob off every decision is as before."""
+    sq = '0,90,180,270'
+    assert '180 deg gap' in _gap(_node(sq), deg=0.0)._drop_due(1)       # off: the square -> T drops, as today
+    assert _gap(_node(sq))._drop_due(1) is None                         # the T 0/180/270
+    assert '180 deg gap' in _gap(_node(sq), lifted=False)._drop_due(1)  # not before the lift is done
+    assert _gap(_node('0,90,190,270'))._drop_due(1) is None             # survivors 0/190/270: 190 <= 200
+    assert '205 deg gap' in _gap(_node('0,90,205,270'))._drop_due(1)    # 205 > 200
+    t = _gap(_node(sq, detached=[False, True, False, False]), deg=0.0)
+    assert 'would remain' in t._drop_due(3)                             # off, min_survivors 3: the pair drops
+    t._min_survivors = 2
+    assert '360 deg gap' in t._drop_due(3)                              # min_survivors 2 alone still drops
+    t._drop_gap_deg = 200.0
+    assert t._drop_due(3) is None                                       # T -> the opposite pair 0/180
+    assert '270 deg gap' in t._drop_due(0)                              # T -> 180/270, 90 deg apart
+    pair = _gap(_node(sq, detached=[False, True, False, True]))
+    pair._min_survivors = 2
+    assert 'would remain' in pair._drop_due(0)                          # the pair -> one quad
+    land = _gap(_node(sq, landing=True))
+    assert land._drop_due(1) == 'during LAND'
+
+
+def test_the_announced_path_leaves_a_pair_only_within_drop_gap_deg():
+    t = _gap(_node('0,90,180,270', detached=[False, True, False, False]), deg=0.0)
+    t._min_survivors = 2
+    assert t._detach_plan(3) is None                                    # knob off: no pair at all
+    t._drop_gap_deg = 200.0
+    assert t._detach_plan(3) is not None                                # the opposite pair 0/180
+    assert t._detach_plan(0) is None                                    # 180/270 would remain
+    assert t._detach_plan(2) is None                                    # 0/270 would remain

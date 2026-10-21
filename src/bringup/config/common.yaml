@@ -96,6 +96,7 @@ fleet_resize:
   departed_ground_idle: true   # ...is pushed to its own resting height and disarmed alone there (cards 2026-10-09_departed_ground_idle, _departed_disarm_alone; default 9 Oct after the LAND re-fly's reviewer)
   drop_on_loss: true           # drop the ring and land every drone on a second loss or a capsize (card 2026-10-08_drop_and_land; on by default with detection, 8 Oct)
   drop_takes_back: ''          # a drop also takes a pending newcomer back from his stream ('' = off; card 2026-10-16_drop_takes_back)
+  drop_gap_deg: ''             # deg, '' = off (a 180 deg gap drops): after the lift a loss keeps flying while the survivors' largest empty arc (a pair: its larger arc) is at most this; 200 flies the T and the opposite pair (Wesley 21 Oct; the pair needs min_survivors 2; card 2026-10-21_chain_release)
   drop_tilt_deg: ''            # deg, '' = 30: the trackers' ring-tilt drop threshold
   drop_samples: ''             # '' = 2: consecutive ring samples over it
   drop_glitch_step_deg: ''     # deg, '' = 15: a frame-to-frame ring attitude step above this is a pose glitch (rig bags: real capsizes stay under it)
