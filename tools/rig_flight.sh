@@ -86,7 +86,7 @@ for ((i = 0; i < N; i++)); do
   topics+=("/drone_$i/motion_capture_state" "/drone_$i/ELRSCommand" "/drone_$i/telemetry"
            "/drone_$i/magnet" "/drone_$i/fc_arm_state" "/drone_$i/mux_state" "/drone_$i/ELRSCommand_diss"
            "/drone_$i/departed" "/drone_$i/down_alone" "/drone_$i/on_load" "/drone_$i/radio_health"
-           "/drone_$i/fc_attitude")
+           "/drone_$i/fc_attitude" "/drone_$i/magnet_tip_state")   # magnet marker (mocap_extra_bodies; card 2026-10-21_tip_detect)
 done
 # combined M1 contact attach (partner_contact:=true): our check, the coil gate, his mission's side
 if [ "$COMBINED" = true ]; then

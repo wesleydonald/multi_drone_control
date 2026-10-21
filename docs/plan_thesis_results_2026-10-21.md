@@ -5,10 +5,10 @@ Approved by Wesley 21 Oct ~18:50. This is the current plan (CLAUDE.md). Status p
 | Section | Status | Commits / runs |
 |---|---|---|
 | Housekeeping (commits, branch day-1021) | done 21 Oct | 410f0f1 (day-1016), 6483d90 (tejen-sync2) |
-| 1. Tonight for Thu 22 | in progress: disk freed (Wesley's list), line_spin + 2q/T worlds (5fbdaba), batch 1 flying 19:12 (R2242-), drop-rule card at the critic | 5fbdaba; R2242 line_spin 3q: 15.7 mm, tilt peak 3.4 deg at the end of the return leg, yaw err mean 0.6 max 5.3 deg |
+| 1. Tonight for Thu 22 | done 20:30: line_spin, 2q/T/1 m worlds, drop_gap_deg (chain card, critic, arm 2 FAILED its rocking bar), magnet detector built on branch tip-detect (critic: rewrite; not flown), sheet docs/rig/thu_2026-10-22.md (Part C moved to Wed 28) | 5fbdaba, d440664; R2242-R2258 |
 | 2. Thu 22 rig | to do | |
 | 3. 1 m switch and the re-fly (R) | to do | |
-| 4. Chain in the twin (N) | to do | |
+| 4. Chain in the twin (N) | step 1 done (drop_gap_deg, R2249-R2258): the square-to-T release rolls the ring to 57 deg (dropped at 45); step 2 next: force-vector split with the tether mass, ~0.1 s reaction, a marker cue | d440664 |
 | 5. Rig Nr and K | to do | |
 | 6. Sim U (magnet off its slot) | to do | |
 | 7. Sim S (scalability) | to do | |

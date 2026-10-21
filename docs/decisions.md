@@ -283,3 +283,28 @@ DECIDED 2026-10-21  The supervisor's results spec (Wesley ~18:50, plan docs/plan
       evening reel; state logs are deleted once their video is checked; disk space from a delete list he approves.
   (8) Lab: every Wed/Thu 8-11 am, a couple of Fridays if needed; results freeze Sat 7 Nov. Tomorrow's first
       priority: the offset check and the 3-quad baselines.
+DECIDED 2026-10-21  Evening answers (Wesley ~22:45-23:00, after the chain card's runs R2249-R2258):
+  (1) The T to the pair stays on Thu 22's rig sheet (Part C, last), gated on the ring centre-of-mass fix first
+      (Motive pivot down to the ring's centre, attach_z / payload_rest_z typed), B1 clean, and the detector branch.
+  (2) A carrier magnet switched off on the rig detaches at once ("because of the angle the quad would be at"), so the
+      magnet-marker check should see a release within tens of ms (card 2026-10-21_tip_detect rev 2).
+  (3) The trackers' measured cable-pull cap goes from 6.6 to 8 N: cable_accel_cap 12 -> 14.5 m/s^2 (common.yaml), a
+      default, applied after the overnight batch; the trackers also log the raw measured pull (acm_x/y/z).
+  (4) Drop rule (Wesley, before the chain card's runs; card 2026-10-21_chain_release): a loss keeps flying while
+      the survivors' largest gap is at most 200 deg (for a pair, its larger arc), switch `drop_gap_deg` (default off,
+      typed on the rig through configs/rig/chain_pair*.yaml) with min_survivors 2; the trackers' ring-tilt drop goes
+      to 45 deg in those files. The cables stay 1.0 m for the chain.
+  (5) Part C's detector branch: the magnet-marker check flies ON only if it passes its critic and the A/B bags replay
+      clean (tools/tip_replay.py). Critic round 2 (~23:00) said NO-GO, so Part C flies chain_pair_noxy.yaml (the
+      stretch check alone) with the markers recorded; the check's rev 3 waits for the chain's step-2 card.
+  (6) Part C, no detection within 2 s of the release: LAND straight away (Wesley: unlikely).
+  (7) Overnight work stops starting new work at 06:30.
+DECIDED 2026-10-21  The magnet-marker check after critic round 2 (Wesley ~23:30, disagreeing with its no-go: our 46 rig
+  flights, 42 min of airborne ring pose at ~88 Hz, show no ring-attitude glitch in normal flight; every glitch and
+  frozen pose came after a failure with the ring at 55-120 deg; scan in docs/experiments/2026-10-21_tip_detect.md):
+  (1) Add the cheap guards (rev 3: 0.1 s persistence on stamps, act only with another armed marker fresh, reject
+      frozen repeats, hold off after a ring attitude step), then compare it against the stretch check in the twin.
+  (2) The comparison runs after the overnight batch (solve sweep, 1 m videos, 4-quad re-runs). "Both methods should
+      work; it would be nice to have both available": the check goes onto the rig tree as a switch (tip_detect_m,
+      default off).
+  (3) The twin's rod-pose marker publishers go into the existing T, 2-quad and 4-quad worlds (0.55 m and 1 m).
