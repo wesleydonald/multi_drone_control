@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Thu 22 Oct 2026, 03:33 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Thu 22 Oct 2026, 06:13 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (21 Oct)
@@ -20,33 +20,35 @@ Updated: Thu 22 Oct 2026, 03:33 AEDT (from `date`). Only what a new session need
   - `~/mdc_wt/thesis` (thesis-rig): the thesis.
 - **Lab PC:** full all evening (Ryan's 11-12 Gazebo sims, load ~107-129 on 24 cores). Everything ran on the laptop.
 
-## Now (Thu 22 Oct, 03:33): Wesley asleep; the 20-min loop (cron job 73b7592d) runs the overnight queue to 07:30
-- **The comparison is done and scored** (R2292-R2299, card results, commit 5e8f242):
-  - the marker check caught both T-to-pair releases in ~0.25 s, where the stretch check missed both;
-  - one frozen bar missed (the pair's rocking);
-  - the sheet's Part C line: your call, ON recommended if the A/B replay is clean.
-- **03:33: the queue reordered.** The basket stack runs at RTF ~0.1 (R2310, the 1 m basket on the circle, ~40 min).
-  - Stopped (scripts only): overnight3b.sh and overnight3c.sh.
-  - Running: R2310's runner (pid 217187) until it ends.
-  - Chained: `scratchpad/overnight3d.sh` (task bdklaxhwe, log `scratchpad/overnight3d.log`) waits on 217187, then:
-    1. c4_detach9_fig8_L100, c4_softdetach9_L100, c4_softdetach9_fig8_L100;
-    2. the neighbours x8;
-    3. basket_hover_L100;
-    4. the solve re-time if started before 05:40;
-    5. render22.sh.
-  - Dropped for time: the second basket_circle_L100 and the 0.55 m basket_circle.
-- **Done in the queue so far:**
-  - R2300-R2305: A/B tipon, all clean;
-  - R2306 basket_hover: the mission done, the landing's TB14 tip-over;
-  - R2307: void;
-  - R2308: the 1 m floor join, clean;
-  - R2309: the hard 1 m detach, dropped at 46 deg.
-- **Scorers:** `scratchpad/score_tip.py` (the check's runs and detaches), `scratchpad/score_1m.py` (paths),
-  `scratchpad/score_basket.py` (the basket and floor-join stages, via `tools/m1_score.py json`).
-- **Morning report:** by 07:15, then a push notification and CronDelete 73b7592d.
-- **day-1021 at 2463c12** (the gate passed at badb4a5; the planner suite passes since).
-- **Stopping a batch:** the script by an anchored pattern (`pgrep -f "^bash /tmp/.*/<script>.sh"`), then the runner
-  (`pgrep -f "^python3 ./tools/run_experiment.py"`, SIGINT), then the stack.
+## Now (Thu 22 Oct, 06:13): rig 08:00-11:00; overnight done (morning report `docs/reports/morning_report_2026-10-22.md`)
+- **Rig tree:** `day-1021`, flight code as of 367c98f:
+  - the magnet-marker check rev 3, a switch (`tip_detect_m`, default off; Part C's `chain_pair_tip.yaml`);
+  - the 8 N pull cap;
+  - the tracker's raw-pull columns.
+  Gate passed at badb4a5. Note `git log --oneline -1` at the rig.
+- **Sheet** `docs/rig/thu_2026-10-22.md`:
+  - bench item 0 (the ring's centre of mass) first;
+  - A then B (markers bagged);
+  - Part C last. Status line: your call, R3on recommended if the A/B replay after Part B is clean (gate 3: run
+    `tools/tip_replay.py` on each A/B bag). R3off will most likely end in "no detection: LAND" (the twin's stretch
+    check missed 4 of 4 zero-share releases).
+- **Overnight results** (registry R2259-R2322; plan status table updated):
+  - the 1 m baselines;
+  - the comparison (one frozen bar missed: the pair's rocking against an arm that never resized);
+  - A/B with the check on, all clean;
+  - the neighbours;
+  - the basket: the mission works in hover at 0.55 m and 1 m, the landing hits TB14; the 1 m circle rejoin stalls;
+  - the 1 m detaches: hard drops, soft does not;
+  - the solve sweep re-timed: 4 / 5 / 6 quads at 5 / 2 / 1 iterations within 60 ms.
+- **Videos:** `scratchpad/render22.sh` running until ~07:05. Reel `results/videos/reel_2026-10-22_overnight.mp4`.
+- **The loop** (cron 73b7592d) stops after the report's push.
+- **Open for after the rig:**
+  - chain step 2a (draft card) and 2b (the reaction to a loaded release);
+  - the scalability quality card;
+  - Tejen's 1 m moving-ring rejoin;
+  - merge day-1021;
+  - the 1 m bands and defaults;
+  - the re-fly R.
 
 ## Earlier today (21 Oct)
 - **Rig day 08:23-11:05** (`docs/reports/rig_2026-10-21.md`, RIG-1021-*):

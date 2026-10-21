@@ -7,11 +7,11 @@ Approved by Wesley 21 Oct ~18:50. This is the current plan (CLAUDE.md). Status p
 | Housekeeping (commits, branch day-1021) | done 21 Oct | 410f0f1 (day-1016), 6483d90 (tejen-sync2) |
 | 1. Tonight for Thu 22 | done 20:30: line_spin, 2q/T/1 m worlds, drop_gap_deg (chain card, critic, arm 2 FAILED its rocking bar). Sheet docs/rig/thu_2026-10-22.md; Part C kept on it (Wesley ~23:00). Magnet detector rev 3 after critics 2 and 3 on branch tip-detect; its twin comparison flies overnight 22 Oct | 5fbdaba, d440664, 33723c2; tip-detect c56ad44; R2242-R2258 |
 | 2. Thu 22 rig | to do | |
-| 3. 1 m switch and the re-fly (R) | twin 1 m baselines B: 2 and 3 quads done (R2259-R2270, all pass the exploratory falsifier, paths 15-18 mm, pulls <= 5.4 N); 4 quads re-flying overnight (R2271-R2281 void, R2282 figure-8 23 mm) | R2259-R2270, R2282 |
-| 4. Chain in the twin (N) | step 1 done (drop_gap_deg, R2249-R2258): the square-to-T release rolls the ring to 57 deg (dropped at 45); step 2 next: force-vector split with the tether mass, ~0.1 s reaction, a marker cue | d440664 |
-| 5. Rig Nr and K | to do | |
+| 3. 1 m switch and the re-fly (R) | twin 1 m baselines B: all nine cells flown (2 quads 15-18 mm, 3 quads 16-18, 4 quads 21-23; R2259-R2270, R2282-R2286), all pass the exploratory falsifier; the 8 N pull cap is in (Wesley 21 Oct). Bands and the 1 m defaults still to do | R2259-R2270, R2282-R2286 |
+| 4. Chain in the twin (N) | step 1 done (drop_gap_deg). The magnet-marker check (rev 3, merged as a switch) catches the zero-share T-to-pair release at 0.55 m and 1 m and mid figure-8; the stretch check misses it. The loaded square-to-T release still drops the ring (57-84 deg) whatever the cue; the soft detach does not (22.9/25.9 deg). Next: step 2a (vector split, draft card) and 2b (reaction) | d440664, c881ef0, 367c98f; R2249-R2258, R2292-R2321 |
+| 5. Rig Nr and K | twin only so far: his basket mission works in hover at 0.55 m and 1 m (R2306, R2322; the landing hits TB14); on a 1 m circle his rejoin stalls in MATCH_VELOCITY (R2310); his 1 m floor join is clean (R2308). The rig waits on his attach | R2306, R2308, R2310, R2322 |
 | 6. Sim U (magnet off its slot) | to do | |
-| 7. Sim S (scalability) | bench run 21-22 Oct but flawed: it never kept its warm start, so every tick was a cold 15-iteration reseed and the 5/2/1 iteration rows came out identical. Fixed in tools/solve_scaling.py; re-time from the cached builds (n 2-10). Size scaling at 15 cold iterations: n2 27, n3 53, n4 102, n6 375, n9 905 ms | results/analysis/solve_scaling_tuf_coldreseed_2026-10-22.json |
+| 7. Sim S (scalability) | bench fixed and re-timed (22 Oct): within the 60 ms cap, 4 quads at 5 SQP iterations, 5 at 2, 6 at 1; 9 quads take 135 ms at 1. Next: plan quality against iterations (card) | results/analysis/solve_scaling_tuf_2026-10-22.json |
 | 8. Sim C (paper's method) | to do | |
 | 9. Videos | to do | |
 | 10. Thesis | to do | |
