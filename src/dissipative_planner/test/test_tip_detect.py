@@ -160,3 +160,35 @@ def test_it_is_quiet_when_off_in_land_or_detached():
     for _ in range(20):
         _step(f, {1: hang})
     assert f.released == []
+
+
+def test_the_offline_replay_runs_the_same_check_over_recorded_samples():
+    """tools/tip_replay.py (Wesley 21 Oct: Part C flies the check only if the A/B flights replay clean)."""
+    import importlib.util
+    import pathlib
+    spec = importlib.util.spec_from_file_location(
+        'tip_replay', pathlib.Path(__file__).resolve().parents[3] / 'tools' / 'tip_replay.py')
+    tr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tr)
+    g = _node()                                  # the T geometry, typed clockwise as the sheet does: 0,90,180
+    q, v = np.array([1.0, 0.0, 0.0, 0.0]), np.zeros(3)
+    ev, t = [], 0.0
+    for k in range(400):                         # rest, lift to 1.0, hold
+        t += DT
+        z = min(1.0, 0.02 + 0.01 * k)
+        ev.append((t, 'ring', -1, np.array([0.0, 0.0, z]), (q, v)))
+        for d in range(3):
+            tip = np.array([0.0, 0.0, z - 1.0]) + _tip(g, d)
+            ev.append((t, 'drone', d, tip + BTT * _out(g, d), None))
+            ev.append((t, 'tip', d, tip, None))
+    f, fires, devmax = tr.replay(ev, [0.0, 90.0, 180.0], 0.02)
+    assert set(f._tip_v0) == {0, 1, 2} and fires == [] and max(devmax.values()) < 0.01
+    body2 = ev[-2][3]                            # drone 2 holds its place...
+    hang = body2 - np.array([0.0, 0.0, BTT])     # ...while its magnet swings off the plate to hang below it
+    for k in range(10):
+        t += DT
+        ev.append((t, 'ring', -1, np.array([0.0, 0.0, 1.0]), (q, v)))
+        ev.append((t, 'drone', 2, body2, None))
+        ev.append((t, 'tip', 2, hang, None))
+    f, fires, devmax = tr.replay(ev, [0.0, 90.0, 180.0], 0.02)
+    assert [d for _, d, _ in fires] == [2]
