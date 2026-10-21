@@ -316,3 +316,6 @@ DECIDED 2026-10-22  The ring's centre of mass (Wesley 08:20, bench item 0): the 
   payload_rest_z 0.0275, with the ring's Motive pivot moved down to the centre of mass (it should read ~2.75 cm at
   rest; it read 5.16 cm before the move and 2.76 cm after, ~08:35). The twin's worlds keep 0.02 / 0.02 until they are
   regenerated.
+DECIDED 2026-10-22  The rig's path baselines fly with no hover hold (Wesley ~08:59, after A2: the integral's lean ~1 deg):
+  the path starts as the lift ends, as in the twin's baseline B configs, so the twin-vs-rig table compares like for
+  like.
