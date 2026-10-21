@@ -138,6 +138,58 @@ Updated: Sun 18 Oct 2026, 06:35 AEDT (from `date`). Only what a new session need
   Thesis writing goes to a separate session: brief docs/thesis_rewrite_brief_2026-10-17.md (Opus 5.5, high).
 - **(4) Band rule signed** (f = 1 +- 2 sigma_rig). Compute and freeze the bands (sigma_rig from RIG-1014-lift3).
 
+## Now (Wed 21 Oct, 16:55): the ring body pivot is fixed in Motive (Wesley); tilt next
+- 4-angle bench (RIG-1021-ringbench): ring mocap centre was (-0.99, +1.39) cm off in the ring frame (fit rms 0.6 mm);
+  body frame tilted 1.3 deg; floor or Motive ground plane 0.9 deg (normal toward -20 deg world).
+- Wesley moved the pivot +9.9 mm toward plate 0, +13.9 mm toward plate 3 (RIG-1021-ringpivot): a 180 deg turn now
+  moves the reading 0.3 mm (was 3.4 cm). EVERY rig flight from now on uses the new pivot; Te-Jen's stack reads it too.
+- Budget of the 5.5-6.6 cm no-hold offset (scratchpad budget.py, planner 4.4-4.6 N/m): ring centre 4.6-5.0 cm (fixed),
+  ring body tilt 1.3 deg 0.9-1.0 cm (sign confirmed by QUAD3/QUAD4 rod lengths), QUAD2 0-0.5 cm, left +-0.5 cm, if the
+  0.9 deg is the floor. If it is Motive's ground plane: +2.1-2.2 cm more, then QUAD2 must cancel 1.3-1.6 cm; the flights
+  cannot tell the two apart, the spirit level can.
+- Open: spirit level on the floor (level floor -> Motive ground plane 0.9 deg off = 0.13 N sideways in flight; sloped
+  floor -> shim the ring level and reset the ring body orientation); QUAD2 link ~2 cm short (bench: rod, magnet, Motive pivot).
+
+## Now (Wed 21 Oct, 16:24): offset cause fitted (desk, exploratory, no reviewer): ring mocap centre + QUAD2
+- Geometry fit over 16 flights (scratchpad geomfit.py / geomfit_run.py, session 3e643efb): ring mocap centre fitted
+  (-1.23, +1.33) cm ring frame = bench (-1.15, +1.30); QUAD2 link ~2.2-2.6 cm short vertically (pivot or magnet).
+  Together they remove the no-hold false pull (0.25-0.29 -> 0.02-0.05 N). Hold flights keep 0.12-0.32 N (open).
+  Registry RIG-1021-offsetc (bak52); addendum in docs/reports/rig_2026-10-21.md.
+
+## Now (Wed 21 Oct, 16:12): why the no-hold offset happens (desk, exploratory, no reviewer yet)
+- No-hold flights (c125_2, c200_2, f125): the quads sit within ~0.5 cm of their refs; the planner plans the ring 2.2-2.6 cm
+  back per 0.5 s and shifts the quads 1.3-1.5 cm toward the path (0.28-0.33 N pull in its model); the ring does not move.
+  From the measured pivots alone (rigid 0.55 m rods, free hanging), mocap puts the ring 1.2-1.4 cm from where it must hang
+  (ring frame 109-128 deg, sd 0.3). The planner is ~5 N/m soft against ~18 N/m of rod geometry, so the offset settles at
+  ~3.5-4x the measurement error. This supersedes the report's "re-centring fixes about a third" (it assumed 1:1).
+  Rod-length pattern does not fit a ring-centre shift alone (QUAD2 also suspect). Hold flights do not fit free hanging
+  (ring tilts about half the free-hanging tilt). Scripts: scratchpad offset_chain.py, hang.py (session 3e643efb).
+
+## Now (Wed 21 Oct, 15:20): Tejen sync 2, avoidance on the transit and floor_join, QUAD1 pickup sheet
+- **Worktree `~/mdc_wt/tejen_sync2`, branch `tejen-sync2`** (from 1db5e0d, nothing committed; Wesley's word needed):
+  his `SwungPayload2026_ThesisCExperiments` (fd495db0, 60 commits since sync 1) merged into our fork
+  (`src/tejen_mission/CHANGES_FROM_TEJEN.md`, 21 Oct sections). Built; `gate.sh --quick` PASSES (1493);
+  his mission tests 1102 pass / 24 fail (12 as before + his files we do not carry); C++ 20/20.
+- **Avoidance (Wesley 21 Oct):** `carry_heights` in partner_mission (the object's bottom half the carriers' cable above
+  them, typed values win), `carrier_model:=tether` (his rod model, fed by ring_bridge), `attach_cpp_transit`
+  (floor_join's leg to the plate on his C++ planner). Unit-tested only; twin configs ready in the worktree:
+  `basket_hover`, `basket_circle`, `floorjoin_cpp_hover` (not run yet). line_x with his mission is refused by our
+  partner_contact guard (needs Wesley's word). Old configs that type 2.7 m with floor_join now refuse at launch.
+- **QUAD1 pickup (Wesley, rig now):** `m1_irl_pickup.launch.py` (his IRL stack + an overlay; hold after the lift),
+  `tools/pickup_geometry.py`, sheet `docs/rig/wed_2026-10-21_quad1_pickup.md` (all in the worktree).
+- Registry: RIG-1015-a1c (the tether struck QUAD2, from the bag).
+
+## Now (Wed 21 Oct, 11:21): rig day done (08:23-11:05), scored, reviewed; report docs/reports/rig_2026-10-21.md
+- 24 launches, 17 flown (QUAD1 out: three quads QUAD2/3/4 on plates 0/8/4, then 4 two-quad attempts). Registry
+  RIG-1021-* + reviewer corrections (bak46-48 in the scratchpad, cmp-checked). Nothing committed yet (asks Wesley).
+- No hold: the integral never runs -> 5.5-6.6 cm constant offset. 10 s hold: offset 0.8-1.8 cm but the ring leans
+  4.4-6.1 deg (the integral's ~0.8 N sideways force). The bias keeps one direction relative to the ring/carrier set
+  (weak; the ring mocap centre 1.7 cm off explains about a third).
+- QUAD2's magnet let go 6 times (lifts); 8 of 13 ARM refusals QUAD2 FC !ERR*. Two quads: no circle completed.
+- New, uncommitted: docs/rig/wed_2026-10-21.md, configs/rig/two_quad_{drop55,noxy,nohold}.yaml, tools/rig_summary.py
+  (title says "detach mode"), docs/reports/rig_2026-10-21.md. Thesis: Wesley edits v3_full; question sheet
+  ~/mdc_wt/thesis/docs/thesis_drafts/INPUT_intro_to_method.md (uncommitted, protocol paragraph removed).
+
 ## Now (Sun 18 Oct, 06:35): overnight done, scored; morning report docs/reports/morning_report_2026-10-18.md
 - Batches b8uawb0oz (night, R2174-R2236) and b3c2thf2x (welded QUAD4, R2237-R2240) finished 06:30; nothing running.
 - Registry to R2240 + corrections (bak42-45 in the scratchpad, each cmp-checked).

@@ -1,0 +1,3 @@
+# 21 Oct rig, two carriers (plates 0 and 6, Wesley): no hover hold (the path starts when the lift ends, so the
+# model integral never runs), and the trackers' ring-tilt drop at 55 deg, under the 60 deg fleet envelope
+drop_tilt_deg: 55.0

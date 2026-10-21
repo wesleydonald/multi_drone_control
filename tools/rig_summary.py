@@ -306,7 +306,7 @@ def summarise(arg):
     path = PATHS.get(kind, kind)
     if kind in ('orbit', 'circle', 'fig_8'):
         path += f' r {float(pp.get("traj_radius", 0)):.2g} m at {float(pp.get("traj_speed", 0)):.3g} m/s'
-    mode = {'mpc_planner': 'mpc', 'dissipative_planner': 'dissipative'}.get(planner, planner or '?')
+    mode = {'mpc_planner': 'mpc', 'dissipative_planner': 'detach mode'}.get(planner, planner or '?')
     rts = tp.get('ref_time_shift')
     head = f'{label}   {mode}, {path}' + (f', ref_time_shift {"on" if rts else "off"}' if rts is not None else '')
     line = [f'3-D RMSE {num["rmse_3d_cm"]:.1f} cm']

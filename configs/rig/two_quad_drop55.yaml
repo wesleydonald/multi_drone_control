@@ -1,0 +1,4 @@
+# 21 Oct rig, two carriers (plates 0 and 6, Wesley): the 10 s hover hold before the path, and the trackers'
+# ring-tilt drop raised from 30 to 55 deg, just under the 60 deg envelope that disarms the whole fleet
+traj_hold_s: 10.0
+drop_tilt_deg: 55.0
