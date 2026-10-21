@@ -138,6 +138,28 @@ Updated: Wed 21 Oct 2026, 19:00 AEDT (from `date`). Only what a new session need
   Thesis writing goes to a separate session: brief docs/thesis_rewrite_brief_2026-10-17.md (Opus 5.5, high).
 - **(4) Band rule signed** (f = 1 +- 2 sigma_rig). Compute and freeze the bands (sigma_rig from RIG-1014-lift3).
 
+## Now (Wed 21 Oct, 20:30): evening done; OVERNIGHT laptop script running; rig 8-11 am Thu
+- **Overnight** (pid in the scratchpad's overnight.log, stops new work at 06:30):
+  1. render tonight's videos and the reel (`results/videos/reel_2026-10-21_evening.mp4`);
+  2. the nine 1 m baselines x2 (`b{2,3,4}_{hover,fig8_v200,linespin_v200}_L100`);
+  3. `tools/solve_scaling.py` (n 2-10, iterations 5/2/1);
+  4. their videos (`reel_2026-10-21_overnight.mp4`).
+  - Score in the morning: registry rows plus N2 bands for Wed 28.
+  - The lab PC was full (Ryan's 12 sims, load ~125).
+- **Tonight's twin** (R2242-R2258, registry):
+  - line_spin flies;
+  - 2-quad hover is steady, and the figure-8 rocks 6-8 deg p-p then decays;
+  - square-to-T unannounced release: 57 deg (R2249), dropped at 45 deg with the rule (R2254);
+  - T to pair under drop_gap_deg: detected and resized, but the pair rocks 8 deg p-p (arm FAILED its 5 deg bar);
+  - the rig's attach_z gap wrecks the T (27 deg, R2253) but not the pair hover (R2255);
+  - the tether-mass model gives the T 4.4 deg, and that release was undetected (R2258).
+- **Code:** `drop_gap_deg` (d440664, off by default); `chain_pair*.yaml`. The magnet-marker detector is on branch
+  `tip-detect` (~/mdc_wt/tipdetect, 0879527/2872395): the critic said rewrite; not merged, not flown.
+- **Sheet** `docs/rig/thu_2026-10-22.md`: A (offset + 3-quad baselines), B (2-quad), and the magnet markers recorded
+  (`mocap_extra_bodies`, bagged by `rig_flight.sh`). Part C (T to pair) moved to Wed 28.
+- **Next for the chain (card step 2):** force-vector split with the tether mass, a ~0.1 s reaction, the marker cue
+  rev 2, and the rig ring pose at its centre of mass.
+
 ## Now (Wed 21 Oct, 19:00): NEW PLAN approved, docs/plan_thesis_results_2026-10-21.md (read it first)
 - Branch **day-1021** (from day-1016 at 410f0f1, today's rig files committed). tejen-sync2 committed at 6483d90 in
   ~/mdc_wt/tejen_sync2 (not merged yet; merge before the basket runs). Decisions: docs/decisions.md DECIDED 2026-10-21.

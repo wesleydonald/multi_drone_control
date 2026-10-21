@@ -124,3 +124,25 @@ Verdict: rewrite the card.
 | 6, 9, 10 | §5 |
 | 7 | Fixed: `num_drones` 3 in launch and io |
 | 18 | If Part C becomes the rig config, CLAUDE.md's locked drop line is amended the same session |
+
+## Results (21 Oct evening, tree d440664; registry R2249-R2258; scored against the bars frozen 19:33)
+
+| Run | Result | Verdict |
+|---|---|---|
+| Unit tests (`test_drop_and_land.py`, rev 3, Wesley's 200 deg rule) | 14 pass; gate --quick passes (1495) | pass |
+| `c4_release9_base` R2249 | detected and resized at +0.21 s (tilt 16.8 deg then); peak 57.1 deg at +0.6 s; under 10 deg by +1.5 s; T settles at 6.7 deg | as predicted from G180 |
+| Arm 1 `c4_release9_pair` R2254 | detected at +0.2 s; ring 45.7 deg at +0.5 s; the trackers' 45 deg drop: DROP AND LAND | as predicted: the rule keeps the T but not the transient |
+| Arm 2 `t3_pair_release` R2250 / R2251 | whole-flight tilt peak 8.6 / 9.6; T 6.8 / 6.8 deg; detected and resized to n=2 at +0.82 / +0.83 s; pair roll 8.4 / 7.8 deg p-p, lean 2.4 / 2.2 deg | **FALSIFIED on the pair's rocking (bar 5 deg p-p)**; the rule acted |
+| `t3_pair_release_off` R2252 | detected, DROP AND LAND (360 deg gap) | confirms the rule is what keeps arm 2 flying |
+| `t3_pair_release_az0` R2253 | T 27.3 deg; tilt peak 41.4; pair roll 81.8 deg p-p, lean 24.4 | the rig's attach_z gap wrecks the T |
+| (extra) `t3_pair_release_rodmass` R2258 | T 4.4 deg (rider planned 0.43 N); release NOT detected; pair 6.6 deg p-p | the tether weight halves the T's hang; detection of a zero-share leaver is unreliable |
+
+**Rig go/no-go for Part C: NO-GO** (arm 2 failed its frozen bar). It moved to Wed 28.
+
+**Next card (chain step 2):**
+- solve the reference balance for force vectors with the tether mass, so the rider holds its own tether and the T is
+  level;
+- react to a release within ~0.1 s: the opposite quad sheds its old share as soon as the release is seen;
+- a release cue that sees an unloaded quad: the magnet marker, card 2026-10-21_tip_detect rev 2, built on the rig's
+  recordings;
+- the rig ring pose moved to its centre of mass, with attach_z typed.
