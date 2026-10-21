@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Thu 22 Oct 2026, 03:13 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Thu 22 Oct 2026, 03:33 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (21 Oct)
@@ -20,23 +20,27 @@ Updated: Thu 22 Oct 2026, 03:13 AEDT (from `date`). Only what a new session need
   - `~/mdc_wt/thesis` (thesis-rig): the thesis.
 - **Lab PC:** full all evening (Ryan's 11-12 Gazebo sims, load ~107-129 on 24 cores). Everything ran on the laptop.
 
-## Now (Thu 22 Oct, 03:13): Wesley asleep; the 20-min loop (cron job 73b7592d) runs the overnight queue to 07:30
+## Now (Thu 22 Oct, 03:33): Wesley asleep; the 20-min loop (cron job 73b7592d) runs the overnight queue to 07:30
 - **The comparison is done and scored** (R2292-R2299, card results, commit 5e8f242):
   - the marker check caught both T-to-pair releases in ~0.25 s, where the stretch check missed both;
   - one frozen bar missed (the pair's rocking);
   - the sheet's Part C line: your call, ON recommended if the A/B replay is clean.
-- **Running:** `scratchpad/overnight3b.sh` (pid 195737, log `scratchpad/overnight3b.log`; runs stop starting 06:15):
-  - done: A/B tipon x6, all clean (R2300-R2305);
-  - R2306 basket_hover: the mission completed, the landing tipped over (TB14);
-  - R2307 void (ball_start, fixed 8355c50);
-  - R2308 1 m floor join clean;
-  - R2309 hard 1 m detach dropped;
-  - now: basket_circle_L100, then c4_detach9_fig8_L100, the neighbours x8, the second basket_hover_L100,
-    basket_circle_L100 and basket_circle.
-- **Chained:** `scratchpad/overnight3c.sh` (task brveotwjo) waits on 195737, then:
-  1. c4_softdetach9_L100 and c4_softdetach9_fig8_L100 (`detach_unload_s` 3.0);
-  2. the solve re-time (n 2-9, fixed bench, if started before 05:40);
-  3. render22.sh (videos and the reel).
+- **03:33: the queue reordered.** The basket stack runs at RTF ~0.1 (R2310, the 1 m basket on the circle, ~40 min).
+  - Stopped (scripts only): overnight3b.sh and overnight3c.sh.
+  - Running: R2310's runner (pid 217187) until it ends.
+  - Chained: `scratchpad/overnight3d.sh` (task bdklaxhwe, log `scratchpad/overnight3d.log`) waits on 217187, then:
+    1. c4_detach9_fig8_L100, c4_softdetach9_L100, c4_softdetach9_fig8_L100;
+    2. the neighbours x8;
+    3. basket_hover_L100;
+    4. the solve re-time if started before 05:40;
+    5. render22.sh.
+  - Dropped for time: the second basket_circle_L100 and the 0.55 m basket_circle.
+- **Done in the queue so far:**
+  - R2300-R2305: A/B tipon, all clean;
+  - R2306 basket_hover: the mission done, the landing's TB14 tip-over;
+  - R2307: void;
+  - R2308: the 1 m floor join, clean;
+  - R2309: the hard 1 m detach, dropped at 46 deg.
 - **Scorers:** `scratchpad/score_tip.py` (the check's runs and detaches), `scratchpad/score_1m.py` (paths),
   `scratchpad/score_basket.py` (the basket and floor-join stages, via `tools/m1_score.py json`).
 - **Morning report:** by 07:15, then a push notification and CronDelete 73b7592d.
