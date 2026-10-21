@@ -60,6 +60,7 @@ def tick_cost(mods, n, iters, args):
             solver.last_X = solver.pending_X
             solver.recover = solver.last_X is None
             continue
+        solver.recover, solver.last_X = False, X       # as planner_node._plan: without it every tick is a cold reseed
         for i in range(n):
             for kk in range(solver.N + 1):
                 solver.drone_kinematics(X[:, kk], i, 0.0)

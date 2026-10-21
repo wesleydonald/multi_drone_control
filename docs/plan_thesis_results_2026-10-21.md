@@ -5,13 +5,13 @@ Approved by Wesley 21 Oct ~18:50. This is the current plan (CLAUDE.md). Status p
 | Section | Status | Commits / runs |
 |---|---|---|
 | Housekeeping (commits, branch day-1021) | done 21 Oct | 410f0f1 (day-1016), 6483d90 (tejen-sync2) |
-| 1. Tonight for Thu 22 | done 20:30: line_spin, 2q/T/1 m worlds, drop_gap_deg (chain card, critic, arm 2 FAILED its rocking bar), magnet detector built on branch tip-detect (critic: rewrite; not flown), sheet docs/rig/thu_2026-10-22.md (Part C moved to Wed 28) | 5fbdaba, d440664; R2242-R2258 |
+| 1. Tonight for Thu 22 | done 20:30: line_spin, 2q/T/1 m worlds, drop_gap_deg (chain card, critic, arm 2 FAILED its rocking bar). Sheet docs/rig/thu_2026-10-22.md; Part C kept on it (Wesley ~23:00). Magnet detector rev 3 after critics 2 and 3 on branch tip-detect; its twin comparison flies overnight 22 Oct | 5fbdaba, d440664, 33723c2; tip-detect c56ad44; R2242-R2258 |
 | 2. Thu 22 rig | to do | |
-| 3. 1 m switch and the re-fly (R) | to do | |
+| 3. 1 m switch and the re-fly (R) | twin 1 m baselines B: 2 and 3 quads done (R2259-R2270, all pass the exploratory falsifier, paths 15-18 mm, pulls <= 5.4 N); 4 quads re-flying overnight (R2271-R2281 void, R2282 figure-8 23 mm) | R2259-R2270, R2282 |
 | 4. Chain in the twin (N) | step 1 done (drop_gap_deg, R2249-R2258): the square-to-T release rolls the ring to 57 deg (dropped at 45); step 2 next: force-vector split with the tether mass, ~0.1 s reaction, a marker cue | d440664 |
 | 5. Rig Nr and K | to do | |
 | 6. Sim U (magnet off its slot) | to do | |
-| 7. Sim S (scalability) | to do | |
+| 7. Sim S (scalability) | bench run 21-22 Oct but flawed: it never kept its warm start, so every tick was a cold 15-iteration reseed and the 5/2/1 iteration rows came out identical. Fixed in tools/solve_scaling.py; re-time from the cached builds (n 2-10). Size scaling at 15 cold iterations: n2 27, n3 53, n4 102, n6 375, n9 905 ms | results/analysis/solve_scaling_tuf_coldreseed_2026-10-22.json |
 | 8. Sim C (paper's method) | to do | |
 | 9. Videos | to do | |
 | 10. Thesis | to do | |
