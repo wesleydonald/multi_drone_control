@@ -14,8 +14,9 @@ current branch like any other file (it reaches main with the merges).
 - Keep it current at every milestone (a batch started or scored, a decision, a commit, a
   merge). Anything durable also goes where it belongs straight away: decisions in
   `docs/decisions.md`, run results in `results/registry.csv`, preferences here or in memory.
-- The current plan is `docs/plan_after_rig_2026-10-14.md` (approved 14 Oct). Its status table is how Wesley follows
-  progress: update the row (status, commits, run ids) the moment a work package moves.
+- The current plan is `docs/plan_thesis_results_2026-10-21.md` (approved 21 Oct: the supervisor's results spec,
+  1 m cables, the 90 deg chain, rig 4->3->4 with the basket, sim U/S/C, videos). Its status table is how Wesley
+  follows progress: update the row (status, commits, run ids) the moment a work package moves.
 
 ## Working with Wesley
 - **Push back.** When a decision of his looks wrong or weaker than an alternative, say so

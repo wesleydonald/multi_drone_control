@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Sun 18 Oct 2026, 06:35 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Wed 21 Oct 2026, 19:00 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (12 Oct tidy)
@@ -137,6 +137,16 @@ Updated: Sun 18 Oct 2026, 06:35 AEDT (from `date`). Only what a new session need
   critic re-fly is now q4_welded_land (+ no-floor), 4 runs chained after the night batch (task b3c2thf2x).
   Thesis writing goes to a separate session: brief docs/thesis_rewrite_brief_2026-10-17.md (Opus 5.5, high).
 - **(4) Band rule signed** (f = 1 +- 2 sigma_rig). Compute and freeze the bands (sigma_rig from RIG-1014-lift3).
+
+## Now (Wed 21 Oct, 19:00): NEW PLAN approved, docs/plan_thesis_results_2026-10-21.md (read it first)
+- Branch **day-1021** (from day-1016 at 410f0f1, today's rig files committed). tejen-sync2 committed at 6483d90 in
+  ~/mdc_wt/tejen_sync2 (not merged yet; merge before the basket runs). Decisions: docs/decisions.md DECIDED 2026-10-21.
+- Tonight (plan section 1), for Thu 22 8-11 am (QUAD2/3/4, 0.55 m): disk delete list (Wesley approves; 8.8 GB free),
+  line_spin (code design A), worlds 2q 0/6 and T 0/3/6, twin runs with video (record, render after the batch, reel),
+  the T on today's code (0/3/6/9 RELEASE 9, unannounced), the chain fix card + critic + code (drop rule, tether-mass
+  split, attach_z), sheet docs/rig/thu_2026-10-22.md. Never edit src/ of the main tree during a batch: code the chain
+  fix in a worktree while runs fly.
+- Releases are UNANNOUNCED only (Wesley): no unloading before a release.
 
 ## Now (Wed 21 Oct, 16:55): the ring body pivot is fixed in Motive (Wesley); tilt next
 - 4-angle bench (RIG-1021-ringbench): ring mocap centre was (-0.99, +1.39) cm off in the ring frame (fit rms 0.6 mm);

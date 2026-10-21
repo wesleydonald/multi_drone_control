@@ -261,3 +261,25 @@ DECIDED 2026-10-17  Evening answers (Wesley ~19:45, after the batch R2133-R2171 
   (3) Corner cutting closed: today's defaults stay, the lag is reported (8 Oct decision stands). The fixed-lead
       combination failed N5 on spin in 2 of 3 pairs (R2150/R2151, R2168-R2171); its switches stay exploratory.
   (4) Next: freeze the N2 1 m bands (signed rule), then the 21-22 Oct rig-day sheet with today's LAND findings.
+DECIDED 2026-10-21  The supervisor's results spec (Wesley ~18:50, plan docs/plan_thesis_results_2026-10-21.md approved):
+  (1) Baseline: hover, figure-8 and line_spin at 0.2 m/s with 2 (plates 0/6), 3 (0/4/8) and 4 quads (0/3/6/9); one
+      rig flight each, twin 2 each. line_spin = 1 m out and back while the ring turns 1 rad per 0.5 m travelled
+      (~229 deg), landing by itself at the end like the figure-8.
+  (2) Novelty: 4->3->2->3->4 in the twin on the three trajectories x 3, one lap per stage (4, 3, 2, 3, 4 quads),
+      releases UNANNOUNCED at a fixed mid-lap point (no load shifted before a release: accept the tilt, minimise it
+      after detection), re-attaches with the path paused between laps.
+  (3) Drop rule (switch, card + critic): a loss leaving a T or an opposite pair keeps flying; a non-opposite pair,
+      one quad or ring tilt > 30 deg still drops the ring.
+  (4) Rig 4->3->4: Tejen's controller re-attaches QUAD4 with the path paused; start in the M1 layout (carriers
+      3/7/11, QUAD4 on 9), the square 0/3/6/9 once the twin fix works; widen to more re-attaches as they work.
+      The basket version (K) on the baseline three trajectories.
+  (5) Every link becomes a slack ~1 m cable (the same kind as the 0.55 m ones), typed at its measured length.
+      Every 0.55 m twin table in the thesis is re-flown at 1 m (supersedes 2026-10-16 decision 5).
+  (6) Sim: the magnet caught off its slot (two arms: measured catch point and slot assumed); scalability to 9 quads
+      at fewer solver iterations if quality holds (the 9-quad Gazebo run gives way first if time runs short; the
+      payload bigger, not much heavier); the paper's method against our planner in the twin (4 quads; hover, line
+      0.2 and 0.4 m/s; 3 repeats), retuned fairly, time-boxed to ~2 days.
+  (7) Videos: every twin run gets one fixed wide-view mp4 (720p, real speed) rendered after the batch, plus an
+      evening reel; state logs are deleted once their video is checked; disk space from a delete list he approves.
+  (8) Lab: every Wed/Thu 8-11 am, a couple of Fridays if needed; results freeze Sat 7 Nov. Tomorrow's first
+      priority: the offset check and the 3-quad baselines.
