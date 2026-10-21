@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Thu 22 Oct 2026, 01:03 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Thu 22 Oct 2026, 01:35 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (21 Oct)
@@ -20,40 +20,27 @@ Updated: Thu 22 Oct 2026, 01:03 AEDT (from `date`). Only what a new session need
   - `~/mdc_wt/thesis` (thesis-rig): the thesis.
 - **Lab PC:** full all evening (Ryan's 11-12 Gazebo sims, load ~107-129 on 24 cores). Everything ran on the laptop.
 
-## Now (Thu 22 Oct, 01:03): Wesley asleep; the 20-min loop (cron job 73b7592d) runs the overnight queue to 07:30
-- **day-1021 at badb4a5:**
-  - tip-detect merged (c881ef0): the check rev 3 after critics 2 and 3, the tracker's raw-pull columns, rod-pose
-    markers in the worlds, `tools/tip_replay.py`, `tools/mocap_glitch_scan.py`, `tools/marker_swap_scan.py`;
-  - the 8 N pull cap (`cable_accel_cap` 14.5);
-  - `tools/gate.sh --quick` PASSED (1512 tests).
-- **The critic's N1 is done:** no held in-band marker swap in the 17 airborne streams (card). N2 (the replay's
-  50 ms bar) and N4 (the sheet's ON procedure) are built; Part C's status line waits on the comparison.
-- **Running:** `scratchpad/overnight3a.sh` (task b3kuxfti2, from 01:04, ~45 min), the comparison:
-  `t3_hover_tip`, `t3_hover_tip_glitch`, `t3_pair_release_tip` x2, `t3_pair_release_tipoff` x2,
-  `c4_release9_tip`, `c4_release9_tipoff`.
-- **Then:**
-  1. Score with `scratchpad/score_tip.py` against the card's frozen bars and round 3's added bars (load: planner
-     row gaps over 0.15 s, solve_ms over 100; S8 timing from RELEASE to the planner's n drop), registry rows,
-     and set the sheet's status line.
-  2. `scratchpad/overnight3b.sh` (23 runs):
-     - A/B tipon x6;
-     - basket_hover, basket_hover_L100, m1c_floorjoin_hover_L100, c4_detach9_L100, basket_circle_L100,
-       c4_detach9_fig8_L100;
-     - the neighbours x8;
-     - basket_hover_L100, basket_circle_L100 and basket_circle again.
-  3. `scratchpad/render22.sh`, plus a render of the 21 Oct 1 m set (R2259-R2270) and the 4-quad re-runs, the reel.
-  4. The solve sweep re-timed (the bench is fixed; builds cached) if the laptop is free before 07:15.
-  5. The morning report.
-- **Scored tonight:**
-  - the 1 m baselines R2259-R2270, R2282-R2286. All pass the exploratory falsifier. Paths: 2 quads 15-18 mm,
-    3 quads 16-18 mm, 4 quads 21-23 mm. Pulls at most 5.4 N;
-  - R2271-R2281 void (R2277-R2281: two stacks at once, my error, memory written);
-  - R2284's harness FAIL is the sim clock freezing after LANDED (flight complete).
-- **The solve sweep (21-22 Oct) is flawed:** the bench never kept its warm start, so every tick was a cold
-  15-iteration reseed and the iteration rows came out identical. Fixed (`tools/solve_scaling.py`), to re-time. The
-  old table is kept as `results/analysis/solve_scaling_tuf_coldreseed_2026-10-22.json`.
-- **Chain step 2a card draft:** `docs/experiments/2026-10-22_chain_step2a_vector_split.md` (for Wesley; nothing
-  built).
+## Now (Thu 22 Oct, 01:35): Wesley asleep; the 20-min loop (cron job 73b7592d) runs the overnight queue to 07:30
+- **day-1021 at 367c98f:** tip-detect merged, the 8 N cap, the gate passed at badb4a5 (1512 tests). Since then:
+  - b42227c: the twin's markers come from the rod's world pose (model x rod; R2287's never armed);
+  - f5f9086: the tether callback crash;
+  - 367c98f: the frozen-ring hold needs 50 ms of repeats (the twin's ring stream repeats a sample or two: R2290
+    had 34 holds).
+  R2287-R2291 are void (harness, registry rows written). R2290 showed every marker armed at 0.0 cm from its plate.
+- **Running:** `scratchpad/overnight3a.sh` (task bzu1moktn, from 01:33, ~50 min), the comparison from its first run.
+  Log: `scratchpad/overnight3a_4.log`.
+- **Then:** score it (`scratchpad/score_tip.py`; the card's bars plus round 3's), the sheet's status line,
+  `scratchpad/overnight3b.sh` (23 runs), the renders and reel, the solve re-time if time allows, the morning report
+  by 07:15.
+- **Stopping a batch:** kill the script by an anchored pattern (`pgrep -f "^bash /tmp/.*/overnight3a.sh"`), then the
+  runner (`pgrep -f "^python3 ./tools/run_experiment.py"`, SIGINT), then the stack. An unanchored `pgrep -f`
+  matches this shell.
+- **Done earlier tonight:**
+  - N1 (no held in-band marker swap);
+  - the 1 m baselines scored: R2259-R2270, R2282-R2286, all passing the exploratory falsifier;
+  - R2271-R2281 void;
+  - the solve bench fixed (old table kept as coldreseed);
+  - chain step 2a card draft.
 
 ## Earlier today (21 Oct)
 - **Rig day 08:23-11:05** (`docs/reports/rig_2026-10-21.md`, RIG-1021-*):
