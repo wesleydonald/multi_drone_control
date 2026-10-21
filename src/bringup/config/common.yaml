@@ -91,7 +91,7 @@ fleet_resize:
   detach_unload_tilt_deg: ''   # deg, '' = 10: release only below this ring tilt
   detach_unload_wait_s: ''     # s, '' = 2: gates not met this long after the blend: cancel
   detach_post_blend_s: ''      # s, '' = 1: survivors' blend after the resize
-  tip_detect_m: ''             # m, '' = off: a carrier's magnet marker (/drone_<d>/magnet_tip_state) this much further from its plate than its attached offset, 3 samples in a row, has let go (Wesley 21 Oct; card 2026-10-21_tip_detect)
+  tip_detect_m: ''             # m, '' = off: a carrier's magnet marker (/drone_<d>/magnet_tip_state) this much further from its plate than its attached offset for 0.1 s, its distance from the ring centre moved too, has let go; held off after a ring-pose glitch (Wesley 21 Oct; card 2026-10-21_tip_detect rev 3)
   detach_detect_m: 0.06        # m, '' = 0 (off): a cable this much over its length for 2 ticks = an unannounced detach (7 Oct; on by default 8 Oct)
   departed_land: true          # a freed drone lands after its step-out while the fleet flies on (7 Oct; on by default with detection, 8 Oct)
   departed_ground_idle: true   # ...is pushed to its own resting height and disarmed alone there (cards 2026-10-09_departed_ground_idle, _departed_disarm_alone; default 9 Oct after the LAND re-fly's reviewer)
