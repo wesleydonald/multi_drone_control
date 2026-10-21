@@ -314,4 +314,5 @@ DECIDED 2026-10-21  The magnet-marker check after critic round 2 (Wesley ~23:30,
 DECIDED 2026-10-22  The ring's centre of mass (Wesley 08:20, bench item 0): the ring is 4.5 cm tall with its centre of
   mass ~2.75 cm above its bottom (top-heavy), so the plates sit 1.75 cm above it. The rig types attach_z 0.0175 and
   payload_rest_z 0.0275, with the ring's Motive pivot moved down to the centre of mass (it should read ~2.75 cm at
-  rest). The twin's worlds keep 0.02 / 0.02 until they are regenerated.
+  rest; it read 5.16 cm before the move and 2.76 cm after, ~08:35). The twin's worlds keep 0.02 / 0.02 until they are
+  regenerated.
