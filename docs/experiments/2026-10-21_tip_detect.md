@@ -77,5 +77,44 @@ Yes:
 
 If it fails, the knob stays off and the code is removed.
 
-## Critic
-(pending)
+## Critic (21 Oct ~20:15): REWRITE. Summary of the must-fix items; the full report is in the session
+
+1. **No rig evidence yet.** Bodies 21-23 have never been seen streaming, and `/drone_<i>/magnet_tip_state` is not
+   bagged (`tools/rig_flight.sh:81-90`).
+   - Record the markers from Part A on, with the detector OFF.
+   - Replay the check over those bags and gate on zero would-fires through lifts, paths and LANDs.
+   - Bench: move each magnet by hand, cover each marker for 2 s, record each offset over 3 re-seats.
+2. **Invalid samples.**
+   - A NaN or a (0,0,0) untracked body must be rejected.
+   - Reject any sample whose distance to its own drone is outside the taut length +-3 cm (the guard's band,
+     `GUARD_TIP_BODY_M`).
+   - Catch rotation glitches as well as translations.
+3. **Use the ring-frame vector, not the scalar distance**, as `_release_seen_tick` does. On the rig the marker sits
+   ~3 cm above the plate point, so a tangential swing needs ~8 cm before the norm grows 4 cm (~0.17 s).
+4. **Learn the offset once**, in a still window after the lift.
+   - Bound it to +-1 cm.
+   - Write N and alpha in seconds; the rig streams ~100-120 Hz against the twin's 60.
+   - Refuse to arm a drone whose offset is over ~6 cm.
+   - The unbounded EMA follows a slow peel-off, so that is never a release.
+5. **Wire the rig path:** `tip_detect_m` in the params file, `mocap_extra_bodies` on T1, and each drone's offset
+   logged after the lift.
+6. **Rig prediction.**
+   - The plate-3 quad is planned at 0.1 N against a ~0.7 N tether, so OFF may leave its magnet resting on the plate.
+     Only the twin's rod, which has no collision, falls away.
+   - So "no detection, marker still on the plate" is expected, not a failure. "Marker off its plate in the bag, no
+     detection" falsifies.
+   - Sheet: with no detection, `/fleet/detach 0` (the announced path, which leaves only an opposite pair) before LAND.
+
+Should-fix 7-15:
+- a 0.2 s bar;
+- twin marker noise and dropouts;
+- the baseline with `tether_tips` on and the detector off;
+- contiguous samples;
+- the lift guard (the card text is wrong: the lift is not guarded);
+- tests for LAND with the ring up, a NaN, and plate 0 in the T;
+- planner load (`tools/load_check.py`);
+- the regenerated world SDFs need Wesley's word, and the thresholds need re-sizing for 1 m;
+- the one-tree rule for the params file.
+
+**Decision for tonight:** the detector stays on branch `tip-detect`, not merged, and is not flown. Tomorrow's rig
+only records the markers (detector off) for the evidence in item 1.
