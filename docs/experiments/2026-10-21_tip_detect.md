@@ -275,3 +275,19 @@ Should-fix:
 - **S8:** detection time in sim time, from the RELEASE event to the planner's first row at the smaller n (10 Hz).
 - **N3, the rig prediction:** Part C's detection about 0.3 s or more after the OFF. A marker more than 4 cm off its plate for more than 0.1 s in the bag with no detection falsifies.
 - **N4:** the sheet's ON procedure as above.
+
+**N1 result (22 Oct ~01:00, `tools/marker_swap_scan.py` over the 17 airborne marker streams, 10.2 min): 0 held
+in-band swaps.** The stream is cut at every frame step over 3 cm, which gives 48 pieces.
+- **Swaps:** every swap (jumps of 0.2-2.8 m) lands outside the body-length band.
+- **In band and 0.1 s or more after a step (8 pieces):**
+  - the marker's own track resuming after an out-of-band swap or a gap (6 pieces, 8-104 s long);
+  - lt_7's 0.36 s piece: real motion during a stream stall. The 14 Oct crash flight's stream repeated samples, then
+    caught up 5.7 cm while QUAD4 flew at ~1 m/s (printed sample by sample);
+  - a3's piece: its "hanging length" is 2.76 m, so the marker was not on QUAD4.
+- **The rest in band:** t5_4's 1-2 sample pieces (3-4 cm steps, within 0.6 cm of the bridging track) are a 3.5 m/s
+  swing.
+- **Caveat:** the two rules that set these apart were added after looking at the data, so they are post hoc:
+  - a piece held 2 s or more is track;
+  - a step right after a repeated sample is a stall catching up.
+
+  The raw listing is in the tool's output.
