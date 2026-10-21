@@ -1,7 +1,8 @@
 # Morning report, Thu 22 Oct 2026 (overnight 21-22 Oct, laptop)
 
 Runs R2259-R2322 (void ones marked in the registry). Everything is on `day-1021`, flight code as of 367c98f, nothing
-pushed. The reel of every valid run is `results/videos/reel_2026-10-22_overnight.mp4` (rendering until ~07:05).
+pushed. The reel is `results/videos/reel_2026-10-22_overnight.mp4` (41 runs; done 06:55). The basket and floor-join
+configs (R2306, R2308, R2310, R2322) carry no recording block, so they have no video: to add before the next ones.
 
 ## For the rig today (read first)
 
