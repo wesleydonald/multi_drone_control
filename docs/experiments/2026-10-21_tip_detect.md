@@ -146,3 +146,38 @@ its plate at once, as in the twin.
 
 **Also on this branch:** the tracker logs the raw measured cable accel (`acm_x/y/z`) beside the applied one, so peak
 pulls above the 6.6 N cap show (Wesley 21 Oct).
+
+## Critic round 2 (21 Oct ~23:00): NO-GO for the check ON on Thu 22; rewrite (rev 3) before it flies
+
+Must-fix for rev 3:
+- **M1. A ring-pose tilt glitch fires plate 0 or 6, then DROP AND LAND from 1 m.** In the T, a ~10 deg Motive
+  mis-solve about the 3-9 axis for >= 30 ms moves markers 0/6 ~4.8 cm in the ring frame and marker 3 ~1 cm, so the
+  "every marker at once" guard misses it. Fix: require the marker to move in the world frame (a pose glitch moves the
+  plate point, not the magnet) and/or a ring-quaternion step guard with a hold-off (as the trackers' drop_glitch_step_deg
+  15). Add a test on plate 0 that does not stub `_on_unannounced`.
+- **M2. Persistence too short.** Time on header stamps, require a minimum sample count, and use 0.06-0.1 s (the rig's
+  QUAD4 guard uses 0.1 s).
+- **M3. A lone armed marker has no glitch guard.** Act only with at least one other armed, fresh marker; otherwise log
+  WOULD-FIRE.
+- **M4. Frozen markers.** Reject bit-identical repeats. The bench's covered-marker result is a gate.
+- **M5. The rig replay.** Now `tools/tip_replay.py` (7102723). Run it over Thu 22's A/B/C bags (markers recorded with
+  the check OFF) and today's QUAD1 marker-21 data.
+- **M6. Restore the whole-flight bars:** no drop or abort, no detection on drones 0/2, and the pair's roll and tilt no
+  worse than R2250/R2251.
+
+Should-fix:
+- S1: the still window, from a window median or position spread, logging "still learning" after ~5 s;
+- S2: clear the tip state on attach and detach;
+- S3: a load check;
+- S4: the twin tip configs fly the rig's params file;
+- S5: keep the rod-pose publishers in separate `*_tip` worlds, or get Wesley's word;
+- S6: a tighter ring-pose staleness;
+- S7: stale comments;
+- S8: score in sim time.
+
+The tracker's raw-pull logging (acm_x/y/z): **GO, low risk.** It is ported alone to day-1021.
+
+**Decision (Wesley's condition "if it passes its critic and twin checks"):** Part C flies Thu 22 with the check OFF
+(chain_pair_noxy.yaml, the stretch check), and LAND if nothing detects within 2 s. The markers are bagged, so Part C's
+bag gives the check its first rig evidence: the detection time it would have had, and false fires replayed
+offline.
