@@ -291,3 +291,12 @@ in-band swaps.** The stream is cut at every frame step over 3 cm, which gives 48
   - a step right after a repeated sample is a stall catching up.
 
   The raw listing is in the tool's output.
+
+**22 Oct 01:35, before any counted comparison run:**
+- The twin's first runs exposed two harness faults in the marker emulation (fixed in b42227c and f5f9086):
+  - the rod pose came relative to its own model, so R2287's markers never armed;
+  - a crash in the tether callback.
+- R2290 then armed every marker at 0.0 cm from its plate. But the frozen-ring rule (3 bit-for-bit repeats) held the
+  check off 34 times in 45 s: the twin's ring stream repeats a sample or two. The rule is now time-based: the same
+  ring pose for 50 ms or more (`TIP_RING_FROZEN_S`). The rig repeats 150 ms or more when it loses the ring.
+- The comparison restarts from its first run on this tree. R2287-R2291 are void for the comparison.

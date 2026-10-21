@@ -90,7 +90,8 @@ TIP_RADIAL_M = 0.015       # m: and its distance from the ring's centre must hav
 TIP_RING_STEP_DEG = 4.0    # deg between two ring samples is a Motive glitch (level flight in our 46 rig bags: 2.1 deg
                            # at most, 4.2 deg only after a magnet let go; tools/mocap_glitch_scan.py)
 TIP_RING_STEP_M = 0.03     # m between two ring samples, likewise
-TIP_RING_FROZEN_N = 3      # the same ring pose this many times in a row, bit for bit, is a lost body
+TIP_RING_FROZEN_S = 0.05   # s of the same ring pose, bit for bit, is a lost body (the rig repeats 150 ms or more
+                           # when it loses one; the twin's stream repeats a sample or two)
 TIP_HOLD_S = 0.2           # s the marker check holds off after any of these
 DROP_LAND_WAIT_S = 30.0    # s after a drop: /fleet/landed even if a drone never reads as down
 DROP_TAKE_BACK_EXTRA_S = 30.0  # s more while a drop's take-back flies QUAD4 out and down (15-25 s; critic F2)
@@ -454,7 +455,7 @@ class DissipativeController(LoadPlanner):
         self._tip_lone = {}           # d -> the run already reported as a lone would-fire
         self._tip_unarmed = set()     # learnt offset out of bounds: not checked
         self._tip_hold_until = -1e18  # stamp until which a ring glitch holds the check off
-        self._tip_ring_same = 0       # the ring's pose repeated bit for bit, in a row
+        self._tip_ring_same = None    # stamp of the ring pose's first bit-for-bit repeat, None while it moves
         if self._tip_detect_m > 0.0:
             for d in range(self.n):          # the carriers; a reserved newcomer's tip is his /magnet_tip_pose
                 self.create_subscription(MotionCaptureState, f'/drone_{d}/magnet_tip_state',
@@ -1662,18 +1663,23 @@ class DissipativeController(LoadPlanner):
 
     def _tip_ring_sample(self, prev, cur, ts):
         """tip_detect_m: a glitch in the ring's own pose holds the marker check off for TIP_HOLD_S (critic round 2,
-        M1): an attitude or position jump between two samples, or the same pose repeated bit for bit (a lost body)."""
-        self._tip_ring_same = self._tip_ring_same + 1 if np.array_equal(prev, cur) else 0
+        M1): an attitude or position jump between two samples, or the same pose repeated bit for bit for
+        TIP_RING_FROZEN_S (a lost body)."""
+        if not np.array_equal(prev, cur):
+            self._tip_ring_same = None
+        elif self._tip_ring_same is None:
+            self._tip_ring_same = ts
+        frozen = self._tip_ring_same is not None and ts - self._tip_ring_same >= TIP_RING_FROZEN_S
         qa, qb = np.asarray(prev[3:7], float), np.asarray(cur[3:7], float)
         c = abs(float(qa @ qb)) / max(float(np.linalg.norm(qa) * np.linalg.norm(qb)), 1e-12)
         step = 2.0 * np.degrees(np.arccos(min(1.0, c)))
         jump = float(np.linalg.norm(np.asarray(cur[0:3], float) - np.asarray(prev[0:3], float)))
-        if step <= TIP_RING_STEP_DEG and jump <= TIP_RING_STEP_M and self._tip_ring_same < TIP_RING_FROZEN_N - 1:
+        if step <= TIP_RING_STEP_DEG and jump <= TIP_RING_STEP_M and not frozen:
             return
         if ts >= self._tip_hold_until and self._tip_v0:
             self.get_logger().warn(
                 f'[dissipative] magnet check held {TIP_HOLD_S:.1f} s: the ring pose '
-                + ('repeats' if self._tip_ring_same >= TIP_RING_FROZEN_N - 1
+                + ('repeats' if frozen
                    else f'jumped {step:.1f} deg / {100.0 * jump:.1f} cm in one sample'))
         self._tip_hold_until = ts + TIP_HOLD_S
         self._tip_run = {}

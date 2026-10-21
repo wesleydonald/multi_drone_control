@@ -36,7 +36,7 @@ def _node(tip_m=0.04):
     log = _Log()
     f = SimpleNamespace(slot2drone=[0, 1, 2], detached=[False] * 3, rho=rho, _tip_detect_m=tip_m, _tip_v0={},
                         _tip_learn={}, _tip_learn_warned=set(), _tip_run={}, _tip_last={}, _tip_raw={},
-                        _tip_lone={}, _tip_unarmed=set(), _tip_hold_until=-1e18, _tip_ring_same=0,
+                        _tip_lone={}, _tip_unarmed=set(), _tip_hold_until=-1e18, _tip_ring_same=None,
                         _detect_refused=set(), phase='planner', _reconfig_mode='ocp', _land_to_ground=False,
                         _unload=None, takeoff_seen=True, load_state=np.r_[0.0, 0.0, 1.0, Q0, np.zeros(6)],
                         cable_len=0.55, cable_len_i=[0.55] * 3, pivot_offset=np.array([0.0, 0.0, -0.04]),
@@ -263,8 +263,11 @@ def test_a_ring_pose_that_repeats_holds_the_check_off():
     f = _node()
     _arm(f)
     frozen = f.load_state.copy()
-    for _ in range(3):                                               # the ring body lost: its last pose, bit for bit
-        _step(f, {d: _s(_tip(f, d)) for d in range(3)}, ring=frozen.copy())
+    for _ in range(4):                                               # the twin's stream repeats a sample or a few:
+        _step(f, {d: _s(_tip(f, d)) for d in range(3)}, ring=frozen.copy())      # not a lost body
+    assert f._tip_hold_until < f.t
+    for _ in range(3):                                               # the ring body lost: its last pose, bit for bit,
+        _step(f, {d: _s(_tip(f, d)) for d in range(3)}, ring=frozen.copy())      # for 50 ms
     assert f._tip_hold_until > f.t
     for _ in range(15):                                              # a release while it is frozen is not acted on...
         _step(f, _on(f, 1), ring=frozen.copy())

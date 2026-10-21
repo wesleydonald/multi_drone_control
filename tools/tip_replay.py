@@ -85,7 +85,7 @@ def replay(events, azimuths_cw, attach_z, tip_m=0.04, target_z=1.0, radius=0.225
     f = SimpleNamespace(slot2drone=list(range(n)), detached=[False] * n, rho=attach_points(n, radius, attach_z, ccw),
                         _tip_detect_m=tip_m, _tip_v0={}, _tip_learn={}, _tip_learn_warned=set(), _tip_run={},
                         _tip_last={}, _tip_raw={}, _tip_lone={}, _tip_unarmed=set(), _tip_hold_until=-1e18,
-                        _tip_ring_same=0, _detect_refused=set(), phase='planner', _reconfig_mode='ocp',
+                        _tip_ring_same=None, _detect_refused=set(), phase='planner', _reconfig_mode='ocp',
                         _land_to_ground=False, _unload=None, takeoff_seen=True, load_state=None, cable_len=cable_len,
                         cable_len_i=[cable_len] * n, pivot_offset=np.array([0.0, 0.0, pivot_z]), lift_z0=None,
                         target_z=target_z, lift_progress=0.0, drone_pos=[None] * n, _drone_t={}, _load_t=None, t=0.0,
