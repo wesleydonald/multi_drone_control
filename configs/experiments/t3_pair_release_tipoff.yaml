@@ -2,8 +2,8 @@ criteria:
   forbid_abort: false
   min_payload_z: -1.0
   min_peak_payload_z: 0.5
-description: 'Card 2026-10-21_tip_detect rev 2 (critic should-fix 9): t3_pair_release_tip with the markers emulated (tether_tips)
-  but the check OFF: the control for the rod publishers and bridges'' own effect.'
+description: 'Card 2026-10-21_tip_detect rev 3, the comparison''s control: t3_pair_release_tip with the rig''s Part C
+  file without the marker check (chain_pair_noxy.yaml: the stretch check alone), the markers still emulated.'
 events:
 - do: ARM
   t: 3.0
@@ -48,7 +48,7 @@ launch:
     measure_rod_len: true
     mode: dissipative
     num_drones: 3
-    params_file: /home/wesley/multi_drone_control/configs/rig/chain_pair.yaml
+    params_file: /home/wesley/multi_drone_control/configs/rig/chain_pair_noxy.yaml
     payload_rest_z: 0.02
     pivot_offset_z: -0.04
     pretension_s: 3.0

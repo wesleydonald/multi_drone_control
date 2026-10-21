@@ -130,6 +130,11 @@ class PayloadMocapEmulator(Node):
                 MotionCaptureState, '/payload/motion_capture_state', 5)
             self.create_subscription(
                 PoseArray, payload_pose_topic, self._payload_cb, 10)
+            # test fault: the runner's MOCAP_TILT -1 rotates the RING's published attitude about its body y (the T's
+            # 3-9 axis), as a Motive mis-solve would (card 2026-10-21_tip_detect rev 3)
+            self._ring_tilt_until = None
+            self._ring_tilt = None
+            self.create_subscription(Float64MultiArray, '/payload/mocap_tilt', self._ring_tilt_cb, 5)
         else:
             self._payload_pub = None
 
@@ -210,11 +215,26 @@ class PayloadMocapEmulator(Node):
         self.get_logger().warn(f'[mocap] attitude tilted {deg:.0f} deg over {ramp:.2f} s, held {secs:.2f} s '
                                f'(MOCAP_TILT test fault)')
 
+    def _ring_tilt_cb(self, msg):
+        deg, secs, ramp = (float(v) for v in (list(msg.data) + [0.0, 0.0, 0.0])[:3])
+        t0 = self.get_clock().now().nanoseconds * 1e-9
+        self._ring_tilt = (t0, deg, max(0.0, ramp))
+        self._ring_tilt_until = t0 + max(0.0, ramp) + max(0.0, secs)
+        self.get_logger().warn(f'[mocap] ring attitude tilted {deg:.0f} deg about its y over {ramp:.2f} s, held '
+                               f'{secs:.2f} s (MOCAP_TILT -1 test fault)')
+
+    @staticmethod
+    def _axis_q(tilt, now, axis):
+        """The injected rotation about body axis (0 x, 1 y) at now, (x, y, z, w)."""
+        t0, deg, ramp = tilt
+        h = 0.5 * np.radians(deg * (min(1.0, (now - t0) / ramp) if ramp > 0.0 else 1.0))
+        q = [0.0, 0.0, 0.0, np.cos(h)]
+        q[axis] = np.sin(h)
+        return q
+
     def _tilt_q(self, now):
         """The injected rotation about body x at now, (x, y, z, w)."""
-        t0, deg, ramp = self._tilt
-        h = 0.5 * np.radians(deg * (min(1.0, (now - t0) / ramp) if ramp > 0.0 else 1.0))
-        return [np.sin(h), 0.0, 0.0, np.cos(h)]
+        return PayloadMocapEmulator._axis_q(self._tilt, now, 0)
 
     def _drone_cb(self, msg: PoseArray):
         if not msg.poses:
@@ -273,6 +293,10 @@ class PayloadMocapEmulator(Node):
         idx = 1 if len(msg.poses) > 1 else 0
         pos = msg.poses[idx].position
         ori = msg.poses[idx].orientation
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if self._ring_tilt_until is not None and now < self._ring_tilt_until:
+            ori.x, ori.y, ori.z, ori.w = (float(v) for v in quaternion_multiply(
+                [ori.x, ori.y, ori.z, ori.w], PayloadMocapEmulator._axis_q(self._ring_tilt, now, 1)))
         ori.x, ori.y, ori.z, ori.w = self._normalize_quat(ori.x, ori.y, ori.z, ori.w)
 
         mcs, self._payload_last_pos, self._payload_last_ori, self._payload_last_time = \

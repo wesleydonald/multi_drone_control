@@ -32,3 +32,16 @@ def test_the_generator_publishes_each_detachable_rod_only_when_asked(tmp_path):
     assert len(tethers) == 2 and all('PosePublisher' in t and '<update_frequency>60</update_frequency>' in t
                                      for t in tethers)
     assert not any('PosePublisher' in t for t in re.findall(r'<model name="tether_\d">.*?</model>', plain, re.S))
+
+
+def test_the_ring_tilt_fault_turns_about_the_rings_y_and_the_drones_about_x():
+    """MOCAP_TILT -1 (card 2026-10-21_tip_detect rev 3): the ring's mis-solve turns about its y, the T's 3-9 axis, so
+    plates 0 and 6 (on x) move; a drone's tilt fault stays about its x."""
+    from tf_transformations import quaternion_matrix
+    R = quaternion_matrix(E._axis_q((0.0, 12.0, 0.0), 1.0, 1))[:3, :3]
+    assert np.allclose(R @ [0.0, 1.0, 0.0], [0.0, 1.0, 0.0])
+    assert np.degrees(np.arccos((R @ [1.0, 0.0, 0.0])[0])) == pytest.approx(12.0)
+    half = E._axis_q((0.0, 12.0, 0.4), 0.2, 1)                       # half way up a 0.4 s ramp
+    assert np.degrees(2 * np.arccos(half[3])) == pytest.approx(6.0)
+    Rx = quaternion_matrix(E._axis_q((0.0, 12.0, 0.0), 1.0, 0))[:3, :3]
+    assert np.allclose(Rx @ [1.0, 0.0, 0.0], [1.0, 0.0, 0.0])

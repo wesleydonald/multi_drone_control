@@ -1,4 +1,4 @@
-# 22 Oct rig, Part C with the magnet-marker check (card docs/experiments/2026-10-21_tip_detect.md rev 2): as
+# 22 Oct rig, Part C with the magnet-marker check (card docs/experiments/2026-10-21_tip_detect.md rev 3): as
 # chain_pair_noxy.yaml plus tip_detect_m (each carrier's marker, mocap_extra_bodies 22-24 -> /drone_<i>/magnet_tip_state)
 detach_detect_m: 0.06
 detach_step_out_m: 0.5

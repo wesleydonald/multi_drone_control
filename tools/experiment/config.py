@@ -76,7 +76,8 @@ EVENT_KINDS = {
     'MOCAP_TILT',  # Float64MultiArray [deg, s, ramp_s] on /drone_<id>/mocap_tilt: the sim mocap emulator rotates that
                    # drone's published attitude about its body x, in one step (a mis-solve) or over ramp_s (a body
                    # tipping), then holds deg for s seconds (default 1), as the trackers and the partner's MPC see it
-                   # (card 2026-10-11_quad4_tilt_cut); arg "id deg [s [ramp_s]]"
+                   # (card 2026-10-11_quad4_tilt_cut); arg "id deg [s [ramp_s]]"; id -1 = the ring, about its body y
+                   # (card 2026-10-21_tip_detect rev 3)
     'WAIT_PICKUP_FREE',  # not published: block until his ball weld (/pickup/detachable_joint_state, made at
                          # spawn on QUAD4's tip) has read 'detached' for 1 s, then shift later events; arg
                          # 'timeout_s': on expiry the run fails and stops (the full M1: QUAD4's tip is also

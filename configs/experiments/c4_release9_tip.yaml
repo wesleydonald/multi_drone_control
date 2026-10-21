@@ -2,8 +2,9 @@ criteria:
   forbid_abort: false
   min_payload_z: -1.0
   min_peak_payload_z: 0.5
-description: 'Card 2026-10-21_tip_detect, informational: c4_release9_pair with the magnet-marker check: how much earlier
-  the square-to-T release is caught than the cable''s stretch (R2249: +0.21 s), and what that does to the 57 deg roll.'
+description: 'Card 2026-10-21_tip_detect rev 3, informational: the square 0/3/6/9, unannounced RELEASE of plate 9,
+  with the rig''s Part C file and its magnet-marker check (chain_pair_tip.yaml): how much earlier the release is caught
+  than by the stretch (c4_release9_tipoff), and what that does to the roll and the 45 deg drop.'
 events:
 - do: ARM
   t: 3.0
@@ -48,7 +49,7 @@ launch:
     measure_rod_len: true
     mode: dissipative
     num_drones: 4
-    params_file: /home/wesley/multi_drone_control/configs/rig/chain_pair.yaml
+    params_file: /home/wesley/multi_drone_control/configs/rig/chain_pair_tip.yaml
     payload_rest_z: 0.02
     pivot_offset_z: -0.04
     pretension_s: 3.0
@@ -68,7 +69,6 @@ launch:
     z_i_gate: 0.25
     z_taut_gate: 0.9
     departed_ground_idle: true
-    tip_detect_m: 0.04
   file: sim_control_launch.py
   package: bringup
 name: c4_release9_tip

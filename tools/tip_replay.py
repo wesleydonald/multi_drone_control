@@ -7,10 +7,11 @@ flies with the check on only if this is clean over the A/B flights; card 2026-10
     tools/tip_replay.py results/rig/2026-10-22/f2 --azimuths 0,180 --attach-z 0.02 --tip-m 0.04
 
 It feeds every recorded /drone_<i>/magnet_tip_state sample, in time order, with the ring's and the drones' latest
-poses, through the planner's own DissipativeController._tip_check / _tip_learn_step (no ROS). Before LAND
+poses, through the planner's own DissipativeController._tip_check / _tip_learn_step, the ring samples through its
+glitch guard _tip_ring_sample (no ROS). Before LAND
 (/fleet/command), after the ring first reaches target_z - 0.05. Prints, per drone: armed or not (its learnt offset and
-body-to-marker length), the largest deviation after arming against tip_detect_m, and every would-fire. Exit status 1
-if anything would have fired.
+body-to-marker length), the largest deviation after arming against tip_detect_m, and every would-fire (a release
+acted on, or a lone marker's logged WOULD-FIRE). Exit status 1 if anything would have fired.
 
 Typed angles are the sheet's (clockwise, as the launch takes them); slot i is drone i in that order. Not modelled:
 the planner's slot re-assignment, detachments, the unload; a flight with a release is not a false-fire check.
@@ -71,12 +72,16 @@ def replay(events, azimuths_cw, attach_z, tip_m=0.04, target_z=1.0, radius=0.225
         def info(self, m, *a, **k):
             self.last = m
             print('   ', m)
+            if 'WOULD-FIRE' in m:
+                fires.append((f.t, int(re.search(r'/drone_(\d+)', m).group(1)) if re.search(r'/drone_(\d+)', m)
+                              else -1, m))
         warn = error = info
 
     f = SimpleNamespace(slot2drone=list(range(n)), detached=[False] * n, rho=attach_points(n, radius, attach_z, ccw),
-                        _tip_detect_m=tip_m, _tip_v0={}, _tip_learn={}, _tip_run={}, _tip_last={}, _tip_unarmed=set(),
-                        _detect_refused=set(), phase='planner', _reconfig_mode='ocp', _land_to_ground=False,
-                        _unload=None, takeoff_seen=True, load_state=None, cable_len=cable_len,
+                        _tip_detect_m=tip_m, _tip_v0={}, _tip_learn={}, _tip_learn_warned=set(), _tip_run={},
+                        _tip_last={}, _tip_raw={}, _tip_lone={}, _tip_unarmed=set(), _tip_hold_until=-1e18,
+                        _tip_ring_same=0, _detect_refused=set(), phase='planner', _reconfig_mode='ocp',
+                        _land_to_ground=False, _unload=None, takeoff_seen=True, load_state=None, cable_len=cable_len,
                         cable_len_i=[cable_len] * n, pivot_offset=np.array([0.0, 0.0, pivot_z]), lift_z0=None,
                         target_z=target_z, lift_progress=0.0, drone_pos=[None] * n, _drone_t={}, _load_t=None, t=0.0)
     log = _Log()
@@ -85,7 +90,8 @@ def replay(events, azimuths_cw, attach_z, tip_m=0.04, target_z=1.0, radius=0.225
         fires.append((f.t, d, log.last))
         f.detached[d] = True
     f._on_unannounced = fired
-    f._tip_learn_step = lambda d, sl, v, b, now: D._tip_learn_step(f, d, sl, v, b, now)
+    for name in ('_tip_learn_step', '_tip_ring_sample', '_tip_rod'):
+        setattr(f, name, (lambda fn: lambda *a: fn(f, *a))(getattr(D, name)))
     lifted = False
     for t, kind, i, xyz, extra in events:
         f.t = t
@@ -93,8 +99,11 @@ def replay(events, azimuths_cw, attach_z, tip_m=0.04, target_z=1.0, radius=0.225
             f._land_to_ground = True
         elif kind == 'ring':
             q, v = extra
+            prev = None if f.load_state is None else f.load_state[0:7].copy()
             f.load_state = np.r_[xyz, q, v, np.zeros(3)]
             f._load_t = t
+            if prev is not None:
+                D._tip_ring_sample(f, prev, f.load_state[0:7], t)
             if f.lift_z0 is None:
                 f.lift_z0 = float(xyz[2])
             lifted = lifted or xyz[2] >= target_z - 0.05
@@ -126,8 +135,8 @@ def main():
     az = [float(v) for v in a.azimuths.split(',')]
     f, fires, devmax = replay(ev, az, a.attach_z, a.tip_m, a.target_z, cable_len=a.cable_len)
     for d in range(len(az)):
-        state = ('armed' if d in f._tip_v0 else 'NOT armed' if d in f._tip_unarmed else 'never learnt (no still '
-                 'second after the lift?)')
+        state = ('armed' if d in f._tip_v0 else 'NOT armed' if d in f._tip_unarmed else 'never learnt (its marker '
+                 'never held still for 1 s after the lift?)')
         print(f'  drone {d}: {state}; largest deviation after arming {100.0 * devmax.get(d, float("nan")):.1f} cm '
               f'(fires at {100.0 * a.tip_m:.0f} cm)')
     print(f'WOULD-FIRES: {len(fires)}' + ''.join(f'\n  t={t:.2f} drone {d}: {m}' for t, d, m in fires))

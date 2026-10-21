@@ -181,3 +181,51 @@ The tracker's raw-pull logging (acm_x/y/z): **GO, low risk.** It is ported alone
 (chain_pair_noxy.yaml, the stretch check), and LAND if nothing detects within 2 s. The markers are bagged, so Part C's
 bag gives the check its first rig evidence: the detection time it would have had, and false fires replayed
 offline.
+
+## Rev 3 (21 Oct ~23:40), after critic round 2 and Wesley
+
+**Wesley (~23:30), against round 2's no-go:** "how often do we get a mocap glitch in our logs big enough to cause
+this?" He wants the guards added, the two methods compared tonight, and both available ("both methods should work, it
+would just be nice to have both available").
+
+**Our rig logs** (`tools/mocap_glitch_scan.py results/rig/*/*/`: every bag with the ring airborne above 0.3 m):
+| Signal | Bags, airborne time | In level flight (ring tilt < 20 deg) | Tilted (after a failure) |
+|---|---|---|---|
+| Ring pose (Motive, ~88 Hz) | 46 bags, 41.1 min (30.4 min level) | 2 departures > 3 deg from the 0.2 s median, both in the 14 Oct t5_2 crash (a 13.4 deg one-frame step); otherwise frame steps up to 4.2 deg, and over 2 deg only in flights where a magnet let go (c2q_noxy_3/4, c2q_p11p5_2, a2_2, r0013, r200006) or t6f2_4 (2.1); no frozen pose | 7 departures > 3 deg and every frozen run (up to 515 s), the ring at 55-120 deg after a magnet let go or a crash (14 Oct lt_7, t5_2; 7 Oct r0013, r200006; 15 Oct a2_2; 21 Oct c2q_noxy_4, c2q_p11p5_2) |
+| Magnet marker (QUAD4's or QUAD1's, /magnet_tip_pose) | 17 streams, 10.2 min | jumps over 0.3 m to a stray marker in 8 streams (0.4-2.8 m), some held > 0.1 s; departures > 2 cm lasting 3+ samples in 4 (at most 2.7 cm) | - |
+
+So outside a crash, a ring-attitude glitch in level flight has not happened in our data; marker swaps have. The body-length band
+rejects swaps that land off the quad's tether length.
+
+| Round 2 item | Rev 3 |
+|---|---|
+| M1 ring-pose glitch | (a) A ring sample that turns over 4 deg or moves over 3 cm from the last, or repeats it bit for bit 3 times, holds the check off for 0.2 s (`_tip_ring_sample`, on the planner's ring callback). (b) A sample counts as past only if the marker's distance from the ring's centre has also moved 1.5 cm: a release swings it out (twin rod: 3.5 cm at 4 cm off the plate; rig cable at 60 deg: ~2.6 cm), and a glitch in the ring's attitude cannot change that distance. Tests: a 12 deg mis-solve about the 3-9 axis held 0.15 s and 1 s (step), and creeping in at 1 deg a sample and held 1 s; markers 0 and 6 read 4.8 cm off. Each fires nothing; with (a) and (b) disabled they fire |
+| M2 persistence | 0.1 s on the samples' header stamps (sim time in the twin) and at least 6 samples |
+| M3 lone marker | With no other armed marker fresh it logs one WOULD-FIRE per run and does not act. The replay counts these as would-fires |
+| M4 frozen marker | A sample repeated bit for bit is no evidence |
+| M5 rig replay | `tools/tip_replay.py` runs rev 3, the ring samples through the glitch guard; tomorrow's A/B bags |
+| M6 bars | Restored below, whole flight |
+| S1 learning | No ring-speed test: a sliding 1 s window after the lift arms once its samples sit within 1 cm (90th percentile) of their median; "still learning" is logged after 5 s |
+| S2 attach/detach | The drone's learnt marker is forgotten when it leaves or attaches (`_tip_forget`) |
+| S4 params | The twin configs fly the rig's own files: `chain_pair_tip.yaml` (on), `chain_pair_noxy.yaml` (off) |
+| S5 worlds | Wesley: the rod-pose publishers go in the existing worlds |
+| New: slack cable | The T's unloaded quad may hang slack on the rig. A body-to-marker length up to 15 cm under the rod arms, and the band is one-sided above (the rod + 3 cm): once the magnet lets go and the cable goes taut, its samples stay in |
+
+Twin fault for M1: `MOCAP_TILT -1 deg [s [ramp]]` rotates the ring's published attitude about its body y (the T's 3-9
+axis) in the mocap emulator.
+
+**Bars (rev 3, frozen 21 Oct 23:45, before any rev 3 run).** One tree for every run: day-1021 with this branch merged,
+the 8 N pull cap and the rig's Part C files.
+
+| Run | Confirms | Falsifies |
+|---|---|---|
+| Unit tests | `test_tip_detect.py` 16 pass, the planner suite passes | any failure |
+| `t3_hover_tip` x1 | every drone armed; no UNANNOUNCED DETACH, WOULD-FIRE, drop or abort | any of them |
+| `t3_hover_tip_glitch` x1 | the three 12 deg glitches: no UNANNOUNCED DETACH, WOULD-FIRE, drop or abort; a "held" line at each step | any detection, drop or abort |
+| `t3_pair_release_tip` x2 | "UNANNOUNCED DETACH ... magnet" for drone 2 (/drone_1, plate 3) within 0.3 s of the RELEASE in both; the resize to n=2; no drop or abort; no detection of /drone_0 or /drone_2; the pair's roll p-p over its last 10 s and the whole-flight tilt peak no worse than the off arm's worse run | no magnet detection within 0.3 s, a drop or abort, a detection of another drone, or worse rocking or tilt than the off arm |
+| `t3_pair_release_tipoff` x2 | the off arm: detection time by the stretch check (R2250/R2251: +0.82 s with chain_pair.yaml) | - |
+| `c4_release9_tip` / `_tipoff` x1 each | informational: detection time, roll peak after the release, dropped at 45 deg or not | - |
+
+**Rig use (Wesley's rule):** Part C flies `chain_pair_tip.yaml` only if these bars pass, critic round 3 leaves no
+must-fix, and tomorrow's A/B flights replay clean (`WOULD-FIRES: 0`, every drone armed). Otherwise
+`chain_pair_noxy.yaml`.

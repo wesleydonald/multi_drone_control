@@ -2,9 +2,9 @@ criteria:
   forbid_abort: false
   min_payload_z: -1.0
   min_peak_payload_z: 0.5
-description: 'Card 2026-10-21_tip_detect: t3_pair_release with the magnet-marker check (tip_detect_m 0.04; the world''s
-  rod poses as the rig''s markers 21-24): the release of the plate-3 quad, which carries ~0, must be detected and the fleet
-  resized to the opposite pair within 0.5 s (drop_gap_deg 200, card 2026-10-21_chain_release).'
+description: 'Card 2026-10-21_tip_detect rev 3: the T 0/3/6, unannounced RELEASE of the plate-3 quad (it carries ~0),
+  with the rig''s Part C file and its magnet-marker check (chain_pair_tip.yaml; the world''s rod poses as the rig''s
+  markers). Against t3_pair_release_tipoff: the detection time and what it does to the pair.'
 events:
 - do: ARM
   t: 3.0
@@ -49,7 +49,7 @@ launch:
     measure_rod_len: true
     mode: dissipative
     num_drones: 3
-    params_file: /home/wesley/multi_drone_control/configs/rig/chain_pair.yaml
+    params_file: /home/wesley/multi_drone_control/configs/rig/chain_pair_tip.yaml
     payload_rest_z: 0.02
     pivot_offset_z: -0.04
     pretension_s: 3.0
@@ -69,7 +69,6 @@ launch:
     z_i_gate: 0.25
     z_taut_gate: 0.9
     departed_ground_idle: true
-    tip_detect_m: 0.04
   file: sim_control_launch.py
   package: bringup
 name: t3_pair_release_tip

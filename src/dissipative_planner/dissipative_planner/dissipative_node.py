@@ -72,14 +72,24 @@ DEPARTED_PRESS_LIMIT_S = 6.0  # s of press after it stopped above its rest; then
 DEPARTED_DOWN_HIGH_M = 0.10  # m: stalled no more than this above its rest is down too (QUAD4 stopped 4-7 cm above
                             # its mat height after every 14 Oct take-back and was never disarmed alone)
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
-TIP_DETECT_S = 0.03        # s of contiguous magnet-marker samples past tip_detect_m: a release (3 at 100 Hz)
+TIP_DETECT_S = 0.1         # s of contiguous magnet-marker samples past tip_detect_m, on their stamps: a release
+TIP_DETECT_N = 6           # and at least this many samples in that run (the rig streams ~88 Hz, the twin 60)
 TIP_GAP_S = 0.05           # s: a longer gap between one marker's samples restarts its count
-TIP_LEARN_S = 1.0          # s of still ring after the lift over which each marker's attached offset is learnt
-TIP_STILL_MPS = 0.05       # m/s: the ring speed under which it counts as still for that
-TIP_ARM_MAX_M = 0.06       # m: a learnt offset (or body-to-marker length) this far out is a mis-routed body or a
-                           # badly seated magnet: that drone's check is not armed
-TIP_BAND_M = 0.03          # m: a sample this far off the learnt body-to-marker length is not this magnet (an
-                           # untracked body read at 0,0,0, a marker swap): no evidence either way
+TIP_LEARN_S = 1.0          # s window after the lift over which each marker's attached offset is learnt
+TIP_LEARN_SPREAD_M = 0.01  # m: the window's samples (90th percentile) within this of their median, else keep learning
+TIP_LEARN_WARN_S = 5.0     # s of learning after the lift before it says it is still learning
+TIP_ARM_MAX_M = 0.06       # m: a learnt offset this far from its plate, or a body-to-marker length this far over the
+                           # rod, is a mis-routed body or a badly seated magnet: that drone's check is not armed
+TIP_ARM_SLACK_M = 0.15     # m: a body-to-marker length up to this far under the rod still arms (a slack cable)
+TIP_BAND_M = 0.03          # m: a sample this far past the longer of the learnt length and the rod, or this far under
+                           # the learnt length, is not this magnet (a swap, an untracked body at 0,0,0): no evidence
+TIP_RADIAL_M = 0.015       # m: and its distance from the ring's centre must have moved this much. A release swings it
+                           # out; a glitch in the ring's attitude cannot change that distance
+TIP_RING_STEP_DEG = 4.0    # deg between two ring samples is a Motive glitch (the ring turns at most 1.5 deg per
+                           # sample in our rig flights' normal flight, 21 Oct scan of 46 bags)
+TIP_RING_STEP_M = 0.03     # m between two ring samples, likewise
+TIP_RING_FROZEN_N = 3      # the same ring pose this many times in a row, bit for bit, is a lost body
+TIP_HOLD_S = 0.2           # s the marker check holds off after any of these
 DROP_LAND_WAIT_S = 30.0    # s after a drop: /fleet/landed even if a drone never reads as down
 DROP_TAKE_BACK_EXTRA_S = 30.0  # s more while a drop's take-back flies QUAD4 out and down (15-25 s; critic F2)
 # partner_contact (card 2026-10-10_combined_m1_contact): his phases from the rejoin on, in which our ring magnet span
@@ -429,14 +439,20 @@ class DissipativeController(LoadPlanner):
         self._detect_refused = set()  # detected but refused (min_survivors): do not re-fire
         # > 0: the magnet-marker check (Wesley 21 Oct, card 2026-10-21_tip_detect). A carrier's magnet marker
         # (/drone_<d>/magnet_tip_state: on the rig Motive bodies 21-24 through mocap_extra_bodies, in the twin the end
-        # of its rod) that sits this much further from its plate than its attached offset, TIP_DETECT_N samples in a
-        # row, has let go. It catches a quad carrying nothing (the T's opposite quad), whose cable never stretches.
+        # of its rod) that sits this much further from its plate than its attached offset, for TIP_DETECT_S, has let
+        # go. It catches a quad carrying nothing (the T's opposite quad), whose cable never stretches.
         self._tip_detect_m = float(p('tip_detect_m', 0.0).value)
-        self._tip_v0 = {}             # d -> (ring-frame offset from its plate point, body-to-marker length), learnt
-        self._tip_learn = {}          # d -> [(t, ring-frame offset, body-to-marker)] while learning
-        self._tip_run = {}            # d -> (t first past, t last) of its current run past the threshold
+        self._tip_v0 = {}             # d -> (ring-frame offset from its plate point, body-to-marker length,
+                                      #       distance from the ring's centre), learnt
+        self._tip_learn = {}          # d -> (t started, [(t, ring-frame offset, body-to-marker, from centre)])
+        self._tip_learn_warned = set()
+        self._tip_run = {}            # d -> (t first past, t last, samples) of its current run past the threshold
         self._tip_last = {}           # d -> (t, its latest deviation from the learnt offset)
+        self._tip_raw = {}            # d -> its last sample as received (a lost marker repeats it)
+        self._tip_lone = {}           # d -> the run already reported as a lone would-fire
         self._tip_unarmed = set()     # learnt offset out of bounds: not checked
+        self._tip_hold_until = -1e18  # stamp until which a ring glitch holds the check off
+        self._tip_ring_same = 0       # the ring's pose repeated bit for bit, in a row
         if self._tip_detect_m > 0.0:
             for d in range(self.n):          # the carriers; a reserved newcomer's tip is his /magnet_tip_pose
                 self.create_subscription(MotionCaptureState, f'/drone_{d}/magnet_tip_state',
@@ -1346,6 +1362,8 @@ class DissipativeController(LoadPlanner):
                 f'[dissipative] detach {d}: the n={self.n} OCP did not converge on the '
                 f'current state. The fleet is resized but the first solves may jump.')
         self.detached[d] = True
+        if getattr(self, '_tip_detect_m', 0.0) > 0.0:
+            self._tip_forget(d)
         if d < len(self.detach_pub):
             self.detach_pub[d].publish(Empty())
             self._release_magnet(d)
@@ -1632,87 +1650,152 @@ class DissipativeController(LoadPlanner):
                 return
             self._detect_refused.add(d)
 
-    def _tip_cb(self, d, msg):
-        p = msg.pose.position
-        self._tip_check(d, np.array([p.x, p.y, p.z], float), time.monotonic())
+    def _payload_cb(self, msg):
+        prev = None if self.load_state is None else self.load_state[0:7].copy()
+        super()._payload_cb(msg)
+        if getattr(self, '_tip_detect_m', 0.0) > 0.0 and prev is not None:
+            st = msg.header.stamp
+            self._tip_ring_sample(prev, self.load_state[0:7],
+                                  st.sec + 1e-9 * st.nanosec if (st.sec or st.nanosec) else time.monotonic())
 
-    def _tip_check(self, d, tip, now):
+    def _tip_ring_sample(self, prev, cur, ts):
+        """tip_detect_m: a glitch in the ring's own pose holds the marker check off for TIP_HOLD_S (critic round 2,
+        M1): an attitude or position jump between two samples, or the same pose repeated bit for bit (a lost body)."""
+        self._tip_ring_same = self._tip_ring_same + 1 if np.array_equal(prev, cur) else 0
+        qa, qb = np.asarray(prev[3:7], float), np.asarray(cur[3:7], float)
+        c = abs(float(qa @ qb)) / max(float(np.linalg.norm(qa) * np.linalg.norm(qb)), 1e-12)
+        step = 2.0 * np.degrees(np.arccos(min(1.0, c)))
+        jump = float(np.linalg.norm(np.asarray(cur[0:3], float) - np.asarray(prev[0:3], float)))
+        if step <= TIP_RING_STEP_DEG and jump <= TIP_RING_STEP_M and self._tip_ring_same < TIP_RING_FROZEN_N - 1:
+            return
+        if ts >= self._tip_hold_until and self._tip_v0:
+            self.get_logger().warn(
+                f'[dissipative] magnet check held {TIP_HOLD_S:.1f} s: the ring pose '
+                + ('repeats' if self._tip_ring_same >= TIP_RING_FROZEN_N - 1
+                   else f'jumped {step:.1f} deg / {100.0 * jump:.1f} cm in one sample'))
+        self._tip_hold_until = ts + TIP_HOLD_S
+        self._tip_run = {}
+
+    def _tip_forget(self, d):
+        """d attached or left: its marker is learnt afresh on its next plate, and every run restarts."""
+        for m in (self._tip_v0, self._tip_learn, self._tip_last, self._tip_raw, self._tip_lone):
+            m.pop(d, None)
+        self._tip_unarmed.discard(d)
+        self._tip_learn_warned.discard(d)
+        self._tip_run = {}
+
+    def _tip_rod(self, sl):
+        return max(float(self.cable_len), float(self.cable_len_i[sl])) - float(self.pivot_offset[2])
+
+    def _tip_cb(self, d, msg):
+        p, st = msg.pose.position, msg.header.stamp
+        self._tip_check(d, np.array([p.x, p.y, p.z], float), time.monotonic(),
+                        st.sec + 1e-9 * st.nanosec if (st.sec or st.nanosec) else None)
+
+    def _tip_check(self, d, tip, now, stamp=None):
         """tip_detect_m: d's magnet marker in the ring frame, from its plate point. Its attached offset is learnt once
-        over TIP_LEARN_S of still ring after the lift (bounded by TIP_ARM_MAX_M); after that, TIP_DETECT_S of
-        contiguous samples past it by tip_detect_m are a release. A sample off the learnt body-to-marker length by
-        TIP_BAND_M is not this magnet; every armed marker past at once is the ring's pose jumping. Off in LAND, where
-        a false fire would drop the ring from height (the stretch check still runs there)."""
+        after the lift (bounded by TIP_ARM_MAX_M); after that, TIP_DETECT_S and TIP_DETECT_N of contiguous samples
+        past it by tip_detect_m, that also moved its distance from the ring's centre by TIP_RADIAL_M, are a release.
+        Not evidence: a sample outside the body-to-marker band (not this magnet) or repeated bit for bit (a lost
+        marker), or within TIP_HOLD_S of a ring-pose glitch. Not acted on: every armed marker past at once (the
+        ring's pose), or no other armed marker fresh (a would-fire, logged). Off in LAND, where a false fire would
+        drop the ring from height (the stretch check still runs there). Runs and holds are timed on the stamps."""
         if (self._tip_detect_m <= 0.0 or self.phase != 'planner' or self._reconfig_mode != 'ocp'
                 or self._land_to_ground or self._unload is not None or not self.takeoff_seen
                 or d not in self.slot2drone or self.detached[d] or d in self._detect_refused
                 or d in self._tip_unarmed or not np.all(np.isfinite(tip))):
             self._tip_run.pop(d, None)
             return
+        if d in self._tip_raw and np.array_equal(tip, self._tip_raw[d]):
+            return
+        self._tip_raw[d] = np.array(tip, float)
+        ts = now if stamp is None else stamp
         load_t, t_d = getattr(self, '_load_t', None), getattr(self, '_drone_t', {}).get(d)
         body = self.drone_pos[d] if d < len(self.drone_pos) else None
         if (self.load_state is None or load_t is None or now - load_t > DETECT_STALE_S or body is None
-                or t_d is None or now - t_d > DETECT_STALE_S):
+                or t_d is None or now - t_d > DETECT_STALE_S or ts < self._tip_hold_until):
             self._tip_run.pop(d, None)
             return
         sl = self.slot2drone.index(d)
-        v = quat_to_rot_np(self.load_state[3:7]).T @ (tip - self.load_state[0:3]) - np.asarray(self.rho[sl], float)
+        rel = tip - self.load_state[0:3]
+        v = quat_to_rot_np(self.load_state[3:7]).T @ rel - np.asarray(self.rho[sl], float)
         b = float(np.linalg.norm(tip - body))
+        r = float(np.linalg.norm(rel))
         learnt = self._tip_v0.get(d)
         if learnt is None:
-            self._tip_learn_step(d, sl, v, b, now)
+            self._tip_learn_step(d, sl, v, b, r, ts)
             return
-        v0, b0 = learnt
-        if abs(b - b0) > TIP_BAND_M:
+        v0, b0, r0 = learnt
+        if b > max(b0, self._tip_rod(sl)) + TIP_BAND_M or b < b0 - TIP_BAND_M:
             self._tip_run.pop(d, None)
             return
         dev = float(np.linalg.norm(v - v0))
         self._tip_last[d] = (now, dev)
-        if dev <= self._tip_detect_m:
+        if dev <= self._tip_detect_m or abs(r - r0) <= TIP_RADIAL_M:
             self._tip_run.pop(d, None)
             return
-        t0, t_prev = self._tip_run.get(d, (now, now))
-        if now - t_prev > TIP_GAP_S:
-            t0 = now
-        self._tip_run[d] = (t0, now)
-        if now - t0 < TIP_DETECT_S:
+        t0, t_prev, k = self._tip_run.get(d, (ts, ts, 0))
+        if ts - t_prev > TIP_GAP_S:
+            t0, k = ts, 0
+        self._tip_run[d] = (t0, ts, k + 1)
+        if ts - t0 < TIP_DETECT_S or k + 1 < TIP_DETECT_N:
             return
         others = [x for x in self.slot2drone if x != d and not self.detached[x] and x in self._tip_last
                   and now - self._tip_last[x][0] <= DETECT_STALE_S]
-        if others and all(self._tip_last[x][1] > self._tip_detect_m for x in others):
+        if not others:
+            if self._tip_lone.get(d) != t0:
+                self._tip_lone[d] = t0
+                self.get_logger().warn(
+                    f'[dissipative] magnet marker of {_who(d)} {100.0 * dev:.0f} cm off its plate for '
+                    f'{1000.0 * (ts - t0):.0f} ms with no other armed marker fresh: WOULD-FIRE, not acted on')
+            return
+        if all(self._tip_last[x][1] > self._tip_detect_m for x in others):
             self._tip_run = {}           # every armed marker off at once: the ring's pose jumped, not every magnet
             return
         self.get_logger().warn(
-            f'[dissipative] UNANNOUNCED DETACH: {_who(d)} magnet {100.0 * dev:.0f} cm off its plate for '
-            f'{1000.0 * (now - t0):.0f} ms - resizing')
+            f'[dissipative] UNANNOUNCED DETACH: {_who(d)} magnet {100.0 * dev:.0f} cm off its plate '
+            f'({100.0 * (r - r0):+.0f} cm from the ring centre) for {1000.0 * (ts - t0):.0f} ms - resizing')
         self._tip_run = {}
         self._on_unannounced(d)
 
-    def _tip_learn_step(self, d, sl, v, b, now):
-        """Learn d's attached marker offset (ring frame) and body-to-marker length over TIP_LEARN_S of still ring
-        after the lift; arm the check only if both are believable."""
+    def _tip_learn_step(self, d, sl, v, b, r, ts):
+        """Learn d's attached marker offset (ring frame), body-to-marker length and distance from the ring's centre
+        over the last TIP_LEARN_S after the lift, once that window holds still on the plate; arm the check only if
+        they are believable."""
         lz0 = getattr(self, 'lift_z0', None)
-        still = float(np.linalg.norm(self.load_state[7:10])) < TIP_STILL_MPS
-        if lz0 is None or self.lift_progress < (self.target_z - lz0) - 1e-6 or not still:
+        if lz0 is None or self.lift_progress < (self.target_z - lz0) - 1e-6:
             self._tip_learn.pop(d, None)
             return
-        hist = self._tip_learn.setdefault(d, [])
-        hist.append((now, v, b))
-        if now - hist[0][0] < TIP_LEARN_S:
+        t_start, hist = self._tip_learn.setdefault(d, (ts, deque()))
+        hist.append((ts, v, b, r))
+        while ts - hist[0][0] > TIP_LEARN_S:
+            hist.popleft()
+        if ts - t_start < TIP_LEARN_S:
             return
-        v0 = np.median(np.array([h[1] for h in hist]), axis=0)
+        V = np.array([h[1] for h in hist])
+        v0 = np.median(V, axis=0)
+        spread = float(np.percentile(np.linalg.norm(V - v0, axis=1), 90))
+        if spread > TIP_LEARN_SPREAD_M:
+            if ts - t_start > TIP_LEARN_WARN_S and d not in self._tip_learn_warned:
+                self._tip_learn_warned.add(d)
+                self.get_logger().warn(
+                    f'[dissipative] magnet marker of {_who(d)} still learning: it moves {100.0 * spread:.1f} cm on '
+                    f'its plate over {TIP_LEARN_S:.0f} s (needs {100.0 * TIP_LEARN_SPREAD_M:.0f})')
+            return
         b0 = float(np.median([h[2] for h in hist]))
-        btt = max(float(self.cable_len), float(self.cable_len_i[sl])) - float(self.pivot_offset[2])
+        r0 = float(np.median([h[3] for h in hist]))
+        btt = self._tip_rod(sl)
         self._tip_learn.pop(d, None)
-        if float(np.linalg.norm(v0)) > TIP_ARM_MAX_M or abs(b0 - btt) > TIP_ARM_MAX_M:
+        if float(np.linalg.norm(v0)) > TIP_ARM_MAX_M or not btt - TIP_ARM_SLACK_M <= b0 <= btt + TIP_ARM_MAX_M:
             self._tip_unarmed.add(d)
             self.get_logger().warn(
                 f'[dissipative] magnet marker of {_who(d)} NOT armed: {100.0 * float(np.linalg.norm(v0)):.0f} cm '
                 f'from its plate, {b0:.3f} m from its body (rod {btt:.3f}) - check mocap_extra_bodies and the magnet')
             return
-        self._tip_v0[d] = (v0, b0)
+        self._tip_v0[d] = (v0, b0, r0)
         self.get_logger().info(
             f'[dissipative] magnet marker of {_who(d)} armed: offset ({100.0 * v0[0]:.1f}, {100.0 * v0[1]:.1f}, '
-            f'{100.0 * v0[2]:.1f}) cm from its plate, {b0:.3f} m from its body')
+            f'{100.0 * v0[2]:.1f}) cm from its plate, {b0:.3f} m from its body, {r0:.3f} m from the ring centre')
 
     def _cancel_unload(self, why):
         """Abandon a soft detach: the tensions blend back to the full split and the magnet
@@ -2815,6 +2898,8 @@ class DissipativeController(LoadPlanner):
             getattr(self, '_warm_latched', set()).discard(j)
             self._approach.pop(j, None)
         self.detached[d] = False
+        if getattr(self, '_tip_detect_m', 0.0) > 0.0:
+            self._tip_forget(d)
         self._weld_time[d] = self.get_clock().now()          # cable-FF ramp for the newcomer
         if start_creep:
             self.creep.resize(self.n, self.rho, self.cable_len_i[:self.n])
