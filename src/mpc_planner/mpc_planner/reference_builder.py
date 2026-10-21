@@ -211,7 +211,7 @@ class ReferenceBuilder:
         if self.traj_t > 0.0:
             t_k = self.traj_t + self.dt * k - self.ref_lag_s
             dx, dy, vx, vy = self.traj.offset_at(t_k)
-            _, yaw_rate = self.traj.yaw_at(t_k)             # 'spin' only, else 0
+            _, yaw_rate = self.traj.yaw_at(t_k)             # 'spin' / 'line_spin' only, else 0
         # p, v, e_att, w. The load yaw REFERENCE goes on the q_ref parameter (set per
         # node in _plan), so e_att stays 0 here; the yaw RATE is the load angular
         # velocity ref (world z), which drives the OCP to actually rotate the load.
@@ -246,7 +246,7 @@ class ReferenceBuilder:
         R_tilt = rot_align(np.array([0.0, 0.0, -1.0]), g_eff)
         # The attach points rotate with the load yaw, so the nominal cable directions
         # rotate with it too (about world z): yaw the formation, then tilt onto g_eff.
-        # The yaw is the latched placement datum psi0 plus, for 'spin', the commanded
+        # The yaw is the latched placement datum psi0 plus, for 'spin' / 'line_spin', the commanded
         # load rotation (0 for every other trajectory).
         R_form = R_tilt @ rot_z(self.psi0 + yaw)
         s_k, t_k = self._refs_at(k)
@@ -255,7 +255,7 @@ class ReferenceBuilder:
 
     def q_ref_at(self, k):
         """Stage-k load attitude reference (the q_ref acados parameter): hold the yaw
-        the rig was placed at (psi0). For 'spin' the commanded load rotation is added
+        the rig was placed at (psi0). For 'spin' / 'line_spin' the commanded load rotation is added
         on top, tracking the load yaw along the horizon so the OCP holds the rotating
         attitude while the yaw-rate term in yref_at drives the rotation."""
         yaw = 0.0
@@ -266,12 +266,14 @@ class ReferenceBuilder:
     def hold_yref(self, load_state):
         """Static hold reference for priming: keep the load at its current measured
         position with zero twist, cables at the nominal 45 deg taut directions (about
-        the placement yaw datum, as in yref_at) and nominal tension. Same field layout
-        as yref_at."""
+        the placement yaw datum plus the trajectory's turned yaw, as in yref_at: line_spin
+        ends turned, so a datum-only hold would swing the formation back) and nominal
+        tension. Same field layout as yref_at."""
         p = load_state[0:3]
         pose = [float(p[0]), float(p[1]), float(p[2]),
                 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        R_yaw = rot_z(self.psi0)
+        yaw = self.traj.yaw_at(self.traj_t)[0] if self.traj_t > 0.0 else 0.0
+        R_yaw = rot_z(self.psi0 + yaw)
         s_0, t_0 = self._refs_at(0)
         s_ref = []
         for i in range(self.n):

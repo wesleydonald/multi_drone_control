@@ -39,7 +39,7 @@ from .load_cable_dynamics import LoadCableDynamics, LOAD_DIM, CABLE_DIM
 from .geometry import (quat_to_rot_np, attach_points, nominal_cable_dirs,
                        azimuth_slot_assignment, yaw_from_quat, slot_azimuth_errors,
                        slot_error_text, slot_offset_report, cw_text, rot_z)
-from .load_trajectory import LoadTrajectory, ORBIT_RAMP_S
+from .load_trajectory import KINDS, LoadTrajectory, ORBIT_RAMP_S
 from .planner_solver import PlannerSolver, HorizonFallback, PLAN_N, PLAN_TF, rod_accel_at
 from .params import PlannerConfig, load_inertia
 from .creep_controller import CreepController
@@ -337,6 +337,8 @@ class LoadPlanner(Node):
         self._drone_t = {}                     # monotonic time of each drone's last pose
         self.auto_slot_assign = cfg.auto_slot_assign
         self.load_traj = cfg.load_traj
+        if self.load_traj not in KINDS:          # an unknown kind used to hover silently
+            raise ValueError(f'load_traj {self.load_traj!r}: not one of {", ".join(KINDS)}')
         self.traj_speed = cfg.traj_speed
         self.traj_distance = cfg.traj_distance
         self.traj_radius = cfg.traj_radius
@@ -360,7 +362,7 @@ class LoadPlanner(Node):
         self._land_drop = 0.0
 
         # Lateral load-reference trajectory generator (line_x / circle / fig_8 /
-        # spin). The trajectory CLOCK traj_t stays here and is advanced in _plan.
+        # spin / line_spin). The trajectory CLOCK traj_t stays here and is advanced in _plan.
         self.traj = LoadTrajectory(self.load_traj, self.traj_speed,
                                    self.traj_distance, self.traj_radius)
 

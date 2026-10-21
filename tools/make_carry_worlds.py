@@ -67,6 +67,10 @@ WORLDS = {
     'four_rigid_ground_rig_m100.sdf': ['--n', '4', '--payload-mass', '1.0'],
     # 1 m cables (the supervisor's hardware for the week of 19 Oct; plan 2026-10-15 A1)
     'three_rigid_ground_rig_L100.sdf': ['--n', '3'],
+    # thesis baseline and the 90 deg chain (plan 2026-10-21): two quads on plates 0/6, and the T on plates 0/3/6
+    # (generator azimuths count counter-clockwise, so clockwise plate 3 is 270)
+    'two_rigid_ground_rig.sdf': ['--n', '2'],
+    'three_rigid_ground_rig_T.sdf': ['--n', '3', '--azimuths', '0,270,180'],
 }
 # per-world options that override RIG_ARGS (passed after them)
 WORLD_OVERRIDES = {'three_rigid_ground_rig_L100.sdf': ['--cable-len', '1.0']}
