@@ -40,7 +40,8 @@ def _node(tip_m=0.04):
                         _detect_refused=set(), phase='planner', _reconfig_mode='ocp', _land_to_ground=False,
                         _unload=None, takeoff_seen=True, load_state=np.r_[0.0, 0.0, 1.0, Q0, np.zeros(6)],
                         cable_len=0.55, cable_len_i=[0.55] * 3, pivot_offset=np.array([0.0, 0.0, -0.04]),
-                        lift_z0=0.02, target_z=1.0, lift_progress=0.98, released=[], t=100.0, _k=0)
+                        lift_z0=0.02, target_z=1.0, lift_progress=0.98, released=[], t=100.0, _k=0,
+                        refs=SimpleNamespace(_t_nom=[5.7, 0.1, 5.7]))      # drone 1, opposite the gap, is the rider
     f.get_logger = lambda: log
     f.log = log
     f._on_unannounced = lambda d: f.released.append(d)
@@ -111,10 +112,13 @@ def _qy(deg):
 def test_it_arms_after_a_still_second_with_the_markers_offset():
     f = _node()
     _arm(f)
-    v0, b0, r0 = f._tip_v0[1]
+    v0, b0, r0, band = f._tip_v0[1]
     assert np.allclose(v0, OFF, atol=2e-3) and b0 == pytest.approx(BTT, abs=2e-3)
     assert r0 == pytest.approx(np.hypot(0.225, 0.02 + 0.03), abs=2e-3)
+    assert band == pytest.approx((b0 - 0.03, max(b0, BTT) + 0.03))
+    assert f._tip_v0[0][3] == pytest.approx((f._tip_v0[0][1] - 0.03, f._tip_v0[0][1] + 0.03))   # loaded: +-3 cm
     assert sum('armed' in m for m in f.log.lines) == 3
+    assert any('+3.0 up' in m and 'rider' in m for m in f.log.lines)
 
 
 def test_it_does_not_learn_in_the_lift_or_while_the_marker_moves():
@@ -163,6 +167,15 @@ def test_a_slack_cable_arms_and_its_release_still_fires():
     for _ in range(12):
         _step(f, _on(f, 1))
     assert f.released == [1]
+
+
+def test_a_loaded_quad_reading_short_is_not_armed():
+    """Only the rider may hang slack: a loaded carrier's marker 8 cm short of its rod is a mis-routed body."""
+    f = _node()
+    f.drone_pos[0] = _tip(f, 0) + (BTT - 0.08) * _out(f, 0)
+    for _ in range(int(TIP_LEARN_S / DT) + 3):
+        _step(f, {d: _s(_tip(f, d)) for d in range(3)})
+    assert 0 in f._tip_unarmed and set(f._tip_v0) == {1, 2}
 
 
 def test_noise_blips_a_gap_and_bad_samples_are_not_releases():
@@ -320,13 +333,17 @@ def test_the_offline_replay_runs_the_same_check_over_recorded_samples():
             bodies[d] = tip + BTT * _out(g, d)
             ev.append((t, 'drone', d, bodies[d], None))
             ev.append((t, 'tip', d, _s(tip), None))
-    f, fires, devmax = tr.replay(ev, [0.0, 90.0, 180.0], 0.02)
+    stats = {}
+    f, fires, devmax = tr.replay(ev, [0.0, 90.0, 180.0], 0.02, rider=1, stats=stats)
     assert set(f._tip_v0) == {0, 1, 2} and fires == [] and max(devmax.values()) < 0.01
+    assert max(st['run'][0] for st in stats.values()) < tr.RUN_BAR_S
+    assert f._tip_v0[1][3][1] >= BTT + 0.03 - 1e-9                 # the rider's band reaches up to the rod
     for k in range(15):                          # drone 2 holds its place while its magnet swings off its plate
         t += DT
         ev.append((t, 'ring', -1, np.array([0.0, 0.0, 1.0 + 1e-6 * (k % 2)]), (Q0, v)))
         for d in range(3):
             ev.append((t, 'drone', d, bodies[d], None))
             ev.append((t, 'tip', d, _s(bodies[2] - np.array([0.0, 0.0, BTT])) if d == 2 else _s(_tip(g, d)), None))
-    f, fires, devmax = tr.replay(ev, [0.0, 90.0, 180.0], 0.02)
-    assert [d for _, d, _ in fires] == [2]
+    stats = {}
+    f, fires, devmax = tr.replay(ev, [0.0, 90.0, 180.0], 0.02, stats=stats)
+    assert [d for _, d, _ in fires] == [2] and stats[2]['run'][0] >= tr.RUN_BAR_S

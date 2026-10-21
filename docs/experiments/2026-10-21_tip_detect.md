@@ -11,6 +11,8 @@ Does a magnet-marker check catch an unannounced release within about 0.1 s, incl
 firing in a normal flight?
 
 ## 2. Hypothesis
+(Sections 2-8 are rev 1, kept as written; rev 3 at the end supersedes them.)
+
 - **Detection.** A released magnet swings off its plate at once: on 0.55 m cables it hangs ~0.28 m out and ~7 cm
   lower within ~0.4 s, so it passes 4 cm beyond its attached offset in well under 0.1 s. Three samples in a row at
   60 Hz is 50 ms.
@@ -229,3 +231,47 @@ the 8 N pull cap and the rig's Part C files.
 **Rig use (Wesley's rule):** Part C flies `chain_pair_tip.yaml` only if these bars pass, critic round 3 leaves no
 must-fix, and tomorrow's A/B flights replay clean (`WOULD-FIRES: 0`, every drone armed). Otherwise
 `chain_pair_noxy.yaml`.
+
+## Critic round 3 (22 Oct ~00:05): GO for tonight's twin comparison; Part C ON only after N1-N4
+
+Round 2 items:
+- **Closed:** M2, M3, M6, S1, S2, S5.
+- **Partly closed:**
+  - M1: a pure attitude glitch is harmless. A held mislabel that also shifts the pivot 1.5 cm along 0-6 for 0.3 s or more could still fire 0 or 6. The twin fault is a pure rotation, so `t3_hover_tip_glitch` passes by construction. No unstubbed plate-0 test yet.
+  - M4: the covered-marker bench is not in the rig rule.
+  - M5: not yet run on rig marker streams.
+  - S7: these sections were stale; the 1.5 deg comment is now 2.1.
+- **Closed once merged:** S4.
+- **Open:** S3, S8. S6 is open but harmless.
+
+New must-fix for Part C ON:
+- **N1.** The scan that overruled round 2 cannot see a held marker swap. A departure held 11 samples becomes its own median, and swaps of 3-30 cm were not counted. Tonight: list every frame step over 3 cm in the 17 streams, with its hold time and |marker - body| against the hanging length. Any in-band hold of 0.1 s or more is a NO-GO until the radial test is shown to reject it.
+- **N2.** The A/B replay gate is a weak yes/no. Print per drone the longest in-band run past both tests, the samples the band rejected, and the learnt offset. New bars: no such run of 50 ms or more, and each magnet's learnt offset repeats within 1 cm across flights.
+- **N3.** On the rig the coils open 0.16-0.20 s after OFF (card 2026-10-08_drop_trigger_replay). Predict detection about 0.3 s or more after the OFF, not 0.1 s.
+- **N4.** The sheet's ON branch needs the full procedure:
+  - the replay between Part B and Part C;
+  - R3 on chain_pair_tip.yaml;
+  - T4 reads back tip_detect_m;
+  - T2's three "armed" lines each within 1 cm of that magnet's A/B offset. A stray marker learnt in place of the magnet would otherwise fire when the real one comes back.
+
+Should-fix:
+- The slack band only for the rider, with the band printed.
+- A sideways slide on plate 3 needs ~8.4 cm before the radial test passes.
+- The replay arms on the measured ring height, the planner on the lift reference.
+- The leaver's index differs between the twin (drone 1) and the rig (drone 0).
+
+**Done tonight (before the comparison runs):**
+- **Rider band:** only the rider (planned under 1 N, `TIP_RIDER_N`) gets the slack band up to the rod. A loaded carrier keeps +-3 cm and does not arm 6 cm or more short (new test).
+- **"armed" line:** gives the offset in its plate's own frame (out, along, up), comparable across plates, and the band.
+- **`tools/tip_replay.py`:** prints per drone the longest in-band run past both tests (ms, samples) and the samples off the band. Its exit status fails on a run of 50 ms or more as well as on a would-fire. `--rider` gives the T's rider its band.
+- **Tests:** 17 in `test_tip_detect.py`, 235 in the planner suite.
+
+**Bars added (22 Oct 00:15, before the comparison; the frozen bars above are unchanged):**
+- **N1 (tonight, rig data):** count the in-band holds of 0.1 s or more among the frame steps over 3 cm in the 17 marker streams. Must be 0, or each one shown rejected by the radial test.
+- **N2 (the morning's A/B replay):**
+  - no in-band run past both tests of 50 ms or more on any drone of any A/B flight;
+  - each magnet's learnt offset (out, along, up) repeats within 1 cm across its flights.
+- **Load:** the planner's tick overruns in the tip arm of the comparison no worse than in the tipoff arm. Overruns are planner log rows more than 0.15 s apart in sim time, and solve_ms over 100.
+- **S8:** detection time in sim time, from the RELEASE event to the planner's first row at the smaller n (10 Hz).
+- **N3, the rig prediction:** Part C's detection about 0.3 s or more after the OFF. A marker more than 4 cm off its plate for more than 0.1 s in the bag with no detection falsifies.
+- **N4:** the sheet's ON procedure as above.

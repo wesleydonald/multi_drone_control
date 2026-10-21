@@ -80,13 +80,15 @@ TIP_LEARN_SPREAD_M = 0.01  # m: the window's samples (90th percentile) within th
 TIP_LEARN_WARN_S = 5.0     # s of learning after the lift before it says it is still learning
 TIP_ARM_MAX_M = 0.06       # m: a learnt offset this far from its plate, or a body-to-marker length this far over the
                            # rod, is a mis-routed body or a badly seated magnet: that drone's check is not armed
-TIP_ARM_SLACK_M = 0.15     # m: a body-to-marker length up to this far under the rod still arms (a slack cable)
-TIP_BAND_M = 0.03          # m: a sample this far past the longer of the learnt length and the rod, or this far under
-                           # the learnt length, is not this magnet (a swap, an untracked body at 0,0,0): no evidence
+TIP_ARM_SLACK_M = 0.15     # m: the rider's body-to-marker length may be up to this far under the rod (a slack cable)
+TIP_RIDER_N = 1.0          # N: a carrier planned under this (the T's quad opposite the gap) is the rider
+TIP_BAND_M = 0.03          # m: a sample this far off the learnt body-to-marker length is not this magnet (a swap, an
+                           # untracked body at 0,0,0): no evidence. The rider's band reaches up to the rod: once its
+                           # magnet lets go its slack cable goes taut
 TIP_RADIAL_M = 0.015       # m: and its distance from the ring's centre must have moved this much. A release swings it
                            # out; a glitch in the ring's attitude cannot change that distance
-TIP_RING_STEP_DEG = 4.0    # deg between two ring samples is a Motive glitch (the ring turns at most 1.5 deg per
-                           # sample in our rig flights' normal flight, 21 Oct scan of 46 bags)
+TIP_RING_STEP_DEG = 4.0    # deg between two ring samples is a Motive glitch (level flight in our 46 rig bags: 2.1 deg
+                           # at most, 4.2 deg only after a magnet let go; tools/mocap_glitch_scan.py)
 TIP_RING_STEP_M = 0.03     # m between two ring samples, likewise
 TIP_RING_FROZEN_N = 3      # the same ring pose this many times in a row, bit for bit, is a lost body
 TIP_HOLD_S = 0.2           # s the marker check holds off after any of these
@@ -1725,8 +1727,8 @@ class DissipativeController(LoadPlanner):
         if learnt is None:
             self._tip_learn_step(d, sl, v, b, r, ts)
             return
-        v0, b0, r0 = learnt
-        if b > max(b0, self._tip_rod(sl)) + TIP_BAND_M or b < b0 - TIP_BAND_M:
+        v0, b0, r0, (lo, hi) = learnt
+        if not lo <= b <= hi:
             self._tip_run.pop(d, None)
             return
         dev = float(np.linalg.norm(v - v0))
@@ -1785,17 +1787,24 @@ class DissipativeController(LoadPlanner):
         b0 = float(np.median([h[2] for h in hist]))
         r0 = float(np.median([h[3] for h in hist]))
         btt = self._tip_rod(sl)
+        t_nom = getattr(getattr(self, 'refs', None), '_t_nom', None)
+        rider = t_nom is not None and sl < len(t_nom) and float(t_nom[sl]) < TIP_RIDER_N
         self._tip_learn.pop(d, None)
-        if float(np.linalg.norm(v0)) > TIP_ARM_MAX_M or not btt - TIP_ARM_SLACK_M <= b0 <= btt + TIP_ARM_MAX_M:
+        if (float(np.linalg.norm(v0)) > TIP_ARM_MAX_M
+                or not btt - (TIP_ARM_SLACK_M if rider else TIP_ARM_MAX_M) <= b0 <= btt + TIP_ARM_MAX_M):
             self._tip_unarmed.add(d)
             self.get_logger().warn(
                 f'[dissipative] magnet marker of {_who(d)} NOT armed: {100.0 * float(np.linalg.norm(v0)):.0f} cm '
                 f'from its plate, {b0:.3f} m from its body (rod {btt:.3f}) - check mocap_extra_bodies and the magnet')
             return
-        self._tip_v0[d] = (v0, b0, r0)
+        band = (b0 - TIP_BAND_M, (max(b0, btt) if rider else b0) + TIP_BAND_M)
+        self._tip_v0[d] = (v0, b0, r0, band)
+        a = float(np.arctan2(self.rho[sl][1], self.rho[sl][0]))
+        rad, tan = v0[0] * np.cos(a) + v0[1] * np.sin(a), -v0[0] * np.sin(a) + v0[1] * np.cos(a)
         self.get_logger().info(
-            f'[dissipative] magnet marker of {_who(d)} armed: offset ({100.0 * v0[0]:.1f}, {100.0 * v0[1]:.1f}, '
-            f'{100.0 * v0[2]:.1f}) cm from its plate, {b0:.3f} m from its body, {r0:.3f} m from the ring centre')
+            f'[dissipative] magnet marker of {_who(d)} armed: offset {100.0 * rad:+.1f} out, {100.0 * tan:+.1f} '
+            f'along, {100.0 * v0[2]:+.1f} up cm from its plate; {b0:.3f} m from its body (band {band[0]:.3f}-'
+            f'{band[1]:.3f}{", rider" if rider else ""}), {r0:.3f} m from the ring centre')
 
     def _cancel_unload(self, why):
         """Abandon a soft detach: the tensions blend back to the full split and the magnet

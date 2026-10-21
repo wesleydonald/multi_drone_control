@@ -56,9 +56,14 @@ def read(bag):
     return out
 
 
-def replay(events, azimuths_cw, attach_z, tip_m=0.04, target_z=1.0, radius=0.225, cable_len=0.55, pivot_z=-0.04):
+RUN_BAR_S = 0.05      # critic round 3, N2: no in-band run past both tests may last this long in a flight without a release
+
+
+def replay(events, azimuths_cw, attach_z, tip_m=0.04, target_z=1.0, radius=0.225, cable_len=0.55, pivot_z=-0.04,
+           rider=None, stats=None):
     """Run the planner's check over the events; returns (node stub, would-fires [(t, drone, line)], max deviation
-    after arming per drone)."""
+    after arming per drone). stats, if a dict, gets per drone 'run' (the longest in-band run past both tests: s,
+    samples) and 'rejected' (samples off the body-to-marker band after arming)."""
     from dissipative_planner.dissipative_node import DissipativeController as D
     from mpc_planner.geometry import attach_points
     n = len(azimuths_cw)
@@ -83,7 +88,9 @@ def replay(events, azimuths_cw, attach_z, tip_m=0.04, target_z=1.0, radius=0.225
                         _tip_ring_same=0, _detect_refused=set(), phase='planner', _reconfig_mode='ocp',
                         _land_to_ground=False, _unload=None, takeoff_seen=True, load_state=None, cable_len=cable_len,
                         cable_len_i=[cable_len] * n, pivot_offset=np.array([0.0, 0.0, pivot_z]), lift_z0=None,
-                        target_z=target_z, lift_progress=0.0, drone_pos=[None] * n, _drone_t={}, _load_t=None, t=0.0)
+                        target_z=target_z, lift_progress=0.0, drone_pos=[None] * n, _drone_t={}, _load_t=None, t=0.0,
+                        refs=SimpleNamespace(_t_nom=[0.1 if i == rider else 5.0 for i in range(n)]))
+    stats = {} if stats is None else stats
     log = _Log()
     f.get_logger = lambda: log
     def fired(d):                    # the planner would resize d away: it is no longer checked
@@ -112,7 +119,14 @@ def replay(events, azimuths_cw, attach_z, tip_m=0.04, target_z=1.0, radius=0.225
             f.drone_pos[i] = xyz
             f._drone_t[i] = t
         elif kind == 'tip' and 0 <= i < n and f.load_state is not None:
+            st = stats.setdefault(i, {'run': (0.0, 0), 'rejected': 0})
+            if i in f._tip_v0 and f.drone_pos[i] is not None and not f.detached[i]:
+                lo, hi = f._tip_v0[i][3]
+                st['rejected'] += not lo <= float(np.linalg.norm(xyz - f.drone_pos[i])) <= hi
             D._tip_check(f, i, xyz, t)
+            if i in f._tip_run:
+                t0, ts, k = f._tip_run[i]
+                st['run'] = max(st['run'], (ts - t0, k))
             if i in f._tip_v0 and i in f._tip_last and f._tip_last[i][0] == t:
                 devmax[i] = max(devmax.get(i, 0.0), f._tip_last[i][1])
     return f, fires, devmax
@@ -126,6 +140,8 @@ def main():
     ap.add_argument('--tip-m', type=float, default=0.04)
     ap.add_argument('--target-z', type=float, default=1.0)
     ap.add_argument('--cable-len', type=float, default=0.55)
+    ap.add_argument('--rider', type=int, help='the drone index carrying ~0 (the T\'s quad opposite the gap): its band '
+                    'reaches up to the rod, as the planner\'s')
     a = ap.parse_args()
     ev = read(a.bag)
     n_tip = sum(1 for e in ev if e[1] == 'tip')
@@ -133,14 +149,22 @@ def main():
     if not n_tip:
         sys.exit('no /drone_<i>/magnet_tip_state in the bag: were the markers routed (mocap_extra_bodies)?')
     az = [float(v) for v in a.azimuths.split(',')]
-    f, fires, devmax = replay(ev, az, a.attach_z, a.tip_m, a.target_z, cable_len=a.cable_len)
+    stats = {}
+    f, fires, devmax = replay(ev, az, a.attach_z, a.tip_m, a.target_z, cable_len=a.cable_len, rider=a.rider,
+                              stats=stats)
+    long_runs = 0
     for d in range(len(az)):
         state = ('armed' if d in f._tip_v0 else 'NOT armed' if d in f._tip_unarmed else 'never learnt (its marker '
                  'never held still for 1 s after the lift?)')
+        st = stats.get(d, {'run': (0.0, 0), 'rejected': 0})
+        long_runs += st['run'][0] >= RUN_BAR_S
         print(f'  drone {d}: {state}; largest deviation after arming {100.0 * devmax.get(d, float("nan")):.1f} cm '
-              f'(fires at {100.0 * a.tip_m:.0f} cm)')
+              f'(fires at {100.0 * a.tip_m:.0f} cm); longest in-band run past both tests {1000.0 * st["run"][0]:.0f} ms '
+              f'({st["run"][1]} samples; bar < {1000.0 * RUN_BAR_S:.0f} ms: '
+              f'{"PASS" if st["run"][0] < RUN_BAR_S else "FAIL"}); {st["rejected"]} samples off the band')
     print(f'WOULD-FIRES: {len(fires)}' + ''.join(f'\n  t={t:.2f} drone {d}: {m}' for t, d, m in fires))
-    sys.exit(1 if fires else 0)
+    print(f'RUNS OVER {1000.0 * RUN_BAR_S:.0f} ms: {long_runs}')
+    sys.exit(1 if fires or long_runs else 0)
 
 
 if __name__ == '__main__':
