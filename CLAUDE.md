@@ -94,7 +94,9 @@ current branch like any other file (it reaches main with the merges).
   mode, attach included (Wesley 14 Oct after RIG-1014-t5_2, critic waived; detach since 8 Oct): a
   loss leaving fewer than `min_survivors`, or ring tilt > 30 deg, drops the ring (every magnet OFF,
   a welded QUAD4's coil too) and lands every drone; and an unwelded QUAD4's fault lands the fleet
-  with `newcomer_fault_land`. A drop while Tejen flies QUAD4: on the rig `drop_takes_back` is on
+  with `newcomer_fault_land`. `drop_gap_deg` 200 (Wesley 21 Oct; default off, typed on the rig only through
+  `configs/rig/chain_pair*.yaml`, with `min_survivors` 2 and the tilt drop at 45 deg): a loss flies on while the
+  survivors' largest gap is at most 200 deg (a T, or an opposite pair by its larger arc). A drop while Tejen flies QUAD4: on the rig `drop_takes_back` is on
   through `params_file:=configs/rig/drop_takes_back.yaml` (we take QUAD4 back and land it; code
   default off), and the console's his LAND asks his planner to land it straight down (Wesley 16 Oct).
 - LAND lands every drone whatever it is doing; a freed drone off the ring is pushed to its own

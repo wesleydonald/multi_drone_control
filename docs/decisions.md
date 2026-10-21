@@ -290,3 +290,12 @@ DECIDED 2026-10-21  Evening answers (Wesley ~22:45-23:00, after the chain card's
       magnet-marker check should see a release within tens of ms (card 2026-10-21_tip_detect rev 2).
   (3) The trackers' measured cable-pull cap goes from 6.6 to 8 N: cable_accel_cap 12 -> 14.5 m/s^2 (common.yaml), a
       default, applied after the overnight batch; the trackers also log the raw measured pull (acm_x/y/z).
+  (4) Drop rule (Wesley, before the chain card's runs; card 2026-10-21_chain_release): a loss keeps flying while
+      the survivors' largest gap is at most 200 deg (for a pair, its larger arc), switch `drop_gap_deg` (default off,
+      typed on the rig through configs/rig/chain_pair*.yaml) with min_survivors 2; the trackers' ring-tilt drop goes
+      to 45 deg in those files. The cables stay 1.0 m for the chain.
+  (5) Part C's detector branch: the magnet-marker check flies ON only if it passes its critic and the A/B bags replay
+      clean (tools/tip_replay.py). Critic round 2 (~23:00) said NO-GO, so Part C flies chain_pair_noxy.yaml (the
+      stretch check alone) with the markers recorded; the check's rev 3 waits for the chain's step-2 card.
+  (6) Part C, no detection within 2 s of the release: LAND straight away (Wesley: unlikely).
+  (7) Overnight work stops starting new work at 06:30.

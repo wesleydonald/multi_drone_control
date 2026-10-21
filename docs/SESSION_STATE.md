@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Wed 21 Oct 2026, 22:51 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Wed 21 Oct 2026, 23:10 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (21 Oct)
@@ -11,12 +11,14 @@ Updated: Wed 21 Oct 2026, 22:51 AEDT (from `date`). Only what a new session need
 - **Worktrees:**
   - `~/mdc_wt/tejen_sync2` (tejen-sync2 6483d90): Tejen's fd495db0 merged into our fork, avoidance on the transit and
     floor_join, `m1_irl_pickup.launch.py`. Not merged into day-1021; merge before the basket runs (plan s5).
-  - `~/mdc_wt/tipdetect` (tip-detect 75b1ec2): the magnet-marker release check rev 2, the tracker's raw-pull log
-    columns, twin rod-pose markers. Critic round 2 running. Merge into day-1021 only after the overnight batch.
+  - `~/mdc_wt/tipdetect` (tip-detect 3728b8b): the magnet-marker release check rev 2, `tools/tip_replay.py`, the
+    tracker's raw-pull log columns, twin rod-pose markers. **Critic round 2: NO-GO for the check ON on Thu 22**
+    (a ring-pose tilt glitch fires plate 0 or 6; rev 3 list M1-M6 in the card). Not merged. Only the tracker's
+    raw-pull columns (acm_x/y/z, GO) are ported to day-1021, after the overnight batch.
   - `~/mdc_wt/thesis` (thesis-rig): the thesis.
 - **Lab PC:** full all evening (Ryan's 11-12 Gazebo sims, load ~107-129 on 24 cores). Everything ran on the laptop.
 
-## Now (Wed 21 Oct, 22:51): rig Thu 22 Oct 8-11 am; overnight running on the laptop
+## Now (Wed 21 Oct, 23:10): rig Thu 22 Oct 8-11 am; overnight running on the laptop
 - **Running:**
   - `overnight.sh` (pid 76740): the solve-time sweep `tools/solve_scaling.py` (n 2-10, iterations 5/2/1; built to n=8
     by 22:42; JSON to `results/analysis/solve_scaling_<host>.json`), then the 1 m set's videos and reel.
@@ -50,9 +52,9 @@ Updated: Wed 21 Oct 2026, 22:51 AEDT (from `date`). Only what a new session need
 - **Before the rig (from ~06:30, when the batches have stopped):**
   1. Score R2259-R2270 and the 4-quad re-runs, plus their registry rows.
   2. Apply the 8 N cap, then gate.
-  3. If critic round 2 passes: merge tip-detect into day-1021, gate, fly `t3_hover_tip`, `t3_pair_release_tip` x2,
-     `t3_pair_release_tipoff` and `c4_release9_tip`, and set the sheet's status line. Otherwise Part C uses
-     `chain_pair_noxy.yaml` (stretch check) with Wesley's `/fleet/detach 0` call.
+  3. Port the tracker's raw-pull columns (acm_x/y/z) from tip-detect to day-1021, then pytest and gate. Critic
+     round 2 said NO-GO for the detector, so Part C flies `chain_pair_noxy.yaml` (the stretch check; no detection in
+     2 s -> LAND). The sheet says so (23:10).
   4. Fill in the solve-sweep table; commit.
 - **Tomorrow's sheet** `docs/rig/thu_2026-10-22.md`:
   - bench item 0: move the ring's Motive pivot down 3.1 cm to its centre of mass, `attach_z` 0.02, and
@@ -60,7 +62,8 @@ Updated: Wed 21 Oct 2026, 22:51 AEDT (from `date`). Only what a new session need
   - magnet markers 22-24 routed (`mocap_extra_bodies`) and bagged on every flight;
   - Part A: the offset check, then the 3-quad hover, figure-8 and line_spin at 0.2;
   - Part B: the 2-quad hover, figure-8 and line_spin;
-  - Part C: the T to the pair, QUAD2 on plate 3 as the leaver.
+  - Part C: the T to the pair, QUAD2 on plate 3 as the leaver, detector off (`chain_pair_noxy.yaml`); I replay
+    the markers from every bag afterwards (`tools/tip_replay.py` in the tipdetect worktree).
 - **Chain step 2 (card next, after the rig):**
   - a force-vector reference split with the tether mass (the T level; the rider ~0.70 N);
   - a reaction to a release within ~0.1 s: re-plan and move the opposite quad, likely bypassing the trackers' 25 m/s^3
