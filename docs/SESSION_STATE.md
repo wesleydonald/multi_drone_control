@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Thu 22 Oct 2026, 01:34 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Thu 22 Oct 2026, 02:15 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (21 Oct)
@@ -20,27 +20,32 @@ Updated: Thu 22 Oct 2026, 01:34 AEDT (from `date`). Only what a new session need
   - `~/mdc_wt/thesis` (thesis-rig): the thesis.
 - **Lab PC:** full all evening (Ryan's 11-12 Gazebo sims, load ~107-129 on 24 cores). Everything ran on the laptop.
 
-## Now (Thu 22 Oct, 01:34): Wesley asleep; the 20-min loop (cron job 73b7592d) runs the overnight queue to 07:30
-- **day-1021 at 367c98f:** tip-detect merged, the 8 N cap, the gate passed at badb4a5 (1512 tests). Since then:
-  - b42227c: the twin's markers come from the rod's world pose (model x rod; R2287's never armed);
-  - f5f9086: the tether callback crash;
-  - 367c98f: the frozen-ring hold needs 50 ms of repeats (the twin's ring stream repeats a sample or two: R2290
-    had 34 holds).
-  R2287-R2291 are void (harness, registry rows written). R2290 showed every marker armed at 0.0 cm from its plate.
-- **Running:** `scratchpad/overnight3a.sh` (task bzu1moktn, from 01:33, ~50 min), the comparison from its first run.
-  Log: `scratchpad/overnight3a_4.log`.
-- **Then:** score it (`scratchpad/score_tip.py`; the card's bars plus round 3's), the sheet's status line,
-  `scratchpad/overnight3b.sh` (23 runs), the renders and reel, the solve re-time if time allows, the morning report
-  by 07:15.
-- **Stopping a batch:** kill the script by an anchored pattern (`pgrep -f "^bash /tmp/.*/overnight3a.sh"`), then the
-  runner (`pgrep -f "^python3 ./tools/run_experiment.py"`, SIGINT), then the stack. An unanchored `pgrep -f`
-  matches this shell.
-- **Done earlier tonight:**
-  - N1 (no held in-band marker swap);
-  - the 1 m baselines scored: R2259-R2270, R2282-R2286, all passing the exploratory falsifier;
-  - R2271-R2281 void;
-  - the solve bench fixed (old table kept as coldreseed);
-  - chain step 2a card draft.
+## Now (Thu 22 Oct, 02:15): Wesley asleep; the 20-min loop (cron job 73b7592d) runs the overnight queue to 07:30
+- **The comparison is done and scored** (R2292-R2299, card results, registry rows, commit 5e8f242):
+  - the marker check caught both T-to-pair releases in ~0.25 s, where the stretch check missed both;
+  - no false fire through hover, three 12 deg ring glitches or load;
+  - one frozen bar missed (the pair's rocking 3.6-3.7 vs 3.0-3.3 deg p-p, against an arm that never resized);
+  - square to T: dropped either way (step 2b).
+  The sheet's Part C status line says: your call, ON recommended if the A/B replay is clean.
+- **Running:** `scratchpad/overnight3b.sh` (task brlte3ugk, from 02:13; log `scratchpad/overnight3b.log`), 23 runs:
+  - A/B tipon x6;
+  - basket_hover, basket_hover_L100, m1c_floorjoin_hover_L100, c4_detach9_L100, basket_circle_L100,
+    c4_detach9_fig8_L100;
+  - the neighbours x8;
+  - second basket_hover_L100, basket_circle_L100, basket_circle.
+  Runs stop starting at 06:15.
+- **Then:**
+  1. Score each run (`scratchpad/score_tip.py` for the check's runs, `scratchpad/score_1m.py` for the A/B,
+     a basket/attach scorer to write).
+  2. `scratchpad/render22.sh` (the 21 Oct 1 m set and every 22 Oct run, voids left out; reel
+     `results/videos/reel_2026-10-22_overnight.mp4`).
+  3. The solve re-time if the laptop is free before ~06:45 (`tools/solve_scaling.py --n 2 3 4 5 6 7 8 9`, fixed
+     bench).
+  4. The morning report by 07:15, a push notification, then stop the loop (CronDelete 73b7592d).
+- **day-1021 at 5e8f242:** the detector merged, the 8 N cap, the twin marker emulation fixed (b42227c, f5f9086),
+  the 50 ms frozen-ring rule (367c98f). Gate passed at badb4a5; the planner suite passes since (235).
+- **Stopping a batch:** kill the script by an anchored pattern (`pgrep -f "^bash /tmp/.*/<script>.sh"`), then the
+  runner (`pgrep -f "^python3 ./tools/run_experiment.py"`, SIGINT), then the stack.
 
 ## Earlier today (21 Oct)
 - **Rig day 08:23-11:05** (`docs/reports/rig_2026-10-21.md`, RIG-1021-*):
