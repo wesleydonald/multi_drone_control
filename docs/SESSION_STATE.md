@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Wed 21 Oct 2026, 23:10 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Wed 21 Oct 2026, 23:49 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## Where things are (21 Oct)
@@ -11,14 +11,16 @@ Updated: Wed 21 Oct 2026, 23:10 AEDT (from `date`). Only what a new session need
 - **Worktrees:**
   - `~/mdc_wt/tejen_sync2` (tejen-sync2 6483d90): Tejen's fd495db0 merged into our fork, avoidance on the transit and
     floor_join, `m1_irl_pickup.launch.py`. Not merged into day-1021; merge before the basket runs (plan s5).
-  - `~/mdc_wt/tipdetect` (tip-detect 3728b8b): the magnet-marker release check rev 2, `tools/tip_replay.py`, the
-    tracker's raw-pull log columns, twin rod-pose markers. **Critic round 2: NO-GO for the check ON on Thu 22**
-    (a ring-pose tilt glitch fires plate 0 or 6; rev 3 list M1-M6 in the card). Not merged. Only the tracker's
-    raw-pull columns (acm_x/y/z, GO) are ported to day-1021, after the overnight batch.
+  - `~/mdc_wt/tipdetect` (tip-detect b4356aa): the magnet-marker release check **rev 3** (critic round 2's guards:
+    ring-glitch hold-off, the distance-from-centre test, 0.1 s on stamps, lone-marker would-fire, frozen markers,
+    learning without the ring speed, slack-cable band, forget on attach/detach), the twin ring tilt fault
+    (`MOCAP_TILT -1`), `tools/tip_replay.py`, `tools/mocap_glitch_scan.py`, the tracker's raw-pull columns, the rod-pose
+    publishers in the existing worlds (Wesley ~23:30). Unit tests 16/16, planner suite 234. **Critic round 3 running**
+    (background agent, its verdict goes into the card). Bars frozen 23:45 (card, rev 3 section).
   - `~/mdc_wt/thesis` (thesis-rig): the thesis.
 - **Lab PC:** full all evening (Ryan's 11-12 Gazebo sims, load ~107-129 on 24 cores). Everything ran on the laptop.
 
-## Now (Wed 21 Oct, 23:10): rig Thu 22 Oct 8-11 am; overnight running on the laptop
+## Now (Wed 21 Oct, 23:49): rig Thu 22 Oct 8-11 am; overnight running on the laptop
 - **Running:**
   - `overnight.sh` (pid 76740): the solve-time sweep `tools/solve_scaling.py` (n 2-10, iterations 5/2/1; built to n=8
     by 22:42; JSON to `results/analysis/solve_scaling_<host>.json`), then the 1 m set's videos and reel.
@@ -52,9 +54,14 @@ Updated: Wed 21 Oct 2026, 23:10 AEDT (from `date`). Only what a new session need
 - **Before the rig (from ~06:30, when the batches have stopped):**
   1. Score R2259-R2270 and the 4-quad re-runs, plus their registry rows.
   2. Apply the 8 N cap, then gate.
-  3. Port the tracker's raw-pull columns (acm_x/y/z) from tip-detect to day-1021, then pytest and gate. Critic
-     round 2 said NO-GO for the detector, so Part C flies `chain_pair_noxy.yaml` (the stretch check; no detection in
-     2 s -> LAND). The sheet says so (23:10).
+  3. **Wesley ~23:30 (decisions.md):** he disagreed with round 2's no-go (our bags show no ring glitch in level flight
+     outside a crash). Add the guards (done: rev 3), then compare the two methods in the twin AFTER the batches; both
+     methods available on the rig tree (switch, default off); rod publishers in the existing worlds. So: merge
+     tip-detect into day-1021 (brings acm_x/y/z), apply the 8 N cap, pytest, `gate.sh --quick`, then fly the frozen
+     comparison: `t3_hover_tip`, `t3_hover_tip_glitch`, `t3_pair_release_tip` x2, `t3_pair_release_tipoff` x2,
+     `c4_release9_tip`, `c4_release9_tipoff` (8 runs, ~45 min). Score against the card's rev 3 bars; then set the
+     sheet's Part C gate 3 back to two branches: ON (`chain_pair_tip.yaml`) only if the bars pass, round 3 leaves no
+     must-fix, and the A/B bags replay clean in the morning; else `chain_pair_noxy.yaml` (no detection in 2 s -> LAND).
   4. Fill in the solve-sweep table; commit.
 - **Tomorrow's sheet** `docs/rig/thu_2026-10-22.md`:
   - bench item 0: move the ring's Motive pivot down 3.1 cm to its centre of mass, `attach_z` 0.02, and

@@ -299,3 +299,12 @@ DECIDED 2026-10-21  Evening answers (Wesley ~22:45-23:00, after the chain card's
       stretch check alone) with the markers recorded; the check's rev 3 waits for the chain's step-2 card.
   (6) Part C, no detection within 2 s of the release: LAND straight away (Wesley: unlikely).
   (7) Overnight work stops starting new work at 06:30.
+DECIDED 2026-10-21  The magnet-marker check after critic round 2 (Wesley ~23:30, disagreeing with its no-go: our 46 rig
+  flights, 42 min of airborne ring pose at ~88 Hz, show no ring-attitude glitch in normal flight; every glitch and
+  frozen pose came after a failure with the ring at 55-120 deg; scan in docs/experiments/2026-10-21_tip_detect.md):
+  (1) Add the cheap guards (rev 3: 0.1 s persistence on stamps, act only with another armed marker fresh, reject
+      frozen repeats, hold off after a ring attitude step), then compare it against the stretch check in the twin.
+  (2) The comparison runs after the overnight batch (solve sweep, 1 m videos, 4-quad re-runs). "Both methods should
+      work; it would be nice to have both available": the check goes onto the rig tree as a switch (tip_detect_m,
+      default off).
+  (3) The twin's rod-pose marker publishers go into the existing T, 2-quad and 4-quad worlds (0.55 m and 1 m).
