@@ -62,3 +62,25 @@ def test_the_rod_world_pose_is_the_model_pose_times_the_rods():
     lifted = E.rod_world([rod, pose((0.0, 0.0, 1.0), (0.0, 0.0, np.sin(np.pi / 4), np.cos(np.pi / 4)))])
     assert np.allclose(E.rod_end(*lifted, 0.275), (0.0, 0.225, 1.040), atol=2e-3)       # carried up and round
     assert np.allclose(E.rod_world([rod])[0], (0.499818, 0.0, 0.05))     # a lone pose is taken as is
+
+
+def test_the_tether_callback_publishes_the_marker_at_the_rods_end():
+    """The callback itself, as the node runs it (22 Oct: a renamed variable crashed every emulator at the first rod
+    pose, and no test ran the callback)."""
+    from types import SimpleNamespace as N
+    from geometry_msgs.msg import Pose, PoseArray
+    sent = []
+    f = N(_tip_last_pub=None, _tether_half=0.275, _tip_rng=np.random.default_rng(0), _tip_noise=0.0, _tip_pub='tip',
+          _due=lambda last: (True, 0.0), _publish=lambda pub, m: sent.append((pub, m)),
+          get_clock=lambda: N(now=lambda: N(to_msg=lambda: __import__('builtin_interfaces.msg',
+                                                                       fromlist=['Time']).Time())))
+    f.rod_world, f.rod_end = E.rod_world, E.rod_end
+    rod, model = Pose(), Pose()
+    rod.position.x, rod.position.z = 0.499818, 0.05
+    rod.orientation.y, rod.orientation.w = 0.69413136, 0.71984835
+    model.position.z = 1.0
+    E._tether_cb(f, PoseArray(poses=[rod, model]))
+    (pub, m), = sent
+    p = m.pose.position
+    assert pub == 'tip' and np.allclose((p.x, p.y, p.z), (0.225, 0.0, 1.040), atol=2e-3)
+    assert m.pose.orientation.y == pytest.approx(0.69413136)

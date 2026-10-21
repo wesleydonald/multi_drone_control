@@ -292,7 +292,8 @@ class PayloadMocapEmulator(Node):
         mcs.header.stamp = self.get_clock().now().to_msg()
         mcs.header.frame_id = 'map'
         mcs.pose.position.x, mcs.pose.position.y, mcs.pose.position.z = (float(v) for v in tip)
-        mcs.pose.orientation = o
+        (mcs.pose.orientation.x, mcs.pose.orientation.y, mcs.pose.orientation.z,
+         mcs.pose.orientation.w) = (float(v) for v in ori)
         self._publish(self._tip_pub, mcs)
 
     def _payload_cb(self, msg: PoseArray):
