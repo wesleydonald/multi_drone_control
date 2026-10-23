@@ -4,7 +4,7 @@ Updated: Fri 23 Oct 2026, 11:18 AEDT (from `date`). Only what a new session need
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## HANDOVER (Fri 23 Oct 17:41) -> NEW CHAT ON BRANCH week7: READ THIS FIRST
-- **Branch:** `week7`, made from day-1021 (be34f95). Its first commit holds everything up to 23 Oct evening: the 21-23 Oct
+- **Branch:** `week7`, made from day-1021 (be34f95). Its first commit (5f8bd51) holds everything up to 23 Oct evening: the 21-23 Oct
   work, the tejen-sync2 merge, figures, both papers and these handover files. NOT pushed (working rules); Wesley pushes
   `week7` and merges to main himself.
 - **Today in one page:** `docs/reports/day_report_2026-10-23.md`. Then the 23 Oct blocks below, and every
@@ -45,7 +45,7 @@ Updated: Fri 23 Oct 2026, 11:18 AEDT (from `date`). Only what a new session need
   - case 6's path keep-out and clearance;
   - merging `week7` into main.
 - **Thesis worktree** `~/mdc_wt/thesis` (branch thesis-rig): today's drafts and the two corrected chapters, committed
-  there.
+  there (dd6aeac).
 
 ## ULTRACODE PUSH (from Thu 22 Oct ~14:20) -- READ THIS FIRST
 **23 Oct morning (07:27): Wesley's answers to every open decision are in decisions.md (DECIDED 2026-10-23). DISK 99 %
