@@ -18,6 +18,10 @@ Updated: Fri 23 Oct 2026, 11:18 AEDT (from `date`). Only what a new session need
   - Then `batch18_list.txt`: S's 8-quad claims at 5 iterations plus the 7 harder cases, 16 runs;
     `--slots 2 --cpus 12 --wall-cap-min 150 --warm-from-config`.
   - Lab only when nobody else is on it: `lab_free_watch.py` waits for that.
+- **Batch 18u FINISHED 18:25** (the old chat's lab_batch is done; the lab is free): 25 runs. The paper's damping form at its
+  offline-best gains LOST the ring in all 6 runs (R2744-R2749: the ring tilts past 30 deg 20-30 s after the hand-over;
+  rows written). The Thu 29 rehearsal and the clearance A/B (R2738-R2743) all PASSED the runner and are NOT scored yet
+  (score with install_tally.py). Next: batch 18h, then 18.
 - **Scoring owed:**
   - whatever of 18u the scoring agent did not finish (U's re-flies, our planner's C cells, the paper's damping form,
     the Thu 29 rehearsal and its clearance A/B);

@@ -628,3 +628,7 @@ hand-over, no loss, LANDED); the smoke falsifier did not fire, so the 12 cells a
 Hover on the hub: our planner 1.4 mm, ring tilt peak 0.19 deg, yaw change 0.0 deg; the network at its best gains
 11.8 mm (first 5 s 22.0), tilt peak 0.32 deg, **yaw change 0.1 deg** (on the rim at the same gains: 22-51 deg,
 R2685/R2686). One run each, exploratory: the first sign that the rim attachment, not the port's code, drives the yaw.
+
+**The paper's damping form at its offline-best gains (R2744-R2749, batch 18u, scored 18:25):** a LOSS in all 6 runs
+(hover, line 0.2, line 0.4, x2): the ring tips past 30 deg 20-30 s after the hand-over and the fleet aborts. Its offline
+J of 12 did not carry to the twin (the harness lacks the 4 cm pivot lever).
