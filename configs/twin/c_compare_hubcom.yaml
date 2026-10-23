@@ -1,0 +1,12 @@
+# Quan et al. exactly, our planner's arm on world C (card docs/experiments/2026-10-23_quan_exact.md; Wesley 23 Oct
+# ~21:45 and ~23:20): configs/twin/c_compare.yaml with world C's two tilt rules off. The cables meet at the ring's centre
+# of mass, so nothing holds its tilt: the trackers' ring-tilt drop at 180 deg never trips (drop_on_loss keeps only the
+# loss detector's drop, fewer than min_survivors) and their 60 deg ring envelope is off (twin only).
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_tilt_deg: 180.0
+payload_tilt_envelope: false
+traj_hold_s: 5.0
+net_hold_carry: true
+net_twin_geometry: true

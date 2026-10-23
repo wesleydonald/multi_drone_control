@@ -124,6 +124,24 @@ network:
   net_damp_relative: false
   net_twin_geometry: false
   net_hold_carry: false
+  # what flies after the hand-over (card 2026-10-23_quan_exact, off until its critic): port = the network below, quan =
+  # Quan et al.'s per-robot law as printed (Eq. 3, 7-10; dissipative_planner/quan_law.py lists its readings)
+  net_law: 'port'
+  quan_nodes: 'algebraic'      # algebraic = Eq. 3 of the main text; dynamic = the supplementary's S2/S4 node masses
+  quan_vcmd: 'measured'        # measured: v_d = v + a_cmd dt (R7b); integrated: v_d accumulates a_cmd (R7)
+  quan_k_ij: 5.0               # N/m: node-node and node-centre springs (unpublished: the card's offline search)
+  quan_c_ij: 5.0               # N s/m: their dampers
+  quan_k_i: 5.0                # N/m: robot-node spring
+  quan_c_i: 5.0                # N s/m: robot-node damper
+  quan_fc: 2.5                 # N s/m: friction to the formation centre (Eq. 9)
+  quan_node_mass: 1.0          # kg: a dynamic node's mass (their init.m)
+  quan_rod_mass: 0.0           # kg per rod in the thrust's modelled pull beyond drone_mass (R6)
+  quan_fz: 'model'             # model: f_i's vertical from the pull model alone (R6); autopilot: plus a vertical integral (R6b)
+  quan_fz_ki: 2.0              # 1/s^2: R6b's integral gain on the vertical velocity error
+  quan_fz_max: 3.0             # m/s^2: its bound
+  quan_hc_m: 3.41              # m: node plane above the load's commanded height (their init.m: 3.41 cable lengths)
+  quan_range_m: 2.0            # m: perception range r (their LiDAR filter)
+  quan_v_max: 2.0              # m/s: bound on the velocity command
   net_land_z: 0.06
   diss_k_pay: 40.0
   diss_k_anchor: 40.0

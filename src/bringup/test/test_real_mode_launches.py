@@ -856,7 +856,9 @@ def test_catch_offset_and_the_slot_arm_are_refused_off_our_twin_approach():
 
 NET_PLANNER_KEYS = ('auto_network_handover', 'auto_handover_settle_s', 'diss_ki_load', 'diss_a_i_load_max',
                     'diss_trim_share_weighted', 'handover_blend_s', 'net_damp_relative', 'net_twin_geometry',
-                    'net_hold_carry')
+                    'net_hold_carry', 'net_law', 'quan_k_ij', 'quan_c_ij', 'quan_k_i', 'quan_c_i', 'quan_fc',
+                    'quan_hc_m', 'quan_range_m', 'quan_v_max', 'quan_nodes', 'quan_vcmd', 'quan_node_mass',
+                    'quan_rod_mass', 'quan_fz', 'quan_fz_ki', 'quan_fz_max')
 VEL_KEYS = ('control_mode', 'vel_kp_pos', 'vel_kv', 'vel_ki', 'vel_k_att', 'vel_swing_k')
 
 
@@ -885,6 +887,32 @@ def test_twin_network_switches_reach_the_planner_from_a_params_file():
                      net_hold_carry=True, traj_hold_s=5.0))['/dissipative_planner']['params']
     assert (p['net_damp_relative'], p['net_traj_lean'], p['net_twin_geometry'], p['net_hold_carry']) == (True,) * 4
     assert p['traj_hold_s'] == 5.0
+
+
+def test_the_network_flies_the_port_unless_net_law_quan_and_world_c_params_reach_every_node():
+    """Card 2026-10-23_quan_exact: net_law port by default; configs/twin/c_net_quan.yaml turns the paper's law on with
+    its readings and coefficients, the velocity loop without its position term, and on world C (both arms' params
+    files) the trackers' tilt drop and 60 deg ring envelope off; every other graph keeps the envelope's default."""
+    g = _by_name(sim('network'))
+    assert g['/dissipative_planner']['params']['net_law'] == 'port'
+    assert all('max_payload_tilt_deg' not in g[f'/tracker_{i}']['params'] for i in range(4))
+    twin = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..', '..', 'configs', 'twin')
+    g = _by_name(sim('network', params_file=os.path.join(twin, 'c_net_quan.yaml')))
+    p = g['/dissipative_planner']['params']
+    assert p['net_law'] == 'quan' and p['quan_hc_m'] == 3.41 and p['quan_range_m'] == 2.0
+    assert p['quan_vcmd'] == 'measured' and p['quan_nodes'] in ('algebraic', 'dynamic') and p['quan_rod_mass'] == 0.075
+    assert p['quan_fz'] == 'model' and p['quan_fz_ki'] == 2.0
+    assert p['diss_ki_load'] == 0.0
+    for i in range(4):
+        t = g[f'/tracker_{i}']['params']
+        assert t['vel_kp_pos'] == 0.0 and t['vel_ki'] == 0.0 and t['drop_tilt_deg'] == 180.0
+        assert t['max_payload_tilt_deg'] == 180.0
+    g = _by_name(sim('dissipative', params_file=os.path.join(twin, 'c_compare_hubcom.yaml')))
+    assert all(g[f'/tracker_{i}']['params']['max_payload_tilt_deg'] == 180.0 for i in range(4))
+    g = _by_name(rig('dissipative'))
+    assert all('max_payload_tilt_deg' not in n['params'] for k, n in g.items() if '/tracker_' in k)
+    with pytest.raises(RuntimeError, match='unknown knob'):
+        rig('dissipative', payload_tilt_envelope=False)
 
 
 def test_twin_dissipative_graph_carries_no_network_knob():

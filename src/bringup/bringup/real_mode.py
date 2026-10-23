@@ -230,6 +230,13 @@ def tracker_drop_options(context):
     return out
 
 
+def payload_envelope_options(context):
+    """{max_payload_tilt_deg: 180} when the twin's payload_tilt_envelope is false (world C: the ring's tilt is free),
+    else {} (the trackers' 60 deg). The rig's profile has no such knob."""
+    v = str(context.launch_configurations.get('payload_tilt_envelope', 'true')).strip().lower()
+    return {} if v in ('1', 'true', 'yes', '') else {'max_payload_tilt_deg': 180.0}
+
+
 def map_and_geometry(context, n, real):
     """(tracker, sim plant, planner) parameters of the thrust-map and geometry knobs.
 

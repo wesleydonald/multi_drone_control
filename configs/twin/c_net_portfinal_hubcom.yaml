@@ -1,0 +1,21 @@
+# Quan et al. exactly, the neighbour (card docs/experiments/2026-10-23_quan_exact.md, Critic F4): our port of the authors'
+# node network at C's search-best gains (configs/twin/c_net_portfinal.yaml, net_law port) on world C, with world C's two
+# tilt rules off as in both arms (the trackers' ring-tilt drop at 180 deg, the 60 deg ring envelope off; Wesley 23 Oct).
+# It flies the port as C flew it: its formation turns with the ring's measured attitude.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_tilt_deg: 180.0
+payload_tilt_envelope: false
+traj_hold_s: 5.0
+net_hold_carry: true
+net_twin_geometry: true
+diss_c: 12.0
+diss_k_slot: 18.0
+diss_k_pay: 80.0
+diss_k_anchor: 80.0
+diss_k_ring: 40.0
+diss_ki_load: 0.5
+vel_kp_pos: 1.0
+vel_kv: 3.0
+vel_k_att: 8.0
