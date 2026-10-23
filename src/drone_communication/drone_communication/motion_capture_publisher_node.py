@@ -13,6 +13,8 @@ import sys
 import time
 import numpy as np
 from collections import deque  # Import deque for the rolling average filter
+import os
+from drone_communication.velocity_filter import VelocityFilter
 import csv
 import scipy.signal  # Import scipy.signal for Butterworth filter
 import re
@@ -55,6 +57,22 @@ MOCAP_DEBUG_PRINT = False
 MOCAP_WORLD_FRAME = "map"
 # ═════════════════════════════════════════════════════════════════════════════
 
+def parse_extra_bodies(spec):
+    """'6:/pickup/motion_capture_state[,id:topic...]' -> {6: '/pickup/motion_capture_state'}; '' -> {}.
+    Extra rigid bodies (the combined M1 stack's pickup ball) go out as MotionCaptureState on their topic."""
+    out = {}
+    for item in str(spec or '').replace(' ', '').split(','):
+        if not item:
+            continue
+        rb, sep, topic = item.partition(':')
+        if not sep or not rb.lstrip('-').isdigit() or not topic.startswith('/'):
+            raise ValueError(f"extra_bodies entry {item!r}: want <body id>:/<topic>")
+        if int(rb) in out:
+            raise ValueError(f'extra_bodies: body {rb} listed twice')
+        out[int(rb)] = topic
+    return out
+
+
 @dataclass
 class ObjectData:
     id: str
@@ -69,6 +87,9 @@ class ParseData():
         self.last_pose = np.array([0, 0, 0])
         self.last_orientation = np.array([0, 0, 0, 1])
         self.last_time = time.time()
+        # linear velocity filter (card 2026-10-14_tracker_timing): None keeps the alpha 0.2 path below; the node
+        # sets it on the carrier bodies only (MDC_MOCAP_VEL_FILTER, MDC_MOCAP_VEL_DRONES)
+        self.vel_filter = None
 
         '''self.last_pen_pose = np.array([0, 0, 0])
         self.last_pen_orientation = np.array([0, 0, 0, 1])
@@ -253,9 +274,13 @@ class ParseData():
 
 
             # Apply low-pass filter to velocity
-            low_pass_vx, low_pass_vy, low_pass_vz = self.apply_low_pass_filter(
-                self.low_pass_velocity_buffers, *linear_velocity_world
-            )
+            if self.vel_filter is None:
+                low_pass_vx, low_pass_vy, low_pass_vz = self.apply_low_pass_filter(
+                    self.low_pass_velocity_buffers, *linear_velocity_world
+                )
+            else:
+                v = self.vel_filter.update(current_time, (r_x, r_y, r_z))
+                low_pass_vx, low_pass_vy, low_pass_vz = linear_velocity_world if v is None else v
 
 
             # Calculate angular velocity
@@ -279,10 +304,8 @@ class ParseData():
             self.last_orientation = np.array([r_qx, r_qy, r_qz, r_qw])
 
 
-            # Round angular velocity (rad/s) to 1 decimal place
-            low_pass_wx = round(low_pass_wx, 1)
-            low_pass_wy = round(low_pass_wy, 1)
-            low_pass_wz = round(low_pass_wz, 1)
+            # body rates go out at full precision: rounding them to 0.1 rad/s (5.7 deg/s) fed the
+            # trackers' x0 a quantised rate on every rig flight to 8 Oct (Tejen found it in his copy, 4b34d768)
 
             # Format with constant width, including sign and padding. Gated:
             # at full mocap rate this alone throttles the receive loop.
@@ -328,9 +351,19 @@ class MotionCapturePublisher(Node):
             -1 if MAGNET_TIP_RIGID_BODY_ID is None else MAGNET_TIP_RIGID_BODY_ID).value)
         self.payload_body_id = None if payload < 0 else payload
         self.magnet_tip_body_id = None if tip < 0 else tip
+        # extra bodies, each to its own topic ('' = none, the default)
+        self.extra_bodies = parse_extra_bodies(self.declare_parameter('extra_bodies', '').value)
+        # map -> drone_<id> on every drone frame; the rig's RViz uses fleet_viz's drone_<i>_mocap frames instead, so
+        # real_io_launch turns it off (14 Oct load cut: ~360 TF messages/s from the node every pose passes through)
+        self.publish_drone_tf = bool(self.declare_parameter('publish_drone_tf', True).value)
+        taken = set(self.body_to_drone) | {self.payload_body_id, self.magnet_tip_body_id}
+        clash = sorted(set(self.extra_bodies) & taken)
+        if clash:
+            raise ValueError(f'extra_bodies {clash} already routed (drone, payload or magnet tip)')
         self.get_logger().info(
             f'MoCap bodies: drones {self.body_to_drone} (id -> drone), payload '
-            f'{self.payload_body_id}, magnet tip {self.magnet_tip_body_id}')
+            f'{self.payload_body_id}, magnet tip {self.magnet_tip_body_id}'
+            + (f', extra {self.extra_bodies}' if self.extra_bodies else ''))
 
         # ROS2 Publishers: one per drone, keyed by drone_id, publishing to
         # /drone_<drone_id>/motion_capture_state (see RIGID_BODY_TO_DRONE above).
@@ -343,6 +376,8 @@ class MotionCapturePublisher(Node):
         self.magnet_tip_parser = ParseData()
         self.payload_publisher = self.create_publisher(
             MotionCaptureState, '/payload/motion_capture_state', 10)
+        self.extra_publishers = {rb: self.create_publisher(MotionCaptureState, topic, 10)
+                                 for rb, topic in self.extra_bodies.items()}
         # TF broadcaster so RViz can render each drone live (map -> drone_<id>).
         self.tf_broadcaster = TransformBroadcaster(self)
         # UDP Setup
@@ -420,6 +455,22 @@ class MotionCapturePublisher(Node):
         self.payloadParseData = ParseData()
         self.drone_parsers = {drone_id: ParseData()
                               for drone_id in self.body_to_drone.values()}
+        extra_parsers = {rb: ParseData() for rb in self.extra_bodies}
+        # card 2026-10-14_tracker_timing: another velocity filter on the carrier drones only (the ring, tip, ball and
+        # QUAD4 feed his stack, our planner and the cable estimate, and keep the old filter)
+        mode = os.environ.get('MDC_MOCAP_VEL_FILTER', 'ema').strip()
+        if mode != 'ema':
+            drones = [int(v) for v in os.environ.get('MDC_MOCAP_VEL_DRONES', '0,1,2').split(',') if v.strip()]
+            frames = int(os.environ.get('MDC_MOCAP_VEL_FRAMES', '4'))
+            for d in drones:
+                if d in self.drone_parsers:
+                    self.drone_parsers[d].vel_filter = VelocityFilter(mode, frames=frames)
+            self.get_logger().warn(f'velocity filter {mode} ({frames} frames) on drones {drones}; the rest ema')
+        # the ring's own filter (card 2026-10-22_velocity_filter, the ring arm; critic before the rig): off = ema
+        ring_mode = os.environ.get('MDC_MOCAP_VEL_RING', 'ema').strip()
+        if ring_mode != 'ema':
+            self.payloadParseData.vel_filter = VelocityFilter(ring_mode, frames=int(os.environ.get('MDC_MOCAP_VEL_FRAMES', '4')))
+            self.get_logger().warn(f'velocity filter {ring_mode} on the ring')
         # Per-rigid-body publish throttle. Keyed by rb_id; the decimation happens
         # before parse_packet so the velocity dt widens with the actual spacing.
         min_period = (1.0 / MOCAP_MAX_PUBLISH_HZ) if MOCAP_MAX_PUBLISH_HZ > 0 else 0.0
@@ -480,7 +531,13 @@ class MotionCapturePublisher(Node):
                     if obj_data is not None:
                         self.drone_publishers[drone_id].publish(
                             self.create_motion_capture_state_msg(obj_data))
-                        self.broadcast_drone_tf(drone_id, obj_data)
+                        if self.publish_drone_tf:
+                            self.broadcast_drone_tf(drone_id, obj_data)
+                elif rb_id in extra_parsers:
+                    obj_data = extra_parsers[rb_id].parse_packet(data)
+                    if obj_data is not None:
+                        self.extra_publishers[rb_id].publish(
+                            self.create_motion_capture_state_msg(obj_data))
                 # else: unknown rigid body -> ignore
 
                 

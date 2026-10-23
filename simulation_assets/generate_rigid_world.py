@@ -112,7 +112,7 @@ def _rod_body(idx, radius, mass, L, cx, cy, cz, pitch, yaw, magnet_mass=0.0):
 
 def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
                  damping=0.1, detachable=False, pivot_dz=0.0, magnet_mass=0.0,
-                 stub_mass=None):
+                 stub_mass=None, pose_hz=0.0):
     """One rigid tether (payload bottom -> drone top). Both ends are ball joints (a
     two-force rigid link: the paper model), so the drone's ATTITUDE is decoupled from
     the rod at the top AND the rod swings freely at the payload -- the MPC tilts the
@@ -135,7 +135,11 @@ def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
     the drone-end ball) fly off together; only the tiny stub stays on the payload.
 
     pivot_dz > 0 puts the drone-end ball that far below the drone centre (base_link -z,
-    the rig's hinge): the rod runs attach -> pivot and the joint is posed in base_link."""
+    the rig's hinge): the rod runs attach -> pivot and the joint is posed in base_link.
+
+    pose_hz > 0 (detachable only) publishes the rod model's pose at that rate
+    (/model/lift_system/model/tether_{idx}/pose): its payload end is the magnet, which the
+    mocap emulator reports as the rig's magnet marker (card 2026-10-21_tip_detect)."""
     top = (drone[0], drone[1], drone[2] - pivot_dz) if pivot_dz else drone
     dx = top[0] - attach[0]
     dy = top[1] - attach[1]
@@ -176,7 +180,7 @@ def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
       <model name="tether_{idx}">
         <pose>0 0 0 0 0 0</pose>
         <link name="rod">{rod}
-        </link>
+        </link>{_pose_publisher(pose_hz)}
       </model>
       <joint name="tether_{idx}_to_drone{idx}" type="ball">
         <parent>tether_{idx}::rod</parent>
@@ -205,6 +209,23 @@ def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
       </joint>"""
 
 
+def _pose_publisher(hz):
+    """A PosePublisher for a tether model, or '' at hz <= 0. Gazebo publishes each pose relative to its parent: the
+    rod (the model's canonical link) never moves in its model, so the message also carries the model's own pose in
+    lift_system (world-anchored), and the rod's world pose is the two composed (22 Oct: without it the twin's marker
+    stayed where the rod lay at spawn). Message: [rod in the model, the model in lift_system]."""
+    if hz <= 0:
+        return ''
+    return f"""
+        <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+          <publish_link_pose>true</publish_link_pose>
+          <publish_nested_model_pose>true</publish_nested_model_pose>
+          <use_pose_vector_msg>true</use_pose_vector_msg>
+          <static_publisher>false</static_publisher>
+          <update_frequency>{hz:g}</update_frequency>
+        </plugin>"""
+
+
 def detachable_joint_block(idx):
     """A DetachableJoint plugin welding the payload-side stub to the tether ROD model
     (a nested model -- see tether_block), released on /drone_{idx}/detach. Because the
@@ -226,7 +247,7 @@ def detachable_joint_block(idx):
       </plugin>"""
 
 
-def payload_geometry_block(legs=False):
+def payload_geometry_block(legs=False, plates=PLATES):
     """Visual + collision of the ring payload in the payload link frame: the plate top
     (attach plane) at z = ATTACH_PLANE_Z, ring segments just below it, plate 0 orange.
     Mirrors m2a_ring_fixture.sdf (Te-Jen) shifted so the launches' attach_z stays 0.025.
@@ -249,8 +270,8 @@ def payload_geometry_block(legs=False):
             <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
           </visual>""")
     z_plate = ATTACH_PLANE_Z - PLATE_THICK / 2.0
-    for k in range(PLATES):
-        th = 2.0 * math.pi * k / PLATES
+    for k in range(plates):
+        th = 2.0 * math.pi * k / plates
         pose = (f"{_fmt(PAYLOAD_RADIUS * math.cos(th))} {_fmt(PAYLOAD_RADIUS * math.sin(th))} "
                 f"{_fmt(z_plate)} 0 0 {_fmt(th)}")
         colour = ("<ambient>0.90 0.25 0.10 1</ambient><diffuse>1.00 0.35 0.15 1</diffuse>" if k == 0
@@ -280,12 +301,12 @@ def payload_rest_z(legs=False):
     return -bottom
 
 
-def ring_spec(outer_r, thickness, plate_r):
+def ring_spec(outer_r, thickness, plate_r, plates=PLATES):
     """The rig-twin ring (--ring-outer-r / --ring-thickness): link origin at the ring's
     mid-plane (its CoG), plates flush with the top face, so the attach plane is
     thickness/2 above the CoG. Radial width RING_SEG_RADIAL as the legacy ring."""
     return {'outer_r': outer_r, 'inner_r': outer_r - RING_SEG_RADIAL,
-            'thickness': thickness, 'plate_r': plate_r, 'plane_z': thickness / 2.0}
+            'thickness': thickness, 'plate_r': plate_r, 'plane_z': thickness / 2.0, 'plates': plates}
 
 
 def ring_inertia(ring, mass):
@@ -313,14 +334,41 @@ def ring_geometry_block(ring):
           </visual>""")
     z_plate = ring['plane_z'] - PLATE_THICK / 2.0 + 0.001
     pr = ring['plate_r']
-    for k in range(PLATES):
-        th = 2.0 * math.pi * k / PLATES
+    plates = ring.get('plates', PLATES)
+    for k in range(plates):
+        th = 2.0 * math.pi * k / plates
         pose = f"{_fmt(pr * math.cos(th))} {_fmt(pr * math.sin(th))} {_fmt(z_plate)} 0 0 {_fmt(th)}"
         colour = ("<ambient>0.90 0.25 0.10 1</ambient><diffuse>1.00 0.35 0.15 1</diffuse>" if k == 0
                   else "<ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse>")
         out.append(f"""          <visual name="plate_{k}_visual"><pose>{pose}</pose>
             <geometry><cylinder><radius>{PLATE_RADIUS:.3f}</radius><length>{PLATE_THICK:.3f}</length></cylinder></geometry>
             <material>{colour}</material>
+          </visual>""")
+    if ring.get('hub_r') is not None:
+        out.append(hub_geometry_block(ring))
+    return "\n".join(out)
+
+
+HUB_VIS_RADIUS = 0.020
+SPOKE_WIDTH = 0.010
+
+
+def hub_geometry_block(ring):
+    """The hub the rods hang from (--hub-r) drawn at the ring's centre, with four spokes out to the ring at 45, 135, 225
+    and 315 deg (between a four's quads). Visual only: the ring's mass, inertia and collision are unchanged."""
+    h = ring['thickness']
+    out = [f"""          <visual name="hub_visual"><pose>0 0 0 0 0 0</pose>
+            <geometry><cylinder><radius>{HUB_VIS_RADIUS:.3f}</radius><length>{h:.3f}</length></cylinder></geometry>
+            <material><ambient>0.65 0.65 0.68 1</ambient><diffuse>0.80 0.80 0.82 1</diffuse></material>
+          </visual>"""]
+    r0, r1 = HUB_VIS_RADIUS, ring['inner_r']
+    for k in range(4):
+        th = math.pi / 4.0 + math.pi / 2.0 * k
+        rm = (r0 + r1) / 2.0
+        pose = f"{_fmt(rm * math.cos(th))} {_fmt(rm * math.sin(th))} 0 0 0 {_fmt(th)}"
+        out.append(f"""          <visual name="spoke_{k}_visual"><pose>{pose}</pose>
+            <geometry><box><size>{r1 - r0:.6f} {SPOKE_WIDTH:.3f} {SPOKE_WIDTH:.3f}</size></box></geometry>
+            <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.20 0.20 0.20 1</diffuse></material>
           </visual>""")
     return "\n".join(out)
 
@@ -382,6 +430,8 @@ def build_world(n, placement, detachable=False, legs=False, geom=None):
         tkw.update(mass=geom['rod_mass'], stub_mass=0.001)
     if geom.get('magnet_mass'):
         tkw['magnet_mass'] = geom['magnet_mass']
+    if geom and geom.get('tether_pose_hz'):
+        tkw['pose_hz'] = geom['tether_pose_hz']
     px, py, pz, pyaw = placement['payload']
     attaches = placement['attaches']
     drones = placement['drones']
@@ -422,21 +472,27 @@ def build_world(n, placement, detachable=False, legs=False, geom=None):
     platforms = "\n".join(platforms)
     if ring:
         ixx, izz = ring_inertia(ring, PAYLOAD_MASS)
+        n_plates = ring.get('plates', PLATES)
         ring_title = (f"{2000 * ring['outer_r']:.0f} mm ring, {1000 * ring['thickness']:.0f} mm thick, "
-                      f"12 magnet plates every 30 deg flush with the top face (r {ring['plate_r']:.3f}), "
-                      "plate 0 on +x, rig twin")
+                      f"{n_plates} magnet plates every {360.0 / n_plates:g} deg flush with the top face "
+                      f"(r {ring['plate_r']:.3f}), plate 0 on +x, rig twin")
+        if ring.get('hub_r') is not None:
+            ring_title += f"; every rod hinged on a hub at its centre (r {ring['hub_r']:.3f}), not on the plates"
         ring_geo = ring_geometry_block(ring)
     else:
         ixx, izz = _IXX, _IZZ
-        ring_title = ("500 mm ring, 12 magnet plates every 30 deg on the top face, "
+        n_plates = geom.get('plates', PLATES)
+        ring_title = (f"500 mm ring, {n_plates} magnet plates every {360.0 / n_plates:g} deg on the top face, "
                       "plate 0 on +x (m2a_ring_fixture.sdf)")
-        ring_geo = payload_geometry_block(legs)
+        ring_geo = payload_geometry_block(legs, n_plates)
+    # a real-time cap below 1 keeps a slow planner (8 quads: 100-220 ms wall a tick) inside its 100 ms of sim
+    rtf = geom.get('real_time_factor', 1.0)
     return f"""<?xml version="1.0" ?>
 <sdf version="1.6">
   <world name="quadcopter">
     <physics name="1ms" type="ignored">
       <max_step_size>0.001</max_step_size>
-      <real_time_factor>1.0</real_time_factor>
+      <real_time_factor>{rtf}</real_time_factor>
       <real_time_update_rate>500</real_time_update_rate>
     </physics>
     <plugin filename="ignition-gazebo-physics-system" name="gz::sim::systems::Physics"/>
@@ -546,23 +602,46 @@ def main():
                           'plates flush with the top face at --attach-radius)')
     rig.add_argument('--ring-thickness', type=float, default=None,
                      help='rig ring thickness m (switches to the rig ring)')
+    rig.add_argument('--tether-pose-hz', type=float, default=0.0,
+                     help='> 0 (with --detachable): publish each rod model\'s pose at this rate, for the '
+                          'magnet-marker emulation (card 2026-10-21_tip_detect)')
     rig.add_argument('--drone-model', choices=('x3', 'x3_rig'), default='x3',
                      help='models/x3_drone{i}.sdf (legacy 0.64 kg) or models/x3_rig_drone{i}.sdf '
                           '(0.475 kg airframe)')
+    rig.add_argument('--plates', type=int, default=PLATES,
+                     help='magnet plates drawn on the ring, evenly from plate 0 on +x (visual only)')
+    rig.add_argument('--real-time-factor', type=float, default=1.0,
+                     help='physics real-time cap (< 1 for fleets whose planner tick takes over 100 ms wall)')
+    rig.add_argument('--hub-r', type=float, default=None,
+                     help="every rod's payload end hinged on a hub at the rig ring's centre, this far from its axis "
+                          '(m) on the attach plane, instead of on the plates at --attach-radius (still drawn there): '
+                          "Quan et al.'s cables at the load's centre (card 2026-10-23_paper_method_compare)")
     a = ap.parse_args()
+    if a.plates < 1 or not a.real_time_factor > 0.0:
+        ap.error('--plates must be >= 1 and --real-time-factor > 0')
+    if a.hub_r is not None and (a.hub_r < 0.0 or (a.ring_outer_r is None and a.ring_thickness is None)):
+        ap.error('--hub-r must be >= 0, on the rig ring (--ring-outer-r / --ring-thickness)')
     geom = {}
     if a.ring_outer_r is not None or a.ring_thickness is not None:
         if a.legs:
             ap.error('--legs is for the legacy ring only')
         geom['ring'] = ring_spec(a.ring_outer_r if a.ring_outer_r is not None else RING_OUTER,
                                  a.ring_thickness if a.ring_thickness is not None else RING_SEG_THICK,
-                                 a.attach_radius)
+                                 a.attach_radius, a.plates)
+        if a.hub_r is not None:
+            geom['ring']['hub_r'] = a.hub_r
+    elif a.plates != PLATES:
+        geom['plates'] = a.plates
+    if a.real_time_factor != 1.0:
+        geom['real_time_factor'] = a.real_time_factor
     if a.pivot_dz:
         geom['pivot_dz'] = a.pivot_dz
     if a.rod_mass is not None:
         geom['rod_mass'] = a.rod_mass
     if a.magnet_mass:
         geom['magnet_mass'] = a.magnet_mass
+    if a.tether_pose_hz:
+        geom['tether_pose_hz'] = a.tether_pose_hz
     if a.drone_model != 'x3':
         geom['drone_model'] = a.drone_model
     ring = geom.get('ring')
@@ -589,7 +668,7 @@ def main():
     az = [float(v) for v in a.azimuths.split(',') if v.strip()] or None
     if az and len(az) != a.n:
         ap.error(f'--azimuths has {len(az)} entries for --n {a.n}')
-    sdf = build(a.n, a.cable_len, elev, a.attach_radius, a.attach_z, a.payload_z,
+    sdf = build(a.n, a.cable_len, elev, a.attach_radius if a.hub_r is None else a.hub_r, a.attach_z, a.payload_z,
                 detachable=a.detachable, azimuths_deg=az, legs=a.legs, geom=geom or None)
     with open(a.out, 'w') as f:
         f.write(sdf)

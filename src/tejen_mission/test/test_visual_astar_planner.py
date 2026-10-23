@@ -1,7 +1,11 @@
+import ast
+from pathlib import Path
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
+import yaml
 
 from tejen_mission.online_safety_planner import StaticSphereObstacle
 from tejen_mission.payload_geometry import PayloadGeometryProfile
@@ -10,12 +14,48 @@ from tejen_mission.visual_astar_planner import (
     VisualAStarRequest,
     _build_whole_body_occupancy_grid,
     compute_visual_astar,
+    idle_visual_astar_result,
     validate_visual_astar_candidate,
 )
 from tejen_mission.voxel_astar import SphereObstacle, VoxelAStar3D
 
 
 class VisualAStarPlannerTests(unittest.TestCase):
+    def test_runtime_and_shared_profile_disable_visual_astar_by_default(self):
+        package = Path(__file__).resolve().parents[1]
+        source = ast.parse((package / "tejen_mission/online_join_planner.py").read_text())
+        declaration = next(
+            node for node in ast.walk(source)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "declare_parameter" and len(node.args) >= 2
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == "visual_astar_enabled"
+        )
+        self.assertIs(declaration.args[1].value, False)
+        profile = yaml.safe_load((package / "config/visual_astar_visual_only.yaml").read_text())
+        self.assertIs(profile["online_join_planner"]["ros__parameters"]["visual_astar_enabled"], False)
+
+    def test_disabled_runtime_scheduler_never_submits_search(self):
+        source = Path(__file__).resolve().parents[1] / "tejen_mission/online_join_planner.py"
+        planner = next(node for node in ast.parse(source.read_text()).body
+                       if isinstance(node, ast.ClassDef) and node.name == "OnlineJoinPlanner")
+        method = next(node for node in planner.body
+                      if isinstance(node, ast.FunctionDef) and node.name == "update_visual_astar")
+        namespace = {"TrajectoryReference": object, "SafetyPlannerRequest": object,
+                     "idle_visual_astar_result": idle_visual_astar_result}
+        exec(compile(ast.Module(body=[method], type_ignores=[]), str(source), "exec"), namespace)
+        runtime = SimpleNamespace(
+            phase=SimpleNamespace(value="APPROACH_ABOVE_PICKUP"),
+            visual_astar_enabled=False, collect_visual_astar_result=Mock(),
+            visual_astar_phase_allowed=Mock(return_value=True),
+            c1f2_cpp_transit_authority_active=Mock(return_value=False),
+            visual_trajectory_target_statistics=Mock(), visual_astar_executor=Mock(),
+        )
+        namespace["update_visual_astar"](runtime, None, None)
+        self.assertEqual(runtime.last_visual_astar_result.status, "disabled")
+        runtime.visual_trajectory_target_statistics.assert_not_called()
+        runtime.visual_astar_executor.submit.assert_not_called()
+
     def make_request(self, positions, obstacles=(), phase_allowed=True, **kwargs):
         positions = np.asarray(positions, dtype=float)
         defaults = dict(

@@ -72,6 +72,29 @@ int main() {
                           "stopped committed target moved after its explicit spline end");
         requireMatrixNear(beyond_stopped_commit.velocity, Vec3::Zero(), 1e-12,
                           "stopped committed target retained motion after its explicit spline end");
+        requireTrue(stopped_predictor.isStationaryAt(committed_centre + committed_offset),
+                    "declared constant commitment not recognized");
+        requireTrue(!stopped_predictor.isStationaryAt(committed_centre),
+                    "stationary target offset ignored");
+        requireTrue(!committed_predictor.isStationaryAt(committed_centre + committed_offset),
+                    "moving commitment classified as stationary");
+        requireTrue(!cv.isStationaryAt(Vec3(1,2,3)) &&
+                    !scripted.isStationaryAt(Vec3(2.5,2,1.5)),
+                    "moving target acquired stationary progress veto");
+        ConstantVelocityTargetPredictor fixed(Vec3(1,2,3), Vec3::Zero(), 4.);
+        requireTrue(fixed.isStationaryAt(Vec3(1,2,3)), "fixed CV target not recognized");
+        requireTrue(!fixed.isStationaryAt(Vec3(1,2,std::nextafter(3.,4.))),
+                    "definition-level identity acquired a physical tolerance");
+        auto moving_from_rest = advertised_piece;
+        moving_from_rest.control_points.row(1) = moving_from_rest.control_points.row(0);
+        moving_from_rest.control_points.row(2) = moving_from_rest.control_points.row(0);
+        CommittedTrajectory accelerating;
+        requireTrue(accelerating.replaceSuffix(12., moving_from_rest).accepted,
+                    "moving-from-rest fixture invalid");
+        CommittedTrajectoryTargetPredictor starts_at_rest(accelerating, Vec3::Zero());
+        requireTrue(starts_at_rest.evaluate(12.).velocity.isZero(0.) &&
+                    !starts_at_rest.isStationaryAt(committed_centre),
+                    "instantaneous zero velocity mistaken for constant target");
         std::cout << "test_target_predictor: PASS\n";
         return 0;
     } catch (const std::exception& exc) {

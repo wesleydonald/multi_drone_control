@@ -1,0 +1,6 @@
+run,traj,window_s,null_window_s,dtheta_deg,share_of_null_at_or_above,sigma_pre_deg,dtheta_over_sigma_pre,null_ratio_median,null_ratio_p95,share_of_null_ratio_at_or_above
+RIG-1007-r0012,hover,8.0,7.0,6.07,0.043,1.95,3.11,3.25,4.06,0.565
+RIG-1008-r302_3,hover,6.58,7.0,11.21,0.0,1.39,8.06,3.25,4.06,0.0
+RIG-1008-r303_4,hover,7.63,7.0,5.29,0.261,1.18,4.48,3.25,4.06,0.0
+RIG-1008-r304_3,hover,7.74,7.0,16.88,0.0,1.03,16.39,3.25,4.06,0.0
+RIG-1008-r305,path,14.0,15.0,8.02,0.14,2.33,3.44,3.07,3.87,0.326

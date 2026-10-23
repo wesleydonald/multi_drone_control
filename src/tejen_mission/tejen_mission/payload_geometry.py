@@ -223,6 +223,7 @@ class PayloadGeometryProfile:
         overtravel: float,
         max_overtravel: float,
         support_surface_z: float,
+        support_surface_overtravel_allowance_m: float = 0.0,
     ) -> PickupTargetGeometry:
         """Compute the shared geometry-aware pickup target.
 
@@ -236,11 +237,13 @@ class PayloadGeometryProfile:
         overtravel = float(overtravel)
         max_overtravel = float(max_overtravel)
         support_surface_z = float(support_surface_z)
+        support_surface_overtravel_allowance_m = float(support_surface_overtravel_allowance_m)
         for name, value in (
             ("contact_gap", contact_gap),
             ("overtravel", overtravel),
             ("max_overtravel", max_overtravel),
             ("support_surface_z", support_surface_z),
+            ("support_surface_overtravel_allowance_m", support_surface_overtravel_allowance_m),
         ):
             if not np.isfinite(value):
                 raise ValueError(f"{name} must be finite")
@@ -248,6 +251,8 @@ class PayloadGeometryProfile:
             raise ValueError("contact_gap must be non-negative")
         if max_overtravel < 0.0:
             raise ValueError("max_overtravel must be non-negative")
+        if support_surface_overtravel_allowance_m < 0.0:
+            raise ValueError("support_surface_overtravel_allowance_m must be non-negative")
 
         requested_overtravel = max(0.0, overtravel)
         used_overtravel = float(
@@ -259,11 +264,10 @@ class PayloadGeometryProfile:
             [0.0, 0.0, contact_gap - used_overtravel],
             dtype=float,
         )
-        support_surface_clamped = bool(
-            contact_face_target_world[2] < support_surface_z
-        )
+        minimum_face_z = support_surface_z - support_surface_overtravel_allowance_m
+        support_surface_clamped = bool(contact_face_target_world[2] < minimum_face_z)
         if support_surface_clamped:
-            contact_face_target_world[2] = support_surface_z
+            contact_face_target_world[2] = minimum_face_z
 
         marker_to_contact_face_world = (
             self.magnet_marker_to_contact_face.copy()

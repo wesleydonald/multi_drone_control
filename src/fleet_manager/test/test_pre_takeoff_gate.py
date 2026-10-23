@@ -33,6 +33,14 @@ def test_disarm_between_arm_and_takeoff_grounds_the_fleet(sync):
     assert f.cmds == [] and not f.flying
 
 
+def test_a_free_newcomer_disarm_before_takeoff_still_grounds_the_fleet(sync):
+    """on_load only scopes in-flight faults: before TAKEOFF nothing flies, so the gate is unchanged."""
+    f = _fake(on_load={3: False})
+    _armed(f)
+    f._arming_feedback_callback(Bool(data=False), 3)
+    assert _grounded_quietly(f)
+
+
 def test_r0749_every_tracker_drops_fires_once(sync):
     f = _fake()
     _armed(f)

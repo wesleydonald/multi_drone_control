@@ -1,0 +1,12 @@
+# LIM-c (card docs/experiments/2026-10-22_position_limit.md): configs/rig/chain_pair_noxy.yaml as it is, plus the
+# position limit at Wesley's 1.75 m.
+# 22 Oct rig, Part C (the T to the pair): configs/rig/chain_pair.yaml plus the height-only model integral
+# (int_k_xy 0, as hover_noxy.yaml), so the hover has no sideways lean (critic 21 Oct, item 16).
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 45.0
+int_k_xy: 0.0
+pos_limit_m: 1.75

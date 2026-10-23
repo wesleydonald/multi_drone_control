@@ -2,7 +2,7 @@
 """
 hybrid_dwell.py -- attach / detach as a hybrid system: measure the jump and the decay.
 
-docs/experimentation/control_methods_survey.md R4. The stack already treats a weld or a
+docs/archive/experimentation/control_methods_survey.md R4. The stack already treats a weld or a
 detach as a JUMP (bumpless datum shift + tension blend = the reset map) followed by a
 HOLD (dwell time) before the trajectory resumes. This reads what the runs actually did
 and reports, per event:
@@ -21,8 +21,8 @@ A conditional ISS-style reading (arXiv 2605.05339): if every event's jump is bou
 the inter-event dwell exceeds T_dwell, the tilt excess contracts by rho per cycle and the
 sequence of events is stable. The numbers here are the measured inputs to that argument.
 
-    tools/hybrid_dwell.py results_archive/R0209_* results/2026-09-10/R0234_* ...
-    tools/hybrid_dwell.py --eps 3 --md docs/experimentation/hybrid_dwell.md <runs>
+    tools/hybrid_dwell.py results/2026-09-10/R0209_* results/2026-09-10/R0234_* ...
+    tools/hybrid_dwell.py --eps 3 --md docs/archive/experimentation/hybrid_dwell.md <runs>
 """
 import argparse
 import csv

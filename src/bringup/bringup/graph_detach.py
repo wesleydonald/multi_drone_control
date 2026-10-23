@@ -5,7 +5,8 @@ place of mpc_planner. Takeoff is the same LoadPlanner OCP; at /fleet/detach <k> 
 resized (reconfig_mode ocp: the OCP is rebuilt for n-1 and keeps flying; network: the
 spring-damper network takes the fleet) and the trackers are unchanged (same reference wire
 format). Per drone a detach bridge (/drone_k/detach -> the world's DetachableJoint): run a
---detachable world. partner_m2: our stack on top of Tejen's M2 world after his drones joined:
+--detachable world. With rejoin_departed (twin only) one rejoin bridge carries /drone_k/attach to the
+same joints and their state back. partner_m2: our stack on top of Tejen's M2 world after his drones joined:
 his stacks own /drone_i command and arming names, so ours move under /ours, and each drone gets
 an ELRS mux that forwards his MPC until /fleet/handover, then ours. sim_interface:=false leaves
 the Gazebo bridges and Betaflight nodes to his launch.
@@ -17,17 +18,20 @@ defaults (a typed value kept, a looser watchdog refused). Magnets: each radio's 
 /drone_<i>/magnet on channel magnet_channel; the planner (detach_magnet) latches every tether ON
 at ARM and OFF at its detach. real_io:=false when Tejen's IRL stack owns the radios and mocap.
 
-sim network (was dissipative_only_launch.py): the dissipative planner hands the fleet to the
-network once the OCP lift tops out (auto_network_handover), so the whole flight after the
-lift is flown on the network. Nothing detaches; no detach bridges.
+sim network: the detach mode's twin graph with the paper's method after the lift (card
+2026-10-23_paper_method_compare): the planner hands the fleet to the network once the OCP lift tops
+out (auto_network_handover) and the trackers switch to their velocity loop (control_mode
+velocity_after_handover), with the twin's thrust map and geometry. Nothing detaches. legacy:=true
+flies the old graph (was dissipative_only_launch.py): the old_worlds plant, no detach bridges.
 
 real dissipative (was real_dissipative_launch.py): the two-terminal rig carry/detach of the R
 ladder: trackers, fleet manager and the dissipative planner after real_io_launch.py, with
 real_control's rig values (decisions 2026-10-03). A detach resizes the OCP and releases that
 drone's magnet on the same tick (reconfig_mode ocp, detach_magnet true).
 """
-from bringup.real_mode import (apply_rig_values, map_and_geometry, planner_options, rig_io,
-                               rig_magnet_latches, rig_thrust_ratio, tracker_drop_options, truthy)
+from bringup.real_mode import (apply_rig_values, map_and_geometry, planner_options, planner_prefix,
+                               position_limit, rig_io, rig_magnet_latches, rig_thrust_ratio, tracker_drop_options,
+                               truthy)
 from launch.actions import LogInfo
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
@@ -37,12 +41,14 @@ from tracker.thrust_model import resolve_thrust_ratio
 PARENT_MODEL = 'lift_system'
 
 
-def dissipative(context, launch_dir, profile_vals):
+def dissipative(context, launch_dir, profile_vals, network=False):
     n = int(LaunchConfiguration('num_drones').perform(context))
     if n < 1:
         raise RuntimeError(f'num_drones must be >= 1, got {n}')
     drone_names = [f'x3_drone{i}' for i in range(n)]
     real = truthy(context, 'real')
+    if real and network:
+        raise RuntimeError('the network mode is twin only: the rig never hands over to the network')
     if real:
         kt, kt_to, kt_note = rig_thrust_ratio(
             LaunchConfiguration('thrust_ratio').perform(context),
@@ -65,6 +71,15 @@ def dissipative(context, launch_dir, profile_vals):
     if real:
         nodes.append(LogInfo(msg=rig_note))
     twin_tracker, twin_bf, twin_planner = map_and_geometry(context, n, real)
+    # the network mode only: the trackers' velocity loop after the hand-over and the network's own knobs (the
+    # detach mode passes neither, so its graph is unchanged)
+    vel = ({'control_mode': LaunchConfiguration('control_mode'), 'vel_kp_pos': f('vel_kp_pos'), 'vel_kv': f('vel_kv'),
+            'vel_ki': f('vel_ki'), 'vel_k_att': f('vel_k_att'), 'vel_swing_k': f('vel_swing_k')} if network else {})
+    net = ({'auto_network_handover': b('auto_network_handover'), 'auto_handover_settle_s': f('auto_handover_settle_s'),
+            'diss_ki_load': f('diss_ki_load'), 'diss_a_i_load_max': f('diss_a_i_load_max'),
+            'diss_trim_share_weighted': b('diss_trim_share_weighted'), 'handover_blend_s': f('handover_blend_s'),
+            'net_damp_relative': b('net_damp_relative'), 'net_twin_geometry': b('net_twin_geometry'),
+            'net_hold_carry': b('net_hold_carry')} if network else {})
 
     # partner_m2 (multi_drone_control 2026-09-26): our stack on top of Tejen's M2 world
     # after his four drones have joined the ring. His per-drone stacks own the /drone_i
@@ -104,7 +119,7 @@ def dissipative(context, launch_dir, profile_vals):
             nodes.append(Node(
                 package='tracker', executable='tracker',
                 name=f'tracker_{i}', remappings=ours(i),
-                parameters=[{'drone_id': i,
+                parameters=[{'drone_id': i, **position_limit(context),
                              'terminal_vel_ref': b('terminal_vel_ref'),
                              'cable_ff_scale': f('cable_ff_scale'),
                              'attitude_ff': b('attitude_ff'),
@@ -128,7 +143,7 @@ def dissipative(context, launch_dir, profile_vals):
                              'kt_batt_v_full': f('kt_batt_v_full'),
                              'kt_batt_v_empty': f('kt_batt_v_empty'),
                              'kt_print_period_s': f('kt_print_period_s'),
-                             **twin_tracker}],
+                             **twin_tracker, **vel}],
                 output='screen'))
             continue
         nodes.append(Node(
@@ -161,7 +176,7 @@ def dissipative(context, launch_dir, profile_vals):
         nodes.append(Node(
             package='tracker', executable='tracker',
             name=f'tracker_{i}',
-            parameters=[{'drone_id': i,
+            parameters=[{'drone_id': i, **position_limit(context),
                          'terminal_vel_ref': b('terminal_vel_ref'),
                          'cable_ff_scale': f('cable_ff_scale'),
                          'attitude_ff': b('attitude_ff'),
@@ -185,11 +200,19 @@ def dissipative(context, launch_dir, profile_vals):
                          'kt_batt_v_full': f('kt_batt_v_full'),
                          'kt_batt_v_empty': f('kt_batt_v_empty'),
                          'kt_print_period_s': f('kt_print_period_s'),
-                         **twin_tracker}],
+                         **twin_tracker, **vel}],
             output='screen'))
 
     if not want_ctrl:
         return nodes
+    if sim_interface and not network and truthy(context, 'rejoin_departed'):
+        # code design B (card 2026-10-23_rejoin_departed): a departed carrier re-welds on its tether's DetachableJoint;
+        # the joint's state comes back for the planner's log
+        nodes.append(Node(
+            package='ros_gz_bridge', executable='parameter_bridge', name='rejoin_bridge',
+            arguments=[a for i in range(n) for a in (f'/drone_{i}/attach@std_msgs/msg/Empty]gz.msgs.Empty',
+                                                     f'/drone_{i}/detachable_joint_state'
+                                                     f'@std_msgs/msg/String[gz.msgs.StringMsg')]))
 
     # ── Central fleet manager ──────────────────────────────────────────────
     if partner_m2 and not real:
@@ -203,11 +226,12 @@ def dissipative(context, launch_dir, profile_vals):
     fleet_remaps = [r for i in range(n) for r in ours(i)]
     nodes.append(Node(
         package='fleet_manager', executable='fleet_manager', name='fleet_manager',
-        remappings=fleet_remaps, parameters=[{'num_drones': n}], output='screen'))
+        remappings=fleet_remaps, parameters=[{'num_drones': n, **position_limit(context)}], output='screen'))
 
     # ── Decentralized dissipative reference generator ──────────────────────
     nodes.append(Node(
         package='dissipative_planner', executable='dissipative_planner', name='dissipative_planner',
+        prefix=planner_prefix(),
         parameters=[{'num_drones': n,
                      'cable_len': f('cable_len'),
                      'attach_azimuths_deg': LaunchConfiguration('attach_azimuths_deg'),
@@ -248,7 +272,7 @@ def dissipative(context, launch_dir, profile_vals):
                      'cable_elev_deg': f('cable_elev_deg'),
                      # rig: tether latches ON at ARM, OFF at their detach
                      **({'detach_magnet': True} if real else {}),
-                     **twin_planner}] + planner_options(context),
+                     **twin_planner, **net}] + planner_options(context, rejoin=sim_interface and not network),
         output='screen'))
 
     return nodes
@@ -256,6 +280,13 @@ def dissipative(context, launch_dir, profile_vals):
 
 
 def sim_network(context, launch_dir, profile_vals):
+    """mode:=network: the detach mode's twin graph with the network after the lift; legacy:=true the old graph."""
+    if truthy(context, 'legacy'):
+        return _sim_network_legacy(context, launch_dir, profile_vals)
+    return dissipative(context, launch_dir, profile_vals, network=True)
+
+
+def _sim_network_legacy(context, launch_dir, profile_vals):
     # Resolve num_drones to a real int -- a LaunchConfiguration is an unresolved
     # substitution at generate_launch_description() time, so the per-drone loop has to
     # happen inside an OpaqueFunction.
@@ -305,7 +336,7 @@ def sim_network(context, launch_dir, profile_vals):
         nodes.append(Node(
             package='tracker', executable='tracker',
             name=f'tracker_{i}',
-            parameters=[{'drone_id': i,
+            parameters=[{'drone_id': i, **position_limit(context),
                          'terminal_vel_ref': b('terminal_vel_ref'),
                          'control_mode': LaunchConfiguration('control_mode'),
                          'vel_kp_pos': f('vel_kp_pos'),
@@ -338,12 +369,13 @@ def sim_network(context, launch_dir, profile_vals):
     # ── Central fleet manager ──────────────────────────────────────────────
     nodes.append(Node(
         package='fleet_manager', executable='fleet_manager', name='fleet_manager',
-        parameters=[{'num_drones': n}], output='screen'))
+        parameters=[{'num_drones': n, **position_limit(context)}], output='screen'))
 
     # ── Dissipative reference generator (OCP takeoff -> network for the rest) ──
     # reserved_attach is left at its 0 default: no mid-flight newcomer in this stack.
     nodes.append(Node(
         package='dissipative_planner', executable='dissipative_planner',
+        prefix=planner_prefix(),
         name='dissipative_planner',
         parameters=[{'num_drones': n,
                      'cable_len': f('cable_len'),
@@ -407,7 +439,7 @@ def real_dissipative(context, launch_dir, profile_vals):
         nodes.append(Node(
             package='tracker', executable='tracker',
             name=f'tracker_{i}',
-            parameters=[{'drone_id': i,
+            parameters=[{'drone_id': i, **position_limit(context),
                          'terminal_vel_ref': b('terminal_vel_ref'),
                          'control_mode': LaunchConfiguration('control_mode'),
                          'vel_kp_pos': f('vel_kp_pos'),
@@ -443,7 +475,7 @@ def real_dissipative(context, launch_dir, profile_vals):
     # ── Central fleet manager ─────────────────────────────────────────────────
     nodes.append(Node(
         package='fleet_manager', executable='fleet_manager', name='fleet_manager',
-        parameters=[{'num_drones': n,
+        parameters=[{'num_drones': n, **position_limit(context),
                      'require_fc_armed': LaunchConfiguration('require_fc_armed').perform(context).lower() == 'true'}],
         output='screen'))
 
@@ -453,6 +485,7 @@ def real_dissipative(context, launch_dir, profile_vals):
     # attach topics are created.
     nodes.append(Node(
         package='dissipative_planner', executable='dissipative_planner',
+        prefix=planner_prefix(),
         name='dissipative_planner',
         parameters=[{'num_drones': n,
                      'cable_len': f('cable_len'),

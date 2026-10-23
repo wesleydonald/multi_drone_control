@@ -6,6 +6,10 @@ wrapper: quaternion->rotation, a Rodrigues "align a onto b" rotation, the attach
 ring / nominal cable directions built from the fleet size, and the azimuth-based
 drone<->slot assignment. All pure functions of their arguments (numpy only), so
 they carry no ROS or solver state and are trivially testable.
+
+Angles: every azimuth here is counter-clockwise in the load frame (ROS, mocap, the
+optimiser). What people type and read is clockwise degrees, angle = 30 x plate (Wesley
+14 Oct); cw_to_ccw_deg / azimuths_param_from_typed convert at the launch boundary.
 """
 import itertools
 import re
@@ -90,10 +94,57 @@ def centre_from_pivot(pivot, acc, yaw, pivot_offset):
     return np.asarray(pivot, float) - thrust_attitude(acc, yaw) @ b
 
 
+def _rows16(V, width):
+    """Rows of V (M x 3, or M x 3 x 3) in a buffer whose rows start 16-byte aligned, as a fresh numpy array does:
+    a 3-vector's dot with itself differs in its last bit off that alignment (numpy 1.24, OpenBLAS)."""
+    M = V.shape[0]
+    buf = np.zeros((M, width))
+    rows = buf[:, :V[0].size].reshape((M,) + V.shape[1:])
+    rows[...] = V
+    return rows
+
+
+def centre_from_pivot_many(P, A, yaw, pivot_offset):
+    """centre_from_pivot for every column of P (3 x M pivots) and A (3 x M thrust accelerations) at one heading,
+    bit for bit: the elementwise steps (the two cross products, the divisions) run on all nodes at once, the three
+    reductions (|a|, |y_b|, R b) per node with the numpy calls thrust_attitude makes, on rows laid out as its fresh
+    arrays are, and a node with |a| ~ 0 or its thrust along the heading goes through centre_from_pivot itself.
+    Returns 3 x M; P itself for a zero offset."""
+    b = np.asarray(pivot_offset, float)
+    P = np.asarray(P, float)
+    if not b.any():
+        return P
+    A = _rows16(np.asarray(A, float).T, 4)
+    PT = np.ascontiguousarray(P.T)
+    M = A.shape[0]
+    na = np.array([np.sqrt(A[k].dot(A[k])) for k in range(M)])      # np.linalg.norm's own steps
+    odd = ~(na > 1e-9)                                    # as thrust_attitude's test: a NaN |a| is level too
+    zb = A / np.where(odd, 1.0, na)[:, None]
+    c, s = np.cos(yaw), np.sin(yaw)
+    yb = _rows16(np.zeros((M, 3)), 4)                     # np.cross(zb, [c, s, 0]): its operations, in its order
+    yb[:, 0] = zb[:, 1] * 0.0 - zb[:, 2] * s
+    yb[:, 1] = zb[:, 2] * c - zb[:, 0] * 0.0
+    yb[:, 2] = zb[:, 0] * s - zb[:, 1] * c
+    ny = np.array([np.sqrt(yb[k].dot(yb[k])) for k in range(M)])
+    odd |= ny < 1e-9
+    yb /= np.where(odd, 1.0, ny)[:, None]
+    R = _rows16(np.zeros((M, 3, 3)), 10)                  # np.column_stack([y_b x z_b, y_b, z_b])
+    R[:, 0, 0] = yb[:, 1] * zb[:, 2] - yb[:, 2] * zb[:, 1]
+    R[:, 1, 0] = yb[:, 2] * zb[:, 0] - yb[:, 0] * zb[:, 2]
+    R[:, 2, 0] = yb[:, 0] * zb[:, 1] - yb[:, 1] * zb[:, 0]
+    R[:, :, 1] = yb
+    R[:, :, 2] = zb
+    out = np.empty_like(PT)
+    for k in range(M):
+        out[k] = centre_from_pivot(PT[k], A[k], yaw, b) if odd[k] else PT[k] - R[k] @ b
+    return out.T
+
+
 def parse_azimuths_deg(spec):
     """'0,90,180' / [0, 90, 180] / '' -> list of azimuths (deg) or None (= even ring).
     The rig's rim magnets sit where they were placed, not on an even ring; this is how
-    a launch says where (clock face: 3 o'clock = 0, 12 = 90, 9 = 180, 6 = 270)."""
+    the planner's attach_azimuths_deg parameter says where, counter-clockwise (clock face:
+    3 o'clock = 0, 12 = 90, 9 = 180, 6 = 270; the launch converts the typed clockwise list)."""
     if spec is None:
         return None
     if isinstance(spec, str):
@@ -232,13 +283,73 @@ def azimuth_slot_assignment(drone_pos, load_xy, n, load_yaw=0.0, slot_az=None):
 
 
 PLATE_PITCH_DEG = 30.0      # M2A ring: 12 magnet plates, plate 0 on the ring body's +x
+N_PLATES = 12
+
+
+def cw_to_ccw_deg(deg):
+    """A clockwise angle (what is typed and shown since 15 Oct) <-> the counter-clockwise azimuth inside (frames,
+    mocap, the optimiser): a = (-c) mod 360. The map is its own inverse, so ccw_to_cw_deg is this function.
+    A number, or a list of them."""
+    if isinstance(deg, (list, tuple, np.ndarray)):
+        return [cw_to_ccw_deg(d) for d in deg]
+    out = (-float(deg)) % 360.0
+    return 0.0 if out >= 360.0 else out       # (-1e-17) % 360 rounds to 360.0
+
+
+ccw_to_cw_deg = cw_to_ccw_deg
+
+
+def plate_cw_deg(plate):
+    """Clockwise angle of a plate: 30 x plate (plate 0 on the ring's +x, counting clockwise seen from above)."""
+    return (PLATE_PITCH_DEG * int(plate)) % 360.0
+
+
+def plate_of_cw_deg(cw_deg):
+    """Plate number (0-11) at a clockwise angle."""
+    return int(round(float(cw_deg) / PLATE_PITCH_DEG)) % N_PLATES
 
 
 def plate_of_azimuth(az_deg):
-    """Plate number (0-11) at a load-frame azimuth: plate 0 on the ring's +x, counting CLOCKWISE
-    seen from above like a clock (Wesley 7 Oct; was anticlockwise). Azimuths stay anticlockwise."""
-    return int(round(-float(az_deg) / PLATE_PITCH_DEG)) % int(360 / PLATE_PITCH_DEG)
+    """Plate number (0-11) at a load-frame (counter-clockwise) azimuth: plate 0 on the ring's +x, counting
+    CLOCKWISE seen from above like a clock (Wesley 7 Oct)."""
+    return plate_of_cw_deg(ccw_to_cw_deg(az_deg))
+
+
+def tejen_plate(plate):
+    """Tejen's plate index for ours, and ours for his: he counts counter-clockwise from +x, so ours 9 (+y) is his
+    3. The map is its own inverse."""
+    return (N_PLATES - int(plate)) % N_PLATES
+
+
+def _like(token, value):
+    """value in the number format of the typed token ('90' -> '270', '90.0' -> '270.0')."""
+    decimals = len(token.split('.', 1)[1]) if '.' in token else 0
+    return f'{value:.{decimals}f}'
+
+
+def azimuths_param_from_typed(spec):
+    """attach_azimuths_deg as typed (clockwise degrees, '90,330,210'; '', even, none, auto = the even ring) ->
+    the planner's node parameter (counter-clockwise, '270,30,150'), in the typed number format, so a run's
+    parameter dump reads as it did before the typed angles turned clockwise."""
+    if spec is None:
+        return ''
+    if not isinstance(spec, str):
+        spec = ','.join(str(v) for v in spec)
+    text = spec.strip()
+    if not text or text.lower() in ('even', 'none', 'auto'):
+        return spec
+    return ','.join(_like(t, cw_to_ccw_deg(float(t))) for t in re.split(r'[,\s]+', text) if t)
+
+
+def cw_text(az_deg, nd=0):
+    """'[90, 330, 210]' for load-frame (counter-clockwise) azimuths, as an operator line shows them (clockwise)."""
+    return '[' + ', '.join(f'{ccw_to_cw_deg(a):.{nd}f}' for a in az_deg) + ']'
+
+
 SLOT_OFFSET_WARN_DEG = 10.0
+# Past this the line says the typed angles may be mirrored: a list typed the old (counter-clockwise) way puts a
+# drone >= 60 deg off on the 30 deg plate grid; a ring body one plate off (model-f1) sits ~30 deg off.
+SLOT_MIRROR_HINT_DEG = 30.0
 
 
 def slot_azimuth_errors(drone_pos, load_xy, load_yaw, slot2drone, slot_az):
@@ -253,11 +364,34 @@ def slot_azimuth_errors(drone_pos, load_xy, load_yaw, slot2drone, slot_az):
     return out
 
 
+def slot_error_text(errors):
+    """The planner's start-up line (see slot_azimuth_errors): each drone's error against its slot in clockwise
+    degrees, + = clockwise of its plate, and the plate."""
+    return ('slot error (deg, + = clockwise): '
+            + ', '.join(f'd{d + 1} {-err + 0.0:+.1f} (plate {plate})' for d, err, plate in errors))
+
+
+def slot_offset_report(errors, tol_deg=SLOT_OFFSET_WARN_DEG, mirror_deg=SLOT_MIRROR_HINT_DEG):
+    """[(severe, line)] for the slots whose |error| exceeds tol_deg (see slot_azimuth_errors). Severe past
+    mirror_deg in the whole degrees the line shows (the planner logs it as an error): the line then says the
+    typed angles may be mirrored."""
+    out = []
+    for d, err, plate in errors:
+        if abs(err) <= tol_deg:
+            continue
+        where = f'drone {d + 1} sits {offset_words(err)} of plate {plate}'
+        check = 'check the ring rigid body (+x toward plate 0) or the magnet plates'
+        if round(abs(err)) > mirror_deg:
+            out.append((True, f'{where}: the typed angles look MIRRORED (typed angles are clockwise since 15 Oct, '
+                              f'angle = 30 x plate: plates 3/11/7 = 90,330,210); if they are right, {check}'))
+        else:
+            out.append((False, f'{where}: {check}'))
+    return out
+
+
 def slot_offset_warnings(errors, tol_deg=SLOT_OFFSET_WARN_DEG):
-    """Operator lines for the slots whose |error| exceeds tol_deg (see slot_azimuth_errors)."""
-    return [f'drone {d + 1} sits {offset_words(err)} of plate {plate}: check the ring rigid body '
-            f'(+x toward plate 0) or the magnet plates'
-            for d, err, plate in errors if abs(err) > tol_deg]
+    """Operator lines for the slots whose |error| exceeds tol_deg (see slot_offset_report)."""
+    return [line for _, line in slot_offset_report(errors, tol_deg)]
 
 
 def offset_words(err_deg, fmt='.0f'):

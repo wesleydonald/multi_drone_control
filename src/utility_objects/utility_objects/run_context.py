@@ -40,7 +40,7 @@ ENVIRONMENT OVERRIDES (all optional)
 ------------------------------------
   MDC_REPO_ROOT     workspace root, if auto-detection ever gets it wrong
   MDC_RESULTS_ROOT  flight data root
-  MDC_ACADOS_ROOT   parent directory for generated solver code
+  MDC_ACADOS_ROOT   parent directory for generated solver code and json (default <repo>/generated)
   MDC_RUN_DIR       this run's directory, set by tools/run_experiment.py so that
                     every node of one launch writes into ONE run directory
 """
@@ -61,7 +61,7 @@ def _detect_repo_root():
     d = here
     while True:
         if (os.path.isdir(os.path.join(d, 'src'))
-                and os.path.isdir(os.path.join(d, '.git'))):
+                and os.path.exists(os.path.join(d, '.git'))):     # a git worktree's .git is a file
             return d
         parent = os.path.dirname(d)
         if parent == d:          # reached /
@@ -104,6 +104,17 @@ def results_root(create=True):
     return path
 
 
+def acados_root(create=True):
+    """Where every generated solver lives: MDC_ACADOS_ROOT, else <repo>/generated (12 Oct 2026; it was the
+    repo root). The c_generated_code_* directories and acados' *_ocp.json / *_sim.json go here. A lab slot sets
+    MDC_ACADOS_ROOT to its own scratch directory so parallel runs never share a solver."""
+    env = os.environ.get('MDC_ACADOS_ROOT')
+    path = (os.path.abspath(os.path.expanduser(env)) if env else os.path.join(repo_root(), 'generated'))
+    if create:
+        os.makedirs(path, exist_ok=True)
+    return path
+
+
 def acados_dir(name, create=True):
     """Generated-C directory for a named solver, e.g. acados_dir('quad_load').
 
@@ -111,9 +122,7 @@ def acados_dir(name, create=True):
     generated code -- the reason `c_generated_code_quad_load` exists separately
     from `c_generated_code` in the first place.
     """
-    env = os.environ.get('MDC_ACADOS_ROOT')
-    parent = (os.path.abspath(os.path.expanduser(env)) if env else repo_root())
-    path = os.path.join(parent, f'c_generated_code_{name}')
+    path = os.path.join(acados_root(create), f'c_generated_code_{name}')
     if create:
         os.makedirs(path, exist_ok=True)
     return path

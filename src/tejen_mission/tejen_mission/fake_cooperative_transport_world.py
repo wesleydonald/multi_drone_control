@@ -19,6 +19,7 @@ is only for visualisation/debugging.
 from __future__ import annotations
 
 from collections import deque
+from copy import deepcopy
 from dataclasses import dataclass
 import math
 from typing import Deque, List, Sequence, Tuple
@@ -45,6 +46,7 @@ from tejen_mission.cooperative_trajectory import (
     rigid_body_offset_state,
 )
 from tejen_mission.m2_fleet_commitment import commitment_sequence_seed
+from tejen_mission.m1_ground_ring import MeasuredRingSource
 
 
 # M2 preview assignment only. Physical vehicle/plate ownership is deliberately not
@@ -181,7 +183,10 @@ class FakeCooperativeTransportWorld(Node):
 
         # Timing / trajectory parameters
         self.declare_parameter('publish_rate_hz', 50.0)
-        self.declare_parameter('trajectory_type', 'circle')  # stationary, circle, line, figure8
+        self.declare_parameter('trajectory_type', 'circle')  # stationary, circle, line, figure8, measured_stationary
+        self.declare_parameter('measured_ring_pose_topic', '/irl/ring/mocap_pose')
+        self.declare_parameter('measured_ring_pose_timeout_s', 0.50)
+        self.declare_parameter('measured_ring_max_tilt_deg', 5.0)
         self.declare_parameter('center_x', 0.0)
         self.declare_parameter('center_y', 0.0)
         self.declare_parameter('center_z', 1.5)
@@ -272,6 +277,16 @@ class FakeCooperativeTransportWorld(Node):
         )
         # Validate the configured attachment index immediately.
         self.ring_geometry.plate_body_offset(self.ring_attachment_plate_index)
+        self.measured_ring_source = None
+        if self.get_string_param('trajectory_type').lower() == 'measured_stationary':
+            self.measured_ring_source = MeasuredRingSource(
+                timeout_s=self.get_float_param('measured_ring_pose_timeout_s'),
+                max_tilt_deg=self.get_float_param('measured_ring_max_tilt_deg'),
+                pitch_diameter_m=self.get_float_param('ring_plate_pitch_diameter_m'),
+            )
+            self.create_subscription(PoseStamped,
+                self.get_string_param('measured_ring_pose_topic'),
+                self.measured_ring_pose_callback, 10)
 
         self.payload_pose_pub = self.create_publisher(PoseStamped, self.payload_pose_topic, 10)
         self.payload_twist_pub = self.create_publisher(TwistStamped, self.payload_twist_topic, 10)
@@ -312,7 +327,8 @@ class FakeCooperativeTransportWorld(Node):
         self.shared_payload_spline: SharedSpline | None = None
         self.shared_trajectory_sequence = commitment_sequence_seed()
         self.last_shared_commitment_publish_s: float | None = None
-        if self.get_bool_param('publish_shared_trajectories'):
+        if (self.get_bool_param('publish_shared_trajectories')
+                and self.measured_ring_source is None):
             self.refresh_shared_commitments(self.start_time_s)
         self.last_payload_state: RigidBodyState | None = None
         self.last_attachment_xyz: Tuple[float, float, float] | None = None
@@ -345,6 +361,20 @@ class FakeCooperativeTransportWorld(Node):
         now = self.get_clock().now()
         return (now - self.start_time).nanoseconds * 1e-9
 
+    def measured_ring_pose_callback(self, msg: PoseStamped) -> None:
+        if self.measured_ring_source is None:
+            return
+        if msg.header.frame_id not in ('', self.frame_id):
+            self.get_logger().warning('Rejected ring pose outside the map frame')
+            return
+        p, q = msg.pose.position, msg.pose.orientation
+        accepted = self.measured_ring_source.ingest(
+            [p.x, p.y, p.z], [q.x, q.y, q.z, q.w],
+            now_s=self.get_clock().now().nanoseconds * 1e-9)
+        if not accepted:
+            self.get_logger().warning('Rejected non-finite or tilted measured ring pose',
+                                      throttle_duration_sec=1.0)
+
     def get_float_param(self, name: str) -> float:
         return float(self.get_parameter(name).value)
 
@@ -365,6 +395,13 @@ class FakeCooperativeTransportWorld(Node):
 
     def compute_payload_state(self, t: float) -> RigidBodyState:
         trajectory_type = self.get_string_param('trajectory_type').lower()
+        if trajectory_type == 'measured_stationary':
+            state = self.measured_ring_source.state(self.get_clock().now().nanoseconds * 1e-9)
+            if state is None:
+                raise RuntimeError('fresh measured ring pose required before reference publication')
+            x, y, z = (float(value) for value in state.position)
+            return RigidBodyState(x=x, y=y, z=z, yaw=state.yaw_rad,
+                                  vx=0.0, vy=0.0, vz=0.0, yaw_rate=0.0)
         cx = self.get_float_param('center_x')
         cy = self.get_float_param('center_y')
         cz = self.get_float_param('center_z')
@@ -564,7 +601,7 @@ class FakeCooperativeTransportWorld(Node):
         msg.header.frame_id = self.frame_id
         msg.vehicle_id = vehicle_id
         msg.sequence = int(sequence)
-        msg.terminal_hold = False
+        msg.terminal_hold = self.measured_ring_source is not None
         piece = CubicTrajectoryPiece()
         piece.valid_from_s = spline.valid_from_s
         piece.valid_until_s = spline.valid_until_s
@@ -878,7 +915,7 @@ class FakeCooperativeTransportWorld(Node):
         self.append_ring_markers(markers, payload_state, stamp)
 
         attachment_marker = self.make_marker_common(1, 'fake_attachment_point', Marker.SPHERE, stamp)
-        attachment_marker.pose = attachment_pose.pose
+        attachment_marker.pose = deepcopy(attachment_pose.pose)
         diameter = self.get_float_param('attachment_marker_diameter')
         attachment_marker.scale.x = diameter
         attachment_marker.scale.y = diameter
@@ -890,7 +927,7 @@ class FakeCooperativeTransportWorld(Node):
         markers.markers.append(attachment_marker)
 
         label_marker = self.make_marker_common(2, 'fake_attachment_label', Marker.TEXT_VIEW_FACING, stamp)
-        label_marker.pose = attachment_pose.pose
+        label_marker.pose = deepcopy(attachment_pose.pose)
         label_marker.pose.position.z += 0.12
         label_marker.scale.z = 0.12
         label_marker.color.r = 0.0
@@ -915,7 +952,7 @@ class FakeCooperativeTransportWorld(Node):
             pose = self.make_pose(state.x, state.y, state.z, state.yaw)
 
             drone_marker = self.make_marker_common(100 + i, 'fake_obstacle_ground_truth', Marker.SPHERE, stamp)
-            drone_marker.pose = pose
+            drone_marker.pose = deepcopy(pose)
             drone_marker.scale.x = 2.0 * obstacle.radius
             drone_marker.scale.y = 2.0 * obstacle.radius
             drone_marker.scale.z = 2.0 * obstacle.radius
@@ -926,7 +963,7 @@ class FakeCooperativeTransportWorld(Node):
             markers.markers.append(drone_marker)
 
             safety_marker = self.make_marker_common(200 + i, 'fake_obstacle_legacy_visual_safety_radius', Marker.SPHERE, stamp)
-            safety_marker.pose = pose
+            safety_marker.pose = deepcopy(pose)
             safety_marker.scale.x = 2.0 * obstacle.safety_radius
             safety_marker.scale.y = 2.0 * obstacle.safety_radius
             safety_marker.scale.z = 2.0 * obstacle.safety_radius
@@ -937,7 +974,7 @@ class FakeCooperativeTransportWorld(Node):
             markers.markers.append(safety_marker)
 
             label_marker = self.make_marker_common(300 + i, 'fake_obstacle_label', Marker.TEXT_VIEW_FACING, stamp)
-            label_marker.pose = pose
+            label_marker.pose = deepcopy(pose)
             label_marker.pose.position.z += obstacle.safety_radius + 0.08
             label_marker.scale.z = 0.10
             label_marker.color.r = 1.0
@@ -963,6 +1000,9 @@ class FakeCooperativeTransportWorld(Node):
 
     def timer_callback(self) -> None:
         t = self.now_sec_since_start()
+        if (self.measured_ring_source is not None
+                and self.measured_ring_source.state(self.start_time_s + t) is None):
+            return
         self.maybe_refresh_shared_commitments(self.start_time_s + t)
         stamp = self.get_clock().now().to_msg()
 
@@ -970,6 +1010,8 @@ class FakeCooperativeTransportWorld(Node):
         attachment_xyz = self.compute_attachment_xyz(payload_state)
         obstacles = self.compute_obstacle_states(t, payload_state)
         avx, avy, avz, ayaw_rate = self.finite_difference_attachment_twist(t, payload_state, attachment_xyz)
+        if self.measured_ring_source is not None:
+            avx = avy = avz = ayaw_rate = 0.0
 
         payload_pose = self.make_pose_stamped(
             payload_state.x,

@@ -244,6 +244,12 @@ def metric_rows(groups):
                                                            math.nan)),
              ('payload phase lag', 's', lambda m: m.get('payload_phase_lag_s',
                                                         math.nan)),
+             ('payload cut, tight bends', 'm', lambda m: m.get(
+                 'payload_contour_cut_topq_mean_m', math.nan)),
+             ('payload across-path rms', 'm', lambda m: m.get(
+                 'payload_contour_across_rms_m', math.nan)),
+             ('payload lag on the schedule', 's', lambda m: m.get('payload_lag_s',
+                                                                  math.nan)),
              ('payload tilt, peak', 'deg', lambda m: m.get('payload_tilt_peak_deg',
                                                            math.nan)),
              ('payload tilt, settled', 'deg', lambda m: m.get(

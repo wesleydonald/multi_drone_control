@@ -112,13 +112,11 @@ def resolve(spec, roots=None):
     """A run id ('R0034'), a directory name or a path -> the run directory.
 
     Ids are how runs are cited in a caption, a commit message and a conversation, so
-    every tool takes them. `results_archive/` is searched FIRST: once a run is promoted,
-    the frozen copy is the one a figure should be built from, and silently preferring
-    the mutable original would defeat the archive."""
+    every tool takes them."""
     if os.path.isdir(spec) and os.path.exists(os.path.join(spec, 'manifest.json')):
         return os.path.abspath(spec)
     if roots is None:
-        roots = [os.path.join(repo_root(), 'results_archive'), results_root()]
+        roots = [results_root()]
     key = os.path.basename(spec.rstrip('/'))
     for root in roots:
         if not os.path.isdir(root):
@@ -128,6 +126,16 @@ def resolve(spec, roots=None):
             if name == key or name.startswith(key + '_') or name[:5] == key:
                 return path
     raise SystemExit(f'no run matching {spec!r} under ' + ' or '.join(roots))
+
+
+def manifest_azimuths_ccw(spec, manifest):
+    """A manifest's typed attach azimuths ('90,330,210', a list, '' / None) as counter-clockwise degrees, the
+    planner's convention: converted when the manifest says its typed angles are clockwise."""
+    if spec is None or (isinstance(spec, str) and not spec.strip()):
+        return []
+    vals = [float(v) for v in (spec if isinstance(spec, (list, tuple)) else str(spec).replace(' ', '').split(','))
+            if str(v).strip()]
+    return [(-v) % 360.0 for v in vals] if (manifest or {}).get('angles') == 'cw' else vals
 
 
 def write_manifest(run_path, **fields):
@@ -149,6 +157,9 @@ def write_manifest(run_path, **fields):
             'operator': getpass.getuser(),
             'argv': sys.argv,
             'started_wall': time.strftime('%Y-%m-%dT%H:%M:%S'),
+            # typed ring angles (launch_args' attach_azimuths_deg and the like) are clockwise from 15 Oct (Wesley
+            # 14 Oct); older manifests have no key and typed them counter-clockwise (manifest_azimuths_ccw)
+            'angles': 'cw',
             **git_state(),
         }
     data.update(fields)

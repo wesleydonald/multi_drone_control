@@ -60,7 +60,7 @@ def test_pre_authority_search_uses_long_budget_but_active_flight_reverts_to_froz
 
     # A successfully rebased prepared trajectory immediately installs a normal
     # active-flight planner with the frozen 100 ms-class runtime parameter.
-    rebased = authority.split("if (reuse_prepared_commit_on_authority_)", 1)[1].split(
+    rebased = authority.split("if (reuse_prepared_commit_on_authority_", 1)[1].split(
         "// Default C1F.8c fallback", 1
     )[0]
     assert "octopus_max_runtime_s_));" in rebased

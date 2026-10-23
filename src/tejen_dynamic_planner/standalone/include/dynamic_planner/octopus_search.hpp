@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
+#include <map>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -14,6 +16,7 @@
 #include "dynamic_planner/bspline.hpp"
 #include "dynamic_planner/minvo.hpp"
 #include "dynamic_planner/separator.hpp"
+#include "dynamic_planner/temporal_collision_certificate.hpp"
 #include "dynamic_planner/types.hpp"
 
 namespace dynamic_planner {
@@ -23,6 +26,13 @@ using OctopusStopPredicate = std::function<bool()>;
 struct TimeIndexedObstacle {
     std::string name;
     std::vector<Eigen::MatrixXd> interval_vertices;
+    // Only dynamic/cooperative obstacles provide exact child hulls. Static
+    // obstacles keep their historical parent-interval representation.
+    std::vector<double> interval_start_s;
+    std::vector<double> interval_end_s;
+    std::vector<double> temporal_breakpoints_s;
+    TemporalHullBuilder temporal_hull_builder;
+    TemporalClearanceBuilder temporal_clearance_builder;
 };
 
 struct OctopusConfig {
@@ -38,12 +48,19 @@ struct OctopusConfig {
     Vec3 xyz_max = Vec3(3.00, 3.00, 2.60);
     double planning_radius_m = 30.0;
     std::uint32_t random_seed = 1;
+    TemporalRefinementConfig temporal_refinement;
 };
 
 struct IntervalSeparator {
     std::string obstacle_name;
     int interval_index = -1;
     SeparationResult result;
+    double time_start_s = std::numeric_limits<double>::quiet_NaN();
+    double time_end_s = std::numeric_limits<double>::quiet_NaN();
+    // Maps the original four parent B-spline control points to this leaf's
+    // MINVO vertices, keeping refinement constraints affine.
+    std::optional<Matrix4> ego_vertex_map;
+    std::optional<Eigen::MatrixXd> obstacle_vertices;
 };
 
 struct OctopusResult {
@@ -82,6 +99,7 @@ struct OctopusResult {
     // the post-arrival hold guard are rejected as infeasible, not merely ranked lower.
     std::size_t terminal_hold_rejections = 0;
     std::size_t terminal_hold_separator_lp_calls = 0;
+    TemporalRefinementStats temporal_refinement;
 
     // M2D hard-geometry fallback diagnostics. If no complete candidate exists,
     // Octopus retains up to eight closest expanded partial histories and tries
@@ -172,6 +190,8 @@ private:
     bool terminalHoldViable(const Vec3& terminal_position);
     bool withinSearchLimits(const Vec3& q) const;
     void validateInputs() const;
+    Matrix4 temporalMinvoMap(int interval, double start_s, double end_s);
+    void addTemporalStats(const TemporalRefinementStats& stats);
 
     std::vector<double> knots_;
     ControlPoints q012_;
@@ -195,6 +215,8 @@ private:
     Separator separator_;
     OctopusStopPredicate stop_requested_;
     std::string stop_reason_;
+    TemporalRefinementStats temporal_refinement_stats_;
+    std::map<std::tuple<int, double, double>, Matrix4> temporal_minvo_map_cache_;
 };
 
 }  // namespace dynamic_planner

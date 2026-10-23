@@ -150,6 +150,8 @@ dynamic_planner_transfer_backend:
     cooperative_tracking_half_x_m: 0.05
     cooperative_tracking_half_y_m: 0.05
     cooperative_tracking_half_z_m: 0.05
+    # Tracking-only peer deviations remain diagnostic; keep collision inflation.
+    cooperative_tracking_safety_enabled: false
 
     # M1 ring/net: the commitment is the true attachment-plane ring centre.
     # Collision geometry is a conservative 0.56 m square footprint spanning
@@ -164,14 +166,13 @@ dynamic_planner_transfer_backend:
     moving_basket_tracking_half_y_m: 0.03
     moving_basket_tracking_half_z_m: 0.03
 
-    # Current ego execution certificate. The same configured axis-wise allowance is
-    # included in planned collision geometry and monitored against measured
-    # closed-loop tracking. Three consecutive 30 Hz violations (~0.1 s) trigger
-    # a checked brake-to-hover fallback. Velocity error is logged but does not
-    # independently trip the gate while this limit is zero.
-    execution_tracking_safety_enabled: true
-    ego_tracking_half_x_m: 0.05
-    ego_tracking_half_y_m: 0.05
+    # Oct-16 approved IRL policy: tracking-only violations do not trigger brakes.
+    # Retain diagnostics and planned +/-100/100/50 mm collision inflation.
+    # Containment within that allowance is now an assumption, not enforced here.
+    # Obstacle/incumbent checks and input-loss handling remain independent.
+    execution_tracking_safety_enabled: false
+    ego_tracking_half_x_m: 0.10
+    ego_tracking_half_y_m: 0.10
     ego_tracking_half_z_m: 0.05
     execution_tracking_violation_samples: 3
     execution_velocity_error_limit_mps: 0.0

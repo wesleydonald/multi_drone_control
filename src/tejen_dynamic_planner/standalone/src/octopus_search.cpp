@@ -9,10 +9,12 @@
 #include <cmath>
 #include <limits>
 #include <functional>
+#include <iomanip>
 #include <memory>
 #include <queue>
 #include <random>
 #include <stdexcept>
+#include <sstream>
 #include <unordered_set>
 #include <utility>
 
@@ -58,6 +60,58 @@ bool finitePositiveVector(const Vec3& value) {
 
 bool finiteVector(const Vec3& value) {
     return value.allFinite();
+}
+
+Vec3 evaluateCubicBezier(const FourPoints& control_points, double u) {
+    const double s = 1.0 - u;
+    return s * s * s * control_points.row(0).transpose()
+         + 3.0 * s * s * u * control_points.row(1).transpose()
+         + 3.0 * s * u * u * control_points.row(2).transpose()
+         + u * u * u * control_points.row(3).transpose();
+}
+
+TemporalEgoPosition egoPositionForInterval(
+    const std::vector<double>& knots,
+    int num_control_points,
+    int interval,
+    const FourPoints& control_points,
+    double start_s,
+    double end_s) {
+    const Matrix4 bezier_map = cubicBSplineIntervalBezierMap(
+        knots, num_control_points, interval);
+    const FourPoints bezier = bezier_map * control_points;
+    return [bezier, start_s, end_s](double time_s) {
+        const double u = std::clamp(
+            (time_s - start_s) / (end_s - start_s), 0.0, 1.0);
+        return evaluateCubicBezier(bezier, u);
+    };
+}
+
+std::string candidateIdentity(const FourPoints& control_points, int interval) {
+    std::ostringstream stream;
+    stream << "interval_" << interval << ":cp=" << std::fixed
+           << std::setprecision(6);
+    for (int row = 0; row < control_points.rows(); ++row) {
+        if (row != 0) stream << '|';
+        stream << control_points(row, 0) << ':' << control_points(row, 1)
+               << ':' << control_points(row, 2);
+    }
+    return stream.str();
+}
+
+void annotateTemporalDiagnostics(TemporalRefinementStats* stats,
+                                 const TimeIndexedObstacle& obstacle,
+                                 int interval,
+                                 const FourPoints& control_points,
+                                 const std::string& stage) {
+    if (stats == nullptr) throw std::invalid_argument("null temporal diagnostics");
+    const std::string identity = candidateIdentity(control_points, interval);
+    for (auto& diagnostic : stats->unresolved_leaves) {
+        diagnostic.stage = stage;
+        diagnostic.candidate_identity = identity;
+        diagnostic.primitive_identity = obstacle.name;
+        diagnostic.parent_interval = interval;
+    }
 }
 
 }  // namespace
@@ -189,6 +243,8 @@ void OctopusSearch::validateInputs() const {
     }
     if (!(config_.goal_tolerance_m >= 0.0) || !(config_.max_runtime_s > 0.0) ||
         !(config_.planning_radius_m > 0.0) || !std::isfinite(config_.heuristic_bias) ||
+        config_.temporal_refinement.max_depth < 0 ||
+        config_.temporal_refinement.max_child_tests == 0U ||
         (stop_requested_ && stop_reason_.empty())) {
         throw std::invalid_argument("goal/runtime/radius/bias configuration is invalid");
     }
@@ -204,6 +260,27 @@ void OctopusSearch::validateInputs() const {
                 throw std::invalid_argument("obstacle hulls must have finite shape (N,3), N>=1");
             }
         }
+        if (config_.temporal_refinement.enabled && obstacle.temporal_hull_builder) {
+            if (static_cast<int>(obstacle.interval_start_s.size()) != num_segments_ ||
+                static_cast<int>(obstacle.interval_end_s.size()) != num_segments_) {
+                throw std::invalid_argument(
+                    "temporal obstacle requires one physical time range per spline interval");
+            }
+            for (int interval = 0; interval < num_segments_; ++interval) {
+                const double start_s = obstacle.interval_start_s.at(
+                    static_cast<std::size_t>(interval));
+                const double end_s = obstacle.interval_end_s.at(
+                    static_cast<std::size_t>(interval));
+                if (!std::isfinite(start_s) || !std::isfinite(end_s) || !(end_s > start_s)) {
+                    throw std::invalid_argument("temporal obstacle interval range is invalid");
+                }
+            }
+            for (double breakpoint : obstacle.temporal_breakpoints_s) {
+                if (!std::isfinite(breakpoint)) {
+                    throw std::invalid_argument("temporal obstacle breakpoint is non-finite");
+                }
+            }
+        }
     }
     for (const auto& obstacle : terminal_hold_obstacles_) {
         if (obstacle.name.empty() || obstacle.interval_vertices.empty()) {
@@ -215,6 +292,24 @@ void OctopusSearch::validateInputs() const {
             }
         }
     }
+}
+
+Matrix4 OctopusSearch::temporalMinvoMap(int interval, double start_s, double end_s) {
+    const auto key = std::make_tuple(interval, start_s, end_s);
+    const auto found = temporal_minvo_map_cache_.find(key);
+    if (found != temporal_minvo_map_cache_.end()) {
+        return found->second;
+    }
+    const Matrix4 map = cubicBSplineIntervalMinvoMap(
+        knots_, num_control_points_, interval, num_segments_, start_s, end_s);
+    temporal_minvo_map_cache_.emplace(key, map);
+    return map;
+}
+
+void OctopusSearch::addTemporalStats(const TemporalRefinementStats& stats) {
+    accumulateTemporalRefinementStats(&temporal_refinement_stats_, stats);
+    separator_calls_ += stats.separator_lp_calls;
+    aabb_separation_skips_ += stats.aabb_separation_skips;
 }
 
 Vec3 OctopusSearch::velocityBetween(const Vec3& q_prev,
@@ -483,6 +578,44 @@ bool OctopusSearch::controlHullSeparable(const FourPoints& control_points, int i
     const Vec3 q_upper = q_minvo.colwise().maxCoeff().transpose();
     for (std::size_t obstacle_index = 0; obstacle_index < obstacles_.size(); ++obstacle_index) {
         const auto& obstacle = obstacles_.at(obstacle_index);
+        if (config_.temporal_refinement.enabled && obstacle.temporal_hull_builder) {
+            const double start_s = obstacle.interval_start_s.at(
+                static_cast<std::size_t>(interval));
+            const double end_s = obstacle.interval_end_s.at(
+                static_cast<std::size_t>(interval));
+            const TemporalEgoPosition ego_position = egoPositionForInterval(
+                knots_, num_control_points_, interval, control_points, start_s, end_s);
+            TemporalLeafDiagnosticBuilder diagnostic_builder;
+            if (obstacle.temporal_clearance_builder) {
+                diagnostic_builder = [ego_position, &obstacle](
+                        const TemporalSeparationLeaf& leaf) {
+                    TemporalLeafDiagnostic diagnostic;
+                    diagnostic.equal_time_clearance = obstacle.temporal_clearance_builder(
+                        ego_position, leaf.start_s, leaf.end_s);
+                    return diagnostic;
+                };
+            }
+            auto certificate = certifyAdaptiveTemporalSeparation(
+                start_s, end_s, q_minvo,
+                obstacle.interval_vertices.at(static_cast<std::size_t>(interval)),
+                [this, &control_points, interval](double child_start_s, double child_end_s) {
+                    const Matrix4 map = temporalMinvoMap(
+                        interval, child_start_s, child_end_s);
+                    return Eigen::MatrixXd(map * control_points);
+                },
+                obstacle.temporal_hull_builder,
+                obstacle.temporal_breakpoints_s,
+                config_.temporal_refinement, 1e-7, false,
+                std::move(diagnostic_builder));
+            annotateTemporalDiagnostics(
+                &certificate.stats, obstacle, interval, control_points,
+                "octopus_search_pruning");
+            addTemporalStats(certificate.stats);
+            if (!certificate.certified) {
+                return false;
+            }
+            continue;
+        }
         const auto& aabb = obstacle_aabbs_.at(obstacle_index).at(
             static_cast<std::size_t>(interval));
         bool disjoint = false;
@@ -592,11 +725,81 @@ std::pair<bool, std::vector<IntervalSeparator>> OctopusSearch::finalCheck(
         interval_cp = control_points.middleRows(interval, 4);
         const FourPoints q_minvo = minvoVertices(interval_cp, interval, num_segments_);
         for (const auto& obstacle : obstacles_) {
+            const Matrix4 parent_map = positionConverters(num_segments_).at(
+                static_cast<std::size_t>(interval)).transpose();
+            if (config_.temporal_refinement.enabled && obstacle.temporal_hull_builder) {
+                const double parent_start_s = obstacle.interval_start_s.at(
+                    static_cast<std::size_t>(interval));
+                const double parent_end_s = obstacle.interval_end_s.at(
+                    static_cast<std::size_t>(interval));
+                const TemporalEgoPosition ego_position = egoPositionForInterval(
+                    knots_, num_control_points_, interval, interval_cp,
+                    parent_start_s, parent_end_s);
+                TemporalLeafDiagnosticBuilder diagnostic_builder;
+                if (obstacle.temporal_clearance_builder) {
+                    diagnostic_builder = [ego_position, &obstacle](
+                            const TemporalSeparationLeaf& leaf) {
+                        TemporalLeafDiagnostic diagnostic;
+                        diagnostic.equal_time_clearance = obstacle.temporal_clearance_builder(
+                            ego_position, leaf.start_s, leaf.end_s);
+                        return diagnostic;
+                    };
+                }
+                auto certificate = certifyAdaptiveTemporalSeparation(
+                    parent_start_s, parent_end_s, q_minvo,
+                    obstacle.interval_vertices.at(static_cast<std::size_t>(interval)),
+                    [this, &interval_cp, interval](double child_start_s, double child_end_s) {
+                        const Matrix4 map = temporalMinvoMap(
+                            interval, child_start_s, child_end_s);
+                        return Eigen::MatrixXd(map * interval_cp);
+                    },
+                    obstacle.temporal_hull_builder,
+                    obstacle.temporal_breakpoints_s,
+                    config_.temporal_refinement, 1e-7, true,
+                    std::move(diagnostic_builder));
+                annotateTemporalDiagnostics(
+                    &certificate.stats, obstacle, interval, interval_cp,
+                    "octopus_final_certification");
+                addTemporalStats(certificate.stats);
+                const auto appendLeaf = [&](const TemporalSeparationLeaf& leaf) {
+                    IntervalSeparator item;
+                    item.obstacle_name = obstacle.name;
+                    item.interval_index = interval;
+                    item.result = leaf.separation;
+                    item.time_start_s = leaf.start_s;
+                    item.time_end_s = leaf.end_s;
+                    item.ego_vertex_map =
+                        (std::abs(leaf.start_s - parent_start_s) <= 1e-12 &&
+                         std::abs(leaf.end_s - parent_end_s) <= 1e-12)
+                            ? parent_map
+                            : temporalMinvoMap(interval, leaf.start_s, leaf.end_s);
+                    item.obstacle_vertices = leaf.second_vertices;
+                    separators.push_back(std::move(item));
+                };
+                for (const auto& leaf : certificate.accepted_leaves) {
+                    appendLeaf(leaf);
+                }
+                if (!certificate.certified) {
+                    if (certificate.rejected_leaf.has_value() &&
+                        certificate.rejected_leaf->second_vertices.rows() > 0) {
+                        appendLeaf(*certificate.rejected_leaf);
+                    }
+                    return {false, std::move(separators)};
+                }
+                continue;
+            }
             ++separator_calls_;
             SeparationResult result = separator_.solve(
                 q_minvo,
                 obstacle.interval_vertices.at(static_cast<std::size_t>(interval)));
-            separators.push_back(IntervalSeparator{obstacle.name, interval, result});
+            IntervalSeparator item;
+            item.obstacle_name = obstacle.name;
+            item.interval_index = interval;
+            item.result = result;
+            item.ego_vertex_map = parent_map;
+            item.obstacle_vertices = obstacle.interval_vertices.at(
+                static_cast<std::size_t>(interval));
+            separators.push_back(std::move(item));
             if (!result.feasible) {
                 return {false, std::move(separators)};
             }
@@ -646,6 +849,8 @@ OctopusResult OctopusSearch::search() {
     aabb_separation_skips_ = 0;
     terminal_hold_rejections_ = 0;
     terminal_hold_separator_calls_ = 0;
+    temporal_refinement_stats_ = TemporalRefinementStats{};
+    temporal_minvo_map_cache_.clear();
     separator_ = Separator(1e-7);
 
     OctopusResult result;
@@ -683,6 +888,7 @@ OctopusResult OctopusSearch::search() {
         result.terminal_hold_rejections = terminal_hold_rejections_;
         result.terminal_hold_separator_lp_calls = terminal_hold_separator_calls_;
         result.aabb_separation_skips = aabb_separation_skips_;
+        result.temporal_refinement = temporal_refinement_stats_;
         result.search_time_s = elapsedSeconds();
         return result;
     }
@@ -1061,6 +1267,7 @@ OctopusResult OctopusSearch::search() {
     result.aabb_separation_skips = aabb_separation_skips_;
     result.terminal_hold_rejections = terminal_hold_rejections_;
     result.terminal_hold_separator_lp_calls = terminal_hold_separator_calls_;
+    result.temporal_refinement = temporal_refinement_stats_;
     result.search_time_s = elapsedSeconds();
     return result;
 }

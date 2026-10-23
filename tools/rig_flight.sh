@@ -12,9 +12,11 @@
 # the bag with every topic the read-back needs, and tees the launch output to <name>.log.
 # Ctrl-C stops the launch and then the bag (so its metadata is written). Then tools/rig_summary.py
 # draws figures/<name>_summary.png in the background, ~20 s (RIG_FLIGHT_SUMMARY=0 skips it).
+# Refuses unless ROS_LOCALHOST_ONLY=1 and ROS_DOMAIN_ID are set; mode:=attach refuses while T1 is up; refuses when a
+# fleet manager already answers in this domain, and stops the launch if its own never answers (tools/fleet_reach.py).
 set -uo pipefail
 
-usage() { sed -n '2,14p' "$0"; exit 2; }
+usage() { sed -n '2,15p' "$0"; exit 2; }
 [ $# -ge 2 ] || usage
 if [[ "$1" == *.py ]]; then
   LAUNCH="$1"; F="${!#}"
@@ -34,24 +36,74 @@ base="$F"; k=2
 while [ -e "$D/$F.log" ] || [ -e "$D/$F" ] || [ -e "$D/${F}_logs" ]; do F="${base}_$k"; k=$((k + 1)); done
 [ "$F" != "$base" ] && echo "rig_flight: $base already exists today: this run is $F"
 
-N=4
-for a in "$@"; do case "$a" in num_drones:=*) N="${a#num_drones:=}" ;; esac; done
+N=""; MODE=""; REAL_IO=true; COMBINED=false
+for a in "$@"; do case "$a" in
+  num_drones:=*) N="${a#num_drones:=}" ;; mode:=*) MODE="${a#mode:=}" ;; real_io:=false) REAL_IO=false ;;
+  partner_contact:=true) COMBINED=true ;;
+esac; done
+# mode:=attach counts only the tethered drones (default 3); the newcomer is one more radio
+if [ "$MODE" = attach ]; then N=$(( ${N:-3} + 1 )); else N=${N:-4}; fi
 
+# the planner on the P-cores (card 2026-10-23_scalability): the bringup graphs prefix it with taskset -c <cpus>
+[ -n "${MDC_PLANNER_CPUS:-}" ] && echo "rig_flight: MDC_PLANNER_CPUS=$MDC_PLANNER_CPUS (the planner's CPUs)"
 if [ "${RIG_FLIGHT_DRY_RUN:-0}" = 1 ]; then
   echo "rig_flight: DRY RUN F=$F LAUNCH=$LAUNCH N=$N DIR=$D ARGS=$*"; exit 0
+fi
+# one DDS domain for T1, T2, T3 and RViz, local only (Wesley 8 Oct: everything on this laptop;
+# a laptop elsewhere on the lab network must not reach the fleet). Set both in ~/.bashrc.
+if [ "${ROS_LOCALHOST_ONLY:-0}" != 1 ] || [ -z "${ROS_DOMAIN_ID:-}" ]; then
+  echo "rig_flight: set ROS_LOCALHOST_ONLY=1 and ROS_DOMAIN_ID in ~/.bashrc (one place, so T1, T3 and RViz" >&2
+  echo "            share it), e.g.  export ROS_DOMAIN_ID=23; export ROS_LOCALHOST_ONLY=1  then open new terminals" >&2
+  exit 1
+fi
+# mode:=attach starts its own radios and mocap: a T1 still up would put two writers on every radio
+if [ "$MODE" = attach ] && [ "$REAL_IO" = true ] && pgrep -f "drone_communication/.*elrs_interface|real_io_launch" >/dev/null; then
+  echo "rig_flight: mode:=attach starts its own radios and mocap: stop T1 (rio) first" >&2
+  exit 1
 fi
 mkdir -p "$D"
 { git rev-parse HEAD; git status --short; } > "$D/${F}_code.txt" 2>&1
 
 tools/clean_slate.sh --rig || { echo "rig_flight: clean_slate failed" >&2; exit 1; }
+# critic F2: no fleet manager may answer in this domain before ours starts (a second stack), and ours must answer
+# from this terminal once it starts (else T3, RViz and his terminal would command nothing): refuse otherwise
+python3 tools/fleet_reach.py --absent || { echo "rig_flight: REFUSED (see above)" >&2; exit 1; }
 export MDC_RUN_DIR="$PWD/$D/${F}_logs"
+# lean rclpy (Wesley 14 Oct): no default QoS event handlers in any Python node, -11 % CPU on the desk graph
+# (tools/lean_rclpy/sitecustomize.py, docs/analysis/rig_load_2026-10-14.md). MDC_LEAN_RCLPY=0 turns it off.
+export MDC_LEAN_RCLPY="${MDC_LEAN_RCLPY:-1}" PYTHONPATH="$REPO/tools/lean_rclpy${PYTHONPATH:+:$PYTHONPATH}"
+# the rig's own solver folder (Wesley 22 Oct): twin runs on this laptop rebuild <repo>/generated at the twin's mass;
+# tools/prebuild_rig.sh fills this one at the rig's
+export MDC_ACADOS_ROOT="${MDC_RIG_ACADOS_ROOT:-$HOME/mdc_rig_generated}"
+[ -f "$MDC_ACADOS_ROOT/c_generated_code_load_planner/.build_sig_${N:-3}" ] || echo "rig_flight: WARNING no prebuilt planner for ${N:-3} quads in $MDC_ACADOS_ROOT: it compiles at launch; run tools/prebuild_rig.sh first" >&2
+# card 2026-10-14_tracker_timing: twin first. A stray export of its switches must not reach the rig
+if [ "${RIG_TIMING_SWITCHES:-0}" != 1 ]; then
+  for v in TRACKER_CMD_NEXT_TICK MDC_MOCAP_VEL_FILTER MDC_MOCAP_VEL_FRAMES MDC_MOCAP_VEL_DRONES; do
+    [ -n "${!v:-}" ] && echo "rig_flight: $v=${!v} ignored (twin-only until the card says; RIG_TIMING_SWITCHES=1 keeps it)"
+    unset "$v"
+  done
+fi
 
 topics=(/payload/motion_capture_state /fleet/command /fleet/abort /fleet/status /fleet/landed
-        /fleet/manager_status /rosout)
+        /fleet/manager_status /rosout /fleet/detach /fleet/drop /fleet/payload_dropped
+        /magnet_tip_pose /attach_target/pose /magnet/command /magnet/object_attached
+        /magnet/attachment_state /partner/release /join_planner/handoff_ready)
 for ((i = 0; i < N; i++)); do
   topics+=("/drone_$i/motion_capture_state" "/drone_$i/ELRSCommand" "/drone_$i/telemetry"
-           "/drone_$i/magnet" "/drone_$i/fc_arm_state")
+           "/drone_$i/magnet" "/drone_$i/fc_arm_state" "/drone_$i/mux_state" "/drone_$i/ELRSCommand_diss"
+           "/drone_$i/departed" "/drone_$i/down_alone" "/drone_$i/on_load" "/drone_$i/radio_health"
+           "/drone_$i/fc_attitude" "/drone_$i/magnet_tip_state")   # magnet marker (mocap_extra_bodies; card 2026-10-21_tip_detect)
 done
+# combined M1 contact attach (partner_contact:=true): our check, the coil gate, his mission's side
+if [ "$COMBINED" = true ]; then
+  topics+=(/magnet/contact /magnet/attach_proof /join_planner/phase /join_planner/give_up /join_planner/reference
+           /join_planner/land_now /drone_3/take_back /drone_3/magnet_ours /drone_3/magnet_gate /drone_3/magnet_coil
+           /drone_3/ELRSCommand_tejen /tejen/magnet/command /tejen/object_attached
+           /tejen/magnet_tip_pose /pickup/motion_capture_state /payload/trajectory_state /tejen/drone_command
+           /join_planner/proof_lift_complete /fleet/mocap_summary /fake_attachment_point/twist)
+  # not recorded (14 Oct load cut): /tejen/pendulum_swing_state, /fake_payload/pose, /fake_attachment_point/pose,
+  # 75 + 46 + 46 Hz copies made from our mocap that no tool reads
+fi
 ros2 bag record -o "$D/$F" "${topics[@]}" > "$D/${F}_bag.txt" 2>&1 &
 BAG=$!
 stop_bag() { kill -INT "$BAG" 2>/dev/null; wait "$BAG" 2>/dev/null; echo "rig_flight: bag $D/$F closed"; }
@@ -61,7 +113,40 @@ summary() {
   setsid nohup python3 tools/rig_summary.py "$D/$F" > "$D/${F}_summary.txt" 2>&1 < /dev/null &
   echo "rig_flight: summary in ~20 s -> $D/figures/${F}_summary.png"
 }
-trap 'stop_bag; summary' EXIT
+# every launch gets a line in $D/launches.csv (armed? flew? refused?), so none is missing from the registry later
+launch_line() {
+  local log="$D/$F.log" armed=no flew=no refused=no
+  grep -q "ARM sequence complete" "$log" 2>/dev/null && armed=yes
+  grep -q "TAKEOFF: flying" "$log" 2>/dev/null && flew=yes
+  grep -qE "ARM FAILED|ARM REFUSED" "$log" 2>/dev/null && refused=yes
+  [ -s "$D/launches.csv" ] || echo "time,name,armed,flew,arm_refused,head,launch" > "$D/launches.csv"
+  printf '%s,%s,%s,%s,%s,%s,"%s"\n' "$(date +%H:%M:%S)" "$F" "$armed" "$flew" "$refused" \
+    "$(git rev-parse --short HEAD)" "$LAUNCH $*" >> "$D/launches.csv"
+}
+trap 'stop_bag; launch_line "$@"; summary' EXIT
 
 echo "rig_flight: F=$F  logs $MDC_RUN_DIR  bag $D/$F (${#topics[@]} topics)"
-ros2 launch bringup "$LAUNCH" "$@" 2>&1 | tee "$D/$F.log"
+SHELL_PID=$$
+( sleep 3
+  if python3 tools/fleet_reach.py --wait 120 >/dev/null; then
+    echo "rig_flight: the fleet manager answers in this domain ($ROS_DOMAIN_ID, localhost only)"
+  else
+    echo "rig_flight: REFUSED: the fleet manager never answered from this terminal in 120 s: stopping the launch" >&2
+    pkill -INT -P "$SHELL_PID" -f "ros2 launch bringup" || true
+  fi ) &
+# T2 shows the events only (plan 2026-10-14 WP2: ~3000 lines a minute on 14 Oct); $D/$F.log keeps everything.
+# RIG_FLIGHT_VERBOSE=1 shows it all, as before.
+EVENTS='process has died|Traceback|\[(WARN|ERROR|FATAL)\]|rig_flight:|COMBINED M1|Fleet manager up|ARM sequence|ARM FAILED|'\
+'ARM REFUSED|arm \(/dev/QUAD|TAKEOFF|LAND|Landed|pretension done|hover hold done|our planner flies the ring|'\
+'Planner phase:|ring magnet span|coil (ON|OFF)|OURS from now|his puck|CONTACT|PROOF|ATTACH|mux:|giving up|give-up|'\
+'TAKE-BACK|RELEASE GUARD|survivors down|is down|disarmed|EMERGENCY STOP|FLEET ABORT|Pose timeout|ENVELOPE|DROPPED|'\
+'UNANNOUNCED DETACH|bottom hold|quiet miss|MPC profile|proof_rules=|Serial connection lost|not available|CIRCLE'
+NOISE='Still waiting for magnetic attachment|tracker not answering|/magnet/contact False|takeoff_requested'
+if [ "${RIG_FLIGHT_VERBOSE:-0}" = 1 ]; then
+  ros2 launch bringup "$LAUNCH" "$@" 2>&1 | tee "$D/$F.log"
+else
+  echo "rig_flight: T2 shows events only (full output: $D/$F.log; RIG_FLIGHT_VERBOSE=1 for everything)"
+  # tee -p: the log keeps everything even if the screen filter ends first
+  ros2 launch bringup "$LAUNCH" "$@" 2>&1 | tee -p "$D/$F.log" \
+    | grep --line-buffered -E "$EVENTS" | grep --line-buffered -vE "$NOISE"
+fi

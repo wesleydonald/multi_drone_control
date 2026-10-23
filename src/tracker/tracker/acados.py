@@ -303,7 +303,7 @@ def set_planner_reference(ocp_solver, ref_pos: np.ndarray, ref_vel: np.ndarray,
     heading is the yaw (rad) the drone should hold; see _tilt_quat_from_accel.
 
     terminal_vel_ref selects what the TERMINAL cost asks of velocity -- this is
-    experiment T1 in general/THESIS_PLAN.md, and it defaults to the historical
+    experiment T1 in docs/archive/thesis_plan_v2_2026-09.md, and it defaults to the historical
     behaviour so nothing changes until it has been measured.
 
       False (default, historical): yref_N[3:6] stays ZERO. Every stage cost tracks

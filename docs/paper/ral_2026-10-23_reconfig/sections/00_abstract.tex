@@ -1,0 +1,21 @@
+\begin{abstract}
+Teams of quadrotors carrying a cable-suspended payload usually keep a fixed composition. We show
+that model predictive control lets such a team drop and re-add carriers in flight. A planner solves an
+optimal control problem over a 0.86\,kg ring; because the attachment geometry is a runtime
+parameter, a change of team is a switch to a pre-built problem of the new size, warm-started from the measured state.
+Three reconfigurations are handled: an unannounced release, detected from motion capture;
+a departed carrier's rejoin; and the attach of a newcomer, admitted after magnet contact and a
+motion-capture proof of co-motion. On a motion-capture rig an unannounced release is detected in 0.42\,s and the
+ring's tilt peaks at 6.5$^\circ$, back within its band 1.8\,s later. In a digital twin of the rig, the tilt
+after a release grows steeply with the largest gap the survivors leave, a 165$^\circ$ gap crossing the 30$^\circ$ drop
+line on 1\,m cables, and feeding the trackers the measured cable pull rather than the planned one cuts the tilt rise
+to about two thirds. In the twin, folding a newcomer in at its measured catch point tolerates catch-point errors up to
+16\,cm radially and 6\,cm along the rim, and a departed carrier rejoins its own plate in 10 of 11 runs within a
+5$^\circ$ tilt bar. Offline, the solver iterations needed per tick grow with fleet size, from two up to four carriers
+to five at eight.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Aerial systems: mechanics and control, multi-robot systems, cooperative manipulation, model predictive control,
+cable-suspended payload.
+\end{IEEEkeywords}

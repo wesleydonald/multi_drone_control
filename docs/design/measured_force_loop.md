@@ -1,6 +1,6 @@
 # Measured-force throttle (INDI-lite) and the settle dwell — branch `measured-force-velocity-loop`
 
-Survey and rationale: `docs/experimentation/control_methods_survey.md` (R1, R4). Run
+Survey and rationale: `docs/archive/experimentation/control_methods_survey.md` (R1, R4). Run
 evidence: `CURRENT_STATE.md` §4.4.
 
 ## 1. The law (`controller_quad_load/velocity_loop.py`, `indi_gain > 0`)

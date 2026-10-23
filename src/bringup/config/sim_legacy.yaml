@@ -23,6 +23,7 @@ height_hold:
   z_i_gate: ''
 trajectory:
   traj_speed: 0.6
+  fig8_size: ''               # the figure-8 sized by traj_radius, as before 22 Oct
 tracker:
   cable_source: 'model'
   cable_accel_cap: 6.0
@@ -35,7 +36,14 @@ thrust_map:
   kt_trim: true
 fleet_resize:
   detach_step_out_m: ''       # off, as before 7 Oct, so legacy runs reproduce
+  detach_detect_m: ''         # off, as before 7 Oct
+  departed_land: ''           # off, as before 7 Oct
+  departed_ground_idle: ''
+  drop_on_loss: ''            # off, as before 8 Oct
   reconfig_mode: 'network'
+attach:
+  newcomer_lifecycle: false   # off, as before 9 Oct
+  newcomer_fault_land: false
 network:
   auto_network_handover: true
 sim_interface:
@@ -65,7 +73,7 @@ modes:
     num_drones: 3
   attach:
     num_drones: 3
-    attach_azimuths_deg: '330,90,210'
+    attach_azimuths_deg: '30,270,150'      # clockwise (typed since 15 Oct): the old_worlds' 330/90/210 counter-clockwise
     start_taut: true
     handover_settle_s: 0.75
     creep_vel: 0.10

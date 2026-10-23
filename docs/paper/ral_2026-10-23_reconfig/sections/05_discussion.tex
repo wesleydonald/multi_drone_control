@@ -1,0 +1,59 @@
+% 05_discussion.tex -- discussion and conclusion, draft 23 Oct 2026.
+\section{Discussion}
+\label{sec:discussion}
+
+\paragraph{Rigid links in the twin, slack tethers on the rig}
+The twin models every cable as a rigid link, which can push as well as pull and welds wherever its end lies. This
+flatters the rejoin and also creates its own failure: on a T, the rejoiner's rigid link set the ring's pitch, so a
+rising height reference lifted the ring's free side, and the height hold that cured it is a patch for the twin's
+links. On the rig the tethers go slack, so that lift cannot arise, but the attach is harder: the magnet catches only on
+contact, which is why the rig's attach is confirmed from motion capture before the newcomer is folded in. The rig's
+release reaction was measured on the rig itself; the twin's release on 1\,m cables gave a similar tilt peak but a
+slower return to band, and the rig flew 0.55\,m rods, so the two are not a like-for-like validation.
+
+\paragraph{Timing}
+Every reconfiguration in Section~\ref{sec:results} is paced by detection and blending rather than by the solver: a
+lost carrier is seen from its cable's stretch in 0.33--0.42\,s and the problem is resized within about 0.1\,s more,
+and a rejoin's fold-in is blended over 10\,s. The solver sets the size of the team instead. At four carriers one SQP
+iteration per tick flies as well as five in the twin's closed loop, but its plans are not converged on the rig's
+flights, and at eight carriers only five iterations pass every bar (Section~\ref{sec:res_scale}). The eight-carrier
+chain ran slower than real time, so it shows that the plan and the physics compose, not that the rig's laptop can fly
+it.
+
+\paragraph{Geometry sets how hard a release hits}
+The release transient is set less by the controller than by the team that remains. The ring's tilt after a release
+grows steeply with the largest gap the survivors leave around the rim, and on 1\,m cables a 165$^\circ$ gap already
+crosses the 30$^\circ$ drop line (Section~\ref{sec:res_release_gap}). The planner can shorten the transient, most of
+all when it plans from the measured cable pull rather than the planned one, but it cannot remove the torque that an
+uneven ring of survivors applies. A team that must shed carriers should therefore leave in an order that keeps the
+survivors' gaps small, and a drop rule written in terms of that gap, rather than of the number of carriers left,
+states what the ring can bear. On the attach side, folding in at the measured catch point makes the twin's fold-in
+tolerant of catch-point error, 16\,cm radially and 6\,cm along the rim (Section~\ref{sec:res_attach_offset}); past
+about 2.5\,cm this is tolerance to model error, not a catch a real magnet could make.
+
+\paragraph{Limitations}
+The rig results cover the release only, three runs on 0.55\,m rods; the rejoin, the attach-offset sweep, the gap
+sweep and the eight-carrier chain are twin results, two runs a cell or fewer, on rigid links that weld wherever the
+end lies. No reconfiguration is compared with a baseline that does not resize the problem. The eight-carrier chain ran
+slower than real time at one iteration a tick, below the five that the offline check asks for at that size, and
+along the rim the measured catch point's advantage over the slot assumed is not shown.
+
+\paragraph{Next on the rig}
+The next rig flights test the attach of a newcomer on 1\,m cables, three carriers to four with a basket, with the
+attach confirmed by motion capture before the fold-in; the four-carrier hover and paths on 1\,m cables; and the
+planner's tick in flight with the speed-ups, which sets the real-time limit. The rejoin of a departed carrier, which
+in the twin depends on the joint's weld, waits for a rig attach that has been shown repeatable.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented a planner that lets a team of quadrotors carry a cable-suspended ring through changes of its own
+membership in flight. On the rig, an unannounced release of one of four carriers was detected in 0.42\,s, the team
+was resized 0.09\,s later, and the ring tilted at most 6.5$^\circ$ before returning to its band in 1.8\,s. In the twin,
+a departed carrier flew back to its own plate, welded within 1.5\,cm and was folded in with the ring tilting
+1.3--3.4$^\circ$ in 10 of 11 runs, and in one exploratory run eight carriers took a larger ring down to four and back with a tilt peak of 3.35$^\circ$. In offline
+replays of nine flights, two SQP iterations per tick converge for every team of up to four, and the iterations needed grow with the size of the team
+(Section~\ref{sec:res_scale}). How hard a release hits is set by the survivors' geometry, the largest gap they leave,
+and folding a newcomer in at its measured catch point tolerates large errors in that point. The rig attach of a newcomer on 1\,m cables is the
+next step \placeholder{result from 29 Oct}, together with the real-time limit of the planner's tick on the rig
+\placeholder{real-time limit}.

@@ -1,0 +1,41 @@
+threshold m,run,drone,release,fire - release (ms)
+0.02,r0013,/drone_1,uncommanded,155
+0.02,r200006,/drone_1,uncommanded,169
+0.02,r303_4,/drone_3,operator OFF,410
+0.02,r304_3,/drone_3,operator OFF,332
+0.02,r305,/drone_3,operator OFF,337
+0.03,r0013,/drone_1,uncommanded,155
+0.03,r200006,/drone_1,uncommanded,169
+0.03,r303_4,/drone_3,operator OFF,410
+0.03,r304_3,/drone_3,operator OFF,332
+0.03,r305,/drone_3,operator OFF,337
+0.04,r0013,/drone_1,uncommanded,155
+0.04,r200006,/drone_1,uncommanded,169
+0.04,r303_4,/drone_3,operator OFF,410
+0.04,r304_3,/drone_3,operator OFF,332
+0.04,r305,/drone_3,operator OFF,337
+0.05,r0013,/drone_1,uncommanded,155
+0.05,r200006,/drone_1,uncommanded,278
+0.05,r303_4,/drone_3,operator OFF,410
+0.05,r304_3,/drone_3,operator OFF,332
+0.05,r305,/drone_3,operator OFF,337
+0.06,r0013,/drone_1,uncommanded,155
+0.06,r200006,/drone_1,uncommanded,278
+0.06,r303_4,/drone_3,operator OFF,410
+0.06,r304_3,/drone_3,operator OFF,332
+0.06,r305,/drone_3,operator OFF,337
+0.08,r0013,/drone_1,uncommanded,275
+0.08,r200006,/drone_1,uncommanded,278
+0.08,r303_4,/drone_3,operator OFF,545
+0.08,r304_3,/drone_3,operator OFF,332
+0.08,r305,/drone_3,operator OFF,476
+0.10,r0013,/drone_1,uncommanded,275
+0.10,r200006,/drone_1,uncommanded,278
+0.10,r303_4,/drone_3,operator OFF,545
+0.10,r304_3,/drone_3,operator OFF,454
+0.10,r305,/drone_3,operator OFF,476
+0.12,r0013,/drone_1,uncommanded,275
+0.12,r200006,/drone_1,uncommanded,278
+0.12,r303_4,/drone_3,operator OFF,545
+0.12,r304_3,/drone_3,operator OFF,454
+0.12,r305,/drone_3,operator OFF,476

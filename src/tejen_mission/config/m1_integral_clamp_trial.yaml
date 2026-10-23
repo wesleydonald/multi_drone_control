@@ -1,0 +1,8 @@
+# Opt-in Oct-8 recorded-state comparison candidate; FLIGHT UNVERIFIED.
+# Load after irl_commissioning.yaml for the M1 ground-ring controller only.
+# The baseline remains 0.30 m*s. Weights, command bounds, tracking tubes and
+# collision/fallback policy are unchanged. This is not disturbance compensation.
+tejen_mpc:
+  ros__parameters:
+    xy_bias_mode: legacy_integral
+    xy_integral_limit: 0.45

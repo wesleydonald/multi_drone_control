@@ -106,3 +106,23 @@ def test_detach_events_and_the_operators_release(tmp_path):
     magnet[0] += [(T0 + 40.02, 'OFF')]                       # the drop's
     rel = rig_to_run.releases(magnet, str(t2), evs)
     assert [(round(t - T0, 2), e, a) for t, e, a in rel] == [(30.0, 'RELEASE', 'drone 2 (/drone_1)')]
+
+
+def test_a_drone_disarmed_alone_does_not_cut_the_flight(tmp_path):
+    # w4/w5: the freed drone is disarmed alone and its tracker log stops ~8 s after the release; the
+    # flight (and LANDED) goes on in the others' logs
+    trk = [str(tmp_path / f'planner_drone{i}') for i in range(3)]
+    for i, p in enumerate(trk):
+        _tracker(p, i, T0 + np.arange(0, 4.0 if i == 1 else 10.0, 0.02))
+    t2 = tmp_path / 't2.log'
+    t2.write_text(f"[main-1] [INFO] [{T0 + 9.0:.6f}] [fleet_manager]: Landed - disarming the fleet.\n")
+    import rig_to_run
+    man, n, ne = rig_to_run.convert(trk, str(tmp_path / 'run'), t2_log=str(t2))
+    d = pd.read_csv(tmp_path / 'run' / 'logs' / 'run.csv')
+    assert abs(d.t.iloc[-1] - 9.98) < 0.05 and man['duration_s'] > 9.9
+    early, late = d[d.t < 3.9], d[d.t > 4.1]
+    assert np.allclose(early.d1_thr, 0.46) and early.d1_x.notna().all()
+    assert late.d1_thr.isna().all() and late.d1_x.isna().all() and late.d1_ref_z.isna().all()
+    assert np.allclose(late.d0_thr, 0.45) and (late.d2_x == 2.0).all()
+    ev = pd.read_csv(tmp_path / 'run' / 'logs' / 'events.csv')
+    assert list(ev.event) == ['LANDED']

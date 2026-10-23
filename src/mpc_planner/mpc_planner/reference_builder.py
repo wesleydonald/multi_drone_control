@@ -124,6 +124,12 @@ class ReferenceBuilder:
         self.balanced_blend = False   # re-solve the incumbents' tensions along the slew
         # estimated constant external force on the load (N, world), 0 unless applied
         self.d_L = np.zeros(3)
+        # cable angular-rate reference: False = zero (the compiled behaviour); True = the rate the flatness
+        # directions turn at, s x ds/dt between nodes (card 2026-10-16_corner_cutting)
+        self.rate_ff = False
+        # s the trajectory reference is evaluated behind the planner's clock: 0 = the one-tick lead the clock has had
+        # (it steps before the solve, which offsets the trackers' plan age); 0.1 cancels it, for ref_time_shift
+        self.ref_lag_s = 0.0
 
     def start_blend(self, s_from, t_from, blend_s):
         """Slew the cable references from (s_from, t_from) -- per slot, s in the same
@@ -201,17 +207,33 @@ class ReferenceBuilder:
         # time so the whole 2 s window tracks the moving load, not just node 0. Gated
         # on traj_t > 0 (set once the lift tops out) so nothing drifts during the
         # climb; the trajectories start from rest so the first active cycle is smooth.
-        dx = dy = vx = vy = ax = ay = 0.0
-        yaw = yaw_rate = 0.0
+        dx = dy = vx = vy = yaw_rate = 0.0
         if self.traj_t > 0.0:
-            t_k = self.traj_t + self.dt * k
+            t_k = self.traj_t + self.dt * k - self.ref_lag_s
             dx, dy, vx, vy = self.traj.offset_at(t_k)
-            ax, ay = self.traj.accel_at(t_k)
-            yaw, yaw_rate = self.traj.yaw_at(t_k)           # 'spin' only, else 0
+            _, yaw_rate = self.traj.yaw_at(t_k)             # 'spin' / 'line_spin' only, else 0
         # p, v, e_att, w. The load yaw REFERENCE goes on the q_ref parameter (set per
         # node in _plan), so e_att stays 0 here; the yaw RATE is the load angular
         # velocity ref (world z), which drives the OCP to actually rotate the load.
         pose = [x0 + dx, y0 + dy, z_k, vx, vy, vz_k, 0, 0, 0, 0, 0, yaw_rate]
+        s_ref, t_ref = self._cable_refs(k)
+        r_ref = [0.0] * (3 * self.n)
+        if self.rate_ff and self.traj_t > 0.0:
+            # s_dot = r x s, so the rate across the rod is s x s_dot; the next node's directions give s_dot
+            s_next, _ = self._cable_refs(k + 1)
+            r_ref = np.concatenate([np.cross(s0, (s1 - s0) / self.dt) for s0, s1 in zip(s_ref, s_next)]).tolist()
+        return np.array(pose + np.concatenate(s_ref).tolist()   # cable directions (flatness)
+                        + t_ref                   # cable tensions (flatness), layout-balanced
+                        + r_ref                   # cable angular rates (0: no swing, or the flatness rate)
+                        + [0.0] * self.dyn.nu)
+
+    def _cable_refs(self, k):
+        """Stage-k flatness cable directions (n arrays) and tensions (list)."""
+        ax = ay = yaw = 0.0
+        if self.traj_t > 0.0:
+            t_k = self.traj_t + self.dt * k - self.ref_lag_s
+            ax, ay = self.traj.accel_at(t_k)
+            yaw, _ = self.traj.yaw_at(t_k)
         # Flatness cable references. A load accelerating at a_load must have its cables
         # counter an EFFECTIVE gravity g_eff = g - a_load: the formation tilts toward
         # g_eff and the tension scales with |g_eff|. Feeding this anticipates the
@@ -224,38 +246,38 @@ class ReferenceBuilder:
         R_tilt = rot_align(np.array([0.0, 0.0, -1.0]), g_eff)
         # The attach points rotate with the load yaw, so the nominal cable directions
         # rotate with it too (about world z): yaw the formation, then tilt onto g_eff.
-        # The yaw is the latched placement datum psi0 plus, for 'spin', the commanded
+        # The yaw is the latched placement datum psi0 plus, for 'spin' / 'line_spin', the commanded
         # load rotation (0 for every other trajectory).
         R_form = R_tilt @ rot_z(self.psi0 + yaw)
         s_k, t_k = self._refs_at(k)
-        s_ref = []
-        for i in range(self.n):
-            s_ref.extend((R_form @ s_k[i]).tolist())
-        t_ref = [ti * g_eff_mag / self.dyn.g for ti in t_k]
-        return np.array(pose + s_ref              # cable directions (flatness)
-                        + t_ref                   # cable tensions (flatness), layout-balanced
-                        + [0.0] * (3 * self.n)    # r_vec ref (no cable swing)
-                        + [0.0] * self.dyn.nu)
+        return ([R_form @ np.asarray(s_k[i], float) for i in range(self.n)],
+                [ti * g_eff_mag / self.dyn.g for ti in t_k])
 
     def q_ref_at(self, k):
         """Stage-k load attitude reference (the q_ref acados parameter): hold the yaw
-        the rig was placed at (psi0). For 'spin' the commanded load rotation is added
+        the rig was placed at (psi0). For 'spin' / 'line_spin' the commanded load rotation is added
         on top, tracking the load yaw along the horizon so the OCP holds the rotating
         attitude while the yaw-rate term in yref_at drives the rotation."""
+        return yaw_quat(self.yaw_ref_at(k))
+
+    def yaw_ref_at(self, k):
+        """Stage-k load yaw reference (rad, not wrapped): the datum psi0 plus the commanded rotation."""
         yaw = 0.0
         if self.traj_t > 0.0:
-            yaw, _ = self.traj.yaw_at(self.traj_t + self.dt * k)
-        return yaw_quat(self.psi0 + yaw)
+            yaw, _ = self.traj.yaw_at(self.traj_t + self.dt * k - self.ref_lag_s)
+        return self.psi0 + yaw
 
     def hold_yref(self, load_state):
         """Static hold reference for priming: keep the load at its current measured
         position with zero twist, cables at the nominal 45 deg taut directions (about
-        the placement yaw datum, as in yref_at) and nominal tension. Same field layout
-        as yref_at."""
+        the placement yaw datum plus the trajectory's turned yaw, as in yref_at: line_spin
+        ends turned, so a datum-only hold would swing the formation back) and nominal
+        tension. Same field layout as yref_at."""
         p = load_state[0:3]
         pose = [float(p[0]), float(p[1]), float(p[2]),
                 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        R_yaw = rot_z(self.psi0)
+        yaw = self.traj.yaw_at(self.traj_t)[0] if self.traj_t > 0.0 else 0.0
+        R_yaw = rot_z(self.psi0 + yaw)
         s_0, t_0 = self._refs_at(0)
         s_ref = []
         for i in range(self.n):

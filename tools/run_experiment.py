@@ -7,6 +7,7 @@ One command runs a Gazebo experiment and writes a self-describing result directo
     ./tools/run_experiment.py configs/experiments/attach_ring_45_gz.yaml
     ./tools/run_experiment.py configs/experiments/attach_ring_45_gz.yaml --repeats 5
     ./tools/run_experiment.py <cfg> --gui        # watch it, for debugging only
+    ./tools/run_experiment.py <cfg> --record     # + an mp4 per camera, rendered after the run
 
 Requirements, each earned by a past failure (§9.1):
 
@@ -30,6 +31,7 @@ That bench replaces Gazebo with a numpy plant to iterate in seconds; this one is
 real simulator and is what a bench result must eventually be checked against.
 """
 import argparse
+import contextlib
 import csv
 import math
 import os
@@ -46,7 +48,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
-from experiment.config import ExperimentConfig            # noqa: E402
+from experiment.config import ExperimentConfig, params_file_path  # noqa: E402
 from run_dir import allocate, file_sha256, write_manifest  # noqa: E402
 
 
@@ -83,6 +85,12 @@ def start_gazebo(cfg, log_path, gui=False, nice=10):
         world = os.path.join(REPO, 'simulation_assets', world)
     if not os.path.exists(world):
         raise SystemExit(f'world not found: {world}')
+    rec = getattr(cfg, 'record', None)
+    if rec:
+        # the world with the camera models and no Sensors system: nothing renders during the run
+        from experiment.record import write_recording_world
+        world = write_recording_world(world, os.path.join(
+            os.path.dirname(os.path.dirname(log_path)), 'record', os.path.basename(world)), rec)
     cmd = ['gz', 'sim', '-r', '-v', '2', world] if gui else \
           ['gz', 'sim', '-s', '-r', '-v', '2', world]
     # Gazebo below the controllers in scheduling priority: a 12-core box sat at load
@@ -90,11 +98,12 @@ def start_gazebo(cfg, log_path, gui=False, nice=10):
     # 0.3-0.7 s WALL (never in SIL, which has no Gazebo), tripping the trackers'
     # 1 s wall-clock reference watchdog (R0169, R0225). Slowing the physics costs
     # only wall time; starving a controller costs the run.
-    if getattr(cfg, 'gz_record', False):
+    if getattr(cfg, 'gz_record', False) or rec:
         # a recording plays back at real speed in the GUI (`gz sim --playback <dir>`),
         # so a headless ~0.25x run can be watched without waiting for it
-        rec = os.path.join(os.path.dirname(os.path.dirname(log_path)), 'gz_record')
-        cmd = cmd[:-1] + ['--record-path', rec, cmd[-1]]
+        path = os.path.join(os.path.dirname(os.path.dirname(log_path)), 'gz_record')
+        period = ['--record-period', f'{rec["period_s"]:g}'] if rec else []
+        cmd = cmd[:-1] + ['--record-path', path, *period, cmd[-1]]
     if nice and not gui:
         cmd = ['nice', '-n', str(int(nice))] + cmd
     fh = open(log_path, 'w')
@@ -187,7 +196,7 @@ def undeclared_launch_args(cfg):
 
 def launch_cwd():
     """Working directory of the launches: the planner generates its solver relative to it
-    (planner_solver CODE_DIR), so parallel lab slots set MDC_LAUNCH_CWD to their own dir."""
+    (the solvers themselves follow MDC_ACADOS_ROOT), so parallel lab slots set MDC_LAUNCH_CWD to their own dir."""
     return os.environ.get('MDC_LAUNCH_CWD') or REPO
 
 
@@ -453,18 +462,65 @@ def tethered_checks(c, teth):
     return out
 
 
-def evaluate(cfg, rows, t_weld, aborts, tethered=None):
+def evaluate(cfg, rows, t_weld, aborts, tethered=None, events=None):
     """Apply cfg.criteria. Returns (ok, [(name, ok, detail)]). With criteria.report_only
     every check is still listed but ok is True."""
     c = cfg.criteria
     if c is None:
         return True, [('(no criteria — exploratory run)', True, '')]
     ok, out = _evaluate(cfg, c, rows, t_weld, aborts)
+    out += tilt_cut_checks(cfg, c, rows, events or [])
     out += tethered_checks(c, tethered)
     ok = ok and all(o[1] for o in out)
     if c.report_only:
         return True, [(f'{n} (report only)', g, d) for n, g, d in out]
     return ok, out
+
+
+MOCAP_TILT_MARGIN_S = 0.5      # s after a MOCAP_TILT's window still excluded (the emulator's last fake pose)
+ARMED_TILT_ROWS = 3            # consecutive run.csv rows (0.02 s) above the bar
+
+
+def tilt_cut_checks(cfg, c, rows, events):
+    """max_armed_tilt_deg and disarmed_after_landed_s (card 2026-10-11_quad4_tilt_cut). events: (t, name, arg)."""
+    out = []
+    if not rows or (c.max_armed_tilt_deg is None and c.disarmed_after_landed_s is None):
+        return out
+    from experiment.config import mocap_tilt_arg
+    t = np.array([r['t'] for r in rows], float)
+    if c.max_armed_tilt_deg is not None:
+        fake = {}
+        for te, name, arg in events:
+            if name == 'MOCAP_TILT':
+                d, _, secs, ramp = mocap_tilt_arg(arg)
+                fake.setdefault(d, []).append((float(te), float(te) + ramp + secs + MOCAP_TILT_MARGIN_S))
+        worst = None
+        for i in range(cfg.n_total):
+            tilt = np.array([r.get(f'd{i}_tilt_deg', math.nan) for r in rows], float)
+            armed = np.array([r.get(f'd{i}_armed', 0) for r in rows], float) > 0
+            over = armed & (tilt > c.max_armed_tilt_deg)
+            for a, b in fake.get(i, []):
+                over &= ~((t >= a) & (t <= b))
+            run = 0
+            for k in np.flatnonzero(over) if over.any() else []:
+                run = run + 1 if k > 0 and over[k - 1] else 1
+                if run >= ARMED_TILT_ROWS and worst is None:
+                    worst = (i, float(t[k]), float(tilt[k]))
+        out.append(('no armed drone over the tilt bar', worst is None,
+                    'none' if worst is None else
+                    f'drone {worst[0] + 1} armed at {worst[2]:.1f} deg at t={worst[1]:.1f}s '
+                    f'(>{c.max_armed_tilt_deg:.0f})'))
+    if c.disarmed_after_landed_s is not None:
+        landed = [float(te) for te, name, _ in events if name == 'LANDED']
+        if not landed:
+            out.append(('every drone disarmed after LANDED', True, 'no LANDED (not asserted)'))
+        else:
+            late = [r for r, tk in zip(rows, t) if tk > landed[0] + float(c.disarmed_after_landed_s)]
+            armed = [i + 1 for i in range(cfg.n_total) if any(r.get(f'd{i}_armed', 0) for r in late)]
+            out.append(('every drone disarmed after LANDED', not armed,
+                        f'still armed {c.disarmed_after_landed_s:g} s after LANDED: drone(s) {armed}' if armed
+                        else 'all disarmed' if late else 'the run ended first (not asserted)'))
+    return out
 
 
 def _evaluate(cfg, c, rows, t_weld, aborts):
@@ -560,6 +616,39 @@ def write_metrics_and_plots(run_dir):
     return finish_run(run_dir)
 
 
+# ── video (experiment/record.py) ─────────────────────────────────────────────
+
+def write_record_spec(run_dir, spec, **run_times):
+    """<run>/record.json: what tools/render_video.py needs (cameras, fps; t_ready_sim is run t = 0)."""
+    import json
+    from experiment.record import TOPIC_PREFIX
+    with open(os.path.join(run_dir, 'record.json'), 'w') as fh:
+        json.dump(dict(spec, topic_prefix=TOPIC_PREFIX, **run_times), fh, indent=1)
+
+
+def render_video(run_dir):
+    """Render the run's cameras now (the stack is down). A failed render never fails the run:
+    `tools/render_video.py <run_dir>` repeats it."""
+    import json
+    print('\n    rendering the video (tools/render_video.py)...', flush=True)
+    os.makedirs(os.path.join(run_dir, 'video'), exist_ok=True)
+    with open(os.path.join(run_dir, 'video', 'render.log'), 'w') as fh:
+        r = subprocess.run([sys.executable, os.path.join(HERE, 'render_video.py'), run_dir],
+                           stdout=fh, stderr=subprocess.STDOUT)
+    try:
+        with open(os.path.join(run_dir, 'video', 'render.json')) as fh:
+            out = json.load(fh)
+    except (OSError, ValueError):
+        out = {'cameras': {}}
+    out['exit'] = r.returncode
+    for name, c in out['cameras'].items():
+        print(f'    [{"OK" if c["ok"] else "FAIL"}] video {name}: {c["file"]} ({c["frames"]}/'
+              f'{c["expected"]} frames, {c["repeated"]} repeated)')
+    if r.returncode:
+        print(f'    !! render failed (exit {r.returncode}); see {run_dir}/video/render.log')
+    return out
+
+
 # ── one run ──────────────────────────────────────────────────────────────────
 
 def preallocated(run_dir):
@@ -573,6 +662,25 @@ def preallocated(run_dir):
     for sub in ('logs', 'plots', 'params'):
         os.makedirs(os.path.join(run_dir, sub), exist_ok=True)
     return run_dir, m.group(1)
+
+
+@contextlib.contextmanager
+def config_env(env):
+    """The config's lab_env in os.environ for the run (every launched process copies it), then the shell's back.
+    The config wins over a stray export: a run must fly what its config says."""
+    old = {k: os.environ.get(k) for k in env}
+    for k, v in env.items():
+        if old[k] is not None and old[k] != v:
+            print(f'    lab_env {k}={v} (the shell had {old[k]})')
+        os.environ[k] = v
+    try:
+        yield
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_state=None):
@@ -595,7 +703,7 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
                    scenario_sha256=file_sha256(cfg_path),
                    world=cfg.world, launch_file=cfg.launch_file,
                    launch_args=cfg.control_args(), repeat=repeat,
-                   rate_source=rate_source(cfg),
+                   rate_source=rate_source(cfg), lab_env=dict(getattr(cfg, 'env', {}) or {}),
                    headless=not gui, status='starting')
     if git_state:
         # the tree was synced from the laptop without .git: its SHA and diff are the provenance
@@ -607,6 +715,9 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
             gs['git_diff_file'] = 'git_diff.patch'
         write_manifest(run_dir, **gs)
 
+    if cfg.record:
+        write_record_spec(run_dir, cfg.record)
+        write_manifest(run_dir, record=cfg.record)
     clean_out = clean_slate()
     with open(os.path.join(run_dir, 'logs', 'clean_slate.log'), 'w') as fh:
         fh.write(clean_out)
@@ -806,7 +917,7 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
             teth = M.tethered_run_metrics(run_dir, hold_window_s=c.hold_window_s)
     except Exception as e:                              # noqa: BLE001
         teth = {'error': f'{type(e).__name__}: {e}'}
-    ok, checks = evaluate(cfg, rows, t_weld, aborts, teth)
+    ok, checks = evaluate(cfg, rows, t_weld, aborts, teth, events=events)
     grounded = (mtr or {}).get('fleet_grounded') if isinstance(mtr, dict) else None
     if grounded:
         # a refused TAKEOFF looks like "never lifted" in the numbers (R0749): VOID, re-fly
@@ -832,6 +943,11 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
                    checks=[{'check': n, 'passed': bool(g), 'detail': d}
                            for n, g, d in checks],
                    metrics=mtr)
+    if cfg.record:
+        write_record_spec(run_dir, cfg.record, t_ready_sim=getattr(node, 't_ready', None),
+                          t_last_row=rows[-1]['t'] if rows else None)
+        if cfg.record['render']:
+            write_manifest(run_dir, video=render_video(run_dir))
     return {'run_dir': run_dir, 'run_id': rid, 'ok': bool(ok),
             'duration_s': dur, 'failures': failures,
             'stopped_early': bool(node is not None and node.stop_reason)}
@@ -841,11 +957,16 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
 
 def checked_config(path):
     """Load a config and refuse it before anything starts: world present, masses agree with
-    the world (unless mis_seed), IMU world for rate_source imu, every launch arg declared."""
+    the world (unless mis_seed), IMU world for rate_source imu, every launch arg declared, a typed
+    params_file present."""
     cfg = ExperimentConfig.from_yaml(path)
     wpath = cfg.world if os.path.isabs(cfg.world) else os.path.join(REPO, 'simulation_assets', cfg.world)
     if not os.path.exists(wpath):
         raise SystemExit(f'{path}: world not found: {wpath}')
+    for sec, args in (('launch', cfg.launch_args), ('io_launch', cfg.io_launch_args)):
+        typed = args.get('params_file')
+        if typed not in (None, '') and params_file_path(typed) is None:
+            raise SystemExit(f'{path}: {sec} params_file not found: {typed}')
     # A launch told a different mass than the world flies mis-sized tension on every
     # drone (35 configs silently did after the 0.86 kg ring landed, 2026-09-23).
     # Robustness arms declare `mis_seed: true`; everything else must agree.
@@ -864,9 +985,41 @@ def checked_config(path):
         raise SystemExit(f'{path}: launch args no launch declares (they would be ignored):\n  '
                          + '\n  '.join(bad))
     check_thrust_map(cfg, wpath, path)
+    check_wrench_world(cfg, wpath, path)
     if not cfg.mis_seed:
         check_world_geometry(cfg, wpath, path)
+        check_tether_len(cfg, wpath, path)
     return cfg
+
+
+def check_wrench_world(cfg, wpath, path):
+    """A WRENCH event needs the world's ApplyLinkWrench plugin (the _push worlds): without it Gazebo drops the push
+    and the run flies unpushed."""
+    if not any(e.do == 'WRENCH' for e in cfg.events):
+        return
+    with open(wpath) as f:
+        if 'gz::sim::systems::ApplyLinkWrench' not in f.read():
+            raise SystemExit(f'{path}: a WRENCH event but {cfg.world} has no ApplyLinkWrench plugin (the push would do '
+                             f'nothing); fly a _push world')
+
+
+def check_tether_len(cfg, wpath, path):
+    """The twin's magnet markers (io tether_tips) sit tether_len along each rod from its middle: a length that is not
+    the world's rods puts every marker that much off its magnet (card 2026-10-21_tip_detect)."""
+    io = cfg.io_launch_args
+    if str(io.get('tether_tips', '')).strip().lower() not in ('1', 'true', 'yes'):
+        return
+    sys.path.insert(0, os.path.join(REPO, 'tools'))
+    from check_geometry import launch_defaults, world_geometry
+    told = io.get('tether_len')
+    if told is None:
+        lp = os.path.join(REPO, 'src', 'bringup', 'launch', cfg.io_launch_file)
+        told = launch_defaults(lp).get('tether_len') if os.path.exists(lp) else None
+    rods = world_geometry(wpath).get('cable_len')
+    if told is not None and rods is not None and abs(float(told) - rods) > 1e-3:
+        raise SystemExit(f'{path}: io tether_len {float(told):g} but the rods of {cfg.world} are {rods:g} m: every '
+                         f'magnet marker would sit {abs(float(told) - rods) / 2:.3f} m off; type tether_len: {rods:g} '
+                         f'or declare mis_seed: true')
 
 
 def sim_thrust_maps(cfg):
@@ -891,7 +1044,8 @@ def check_thrust_map(cfg, wpath, path):
                          f'{"rig" if rig_world else "linear"} or declare mis_seed: true')
 
 
-# Values only params.py sets (no launch arg): reported, not refused, until params.py follows.
+# Values params.py sets unless a config types them (load_ixx / load_izz, card 2026-10-23_scalability): reported, not
+# refused, while params.py supplies them; a typed one that disagrees with the world is refused like any other.
 PARAMS_ONLY_GEOMETRY = ('load_ixx', 'load_izz')
 
 
@@ -899,14 +1053,15 @@ def check_world_geometry(cfg, wpath, path):
     """check_geometry.config_mismatches: every geometry value the controller would fly
     differently from the world. `geometry_exempt: {key: reason}` names a deliberate one."""
     sys.path.insert(0, os.path.join(REPO, 'tools'))
-    from check_geometry import config_mismatches
+    from check_geometry import config_mismatches, inertia_untyped
     lp = os.path.join(REPO, 'src', cfg.launch_package, 'launch', cfg.launch_file)
     bad = []
-    for k, wv, cv in config_mismatches(wpath, lp if os.path.exists(lp) else None, cfg.control_args()):
+    args = cfg.control_args()
+    for k, wv, cv in config_mismatches(wpath, lp if os.path.exists(lp) else None, args):
         line = f'{k}: world {wv:.4g}, controller {cv:.4g}'
         if k in cfg.geometry_exempt:
             continue
-        if k in PARAMS_ONLY_GEOMETRY:
+        if k in PARAMS_ONLY_GEOMETRY and inertia_untyped(args.get(k)):
             print(f'warn  {path}: {line} (params.py)', file=sys.stderr)
             continue
         bad.append(line)
@@ -931,6 +1086,9 @@ def main():
                                              'manifest instead of this checkout\'s')
     ap.add_argument('--check', action='store_true',
                     help='validate the configs (world, masses, launch args) and exit')
+    ap.add_argument('--record', action='store_true',
+                    help='record a video: the config\'s `record:` block, else the default cameras '
+                         '(experiment/record.py); mp4s in <run>/video/')
     args = ap.parse_args()
     if args.run_dir and (len(args.config) != 1 or args.repeats != 1):
         ap.error('--run-dir takes exactly one config and one repeat')
@@ -953,10 +1111,14 @@ def main():
         return 1 if n_bad else 0
     for path in args.config:
         cfg = checked_config(path)
+        if args.record and not cfg.record:
+            from experiment.record import parse
+            cfg.record = parse(True)
         for rep in range(args.repeats):
-            results.append((cfg, rep, run_once(cfg, path, gui=args.gui, repeat=rep,
-                                               gz_nice=args.gz_nice, run_dir=args.run_dir,
-                                               git_state=git_state)))
+            with config_env(cfg.env):
+                results.append((cfg, rep, run_once(cfg, path, gui=args.gui, repeat=rep,
+                                                   gz_nice=args.gz_nice, run_dir=args.run_dir,
+                                                   git_state=git_state)))
 
     print('\n=== experiment summary ===')
     ok_all = True

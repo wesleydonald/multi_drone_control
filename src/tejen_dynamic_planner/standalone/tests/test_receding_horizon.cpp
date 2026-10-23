@@ -2,6 +2,7 @@
 #include "test_common.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 
 using namespace dynamic_planner;
@@ -26,10 +27,111 @@ LocalPlannerConfig makeLocalConfig() {
     return config;
 }
 
+void testStoppedPartialRetainsSelectedEndpoint() {
+    LocalPlanner local(makeLocalConfig());
+    LocalPlanRequest request;
+    request.initial_state = {Vec3(0.0, 0.0, 1.5), Vec3::Zero(), Vec3::Zero()};
+    request.local_goal = Vec3(2.0, 0.0, 1.5);
+    request.duration_s = 4.0;
+    request.terminal_boundary.position = request.local_goal;
+    // Deterministic cutoff: only the existing stationary partial is available.
+    request.octopus_stop_requested = []() { return true; };
+    request.octopus_stop_reason = "TEST_CUTOFF";
+    const auto result = local.plan(request);
+    requireTrue(result.success && result.partial,
+                "stopped partial fixture failed: " + result.status);
+    const Vec3 selected_endpoint = result.search.control_points->bottomRows(1).transpose();
+    requireMatrixNear(result.effective_terminal_boundary.position, selected_endpoint, 1e-10,
+                      "stopped partial still refines toward the distant nominal goal");
+    const State terminal = evaluateCubicState(
+        *result.control_points, result.knots, request.duration_s);
+    requireMatrixNear(terminal.position, selected_endpoint, 1e-7,
+                      "refinement moved the selected stationary evasive endpoint");
+    requireMatrixNear(terminal.velocity, Vec3::Zero(), 1e-7,
+                      "refined partial is not stopped");
+}
+
+void testObstructedIntermediateGoalRemainsSoft() {
+    // N1's diagonal projected waypoint lies inside a peer's cable-vs-body
+    // C-space even though the two vehicle bodies alone are vertically clear.
+    const State start{Vec3(-1.85, -1.85, 1.35), Vec3::Zero(), Vec3::Zero()};
+    const Vec3 goal(1.85, 1.85, 1.35);
+    RecedingHorizonConfig config;
+    config.fixed_splice_lookahead_s = 0.10;
+    config.moving_rendezvous_enabled = true;
+    config.terminal_time_target_prediction_enabled = true;
+    config.target_prediction_high_confidence_horizon_s = 30.0;
+    config.spline_time_factor = 3.0;
+    LocalPlannerConfig local = makeLocalConfig();
+    local.octopus.xyz_min = Vec3(-2.5, -2.5, 0.4);
+    local.octopus.xyz_max = Vec3(2.5, 2.5, 3.5);
+    local.refinement.xyz_min = local.octopus.xyz_min;
+    local.refinement.xyz_max = local.octopus.xyz_max;
+
+    WorldSnapshot snapshot;
+    snapshot.ego_half_extents = Vec3(0.105, 0.105, 0.10);
+    snapshot.ego_tracking_error_half_extents = Vec3(0.10, 0.10, 0.05);
+    snapshot.ego_suspended_geometry.enabled = true;
+    snapshot.ego_suspended_geometry.cable_length_m = 0.49;
+    snapshot.ego_suspended_geometry.max_swing_angle_rad = 15.0 * std::acos(-1.0) / 180.0;
+    snapshot.ego_suspended_geometry.magnet_center_below_cable_end_m = 0.0;
+    snapshot.ego_suspended_geometry.payload_attached = true;
+    snapshot.ego_suspended_geometry.payload_half_extents = Vec3(0.043, 0.043, 0.011);
+    snapshot.ego_suspended_geometry.payload_center_from_magnet_center = Vec3(0.0, 0.0, -0.036);
+    CooperativeObstacleTrajectory peer;
+    peer.name = "drone_2";
+    peer.physical_half_extents = snapshot.ego_half_extents;
+    peer.trajectory = makeStationaryHoverTrajectory(
+        Vec3(-0.530330, -0.530330, 1.0), 0.0, 100.0);
+    snapshot.cooperative_obstacles.push_back(peer);
+    peer.name = "drone_3";
+    peer.trajectory = makeStationaryHoverTrajectory(
+        Vec3(0.530330, 0.530330, 1.0), 0.0, 100.0);
+    snapshot.cooperative_obstacles.push_back(peer);
+    VersionedWorld world(snapshot);
+    CommittedTrajectoryTargetPredictor predictor(
+        makeStationaryHoverTrajectory(goal, 0.0, 100.0), Vec3::Zero());
+    RecedingHorizonPlanner planner(goal, config, local);
+    planner.initializeCommittedTrajectory(makeStationaryHoverTrajectory(start.position, 0.0, 0.10));
+    const auto result = planner.replan(0.0, start, world, []() { return 0.01; }, &predictor);
+    requireTrue(result.local_plan.has_value(), "blocked-goal fixture never reached local search");
+    requireTrue(result.local_plan->requested_terminal_boundary.mode == TerminalMode::Stopped,
+                "obstructed intermediate goal was still requested as a hard endpoint");
+    const TrajectoryPiece projected_hold = makeStationaryHoverTrajectory(
+        result.local_goal, 0.0, 1.0).pieces().front();
+    TrajectorySafetyChecker checker;
+    const auto blocked = checker.checkPiece(projected_hold, 0.0, 1.0, snapshot);
+    requireTrue(!blocked.safe, "projected waypoint unexpectedly clears the suspended peer geometry");
+    requireTrue(result.accepted && result.candidate_kind == CandidateKind::Complete,
+                "blocked soft waypoint did not yield a complete accepted plan: " + result.status);
+    const State terminal = planner.committedTrajectory().endState();
+    requireTrue((terminal.position - result.local_goal).norm() > 0.10,
+                "accepted endpoint was still pinned to the obstructed waypoint");
+    requireTrue((terminal.position - start.position).norm() > 0.25,
+                "soft waypoint produced only a stationary hold instead of progress");
+    const Vec3 direction = (goal - start.position).normalized();
+    const Vec3 displacement = terminal.position - start.position;
+    requireTrue((displacement - displacement.dot(direction) * direction).norm() > 0.01,
+                "blocked waypoint did not permit an off-axis endpoint");
+    requireMatrixNear(terminal.velocity, Vec3::Zero(), 1e-7, "soft endpoint velocity is nonzero");
+    requireMatrixNear(terminal.acceleration, Vec3::Zero(), 1e-7, "soft endpoint acceleration is nonzero");
+    requireTrue(!result.goal_seen && !result.local_continuation_active,
+                "intermediate soft plan reports completion or hard continuation");
+    requireNear(result.splice_time_s, 0.10, 1e-12, "soft goal changed the 100 ms splice lookahead");
+    requireTrue(checker.checkCommitted(planner.committedTrajectory(),
+                                     planner.committedTrajectory().startTime(),
+                                     planner.committedTrajectory().endTime(), snapshot).safe,
+                "accepted off-axis trajectory failed independent whole-assembly checking");
+    std::cout << "obstructed soft goal / accepted endpoint: " << result.local_goal.transpose()
+              << " / " << terminal.position.transpose() << '\n';
+}
+
 }  // namespace
 
 int main() {
     try {
+        testStoppedPartialRetainsSelectedEndpoint();
+        testObstructedIntermediateGoalRemainsSoft();
         State start;
         start.position = Vec3(0.0, 0.0, 1.5);
         start.velocity = Vec3::Zero();

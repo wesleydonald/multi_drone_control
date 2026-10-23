@@ -1,0 +1,112 @@
+\section{Method}
+\label{sec:method}
+
+The controller is a two-level cascade. A centralised planner plans the motion of the ring and of every link over a
+horizon; a tracking MPC on each carrier follows that carrier's share of the plan. A change of team is handled
+inside the planner, by changing the problem it solves.
+
+\subsection{Cooperative planner and trackers}
+\label{sec:planner}
+
+The planner's model is the ring as a rigid body, pose $(\mathbf{p}_L, \mathbf{q}_L)$ and twist $(\mathbf{v}_L,
+\boldsymbol{\omega}_L)$, with each of the $N$ carriers reduced to a link of length $l_i$ attached at the plate
+point $\boldsymbol{\rho}_i$ in the ring frame, with unit direction $\mathbf{q}_i$ and tension $\lambda_i$. The
+carrier positions follow kinematically, $\mathbf{p}_i = \mathbf{p}_L + R(\mathbf{q}_L)\boldsymbol{\rho}_i -
+l_i\mathbf{q}_i$, and the thrust each must produce follows from its link's acceleration and tension. At every
+tick the planner solves
+\begin{equation}
+\begin{aligned}
+  \min_{\mathbf{x}_{0:N_h},\,\mathbf{u}_{0:N_h-1}} \;& \sum_{k=0}^{N_h-1} \|\mathbf{y}_k - \mathbf{y}_k^{\mathrm{ref}}\|_W^2
+    + \|\mathbf{y}_{N_h} - \mathbf{y}_{N_h}^{\mathrm{ref}}\|_{W_{N_h}}^2 \\
+  \text{s.t.}\;& \mathbf{x}_{k+1} = \mathbf{F}(\mathbf{x}_k, \mathbf{u}_k;\, \{\boldsymbol{\rho}_i, l_i\}, \mathbf{d}),
+    \quad C_0\mathbf{x}_0 = C_0\hat{\mathbf{x}}(t), \\
+  & \lambda_{\min} \le \lambda_{i,k} \le \lambda_{\max}, \quad f_{\min} \le \|\mathbf{f}_{i,k}\| \le f_{\max},
+\end{aligned}
+\label{eq:ocp}
+\end{equation}
+where the output $\mathbf{y}$ stacks the ring's position, velocity, attitude error and rate, the link directions,
+tensions and rates, and the inputs; $\mathbf{f}_{i,k}$ is carrier $i$'s planned thrust, its bounds softened with
+slack. The horizon has $N_h = 20$ nodes over 2\,s, so a node is the 100\,ms planner tick. The constraint on node~0
+pins only what motion capture measures, the ring's pose and twist and the link directions; the tensions and link
+rates are left free and warm-started from the previous solution. A lumped force $\mathbf{d}$ on the ring, formed
+from the integral of its position error in steady flight, removes steady offsets through the model
+\cite{pannocchia2003disturbance, maeder2009linear}. The references follow from the ring's trajectory by flatness,
+with the nominal formation tilted along the effective gravity and the tensions scaled with it.
+
+Problem~\eqref{eq:ocp} is solved with acados \cite{verschueren2022acados} in a real-time iteration scheme
+\cite{diehl2002rti}: a fixed number of Gauss--Newton SQP iterations per tick (one unless stated;
+Section~\ref{sec:res_scale}), warm-started, with HPIPM \cite{frison2020hpipm}
+solving the QP. On the rig no new iteration starts after 60\,ms of the tick, and a plan not ready by then is replaced
+by the previous one shifted by a node.
+
+Each carrier's tracker is an MPC on a 17-state model in which the four stick commands are states and their rates the
+inputs, with the flight controller's rate loop modelled as first order and the identified affine thrust map. It
+solves every 20\,ms over the same 2\,s horizon, following the planner's position, velocity and thrust direction. The
+link's pull enters its model as a known parameter along the horizon: the planned pull, shifted by the difference
+between the pull measured from motion capture and the planned one at the first node, so that the tracker anticipates
+the link's force rather than reacting to it.
+
+\subsection{Reconfiguration: release and drop}
+\label{sec:reconfig}
+
+Two properties of \eqref{eq:ocp} make an in-flight change of team possible. The plate points
+$\boldsymbol{\rho}_i$ and link lengths $l_i$ are runtime parameters, so only the team size fixes the problem's
+dimensions, and one solver per size, built in advance and primed on the measured state, covers any layout. And the
+survivors keep their own plates: the nominal tensions come from a moment balance at the actual plate points, so the
+ring's reference stays level without re-spacing the team.
+
+\emph{Detection.} A release the planner is told of is a DETACH command, which switches the leaver's magnet off and
+resizes on the same tick. An unannounced release is detected from the link alone. A rigid link on its plate cannot
+measure longer than itself, so when the leaver's link, measured by motion capture between the carrier's pivot and
+its plate point, reads more than 6\,cm over its length for two consecutive ticks, the planner removes that carrier.
+No force sensor and no message from the leaver are needed.
+
+\emph{Resize.} At the event the planner swaps to the solver for $N-1$ carriers, sets the survivors' plate points and
+link lengths, and warm-starts it from the measured state with the tensions and link directions free at node~0. The
+first solve redistributes the load; there is no separate hand-off phase. With three survivors the vertical shares
+are fixed by statics: each is the ring's weight times the barycentric coordinate of its centre in the survivors'
+triangle, and a level ring exists only while the centre lies inside the polygon of the plates
+\cite{michael2011cooperative}. For plates on a circle of radius $r$, with $g_{\max}$ the survivors' largest angular
+gap, the support margin
+\begin{equation}
+  m = r\cos(g_{\max}/2)
+  \label{eq:margin}
+\end{equation}
+is the distance from the centre to the nearest edge. Losing one of four evenly spaced carriers puts the centre on an
+edge, so the four-carrier layout uses plates 3, 7, 9 and 11, where losing plate 9 leaves an even triangle with a
+112\,mm margin.
+
+\emph{Drop rule.} A loss that leaves fewer survivors than the configured minimum (three by default), or a ring tilt
+above $30^\circ$, drops the ring: every magnet is switched off and every carrier lands. Release chains that continue
+below three carriers fly on while the survivors' largest gap is at most $200^\circ$, which keeps a T and an opposite
+pair. The freed carrier steps out radially, clear of the ring, and lands and disarms alone while the survivors carry
+on.
+
+\subsection{Rejoin of a departed carrier}
+\label{sec:rejoin}
+
+A departed carrier can return to its own plate. At its release the planner records its plate point and the link's
+measured length. \emph{Staging:} the carrier is held on its plate's bearing 0.3\,m beyond the formation's reach,
+the point moving and turning with the planned ring and kept inside the position limit. \emph{Approach:} on the
+rejoin command, given only while the ring holds its path, the carrier descends at 0.1\,m/s so that its link's
+lower end lands on the plate point of the measured ring, with a feedback loop on the measured end correcting the
+end's height. \emph{Weld:} the magnet is switched on once the end has stayed within 1.5\,cm of its plate point on
+every sample over 0.3\,s (at least eight samples) at under 2\,cm/s; the joint must then report attached, or the
+carrier is let go and backs out to staging. \emph{Fold-in:} the planner grows to $N+1$ with the plate point and the
+link re-measured from pivot to plate; the rejoiner is seeded at 0.1\,N and every tension is blended to the balanced
+split over 10\,s, with its link feedforward ramped over 1.5\,s and the ring's path held throughout, as a dock blends
+thrust across a switch \cite{sugihara2023trady}. Through the blend the rejoiner's height reference is capped at the
+weld height, so that it cannot lift its plate and tilt the ring before it carries its share, and it counts as absent
+for the drop rule. LAND or a drop sends every staged or rejoining carrier up, out along its bearing and down alone.
+
+\subsection{Attach of a newcomer}
+\label{sec:attach}
+
+A newcomer is flown by another team's controller down to contact; its magnet catches only there. Our side admits it
+from motion capture alone, with its magnet tip expressed in the plate's frame. A \emph{contact} is the tip within
+24\,mm of the plate point and close to the plate's face, nearly still for 0.3\,s. A contact is only a candidate, since
+a tip resting on a plate and a caught magnet look alike, so the catch is \emph{confirmed} by co-motion: after the
+newcomer's small lift, the tip has stayed within 6\,mm of its contact point while the plate moved with it, on a taut
+tether. Only then do our trackers take the newcomer over and the planner grows to $N+1$ with the recorded plate
+point, the newcomer seeded at 0.1\,N and blended as in Section~\ref{sec:rejoin}. A newcomer not confirmed in time is
+taken back: our tracker latches onto its measured state, lifts it clear and lands it alone.

@@ -146,3 +146,54 @@ class SupervisorLandingCheckTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StopActionTest(unittest.TestCase):
+    """multi_drone_control combined rig (H5): stop_action 'land' turns the stop's disarm request into
+    /join_planner/land_now; 'disarm' (the default) is his behaviour."""
+
+    def _run(self, stop_action):
+        import os
+        import rclpy
+        from tejen_mission.simulation_test_supervisor import SimulationTestSupervisor, SupervisorDecision
+
+        class Rec:
+            def __init__(self):
+                self.msgs = []
+
+            def publish(self, m):
+                self.msgs.append(m)
+
+            def get_subscription_count(self):
+                return 1
+
+        os.environ['ROS_LOCALHOST_ONLY'] = '1'
+        args = ['--ros-args', '-p', 'result_path:=/tmp/stop_action_test.json']
+        if stop_action:
+            args += ['-p', f'stop_action:={stop_action}']
+        rclpy.init(args=args, domain_id=95)
+        try:
+            node = SimulationTestSupervisor()
+            node.land_publisher, node.command_publisher = Rec(), Rec()
+            if node.give_up_publisher is not None:
+                node.give_up_publisher = Rec()
+                self.give_ups = node.give_up_publisher
+            node.arming_client = type('C', (), {'service_is_ready': lambda self: False})()
+            node.core.step = lambda now, snap: SupervisorDecision(
+                actions=(SupervisorAction.REQUEST_DISARM,), outcome='FAIL', reason='REQUIRED_INPUT_STALE')
+            node._tick()
+            out = ([m.data for m in node.land_publisher.msgs], [m.data for m in node.command_publisher.msgs])
+            node.destroy_node()
+            return out
+        finally:
+            rclpy.shutdown()
+
+    def test_default_disarms(self):
+        self.assertEqual(self._run(''), ([], ['DISARM']))
+
+    def test_land_lands_and_never_disarms(self):
+        self.assertEqual(self._run('land'), ([True], []))
+
+    def test_give_up_gives_up_and_neither_lands_nor_disarms(self):
+        self.assertEqual(self._run('give_up'), ([], []))
+        self.assertEqual([m.data for m in self.give_ups.msgs], [True])

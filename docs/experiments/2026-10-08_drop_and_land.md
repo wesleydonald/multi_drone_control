@@ -95,7 +95,7 @@ Yes, as in section 3, with unit tests:
 - `/fleet/landed` follows only when every drone is down.
 
 It lives on branch `safety-defaults` and is not flown on the rig until the twin passes and Wesley
-says so. The CLAUDE.md lock "fleet-wide disarm on any envelope fault" is amended on this branch:
+says so. The working-rules lock "fleet-wide disarm on any envelope fault" is amended on this branch:
 in detach mode, these two triggers drop and land instead; the 60 deg envelope stays as the last
 resort. If falsified, the code is recorded in the registry and deleted.
 
@@ -130,7 +130,7 @@ The design would not have saved either 7 Oct rig event, and the twin bars cannot
    - three bars pass by construction: magnets OFF within 0.2 s, landing spot >= 1.0 m, and D3 on
      1/3/5/9.
 4. **What it breaks if it works:**
-   - the locked fleet-wide disarm (needs Wesley's line in decisions.md and CLAUDE.md);
+   - the locked fleet-wide disarm (needs Wesley's line in decisions.md and the working rules);
    - research code joins the safety path;
    - the latched topic outlives the flight under re-ARM without relaunch (618e315);
    - attach/m2 modes reach 39-47 deg (R0196/R0197, R0234), so the 30 deg trigger must stay off
@@ -209,7 +209,7 @@ The design would not have saved either 7 Oct rig event, and the twin bars cannot
 - **A twin win in the race says little about the rig** (RTF 0.3).
 - **A cheaper way to cut exposure that keeps the ring:** LAND automatically after an unannounced
   detection.
-- **The lock amendment** is Wesley's line in decisions.md and CLAUDE.md before any code.
+- **The lock amendment** is Wesley's line in decisions.md and the working rules before any code.
 
 ## Revision v2 after the critic (8 Oct night)
 
@@ -369,3 +369,87 @@ layout is 11.8 deg unannounced, 10.0 deg announced.
 
 The rig risks are still the ones listed above: the magnet delay, slack and snatch, glitches, and
 whether 30 deg is recoverable.
+
+## Revision v3 (Fri 16 Oct, 08:40 AEDT): D1 and D4 re-flown for the detach freeze (configs prepared, no runs)
+
+Why: the detach tables freeze on week5 4b3560e's flight code, flown from day-1016 (decisions.md 16 Oct). The inventory
+(D4) asks for D1 and D4, 2 each, on the freeze tree.
+
+The configs are new and fly today's defaults. They are the W4 base (`w4_da_release_hover`: departed_land,
+departed_ground_idle, `drop_and_land.yaml`, model integral) with the arm's events:
+
+| arm | config | events | n | 8 Oct runs |
+|---|---|---|---|---|
+| D1 second loss | `dl_d1_second_loss` | RELEASE drone 1 (90 ccw) at 20 s, drone 0 (30 ccw) at 26 s, LAND 46 s | 2 | R1191, R1192 (7ed29c9); R1204, R1209 (week4 port) |
+| D4 bad leaver, 240 deg gap | `dl_d4_gap240` | RELEASE drone 3 (270 ccw, plate 3) at 20 s, LAND 45 s | 2 | R1195, R1196 (7ed29c9) |
+
+How these differ from the 8 Oct configs (`old/w4_3915_release2_drop`, `old/w4_3915_release3_drop`):
+- departed_land is on, as on the rig; the 8 Oct configs pinned it off. So in D1 the first freed drone steps out and
+  lands, and is disarmed alone, before the second loss.
+- departed_ground_idle is on.
+- These are today's defaults, not a new variable: the bars are absolute, and B0 is not re-flown (the reviewer: B0 was
+  never a one-variable baseline).
+
+**Pass / fail: the v2 bars, unchanged (FROZEN Fri 16 Oct 08:41, before the runs (set while Wesley is at work; he may change them for later runs only)).** Each is checked from the trigger
+to the end of the window (`tools/drop_metrics.py`).
+
+| bar | must hold | 8 Oct (R1191, R1192, R1195, R1196, R1204, R1209) |
+|---|---|---|
+| any drone disarmed above 0.2 m | none | none (largest height at disarm 0.13 m) |
+| tracker fault latch before the stand-down | none | none |
+| drone tilt after the trigger | <= 30 deg | <= 13.6 deg |
+| climb after the trigger | <= 0.3 m | <= 0.16 m |
+| every drone down (z < 0.15 m), then /fleet/landed and the disarm | within 15 s | 8.6-8.9 s |
+| the drop fires | D1 at the second loss; D4 at the first | 0.20-0.25 s after the loss |
+
+Reported:
+- which rule fired first (the planner's min_survivors or gap rule, or the trackers' tilt request);
+- peak speed and the closest pair;
+- in D1, the first freed drone's disarm (departed_disarm_alone P1).
+
+The reviewer's caveats stand: "down" means z < 0.15 m, and the margin to the 60 deg latch is thin (0.06-0.12 s in the
+twin).
+
+## Result, revision v3 (Fri 16 Oct, 10:52 AEDT from `date`)
+
+**Runs:** D1 R1915, R1916; D4 R1917, R1918 (lab batch 15).
+- Tree: 8c468bd (day-1016, clean); its flight code is week5 4b3560e's. Lab PC, 4 slots.
+- Scored by `tools/drop_metrics.py`, from the trigger. The height at disarm comes from each drone's armed edge in run.csv.
+- Reviewer: not yet.
+
+| arm | run | trigger (first) | after the loss (s) | faults | drone tilt max (deg) | climb max (m) | all down (s) | /fleet/landed (s) | height at disarm max (m) | closest pair (m) | peak speed (m/s) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| D1 | R1915 | all four trackers' tilt request (35.8 deg) | 0.23 after the second RELEASE | 0 | 13.3 | 0.16 | 8.6 | 8.7 | 0.10 | 0.88 | 0.53 |
+| D1 | R1916 | all four trackers' tilt request (35.4 deg) | 0.23 after the second RELEASE | 0 | 13.6 | 0.18 | 8.5 | 8.7 | 0.10 | 0.88 | 0.55 |
+| D4 | R1917 | the planner's gap rule (240 deg) at detection; the trackers' requests after | 0.22 | 0 | 12.0 | 0.18 | 8.8 | 8.9 | 0.11 | 0.51 | 0.63 |
+| D4 | R1918 | all four trackers' tilt request (35.8 deg); no planner detection line before it | 0.22 | 0 | 11.8 | 0.16 | 8.9 | 8.9 | 0.10 | 0.51 | 0.67 |
+
+| v2 bar (must hold) | verdict |
+|---|---|
+| no drone disarmed above 0.2 m | **confirmed** (all at 0.10-0.11 m) |
+| no tracker fault latch before the stand-down | **confirmed** (0 ENVELOPE FAULT / FLEET ABORT / EMERGENCY lines) |
+| drone tilt after the trigger <= 30 deg | **confirmed** (<= 13.6) |
+| climb after the trigger <= 0.3 m | **confirmed** (<= 0.18) |
+| every drone down (z < 0.15 m) within 15 s, then /fleet/landed and the disarm | **confirmed** (8.5-8.9 s; announced 8.7-8.9 s) |
+| the drop fires: D1 at the second loss, D4 at the first | **confirmed** (D1: the first loss resized at +0.40/+0.42 s with no drop; the drop came 0.23 s after the second; D4: 0.22 s) |
+
+**Reported:**
+- **In D1, the first freed drone was already down and disarmed alone** (departed_disarm_alone P1) before the second
+  loss: 0.19 and 0.21 s after first at rest, dz 0.000 m. It is the departed_land change against 8 Oct.
+- **R1917 is the first in-flight firing of the planner's gap rule.** It fired at detection, 0.217 s after the release,
+  2 ms ahead of the trackers. On 8 Oct the trackers' tilt request won in R1195/R1196, and R1918 repeats that. Tier B's
+  G180d (R1919) also fired the gap rule, at 180 deg.
+- **Against 8 Oct (R1191, R1192, R1195, R1196, R1204, R1209):**
+  - trigger 0.22-0.23 s (then 0.20-0.25);
+  - drone tilt <= 13.6 deg (then <= 13.6);
+  - climb <= 0.18 m (then <= 0.16);
+  - down in 8.5-8.9 s (then 8.6-8.9).
+- **The reviewer's caveats stand:** "down" means z < 0.15 m, and the margin to the 60 deg latch is thin.
+
+**Re-fly needed:** none.
+
+**Reviewer, v3 result (16 Oct ~11:05): SUPPORTED.** Every v2 bar recomputes (trigger 0.22-0.23 s after the loss, 0
+faults, drone tilt <= 13.6 deg, climb <= 0.18 m, all down in 8.5-8.9 s, height at disarm 0.100-0.107 m). The planner's
+gap rule won the race against the trackers in R1917 only (8.7 ms of wall, ~2 ms of sim, with the ring already at 33.7
+deg); in R1918 the trackers fired first.
+

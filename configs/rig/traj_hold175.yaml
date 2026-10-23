@@ -1,0 +1,3 @@
+# TB6 arm m1c_nocatch_orbit_ph175 (card 2026-10-10_combined_m1_contact rev 10 §6.2): the hover hold before the circle
+# 17.5 s instead of 5 s, so his give-up falls about 180 deg later in the lap (an uncontrolled phase)
+traj_hold_s: 17.5

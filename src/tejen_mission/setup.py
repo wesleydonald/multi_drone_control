@@ -39,6 +39,7 @@ setup(
             'motion_capture_publisher_node = tejen_mission.motion_capture_publisher_node:main',
             'fake_cooperative_transport_world = tejen_mission.fake_cooperative_transport_world:main',
             'ring_bridge = tejen_mission.ring_bridge:main',
+            'partner_rig_state = tejen_mission.partner_rig_state:main',
             'fake_moving_obstacle = tejen_mission.fake_moving_obstacle:main',
             'online_join_planner = tejen_mission.online_join_planner:main',
             'pendulum_state_publisher = tejen_mission.pendulum_state_publisher:main',

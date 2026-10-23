@@ -43,3 +43,90 @@ def test_a_flight_sets_the_airborne_latch():
     s = _stub(z=0.6, ref_z=0.6)
     Controller._ground_idle_update(s)
     assert s._gi_airborne
+
+
+# ── a departed drone landing by itself while the ring flies (card 2026-10-09_departed_ground_idle) ──
+
+def test_a_departed_drone_idles_at_its_rest_while_the_ring_flies():
+    s = _stub(z=0.11, ref_z=-0.15, resting=False, airborne=True)
+    s._departed = True
+    assert _run(s, GROUND_IDLE_HOLD_S + 0.1) is True
+
+
+def test_departed_needs_its_own_rest_height_both_ways():
+    for z in (0.24, 0.05):                     # hovering light on its rod / below its rest: not at rest
+        s = _stub(z=z, ref_z=-0.15, resting=False, airborne=True)
+        s._departed = True
+        assert _run(s, 1.0) is False
+
+
+def test_departed_without_the_flag_or_before_flying_does_nothing():
+    assert _run(_stub(z=0.10, ref_z=-0.15, resting=False, airborne=True), 1.0) is False
+
+
+def test_departed_idles_even_if_it_never_rose_4_cm():
+    """Critic pass 2 N1: a newcomer taken out on the floor must idle too (the flag implies TAKEOFF)."""
+    s = _stub(z=0.10, ref_z=-0.15, resting=False)
+    s._departed = True
+    assert _run(s, GROUND_IDLE_HOLD_S + 0.1) is True
+
+
+def test_the_flag_counts_only_after_this_arm_and_while_flying():
+    s = types.SimpleNamespace(armed=False, takeoff_requested=False, _armed_at=None, _departed=False)
+    Controller._departed_cb(s, types.SimpleNamespace(data=True))    # a latched True from an earlier flight
+    assert s._departed is False
+    s.armed, s.takeoff_requested, s._armed_at = True, True, 1
+    Controller._departed_cb(s, types.SimpleNamespace(data=True))
+    assert s._departed is True
+    Controller._departed_cb(s, types.SimpleNamespace(data=False))   # the planner's False at ARM/TAKEOFF
+    assert s._departed is False
+
+
+# ── ...and is then disarmed alone by the fleet manager (card 2026-10-09_departed_disarm_alone) ──
+
+class _Pub:
+    def __init__(self):
+        self.msgs = []
+
+    def publish(self, msg):
+        self.msgs.append(msg)
+
+
+def _with_pub(s):
+    s._down_alone_pub = _Pub()
+    s.get_logger = lambda: types.SimpleNamespace(warn=lambda *a, **k: None, info=lambda *a, **k: None)
+    return s
+
+
+def test_a_departed_drone_at_its_rest_asks_once_to_be_disarmed_alone():
+    s = _with_pub(_stub(z=0.11, ref_z=-0.15, resting=False, airborne=True))
+    s._departed = True
+    _run(s, GROUND_IDLE_HOLD_S + 1.0)
+    assert [m.data for m in s._down_alone_pub.msgs] == [True]
+
+
+def test_a_carrier_landing_with_the_ring_does_not_ask():
+    s = _with_pub(_stub(z=0.10, ref_z=0.0, airborne=True))
+    assert _run(s, GROUND_IDLE_HOLD_S + 1.0) is True
+    assert s._down_alone_pub.msgs == []
+
+
+def test_a_departed_drone_above_its_rest_does_not_ask():
+    s = _with_pub(_stub(z=0.24, ref_z=-0.15, resting=False, airborne=True))
+    s._departed = True
+    _run(s, 2.0)
+    assert s._down_alone_pub.msgs == []
+
+
+def test_a_departed_drone_held_a_few_cm_above_its_rest_idles_and_asks():
+    """14 Oct: QUAD4 stopped 4-7 cm above its mat height after every take-back; the planner now holds it there as
+    down, and its tracker idles and asks to be disarmed alone."""
+    s = _stub(z=0.16, ref_z=0.16, resting=False, airborne=True)
+    s._departed = True
+    sent = []
+    s._down_alone_pub = types.SimpleNamespace(publish=lambda m: sent.append(m.data))
+    s.get_logger = lambda: types.SimpleNamespace(warn=lambda *a, **k: None, info=lambda *a, **k: None)
+    assert _run(s, GROUND_IDLE_HOLD_S + 0.1) is True and sent == [True]
+    high = _stub(z=0.21, ref_z=0.21, resting=False, airborne=True)       # 11 cm up: not down
+    high._departed = True
+    assert _run(high, 1.0) is False

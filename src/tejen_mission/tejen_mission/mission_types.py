@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Iterable, Mapping
+from typing import Dict, Iterable, Mapping, Optional
 
 
 class MissionPhase(str, Enum):
@@ -30,6 +30,11 @@ class MissionPhase(str, Enum):
     MATCH_VELOCITY = "MATCH_VELOCITY"
     DESCEND_TO_ATTACHMENT = "DESCEND_TO_ATTACHMENT"
     ATTACH_READY = "ATTACH_READY"
+    # contact_attach (combined M1 subtest): the catch is proved by a small lift, then the
+    # fleet's controller takes the vehicle, attached or not
+    LIFT_PROOF = "LIFT_PROOF"
+    RING_ATTACHED = "RING_ATTACHED"
+    TAKEN_BACK = "TAKEN_BACK"
     LANDING = "LANDING"
     LANDED_DISARMED = "LANDED_DISARMED"
 
@@ -47,6 +52,8 @@ class MissionPhase(str, Enum):
     M2_ATTACH_CAPTURE_WAIT = "M2_ATTACH_CAPTURE_WAIT"
     M2_ATTACH_PROOF = "M2_ATTACH_PROOF"
     M2_ATTACHED_HOLD = "M2_ATTACHED_HOLD"
+    M2_PARKING_ATTACHED = "M2_PARKING_ATTACHED"
+    M2_PARKED_ATTACHED = "M2_PARKED_ATTACHED"
     M2_DETACHED_RETREAT = "M2_DETACHED_RETREAT"
     M2_LANDING_STAGE = "M2_LANDING_STAGE"
     M2_FAULT = "M2_FAULT"
@@ -92,7 +99,8 @@ class PhaseSpec:
 
     def __post_init__(self) -> None:
         command = self.magnet_command.strip().upper()
-        if command not in {"ON", "OFF"}:
+        # NONE: the planner sends nothing in this phase and the manager keeps its last state
+        if command not in {"ON", "OFF", "NONE"}:
             raise ValueError(f"Unsupported magnet command: {self.magnet_command!r}")
         object.__setattr__(self, "magnet_command", command)
 
@@ -102,12 +110,18 @@ class MissionDefinition:
     name: str
     initial_phase: MissionPhase
     phases: Mapping[MissionPhase, PhaseSpec]
+    # the phase the planner's takeoff guards hand over to (missions with a TAKEOFF phase)
+    takeoff_exit: Optional[MissionPhase] = None
 
     def __post_init__(self) -> None:
         phases: Dict[MissionPhase, PhaseSpec] = dict(self.phases)
         if self.initial_phase not in phases:
             raise ValueError(
                 f"Initial phase {self.initial_phase.value} is absent from mission {self.name!r}."
+            )
+        if (MissionPhase.TAKEOFF in phases) != (self.takeoff_exit in phases):
+            raise ValueError(
+                f"Mission {self.name!r} needs a takeoff_exit among its phases exactly when it has TAKEOFF."
             )
         for key, spec in phases.items():
             if key != spec.phase:

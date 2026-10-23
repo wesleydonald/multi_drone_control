@@ -2,7 +2,7 @@
 """
 tools/plot_run.py — the auto-generated figures for one run (THESIS_PLAN §9.4)
 
-    ./tools/plot_run.py R0034                 # by run id, from results/ or results_archive/
+    ./tools/plot_run.py R0034                 # by run id, from results/
     ./tools/plot_run.py results/2026-08-05/R0034_sim_gz_attach_ring_45_gz
     ./tools/plot_run.py R0034 R0039 --quiet   # several
 
@@ -45,7 +45,7 @@ import metrics as M                    # noqa: E402
 import plot_style as S                 # noqa: E402
 from run_dir import resolve            # noqa: E402
 
-AUTHORITY_MS2 = 13.0     # thrust acceleration left after gravity (CURRENT_STATE.md §10)
+AUTHORITY_MS2 = 13.0     # thrust acceleration left after gravity (docs/reference.md §10)
 
 
 class Run:

@@ -1,0 +1,101 @@
+# Overnight 7-8 Oct: progress log
+
+Plan approved 8 Oct ~01:00. Branch `week4`
+is tomorrow's rig tree: only tested pieces go there. The new defaults and the drop-and-land work live on
+branch `safety-defaults` (git worktree) until they are twin-verified.
+
+| item | status | tested | committed | live for 8 Oct rig |
+|---|---|---|---|---|
+| A1 plates clockwise 0-11, RViz 1-4, preflight wording | done | mpc_planner 140, bringup 92, preflight 25, sim_comm 45, gate --quick | f3b3072 | yes |
+| A2 rig_flight.sh: run name last (old order works), auto-suffix _2.., dry run, per-run code.txt | done | 4 dry-run tests | 34a4dd5 | yes |
+| A3 detector glitch guard: no detection on a stale ring pose (>0.1 s), a drone's stale pose skips that drone, all cables over at once = ring pose jump (no action) | done | dissipative 49 (11 detect/soft), full suites, gate; replay over 13 flown 7 Oct rig logs: fires only on r200006 (0.38 s after the slip), no all-over ticks | 80f0519 | yes |
+| A4 QUAD1 arming: each arm attempt judged by frames after its own edge (sparse QUAD1 telemetry), retry on an explicit refusal, up to 4 s; rig TAKEOFF refused unless every FC reports armed within 10 s ('unconfirmed' no longer passes); a disarm before takeoff keeps trackers and manager up, so replug + ARM again works without relaunching T2 | done | arm_switch 10, fleet_manager 35, utility 15, tracker 81, bringup 92; twin re-ARM check queued | 618e315 | yes (bench props-off ARM/DISARM first) |
+| A5 twin reliability: runner parameter read-back after the run, not during ARM/TAKEOFF (Fix B); tracker pose/ref watchdogs on the node clock, sim time in the twin, wall time on the rig as before (Fix A); schedule starts only once the planner publishes refs for every drone in mpc/dissipative mode (Fix C); a run grounded before TAKEOFF stops 2 s later instead of running out its duration (Fix D) | done | tracker 83, utility 15, tools 277 (new test_runner_ready 8), gate --quick; rig real mode keeps use_sim_time false (test_real_mode_launches) | fdbb39a | twin only (tracker change is a no-op on the rig: wall clock there) |
+| A6 circle detach: a freed drone during a circle (orbit/circle/spin) steps 0.5 m out from the ring, then out from the PATH centre to r_orbit + 1.0 m (1.5 m at r 0.5), level, before it holds or lands (departed_land); other trajectories unchanged | done | dissipative 51 (2 new), gate --quick; twin R1149, R1150 (lab, one slot): both PASS, detected 0.27/0.21 s, tilt 9.3/8.7 deg, freed drone 1.45 m from the circle centre | 1ba38bc | **yes: r306 on the sheet** (start the ring 0.5 m toward -y) |
+| A6b re-ARM without relaunch in the twin: ARM, operator DISARM before takeoff, ARM, TAKEOFF, hover, LAND (`w4_rearm_3915.yaml`) | done | R1151 PASS: ARM sequence complete twice, lifted, landed, no relaunch | 1ba38bc (config) | yes (the r300 bench check) |
+| A8 registry: R1146-R1148 void cause (read-back + wall-clock watchdog), R1148 row, U1 hover 2 valid of 4 | done | - | 04b2884 | - |
+| A9 .gitignore agile_and_collective_supplementary/ (2.2 GB) | done | - | 04b2884 | - |
+| A7 rig sheet rewritten (`docs/rig_2026-10-08_commands.md`): clockwise plates and a convention table, names last, preflight per run, r300 props-off arm check, ARM FAILED replug + re-ARM line, 1.3 m clear on +y, mats, 10 s steady hover before a release, build line with drone_communication/utility_objects, stop rules restored (+ second loss / 30 deg = disarm today), r306 circle detach; T2 detach lines now name `drone N (/drone_i)` | done | dissipative 51, gate --quick | 5cb06b8 | yes |
+| D Tejen: ff-pulled d9c69415 -> 611dc3d2 (14 commits since our fork a7524bae, 25 Sep-7 Oct); classified in `docs/tejen_sync_2026-10-08.md` | done (classify only) | - | 06ebe9b | no: port after the rig on `tejen-sync`, with your word |
+| B2 model integral on resizing fleets (kept through a resize, frozen in the hold) | **SUPPORTS on one host** (laptop): release tilt peak hover 4.1-4.7 vs 7.2-9.2 deg (reference), circle 4.9-5.2 vs 8.0-9.1; detection and ring drop unchanged; lab acceptance run 6.2 vs 7.5/7.9 | mpc_planner 141, bringup 92, dissipative 58; R1157-R1160, R1187, R1188, R1190, R1199, R1189 | f2f7d74 (branch safety-defaults) | no (needs your go to merge) |
+| B3 default mode dissipative (legacy keeps mpc), detection 0.06 on by default | circle **supports** (clean same-commit pair R1171/R1174 inside the mpc pair); figure-8 **grey** (clean pair R1202/R1203: lag the same, RMSE 2.20/1.82 vs mpc 1.82/1.30 cm, one run 0.02 cm over the support bar, under the falsifier); no detector fire in 8 carries; acceptance run resolves the defaults and passes | as B2; R1161-R1174, R1200-R1203, R1189 | f2f7d74 (branch safety-defaults) | no (your call; more figure-8 pairs would settle it) |
+| B1 drop-and-land v2 | **SUPPORTS in the twin** after one bug fix (the landed timeout ran on wall time and disarmed descending drones in D4/D5, R1182-R1185; fixed 7ed29c9): D1 second loss, D2 forced, D4 bad leaver, D5 double loss all drop 0.21-0.25 s after the loss (the trackers' tilt rule), 0 faults, drone tilt <= 15 deg, climb <= 0.18 m, every drone down < 9 s at 1.1-1.2 m from the ring, disarmed <= 0.15 m; D3 (1/3/6/9 single release) never drops; B0 today's code disarms the fleet in the air | dissipative 58, tracker 88, fleet_manager 37; R1175-R1198 | 098f3be, 7ed29c9 (branch safety-defaults) | no (rig: your decisions on the trigger rule and a first forced drop from low hover) |
+| analysis tools read the dissipative planner's log (metrics, thrust_fit, planner_replay); a param dump holding a DDS error no longer breaks metrics | done | tools 278 | bddad69 | - |
+| C1 `tools/lag_metrics.py` (D, L0, L5, c, s on the planner clock) | done; reproduces the overnight study (R1127, R1106, r206e60 within 0.005 s) | - | f788260 | - |
+| C2 lag H1: twin + 0.035 s on every reference publish (test-only `ref_publish_delay_s`, branch time-cascade) | running on the lab (R1163, R1164), with rung b `ref_time_shift` (R1165, R1166); baselines R1152/R1153 | mpc_planner 141 | af137ad (branch time-cascade) | no |
+| C3 time-consistent cascade | card + critic: REWRITE (gate on H1; one ruler: lag_metrics A0; rungs a-d; no multithreaded executor; wire format needs your word). Rung a (pose-age logging) done | mpc_planner 141 (1 new) | dd5bca5, 8864bc5; rung a 1df4330 (branch time-cascade) | no (rig 14 Oct) |
+| C4 strike the 0.2 s time-lead fallback in the week plan | done | - | d1b999b | - |
+| C2 lag H1 (re-flown with the hold in the trackers) | **SUPPORTS** (R1172/R1173): +0.035 s of latency -> +0.083 s of lag, c unchanged; the first arm (planner-side hold) was invalid (the planner's sim clock freezes during its tick) | tracker 85 | 5bc43c9 (branch time-cascade) | - |
+| C rung b: `ref_time_shift` (existing tracker switch) | **SUPPORTS** in the twin: circle lag on one clock 0.131-0.144 -> 0.007-0.015 s (R1165/R1166); figure-8 on week4 code 0.104-0.106 -> 0.000 s (R1176/R1177); c unchanged; landed | - | configs/rig/traj_hold_rts.yaml 36cff5a | **optional r302 on the sheet, your call** |
+| runner fix: each --repeats run gets its own event copies (second repeats had started ~10 s late) | done | tools test_runner_schedule | f694300 | - |
+| reviewer on the safety-defaults results | WEAK -> corrected: M host-confounded, S bars not yet met, R1161/R1162 wrongly excluded (their anomalies were after the runner window; now kept) | - | 7849b02, 9fa14df | - |
+| week4 final check (05:00) | gate --quick 449 passed; mpc_planner 140, dissipative 51, tracker 83, fleet_manager 35, drone_communication 16, utility 15, bringup 92, sim_comm 45, tools 279 (only the old flake8/pep257 style tests fail, as before tonight) | - | HEAD on week4 | - |
+| C1 `tools/planner_replay.py`: reads the logged traj_t (orbits replayed as hovers before), slot2drone from the log row (the launch line is 1-based since 1 Oct), dissipative and twin logs; records the ring's node-5 plan | done; r206e60 (rig orbit) replays every tick with no failure, but its node-5 plan sits 16 mm (median; p90 29 mm) from the logged one, not the < 5 mm the study wanted: cause open (not the integral force, which is 0 in the orbit); needed for the catch-up (c) work, not for the rig | tools 279 | (this commit) | - |
+
+## 8 Oct morning: Wesley's run order, drop and land live
+
+| item | status | tested | committed | live for 8 Oct rig |
+|---|---|---|---|---|
+| rig sheet in Wesley's order (r301 r206e60 circle + ref_time_shift; r302/r303 hover detach announced/unannounced; r304 the better on 11/9/6/3; r305 circle detach; r306 figure-8); 30 deg stop limit (was 15); made concise (65 lines, shell shorthands $R $C $D $O) | done | every run line dry-run through rig_flight.sh; each rig config resolved through the real profile | (this commit) | yes |
+| drop and land on week4 (plain 30 deg tracker rule, Wesley 8 Oct): the two drop commits cherry-picked onto week4 alone (no model integral, default mode or detection default), on only through `drop_on_loss` in the detach configs of r302-r305 | **SUPPORTS on week4** in the twin, 12 of 12: second loss and forced drop drop and land (0 faults, down in 8.6 s, final z <= 0.14 m); r302/r303/r304 (both kinds)/r305 configs never drop (peaks 6.0-20.0 deg) and land | gate --quick 449, dissipative 58, tracker 86, fleet_manager 37, bringup 92; R1204-R1215; reviewer: numbers supported | c142662, c9b6cc6, 700a77b, 938b024, bb0406b | **yes, r302-r305** |
+| Working-rules lock line: fleet-wide disarm except detach runs with drop_on_loss | done | - | (untracked file) | - |
+
+## 8 Oct afternoon: rig session and after
+
+| item | status | evidence | committed |
+|---|---|---|---|
+| r300 props-off arm check | done: QUAD2-4 armed twice, re-ARM without relaunch works; QUAD1 `!ERR*` from boot (power-cycle) | r300.log | - |
+| r301 circle + ref_time_shift | not flown (Wesley: lag not a concern); ref_time_shift stays off everywhere | r301.log (no ARM) | - |
+| r302_3 announced hover detach, 1/3/5/9 | flew: no drop, tilt peak 15.4 deg (twin 7.4-8.6), ring dip 6.9 cm | RIG-1008-r302_3 | registry |
+| r303 | void: QUAD1 handled before TAKEOFF tripped the creep lift-off gate (z rise with no TAKEOFF check); the planner timed out its sweep with the fleet disarmed. Rule: relaunch T2 after touching a drone. Fix pending (gate only after TAKEOFF; needs a floor-start twin run) | RIG-1008-r303 | registry |
+| r303_4 unannounced hover detach, 1/3/5/9 | flew: FIRST RIG UNANNOUNCED DETACH, detected 0.42 s after the release, tilt 6.5 deg | RIG-1008-r303_4 | registry |
+| r304_3 unannounced, 1/3/6/9 (150 deg gap) | flew: detected 0.33 s, tilt 17.8 deg (twin 15.5-18.2) | RIG-1008-r304_3 | registry |
+| r305 unannounced detach in the circle | flew: FIRST RIG CIRCLE DETACH, detected 0.34 s, tilt 8.1 deg, freed drone cleared to 1.5 m and landed; off-path 5.4 cm = a constant ~6 cm offset (reference integral), 2.4 cm with offset and lag removed | RIG-1008-r305, figures/r305_detail.png, r305_video_detach.mp4 | registry |
+| tools/rig_summary.py: one image per run (top view, height, tilt, error split along/off/height, lag A0, detection latency), drawn by rig_flight.sh after Ctrl-C | done | tools 280 passed; used on every run this afternoon | this commit set |
+| model integral on resizing fleets (week4 port of f2f7d74's integral half) | tests 292 + gate --quick; twin port check running | docs/decisions.md 2026-10-08 evening | this commit set |
+| 180 deg gap with an accepted tilt (Wesley's idea for next week) | statics sketched in chat: possible in principle with the gap side drooping; limits are magnet shear at shallow rods, the planner's level-ring target and the neutral axis | - | - |
+
+## 8 Oct night (after the planning session): rig-prep and the M1 branches
+
+| item | status | evidence | committed |
+|---|---|---|---|
+| creep fix direct test (critic M1) | **SUPPORTS 2 of 2** with a valid negative control: R1242 (old file) reproduces r303, R1241/R1243 lift 9.91/9.83 s; first attempt void (the 6.5 N push flipped drone 1: R1235-R1237), R1239/R1240 void (harness) | registry R1235-R1243, card 2026-10-09_creep_takeoff_gate | rig-prep 6b6fdf0 |
+| twin R8a0 (carry on 270/30/150, QUAD4 idle on the floor) | 2 of 2 clean: ring 0.999-1.001 m, tilt peak 3.7 deg, QUAD4 no reference, z 0.10 | R1238, R1244 | rig-prep |
+| rig-prep = twin-attach (body-to-tip, runner tip columns, tools/attach_metrics.py, tools/tilt_statics.py) | merged; dissipative 60, tools 306, bringup 98 (+ the old flake8/pep257), gate --quick passed | - | rig-prep 5130c70 |
+| body-to-tip (twin dry approach) | supports on R1245: body-tip 0.590 m, tip at target - 0.01 within 0.2 mm; R1246 and the 0.51 baseline running | R1245 | - |
+| newcomer LAND and abort (rules a, b) | built behind `newcomer_lifecycle` (default off), card rev 2 after the critic's REWRITE; R1245 already shows the bug it fixes (QUAD4 disarmed at 0.64 m at LANDED); second critic pass running; twin batch 5 written | unit 77 + runner/metrics tests | branch newcomer-policy acb21f3 |
+| newcomer fault scope (rule c, Wesley: falls alone now, land later) | built behind `newcomer_fault_alone` (default off), on_load + fleet manager; MOCAP_LOSS and the push world (Wesley's word); critic running | unit 84 + fleet manager 32 + tools | branch newcomer-fault-scope be2afda |
+| QUAD1 arming checklist, questions for Tejen | written | docs/rig_quad1_checklist.md, docs/tejen_questions_2026-10.md | twin-attach |
+| tilt statics for Thursday (survivors 270/0/180) | smallest tilt 20 deg; hinge drones 1.75x weight (throttle ~0.67 < 0.8 cap), third rod 1 N at 20 deg; card + critic Sunday | tools/tilt_statics.py | - |
+
+## 9 Oct early (00:00-03:00): the newcomer's LAND, abort, fault and landing
+
+| item | status | evidence | committed |
+|---|---|---|---|
+| newcomer LAND/abort (`newcomer_lifecycle`, default off), card rev 3 after two critic REWRITEs + GO | the abort supports on every row (LAND and OFF, hover and circle, clearance >= 0.40 m, ring steady); "lands by itself" failed wherever the ring was still up (floated 0.24 m or stood on its rod) | R1248-R1257 | rig-prep |
+| newcomer fault lands the fleet (`newcomer_fault_land`, default off; Wesley: "land everything") | supports after one fix: C1 x2, C1b, C2, C3, C5; C6 (fault in the creep) leaked via the magnet manager's startup message, fixed f3a2dee, re-flown R1274 | R1258-R1265, R1274 | rig-prep |
+| departed ground idle (`departed_ground_idle`, default off), card rev 3 after REWRITE + GO | supports: G1, B1n x2, G2, N1, N2; greys G1 (press 1.02 s), G3; voids R1270/R1273 (planner lag at startup, fixed 02dba91), R1278 (carrier creep flip, cause open) | R1267-R1279 | rig-prep |
+| rig finding (critics, from the 8 Oct logs) | the freed QUAD4 in 4/4 rig detach runs (r302_3, r303_4, r304_3, r305) never reached the floor: stalled ~0.2 m, rose to 0.34-0.38 m and was dropped ~0.3 m at the fleet disarm; registry rows corrected | tracker drone3 logs | 8048739 |
+| lay-rod arc card | shelved (critic: the twin stilt was the stall freeze; the rig floats) | - | 4f36a4d |
+| twin T-R8b (first weld in the twin attach world) | ring tilt 2.7 deg, dip 1 mm; the fold-in used r 0.25 from the body, the tip was at 0.223 | R1266 | registry |
+| reviewer: creep and body-to-tip tables | both supported (body-to-tip: approach half only) | - | 9812a80 |
+| tools | runner WAIT_LOG, MOCAP_LOSS; attach_metrics, departed_metrics; push variant of the free-start attach world | tests | rig-prep |
+| combined switches (the rig R8a candidate) | batch 8 flying | twin_all_a1 x2, twin_all_b1 | - |
+
+## 9 Oct 03:00-04:40: reviewer and re-flies on the rig candidate
+
+| item | status | evidence |
+|---|---|---|
+| reviewer on the three newcomer tables | all WEAK (pre-data bars, two code trees, C1b grey, N1 no test, N2 grey); corrections taken in the cards and registry | 2fd4085, c0604f7 |
+| fault rule on the rig candidate | C1 x2, C2 support; C1b again 57 deg ring tilt (reproducible) | R1284-R1287 |
+| combined switches (the R8a candidate) | the abort supports 5/5 (A1 x3, B1 x2); QUAD4's own landing: down at its rest in 4/5, rod stand in R1282 (held at +0.25 m by the 2 s press limit, dropped 0.37 m) | R1280-R1283, R1294 |
+| ground idle on the rig candidate | freed carrier G2 supports (survivors grey at the release transient); N2 grey (disarmed at rest, no idle) | R1288, R1289 |
+| creep-start sampling | no flip in 5 more floor starts: R1278 is 1 in 53, cause open; the planner's startup lag (ARM taken after TAKEOFF, lift ~14.7 s) in 4 runs, with every switch off too | R1290-R1294 |
+
+## 9 Oct 04:45-05:55: the rod tip
+
+| item | status | evidence |
+|---|---|---|
+| how often QUAD4 stays propped on its rod tip (combined B1, 2 s press limit) | 4 of 6 (the 2 s press tips the rod halfway, then holds it) | R1282, R1283, R1295-R1298 |
+| exploratory: press limit 6 s | 4 of 4 landed and idled at rest; kept on rig-prep (still time-bounded) | R1299-R1302, 6e0c825 |
+| tests on rig-prep d1736ac | dissipative 105, tracker 93, mpc_planner 146, fleet_manager 48 + the 2 old style tests, bringup 98 + 2 style, tools 312; gate --quick passed | - |

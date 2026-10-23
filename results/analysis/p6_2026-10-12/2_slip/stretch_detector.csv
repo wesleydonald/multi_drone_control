@@ -1,0 +1,9 @@
+run,replayed on,drone,release,release (s),first tick over (s),fire (s),fire - release (ms),over at fire (cm),flight logged (s),logged - release (ms),verdict
+r302_3,log,-,-,-,-,-,-,-,-,-,no fire (announced release: the planner already knew)
+r302_3,bag,-,-,-,-,-,-,-,-,-,no fire (announced release: the planner already knew)
+r303_4,log,/drone_3,operator OFF,28.757,29.067,29.167,410,14.1,29.175,418,detection
+r303_4,bag,/drone_3,operator OFF,28.757,29.067,29.167,410,14.1,29.175,418,detection
+r304_3,log,/drone_3,operator OFF,28.821,29.053,29.153,332,20.5,29.153,332,detection
+r304_3,bag,/drone_3,operator OFF,28.821,29.053,29.153,332,20.5,29.153,332,detection
+r305,log,/drone_3,operator OFF,51.735,51.971,52.071,337,15.3,52.079,345,detection
+r305,bag,/drone_3,operator OFF,51.735,51.971,52.071,337,14.9,52.079,345,detection

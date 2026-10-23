@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""tools/land_metrics.py -- LAND after the payload touches down (cards 2026-10-03_land_unwind,
-2026-10-04_land_matrix), from run.csv and events.csv, load-down to the last armed sample.
+"""tools/land_metrics.py -- one LAND, scored for the LAND matrix (Wesley 9 Oct: LAND lands every drone safely,
+whatever it is doing).
 
-    python3 tools/land_metrics.py R0960 R0987 ...
+    python3 tools/land_metrics.py R1311 R1312 ...
 
-Per run: the worst drone pushed OUTSIDE its reference radially (the rod shove) and LAGGING INSIDE it
-(cm, about the ring centre at load-down); the worst drone tilt after the 1.2 s feedforward blend; the
-ring's xy shift; and the outcome (landed / ABORT with its reason). Window: load-down to LANDED (or the
-abort).
+From run.csv and events.csv (runner time), from the first LAND on:
+  land_t / landed_t   the first LAND and the runner's LANDED (None: never)
+  abort               the launch log shows a /fleet/abort or an EMERGENCY STOP
+  ring_tilt_max       the ring's peak tilt from LAND to the end of run.csv (deg)
+  per drone           disarm_dz (z at its disarm edge minus its rest; None: still armed at the end),
+                      tilt_max (its peak tilt from LAND to its disarm edge, deg), alone (disarmed before LANDED)
+  armed_at_end        drones still armed at run.csv's last row
 """
-import csv
 import glob
+import json
 import os
-import re
 import sys
 
 import numpy as np
@@ -21,56 +23,71 @@ import pandas as pd
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def land(rid):
-    d = glob.glob(os.path.join(REPO, 'results', '*', f'{rid}_*'))[0]
-    ev = list(csv.DictReader(open(os.path.join(d, 'logs', 'events.csv'))))
-    t_land = [float(e['sim_time']) for e in ev if e['event'] == 'LAND']
-    out = dict(run=rid, config=re.sub(r'^R\d{4}_sim_gz_', '', os.path.basename(d)))
-    abort = [f"{e['event']} {e['arg']}" for e in ev if 'ABORT' in e['event']]
-    out['outcome'] = ('ABORT ' + abort[0][:50]) if abort else (
-        'landed' if any(e['event'] == 'LANDED' for e in ev) else 'no LANDED')
-    if not t_land:
-        out['outcome'] = 'void (no LAND)' if not abort else out['outcome']
+def run_dir(rid):
+    if os.path.isdir(rid):
+        return rid
+    return glob.glob(os.path.join(REPO, 'results', '*', f'{rid}_*'))[0]
+
+
+def _event(ev, name):
+    hit = ev[ev.event == name]
+    return float(hit.sim_time.iloc[0]) if len(hit) else None
+
+
+def _aborted(d):
+    for f in glob.glob(os.path.join(d, '**', '*.log'), recursive=True):
+        try:
+            with open(f, errors='ignore') as fh:
+                for line in fh:
+                    if 'EMERGENCY STOP' in line or '/fleet/abort at' in line:
+                        return True
+        except OSError:
+            pass
+    return False
+
+
+def analyse(rid):
+    d = run_dir(rid)
+    run = pd.read_csv(os.path.join(d, 'logs', 'run.csv')).drop_duplicates('t').reset_index(drop=True)
+    ev = pd.read_csv(os.path.join(d, 'logs', 'events.csv'))
+    t = run.t.to_numpy()
+    land_t, landed_t = _event(ev, 'LAND'), _event(ev, 'LANDED')
+    out = {'run': os.path.basename(d).split('_')[0], 'land_t': land_t, 'landed_t': landed_t,
+           'abort': _aborted(d)}
+    if land_t is None:
         return out
-    df = pd.read_csv(os.path.join(d, 'logs', 'run.csv')).drop_duplicates('t')
-    n = len([c for c in df.columns if re.match(r'd\d+_tilt_deg$', c)])
-    z0 = float(df.payload_z.iloc[:20].median())
-    after = df[df.t >= t_land[0]]
-    down = after[after.payload_z <= z0 + 0.05]
-    if down.empty:
-        out['outcome'] += ' (load never down)'
-        return out
-    t_down = float(down.t.iloc[0])
-    t_end = [float(e['sim_time']) for e in ev if e['event'] in ('LANDED', 'FLEET_ABORT')]
-    w = df[(df.t >= t_down) & (df.t <= (t_end[0] if t_end else df.t.max()))]
-    armed = [f'd{i}_armed' for i in range(n)]
-    if all(c in w for c in armed):
-        w = w[w[armed].sum(axis=1) > 0]       # until LANDED (a disarmed drone may flop over after it)
-    cx, cy = float(w.payload_x.iloc[0]), float(w.payload_y.iloc[0])
-    outside, inside, tilt = [], [], []
+    after = t >= land_t
+    out['land_to_landed_s'] = round(landed_t - land_t, 2) if landed_t is not None else None
+    if 'payload_tilt_deg' in run:
+        out['ring_tilt_max'] = round(float(np.nanmax(run.payload_tilt_deg.to_numpy()[after])), 1)
+    n = len([c for c in run.columns if c.startswith('d') and c.endswith('_armed')])
+    drones, armed_end = {}, []
     for i in range(n):
-        r = np.hypot(w[f'd{i}_x'] - cx, w[f'd{i}_y'] - cy)
-        rr = np.hypot(w[f'd{i}_ref_x'] - cx, w[f'd{i}_ref_y'] - cy)
-        dr = (r - rr).to_numpy()
-        outside.append(float(np.nanmax(dr)))
-        inside.append(float(-np.nanmin(dr)))
-        late = w[w.t >= t_down + 1.2]
-        tilt.append(float(late[f'd{i}_tilt_deg'].max()) if len(late) else float('nan'))
-    shift = float(np.hypot(w.payload_x - cx, w.payload_y - cy).max())
-    out.update(n=n, outside_cm=100 * max(outside), inside_cm=100 * max(inside),
-               tilt_deg=max(tilt), ring_shift_cm=100 * shift, window_s=float(w.t.iloc[-1] - t_down))
+        z = run[f'd{i}_z'].to_numpy()
+        armed = run[f'd{i}_armed'].to_numpy() > 0.5
+        tilt = run[f'd{i}_tilt_deg'].to_numpy()
+        rest = float(np.nanmedian(z[t <= t[0] + 2.0]))
+        edge = np.where(after[1:] & armed[:-1] & ~armed[1:])[0]
+        k = edge[0] + 1 if len(edge) else None
+        end = k if k is not None else len(t) - 1
+        drones[i] = {'disarm_dz': round(float(z[k] - rest), 3) if k is not None else None,
+                     'tilt_max': round(float(np.nanmax(tilt[after][:max(1, end - int(np.argmax(after)) + 1)])), 1),
+                     'alone': bool(k is not None and landed_t is not None and t[k] < landed_t)}
+        if armed[-1]:
+            armed_end.append(i)
+    out['drones'] = drones
+    out['armed_at_end'] = armed_end
     return out
 
 
-def main():
-    keys = ['run', 'config', 'n', 'outside_cm', 'inside_cm', 'tilt_deg', 'ring_shift_cm', 'outcome']
-    print('| ' + ' | '.join(keys) + ' |')
-    print('|' + '---|' * len(keys))
-    for rid in sys.argv[1:]:
-        r = land(rid)
-        print('| ' + ' | '.join(f'{r[k]:.1f}' if isinstance(r.get(k), float) else str(r.get(k, ''))
-                                for k in keys) + ' |')
+def main(argv):
+    if not argv:
+        print(__doc__)
+        return 1
+    for rid in argv:
+        print(json.dumps(analyse(rid)))
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main(sys.argv[1:]))

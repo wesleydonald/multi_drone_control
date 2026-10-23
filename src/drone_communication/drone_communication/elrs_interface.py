@@ -8,6 +8,8 @@ import csv  # Import the csv module
 import serial
 import time
 import argparse
+import json
+import math
 from enum import IntEnum
 import numpy as np
 from datetime import datetime
@@ -16,6 +18,7 @@ from interfaces.msg import MotionCaptureState, ELRSCommand, Telemetry  # Import 
 from std_msgs.msg import Bool
 
 from drone_communication.arm_switch import ArmSwitch
+from drone_communication.serial_lock import open_exclusive
 
 CRSF_SYNC = 0xC8
 
@@ -34,6 +37,28 @@ class PacketsTypes(IntEnum):
     CONFIG_READ = 0x2C
     CONFIG_WRITE = 0x2D
     RADIO_ID = 0x3A
+
+def radio_health(node, now) -> dict:
+    """The radio_health record of an ELRS interface (node: its attributes), at wall time now."""
+    def age(t):
+        return None if t is None else round(now - t, 2)
+    recent = [t for t in node.cmd_times if t >= now - 5.0]
+    node.cmd_times[:] = recent
+    gaps = [b - a for a, b in zip(recent, recent[1:])]
+    roll, pitch = node.attitude if node.attitude is not None else (None, None)
+    tilt = (None if roll is None else
+            round(math.degrees(math.acos(max(-1.0, min(1.0, math.cos(roll) * math.cos(pitch))))), 1))
+    return {'port': node.serial_port, 'connected': node.ser is not None, 'reconnects': node.reconnects,
+            'reconnect_age_s': age(node.reconnect_t),
+            'cmd_rate_hz': round(len([t for t in recent if t >= now - 1.0]), 1),
+            'cmd_max_gap_s': round(max(gaps), 3) if gaps else None,
+            'rssi_dbm': node.link.get('rssi_dbm'), 'lq': node.link.get('lq'), 'link_age_s': age(node.link.get('t')),
+            'voltage': round(float(node.battery_voltage), 2) if node.battery_t is not None else None,
+            'voltage_age_s': age(node.battery_t), 'mode': node.mode, 'mode_age_s': age(node.mode_t),
+            'fc_tilt_deg': tilt, 'fc_roll_deg': None if roll is None else round(math.degrees(roll), 1),
+            'fc_pitch_deg': None if pitch is None else round(math.degrees(pitch), 1),
+            'attitude_age_s': age(node.attitude_t), 'fc_arm_state': node.fc_arm_state}
+
 
 def crc8_dvb_s2(crc, a) -> int:
   crc = crc ^ a
@@ -147,8 +172,23 @@ class ELRSInterface(Node):
         self.battery_mah_used = 0
         self.rssi = 0
         self.mode = "UNKNOWN"
+        # telemetry lines on the console only on request (they were ~20 % of the 14 Oct T2 flood); the same values go
+        # out once a second on radio_health for the console and the bag
+        self.print_telemetry = bool(self.declare_parameter('print_telemetry', False).value)
+        self.link = {}
+        self.battery_t = None
+        self.attitude = None
+        self.attitude_t = None
+        self.reconnects = 0
+        self.reconnect_t = None
+        self.cmd_times = []
+        self.health_pub = self.create_publisher(String, 'radio_health', 10)
+        self.health_timer = self.create_timer(1.0, self.publish_health)
 
         self.telemetry_publisher = self.create_publisher(Telemetry, 'telemetry', 10)  # Telemetry publisher
+        # the FC's own attitude from CRSF telemetry ([roll, pitch, yaw] rad), next to mocap's: the tilt cut's
+        # rig evidence (card 2026-10-11_quad4_tilt_cut, critic round 1 M1)
+        self.fc_attitude_pub = self.create_publisher(Float32MultiArray, 'fc_attitude', 10)
 
         # Per-drone electromagnet on a Betaflight aux mode. `magnet` (String ON|OFF, relative
         # -> /drone_<i>/magnet) latches the aux value into every packet sent, including the
@@ -191,13 +231,13 @@ class ELRSInterface(Node):
                 # Explicit device if the serial_port param is set; else auto-detect
                 # the first /dev/ttyUSB* (single-drone fallback, unchanged).
                 if self.serial_port:
-                    self.ser = serial.Serial(self.serial_port, 921600, timeout=0.1)
+                    self.ser = open_exclusive(self.serial_port)
                     self.get_logger().info(f'Serial port MULTI {self.serial_port} connected.')
                     return
                 ports = serial.tools.list_ports.comports()
                 for port in ports:
                     if '/dev/ttyUSB' in port.device:  # Check for USB serial devices
-                        self.ser = serial.Serial(port.device, 921600, timeout=0.1)  # Reduced timeout
+                        self.ser = open_exclusive(port.device)
                         self.get_logger().info(f'Serial port SINGLE {port.device} connected.')
                         return
                 if say:
@@ -210,7 +250,8 @@ class ELRSInterface(Node):
                     self.get_logger().error(
                         f'Radio {self.serial_port or "/dev/ttyUSB*"} not available ({e}). This drone gets '
                         f'no commands until it connects: plug in / reseat its TX module, check '
-                        f'ls -l /dev/QUAD*. Retrying every second.')
+                        f'ls -l /dev/QUAD*; "busy" means another radio node holds it (T1 still up, or a '
+                        f'second stack). Retrying every second.')
                 time.sleep(1)  # Wait before retrying
 
     def magnet_callback(self, msg):
@@ -226,6 +267,7 @@ class ELRSInterface(Node):
 
     def controller_commands_callback(self, msg):
         self.last_message_time = time.time()  # Update the timestamp of the most recent message
+        self.cmd_times.append(self.last_message_time)
         self.armed = bool(msg.armed)  # Ensure msg.armed is explicitly converted to a boolean
 
         self.packet[0] = self.idle + int(max(-1.0, min(1.0, msg.channel_0)) * self.range)
@@ -243,6 +285,19 @@ class ELRSInterface(Node):
 
         # packet[4] (the arm switch) is set every tick in publish_message by the arm switch
 
+    def _tprint(self, ptype, text, force=False):
+        """Telemetry to the console at most once a second per frame type (every frame was 94 lines/s over four
+        radios on the loaded rig laptop, 14 Oct); force prints a change at once (the flight mode)."""
+        last = getattr(self, '_tprint_t', None)
+        if last is None:
+            last = self._tprint_t = {}
+        now = time.time()
+        if not getattr(self, 'print_telemetry', True):
+            return
+        if force or now - last.get(ptype, 0.0) >= 1.0:
+            last[ptype] = now
+            print(text)
+
     def handleCrsfPacket(self, ptype, data):
         if ptype == PacketsTypes.RADIO_ID and data[5] == 0x10:
             #print(f"OTX sync")
@@ -259,25 +314,29 @@ class ELRSInterface(Node):
             downlink_rssi = signed_byte(data[10])
             downlink_lq = data[11]
             downlink_snr = signed_byte(data[12])
-            print(f"RSSI={rssi1}/{rssi2}dBm LQ={lq:03} mode={mode} ant={antenna} snr={snr} power={power} drssi={downlink_rssi} dlq={downlink_lq} dsnr={downlink_snr}")
+            self._tprint(ptype, f"RSSI={rssi1}/{rssi2}dBm LQ={lq:03} mode={mode} ant={antenna} snr={snr} power={power} drssi={downlink_rssi} dlq={downlink_lq} dsnr={downlink_snr}")
             self.rssi = signed_byte(data[3])  # Update RSSI
+            self.link = {'rssi_dbm': max(rssi1, rssi2), 'lq': lq, 'downlink_lq': downlink_lq, 't': time.time()}
         elif ptype == PacketsTypes.ATTITUDE:
             pitch = int.from_bytes(data[3:5], byteorder='big', signed=True) / 10000.0
             roll = int.from_bytes(data[5:7], byteorder='big', signed=True) / 10000.0
             yaw = int.from_bytes(data[7:9], byteorder='big', signed=True) / 10000.0
-            print(f"Attitude: Pitch={pitch:0.2f} Roll={roll:0.2f} Yaw={yaw:0.2f} (rad)")
+            self._tprint(ptype, f"Attitude: Pitch={pitch:0.2f} Roll={roll:0.2f} Yaw={yaw:0.2f} (rad)")
+            self.fc_attitude_pub.publish(Float32MultiArray(data=[float(roll), float(pitch), float(yaw)]))
+            self.attitude, self.attitude_t = (roll, pitch), time.time()
         elif ptype == PacketsTypes.FLIGHT_MODE:
             packet = ''.join(map(chr, data[3:-2]))
-            print(f"Flight Mode: {packet}")
+            self._tprint(ptype, f"Flight Mode: {packet}", force=(packet != self.mode))
             self.mode = ''.join(map(chr, data[3:-2]))  # Update mode
             self.mode_t = time.time()
         elif ptype == PacketsTypes.BATTERY_SENSOR:
             vbat = int.from_bytes(data[3:5], byteorder='big', signed=True) / 10.0
             curr = int.from_bytes(data[5:7], byteorder='big', signed=True) / 10.0
-            mah = data[7] << 16 | data[8] << 7 | data[9]
+            mah = data[7] << 16 | data[8] << 8 | data[9]
             pct = data[10]
-            print(f"Battery: {vbat:0.2f}V {curr:0.1f}A {mah}mAh {pct}%")
+            self._tprint(ptype, f"Battery: {vbat:0.2f}V {curr:0.1f}A {mah}mAh {pct}%")
             self.battery_voltage = vbat  # Update battery voltage
+            self.battery_t = time.time()
             self.battery_mah_used = mah  # Update battery mAh used
         elif ptype == PacketsTypes.BARO_ALT:
             print(f"BaroAlt: ")
@@ -306,8 +365,12 @@ class ELRSInterface(Node):
         self.packet[4] = self.idle + self.range if high else self.idle - self.range
         if state != self.fc_arm_state:
             self.fc_arm_state = state
-            log = self.get_logger().error if state.startswith('failed') else self.get_logger().info
-            log(f'arm ({self.serial_port or "radio"}): {state}')
+            # one call site per severity: rclpy raises if a call site changes severity (it killed the radio on a refused arm)
+            msg = f'arm ({self.serial_port or "radio"}): {state}'
+            if state.startswith('failed'):
+                self.get_logger().error(msg)
+            else:
+                self.get_logger().info(msg)
             self.fc_state_pub.publish(String(data=f'{state} [{self.serial_port}]'))
             self.fc_armed_pub.publish(Bool(data=state == 'armed'))
 
@@ -322,6 +385,10 @@ class ELRSInterface(Node):
         # re-publish the arm state at 10 Hz so a late subscriber (the manager) sees it
         self.fc_state_pub.publish(String(data=f'{self.fc_arm_state} [{self.serial_port}]'))
         self.fc_armed_pub.publish(Bool(data=self.fc_arm_state == 'armed'))
+
+    def publish_health(self):
+        """Once a second: everything the console needs from this radio (std_msgs/String, JSON)."""
+        self.health_pub.publish(String(data=json.dumps(radio_health(self, time.time()))))
 
     def publish_message(self):
         # Check if no message has been received for 0.1 seconds
@@ -362,7 +429,14 @@ class ELRSInterface(Node):
                     break
         except (serial.SerialException, OSError):
             self.get_logger().error('Serial connection lost. Attempting to reconnect...')
+            try:
+                if self.ser is not None:
+                    self.ser.close()
+            except (serial.SerialException, OSError):
+                pass
             self.ser = None
+            self.reconnects += 1
+            self.reconnect_t = time.time()
             self.connect_serial()
         
 

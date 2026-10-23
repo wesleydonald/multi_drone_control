@@ -117,7 +117,29 @@ def world_geometry(sdf_path):
             g['_warn_cable'] = f'rod lengths differ: {sorted(set(lengths))}'
 
     g.update(_drone_and_rod_geometry(sdf_path, world))
+    arm = newcomer_arm(sdf_path)
+    if arm is not None:
+        g['attach_arm_len'], g['attach_arm_pivot_z'] = arm
     return g
+
+
+def newcomer_arm(sdf_path):
+    """(length, pivot z in the body frame) of the newcomer's magnet arm in the model the world includes
+    (models/x3_[rig_]drone<k>_magnet*.sdf, link magnet_arm), or None. The newcomer's body to tip is length - pivot z
+    (rig twin 0.55 + 0.04, legacy 0.50 - 0.01)."""
+    m = re.search(r'<uri>(models/x3_(?:rig_)?drone\d_magnet[^<]*\.sdf)</uri>', pathlib.Path(sdf_path).read_text())
+    if not m:
+        return None
+    mf = pathlib.Path(sdf_path).parent / m.group(1)
+    if not mf.exists():                       # a world in old_worlds/ includes models/ too
+        mf = REPO / 'simulation_assets' / m.group(1)
+    # read as text: some legacy newcomer models are not well-formed XML. A segmented arm (magnet_arm_lower) adds up
+    links = re.findall(r'<link name="magnet_arm(?:_lower)?">\s*<pose[^>]*>([^<]+)</pose>(.*?)</link>',
+                       mf.read_text() if mf.exists() else '', re.S)
+    lengths = [re.search(r'<cylinder>.*?<length>([0-9.eE+-]+)</length>', body, re.S) for _, body in links]
+    if not links or not all(lengths):
+        return None
+    return sum(float(m.group(1)) for m in lengths), float(links[0][0].split()[2])
 
 
 def _link_mass(link):
@@ -257,6 +279,7 @@ def launch_defaults(launch_path, mode=None, legacy=False):
 
 
 COMPARED = ['cable_len', 'attach_radius', 'load_mass', 'attach_z', 'load_ixx', 'load_izz']
+ARM_TOL = 0.005    # m: the newcomer's body to tip, the planner's (attach_cable_len) against the world's arm
 INFO_ONLY = ['num_drones']   # passed per run (num_drones:=3), not a fixed default
 # Compared only where the launch/config declares them. drone_mass is airframe + rod
 # (the legacy worlds' 1 g rod sits inside its 5 g band); the launch's pivot_offset_z is
@@ -268,6 +291,15 @@ DECLARED = {'drone_mass': ('drone_mass', 1.0, 0.005),
 def _tol(k, wv):
     # inertias are ~1e-2, so they get a relative tolerance instead of TOL
     return 0.05 * abs(wv) if k.startswith('load_i') else TOL
+
+
+def inertia_untyped(v):
+    """A load_ixx / load_izz knob that leaves the ring inertia to params.py: untyped ('' in the profile) or 0 (the
+    planner's per-kg default, params.load_inertia)."""
+    try:
+        return v is None or str(v).strip() == '' or float(v) == 0.0
+    except (TypeError, ValueError):
+        return False
 
 
 def config_mismatches(world, launch_path=None, overrides=None):
@@ -284,8 +316,9 @@ def config_mismatches(world, launch_path=None, overrides=None):
     for k in COMPARED:
         if k not in g:
             continue
+        v = None if k.startswith('load_i') and inertia_untyped(d.get(k)) else d.get(k)
         try:
-            cv = float(d[k]) if d.get(k) is not None else nd.get(k)
+            cv = float(v) if v is not None else nd.get(k)
         except (TypeError, ValueError):
             continue
         if cv is not None and abs(cv - g[k]) > _tol(k, g[k]):
@@ -299,7 +332,42 @@ def config_mismatches(world, launch_path=None, overrides=None):
             continue
         if abs(cv - sign * g[wk]) > tol:
             bad.append((k, sign * g[wk] + 0.0, cv))
+    arm = arm_rods(g, d, nd)
+    legacy_world = legacy or (not isinstance(world, dict) and is_legacy_world(world))
+    if arm is not None and abs(arm[1] - arm[0]) > ARM_TOL and not (legacy_world and arm_untyped(d)):
+        bad.append(('attach_cable_len',) + arm)
     return bad
+
+
+def attach_rod(d, nd=None):
+    """The newcomer's rod the planner flies: attach_cable_len, untyped ('') the carriers' cable_len."""
+    for k in ('attach_cable_len', 'cable_len'):
+        v = d.get(k)
+        if v not in (None, ''):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+    return (nd or {}).get('cable_len')
+
+
+def arm_untyped(d):
+    """attach_cable_len left to cable_len. On a legacy world that is the legacy profile's rod, 1 cm over its arm's
+    body to tip (0.50 against 0.49) as flown since 4 Oct: reported (WARN), not refused."""
+    return d.get('attach_cable_len') in (None, '')
+
+
+def arm_rods(g, d, nd=None):
+    """(the attach_cable_len the world's arm asks for, the one flown), or None: the two compared body to tip, the
+    planner's rod below its pivot_offset_z (legacy 0) against the world's arm below its own pivot."""
+    rod = attach_rod(d, nd)
+    if 'attach_arm_len' not in g or rod is None:
+        return None
+    try:
+        pz = float(d.get('pivot_offset_z') or 0.0)
+    except (TypeError, ValueError):
+        pz = 0.0
+    return g['attach_arm_len'] - g['attach_arm_pivot_z'] + pz, rod
 
 
 def _load_config(path):
@@ -375,9 +443,10 @@ def main():
         if k not in g:
             continue
         wv = float(g[k])
-        if k in d and d[k] is not None:
+        typed = None if k.startswith('load_i') and inertia_untyped(d.get(k)) else d.get(k)
+        if typed is not None:
             try:
-                cv, src = float(d[k]), 'launch'
+                cv, src = float(typed), 'launch'
             except (TypeError, ValueError):
                 continue
         elif k in nd:
@@ -403,12 +472,22 @@ def main():
         bad += flag != 'ok'
         print(f"   {k:16s} world={wv:<9.4f} {'launch':>9s}={cv:<9.4f} {flag}")
 
+    arm = arm_rods(g, d, nd)
+    if arm is not None:
+        flag = '** MISMATCH **' if abs(arm[1] - arm[0]) > ARM_TOL else 'ok'
+        if flag != 'ok' and is_legacy_world(args.world) and arm_untyped(d):
+            flag = 'WARN (legacy, untyped)'
+        bad += flag == '** MISMATCH **'
+        print(f"   {'attach_cable_len':16s} world={arm[0]:<9.4f} {'launch':>9s}={arm[1]:<9.4f} {flag} "
+              f"(the newcomer's body to tip, less pivot_offset_z)")
+
     # attach azimuths: the launch's attach_azimuths_deg ('' = even ring) vs the stubs
     if 'attach_azimuths' in g:
         spec = d.get('attach_azimuths_deg')
         n_w = len(g['attach_azimuths'])
         if spec:
-            want = sorted(round(float(v) % 360.0, 1) for v in str(spec).split(',') if v.strip())
+            # typed clockwise since 15 Oct; the world's stubs sit at counter-clockwise azimuths
+            want = sorted(round((-float(v)) % 360.0, 1) for v in str(spec).split(',') if v.strip())
         else:
             want = sorted(round(360.0 * k / n_w, 1) for k in range(n_w))
         have = g['attach_azimuths']

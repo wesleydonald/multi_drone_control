@@ -1,0 +1,48 @@
+name: carry_hover_n3_long_ff090_ofw
+description: 'Card docs/experiments/2026-10-04_offset_free_innovation.md: SIL arm carry_hover_n3_long_ff090 with
+  the offset-free observer on (of_tau 2.0, of_window 0.5: the position predicted 0.5 s back).'
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    mode: attach
+    num_drones: 3
+    reserved_attach: 0
+    enable_approach: false
+    start_taut: true
+    load_traj: hover
+    cable_len: 0.5
+    attach_azimuths_deg: even
+    load_mass: 0.86
+    target_z: 0.6
+    cable_ff_scale: 0.9
+    kt_trim: false
+    z_ki: 0.0
+    offset_free: 'on'
+    of_tau: 2.0
+    of_window: 0.5
+fleet:
+  n_tethered: 3
+  n_total: 3
+geometry:
+  cable_len: 0.5
+  attach_radius: 0.25
+  attach_z: 0.025
+  load_mass: 0.86
+initial:
+  stands: true
+  load_z: 0.45
+  elev_deg: 45.0
+timing:
+  dt: 0.02
+  substeps: 20
+  duration_s: 50.0
+  step_timeout_s: 0.5
+  ready_timeout_s: 300.0
+events:
+- t: 1.0
+  do: ARM
+- t: 10.0
+  do: TAKEOFF
+- t: 46.0
+  do: LAND

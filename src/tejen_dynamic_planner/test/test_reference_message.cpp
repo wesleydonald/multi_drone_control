@@ -105,6 +105,30 @@ int main() {
                         "MPC stage sample timing mismatch");
         }
 
+        // The companion carries the existing stopped tail, not an invented stop
+        // at the rolling-window endpoint. Normal MPC publication stays 61 points.
+        dynamic_planner::State moving;
+        moving.position = dynamic_planner::Vec3(0., 0., 1.);
+        moving.velocity = dynamic_planner::Vec3(.5, 0., 0.);
+        const auto stopped = dynamic_planner::makeBrakingHoverTrajectory(
+            moving, 100., dynamic_planner::Vec3::Constant(.10), .25);
+        const auto continuation = tejen_dynamic_planner::sampleStoppedContinuation(stopped, 100., config);
+        require(continuation.samples.size() > 61, "companion truncates a moving tail");
+        require(continuation.samples.back().state.velocity.norm() < 1e-9 &&
+                continuation.samples.back().state.acceleration.norm() < 1e-9,
+                "companion does not reach actual committed stop");
+        for (const auto& sample : continuation.samples) {
+            const auto expected = stopped.evaluate(sample.absolute_time_s);
+            require((sample.state.position-expected.position).norm() < 1e-12 &&
+                    (sample.state.velocity-expected.velocity).norm() < 1e-12 &&
+                    (sample.state.acceleration-expected.acceleration).norm() < 1e-12,
+                    "companion changes committed dynamics");
+        }
+        bool rejected_moving_end = false;
+        try { (void)tejen_dynamic_planner::sampleStoppedContinuation(committed, 100.5, config); }
+        catch (const std::invalid_argument&) { rejected_moving_end = true; }
+        require(rejected_moving_end, "moving endpoint falsely declared stopped");
+
         std::cout << "C.1a ROS reference-message contract: PASS\n";
         std::cout << "points: " << message.points.size() << "\n";
         std::cout << "stage spacing: 0.1 s; terminal: 2.0 s\n";

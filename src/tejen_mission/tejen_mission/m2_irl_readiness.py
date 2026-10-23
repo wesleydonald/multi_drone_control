@@ -1,4 +1,4 @@
-"""ROS-independent fail-closed readiness gate for the two-drone M2 IRL mission."""
+"""ROS-independent readiness gate for two/four-drone M2 IRL missions."""
 
 from __future__ import annotations
 
@@ -53,20 +53,46 @@ class TwoDroneIRLReadinessGate:
         self,
         *,
         vehicle_ids: Sequence[str] = ("drone_0", "drone_1"),
-        timeout_s: float = 0.25,
+        timeout_s: float | None = None,
+        mocap_timeout_s: float | None = None,
+        telemetry_timeout_s: float | None = None,
+        ring_timeout_s: float | None = None,
+        link_statistics_timeout_s: float | None = None,
         status_timeout_s: float = 1.25,
         stationary_dwell_s: float = 1.0,
         max_stationary_speed_mps: float = 0.05,
     ) -> None:
         ids = tuple(str(value) for value in vehicle_ids)
-        if ids != ("drone_0", "drone_1"):
-            raise ValueError("minimum M2 IRL baseline requires drone_0 and drone_1")
+        if len(ids) not in (2, 4) or ids != tuple(f"drone_{i}" for i in range(len(ids))):
+            raise ValueError("M2 IRL readiness requires two or four contiguous vehicle IDs")
         self.vehicle_ids = ids
-        self.timeout_s = float(timeout_s)
+        # timeout_s remains a compatibility default for non-IRL callers.  The
+        # two-drone IRL launch supplies every stream class explicitly.
+        legacy_timeout_s = 0.25 if timeout_s is None else float(timeout_s)
+        self.mocap_timeout_s = float(
+            legacy_timeout_s if mocap_timeout_s is None else mocap_timeout_s
+        )
+        self.telemetry_timeout_s = float(
+            legacy_timeout_s if telemetry_timeout_s is None else telemetry_timeout_s
+        )
+        self.ring_timeout_s = float(
+            legacy_timeout_s if ring_timeout_s is None else ring_timeout_s
+        )
+        self.link_statistics_timeout_s = float(
+            legacy_timeout_s
+            if link_statistics_timeout_s is None
+            else link_statistics_timeout_s
+        )
+        self.timeout_s = self.mocap_timeout_s
         self.status_timeout_s = float(status_timeout_s)
         self.required_dwell_s = float(stationary_dwell_s)
         self.max_stationary_speed_mps = float(max_stationary_speed_mps)
-        if self.timeout_s <= 0.0 or self.status_timeout_s <= 0.0 or self.required_dwell_s < 0.0:
+        timing_values = (
+            self.mocap_timeout_s, self.telemetry_timeout_s,
+            self.ring_timeout_s, self.link_statistics_timeout_s,
+            self.status_timeout_s,
+        )
+        if any(not math.isfinite(value) or value <= 0.0 for value in timing_values) or self.required_dwell_s < 0.0:
             raise ValueError("readiness timing values are invalid")
         if self.max_stationary_speed_mps < 0.0:
             raise ValueError("max_stationary_speed_mps must be non-negative")
@@ -113,7 +139,7 @@ class TwoDroneIRLReadinessGate:
         now = float(now_s)
         if not math.isfinite(now):
             raise ValueError("now_s must be finite")
-        ring_fresh = self.ring_stamp_s is not None and self._fresh(now, self.ring_stamp_s)
+        ring_fresh = self.ring_stamp_s is not None and self._ring_fresh(now, self.ring_stamp_s)
         vehicle_ready: dict[str, bool] = {}
         vehicle_reasons: dict[str, tuple[str, ...]] = {}
         for vehicle_id in self.vehicle_ids:
@@ -127,10 +153,11 @@ class TwoDroneIRLReadinessGate:
                 ("body_stale", evidence.body_stamp_s),
                 ("magnet_stale", evidence.magnet_stamp_s),
                 ("arming_stale", evidence.arming_stamp_s),
-                ("telemetry_stale", evidence.telemetry_stamp_s),
             ):
-                if not self._fresh(now, stamp):
+                if not self._mocap_fresh(now, stamp):
                     reasons.append(name)
+            if not self._telemetry_fresh(now, evidence.telemetry_stamp_s):
+                reasons.append("telemetry_stale")
             for name, stamp in (
                 ("planner_stale", evidence.planner_stamp_s),
                 ("backend_stale", evidence.backend_stamp_s),
@@ -140,7 +167,7 @@ class TwoDroneIRLReadinessGate:
                     reasons.append(name)
             if not link_statistics_fresh(
                 self.link_statistics_stamps.get(vehicle_id),
-                now_s=now, timeout_s=self.timeout_s,
+                now_s=now, timeout_s=self.link_statistics_timeout_s,
             ):
                 reasons.append("link_statistics_stale")
             if evidence.armed:
@@ -171,9 +198,17 @@ class TwoDroneIRLReadinessGate:
             reason = "ready"
         return ReadinessSnapshot(ready, vehicle_ready, vehicle_reasons, dwell, reason)
 
-    def _fresh(self, now: float, stamp: float) -> bool:
+    def _mocap_fresh(self, now: float, stamp: float) -> bool:
         age = now - float(stamp)
-        return -1e-6 <= age <= self.timeout_s
+        return -1e-6 <= age <= self.mocap_timeout_s
+
+    def _telemetry_fresh(self, now: float, stamp: float) -> bool:
+        age = now - float(stamp)
+        return -1e-6 <= age <= self.telemetry_timeout_s
+
+    def _ring_fresh(self, now: float, stamp: float) -> bool:
+        age = now - float(stamp)
+        return -1e-6 <= age <= self.ring_timeout_s
 
     def _status_fresh(self, now: float, stamp: float) -> bool:
         age = now - float(stamp)

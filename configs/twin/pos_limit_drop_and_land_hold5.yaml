@@ -1,0 +1,12 @@
+# The twin's LIM runs (card docs/experiments/2026-10-22_position_limit.md): configs/rig/drop_and_land_hold5.yaml as it
+# is, plus the position limit at Wesley's 1.75 m (a launch takes one params_file and pos_limit_m cannot be typed).
+# drop and land (card docs/experiments/2026-10-08_drop_and_land.md): unannounced-detach detection, the
+# 0.5 m step-out and drop_on_loss (planner triggers + the trackers' ring-tilt rule at 30 deg).
+# 8 Oct rig: the unannounced hover detaches
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+# 22 Oct (Wesley, after RIG-1022-f3big): every path flies a 5 s hover hold first, so the model integral learns the
+# rig's steady push (2-5 cm toward -x) before the path; the twin's baselines fly it too (twin = rig)
+traj_hold_s: 5.0
+pos_limit_m: 1.75

@@ -44,22 +44,48 @@ fi
 
 step "2/6  unit tests"
 if python3 -m pytest src/utility_objects/test/test_safety.py \
+                    src/utility_objects/test/test_position_limit.py \
                     src/bringup/test/test_rviz_config.py \
-                    src/tracker/test/test_planner_reference.py \
                     src/bringup/test/test_config_tools.py \
-                    src/dissipative_planner/test/test_attach_network.py \
-                    src/dissipative_planner/test/test_load_trim.py \
                     src/mpc_planner/test/test_creep_controller.py \
-                    src/tracker/test/test_velocity_loop.py \
                     src/mpc_planner/test/test_load_geometry_params.py \
-                    src/tracker/test/test_kt_trim.py \
                     src/mpc_planner/test/test_attach_azimuths.py \
                     src/mpc_planner/test/test_measured_rod.py \
-                    src/dissipative_planner/test/test_symmetric_handout.py \
-                    src/drone_magnet/test/test_handover_policy.py \
-                    src/drone_magnet/test/test_elrs_mux_magnet.py \
-                    src/drone_communication/test/test_magnet_channel.py \
-                    src/tracker/test/test_thrust_model.py \
+                    src/mpc_planner/test/test_fig8_size.py \
+                    src/mpc_planner/test/test_traj_laps.py \
+                    src/mpc_planner/test/test_position_limit_refs.py \
+                    src/mpc_planner/test/test_horizon_kinematics.py \
+                    src/mpc_planner/test/test_res_defer.py \
+                    src/mpc_planner/test/test_load_inertia_param.py \
+                    src/mpc_planner/test/test_planner_log.py \
+                    src/tejen_mpc/test/test_mpc_profile.py \
+                    src/tejen_mpc/test/test_command_execution.py \
+                    src/tejen_mission/test/test_partner_mission_mpc_profile.py \
+                    src/bringup/test/test_real_mode_launches.py \
+                    src/bringup/test/test_fleet_viz_launch.py \
+                    src/simulation_communication/test/test_fleet_viz.py \
+                    src/simulation_communication/test/test_cmd_delay_split.py \
+                    src/simulation_communication/test/test_rate_pid.py \
+                    src/dissipative_planner/test \
+                    src/drone_magnet/test \
+                    src/tejen_mission/test/test_m1_contact_attach.py \
+                    src/tejen_mission/test/test_m1_contact_targets.py \
+                    src/tejen_mission/test/test_floor_join_delivery_rejoin.py \
+                    src/tejen_mission/test/test_takeoff_hold.py \
+                    src/tejen_mission/test/test_bottom_hold.py \
+                    src/tejen_mission/test/test_partner_mission_rig.py \
+                    src/tejen_mission/test/test_m2_irl_progressive_policy.py \
+                    src/tejen_mission/test/test_partner_mission_geometry.py \
+                    src/tracker/test \
+                    src/drone_communication/test \
+                    src/fleet_manager/test/test_announce_real_logger.py \
+                    src/fleet_manager/test/test_arm_gate.py \
+                    src/fleet_manager/test/test_down_alone.py \
+                    src/fleet_manager/test/test_mux_abort_manager.py \
+                    src/fleet_manager/test/test_payload_dropped.py \
+                    src/fleet_manager/test/test_pre_takeoff_gate.py \
+                    src/fleet_manager/test/test_tilt_cut_manager.py \
+                    src/fleet_manager/test/test_position_limit_manager.py \
                     tools/test -q 2>&1 | tail -3; then
   :
 else
@@ -79,9 +105,13 @@ step "4/6  world geometry vs controller config"
 # config bug. This project has lost a week to exactly that.
 GEO_BAD=0
 launch="src/bringup/launch/sim_control_launch.py"
+# the twin's defaults fly 1 m cables since 22 Oct: its default worlds are the _L100 ones (a 0.55 m world is flown
+# with cable_len:=0.55 typed)
 for pair in \
-  "simulation_assets/three_rigid_ground_rig.sdf:mpc" \
-  "simulation_assets/four_rigid_ground_rig.sdf:dissipative" \
+  "simulation_assets/three_rigid_ground_rig_L100.sdf:mpc" \
+  "simulation_assets/four_rigid_ground_rig_L100.sdf:dissipative" \
+  "simulation_assets/four_rigid_ground_rig_L100.sdf:network" \
+  "simulation_assets/three_rigid_ground_rig_attach_L100.sdf:attach" \
   "simulation_assets/old_worlds/three_rigid_ground.sdf:mpc" \
   "simulation_assets/old_worlds/four_rigid_ground.sdf:dissipative" \
   "simulation_assets/old_worlds/three_attach.sdf:attach" \
@@ -114,6 +144,13 @@ if python3 tools/make_carry_worlds.py --check >/dev/null 2>&1; then
   echo "   ok   rig carry worlds up to date"
 else
   echo "!! rig carry worlds stale: rerun tools/make_carry_worlds.py"
+  GEO_BAD=1
+fi
+# ... and the 1 m attach family from make_attach_worlds.py's generator (the 0.55 m family has its own test)
+if python3 tools/make_attach_worlds_L100.py --check >/dev/null 2>&1; then
+  echo "   ok   rig 1 m attach worlds up to date"
+else
+  echo "!! rig 1 m attach worlds stale: rerun tools/make_attach_worlds_L100.py"
   GEO_BAD=1
 fi
 [ "$GEO_BAD" -eq 0 ] || FAILED+=("geometry")

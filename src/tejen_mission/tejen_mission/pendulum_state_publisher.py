@@ -91,6 +91,12 @@ class PendulumStatePublisher(Node):
 
         self.frame_id = str(self.declare_parameter('frame_id', 'map').value)
         self.publish_rate_hz = max(1.0, float(self.declare_parameter('publish_rate_hz', 500.0).value))
+        # Opt-in experiment simulation: derivatives belong to source poses, not
+        # repeated 500 Hz timer reads of the same cached 120 Hz measurement.
+        self.use_pose_sample_time = bool(self.declare_parameter('use_pose_sample_time', False).value)
+        self.last_pose_sample_ns: Optional[int] = None
+        self.last_pose_clock_ns: Optional[int] = None
+        self.pose_sample_stamp = None
         self.warn_throttle_s = float(self.declare_parameter('warn_throttle_s', 2.0).value)
         self.publish_payload_world_state = bool(self.declare_parameter('publish_payload_world_state', False).value)
         self.publish_magnet_tip_pose = bool(self.declare_parameter('publish_magnet_tip_pose', True).value)
@@ -123,7 +129,8 @@ class PendulumStatePublisher(Node):
         self.payload_world_pub = self.create_publisher(MotionCaptureState, self.payload_world_state_topic, 10)
         self.magnet_tip_pub = self.create_publisher(PoseStamped, self.magnet_tip_pose_topic, 10)
 
-        self.timer = self.create_timer(1.0 / self.publish_rate_hz, self.publish_state)
+        self.timer = (None if self.use_pose_sample_time else
+                      self.create_timer(1.0 / self.publish_rate_hz, self.publish_state))
 
         self.get_logger().info(
             'PendulumStatePublisher started with electromagnet-based state and world-frame magnet tip. '
@@ -132,7 +139,8 @@ class PendulumStatePublisher(Node):
             f'x3_link_poses_are_relative={self.x3_link_poses_are_relative}, '
             f'use_drone_as_attachment_anchor={self.use_drone_as_attachment_anchor}, '
             f'attachment_offset=({self.attachment_offset_x:.3f},{self.attachment_offset_y:.3f},{self.attachment_offset_z:.3f}), '
-            f'object_pose_topic={self.object_pose_topic}, object_index={self.object_index}'
+            f'object_pose_topic={self.object_pose_topic}, object_index={self.object_index}, '
+            f'use_pose_sample_time={self.use_pose_sample_time}'
         )
 
     @staticmethod
@@ -231,9 +239,28 @@ class PendulumStatePublisher(Node):
             )
             return
 
+        if self.use_pose_sample_time:
+            stamp = msg.header.stamp
+            if stamp.sec < 0 or not 0 <= stamp.nanosec < 1_000_000_000:
+                return
+            sample_ns = stamp.sec * 1_000_000_000 + stamp.nanosec
+            clock_ns = self.get_clock().now().nanoseconds
+            if self.last_pose_clock_ns is not None and clock_ns < self.last_pose_clock_ns:
+                # A new simulation epoch needs a new derivative baseline.
+                self.last_pose_sample_ns = None
+                self.last_time = self.last_phi = self.last_theta = None
+                self.last_tip_world_position = None
+            self.last_pose_clock_ns = clock_ns
+            if self.last_pose_sample_ns is not None and sample_ns <= self.last_pose_sample_ns:
+                return
+            self.last_pose_sample_ns = sample_ns
+            self.pose_sample_stamp = stamp
+
         self.magnet_pose_local_or_world = magnet_pose
         self.attachment_pose_local_or_world = attachment_pose
         self.drone_pose_world = drone_pose
+        if self.use_pose_sample_time:
+            self.publish_state()
 
     def object_pose_callback(self, msg: PoseArray) -> None:
         object_pose = self._select_pose(msg, self.object_index)
@@ -283,7 +310,10 @@ class PendulumStatePublisher(Node):
             return
 
         now = self.get_clock().now()
-        t = now.nanoseconds * 1e-9
+        stamp = self.pose_sample_stamp if self.use_pose_sample_time else now.to_msg()
+        if stamp is None:
+            return
+        t = stamp.sec + stamp.nanosec * 1e-9
 
         tip_world_pose = self._current_tip_world_pose()
         attachment_world_pose = self._attachment_anchor_world_pose()
@@ -340,7 +370,7 @@ class PendulumStatePublisher(Node):
 
         swing_msg = MotionCaptureState()
         try:
-            swing_msg.header.stamp = now.to_msg()
+            swing_msg.header.stamp = stamp
             swing_msg.header.frame_id = self.frame_id
         except Exception:
             pass
@@ -360,7 +390,7 @@ class PendulumStatePublisher(Node):
 
         if self.publish_magnet_tip_pose and tip_world_pose is not None:
             tip_msg = PoseStamped()
-            tip_msg.header.stamp = now.to_msg()
+            tip_msg.header.stamp = stamp
             tip_msg.header.frame_id = self.frame_id
             tip_msg.pose = tip_world_pose
             self.magnet_tip_pub.publish(tip_msg)

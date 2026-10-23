@@ -1,5 +1,5 @@
 """Ring quaternion sign continuity and the slot-offset pre-flight warning (rig model-f1,
-docs/rig_2026-09-30_replay.md). The rig mocap sends w >= 0, so the ring quaternion flips sign
+docs/archive/rig_2026-09-30_replay.md). The rig mocap sends w >= 0, so the ring quaternion flips sign
 when its yaw crosses 180 deg; build_x_init keeps it in the warm start's hemisphere. With the
 drones one plate (30 deg) off their modelled slots every flip failed the solve."""
 import numpy as np

@@ -59,6 +59,7 @@ class M2IRLMocapRouter(Node):
         )
         self.hardware = self.identity.vehicles
         self.ring_id = self.identity.ring_id
+        self.pickup_id = int(self.declare_parameter("pickup_rigid_body_id", -1).value)
         self.ring_marker_translation = np.array([
             float(self.declare_parameter("ring_marker_translation_x", 0.0).value),
             float(self.declare_parameter("ring_marker_translation_y", 0.0).value),
@@ -81,12 +82,15 @@ class M2IRLMocapRouter(Node):
         self.body_ids = {vehicle_id: item.body_id for vehicle_id, item in self.hardware.items()}
         self.magnet_ids = {vehicle_id: item.magnet_id for vehicle_id, item in self.hardware.items()}
         all_ids = (self.ring_id, *self.body_ids.values(), *self.magnet_ids.values())
+        if self.pickup_id >= 0:
+            all_ids = (*all_ids, self.pickup_id)
         if len(set(all_ids)) != len(all_ids):
             raise ValueError("ring, body and magnet rigid-body IDs must be unique")
 
         self.throttle = PerRigidBodyThrottle(max_rate_hz=self.max_rate_hz)
         self.parsers = {body_id: RigidBodyParser() for body_id in all_ids}
         self.latest: dict[int, ObjectData] = {}
+        self.sample_stamps = {}
         self.last_rx_monotonic: dict[int, float] = {}
         self.last_angles: dict[str, tuple[np.ndarray, float]] = {}
         self.rate_buffers = {
@@ -119,6 +123,8 @@ class M2IRLMocapRouter(Node):
             for vehicle_id in self.hardware
         }
         self.ring_pub = self.create_publisher(PoseArray, "/m2/ring/pose", 10)
+        self.pickup_pub = (self.create_publisher(PoseArray, "/irl/pickup_object/pose", 10)
+                           if self.pickup_id >= 0 else None)
         self.status_pub = self.create_publisher(String, "/m2/irl/mocap_status", 10)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -169,12 +175,14 @@ class M2IRLMocapRouter(Node):
             if obj is None:
                 continue
             self.latest[body_id] = obj
+            self.sample_stamps[body_id] = self.get_clock().now().to_msg()
             self.last_rx_monotonic[body_id] = now
             self._publish_sample(body_id, obj)
 
-    def _header(self) -> Header:
+    def _header(self, body_id: int | str) -> Header:
         header = Header()
-        header.stamp = self.get_clock().now().to_msg()
+        # ParseData preserves the packet's string label; reception uses numeric IDs.
+        header.stamp = self.sample_stamps[self._packet_id(str(body_id))]
         header.frame_id = "map"
         return header
 
@@ -205,7 +213,7 @@ class M2IRLMocapRouter(Node):
 
     def _motion(self, obj: ObjectData) -> MotionCaptureState:
         msg = MotionCaptureState()
-        msg.header = self._header()
+        msg.header = self._header(obj.id)
         msg.child_frame_id = str(obj.id)
         self._fill_pose(msg.pose, obj)
         msg.twist.linear.x, msg.twist.linear.y, msg.twist.linear.z = map(
@@ -218,13 +226,13 @@ class M2IRLMocapRouter(Node):
 
     def _pose_stamped(self, obj: ObjectData) -> PoseStamped:
         msg = PoseStamped()
-        msg.header = self._header()
+        msg.header = self._header(obj.id)
         self._fill_pose(msg.pose, obj)
         return msg
 
     def _transform(self, obj: ObjectData, child: str) -> TransformStamped:
         msg = TransformStamped()
-        msg.header = self._header()
+        msg.header = self._header(obj.id)
         msg.child_frame_id = child
         (
             msg.transform.translation.x,
@@ -240,9 +248,16 @@ class M2IRLMocapRouter(Node):
         return msg
 
     def _publish_sample(self, body_id: int, obj: ObjectData) -> None:
+        if body_id == getattr(self, 'pickup_id', -1):
+            msg = PoseArray(header=self._header(body_id))
+            pose = Pose()
+            self._fill_pose(pose, obj)
+            msg.poses = [pose]
+            self.pickup_pub.publish(msg)
+            return
         if body_id == self.ring_id:
             msg = PoseArray()
-            msg.header = self._header()
+            msg.header = self._header(body_id)
             pose = Pose()
             self._fill_calibrated_ring_pose(pose, obj)
             msg.poses = [pose]
@@ -293,7 +308,7 @@ class M2IRLMocapRouter(Node):
             rates = np.array([np.mean(buffers["phi"]), np.mean(buffers["theta"])])
         self.last_angles[vehicle_id] = (angles, magnet.timestamp)
         msg = MotionCaptureState()
-        msg.header = self._header()
+        msg.header = self._header(magnet.id)
         msg.child_frame_id = f"{vehicle_id}/pendulum"
         msg.pose.position.x = float(angles[0])
         msg.pose.position.y = float(angles[1])

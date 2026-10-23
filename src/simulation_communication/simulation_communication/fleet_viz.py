@@ -17,23 +17,36 @@ Publishes:
     TF  map -> payload_mocap     from /payload/motion_capture_state
     /payload/marker              the payload ring + magnet plates (matches the world SDF)
     /payload/actual_path         where the payload has actually been
-    /fleet/id_markers            floating text label (drone id) above each drone
+    /fleet/id_markers            floating text label (drone id) above each drone, the plate numbers,
+                                 and at marker_hz the swung magnet: the tip sphere (grey coil OFF,
+                                 orange ON, green attached), the tether from QUAD4's body, the puck
+    /fleet/mocap_summary         std_msgs/String JSON at summary_hz for the console: per body z,
+                                 tilt_deg, speed_mps, age_s, rate_hz, max_gap_s
 
 Params:
     num_drones      (int)   fleet size
     payload_size    (float[3]) payload ring diameter dx,dy (radius = dx/2) and thickness
     path_max_len    (int)   ring-buffer length for the payload track
+    tip_topic       (str)   magnet tip, PoseStamped ('' = none)
+    puck_topic      (str)   puck, MotionCaptureState ('' = none)
+    tether_drone    (int)   the drone whose body holds the tether (QUAD4 = 3)
+    coil_topic      (str)   QUAD4's coil latch, String ON/OFF ('' = none)
+    attached_topic  (str)   the ring weld, Bool ('' = none)
+    marker_hz, summary_hz (float) swung-magnet markers and the summary (0 = off)
 """
 
 
+import json
 import math
+from collections import deque
+
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import TransformStamped, PoseStamped
 from nav_msgs.msg import Path
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point, Pose, Quaternion
 from std_msgs.msg import ColorRGBA
 from tf2_ros import TransformBroadcaster
 
@@ -50,6 +63,189 @@ RING_Z = 0.005
 PLATE_RADIUS = 0.03
 PLATE_THICK = 0.005
 PLATE_Z = 0.0225
+
+# The swung magnet (rig): tip sphere, tether, Tejen's puck (86 x 22 mm)
+TIP_DIAMETER = 0.04
+TETHER_WIDTH = 0.004
+TETHER_ANCHOR = (0.0, 0.0, -0.03)      # QUAD4's body frame: where the tether leaves the airframe
+PUCK_DIAMETER = 0.086
+PUCK_HEIGHT = 0.022
+MARKER_LIFETIME_S = 0.5                # a stream that stops loses its marker
+TIP_OFF = (0.6, 0.6, 0.6)
+TIP_ON = (1.0, 0.55, 0.0)
+TIP_ATTACHED = (0.1, 0.85, 0.2)
+TETHER_RGB = (0.9, 0.9, 0.9)
+PUCK_RGB = (0.75, 0.15, 0.15)
+COIL_ON = ('ON', '1', 'TRUE', 'ENABLE', 'ENABLED')
+COIL_OFF = ('OFF', '0', 'FALSE', 'DISABLE', 'DISABLED')
+RATE_WINDOW_S = 2.0
+GAP_WINDOW_S = 5.0
+
+
+def coil_word(text):
+    """True for an ON word, False for an OFF word, None for anything else (his NONE, a typo)."""
+    w = str(text).strip().upper()
+    return True if w in COIL_ON else False if w in COIL_OFF else None
+
+
+def tip_colour(coil_on, attached):
+    return TIP_ATTACHED if attached else TIP_ON if coil_on else TIP_OFF
+
+
+def unit_quat(o):
+    """(w, x, y, z) of a geometry_msgs Quaternion, normalised; identity when unset (all zero) or NaN."""
+    n = math.sqrt(o.w * o.w + o.x * o.x + o.y * o.y + o.z * o.z)
+    if not n >= 0.5:
+        return 1.0, 0.0, 0.0, 0.0
+    return o.w / n, o.x / n, o.y / n, o.z / n
+
+
+def rotate(q, v):
+    """v rotated by the unit quaternion q = (w, x, y, z)."""
+    w, x, y, z = q
+    tx, ty, tz = 2.0 * (y * v[2] - z * v[1]), 2.0 * (z * v[0] - x * v[2]), 2.0 * (x * v[1] - y * v[0])
+    return (v[0] + w * tx + y * tz - z * ty,
+            v[1] + w * ty + z * tx - x * tz,
+            v[2] + w * tz + x * ty - y * tx)
+
+
+def tilt_deg(o):
+    """Angle between the body's z and the world's z (deg) for a geometry_msgs Quaternion; None when unset or NaN."""
+    n = o.w * o.w + o.x * o.x + o.y * o.y + o.z * o.z
+    if not n >= 0.25:
+        return None
+    return math.degrees(math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * (o.x * o.x + o.y * o.y) / n))))
+
+
+def _marker(ns, kind, stamp, frame, lifetime_s, rgb, alpha=1.0):
+    m = Marker()
+    m.header.frame_id = frame
+    m.header.stamp = stamp
+    m.ns = ns
+    m.id = 0
+    m.type = kind
+    m.action = Marker.ADD
+    m.pose.orientation.w = 1.0
+    m.color.r, m.color.g, m.color.b = (float(c) for c in rgb)
+    m.color.a = alpha
+    m.lifetime.sec = int(lifetime_s)
+    m.lifetime.nanosec = int(round((lifetime_s - int(lifetime_s)) * 1e9))
+    return m
+
+
+def swung_magnet_markers(stamp, tip=None, body=None, puck=None, coil_on=False, attached=False,
+                         frame=FRAME, lifetime_s=MARKER_LIFETIME_S):
+    """The tip sphere, the tether (QUAD4's body + R TETHER_ANCHOR -> the tip) and the puck cylinder for the poses
+    given (geometry_msgs/Pose; None is not drawn, and the tether needs both the tip and the body)."""
+    out = []
+    if tip is not None:
+        p = tip.position
+        m = _marker('magnet_tip', Marker.SPHERE, stamp, frame, lifetime_s, tip_colour(coil_on, attached))
+        m.pose.position = Point(x=float(p.x), y=float(p.y), z=float(p.z))
+        m.scale.x = m.scale.y = m.scale.z = TIP_DIAMETER
+        out.append(m)
+        if body is not None:
+            b = body.position
+            a = rotate(unit_quat(body.orientation), TETHER_ANCHOR)
+            line = _marker('tether', Marker.LINE_STRIP, stamp, frame, lifetime_s, TETHER_RGB, 0.9)
+            line.scale.x = TETHER_WIDTH
+            line.points = [Point(x=float(b.x) + a[0], y=float(b.y) + a[1], z=float(b.z) + a[2]),
+                           Point(x=float(p.x), y=float(p.y), z=float(p.z))]
+            out.append(line)
+    if puck is not None:
+        p = puck.position
+        w, x, y, z = unit_quat(puck.orientation)
+        m = _marker('puck', Marker.CYLINDER, stamp, frame, lifetime_s, PUCK_RGB)
+        m.pose = Pose(position=Point(x=float(p.x), y=float(p.y), z=float(p.z)),
+                      orientation=Quaternion(w=w, x=x, y=y, z=z))
+        m.scale.x = m.scale.y = PUCK_DIAMETER
+        m.scale.z = PUCK_HEIGHT
+        out.append(m)
+    return out
+
+
+class StreamStats:
+    """One stream's arrivals: the age of the last, the rate over the last RATE_WINDOW_S, and the largest gap that
+    ended in the last GAP_WINDOW_S or is still open. O(1) per message (a sliding-window maximum)."""
+
+    def __init__(self, rate_window=RATE_WINDOW_S, gap_window=GAP_WINDOW_S):
+        self.rate_window, self.gap_window = rate_window, gap_window
+        self.reset()
+
+    def reset(self):
+        self.last = None
+        self._recent = deque()        # arrival times inside the rate window
+        self._gaps = deque()          # (end time, gap), gaps decreasing: the window's largest first
+
+    def add(self, t):
+        if self.last is not None and t < self.last:      # the clock went back (a new sim)
+            self.reset()
+        if self.last is not None:
+            gap = t - self.last
+            while self._gaps and self._gaps[-1][1] <= gap:
+                self._gaps.pop()
+            self._gaps.append((t, gap))
+        self.last = t
+        self._recent.append(t)
+        self._prune(t)
+
+    def _prune(self, now):
+        while self._recent and self._recent[0] <= now - self.rate_window:
+            self._recent.popleft()
+        while self._gaps and self._gaps[0][0] <= now - self.gap_window:
+            self._gaps.popleft()
+
+    def summary(self, now):
+        """(age_s, rate_hz, max_gap_s); age and gap are None before the first message."""
+        if self.last is None:
+            return None, 0.0, None
+        self._prune(now)
+        age = max(0.0, now - self.last)
+        return age, len(self._recent) / self.rate_window, max(age, self._gaps[0][1]) if self._gaps else age
+
+
+def _r(v, digits):
+    """Rounded for the JSON; None (null) when unknown or not finite (a lost Motive body)."""
+    return None if v is None or not math.isfinite(v) else round(float(v), digits)
+
+
+class BodyTrack:
+    """The latest pose of one mocap stream, its arrival statistics and its speed: the stream's own twist when it
+    has one, else the displacement between two summaries."""
+
+    def __init__(self):
+        self.pose = self.twist = self.speed = self._ref = None
+        self.stats = StreamStats()
+
+    def update(self, t, pose, twist=None):
+        self.pose, self.twist = pose, twist
+        self.stats.add(t)
+
+    def fresh(self, now, max_age):
+        return self.pose if self.pose is not None and now - self.stats.last <= max_age else None
+
+    def entry(self, now):
+        age, rate, gap = self.stats.summary(now)
+        if self.pose is not None:
+            p = self.pose.position
+            if self.twist is not None:
+                v = self.twist.linear
+                self.speed = math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+            else:
+                t = self.stats.last
+                if self._ref is not None and t > self._ref[0]:
+                    self.speed = math.dist((p.x, p.y, p.z), self._ref[1:]) / (t - self._ref[0])
+                if self._ref is None or t != self._ref[0]:
+                    self._ref = (t, p.x, p.y, p.z)
+        return {'z': _r(None if self.pose is None else self.pose.position.z, 3),
+                'tilt_deg': _r(None if self.pose is None else tilt_deg(self.pose.orientation), 1),
+                'speed_mps': _r(self.speed, 3), 'age_s': _r(age, 3), 'rate_hz': _r(rate, 1),
+                'max_gap_s': _r(gap, 3)}
+
+
+def mocap_summary(now, tracks):
+    """The /fleet/mocap_summary document: {"t": now, "bodies": {name: entry}}."""
+    return {'t': round(float(now), 3), 'bodies': {k: tr.entry(now) for k, tr in tracks.items()}}
 
 
 class FleetViz(Node):
@@ -71,14 +267,26 @@ class FleetViz(Node):
         self._viz_last = {}
         self.id_label_z = float(self.declare_parameter('id_label_z', 0.15).value)
         self.id_label_size = float(self.declare_parameter('id_label_size', 0.15).value)
+        tip_topic = str(self.declare_parameter('tip_topic', '/magnet_tip_pose').value)
+        puck_topic = str(self.declare_parameter('puck_topic', '/pickup/motion_capture_state').value)
+        self.tether_drone = int(self.declare_parameter('tether_drone', 3).value)
+        coil_topic = str(self.declare_parameter('coil_topic', f'/drone_{self.tether_drone}/magnet_coil').value)
+        attached_topic = str(self.declare_parameter('attached_topic', '/magnet/object_attached').value)
+        marker_hz = float(self.declare_parameter('marker_hz', 5.0).value)
+        summary_hz = float(self.declare_parameter('summary_hz', 5.0).value)
+        self._coil_on = False
+        self._attached = False
 
         self.tf = TransformBroadcaster(self)
         self.marker_pub = self.create_publisher(Marker, '/payload/marker', 1)
         self.id_pub = self.create_publisher(MarkerArray, '/fleet/id_markers', 1)
         self.path_pub = self.create_publisher(Path, '/payload/actual_path', 5)
+        self.summary_pub = self.create_publisher(String, '/fleet/mocap_summary', 1)
         self._payload_path = []
         self.create_subscription(String, '/fleet/command', self._command_cb, 5)
 
+        self.tracks = {f'drone_{i}': BodyTrack() for i in range(self.n)}
+        self.tracks['payload'] = BodyTrack()
         for i in range(self.n):
             self.create_subscription(
                 MotionCaptureState, f'/drone_{i}/motion_capture_state',
@@ -86,10 +294,29 @@ class FleetViz(Node):
         self.create_subscription(
             MotionCaptureState, '/payload/motion_capture_state',
             self._payload_cb, 5)
+        if tip_topic:
+            self.tracks['tip'] = BodyTrack()
+            self.create_subscription(PoseStamped, tip_topic, lambda m: self._track('tip', m.pose), 5)
+        if puck_topic:
+            self.tracks['puck'] = BodyTrack()
+            self.create_subscription(MotionCaptureState, puck_topic,
+                                     lambda m: self._track('puck', m.pose, m.twist), 5)
+        if coil_topic:
+            self.create_subscription(String, coil_topic, self._coil_cb, 5)
+        if attached_topic:
+            self.create_subscription(Bool, attached_topic, self._attached_cb, 5)
+        if marker_hz > 0.0 and (tip_topic or puck_topic):
+            self.create_timer(1.0 / marker_hz, self._marker_tick)
+        if summary_hz > 0.0:
+            self.create_timer(1.0 / summary_hz, self._summary_tick)
 
         self.get_logger().info(
             f'fleet_viz up: broadcasting TF for {self.n} drones + payload, '
-            f'payload box {self.payload_size}')
+            f'payload box {self.payload_size}; tip {tip_topic or "-"}, puck {puck_topic or "-"}, '
+            f'coil {coil_topic or "-"}')
+
+    def _now(self):
+        return self.get_clock().now().nanoseconds * 1e-9
 
     def _send_tf(self, msg, child):
         t = TransformStamped()
@@ -106,18 +333,43 @@ class FleetViz(Node):
         t.transform.rotation.z = float(o.z)
         self.tf.sendTransform(t)
 
-    def _viz_due(self, key):
+    def _viz_due(self, key, now):
         if not self._viz_min_dt:
             return True
-        now = self.get_clock().now().nanoseconds * 1e-9
         last = self._viz_last.get(key)
         if last is not None and 0.0 <= now - last < self._viz_min_dt:
             return False
         self._viz_last[key] = now
         return True
 
+    def _track(self, name, pose, twist=None):
+        self.tracks[name].update(self._now(), pose, twist)
+
+    def _coil_cb(self, msg):
+        on = coil_word(msg.data)
+        if on is not None:
+            self._coil_on = on
+
+    def _attached_cb(self, msg):
+        self._attached = bool(msg.data)
+
+    def _marker_tick(self):
+        now = self._now()
+        fresh = {k: tr.fresh(now, MARKER_LIFETIME_S) for k, tr in self.tracks.items()}
+        markers = swung_magnet_markers(self.get_clock().now().to_msg(), fresh.get('tip'),
+                                       fresh.get(f'drone_{self.tether_drone}'), fresh.get('puck'),
+                                       self._coil_on, self._attached)
+        if markers:
+            self.id_pub.publish(MarkerArray(markers=markers))
+
+    def _summary_tick(self):
+        doc = mocap_summary(self._now(), self.tracks)
+        self.summary_pub.publish(String(data=json.dumps(doc, separators=(',', ':'))))
+
     def _drone_cb(self, msg, i):
-        if not self._viz_due(i):
+        now = self._now()
+        self.tracks[f'drone_{i}'].update(now, msg.pose, msg.twist)
+        if not self._viz_due(i, now):
             return
         self._send_tf(msg, f'drone_{i}_mocap')
 
@@ -143,7 +395,9 @@ class FleetViz(Node):
             self._path_last_t = None
 
     def _payload_cb(self, msg):
-        if not self._viz_due('payload'):
+        now = self._now()
+        self.tracks['payload'].update(now, msg.pose, msg.twist)
+        if not self._viz_due('payload', now):
             return
         self._send_tf(msg, 'payload_mocap')
         # ring marker, anchored to the payload frame so it moves with it: the 500 mm ring
@@ -200,7 +454,6 @@ class FleetViz(Node):
         m = ring
 
         # actual track, thinned to one point per path_dt
-        now = self.get_clock().now().nanoseconds * 1e-9
         if self._path_last_t is not None and now - self._path_last_t < self.path_dt:
             return
         self._path_last_t = now

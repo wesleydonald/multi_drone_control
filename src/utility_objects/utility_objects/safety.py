@@ -16,7 +16,8 @@ NO GEOFENCE, BY DECISION (Wesley, 2026-08-04)
 Position/altitude bounds checking was implemented and then **deliberately removed**: the
 operator is at the cage with a kill switch throughout testing, and a geofence cannot
 catch anything a ready human cannot. Do not re-add one without asking -- it was not an
-oversight.
+oversight. (Wesley 22 Oct: a position limit replaces this, as a fleet LAND and never a
+FAULT here: utility_objects/position_limit.py, pos_limit_m, off until the critic.)
 
 What is kept is what a human CANNOT react to in time, or cannot see at all:
 

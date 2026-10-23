@@ -30,6 +30,7 @@ import re
 import numpy as np
 
 import run_logs
+from run_dir import manifest_azimuths_ccw
 
 SETTLE_S = 5.0            # steady window starts this long after the event
 THROTTLE_SAT = 0.59       # tracker_node's own saturation annotation threshold
@@ -128,6 +129,218 @@ def radius_ratio(actual_xy, desired_xy, mask=None):
     r_des = np.mean(np.linalg.norm(d - c, axis=1))
     r_act = np.mean(np.linalg.norm(a - c, axis=1))
     return float(r_act / r_des) if r_des > 1e-9 else math.nan
+
+
+# ── path contour and schedule lag (16 Oct; docs/decisions.md, the corner-cutting ruler) ──
+#
+# The desired path is published once per planner tick (10 Hz) and HELD between ticks in the
+# logs, so payload_rmse against it charges an on-time ring v*0.1/sqrt(3) (17 mm at 0.3 m/s)
+# and scores a ring ~0.05 s late best. These metrics split that error the way the thesis
+# reports it: how far the ring is from the PATH (no clock), and how late it is on the
+# planner's own schedule (seconds). Both come from the published points alone, so a twin
+# run and a rig run are scored the same way.
+
+HOLD_GAP_S = 0.15          # published points further apart than this: the planner's clock held
+CONTOUR_SEARCH_M = 0.25    # nearest path point searched this far either side of the scheduled one
+PATH_STEP_M = 0.001
+
+
+def schedule_knots(t, desired_xy, mask=None):
+    """(t_k, xy_k): one knot per change of the held desired, timed at the first row that
+    carries the new value less half the median row interval."""
+    t = np.asarray(t, float)
+    d = np.asarray(desired_xy, float)[:, :2]
+    idx = np.arange(t.size) if mask is None else np.where(np.asarray(mask, bool))[0]
+    idx = idx[np.all(np.isfinite(d[idx]), axis=1)]
+    if idx.size < 2:
+        return np.empty(0), np.empty((0, 2))
+    dd = d[idx]
+    new = np.r_[True, np.any(np.abs(np.diff(dd, axis=0)) > 1e-9, axis=1)]
+    half = 0.5 * float(np.median(np.diff(t[idx])))
+    return t[idx[new]] - half, dd[new]
+
+
+def path_through(knots_xy, step=PATH_STEP_M):
+    """Dense path through the knots (centripetal Catmull-Rom, so no loops or overshoot at
+    uneven spacing). Returns points, arc length, unit tangent, inward unit normal, signed
+    curvature (1/m, + turning left) and the arc length at each knot."""
+    P = np.asarray(knots_xy, float)
+    ext = np.vstack([2 * P[0] - P[1], P, 2 * P[-1] - P[-2]])
+    pts, s_knot = [], []
+    for i in range(P.shape[0] - 1):
+        p0, p1, p2, p3 = ext[i:i + 4]
+        t0 = 0.0
+        t1 = t0 + max(np.linalg.norm(p1 - p0), 1e-9) ** 0.5
+        t2 = t1 + max(np.linalg.norm(p2 - p1), 1e-9) ** 0.5
+        t3 = t2 + max(np.linalg.norm(p3 - p2), 1e-9) ** 0.5
+        m = max(2, int(math.ceil(np.linalg.norm(p2 - p1) / step)))
+        u = np.linspace(t1, t2, m, endpoint=False)[:, None]
+        a1 = ((t1 - u) * p0 + (u - t0) * p1) / (t1 - t0)
+        a2 = ((t2 - u) * p1 + (u - t1) * p2) / (t2 - t1)
+        a3 = ((t3 - u) * p2 + (u - t2) * p3) / (t3 - t2)
+        b1 = ((t2 - u) * a1 + (u - t0) * a2) / (t2 - t0)
+        b2 = ((t3 - u) * a2 + (u - t1) * a3) / (t3 - t1)
+        s_knot.append(sum(len(x) for x in pts))
+        pts.append(((t2 - u) * b1 + (u - t1) * b2) / (t2 - t1))
+    s_knot.append(sum(len(x) for x in pts))
+    pts.append(P[-1:])
+    Q = np.vstack(pts)
+    s = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(Q, axis=0), axis=1))]
+    s_knot = s[np.asarray(s_knot)]
+    keep = np.r_[True, np.diff(s) > 1e-12]
+    Q, s = Q[keep], s[keep]
+    d1 = np.gradient(Q, s, axis=0)
+    T = d1 / np.maximum(np.linalg.norm(d1, axis=1), 1e-12)[:, None]
+    d2 = np.gradient(T, s, axis=0)
+    kappa = T[:, 0] * d2[:, 1] - T[:, 1] * d2[:, 0]
+    w = max(1, int(round(0.02 / step)))              # 2 cm moving average: the spline's
+    kappa = np.convolve(kappa, np.ones(w) / w, 'same')  # second derivative jumps at knots
+    left = np.column_stack([-T[:, 1], T[:, 0]])
+    inward = left * np.where(kappa >= 0, 1.0, -1.0)[:, None]
+    return Q, s, T, inward, kappa, s_knot
+
+
+def project_on_path(path, xy, s_seed, search_m=CONTOUR_SEARCH_M):
+    """Nearest path point to each xy, searched within search_m of arc around s_seed (so a
+    figure-8's other branch at the crossing is never picked). Returns the signed distance
+    (+ = inside the curve), the arc position and the curvature there."""
+    Q, s, T, inward, kappa = path[:5]
+    xy = np.asarray(xy, float)
+    j0 = np.searchsorted(s, np.asarray(s_seed, float))
+    W = int(math.ceil(search_m / max(float(np.median(np.diff(s))), 1e-6)))
+    across = np.full(xy.shape[0], math.nan)
+    s_at = np.full(xy.shape[0], math.nan)
+    k_at = np.full(xy.shape[0], math.nan)
+    ok = np.all(np.isfinite(xy), axis=1) & np.isfinite(np.asarray(s_seed, float))
+    for c in range(0, xy.shape[0], 1000):
+        sl = slice(c, c + 1000)
+        rows = np.where(ok[sl])[0] + c
+        if rows.size == 0:
+            continue
+        J = np.clip(j0[rows][:, None] + np.arange(-W, W + 1)[None, :], 0, Q.shape[0] - 1)
+        dist = np.linalg.norm(Q[J] - xy[rows][:, None, :], axis=2)
+        j = J[np.arange(rows.size), np.argmin(dist, axis=1)]
+        e = xy[rows] - Q[j]
+        across[rows] = np.sum(e * inward[j], axis=1)
+        s_at[rows] = s[j] + np.sum(e * T[j], axis=1)
+        k_at[rows] = kappa[j]
+    return across, s_at, k_at
+
+
+def contour_lag(t, payload_xy, desired_xy, mask=None, full=False):
+    """The ring against its path, split into distance from the path (clock-free) and lag
+    on the planner's schedule (seconds), over the fast part of the motion (schedule speed
+    above half its peak) outside clock holds. {} when there is no motion to score.
+
+      across_mean_m / across_rms_m   signed distance to the path, + = inside the curve
+      cut_topq_mean_m / _max_m       the same over the tightest quarter of the path
+                                     (|curvature| above its 75th percentile)
+      lag_s / lag_sd_s               t minus the time the schedule passed the ring's point
+                                     (+ = late)
+      rmse_sched_m                   the ring against the continuous schedule (both errors
+                                     in one number, without the 10 Hz staircase)
+    A path that turns back on itself (line_x's shuttle) has no lag here: near a reversal the
+    nearest point can be on the other leg, so lag_s and lag_sd_s are nan."""
+    t = np.asarray(t, float)
+    tk, xk = schedule_knots(t, desired_xy, mask)
+    if tk.size < 20:
+        return {}
+    path = path_through(xk)
+    sk = path[5]
+    gap = np.diff(tk)
+    v_k = np.diff(sk) / np.maximum(gap, 1e-6)
+    dk = np.diff(xk, axis=0)
+    dk = dk / np.maximum(np.linalg.norm(dk, axis=1), 1e-12)[:, None]
+    retraces = bool(dk.shape[0] > 1 and np.min(np.sum(dk[1:] * dk[:-1], axis=1)) < -0.5)
+    moving = gap <= HOLD_GAP_S
+    if not np.any(moving):
+        return {}
+    v_peak = float(np.percentile(v_k[moving], 95))
+    if v_peak < 1e-3:
+        return {}
+    # clock holds: from the knot before the gap to 0.5 s after the next one
+    hold = np.zeros(t.size, bool)
+    for i in np.where(~moving)[0]:
+        hold |= (t >= tk[i]) & (t <= tk[i + 1] + 0.5)
+    sel = np.ones(t.size, bool) if mask is None else np.asarray(mask, bool).copy()
+    sel &= (t >= tk[0]) & (t <= tk[-1])
+    s_sched = np.interp(t, tk, sk)
+    seg = np.clip(np.searchsorted(tk, t, side='right') - 1, 0, v_k.size - 1)
+    v_sched = np.where(moving[seg], v_k[seg], 0.0)
+    xy = np.asarray(payload_xy, float)[:, :2]
+    across, s_r, k_r = project_on_path(path, xy, np.where(sel, s_sched, np.nan))
+    lag = t - np.interp(s_r, sk, tk)
+    use = sel & ~hold & (v_sched >= 0.5 * v_peak) & np.isfinite(across)
+    if np.count_nonzero(use) < 10:
+        return {}
+    v_path = np.interp(path[1], sk[:-1], np.where(moving, v_k, 0.0))
+    fast_k = np.abs(path[4][v_path >= 0.5 * v_peak])
+    k_q = float(np.quantile(fast_k, 0.75)) if fast_k.size else math.inf
+    top = use & (np.abs(k_r) >= k_q)
+    Q, s = path[0], path[1]
+    sched_xy = np.column_stack([np.interp(s_sched, s, Q[:, 0]), np.interp(s_sched, s, Q[:, 1])])
+    e_sched = np.linalg.norm(xy - sched_xy, axis=1)
+    out = {'across_mean_m': float(np.mean(across[use])),
+           'across_rms_m': float(np.sqrt(np.mean(across[use] ** 2))),
+           'cut_topq_mean_m': float(np.mean(across[top])) if np.any(top) else math.nan,
+           'cut_topq_max_m': float(np.max(across[top])) if np.any(top) else math.nan,
+           'lag_s': math.nan if retraces else float(np.mean(lag[use])),
+           'lag_sd_s': math.nan if retraces else float(np.std(lag[use])),
+           'rmse_sched_m': float(np.sqrt(np.mean(e_sched[use] ** 2))),
+           'topq_curvature': k_q, 'clock_holds': int(np.count_nonzero(~moving)),
+           'n': int(np.count_nonzero(use))}
+    if full:
+        out.update(t=t, across=across, s_r=s_r, kappa_r=k_r, lag=lag, use=use, top=top,
+                   s_sched=s_sched, path=path, knots=(tk, xk))
+    return out
+
+
+def segment_error(xyz, x0, x1, y0, z0, past_end=True):
+    """Distance of each sample to the straight segment from x0 to x1 along x at (y0, z0): its sideways and height
+    error plus how far past either end it is. y0 and z0 may be per sample (the published reference). The clock-free
+    error of a line_x shuttle (card 2026-10-23_paper_method_compare): a ring late on the line scores nothing for the
+    lag, one past an end scores the overshoot. past_end False drops that along-line term (the distance to the line),
+    for a headline whose reach term already counts the overshoot (the card's critic, M2)."""
+    p = np.asarray(xyz, float)
+    lo, hi = min(float(x0), float(x1)), max(float(x0), float(x1))
+    past = np.maximum(0.0, np.maximum(p[:, 0] - hi, lo - p[:, 0])) if past_end else 0.0
+    return np.sqrt(past ** 2 + (p[:, 1] - np.asarray(y0, float)) ** 2 + (p[:, 2] - np.asarray(z0, float)) ** 2)
+
+
+def turnaround_reach(t, x, t_path0, period, x0, x1, t_end=None):
+    """How far short of each end a line_x shuttle (x0 -> x1 -> x0 ..., an end every half period from t_path0) turned:
+    per commanded reversal, the end minus the ring's furthest x toward it within half a period of the reversal (to
+    t_end), + = short, - = past it. The clock-free error cannot see a line flown short (offline: 6.8 cm short scored
+    10 mm). Half a period, so a ring up to T/2 late still turns inside the window (a quarter is 1.18 s at 0.6 m/s,
+    about the port's offline lag). Only reversals at least a quarter period before t_end (default: the last sample)
+    count, so the start and the final arrival are not reversals. Returns [(t_reversal, end x, shortfall m)]."""
+    t = np.asarray(t, float)
+    x = np.asarray(x, float)
+    T = float(period)
+    t_end = float(t[-1]) if t_end is None else float(t_end)
+    d = abs(float(x1) - float(x0))
+    u = (x - float(x0)) * (1.0 if x1 >= x0 else -1.0)           # along the line, from x0 toward x1
+    out, m = [], 1
+    while T > 0.0 and t_path0 + 0.5 * m * T + 0.25 * T <= t_end + 1e-9:
+        tr = t_path0 + 0.5 * m * T
+        sel = (t >= tr - 0.5 * T) & (t <= min(tr + 0.5 * T, t_end + 1e-9)) & np.isfinite(u)
+        if np.any(sel):
+            far = m % 2 == 1
+            out.append((tr, float(x1 if far else x0), d - float(np.max(u[sel])) if far else float(np.min(u[sel]))))
+        m += 1
+    return out
+
+
+def fit_circle(xy):
+    """Least-squares circle (centre, radius) through points: the algebraic (Kasa) fit."""
+    p = np.asarray(xy, float)
+    p = p[np.all(np.isfinite(p), axis=1)]
+    if p.shape[0] < 3:
+        return np.full(2, math.nan), math.nan
+    A = np.column_stack([2 * p[:, 0], 2 * p[:, 1], np.ones(p.shape[0])])
+    b = np.sum(p ** 2, axis=1)
+    cx, cy, c = np.linalg.lstsq(A, b, rcond=None)[0]
+    return np.array([cx, cy]), float(math.sqrt(max(c + cx * cx + cy * cy, 0.0)))
 
 
 def dominant_period_s(t, x):
@@ -1223,6 +1436,11 @@ def summarise_run(run_path):
             out['payload_phase_lag_s'] = phase_lag_s(t[sweep], des[sweep, 0],
                                                      payload[sweep, 0])
             out['stage_split'] = stage_split_run(t, d, n, sweep)
+            cl = contour_lag(t, payload[:, :2], des[:, :2], sweep)
+            for k in ('across_mean_m', 'across_rms_m', 'cut_topq_mean_m', 'cut_topq_max_m',
+                      'lag_s', 'lag_sd_s', 'rmse_sched_m'):
+                if k in cl:
+                    out['payload_' + ('contour_' + k if k.startswith(('across', 'cut')) else k)] = cl[k]
     per_drone = []
     for i in range(n):
         err = d[f'd{i}_track_err']
@@ -1250,7 +1468,7 @@ def summarise_run(run_path):
         # a late mocap made R0676 fold drone 3 in after TAKEOFF at the clamped radius (VOID)
         try:
             man = json.load(open(os.path.join(run_path, 'manifest.json')))
-            az = [float(v) for v in str((man.get('launch_args') or {}).get('attach_azimuths_deg', '')).split(',') if v]
+            az = manifest_azimuths_ccw((man.get('launch_args') or {}).get('attach_azimuths_deg', ''), man)
             if az:
                 out['m1']['clearance'] = partner_clearance(t, d, ev_list, az)
         except Exception:

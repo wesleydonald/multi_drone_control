@@ -11,7 +11,7 @@ validation ground truth, not detector input.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 import math
 from typing import Optional
@@ -19,6 +19,7 @@ from typing import Optional
 import numpy as np
 
 from .cooperative_trajectory import RingNetGeometry
+from .m2_irl_attachment_policy import POLICY, LEGACY, validate_policy, ContactProofConfig, ContactProofEvidence
 
 
 def _vec3(value, *, name: str) -> np.ndarray:
@@ -101,8 +102,15 @@ class AttachmentDetectorConfig:
     pose_timeout_s: float
     velocity_filter_tau_s: float
     magnet_off_counts_as_loss: bool = True
+    # None preserves commissioned simulation behavior; IRL enables plate-fixed proof.
+    proof_max_contact_drift_m: Optional[float] = None
+    attachment_policy: str = LEGACY
+    proof_angle_deg: float = 15.0
+    proof_angle_tolerance_deg: float = 2.0
+    initial_contact_max_normal_m: float = 0.0
 
     def __post_init__(self) -> None:
+        validate_policy(self.attachment_policy)
         for name in (
             "candidate_xy_m",
             "candidate_normal_m",
@@ -120,13 +128,16 @@ class AttachmentDetectorConfig:
                 name,
                 _nonnegative_finite(getattr(self, name), name=name, strictly_positive=True),
             )
-        for name in ("candidate_dwell_s", "proof_dwell_s", "loss_dwell_s", "velocity_filter_tau_s"):
+        for name in ("candidate_dwell_s", "proof_dwell_s", "loss_dwell_s", "velocity_filter_tau_s",
+                     "initial_contact_max_normal_m"):
             object.__setattr__(
                 self,
                 name,
                 _nonnegative_finite(getattr(self, name), name=name),
             )
 
+        if self.initial_contact_max_normal_m > min(self.candidate_normal_m, self.proof_normal_m):
+            raise ValueError("initial_contact_max_normal_m must fit inside contact/proof geometry")
         direction = _vec3(self.proof_direction_plate, name="proof_direction_plate")
         norm = float(np.linalg.norm(direction))
         if norm <= 1e-12:
@@ -140,6 +151,11 @@ class AttachmentDetectorConfig:
         object.__setattr__(
             self, "magnet_off_counts_as_loss", bool(self.magnet_off_counts_as_loss)
         )
+
+        if self.proof_max_contact_drift_m is not None:
+            object.__setattr__(self, "proof_max_contact_drift_m", _nonnegative_finite(
+                self.proof_max_contact_drift_m, name="proof_max_contact_drift_m", strictly_positive=True
+            ))
 
 
 @dataclass(frozen=True)
@@ -157,6 +173,8 @@ class AttachmentObservation:
     drone_time_s: float
     magnet_on: bool
     proof_requested: bool
+    anchor_position_world: Optional[np.ndarray] = None
+    proof_motion_complete: bool = False
 
     def __post_init__(self) -> None:
         for name in ("time_s", "ring_time_s", "magnet_time_s", "drone_time_s"):
@@ -226,11 +244,17 @@ class AttachmentDetectorOutput:
     proof_condition: bool
     proof_dwell_s: float
     proof_excitation_m: float
+    proof_contact_drift_m: float
     confirmed: bool
     lost_condition: bool
     geometry_separated: bool
     loss_dwell_s: float
     lost: bool
+    initial_contact: bool = False
+    proof_angle_error_deg: float = float("nan")
+    evidence_sample_time_s: float = float("nan")
+    new_measurement: bool = False
+    velocity_valid: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -277,16 +301,31 @@ class AttachmentDetector:
         self.reset()
 
     def reset(self) -> None:
+        c = self.config
+        self.progressive = ContactProofEvidence(ContactProofConfig(
+            xy_m=c.candidate_xy_m, normal_m=c.candidate_normal_m,
+            proof_xy_m=c.proof_xy_m,
+            initial_contact_max_normal_m=c.initial_contact_max_normal_m,
+            speed_mps=c.proof_speed_mps, contact_dwell_s=c.candidate_dwell_s,
+            proof_dwell_s=c.proof_dwell_s, drift_m=c.proof_max_contact_drift_m or .008,
+            angle_deg=c.proof_angle_deg, angle_tolerance_deg=c.proof_angle_tolerance_deg,
+            loss_xy_m=c.loss_xy_m, loss_normal_m=c.loss_normal_m, loss_dwell_s=c.loss_dwell_s))
         self._previous_time_s: Optional[float] = None
         self._previous_plate_relative_position_m: Optional[np.ndarray] = None
         self._filtered_relative_velocity_mps = np.zeros(3, dtype=float)
         self._candidate_start_s: Optional[float] = None
         self._candidate_ready = False
         self._proof_start_drone_plate_m: Optional[np.ndarray] = None
+        self._proof_start_contact_plate_m: Optional[np.ndarray] = None
+        self._proof_contact_moved = False
+        self._proof_epoch_invalidated = False
         self._proof_condition_start_s: Optional[float] = None
         self._loss_start_s: Optional[float] = None
         self._confirmed = False
         self._lost = False
+        self._last_measured_stamp_s: Optional[float] = None
+        self._previous_observation_time_s: Optional[float] = None
+        self._measurement_velocity_valid = False
 
     @staticmethod
     def _dwell(now_s: float, start_s: Optional[float]) -> float:
@@ -377,6 +416,8 @@ class AttachmentDetector:
     def update(self, observation: AttachmentObservation) -> AttachmentDetectorOutput:
         p_pc, p_pq, orientation_error = self._geometry(observation)
         fresh = self._fresh(observation)
+        if self.config.attachment_policy == POLICY:
+            return self._update_measured(observation, p_pc, orientation_error, fresh)
         if fresh:
             velocity = self._relative_velocity(
                 now_s=observation.time_s,
@@ -421,9 +462,14 @@ class AttachmentDetector:
             # transport dropout does not itself become a separation event, but
             # externally the detector reports no current confirmation evidence.
             if not self._confirmed:
+                if observation.proof_requested and self.config.proof_max_contact_drift_m is not None:
+                    # The same pull cannot restart after losing contact evidence.
+                    self._proof_epoch_invalidated = True
                 self._candidate_start_s = None
                 self._candidate_ready = False
                 self._proof_start_drone_plate_m = None
+                self._proof_start_contact_plate_m = None
+                self._proof_contact_moved = False
             self._proof_condition_start_s = None
             self._loss_start_s = None
             return self._output(
@@ -437,6 +483,7 @@ class AttachmentDetector:
                 proof_condition=False,
                 proof_dwell=0.0,
                 proof_excitation=0.0,
+                proof_contact_drift=0.0,
                 lost_condition=False,
                 geometry_separated=geometry_separated,
                 loss_dwell=0.0,
@@ -449,9 +496,13 @@ class AttachmentDetector:
                 self._candidate_ready = False
 
         if not observation.magnet_on and not self._confirmed:
+            if observation.proof_requested and self.config.proof_max_contact_drift_m is not None:
+                self._proof_epoch_invalidated = True
             self._candidate_start_s = None
             self._candidate_ready = False
             self._proof_start_drone_plate_m = None
+            self._proof_start_contact_plate_m = None
+            self._proof_contact_moved = False
             self._proof_condition_start_s = None
 
         proving = bool(
@@ -460,13 +511,19 @@ class AttachmentDetector:
             and self._candidate_ready
             and not self._confirmed
             and not self._lost
+            and not self._proof_epoch_invalidated
         )
 
         if proving and self._proof_start_drone_plate_m is None:
             self._proof_start_drone_plate_m = p_pq.copy()
+            self._proof_start_contact_plate_m = p_pc.copy()
+            self._proof_contact_moved = False
             self._proof_condition_start_s = None
         elif not observation.proof_requested and not self._confirmed and not self._lost:
             self._proof_start_drone_plate_m = None
+            self._proof_start_contact_plate_m = None
+            self._proof_contact_moved = False
+            self._proof_epoch_invalidated = False
             self._proof_condition_start_s = None
 
         proof_excitation = 0.0
@@ -477,11 +534,20 @@ class AttachmentDetector:
                 float(np.dot(delta, self.config.proof_direction_plate)),
             )
 
+        proof_contact_drift = 0.0
+        if self._proof_start_contact_plate_m is not None:
+            proof_contact_drift = float(np.linalg.norm(p_pc - self._proof_start_contact_plate_m))
+            if (self.config.proof_max_contact_drift_m is not None
+                    and proof_contact_drift > self.config.proof_max_contact_drift_m):
+                # A moving contact cannot regain proof just by swinging back.
+                self._proof_contact_moved = True
+
         proof_condition = bool(
             proving
             and xy_error <= self.config.proof_xy_m
             and abs(normal_error) <= self.config.proof_normal_m
             and relative_speed <= self.config.proof_speed_mps
+            and not self._proof_contact_moved
         )
         if proof_condition:
             if self._proof_condition_start_s is None:
@@ -540,10 +606,82 @@ class AttachmentDetector:
             proof_condition=proof_condition,
             proof_dwell=proof_dwell if proof_condition else 0.0,
             proof_excitation=proof_excitation,
+            proof_contact_drift=proof_contact_drift,
             lost_condition=lost_condition,
             geometry_separated=geometry_separated,
             loss_dwell=loss_dwell,
         )
+
+    def _update_measured(self, observation, p_pc, orientation_error, fresh):
+        stamp = observation.magnet_time_s
+        now = observation.time_s
+        clock_reset = (self._previous_observation_time_s is not None
+                       and now < self._previous_observation_time_s)
+        self._previous_observation_time_s = now
+        if clock_reset:
+            self._last_measured_stamp_s = None
+        source_valid = 0. <= stamp <= now + 1e-9
+        new_sample = source_valid and (self._last_measured_stamp_s is None
+                                      or stamp > self._last_measured_stamp_s)
+        gap = (new_sample and self._previous_time_s is not None
+               and stamp - self._previous_time_s > self.config.pose_timeout_s)
+        p_wp = self.geometry.plate_position_world(
+            ring_position=observation.ring_position_world,
+            rotation_world_from_ring=observation.rotation_world_from_ring,
+            plate_index=self.assigned_plate_id)
+        r_wp = self.geometry.plate_rotation_world(
+            rotation_world_from_ring=observation.rotation_world_from_ring,
+            plate_index=self.assigned_plate_id)
+        anchor = observation.anchor_position_world
+        fresh = bool(fresh and source_valid and anchor is not None
+                     and np.all(np.isfinite(anchor)))
+        anchor_plate = np.zeros(3) if anchor is None else r_wp.T @ (anchor - p_wp)
+        if not fresh or clock_reset or gap:
+            self._previous_time_s = self._previous_plate_relative_position_m = None
+            self._filtered_relative_velocity_mps = np.zeros(3)
+            self._measurement_velocity_valid = False
+            # Clear unfinished dwell only. Initial/proven contact and seeds survive.
+            self.progressive.update(now=stamp, contact=p_pc, anchor=anchor_plate,
+                speed=float("inf"), fresh=False, magnet_on=observation.magnet_on)
+        if new_sample:
+            self._last_measured_stamp_s = stamp
+        if fresh and new_sample:
+            self._measurement_velocity_valid = self._previous_time_s is not None
+            self._relative_velocity(now_s=stamp, position_m=p_pc)
+            speed = (float(np.linalg.norm(self._filtered_relative_velocity_mps))
+                     if self._measurement_velocity_valid else float("inf"))
+            self.progressive.update(now=stamp, contact=p_pc, anchor=anchor_plate,
+                speed=speed, fresh=True, magnet_on=observation.magnet_on,
+                proving=observation.proof_requested,
+                motion_complete=observation.proof_motion_complete)
+        e = self.progressive
+        if not observation.magnet_on:
+            e.contact_since = e.proof_since = None
+            e.candidate_condition = e.proof_condition = False
+            e.candidate_dwell = e.proof_dwell = 0.
+        elif not observation.proof_requested:
+            e.proof_since = None; e.proof_condition = False; e.proof_dwell = 0.
+        self._confirmed, self._lost = e.confirmed, e.lost
+        separated = bool(np.linalg.norm(p_pc[:2]) > self.config.loss_xy_m
+                         or abs(p_pc[2]) > self.config.loss_normal_m)
+        state = (AttachmentEvidenceState.UNAVAILABLE if not fresh else
+                 AttachmentEvidenceState.LOST if e.lost else
+                 AttachmentEvidenceState.CONFIRMED if e.confirmed else
+                 AttachmentEvidenceState.PROVING if observation.proof_requested and e.initial_contact else
+                 AttachmentEvidenceState.CONTACT_CANDIDATE if e.initial_contact or e.candidate_condition else
+                 AttachmentEvidenceState.SEPARATED)
+        result = self._output(state=state, fresh=fresh, position=p_pc,
+            velocity=self._filtered_relative_velocity_mps,
+            orientation_error=orientation_error, candidate_condition=e.candidate_condition,
+            candidate_dwell=e.candidate_dwell, proof_condition=e.proof_condition,
+            proof_dwell=e.proof_dwell, proof_excitation=0., proof_contact_drift=e.drift,
+            lost_condition=bool(fresh and e.initial_contact and separated),
+            geometry_separated=bool(fresh and separated), loss_dwell=e.loss_dwell)
+        return replace(result, initial_contact=e.initial_contact,
+            proof_angle_error_deg=e.angle_error_deg, evidence_sample_time_s=stamp,
+            new_measurement=bool(new_sample and fresh),
+            velocity_valid=self._measurement_velocity_valid,
+            relative_speed_mps=result.relative_speed_mps if self._measurement_velocity_valid else float("nan"))
 
     def _output(
         self,
@@ -558,6 +696,7 @@ class AttachmentDetector:
         proof_condition: bool,
         proof_dwell: float,
         proof_excitation: float,
+        proof_contact_drift: float,
         lost_condition: bool,
         geometry_separated: bool,
         loss_dwell: float,
@@ -580,6 +719,7 @@ class AttachmentDetector:
             proof_condition=bool(proof_condition),
             proof_dwell_s=float(proof_dwell),
             proof_excitation_m=float(proof_excitation),
+            proof_contact_drift_m=float(proof_contact_drift),
             confirmed=bool(exposed_confirmed),
             lost_condition=bool(lost_condition),
             geometry_separated=bool(geometry_separated),

@@ -17,6 +17,7 @@ def generate_launch_description() -> LaunchDescription:
     config = drone_share / 'config' / 'irl_commissioning.yaml'
 
     gui = LaunchConfiguration('gui')
+    pickup_alignment_mode = LaunchConfiguration('pickup_alignment_mode')
 
     state_pipeline = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -39,6 +40,7 @@ def generate_launch_description() -> LaunchDescription:
         launch_arguments={
             'planner_rate_hz': '5.0',
             'minimum_search_z_m': '0.20',
+            'stopped_continuation_enabled': 'true',
         }.items(),
     )
 
@@ -51,6 +53,12 @@ def generate_launch_description() -> LaunchDescription:
             str(drone_share / 'config' / 'visual_astar_visual_only.yaml'),
             str(drone_share / 'config' / 'c1f2b_cpp_authority.yaml'),
             str(config),
+            str(drone_share / 'config' / 'm1_measured_tip_pickup.yaml'),
+            str(drone_share / 'config' / 'm1_measured_tip_tracking.yaml'),
+            {'pickup_alignment_mode': pickup_alignment_mode,
+             'm1_gentle_takeoff_enabled': True,
+             'c1f2_stopped_continuation_enabled': True,
+             'target_alignment_mode': LaunchConfiguration('target_alignment_mode')},
         ],
     )
 
@@ -59,7 +67,7 @@ def generate_launch_description() -> LaunchDescription:
         executable='main',
         name='tejen_mpc',
         output='screen',
-        parameters=[str(config)],
+        parameters=[str(config), {'external_reference_validate_timing': True}],
     )
 
     elrs = Node(
@@ -79,7 +87,13 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription([
         DeclareLaunchArgument('gui', default_value='true'),
-        LogInfo(msg='M1 IRL: REAL ID6 pickup + ID7 drone + ID8 magnet; ID9 ring reserved; delivery ring is VIRTUAL.'),
+        DeclareLaunchArgument('target_alignment_mode', default_value='legacy',
+                              choices=['legacy', 'measured_tip_trim']),
+        LogInfo(msg=['M1 local target alignment: ', LaunchConfiguration('target_alignment_mode')]),
+        DeclareLaunchArgument('pickup_alignment_mode', default_value='legacy',
+                              choices=['legacy', 'measured_tip_tiered']),
+        LogInfo(msg=['M1 pickup alignment mode: ', pickup_alignment_mode]),
+        LogInfo(msg='M1 IRL: REAL ID6 pickup + ID12 drone + ID22 magnet; ID9 ring reserved; delivery ring is VIRTUAL.'),
         LogInfo(msg='Manual ARM/TAKEOFF/DISARM authority is unchanged. This launch never arms automatically.'),
         LogInfo(msg='Mission permits the normal M1 physical magnet-OFF drop at the moving virtual target.'),
         state_pipeline,

@@ -1,0 +1,31 @@
+run,replayed on,drone,release,release (s),first tick over (s),fire (s),fire - release (ms),over at fire (cm),flight logged (s),logged - release (ms),verdict
+r000014,log,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r000014,bag,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r0001,log,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r0001,bag,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r0005,log,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r0005,bag,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r0007,log,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r0007,bag,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r0012,log,-,-,-,-,-,-,-,-,-,no fire (announced release: the planner already knew)
+r0012,bag,-,-,-,-,-,-,-,-,-,no fire (announced release: the planner already knew)
+r0013,log,/drone_1,uncommanded,31.863,31.927,32.018,155,30.6,none logged,-,detection
+r0013,log,/drone_2,uncommanded,32.105,-,-,-,-,-,-,no fire possible: the fleet stopped 75 ms after it
+r0013,bag,/drone_1,uncommanded,31.863,32.018,32.138,275,72.6,none logged,-,detection
+r0013,bag,/drone_2,uncommanded,32.105,-,-,-,-,-,-,no fire possible: the fleet stopped 75 ms after it
+r002,log,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r002,bag,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r006,log,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r006,bag,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r011,log,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r011,bag,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r200006,log,/drone_1,uncommanded,36.250,36.419,36.528,278,17.5,none logged,-,detection
+r200006,log,/drone_2,uncommanded,39.037,-,-,-,-,-,-,detector not active (after LAND)
+r200006,bag,/drone_1,uncommanded,36.250,36.419,36.528,278,39.7,none logged,-,detection
+r200006,bag,/drone_2,uncommanded,39.037,-,-,-,-,-,-,detector not active (after LAND)
+r20004,log,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r20004,bag,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r2008e60,log,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r2008e60,bag,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r206e60,log,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"
+r206e60,bag,-,-,-,-,-,-,-,-,-,"no fire, no release to detect"

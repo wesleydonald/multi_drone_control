@@ -525,3 +525,215 @@ def test_t0015_m2_legacy_layout_from_the_real_run():
         pytest.skip('T0015 controller / evidence logs not on this machine')
     _check_t0015(s)
     assert len(s['tracker_logs']) == 4
+
+
+# ── path contour and schedule lag (corner cutting, 16 Oct) ───────────────────
+
+def _orbit_xy(tau, R=0.5, v=0.3):
+    th = v * np.maximum(tau, 0.0) / R
+    return np.column_stack([R * np.sin(th), R * (1.0 - np.cos(th))])
+
+
+def _logged(tau_of_t, ring_of_t, t_end=14.0, tick=0.1, jitter=0.0, seed=1):
+    """A run as the runner logs it: the planner publishes path(tau_k) at its ticks t_k, the
+    runner holds the last value and logs rows at ~46 Hz with the ring's position."""
+    rng = np.random.default_rng(seed)
+    tk = np.arange(0.0, t_end, tick)
+    if jitter:
+        tk = np.sort(tk + np.clip(rng.normal(0.0, jitter, tk.size), -0.04, 0.04))
+    taus = tau_of_t(np.arange(tk.size) * tick)
+    t = np.cumsum(np.full(int(t_end / 0.0217), 0.0217) + rng.uniform(-0.002, 0.002, int(t_end / 0.0217)))
+    k = np.searchsorted(tk, t, side='right') - 1
+    ok = k >= 0
+    t, k = t[ok], k[ok]
+    return t, _orbit_xy(taus[k]), ring_of_t(t)
+
+
+def test_contour_lag_scores_an_on_time_ring_zero_where_the_held_reference_charges_17mm():
+    """The reason for these metrics: against the 10 Hz held desired an on-time ring at
+    0.3 m/s reads ~17 mm (v*0.1/sqrt(3)); off the path it is 0 mm and 0 s late."""
+    t, des, ring = _logged(lambda tau: tau, lambda t: _orbit_xy(t))
+    held = M.payload_rmse(np.c_[ring, np.zeros(len(t))], np.c_[des, np.zeros(len(t))])
+    assert held == pytest.approx(0.3 * 0.1 / math.sqrt(3), abs=0.002)
+    o = M.contour_lag(t, ring, des)
+    assert abs(o['across_mean_m']) < 3e-4 and o['across_rms_m'] < 5e-4
+    assert abs(o['lag_s']) < 0.004
+    assert o['rmse_sched_m'] < 0.002
+
+
+def test_contour_lag_reads_a_late_ring_as_lag_not_as_distance_from_the_path():
+    t, des, ring = _logged(lambda tau: tau, lambda t: _orbit_xy(t - 0.05))
+    o = M.contour_lag(t, ring, des)
+    assert o['lag_s'] == pytest.approx(0.05, abs=0.004)
+    assert abs(o['across_mean_m']) < 5e-4
+
+
+def test_contour_lag_reads_a_smaller_circle_as_a_cut_inside_the_curve():
+    """A ring 5 mm inside the orbit, on time: across +5 mm (inside is +), no lag."""
+    def ring(t):
+        p = _orbit_xy(t) - [0.0, 0.5]
+        return p * (0.495 / 0.5) + [0.0, 0.5]
+    t, des, r = _logged(lambda tau: tau, ring)
+    o = M.contour_lag(t, r, des)
+    assert o['across_mean_m'] == pytest.approx(0.005, abs=3e-4)
+    assert o['cut_topq_mean_m'] == pytest.approx(0.005, abs=5e-4)
+    assert abs(o['lag_s']) < 0.004
+
+
+def test_contour_lag_sign_is_inside_the_curve_on_both_lobes_of_a_figure_8():
+    """Gerono figure-8: the two lobes turn opposite ways; a ring offset 5 mm toward each
+    lobe's centre of curvature reads +5 mm on both, and the crossing never jumps branch."""
+    a, w = 0.5, 0.6
+
+    def g(tau):
+        th = w * np.maximum(tau, 0.0)
+        return th, np.column_stack([a * np.sin(th), 0.5 * a * np.sin(2 * th)])
+
+    def ring(t):
+        th, p = g(t)
+        d1 = np.column_stack([a * np.cos(th), a * np.cos(2 * th)])
+        d2 = np.column_stack([-a * np.sin(th), -2 * a * np.sin(2 * th)])
+        k = d1[:, 0] * d2[:, 1] - d1[:, 1] * d2[:, 0]
+        n = np.column_stack([-d1[:, 1], d1[:, 0]]) / np.linalg.norm(d1, axis=1)[:, None]
+        return p + 0.005 * n * np.sign(k)[:, None]
+    t, des, r = _logged(lambda tau: tau, ring, t_end=2 * math.pi / w)
+    des = g(np.floor(t / 0.1) * 0.1)[1]
+    o = M.contour_lag(t, r, des, full=True)
+    sel = o['use'] & (np.abs(o['kappa_r']) > 1.0)
+    for lobe in (r[:, 0] > 0.05, r[:, 0] < -0.05):
+        assert np.mean(o['across'][sel & lobe]) == pytest.approx(0.005, abs=5e-4)
+    assert abs(o['lag_s']) < 0.006
+
+
+def test_contour_lag_refuses_a_clock_hold_instead_of_smearing_it_into_lag():
+    """The planner's clock holds 1.5 s mid-path (a resize, a reconfiguration hold): the
+    ring holds with it, so it is never late; the hold is counted and kept out of the lag."""
+    def tau(t):
+        t = np.asarray(t, float)
+        return np.where(t < 5.0, t, np.where(t < 6.5, 5.0, t - 1.5))
+    t, des, ring = _logged(tau, lambda t: _orbit_xy(tau(t)), t_end=16.0)
+    o = M.contour_lag(t, ring, des, full=True)
+    assert o['clock_holds'] == 1
+    assert abs(o['lag_s']) < 0.004
+    assert not np.any(o['use'] & (t > 5.0) & (t < 6.9))
+
+
+def test_contour_lag_recovers_the_schedule_from_jittered_planner_ticks():
+    """Rig-like tick jitter (sd 15 ms) on a ring that is on the nominal clock: the knot
+    clock still reads it on time to a few ms."""
+    t, des, ring = _logged(lambda tau: tau, lambda t: _orbit_xy(t), jitter=0.015)
+    o = M.contour_lag(t, ring, des)
+    assert abs(o['lag_s']) < 0.004
+    assert abs(o['across_mean_m']) < 5e-4
+
+
+def test_contour_lag_skips_missing_pose_rows():
+    t, des, ring = _logged(lambda tau: tau, lambda t: _orbit_xy(t - 0.05))
+    ring[::20] = np.nan
+    o = M.contour_lag(t, ring, des)
+    assert o['lag_s'] == pytest.approx(0.05, abs=0.004)
+
+
+def test_contour_lag_is_empty_without_motion():
+    t = np.linspace(0, 10, 460)
+    assert M.contour_lag(t, np.zeros((460, 2)), np.zeros((460, 2))) == {}
+
+
+# ── the line's clock-free error and its reach (card 2026-10-23_paper_method_compare) ────────────────────
+
+def _shuttle(t, d=0.9, v=0.4, delay=0.0, amp=1.0, x0=0.2):
+    """line_x on the planner's schedule, from rest at x0: x0 + amp * d/2 (1 - cos(w (t - delay)))."""
+    w = 2.0 * v / d
+    tt = np.maximum(np.asarray(t, float) - delay, 0.0)
+    return x0 + amp * 0.5 * d * (1.0 - np.cos(w * tt))
+
+
+def test_segment_error_is_the_sideways_and_height_error_inside_the_segment():
+    p = np.array([[0.5, 0.03, 1.04], [0.2, 0.0, 1.0], [1.1, 0.0, 1.0]])
+    e = M.segment_error(p, 0.2, 1.1, 0.0, 1.0)
+    assert e == pytest.approx([0.05, 0.0, 0.0], abs=1e-12)
+
+
+def test_segment_error_scores_an_overshoot_past_either_end_and_takes_a_per_sample_reference():
+    p = np.array([[1.13, 0.0, 1.0], [0.16, 0.0, 1.0], [1.13, 0.03, 0.96]])
+    e = M.segment_error(p, 1.1, 0.2, np.array([0.0, 0.0, 0.0]), np.array([1.0, 1.0, 1.0]))
+    assert e == pytest.approx([0.03, 0.04, math.sqrt(0.03 ** 2 * 2 + 0.04 ** 2)], abs=1e-12)
+
+
+def test_segment_error_without_the_along_line_term_is_the_distance_to_the_line():
+    """The C headline adds the reach, which already counts an overshoot (the card's critic, M2)."""
+    p = np.array([[1.13, 0.0, 1.0], [0.16, 0.0, 1.0], [1.13, 0.03, 0.96], [0.5, 0.03, 1.04]])
+    e = M.segment_error(p, 1.1, 0.2, 0.0, 1.0, past_end=False)
+    assert e == pytest.approx([0.0, 0.0, 0.05, 0.05], abs=1e-12)
+
+
+def test_turnaround_reach_waits_half_a_period_for_a_late_ring():
+    """1.6 s late at 0.6 m/s (past a quarter period, 1.18 s; a quarter read it 7 cm short): it still turns at the end,
+    so no shortfall."""
+    d, v = 0.9, 0.6
+    T = math.pi * d / v
+    t = np.arange(0.0, 4 * T + 0.01, 0.02)
+    r = M.turnaround_reach(t, _shuttle(t, v=v, delay=1.6), 0.0, T, 0.2, 1.1, t_end=4 * T)
+    assert len(r) == 7 and max(abs(x[2]) for x in r) < 1e-3
+
+
+def test_a_late_ring_on_the_line_is_not_charged_clock_free():
+    """0.47 s late (the port's offline lag) on 4 cycles of the 0.9 m line: the clock-free error stays 0, the reach
+    stays 0, only the lag and the time-indexed error see it."""
+    d, v = 0.9, 0.4
+    T = math.pi * d / v
+    t = np.arange(0.0, 4 * T, 0.02)
+    ref, ring = _shuttle(t), _shuttle(t, delay=0.47)
+    e = M.segment_error(np.c_[ring, np.zeros_like(t), np.ones_like(t)], 0.2, 1.1, 0.0, 1.0)
+    assert np.max(e) < 1e-12
+    reach = M.turnaround_reach(t, ring, 0.0, T, 0.2, 1.1)
+    w = t > 1.0
+    assert M.phase_lag_s(t[w], ref[w], ring[w]) == pytest.approx(0.47, abs=0.01)
+    assert max(abs(r[2]) for r in reach) < 1e-4
+
+
+def test_turnaround_reach_sees_a_line_flown_short_and_a_line_flown_long():
+    """The blind spot it closes: a shuttle flown at 92.5 % of its 0.9 m is 6.75 cm short at the far end and inside the
+    segment everywhere, so its clock-free error is 0. Reach reads +6.75 cm at every far end, 0 at the near ones; an
+    overshooting ring reads minus."""
+    d, v = 0.9, 0.2
+    T = math.pi * d / v
+    t = np.arange(0.0, 4 * T, 0.02)
+    short = _shuttle(t, v=v, amp=0.925)
+    assert np.max(M.segment_error(np.c_[short, np.zeros_like(t), np.ones_like(t)], 0.2, 1.1, 0.0, 1.0)) < 1e-12
+    r = M.turnaround_reach(t, short, 0.0, T, 0.2, 1.1)
+    assert [round(x[1], 3) for x in r] == [1.1, 0.2, 1.1, 0.2, 1.1, 0.2, 1.1]        # 7 reversals in 4 cycles
+    assert [x[2] for x in r[0::2]] == pytest.approx([0.0675] * 4, abs=2e-4)
+    assert [x[2] for x in r[1::2]] == pytest.approx([0.0] * 3, abs=1e-5)      # the 0.02 s samples miss the minimum
+    over = M.turnaround_reach(t, _shuttle(t, v=v, amp=1.04), 0.0, T, 0.2, 1.1)
+    assert over[0][2] == pytest.approx(-0.036, abs=2e-4)
+
+
+def test_turnaround_reach_counts_only_reversals_inside_the_window_and_runs_either_way():
+    d, v = 0.9, 0.4
+    T = math.pi * d / v
+    t = np.arange(0.0, 2 * T, 0.02)
+    back = 1.3 - (_shuttle(t) - 0.2)                         # x0 1.3 -> x1 0.4 and back
+    r = M.turnaround_reach(t, back, 0.0, T, 1.3, 0.4, t_end=1.6 * T)
+    assert [round(x[0] / T, 2) for x in r] == [0.5, 1.0]     # the third (1.5 T) needs the window to 1.75 T
+    assert max(abs(x[2]) for x in r) < 1e-3
+
+
+def test_fit_circle_recovers_centre_and_radius():
+    th = np.linspace(0, 2 * math.pi, 50)
+    c, r = M.fit_circle(np.column_stack([0.3 + 0.48 * np.cos(th), -0.2 + 0.48 * np.sin(th)]))
+    assert c == pytest.approx([0.3, -0.2], abs=1e-9) and r == pytest.approx(0.48, abs=1e-9)
+
+
+def test_contour_lag_gives_no_lag_on_a_path_that_turns_back_on_itself():
+    """line_x's shuttle: the nearest point near a reversal can be on the other leg, so the
+    lag is undefined (nan) while the distance from the line is still scored (as rms: a
+    straight line has no inside, so the sign of the offset is not defined)."""
+    def shuttle(tau):
+        tau = np.maximum(np.asarray(tau, float), 0.0)
+        return np.column_stack([0.5 * (1 - np.cos(0.6 * tau)), np.zeros(tau.size)])
+    t = np.arange(0.0, 20.0, 0.0217)
+    des = shuttle(np.floor(t / 0.1) * 0.1)
+    ring = shuttle(t - 0.05) + [0.0, 0.003]
+    o = M.contour_lag(t, ring, des)
+    assert math.isnan(o['lag_s']) and o['across_rms_m'] == pytest.approx(0.003, abs=5e-4)

@@ -1,0 +1,10 @@
+# Thesis result C (card docs/experiments/2026-10-23_paper_method_compare.md, §5 the switches' own bars):
+# configs/twin/c_compare.yaml plus net_damp_relative alone (the paper's Eq. 9 without Eq. 10's net_traj_lean), so
+# c_netr_linex_v400_L100 and c_net_linex_v400_L100 differ only in this switch. The port's frozen gains go here too.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+traj_hold_s: 5.0
+net_hold_carry: true
+net_twin_geometry: true
+net_damp_relative: true

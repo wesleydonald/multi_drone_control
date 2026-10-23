@@ -136,6 +136,9 @@ class MagnetAttachmentManager(Node):
         self.object_velocity = np.zeros(3, dtype=float)
         self.last_magnet_tip_time: Optional[float] = None
         self.last_object_time: Optional[float] = None
+        self.last_magnet_tip_sample_time: Optional[float] = None
+        self.last_object_sample_time: Optional[float] = None
+        self.last_clock_time_s: Optional[float] = None
 
         self.create_subscription(String, self.magnet_command_topic, self.magnet_command_callback, 10)
         if self.magnet_tip_pose_msg_type in ('pose_stamped', 'posestamped', 'stamped'):
@@ -197,6 +200,40 @@ class MagnetAttachmentManager(Node):
         dt = max(1e-6, now - old_time)
         return new_position, (new_position - old_position) / dt
 
+    def _now_s(self) -> float:
+        """One ROS clock for receipt age and dwell; wall time on non-sim nodes."""
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if self.last_clock_time_s is not None and now < self.last_clock_time_s:
+            self.last_magnet_tip_time = self.last_object_time = None
+            self.last_magnet_tip_sample_time = self.last_object_sample_time = None
+            self.attach_condition_start = None
+            self.last_magnet_command_time = None
+            self._last_elrs_publish_time = self._last_kinematic_update = 0.
+        self.last_clock_time_s = now
+        return now
+
+    def _receive_pose(self, kind: str, pose: Pose, stamp) -> None:
+        now = self._now_s()
+        if stamp.sec < 0 or not 0 <= stamp.nanosec < 1_000_000_000:
+            return
+        source_ns = stamp.sec * 1_000_000_000 + stamp.nanosec
+        sample = source_ns * 1e-9 if source_ns or now == 0. else now
+        old_sample = getattr(self, f'last_{kind}_sample_time')
+        if old_sample is not None and sample <= old_sample:
+            return  # Replayed poses are not fresh measurements.
+        received = getattr(self, f'last_{kind}_time')
+        if received is None or now-received > self.pose_timeout_s:
+            old_sample = None
+            self.attach_condition_start = None
+        old_position = getattr(self, f'{kind}_position')
+        position, velocity = self._update_position_and_velocity(
+            self._pose_to_position(pose), sample, old_position, old_sample)
+        setattr(self, f'prev_{kind}_position', old_position)
+        setattr(self, f'{kind}_position', position)
+        setattr(self, f'{kind}_velocity', velocity)
+        setattr(self, f'last_{kind}_sample_time', sample)
+        setattr(self, f'last_{kind}_time', now)
+
     def magnet_tip_pose_callback(self, msg: PoseArray) -> None:
         pose = self._select_pose(msg, self.magnet_tip_pose_index)
         if pose is None:
@@ -206,23 +243,11 @@ class MagnetAttachmentManager(Node):
                 throttle_duration_sec=2.0,
             )
             return
-        now = time.time()
-        new_pos = self._pose_to_position(pose)
-        self.prev_magnet_tip_position = self.magnet_tip_position
-        self.magnet_tip_position, self.magnet_tip_velocity = self._update_position_and_velocity(
-            new_pos, now, self.magnet_tip_position, self.last_magnet_tip_time
-        )
-        self.last_magnet_tip_time = now
+        self._receive_pose('magnet_tip', pose, msg.header.stamp)
 
     def magnet_tip_pose_stamped_callback(self, msg: PoseStamped) -> None:
         """Update magnet tip from a world-frame PoseStamped, e.g. /magnet_tip_pose."""
-        now = time.time()
-        new_pos = self._pose_to_position(msg.pose)
-        self.prev_magnet_tip_position = self.magnet_tip_position
-        self.magnet_tip_position, self.magnet_tip_velocity = self._update_position_and_velocity(
-            new_pos, now, self.magnet_tip_position, self.last_magnet_tip_time
-        )
-        self.last_magnet_tip_time = now
+        self._receive_pose('magnet_tip', msg.pose, msg.header.stamp)
 
     def object_pose_callback(self, msg: PoseArray) -> None:
         pose = self._select_pose(msg, self.object_pose_index)
@@ -233,13 +258,7 @@ class MagnetAttachmentManager(Node):
                 throttle_duration_sec=2.0,
             )
             return
-        now = time.time()
-        new_pos = self._pose_to_position(pose)
-        self.prev_object_position = self.object_position
-        self.object_position, self.object_velocity = self._update_position_and_velocity(
-            new_pos, now, self.object_position, self.last_object_time
-        )
-        self.last_object_time = now
+        self._receive_pose('object', pose, msg.header.stamp)
 
     def _set_elrs_channel(self, msg: ELRSCommand, channel_index: int, value: float) -> bool:
         """Set one normalised ELRS channel field, e.g. channel_10 = +1.0."""
@@ -258,7 +277,7 @@ class MagnetAttachmentManager(Node):
         if not self.enable_elrs_magnet_output:
             return
 
-        now = time.time()
+        now = self._now_s()
         repeat_period = 1.0 / max(0.01, self.elrs_magnet_repeat_rate_hz)
         if (
             not force
@@ -292,7 +311,7 @@ class MagnetAttachmentManager(Node):
 
     def magnet_command_callback(self, msg: String) -> None:
         command = str(msg.data).strip().upper()
-        self.last_magnet_command_time = time.time()
+        self.last_magnet_command_time = self._now_s()
 
         if command in ('ON', '1', 'TRUE', 'ENABLE', 'ENABLED'):
             if not self.magnet_on:
@@ -322,7 +341,7 @@ class MagnetAttachmentManager(Node):
         return None
 
     def poses_fresh(self) -> Tuple[bool, str]:
-        now = time.time()
+        now = self._now_s()
         if self.magnet_tip_position is None or self.last_magnet_tip_time is None:
             return False, 'waiting for magnet tip pose'
         if now - self.last_magnet_tip_time > self.pose_timeout_s:
@@ -457,7 +476,7 @@ class MagnetAttachmentManager(Node):
         self.last_state_text = text
 
     def timer_callback(self) -> None:
-        now = time.time()
+        now = self._now_s()
 
         if self.command_timeout_s > 0.0 and self.last_magnet_command_time is not None:
             if now - self.last_magnet_command_time > self.command_timeout_s:
@@ -476,6 +495,7 @@ class MagnetAttachmentManager(Node):
         fresh, freshness_reason = self.poses_fresh()
         object_pos = self.current_object_position()
         if not fresh or object_pos is None or self.magnet_tip_position is None:
+            self.attach_condition_start = None
             self.publish_state(
                 f'magnet_on={self.magnet_on} attached={self.attached} status={freshness_reason}'
             )

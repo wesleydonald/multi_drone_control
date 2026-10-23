@@ -3,7 +3,7 @@
 written to thesis/Source/src/tables/*.tex from the run data (no hand-typed numbers; no run ids in the
 output, they are listed in configs/thesis_figures.yaml).
 
-    python3 tools/thesis_sim_tables.py
+    python3 tools/thesis_sim_tables.py [OUT_DIR]
 
 An arm is a config name (every non-void run of it, for today's box-at-zero configs) or an explicit
 run list (the old-box baselines, whose configs were also flown on older code). Cells show the mean
@@ -11,6 +11,7 @@ over the arm's runs and n.
 """
 import csv
 import glob
+import json
 import os
 import sys
 
@@ -24,7 +25,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(REPO, 'thesis', 'Source', 'src', 'tables')
 
 
-def runs_of(config):
+def runs_of(config, aborted=False):
     ids = []
     for d in sorted(glob.glob(os.path.join(REPO, 'results', '*', f'R*_sim_gz_{config}'))):
         rid = os.path.basename(d).split('_')[0]
@@ -36,7 +37,7 @@ def runs_of(config):
         ev = {}
         for e in csv.DictReader(open(os.path.join(d, 'logs', 'events.csv'))):
             ev.setdefault(e['event'], float(e['sim_time']))
-        if 'FLEET_ABORT' in ev and ev['FLEET_ABORT'] < ev.get('LAND', 1e9):
+        if 'FLEET_ABORT' in ev and ev['FLEET_ABORT'] < ev.get('LAND', 1e9) and not aborted:
             continue                                   # aborted in flight
         ids.append(rid)
     return ids
@@ -65,13 +66,9 @@ def cell(vals, fmt='{:.1f}', signed=False):
     return s + (f' ({len(vals)})' if len(vals) > 1 else ' (1)')
 
 
-def registry():
-    return {r[0]: r for r in csv.reader(open(os.path.join(REPO, 'results', 'registry.csv')))}
-
-
 def table_x0():
-    hold = {'old': ['R0841', 'R0844'], 'new': 'b2_cap075_fix_n3_x0b0'}
-    orbit = {'old': ['R0832'], 'new': 'b2_cap075_fix_n3_orbit_x0b0'}
+    hold = {'old': 'app_x0_hold_eps025', 'new': 'app_x0_hold_eps0'}
+    orbit = {'old': 'app_x0_orbit_eps025', 'new': 'app_x0_orbit_eps0'}
     rows = [
         ('Gazebo, hover at 1.0\\,m', 'height error (cm)',
          cell([metrics(r)['z_err_cm'] for r in ids(hold['old'])], signed=True),
@@ -132,10 +129,9 @@ def learned(arm, axis):
 
 
 def table_disturbance():
-    Z = dict(none='b2_cap075_fix_n3_pushz_x0b0', ref='b2_cap075_fix_n3_pushz_x0b0_zki',
-             model='b2_cap075_fix_n3_pushz_x0b0_int')
-    X = dict(none='b2_cap075_fix_n3_push04_x0b0', model='b2_cap075_fix_n3_push04_x0b0_int')
-    M = dict(ref='b2_cap075_fix_n3_mapneg_x0b0_zki', model='b2_cap075_fix_n3_mapneg_x0b0_int')
+    Z = dict(none='app_pushz_none', ref='app_pushz_ref', model='app_pushz_model')
+    X = dict(none='app_push04_none', model='app_push04_model')
+    M = dict(ref='app_mapneg_ref', model='app_mapneg_model')
     zc = {k: push_cells(v) for k, v in Z.items()}
     xc = {k: push_cells(v) for k, v in X.items()}
     names = ['steady displacement (cm)', 'peak displacement (cm)', 'overshoot on release (cm)',
@@ -163,11 +159,11 @@ def table_disturbance():
 
 
 def table_gain():
-    arms = [('$k_i = 0.4$', ['R0969', 'R0982']), ('$k_i = 0.8$', ['R0976']),
-            ('$k_i = 0.4$, speed gate only in the first 5\\,s after the lift', ['R0977'])]
+    arms = [('$k_i = 0.4$', 'app_pushz_model'), ('$k_i = 0.8$', 'app_pushz_model_ki08'),
+            ('$k_i = 0.4$, speed gate only in the first 5\\,s after the lift', 'app_pushz_model_settle')]
     lines = []
-    for name, rr in arms:
-        P = [push(r) for r in rr]
+    for name, arm in arms:
+        P = [push(r) for r in ids(arm)]
         lines.append(f'{name} & {cell([p["peak_cm"] for p in P])} & {cell([p["release_overshoot_cm"] for p in P])} & '
                      f'{cell([p["settle_s"] for p in P])} \\\\')
     return ('gain', r"""\begin{tabularx}{\textwidth}{Xccc}
@@ -179,47 +175,6 @@ Model integral & Peak (cm) & Overshoot (cm) & Settling (s) \\
 \end{tabularx}""")
 
 
-def trajectory_error(rid):
-    """Horizontal error (cm) over the whole trajectory, where the reference moves, sampled when the
-    planner's 10 Hz reference updates (not against a stale step)."""
-    import pandas as pd
-    d = glob.glob(os.path.join(REPO, 'results', '*', f'{rid}_*'))[0]
-    run = pd.read_csv(os.path.join(d, 'logs', 'run.csv')).drop_duplicates('t')
-    ch = (run.payload_ref_x.diff().abs() > 1e-6) | (run.payload_ref_y.diff().abs() > 1e-6)
-    t = run.t[ch]
-    w = run[ch & (run.t >= t.iloc[0]) & (run.t <= t.iloc[-1])]
-    return 100 * np.hypot(w.payload_x - w.payload_ref_x, w.payload_y - w.payload_ref_y).to_numpy()
-
-
-def table_four():
-    reg = registry()
-    rows = []
-    for name, rr in (('Hover, even ring', ['R0931', 'R0932']), ('Hover, plates 1/3/5/9', ['R0936'])):
-        M = [metrics(r) for r in rr]
-        rows.append(f'{name} & height error {cell([m["z_err_cm"] for m in M], signed=True)}\\,cm, '
-                    f'tilt {cell([m["tilt"] for m in M])}\\,\\si{{\\degree}} \\\\')
-    m = metrics('R0933')
-    rows.append(f'Circle, $r = 0.5$\\,m, 0.125\\,m/s (1) & horizontal error {m["err_cm"]:.1f}\\,cm mean, '
-                f'{m["err_max_cm"]:.1f}\\,cm max; height error {m["z_err_cm"]:+.1f}\\,cm \\\\')
-    e = trajectory_error('R0935')
-    rows.append(f'Figure-8, 2\\,m $\\times$ 1\\,m, 0.25\\,m/s (1) & horizontal error {np.mean(e):.1f}\\,cm mean, '
-                f'{np.max(e):.1f}\\,cm max \\\\')
-    dt = [v.strip() for v in reg['R0939'][7].split('/')]
-    rows.append(f'Detach, 4 to 3 (plates 1/3/5/9) (1) & peak tilt {dt[0].split()[0]}\\,\\si{{\\degree}}, '
-                f'under 2\\,\\si{{\\degree}} after {dt[1].split()[0]}\\,s, ring dip {dt[2].split()[0]}\\,cm \\\\')
-    return ('four', r"""\begin{tabularx}{\textwidth}{lX}
-\toprule
-Case & Result \\
-\midrule
-""" + '\n'.join(r.replace('+', '$+$') for r in rows) + r"""
-\bottomrule
-\end{tabularx}""")
-
-
-STRAIGHT = ['R0960', 'R0961', 'R0962', 'R0963', 'R0967', 'R0968', 'R0969', 'R0971', 'R0972', 'R0974', 'R0976',
-            'R0977', 'R0978', 'R0979', 'R0980', 'R0981', 'R0982', 'R0983', 'R0984', 'R0985', 'R0986']
-
-
 def card_runs(card):
     """Non-void runs registered against a card, in order."""
     out = []
@@ -229,11 +184,31 @@ def card_runs(card):
     return out
 
 
+CARRY_CARD = '2026-10-16_carry_speed_envelope'       # the traj3 claim cells (0.55 m)
+
+
+def claim_runs(config=None):
+    """The carry claim's 0.55 m runs (not L100, not traj3d), or one cell of it."""
+    out = []
+    for r in card_runs(CARRY_CARD):
+        c = os.path.basename(glob.glob(os.path.join(REPO, 'results', '*', f'{r}_*'))[0]).split('_sim_gz_')[1]
+        if c.startswith('traj3_') and 'L100' not in c and 'traj3d' not in c and config in (None, c):
+            out.append(r)
+    return out
+
+
+def freeze_landings():
+    """Every non-void three-carrier 0.55 m landing on the freeze tree with the default landing: the
+    appendix configs (not the straight-descent arm, not the four-carrier ones) and the carry claim."""
+    app = sorted(os.path.basename(f)[:-5]
+                 for f in glob.glob(os.path.join(REPO, 'configs', 'experiments', 'app_*.yaml')))
+    app = [c for c in app if c != 'app_land_straight' and not c.startswith(('app_traj4_', 'app_w4_'))]
+    return sum((runs_of(c, aborted=True) for c in app), []) + claim_runs()
+
+
 def table_land():
-    from land_metrics import land
-    sets = [('straight descent', STRAIGHT),
-            ('unwind', card_runs('2026-10-04_land_matrix')),
-            ('unwind, feedforward ramp, ground idle', card_runs('2026-10-04_land_fix'))]
+    from land_touchdown import land
+    sets = [('unwind, feedforward ramp, ground idle (freeze tree)', freeze_landings())]
     lines = []
     for name, rr in sets:
         R = [land(r) for r in rr]
@@ -253,7 +228,7 @@ Landing & Runs & Tipped (aborted) & Pushed outward (cm) & Tilt after 1.2\,s (\si
 \end{tabularx}""")
 
 
-ROBUST = [('none', ['R1013', 'R1023'], ''),
+ROBUST = [('none', 'none', ''),
           ('payload mass typed $+10$\\,\\%', 'm+10', ''),
           ('payload mass typed $+20$\\,\\%', 'm+20', '$^a$'),
           ('payload mass typed $-20$\\,\\%', 'm-20', ''),
@@ -263,22 +238,22 @@ ROBUST = [('none', ['R1013', 'R1023'], ''),
 
 
 def robust_runs(arm, zki):
-    if isinstance(arm, list) and not zki:
-        return arm
-    return runs_of(f'b2_cap075_fix_n3_rob_{arm if isinstance(arm, str) else "none"}_{"zki" if zki else "z0"}')
+    if arm == 'none':
+        return runs_of('app_rob_none_int' if zki else 'app_x0_hold_eps0', aborted=True)
+    return runs_of(f'app_rob_{arm}_{"int" if zki else "z0"}', aborted=True)   # an abort counts, under Landed
 
 
-def target_shift(rid):
-    """The height integral's target shift at LAND (cm, + = target raised)."""
+def learned_fz(rid):
+    """The model integral's vertical force at LAND (N)."""
     import pandas as pd
     d = glob.glob(os.path.join(REPO, 'results', '*', f'{rid}_*'))[0]
     L = pd.read_csv(glob.glob(os.path.join(d, 'logs', '*planner', '*', 'log.csv'))[0])
-    return 100 * float(L.z_bias.dropna().iloc[-1])
+    return float(L.int_fz[L.land == 0].dropna().iloc[-1])
 
 
 def table_robust():
     """T9. Every cell is the mean of two Gazebo runs (the caption says so; a cell with another n fails)."""
-    from land_metrics import land
+    from land_touchdown import land
     lines = []
     for name, arm, mark in ROBUST:
         r0, r1 = robust_runs(arm, False), robust_runs(arm, True)
@@ -287,13 +262,14 @@ def table_robust():
         R = [land(r) for r in r0 + r1]
         ok = sum(x.get('outcome') == 'landed' and x.get('tilt_deg', 90) <= 45 for x in R)
         lines.append(f'{name} & {sg([metrics(r)["z_err_cm"] for r in r0])} & '
-                     f'{sg([metrics(r)["z_err_cm"] for r in r1])}{mark} & {sg([target_shift(r) for r in r1])} & '
+                     f'{sg([metrics(r)["z_err_cm"] for r in r1])}{mark} & '
+                     f'{cell([learned_fz(r) for r in r1], "{:.2f}").split(" (")[0]} & '
                      f'{cell([metrics(r)["tilt"] for r in r0 + r1]).split(" (")[0]} & {ok}/{len(R)} \\\\')
     return ('robust', r"""\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xccccc}
 \toprule
- & \multicolumn{2}{c}{Height error (cm)} & Target & & \\
+ & \multicolumn{2}{c}{Height error (cm)} & Learned & & \\
 \cmidrule(lr){2-3}
-Error in the controller's model & no integral & integral & shift (cm) & Tilt (\si{\degree}) & Landed \\
+Error in the controller's model & no integral & integral & force (N) & Tilt (\si{\degree}) & Landed \\
 \midrule
 """ + '\n'.join(lines) + r"""
 \bottomrule
@@ -301,7 +277,7 @@ Error in the controller's model & no integral & integral & shift (cm) & Tilt (\s
 
 
 PARAMS = [('Fleet and payload', [('drone_mass', 'UAV mass, with rod and magnet', 'kg'), ('load_mass', 'payload mass', 'kg'),
-                                 ('cable_len', 'rod length', 'm'), ('pivot_offset_z', 'rod pivot below the UAV centre', 'm'),
+                                 ('cable_len', 'cable length', 'm'), ('pivot_offset_z', 'rod pivot below the UAV centre', 'm'),
                                  ('attach_radius', 'attachment radius', 'm')]),
           ('Thrust map', [('thrust_offset', 'throttle offset $a_i$ (shared)', ''),
                           ('thrust_offset_v_slope', 'voltage slope', '1/V'),
@@ -315,24 +291,51 @@ PARAMS = [('Fleet and payload', [('drone_mass', 'UAV mass, with rod and magnet',
           ('Watchdogs', [('pose_timeout_s', 'motion-capture timeout', 's'), ('solve_budget_s', 'planner solve budget', 's')])]
 
 
-def rig_profile():
-    import yaml
-    cfg = {}
-    for f in ('common.yaml', 'real.yaml'):
-        for sec, kv in yaml.safe_load(open(os.path.join(REPO, 'src', 'bringup', 'config', f))).items():
-            if sec != 'modes':
-                cfg.update(kv)
-    return cfg
+def run_params(rid):
+    """What run rid flew: its manifest's launch args, overlaid by its nodes' params.json (planner, trackers)."""
+    d = glob.glob(os.path.join(REPO, 'results', '*', f'{rid}_*'))[0]
+    out = {}
+    try:
+        with open(os.path.join(d, 'manifest.json')) as f:
+            out.update(json.load(f).get('launch_args') or {})
+    except (OSError, ValueError):
+        pass
+    for fn in sorted(glob.glob(os.path.join(d, 'logs', '*', '*', 'params.json'))):
+        try:
+            with open(fn) as f:
+                p = json.load(f)
+        except (OSError, ValueError):
+            continue
+        po = p.get('pivot_offset')
+        if po not in (None, ''):
+            p['pivot_offset_z'] = (json.loads(po) if isinstance(po, str) else po)[2]
+        out.update(p)
+    return out
 
 
-def table_params():
-    cfg = rig_profile()
-    lines = []
+def table_params(runs=None):
+    """The parameters the run set flew (default: the trajectory table's runs), never a profile's: a row its runs do not
+    all carry with one value is left out, and with no run params the table is (None, note)."""
+    runs = [r for _, _, _, arm, _ in TRAJ for r in ids(arm)] if runs is None else list(runs)
+    P = [run_params(r) for r in runs]
+    lines, left_out = [], []
     for group, rows in PARAMS:
-        lines.append(f'\\multicolumn{{3}}{{l}}{{\\textit{{{group}}}}} \\\\')
+        body = []
         for key, label, unit in rows:
-            v = cfg[key]
-            lines.append(f'\\quad {label} & {abs(v):g} & {unit} \\\\')
+            try:
+                vals = {round(float(p[key]), 6) for p in P}
+            except (KeyError, TypeError, ValueError):
+                vals = set()
+            if len(vals) != 1:
+                left_out.append(key)
+                continue
+            body.append(f'\\quad {label} & {abs(vals.pop()):g} & {unit} \\\\')
+        if body:
+            lines += [f'\\multicolumn{{3}}{{l}}{{\\textit{{{group}}}}} \\\\'] + body
+    if not lines:
+        return None, f'params: no run of the set carries its parameters ({len(runs)} runs): the table is left out'
+    if left_out:
+        print(f'params: left out (not carried by every run, or the runs differ): {", ".join(left_out)}')
     return ('params', r"""\begin{tabular}{llc}
 \toprule
 Parameter & Value & Unit \\
@@ -342,14 +345,12 @@ Parameter & Value & Unit \\
 \end{tabular}""")
 
 
-TRAJ = [('Hover', 3, '--', 'b2_cap075_fix_n3_x0b0_lf', 'hover'),
-        ('Hover, plates 1/3/5/9', 4, '--', 'w4_3915_hover_lf', 'hover'),
-        ('Line, 1\\,m shuttle', 4, '0.25', 'w4_even_line_lf', 'all'),
-        ('Circle, $r = 0.5$\\,m', 3, '0.125', ['b2_cap075_fix_n3_orbit_x0b0', 'b2_cap075_fix_n3_orbit_x0b0_lu',
-                                               'b2_cap075_fix_n3_orbit_x0b0_lf'], 'lap'),
-        ('Circle, $r = 0.5$\\,m', 4, '0.125', 'w4_even_orbit_lf', 'lap'),
-        ('Figure-8, 2\\,m $\\times$ 1\\,m', 4, '0.25', 'w4_even_fig8_lf', 'all'),
-        ('Spin, circle with one turn of yaw', 4, '0.125', 'w4_even_spin_lf', 'all')]
+TRAJ = [('Hover', 3, '--', 'app_rob_none_int', 'hover'),
+        ('Circle from the centre, $r = 0.5$\\,m', 3, '0.125', claim_runs('traj3_circle_v125'), 'all'),
+        ('Circle, $r = 0.5$\\,m', 3, '0.125', claim_runs('traj3_orbit_v125'), 'lap'),
+        ('Figure-8, $r = 0.5$\\,m', 3, '0.125', claim_runs('traj3_fig8_v125'), 'all'),
+        ('Line, 1\\,m', 3, '0.125', claim_runs('traj3_linex_v125'), 'all'),
+        ('Spin, circle with one turn of yaw', 3, '0.125', claim_runs('traj3_spin_v125'), 'all')]
 
 
 def traj_stats(rid, window):
@@ -394,18 +395,18 @@ def spin_yaw_err(rid):
     return float(np.abs(e).mean()), float(np.abs(e).max())
 
 
-DETACH = [('$\\epsilon = 0.025$, height integral on', ['R0939']),
-          ('$\\epsilon = 0$, no integral', ['R0997', 'R1007', 'R1012', 'R1029', 'R1034'])]
+DETACH = [('measured', ['R1887', 'R1891', 'R1895']),            # Tier A A1 (ta_a1_r1..r3, freeze tree)
+          ('planned', ['R1888', 'R1892', 'R1896'])]             # Tier A A2
 
 
 def detach_stats(rid):
-    """F_detach's measures for one run: peak ring tilt in the 5 s after DETACH; time until the tilt stays
-    under the hover's own maximum (5 s before) plus 0.5 deg; largest ring height change from its mean
-    over the 5 s before, in the 12 s after."""
+    """F_detach's measures for one run: peak ring tilt in the 5 s after DETACH (or RELEASE); time until
+    the tilt stays under the hover's own maximum (5 s before) plus 0.5 deg; largest ring height change
+    from its mean over the 5 s before, in the 12 s after."""
     import pandas as pd
     d = glob.glob(os.path.join(REPO, 'results', '*', f'{rid}_*'))[0]
     t_det = [float(e['sim_time']) for e in csv.DictReader(open(os.path.join(d, 'logs', 'events.csv')))
-             if e['event'] == 'DETACH'][0]
+             if e['event'] in ('DETACH', 'RELEASE')][0]
     run = pd.read_csv(os.path.join(d, 'logs', 'run.csv')).drop_duplicates('t')
     w = run[(run.t >= t_det - 5) & (run.t <= t_det + 12)]
     tr, tilt = w.t.to_numpy() - t_det, w.payload_tilt_deg.to_numpy()
@@ -426,7 +427,7 @@ def table_detach():
     return ('detach', r"""\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xcccc}
 \toprule
  & & Peak tilt & Back in band & Height change \\
-Tracker box & Runs & (\si{\degree}) & (s) & (cm) \\
+Rod pull & Runs & (\si{\degree}) & (s) & (cm) \\
 \midrule
 """ + '\n'.join(lines) + r"""
 \bottomrule
@@ -436,10 +437,10 @@ Tracker box & Runs & (\si{\degree}) & (s) & (cm) \\
 def table_traj():
     lines, note = [], ''
     for name, n, v, arm, window in TRAJ:
-        rr = sum((runs_of(a) for a in arm), []) if isinstance(arm, list) else runs_of(arm)
+        rr = ids(arm)
         S = [traj_stats(r, window) for r in rr]
         c = lambda k, **kw: cell([x[k] for x in S], **kw).split(' (')[0].replace('+', '$+$')
-        mark = '$^a$' if 'spin' in str(arm) else ''
+        mark = '$^a$' if name.startswith('Spin') else ''
         lines.append(f'{name}{mark} & {n} & {v} & {c("mean")} & {c("max")} & {c("z", signed=True)} & {c("tilt")} & '
                      f'{len(S) if S else "--"} \\\\')
         if mark:
@@ -458,9 +459,24 @@ Reference & UAVs & (m/s) & mean & max & error (cm) & (\si{\degree}) & Runs \\
 \end{tabularx}""")
 
 
+def table_compare():
+    """Result C, the paper's method against our planner (card 2026-10-23_paper_method_compare), from the newest
+    results/analysis/c_compare_<date>.json (tools/c_metrics.py --table); (None, note) until C's runs are scored."""
+    import c_metrics
+    files = sorted(glob.glob(os.path.join(REPO, 'results', 'analysis', 'c_compare_*.json')))
+    if not files:
+        return None, 'compare_c: no results/analysis/c_compare_*.json yet (tools/c_metrics.py --table): left out'
+    return 'compare_c', c_metrics.latex(json.load(open(files[-1]))['cells'])
+
+
 if __name__ == '__main__':
+    OUT = sys.argv[1] if len(sys.argv) > 1 else OUT
     os.makedirs(OUT, exist_ok=True)
-    for fn in (table_x0, table_disturbance, table_gain, table_four, table_land, table_robust, table_params, table_traj, table_detach):
+    for fn in (table_x0, table_disturbance, table_gain, table_land, table_robust, table_params, table_traj,
+               table_detach, table_compare):
         name, tex = fn()
+        if name is None:
+            print(f'== {tex}\n')
+            continue
         open(os.path.join(OUT, name + '.tex'), 'w').write('% generated by tools/thesis_sim_tables.py\n' + tex + '\n')
         print(f'== {name}\n{tex}\n')

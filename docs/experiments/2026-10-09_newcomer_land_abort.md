@@ -1,0 +1,149 @@
+# Newcomer LAND and abort (M1 rules a and b)
+
+Revision 3 (critic: REWRITE twice, 8 Oct night; Wesley's answers the same night). Rule c (a fault on QUAD4 alone) is its
+own card: 2026-10-09_newcomer_fault_scope.md.
+
+1. **Question.** Wesley, 8 Oct: "LAND should land all drones no matter which controller it is using"; an unwelded
+   QUAD4 on LAND, or on an abort, moves clear and lands while the carriers fly on. Does the attach graph do that?
+2. **Hypothesis.** Today (rig-prep 5130c70, read from the code): LAND leaves the newcomer's approach hold following
+   the plate down, the landed gate counts only the carriers and `_departed_hold`, `/fleet/landed` fires and the
+   fleet manager disarms QUAD4 ~0.6 m above the ring; `/magnet/command OFF` only blocks the weld and QUAD4 hovers
+   over the plate until LAND. With `newcomer_lifecycle` on: LAND or OFF before the weld sends OFF, holds QUAD4 at
+   its approach reference for 0.5 s (the magnet lets go), moves it radially out from the ring centre to 1.2 m at its
+   height (0.15 m/s; Wesley: no climb, a climb can itself collide), lands it by itself, and the landed gate waits
+   for it; OFF is re-sent every 0.5 s while it is out and any later ON or weld is refused with OFF.
+3. **The one variable.** `newcomer_lifecycle` (bringup common.yaml, default false; planner param), flown from
+   branch newcomer-fault-scope (this card's code from acb21f3 on, under the fault-scope card's be2afda with
+   `newcomer_fault_land` off in every row here, so NC and A1 differ only in `newcomer_lifecycle`): dissipative_node.py `_abort_newcomer`, `_newcomers_out_on_land`, `_newcomer_off_tick`, OFF/ON
+   handling in `_magnet_cmd_cb` (the subscription is no longer gated on the approach hold; ON keeps that gate), weld
+   refusals in `_magnet_attached_cb`/`_do_attach`, `_publish_departed_refs` lands a `_land_alone` drone by itself
+   (its own 0.15 m/s path also during LAND, its touchdown detector kept between ticks), `_pos` reads an unwelded
+   newcomer's own mocap (stamped; older than 0.5 s is not used). Off in every partner run (attached or not) and
+   outside the OCP phase. A refused ON sends OFF only while a newcomer is unwelded (OFF releases a welded one).
+   A newcomer whose approach never started gets no reference (R0532); one still on the floor when it is taken
+   out (less than 5 cm above its height at ATTACH: the rig's resting z is not the twin's) lands where it is (its
+   reference goes down and freezes at the stall, no hold at floor height). During a circle it moves on out past
+   the ring's path (orbit radius + 1.0 m from the path centre) before it lands, as a detached drone does. Test tooling: runner `WAIT_LOG` (times an
+   event into a planner phase), `tools/attach_metrics.py`.
+   Pinned: configs/experiments/twin_r8a_dry.yaml (free-start twin attach world, M1 layout 270/30/150, QUAD4 on
+   plate 9, hover 1.0 m, weld_radius 0) with `newcomer_lifecycle` the only difference between NC and A1.
+4. **Baseline.** NC: the A1 config with the switch off, same tree. Expected: QUAD4 disarmed above 0.3 m at LANDED.
+   If it lands cleanly the code reading is wrong and this card is void. R1238 (twin_r8a0, LAND before ATTACH):
+   QUAD4 never had a reference, z 0.10 throughout, tilt 0; ring 0.999-1.001 m.
+5. **Pass / fail.** Twin. Every row names the planner line that proves the event fell in the phase
+   (`approach: drone 3 <phase>` before, `out of this flight (<why>)` after; `tools/attach_metrics.py`).
+   Clearance = QUAD4 body to every carrier body / to every carrier rod (carrier -> plate), MAGNET ON -> LANDED.
+   Tip-rim = QUAD4's magnet tip to the ring's plate circle while it moves out (the twin has no rim contact: the rod
+   has no collision and the magnet does not collide with the ring, so this is measured, not felt).
+   | Run | Events | Supports if | Falsified if |
+   |---|---|---|---|
+   | NC | switch off; MAGNET ON, WAIT_LOG descend, LAND +8 s | QUAD4 disarmed above 0.3 m at LANDED (the bug is there) | it lands cleanly: card void |
+   | A1 | as NC, switch on | no `/fleet/abort`; out (LAND) logged in descend; moves out to >= 1.15 m with z within +/-3 cm of its own reference during the level move (step_dz_ref, the move ends where its descent starts); QUAD4 below 0.15 m before LANDED and disarmed below 0.15 m (disarm_z); no 'not down after' line; clearance body >= 0.30, rod >= 0.15 m; the move never brings the tip closer to the rim than 0.02 m, or than the approach parked it if that is closer (tip_rim_moving_min >= min(tip_rim_parked, 0.02) - 0.005 m; parked over the plate by design ~0.02 m); ring tilt <= 10 deg; QUAD4 tilt <= 10 deg on the floor | QUAD4 disarmed above 0.15 m, any abort, body < 0.25 / rod < 0.10 m, tip-rim < 0.01 m |
+   | A2 | LAND 2 s after transit starts | as A1 (out logged in transit) | as A1 |
+   | A3 | LAND 2 s after the climb starts (at spawn, r 1.4) | as A1 (it is already clear: lands where it is) | as A1 |
+   | B1 | weld_radius 0; OFF 8 s after descend starts; LAND 25 s later | out (abort) in descend; moves out and lands while the carriers hover (ring z +/-3 cm of 1.0, tilt <= 5 deg); LANDED after all four are down; A1's clearance and tip-rim bars | as A1, or the carriers move |
+   | B2 | weld_radius 0.08; OFF 2 s after transit starts | out (abort) in transit; as B1 | as B1 |
+   | N1 | twin_r8a0 with the switch on (LAND before ATTACH) | QUAD4 never gets a reference, z <= 0.12, tilt <= 5 deg; ring as R1238 +/- 1 cm | a reference, or QUAD4 moves |
+   Grey (between the columns): one repeat of that run.
+   Not flown here (unit tests only): an ON after an abort, and a weld racing LAND or an abort (refused, OFF sent,
+   the release hold restarted). The twin cannot make them happen: with the magnet ON during the descent the tip
+   welds before an OFF can reach it near the plate. Nor can a props-off desk check (the planner stays in the creep
+   phase, where the switch does nothing, and weld_radius 0 refuses an ON in the magnet manager anyway): the refusal
+   is unit-test-only until a weld-capable rig rung (R8b);
+   the network-phase LAND (the switch does nothing outside the OCP phase); the drop path (drop is off in attach;
+   its own card).
+6. **Repeats.** A1 and B1: 2 each (Gazebo). NC, A2, A3, B2, N1: 1 each. Neighbour before the repeats: B1 on an
+   orbit (twin_nc_b1_orbit: the abort holds a newcomer that was tracking a moving plate, moves it out from the ring,
+   then past the ring's path, and lands it while the carriers circle on). Bars: B1's clearance (body >= 0.30, rod
+   >= 0.15 m) and tip-rim (>= 0.02 m) from MAGNET ON to LANDED, its landing spot >= orbit radius + 0.9 m from the
+   path centre; falsified as B1. A failure blocks the switch as the default on trajectories (hover rows stand). Later: A1 on an orbit, OFF after a weld (today's release, caught only by
+   detection).
+7. **Cost.** 10 Gazebo runs on the laptop (~11 min each at RTF 0.25).
+8. **New code?** Yes, a gate that can hold the fleet down (the landed gate waits for an out newcomer; its own
+   touchdown or the planner's existing 15 s fallback ends the wait). Behind `newcomer_lifecycle`, default off; it
+   becomes the default (Wesley's standing rule) only after the rows above pass and the reviewer reads the table.
+   Removal: drop the branch; R8a/R8b then fly with the sheet rule "no LAND while QUAD4 is airborne and unwelded:
+   OFF, wait, then hand-fly it clear" instead.
+
+## Critic
+
+Verdict REWRITE (8 Oct night, on revision 1, which also held rule c). Must-fix and should-fix items, each with what
+revision 2 does:
+- M1 (c) not what Wesley decided; split the fleet-manager exemption into its own card. Asked: Wesley chose "QUAD4
+  falls alone now, a tracker fault-land later". Split out: 2026-10-09_newcomer_fault_scope.md.
+- M2 LAND must not give an idle floor newcomer a hold (R0532). Done: no approach, no reference; N1 bars QUAD4's
+  reference, z and tilt.
+- M3 the step-out near the rim: OFF, wait for the release, climb, step at <= 0.15 m/s; the twin cannot feel rim
+  contact. Wesley: no climb (radially out at its height). Done: OFF, 0.5 s hold, level radial move at 0.15 m/s,
+  also during LAND (not the fleet's 0.4 m/s clear-out); tip-rim measured from the tip columns.
+- M4 refusals must reach the magnet: the runner repeats ON for 2 s and the magnet manager welds on its own. Done:
+  OFF re-sent every 0.5 s while out; a refused ON or weld publishes OFF.
+- M5 B1 as written could not exist (it welds during the descent). Done: B1 at weld_radius 0; every row timed with
+  WAIT_LOG on the planner's phase line and checked against it after the run.
+- M6 the FAULT injector was a service shutdown. Moved to the fault-scope card (push world + pose-loss event,
+  Wesley's word given).
+- M7 partner mode. Done: the switch is forced off in partner runs (LAND there goes to Tejen's land_now, combined
+  stack card).
+- M8 on_load semantics. Moved to the fault-scope card.
+- S1 ATTACH meant MAGNET ON. Done. S2 R1238 row and metrics.json numbers. Done (registry R1238). S3 behind a
+  parameter, default off, NC on the same tree. Done. S4 ARM before TAKEOFF clears 'out'. Done. S5 own OFF echo is a
+  no-op (tested). S6 attach_moving false clears the approach hold. Done. S7 stamp attach_pos. Done (0.5 s).
+  S8 neighbours: listed in 6, the weld-LAND race as a unit test. S9 clearance with the rods. Done (attach_metrics).
+  S10 the 'not down after' line and QUAD4's floor tilt. Done (bars). S11 drop path and network LAND out of scope.
+  Done (the drop edit removed; the switch acts only in the OCP phase). S12 'a later weld is refused': B3 and unit
+  tests (B3 dropped in revision 3).
+
+Second pass (8 Oct night, on revision 2): REWRITE. M1 a refused ON during LAND sent OFF to a welded, carrying
+newcomer (OFF is its release): fixed, OFF only while a newcomer is unwelded, tested. M2 a partner run that is not
+partner-attached left the switch on: fixed, any partner run forces it off. M3 B2/B3 could not weld either way:
+B3 dropped (unit test + rig desk check), B2 is an abort-in-transit row without a weld falsifier. S4 a refused weld
+restarts the release hold: done. S5 out while still on the floor: lands where it is, done. S6 WAIT_LOG now times
+later events from the matched line (A3's climb line comes before the wait fires): done, tested. S7 B1 on an orbit:
+added. S8 metrics: on_refused, step_dz_ref, disarm_z: done. S9 the fault-scope card exists on its branch.
+
+Third pass (8 Oct night, on revision 3, 5aef593): GO. Should-fixes done before the runs: S1 the props-off desk check
+cannot exercise the refusal (dropped; unit-test-only until R8b); S2 the floor test is relative to the newcomer's
+height at ATTACH (+5 cm), tested; S3 the abort path clears the ring's circle like a detach (`_path_clear_point`),
+tested, and the orbit row has bars; S5 the flown commit named. S4 (absolute params_file path) stays: laptop runs.
+
+Bar wording changed after data (recorded here, 8-9 Oct night): (1) after A1 (R1250) the height and tip bars were
+scored over the level move only, not the start of the descent nor the parked pose; (2) after A2 (R1251) the tip bar
+reads "not closer than 0.02 m, or than parked if parked closer": the first rewording ("never closer than parked")
+failed A2 on a body still catching up with its reference mid-transit at 0.71 m from the rim. Both runs pass the
+original pre-data bar (tip-rim >= 0.02 m) as well.
+
+## Result (8-9 Oct night, twin, rig-prep f3aca33)
+
+| Row | Run | Event in phase | Moved out to (m) | z vs ref in the move (m) | Tip-rim parked / moving min (m) | Clearance body / rod (m) | QUAD4 at the fleet disarm (m) | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| NC (off) | R1249 | LAND, descend +8.0 s | - | - | - | 0.449 / 0.431 | 0.637 (in the air) | the bug reproduced |
+| N1 | R1248 | LAND before ATTACH | (on the floor) | - | - | - | 0.100, no reference ever | supports |
+| A1 | R1250 | LAND, descend | 1.312 | 0.010 | 0.020 / 0.040 | 0.448 / 0.431 | 0.144 | supports |
+| A1 | R1256 | LAND, descend | 1.309 | 0.010 | 0.021 / 0.046 | 0.449 / 0.433 | 0.143 | supports |
+| A2 | R1251 | LAND, transit | 1.192 | 0.004 | 0.792 / 0.713 | 0.864 / 0.864 | 0.100 | supports |
+| A3 | R1252 | LAND, climb | (already at 1.4) | - | - | 1.209 / 1.208 | 0.237 (floated) | landing falsified |
+| B1 | R1253 | OFF, descend | 1.197 | 0.014 | 0.021 / 0.020 | 0.450 / 0.434 | 0.602 (on its rod) | landing falsified |
+| B1 | R1257 | OFF, descend | 1.241 | 0.002 | 0.024 / 0.020 | 0.449 / 0.434 | 0.247 (floated) | landing falsified |
+| B2 | R1254 | OFF, transit | 1.197 | 0.009 | 0.795 / 0.679 | 0.853 / 0.853 | 0.236 (floated) | landing falsified |
+| B1 orbit | R1255 | OFF, descend (circle) | 1.954, 1.49 from the circle centre | 0.028 | 0.049 / 0.032 | 0.402 / 0.399 | 0.235 (floated) | landing falsified |
+
+No /fleet/abort and no weld in any row; the carriers held the ring (0.999-1.001 m, tilt <= 1.9 deg) through every
+abort. Verdict: **the abort and the step-out SUPPORT** (every row, both LAND and OFF, in hover and on a circle);
+**"lands by itself" is FALSIFIED wherever QUAD4 lands while the ring is still in the air** (A3, B1 x2, B2, B1 orbit):
+light on its rod it hovers above any floor reference (12 cm in the twin; the rig's freed QUAD4 did the same in 4/4 on
+8 Oct), and the old stall freeze can hold it on its rod. Where the ring was already down (A1 x2, A2) the tracker's
+ground idle took over and it landed. The fix is the departed ground idle card (rows in batch 6). Until it passes, a
+rig LAND or abort with QUAD4 unwelded ends with QUAD4 hovering 0.15-0.4 m up and dropped at the fleet disarm.
+
+Reviewer (9 Oct 03:15): WEAK. Taken:
+- On the bars as written before the data, the height bar fails in all six hover rows: |z - ref| from the abort to
+  r >= 1.15 m is 0.17-0.23 m (R1250 0.201, R1256 0.185, R1251 0.196, R1253 0.225, R1257 0.192, R1254 0.174): the
+  reference starts its descent at r ~1.18 m while the body is still at ~1.07 m. A1, A2, B1, B2 are grey on the
+  original bars; the "within 1 cm" holds only on the window changed after A1.
+- B1's tip-rim reaches 0.0198 m unrounded in both runs, under the original 0.02 m bar.
+- A1's "lands" rests on the absolute 0.15 m rule: QUAD4 never idled, it was disarmed at 0.143-0.144 m (rest 0.100)
+  at throttle 0.45 still descending, its 'is down' came after LANDED. Only A2 idled.
+- Every row flew f3aca33, not the rig candidate (the departed path and the fault code changed later); the parameter
+  read-back shows the fault switch under its old name.
+So: "lands by itself is falsified while the ring flies" stands; "the abort and step-out support" holds only on the
+bars changed after the data; the A/B rows need re-flying on the final tree with the bars as now written.

@@ -19,6 +19,7 @@ from typing import Mapping, Optional
 
 DEFAULT_VEHICLE_IDS = ("drone_0", "drone_1", "drone_2", "drone_3")
 ATTACHED_PHASE = "M2_ATTACHED_HOLD"
+PARKING_PHASES = frozenset({"M2_PARKING_ATTACHED", "M2_PARKED_ATTACHED"})
 LANDING_PHASES = frozenset({"M2_LANDING_STAGE", "LANDING", "LANDED_DISARMED"})
 TERMINAL_FAILURE_PHASES = frozenset({"M2_FAULT", "LANDING", "LANDED_DISARMED"})
 
@@ -28,6 +29,7 @@ class AttachmentEvidence:
     confirmed: bool = False
     lost: bool = False
     stamp_s: Optional[float] = None
+    fresh: bool = True
 
 
 @dataclass(frozen=True)
@@ -38,8 +40,11 @@ class M2DSupervisorSnapshot:
     assigned_plate_ids: Mapping[str, int]
     attached_plate_ids: Mapping[str, int]
     abort_reason: str = ""
+    waiting_reason: str = ""
     landing_vehicle_id: Optional[str] = None
     landed_vehicle_ids: tuple[str, ...] = ()
+    parked_vehicle_ids: tuple[str, ...] = ()
+    completion_mode: str = "airborne_hold"
 
     @property
     def passed(self) -> bool:
@@ -79,10 +84,19 @@ class M2DSequentialSupervisorCore:
         target_attachment_count: Optional[int] = None,
         operator_hold_after_goal: bool = False,
         simultaneous: bool = False,
+        progressive_policy: bool = False,
+        completion_mode: str = "airborne_hold",
     ) -> None:
         # simultaneous (multi_drone_control, Wesley 2026-09-26, for testing): every
         # unattached vehicle holds mission permission at once instead of one at a time
         self.simultaneous = bool(simultaneous)
+        self.progressive_policy = bool(progressive_policy)
+        self.completion_mode = str(completion_mode)
+        if self.completion_mode not in {"airborne_hold", "attach_park"}:
+            raise ValueError("completion_mode must be airborne_hold or attach_park")
+        if self.completion_mode == "attach_park" and not self.progressive_policy:
+            raise ValueError("attach_park requires the progressive attachment policy")
+        self.waiting_reason = ""
         self.vehicle_ids = tuple(str(v) for v in vehicle_ids)
         if len(self.vehicle_ids) == 0 or len(set(self.vehicle_ids)) != len(self.vehicle_ids):
             raise ValueError("vehicle_ids must be non-empty and unique")
@@ -103,6 +117,8 @@ class M2DSequentialSupervisorCore:
         self.phases = {vehicle_id: "" for vehicle_id in self.vehicle_ids}
         self.evidence = {vehicle_id: AttachmentEvidence() for vehicle_id in self.vehicle_ids}
         self.attached = set()
+        self.parked = set()
+        self.arming_feedback = {vehicle_id: (None, None) for vehicle_id in self.vehicle_ids}
         self.landed = set()
         self.abort_reason = ""
 
@@ -134,6 +150,14 @@ class M2DSequentialSupervisorCore:
         self._require_vehicle(vehicle_id)
         self.phases[str(vehicle_id)] = str(phase)
 
+    def update_arming_state(self, vehicle_id: str, armed: bool, *, stamp_s: float) -> None:
+        self._require_vehicle(vehicle_id)
+        self.arming_feedback[vehicle_id] = (bool(armed), float(stamp_s))
+
+    def _disarm_ack_fresh(self, vehicle_id: str, now_s: float) -> bool:
+        armed, stamp = self.arming_feedback[vehicle_id]
+        return armed is False and stamp is not None and 0 <= now_s-stamp <= .50
+
     def update_attachment_evidence(
         self,
         vehicle_id: str,
@@ -141,19 +165,21 @@ class M2DSequentialSupervisorCore:
         confirmed: bool,
         lost: bool,
         stamp_s: float,
+        fresh: bool = True,
     ) -> None:
         self._require_vehicle(vehicle_id)
         self.evidence[str(vehicle_id)] = AttachmentEvidence(
             confirmed=bool(confirmed),
             lost=bool(lost),
             stamp_s=float(stamp_s),
+            fresh=bool(fresh),
         )
 
     def request_landing(self) -> bool:
         """Accept an operator landing request only from the monitored success hold."""
         if not self.operator_hold_after_goal or self.abort_reason or self.landing_requested:
             return False
-        if self.snapshot().state != "M2D_SUCCESS_HOLD":
+        if self.snapshot().state not in {"M2D_SUCCESS_HOLD", "M2D_PARKED"}:
             return False
 
         ordered_attached = [vehicle_id for vehicle_id in self.vehicle_ids if vehicle_id in self.attached]
@@ -181,18 +207,22 @@ class M2DSequentialSupervisorCore:
         if evidence.stamp_s is None:
             return False
         age = float(now_s) - float(evidence.stamp_s)
-        return 0.0 <= age <= self.evidence_timeout_s
+        return (not self.progressive_policy or evidence.fresh) and 0.0 <= age <= self.evidence_timeout_s
 
     def _attachment_healthy(self, vehicle_id: str, now_s: float) -> bool:
         evidence = self.evidence[vehicle_id]
         return bool(
-            self.phases[vehicle_id] == ATTACHED_PHASE
+            (self.phases[vehicle_id] == ATTACHED_PHASE or (
+                self.completion_mode == "attach_park" and self.phases[vehicle_id] in PARKING_PHASES))
             and self._evidence_fresh(vehicle_id, now_s)
             and evidence.confirmed
             and not evidence.lost
         )
 
     def _abort(self, reason: str) -> None:
+        if self.progressive_policy and reason.startswith(("PROVEN_ATTACHMENT_LOST:", "UNEXPECTED_LANDING_PHASE:")):
+            self.waiting_reason = reason + "; operator-managed recovery"
+            return
         if not self.abort_reason:
             self.abort_reason = str(reason)
 
@@ -217,6 +247,7 @@ class M2DSequentialSupervisorCore:
 
         if phase == "LANDED_DISARMED":
             self.attached.discard(landing_vehicle)
+            self.parked.discard(landing_vehicle)
             self.landed.add(landing_vehicle)
             assert self.landing_index is not None
             self.landing_index += 1
@@ -227,20 +258,32 @@ class M2DSequentialSupervisorCore:
         # Before the planner acknowledges the release/landing request by leaving
         # ATTACHED_HOLD, the attachment must remain valid. Once it enters the
         # intentional landing phases, evidence is allowed to disappear by design.
-        if phase == ATTACHED_PHASE and not self._attachment_healthy(landing_vehicle, now_s):
+        attached_phases = {ATTACHED_PHASE, *PARKING_PHASES} if self.completion_mode == "attach_park" else {ATTACHED_PHASE}
+        if phase in attached_phases and not self._attachment_healthy(landing_vehicle, now_s):
             self._abort(f"PROVEN_ATTACHMENT_LOST:{landing_vehicle}")
             return
-        if phase not in {ATTACHED_PHASE, *LANDING_PHASES}:
+        if phase not in {*attached_phases, *LANDING_PHASES}:
             self._abort(f"UNEXPECTED_LANDING_PHASE:{landing_vehicle}:{phase}")
 
     def step(self, now_s: float) -> M2DSupervisorSnapshot:
         now_s = float(now_s)
         if self.abort_reason:
             return self.snapshot()
+        self.waiting_reason = ""
 
         if self.landing_requested:
             self._step_landing(now_s)
             return self.snapshot()
+
+        if self.completion_mode == "attach_park":
+            for vehicle in tuple(self.parked):
+                if self.phases[vehicle] == "LANDED_DISARMED":
+                    self.parked.discard(vehicle)
+                    self.attached.discard(vehicle)
+                    self.landed.add(vehicle)
+            if self.landed:
+                self.waiting_reason = "parked magnet released by operator; fleet completion withdrawn"
+                return self.snapshot()
 
         # A previously proven attachment becoming stale/lost is a fleet-level
         # fault. Gazebo joint truth is deliberately absent from this policy.
@@ -274,19 +317,28 @@ class M2DSequentialSupervisorCore:
         phase = self.phases[active]
         evidence = self.evidence[active]
 
+        if self.progressive_policy and phase in {"M2_LANDING_STAGE", "LANDING", "LANDED_DISARMED"}:
+            self.waiting_reason = "active vehicle landing/landed; operator intervention"
+            return self.snapshot()
         if phase in TERMINAL_FAILURE_PHASES and active not in self.attached:
             self._abort(f"ACTIVE_VEHICLE_TERMINAL_FAILURE:{active}:{phase}")
             return self.snapshot()
 
         attachment_complete = bool(
-            phase == ATTACHED_PHASE
+            (phase == ATTACHED_PHASE or (self.completion_mode == "attach_park" and phase in PARKING_PHASES))
             and self._evidence_fresh(active, now_s)
             and evidence.confirmed
             and not evidence.lost
         )
         if attachment_complete:
             self.attached.add(active)
-            if len(self.attached) >= self.target_attachment_count:
+            if self.completion_mode == "attach_park":
+                if phase != "M2_PARKED_ATTACHED" or not self._disarm_ack_fresh(active, now_s):
+                    # Keep local ownership until low DISARM is acknowledged.
+                    return self.snapshot()
+                self.parked.add(active)
+            completed = self.parked if self.completion_mode == "attach_park" else self.attached
+            if len(completed) >= self.target_attachment_count:
                 self.active_index = None
             elif self.active_index + 1 >= len(self.vehicle_ids):
                 self.active_index = None
@@ -300,6 +352,9 @@ class M2DSequentialSupervisorCore:
         if self.abort_reason:
             state = "M2D_ABORT"
             active = None
+        elif self.progressive_policy and self.waiting_reason:
+            state = "M2D_OPERATOR_WAIT"
+            active = None if self.active_index is None else self.vehicle_ids[self.active_index]
         elif self.assignment is None:
             state = "WAIT_ASSIGNMENT"
             active = None
@@ -313,7 +368,10 @@ class M2DSequentialSupervisorCore:
             else:
                 state = "M2D_LANDING"
                 active = landing_vehicle
-        elif len(self.attached) >= self.target_attachment_count:
+        elif self.completion_mode == "attach_park" and len(self.parked) >= self.target_attachment_count:
+            state = "M2D_PARKED"
+            active = None
+        elif self.completion_mode != "attach_park" and len(self.attached) >= self.target_attachment_count:
             state = "M2D_SUCCESS_HOLD" if self.operator_hold_after_goal else "M2D_PASS"
             active = None
         elif self.active_index is None:
@@ -324,7 +382,9 @@ class M2DSequentialSupervisorCore:
             state = f"ACTIVE_{self.active_index}"
 
         permissions = {vehicle_id: False for vehicle_id in self.vehicle_ids}
-        if active is not None and not self.abort_reason and state.startswith("ACTIVE_"):
+        if active is not None and not self.abort_reason and (
+                state.startswith("ACTIVE_") or (self.progressive_policy and state == "M2D_OPERATOR_WAIT"
+                and self.phases[active] not in LANDING_PHASES)):
             permissions[active] = True
         if (self.simultaneous and state.startswith("ACTIVE_") and not self.abort_reason):
             for vehicle_id in self.vehicle_ids:
@@ -343,8 +403,11 @@ class M2DSequentialSupervisorCore:
             assigned_plate_ids=assigned,
             attached_plate_ids=attached_plate_ids,
             abort_reason=self.abort_reason,
+            waiting_reason=self.waiting_reason,
             landing_vehicle_id=landing_vehicle,
             landed_vehicle_ids=tuple(
                 vehicle_id for vehicle_id in self.vehicle_ids if vehicle_id in self.landed
             ),
+            parked_vehicle_ids=tuple(vehicle_id for vehicle_id in self.vehicle_ids if vehicle_id in self.parked),
+            completion_mode=self.completion_mode,
         )

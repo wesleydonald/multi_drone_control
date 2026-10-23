@@ -67,7 +67,7 @@ magnet_attachment_manager_irl:
     # Keep these identical to online_join_planner.magnet_marker_to_contact_face_*.
     magnet_marker_to_contact_face_x: 0.000
     magnet_marker_to_contact_face_y: 0.000
-    magnet_marker_to_contact_face_z: -0.030
+    magnet_marker_to_contact_face_z: -0.0225
 
     attach_radius_m: 0.12
     attach_speed_threshold_mps: 0.25
@@ -105,7 +105,7 @@ online_join_planner:
     # Earlier physical commissioning and the 2026-09-17 flight both place this
     # around 0.53-0.54 m. This is intentionally separate from the MPC effective
     # pendulum-length parameter.
-    magnet_drop_below_quad: 0.53
+    magnet_drop_below_quad: 0.575
 
     # Measured physical pickup object dimensions [m].
     payload_name: "irl_60g_round_pickup_object"
@@ -133,7 +133,7 @@ online_join_planner:
     # Same physical magnet-marker -> contact-face convention used by attachment gate.
     magnet_marker_to_contact_face_x: 0.000
     magnet_marker_to_contact_face_y: 0.000
-    magnet_marker_to_contact_face_z: -0.030
+    magnet_marker_to_contact_face_z: -0.0225
 
     use_geometry_aware_pickup: true
     pickup_contact_gap: 0.000
@@ -227,7 +227,7 @@ fake_cooperative_transport_world:
 tejen_mpc:
   ros__parameters:
     use_external_reference: true
-    xy_bias_mode: lateral_disturbance  # legacy_integral | lateral_disturbance | lateral_disturbance_shadow | none
+    xy_bias_mode: legacy_integral  # legacy_integral | lateral_disturbance | lateral_disturbance_shadow | none
     enable_xy_integral_action: true  # backward-compatible fallback only when xy_bias_mode is omitted
     xy_integral_weight: 15.0
     xy_integral_terminal_weight: 30.0

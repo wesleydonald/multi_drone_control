@@ -1,0 +1,49 @@
+\section{Introduction}
+\label{sec:intro}
+
+Several quadrotors sharing a payload on cables can lift what none of them could carry alone, and spread the load so
+that each flies with margin \cite{olleroPresentFutureAerial2022, estevezReviewAerialTransportation2024}. Such a team
+is almost always treated as fixed: the carriers are attached on the ground, take off together and land together. A
+team that could change in the air would be more useful and more robust. A carrier with a low battery or a fault could
+leave and come back; a fresh carrier could join to take up a heavier load or relieve another; and a carrier that is
+lost without warning, a released magnet or a failed motor, need not bring the payload down with it. This letter
+asks what a controller needs to let a team carrying a cable-suspended payload lose and gain carriers in flight.
+
+\emph{Cooperative cable transport.} The statics of a rigid payload hung from several cables, and the internal forces
+the team may choose freely, are well understood \cite{michael2011cooperative, tognon2018internal,
+gabellieri2023equilibria}. Controllers range from decentralised schemes that need no communication between carriers
+\cite{tognon2018internal, gabellieri2023force, klausen2020cooperative} through geometric and leader--follower designs
+\cite{lee2018geometric, loianno2018cooperative}. Model predictive control (MPC) suits the problem because cable tensions are bounded and
+the payload's motion couples every carrier: nonlinear MPC of the full payload pose \cite{sunNonlinearMPCFullPose2023,
+liNonlinearModelPredictive2023}, kinodynamic planning for the team \cite{wahbaKinodynamicMotionPlanning2024}, and
+distributed formulations \cite{decarliDistributedNMPCCooperative, distributedNMPC} all fly a team of a fixed size.
+
+\emph{Reconfiguration and attach.} Plug-and-play MPC adds and removes subsystems from a distributed controller
+\cite{riverso2013plug, zeilinger2013plug, aboudonia2022reconfigurable, saccani2023model}, but for systems of
+loosely coupled plants, not for carriers that share one payload. Modular aerial robots dock and undock in flight
+\cite{saldana2018modquad, sugihara2023trady, sugihara2026legion}, and magnetic grippers let a multirotor pick up and
+release objects \cite{gawel2017magnetic, miyazaki2018airborne}. Fault-tolerant cooperative transport keeps a payload
+up after a carrier fails \cite{liang2021fault, farrasFaultTolerantControlMultiQuadcopter2024}. We know of no work
+in which a team carrying a cable-suspended payload both loses carriers without warning and admits carriers that join
+in the air, nor of one flown on hardware.
+
+The working hypothesis of this letter is that a centralised optimal control problem suits a change of team because
+the planner solves for the force distribution of the team it actually has in the first tick after the event,
+instead of leaving the survivors to find it from the motion that follows. The contributions are:
+\begin{itemize}
+  \item a reconfiguration method: a cooperative MPC whose attachment geometry is a runtime parameter, so that a
+  change of team is a switch to a pre-built problem of the new size, warm-started from the measured state; with it,
+  motion-capture detection of an unannounced release, a drop rule from the survivors' largest gap, the rejoin of a
+  departed carrier, and the admission of a newcomer on a motion-capture proof of co-motion
+  (Sections~\ref{sec:method}, \ref{sec:reconfig} and~\ref{sec:rejoin});
+  \item what governs the release transient: the ring's tilt after a release grows steeply with the largest gap the
+  survivors leave, so that on 1\,m cables a 165$^\circ$ gap crosses the 30$^\circ$ drop line, and feeding the
+  trackers the measured cable pull rather than the planned one cuts the tilt rise (Section~\ref{sec:res_release_gap});
+  \item the fold-in's tolerance to error in the newcomer's catch point (twin): up to 16\,cm radially when the
+  measured catch point is used against 6\,cm when the nominal plate point is assumed, and 6\,cm along the rim (Section~\ref{sec:res_attach_offset});
+  \item validation of the release on a motion-capture rig with unmodified Betaflight quadrotors, and of release,
+  rejoin and attach in a digital twin built from the rig's identified thrust map and geometry, including an
+  exploratory chain in which eight carriers drop to four and rejoin all four; and the scaling of the solver's
+  iterations with fleet size
+  (Sections~\ref{sec:res_reconfig} and~\ref{sec:res_scale}).
+\end{itemize}

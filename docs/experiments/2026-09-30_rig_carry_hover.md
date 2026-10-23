@@ -1,7 +1,7 @@
 # 2026-09-30 Rig carry hover: three on plates 1/5/9, then four on 1/3/5/9 (G7 R3b + R4, rig go/no-go)
 
 Written 2026-09-28, before any of it is flown. Command sheet: tests.txt, section "WED 30 SEP 2026 (G7 R0b-R4)".
-Plan: docs/g7_real_world_ladder.md §3 (R3a-R4). Operator: Wesley; hand kill = the panel DISARM (spacebar), which latches every drone (Wesley 2026-09-28).
+Plan: docs/archive/g7_real_world_ladder.md §3 (R3a-R4). Operator: Wesley; hand kill = the panel DISARM (spacebar), which latches every drone (Wesley 2026-09-28).
 
 ## 1. Question
 Can our stack lift the 0.86 kg M2A ring off the lab floor and hover it at 0.60 m? First three drones on plates 1/5/9

@@ -107,10 +107,10 @@ def test_fake_mocap_default_is_the_original_even_cone():
 
 
 def test_fake_mocap_rig_layout_passes_the_preflight_geometry():
-    """Plates 1/3/5/9, payload yawed 20 deg, drones resting with near-flat rods: the fit
-    must find the payload origin, the rod, and the typed azimuths."""
+    """Plates 11/9/7/3 (typed clockwise 330,270,210,90; azimuths 30/90/150/270 inside), payload yawed 20 deg,
+    drones resting with near-flat rods: the fit must find the payload origin, the rod, and the azimuths."""
     az = [30, 90, 150, 270]
-    poses = FM.compute_poses(4, cable_len=0.47, azimuths_deg='30,90,150,270', yaw_deg=20.0,
+    poses = FM.compute_poses(4, cable_len=0.47, azimuths_deg='330,270,210,90', yaw_deg=20.0,
                              drone_z=0.08, load_z=0.05)
     P = [poses[f'/drone_{i}/motion_capture_state'][0][:2] for i in range(4)]
     cx, cy, r, _ = fit_circle(P)
@@ -133,7 +133,7 @@ def test_fake_mocap_rejects_a_mismatched_azimuth_list():
 
 
 def test_fake_mocap_dry_run_prints_without_ros(capsys):
-    FM.main(['--num-drones', '3', '--azimuths-deg', '30,150,270', '--drone-z', '0.08', '--dry-run'])
+    FM.main(['--num-drones', '3', '--azimuths-deg', '330,210,90', '--drone-z', '0.08', '--dry-run'])
     out = capsys.readouterr().out
     assert out.count('/drone_') == 3 and '/payload/motion_capture_state' in out
 
@@ -145,3 +145,15 @@ def test_slot_offset_detail_names_the_plate_and_the_check():
     assert msg.startswith('drone 1 sits 30 deg clockwise of plate 1:')
     assert 'ring rigid body (+x toward plate 0)' in msg and 'magnet plates' in msg
     assert 'sits' in slot_offset_detail(0, 10.5, 0.0) and 'sits' not in slot_offset_detail(0, 9.9, 0.0)
+
+
+def test_fake_mocap_tip_over_plate_9_sits_at_the_weld_point():
+    """The props-off attach check: plate 9 is the ring's +y (attach_y_offset 0.225 in real.yaml)
+    and the tip sits --tip-dz above the ring origin plane, QUAD4 hanging straight above it."""
+    for yaw in (0.0, 20.0):
+        poses = FM.compute_poses(3, attach=True, radius=0.225, load_z=0.05, yaw_deg=yaw,
+                                 tip_len=0.58, tip_plate=9, tip_dz=0.02)
+        (x, y, z), _ = poses[FM.TIP_TOPIC]
+        a = math.radians(90 + yaw)
+        assert (x, y, z) == pytest.approx((0.225 * math.cos(a), 0.225 * math.sin(a), 0.07))
+        assert poses['/drone_3/motion_capture_state'][0] == pytest.approx((x, y, z + 0.58))

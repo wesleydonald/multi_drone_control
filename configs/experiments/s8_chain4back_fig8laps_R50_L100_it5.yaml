@@ -1,0 +1,178 @@
+name: s8_chain4back_fig8laps_R50_L100_it5
+description: 'Scalability S, proposed case 7 (card 2026-10-23_scalability, ''More complex cases (proposed 23 Oct, for Wesley)'',
+  ### 7, the plan''s design B at scale; traj_laps and traj_lap_hold_s built 23 Oct, default off, twin only; critic waived
+  by Wesley 23 Oct; not flown, no bar frozen; 5 SQP iterations). The chain lap by lap on s8_fig8laps_h5_v200_R50_L100_it5''s
+  path (the figure-8 at size 0.5 and 0.2 m/s, 9 laps, held 3 s at each lap end): a lap at 8, then one unannounced release
+  per lap at mid-lap (the centre crossing at speed; WAIT_TRAJ lap 1.5, 2.5, 3.5, 4.5: /drone_1, 5, 3, 7) down to 4, the freed
+  quads staged in the ring frame (rejoin_departed, departed_land false, io tether_tips), then one rejoin per lap end in its
+  hold (ATTACH 0.5 s after ''lap k done'', k 5-8: /drone_7, 3, 5, 1; the rejoin holds the path on through its fold-in) and
+  the last lap at 8; LAND 2 s after the last lap. One variable against s8_fig8laps_h5_v200_R50_L100_it5: the chain (four releases
+  and four rejoins, with the staging switches they need). Falsifier (exploratory): an abort, a drop, a failed solve, more
+  than 1 % late planner ticks (void), a REJOIN REFUSED (''the path is running'' means the lap-end hold was missed: void, not
+  a falsification), a refused or timed-out rejoin, a release or rejoin over the card''s chain bars, or the clock running back.'
+lab_env:
+  SIM_MOCAP_VEL_FILTER: ema
+  MDC_MOCAP_VEL_DRONES: 0,1,2,3,4,5,6,7
+world: eight_rigid_ground_rig_R50_L100.sdf
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    mode: dissipative
+    num_drones: 8
+    attach_azimuths_deg: 0,315,270,225,180,135,90,45
+    load_traj: fig_8
+    target_z: 1.0
+    lift_ramp_vel: 0.15
+    creep_vel: 0.2
+    pretension_s: 3.0
+    start_taut: false
+    cable_len: 1.0
+    attach_radius: 0.5
+    attach_z: 0.02
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    load_mass: 0.9
+    drone_mass: 0.55
+    measure_rod_len: true
+    rod_tol_frac: 0.25
+    rod_spread_m: 0.08
+    z_taut_gate: 0.9
+    z_i_gate: 0.25
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    reconfig_mode: ocp
+    thrust_ratio: 35.2
+    takeoff_thrust_ratio: 0.0
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    throttle_max: 0.8
+    kt_trim: false
+    departed_land: false
+    departed_ground_idle: true
+    params_file: /home/wesley/multi_drone_control/configs/twin/s_chain_pair.yaml
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187,0.181,0.185,0.187,0.187
+    sim_pack_v0: 23.8
+    traj_speed: 0.2
+    load_ixx: 0.113025
+    load_izz: 0.22581
+    plan_sqp_iters: 5
+    plan_fast_refs: true
+    fig8_size: 0.5
+    traj_hold_s: 5.0
+    traj_laps: 9
+    traj_lap_hold_s: 3.0
+    rejoin_departed: true
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 8
+    sim_thrust_map: rig
+    sim_pack_v0: 23.8
+    tether_tips: true
+    tether_len: 1.0
+fleet:
+  num_drones: 8
+  n_total: 8
+timing:
+  duration_s: 650.0
+  ready_timeout_s: 600.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 90
+- t: 9.0
+  do: WAIT_TRAJ
+  arg: lap 1.5 120
+- t: 9.0
+  do: RELEASE
+  arg: 1
+- t: 10.0
+  do: WAIT_TRAJ
+  arg: lap 2.5 60
+- t: 10.0
+  do: RELEASE
+  arg: 5
+- t: 11.0
+  do: WAIT_TRAJ
+  arg: lap 3.5 60
+- t: 11.0
+  do: RELEASE
+  arg: 3
+- t: 12.0
+  do: WAIT_TRAJ
+  arg: lap 4.5 60
+- t: 12.0
+  do: RELEASE
+  arg: 7
+- t: 13.0
+  do: WAIT_LOG
+  arg: 60 lap 5 done
+- t: 13.5
+  do: ATTACH
+  arg: 7
+- t: 14.0
+  do: WAIT_LOG
+  arg: 60 REJOIN WELD drone 8
+- t: 15.0
+  do: WAIT_LOG
+  arg: 90 lap 6 done
+- t: 15.5
+  do: ATTACH
+  arg: 3
+- t: 16.0
+  do: WAIT_LOG
+  arg: 60 REJOIN WELD drone 4
+- t: 17.0
+  do: WAIT_LOG
+  arg: 90 lap 7 done
+- t: 17.5
+  do: ATTACH
+  arg: 5
+- t: 18.0
+  do: WAIT_LOG
+  arg: 60 REJOIN WELD drone 6
+- t: 19.0
+  do: WAIT_LOG
+  arg: 90 lap 8 done
+- t: 19.5
+  do: ATTACH
+  arg: 1
+- t: 20.0
+  do: WAIT_LOG
+  arg: 60 REJOIN WELD drone 2
+- t: 21.0
+  do: WAIT_TRAJ
+  arg: lap 9 90
+- t: 23.0
+  do: LAND
+criteria:
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    wide:
+      pos:
+      - 3.6
+      - -6.2
+      - 3.8
+      look_at:
+      - 0.0
+      - 0.0
+      - 1.1
+      hfov_deg: 62.0
+      size:
+      - 1280
+      - 720

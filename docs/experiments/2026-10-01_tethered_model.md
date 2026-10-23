@@ -1,8 +1,8 @@
 # Tethered model: solve failures, rod pivot, tracker throttle bookkeeping (card A), 2026-10-01
 
-Plan: `docs/plan_2026-10_tethered_model.md` (Schedule and critic must-fixes override its draft).
-Inputs: `docs/rig_2026-09-30_review.md`, `docs/rig_2026-09-30_replay.md` (W2),
-`docs/rig_2026-09-30_force_balance.md` (W3). Code: branch `real-world-testing`, base 155ee56 plus
+Plan: `docs/archive/plan_2026-10_tethered_model.md` (Schedule and critic must-fixes override its draft).
+Inputs: `docs/archive/rig_2026-09-30_review.md`, `docs/archive/rig_2026-09-30_replay.md` (W2),
+`docs/archive/rig_2026-09-30_force_balance.md` (W3). Code: branch `real-world-testing`, base 155ee56 plus
 the uncommitted W1/W8/W9/W12/W13 edits.
 
 **Question.** On the rig, can the planner fly a four-drone tethered hover with no solve

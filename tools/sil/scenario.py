@@ -55,7 +55,7 @@ class Scenario:
 
     cable_len: float = 0.5
     attach_radius: float = 0.25
-    attach_azimuths_deg: str = ''      # '' = even ring; '330,90,210' = 4/12/8 o'clock
+    attach_azimuths_deg: str = ''      # '' = even ring; typed clockwise (15 Oct): '30,270,150' = 4/12/8 o'clock
     attach_z: float = 0.025
     load_mass: float = 0.6
     drone_mass: float = 0.64        # x3 model over all links (2026-09-24; was 0.6)
@@ -192,10 +192,11 @@ class Scenario:
         Uses the same ring the controllers use -- mpc_planner.geometry
         .attach_points(n_tethered, ...). Note it is built for the TETHERED count, not
         n_total: the newcomer does not get a nominal ring point, it welds where its
-        magnet lands (see weld_point)."""
-        from mpc_planner.geometry import attach_points
+        magnet lands (see weld_point). The typed clockwise azimuths become the plant's
+        counter-clockwise ones here, as the launch converts the controllers' copy."""
+        from mpc_planner.geometry import attach_points, azimuths_param_from_typed
         return attach_points(self.n_tethered, self.attach_radius, self.attach_z,
-                             self.attach_azimuths_deg or None)
+                             azimuths_param_from_typed(self.attach_azimuths_deg) or None)
 
     def initial_state(self):
         """(drone positions, load position) for a taut AIRBORNE start.
@@ -235,7 +236,7 @@ class Scenario:
     def launch_argv(self, params_path=None):
         """Launch args; knobs that are not launch arguments go to params_path (launch_args.py).
         The bench plant is the legacy one (linear thrust, centre pivot, massless rods), so the
-        sim launch is pinned to legacy:=true until the plant is ported (docs/redo_on_twin.md)."""
+        sim launch is pinned to legacy:=true until the plant is ported (docs/archive/redo_on_twin.md)."""
         import launch_args
         args = dict(self.launch_args)
         if self.launch_file == 'sim_control_launch.py':

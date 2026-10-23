@@ -43,8 +43,9 @@ def _make_backend_node(context, *, config: Path, run_dir: Path):
             output='screen',
             parameters=[
                 str(config),
-                *( [LaunchConfiguration('extra_params_file').perform(context)]
-                   if LaunchConfiguration('extra_params_file').perform(context) else [] ),
+                # one file or several, comma-separated (later wins)
+                *[f.strip() for f in LaunchConfiguration('extra_params_file').perform(context).split(',')
+                  if f.strip()],
                 {
                     'planner_rate_hz': ParameterValue(
                         LaunchConfiguration('planner_rate_hz'), value_type=float

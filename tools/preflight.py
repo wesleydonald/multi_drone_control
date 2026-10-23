@@ -124,6 +124,18 @@ def main():
                     help='deg; FAIL when a drone\'s measured bearing is further than this from its typed azimuth')
     a = ap.parse_args()
     rclpy.init()
+    # critic F2: a terminal outside the fleet's DDS domain reads nothing and its checks would pass on silence
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from fleet_reach import env_line, probe
+    reach = rclpy.create_node('preflight_reach')
+    status = probe(reach, 2.0)
+    reach.destroy_node()
+    if status is None:
+        print(f'PREFLIGHT REFUSED: no fleet manager answered on /fleet/manager_status within 2 s from this terminal '
+              f'({env_line()}): export the T2 domain (ROS_LOCALHOST_ONLY=1, ROS_DOMAIN_ID as T2) or check that T2 '
+              f'is up.', file=sys.stderr)
+        rclpy.shutdown()
+        sys.exit(2)
     pf = Preflight(a.drones, a.attach, a.real, a.listen)
     t0 = time.time()
     while time.time() - t0 < a.listen:
@@ -271,8 +283,9 @@ def main():
             lines.append(f'  payload yaw {yaw:+.1f} deg; slot->drone {[d + 1 for d in slot2drone]} (the planner\'s auto slot line '
                          f'should print the same)')
             for s_, d_ in enumerate(slot2drone):
-                check(abs(err[s_]) <= a.az_tol_deg, f'drone {d_ + 1} on typed azimuth {typed[s_]:.0f}',
-                      f'measured {meas[d_]:.1f} deg; '
+                # shown clockwise, as typed since 15 Oct (the planner's read-back is counter-clockwise)
+                check(abs(err[s_]) <= a.az_tol_deg, f'drone {d_ + 1} at {(-typed[s_]) % 360.0:.0f} deg cw (typed)',
+                      f'measured {(-meas[d_]) % 360.0:.1f} deg cw; '
                       + slot_offset_detail(d_, err[s_], typed[s_], a.az_tol_deg))
 
     # 2. geometry from mocap: drone-to-rim-point distance vs cable_len (slot by nearest rim point)

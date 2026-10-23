@@ -19,7 +19,7 @@ load_mass recompiles the planner's solver on the first launch.
 real free_hover (was real_hover_launch.py): no payload, no cables: each drone climbs from where
 it sits to hover_z and descends on LAND; the settled hover throttle gives that airframe's kT.
 """
-from bringup.real_mode import planner_options
+from bringup.real_mode import planner_options, planner_prefix, position_limit
 from launch.actions import LogInfo
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
@@ -90,7 +90,7 @@ def sim_mpc(context, launch_dir, profile_vals):
         nodes.append(Node(
             package='tracker', executable='tracker',
             name=f'tracker_{i}',
-            parameters=[{'drone_id': i,
+            parameters=[{'drone_id': i, **position_limit(context),
                          'terminal_vel_ref': b('terminal_vel_ref'),
                          'x0_relax_symmetric': b('x0_relax_symmetric'),
                          'cable_ff_scale': f('cable_ff_scale'),
@@ -122,7 +122,7 @@ def sim_mpc(context, launch_dir, profile_vals):
     # ── Central fleet manager ──────────────────────────────────────────────
     nodes.append(Node(
         package='fleet_manager', executable='fleet_manager', name='fleet_manager',
-        parameters=[{'num_drones': n}], output='screen'))
+        parameters=[{'num_drones': n, **position_limit(context)}], output='screen'))
 
     reference = LaunchConfiguration('reference').perform(context).strip()
     if reference == 'free_hover':
@@ -136,6 +136,7 @@ def sim_mpc(context, launch_dir, profile_vals):
     # ── Centralized cable-suspended load planner ───────────────────────────
     nodes.append(Node(
         package='mpc_planner', executable='mpc_planner', name='mpc_planner',
+        prefix=planner_prefix(),
         parameters=[{'num_drones': n,
                      'cable_len': f('cable_len'),
                      'attach_azimuths_deg': LaunchConfiguration('attach_azimuths_deg'),
@@ -187,7 +188,7 @@ def real_mpc(context, launch_dir, profile_vals):
         nodes.append(Node(
             package='tracker', executable='tracker',
             name=f'tracker_{i}',
-            parameters=[{'drone_id': i,
+            parameters=[{'drone_id': i, **position_limit(context),
                          'terminal_vel_ref': b('terminal_vel_ref'),
                          'cable_ff_scale': f('cable_ff_scale'),
                          'attitude_ff': b('attitude_ff'),
@@ -217,13 +218,14 @@ def real_mpc(context, launch_dir, profile_vals):
     # ── Central fleet manager ─────────────────────────────────────────────────
     nodes.append(Node(
         package='fleet_manager', executable='fleet_manager', name='fleet_manager',
-        parameters=[{'num_drones': n,
+        parameters=[{'num_drones': n, **position_limit(context),
                      'require_fc_armed': LaunchConfiguration('require_fc_armed').perform(context).lower() == 'true'}],
         output='screen'))
 
     # ── Centralized cable-suspended load planner ──────────────────────────────
     nodes.append(Node(
         package='mpc_planner', executable='mpc_planner', name='mpc_planner',
+        prefix=planner_prefix(),
         parameters=[{'num_drones': n,
                      'cable_len': f('cable_len'),
                      'attach_azimuths_deg': LaunchConfiguration('attach_azimuths_deg'),
@@ -273,7 +275,7 @@ def real_free_hover(context, launch_dir, profile_vals):
         nodes.append(Node(
             package='tracker', executable='tracker',
             name=f'tracker_{i}',
-            parameters=[{'drone_id': i,
+            parameters=[{'drone_id': i, **position_limit(context),
                          'terminal_vel_ref': b('terminal_vel_ref'),
                          # no cable: the feedforward is zero on the wire anyway
                          'cable_ff_scale': 1.0,
@@ -299,7 +301,7 @@ def real_free_hover(context, launch_dir, profile_vals):
 
     nodes.append(Node(
         package='fleet_manager', executable='fleet_manager', name='fleet_manager',
-        parameters=[{'num_drones': n,
+        parameters=[{'num_drones': n, **position_limit(context),
                      'require_fc_armed': LaunchConfiguration('require_fc_armed').perform(context).lower() == 'true'}],
         output='screen'))
 
@@ -309,7 +311,11 @@ def real_free_hover(context, launch_dir, profile_vals):
                      'hover_z': f('hover_z'),
                      'climb_vel': f('climb_vel'),
                      'land_vel': f('land_vel'),
-                     'land_tol': f('land_tol')}],
+                     'land_tol': f('land_tol'),
+                     'circle_radius': f('circle_radius'),
+                     'circle_period_s': f('circle_period_s'),
+                     'circle_laps': ParameterValue(LaunchConfiguration('circle_laps'), value_type=int),
+                     'circle_hold_s': f('circle_hold_s')}],
         output='screen'))
 
     return nodes

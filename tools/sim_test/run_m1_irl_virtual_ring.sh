@@ -5,11 +5,17 @@
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 GUI="${1:-true}"
 MODE="${2:-run}"
+PICKUP_ALIGNMENT_MODE="${3:-legacy}"
+TARGET_ALIGNMENT_MODE="${4:-legacy}"
+if [[ "$TARGET_ALIGNMENT_MODE" != legacy && "$TARGET_ALIGNMENT_MODE" != measured_tip_trim ]]; then
+  echo "ERROR: fourth argument must be legacy or measured_tip_trim."
+  exit 2
+fi
 CONFIG="$ROOT/src/tejen_mission/config/irl_commissioning.yaml"
 
 if [[ "$GUI" != "true" && "$GUI" != "false" ]]; then
   echo "ERROR: first argument must be true or false (RViz GUI)."
-  echo "Usage: bash tools/sim_test/run_m1_irl_virtual_ring.sh [true|false] [run|check]"
+  echo "Usage: bash tools/sim_test/run_m1_irl_virtual_ring.sh [true|false] [run|check] [legacy|measured_tip_tiered] [legacy|measured_tip_trim]"
   exit 2
 fi
 if [[ "$MODE" != "run" && "$MODE" != "check" ]]; then
@@ -18,6 +24,11 @@ if [[ "$MODE" != "run" && "$MODE" != "check" ]]; then
 fi
 
 cd "$ROOT" || exit 2
+
+if [[ "$PICKUP_ALIGNMENT_MODE" != "legacy" && "$PICKUP_ALIGNMENT_MODE" != "measured_tip_tiered" ]]; then
+  echo "ERROR: third argument must be legacy or measured_tip_tiered."
+  exit 2
+fi
 
 if [[ ! -f "$CONFIG" ]]; then
   echo "ERROR: missing $CONFIG"
@@ -43,11 +54,13 @@ echo "M1 IRL - REAL PICKUP + MOVING VIRTUAL RING"
 echo "Repository: $ROOT"
 echo "Config:     $CONFIG"
 echo "RViz:       $GUI"
+echo "Pickup:     $PICKUP_ALIGNMENT_MODE"
+echo "Local trim: $TARGET_ALIGNMENT_MODE"
 echo "Authority:  MANUAL ARM / TAKEOFF / DISARM"
-echo "OptiTrack:  ID6 pickup | ID7 drone | ID8 magnet | ID9 ring reserved"
+echo "OptiTrack:  ID6 pickup | ID12 drone | ID22 magnet | ID9 ring reserved"
 echo "============================================================================="
 
-python3 - "$CONFIG" <<'PY'
+python3 - "$CONFIG" "$ROOT/src/tejen_mission/config/m1_measured_tip_tracking.yaml" <<'PY'
 import math
 import sys
 from pathlib import Path
@@ -57,6 +70,13 @@ import yaml
 path = Path(sys.argv[1])
 data = yaml.safe_load(path.read_text())
 errors = []
+try:
+    from tejen_mission.measured_tip_alignment import TrackingTipAlignment, TipAlignmentConfig
+    tuning = yaml.safe_load(Path(sys.argv[2]).read_text())['online_join_planner']['ros__parameters']
+    TrackingTipAlignment(TipAlignmentConfig(**{k.removeprefix('target_alignment_'):v
+                                              for k,v in tuning.items()}))
+except (OSError, TypeError, ValueError, ImportError) as exc:
+    errors.append(f'local target alignment profile invalid (rebuild if needed): {exc}')
 
 
 def params(node):
@@ -79,8 +99,8 @@ if operator.get("lab_config_ready") is not True:
 
 expected_ids = {
     "pickup_rigid_body_id": "6",
-    "quad_rigid_body_id": "7",
-    "magnet_rigid_body_id": "8",
+    "quad_rigid_body_id": "12",
+    "magnet_rigid_body_id": "22",
     "ring_rigid_body_id": "9",
 }
 for key, expected in expected_ids.items():
@@ -175,7 +195,7 @@ if errors:
     raise SystemExit(3)
 
 print("\nIRL CONFIG GATE: PASS")
-print("  rigid bodies: pickup=6, quad=7, magnet=8, ring=9 reserved")
+print("  rigid bodies: pickup=6, quad=12, magnet=22, ring=9 reserved")
 print("  real pickup tracking: enabled")
 print("  moving virtual ring: enabled; fake companions disabled")
 print("  physical drop: enabled (commissioning_hold_before_drop=false)")
@@ -198,4 +218,4 @@ echo "  ros2 service call /drone_arming_service interfaces/srv/SetArming \"{arm:
 echo
 echo "Starting full stack. This does NOT arm or request takeoff automatically."
 
-exec ros2 launch tejen_mission m1_irl_virtual_ring.launch.py gui:="$GUI"
+exec ros2 launch tejen_mission m1_irl_virtual_ring.launch.py gui:="$GUI" pickup_alignment_mode:="$PICKUP_ALIGNMENT_MODE" target_alignment_mode:="$TARGET_ALIGNMENT_MODE"

@@ -10,7 +10,10 @@ of an analytic path:
   datum, clock, hold), so the commitment is the path the ring is being flown along, not a
   fit to noisy mocap;
 * the carrying drones are fixed points in the ring frame (Tejen's 'three_attached' model):
-  attach point + cable at the flight elevation, per carrier azimuth.
+  attach point + cable at the flight elevation, per carrier azimuth;
+* publish_attached_plates (default off): each carrier's plate (his numbering, std_msgs/Int32, latched) and the
+  measured ring pose (PoseArray, index 0), the inputs of his planner's attached-tether model, so his collision
+  avoidance sees the carriers' rods down to the ring (Wesley 21 Oct).
 
 The drone flying Tejen's mission is simply not listed as a carrier.
 """
@@ -19,11 +22,14 @@ import math
 from typing import List, Tuple
 
 import rclpy
+from geometry_msgs.msg import Pose, PoseArray
 from interfaces.msg import MotionCaptureState
-from std_msgs.msg import String
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import Int32, String
 
 from tejen_mission.fake_cooperative_transport_world import (
     FakeCooperativeTransportWorld, RigidBodyState)
+from mpc_planner.geometry import cw_text, tejen_plate
 from mpc_planner.load_trajectory import LoadTrajectory
 
 
@@ -31,20 +37,52 @@ def _yaw_from_quat(w, x, y, z):
     return math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
 
 
+def _rotate(q, v):
+    """v rotated by the unit quaternion q = (w, x, y, z)."""
+    w, x, y, z = q
+    n = math.sqrt(w * w + x * x + y * y + z * z) or 1.0
+    w, x, y, z = w / n, x / n, y / n, z / n
+    vx, vy, vz = v
+    cx, cy, cz = y * vz - z * vy, z * vx - x * vz, x * vy - y * vx
+    ccx, ccy, ccz = y * cz - z * cy, z * cx - x * cz, x * cy - y * cx
+    return (vx + 2.0 * (w * cx + ccx), vy + 2.0 * (w * cy + ccy), vz + 2.0 * (w * cz + ccz))
+
+
 class RingBridge(FakeCooperativeTransportWorld):
     def __init__(self) -> None:
         self._traj_state = None          # latest /payload/trajectory_state (dict)
         self._traj_rx_s = None           # node time it arrived
         self._ring = None                # latest measured ring RigidBodyState
+        self._ring_q = None              # its attitude (w, x, y, z)
+        self._zf = None                  # attach_z_lowpass_hz: the two filter stages, and when they ran
+        self._zf_t = None
         super().__init__()
         self.create_subscription(String, '/payload/trajectory_state', self._traj_cb, 5)
         self.create_subscription(MotionCaptureState, '/payload/motion_capture_state',
                                  self._ring_cb, 10)
+        self._ring_pose_pub = None
+        if self._param('publish_attached_plates', False):
+            latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                                 durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            plates = self.carrier_plates()
+            self._plate_pubs = [self.create_publisher(Int32, f'/fake_obstacles/drone_{i}/attached_plate', latched)
+                                for i in range(len(plates))]
+            for pub, plate in zip(self._plate_pubs, plates):
+                pub.publish(Int32(data=plate))
+            self._ring_pose_pub = self.create_publisher(
+                PoseArray, str(self._param('ring_pose_array_topic', '/fake_payload/pose_array')), 10)
+            self.create_timer(0.05, self._publish_ring_pose)
+            self.get_logger().info(f'[ring_bridge] carriers\' plates for his tether model (his numbering): {plates}')
+        # shown as typed (clockwise degrees, our plate number); the parameters are his (counter-clockwise)
         self.get_logger().info(
-            f'[ring_bridge] carriers {self._carrier_azimuths()} deg, cable '
+            f'[ring_bridge] carriers (cw) {cw_text(self._carrier_azimuths())} deg, cable '
             f'{self.get_float_param("bridge_cable_len_m"):.2f} m at '
             f'{self.get_float_param("bridge_cable_elev_deg"):.0f} deg, target plate '
-            f'{self.ring_attachment_plate_index}')
+            f'{tejen_plate(self.ring_attachment_plate_index)} (his {self.ring_attachment_plate_index})')
+        # the typed switches, so a run's log says which arm it flew (RIG-1015-a2_2 flew without its intended filter)
+        self.get_logger().info(
+            f"[ring_bridge] attachment twist: {str(self._param('attach_twist', '')).strip() or 'raw'}; plate height "
+            f"low-pass: {float(self._param('attach_z_lowpass_hz', 0.0)) or 'off'}")
 
     # ── inputs ────────────────────────────────────────────────────────────────
     def _traj_cb(self, msg: String) -> None:
@@ -58,6 +96,23 @@ class RingBridge(FakeCooperativeTransportWorld):
         p, q, v = msg.pose.position, msg.pose.orientation, msg.twist.linear
         self._ring = RigidBodyState(x=p.x, y=p.y, z=p.z, yaw=_yaw_from_quat(q.w, q.x, q.y, q.z),
                                     vx=v.x, vy=v.y, vz=v.z, yaw_rate=0.0)
+        self._ring_q = (q.w, q.x, q.y, q.z)
+
+    def carrier_plates(self) -> List[int]:
+        """Each carrier's plate in his numbering (counter-clockwise from the ring's +x, 30 deg apart)."""
+        return [int(round(a / 30.0)) % 12 for a in self._carrier_azimuths()]
+
+    def _publish_ring_pose(self) -> None:
+        if self._ring is None or self._ring_q is None:
+            return
+        pose = Pose()
+        pose.position.x, pose.position.y, pose.position.z = self._ring.x, self._ring.y, self._ring.z
+        pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z = self._ring_q
+        msg = PoseArray()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'map'
+        msg.poses = [pose]
+        self._ring_pose_pub.publish(msg)
 
     # ── parameters (declared lazily: the parent calls the offsets in its __init__) ─
     def _param(self, name, default):
@@ -97,7 +152,7 @@ class RingBridge(FakeCooperativeTransportWorld):
             return RigidBodyState(x=0.0, y=0.0, z=0.0, yaw=0.0, vx=0.0, vy=0.0, vz=0.0,
                                   yaw_rate=0.0)
         s = self._traj_state
-        traj = LoadTrajectory(s['kind'], s['speed'], s.get('distance', 1.0), s['radius'])
+        traj = LoadTrajectory(s['kind'], s['speed'], s.get('distance', 1.0), s['radius'], laps=s.get('laps', 1))
         age = max(0.0, self.get_clock().now().nanoseconds * 1e-9 - float(self._traj_rx_s))
         run = max(0.0, ahead + age - float(s.get('hold_s', 0.0)))
         moving = bool(s.get('running', False))
@@ -113,9 +168,61 @@ class RingBridge(FakeCooperativeTransportWorld):
         return RigidBodyState(x=float(s['hover_x']) + dx, y=float(s['hover_y']) + dy,
                               z=z, yaw=yaw, vx=vx, vy=vy, vz=0.0, yaw_rate=0.0)
 
+    def _plate_xy(self):
+        """The attach plate's point in the ring frame: bridge_attach_xy_m when set (our weld point, so both stacks aim
+        at one point: on 14 Oct his nominal plate and our measured point were 2.4 cm apart), else his nominal."""
+        xy = [float(v) for v in self._param('bridge_attach_xy_m', [0.0])]
+        if len(xy) == 2:
+            return xy
+        plate = self.ring_geometry.plate_body_offset(self.ring_attachment_plate_index)
+        return [float(plate[0]), float(plate[1])]
+
     def compute_attachment_xyz(self, payload_state: RigidBodyState) -> Tuple[float, float, float]:
-        x, y, z = super().compute_attachment_xyz(payload_state)
-        return (x, y, z + float(self._param('bridge_attach_z_m', 0.025)))
+        z0 = float(self._param('bridge_attach_z_m', 0.025))
+        if self._param('full_pose_attachment', False) and self._ring_q is not None:
+            # the plate point as our magnet manager computes it (ring pose + R(q) @ offset): a
+            # tilted ring moves the plate by r*sin(tilt), which a yaw-only target misses
+            px, py = self._plate_xy()
+            ox, oy, oz = _rotate(self._ring_q, (px, py, z0))
+            x, y, z = payload_state.x + ox, payload_state.y + oy, payload_state.z + oz
+        else:
+            x, y, z = super().compute_attachment_xyz(payload_state)
+            z += z0
+        if payload_state is getattr(self, "_ring", None):   # the present, measured plate (not the predicted path)
+            z = self._lowpass_z(z)
+        return (x, y, z)
+
+    def finite_difference_attachment_twist(self, t, payload_state, attachment_xyz):
+        """attach_twist 'zero' (typed only; '' = the base's 50 Hz finite difference): a zero attachment twist, as his
+        measured-ring mode publishes. His reference extrapolates this twist over its horizon and his match gate compares
+        QUAD4's velocity with it; differenced from the raw ring pose it carried the 1.8 Hz bounce (+-0.13 m/s, RIG-1015-a1)
+        and 0.09 m/s of sideways jitter (a3_2). Hover only: a moving ring needs its velocity."""
+        mode = str(self._param('attach_twist', '')).strip().lower()
+        # 'running' is also true in a hover once the lift tops out (the trajectory clock runs): R1828-R1834 flew raw
+        st = getattr(self, '_traj_state', None) or {}
+        moving = (bool(st.get('running', False)) and str(st.get('kind', 'hover')) != 'hover'
+                  and float(st.get('speed', 0.0) or 0.0) > 0.0)
+        if mode == 'zero' and not moving:
+            return 0.0, 0.0, 0.0, 0.0
+        return FakeCooperativeTransportWorld.finite_difference_attachment_twist(self, t, payload_state, attachment_xyz)
+
+    def _lowpass_z(self, z: float) -> float:
+        """attach_z_lowpass_hz > 0 (0 = off): the plate height through two first-order lags at that cutoff. On
+        15 Oct (a1) the ring bounced ~0.8 cm at 1.8 Hz, his reference copied it and QUAD4 followed half a cycle late,
+        doubling the tip's bounce against the plate; x and y stay raw (QUAD4 barely followed them)."""
+        fc = float(self._param('attach_z_lowpass_hz', 0.0))
+        if fc <= 0.0:
+            return z
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if self._zf is None or now - self._zf_t > 0.5:
+            self._zf, self._zf_t = [z, z], now
+            return z
+        dt = now - self._zf_t
+        a = dt / (1.0 / (2.0 * math.pi * fc) + dt)
+        self._zf[0] += a * (z - self._zf[0])
+        self._zf[1] += a * (self._zf[0] - self._zf[1])
+        self._zf_t = now
+        return self._zf[1]
 
 
 def main(args=None) -> None:

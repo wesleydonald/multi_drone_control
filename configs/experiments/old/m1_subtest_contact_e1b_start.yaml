@@ -1,0 +1,105 @@
+name: m1_subtest_contact_e1b_start
+description: 'E1b, fold-in seed start (exploratory, card 2026-10-10_combined_m1_contact): as m1_subtest_contact_e1b with
+  QUAD4 starting the fold-in at attach_t_start_new (0.1 N) instead of its n+1 OCP share: R1479 / R1480 (ocp) sagged plate 9
+  by 2.5-3.5 cm and tilted the ring 8 deg 1.5 s after the switch while QUAD4''s throttle rose; our own R9 welds (0.1 N)
+  peaked at 3 deg. Falsifier: the tilt peak contact..confirm+8 s not lower than R1479''s 8.1 deg.'
+world: three_rigid_ground_rig_attach_pickup.sdf
+ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    attach_radius: 0.225
+    attach_z: 0.02
+    cable_len: 0.55
+    creep_vel: 0.2
+    drone_mass: 0.55
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.15
+    load_mass: 0.86
+    load_traj: hover
+    measure_rod_len: true
+    num_drones: 3
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    reconfig_mode: ocp
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.0
+    throttle_max: 0.8
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    mode: attach
+    reserved_attach: 1
+    attach_azimuths_deg: 90,330,210  # clockwise degrees since 15 Oct; was 270,30,150
+    attach_x_offset: 0.0
+    attach_y_offset: 0.225
+    partner: true
+    weld_radius: 0.01
+    weld_point_z: 0.032
+    partner_contact: true
+    contact_fold_seed: start
+    weld_speed_gate: 0.05
+    attach_cable_len: 0.59
+    tip_max_rate_hz: 120.0
+    tip_noise_sd_m: 0.0005
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 3
+    attach: true
+    clock_hz: 500
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+fleet:
+  num_drones: 3
+  n_total: 4
+timing:
+  duration_s: 600.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 5.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 8.0
+  launch_expect_topics:
+  - /join_planner/phase
+  - /fake_payload/pose
+  dds_udp_only: true
+  bg_param_dump: false
+events:
+- t: 1.0
+  do: LAUNCH
+  # our plate number, clockwise degrees since 15 Oct; was plate:=3 [270.0,30.0,150.0]
+  arg: tejen_mission partner_mission.launch.py geometry:=rig_twin plate:=9 carrier_azimuths_deg:=[90.0,330.0,210.0]
+    pickup_lift_height:=2.3 minimum_search_z_m:=2.7 drop_approach_clearance:=1.35
+    contact_attach:=true confirm_pickup_release:=true
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 20.0
+  do: WAIT_WELD
+  arg: 150
+- t: 28.0
+  do: LAND
+criteria:
+  require_weld: false
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5

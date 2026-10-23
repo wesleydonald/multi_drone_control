@@ -6,7 +6,9 @@ from tracker.tracker_node import Controller
 
 
 def _c(off, slope=0.022, v=23.5, cap=0.8):
+    log = types.SimpleNamespace(warn=lambda *a, **k: None)
     c = types.SimpleNamespace(thrust_offset=off, thrust_offset_v_slope=slope, thrust_v_ref=23.5,
+                              thrust_v_full=25.2, _last_good_v=None, drone_id=0, get_logger=lambda: log,
                               battery_voltage=v, throttle_max=cap)
     c._thrust_off = types.MethodType(Controller._thrust_off, c)
     return c
@@ -28,7 +30,16 @@ def test_hover_and_carry_match_the_fit():
 
 def test_weaker_pack_needs_more_throttle():
     assert abs(out(_c(0.185, v=22.5), 0.3) - (0.3 + 0.185 + 0.022)) < 1e-9
-    assert out(_c(0.185, v=None), 0.3) == 0.3 + 0.185            # no telemetry: nominal
+    full = 0.185 + 0.022 * (23.5 - 25.2)
+    assert abs(out(_c(0.185, v=None), 0.3) - (0.3 + full)) < 1e-9   # no telemetry: a full pack (errs low)
+    assert abs(out(_c(0.185, v=0.0), 0.3) - (0.3 + full)) < 1e-9    # the radio's 0.0 before any frame
+
+
+def test_a_lost_reading_keeps_the_last_good_voltage():
+    c = _c(0.185, v=22.5)
+    out(c, 0.3)
+    c.battery_voltage = 0.0
+    assert abs(out(c, 0.3) - (0.3 + 0.185 + 0.022)) < 1e-9
 
 
 def test_cap_and_spool():
@@ -129,3 +140,11 @@ def test_recovering_pack_cannot_book_above_the_model_cap():
     c.battery_voltage = 24.5                                       # offset falls, cap not yet refreshed
     c.publish(0.7)
     assert c._thr_out == 0.8 and abs(c._applied_u[2] - c._model_thr_max) < 1e-12
+
+
+def test_arming_state_exists_before_the_arming_service():
+    """The callback manager's arming service is live while the tracker waits for its first pose: an ARM/DISARM then
+    read takeoff_requested before it existed and killed the node (RIG-1014-lt_9)."""
+    import inspect
+    src = inspect.getsource(Controller.__init__)
+    assert src.index('self.takeoff_requested = False') < src.index('CallbackManagerMulti(')

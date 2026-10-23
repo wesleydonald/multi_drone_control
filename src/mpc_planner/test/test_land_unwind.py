@@ -58,3 +58,18 @@ def test_never_below_the_floor():
 def test_touched_down_holds_still():
     _, vel = land_arc_ref(ATTACH, RADIAL, ROD, np.radians(40.0), PIVOT_UP, 0.1, 0.0)
     assert np.allclose(vel, 0.0)
+
+
+def test_no_floor_descends_below_zero():
+    """land_descend_to_stall (card 2026-10-17_land_ref_below_rest): the unwind keeps descending, position and
+    velocity together, until the stall freezes it."""
+    pos, vel = land_arc_ref(ATTACH, RADIAL, ROD, np.radians(10.0), PIVOT_UP, 5.0, V, floor=-np.inf)
+    arc = np.radians(10.0) * ROD
+    assert np.isclose(pos[2], ATTACH[2] + PIVOT_UP[2] - (5.0 - arc)) and np.isclose(vel[2], -V)
+
+
+def test_default_floor_is_todays():
+    for s in (0.0, 0.05, 0.2, 5.0):
+        a, va = land_arc_ref(ATTACH, RADIAL, ROD, np.radians(30.0), PIVOT_UP, s, V)
+        b, vb = land_arc_ref(ATTACH, RADIAL, ROD, np.radians(30.0), PIVOT_UP, s, V, floor=0.0)
+        assert np.array_equal(a, b) and np.array_equal(va, vb)

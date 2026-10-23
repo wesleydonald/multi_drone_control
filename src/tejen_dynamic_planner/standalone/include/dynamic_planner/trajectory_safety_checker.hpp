@@ -2,8 +2,10 @@
 
 #include <cstddef>
 #include <string>
+#include <utility>
 
 #include "dynamic_planner/committed_trajectory.hpp"
+#include "dynamic_planner/temporal_collision_certificate.hpp"
 #include "dynamic_planner/world_snapshot.hpp"
 
 namespace dynamic_planner {
@@ -17,6 +19,7 @@ struct TrajectorySafetyResult {
     // Exact broad-phase skips.  AABB-disjoint convex hulls are provably
     // separated, so the expensive LP separator is unnecessary in these cases.
     std::size_t aabb_separation_skips = 0;
+    TemporalRefinementStats temporal_refinement;
     std::string obstacle_name;
     double unsafe_interval_start_s = 0.0;
     double unsafe_interval_end_s = 0.0;
@@ -24,8 +27,11 @@ struct TrajectorySafetyResult {
 
 class TrajectorySafetyChecker {
 public:
-    explicit TrajectorySafetyChecker(double separator_validation_tolerance = 1e-7)
-        : separator_validation_tolerance_(separator_validation_tolerance) {}
+    explicit TrajectorySafetyChecker(
+        double separator_validation_tolerance = 1e-7,
+        TemporalRefinementConfig temporal_refinement = {})
+        : separator_validation_tolerance_(separator_validation_tolerance),
+          temporal_refinement_(std::move(temporal_refinement)) {}
 
     TrajectorySafetyResult checkPiece(
         const TrajectoryPiece& ego,
@@ -41,6 +47,7 @@ public:
 
 private:
     double separator_validation_tolerance_ = 1e-7;
+    TemporalRefinementConfig temporal_refinement_;
 };
 
 }  // namespace dynamic_planner

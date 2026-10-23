@@ -1,0 +1,7 @@
+# W4 (Wed 14 Oct): drop_and_land.yaml (the 8 Oct hover detaches) + the freed drone lands by itself, pushed to its
+# rest and disarmed alone (departed_ground_idle; cards 2026-10-09_departed_ground_idle and _departed_disarm_alone)
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+departed_land: true
+departed_ground_idle: true

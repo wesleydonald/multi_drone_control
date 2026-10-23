@@ -70,7 +70,7 @@ class DissipativeParams:
                  node_mass=0.5, substeps=10, elev_deg=45.0, k_slot=18.0,
                  balanced_tensions=False, T_handout=12.0,
                  ki_load=0.0, a_i_load_max=2.0, i_load_xyz=False, trim_share_weighted=False,
-                 handout_tension_blend=True, wrench_true_attitude=False):
+                 handout_tension_blend=True, wrench_true_attitude=False, damp_relative=False):
         self.k_pay = k_pay          # N/m spring to the payload node (rest cable_len)
         self.k_anchor = k_anchor    # N/m spring to the anchor node (rest cone radius)
         self.k_ring = k_ring        # N/m spring to each ring neighbour (rest chord)
@@ -133,6 +133,10 @@ class DissipativeParams:
         # load-z integral still drives everything -- no per-drone wind-up -- it is only
         # distributed the way the load itself is.
         self.trim_share_weighted = bool(trim_share_weighted)
+        # The paper's friction is relative to the moving formation (Quan et al. Eq. 9); the port damps each node
+        # against the pinned payload and anchor as if they were still, right only in hover (offline: the line_x
+        # formation 0.47 s late). On: damped against the commanded target velocity step() is given, open loop.
+        self.damp_relative = bool(damp_relative)
 
 
 class DissipativeNetwork:
@@ -374,7 +378,7 @@ class DissipativeNetwork:
         return R_lean, up, mag
 
     def step(self, load_pos, load_quat, load_vel, p_des_load, dt, load_accel=None,
-             integrate_trim=True):
+             integrate_trim=True, p_des_vel=None):
         """Advance the network one control tick of length dt (integrated in substeps).
         The payload node is pinned to p_des_load and the anchor to the axis above it, so
         the whole cone translates up as the lift target rises; robot nodes relax onto the
@@ -382,9 +386,11 @@ class DissipativeNetwork:
         load_quat orients the ring in the load's yaw. load_pos feeds only the common-mode
         load trim below (the spring loop still closes physically through the rigid rods).
         `integrate_trim=False` freezes the trim without zeroing it -- for LAND/grounded,
-        and for horizon rollouts, which predict rather than measure. Read references via
+        and for horizon rollouts, which predict rather than measure. p_des_vel is the
+        commanded velocity of p_des_load, read only with damp_relative. Read references via
         reference(i)."""
         p_des = np.asarray(p_des_load, float)
+        v_d = np.asarray(p_des_vel, float) if (self.p.damp_relative and p_des_vel is not None) else None
         R = self._frame_rot(load_quat)
 
         # advance the SOFT HAND-OUT of any newcomer: its handout scalar creeps 0 -> 1 at
@@ -499,7 +505,7 @@ class DissipativeNetwork:
                     v_target = apt[i] + R_lean @ np.array(
                         [0.0, 0.0, self.cable_len_i[i]])
                     f += self._spring(qi, v_target, self.p.k_anchor, 0.0)
-                    f += -self.p.c * self.qd[i] * 2.0
+                    f += -self.p.c * (self.qd[i] if v_d is None else self.qd[i] - v_d) * 2.0
                     acc[i] = f / self.p.node_mass
                     continue
                 # spring to the anchor node. Under a soft hand-out the anchor point and the
@@ -526,9 +532,9 @@ class DissipativeNetwork:
                 # central); the azimuth pin fades in as it hands out.
                 if i in slot:
                     f += self._spring(qi, slot[i], self.p.k_slot * self.handout[i], 0.0)
-                # graph-Laplacian damping toward the pinned anchor & payload (both still,
-                # so this is absolute damping) -- 2 edges.
-                f += -self.p.c * (self.qd[i] - 0.0) * 2.0
+                # graph-Laplacian damping toward the pinned anchor & payload -- 2 edges. Absolute
+                # (as if both were still) unless damp_relative: then against the target they move with.
+                f += -self.p.c * (self.qd[i] - (0.0 if v_d is None else v_d)) * 2.0
                 # ring-neighbour springs (rest = current-fleet chord) + damping (the
                 # dissipation that couples the robots and absorbs the detach transient).
                 # Skipped in balanced (fixed-geometry) mode: the even-chord rest would pull the
@@ -732,13 +738,14 @@ class DissipativeNetwork:
         self._a_trim = np.zeros(3)
 
     def horizon_references(self, load_quat, p_des_seq, dt, taut_gates=None,
-                           load_accel_seq=None):
+                           load_accel_seq=None, p_des_vel_seq=None):
         """Per-node references over a whole horizon: [drone][node] -> (p, v, a_ff, a_c).
 
         Rolls a COPY of the network forward along the supplied future load targets
-        (p_des_seq[k] is the target at horizon node k, k=0 being now) and reads the
-        references off each predicted state. Node 0 is the live state -- the caller has
-        already step()ed it for this tick -- so only k>=1 are predicted.
+        (p_des_seq[k] is the target at horizon node k, k=0 being now, p_des_vel_seq[k] its
+        velocity for damp_relative) and reads the references off each predicted state. Node
+        0 is the live state -- the caller has already step()ed it for this tick -- so only
+        k>=1 are predicted.
 
         This replaces repeating node 0 across the horizon. That repeat is exact only
         while the formation's geometry relative to the load is constant; on a curved
@@ -771,7 +778,8 @@ class DissipativeNetwork:
                     # measurement here -- passing p_des as load_pos would freeze the
                     # error at zero anyway, but be explicit): integrate_trim=False.
                     self.step(p_des, load_quat, np.zeros(3), p_des, dt, load_accel=a_k,
-                              integrate_trim=False)
+                              integrate_trim=False,
+                              p_des_vel=None if p_des_vel_seq is None else p_des_vel_seq[k])
                 Rk = (quat_to_rot_np(load_quat) if self.p.wrench_true_attitude
                       else self._frame_rot(load_quat))
                 Tk = (self._solve_tensions(Rk, p_des, a_k)

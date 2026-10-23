@@ -171,6 +171,43 @@ def test_planner_arm_permission_revokes_when_inbound_link_event_stales():
     assert planner.m2b_arm_permitted()
 
 
+def test_readiness_uses_independent_link_timeout_not_mocap_timeout():
+    api = _readiness()
+    gate = api.TwoDroneIRLReadinessGate(
+        mocap_timeout_s=0.50,
+        telemetry_timeout_s=0.50,
+        ring_timeout_s=0.50,
+        link_statistics_timeout_s=0.75,
+        status_timeout_s=1.25,
+    )
+    assert gate.link_statistics_timeout_s == 0.75
+    assert gate.mocap_timeout_s == 0.50
+
+
+def test_half_hz_link_event_survives_irL_freshness_but_stale_mocap_does_not():
+    api = _readiness()
+    gate = api.TwoDroneIRLReadinessGate(
+        mocap_timeout_s=0.50,
+        telemetry_timeout_s=0.50,
+        ring_timeout_s=0.50,
+        link_statistics_timeout_s=0.75,
+        status_timeout_s=1.25,
+        stationary_dwell_s=0.0,
+    )
+    for vehicle_id in ("drone_0", "drone_1"):
+        gate.update_vehicle(
+            vehicle_id, body_stamp_s=10.0, magnet_stamp_s=10.0,
+            speed_mps=0.0, armed=False, arming_stamp_s=10.0,
+            planner_stamp_s=10.0, backend_stamp_s=10.0,
+            controller_stamp_s=10.0, telemetry_stamp_s=10.0,
+        )
+        gate.note_link_statistics(vehicle_id, stamp_s=9.4)
+    gate.update_ring(stamp_s=10.0)
+    snapshot = gate.evaluate(10.0)
+    assert snapshot.vehicle_ready == {"drone_0": True, "drone_1": True}
+    assert gate.evaluate(10.51).reason == "ring_not_fresh"
+
+
 def test_supervisor_wrapper_declares_vehicle_ids_and_keeps_four_drone_default():
     path = (
         Path(__file__).resolve().parents[1]

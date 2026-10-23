@@ -1,0 +1,12 @@
+# Thesis result C (card docs/experiments/2026-10-23_paper_method_compare.md): configs/twin/c_compare.yaml plus the
+# paper's form of the network (Quan et al.): friction relative to the moving formation (Eq. 9; the port damps against
+# still nodes) and the expected acceleration fed forward (Eq. 10). Both act only while the target moves, so the two
+# forms fly the same law in hover. Flies only once the card's critic has passed net_damp_relative.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+traj_hold_s: 5.0
+net_hold_carry: true
+net_twin_geometry: true
+net_damp_relative: true
+net_traj_lean: true

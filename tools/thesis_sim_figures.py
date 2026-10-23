@@ -37,9 +37,9 @@ OUT = os.path.join(REPO, 'docs', 'figures')
 GREY, LIGHT = '0.35', '0.45'
 LAP_S = 27.2
 
-X0_RUNS = dict(hold=('R0841', 'R0960'), orbit=('R0832', 'R0974'))
-DIST_RUNS = dict(z=dict(none='R0962', ref='R0968', model='R0969'),
-                 x=dict(none='R0961', model='R0971'))
+X0_RUNS = dict(hold=('R2024', 'R2023'), orbit=('R2026', 'R2025'))   # app_x0_{hold,orbit}_eps{025,0} r1
+DIST_RUNS = dict(z=dict(none='R2027', ref='R2028', model='R2029'),    # app_pushz_{none,ref,model} r1
+                 x=dict(none='R2030', model='R2031'))                 # app_push04_{none,model} r1
 
 
 def run_dir(rid):
@@ -233,7 +233,7 @@ def fig_disturbance(pushes=('x',)):
     return stem, stats
 
 
-LAND_RUNS = dict(before='R0960', after='R1013')
+LAND_RUNS = dict(before='R2049', after='R2023')     # app_land_straight r1, app_x0_hold_eps0 r1
 LAND_LABEL = dict(before='straight descent', after='unwind, ramp, idle')
 
 
@@ -333,20 +333,20 @@ def fig_landing():
     return stem, stats
 
 
-DETACH_RUN = 'R1012'
-DETACH_PLATES = {0: 1, 1: 3, 2: 5, 3: 9}        # w4_3915: drone i on plate 1/3/5/9 (30/90/150/270 deg)
+DETACH_RUN = 'R1887'                              # ta_a1_r1 (Tier A A1, measured pull)
+DETACH_PLATES = {0: 11, 1: 9, 2: 7, 3: 3}        # drone i on plate 11/9/7/3 (330/270/210/90 deg clockwise)
 
 
 def fig_detach():
-    """F_detach -- "Releasing one UAV of four by OCP resize hands its load to the three survivors in
-    one planner tick: the uneven tensions of the 1/3/5/9 layout become the equal tensions of the even
-    triangle, and the ring stays within a few degrees of level."
+    """F_detach -- "When one UAV of four lets go unannounced, the planner resizes at detection and hands
+    its load to the three survivors in one tick: the uneven tensions of the 11/9/7/3 layout become the
+    equal tensions of the even triangle, and the ring stays within a few degrees of level."
     hero: the planned tensions per UAV (departing UAV in its drone colour, survivors dark grey);
-    support: ring tilt and height. Window: 5 s before DETACH to 12 s after."""
+    support: ring tilt and height. Window: 5 s before RELEASE to 12 s after."""
     ps.thesis()
     ev = events(DETACH_RUN)
-    t_det = ev['DETACH'][0][0]
-    gone = int(ev['DETACH'][0][1])
+    t_det = ev['RELEASE'][0][0]
+    gone = int(ev['RELEASE'][0][1])
     run = run_csv(DETACH_RUN)
     L = planner_log(DETACH_RUN)
     L = L[(L.phase == 'planner') & (L.t >= t_det - 5) & (L.t <= t_det + 12)]
@@ -398,24 +398,24 @@ def fig_detach():
     axt.axhline(band, color='0.45', lw=0.6, ls=':')
     over = np.flatnonzero((tr >= 0) & (tilt > band))
     t2 = float(tr[over[-1] + 1]) if over.size else 0.0
-    axt.annotate('', xy=(0, 3.6), xytext=(t2, 3.6),
+    axt.annotate('', xy=(0, 7.2), xytext=(t2, 7.2),
                  arrowprops=dict(arrowstyle='<->', color='0.3', lw=0.6, shrinkA=0, shrinkB=0))
-    axt.annotate(f'{t2:.1f}\\,s', xy=(t2, 3.6), xytext=(4, 0), textcoords='offset points', fontsize=8,
+    axt.annotate(f'{t2:.1f}\\,s', xy=(t2, 7.2), xytext=(4, 0), textcoords='offset points', fontsize=8,
                  color='0.3', va='center')
     axt.set_ylabel(r'Ring tilt (\si{\degree})')
-    axt.set_ylim(0, 4)
-    axt.set_yticks([0, 1, 2, 3, 4])
+    axt.set_ylim(0, 8)
+    axt.set_yticks([0, 2, 4, 6, 8])
     z0 = 1.0                                           # the hover target
     axz.plot(tr, 100 * (w.payload_z.to_numpy() - z0), color=ps.PAYLOAD_LINE, lw=1.3)
     axz.axhline(0.0, color='0.6', lw=0.5)
     axz.set_ylabel(r'Height error (cm)')
     axz.set_ylim(-4, 4)
     axz.set_yticks([-4, -2, 0, 2, 4])
-    axz.set_xlabel(r'$t$ after DETACH (s)')
+    axz.set_xlabel(r'$t$ after the release (s)')
     axz.set_xlim(-5, 12)
     for a in axs:
         a.axvline(0.0, color='0.75', lw=0.4, zorder=0)
-    ax.annotate('DETACH', xy=(0, 1.0), xycoords=('data', 'axes fraction'), xytext=(2, 1),
+    ax.annotate('RELEASE', xy=(0, 1.0), xycoords=('data', 'axes fraction'), xytext=(2, 1),
                 textcoords='offset points', fontsize=8, color='0.35', va='bottom')
     for a, letter in zip(axs, 'abc'):
         ps.panel_label(a, letter)
@@ -426,7 +426,7 @@ def fig_detach():
     return stem, dict(peak_tilt=peak, band=band, settle=t2, survivors=v3, z_change_max=float(100 * np.max(np.abs(w.payload_z[tr >= 0] - z0))))
 
 
-TRAJ_RUNS = dict(circle=dict(old='R0933', new='R1033'), eight=dict(old='R0935', new='R1035'))
+TRAJ_RUNS = dict(circle='R1853', eight='R1849')     # traj3_orbit_v125 r1, traj3_fig8_v125 r1 (carry claim)
 
 
 def traj_window(rid, kind):
@@ -447,19 +447,17 @@ def traj_window(rid, kind):
 
 
 def fig_trajectories():
-    """F_traj -- "With node 0 pinned, four UAVs carry the ring around a circle and a figure-8 about a
-    centimetre from the reference; the relaxed box left about three."
-    hero: the error strips (gold, epsilon 0) against the relaxed box (grey, dashed); plan views show
-    the shapes, with the reference drawn on top."""
+    """F_traj -- "On the default controller three UAVs carry the ring around a circle and a figure-8 at
+    0.125 m/s about a centimetre from the reference."
+    hero: the error strips (gold); plan views show the shapes, with the reference drawn on top."""
     ps.thesis()
     fig = plt.figure(figsize=ps.size('full', height=3.7))
     gs = fig.add_gridspec(2, 2, width_ratios=[1.0, 1.9], height_ratios=[1.5, 1.0])
     stats = {}
     for col, kind in enumerate(('circle', 'eight')):
-        runs = TRAJ_RUNS[kind]
         axp = fig.add_subplot(gs[0, col])
         axe = fig.add_subplot(gs[1, col])
-        t, x, y, rx, ry, e, zerr = traj_window(runs['new'], kind)
+        t, x, y, rx, ry, e, zerr = traj_window(TRAJ_RUNS[kind], kind)
         axp.plot(x, y, color=ps.PAYLOAD_LINE, lw=1.0, zorder=2)
         axp.plot(rx, ry, '--', color='0.15', lw=0.5, dashes=(4, 3), zorder=3)
         axp.plot(x[0], y[0], 'o', color='0.15', ms=3, zorder=4)
@@ -473,19 +471,14 @@ def fig_trajectories():
         axp.set_yticks([0.0, 0.5, 1.0] if kind == 'circle' else [-0.5, 0.0, 0.5])
         axp.set_xlabel(r'$x$ (m)')
         axp.set_ylabel(r'$y$ (m)')
-        to, *_, eo, zo = traj_window(runs['old'], kind)
-        axe.plot(to, eo, color='0.45', lw=0.8, ls=(0, (3, 1.5)), label=r'$\epsilon = 0.025$')
-        axe.plot(t, e, color=ps.PAYLOAD_LINE, lw=1.2, label=r'$\epsilon = 0$')
-        stats[(kind, 'new')] = (float(e.mean()), float(e.max()), zerr, float(t[-1]))
-        stats[(kind, 'old')] = (float(eo.mean()), float(eo.max()), zo, float(to[-1]))
+        axe.plot(t, e, color=ps.PAYLOAD_LINE, lw=1.2)
+        stats[kind] = (float(e.mean()), float(e.max()), zerr, float(t[-1]))
         axe.set_ylim(0, 6)
         axe.set_yticks([0, 2, 4, 6])
-        axe.set_xlim(0, max(t[-1], to[-1]))
+        axe.set_xlim(0, t[-1])
         axe.set_xlabel(r'$t$ from motion onset (s)')
         if col == 0:
             axe.set_ylabel('Horizontal error (cm)')
-        else:
-            axe.legend(loc='upper right', ncol=2, handlelength=2.2, borderaxespad=0.2)
         ps.panel_label(axp, 'ab'[col])
         ps.panel_label(axe, 'cd'[col])
     fig.align_ylabels()
@@ -494,11 +487,11 @@ def fig_trajectories():
     return stem, stats
 
 
-FLIGHT_RUN = 'R1013'
+FLIGHT_RUN = 'R2034'                              # app_rob_none_int r1 (the default controller)
 
 
 def fig_flight():
-    """F_flight -- "From the floor, the UAVs first swing their rods up to 45 deg (creep), then
+    """F_flight -- "From the floor, the UAVs first swing their rods up to 60 deg (creep), then
     pretension, then lift the ring to 1.0 m; on LAND the ring comes down first and the UAVs follow."
     hero: ring height and rod elevations through the phases; phases as light bands with direct labels."""
     ps.thesis()
@@ -529,7 +522,7 @@ def fig_flight():
                 color=ps.PAYLOAD_LINE, va='top')
     ax.annotate('UAVs', xy=(t[-1] * 0.45, 1.5), xytext=(0, 3), textcoords='offset points', fontsize=8,
                 color='0.4', va='bottom')
-    axe.axhline(45.0, color='0.5', lw=0.6, ls='--', zorder=1)
+    axe.axhline(60.0, color='0.5', lw=0.6, ls='--', zorder=1)
     hold = Lw[(Lw.t > t_up + 2) & (Lw.t < t_land)]
     e_hold = float(np.nanmean([hold[f'elev{i}'].mean() for i in range(n)]))
     axe.axhline(e_hold, color='0.5', lw=0.5, ls=':', zorder=1)

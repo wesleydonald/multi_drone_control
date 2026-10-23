@@ -40,6 +40,7 @@ class HandoverPolicy:
         self.require_live = bool(require_live)
         self.live_timeout_s = float(live_timeout_s)
         self.welded = False
+        self.taken_back = False
         self._last_live_t = None
         self._switched = False
 
@@ -49,6 +50,12 @@ class HandoverPolicy:
             self.welded = True
         elif not self.latch:
             self.welded = False
+        return self.attached(now)
+
+    def take_back(self, now=None):
+        """Feed a take-back (no attach: our tracker flies the drone away and lands it). It never
+        un-latches, and the live-takeover rule applies as for the weld."""
+        self.taken_back = True
         return self.attached(now)
 
     def tracker_command(self, armed, throttle, now):
@@ -73,7 +80,7 @@ class HandoverPolicy:
         yanked the ring to 46 deg (R0624)."""
         if self.latch and self._switched:
             return True
-        if self.welded and self.tracker_live(now):
+        if (self.welded or self.taken_back) and self.tracker_live(now):
             self._switched = True
             return True
         return False

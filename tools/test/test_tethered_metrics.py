@@ -201,7 +201,7 @@ def _f1():
 
 
 def test_model_f1_carried_fraction_matches_the_force_balance_table():
-    """docs/rig_2026-09-30_force_balance.md: model_f1 172526, airborne 12.3 s, median 0.780."""
+    """docs/archive/rig_2026-09-30_force_balance.md: model_f1 172526, airborne 12.3 s, median 0.780."""
     cf = _f1()['carried_fraction']
     assert cf['airborne_median'] == pytest.approx(0.780, abs=0.002)
     assert cf['airborne_s'] == pytest.approx(12.3, abs=0.2)

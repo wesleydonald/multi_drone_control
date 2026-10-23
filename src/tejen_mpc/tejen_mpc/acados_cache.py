@@ -47,6 +47,7 @@ def build_payload_mpc_cache_identity(
     source_paths: Iterable[Path],
     xy_integral_weight: float,
     xy_integral_terminal_weight: float,
+    mpc_profile: str = "oct10",
 ) -> PayloadMpcCacheIdentity:
     """Fingerprint every input that changes generated payload-MPC artifacts."""
     sources = {}
@@ -60,6 +61,8 @@ def build_payload_mpc_cache_identity(
     payload = {
         "schema_version": CACHE_SCHEMA_VERSION,
         "solver_family": "quad_payload_integral_dynamics",
+        # the profile's weights and input bounds are generated into the solver
+        "mpc_profile": str(mpc_profile),
         "xy_integral_weight": float(xy_integral_weight),
         "xy_integral_terminal_weight": float(xy_integral_terminal_weight),
         "sources": dict(sorted(sources.items())),

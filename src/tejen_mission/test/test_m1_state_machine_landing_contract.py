@@ -11,6 +11,19 @@ PLANNER = (
 )
 
 
+def test_m1_takeoff_latches_ground_height_for_landing():
+    text = PLANNER.read_text(encoding='utf-8')
+    takeoff = text.split('self.phase == MissionPhase.WAIT_FOR_TAKEOFF', 1)[1].split(
+        'elif command in {"ARM", "ARMED"}:', 1
+    )[0]
+    assert 'self.initial_quad_z = float(self.takeoff_start_position[2])' in takeoff
+    landing = text.split('def initialise_landing(self) -> None:', 1)[1].split(
+        'def build_landing_reference', 1
+    )[0]
+    assert 'self.takeoff_start_position[2]' in landing
+    assert 'min(self.landing_start_z,' in landing
+
+
 def test_external_landing_request_enters_planner_landing_state():
     text = PLANNER.read_text(encoding='utf-8')
     assert 'def external_landing_callback(self, msg: Bool) -> None:' in text

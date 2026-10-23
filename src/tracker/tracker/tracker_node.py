@@ -43,6 +43,7 @@ from .kt_trim import KtTrim
 from .x0_rate import X0_RATE_SOURCES, x0_body_rate
 from .delay_comp import DelayPredictor
 N_POSE = 13
+WARM_FAULT_HOLD_S = 0.5     # s a warm tracker stays not live after its last fault (warm_fault_not_live)
 
 
 # recompile the solver if acados.py/dynamics.py changed since the last build
@@ -71,6 +72,7 @@ def _solver_is_fresh():
 from utility_objects.visualization import TrajectoryVisualizer
 from utility_objects.data_logger import DataLogger, node_params, write_params
 from utility_objects.safety import EnvelopeChecker, EnvelopeLimits, tilt_deg_from_quat
+from utility_objects.position_limit import POS_LIMIT_REF_MARGIN_M, limit_horizon
 from utility_objects.callback_manager_multi import CallbackManagerMulti
 from interfaces.msg import MotionCaptureState, ELRSCommand, Telemetry
 from std_msgs.msg import Bool, Int32, Float64, Float64MultiArray, String
@@ -85,6 +87,17 @@ USE_MOTION_CAPTURE = True
 FREQUENCY_HZ = 50.0
 DT = 1.0 / FREQUENCY_HZ
 
+
+def next_tick_command(u0, u_rate, dt):
+    """The command state one control tick after node 0: the first stage holds u_rate (piecewise-constant input
+    on the u_state integrator), so u(dt) = u0 + u_rate * dt."""
+    return np.asarray(u0, dtype=float) + np.asarray(u_rate, dtype=float) * float(dt)
+
+
+# RViz plan and path every VIZ_EVERY-th tick (10 Hz): drawn inside the control loop, they lengthened
+# every tick on the loaded rig laptop (14 Oct). Nothing but RViz reads them.
+VIZ_EVERY = 5
+
 # limits for the measured-f_ext path (cable_source=measured). feeding the raw
 # imu cable force straight in makes an imu->model->command->imu loop that blows
 # up at takeoff, so filter/clamp/ramp it.
@@ -98,7 +111,10 @@ MODEL_CAP_PERIOD_S = 1.0       # the model throttle cap follows the pack voltage
 # thr_out = real throttle sent, thr_off = offset in use (voltage term included),
 # acx/acy/acz = node-0 cable accel the model was given, ref_age = s since the last reference.
 TRACKER_W1_COLS = ('thr_out', 'thr_off', 'acx', 'acy', 'acz',
-                   'ff_active', 'grounded', 'ref_age')
+                   'ff_active', 'grounded', 'ref_age',
+                   'acm_x', 'acm_y', 'acm_z',   # the raw measured cable accel, before the cap and the slew limit
+                                                 # (x the drone's mass = the cable's pull on it; Wesley 21 Oct)
+                   'solve_ms')                   # this tick's MPC solve (card 2026-10-23_paper_method_compare)
 
 # Height above spawn z at which the drone counts as AIRBORNE, which is when kT
 # switches from takeoff_thrust_ratio to thrust_ratio.
@@ -114,6 +130,8 @@ TRACKER_W1_COLS = ('thr_out', 'thr_off', 'acx', 'acy', 'acz',
 # Soften the surge by raising takeoff_thrust_ratio, not by changing this margin.
 AIRBORNE_MARGIN = 0.04         # m above spawn z
 GROUND_IDLE_MARGIN = 0.03      # m above spawn z: back on the floor (ground_idle)
+DEPARTED_IDLE_MARGIN = 0.10    # m above spawn z: a departed drone the planner holds there is down (the planner's
+                               # DEPARTED_DOWN_HIGH_M; QUAD4 stopped 4-7 cm above its mat height on 14 Oct)
 GROUND_IDLE_HOLD_S = 0.2
 
 # Takeoff spool floor. The applied throttle eases from FLOOR*u to u over
@@ -252,6 +270,14 @@ class Controller(Node):
         self._safety_clock = self.get_clock()
         self.last_pose_update_time = self._safety_clock.now()
 
+        # ── State ─────────────────────────────────────────────────────────
+        # before the callback manager: its arming service is live while the node waits for its first pose
+        # (an ARM/DISARM in that window raised AttributeError and killed the tracker, RIG-1014-lt_9)
+        self.armed = False
+        self.takeoff_requested = False
+        self.shutdown_requested = False
+        self.step_counter = 0
+
         # ── Callbacks / subscriptions ─────────────────────────────────────
         self.cb = CallbackManagerMulti(self, drone_id=self.drone_id)
 
@@ -268,12 +294,6 @@ class Controller(Node):
         # during flight (see control_loop); the reference is streamed by the planner.
         self.trajectory_visualizer = TrajectoryVisualizer(
             self, frame_id="map", prefix=f"drone_{self.drone_id}")
-
-        # ── State ─────────────────────────────────────────────────────────
-        self.armed = False
-        self.takeoff_requested = False
-        self.shutdown_requested = False
-        self.step_counter = 0
 
         # fleet manager broadcasts the master step index, just follow it
         self.fleet_step_sub = self.create_subscription(
@@ -404,6 +424,16 @@ class Controller(Node):
         self._gi_ticks = 0
         self._gi_latched = False
         self._kt_desc_ticks = 0
+        # a drone the planner reports off the ring and landing by itself (card 2026-10-09_departed_ground_idle):
+        # it idles on the floor while the ring still flies. Counts only if received after this ARM.
+        self._departed = False
+        self._armed_at = None
+        self.create_subscription(
+            Bool, f'/drone_{self.drone_id}/departed', self._departed_cb,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                       reliability=ReliabilityPolicy.RELIABLE))
+        # ...and once it idles there, the fleet manager disarms it alone (card 2026-10-09_departed_disarm_alone)
+        self._down_alone_pub = self.create_publisher(Bool, f'/drone_{self.drone_id}/down_alone', 5)
         self._kt_payload_z0 = None        # load height at ARM: the floor test applies until it lifts 5 cm
         self._kt_frozen_said = False
         self.create_subscription(Float64, f'/drone_{self.drone_id}/cable_static_z',
@@ -468,6 +498,15 @@ class Controller(Node):
         # already sent (the rig's command and mocap delay; 7 Oct, card delay_comp). 0 = off
         self.delay_comp_s = float(self.declare_parameter(
             'delay_comp_s', float(os.environ.get('TRACKER_DELAY_COMP_S', '0.0'))).value)
+        # True: once airborne, send the THROTTLE for the next tick (node 0's u_state + the first-stage rate x DT)
+        # instead of node 1's (0.1 s ahead), which let it move 5x its modelled 0.5/s per tick; roll, pitch, yaw and
+        # the takeoff spool unchanged (card 2026-10-14_tracker_timing, critic must-fixes)
+        env = os.environ.get('TRACKER_CMD_NEXT_TICK', '0').strip()
+        if env not in ('0', '1', ''):
+            self.get_logger().warn(f"TRACKER_CMD_NEXT_TICK={env!r} is not 0 or 1: next-tick throttle OFF")
+        self.cmd_next_tick = bool(self.declare_parameter('cmd_next_tick', env == '1').value)
+        if self.cmd_next_tick:
+            self.get_logger().warn(f"[Drone {self.drone_id + 1}] next-tick throttle ON (card 2026-10-14_tracker_timing)")
         self._delay_pred = None
         if self.delay_comp_s > 0.0:
             from .dynamics import QuadLoadDynamics
@@ -586,6 +625,10 @@ class Controller(Node):
         self.thrust_offset = float(self.declare_parameter('thrust_offset', 0.0).value)
         self.thrust_offset_v_slope = float(self.declare_parameter('thrust_offset_v_slope', 0.0).value)
         self.thrust_v_ref = float(self.declare_parameter('thrust_v_ref', 23.5).value)
+        # no pack voltage yet (or a bad frame): the last good one, else a full pack, so a missing reading errs low
+        # (RIG-1014-t6h hopped on fresh packs with no telemetry, read as 23.5 V)
+        self.thrust_v_full = float(self.declare_parameter('thrust_v_full', 25.2).value)
+        self._last_good_v = None
         # the model's own ceiling leaves room for the offset under the real cap
         self._model_thr_max = max(0.1, self.throttle_max - self.thrust_offset)
         self._model_cap_t = None
@@ -659,6 +702,29 @@ class Controller(Node):
         self.control_history = []
         self.estimated_state_history = []
 
+        # Combined M1 contact attach (card 2026-10-10_combined_m1_contact): while the mux forwards another stream,
+        # the model's actuator state is the command the mux actually sends, and the states learned from our own
+        # command (measured cable, thrust history, trims) hold until the switch to ours.
+        self.warm_follow_applied = bool(self.declare_parameter('warm_follow_applied', False).value)
+        self._in_authority = not self.warm_follow_applied
+        self._applied_cmd = None
+        # card 2026-10-11_quad4_tilt_cut (rig-port critic F6; off by default): a fault while another stream flies the
+        # drone makes this tracker NOT LIVE (armed idle, so the mux never hands the drone to it) instead of latching,
+        # held WARM_FAULT_HOLD_S after the last fault; with authority a fault latches as before
+        self.warm_fault_not_live = (bool(self.declare_parameter('warm_fault_not_live', False).value)
+                                    and self.warm_follow_applied)
+        self._warm_hold_until = None
+        if self.warm_follow_applied:
+            self.create_subscription(
+                String, f'/drone_{self.drone_id}/mux_state', self._mux_state_cb,
+                QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                           reliability=ReliabilityPolicy.RELIABLE))
+            # the launch remaps this name onto the mux output (our own command topic is remapped to the pre-mux one)
+            self.create_subscription(ELRSCommand, f'/drone_{self.drone_id}/ELRSCommand_applied',
+                                     self._applied_cmd_cb, 1)
+
+        self._init_tilt_cut()
+
         # ── Control timer ─────────────────────────────────────────────────
         self.timer = self.create_timer(DT, self.control_loop)
         self.get_logger().info(
@@ -667,6 +733,76 @@ class Controller(Node):
             f"throttle cap {self.throttle_max:.2f}"
             + (f", thrust offset {self.thrust_offset:.3f} + {self.thrust_offset_v_slope:.3f}/V below "
                f"{self.thrust_v_ref:.1f} V." if self.thrust_offset > 0.0 else "."))
+
+    # ── QUAD4 tilt cut (card 2026-10-11_quad4_tilt_cut; '' = off) ────────────
+    def _init_tilt_cut(self):
+        """The newcomer's tilt fault, for the mux to cut it while another stream flies it: on every fresh pose,
+        ahead of the pose-timeout and armed gates and of the envelope's latch (a disarm clears armed and
+        takeoff_requested on the same tick, and a knock latches the speed fault first: critic round 1, C1)."""
+        p = self.declare_parameter
+        self.tilt_fault_topic = str(p('tilt_fault_topic', '').value).strip()
+        self._tilt_rule = None
+        if not self.tilt_fault_topic:
+            return
+        from utility_objects.tilt_cut import TiltCutConfig, TiltCutRule
+        self._tilt_rule = TiltCutRule(TiltCutConfig(
+            cut_deg=float(p('tilt_cut_deg', 60.0).value),
+            cut_hold_s=float(p('tilt_cut_hold_s', 0.025).value),
+            glitch_rate_dps=float(p('tilt_glitch_rate_dps', 3000.0).value),
+            glitch_holdoff_s=float(p('tilt_glitch_holdoff_s', 0.5).value),
+            slow_deg=float(p('tilt_slow_deg', 0.0).value),
+            slow_s=float(p('tilt_slow_s', 0.5).value)))
+        self._tilt_prev_armed = False
+        self._tilt_glitches_said = 0
+        self._tilt_speed_said = False
+        # volatile: a relaunched mux must not be cut by an old fault (critic round 1, M5); its subscribers are up
+        # long before a flight, and the mux re-sends its own disarm
+        self._tilt_pub = self.create_publisher(
+            Bool, self.tilt_fault_topic, QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE,
+                                                    durability=DurabilityPolicy.VOLATILE))
+        self.create_subscription(MotionCaptureState, f'/drone_{self.drone_id}/motion_capture_state',
+                                 self._tilt_pose_cb, 10)
+        cfg = self._tilt_rule.config
+        self.get_logger().info(
+            f"[Drone {self.drone_id + 1}] tilt cut: {cfg.cut_deg:.0f} deg held {cfg.cut_hold_s * 1e3:.0f} ms from "
+            f"TAKEOFF to the next ARM (glitch above {cfg.glitch_rate_dps:.0f} deg/s, hold-off "
+            f"{cfg.glitch_holdoff_s:.1f} s"
+            + (f", slow {cfg.slow_deg:.0f} deg for {cfg.slow_s:.1f} s" if cfg.slow_deg > 0.0 else "")
+            + f") -> {self.tilt_fault_topic}")
+
+    def _tilt_pose_cb(self, msg: MotionCaptureState):
+        rule = self._tilt_rule
+        armed = bool(self.armed)
+        if armed and not self._tilt_prev_armed:
+            rule.arm()
+            self._tilt_glitches_said = 0
+            self._tilt_speed_said = False
+        self._tilt_prev_armed = armed
+        if self.takeoff_requested:
+            rule.takeoff()
+        o = msg.pose.orientation
+        why = rule.step(self.get_clock().now().nanoseconds * 1e-9, (o.w, o.x, o.y, o.z))
+        if rule.glitches > self._tilt_glitches_said:
+            self._tilt_glitches_said = rule.glitches
+            self.get_logger().warn(f"[Drone {self.drone_id + 1}] tilt cut: attitude change faster than "
+                                   f"{rule.config.glitch_rate_dps:.0f} deg/s between two poses (mocap glitch "
+                                   f"{rule.glitches}): not counted for {rule.config.glitch_holdoff_s:.1f} s",
+                                   throttle_duration_sec=1.0)
+        v = msg.twist.linear
+        speed = math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+        if rule.flying and speed > self.envelope.limits.max_speed and not self._tilt_speed_said:
+            # logged only (critic round 1, M2): the speed rule is not part of the cut
+            self._tilt_speed_said = True
+            self.get_logger().warn(f"[Drone {self.drone_id + 1}] tilt cut: would cut (speed) {speed:.2f} m/s > "
+                                   f"{self.envelope.limits.max_speed:.1f} (logged only)")
+        if why is None:
+            return
+        self._tilt_pub.publish(Bool(data=True))
+        self.get_logger().error(
+            f"[Drone {self.drone_id + 1}] TILT FAULT ({why}): drone tilt {rule.fault_tilt:.1f} deg > "
+            f"{rule.config.slow_deg if why == 'slow' else rule.config.cut_deg:.0f} "
+            f"({'ours' if getattr(self, '_in_authority', True) else 'another stream'} flying it, "
+            f"{'armed' if armed else 'disarmed'}) -> {self.tilt_fault_topic}")
 
     # ─────────────────────────────────────────────────────────────────────
     # Fleet step callback
@@ -693,8 +829,15 @@ class Controller(Node):
             return
         arr = np.array(data[2:2 + fields * n_nodes],
                        dtype=float).reshape(n_nodes, fields)
-        self.planner_ref_pos = arr[:, 0:3]
-        self.planner_ref_vel = arr[:, 3:6]
+        pos, vel = arr[:, 0:3], arr[:, 3:6]
+        limit = getattr(self, 'pos_limit_m', 0.0)
+        if limit > 0.0:
+            pos, vel, k = limit_horizon(pos, vel, limit - POS_LIMIT_REF_MARGIN_M)
+            if k:
+                self.get_logger().warn(f"[Drone {self.drone_id + 1}] reference past the position limit: {k} nodes "
+                                       f"held at +-{limit - POS_LIMIT_REF_MARGIN_M:.2f} m", throttle_duration_sec=1.0)
+        self.planner_ref_pos = pos
+        self.planner_ref_vel = vel
         self.planner_ref_acc = arr[:, 6:9]
         self.planner_ref_cable = arr[:, 9:12] if fields >= 12 else None
         self._ref_arrival_sim = self.get_clock().now().nanoseconds * 1e-9
@@ -798,6 +941,9 @@ class Controller(Node):
         self.drop_tilt_deg = float(p('drop_tilt_deg', 30.0).value)
         self.drop_samples = int(p('drop_samples', 2).value)
         self.drop_glitch_step_deg = float(p('drop_glitch_step_deg', 15.0).value)
+        # the position limit (Wesley 22 Oct; 0 = off, card 2026-10-22_position_limit): every reference this tracker
+        # flies is kept POS_LIMIT_REF_MARGIN_M inside +-pos_limit_m in x and y, whoever sent it
+        self.pos_limit_m = float(p('pos_limit_m', 0.0).value)
         self._drop_requested_t = None
         self._drop_count = 0
         self._drop_prev_q = None
@@ -879,6 +1025,8 @@ class Controller(Node):
             self._gi_airborne = False
             self._gi_ticks = 0
             self._gi_latched = False
+            self._departed = False
+            self._armed_at = self.get_clock().now().nanoseconds
             self._kt_z_max = -1e9
             self._kt_payload_z0 = (float(self.payload_pos[2])
                                    if self.payload_pos is not None else None)
@@ -905,11 +1053,19 @@ class Controller(Node):
             airborne=bool(self.armed and self.takeoff_requested),
         )
 
+        if verdict.is_fault and self._warm_unlatched():
+            self.envelope.reset()               # re-evaluated next tick: a fault that persists keeps it not live
+            self._warm_not_live(verdict.reason)
+            return True
         if verdict.is_fault:
             self.get_logger().error(
                 f"[Drone {self.drone_id + 1}] ENVELOPE FAULT: {verdict.reason} "
                 f"- disarming fleet.")
             self._do_safety_disarm(reason=verdict.reason)
+            return True
+        if self._warm_unlatched() and self._warm_hold_until is not None and \
+                self._safety_clock.now().nanoseconds * 1e-9 < self._warm_hold_until:
+            self._publish_warm_idle()
             return True
 
         if verdict.level == 'WARN':
@@ -940,13 +1096,70 @@ class Controller(Node):
             f"{'VELOCITY LOOP' if want else 'MPC'} (/fleet/control_phase="
             f"{msg.data!r})")
 
+    def _warm_unlatched(self):
+        """warm_fault_not_live and another stream flies the drone: a fault makes this tracker not live, not latched."""
+        return getattr(self, 'warm_fault_not_live', False) and not getattr(self, '_in_authority', True)
+
+    def _publish_warm_idle(self):
+        self.cb.cmd_publisher_.publish(ELRSCommand(armed=True, channel_0=0.0, channel_1=0.0, channel_2=-1.0,
+                                                   channel_3=0.0))
+
+    def _warm_not_live(self, why):
+        """Not live for WARM_FAULT_HOLD_S after the last fault: armed idle on our pre-mux stream (the mux's
+        live-takeover rule never hands the drone to a tracker that idles), nothing latched, no disarm."""
+        now = self._safety_clock.now().nanoseconds * 1e-9
+        if self._warm_hold_until is None or now >= self._warm_hold_until:     # a new episode: say it once
+            self.get_logger().warn(f"[Drone {self.drone_id + 1}] {why} while another stream flies it: not live "
+                                   f"(armed idle), not latched; live again {WARM_FAULT_HOLD_S:.1f} s after it clears")
+        self._warm_hold_until = now + WARM_FAULT_HOLD_S
+        self._publish_warm_idle()
+
+    def _mux_state_cb(self, msg):
+        ours = str(msg.data).strip().lower() == 'ours'
+        if ours and not self._in_authority:
+            # bumpless: the next solve starts cold from the measured state with the applied command as its
+            # actuator state, holding the heading the drone has now (the other controller may have turned it)
+            self.first_solve = True
+            self._heading_datum = self._measured_heading()
+            self._yaw_hold = False
+            self._vel_hist.clear()
+            self._acc_lpf = self._thr_w_lpf = self._acc_t = None
+            self._applied_cable_vec = None
+            self.get_logger().warn(
+                f"[Drone {self.drone_id + 1}] mux -> ours: solver re-seeded from the measured state, heading "
+                f"{math.degrees(self._heading_datum):.1f} deg, u-state {np.round(self._applied_u, 3).tolist()}")
+        self._in_authority = ours
+
+    def _applied_cmd_cb(self, msg):
+        self._applied_cmd = msg
+        if not self._in_authority:
+            self._pin_applied()
+
+    def _pin_applied(self):
+        """The actuator state is the mux output's last command: roll, pitch and yaw as sent, the throttle in model
+        units ((ch2 + 1) / 2 through the thrust map). Nothing sent, or disarmed: no thrust."""
+        m = self._applied_cmd
+        if m is None or not m.armed:
+            self._applied_u = np.zeros(4)
+            self.last_cmd_throttle = None
+            return
+        thr = self._realised_model_throttle((float(m.channel_2) + 1.0) / 2.0)
+        self._applied_u = np.array([float(m.channel_0), float(m.channel_1), float(thr), float(m.channel_3)])
+        self.last_cmd_throttle = thr
+
     def _thrust_off(self):
         """Throttle offset of the affine map at the current pack voltage (0 = proportional map)."""
         if self.thrust_offset <= 0.0:
             return 0.0
         v = self.battery_voltage
-        dv = (self.thrust_v_ref - float(v)) if (v is not None and 18.0 < float(v) < 27.0) else 0.0
-        return max(0.0, self.thrust_offset + self.thrust_offset_v_slope * dv)
+        if v is not None and 18.0 < float(v) < 27.0:
+            self._last_good_v = float(v)
+        elif self._last_good_v is None and not getattr(self, '_no_v_said', False):
+            self._no_v_said = True
+            self.get_logger().warn(f"[Drone {self.drone_id + 1}] no pack voltage yet: thrust offset for a full pack "
+                                   f"({self.thrust_v_full:.1f} V) until one arrives")
+        used = self._last_good_v if self._last_good_v is not None else self.thrust_v_full
+        return max(0.0, self.thrust_offset + self.thrust_offset_v_slope * (self.thrust_v_ref - used))
 
     def _output_throttle(self, thr, spool_frac=1.0):
         """Model throttle (above the offset) -> the throttle the flight controller gets."""
@@ -999,11 +1212,14 @@ class Controller(Node):
             except (TypeError, ValueError, AttributeError, IndexError):
                 return float('nan')
         ac = getattr(self, '_applied_cable_xyz', None)
+        raw = getattr(self, '_raw_cable_meas', None)
         last = getattr(self, '_last_ref_wall', None)
         return [num(lambda: self._thr_out), num(lambda: self._thr_off),
                 num(lambda: ac[0]), num(lambda: ac[1]), num(lambda: ac[2]),
                 num(lambda: self._planner_ff_active), num(lambda: self._load_grounded()),
-                num(lambda: (self._safety_clock.now() - last).nanoseconds * 1e-9)]
+                num(lambda: (self._safety_clock.now() - last).nanoseconds * 1e-9),
+                num(lambda: raw[0]), num(lambda: raw[1]), num(lambda: raw[2]),
+                num(lambda: self._last_solve_ms)]
 
     def _publish_channels(self, u, u_rate):
         """Send [roll, pitch, throttle, yaw] to the FC, or armed-idle before TAKEOFF.
@@ -1015,6 +1231,10 @@ class Controller(Node):
             self._waiting_said = False
             thr = float(u[2])
             spool_frac = 1.0
+            if getattr(self, 'warm_follow_applied', False):
+                # warm on another stream's flight: a take-over mid-air must not start from a half-throttle spool
+                self._takeoff_step = max(self._takeoff_step or 0,
+                                         int(math.ceil(max(1.0, self.takeoff_spool_s * FREQUENCY_HZ))))
             # takeoff spool-up: for the first takeoff_spool_s, scale the throttle up
             # from 0 to the commanded value so thrust rises smoothly and the drones
             # ease off the platforms. Raised-cosine (not linear): the applied throttle
@@ -1057,6 +1277,8 @@ class Controller(Node):
             self._applied_u = np.array(
                 [float(u[0]), float(u[1]), float(thr), yaw])
             self._applied_u_rate = np.asarray(u_rate, dtype=float).copy()
+            if not getattr(self, '_in_authority', True):
+                self._pin_applied()                # our command is not the one flying
             if getattr(self, '_delay_pred', None) is not None:
                 self._delay_pred.record(self.get_clock().now().nanoseconds * 1e-9, self._applied_u)
             self.get_logger().debug(
@@ -1071,6 +1293,8 @@ class Controller(Node):
             # channel_2 = -1.0 maps to throttle 0, so every channel is at zero
             self._applied_u = np.zeros(4)
             self._applied_u_rate = np.zeros(4)
+            if not getattr(self, '_in_authority', True):
+                self._pin_applied()
             # THROTTLED: this branch runs every cycle of the 50 Hz loop for as long as
             # the fleet sits armed waiting for TAKEOFF. Logging it unthrottled put 50
             # lines/s PER DRONE through the launch stdout pipe (200/s with four
@@ -1088,6 +1312,13 @@ class Controller(Node):
             self._last_good_msg = msg
         return msg
 
+    def _departed_cb(self, msg):
+        # a latched True from an earlier flight arrives at subscription: only one sent after this ARM counts
+        if not msg.data:
+            self._departed = False
+        elif self.armed and self.takeoff_requested and self._armed_at is not None:
+            self._departed = True
+
     def _ground_idle_update(self):
         """ground_idle: True, latched until the next ARM, once a drone that flew is back within
         GROUND_IDLE_MARGIN of its resting height, with the ring resting and its reference at the
@@ -1101,14 +1332,28 @@ class Controller(Node):
         if z >= self._kt_spawn_z + AIRBORNE_MARGIN:
             self._gi_airborne = True
         ref = self._current_ref_pos
+        at_rest_ref = ref is not None and float(ref[2]) <= self._kt_spawn_z + GROUND_IDLE_MARGIN
         down = (self._gi_airborne and self.payload_resting
-                and z <= self._kt_spawn_z + GROUND_IDLE_MARGIN
-                and ref is not None and float(ref[2]) <= self._kt_spawn_z + GROUND_IDLE_MARGIN)
+                and z <= self._kt_spawn_z + GROUND_IDLE_MARGIN and at_rest_ref)
+        # off the ring and landing by itself while the ring flies: back at its own resting height (two-sided,
+        # so a drone still tied to the ring cannot idle on a wrong report)
+        # (no airborne latch needed: the planner's flag comes only after TAKEOFF, and a newcomer taken out
+        # before it rose 4 cm must idle too)
+        vz = float(self.current_pose[9]) if len(self.current_pose) > 9 else 0.0
+        alone = (getattr(self, '_departed', False) and ref is not None
+                 and float(ref[2]) <= self._kt_spawn_z + DEPARTED_IDLE_MARGIN
+                 and -GROUND_IDLE_MARGIN <= z - self._kt_spawn_z <= DEPARTED_IDLE_MARGIN and abs(vz) <= 0.05)
+        down = down or alone
         self._gi_ticks = self._gi_ticks + 1 if down else 0
         if self._gi_ticks >= GROUND_IDLE_HOLD_S * FREQUENCY_HZ:
             self._gi_latched = True
             self.get_logger().warn(f'[Drone {self.drone_id + 1}] on the floor after the flight: '
                                    f'armed idle until disarm')
+            if alone and getattr(self, '_down_alone_pub', None) is not None:
+                self.keep_alive_on_disarm = True        # the disarm that follows must not end this process
+                self._down_alone_pub.publish(Bool(data=True))
+                self.get_logger().info(f'[Drone {self.drone_id + 1}] down at its rest off the ring: '
+                                       f'asking the fleet manager to disarm it alone')
         return self._gi_latched
 
     def _velocity_step(self, ref_acc):
@@ -1134,7 +1379,7 @@ class Controller(Node):
         # Integrate only while actually flying the reference. On the stand the drone
         # cannot move toward it and the integrator would wind up against the platform,
         # then dump that trim in as a lurch the moment thrust is applied.
-        integrate = bool(self.takeoff_requested and not self.payload_resting)
+        integrate = bool(self.takeoff_requested and not self.payload_resting) and getattr(self, '_in_authority', True)
         u = self.velocity_loop.step(
             p, v, q, p_ref, v_ref, a_ff, 1.0 / FREQUENCY_HZ,
             self._effective_kT(), heading=self._heading_datum,
@@ -1218,6 +1463,10 @@ class Controller(Node):
         base = (self.thrust_ratio if self._kt_airborne()
                 else self.takeoff_thrust_ratio)
         return base * self._battery_derate()
+
+    def _next_tick_live(self):
+        """cmd_next_tick in force: on, after TAKEOFF and off the stand (the spool keeps the node-1 throttle)."""
+        return self.cmd_next_tick and self.takeoff_requested and self._kt_airborne()
 
     def _kt_airborne(self):
         """True once the drone is clearly off its stand -- the switch from
@@ -1457,6 +1706,9 @@ class Controller(Node):
 
         # ── Pose timeout watchdog (node clock: wall on the rig) ───────────
         elapsed = (self._safety_clock.now() - self.last_pose_update_time).nanoseconds * 1e-9
+        if self.armed and elapsed > self.pose_timeout_s and self._warm_unlatched():
+            self._warm_not_live(f'pose timeout ({elapsed:.2f}s)')
+            return
         if self.armed and elapsed > self.pose_timeout_s:
             self.get_logger().error(
                 f"[Drone {self.drone_id + 1}] Pose timeout ({elapsed:.2f}s) - disarming.")
@@ -1492,7 +1744,8 @@ class Controller(Node):
             # Assumed thrust gain for this cycle: the configured thrust_ratio, or
             # takeoff_thrust_ratio while still on the stand, times the battery
             # derate. Constant for the whole flight unless the derate is enabled.
-            self._update_kt_trim()
+            if self._in_authority:
+                self._update_kt_trim()
             self.est_params[0] = self._effective_kT()
             self._refresh_model_cap()
 
@@ -1542,8 +1795,10 @@ class Controller(Node):
             # Part 2c: optionally replace the open-loop model cable term with
             # the IMU-measured f_ext, held constant across the horizon. Falls
             # back to the model until a valid measurement is available.
-            if self.cable_source in ("measured", "mocap"):
+            # (Frozen while another stream flies the drone: the planned term, no measurement history.)
+            if self.cable_source in ("measured", "mocap") and self._in_authority:
                 ac_meas = self.measured_cable_accel()
+                self._raw_cable_meas = ac_meas
                 if self._load_grounded() or not self._kt_airborne():
                     # on the stand or with the ring resting the imu reads the floor's support:
                     # fly the planned term and restart the slew from it once airborne
@@ -1652,6 +1907,8 @@ class Controller(Node):
             if self.first_solve:
                 set_initial_guess(self.ocp, self.N)
                 self.first_solve = False
+            elif self._next_tick_live():
+                pass      # 20 ms passed, not a 0.1 s stage: the previous solution is the closer guess unshifted
             else:
                 warm_start_from_previous_solution(self.ocp, self.N)
 
@@ -1660,6 +1917,7 @@ class Controller(Node):
             status = self.ocp.solve()
             self._last_solve_status = int(status)
             solve_ms = (time.perf_counter() - t0) * 1000
+            self._last_solve_ms = solve_ms
             #self.get_logger().info(f"Solve time: {solve_ms:.2f}ms")
             if status != 0:
                 # NON-FATAL: a single bad solve should not kill the node. Hold the
@@ -1686,6 +1944,9 @@ class Controller(Node):
             x = self.ocp.get(1, "x")
             u = x[-4:]
             u_rate = self.ocp.get(0, "u")
+            if self._next_tick_live():
+                u = np.array(u, dtype=float)
+                u[2] = next_tick_command(self.ocp.get(0, "x")[-4:], u_rate, DT)[2]
 
             # ~2 Hz planner diagnostic. ez = z error, thr = throttle (0.6=sat),
             # |aT| = thrust-ff accel (>9.81), |aC| = cable accel (0 = gate shut)
@@ -1708,7 +1969,7 @@ class Controller(Node):
                     rdrift = float(np.linalg.norm(cxy) - np.linalg.norm(rxy))
                     # imu measured cable accel vs applied model: |aCm| = measured,
                     # dC = |measured - modelled| (small once they agree)
-                    ac_meas = self.measured_cable_accel()
+                    ac_meas = self.measured_cable_accel() if self._in_authority else None
                     if ac_meas is not None:
                         ac_mod = (self.planner_ref_cable[0] * self.cable_ff_scale
                                   if self.planner_ref_cable is not None
@@ -1760,13 +2021,15 @@ class Controller(Node):
             # "what if the throttle stayed at zero", but it never happens (the
             # drones rest on platforms and the throttle ramps at TAKEOFF), so
             # drawing it in RViz is just misleading.
-            if self.takeoff_requested:
-                self.trajectory_visualizer.publish_mpc_plan(mpc_trajectory)
-            # NOTE: the map -> drone_N_mocap TF is deliberately NOT broadcast
-            # here. simulation_communication/fleet_viz owns it, so the RViz
-            # stack can come up and show the fleet BEFORE any controller runs.
-            # Broadcasting from both would just spam TF_REPEATED_DATA.
-            self.trajectory_visualizer.publish_actual_path(self.current_pose)
+            self._viz_tick = getattr(self, '_viz_tick', -1) + 1
+            if self._viz_tick % VIZ_EVERY == 0:
+                if self.takeoff_requested:
+                    self.trajectory_visualizer.publish_mpc_plan(mpc_trajectory)
+                # NOTE: the map -> drone_N_mocap TF is deliberately NOT broadcast
+                # here. simulation_communication/fleet_viz owns it, so the RViz
+                # stack can come up and show the fleet BEFORE any controller runs.
+                # Broadcasting from both would just spam TF_REPEATED_DATA.
+                self.trajectory_visualizer.publish_actual_path(self.current_pose)
 
             # ── Logging ───────────────────────────────────────────────────
             sim_time_sec = self.get_clock().now().nanoseconds * 1e-9

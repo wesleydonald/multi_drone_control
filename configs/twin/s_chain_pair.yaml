@@ -1,0 +1,12 @@
+# Scalability S's own copy of configs/rig/chain_pair.yaml (22 Oct, the card's critic): the s* configs read this file,
+# so a later edit of the rig's file cannot change a frozen claim. Values as the rig's file on 22 Oct.
+# The 90 deg chain (card docs/experiments/2026-10-21_chain_release.md, Wesley 21 Oct): after the lift, an unannounced
+# loss keeps flying while the survivors' largest empty arc (a pair: its larger arc) is at most 200 deg, so the T and
+# the opposite pair fly on; release and land beyond that. The pair needs min_survivors 2. The trackers' ring-tilt
+# drop is raised from 30 to 45 deg for this step (Wesley 21 Oct). Otherwise as configs/rig/drop_and_land.yaml.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 45.0

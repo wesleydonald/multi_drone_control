@@ -1,0 +1,5 @@
+run,drone,what,OFF (s),onset (s),|rod error| > 3 cm (s),onset - OFF (ms),3 cm - OFF (ms),peak |rod error| (cm),verdict
+r302_3,/drone_3,magnet OFF (planner),32.124,32.366,32.379,242,255,-,detected
+r303_4,/drone_3,magnet OFF (operator),28.757,28.948,29.014,191,258,-,detected
+r304_3,/drone_3,magnet OFF (operator),28.821,28.918,28.984,97,163,-,detected
+r305,/drone_3,magnet OFF (operator),51.735,51.855,51.934,120,199,-,detected

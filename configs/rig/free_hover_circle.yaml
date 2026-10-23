@@ -1,0 +1,5 @@
+# mode:=free_hover num_drones:=1: the drone circles its takeoff point after the hover, for the flight
+# controller's accelerometer against motion capture (Wesley 15 Oct; 0.5 m/s, 0.55 m/s^2 inward)
+circle_radius: 0.5
+circle_period_s: 6.0
+circle_laps: 3

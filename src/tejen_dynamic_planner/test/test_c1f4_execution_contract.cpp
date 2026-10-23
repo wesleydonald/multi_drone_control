@@ -1,6 +1,8 @@
 #include "dynamic_planner/reference_window.hpp"
 #include "dynamic_planner/trajectory_safety_checker.hpp"
 #include "dynamic_planner/world_snapshot.hpp"
+#include "tejen_dynamic_planner/reference_recovery.hpp"
+#include "tejen_dynamic_planner/execution_fallback.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -49,6 +51,38 @@ CommittedTrajectory stationaryTrajectory(const Vec3& position, double t0, double
 
 int main() {
     try {
+        using tejen_dynamic_planner::ReferenceRecoveryContext;
+        using tejen_dynamic_planner::RecoveryAction;
+        using tejen_dynamic_planner::parseRecoveryRequest;
+        const std::string id(32, 'a');
+        ReferenceRecoveryContext recovery;
+        auto reset = parseRecoveryRequest(id + " reset");
+        requireTrue(reset.has_value(), "valid recovery reset rejected");
+        requireTrue(recovery.apply(*reset) == RecoveryAction::Reset, "reset not applied");
+        requireTrue(recovery.apply(*reset) == RecoveryAction::Ignore, "heartbeat resets backend epoch");
+        auto seed = parseRecoveryRequest(id + " seed 0.4 -0.3 0.9 1000000000");
+        requireTrue(seed.has_value(), "valid recovery seed rejected");
+        requireTrue(recovery.apply(*seed) == RecoveryAction::Seed, "common seed not applied");
+        requireTrue(!recovery.grant_requested, "passive seed grants authority");
+        requireTrue(!parseRecoveryRequest(id + " seed nan 0 1 1000000000").has_value(),
+                    "non-finite seed accepted");
+        requireTrue(!parseRecoveryRequest(id + " reset trailing").has_value(),
+                    "malformed reset accepted");
+        auto moved_seed = parseRecoveryRequest(id + " seed 0.401 -0.3 0.9 1000000001");
+        requireTrue(recovery.apply(*moved_seed) == RecoveryAction::Ignore,
+                    "same transaction changes commanded recovery origin");
+        auto grant = parseRecoveryRequest(id + " grant 1000000010");
+        requireTrue(recovery.apply(*grant) == RecoveryAction::Grant && recovery.grant_requested,
+                    "explicit transaction grant not recorded");
+        requireTrue(recovery.seed_stamp_ns == 1000000010, "grant heartbeat leaves common hold stale");
+        recovery.apply(*parseRecoveryRequest(id + " cancel"));
+        requireTrue(!recovery.grant_requested && !recovery.seed.has_value(), "cancel leaves pending authority");
+        requireTrue(recovery.apply(*seed) == RecoveryAction::Ignore, "late seed undoes LAND cancellation");
+        requireTrue(recovery.apply(*reset) == RecoveryAction::Ignore, "late reset undoes cancellation");
+        recovery.apply(*parseRecoveryRequest(std::string(32, 'b') + " reset"));
+        requireTrue(recovery.apply(*grant) == RecoveryAction::Ignore, "old grant enters newer transaction");
+        requireTrue(recovery.apply(*reset) == RecoveryAction::Ignore, "old reset enters newer transaction");
+
         // C1F.4 execution fallback: preserve measured p/v, bound initial
         // acceleration, and terminate in the existing certified stopped hold.
         State measured;
@@ -70,6 +104,59 @@ int main() {
         const State held = brake.evaluate(brake.endTime() + 0.5);
         requireTrue(held.velocity.norm() < 1e-10 && held.acceleration.norm() < 1e-10,
                     "post-brake terminal hold is not stationary");
+
+        // The production fallback transaction must keep a constructed stop when
+        // checking fails, but never report a failed installation as active.
+        using tejen_dynamic_planner::ExecutionFallbackOutcome;
+        using tejen_dynamic_planner::attemptExecutionFallback;
+        using tejen_dynamic_planner::PreparedExecutionFallback;
+        int installations = 0;
+        auto unchecked = attemptExecutionFallback(
+            [&]() { return brake; },
+            [](const CommittedTrajectory&) -> PreparedExecutionFallback {
+                throw std::runtime_error("peer coverage gap");
+            },
+            [&](const PreparedExecutionFallback& prepared) {
+                ++installations;
+                requireTrue(!prepared.certified, "checking exception certified a stop");
+                requireTrue(prepared.trajectory.endsInStoppedHold(), "constructed brake lost");
+            });
+        requireTrue(unchecked.outcome == ExecutionFallbackOutcome::InstalledUncertified &&
+                    installations == 1 && unchecked.error == "peer coverage gap",
+                    "checking exception prevented bounded stop installation");
+
+        auto prepare_safe = [](const CommittedTrajectory& stop) {
+            return PreparedExecutionFallback{stop, true, "SMOOTH_BRAKE", ""};
+        };
+        CommittedTrajectory installed = brake;
+        auto failed = attemptExecutionFallback(
+            [&]() { return brake; }, prepare_safe,
+            [](const PreparedExecutionFallback&) { throw std::runtime_error("install failed"); });
+        requireTrue(failed.outcome == ExecutionFallbackOutcome::NotInstalled &&
+                    failed.error == "install failed",
+                    "installation exception masquerades as an installed fallback");
+        auto construction_failed = attemptExecutionFallback(
+            []() -> CommittedTrajectory { throw std::runtime_error("construction failed"); },
+            prepare_safe, [&](const PreparedExecutionFallback&) { ++installations; });
+        requireTrue(construction_failed.outcome == ExecutionFallbackOutcome::NotInstalled &&
+                    installations == 1, "failed construction reached installation");
+        auto retried = attemptExecutionFallback(
+            [&]() { return brake; }, prepare_safe,
+            [&](const PreparedExecutionFallback& prepared) { installed = prepared.trajectory; });
+        requireTrue(retried.outcome == ExecutionFallbackOutcome::InstalledCertified &&
+                    installed.endsInStoppedHold(), "later retry did not install the stop");
+
+        auto collision_stop = dynamic_planner::makeStationaryHoverTrajectory(
+            measured.position, 4.0, 0.10);
+        auto hard_hover = attemptExecutionFallback(
+            [&]() { return brake; },
+            [&](const CommittedTrajectory&) {
+                return PreparedExecutionFallback{collision_stop, false, "UNCERTIFIED_HARD_HOVER", ""};
+            }, [&](const PreparedExecutionFallback& prepared) { installed = prepared.trajectory; });
+        requireTrue(hard_hover.outcome == ExecutionFallbackOutcome::InstalledUncertified &&
+                    hard_hover.mode == "UNCERTIFIED_HARD_HOVER" &&
+                    installed.evaluate(4.0).velocity.norm() == 0.0,
+                    "actual-collision hard-hover semantics changed");
 
         // C1F.4 robust geometry: the ego execution tube must be included in
         // cooperative C-space generation rather than applied only at runtime.

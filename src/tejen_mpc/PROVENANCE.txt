@@ -1,3 +1,5 @@
 Forked from /home/wesley/tejen/drone_cage_control (branch SwungPayload2026_Collaborative, commit a7524bae, author Te-Jen Yu) on 2026-09-25.
-Renamed: tejen_mission->tejen_mission, tejen_mpc->tejen_mpc,
-tejen_utility_objects->tejen_utility_objects, tejen_dynamic_planner->tejen_dynamic_planner (standalone C++ planner vendored in standalone/).
+Renamed: drone_communication->tejen_mission, controller_mpc_payload->tejen_mpc,
+utility_objects->tejen_utility_objects, dynamic_planner_ros->tejen_dynamic_planner (standalone C++ planner vendored in standalone/).
+Checked against 11a0683f (8 Oct 2026) on 10 Oct 2026: no upstream change since a7524bae. Edits: src/tejen_mission/CHANGES_FROM_TEJEN.md.
+Controller checked against d00934c1 (14 Oct 2026) on 14 Oct 2026: his MPC since 11a0683f is carried behind mpc_profile (oct14; the default oct10 is 11a0683f). Edits: src/tejen_mission/CHANGES_FROM_TEJEN.md.

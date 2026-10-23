@@ -1,0 +1,2051 @@
+{
+ "card": "docs/experiments/2026-10-23_scalability.md, section 5 C (bars frozen 23 Oct ~07:25, stamped 11:18)",
+ "method": "C1-C3: tools/n2_bands.py path_metrics_clock_free (the b22 metric). C4-C7: tools/s_metrics.py score() with the planner and tracker logs moved onto the runner clock (sim_time - manifest t_ready_sim) and clipped to run.csv's t range; 's_raw' is score() as it stands (no alignment, no clip). Late ticks: s_metrics' late_fraction inside that window.",
+ "tree": "be34f95 + patch 537551ba (diff_sha256 537551bae5...)",
+ "bars": {
+  "hover": {
+   "C1": [
+    22.0,
+    3.21
+   ],
+   "C2_mm": 4.33078712939177,
+   "C3_deg": 1.2251293705620412,
+   "C6_deg": 2.8211435149422357
+  },
+  "fig8big": {
+   "C1": [
+    33.0,
+    4.06
+   ],
+   "C2_mm": 14.322625744657614,
+   "C3_deg": 2.0484007774285695,
+   "C6_deg": 2.7874655016784042
+  },
+  "release9": {
+   "C3_deg": 7.26770770818913,
+   "C6_deg": 3.551794816795371,
+   "C7": {
+    "resize_s": 2.0,
+    "peak_deg": 8.823635195497308,
+    "settled_deg": 1.084004607139352
+   }
+  }
+ },
+ "verdict": "C CONFIRMS: C1-C7 hold in both repeats of every cell",
+ "runs": {
+  "R2700": {
+   "run": "R2700",
+   "dir": "results/2026-10-23/R2700_sim_gz_s4_hover_L100_it5",
+   "t_ready": 6.599,
+   "off_liftoff": 6.635999999999999,
+   "rtf": 0.22167832408377944,
+   "passed": true,
+   "exit": "stopped 2s after /fleet/landed at t=64.0",
+   "path_mm": 1.3413254540793336,
+   "tilt_peak_deg": 0.2510917945520394,
+   "s": {
+    "run": "R2700_sim_gz_s4_hover_L100_it5",
+    "events": [],
+    "stages": [
+     {
+      "from": 28.004,
+      "to": 52.29,
+      "n": 4,
+      "pos_rmse_m": 0.0013413254540793336,
+      "tilt_peak_deg": 0.25109179455188835,
+      "event": null,
+      "tensions": [
+       2.449099173553719,
+       2.44904132231405,
+       2.449041322314049,
+       2.449082644628099
+      ],
+      "thr_p95": 0.6005000025033951,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.213,
+     "to": 28.004,
+     "n": null,
+     "pos_rmse_m": 0.019045480325312805,
+     "tilt_peak_deg": 1.7727514262200483,
+     "pos_err_max_m": 0.052062311911711616
+    },
+    "n1": {
+     "from": 28.004,
+     "to": 52.29,
+     "n": 4,
+     "pos_rmse_m": 0.0013413254540793336,
+     "tilt_peak_deg": 0.25109179455188835,
+     "event": null,
+     "tensions": [
+      2.449099173553719,
+      2.44904132231405,
+      2.449041322314049,
+      2.449082644628099
+     ],
+     "thr_p95": 0.6005000025033951,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 649,
+     "solve_ms_p50": 99.5,
+     "solve_ms_p95": 151.18000000000006,
+     "solve_ms_max": 190.5,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 3.1098000000000076e-09,
+     "res_ms_p95": 60.64000000000001,
+     "late": 0.0015432098765432098,
+     "published": 440,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 1.121e-08
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "s_raw": {
+    "run": "R2700_sim_gz_s4_hover_L100_it5",
+    "events": [],
+    "stages": [
+     {
+      "from": 28.004,
+      "to": 52.29,
+      "n": 4,
+      "pos_rmse_m": 0.0013413254540793336,
+      "tilt_peak_deg": 0.25109179455188835,
+      "event": null,
+      "tensions": [
+       2.4469545454545454,
+       2.446896694214876,
+       2.446921487603306,
+       2.4469793388429757
+      ],
+      "thr_p95": 0.6005000025033951,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.213,
+     "to": 28.004,
+     "n": null,
+     "pos_rmse_m": 0.019045480325312805,
+     "tilt_peak_deg": 1.7727514262200483,
+     "pos_err_max_m": 0.052062311911711616
+    },
+    "n1": {
+     "from": 28.004,
+     "to": 52.29,
+     "n": 4,
+     "pos_rmse_m": 0.0013413254540793336,
+     "tilt_peak_deg": 0.25109179455188835,
+     "event": null,
+     "tensions": [
+      2.4469545454545454,
+      2.446896694214876,
+      2.446921487603306,
+      2.4469793388429757
+     ],
+     "thr_p95": 0.6005000025033951,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 944,
+     "solve_ms_p50": 104.55,
+     "solve_ms_p95": 120.6499999999999,
+     "solve_ms_max": 235.2,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 1.5707499999999987e-09,
+     "res_ms_p95": 54.584999999999994,
+     "late": 0.0042417815482502655,
+     "published": 440,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 1.121e-08
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "late_start_corrected": 0.0,
+   "late_end_stamped_check": 0.0015432098765432098,
+   "planner_rows_in_window": 649
+  },
+  "R2701": {
+   "run": "R2701",
+   "dir": "results/2026-10-23/R2701_sim_gz_s4_hover_L100_it5",
+   "t_ready": 3.267,
+   "off_liftoff": 3.2840000000000025,
+   "rtf": 0.26980747626321155,
+   "passed": true,
+   "exit": "stopped 2s after /fleet/landed at t=63.9",
+   "path_mm": 1.3202488047042062,
+   "tilt_peak_deg": 0.1991669465720429,
+   "s": {
+    "run": "R2701_sim_gz_s4_hover_L100_it5",
+    "events": [],
+    "stages": [
+     {
+      "from": 27.946,
+      "to": 52.232,
+      "n": 4,
+      "pos_rmse_m": 0.0013202488047042063,
+      "tilt_peak_deg": 0.19916694657176315,
+      "event": null,
+      "tensions": [
+       2.4493842975206612,
+       2.4494793388429756,
+       2.44953305785124,
+       2.4494504132231407
+      ],
+      "thr_p95": 0.6005000025033951,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.144,
+     "to": 27.946,
+     "n": null,
+     "pos_rmse_m": 0.01997957501479443,
+     "tilt_peak_deg": 1.8695356036644235,
+     "pos_err_max_m": 0.05370474526404783
+    },
+    "n1": {
+     "from": 27.946,
+     "to": 52.232,
+     "n": 4,
+     "pos_rmse_m": 0.0013202488047042063,
+     "tilt_peak_deg": 0.19916694657176315,
+     "event": null,
+     "tensions": [
+      2.4493842975206612,
+      2.4494793388429756,
+      2.44953305785124,
+      2.4494504132231407
+     ],
+     "thr_p95": 0.6005000025033951,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 659,
+     "solve_ms_p50": 92.9,
+     "solve_ms_p95": 102.12,
+     "solve_ms_max": 190.4,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 2.6256000000000034e-09,
+     "res_ms_p95": 64.1,
+     "late": 0.0,
+     "published": 440,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 1.12e-08
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "s_raw": {
+    "run": "R2701_sim_gz_s4_hover_L100_it5",
+    "events": [],
+    "stages": [
+     {
+      "from": 27.946,
+      "to": 52.232,
+      "n": 4,
+      "pos_rmse_m": 0.0013202488047042063,
+      "tilt_peak_deg": 0.19916694657176315,
+      "event": null,
+      "tensions": [
+       2.4458312757201646,
+       2.4458395061728395,
+       2.4459259259259256,
+       2.4459218106995886
+      ],
+      "thr_p95": 0.6005000025033951,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.144,
+     "to": 27.946,
+     "n": null,
+     "pos_rmse_m": 0.01997957501479443,
+     "tilt_peak_deg": 1.8695356036644235,
+     "pos_err_max_m": 0.05370474526404783
+    },
+    "n1": {
+     "from": 27.946,
+     "to": 52.232,
+     "n": 4,
+     "pos_rmse_m": 0.0013202488047042063,
+     "tilt_peak_deg": 0.19916694657176315,
+     "event": null,
+     "tensions": [
+      2.4458312757201646,
+      2.4458395061728395,
+      2.4459259259259256,
+      2.4459218106995886
+     ],
+     "thr_p95": 0.6005000025033951,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 897,
+     "solve_ms_p50": 90.4,
+     "solve_ms_p95": 101.93999999999998,
+     "solve_ms_max": 226.6,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 1.5732e-09,
+     "res_ms_p95": 62.099999999999966,
+     "late": 0.0011160714285714285,
+     "published": 440,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 1.12e-08
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "late_start_corrected": 0.0,
+   "late_end_stamped_check": 0.0,
+   "planner_rows_in_window": 659
+  },
+  "R2702": {
+   "run": "R2702",
+   "dir": "results/2026-10-23/R2702_sim_gz_s4_hover_L100_it1",
+   "t_ready": 8.447,
+   "off_liftoff": 8.482000000000003,
+   "rtf": 0.26960360191696,
+   "passed": true,
+   "exit": "stopped 2s after /fleet/landed at t=64.0",
+   "path_mm": 1.3494278756524503,
+   "tilt_peak_deg": 0.2351823435515725,
+   "s": {
+    "run": "R2702_sim_gz_s4_hover_L100_it1",
+    "events": [],
+    "stages": [
+     {
+      "from": 27.977,
+      "to": 52.207,
+      "n": 4,
+      "pos_rmse_m": 0.0013494278756524503,
+      "tilt_peak_deg": 0.23518234355082698,
+      "event": null,
+      "tensions": [
+       2.4487231404958685,
+       2.4487603305785126,
+       2.4488016528925614,
+       2.4487520661157025
+      ],
+      "thr_p95": 0.6005000025033951,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.176,
+     "to": 27.977,
+     "n": null,
+     "pos_rmse_m": 0.016565164294705538,
+     "tilt_peak_deg": 1.8245474154346577,
+     "pos_err_max_m": 0.049976929105249875
+    },
+    "n1": {
+     "from": 27.977,
+     "to": 52.207,
+     "n": 4,
+     "pos_rmse_m": 0.0013494278756524503,
+     "tilt_peak_deg": 0.23518234355082698,
+     "event": null,
+     "tensions": [
+      2.4487231404958685,
+      2.4487603305785126,
+      2.4488016528925614,
+      2.4487520661157025
+     ],
+     "thr_p95": 0.6005000025033951,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 659,
+     "solve_ms_p50": 8.2,
+     "solve_ms_p95": 71.3,
+     "solve_ms_max": 79.3,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 8.189900000000002e-05,
+     "res_ms_p95": 64.81,
+     "late": 0.0,
+     "published": 440,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 9.972e-05
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "s_raw": {
+    "run": "R2702_sim_gz_s4_hover_L100_it1",
+    "events": [],
+    "stages": [
+     {
+      "from": 27.977,
+      "to": 52.207,
+      "n": 4,
+      "pos_rmse_m": 0.0013494278756524503,
+      "tilt_peak_deg": 0.23518234355082698,
+      "event": null,
+      "tensions": [
+       2.4461851851851852,
+       2.4461851851851852,
+       2.446028806584362,
+       2.446074074074074
+      ],
+      "thr_p95": 0.6005000025033951,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.176,
+     "to": 27.977,
+     "n": null,
+     "pos_rmse_m": 0.016565164294705538,
+     "tilt_peak_deg": 1.8245474154346577,
+     "pos_err_max_m": 0.049976929105249875
+    },
+    "n1": {
+     "from": 27.977,
+     "to": 52.207,
+     "n": 4,
+     "pos_rmse_m": 0.0013494278756524503,
+     "tilt_peak_deg": 0.23518234355082698,
+     "event": null,
+     "tensions": [
+      2.4461851851851852,
+      2.4461851851851852,
+      2.446028806584362,
+      2.446074074074074
+     ],
+     "thr_p95": 0.6005000025033951,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 997,
+     "solve_ms_p50": 9.3,
+     "solve_ms_p95": 68.83999999999999,
+     "solve_ms_max": 213.7,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 6.81659999999999e-05,
+     "res_ms_p95": 63.519999999999996,
+     "late": 0.013052208835341365,
+     "published": 440,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 9.972e-05
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": true
+   },
+   "late_start_corrected": 0.0,
+   "late_end_stamped_check": 0.0,
+   "planner_rows_in_window": 659
+  },
+  "R2703": {
+   "run": "R2703",
+   "dir": "results/2026-10-23/R2703_sim_gz_s4_hover_L100_it1",
+   "t_ready": 8.89,
+   "off_liftoff": 8.925999999999998,
+   "rtf": 0.25790472022703703,
+   "passed": true,
+   "exit": "stopped 2s after /fleet/landed at t=64.0",
+   "path_mm": 1.3693894647967797,
+   "tilt_peak_deg": 0.2085450392791144,
+   "s": {
+    "run": "R2703_sim_gz_s4_hover_L100_it1",
+    "events": [],
+    "stages": [
+     {
+      "from": 28.021,
+      "to": 52.246,
+      "n": 4,
+      "pos_rmse_m": 0.0013693894647967798,
+      "tilt_peak_deg": 0.2085450392790205,
+      "event": null,
+      "tensions": [
+       2.448648760330579,
+       2.4486570247933885,
+       2.448623966942149,
+       2.4485950413223136
+      ],
+      "thr_p95": 0.601000003516674,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.23,
+     "to": 28.021,
+     "n": null,
+     "pos_rmse_m": 0.01587089254569309,
+     "tilt_peak_deg": 1.8670332065102204,
+     "pos_err_max_m": 0.04943746942236578
+    },
+    "n1": {
+     "from": 28.021,
+     "to": 52.246,
+     "n": 4,
+     "pos_rmse_m": 0.0013693894647967798,
+     "tilt_peak_deg": 0.2085450392790205,
+     "event": null,
+     "tensions": [
+      2.448648760330579,
+      2.4486570247933885,
+      2.448623966942149,
+      2.4485950413223136
+     ],
+     "thr_p95": 0.601000003516674,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 660,
+     "solve_ms_p50": 9.0,
+     "solve_ms_p95": 70.2,
+     "solve_ms_max": 78.1,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 8.222649999999996e-05,
+     "res_ms_p95": 61.705,
+     "late": 0.0,
+     "published": 440,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 0.0001469
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "s_raw": {
+    "run": "R2703_sim_gz_s4_hover_L100_it1",
+    "events": [],
+    "stages": [
+     {
+      "from": 28.021,
+      "to": 52.246,
+      "n": 4,
+      "pos_rmse_m": 0.0013693894647967798,
+      "tilt_peak_deg": 0.2085450392790205,
+      "event": null,
+      "tensions": [
+       2.4451570247933883,
+       2.4450000000000003,
+       2.444611570247934,
+       2.444756198347107
+      ],
+      "thr_p95": 0.601000003516674,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.23,
+     "to": 28.021,
+     "n": null,
+     "pos_rmse_m": 0.01587089254569309,
+     "tilt_peak_deg": 1.8670332065102204,
+     "pos_err_max_m": 0.04943746942236578
+    },
+    "n1": {
+     "from": 28.021,
+     "to": 52.246,
+     "n": 4,
+     "pos_rmse_m": 0.0013693894647967798,
+     "tilt_peak_deg": 0.2085450392790205,
+     "event": null,
+     "tensions": [
+      2.4451570247933883,
+      2.4450000000000003,
+      2.444611570247934,
+      2.444756198347107
+     ],
+     "thr_p95": 0.601000003516674,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 969,
+     "solve_ms_p50": 10.4,
+     "solve_ms_p95": 68.9,
+     "solve_ms_max": 276.4,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 7.073399999999991e-05,
+     "res_ms_p95": 59.31999999999998,
+     "late": 0.014462809917355372,
+     "published": 440,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 0.0001469
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": true
+   },
+   "late_start_corrected": 0.0,
+   "late_end_stamped_check": 0.0,
+   "planner_rows_in_window": 660
+  },
+  "R2704": {
+   "run": "R2704",
+   "dir": "results/2026-10-23/R2704_sim_gz_s4_fig8big_h5_v200_L100_it5",
+   "t_ready": 3.2720000000000002,
+   "off_liftoff": 3.285999999999998,
+   "rtf": 0.23803826592333047,
+   "passed": true,
+   "exit": "stopped 2s after /fleet/landed at t=110.4",
+   "path_mm": 11.21188949252527,
+   "tilt_peak_deg": 1.0489457847806316,
+   "s": {
+    "run": "R2704_sim_gz_s4_fig8big_h5_v200_L100_it5",
+    "events": [],
+    "stages": [
+     {
+      "from": 27.931,
+      "to": 103.207,
+      "n": 4,
+      "pos_rmse_m": 0.010685395341377116,
+      "tilt_peak_deg": 1.048945784780637,
+      "event": null,
+      "tensions": [
+       2.4074188829787233,
+       2.4081795212765957,
+       2.408831117021277,
+       2.4082433510638297
+      ],
+      "thr_p95": 0.6075000017881393,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.142000000000003,
+     "to": 27.931,
+     "n": null,
+     "pos_rmse_m": 0.018756681498914907,
+     "tilt_peak_deg": 1.799186762648862,
+     "pos_err_max_m": 0.053319958891720996
+    },
+    "n1": {
+     "from": 27.931,
+     "to": 103.207,
+     "n": 4,
+     "pos_rmse_m": 0.010685395341377116,
+     "tilt_peak_deg": 1.048945784780637,
+     "event": null,
+     "tensions": [
+      2.4074188829787233,
+      2.4081795212765957,
+      2.408831117021277,
+      2.4082433510638297
+     ],
+     "thr_p95": 0.6075000017881393,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 1124,
+     "solve_ms_p50": 93.6,
+     "solve_ms_p95": 107.68499999999999,
+     "solve_ms_max": 182.5,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 1.4380999999999996e-09,
+     "res_ms_p95": 62.184999999999995,
+     "late": 0.0,
+     "published": 902,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 1.186e-08
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "s_raw": {
+    "run": "R2704_sim_gz_s4_fig8big_h5_v200_L100_it5",
+    "events": [],
+    "stages": [
+     {
+      "from": 27.931,
+      "to": 103.207,
+      "n": 4,
+      "pos_rmse_m": 0.010685395341377116,
+      "tilt_peak_deg": 1.048945784780637,
+      "event": null,
+      "tensions": [
+       2.4101978751660025,
+       2.4108884462151394,
+       2.4114634794156706,
+       2.4109322709163346
+      ],
+      "thr_p95": 0.6075000017881393,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.142000000000003,
+     "to": 27.931,
+     "n": null,
+     "pos_rmse_m": 0.018756681498914907,
+     "tilt_peak_deg": 1.799186762648862,
+     "pos_err_max_m": 0.053319958891720996
+    },
+    "n1": {
+     "from": 27.931,
+     "to": 103.207,
+     "n": 4,
+     "pos_rmse_m": 0.010685395341377116,
+     "tilt_peak_deg": 1.048945784780637,
+     "event": null,
+     "tensions": [
+      2.4101978751660025,
+      2.4108884462151394,
+      2.4114634794156706,
+      2.4109322709163346
+     ],
+     "thr_p95": 0.6075000017881393,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 1356,
+     "solve_ms_p50": 91.7,
+     "solve_ms_p95": 107.5,
+     "solve_ms_max": 224.3,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 1.27575e-09,
+     "res_ms_p95": 60.875,
+     "late": 0.0036900369003690036,
+     "published": 902,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 1.186e-08
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "late_start_corrected": 0.0,
+   "late_end_stamped_check": 0.0,
+   "planner_rows_in_window": 1124
+  },
+  "R2705": {
+   "run": "R2705",
+   "dir": "results/2026-10-23/R2705_sim_gz_s4_fig8big_h5_v200_L100_it5",
+   "t_ready": 7.488,
+   "off_liftoff": 7.508999999999997,
+   "rtf": 0.23746484422513534,
+   "passed": true,
+   "exit": "stopped 2s after /fleet/landed at t=110.5",
+   "path_mm": 11.433361996789959,
+   "tilt_peak_deg": 1.047855770076507,
+   "s": {
+    "run": "R2705_sim_gz_s4_fig8big_h5_v200_L100_it5",
+    "events": [],
+    "stages": [
+     {
+      "from": 28.017000000000003,
+      "to": 103.305,
+      "n": 4,
+      "pos_rmse_m": 0.010774105487616469,
+      "tilt_peak_deg": 1.0478557700764757,
+      "event": null,
+      "tensions": [
+       2.4073577127659576,
+       2.407768617021277,
+       2.4084574468085105,
+       2.4081063829787235
+      ],
+      "thr_p95": 0.6070000007748604,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.222,
+     "to": 28.017000000000003,
+     "n": null,
+     "pos_rmse_m": 0.018740433363525225,
+     "tilt_peak_deg": 1.7757442407079465,
+     "pos_err_max_m": 0.05172231127849621
+    },
+    "n1": {
+     "from": 28.017000000000003,
+     "to": 103.305,
+     "n": 4,
+     "pos_rmse_m": 0.010774105487616469,
+     "tilt_peak_deg": 1.0478557700764757,
+     "event": null,
+     "tensions": [
+      2.4073577127659576,
+      2.407768617021277,
+      2.4084574468085105,
+      2.4081063829787235
+     ],
+     "thr_p95": 0.6070000007748604,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 1126,
+     "solve_ms_p50": 94.8,
+     "solve_ms_p95": 109.475,
+     "solve_ms_max": 183.0,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 1.5645000000000001e-09,
+     "res_ms_p95": 61.475,
+     "late": 0.0,
+     "published": 902,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 1.174e-08
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "s_raw": {
+    "run": "R2705_sim_gz_s4_fig8big_h5_v200_L100_it5",
+    "events": [],
+    "stages": [
+     {
+      "from": 28.017000000000003,
+      "to": 103.305,
+      "n": 4,
+      "pos_rmse_m": 0.010774105487616469,
+      "tilt_peak_deg": 1.0478557700764757,
+      "event": null,
+      "tensions": [
+       2.4155856573705177,
+       2.415867197875166,
+       2.4163147410358565,
+       2.416082337317397
+      ],
+      "thr_p95": 0.6070000007748604,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.222,
+     "to": 28.017000000000003,
+     "n": null,
+     "pos_rmse_m": 0.018740433363525225,
+     "tilt_peak_deg": 1.7757442407079465,
+     "pos_err_max_m": 0.05172231127849621
+    },
+    "n1": {
+     "from": 28.017000000000003,
+     "to": 103.305,
+     "n": 4,
+     "pos_rmse_m": 0.010774105487616469,
+     "tilt_peak_deg": 1.0478557700764757,
+     "event": null,
+     "tensions": [
+      2.4155856573705177,
+      2.415867197875166,
+      2.4163147410358565,
+      2.416082337317397
+     ],
+     "thr_p95": 0.6070000007748604,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 1430,
+     "solve_ms_p50": 94.8,
+     "solve_ms_p95": 108.42999999999998,
+     "solve_ms_max": 240.4,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 1.2070499999999995e-09,
+     "res_ms_p95": 59.655,
+     "late": 0.002099370188943317,
+     "published": 902,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 1.174e-08
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "late_start_corrected": 0.0,
+   "late_end_stamped_check": 0.0,
+   "planner_rows_in_window": 1126
+  },
+  "R2706": {
+   "run": "R2706",
+   "dir": "results/2026-10-23/R2706_sim_gz_s4_fig8big_h5_v200_L100_it1",
+   "t_ready": 6.975,
+   "off_liftoff": 7.016000000000002,
+   "rtf": 0.23145185850410516,
+   "passed": true,
+   "exit": "stopped 2s after /fleet/landed at t=110.3",
+   "path_mm": 9.656396422616744,
+   "tilt_peak_deg": 0.8901664953739505,
+   "s": {
+    "run": "R2706_sim_gz_s4_fig8big_h5_v200_L100_it1",
+    "events": [],
+    "stages": [
+     {
+      "from": 27.945,
+      "to": 103.184,
+      "n": 4,
+      "pos_rmse_m": 0.009164426570682886,
+      "tilt_peak_deg": 0.8901664953739491,
+      "event": null,
+      "tensions": [
+       2.405970744680851,
+       2.406242021276596,
+       2.407574468085106,
+       2.4073843085106383
+      ],
+      "thr_p95": 0.6070000007748604,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.139000000000003,
+     "to": 27.945,
+     "n": null,
+     "pos_rmse_m": 0.016545271573854308,
+     "tilt_peak_deg": 1.8190391058955988,
+     "pos_err_max_m": 0.04995498397160085
+    },
+    "n1": {
+     "from": 27.945,
+     "to": 103.184,
+     "n": 4,
+     "pos_rmse_m": 0.009164426570682886,
+     "tilt_peak_deg": 0.8901664953739491,
+     "event": null,
+     "tensions": [
+      2.405970744680851,
+      2.406242021276596,
+      2.407574468085106,
+      2.4073843085106383
+     ],
+     "thr_p95": 0.6070000007748604,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 1123,
+     "solve_ms_p50": 11.0,
+     "solve_ms_p95": 67.98999999999998,
+     "solve_ms_max": 81.0,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 6.712899999999982e-05,
+     "res_ms_p95": 62.2,
+     "late": 0.0,
+     "published": 902,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 0.0004186
+    },
+    "tracker_late_max": 0.0001863932898415657,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "s_raw": {
+    "run": "R2706_sim_gz_s4_fig8big_h5_v200_L100_it1",
+    "events": [],
+    "stages": [
+     {
+      "from": 27.945,
+      "to": 103.184,
+      "n": 4,
+      "pos_rmse_m": 0.009164426570682886,
+      "tilt_peak_deg": 0.8901664953739491,
+      "event": null,
+      "tensions": [
+       2.413369680851064,
+       2.413503989361702,
+       2.4146090425531916,
+       2.4145212765957447
+      ],
+      "thr_p95": 0.6070000007748604,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.139000000000003,
+     "to": 27.945,
+     "n": null,
+     "pos_rmse_m": 0.016545271573854308,
+     "tilt_peak_deg": 1.8190391058955988,
+     "pos_err_max_m": 0.04995498397160085
+    },
+    "n1": {
+     "from": 27.945,
+     "to": 103.184,
+     "n": 4,
+     "pos_rmse_m": 0.009164426570682886,
+     "tilt_peak_deg": 0.8901664953739491,
+     "event": null,
+     "tensions": [
+      2.413369680851064,
+      2.413503989361702,
+      2.4146090425531916,
+      2.4145212765957447
+     ],
+     "thr_p95": 0.6070000007748604,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 1389,
+     "solve_ms_p50": 10.2,
+     "solve_ms_p95": 67.16,
+     "solve_ms_max": 218.7,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 4.0745999999999945e-05,
+     "res_ms_p95": 60.85999999999999,
+     "late": 0.0007204610951008645,
+     "published": 902,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 0.0004186
+    },
+    "tracker_late_max": 0.0001863932898415657,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "late_start_corrected": 0.0,
+   "late_end_stamped_check": 0.0,
+   "planner_rows_in_window": 1123
+  },
+  "R2707": {
+   "run": "R2707",
+   "dir": "results/2026-10-23/R2707_sim_gz_s4_fig8big_h5_v200_L100_it1",
+   "t_ready": 9.383,
+   "off_liftoff": 9.421000000000003,
+   "rtf": 0.2504340510083144,
+   "passed": true,
+   "exit": "stopped 2s after /fleet/landed at t=110.3",
+   "path_mm": 9.842946353408554,
+   "tilt_peak_deg": 0.9294139499727186,
+   "s": {
+    "run": "R2707_sim_gz_s4_fig8big_h5_v200_L100_it1",
+    "events": [],
+    "stages": [
+     {
+      "from": 27.927000000000003,
+      "to": 103.172,
+      "n": 4,
+      "pos_rmse_m": 0.009073326832285209,
+      "tilt_peak_deg": 0.9294139499726626,
+      "event": null,
+      "tensions": [
+       2.4072380319148934,
+       2.4074468085106386,
+       2.4085,
+       2.408416223404255
+      ],
+      "thr_p95": 0.6070000007748604,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.138,
+     "to": 27.927000000000003,
+     "n": null,
+     "pos_rmse_m": 0.016601496484554844,
+     "tilt_peak_deg": 1.7520587844806583,
+     "pos_err_max_m": 0.050729426906299654
+    },
+    "n1": {
+     "from": 27.927000000000003,
+     "to": 103.172,
+     "n": 4,
+     "pos_rmse_m": 0.009073326832285209,
+     "tilt_peak_deg": 0.9294139499726626,
+     "event": null,
+     "tensions": [
+      2.4072380319148934,
+      2.4074468085106386,
+      2.4085,
+      2.408416223404255
+     ],
+     "thr_p95": 0.6070000007748604,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 1123,
+     "solve_ms_p50": 9.3,
+     "solve_ms_p95": 70.0,
+     "solve_ms_max": 81.9,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 6.621299999999981e-05,
+     "res_ms_p95": 61.7,
+     "late": 0.0,
+     "published": 902,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 0.0003494
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "s_raw": {
+    "run": "R2707_sim_gz_s4_fig8big_h5_v200_L100_it1",
+    "events": [],
+    "stages": [
+     {
+      "from": 27.927000000000003,
+      "to": 103.172,
+      "n": 4,
+      "pos_rmse_m": 0.009073326832285209,
+      "tilt_peak_deg": 0.9294139499726626,
+      "event": null,
+      "tensions": [
+       2.417534574468085,
+       2.4175465425531915,
+       2.4180811170212766,
+       2.4181609042553194
+      ],
+      "thr_p95": 0.6070000007748604,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.138,
+     "to": 27.927000000000003,
+     "n": null,
+     "pos_rmse_m": 0.016601496484554844,
+     "tilt_peak_deg": 1.7520587844806583,
+     "pos_err_max_m": 0.050729426906299654
+    },
+    "n1": {
+     "from": 27.927000000000003,
+     "to": 103.172,
+     "n": 4,
+     "pos_rmse_m": 0.009073326832285209,
+     "tilt_peak_deg": 0.9294139499726626,
+     "event": null,
+     "tensions": [
+      2.417534574468085,
+      2.4175465425531915,
+      2.4180811170212766,
+      2.4181609042553194
+     ],
+     "thr_p95": 0.6070000007748604,
+     "thr_cap_frac": 0.0
+    },
+    "n4": null,
+    "planner": {
+     "ticks": 1413,
+     "solve_ms_p50": 9.2,
+     "solve_ms_p95": 69.63999999999999,
+     "solve_ms_max": 211.7,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 3.333399999999942e-05,
+     "res_ms_p95": 60.7,
+     "late": 0.0056657223796034,
+     "published": 902,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 0.0003494
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "late_start_corrected": 0.0,
+   "late_end_stamped_check": 0.0,
+   "planner_rows_in_window": 1123
+  },
+  "R2708": {
+   "run": "R2708",
+   "dir": "results/2026-10-23/R2708_sim_gz_s4_release9_3915_L100_it5",
+   "t_ready": 11.986,
+   "off_liftoff": 12.015999999999998,
+   "rtf": 0.23970115053991473,
+   "passed": true,
+   "exit": "stopped 2s after /fleet/landed at t=69.1",
+   "path_mm": 26.221645216711234,
+   "tilt_peak_deg": 6.750346761448779,
+   "s": {
+    "run": "R2708_sim_gz_s4_release9_3915_L100_it5",
+    "events": [
+     {
+      "t": 37.327,
+      "event": "RELEASE",
+      "drone": 1,
+      "peak_deg": 8.248475063986044,
+      "abs_peak_deg": 6.7503467614487604,
+      "settled_deg": 0.08523903860858814,
+      "resize_s": 0.2879999999999967,
+      "n_after": 3
+     }
+    ],
+    "stages": [
+     {
+      "from": 28.025,
+      "to": 37.327,
+      "n": 4,
+      "pos_rmse_m": 0.009894413939859409,
+      "tilt_peak_deg": 1.7290872634617174,
+      "event": null,
+      "tensions": [
+       2.175075268817204,
+       1.6272043010752686,
+       2.1748172043010756,
+       3.8180107526881724
+      ],
+      "thr_p95": 0.6634999960660934,
+      "thr_cap_frac": 0.0
+     },
+     {
+      "from": 42.327,
+      "to": 57.328,
+      "n": 3,
+      "pos_rmse_m": 0.002349286631629985,
+      "tilt_peak_deg": 0.5892254928356964,
+      "event": 37.327,
+      "tensions": [
+       3.291306666666667,
+       3.291373333333333,
+       3.2936933333333336
+      ],
+      "thr_p95": 0.6430000066757202,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.236,
+     "to": 28.025,
+     "n": null,
+     "pos_rmse_m": 0.04864433137940634,
+     "tilt_peak_deg": 2.567302708616671,
+     "pos_err_max_m": 0.06111842290157847
+    },
+    "n1": {
+     "from": 28.025,
+     "to": 37.327,
+     "n": 4,
+     "pos_rmse_m": 0.009894413939859409,
+     "tilt_peak_deg": 1.7290872634617174,
+     "event": null,
+     "tensions": [
+      2.175075268817204,
+      1.6272043010752686,
+      2.1748172043010756,
+      3.8180107526881724
+     ],
+     "thr_p95": 0.6634999960660934,
+     "thr_cap_frac": 0.0
+    },
+    "n4": {
+     "from": 39.614999999999995,
+     "to": 57.328,
+     "n": 3,
+     "pos_rmse_m": 0.01408642124942963,
+     "tilt_peak_deg": 3.2370192322404767
+    },
+    "planner": {
+     "ticks": 711,
+     "solve_ms_p50": 84.8,
+     "solve_ms_p95": 102.94999999999999,
+     "solve_ms_max": 165.1,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 2.8025e-08,
+     "res_ms_p95": 60.6,
+     "late": 0.0,
+     "published": 491,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 2.489e-07
+    },
+    "tracker_late_max": 0.000302571860816944,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "s_raw": {
+    "run": "R2708_sim_gz_s4_release9_3915_L100_it5",
+    "events": [
+     {
+      "t": 37.327,
+      "event": "RELEASE",
+      "drone": 1,
+      "peak_deg": 8.248475063986044,
+      "abs_peak_deg": 6.7503467614487604,
+      "settled_deg": 0.08523903860858814,
+      "resize_s": 12.274000000000001,
+      "n_after": 3
+     }
+    ],
+    "stages": [
+     {
+      "from": 28.025,
+      "to": 37.327,
+      "n": 4,
+      "pos_rmse_m": 0.009894413939859409,
+      "tilt_peak_deg": 1.7290872634617174,
+      "event": null,
+      "tensions": [
+       2.159548387096774,
+       1.600967741935484,
+       2.159569892473118,
+       3.834172043010753
+      ],
+      "thr_p95": 0.6634999960660934,
+      "thr_cap_frac": 0.0
+     },
+     {
+      "from": 42.327,
+      "to": 57.328,
+      "n": 3,
+      "pos_rmse_m": 0.002349286631629985,
+      "tilt_peak_deg": 0.5892254928356964,
+      "event": 37.327,
+      "tensions": [
+       2.7591266666666665,
+       2.4974800000000004,
+       2.747273333333333
+      ],
+      "thr_p95": 0.6430000066757202,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.236,
+     "to": 28.025,
+     "n": null,
+     "pos_rmse_m": 0.04864433137940634,
+     "tilt_peak_deg": 2.567302708616671,
+     "pos_err_max_m": 0.06111842290157847
+    },
+    "n1": {
+     "from": 28.025,
+     "to": 37.327,
+     "n": 4,
+     "pos_rmse_m": 0.009894413939859409,
+     "tilt_peak_deg": 1.7290872634617174,
+     "event": null,
+     "tensions": [
+      2.159548387096774,
+      1.600967741935484,
+      2.159569892473118,
+      3.834172043010753
+     ],
+     "thr_p95": 0.6634999960660934,
+     "thr_cap_frac": 0.0
+    },
+    "n4": {
+     "from": 51.601,
+     "to": 57.328,
+     "n": 3,
+     "pos_rmse_m": 0.0010710601666490572,
+     "tilt_peak_deg": 0.2359410815149031
+    },
+    "planner": {
+     "ticks": 1058,
+     "solve_ms_p50": 43.0,
+     "solve_ms_p95": 102.615,
+     "solve_ms_max": 302.4,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 9.144899999999968e-09,
+     "res_ms_p95": 57.73,
+     "late": 0.0,
+     "published": 491,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 2.489e-07
+    },
+    "tracker_late_max": 0.000302571860816944,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "resize_wall_check_s": 0.28902055830567264,
+   "late_start_corrected": 0.0,
+   "late_end_stamped_check": 0.0,
+   "planner_rows_in_window": 711
+  },
+  "R2709": {
+   "run": "R2709",
+   "dir": "results/2026-10-23/R2709_sim_gz_s4_release9_3915_L100_it5",
+   "t_ready": 8.649000000000001,
+   "off_liftoff": 8.672,
+   "rtf": 0.27024736375996755,
+   "passed": true,
+   "exit": "stopped 2s after /fleet/landed at t=69.1",
+   "path_mm": 25.512029805186014,
+   "tilt_peak_deg": 5.785068654929482,
+   "s": {
+    "run": "R2709_sim_gz_s4_release9_3915_L100_it5",
+    "events": [
+     {
+      "t": 37.268,
+      "event": "RELEASE",
+      "drone": 1,
+      "peak_deg": 7.398795327008573,
+      "abs_peak_deg": 5.785068654929502,
+      "settled_deg": 0.08277017567011613,
+      "resize_s": 0.28300000000000125,
+      "n_after": 3
+     }
+    ],
+    "stages": [
+     {
+      "from": 27.96,
+      "to": 37.268,
+      "n": 4,
+      "pos_rmse_m": 0.009946072170701805,
+      "tilt_peak_deg": 1.803535833307439,
+      "event": null,
+      "tensions": [
+       2.1765806451612897,
+       1.6286989247311818,
+       2.176548387096774,
+       3.82020430107527
+      ],
+      "thr_p95": 0.6605000048875809,
+      "thr_cap_frac": 0.0
+     },
+     {
+      "from": 42.268,
+      "to": 57.269,
+      "n": 3,
+      "pos_rmse_m": 0.0022490408715705613,
+      "tilt_peak_deg": 0.5694945423539018,
+      "event": 37.268,
+      "tensions": [
+       3.2950733333333333,
+       3.2949800000000002,
+       3.2972799999999998
+      ],
+      "thr_p95": 0.6430000066757202,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.157,
+     "to": 27.96,
+     "n": null,
+     "pos_rmse_m": 0.04922986650065266,
+     "tilt_peak_deg": 2.536286924974071,
+     "pos_err_max_m": 0.061806591830521944
+    },
+    "n1": {
+     "from": 27.96,
+     "to": 37.268,
+     "n": 4,
+     "pos_rmse_m": 0.009946072170701805,
+     "tilt_peak_deg": 1.803535833307439,
+     "event": null,
+     "tensions": [
+      2.1765806451612897,
+      1.6286989247311818,
+      2.176548387096774,
+      3.82020430107527
+     ],
+     "thr_p95": 0.6605000048875809,
+     "thr_cap_frac": 0.0
+    },
+    "n4": {
+     "from": 39.551,
+     "to": 57.269,
+     "n": 3,
+     "pos_rmse_m": 0.014532185392784324,
+     "tilt_peak_deg": 3.402511537967289
+    },
+    "planner": {
+     "ticks": 711,
+     "solve_ms_p50": 86.8,
+     "solve_ms_p95": 101.95,
+     "solve_ms_max": 179.3,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 2.5205e-08,
+     "res_ms_p95": 64.15,
+     "late": 0.0,
+     "published": 491,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 1.887e-07
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "s_raw": {
+    "run": "R2709_sim_gz_s4_release9_3915_L100_it5",
+    "events": [
+     {
+      "t": 37.268,
+      "event": "RELEASE",
+      "drone": 1,
+      "peak_deg": 7.398795327008573,
+      "abs_peak_deg": 5.785068654929502,
+      "settled_deg": 0.08277017567011613,
+      "resize_s": 8.932000000000002,
+      "n_after": 3
+     }
+    ],
+    "stages": [
+     {
+      "from": 27.96,
+      "to": 37.268,
+      "n": 4,
+      "pos_rmse_m": 0.009946072170701805,
+      "tilt_peak_deg": 1.803535833307439,
+      "event": null,
+      "tensions": [
+       2.1687849462365594,
+       1.6018387096774194,
+       2.1671075268817206,
+       3.864483870967742
+      ],
+      "thr_p95": 0.6605000048875809,
+      "thr_cap_frac": 0.0
+     },
+     {
+      "from": 42.268,
+      "to": 57.269,
+      "n": 3,
+      "pos_rmse_m": 0.0022490408715705613,
+      "tilt_peak_deg": 0.5694945423539018,
+      "event": 37.268,
+      "tensions": [
+       3.0073199999999995,
+       2.8649600000000004,
+       2.994613333333333
+      ],
+      "thr_p95": 0.6430000066757202,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.157,
+     "to": 27.96,
+     "n": null,
+     "pos_rmse_m": 0.04922986650065266,
+     "tilt_peak_deg": 2.536286924974071,
+     "pos_err_max_m": 0.061806591830521944
+    },
+    "n1": {
+     "from": 27.96,
+     "to": 37.268,
+     "n": 4,
+     "pos_rmse_m": 0.009946072170701805,
+     "tilt_peak_deg": 1.803535833307439,
+     "event": null,
+     "tensions": [
+      2.1687849462365594,
+      1.6018387096774194,
+      2.1671075268817206,
+      3.864483870967742
+     ],
+     "thr_p95": 0.6605000048875809,
+     "thr_cap_frac": 0.0
+    },
+    "n4": {
+     "from": 48.2,
+     "to": 57.269,
+     "n": 3,
+     "pos_rmse_m": 0.001224717277254089,
+     "tilt_peak_deg": 0.24229591026627972
+    },
+    "planner": {
+     "ticks": 935,
+     "solve_ms_p50": 35.2,
+     "solve_ms_p95": 101.42999999999999,
+     "solve_ms_max": 302.4,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 1.4371999999999998e-08,
+     "res_ms_p95": 6.5,
+     "late": 0.0010706638115631692,
+     "published": 491,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 1.887e-07
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "resize_wall_check_s": 0.2839014710535821,
+   "late_start_corrected": 0.0,
+   "late_end_stamped_check": 0.0,
+   "planner_rows_in_window": 711
+  },
+  "R2710": {
+   "run": "R2710",
+   "dir": "results/2026-10-23/R2710_sim_gz_s4_release9_3915_L100_it1",
+   "t_ready": 22.545,
+   "off_liftoff": 22.596000000000004,
+   "rtf": 0.26344593543076494,
+   "passed": true,
+   "exit": "stopped 2s after /fleet/landed at t=69.0",
+   "path_mm": 26.229493604095616,
+   "tilt_peak_deg": 6.457141987412398,
+   "s": {
+    "run": "R2710_sim_gz_s4_release9_3915_L100_it1",
+    "events": [
+     {
+      "t": 37.231,
+      "event": "RELEASE",
+      "drone": 1,
+      "peak_deg": 7.995132807503559,
+      "abs_peak_deg": 6.4571419874123706,
+      "settled_deg": 0.10258088788462957,
+      "resize_s": 0.32399999999999807,
+      "n_after": 3
+     }
+    ],
+    "stages": [
+     {
+      "from": 27.963,
+      "to": 37.231,
+      "n": 4,
+      "pos_rmse_m": 0.009640586643148388,
+      "tilt_peak_deg": 1.7685103446927959,
+      "event": null,
+      "tensions": [
+       2.174826086956522,
+       1.6270434782608694,
+       2.1743913043478256,
+       3.8171521739130445
+      ],
+      "thr_p95": 0.6615000069141388,
+      "thr_cap_frac": 0.0
+     },
+     {
+      "from": 42.231,
+      "to": 57.233,
+      "n": 3,
+      "pos_rmse_m": 0.001959113825389608,
+      "tilt_peak_deg": 0.5324048200470693,
+      "event": 37.231,
+      "tensions": [
+       3.2899866666666666,
+       3.290313333333333,
+       3.291913333333333
+      ],
+      "thr_p95": 0.6430000066757202,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.17,
+     "to": 27.963,
+     "n": null,
+     "pos_rmse_m": 0.047312942322797605,
+     "tilt_peak_deg": 2.6307779414038204,
+     "pos_err_max_m": 0.05874366073726233
+    },
+    "n1": {
+     "from": 27.963,
+     "to": 37.231,
+     "n": 4,
+     "pos_rmse_m": 0.009640586643148388,
+     "tilt_peak_deg": 1.7685103446927959,
+     "event": null,
+     "tensions": [
+      2.174826086956522,
+      1.6270434782608694,
+      2.1743913043478256,
+      3.8171521739130445
+     ],
+     "thr_p95": 0.6615000069141388,
+     "thr_cap_frac": 0.0
+    },
+    "n4": {
+     "from": 39.555,
+     "to": 57.233,
+     "n": 3,
+     "pos_rmse_m": 0.01375607778636515,
+     "tilt_peak_deg": 3.178017439443861
+    },
+    "planner": {
+     "ticks": 709,
+     "solve_ms_p50": 7.5,
+     "solve_ms_p95": 70.86,
+     "solve_ms_max": 82.6,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 0.00010018800000000002,
+     "res_ms_p95": 64.38000000000001,
+     "late": 0.0,
+     "published": 490,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 0.0019
+    },
+    "tracker_late_max": 0.0004621072088724584,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "s_raw": {
+    "run": "R2710_sim_gz_s4_release9_3915_L100_it1",
+    "events": [
+     {
+      "t": 37.231,
+      "event": "RELEASE",
+      "drone": 1,
+      "peak_deg": 7.995132807503559,
+      "abs_peak_deg": 6.4571419874123706,
+      "settled_deg": 0.10258088788462957,
+      "resize_s": null,
+      "n_after": null
+     }
+    ],
+    "stages": [
+     {
+      "from": 27.963,
+      "to": 37.231,
+      "n": 4,
+      "pos_rmse_m": 0.009640586643148388,
+      "tilt_peak_deg": 1.7685103446927959,
+      "event": null,
+      "tensions": [
+       2.0830588235294116,
+       1.5564705882352943,
+       2.088588235294118,
+       3.6746470588235294
+      ],
+      "thr_p95": 0.6615000069141388,
+      "thr_cap_frac": 0.0
+     },
+     {
+      "from": 42.231,
+      "to": 57.233,
+      "n": 4,
+      "pos_rmse_m": 0.001959113825389608,
+      "tilt_peak_deg": 0.5324048200470693,
+      "event": 37.231,
+      "tensions": [
+       2.1686133333333335,
+       1.6102800000000002,
+       2.1678599999999997,
+       3.8410933333333332
+      ],
+      "thr_p95": 0.6430000066757202,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.17,
+     "to": 27.963,
+     "n": null,
+     "pos_rmse_m": 0.047312942322797605,
+     "tilt_peak_deg": 2.6307779414038204,
+     "pos_err_max_m": 0.05874366073726233
+    },
+    "n1": {
+     "from": 27.963,
+     "to": 37.231,
+     "n": 4,
+     "pos_rmse_m": 0.009640586643148388,
+     "tilt_peak_deg": 1.7685103446927959,
+     "event": null,
+     "tensions": [
+      2.0830588235294116,
+      1.5564705882352943,
+      2.088588235294118,
+      3.6746470588235294
+     ],
+     "thr_p95": 0.6615000069141388,
+     "thr_cap_frac": 0.0
+    },
+    "n4": {
+     "from": 39.231,
+     "to": 57.233,
+     "n": 4,
+     "pos_rmse_m": 0.01690493282278499,
+     "tilt_peak_deg": 3.929313975244931
+    },
+    "planner": {
+     "ticks": 1088,
+     "solve_ms_p50": 8.5,
+     "solve_ms_p95": 67.865,
+     "solve_ms_max": 301.7,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 7.994349999999997e-05,
+     "res_ms_p95": 60.06499999999999,
+     "late": 0.010119595216191352,
+     "published": 490,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 0.0019
+    },
+    "tracker_late_max": 0.0004621072088724584,
+    "dropped": false,
+    "rejoins": [],
+    "void": true
+   },
+   "resize_wall_check_s": 0.31903760737595377,
+   "late_start_corrected": 0.0,
+   "late_end_stamped_check": 0.0,
+   "planner_rows_in_window": 709
+  },
+  "R2711": {
+   "run": "R2711",
+   "dir": "results/2026-10-23/R2711_sim_gz_s4_release9_3915_L100_it1",
+   "t_ready": 22.571,
+   "off_liftoff": 22.623,
+   "rtf": 0.24994669688093296,
+   "passed": true,
+   "exit": "stopped 2s after /fleet/landed at t=68.9",
+   "path_mm": 26.637771553074106,
+   "tilt_peak_deg": 6.961954199247242,
+   "s": {
+    "run": "R2711_sim_gz_s4_release9_3915_L100_it1",
+    "events": [
+     {
+      "t": 37.215,
+      "event": "RELEASE",
+      "drone": 1,
+      "peak_deg": 8.456438827774098,
+      "abs_peak_deg": 6.96195419924725,
+      "settled_deg": 0.10591410392001739,
+      "resize_s": 0.31399999999999295,
+      "n_after": 3
+     }
+    ],
+    "stages": [
+     {
+      "from": 27.937,
+      "to": 37.215,
+      "n": 4,
+      "pos_rmse_m": 0.009647281411628086,
+      "tilt_peak_deg": 1.681553511143026,
+      "event": null,
+      "tensions": [
+       2.174673913043478,
+       1.6269565217391304,
+       2.1743586956521743,
+       3.8171086956521743
+      ],
+      "thr_p95": 0.6634999960660934,
+      "thr_cap_frac": 0.0
+     },
+     {
+      "from": 42.215,
+      "to": 57.216,
+      "n": 3,
+      "pos_rmse_m": 0.002150116811540472,
+      "tilt_peak_deg": 0.5007562464286439,
+      "event": 37.215,
+      "tensions": [
+       3.2929000000000004,
+       3.29316,
+       3.294853333333333
+      ],
+      "thr_p95": 0.6430000066757202,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.144,
+     "to": 27.937,
+     "n": null,
+     "pos_rmse_m": 0.04794207689716803,
+     "tilt_peak_deg": 2.664007059607069,
+     "pos_err_max_m": 0.05909409319815297
+    },
+    "n1": {
+     "from": 27.937,
+     "to": 37.215,
+     "n": 4,
+     "pos_rmse_m": 0.009647281411628086,
+     "tilt_peak_deg": 1.681553511143026,
+     "event": null,
+     "tensions": [
+      2.174673913043478,
+      1.6269565217391304,
+      2.1743586956521743,
+      3.8171086956521743
+     ],
+     "thr_p95": 0.6634999960660934,
+     "thr_cap_frac": 0.0
+    },
+    "n4": {
+     "from": 39.528999999999996,
+     "to": 57.216,
+     "n": 3,
+     "pos_rmse_m": 0.013908211629353259,
+     "tilt_peak_deg": 3.1993286700773362
+    },
+    "planner": {
+     "ticks": 692,
+     "solve_ms_p50": 8.0,
+     "solve_ms_p95": 69.945,
+     "solve_ms_max": 78.7,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 0.00010342499999999997,
+     "res_ms_p95": 65.93499999999997,
+     "late": 0.001447178002894356,
+     "published": 490,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 0.002313
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": false
+   },
+   "s_raw": {
+    "run": "R2711_sim_gz_s4_release9_3915_L100_it1",
+    "events": [
+     {
+      "t": 37.215,
+      "event": "RELEASE",
+      "drone": 1,
+      "peak_deg": 8.456438827774098,
+      "abs_peak_deg": 6.96195419924725,
+      "settled_deg": 0.10591410392001739,
+      "resize_s": null,
+      "n_after": null
+     }
+    ],
+    "stages": [
+     {
+      "from": 27.937,
+      "to": 37.215,
+      "n": 4,
+      "pos_rmse_m": 0.009647281411628086,
+      "tilt_peak_deg": 1.681553511143026,
+      "event": null,
+      "tensions": [
+       2.083117647058824,
+       1.5564705882352943,
+       2.088588235294118,
+       3.674823529411764
+      ],
+      "thr_p95": 0.6634999960660934,
+      "thr_cap_frac": 0.0
+     },
+     {
+      "from": 42.215,
+      "to": 57.216,
+      "n": 4,
+      "pos_rmse_m": 0.002150116811540472,
+      "tilt_peak_deg": 0.5007562464286439,
+      "event": 37.215,
+      "tensions": [
+       2.1686533333333333,
+       1.6104733333333334,
+       2.16778,
+       3.8405333333333327
+      ],
+      "thr_p95": 0.6430000066757202,
+      "thr_cap_frac": 0.0
+     }
+    ],
+    "lift": {
+     "from": 18.144,
+     "to": 27.937,
+     "n": null,
+     "pos_rmse_m": 0.04794207689716803,
+     "tilt_peak_deg": 2.664007059607069,
+     "pos_err_max_m": 0.05909409319815297
+    },
+    "n1": {
+     "from": 27.937,
+     "to": 37.215,
+     "n": 4,
+     "pos_rmse_m": 0.009647281411628086,
+     "tilt_peak_deg": 1.681553511143026,
+     "event": null,
+     "tensions": [
+      2.083117647058824,
+      1.5564705882352943,
+      2.088588235294118,
+      3.674823529411764
+     ],
+     "thr_p95": 0.6634999960660934,
+     "thr_cap_frac": 0.0
+    },
+    "n4": {
+     "from": 39.215,
+     "to": 57.216,
+     "n": 4,
+     "pos_rmse_m": 0.017075249786956865,
+     "tilt_peak_deg": 3.8546288876971566
+    },
+    "planner": {
+     "ticks": 979,
+     "solve_ms_p50": 6.2,
+     "solve_ms_p95": 68.30999999999999,
+     "solve_ms_max": 297.8,
+     "failed": 0,
+     "unconverged": 0,
+     "res_eq_p95": 8.40179999999999e-05,
+     "res_ms_p95": 64.8,
+     "late": 0.02147239263803681,
+     "published": 490,
+     "published_res_over": 0,
+     "published_res_missing": 0,
+     "published_res_eq_max": 0.002313
+    },
+    "tracker_late_max": 0.0,
+    "dropped": false,
+    "rejoins": [],
+    "void": true
+   },
+   "resize_wall_check_s": 0.3179233260238874,
+   "late_start_corrected": 0.001447178002894356,
+   "late_end_stamped_check": 0.001447178002894356,
+   "planner_rows_in_window": 692
+  }
+ }
+}

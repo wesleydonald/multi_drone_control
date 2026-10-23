@@ -101,7 +101,7 @@ def _marker_array(name, topic, *namespaces):
 
 def build_config(n: int, *, show_actual: bool = False, detach: bool = False,
                  attach: bool = False, show_plan: bool = True,
-                 magnets: bool = False, magnet_on: bool = False,
+                 magnets: bool = False, magnet_on: bool = False, hidden_magnets=(),
                  width: int = 1400, height: int = 900) -> str:
     """Return a complete .rviz config for exactly `n` drones.
 
@@ -167,6 +167,9 @@ def build_config(n: int, *, show_actual: bool = False, detach: bool = False,
             enabled=False))
 
     body = "\n".join(displays)
+    # drones with no MAGNET row (combined M1: QUAD4's coil has one writer, magnet_gate_3)
+    hidden = (f'\n    HiddenMagnets: "{",".join(str(int(d)) for d in hidden_magnets)}"'
+              if hidden_magnets else '')
     return f"""Panels:
   - Class: rviz_common/Displays
     Name: Displays
@@ -178,7 +181,7 @@ def build_config(n: int, *, show_actual: bool = False, detach: bool = False,
     ShowDetach: {str(detach).lower()}
     ShowAttach: {str(attach).lower()}
     ShowMagnets: {str(magnets).lower()}
-    MagnetInitialOn: {str(magnet_on).lower()}
+    MagnetInitialOn: {str(magnet_on).lower()}{hidden}
     NumDrones: {n}
 Visualization Manager:
   Class: ""

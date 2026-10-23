@@ -2,6 +2,7 @@
 #include "test_common.hpp"
 
 #include <iostream>
+#include <functional>
 
 using namespace dynamic_planner;
 
@@ -91,6 +92,46 @@ int main() {
             found_b = found_b || obstacle.name == "m2d_ring_segment_01";
         }
         requireTrue(found_a && found_b, "cooperative batch update lost segmented obstacles");
+
+        world.upsertCooperativeTrajectory(cooperative);
+        world.upsertCooperativeTrajectories({segment_b, segment_a});
+        requireTrue(world.currentVersion() == before_batch + 1U,
+                    "identical single/batch updates advanced world version");
+
+        // Test each collision-relevant field independently, including tiny changes
+        // and disabled-geometry fields (no approximate equality or hidden state).
+        const std::vector<std::function<void(CooperativeObstacleTrajectory&)>> changes = {
+            [](auto& o) { o.trajectory = o.trajectory.shiftedToStartTime(0.0001); },
+            [](auto& o) { o.trajectory = linearTrajectory(Vec3(1e-12,0,1), Vec3(1,0,1), 0,1); },
+            [](auto& o) { o.physical_half_extents.x() += 1e-12; },
+            [](auto& o) { o.tracking_error_half_extents.y() += 1e-12; },
+            [](auto& o) { o.suspended_geometry.enabled = true; },
+            [](auto& o) { o.suspended_geometry.cable_length_m += .01; },
+            [](auto& o) { o.suspended_geometry.cable_radius_m += .001; },
+            [](auto& o) { o.suspended_geometry.max_swing_angle_rad += .01; },
+            [](auto& o) { o.suspended_geometry.magnet_half_extents.z() += .001; },
+            [](auto& o) { o.suspended_geometry.magnet_center_below_cable_end_m += .001; },
+            [](auto& o) { o.suspended_geometry.payload_attached = true; },
+            [](auto& o) { o.suspended_geometry.payload_half_extents.x() += .001; },
+            [](auto& o) { o.suspended_geometry.payload_center_from_magnet_center.x() += .001; },
+            [](auto& o) { o.attached_tether_geometry.enabled = true; },
+            [](auto& o) { o.attached_tether_geometry.anchor_from_body.x() += .001; },
+            [](auto& o) { o.attached_tether_geometry.plate_from_body.x() += .001; },
+            [](auto& o) { o.attached_tether_geometry.radius_m += .001; },
+        };
+        for (const auto& change : changes) {
+            VersionedWorld isolated;
+            isolated.upsertCooperativeTrajectory(cooperative);
+            auto modified = cooperative;
+            change(modified);
+            isolated.upsertCooperativeTrajectories({modified, segment_a});
+            requireTrue(isolated.currentVersion() == 2U, "changed batch must advance exactly once");
+            isolated.upsertCooperativeTrajectory(modified);
+            isolated.upsertCooperativeTrajectories({segment_a, modified});
+            requireTrue(isolated.currentVersion() == 2U, "repeated changed obstacle not idempotent");
+            isolated.upsertCooperativeTrajectory(cooperative);
+            requireTrue(isolated.currentVersion() == 3U, "single update lost a real field change");
+        }
 
         // C1F.4: ego closed-loop tracking allowance is part of the planned
         // cooperative collision geometry, not merely a runtime warning.

@@ -1,0 +1,4 @@
+# 22 Oct rig, two carriers (plates 0 and 6): the 5 s hover hold before the path (Wesley, after f3big: every flight
+# lifted 2-5 cm toward -x and only the hold lets the integral remove it), and the trackers' ring-tilt drop at 55 deg
+traj_hold_s: 5.0
+drop_tilt_deg: 55.0

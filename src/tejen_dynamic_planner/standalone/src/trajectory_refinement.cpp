@@ -133,11 +133,12 @@ void appendFixedSeparatorInequalities(const std::vector<IntervalSeparator>& sepa
         const SeparatingPlane& plane = *item.result.plane;
         const Vec3 normal = plane.normal;
         const double bound = 1.0 - plane.offset - margin_m * normal.norm();
-        const Matrix4& converter = converters.at(static_cast<std::size_t>(interval));
+        const Matrix4 vertex_map = item.ego_vertex_map.value_or(
+            converters.at(static_cast<std::size_t>(interval)).transpose());
         for (int vertex = 0; vertex < 4; ++vertex) {
             Eigen::VectorXd row = Eigen::VectorXd::Zero(nvar);
             for (int local_cp = 0; local_cp < 4; ++local_cp) {
-                const double coeff = converter(local_cp, vertex);
+                const double coeff = vertex_map(vertex, local_cp);
                 const int global_cp = interval + local_cp;
                 for (int axis = 0; axis < 3; ++axis) {
                     row(flatIndex(global_cp, axis)) += coeff * normal(axis);
@@ -164,12 +165,7 @@ SeparatorPostcheck separatorPostcheck(const ControlPoints& cps,
     double min_slack = std::numeric_limits<double>::infinity();
 
     for (const auto& item : raw_result.separators) {
-        const auto obstacle_it = std::find_if(
-            obstacles.begin(), obstacles.end(),
-            [&item](const TimeIndexedObstacle& obstacle) {
-                return obstacle.name == item.obstacle_name;
-            });
-        if (obstacle_it == obstacles.end() || !item.result.plane.has_value()) {
+        if (!item.result.plane.has_value()) {
             return {false, -std::numeric_limits<double>::infinity()};
         }
         const int interval = item.interval_index;
@@ -177,9 +173,30 @@ SeparatorPostcheck separatorPostcheck(const ControlPoints& cps,
             return {false, -std::numeric_limits<double>::infinity()};
         }
 
+        const Eigen::MatrixXd* obstacle_vertices = nullptr;
+        if (item.obstacle_vertices.has_value()) {
+            obstacle_vertices = &*item.obstacle_vertices;
+        } else {
+            const auto obstacle_it = std::find_if(
+                obstacles.begin(), obstacles.end(),
+                [&item](const TimeIndexedObstacle& obstacle) {
+                    return obstacle.name == item.obstacle_name;
+                });
+            if (obstacle_it == obstacles.end()) {
+                return {false, -std::numeric_limits<double>::infinity()};
+            }
+            obstacle_vertices = &obstacle_it->interval_vertices.at(
+                static_cast<std::size_t>(interval));
+        }
+        if (obstacle_vertices->rows() < 1 || obstacle_vertices->cols() != 3 ||
+            !obstacle_vertices->allFinite()) {
+            return {false, -std::numeric_limits<double>::infinity()};
+        }
         FourPoints q;
         q = cps.middleRows(interval, 4);
-        const FourPoints vertices = converters.at(static_cast<std::size_t>(interval)).transpose() * q;
+        const Matrix4 vertex_map = item.ego_vertex_map.value_or(
+            converters.at(static_cast<std::size_t>(interval)).transpose());
+        const FourPoints vertices = vertex_map * q;
         const SeparatingPlane& plane = *item.result.plane;
         const Eigen::VectorXd values = vertices * plane.normal
                                      + Eigen::VectorXd::Constant(4, plane.offset);
@@ -191,7 +208,7 @@ SeparatorPostcheck separatorPostcheck(const ControlPoints& cps,
 
         const SeparationResult recheck = separator.solve(
             vertices,
-            obstacle_it->interval_vertices.at(static_cast<std::size_t>(interval)));
+            *obstacle_vertices);
         if (!recheck.feasible) {
             return {false, min_slack};
         }

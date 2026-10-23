@@ -25,6 +25,7 @@ struct RecedingHorizonConfig {
     // Fast real-time profiles may use a fixed future splice instead of the
     // legacy runtime-scaled lookahead. Zero preserves the adaptive behavior.
     double fixed_splice_lookahead_s = 0.0;
+    TemporalRefinementConfig temporal_refinement;
     double factor_alloc = 1.0;
     double factor_alloc_close = 2.5;
     // Project-specific representation/search floor. RMADER's double-integrator
@@ -134,8 +135,8 @@ struct ReplanResult {
     double global_distance_from_splice_m = 0.0;
     double committed_endpoint_distance_m = 0.0;
     bool moving_target_terminal_active = false;
-    // True when the local waypoint is an intermediate receding-horizon target.
-    // Its terminal position is hard-constrained but terminal velocity is free.
+    // Legacy hard-position/free-velocity terminal diagnostic, retained for log
+    // compatibility. Intermediate goals now use Stopped and leave this false.
     bool local_continuation_active = false;
     bool moving_rendezvous_active = false;
     Vec3 terminal_target_velocity = Vec3::Zero();
@@ -180,6 +181,8 @@ struct ReplanResult {
     std::uint64_t planning_world_version = 0;
     std::uint64_t recheck_world_version = 0;
     std::uint64_t final_recheck_world_version = 0;
+    // Set only when the native version-gated commitment transaction succeeds.
+    std::optional<std::uint64_t> certified_world_version;
     std::string recheck_error;
     bool recheck_retry_performed = false;
     // C1F.8: explicit certificate that a failed replacement caused the core
@@ -226,6 +229,7 @@ public:
                         const FrozenWorld& world);
 
     bool goalSeen() const noexcept { return goal_seen_; }
+    void setPreviousSpliceTiming(double elapsed_s);
     bool goalReached(const State& state) const;
 
     // Seed authority with a pre-certified incumbent before the first moving
@@ -237,9 +241,11 @@ public:
     const CommittedTrajectory& committedTrajectory() const noexcept { return committed_; }
     double previousReplanRuntime() const noexcept { return previous_replan_runtime_s_; }
     double previousSpliceTiming() const noexcept { return previous_splice_timing_s_; }
+    // Resolve fixed/adaptive policy from this planner's actual configuration
+    // and history. Callers must not treat the adaptive zero sentinel as coverage.
+    double chooseSpliceLookahead() const;
 
 private:
-    double chooseSpliceLookahead() const;
     Vec3 projectLocalGoal(const Vec3& from) const;
     double allocateLocalDuration(const State& start,
                                  const Vec3& local_goal,

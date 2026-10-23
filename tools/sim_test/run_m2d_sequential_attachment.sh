@@ -17,6 +17,7 @@ case "$GOAL_ATTACHMENTS" in
   0|1|2|4) ;;
   *) echo "ERROR: M2D_GOAL_ATTACHMENTS must be 0, 1, 2, or 4"; exit 2 ;;
 esac
+ATTACHMENT_POLICY="${M2D_ATTACHMENT_POLICY:-legacy}"
 OPERATOR_HOLD="${M2D_OPERATOR_HOLD:-false}"
 SIMULTANEOUS="${M2D_SIMULTANEOUS:-false}"   # multi_drone_control: all four at once (testing)
 # multi_drone_control handover: dynamic 0.86 kg ring, his MPC ELRS via our per-drone
@@ -73,7 +74,9 @@ if [[ -f "$HOME/ros2_humble/install/setup.bash" ]]; then source "$HOME/ros2_humb
 source install/setup.bash
 
 printf 'Clearing stale thesis simulation / ROS processes before M2D...\n'
-bash "$REPO/tools/sim_test/cleanup_m2b_stale.sh"
+if [[ "${M2D_SKIP_CLEANUP:-false}" != "true" ]]; then
+  bash "$REPO/tools/sim_test/cleanup_m2b_stale.sh"
+fi
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 LOG_DIR="$REPO/logs/m2_attachment/m2d_sequential_${STAMP}"
@@ -553,6 +556,7 @@ start_managed ros2 launch tejen_mission m2d_four_drone_sequential.launch.py \
   gui:="$GUI" world_path:="$WORLD" m2d_log_dir:="$LOG_DIR" \
   octopus_pre_authority_max_runtime_s:="$PREAUTH_OCTOPUS_MAX_RUNTIME_S" \
   target_attachment_count:="$TARGET_ATTACHMENTS" \
+  attachment_policy:="$ATTACHMENT_POLICY" \
   operator_hold_after_goal:="$OPERATOR_HOLD" simultaneous:="$SIMULTANEOUS"
 BASE_LAUNCH_PGID="$LAST_MANAGED_PGID"
 

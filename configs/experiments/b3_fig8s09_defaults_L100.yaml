@@ -1,0 +1,67 @@
+name: b3_fig8s09_defaults_L100
+description: 'V1 (1m-defaults smoke, exploratory; Wesley 22 Oct): b3_fig8s09_h5_v200_L100_ema with no geometry or thrust map typed: cable, plates, pivot, masses, gates and the map from the 1 m profile (sim.yaml, common.yaml), fig8_size 0.9 typed (the profile''s too). Falsifier: a geometry refusal, a params.json value unlike the typed cell''s, a reference x-span not 1.8 m +- 1 cm, an abort or drop, or outside the size-0.9 band of its typed twin cell.'
+lab_env:
+  SIM_MOCAP_VEL_FILTER: 'ema'
+  MDC_MOCAP_VEL_DRONES: '0,1,2'
+world: three_rigid_ground_rig_L100.sdf
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    mode: dissipative
+    num_drones: 3
+    attach_azimuths_deg: 0,240,120
+    load_traj: fig_8
+    target_z: 1.0
+    fig8_size: 0.9
+    lift_ramp_vel: 0.15
+    params_file: /home/wesley/multi_drone_control/configs/rig/drop_and_land_hold5.yaml
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187
+    sim_pack_v0: 23.8
+    traj_speed: 0.2
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 3
+    sim_thrust_map: rig
+    sim_pack_v0: 23.8
+fleet:
+  num_drones: 3
+  n_total: 3
+timing:
+  duration_s: 146.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 91.0
+  do: LAND
+criteria:
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    baseline:
+      pos:
+      - 2.0
+      - -4.6
+      - 2.9
+      look_at:
+      - 0.35
+      - 0.0
+      - 1.1
+      hfov_deg: 60.0
+      size:
+      - 1280
+      - 720

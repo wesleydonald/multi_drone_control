@@ -1,0 +1,76 @@
+name: traj3_linex_v200
+description: 'Exploratory (15 Oct night, no card; plan 2026-10-15 overnight queue): the three-carrier rig carry on load_traj
+  line_x at traj_speed 0.2 m/s (radius 0.5 m, line distance 1.0 m) in the rig twin: Wesley''s rig plan for 15 Oct (all trajectories
+  with three quads, speeds from 0.125) moved to the twin after the noise stop. Mode dissipative (our planner), floor start,
+  target 1.0, lift 0.15, drop_on_loss on; LAND 40 s of motion + 8 s after the ring tops out. Falsifier: an abort, a drop,
+  or the ring''s tracking error growing past 0.15 m means this speed is not ready for the rig.'
+world: three_rigid_ground_rig.sdf
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    mode: dissipative
+    num_drones: 3
+    attach_azimuths_deg: 0,240,120
+    load_traj: line_x
+    target_z: 1.0
+    lift_ramp_vel: 0.15
+    creep_vel: 0.2
+    pretension_s: 3.0
+    start_taut: false
+    cable_len: 0.55
+    attach_radius: 0.225
+    attach_z: 0.02
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    load_mass: 0.86
+    drone_mass: 0.55
+    measure_rod_len: true
+    rod_tol_frac: 0.25
+    rod_spread_m: 0.08
+    z_taut_gate: 0.9
+    z_i_gate: 0.25
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    reconfig_mode: ocp
+    thrust_ratio: 35.2
+    takeoff_thrust_ratio: 0.0
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    throttle_max: 0.8
+    kt_trim: false
+    departed_land: true
+    departed_ground_idle: true
+    params_file: /home/wesley/multi_drone_control/configs/rig/drop_and_land.yaml
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187
+    sim_pack_v0: 23.8
+    traj_speed: 0.2
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 3
+    sim_thrust_map: rig
+    sim_pack_v0: 23.8
+fleet:
+  num_drones: 3
+  n_total: 3
+timing:
+  duration_s: 107.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 62.0
+  do: LAND
+criteria:
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
