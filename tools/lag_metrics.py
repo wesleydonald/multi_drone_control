@@ -74,8 +74,7 @@ def planner_lags(path):
     csv = sorted(run_logs.planner_csvs(path), key=lambda p: -os.path.getsize(p))[0]
     L = pd.read_csv(csv)
     prm = json.load(open(os.path.join(os.path.dirname(csv), 'params.json')))
-    traj = LoadTrajectory(prm.get('load_traj', 'orbit'), float(prm.get('traj_speed', 0.125)),
-                          float(prm.get('traj_distance', 1.0)), float(prm.get('traj_radius', 0.5)))
+    traj = LoadTrajectory.from_params(prm, kind='orbit', speed=0.125)
     hover = L[['load_x', 'load_y']].dropna().iloc[0].to_numpy(float)
     ref_lag = float(prm.get('plan_ref_lag_s') or 0.0)
     ticks = L[L.traj_t > 0].drop_duplicates('traj_t')

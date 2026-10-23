@@ -11,7 +11,7 @@ from launch_ros.utilities import evaluate_parameters
 
 LAUNCH = Path(__file__).resolve().parents[1] / 'launch' / 'partner_mission.launch.py'
 RIG_TYPED = {'real': 'true', 'contact_attach': 'true', 'contact_target_z': '0.031',
-             'magnet_drop_below_quad': '0.575', 'mpc_thrust_ratio': '22.0'}
+             'magnet_drop_below_quad': '0.575', 'mpc_thrust_ratio': '22.0', 'ring_cable_len': '0.55'}
 
 
 def _module():

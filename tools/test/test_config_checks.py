@@ -118,22 +118,89 @@ def test_a_world_in_old_worlds_flies_the_legacy_profile(tmp_path):
     assert not [a for a in m2.io_launch_argv() if a.startswith('sim_thrust_map')]
 
 
-def test_a_bare_twin_config_passes_on_the_defaults(tmp_path):
-    """World, fleet and events only: the sim defaults are the twin's, so nothing is typed."""
+def _bare(tmp_path, world, args=None, io=None, n=3, mode='mpc'):
     p = tmp_path / 'bare.yaml'
     p.write_text(yaml.safe_dump({
-        'name': 'bare', 'world': 'three_rigid_ground_rig.sdf',
-        'launch': {'package': 'bringup', 'file': 'sim_control_launch.py', 'args': {'mode': 'mpc'}},
-        'io_launch': {'file': 'sim_io_launch.py', 'args': {}},
-        'fleet': {'num_drones': 3, 'n_total': 3},
+        'name': 'bare', 'world': world,
+        'launch': {'package': 'bringup', 'file': 'sim_control_launch.py', 'args': {'mode': mode, **(args or {})}},
+        'io_launch': {'file': 'sim_io_launch.py', 'args': dict(io or {})},
+        'fleet': {'num_drones': n, 'n_total': n},
         'events': [{'t': 3.0, 'do': 'ARM'}]}))
-    cfg = R.checked_config(str(p))
+    return str(p)
+
+
+def test_a_bare_twin_config_passes_on_the_defaults(tmp_path):
+    """World, fleet and events only: the sim defaults are the twin's (1 m cables since 22 Oct), so nothing is typed;
+    a 0.55 m world needs its cable typed."""
+    cfg = R.checked_config(_bare(tmp_path, 'three_rigid_ground_rig_L100.sdf'))
     assert R.sim_thrust_maps(cfg) == ('rig', 'rig') and not cfg.legacy
+    with pytest.raises(SystemExit, match='cable_len: world 0.55'):
+        R.checked_config(_bare(tmp_path, 'three_rigid_ground_rig.sdf'))
+    R.checked_config(_bare(tmp_path, 'three_rigid_ground_rig.sdf', {'cable_len': 0.55}))
 
 
-def test_a_legacy_mode_on_a_twin_world_is_refused(tmp_path):
+def test_the_newcomers_rod_must_be_its_worlds_arm(tmp_path):
+    """attach_cable_len is QUAD4's rod from its pivot (Wesley 22 Oct): untyped it is the carriers' cable_len, the 1 m
+    arm; the body-to-tip typed in its place (+4 cm, every attach config before 22 Oct) is refused unless exempted."""
+    w = 'three_rigid_ground_rig_attach_L100.sdf'
+    a = {'num_drones': 3, 'legacy': False}
+    R.checked_config(_bare(tmp_path, w, a, mode='attach'))
+    with pytest.raises(SystemExit, match='attach_cable_len: world 1, controller 1.04'):
+        R.checked_config(_bare(tmp_path, w, {**a, 'attach_cable_len': 1.04}, mode='attach'))
+    raw = yaml.safe_load(open(_bare(tmp_path, w, {**a, 'attach_cable_len': 1.04}, mode='attach')))
+    raw['geometry_exempt'] = {'attach_cable_len': 'as flown'}
+    p = tmp_path / 'exempt.yaml'
+    p.write_text(yaml.safe_dump(raw))
+    R.checked_config(str(p))
+
+
+def test_the_newcomers_rod_is_compared_body_to_tip(tmp_path):
+    """A legacy newcomer's arm is 0.50 from a pivot 1 cm above its body and the legacy planner's pivot is the body: its
+    rod is 0.49, and a typed 0.50 is refused (left untyped, the legacy profile's 0.50 as flown is only reported); the
+    twin's body-to-tip 0.59 typed as its rod is refused too."""
+    w = 'old_worlds/three_attach_rod.sdf'
+    a = {'num_drones': 3, 'legacy': True, 'cable_len': 0.5}
+    R.checked_config(_bare(tmp_path, w, {**a, 'attach_cable_len': 0.49}, mode='attach'))
+    R.checked_config(_bare(tmp_path, w, a, mode='attach'))
+    with pytest.raises(SystemExit, match='attach_cable_len: world 0.49, controller 0.5'):
+        R.checked_config(_bare(tmp_path, w, {**a, 'attach_cable_len': 0.5}, mode='attach'))
+    tw, t = 'three_rigid_ground_rig_attach.sdf', {'num_drones': 3, 'legacy': False, 'cable_len': 0.55}
+    R.checked_config(_bare(tmp_path, tw, {**t, 'attach_cable_len': 0.55}, mode='attach'))
+    with pytest.raises(SystemExit, match='attach_cable_len: world 0.55, controller 0.59'):
+        R.checked_config(_bare(tmp_path, tw, {**t, 'attach_cable_len': 0.59}, mode='attach'))
+
+
+def test_the_twin_markers_take_the_worlds_rod_length(tmp_path):
+    """io tether_tips places each magnet marker tether_len along its rod: one that is not the world's rods is refused
+    (the launch default is 1.0 since 22 Oct)."""
+    tips = {'tether_tips': True}
+    R.checked_config(_bare(tmp_path, 'three_rigid_ground_rig_L100.sdf', io=tips))
+    with pytest.raises(SystemExit, match='tether_len 0.55 but the rods'):
+        R.checked_config(_bare(tmp_path, 'three_rigid_ground_rig_L100.sdf', io={**tips, 'tether_len': 0.55}))
+    with pytest.raises(SystemExit, match='tether_len 1 but the rods'):
+        R.checked_config(_bare(tmp_path, 'three_rigid_ground_rig.sdf', {'cable_len': 0.55}, io=tips))
+    R.checked_config(_bare(tmp_path, 'three_rigid_ground_rig.sdf', {'cable_len': 0.55},
+                           io={**tips, 'tether_len': 0.55}))
+
+
+def test_the_network_flies_the_twin_and_a_legacy_only_mode_is_refused(tmp_path, monkeypatch):
+    """mode network flies the rig twin (built 22 Oct, card 2026-10-23_paper_method_compare); a mode listed legacy-only
+    is still refused on a twin world."""
+    R.checked_config(_cfg(tmp_path, 'rig_twin_hover_fixed.yaml', launch__mode='network'))
+    from bringup import profiles
+    monkeypatch.setattr(profiles, 'LEGACY_ONLY', ('network',))
     with pytest.raises((SystemExit, RuntimeError), match='legacy:=true'):
         R.checked_config(_cfg(tmp_path, 'rig_twin_hover_fixed.yaml', launch__mode='network'))
+
+
+def test_a_typed_params_file_that_does_not_exist_is_refused(tmp_path):
+    """sim-C review (22 Oct): every C config named configs/twin/ before it existed, and --check passed."""
+    pf = tmp_path / 'knobs.yaml'
+    pf.write_text('traj_hold_s: 5.0\n')
+    R.checked_config(_cfg(tmp_path, 'rig_twin_hover_fixed.yaml', launch__params_file=str(pf)))
+    with pytest.raises(SystemExit, match='launch params_file not found: .*nowhere.yaml'):
+        R.checked_config(_cfg(tmp_path, 'rig_twin_hover_fixed.yaml',
+                              launch__params_file=str(tmp_path / 'nowhere.yaml')))
 
 
 def test_model_f1_pivot_needs_its_named_exemption(tmp_path):
@@ -141,10 +208,26 @@ def test_model_f1_pivot_needs_its_named_exemption(tmp_path):
         R.checked_config(_cfg(tmp_path, 'rig_twin_model_f1.yaml', geometry_exempt=None))
 
 
+def test_a_wrench_on_a_world_without_the_push_tool_is_refused(tmp_path):
+    R.checked_config(os.path.join(CONFIGS, 'app_pushz_none.yaml'))
+    with pytest.raises(SystemExit, match='WRENCH event but three_rigid_ground_rig.sdf has no ApplyLinkWrench'):
+        R.checked_config(_cfg(tmp_path, 'app_pushz_none.yaml', world='three_rigid_ground_rig.sdf'))
+
+
 def test_a_wrong_rod_length_is_refused_without_mis_seed(tmp_path):
     with pytest.raises(SystemExit, match='cable_len'):
         R.checked_config(_cfg(tmp_path, 'rig_twin_hover_fixed.yaml', launch__cable_len=0.5))
     R.checked_config(_cfg(tmp_path, 'rig_twin_hover_fixed.yaml', launch__cable_len=0.5, mis_seed=True))
+
+
+def test_a_typed_ring_inertia_must_agree_with_the_world(tmp_path, capsys):
+    """load_ixx / load_izz (card 2026-10-23_scalability): untyped or 0 the planner takes params.py's per-kg ring and
+    the runner only warns, as before; typed, they are refused when they disagree with the world's ring."""
+    R.checked_config(_cfg(tmp_path, 'rig_twin_hover_fixed.yaml', launch__load_ixx=0, launch__load_izz=0))
+    assert 'load_ixx' in capsys.readouterr().err
+    with pytest.raises(SystemExit, match='load_ixx'):
+        R.checked_config(_cfg(tmp_path, 'rig_twin_hover_fixed.yaml', launch__load_ixx=0.11, launch__load_izz=0.22))
+    R.checked_config(_cfg(tmp_path, 'rig_twin_hover_fixed.yaml', launch__load_ixx=2.227e-2, launch__load_izz=4.431e-2))
 
 
 # ── the sim launch, evaluated offline ────────────────────────────────────────

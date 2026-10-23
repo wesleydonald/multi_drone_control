@@ -81,7 +81,8 @@ def test_four_readiness_needs_every_vehicle_and_inbound_link():
 
 
 @pytest.mark.parametrize("flight_order", [None, ("drone_2", "drone_0", "drone_1", "drone_3")])
-def test_four_launch_builds_complete_stacks_and_three_peers(tmp_path, flight_order):
+@pytest.mark.parametrize("completion_mode", ["airborne_hold", "attach_park"])
+def test_four_launch_builds_complete_stacks_and_three_peers(tmp_path, flight_order, completion_mode):
     from launch import LaunchContext
     from launch_ros.utilities import evaluate_parameters
     from launch_ros.actions import Node
@@ -98,7 +99,7 @@ def test_four_launch_builds_complete_stacks_and_three_peers(tmp_path, flight_ord
     path.write_text(yaml.safe_dump(payload))
     context = LaunchContext()
     context.launch_configurations.update(mode="mission", config_file=str(path),
-        log_dir=str(tmp_path / "logs"), rviz="true", expected_vehicle_count="4")
+        log_dir=str(tmp_path / "logs"), rviz="true", expected_vehicle_count="4", completion_mode=completion_mode)
     actions = module._launch_setup(context)
     nodes = [a for a in actions if isinstance(a, Node)]
     timers = [a for a in actions if isinstance(a, TimerAction)]
@@ -118,6 +119,12 @@ def test_four_launch_builds_complete_stacks_and_three_peers(tmp_path, flight_ord
     supervisor = by_executable["m2d_fleet_supervisor"][0]
     assert list(supervisor["vehicle_ids"]) == list(flight_order or IDS)
     assert supervisor["target_attachment_count"] == 4
+    assert supervisor["completion_mode"] == completion_mode
+    for planner in by_executable["online_join_planner"]:
+        assert planner["m2b_completion_mode"] == completion_mode
+        if completion_mode == "attach_park":
+            assert planner["parking_max_radius_m"] == .50
+            assert planner["parking_disarm_height_above_rest_m"] == .02
     for p in by_executable["dynamic_planner_transfer_backend"]:
         peers = [v for v in IDS if v != p["vehicle_id"]]
         assert list(p["cooperative_vehicle_ids"]) == peers
@@ -133,6 +140,8 @@ def test_four_launch_builds_complete_stacks_and_three_peers(tmp_path, flight_ord
     for p in by_executable["main"]:
         assert p["require_external_arm_permission"] is True
     assert by_executable["m2_irl_mocap_router"][0]["hardware_identity_json"] == by_executable["m2_irl_fleet_manager"][0]["hardware_identity_json"]
+    if completion_mode == "attach_park":
+        payload["m2_irl"]["completion_mode"] = completion_mode
     assert yaml.safe_load((tmp_path / "logs/resolved_config.yaml").read_text()) == payload
     context.launch_configurations["expected_vehicle_count"] = "2"
     with pytest.raises(ValueError, match="vehicle count"):

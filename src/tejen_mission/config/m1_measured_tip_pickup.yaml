@@ -12,7 +12,7 @@ online_join_planner:
     pickup_alignment_capture_dwell_s: 0.5
     pickup_alignment_low_xy_m: 0.025
     pickup_alignment_low_dwell_s: 0.3
-    pickup_alignment_max_relative_speed_mps: 0.08
+    pickup_alignment_max_relative_speed_mps: 0.07
     pickup_alignment_high_xy_m: 0.05
     pickup_candidate_max_clearance_m: 0.005
     pickup_retry_enabled: true
@@ -23,7 +23,7 @@ online_join_planner:
     pickup_retry_max_rise_m: 0.20
     pickup_retry_clearance_m: 0.08
     pickup_retry_separation_dwell_s: 0.12
-    pickup_retry_max_attempts: 3
+    pickup_retry_max_attempts: 5
     pickup_proof_enabled: true
     pickup_proof_minimum_body_rise_m: 0.06
     pickup_proof_minimum_object_rise_m: 0.02

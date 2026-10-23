@@ -205,6 +205,7 @@ def test_input_loss_restarts_the_quiet_timer_on_the_real_return_path():
     p.inputs_ready = lambda: False
     p.invalidate_pickup_alignment = p.invalidate_target_alignment = lambda: None
     p.m2b_quiet_miss = None
+    p.m1_takeoff_mpc_mode_publisher = None                # his gentle-takeoff MPC mode (off)
     p.timer_callback()                                    # the input-loss return
     assert p.contact_quiet.elapsed_s == 0.0 and p.contact_tip_last is None
     for _ in range(30):                                   # 3 s more: not 4 s since the loss

@@ -35,6 +35,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String, Bool, Int32
 from interfaces.srv import SetArming
 from interfaces.msg import ELRSCommand, MotionCaptureState
+from utility_objects.position_limit import POS_LIMIT_SAMPLES, breach
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -182,6 +183,10 @@ class CentralController(Node):
         # his MPC's self-disarm never reached us). Not an FC failure: a brown-out or RX failsafe keeps 'armed'
         # (critic round 2, M-B)
         self.fc_disarm_land = bool(self.declare_parameter('fc_disarm_land', False).value)
+        # the position limit (Wesley 22 Oct; 0 = off until the critic, card 2026-10-22_position_limit): an airborne
+        # drone's x or y past +-pos_limit_m from the mocap origin lands the fleet (a LAND, never the emergency stop)
+        self.pos_limit_m = float(self.declare_parameter('pos_limit_m', 0.0).value)
+        self._limit_count = {}
         self._rest_z = {}
         self._pose_z = {}
         self._pose_speed = {}
@@ -196,7 +201,7 @@ class CentralController(Node):
             if self.tilt_fault_land:
                 self.create_subscription(Bool, f'/drone_{i}/tilt_fault',
                                          lambda msg, drone_id=i: self._tilt_fault_callback(msg, drone_id), cut_qos)
-            if self.landed_partner_cut or self.fc_disarm_land:
+            if self.landed_partner_cut or self.fc_disarm_land or self.pos_limit_m > 0.0:
                 self.create_subscription(MotionCaptureState, f'/drone_{i}/motion_capture_state',
                                          lambda msg, drone_id=i: self._tilt_pose_callback(msg, drone_id), 1)
             if self.landed_partner_cut:
@@ -263,6 +268,7 @@ class CentralController(Node):
             self._rest_z = dict(getattr(self, '_pose_z', {}))   # each drone's height at ARM: airborne is 0.1 above
             self._fc_flew, self._fc_landed_for = set(), set()
             self._fault_land_sent = False
+            self._limit_count = {}
             self._off_ring.clear()
             self._down_alone.clear()
             self._arm_fleet()
@@ -588,9 +594,9 @@ class CentralController(Node):
                          f"{self.mux_state.get(drone_id, 'none')}): its motors are cut: LAND, every drone lands.")
 
     def _fault_land(self, text):
-        """One LAND per flight for a fault of a drone the partner flies: the tilt fault and his stream's disarm can
-        both follow one upset, and the LAND they publish reaches _land_fleet only through the topic (critic round 2,
-        M-C)."""
+        """One LAND per flight for a fault that lands the fleet (a drone the partner flies; the position limit): the
+        tilt fault and his stream's disarm can both follow one upset, and the LAND they publish reaches _land_fleet
+        only through the topic (critic round 2, M-C)."""
         if self.landing or self._fault_land_sent:
             self.get_logger().warn(f"{text} (already landing)")
             return
@@ -606,6 +612,22 @@ class CentralController(Node):
         rest = self._rest_z.get(drone_id)
         if self._fc_armed.get(drone_id) and rest is not None and z > rest + FC_AIRBORNE_M:
             self._fc_flew.add(drone_id)
+        if getattr(self, 'pos_limit_m', 0.0) > 0.0:
+            self._limit_check(drone_id, msg.pose.position, rest)
+
+    def _limit_check(self, drone_id, p, rest):
+        """The position limit: drone_id's x or y past +-pos_limit_m on POS_LIMIT_SAMPLES poses in a row while it is
+        airborne (FC_AIRBORNE_M over its height at ARM, at most REST_Z_MAX_M) and the fleet flies: LAND, every drone
+        lands (once a flight, said once per excursion). On the floor, or flown by the partner, a drone past it changes
+        nothing (Wesley 22 Oct: his stream's landing point is his)."""
+        floor = REST_Z_MAX_M if rest is None else min(REST_Z_MAX_M, rest + FC_AIRBORNE_M)
+        # a drone the partner flies (QUAD4 before we take it over) is his: our limit does not land the fleet on it
+        ours = getattr(self, 'mux_state', {}).get(drone_id) not in ('partner', 'cut')
+        out = ours and self.flying and float(p.z) > floor and breach((p.x, p.y), self.pos_limit_m)
+        k = self._limit_count[drone_id] = self._limit_count.get(drone_id, 0) + 1 if out else 0
+        if k == POS_LIMIT_SAMPLES:
+            self._fault_land(f"POSITION LIMIT: drone {label(drone_id)} at x {float(p.x):+.2f}, y {float(p.y):+.2f} m, "
+                             f"past +-{self.pos_limit_m:.2f} m: LAND, every drone lands.")
 
     def _fc_state_callback(self, msg: String, drone_id: int):
         """The arm state of a drone the partner flies: armed and airborne (0.1 m over its height at ARM), then

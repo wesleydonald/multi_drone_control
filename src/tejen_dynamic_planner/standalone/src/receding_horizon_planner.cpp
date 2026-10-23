@@ -1,4 +1,5 @@
 #include "dynamic_planner/receding_horizon_planner.hpp"
+#include "dynamic_planner/execution_timing.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -48,12 +49,13 @@ RecedingHorizonPlanner::RecedingHorizonPlanner(
           local_config.octopus.a_max = config_.a_max;
           local_config.octopus.planning_radius_m = config_.planning_radius_m;
           local_config.octopus.goal_tolerance_m = config_.goal_tolerance_m;
+          local_config.octopus.temporal_refinement = config_.temporal_refinement;
           local_config.refinement.v_max = config_.v_max;
           local_config.refinement.a_max = config_.a_max;
           local_config.refinement.goal_acceptance_m = config_.goal_tolerance_m;
           return local_config;
       }()),
-      safety_checker_(config_.separator_validation_tolerance),
+      safety_checker_(config_.separator_validation_tolerance, config_.temporal_refinement),
       previous_splice_timing_s_(config_.initial_splice_timing_s) {
     validateConfig();
     if (!global_goal_.allFinite()) {
@@ -67,6 +69,8 @@ void RecedingHorizonPlanner::validateConfig() const {
         !(config_.max_splice_lookahead_s >= config_.min_splice_lookahead_s) ||
         !std::isfinite(config_.fixed_splice_lookahead_s) ||
         !(config_.fixed_splice_lookahead_s >= 0.0) ||
+        config_.temporal_refinement.max_depth < 0 ||
+        config_.temporal_refinement.max_child_tests == 0U ||
         (config_.fixed_splice_lookahead_s > 0.0 &&
          (config_.fixed_splice_lookahead_s < config_.min_splice_lookahead_s ||
           config_.fixed_splice_lookahead_s > config_.max_splice_lookahead_s)) ||
@@ -114,11 +118,15 @@ double RecedingHorizonPlanner::chooseSpliceLookahead() const {
     if (config_.fixed_splice_lookahead_s > 0.0) {
         return config_.fixed_splice_lookahead_s;
     }
-    const double timing = std::max(0.0, previous_splice_timing_s_);
-    const double ticks = std::max(1.0, std::ceil(timing / config_.dc_s));
-    const double raw = config_.factor_alpha * ticks * config_.dc_s;
-    return std::clamp(raw, config_.min_splice_lookahead_s,
-                      config_.max_splice_lookahead_s);
+    return adaptiveSpliceLookahead(previous_splice_timing_s_, config_.dc_s,
+        config_.factor_alpha, config_.min_splice_lookahead_s,
+        config_.max_splice_lookahead_s);
+}
+
+void RecedingHorizonPlanner::setPreviousSpliceTiming(double elapsed_s) {
+    if (!std::isfinite(elapsed_s) || elapsed_s < 0.0)
+        throw std::invalid_argument("invalid previous splice timing");
+    previous_splice_timing_s_ = elapsed_s;
 }
 
 Vec3 RecedingHorizonPlanner::projectLocalGoal(const Vec3& from) const {
@@ -342,17 +350,34 @@ ReplanResult RecedingHorizonPlanner::replan(
     // only permissible if that incumbent is still safe in the newest world.
     // Check beyond its finite endpoint as well because CommittedTrajectory
     // extends a certified stopped endpoint indefinitely.
-    auto revalidateRemainingIncumbent = [&](
-        double check_from_s, const std::string& unsafe_status) -> bool {
+    auto revalidateRemainingIncumbent = [&](const std::string& unsafe_status) -> bool {
         if (!had_incumbent) return true;
+        result.prefix_safety.reset();
         try {
-            const WorldSnapshot latest = world.snapshot(check_from_s);
+            const WorldSnapshot latest = world.snapshot(trajectoryNow());
+            // Rolling commitments may advance while the snapshot is acquired.
+            // Only the remaining incumbent at the post-acquisition clock needs
+            // certification; solve-finish time is diagnostic, not check origin.
+            const double check_from_s = trajectoryNow();
             result.recheck_world_version = latest.version;
             const double check_until_s = committed_.endsInStoppedHold()
                 ? std::max(committed_.endTime(),
                            check_from_s + config_.incumbent_failure_recheck_horizon_s)
                 : std::min(committed_.endTime(),
                            check_from_s + config_.incumbent_failure_recheck_horizon_s);
+            for (const auto& obstacle : latest.cooperative_obstacles) {
+                const auto& trajectory = obstacle.trajectory;
+                if (check_from_s < trajectory.startTime() - kTrajectoryTimeToleranceS ||
+                    (check_until_s > trajectory.endTime() + kTrajectoryTimeToleranceS &&
+                     !trajectory.endsInStoppedHold())) {
+                    std::ostringstream error;
+                    error << std::setprecision(17) << "obstacle=" << obstacle.name
+                          << " requested=[" << check_from_s << ',' << check_until_s
+                          << "] available=[" << trajectory.startTime() << ','
+                          << trajectory.endTime() << ']';
+                    throw std::invalid_argument(error.str());
+                }
+            }
             const auto safety_started = Clock::now();
             result.prefix_safety = safety_checker_.checkCommitted(
                 committed_, check_from_s, check_until_s, latest);
@@ -394,10 +419,11 @@ ReplanResult RecedingHorizonPlanner::replan(
                 }
             }
             return true;
-        } catch (const std::exception&) {
+        } catch (const std::exception& exc) {
             // Fail closed: an incumbent that cannot be revalidated after a
             // failed replacement must not be treated as certified.
             result.incumbent_prefix_unsafe = true;
+            result.recheck_error = std::string("incumbent remaining-prefix: ") + exc.what();
             result.status = "INCUMBENT_RECHECK_FAILED:" + unsafe_status;
             return false;
         }
@@ -555,7 +581,9 @@ ReplanResult RecedingHorizonPlanner::replan(
             result.local_goal = final_goal;
             result.local_duration_s = duration_s;
             result.moving_target_terminal_active = final_rendezvous;
-            result.local_continuation_active = prediction_covers_terminal && !final_rendezvous;
+            // Outside the rendezvous radius this is only a soft intermediate
+            // goal. MADER's stopped terminal leaves its position free so an
+            // obstructed projected waypoint does not force an infeasible tail.
             result.moving_rendezvous_active = final_rendezvous;
             result.terminal_target_velocity = final_terminal_velocity;
             result.global_distance_from_splice_m = final_distance;
@@ -594,10 +622,6 @@ ReplanResult RecedingHorizonPlanner::replan(
         request.terminal_boundary.mode = TerminalMode::MovingRendezvous;
         request.terminal_boundary.position = result.local_goal;
         request.terminal_boundary.velocity = result.terminal_target_velocity;
-    } else if (result.local_continuation_active) {
-        request.terminal_boundary.mode = TerminalMode::Continuation;
-        request.terminal_boundary.position = result.local_goal;
-        request.terminal_boundary.velocity.setZero();
     } else {
         request.terminal_boundary.mode = TerminalMode::Stopped;
         request.terminal_boundary.position = result.local_goal;
@@ -670,7 +694,6 @@ ReplanResult RecedingHorizonPlanner::replan(
             try {
                 result.candidate_finish_time_s = trajectoryNow();
                 (void)revalidateRemainingIncumbent(
-                    result.candidate_finish_time_s,
                     "INCUMBENT_REMAINING_UNSAFE_AFTER_" + local_failure);
             } catch (const std::exception&) {
                 result.incumbent_prefix_unsafe = true;
@@ -699,13 +722,12 @@ ReplanResult RecedingHorizonPlanner::replan(
         result.status = "TRAJECTORY_TIME_INVALID";
         return finish(std::move(result));
     }
-    if (had_incumbent && result.candidate_finish_time_s >= splice_time - 1e-12) {
+    if (had_incumbent && !strictlyBeforeSplice(result.candidate_finish_time_s, splice_time)) {
         result.candidate_late = true;
         result.status = "LATE_CANDIDATE_REJECTED";
         result.committed_endpoint_distance_m =
             (committed_.endState().position - global_goal_).norm();
         (void)revalidateRemainingIncumbent(
-            result.candidate_finish_time_s,
             "INCUMBENT_REMAINING_UNSAFE_AFTER_LATE_CANDIDATE");
         return finish(std::move(result));
     }
@@ -718,7 +740,7 @@ ReplanResult RecedingHorizonPlanner::replan(
 
     std::optional<TrajectoryPiece> rendezvous_backup_piece;
     const bool moving_nominal_needs_stopped_backup =
-        result.moving_target_terminal_active || result.local_continuation_active;
+        result.moving_target_terminal_active;
     if (moving_nominal_needs_stopped_backup) {
         try {
             const State terminal_state = evaluateCubicState(
@@ -741,7 +763,6 @@ ReplanResult RecedingHorizonPlanner::replan(
             result.status = "RENDEZVOUS_BACKUP_BUILD_FAILED";
             if (had_incumbent) {
                 (void)revalidateRemainingIncumbent(
-                    result.candidate_finish_time_s,
                     "INCUMBENT_REMAINING_UNSAFE_AFTER_RENDEZVOUS_BACKUP_BUILD_FAILED");
             }
             return finish(std::move(result));
@@ -767,7 +788,7 @@ ReplanResult RecedingHorizonPlanner::replan(
             result.status = "TRAJECTORY_TIME_INVALID";
             return false;
         }
-        if (had_incumbent && check_from_s >= splice_time - 1e-12) {
+        if (had_incumbent && !strictlyBeforeSplice(check_from_s, splice_time)) {
             result.candidate_late = true;
             result.status = "LATE_CANDIDATE_REJECTED_AFTER_RECHECK";
             return false;
@@ -930,7 +951,6 @@ ReplanResult RecedingHorizonPlanner::replan(
                 (committed_.endState().position - global_goal_).norm();
             if (!result.incumbent_prefix_unsafe) {
                 (void)revalidateRemainingIncumbent(
-                    result.candidate_finish_time_s,
                     "INCUMBENT_REMAINING_UNSAFE_AFTER_CANDIDATE_REJECTION");
             }
         }
@@ -951,7 +971,7 @@ ReplanResult RecedingHorizonPlanner::replan(
                     return;
                 }
                 if (had_incumbent &&
-                    result.authority_decision_time_s >= splice_time - 1e-12) {
+                    !strictlyBeforeSplice(result.authority_decision_time_s, splice_time)) {
                     commit_deadline_passed = true;
                     return;
                 }
@@ -973,6 +993,7 @@ ReplanResult RecedingHorizonPlanner::replan(
                 }
                 if (result.splice_diagnostics.accepted) {
                     committed_ = std::move(updated);
+                    result.certified_world_version = version;
                 }
             });
         result.atomic_commit_s +=
@@ -1084,14 +1105,12 @@ ReplanResult RecedingHorizonPlanner::replan(
         result.status = result.recheck_retry_performed
             ? "ACCEPTED_AFTER_RECHECK_MOVING_TARGET_PURSUIT"
             : "ACCEPTED_MOVING_TARGET_PURSUIT";
-    } else if (!result.local_continuation_active &&
+    } else if ((!result.target_time_prediction_valid ||
+                result.global_distance_from_splice_m <= config_.planning_radius_m) &&
                result.committed_endpoint_distance_m <= config_.goal_tolerance_m) {
-        // A continuation candidate may pass through the mission goal region while
-        // still carrying an appended brake-to-hover safety tail. Do not freeze
-        // replanning on the nominal/local continuation endpoint: the committed
-        // trajectory that will actually execute can stop materially away from the
-        // mission goal. Only a non-continuation terminal candidate may latch
-        // goal_seen_.
+        // A stopped tail at an intermediate projected goal is not a completed
+        // rendezvous. Keep pursuing a predicted target outside the local radius,
+        // independently of the legacy hard-continuation diagnostic.
         goal_seen_ = true;
         result.status = result.recheck_retry_performed
             ? "ACCEPTED_AFTER_RECHECK_GOAL_SEEN"

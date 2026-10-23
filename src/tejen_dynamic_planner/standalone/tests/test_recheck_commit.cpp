@@ -165,11 +165,14 @@ void rollingRecheck(const std::string& scenario) {
     const auto result = planner.replan(100.0, start, world, [&]() { return clock_s; });
     if (scenario == "first" || scenario == "final") {
         requireTrue(result.accepted, "rolling " + scenario + " recheck rejected: " + result.status + ": " + result.recheck_error);
+        requireTrue(result.certified_world_version == (scenario == "first" ? 1U : 2U),
+                    "accepted candidate lacks its atomic certification version");
         requireTrue(result.prefix_safety.has_value(), "missing remaining-prefix certificate");
         requireNear(result.prefix_safety->checked_from_s, scenario == "first" ? 100.030 : 100.060, 1e-9,
                     "prefix did not start at post-snapshot clock");
     } else {
         requireTrue(!result.accepted, "invalid candidate gained authority: " + scenario);
+        requireTrue(!result.certified_world_version, "rejection acquired certification version");
         requireTrue(planner.committedTrajectory().pieceCount() == before.pieceCount(), "rejection mutated incumbent pieces");
         requireNear(planner.committedTrajectory().endTime(), before.endTime(), 1e-9, "rejection mutated incumbent time");
         requireMatrixNear(planner.committedTrajectory().endState().position, before.endState().position, 1e-12,
@@ -194,15 +197,66 @@ void rollingRecheck(const std::string& scenario) {
     }
 }
 
+void failedRollingRecheck(const std::string& scenario) {
+    State start;
+    start.position = Vec3(0, 0, 1.5);
+    auto config = makeConfig();
+    config.fixed_splice_lookahead_s = .10;
+    RecedingHorizonPlanner planner(Vec3(3, 0, 1.5), config, makeLocalConfig());
+    planner.initializeCommittedTrajectory(makeStationaryHoverTrajectory(start.position, 99., .1));
+    const auto before = planner.committedTrajectory();
+    // Replacement failure is deterministic; the latest world no longer contains
+    // the blocker. Only its rolling peer commitment matters to the incumbent.
+    auto latest = emptySnapshot(2);
+    CooperativeObstacleTrajectory peer;
+    peer.name = "failure_rolling_peer";
+    peer.trajectory = makeStationaryHoverTrajectory(Vec3(0, 10, 1.5),
+        scenario == "failure_gap" ? 100.040 : 100.025, 20.);
+    latest.cooperative_obstacles.push_back(peer);
+    if (scenario == "failure_collision") {
+        latest.physical_static_obstacles.push_back(
+            {"remaining_blocker", boxVertices(start.position, Vec3::Constant(.2))});
+    }
+    double clock_s = 100.;
+    ScriptedWorld world;
+    world.snapshots = {blockedSnapshot(1, Vec3(1.5, 0, 1.5), Vec3(3, 3, 2)), latest};
+    world.after_snapshot = [&](std::size_t i) { clock_s = i == 0 ? 100.020 : 100.030; };
+    const auto result = planner.replan(100., start, world, [&]() { return clock_s; });
+    requireTrue(!result.accepted, "failed replacement unexpectedly committed");
+    requireNear(planner.committedTrajectory().endTime(), before.endTime(), 1e-12,
+                "failure-path recheck mutated incumbent");
+    if (scenario == "failure_safe") {
+        requireTrue(!result.incumbent_prefix_unsafe,
+                    "safe remaining incumbent rejected: " + result.status);
+        requireTrue(result.incumbent_recheck_performed && result.prefix_safety &&
+                    result.prefix_safety->safe, "missing failure-path safe certificate");
+        requireNear(result.prefix_safety->checked_from_s, 100.030, 1e-9,
+                    "failure-path prefix did not use post-snapshot time");
+    } else {
+        requireTrue(result.incumbent_prefix_unsafe, "real remaining-prefix hazard ignored");
+        if (scenario == "failure_collision") {
+            requireTrue(result.prefix_safety && !result.prefix_safety->safe,
+                        "remaining-prefix collision lacks certificate");
+        } else {
+            requireTrue(!result.prefix_safety, "coverage failure retained obsolete prefix result");
+        }
+    }
+}
+
 int main(int argc, char** argv) {
     try {
         if (argc == 2) {
-            rollingRecheck(argv[1]);
+            const std::string scenario(argv[1]);
+            if (scenario.find("failure_") == 0) failedRollingRecheck(scenario);
+            else rollingRecheck(scenario);
             std::cout << "rolling " << argv[1] << ": PASS\n";
             return 0;
         }
         for (const auto& scenario : {"first", "final", "gap", "late", "commit_late", "collision", "race"}) {
             rollingRecheck(scenario);
+        }
+        for (const auto& scenario : {"failure_safe", "failure_gap", "failure_collision"}) {
+            failedRollingRecheck(scenario);
         }
         State start;
         start.position = Vec3(0.0, 0.0, 1.5);

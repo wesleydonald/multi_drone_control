@@ -2,6 +2,8 @@ name: tc_t0_off_transit
 description: 'T0 baseline, switch OFF: MOCAP_TILT on QUAD4 (90 deg over 0.3 s, held 2 s), 2 s into his transit (1.4 m from the carriers); expected: no cut, no LAND, QUAD4 armed, the LAND take-back stuck, QUAD4 armed after LANDED (card 2026-10-11_quad4_tilt_cut rev 3; exploratory until the claim)'
 world: three_rigid_ground_rig_attach_pickup.sdf
 ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

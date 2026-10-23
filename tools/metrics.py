@@ -295,6 +295,42 @@ def contour_lag(t, payload_xy, desired_xy, mask=None, full=False):
     return out
 
 
+def segment_error(xyz, x0, x1, y0, z0, past_end=True):
+    """Distance of each sample to the straight segment from x0 to x1 along x at (y0, z0): its sideways and height
+    error plus how far past either end it is. y0 and z0 may be per sample (the published reference). The clock-free
+    error of a line_x shuttle (card 2026-10-23_paper_method_compare): a ring late on the line scores nothing for the
+    lag, one past an end scores the overshoot. past_end False drops that along-line term (the distance to the line),
+    for a headline whose reach term already counts the overshoot (the card's critic, M2)."""
+    p = np.asarray(xyz, float)
+    lo, hi = min(float(x0), float(x1)), max(float(x0), float(x1))
+    past = np.maximum(0.0, np.maximum(p[:, 0] - hi, lo - p[:, 0])) if past_end else 0.0
+    return np.sqrt(past ** 2 + (p[:, 1] - np.asarray(y0, float)) ** 2 + (p[:, 2] - np.asarray(z0, float)) ** 2)
+
+
+def turnaround_reach(t, x, t_path0, period, x0, x1, t_end=None):
+    """How far short of each end a line_x shuttle (x0 -> x1 -> x0 ..., an end every half period from t_path0) turned:
+    per commanded reversal, the end minus the ring's furthest x toward it within half a period of the reversal (to
+    t_end), + = short, - = past it. The clock-free error cannot see a line flown short (offline: 6.8 cm short scored
+    10 mm). Half a period, so a ring up to T/2 late still turns inside the window (a quarter is 1.18 s at 0.6 m/s,
+    about the port's offline lag). Only reversals at least a quarter period before t_end (default: the last sample)
+    count, so the start and the final arrival are not reversals. Returns [(t_reversal, end x, shortfall m)]."""
+    t = np.asarray(t, float)
+    x = np.asarray(x, float)
+    T = float(period)
+    t_end = float(t[-1]) if t_end is None else float(t_end)
+    d = abs(float(x1) - float(x0))
+    u = (x - float(x0)) * (1.0 if x1 >= x0 else -1.0)           # along the line, from x0 toward x1
+    out, m = [], 1
+    while T > 0.0 and t_path0 + 0.5 * m * T + 0.25 * T <= t_end + 1e-9:
+        tr = t_path0 + 0.5 * m * T
+        sel = (t >= tr - 0.5 * T) & (t <= min(tr + 0.5 * T, t_end + 1e-9)) & np.isfinite(u)
+        if np.any(sel):
+            far = m % 2 == 1
+            out.append((tr, float(x1 if far else x0), d - float(np.max(u[sel])) if far else float(np.min(u[sel]))))
+        m += 1
+    return out
+
+
 def fit_circle(xy):
     """Least-squares circle (centre, radius) through points: the algebraic (Kasa) fit."""
     p = np.asarray(xy, float)

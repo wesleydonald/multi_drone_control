@@ -99,6 +99,30 @@ def test_slot_builds_both_solvers_before_the_run():
     assert warm.endswith('exec "$@"') and cmd[k + 4:k + 6] == ['python3', 'tools/run_experiment.py']
 
 
+def test_the_warm_up_can_build_what_the_config_loads():
+    """--warm-from-config (card 2026-10-23_scalability): every resize size, the ring inertia and the rod model of the
+    config, built in the slot before the run; off, the warm-up is the fleet size with its masses, as before."""
+    cfg = ExperimentConfig.from_yaml(CFG)
+    job = LB.Job(CFG, cfg, 'R0900', '/x/results/2026-10-01/R0900_sim_gz_rig_twin_hover_fixed', '2026-10-01')
+    assert not job.warm_from_config
+    job.warm_from_config = True
+    cmd = job.command(1, 12, 10)
+    warm = cmd[cmd.index('bash') + 2]
+    assert warm.startswith('cd /scratch/slot1 && python3 /home/wesley/multi_drone_control/tools/prebuild_planner.py '
+                           '--from-config /home/wesley/multi_drone_control/configs/experiments/'
+                           'rig_twin_hover_fixed.yaml && ')
+    assert '_solver_is_fresh() or c.generate_ocp_controller()' in warm and '--cpus 12' in ' '.join(cmd)
+
+
+def test_a_resizing_config_warms_every_size_it_resizes_through():
+    """A slot's cache holds one solver per size: a config whose planner resizes (every detach-mode OCP flight) gets
+    the --from-config warm-up without the flag, so nothing another ring's batch evicted compiles in the ready window."""
+    assert LB.planner_sizes(CFG) == [4]
+    s8 = os.path.join(REPO, 'configs', 'experiments', 's8_chain4_R50_L100_it1.yaml')
+    assert LB.planner_sizes(s8) == list(range(2, 9))
+    assert LB.planner_sizes(os.path.join(REPO, 'configs', 'experiments', 'b4_hover_L100_ema.yaml')) == [2, 3, 4]
+
+
 def test_preallocated_run_dir_needs_a_run_id(tmp_path):
     d, rid = R.preallocated(str(tmp_path / 'R0901_sim_gz_a'))
     assert rid == 'R0901' and os.path.isdir(os.path.join(d, 'logs'))

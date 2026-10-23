@@ -42,6 +42,18 @@ from interfaces.msg import ELRSCommand
 from tf_transformations import quaternion_multiply, quaternion_inverse, quaternion_matrix
 
 
+def due(queue, now, delay):
+    """Pop the entries of a command queue [(t_arrival, ...)] whose delay has passed at now; the latest, or None."""
+    last = None
+    while queue and queue[0][0] <= now - delay:
+        last = queue.popleft()
+    return last
+
+
+def _env_float(name):
+    return float(os.environ.get(name, '0.0'))
+
+
 class PayloadBetaflightComm(Node):
     def __init__(self):
         super().__init__('payload_betaflight_comm')
@@ -135,11 +147,23 @@ class PayloadBetaflightComm(Node):
         self._active = False
         # > 0: each command takes effect this long after it arrives, standing in for the rig's
         # radio, Betaflight filtering and motor lag (default from SIM_CMD_DELAY_S; 0 = off)
-        self._cmd_delay = float(self.declare_parameter(
-            'cmd_delay_s', float(os.environ.get('SIM_CMD_DELAY_S', '0.0'))).value)
-        self._cmd_queue = collections.deque()
-        if self._cmd_delay > 0.0:
-            self.get_logger().warn(f'[BF{self.drone_id}] command delay {self._cmd_delay:.3f} s')
+        self._cmd_delay = float(self.declare_parameter('cmd_delay_s', _env_float('SIM_CMD_DELAY_S')).value)
+        # sim time (s) from which the delays apply (default from SIM_CMD_DELAY_FROM_S; 0 = from the start): the drones
+        # flipped in the takeoff creep with the delay on from the start (R1100, 7 Oct)
+        self._cmd_delay_from = float(self.declare_parameter(
+            'cmd_delay_from_s', _env_float('SIM_CMD_DELAY_FROM_S')).value)
+        # extra delay on the throttle / on the three rates over cmd_delay_s (SIM_CMD_DELAY_THR_S / _ATT_S): the rig's
+        # throttle reaches lift later than the twin's while its rates answer sooner (card 2026-10-23_pair_mode_timing)
+        self._d_thr = self._cmd_delay + float(self.declare_parameter(
+            'cmd_delay_thr_s', _env_float('SIM_CMD_DELAY_THR_S')).value)
+        self._d_att = self._cmd_delay + float(self.declare_parameter(
+            'cmd_delay_att_s', _env_float('SIM_CMD_DELAY_ATT_S')).value)
+        self._att_queue, self._thr_queue = collections.deque(), collections.deque()
+        self._att, self._thr = None, None
+        if self._d_thr > 0.0 or self._d_att > 0.0:
+            self.get_logger().warn(
+                f'[BF{self.drone_id}] command delay thr {self._d_thr:.3f} s att {self._d_att:.3f} s '
+                f'from t {self._cmd_delay_from:.1f} s')
 
     # ------------------------------------------------------------------
     def _on_rate_params(self, params):
@@ -234,12 +258,34 @@ class PayloadBetaflightComm(Node):
             self.motor_pub.publish(msg_out)
 
     def _apply_due_cmds(self):
-        """Apply the queued commands whose delay has passed (sim time)."""
-        if not self._cmd_queue:
+        """Apply the queued commands whose delay has passed (sim time), each channel group on its own delay."""
+        if not (self._att_queue or self._thr_queue):
             return
         now = self.get_clock().now().nanoseconds * 1e-9
-        while self._cmd_queue and self._cmd_queue[0][0] <= now - self._cmd_delay:
-            _, self.set_point, self._active = self._cmd_queue.popleft()
+        a = due(self._att_queue, now, self._d_att)
+        if a is not None:
+            self._att = a[1]
+        t = due(self._thr_queue, now, self._d_thr)
+        if t is not None:
+            _, self._thr, self._active = t
+        self._compose_set_point()
+
+    def _compose_set_point(self):
+        if self._att is not None and self._thr is not None:
+            self.set_point = [self._att[0], self._att[1], self._thr, self._att[2]]
+
+    def _route_cmd(self, now, att, throttle, active):
+        """A new command: each channel group straight into effect, or queued once its delay is on."""
+        late = now >= self._cmd_delay_from
+        if self._d_att > 0.0 and late:
+            self._att_queue.append((now, att))
+        else:
+            self._att = att
+        if self._d_thr > 0.0 and late:
+            self._thr_queue.append((now, throttle, active))
+        else:
+            self._thr, self._active = throttle, active
+        self._compose_set_point()
 
     def _imu_cb(self, msg: Imu):
         """One rate-loop step per gyro sample, dt from the sensor stamps (sim time).
@@ -306,12 +352,8 @@ class PayloadBetaflightComm(Node):
         if msg.armed and throttle < 0.05 * 4631:
             throttle = 0.05 * 4631
 
-        set_point = [roll_rate, pitch_rate, throttle, yaw_rate]
         active = integrate_active(msg.armed, u, self._i_min_u)
-        if self._cmd_delay > 0.0:
-            self._cmd_queue.append((self.get_clock().now().nanoseconds * 1e-9, set_point, active))
-        else:
-            self.set_point, self._active = set_point, active
+        self._route_cmd(self.get_clock().now().nanoseconds * 1e-9, (roll_rate, pitch_rate, yaw_rate), throttle, active)
         if (self.rate_source == 'imu' and msg.armed and self._imu_n == 0
                 and not self._warned_no_imu):
             self._warned_no_imu = True

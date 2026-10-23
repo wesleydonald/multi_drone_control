@@ -118,7 +118,7 @@ def test_stale_or_unseparated_ring_never_authorises_lateral_motion():
     np.testing.assert_allclose(decision.target_position[:2], [.22, 0.])
 
 
-def test_loss_during_pad_return_holds_current_xy_instead_of_reapproaching_ring():
+def test_verified_separation_survives_return_gap_dip_and_stale_return_resumes():
     exit = GroundRingExit([.22, 0., .60], [.60, 0.], started_s=0.)
     exit.step(.30, face_gap_m=.10, fresh=True,
               body_position=[.22, 0., .60], body_speed_mps=0.)
@@ -126,11 +126,15 @@ def test_loss_during_pad_return_holds_current_xy_instead_of_reapproaching_ring()
                      body_position=[.22, 0., .60], body_speed_mps=0.).stage == "return"
     decision = exit.step(.50, face_gap_m=.02, fresh=True,
                          body_position=[.40, 0., .65], body_speed_mps=0.)
-    assert decision.stage == "blocked"
-    np.testing.assert_allclose(decision.target_position[:2], [.40, 0.])
+    assert decision.stage == "return"  # clearance is an entry certificate, not a return gate
+    np.testing.assert_allclose(decision.target_position[:2], [.60, 0.])
+    stale = exit.step(.55, face_gap_m=float('nan'), fresh=False,
+                      body_position=[.40, 0., .65], body_speed_mps=0.)
+    assert stale.stage == "return" and not stale.ready_to_land
+    np.testing.assert_allclose(stale.target_position[:2], [.40, 0.])
     later = exit.step(.60, face_gap_m=.02, fresh=True,
                       body_position=[.43, 0., .65], body_speed_mps=0.)
-    np.testing.assert_allclose(later.target_position[:2], [.40, 0.])
+    np.testing.assert_allclose(later.target_position[:2], [.60, 0.])
 
 
 
@@ -152,6 +156,9 @@ def test_ground_launch_owns_one_udp_reader_and_one_measured_commitment():
     launch = (PACKAGE / "launch/m1_irl_ground_ring.launch.py").read_text()
     backend = (ROOT / "src/tejen_dynamic_planner/launch/"
                "c1f_irl_m1_virtual_ring_backend.launch.py").read_text()
+    assert "'stopped_continuation_enabled': 'true'" in launch
+    assert "'c1f2_stopped_continuation_enabled': True" in launch
+    assert "'external_reference_validate_timing': True" in launch
     assert launch.count("executable='motion_capture_publisher_irl'") == 1
     assert "m1_ground_ring.yaml" in launch
     assert "ring_commitment_topic" in launch

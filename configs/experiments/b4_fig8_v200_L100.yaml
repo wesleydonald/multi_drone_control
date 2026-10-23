@@ -12,6 +12,7 @@ launch:
     num_drones: 4
     attach_azimuths_deg: 0,270,180,90
     load_traj: fig_8
+    fig8_size: 0.5
     target_z: 1.0
     lift_ramp_vel: 0.15
     creep_vel: 0.2

@@ -2,6 +2,8 @@ name: twin_r8a_dry_b051
 description: 'Body-to-tip baseline (card 2026-10-09_newcomer_body_to_tip, section 4): twin_r8a_dry with attach_cable_len
   typed 0.51, so body_to_tip = 0.51 + 0.04 = 0.55 m, the pre-change approach arm. One run.'
 world: three_rigid_ground_rig_attach.sdf
+geometry_exempt:
+  attach_cable_len: 'deliberate arm (card 2026-10-09_approach_tip_feedback)'
 launch:
   package: bringup
   file: sim_control_launch.py

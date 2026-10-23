@@ -200,3 +200,53 @@ def test_ball_is_expected_only_with_the_partner_mission(tmp_path):
     assert ExperimentConfig.from_yaml(write(tmp_path, doc)).ball_start == (1.2, -1.4, 0.08)
     doc['ball_start'] = None
     assert ExperimentConfig.from_yaml(write(tmp_path, doc)).ball_start is None
+
+
+def test_lab_env_is_parsed_checked_and_applied_for_the_run_only(tmp_path, monkeypatch):
+    # card 2026-10-22_velocity_filter: the twin's rig switches come from the config, the same on the laptop and the
+    # lab PC, and a run never inherits another's
+    doc = dict(BASE, lab_env={'SIM_MOCAP_VEL_FILTER': 'slope', 'SIM_CMD_DELAY_S': 0.04})
+    c = ExperimentConfig.from_yaml(write(tmp_path, doc))
+    assert c.env == {'SIM_MOCAP_VEL_FILTER': 'slope', 'SIM_CMD_DELAY_S': '0.04'}
+    assert ExperimentConfig.from_yaml(write(tmp_path, BASE)).env == {}
+    for bad in ({'SIM_MOCAP_VEL_FILTER': 'fast'}, {'NOT_A_SWITCH': '1'}, {'SIM_CMD_DELAY_S': 'soon'}):
+        with pytest.raises(ValueError):
+            ExperimentConfig.from_yaml(write(tmp_path, dict(BASE, lab_env=bad)))
+    import run_experiment as R
+    monkeypatch.setenv('SIM_MOCAP_VEL_FILTER', 'ema')
+    monkeypatch.delenv('SIM_CMD_DELAY_S', raising=False)
+    with R.config_env(c.env):
+        assert os.environ['SIM_MOCAP_VEL_FILTER'] == 'slope' and os.environ['SIM_CMD_DELAY_S'] == '0.04'
+    assert os.environ['SIM_MOCAP_VEL_FILTER'] == 'ema' and 'SIM_CMD_DELAY_S' not in os.environ
+
+
+def test_lab_env_takes_the_per_channel_delay(tmp_path):
+    # card 2026-10-23_pair_mode_timing: the twin's per-channel command delay
+    env = {'SIM_CMD_DELAY_THR_S': '0.035', 'SIM_CMD_DELAY_ATT_S': 0, 'SIM_CMD_DELAY_FROM_S': '24.0'}
+    c = ExperimentConfig.from_yaml(write(tmp_path, dict(BASE, lab_env=env)))
+    assert c.env == {k: str(v) for k, v in env.items()}
+    for bad in ({'SIM_CMD_DELAY_THR_S': '-0.035'}, {'SIM_CMD_DELAY_THR_S': 'nan'}, {'SIM_CMD_DELAY_ATT_S': 'inf'},
+                {'SIM_CMD_DELAY_ATT_S': 'fast'}, {'SIM_RATE_KFF': '0.027'}, {'SIM_THR_TAU_S': '0.02'},
+                {'SIM_MOCAP_RATE_FILTER': 'ema'}):
+        with pytest.raises(ValueError):
+            ExperimentConfig.from_yaml(write(tmp_path, dict(BASE, lab_env=bad)))
+
+
+def test_a_figure8_config_states_its_size(tmp_path):
+    """Wesley 22 Oct: fig8_size sizes the figure-8 (profile 0.9), traj_radius no longer; a figure-8 config that does not
+    state its size (in launch.args or its params_file) is refused rather than flying the new default."""
+    doc = {**BASE, 'launch': {**BASE['launch'], 'args': {**BASE['launch']['args'], 'load_traj': 'fig_8'}}}
+    with pytest.raises(ValueError, match='fig8_size'):
+        ExperimentConfig.from_yaml(write(tmp_path, doc))
+    doc['launch']['args']['traj_radius'] = 0.5                   # the old knob alone: still refused
+    with pytest.raises(ValueError, match='fig8_size'):
+        ExperimentConfig.from_yaml(write(tmp_path, doc))
+    doc['launch']['args']['fig8_size'] = 0.5
+    assert ExperimentConfig.from_yaml(write(tmp_path, doc)).launch_args['fig8_size'] == 0.5
+    pf = tmp_path / 'p.yaml'
+    pf.write_text('trajectory:\n  fig8_size: 1.0\n')
+    del doc['launch']['args']['fig8_size']
+    doc['launch']['args']['params_file'] = str(pf)
+    ExperimentConfig.from_yaml(write(tmp_path, doc))
+    hover = {**BASE, 'launch': {**BASE['launch'], 'args': {**BASE['launch']['args'], 'load_traj': 'orbit'}}}
+    ExperimentConfig.from_yaml(write(tmp_path, hover))              # other paths: nothing new

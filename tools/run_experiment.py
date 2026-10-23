@@ -31,6 +31,7 @@ That bench replaces Gazebo with a numpy plant to iterate in seconds; this one is
 real simulator and is what a bench result must eventually be checked against.
 """
 import argparse
+import contextlib
 import csv
 import math
 import os
@@ -47,7 +48,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
-from experiment.config import ExperimentConfig            # noqa: E402
+from experiment.config import ExperimentConfig, params_file_path  # noqa: E402
 from run_dir import allocate, file_sha256, write_manifest  # noqa: E402
 
 
@@ -663,6 +664,25 @@ def preallocated(run_dir):
     return run_dir, m.group(1)
 
 
+@contextlib.contextmanager
+def config_env(env):
+    """The config's lab_env in os.environ for the run (every launched process copies it), then the shell's back.
+    The config wins over a stray export: a run must fly what its config says."""
+    old = {k: os.environ.get(k) for k in env}
+    for k, v in env.items():
+        if old[k] is not None and old[k] != v:
+            print(f'    lab_env {k}={v} (the shell had {old[k]})')
+        os.environ[k] = v
+    try:
+        yield
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
 def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_state=None):
     import rclpy
     from experiment.runner_node import ExperimentRunner
@@ -683,7 +703,7 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
                    scenario_sha256=file_sha256(cfg_path),
                    world=cfg.world, launch_file=cfg.launch_file,
                    launch_args=cfg.control_args(), repeat=repeat,
-                   rate_source=rate_source(cfg),
+                   rate_source=rate_source(cfg), lab_env=dict(getattr(cfg, 'env', {}) or {}),
                    headless=not gui, status='starting')
     if git_state:
         # the tree was synced from the laptop without .git: its SHA and diff are the provenance
@@ -937,11 +957,16 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
 
 def checked_config(path):
     """Load a config and refuse it before anything starts: world present, masses agree with
-    the world (unless mis_seed), IMU world for rate_source imu, every launch arg declared."""
+    the world (unless mis_seed), IMU world for rate_source imu, every launch arg declared, a typed
+    params_file present."""
     cfg = ExperimentConfig.from_yaml(path)
     wpath = cfg.world if os.path.isabs(cfg.world) else os.path.join(REPO, 'simulation_assets', cfg.world)
     if not os.path.exists(wpath):
         raise SystemExit(f'{path}: world not found: {wpath}')
+    for sec, args in (('launch', cfg.launch_args), ('io_launch', cfg.io_launch_args)):
+        typed = args.get('params_file')
+        if typed not in (None, '') and params_file_path(typed) is None:
+            raise SystemExit(f'{path}: {sec} params_file not found: {typed}')
     # A launch told a different mass than the world flies mis-sized tension on every
     # drone (35 configs silently did after the 0.86 kg ring landed, 2026-09-23).
     # Robustness arms declare `mis_seed: true`; everything else must agree.
@@ -960,9 +985,41 @@ def checked_config(path):
         raise SystemExit(f'{path}: launch args no launch declares (they would be ignored):\n  '
                          + '\n  '.join(bad))
     check_thrust_map(cfg, wpath, path)
+    check_wrench_world(cfg, wpath, path)
     if not cfg.mis_seed:
         check_world_geometry(cfg, wpath, path)
+        check_tether_len(cfg, wpath, path)
     return cfg
+
+
+def check_wrench_world(cfg, wpath, path):
+    """A WRENCH event needs the world's ApplyLinkWrench plugin (the _push worlds): without it Gazebo drops the push
+    and the run flies unpushed."""
+    if not any(e.do == 'WRENCH' for e in cfg.events):
+        return
+    with open(wpath) as f:
+        if 'gz::sim::systems::ApplyLinkWrench' not in f.read():
+            raise SystemExit(f'{path}: a WRENCH event but {cfg.world} has no ApplyLinkWrench plugin (the push would do '
+                             f'nothing); fly a _push world')
+
+
+def check_tether_len(cfg, wpath, path):
+    """The twin's magnet markers (io tether_tips) sit tether_len along each rod from its middle: a length that is not
+    the world's rods puts every marker that much off its magnet (card 2026-10-21_tip_detect)."""
+    io = cfg.io_launch_args
+    if str(io.get('tether_tips', '')).strip().lower() not in ('1', 'true', 'yes'):
+        return
+    sys.path.insert(0, os.path.join(REPO, 'tools'))
+    from check_geometry import launch_defaults, world_geometry
+    told = io.get('tether_len')
+    if told is None:
+        lp = os.path.join(REPO, 'src', 'bringup', 'launch', cfg.io_launch_file)
+        told = launch_defaults(lp).get('tether_len') if os.path.exists(lp) else None
+    rods = world_geometry(wpath).get('cable_len')
+    if told is not None and rods is not None and abs(float(told) - rods) > 1e-3:
+        raise SystemExit(f'{path}: io tether_len {float(told):g} but the rods of {cfg.world} are {rods:g} m: every '
+                         f'magnet marker would sit {abs(float(told) - rods) / 2:.3f} m off; type tether_len: {rods:g} '
+                         f'or declare mis_seed: true')
 
 
 def sim_thrust_maps(cfg):
@@ -987,7 +1044,8 @@ def check_thrust_map(cfg, wpath, path):
                          f'{"rig" if rig_world else "linear"} or declare mis_seed: true')
 
 
-# Values only params.py sets (no launch arg): reported, not refused, until params.py follows.
+# Values params.py sets unless a config types them (load_ixx / load_izz, card 2026-10-23_scalability): reported, not
+# refused, while params.py supplies them; a typed one that disagrees with the world is refused like any other.
 PARAMS_ONLY_GEOMETRY = ('load_ixx', 'load_izz')
 
 
@@ -995,14 +1053,15 @@ def check_world_geometry(cfg, wpath, path):
     """check_geometry.config_mismatches: every geometry value the controller would fly
     differently from the world. `geometry_exempt: {key: reason}` names a deliberate one."""
     sys.path.insert(0, os.path.join(REPO, 'tools'))
-    from check_geometry import config_mismatches
+    from check_geometry import config_mismatches, inertia_untyped
     lp = os.path.join(REPO, 'src', cfg.launch_package, 'launch', cfg.launch_file)
     bad = []
-    for k, wv, cv in config_mismatches(wpath, lp if os.path.exists(lp) else None, cfg.control_args()):
+    args = cfg.control_args()
+    for k, wv, cv in config_mismatches(wpath, lp if os.path.exists(lp) else None, args):
         line = f'{k}: world {wv:.4g}, controller {cv:.4g}'
         if k in cfg.geometry_exempt:
             continue
-        if k in PARAMS_ONLY_GEOMETRY:
+        if k in PARAMS_ONLY_GEOMETRY and inertia_untyped(args.get(k)):
             print(f'warn  {path}: {line} (params.py)', file=sys.stderr)
             continue
         bad.append(line)
@@ -1056,9 +1115,10 @@ def main():
             from experiment.record import parse
             cfg.record = parse(True)
         for rep in range(args.repeats):
-            results.append((cfg, rep, run_once(cfg, path, gui=args.gui, repeat=rep,
-                                               gz_nice=args.gz_nice, run_dir=args.run_dir,
-                                               git_state=git_state)))
+            with config_env(cfg.env):
+                results.append((cfg, rep, run_once(cfg, path, gui=args.gui, repeat=rep,
+                                                   gz_nice=args.gz_nice, run_dir=args.run_dir,
+                                                   git_state=git_state)))
 
     print('\n=== experiment summary ===')
     ok_all = True

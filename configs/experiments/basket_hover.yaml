@@ -1,7 +1,9 @@
 name: basket_hover
-description: 'Exploratory (Wesley 21 Oct, before the rig test): his mission from the floor on QUAD4, picking the ball up and dropping it into the ring while the three carriers fly hover, after the 10 s hold; then his contact rejoin as the rig flies it. Falsifier: no pickup, the ball not in the net after the drop, or any abort.'
+description: 'Exploratory (Wesley 21 Oct, before the rig test): his mission from the floor on QUAD4, picking the ball up and dropping it into the ring while the three carriers fly hover, after the 10 s hold; then his contact rejoin as the rig flies it. Sync 2 tree (his 19 Oct code): the transit carries the ball''s bottom half the carriers'' cable above them (carry_heights), his C++ planner avoiding the carriers'' rods (carrier_model tether). Falsifier: no pickup, the ball not in the net after the drop, or any abort.'
 world: three_rigid_ground_rig_attach_pickup.sdf
 ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py
@@ -79,7 +81,6 @@ events:
 - t: 1.0
   do: LAUNCH
   arg: tejen_mission partner_mission.launch.py geometry:=rig_twin plate:=9 carrier_azimuths_deg:=[90.0,330.0,210.0]
-    pickup_lift_height:=2.3 minimum_search_z_m:=2.7 drop_approach_clearance:=1.35
     contact_attach:=true confirm_pickup_release:=true
 - t: 3.0
   do: ARM

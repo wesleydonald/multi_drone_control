@@ -1,4 +1,8 @@
-# Card (DRAFT for Wesley, 22 Oct): chain step 2a, the force-vector tension split with the tether's weight
+# Card (DROPPED 22 Oct, Wesley): chain step 2a, the force-vector tension split with the tether's weight
+
+**Dropped:** the rig T (plates 11/2/5, 0.55 m, int_k_xy 0) hung 2.6 deg mean, 2.2 median over 49 s (RIG-1022-t3p_2),
+as the twin predicted (2.3); the 4.4-6.8 deg below came with the xy integral or the massless split. Kept for the
+record; the chain work moves to step 2b.
 
 Draft written overnight from the chain card's results (2026-10-21_chain_release) for review after the rig day.
 Nothing is built. The critic is required before any code (a change to the reference the planner flies).

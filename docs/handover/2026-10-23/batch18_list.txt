@@ -1,0 +1,16 @@
+configs/experiments/s8_hover_R50_L100_it5.yaml
+configs/experiments/s8_hover_R50_L100_it5.yaml
+configs/experiments/s8_chain4back_R50_L100_it5.yaml
+configs/experiments/s8_chain4back_R50_L100_it5.yaml
+configs/experiments/s8_chain4b2b_R50_L100_it5.yaml
+configs/experiments/s8_orbit_r30_v200_R50_L100_it5.yaml
+configs/experiments/s8_chain4b2b_orbit_r30_v200_R50_L100_it5.yaml
+configs/experiments/s8_fig8_h5_v200_R50_L100_it5.yaml
+configs/experiments/s8_fig8rel2_h5_v200_R50_L100_it5.yaml
+configs/experiments/s8_chain4back_pairs_R50_L100_it5.yaml
+configs/experiments/s8_adjpair_R50_L100_it5.yaml
+configs/experiments/s8_chain4back_relblend_R50_L100_it5.yaml
+configs/experiments/s8_relay_R50_L100_it5.yaml
+configs/experiments/s8_chain4task_R50_L100_it5.yaml
+configs/experiments/s8_fig8laps_h5_v200_R50_L100_it5.yaml
+configs/experiments/s8_chain4back_fig8laps_R50_L100_it5.yaml

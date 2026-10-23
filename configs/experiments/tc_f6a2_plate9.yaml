@@ -2,6 +2,8 @@ name: tc_f6a2_plate9
 description: 'F6a2 (critic round 2 H-C): his taken_back_self_land alone on the no-catch hover: our warm tracker latches in his transit (MOCAP_TILT 65 deg 0.1 s), no LAND until his give-up at plate 9 (the twin never catches), then his self-land from there with his object magnet OFF (after the drop); QUAD4 down and disarmed before our LAND (card 2026-10-11_quad4_tilt_cut rev 3; exploratory until the claim)'
 world: three_rigid_ground_rig_attach_pickup.sdf
 ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

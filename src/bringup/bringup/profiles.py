@@ -6,7 +6,8 @@ Every control knob has its default in bringup/config, layered in this order (lat
     ->  the typed launch arguments
 
 sim.yaml is the rig twin. legacy:=true (sim only) reads sim_legacy.yaml instead: the worlds in
-simulation_assets/old_worlds/, and the only profile with the attach and network modes.
+simulation_assets/old_worlds/. Every sim mode flies both (network on the twin: built 22 Oct, flies after its
+card's critic).
 
 Only the knobs in KEPT are launch arguments (set in three or more run configs or commands,
 or structural); any other knob goes in a params_file (flat `knob: value`, or grouped like
@@ -23,8 +24,9 @@ MODES = {'sim': ('mpc', 'free_hover', 'dissipative', 'network', 'attach'),
          'real': ('mpc', 'free_hover', 'dissipative', 'attach', 'm2')}
 DEFAULT_MODE = 'dissipative'     # Wesley 8 Oct (was mpc); legacy:=true keeps mpc
 LEGACY_DEFAULT_MODE = 'mpc'
-# sim modes with no rig-twin world or thrust-map plumbing yet (docs/archive/redo_on_twin.md)
-LEGACY_ONLY = ('network',)          # attach flies the twin attach worlds since 8 Oct
+# sim modes with no rig-twin world or thrust-map plumbing yet (docs/archive/redo_on_twin.md): none since the
+# twin network mode (card 2026-10-23_paper_method_compare); attach flies the twin attach worlds since 8 Oct
+LEGACY_ONLY = ()
 
 # launch arguments: knobs set in >= 3 configs or commands, then the structural ones
 KEPT_COMMON = (
@@ -33,7 +35,7 @@ KEPT_COMMON = (
     'auto_slot_assign', 'start_taut', 'handover_elev_deg', 'handover_settle_s', 'creep_vel',
     'pretension_s', 'ff_cap_release_s', 'lift_ramp_vel', 'target_z', 'z_taut_gate',
     'payload_rest_z', 'takeoff_spool_s', 'airborne_start', 'cable_elev_deg', 'z_ki', 'z_i_max',
-    'z_i_gate', 'z_ki_in_orbit', 'load_traj', 'traj_speed', 'traj_radius', 'terminal_vel_ref',
+    'z_i_gate', 'z_ki_in_orbit', 'load_traj', 'traj_speed', 'traj_radius', 'fig8_size', 'terminal_vel_ref',
     'thrust_ratio', 'takeoff_thrust_ratio', 'thrust_offset', 'thrust_offset_v_slope',
     'throttle_max', 'kt_trim', 'control_mode', 'vel_ki', 'pose_timeout_s',
     'safety_ref_timeout_s', 'reconfig_mode', 'reconfig_hold_s', 'diss_ki_load',
@@ -173,6 +175,21 @@ def split(side, args):
     return largs, {k: v for k, v in args.items() if k not in largs}
 
 
+def fig8_size_refusal(lc, chosen):
+    """A figure-8 whose traj_radius was chosen (typed, or in the params_file) but not its fig8_size: the figure-8 is
+    fig8_size since 22 Oct, so a traj_radius that differs from it would be ignored without a word. Refused; an equal
+    value passes (the sheet's traj_radius:=0.9)."""
+    size = str(lc.get('fig8_size', '')).strip()
+    if str(lc.get('load_traj', '')).strip() != 'fig_8' or 'traj_radius' not in chosen or 'fig8_size' in chosen \
+            or not size or float(size) <= 0.0:
+        return
+    r = float(lc['traj_radius'])
+    if abs(r - float(size)) > 1e-9:
+        raise RuntimeError(f'load_traj fig_8 with traj_radius {r:g}: the figure-8 is sized by fig8_size since 22 Oct '
+                           f'(default {float(size):g}); type fig8_size:={r:g} for a size-{r:g} figure-8 (traj_radius '
+                           f'sizes the circle, spin and orbit)')
+
+
 def apply(context, side):
     """Fill the launch configuration from the profile; return (mode, profile values).
 
@@ -198,11 +215,12 @@ def apply(context, side):
     legacy = side == 'sim' and LaunchConfiguration('legacy').perform(context).strip().lower() == 'true'
     if legacy and 'mode' not in typed:
         mode = lc['mode'] = LEGACY_DEFAULT_MODE
-    vals = profile(side, mode, LaunchConfiguration('params_file').perform(context).strip(),
-                   legacy=legacy)
+    pf = LaunchConfiguration('params_file').perform(context).strip()
+    vals = profile(side, mode, pf, legacy=legacy)
     for k, v in vals.items():
         if k not in typed:
             lc[k] = v
+    fig8_size_refusal(lc, typed | (set(flatten(_load(pf))) if pf else set()))
     # the one boundary of the typed attach angles: the graph builders pass this value to the nodes
     lc['attach_azimuths_deg'] = azimuths_param_from_typed(lc.get('attach_azimuths_deg', ''))
     lc['real'] = 'true' if side == 'real' else 'false'

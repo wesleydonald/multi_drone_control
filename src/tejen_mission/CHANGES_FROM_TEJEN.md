@@ -14,6 +14,7 @@ His `tools/sim_test/` and `tools/irl_test/` scripts live at the same paths in ou
 |---|---|---|
 | fork | a7524bae | 25 Sep 2026 |
 | sync 1 | 11a0683f | 10 Oct 2026 |
+| sync 2 | fd495db0 (`SwungPayload2026_ThesisCExperiments`) | 21 Oct 2026 |
 
 ## (a) Edits our fork carries against his code (since a7524bae)
 
@@ -294,3 +295,65 @@ Not taken:
 | `tejen_mission/ring_bridge.py` | `attach_z_lowpass_hz` (typed only, 0 = off): the present measured plate height through two first-order lags | RIG-1015-a1: the ring's 1.8 Hz bounce reached QUAD4 0.25 s late through his reference (card docs/experiments/2026-10-16_plate_height_filter.md; it also reaches his bottom hold and proof base: not for the rig until those read the raw plate) |
 | `tejen_mission/ring_bridge.py` | `attach_twist` 'zero' (typed only, '' = raw; hover only: never while the ring flies a trajectory of a kind other than hover at a speed above zero; the planner's `running` alone is true in a lifted hover too): a zero attachment twist, as his measured-ring mode publishes; start-up line names both switches | the bridge's 50 Hz finite difference carried the bounce (+-0.13 m/s) and 0.09 m/s of sideways jitter into his reference and match gate; **changes what his gates measure** (relative velocity -> QUAD4's own velocity): needs Tejen's agreement before the rig |
 | `launch/partner_mission.launch.py` (ours) | typed only: `attach_z_lowpass`, `attach_twist` (choices '', zero), `match_dwell` (his `dwell_time_s`), `match_speed`, `match_xy` (twin) | the overnight 15-16 Oct experiments; his values otherwise |
+
+## 21 Oct 2026: sync 2 (his 11a0683f..fd495db0, 60 commits, 8-19 Oct, branch SwungPayload2026_ThesisCExperiments; Wesley 21 Oct)
+
+Branch `tejen-sync2` (worktree `~/mdc_wt/tejen_sync2`). Three-way merge as sync 1 (base his 11a0683f, ours
+day-1016 1db5e0d, his fd495db0; names mapped), `tejen_mission`, `tejen_dynamic_planner` (+ `standalone/`), his
+`tools/irl_test` runners. 56 files clean, 20 new files, 4 files with conflicts:
+
+| file | conflict | resolution |
+|---|---|---|
+| `online_join_planner.py` (15) | our floor_join/delivery_rejoin, contact attach and bottom hold against his preloaded navigation, gentle takeoff, ground-ring tip receipt, stopped-tail recovery and measured pickup contact | both kept everywhere. Our `c1f2_prepare_phase()` keeps his preloaded-navigation TAKEOFF and is used by his new `c1f2_initial_prepare_active()`; his `update_preloaded_navigation` whole, after our delivery climb hold; the contact-wait stall uses his measured contact evidence and progress (`progress_m=-gap`) with our contact_attach rule (attached but off target is a stall); his quiet miss `pause()` on input loss and our `invalidate_contact_hold_evidence()`; the C1F.2b hold's phase test written out (his stub tests have no helper) |
+| `m2_irl_attachment_policy.py` | `QuietMissTracker` docstring | his (we already carried his d2eaf41e class) |
+| `magnet_attachment_manager.py` | imports: he dropped `time` | ours kept: our repeated gz sends sleep in a thread |
+| `test/test_m1_pickup_recovery.py` | the stall source strings | the merged rule's strings |
+
+Edits made in this sync to his files: `preloaded_navigation` read with `getattr` where our stub planners reach it
+(TAKEOFF entry); `publish_m1_takeoff_mpc_mode` reads its publisher with `getattr` (his own
+`test_m2_irl_progressive_policy` stub has none: his tree fails that test); `test_bottom_hold.py` (ours) sets his new `m1_takeoff_mpc_mode_publisher`; two of his tests marked
+`xfail(strict)` because our edits change what they check: `test_c1f2_reference_recovery::test_continuation_advances_
+without_inventing_a_stop_for_a_moving_window_tail` (our df62cd7 stopped-hold padding; his recovery is off in every
+launch we run) and `test_m1_gentle_takeoff::test_irl_wait_and_takeoff_follow_measured_rest_not_pickup_floor` (our
+15 Oct ground hold in WAIT_FOR_TAKEOFF). `tejen_dynamic_planner/launch/c1f6_moving_rendezvous_backend.launch.py`:
+`extra_params_file` takes a comma-separated list.
+
+Not taken: his MPC (`controller_mpc_payload`, d00934c1..fd495db0: a simulated-time command interval, which our
+14 Oct port already times on the node clock, and `initial_thrust_ratio`, which our `thrust_ratio` parameter already
+is); his new packages `thesis_c_experiments` and `wesley_drone_control`; `drone_visualisation`, docs, command sheets.
+
+Tests: `python3 -m pytest src/tejen_mission/test`: 1102 passed, 24 failed, 2 xfailed (before: 1025 passed, 12
+failed). The 12 new failures read files we do not carry (his RViz configs and panels, his repo `.gitignore`) or
+are his own M2 contract tests that his exported tree fails too. C++ `colcon test` tejen_dynamic_planner: 20/20.
+
+## 21 Oct 2026: collision avoidance on the transit and on floor_join's leg to the plate (Wesley 21 Oct)
+
+Wesley: "carry the object at cable_length/2 above the drones so that obstacle avoidance needs to be on for drop
+off"; "for normal attach obstacle avoidance should be on as well". His collision avoidance is his C++ planner
+(`standalone/`: Octopus search, receding horizon, trajectory safety checker; `transfer_backend_node.cpp`: the world
+of carriers, their rods, the moving ring, QUAD4's own cable, magnet and object). Before this, only
+TRANSIT_TO_DROP_POINT (and M2's capture transit) flew on it, high above everything (2.3 / 2.7 / 1.35 m typed).
+
+| file | change | why |
+|---|---|---|
+| `launch/partner_mission.launch.py` (ours) | `carry_heights`: unless typed, `pickup_lift_height`, `drop_approach_clearance`, `minimum_search_z_m` and `attach_transit_clearance` put the lowest point QUAD4 carries (the object's bottom, or the magnet's on floor_join) `carry_clearance` (default half the carriers' cable) above the carriers' bodies; `ring_z` (default 1.0; bringup passes `target_z` on the rig); a search floor above where the transit starts is refused; GEOMETRY gains `object_bottom_below_tip` and `object_rest_z` (ball 0.16 / 0.08, rig puck 0.05 / 0.03) | the transit must pass the carriers, so the avoidance has to work for the drop-off |
+| `launch/partner_mission.launch.py` (ours) | `carrier_model` (default `tether`): his attached-tether model of the carriers' rods (plates and ring pose from `ring_bridge`) with his small carrier boxes; `column` keeps our tall boxes; the backend also gets QUAD4's own cable length (`suspended_cable_length_m`, was his 0.50) and, on floor_join, `require_payload_attached_for_enable` false (generated YAML after our override file) | the tall boxes made the plate's approach point unreachable with the rig's 15 deg swing envelope (0.45 m needed, 0.43 m there) and blocked the transit far above the carriers |
+| `tejen_mission/ring_bridge.py` | `publish_attached_plates` (default off): each carrier's plate in his numbering (`/fake_obstacles/drone_<i>/attached_plate`, Int32, latched) and the measured ring pose (`/fake_payload/pose_array`, index 0) at 20 Hz | the inputs of his tether model |
+| `tejen_mission/mission_definitions.py` | `floor_join_mission(contact_attach, cpp_transit)` and `mission_for_mode(..., attach_cpp_transit)`: with it, floor_join carries TRANSIT_TO_REATTACH and leaves TAKEOFF for it | the C++ leg |
+| `tejen_mission/online_join_planner.py` | `attach_cpp_transit` (default off; our launch: on) and `attach_transit_clearance`: floor_join climbs to the transit height, holds, settles and hands to the C++ planner as delivery_rejoin's climb does (one helper, `c1f2_climb_hold_handoff`, for both), which flies TRANSIT_TO_REATTACH to above the plate (`attach_transit_body_target`, moving with the ring); in its capture region (his 0.12 / 0.15 m for 0.5 s) his approach takes over as a Python TRANSFER from the measured state and the C++ authority is released (any exit, LAND included). `c1f2_cpp_transit_phases()` replaces his five literal phase sets | the 15 Oct tether strike (RIG-1015-a1): his Python transfer has no collision avoidance |
+| tests | `test/test_attach_cpp_transit.py` (ours, 10); `test_partner_mission_rig.py` (the rig heights) | |
+
+The rejoin after a drop stays on his Python approach: after the drop QUAD4 is over the ring's centre and its move to
+the plate stays inside the ring.
+
+## 23 Oct 2026: sync 2 merged into day-1021; his rig launch on 1 m cables (Thu 29 Oct)
+
+tejen-sync2 (6483d90) applied to day-1021's working tree file by file (3-way; only `graph_attach.py` and the two
+basket configs had changed on both sides, merged clean). Then the rig path (`real:=true`) for 1 m cables, after
+decisions 22 Oct answer 16 (QUAD4's typed record feeds his launch):
+
+| file | change | why |
+|---|---|---|
+| `launch/partner_mission.launch.py` (ours) | `ring_cable_len` (typed, refused untyped on the rig) and `ring_cable_elev_deg` ('' = 60) replace the 'rig' table's carriers' cable for his bridge's carrier model and `carry_heights` | the table's 0.55 on 1 m cables put his carriers 0.23 m further in and 0.39 m lower than they fly |
+| `launch/partner_mission.launch.py` (ours) | his MPC's `cable_length` untyped = `magnet_drop_below_quad` - 0.044 (his QUAD2 calibration, as `m1_irl_pickup.launch.py`), rounded to 0.1 mm | was the table's 0.531 whatever the tether; 0.575 still gives 0.531 |
+| `bringup/graph_attach.py` (ours) | passes `ring_cable_len` (our `cable_len`), `ring_cable_elev_deg` (both ours alone: PARTNER_OWNED) and `magnet_drop_below_quad` = `proof_taut_len` + 0.003 unless partner_args types it (then checked against it, as before) | one record: the sheet types QUAD4's numbers once |

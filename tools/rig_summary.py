@@ -305,7 +305,14 @@ def summarise(arg):
     plt.setp(ax_tilt.get_xticklabels(), visible=False)
 
     path = PATHS.get(kind, kind)
-    if kind in ('orbit', 'circle', 'fig_8', 'spin'):
+    if kind == 'fig_8':
+        try:
+            from mpc_planner.load_trajectory import path_radius
+            size = path_radius(kind, pp.get('traj_radius', 0), pp.get('fig8_size'))
+        except ImportError:                  # an unsourced shell: the same rule (fig8_size when set)
+            size = float(pp.get('fig8_size') or 0.0) or float(pp.get('traj_radius', 0))
+        path += f' size {size:.2g} m at {float(pp.get("traj_speed", 0)):.3g} m/s'
+    elif kind in ('orbit', 'circle', 'spin'):
         path += f' r {float(pp.get("traj_radius", 0)):.2g} m at {float(pp.get("traj_speed", 0)):.3g} m/s'
     elif kind in ('line_x', 'line_spin'):
         path += f' {float(pp.get("traj_distance", 1.0)):.2g} m at {float(pp.get("traj_speed", 0)):.3g} m/s'

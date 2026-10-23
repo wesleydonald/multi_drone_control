@@ -1,5 +1,6 @@
 """line_spin (Wesley 21 Oct, plan_thesis_results_2026-10-21 A): out along +x by distance and back on two smootherstep
-legs, the load yawing at the spin's rate (one radian per radius travelled) and holding the turned yaw afterwards."""
+legs, the load turning once at a constant yaw rate through the turnaround (Wesley 22 Oct, after RIG-1022-ls3) and
+holding the turned yaw afterwards."""
 import types
 
 import numpy as np
@@ -41,17 +42,28 @@ def test_position_velocity_acceleration_and_yaw_are_consistent():
         assert np.isclose((tr.yaw_at(t + h)[0] - y0) / h, w, atol=5e-3)
 
 
-def test_the_load_turns_at_the_spins_rate_and_holds_the_turned_yaw():
+def test_the_load_turns_once_at_a_constant_rate_through_the_turnaround():
     tr, T = trip()
     ys = [tr.yaw_at(t) for t in np.linspace(1e-3, T, 3001)]
     assert all(b[0] >= a[0] - 1e-12 for a, b in zip(ys, ys[1:]))      # one way only (counter-clockwise)
-    assert max(w for _, w in ys) == pytest.approx(0.2 / 0.5, rel=1e-4)  # 0.4 rad/s = 23 deg/s at 0.2 m/s
-    assert np.isclose(tr.yaw_at(T)[0], 2 * 1.0 / 0.5)                 # 4 rad = 229 deg
-    assert tr.yaw_at(T + 30.0) == (pytest.approx(4.0), 0.0)            # held, not snapped back as spin's full turn
+    w = 2 * np.pi / (T - 4.0)                                          # 4 s rate ramps: 0.426 rad/s = 24.4 deg/s
+    assert max(r for _, r in ys) == pytest.approx(w, rel=1e-6)
+    for t in (4.0, T / 2, T - 4.0):                                    # the rate holds, the turnaround included
+        assert tr.yaw_at(t)[1] == pytest.approx(w, rel=1e-6)
+    assert tr.yaw_at(T / 2)[0] == pytest.approx(np.pi)                 # half the turn at the far end
+    assert np.isclose(tr.yaw_at(T)[0], 2 * np.pi) and tr.yaw_at(T)[1] == pytest.approx(0.0, abs=1e-12)
+    assert tr.yaw_at(T + 30.0) == (pytest.approx(2 * np.pi), 0.0)      # held, not snapped back as spin's turn
     assert tr.yaw_at(0.0) == (0.0, 0.0)
-    spin = LoadTrajectory('spin', 0.2, 1.0, 0.5)                       # same peak rate as the spin at this speed
-    T_spin = spin._circle_theta(0.0)[3]
-    assert max(spin.yaw_at(t)[1] for t in np.linspace(0, T_spin, 2001)) == pytest.approx(0.4, rel=1e-3)
+    assert LoadTrajectory('line_spin', 0.2, 1.0, 1.0).yaw_at(T / 2) == tr.yaw_at(T / 2)   # the radius plays no part
+
+
+def test_a_short_trip_ramps_straight_into_the_wind_down():
+    tr = LoadTrajectory('line_spin', 0.5, 0.5, 0.5)                    # 3.75 s trip: ramps of T/2, no constant part
+    T = tr._line_spin(0.0)[4]
+    assert tr.yaw_at(T / 2)[0] == pytest.approx(np.pi) and np.isclose(tr.yaw_at(T)[0], 2 * np.pi)
+    h = 1e-5
+    for t in np.linspace(0.01, T - 0.01, 200):
+        assert np.isclose((tr.yaw_at(t + h)[0] - tr.yaw_at(t)[0]) / h, tr.yaw_at(t)[1], atol=1e-3)
 
 
 def test_the_hold_reference_keeps_the_turned_yaw():
@@ -63,7 +75,7 @@ def test_the_hold_reference_keeps_the_turned_yaw():
     b.psi0 = 0.3
     b.update((0.0, 0.0), 0.0, 1.0, 1.0, 0.0, T + 2.0)
     s_hold = b.hold_yref(np.zeros(13))[12:21].reshape(3, 3)
-    turned = rot_z(0.3 + 4.0)
+    turned = rot_z(0.3 + 2 * np.pi)
     for i in range(3):
         assert np.allclose(s_hold[i], turned @ np.asarray(s_nom[i], float))
     b.update((0.0, 0.0), 0.0, 1.0, 1.0, 0.0, 0.0)                     # before the trip: the datum alone

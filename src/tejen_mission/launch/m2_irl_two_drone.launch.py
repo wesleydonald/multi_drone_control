@@ -13,6 +13,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction, TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 from tejen_mission.m2_irl_launch_config import (
     gate_profile_ros_parameters,
@@ -20,6 +21,7 @@ from tejen_mission.m2_irl_launch_config import (
     load_hardware_config,
     parse_gate_profiles,
     progressive_ros_parameters,
+    parking_ros_parameters,
     parse_fleet_identity,
     parse_flight_order,
     validate_mission_hardware_config,
@@ -51,9 +53,13 @@ def _launch_setup(context):
         raise ValueError(f"M2 IRL vehicle count {len(vehicle_ids)} does not match requested {expected_count}")
     profiles = parse_gate_profiles(payload)
     progressive = progressive_ros_parameters(payload)
+    completion_mode = LaunchConfiguration("completion_mode", default="airborne_hold").perform(context)
+    parking_params = parking_ros_parameters(payload, completion_mode)
     identity_params = identity_ros_parameters(identity)
     profile_params = gate_profile_ros_parameters(profiles)
     root = payload["m2_irl"]
+    if completion_mode == "attach_park":
+        root["completion_mode"] = completion_mode  # Keep legacy resolved configs unchanged.
     ring_geometry = parse_irl_ring_geometry(payload)
     vehicles = identity.vehicles
     geometry = root["geometry"]
@@ -149,6 +155,7 @@ def _launch_setup(context):
                 "target_attachment_count": len(vehicle_ids),
                 "operator_hold_after_goal": True,
                 **progressive["supervisor"],
+                "completion_mode": completion_mode,
                 "attachment_evidence_timeout_s": 0.75,
                 "operator_land_request_topic": "/m2d/operator/land_request",
             }],
@@ -252,6 +259,10 @@ def _launch_setup(context):
                 "m2b_commissioning_stage": "b2",
                 "c1f1_shadow_transfer_enabled": True,
                 "c1f2_cpp_authority_enabled": True,
+                "c1f2_reference_recovery_enabled": True,
+                "c1f2_recovery_request_topic": f"{ns}/dynamic_planner/reference_recovery_request",
+                "c1f2_recovery_status_topic": f"{ns}/dynamic_planner/reference_recovery_status",
+                "c1f2_recovery_continuation_topic": f"{ns}/dynamic_planner/transfer_reference_continuation",
                 "c1f1_shadow_target_topic": f"{ns}/dynamic_planner/transfer_target",
                 "c1f1_shadow_enable_topic": f"{ns}/dynamic_planner/transfer_enable",
                 "c1f1_shadow_reference_topic": f"{ns}/dynamic_planner/transfer_reference",
@@ -280,6 +291,7 @@ def _launch_setup(context):
                 "ring_plate_diameter_m": ring_geometry.plate_diameter_m,
                 "m2b_pendulum_topic": f"{ns}/pendulum_swing_state",
                 "m2b_attached_hold_angle_deg": 15.0,
+                "m2b_freeze_attached_hold_reference": True,
                 "m2b_anchor_to_contact_length_m": float(geometry["tether_length_m"]),
                 "m2b_tether_anchor_body_x": float(geometry["tether_anchor_body"][0]),
                 "m2b_tether_anchor_body_y": float(geometry["tether_anchor_body"][1]),
@@ -299,6 +311,7 @@ def _launch_setup(context):
                 "enable_csv_logging": True,
                 "log_directory": str(log_dir / vehicle_id / "join_planner"),
                 **progressive["planner"],
+                **parking_params,
                 "m2b_irl_quiet_miss_enabled": True,
                 "m2b_irl_quiet_miss_wait_s": profiles.quiet_miss.wait_s,
                 "m2b_irl_quiet_miss_improvement_m": profiles.quiet_miss.improvement_m,
@@ -308,6 +321,9 @@ def _launch_setup(context):
         backend = deepcopy(commissioned_backend)
         backend.update({
             "use_sim_time": False,
+            # IRL only: keep collision inflation/diagnostics, not tracking brakes.
+            "execution_tracking_safety_enabled": False,
+            "cooperative_tracking_safety_enabled": False,
             "vehicle_id": vehicle_id,
             "state_topic": f"{ns}/motion_capture_state",
             "target_topic": f"{ns}/dynamic_planner/transfer_target",
@@ -315,6 +331,10 @@ def _launch_setup(context):
             "enable_topic": f"{ns}/dynamic_planner/transfer_enable",
             "authority_topic": f"{ns}/dynamic_planner/transfer_authority",
             "authority_ack_topic": f"{ns}/dynamic_planner/transfer_authority_ack",
+            "reference_recovery_enabled": True,
+            "recovery_request_topic": f"{ns}/dynamic_planner/reference_recovery_request",
+            "recovery_status_topic": f"{ns}/dynamic_planner/reference_recovery_status",
+            "recovery_continuation_topic": f"{ns}/dynamic_planner/transfer_reference_continuation",
             "shadow_reference_topic": f"{ns}/dynamic_planner/transfer_reference",
             "diagnostics_topic": f"{ns}/dynamic_planner/transfer_status",
             "marker_topic": f"{ns}/dynamic_planner/markers",
@@ -358,6 +378,7 @@ def _launch_setup(context):
                 ("drone_arming_state_feedback", "arming_state_feedback"),
             ],
             parameters=[{
+                "external_reference_validate_timing": True,
                 "use_sim_time": False,
                 "use_external_reference": True,
                 "disarmed_external_reference_fast_path": True,
@@ -379,6 +400,11 @@ def _launch_setup(context):
                 "c1d_status_topic": "tejen_mpc/c1d_status",
                 "acados_cache_dir": str(log_dir / vehicle_id / "acados_cache"),
                 "logging_instance": vehicle_id,
+                "xy_integral_limit": 0.45,
+                "lateral_disturbance_diagnostics_enabled": ParameterValue(
+                    LaunchConfiguration("lateral_disturbance_diagnostics_enabled", default="false"),
+                    value_type=bool,
+                ),
             }],
         ))
 
@@ -408,11 +434,16 @@ def generate_launch_description() -> LaunchDescription:
     share = Path(get_package_share_directory("tejen_mission"))
     return LaunchDescription([
         DeclareLaunchArgument("mode", default_value="io"),
+        DeclareLaunchArgument("completion_mode", default_value="airborne_hold",
+                              choices=["airborne_hold", "attach_park"]),
         DeclareLaunchArgument("expected_vehicle_count", default_value="2"),
         DeclareLaunchArgument(
             "config_file", default_value=str(share / "config" / "m2_irl_two_drone.yaml")
         ),
         DeclareLaunchArgument("log_dir", default_value="logs/m2_irl/manual"),
         DeclareLaunchArgument("rviz", default_value="false"),
+        DeclareLaunchArgument("lateral_disturbance_diagnostics_enabled", default_value="false",
+                              choices=["false", "true"],
+                              description="Log the existing observer without changing bias compensation"),
         OpaqueFunction(function=_launch_setup),
     ])

@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -88,8 +89,10 @@ def main():
                 print(f'skip {rid}: {mp4}')
                 continue
             card = os.path.join(tmp, f'{i:03d}_card.txt')
+            # drawtext centres the widest line: an unwrapped verdict pushed every line off the frame's left edge
+            verdict = textwrap.wrap(reg.get(rid, '(no registry row yet)'), 56, max_lines=3, placeholder=' ...')
             with open(card, 'w') as fh:
-                fh.write(f'{rid}   {name}\n\n{reg.get(rid, "(no registry row yet)")[:90]}')
+                fh.write(f'{rid}   {name}\n\n' + '\n'.join(verdict))
             title = os.path.join(tmp, f'{i:03d}_a.mp4')
             ffmpeg('-f', 'lavfi', '-i', f'color=c=black:s={W}x{H}:d=2:r={FPS}',
                    '-vf', f"drawtext=fontfile={FONT}:textfile={card}:fontcolor=white:fontsize=34:"

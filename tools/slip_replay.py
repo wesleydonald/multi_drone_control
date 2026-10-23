@@ -227,11 +227,12 @@ def replay_stretch(rows, prm, rods_by_slot, mocap, detect_m, source, rest_z, una
         return [], {}, []
     starts = tick_starts(pl)
     s2d0 = [int(v) for v in pl[0]['slot2drone'].split()]
-    rod_of = {d: (rods_by_slot[i] if rods_by_slot and i < len(rods_by_slot) else TYPED_ROD)
+    typed = float(prm.get('cable_len') or TYPED_ROD)      # the flight's own typed rod (1 m from 22 Oct)
+    rod_of = {d: (rods_by_slot[i] if rods_by_slot and i < len(rods_by_slot) else typed)
               for i, d in enumerate(s2d0)}
     rho = {d: rho_of(az)[i] for i, d in enumerate(s2d0)}
     announced = [(t, d) for t, d in det_lines if d not in {u[1] for u in unann}]     # the planner's own OFFs
-    det = Stretch(detect_m)
+    det = Stretch(detect_m, typed)
     fires, ones, active_t = [], {}, []
     drop = bool(prm.get('drop_on_loss', False))
     for r, tk in zip(pl, starts):
@@ -265,7 +266,7 @@ def replay_stretch(rows, prm, rods_by_slot, mocap, detect_m, source, rest_z, una
                 ones[d] = tk
         if f is not None:
             dist = next(x for dd, x, _ in rods if dd == f)
-            fires.append((tk, f, dist - max(TYPED_ROD, rod_of[f])))
+            fires.append((tk, f, dist - max(typed, rod_of[f])))
     return fires, ones, active_t
 
 

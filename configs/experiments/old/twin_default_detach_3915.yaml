@@ -12,6 +12,7 @@ launch:
     drop_on_loss: false
     departed_land: false
     mode: dissipative
+    cable_len: 0.55        # pinned 22 Oct: the default before the 1 m cables
     num_drones: 4
     attach_azimuths_deg: 330,270,210,90  # clockwise degrees since 15 Oct; was 30,90,150,270
 io_launch:

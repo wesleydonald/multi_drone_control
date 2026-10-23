@@ -26,18 +26,32 @@ the next tick reseeds from x_init, as the node does.
 
 Arms: base; a = solver.reset() (u = 0, multipliers cleared) before every reseed; b = cable
 references at the hand-over elevation instead of 45 deg; c = rods from a pivot 4 cm below
-the drone centre (body z), 0.55 m each; d = load pose 0.5 s stale (drones current); e = load
+the drone centre (body z), each the rig's rod (0.55 m, the flight's cable_len when longer: the 1 m cables);
+d = load pose 0.5 s stale (drones current); e = load
 angular-rate noise (sd --omega-sd rad/s); f = old geometry (radius 0.25, rod 0.53, drone
 0.525 kg, no measured rods); g = the ring quaternion kept in one hemisphere (the rig's mocap
 sends w >= 0, so q changes sign when the yaw crosses 180 deg); h = attach azimuths rotated
 to where the drones sat at rest on the first row; y = ring yaw held at the datum instead of
-following the drones. Letters combine with '+' (a+g).
+following the drones; i<k> = k warm SQP iterations a tick (plan_sqp_iters; card
+2026-10-23_scalability); v = the planner's plan_fast_refs (references from the mapped extraction, the
+residual after them). Letters combine with '+' (a+g, i1+v).
 
-The solver is generated and built in --work (never the repo's c_generated_code), and each
-arm runs in its own process: two builds of the same model name cannot share one process.
-Imports come from --src first (default: the repo's src/mpc_planner).
+Scalability S (card 2026-10-23_scalability):
+  --quality       per warm planner tick, each arm's solve against the converged plan of the same tick
+                  (tools/plan_quality.py: cost ratio, residual, reference deltas at nodes 1/5/N, node-0
+                  feed-forward and tension deltas, thrust excursion); the arm's own warm-start chain is kept
+  --q-source auto the ring attitude and rate from the planner log's qw..qz, wx..wz where logged (else the fit)
+  --flown-pivot   rods from the flight's pivot_offset (params.json) and the references at the drone centres
+  --ref-hash      a hash per tick of the plan X and of every drone's extracted references (bit-identity checks)
+  --summary-json  the arms' summaries (and quality) for every flight given (--flight a,b,c)
+The defaults replay as before. A flight's ring inertia comes from params.json when it typed one (load_ixx).
+
+The solver is generated and built in --work (never the repo's c_generated_code, and its cache check and
+signature are kept there too), and each arm runs in its own process: two builds of the same model name
+cannot share one process. Imports come from --src first (default: the repo's src/mpc_planner).
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -49,6 +63,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import plan_quality as PQ  # noqa: E402
 import run_logs  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -56,6 +71,7 @@ RIG = os.path.join(REPO, 'results', 'rig', '2026-09-30')
 FLIGHTS = {'model_f1': os.path.join(RIG, 'model_f1_logs'),
            'f7': os.path.join(RIG, 'lift_f7_logs')}
 DEFAULT_SRC = os.path.join(REPO, 'src', 'mpc_planner')
+RIG_ROD_055 = 0.55          # the rig's rods until the 1 m cables (model-f1 typed 0.47)
 DEFAULT_WORK = os.path.join(os.environ.get('TMPDIR', '/tmp'), f'mdc_planner_replay_{os.getuid()}')
 G = 9.81
 PIVOT_DZ = 0.04
@@ -63,7 +79,8 @@ ARMS = ['base', 'a', 'b', 'c', 'd', 'e', 'f']
 ARM_TEXT = {'base': 'as flown', 'a': 'reset + u=0 on reseed', 'b': 'refs at hand-over elevation',
             'c': 'pivot 4 cm, rods 0.55', 'd': 'load pose 0.5 s stale', 'e': 'ring omega noise',
             'f': 'old geometry r0.25 l0.53 m0.525', 'g': 'quaternion sign kept continuous',
-            'h': 'attach azimuths where the drones sat at rest', 'y': 'ring yaw held at the datum'}
+            'h': 'attach azimuths where the drones sat at rest', 'y': 'ring yaw held at the datum',
+            'v': 'plan_fast_refs'}
 
 
 def load_modules(src):
@@ -239,6 +256,13 @@ def rest_azimuth_offset(fl):
     return float(np.degrees(np.angle(np.mean(np.exp(1j * np.radians(offs))))))
 
 
+def flown_path_radius(prm):
+    """The radius the flight's path flew (load_trajectory.path_radius, kept here because --src may be an older
+    tree): fig8_size for a figure-8 when set (22 Oct on), else traj_radius."""
+    size = float(prm.get('fig8_size') or 0.0)
+    return size if prm.get('load_traj') == 'fig_8' and size > 0.0 else float(prm.get('traj_radius', 0.5))
+
+
 def _rho_flown(fl):
     az = fl.prm.get('attach_azimuths_deg', '') or ''
     th = ([float(v) for v in re.split(r'[,\s]+', az.strip()) if v] if az.strip().lower() not in ('', 'even', 'none', 'auto')
@@ -250,18 +274,24 @@ def _rho_flown(fl):
 def arm_setup(fl, arm):
     """Arm letters combine with '+', e.g. 'a+g'."""
     prm, ev = fl.prm, fl.ev
+    ixx, izz = float(prm.get('load_ixx', 0.0) or 0.0), float(prm.get('load_izz', 0.0) or 0.0)
     geo = dict(radius=float(prm['attach_radius']), attach_z=float(prm['attach_z']),
                az_deg=[float(np.degrees(np.arctan2(v[1], v[0]))) for v in _rho_flown(fl)],
                rod=float(prm['cable_len']), drone=float(prm['drone_mass']), load=float(prm['load_mass']),
                rods=ev.get('rods_applied'), elev=45.0, pivot=0.0, stale=0.0, omega_sd=0.0,
-               reset=False, qsign=False, yaw_fixed=False)
+               reset=False, qsign=False, yaw_fixed=False, iters=None, fast=False,
+               inertia=[ixx, ixx, izz] if ixx > 0.0 else None)
     for t in [a for a in arm.split('+') if a != 'base']:
-        if t == 'a':
+        if re.fullmatch(r'i\d+', t):
+            geo['iters'] = int(t[1:])
+        elif t == 'v':
+            geo['fast'] = True
+        elif t == 'a':
             geo['reset'] = True
         elif t == 'b':
             geo['elev'] = ev.get('handover_elev', 45.0)
         elif t == 'c':
-            geo.update(pivot=PIVOT_DZ, rods=[0.55] * fl.n)
+            geo.update(pivot=PIVOT_DZ, rods=[max(RIG_ROD_055, float(prm['cable_len']))] * fl.n)
         elif t == 'd':
             geo['stale'] = 0.5
         elif t == 'e':
@@ -280,10 +310,43 @@ def arm_setup(fl, arm):
     return geo
 
 
-def run_arm(fl, mods, arm, work, omega_sd=0.3, seed=0, keep_nodes=False):
+def logged_attitude(rows, LS):
+    """LS with the ring attitude and rate the planner logged (qw..qz, wx..wz: what it was fed) on every row that
+    has them; the rest keep the rod fit."""
+    cols = ['qw', 'qx', 'qy', 'qz', 'wx', 'wy', 'wz']
+    if not set(cols) <= set(rows.columns):
+        return LS
+    V = rows[cols].to_numpy(float)
+    ok = np.all(np.isfinite(V), axis=1)
+    out = np.array(LS, float)
+    out[ok, 3:7] = V[ok, :4]
+    out[ok, 10:13] = V[ok, 4:]
+    return out
+
+
+def ref_digest(mods, solver, X, n, fast):
+    """sha1 over every drone's (pos, vel, thrust acc, cable acc, rod acc) at every node, extracted as the planner
+    does with plan_fast_refs on (one mapped call) or off (node by node)."""
+    h = hashlib.sha1()
+    for i in range(n):
+        nodes = (solver.horizon_kinematics(X, i) if fast else
+                 [(*solver.drone_kinematics(X[:, k], i), mods.ps.rod_accel_at(solver, X[:, k], i))
+                  for k in range(X.shape[1])])
+        for node in nodes:
+            for v in node:
+                h.update(np.ascontiguousarray(v, float).tobytes())
+    return h.hexdigest()
+
+
+def run_arm(fl, mods, arm, work, omega_sd=0.3, seed=0, keep_nodes=False, quality=False, q_source='fit',
+            flown_pivot=False, ref_hash=False):
     geo = arm_setup(fl, arm)
     if geo['omega_sd'] is None:
         geo['omega_sd'] = omega_sd
+    po = fl.prm.get('pivot_offset') or [0.0, 0.0, 0.0]
+    pivot_offset = [float(v) for v in (json.loads(po) if isinstance(po, str) else po)]   # params.json: '[0, 0, -0.04]'
+    if flown_pivot:
+        geo['pivot'] = -pivot_offset[2]
     n, ev, rows = fl.n, fl.ev, fl.rows
     rho = mods.geometry.attach_points(n, geo['radius'], geo['attach_z'], geo['az_deg'])
     # the attitude fit uses the flown radius in every arm (and h's azimuths)
@@ -291,23 +354,35 @@ def run_arm(fl, mods, arm, work, omega_sd=0.3, seed=0, keep_nodes=False):
                                           geo['az_deg'])
     rods_fit = ev.get('rods_measured') or [float(fl.prm['cable_len'])] * n
     LS, fit_tilt = load_states(fl, mods, rho_fly, rods_fit, yaw_fixed=geo['yaw_fixed'])
+    if q_source == 'auto':
+        LS = logged_attitude(rows, LS)
 
-    dyn = mods.lcd.LoadCableDynamics(n, geo['load'], mods.params.load_inertia(geo['load']),
-                                     [geo['rod']] * n, rho, geo['drone'])
+    J = geo['inertia'] or mods.params.load_inertia(geo['load'])
+    dyn = mods.lcd.LoadCableDynamics(n, geo['load'], J, [geo['rod']] * n, rho, geo['drone'])
     # acados also rebuilds when the nominal node-0 bounds change, and they follow the azimuths
     az_tag = '_'.join(f'{a:.0f}' for a in geo['az_deg'])
-    code = os.path.join(work, f"n{n}_m{geo['drone']:.3f}_M{geo['load']:.3f}_az{az_tag}")
+    i_tag = '' if geo['inertia'] is None else f'_I{J[0]:.4f}_{J[2]:.4f}'
+    code = os.path.join(work, f"n{n}_m{geo['drone']:.3f}_M{geo['load']:.3f}_az{az_tag}{i_tag}")
     os.makedirs(code, exist_ok=True)
     os.environ['MDC_ACADOS_ROOT'] = code
+    # the solver's cache check and signature live in its import-time CODE_DIR: here too, never the planner's cache
+    mods.ps.CODE_DIR = os.path.join(code, 'c_generated_code_load_planner')
     cwd = os.getcwd()
     os.chdir(code)
     try:
         solver = mods.ps.PlannerSolver(dyn)
     finally:
         os.chdir(cwd)
+    if geo['iters']:
+        solver.steady_iters = geo['iters']
+    solver.defer_res = geo['fast']
+    if flown_pivot:
+        solver.pivot_offset = np.asarray(pivot_offset, float)
     s_nom = mods.geometry.nominal_cable_dirs(rho, geo['elev'])
+    laps = int(float(fl.prm.get('traj_laps') or 1))         # passed only when lapped: --src may predate traj_laps
     traj = mods.lt.LoadTrajectory(fl.prm.get('load_traj', 'hover'), float(fl.prm.get('traj_speed', 0.1)),
-                                  float(fl.prm.get('traj_distance', 1.0)), float(fl.prm.get('traj_radius', 0.5)))
+                                  float(fl.prm.get('traj_distance', 1.0)), flown_path_radius(fl.prm),
+                                  **({'laps': laps} if laps > 1 else {}))
     refs = mods.rb.ReferenceBuilder(dyn, n, s_nom, solver.dt, traj)
     refs.set_yaw_datum(np.radians(ev['psi0_deg']))
     s2d = ev['slot2drone']
@@ -355,6 +430,7 @@ def run_arm(fl, mods, arm, work, omega_sd=0.3, seed=0, keep_nodes=False):
             yref_at = (lambda _k, h=hold: h)
         reseed = solver.last_X is None or (planner and solver.recover)
         x_init = solver.build_x_init(ls, slot_pos)
+        before = PQ.snapshot(solver) if quality and planner and not reseed else None
         t0 = time.perf_counter()
         if geo['reset'] and reseed:
             acados.reset()
@@ -362,15 +438,25 @@ def run_arm(fl, mods, arm, work, omega_sd=0.3, seed=0, keep_nodes=False):
                 acados.set(j, 'u', np.zeros(dyn.nu))
         X, status = solver.solve_horizon(yref_at, refs.q_ref_at, x_init, reseed=reseed)
         dt_ms = (time.perf_counter() - t0) * 1e3
+        if getattr(solver, 'finish_tick', None) is not None:
+            solver.finish_tick()                            # a deferred residual (arm v), as the node does
+        res = getattr(solver, 'last_res', None)
         rec = dict(t=float(tk), rel=float(tk - t_ho), planner=planner, status=int(status),
                    reseed=bool(reseed), ms=dt_ms, load_z=float(r.load_z), z_tgt=float(r.z_tgt),
                    land=int(r.land), fit_tilt=float(fit_tilt[k]), tilt=float(r.tilt_deg),
-                   z_bias=float(r.z_bias) if np.isfinite(r.z_bias) else 0.0)
+                   z_bias=float(r.z_bias) if np.isfinite(r.z_bias) else 0.0,
+                   res_eq=None if res is None else float(res[1]), iters=int(getattr(solver, 'last_iters', 0)))
         if X is not None:
             rec['ratio'] = float(-sum(X[ti[i], 0] * X[si[i], 0] for i in range(n)) / (float(fl.prm['load_mass']) * G))
             rec['t0'] = [float(X[ti[i], 0]) for i in range(n)]
             rec['zN'] = float(X[2, -1])
             rec['plan5'] = [float(v) for v in X[0:3, min(5, X.shape[1] - 1)]]   # ring, node 5 (log plan5_*)
+            if ref_hash:
+                rec['x_sha'] = hashlib.sha1(np.ascontiguousarray(X, float).tobytes()).hexdigest()
+                rec['ref_sha'] = ref_digest(mods, solver, X, n, geo['fast'])
+            if before is not None:
+                rec.update(PQ.compare(solver, before, X, lambda: solver.solve_horizon(
+                    yref_at, refs.q_ref_at, x_init, reseed=False), ti))
             if keep_nodes:
                 kin0 = [solver.drone_kinematics(X[:, 0], i) for i in range(n)]
                 kin5 = [solver.drone_kinematics(X[:, 5], i) for i in range(n)]
@@ -406,6 +492,7 @@ def static_hold(mods, elev_deg, work, ticks=50, n=4, load=0.86, drone=0.55, radi
     code = os.path.join(work, f'n{n}_m{drone:.3f}_M{load:.3f}_even')
     os.makedirs(code, exist_ok=True)
     os.environ['MDC_ACADOS_ROOT'] = code
+    mods.ps.CODE_DIR = os.path.join(code, 'c_generated_code_load_planner')
     cwd = os.getcwd()
     os.chdir(code)
     try:
@@ -451,6 +538,55 @@ def summarize(res):
         ratio_med=float(np.median(allr)) if allr else None,
         ratio_air_med=float(np.median(hold)) if hold else None,
         ratio_min=float(np.min(allr)) if allr else None, ratio_max=float(np.max(allr)) if allr else None)
+
+
+def timing_vs_logged(rows, recs):
+    """The flight's logged solve_ms against this replay's per-tick wall time (both PlannerSolver.solve_horizon, the
+    residual inside unless deferred), over the warm planner ticks both solved: p50 / p95 of each, of their per-tick
+    ratio (logged / replayed), and the same on the ticks where both ran the same SQP iterations (the flight's budget
+    cut not firing). None when the log has no solve_ms or no tick ran the flight's iterations (an i<k> arm other than
+    the flown count times a different problem): card 2026-10-23_scalability, the B calibration."""
+    if 'solve_ms' not in rows:
+        return None
+    lt = rows['sim_time'].to_numpy(float)
+    lms = pd.to_numeric(rows['solve_ms'], errors='coerce').to_numpy(float)
+    lit = (pd.to_numeric(rows['sqp_calls'], errors='coerce').to_numpy(float) if 'sqp_calls' in rows
+           else np.full(len(rows), np.nan))
+    pairs = []
+    for r in recs:
+        if not r['planner'] or r['reseed'] or r['status'] != 0:
+            continue
+        k = int(np.searchsorted(lt, r['t']))
+        if k < len(lt) and lt[k] == r['t'] and np.isfinite(lms[k]):
+            pairs.append((lms[k], r['ms'], lit[k] == r.get('iters', -1)))
+    P = np.array(pairs, float).reshape(-1, 3)
+    if not np.any(P[:, 2] > 0.5):
+        return None
+
+    def stats(m):
+        lg, rp = P[m, 0], P[m, 1]
+        if not lg.size:
+            return None
+        pc = lambda a, q: float(np.percentile(a, q))
+        return {'ticks': int(lg.size), 'logged_p50': pc(lg, 50), 'logged_p95': pc(lg, 95),
+                'replay_p50': pc(rp, 50), 'replay_p95': pc(rp, 95),
+                'ratio_p50': pc(lg / rp, 50), 'ratio_p95': pc(lg / rp, 95)}
+    return {'all': stats(np.ones(len(P), bool)), 'same_iters': stats(P[:, 2] > 0.5)}
+
+
+def timing_table(arms):
+    """The arms' replayed solve times against the flight's logged ones (timing_vs_logged)."""
+    out = ['| arm | ticks | logged solve_ms p50 / p95 | replayed p50 / p95 | per-tick logged/replayed p50 / p95 '
+           '| same iterations: ticks, ratio p50 / p95 |', '|' + '---|' * 6]
+    for arm, tm in arms.items():
+        if not tm or not tm.get('all'):
+            continue
+        a, s = tm['all'], tm.get('same_iters') or {}
+        same = (f"{s['ticks']}, {s['ratio_p50']:.2f} / {s['ratio_p95']:.2f}" if s else '')
+        out.append(f"| {arm} | {a['ticks']} | {a['logged_p50']:.1f} / {a['logged_p95']:.1f} "
+                   f"| {a['replay_p50']:.1f} / {a['replay_p95']:.1f} | {a['ratio_p50']:.2f} / {a['ratio_p95']:.2f} "
+                   f"| {same} |")
+    return '\n'.join(out)
 
 
 def table(sums, logged_pre, logged_post):
@@ -541,12 +677,18 @@ def main(argv=None):
     ap.add_argument('--heave', action='store_true', help='compare replayed node-0 refs with the logged ones')
     ap.add_argument('--static-hold', default=None, metavar='DEG,DEG',
                     help='static-hold check at these rod elevations; prints one JSON line each')
+    ap.add_argument('--quality', action='store_true',
+                    help="each arm's warm solves against the converged plan of the same tick (tools/plan_quality.py)")
+    ap.add_argument('--q-source', choices=('fit', 'auto'), default='fit',
+                    help="the ring attitude fed: the rod fit (as before) or the planner log's qw..qz / wx..wz")
+    ap.add_argument('--flown-pivot', action='store_true',
+                    help="rods from the flight's pivot_offset, references at the drone centres")
+    ap.add_argument('--ref-hash', action='store_true', help="hash every tick's plan and extracted references")
+    ap.add_argument('--summary-json', default=None, help='write every flight\'s arm summaries here')
     ap.add_argument('--one', default=None, help=argparse.SUPPRESS)
     a = ap.parse_args(argv)
-    run_dir = FLIGHTS.get(a.flight, a.flight)
     if not a.one:
         # one build tree per source tree: the solver cache is judged on mtimes alone
-        import hashlib
         a.work = os.path.join(a.work, 'src_' + hashlib.md5(os.path.abspath(a.src).encode()).hexdigest()[:8])
     os.makedirs(a.work, exist_ok=True)
     if a.static_hold:
@@ -557,23 +699,49 @@ def main(argv=None):
         return 0
     if a.one:
         mods = load_modules(a.src)
-        fl = read_flight(run_dir)
-        res = run_arm(fl, mods, a.one, a.work, a.omega_sd, keep_nodes=a.heave)
+        fl = read_flight(FLIGHTS.get(a.flight, a.flight))
+        res = run_arm(fl, mods, a.one, a.work, a.omega_sd, keep_nodes=a.heave, quality=a.quality,
+                      q_source=a.q_source, flown_pivot=a.flown_pivot, ref_hash=a.ref_hash)
         with open(a.out, 'w') as f:
             json.dump(res, f)
         return 0
-    out = a.out or os.path.join(a.work, f'replay_{os.path.basename(run_dir.rstrip("/"))}')
-    os.makedirs(out, exist_ok=True)
     arms = [s.strip() for s in a.arms.split(',') if s.strip()]
+    summary, bad = {}, 0
+    for flight in [s.strip() for s in a.flight.split(',') if s.strip()]:
+        results = replay_flight(FLIGHTS.get(flight, flight), arms, a)
+        if not results:
+            bad += 1
+            continue
+        summary[flight] = {k: dict(summarize(v), timing=v.get('timing'), quality=(PQ.summarize(
+            [r for r in v['recs'] if r['planner'] and 'q_conv_status' in r]) if a.quality else None))
+            for k, v in results.items()}
+        if a.quality:
+            print('\n' + quality_table(summary[flight]))
+    if a.summary_json:
+        os.makedirs(os.path.dirname(os.path.abspath(a.summary_json)), exist_ok=True)
+        with open(a.summary_json, 'w') as f:
+            json.dump({'arms': arms, 'quality': a.quality, 'q_source': a.q_source, 'flown_pivot': a.flown_pivot,
+                       'src': os.path.abspath(a.src), 'flights': summary}, f, indent=1)
+        print(f'wrote {a.summary_json}')
+    return 1 if bad else 0
+
+
+def replay_flight(run_dir, arms, a):
+    """Every arm on one flight, each in its own process; prints the arms' table. {arm: result} (empty: none ran)."""
+    out = (os.path.join(a.out, os.path.basename(run_dir.rstrip('/'))) if a.out and ',' in a.flight
+           else a.out or os.path.join(a.work, f'replay_{os.path.basename(run_dir.rstrip("/"))}'))
+    os.makedirs(out, exist_ok=True)
     # the first arm of each solver build runs alone, so no arm loads a half-built solver
     fl = read_flight(run_dir)
     built, procs, results = set(), [], {}
     for arm in arms:
         g = arm_setup(fl, arm)
-        key = (g['drone'], g['load'], tuple(round(v) for v in g['az_deg']))
+        key = (g['drone'], g['load'], tuple(round(v) for v in g['az_deg']), tuple(g['inertia'] or ()))
         cmd = [sys.executable, os.path.abspath(__file__), '--flight', run_dir, '--src', a.src,
-               '--work', a.work, '--omega-sd', str(a.omega_sd), '--one', arm,
-               '--out', os.path.join(out, f'{arm}.json')] + (['--heave'] if a.heave else [])
+               '--work', a.work, '--omega-sd', str(a.omega_sd), '--one', arm, '--q-source', a.q_source,
+               '--out', os.path.join(out, f'{arm}.json')] + (['--heave'] if a.heave else []) + (
+               ['--quality'] if a.quality else []) + (['--flown-pivot'] if a.flown_pivot else []) + (
+               ['--ref-hash'] if a.ref_hash else [])
         while len([p for _, p in procs if p.poll() is None]) >= (max(1, a.jobs) if key in built else 1):
             time.sleep(0.2)
         procs.append((arm, subprocess.Popen(cmd)))
@@ -587,7 +755,7 @@ def main(argv=None):
         with open(os.path.join(out, f'{arm}.json')) as f:
             results[arm] = json.load(f)
     if not results:
-        return 1
+        return results
     any_res = next(iter(results.values()))
     logged = np.array(any_res['fail_times'])
     lp = int(np.sum((logged >= any_res['t_handover']) & (logged < any_res['t_land'])))
@@ -595,9 +763,30 @@ def main(argv=None):
     print(f'\n{os.path.basename(run_dir)}  hand-over {any_res["t_handover"]:.2f}  '
           f'LAND +{any_res["t_land"] - any_res["t_handover"]:.1f} s  per-tick JSON in {out}\n')
     print(table([summarize(results[k]) for k in arms if k in results], lp, lq))
+    for k in results:
+        results[k]['timing'] = timing_vs_logged(fl.rows, results[k]['recs'])
+    if any(v['timing'] for v in results.values()):
+        print('\n' + timing_table({k: results[k]['timing'] for k in arms if k in results}))
     if a.heave and 'base' in results:
         print('\n' + heave_report(read_flight(run_dir), results['base']))
-    return 0
+    return results
+
+
+def quality_table(arms):
+    """The arms' quality against the converged plan (p50 / p95; tools/plan_quality.py)."""
+    f = lambda q, k, s, sc=1.0, fmt='.3f': '' if not q or not q.get(k) else format(q[k][s] * sc, fmt)
+    out = ['| arm | ticks | J/J_conv p50 / p95 | paired with res_eq <= 1e-3: p50 / p95 (ticks over) | res_eq p95 '
+           '| ref node 1 p95 (mm) | node 5 p95 (mm) | node N p95 (mm) | ff0 p95 (m/s^2) | t0 p95 (N) '
+           '| thrust excursion max (N) | failed solves |', '|' + '---|' * 12]
+    for arm, s in arms.items():
+        q = s.get('quality') or {}
+        cp = q.get('cost_ratio_paired') or {}
+        paired = f"{cp['p50']:.3f} / {cp['p95']:.3f} ({cp['res_over']})" if cp else ''
+        out.append(f"| {arm} | {q.get('ticks', '')} | {f(q, 'cost_ratio', 'p50')} / {f(q, 'cost_ratio', 'p95')} "
+                   f"| {paired} | {f(q, 'res_eq', 'p95', fmt='.1e')} | {f(q, 'ref1', 'p95', 1e3, '.1f')} "
+                   f"| {f(q, 'ref5', 'p95', 1e3, '.1f')} | {f(q, 'refN', 'p95', 1e3, '.1f')} | {f(q, 'ff0', 'p95')} "
+                   f"| {f(q, 't0', 'p95')} | {f(q, 'thrust_viol', 'max')} | {s['fail_pre'] + s['fail_post']} |")
+    return '\n'.join(out)
 
 
 if __name__ == '__main__':

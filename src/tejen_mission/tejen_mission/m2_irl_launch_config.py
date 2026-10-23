@@ -30,6 +30,25 @@ class IRLFleetIdentity:
 TwoDroneIdentity = IRLFleetIdentity
 
 
+def parking_ros_parameters(payload: Mapping, completion_mode='airborne_hold') -> dict:
+    """Parking profile is opt-in; old configurations remain valid when disabled."""
+    from .m2_irl_attachment_policy import ParkingConfig
+    if completion_mode not in ('airborne_hold', 'attach_park'):
+        raise ValueError('completion_mode must be airborne_hold or attach_park')
+    result = {'m2b_completion_mode': completion_mode}
+    if completion_mode == 'airborne_hold':
+        return result
+    if payload['m2_irl'].get('attachment_policy') != 'measured_contact_15deg':
+        raise ValueError('attach_park requires measured_contact_15deg')
+    try:
+        values = payload['m2_irl']['parking']
+        config = ParkingConfig(**{name: float(values[name]) for name in ParkingConfig.__dataclass_fields__})
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f'invalid M2 IRL parking profile: {exc}') from exc
+    result.update({'parking_'+name: value for name, value in asdict(config).items()})
+    return result
+
+
 @dataclass(frozen=True)
 class IRLRingGeometry:
     """Measured physical annulus; simulation's RingNetGeometry defaults stay fixed."""
@@ -109,9 +128,12 @@ def progressive_ros_parameters(payload: Mapping) -> dict:
              "proof_angle_tolerance_deg", "proof_duration_s", "proof_speed_mps",
              "release_dwell_s", "release_speed_mps", "loss_xy_m", "loss_normal_m", "loss_dwell_s")
     v = {n: _gate_value(values, n, "progressive_attachment."+n, positive=True) for n in names}
+    attachment = payload["m2_irl"]["gate_profiles"]["attachment_search"]
+    proof_xy_m = _gate_value(attachment, "proof_xy_m", "attachment_search.proof_xy_m", positive=True) if "proof_xy_m" in attachment else search.candidate_xy_m
     if not 0 < v["proof_angle_tolerance_deg"] < v["proof_angle_deg"] < 90:
         raise ValueError("proof angle/tolerance must be ordered within (0,90)")
-    if v["loss_xy_m"] < search.candidate_xy_m or v["loss_normal_m"] < search.proof_normal_m:
+    if (proof_xy_m < search.candidate_xy_m or v["loss_xy_m"] < proof_xy_m
+            or v["loss_normal_m"] < search.proof_normal_m):
         raise ValueError("loss geometry must exceed contact geometry")
     planner = dict(attachment_policy=policy,
         progressive_arc_duration_s=v["proof_duration_s"], progressive_arc_speed_mps=v["proof_speed_mps"],
@@ -126,7 +148,7 @@ def progressive_ros_parameters(payload: Mapping) -> dict:
     observer = dict(attachment_policy=policy,
         candidate_xy_m=search.candidate_xy_m, candidate_normal_m=search.candidate_normal_m,
         candidate_speed_mps=search.proof_relative_speed_mps, candidate_dwell_s=v["contact_dwell_s"],
-        proof_xy_m=search.candidate_xy_m, proof_normal_m=search.proof_normal_m,
+        proof_xy_m=proof_xy_m, proof_normal_m=search.proof_normal_m,
         proof_speed_mps=search.proof_relative_speed_mps, proof_dwell_s=v["proof_dwell_s"],
         proof_max_contact_drift_m=search.proof_max_contact_drift_m,
         proof_angle_deg=v["proof_angle_deg"], proof_angle_tolerance_deg=v["proof_angle_tolerance_deg"],
@@ -220,8 +242,8 @@ def parse_gate_profiles(payload: Mapping) -> IRLGateProfiles:
     if result.tip_alignment.min_normal_m > result.tip_alignment.pre_low_normal_m:
         raise ValueError("tip alignment minimum clearance exceeds pre-LOW staging clearance")
     search = result.attachment_search
-    if search.contact_overtravel_m > 0.010:
-        raise ValueError("IRL contact overtravel must be <= 0.010 m")
+    if search.contact_overtravel_m > 0.050:
+        raise ValueError("IRL contact overtravel must be <= 0.050 m")
     if search.max_contact_correction_m > 0.030:
         raise ValueError("IRL measured contact correction must be <= 0.030 m")
     if search.contact_correction_rate_mps > 0.010:

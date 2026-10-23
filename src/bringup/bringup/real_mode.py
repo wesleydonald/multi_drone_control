@@ -10,8 +10,8 @@ sim claim flew. What changes on the rig is here, shared by both launches:
   * the watchdogs are the node defaults, which are the rig values (pose 0.25 s, reference
     staleness 1.0 s); the sim launches loosen them for Gazebo under load. A tighter typed
     value is kept, a looser one is refused.
-  * payload_rest_z 0.05 (the ring rests on the floor; every real launch and the node
-    default) and z_taut_gate 0.9 (decisions.md 2026-09-25: 0.99 sim / 0.9 real) replace
+  * payload_rest_z 0.0275 (the ring's centre of mass resting on the floor, 22 Oct; 0.05 until
+    then) and z_taut_gate 0.9 (decisions.md 2026-09-25: 0.99 sim / 0.9 real) replace
     the sim defaults; a typed value is kept.
   * the creep floor start and the OCP resize (decisions.md 2026-09-28, Q7): start_taut
     false, handover_elev_deg 45, handover_settle_s 1.0 (2.0 until 2026-10-03), creep_vel 0.2,
@@ -31,6 +31,7 @@ sim claim flew. What changes on the rig is here, shared by both launches:
     and the latch overwrites it in every packet.
 """
 import os
+import re
 
 from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -38,7 +39,7 @@ from launch.substitutions import LaunchConfiguration
 from launch.utilities import perform_substitutions
 
 RIG_WATCHDOGS = {'pose_timeout_s': 0.25, 'safety_ref_timeout_s': 1.0}
-RIG_DEFAULTS = {'payload_rest_z': 0.05, 'z_taut_gate': 0.9,
+RIG_DEFAULTS = {'payload_rest_z': 0.0275, 'z_taut_gate': 0.9,
                 'start_taut': 'false', 'handover_elev_deg': 60.0, 'handover_settle_s': 1.0,
                 'creep_vel': 0.2, 'reconfig_mode': 'ocp'}   # handover 60 as everywhere (Wesley 7-8 Oct)
 _TYPED_KEY = 'real_mode_typed_args'
@@ -121,7 +122,8 @@ PLANNER_OPTIONAL = {'land_unwind': 'bool', 'dist_est': 'str', 'dist_tau': 'float
                     'offset_free': 'str', 'of_tau': 'float', 'of_window': 'float',
                     'pin_cable_rates': 'bool', 'plan_w_pos_scale': 'float', 'plan_w_s_scale': 'float',
                     'plan_w_r_scale': 'float', 'plan_rate_ff': 'bool', 'plan_ref_lag_s': 'float',
-                    'plan_sqp_iters': 'int', 'land_rearm_touchdown': 'bool',
+                    'plan_sqp_iters': 'int', 'plan_fast_refs': 'bool', 'plan_res_every': 'int',
+                    'load_ixx': 'float', 'load_izz': 'float', 'land_rearm_touchdown': 'bool',
                     'land_descend_to_stall': 'bool',
                     'int_mode': 'str', 'int_k_xy': 'float', 'int_k_z': 'float',
                     'int_settle_s': 'float', 'land_ff_ramp': 'bool',
@@ -131,18 +133,31 @@ PLANNER_OPTIONAL = {'land_unwind': 'bool', 'dist_est': 'str', 'dist_tau': 'float
                     'detach_unload_wait_s': 'float', 'detach_post_blend_s': 'float',
                     'detach_detect_m': 'float', 'departed_land': 'bool', 'departed_ground_idle': 'bool',
                     'drop_on_loss': 'bool', 'drop_takes_back': 'bool', 'drop_gap_deg': 'float',
-                    'tip_detect_m': 'float'}
+                    'tip_detect_m': 'float', 'fig8_size': 'float', 'pos_limit_m': 'float',
+                    'rejoin_departed': 'bool', 'rejoin_task': 'bool', 'traj_laps': 'int', 'traj_lap_hold_s': 'float'}
 # the trackers' thrust map, which the disturbance estimate reads delivered thrust through
 DIST_MAP = ('thrust_ratio', 'thrust_offset', 'thrust_offset_v_slope', 'thrust_v_ref')
 
 
-def planner_options(context):
+def planner_prefix():
+    """The load planner's launch prefix: `taskset -c <MDC_PLANNER_CPUS>` when that is set (the rig laptop's P-cores;
+    the planner ran 2.6x slower on its E-cores, card 2026-10-23_scalability), else None (the default prefix)."""
+    cpus = os.environ.get('MDC_PLANNER_CPUS', '').strip()
+    if not cpus:
+        return None
+    if not re.fullmatch(r'\d+(-\d+)?(,\d+(-\d+)?)*', cpus):
+        raise RuntimeError(f'MDC_PLANNER_CPUS={cpus!r}: a taskset CPU list, e.g. 0-7')
+    return f'taskset -c {cpus}'
+
+
+def planner_options(context, rejoin=False):
     """Return [{knob: value}] of the set PLANNER_OPTIONAL knobs, or [].
 
     Appended to a planner's parameters list. With dist_est set, the trackers' thrust map goes
     along (a numeric thrust_ratio is required). int_mode auto (the default since 5 Oct) flies
     model wherever model is allowed and reference elsewhere; a fleet that attaches or detaches
-    keeps the learned ring force through the resize (8 Oct).
+    keeps the learned ring force through the resize (8 Oct). rejoin: this graph bridges each
+    tether's gz joint for rejoin_departed (the twin's mode:=dissipative only), else it is refused.
     """
     opts = {}
     for k, kind in PLANNER_OPTIONAL.items():
@@ -150,6 +165,24 @@ def planner_options(context):
         if v:
             opts[k] = (truthy(context, k) if kind == 'bool' else float(v) if kind == 'float'
                        else int(v) if kind == 'int' else v.lower())
+    if opts.get('rejoin_departed') and not rejoin:
+        raise RuntimeError("rejoin_departed flies only the twin's mode:=dissipative: it re-welds each tether's gz "
+                           'joint (/drone_i/attach), which this launch does not bridge (code design B)')
+    if opts.get('rejoin_departed') and (opts.get('departed_land') is not False
+                                        or LaunchConfiguration('reconfig_mode').perform(context).strip() != 'ocp'):
+        # the planner refuses these at construction; here the launch says why before any node starts
+        raise RuntimeError('rejoin_departed needs departed_land:=false (a staged carrier holds, it does not land) and '
+                           'reconfig_mode:=ocp (card 2026-10-23_rejoin_departed)')
+    # card 2026-10-23_scalability cases 6 and 7: twin only
+    if opts.get('rejoin_task') and not (rejoin and opts.get('rejoin_departed')):
+        raise RuntimeError("rejoin_task flies only with rejoin_departed, in the twin's mode:=dissipative (a task flies a "
+                           'staged carrier)')
+    if opts.get('traj_laps', 1) != 1 and context.launch_configurations.get('real', 'false') == 'true':
+        raise RuntimeError('traj_laps flies only in the twin (card 2026-10-23_scalability, case 7)')
+    if opts.get('traj_lap_hold_s', 0.0) > 0.0 and not (
+            rejoin and LaunchConfiguration('reconfig_mode').perform(context).strip() == 'ocp'):
+        raise RuntimeError("traj_lap_hold_s flies only in the twin's mode:=dissipative with reconfig_mode:=ocp (it holds "
+                           'the clock through the resize hold)')
     if opts.get('offset_free') == 'on' and truthy(context, 'kt_trim'):
         raise RuntimeError('offset_free on with kt_trim on: two adaptive loops on one vertical residual')
     if opts.get('int_mode') in ('model', 'auto'):
@@ -171,6 +204,13 @@ def planner_options(context):
             except ValueError:
                 raise RuntimeError(f'dist_est needs a numeric {k} (the trackers\' map), got {v!r}')
     return [opts] if opts else []
+
+
+def position_limit(context):
+    """{'pos_limit_m': m} for the fleet manager and the trackers when the position limit is set (Wesley 22 Oct; '' = off
+    until the critic, card 2026-10-22_position_limit), else {}; the planners take it through PLANNER_OPTIONAL."""
+    v = str(context.launch_configurations.get('pos_limit_m', '')).strip()
+    return {'pos_limit_m': float(v)} if v and float(v) > 0.0 else {}
 
 
 # the trackers' half of drop and land (card 2026-10-08_drop_and_land): passed only when set

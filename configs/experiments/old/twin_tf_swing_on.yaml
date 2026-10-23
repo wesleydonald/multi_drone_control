@@ -2,6 +2,8 @@ name: twin_tf_swing_on
 description: 'card 2026-10-09_approach_tip_feedback rev 5, arm S: E+ and a 0.5 N radial push on QUAD4 for 0.2 s
   (2 N x 0.5 s swung the rod ~0.56 m, R1333), 8 s into the tip hold (after convergence; rev 5) (switch ON)'
 world: three_rigid_ground_rig_attach_push.sdf
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

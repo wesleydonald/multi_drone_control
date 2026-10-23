@@ -58,7 +58,7 @@ launch:
     thrust_ratio: 35.2
     z_i_gate: 0.25
     z_taut_gate: 0.9
-    traj_radius: 1.0
+    fig8_size: 1.0
     traj_speed: 0.25
   file: sim_control_launch.py
   package: bringup

@@ -37,25 +37,36 @@ import rclpy
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Int32, Empty, Bool, Float64MultiArray, String
 from geometry_msgs.msg import PoseStamped, TwistStamped
-from dissipative_planner.approach import (ApproachProfile, TIP_FROZEN_N, TIP_STANDOFF_M, TipLoop, body_to_tip,
-                                          carrot_step, tip_valid)
+from dissipative_planner.approach import (APPROACH_VEL, CLEARANCE_M, ApproachProfile, TIP_FROZEN_N, TIP_STANDOFF_M,
+                                          TipLoop, body_to_tip, carrot_step, tip_valid)
 
 from interfaces.msg import MotionCaptureState
 from mpc_planner.geometry import (quat_to_rot_np, attach_points, rot_z,
-                                  apex_direction, balanced_tensions, ccw_to_cw_deg, plate_of_azimuth)
+                                  apex_direction, balanced_tensions, ccw_to_cw_deg, plate_of_azimuth,
+                                  centre_from_pivot)
+from mpc_planner.load_trajectory import ORBIT_RAMP_S
+from mpc_planner.params import prebuild_sizes
 from mpc_planner.planner_node import LoadPlanner, DRONE_MASS, PLANNER_HZ, TouchdownDetector
 from mpc_planner.reference_builder import unload_tensions
 
 from dissipative_planner.dissipative_network import (
     DissipativeNetwork, DissipativeParams)
+from utility_objects.position_limit import POS_LIMIT_LAND_MARGIN_M, clear_point, limit_ray, limit_xy
 
 
-# a freed drone lands at least this far from the ring centre (ring 0.28 + cable 0.5 + margin)
+# a freed drone lands at least this far from the ring centre (ring 0.28 + cable 0.5 + margin). Kept at 1 m (Wesley
+# 22 Oct): the 1 m twin drops landed every quad upright 1.15-1.32 m out (R2309-R2319), and more pushes the quads at a
+# lobe tip toward the net; it grows only with a formation wider than the rig ring's at 1 m (_departed_clear_r)
 DEPARTED_CLEAR_R = 1.2
 DETACH_STEP_VEL = 0.15     # m/s, a freed drone's step out from the ring (detach_step_out_m)
 # during a circle the formation sweeps a disc of radius r_orbit + 0.5 (+ props): a freed drone then
-# also steps out from the PATH centre to r_orbit + this before it holds or lands
+# also steps out from the PATH centre to r_orbit + this before it holds or lands (+ a longer cable's reach,
+# _path_clear_m)
 DEPARTED_PATH_CLEAR_M = 1.0
+# m: the cable the path and zone clearances were set on (legacy 0.5 and the rig's 0.55 keep them as flown); and the
+# formation's reach (attach radius + cable x cos elevation) of the rig ring at 1 m, up to which DEPARTED_CLEAR_R holds
+CLEAR_CABLE_M = 0.55
+RIG_RING_REACH_M = 0.725
 NEWCOMER_RELEASE_S = 0.5   # s an aborted newcomer holds after its magnet OFF (rig release < 0.2 s)
 NEWCOMER_OFF_EVERY_S = 0.5  # s between the OFFs re-sent while a newcomer is out (a repeated ON must not weld it)
 NEWCOMER_POSE_STALE_S = 0.5  # s: an older newcomer pose is not used (a frozen pose reads as a stall)
@@ -71,6 +82,28 @@ DEPARTED_AT_REST_S = 0.5   # s at its rest before its reference stops pressing (
 DEPARTED_PRESS_LIMIT_S = 6.0  # s of press after it stopped above its rest; then held at its own height
 DEPARTED_DOWN_HIGH_M = 0.10  # m: stalled no more than this above its rest is down too (QUAD4 stopped 4-7 cm above
                             # its mat height after every 14 Oct take-back and was never disarmed alone)
+# rejoin_departed (twin only; plan 2026-10-21 code design B, card 2026-10-23_rejoin_departed)
+REJOIN_STAGE_OUT_M = 0.3   # m: a departed carrier holds this far beyond the formation's reach (its plate's radius plus
+                           # its rod's run out at the planned elevation), on its own plate's bearing
+POSITION_LIMIT_M = 1.75    # m: Wesley's 22 Oct limit, kept by staged and rejoining drones while pos_limit_m is off;
+STAGE_LIMIT_MARGIN_M = 0.15  # m: a staging point stays this far inside the limit (pos_limit_m when it is set)
+REJOIN_WELD_M = 0.015      # m: the twin's joint welds the rod where its end IS, so only this close to the plate point,
+REJOIN_WELD_S = 0.3        # s of contiguous rod-end samples (on their stamps) all that close,
+REJOIN_WELD_N = 8          # at least this many of them (the twin publishes the rod poses at 60 Hz),
+REJOIN_SLOW_MPS = 0.02     # m/s: and moving at most this fast relative to the plate across them
+REJOIN_TIP_GAP_S = 0.05    # s: a longer gap between two samples restarts the run
+REJOIN_TIP_FRESH_S = 0.5   # s: a rejoin starts only with its rod's end seen this recently
+REJOIN_TIP_BAND_M = 0.05   # m: a sample this far off the body-to-end length is not this rod's end: no evidence
+REJOIN_TIMEOUT_S = 45.0    # s from the ATTACH without a weld: it climbs back out to its staging point, the path resumes
+REJOIN_JOINT_S = 0.5       # s for the twin's joint to report attached after /drone_d/attach, else it lets go, backs out
+REJOIN_OUT_EXTRA_S = 30.0  # s more of the landed wait once a staged or rejoining drone left for its own landing: up,
+                           # out and down from over its plate takes ~14 s past a departed drone's (critic M1)
+REJOIN_OUT_MARGIN_M = 0.05  # m: its landing point lies this far beyond the clear radius (R2585 touched down 2.1 cm
+                            # inside it: its reference stopped 1.9 cm short and the ring settled 4 mm away)
+STAGE_TRACK_M = 0.03       # m: a staged drone's reference stays this far inside its staging clamp (R2586: the drone
+                           # sat up to 5 mm past its reference on the clamp, 5 cm past it braking)
+# rejoin_task (twin only; card 2026-10-23_scalability case 6)
+TASK_TIP_FLOOR_M = 0.3     # m: a task waypoint keeps the rod's end at least this far above the floor
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
 TIP_DETECT_S = 0.1         # s of contiguous magnet-marker samples past tip_detect_m, on their stamps: a release
 TIP_DETECT_N = 6           # and at least this many samples in that run (the rig streams ~88 Hz, the twin 60)
@@ -118,7 +151,8 @@ TAKE_BACK_K = 1.5          # 1/s: the carrot closes linearly near its goal (K * 
 TAKE_BACK_REACHED_M = 0.02  # m: a goal is reached by the REFERENCE (critic round 4, F5)
 ZONE_OVER_CARRIERS_M = 0.15  # zone (a): QUAD4's lowest point this far above the highest carrier
 ZONE_BELOW_RING_M = 0.3    # zone (b): its body this far below the ring (its rotors under the ring and its net)
-ZONE_RISE_FAR_M = 0.9      # zone (c) rises from this far out of the ring centre (the formation's edge + rotors)
+ZONE_RISE_FAR_M = 0.9      # zone (c) rises from this far out of the ring centre (the formation's edge + rotors; + a
+                           # longer cable's reach: _zone_rise_far_m)
 TIP_AT_RING_BELOW_M = 0.15  # the tip is at the ring from this far below the ring centre up to TAKE_BACK_TIP_CLEAR_M
 TIP_OVER_FLOOR_M = 0.1     # a co-moving descent under the formation stops with the tip this far above the floor
 BALL_DIAM_M = 0.16         # his twin ball (tejen payload_model.sdf, r 0.08), under the tip while he carries it
@@ -154,6 +188,77 @@ def gap_centre_rho(rho, attach_radius, attach_z):
     k = int(np.argmax(gaps))
     az = azs[k] + 0.5 * gaps[k]
     return np.array([attach_radius * np.cos(az), attach_radius * np.sin(az), attach_z])
+
+
+def _reach_past(node, ref):
+    """How far the formation reaches past ref (m, >= 0): attach radius + the typed cable at the planned elevation (the
+    rig ring: 0.5 on 0.55 m cables, 0.725 on 1 m)."""
+    reach = (float(getattr(node, 'attach_radius', 0.225)) + float(getattr(node, 'cable_len', 0.55))
+             * float(np.cos(np.radians(float(getattr(node, 'cable_elev_deg', 60.0))))))
+    return max(0.0, round(reach - ref, 9))
+
+
+def _cable_reach_past(node):
+    """A cable longer than CLEAR_CABLE_M: its extra reach at the planned elevation (m, >= 0; 1 m at 60 deg: 0.225)."""
+    extra = max(0.0, float(getattr(node, 'cable_len', 0.55)) - CLEAR_CABLE_M)
+    return round(extra * float(np.cos(np.radians(float(getattr(node, 'cable_elev_deg', 60.0))))), 9)
+
+
+def _path_clear_m(node):
+    """DEPARTED_PATH_CLEAR_M + a longer cable's reach (1.225 m on 1 m cables)."""
+    return DEPARTED_PATH_CLEAR_M + _cable_reach_past(node)
+
+
+def _zone_rise_far_m(node):
+    """ZONE_RISE_FAR_M + a longer cable's reach (1.125 m on 1 m cables)."""
+    return ZONE_RISE_FAR_M + _cable_reach_past(node)
+
+
+def _departed_clear_r(node):
+    """DEPARTED_CLEAR_R, + the reach past the rig ring's at 1 m (S's ring R 0.5: 1.475 m)."""
+    return DEPARTED_CLEAR_R + _reach_past(node, RIG_RING_REACH_M)
+
+
+def _land_inside(node, p, c=None, limit=None):
+    """p POS_LIMIT_LAND_MARGIN_M inside the position limit (pos_limit_m > 0, or limit when given), so a freed or dropped
+    drone lands inside it: moved back along its ray from c when given (a step out stays radial), else x and y clamped;
+    p itself when the limit is off."""
+    limit = float(getattr(node, '_pos_limit_m', 0.0)) if limit is None else float(limit)
+    if limit <= 0.0:
+        return p
+    bound = limit - POS_LIMIT_LAND_MARGIN_M
+    return limit_xy(p, bound) if c is None else limit_ray(c, p, bound)
+
+
+def _land_clear(node, c, target, r_clear, limit=None):
+    """A freed drone's landing goal out from the ring centre c: target, shortened along its ray from c to the position
+    limit's landing margin; where that leaves it inside the clearance circle about c (r_clear, or target's own distance
+    when nearer), the point of that circle inside the margin nearest its bearing instead, so it never comes down with
+    its tether under the ring (R0567; critic M1). None when no point of the circle is inside the margin. limit: in
+    place of pos_limit_m."""
+    c = np.asarray(c, float)[:2]
+    limit = float(getattr(node, '_pos_limit_m', 0.0)) if limit is None else float(limit)
+    q = _land_inside(node, target, c, limit)
+    if q is target:
+        return target
+    v = np.asarray(target, float)[:2] - c
+    r = min(float(r_clear), float(np.linalg.norm(v)))
+    if float(np.linalg.norm(q[:2] - c)) >= r - 1e-9:
+        return q
+    p = clear_point(c, v, r, limit - POS_LIMIT_LAND_MARGIN_M)
+    return None if p is None else np.array([p[0], p[1], float(target[2])])
+
+
+def _hold_unclear(node, d, r_clear):
+    """No point r_clear from the ring is inside the position limit's landing margin: d holds where it is, at height,
+    rather than land on its tether, and the status line says so."""
+    held = getattr(node, '_held_unclear', None)
+    if held is None:
+        held = node._held_unclear = {}
+    if d not in held:
+        node.get_logger().error(f'[dissipative] {_who(d)} HELD at height: no landing point {r_clear:.2f} m from the '
+                                f'ring is inside the position limit; it does not come down onto its tether')
+    held[d] = f'{_who(d)} HELD: no landing spot clear of the ring inside the limit'
 
 
 def _ring_off_allowed(node):
@@ -194,6 +299,60 @@ def take_back_ramp(q, v, goal, v_f, dt, vmax=DETACH_STEP_VEL, v_g=None):
     return q + (v_new - vf) * dt, v_new, dv / dt
 
 
+def rejoin_weld_gate(samples):
+    """(ready, offset, speed) of a rejoining rod's end on its plate point. samples: its newest (receipt time, stamp,
+    offset from the plate point) last. Ready: a contiguous run (gaps up to REJOIN_TIP_GAP_S) of at least REJOIN_WELD_N
+    samples spanning REJOIN_WELD_S, every one within REJOIN_WELD_M, moving at most REJOIN_SLOW_MPS relative to the plate
+    between its ends. offset: the newest sample's, m; speed: the run's, m/s (None until the run spans the window)."""
+    if not samples:
+        return False, None, None
+    _, t_new, e_new = samples[-1]
+    off = float(np.linalg.norm(e_new))
+    run, t_prev = [], None
+    for _, ts, e in reversed(samples):
+        if (t_prev is not None and t_prev - ts > REJOIN_TIP_GAP_S) or float(np.linalg.norm(e)) > REJOIN_WELD_M:
+            break
+        run.append((ts, e))
+        t_prev = ts
+        if t_new - ts >= REJOIN_WELD_S:
+            break
+    if len(run) < REJOIN_WELD_N or t_new - run[-1][0] < REJOIN_WELD_S - 1e-9:
+        return False, off, None
+    speed = float(np.linalg.norm(np.asarray(e_new, float) - np.asarray(run[-1][1], float))) / (t_new - run[-1][0])
+    return speed <= REJOIN_SLOW_MPS, off, speed
+
+
+def parse_task(text):
+    """/fleet/task text -> (drone id, [(x, y, z, dwell s), ...]): 'd x,y,z,dwell; x,y,z,dwell; ...' (world m).
+    ValueError on anything else."""
+    head, _, rest = str(text).strip().partition(' ')
+    d = int(head)
+    wps = []
+    for part in rest.split(';'):
+        if not part.strip():
+            continue
+        w = tuple(float(v) for v in part.split(','))
+        if len(w) != 4 or not all(np.isfinite(w)) or w[3] < 0.0:
+            raise ValueError(f'waypoint {part.strip()!r}: want x,y,z,dwell, finite, dwell >= 0')
+        wps.append(w)
+    if not wps:
+        raise ValueError('no waypoint')
+    return d, wps
+
+
+def _min_dist_xy(path, pts):
+    """The smallest horizontal distance between the polyline `path` (points, x y first) and any of `pts`."""
+    pts = np.asarray(pts, float)[:, :2]
+    best = float('inf')
+    for a, b in zip(path[:-1], path[1:]):
+        a, b = np.asarray(a, float)[:2], np.asarray(b, float)[:2]
+        ab = b - a
+        n2 = float(ab @ ab)
+        s = np.zeros(len(pts)) if n2 < 1e-12 else np.clip((pts - a) @ ab / n2, 0.0, 1.0)
+        best = min(best, float(np.min(np.linalg.norm(pts - (a + s[:, None] * ab), axis=1))))
+    return best
+
+
 def _who(d):
     """A drone in operator lines: its label (1-4, as RViz, the fleet manager and the airframes)
     and its topic index."""
@@ -220,6 +379,19 @@ def _survivor_gap_deg(rho):
         return _largest_gap_deg(rho)
     a0, a1 = (np.arctan2(float(r[1]), float(r[0])) for r in rho)
     return 360.0 - abs(np.degrees((a1 - a0 + np.pi) % (2 * np.pi) - np.pi))
+
+
+def attach_point_slot(source, slot_xy):
+    """The newcomer's fold-in point (card 2026-10-23_catch_offset): None for 'measured' (where it caught, as flown),
+    the typed slot's xy for 'slot' (twin only, the launch refuses it elsewhere)."""
+    source = str(source).strip().lower()
+    if source not in ('measured', 'slot'):
+        raise ValueError(f'attach_point_source {source!r}: measured or slot')
+    if source == 'measured':
+        return None
+    if not np.all(np.isfinite(np.asarray(slot_xy, float))):
+        raise ValueError('attach_point_source slot needs the slot: attach_x_offset and attach_y_offset')
+    return np.array(slot_xy, float)
 
 
 class DissipativeController(LoadPlanner):
@@ -261,7 +433,9 @@ class DissipativeController(LoadPlanner):
             # its actual cable force tracks the modelled feedforward and the feedforward-
             # trusting, no-integrator tracker never under-thrusts (the mid-flight attach
             # runaway fix). Only used when attach_handout is on. See DissipativeParams.
-            T_handout=float(p('diss_t_handout', 12.0).value))
+            T_handout=float(p('diss_t_handout', 12.0).value),
+            # the paper's friction relative to the moving formation (Eq. 9; card 2026-10-23_paper_method_compare)
+            damp_relative=bool(p('net_damp_relative', False).value))
         # Horizon PREVIEW for the published network references. ON (default) carries the
         # load trajectory's own future displacement along the horizon, the way the OCP
         # path does (reference_builder.yref_at); OFF repeats the network's single target
@@ -285,6 +459,14 @@ class DissipativeController(LoadPlanner):
         # symptom and therefore cannot confirm the cure. Fly it as an A/B against the
         # logs (net_traj_lean:=true) before making it the default.
         self._net_lean = bool(p('net_traj_lean', False).value)
+        # Rig-twin geometry (card 2026-10-23_paper_method_compare; off until its critic): the network's
+        # reference is the rod's drone end, which on the twin is the pivot 4 cm below the drone the
+        # tracker flies, so the reference goes to the drone centre as the OCP's does, and the nodes start
+        # at the measured pivots and rods.
+        self._net_twin = bool(p('net_twin_geometry', False).value)
+        # The 5 s pre-path hold (traj_hold_s) the OCP began runs to its end in the network phase, so the
+        # path starts when it would under the OCP: the hand-over comes 1.5 s into the hold (same card).
+        self._net_hold_carry = bool(p('net_hold_carry', False).value)
         # ATTACH capacity: the network is provisioned with reserved_attach EXTRA nodes
         # beyond the n tethered drones the OCP flies. The reserved slots start off-network
         # (detach()-ed, hence inert) and are welded in mid-flight by attach(). The parent
@@ -577,6 +759,7 @@ class DissipativeController(LoadPlanner):
         # gap-centre placeholder stands in, which ties between equal gaps (critic round 2, A4)
         wp = [float(p(k, float('nan')).value) for k in ('attach_x_offset', 'attach_y_offset', 'weld_point_z')]
         self._weld_rho = np.array(wp) if np.all(np.isfinite(wp)) else None
+        self._slot_xy = attach_point_slot(p('attach_point_source', 'measured').value, wp[:2])
         if self._release_guard:
             if self._weld_rho is None:
                 raise ValueError('take_back_release_guard needs the weld point: attach_x_offset, attach_y_offset '
@@ -696,17 +879,46 @@ class DissipativeController(LoadPlanner):
         # while the survivors' largest empty arc (a pair: its larger arc) is at most this, so the T and the opposite
         # pair fly on at 200; 0 = the rule before (a gap of 180 or more drops). A pair also needs min_survivors 2.
         self._drop_gap_deg = float(p('drop_gap_deg', 0.0).value)
+        # rejoin_departed (twin only; plan 2026-10-21 code design B, card 2026-10-23_rejoin_departed): a carrier that
+        # leaves holds at a staging point in the ring frame instead of landing, and /fleet/attach <d> flies it back to
+        # its own plate on the newcomer's approach, re-welds its tether's gz joint (/drone_d/attach) and grows the OCP
+        # with the plate point and rod length it left with. Off: departed carriers as before, and an attach of one is
+        # refused.
+        self._rejoin_departed = bool(p('rejoin_departed', False).value)
+        # the rejoiner's fold-in blend (the card's 10 s, as QUAD4's); the detach graph has no attach_traj_hold_s
+        self._rejoin_blend_s = float(p('rejoin_blend_s', 10.0).value)
+        # rejoin_task (twin only; card 2026-10-23_scalability case 6, critic waived by Wesley 23 Oct): /fleet/task
+        # 'd x,y,z,dwell; ...' flies staged carrier d to each waypoint (world m), holds it there its dwell and flies it
+        # back to its staging point (_start_task). Off: no /fleet/task.
+        self._rejoin_task = bool(p('rejoin_task', False).value)
+        # traj_lap_hold_s (twin only; the same card, case 7): > 0 = the path is held this long at each lap end but the
+        # last, through the reconfiguration hold (_lap_end_tick). 0 = off.
+        self._lap_hold_s = float(p('traj_lap_hold_s', 0.0).value)
+        self._lap_held = 0            # the last lap whose end was held
+        self._rejoin = {}             # d -> its staging / rejoin state (_stage_departed)
+        self._rejoin_tip_t = {}       # d -> monotonic time its rod's end was last seen
+        self._rejoin_joint = {}       # d -> its tether joint's last gz state
+        self._rejoin_joint_t = {}     # d -> node time of its joint's last 'attached'
+        self._rejoin_blend = None     # the rejoiner whose fold-in blend runs: {'d', 'rj', 'max_off', the cap's}
+        self._rejoin_landing = set()  # staged or rejoining drones sent to their own landing (LAND, a drop)
+        if self._rejoin_departed and (self._reconfig_mode != 'ocp' or self._departed_land):
+            raise ValueError('rejoin_departed needs reconfig_mode ocp and departed_land false (a staged carrier holds, '
+                             'it does not land)')
+        if self._rejoin_task and not self._rejoin_departed:
+            raise ValueError('rejoin_task needs rejoin_departed (a task flies a staged carrier)')
+        if self._lap_hold_s > 0.0 and self._reconfig_mode != 'ocp':
+            raise ValueError('traj_lap_hold_s needs reconfig_mode ocp (the network phase runs its own clock)')
         # Where each departed drone was parked, so it keeps getting a reference after
         # an OCP resize (the resized OCP plans only for the drones still on the load,
         # and a tracker with no reference trips ref_stale and disarms the fleet).
         self._departed_hold = {}
         self._departed_clear = {}       # d -> True once stepped clear of the ring on LAND
+        self._held_unclear = {}         # d -> status text: no landing point clear of the ring inside the limit
         if self._reconfig_mode == 'ocp':
-            # Every size this flight could end up at. Built now because an acados
-            # build is 9-40 s and cannot happen mid-flight; warm cache makes it ~0.1 s
-            # (tools/prebuild_planner.py).
-            self.prebuild_solvers(range(max(2, self.n - self.reserved_attach - 2),
-                                        self.n + self.reserved_attach + 1))
+            # Every size this flight could end up at, down to min_survivors (an 8-quad chain to its pair).
+            # Built now because an acados build is 9-40 s and cannot happen mid-flight; warm cache makes it
+            # ~0.1 s (tools/prebuild_planner.py builds the same set).
+            self.prebuild_solvers(prebuild_sizes(self.n, self.reserved_attach, self._min_survivors))
 
         # Which generator is flying the fleet, announced for anyone downstream that
         # needs to change behaviour at the handover -- currently the trackers'
@@ -724,6 +936,14 @@ class DissipativeController(LoadPlanner):
         # Gazebo DetachableJoint release triggers (bridged to gz.msgs.Empty in launch).
         self.detach_pub = [self.create_publisher(Empty, f'/drone_{i}/detach', 1)
                            for i in range(self.n)]
+        if self._rejoin_departed:
+            # the same joints re-weld (/drone_i/attach, the rejoin bridge); each rod's end and joint state come back
+            self._attach_pubs = [self.create_publisher(Empty, f'/drone_{i}/attach', 1) for i in range(self.n)]
+            for i in range(self.n):
+                self.create_subscription(MotionCaptureState, f'/drone_{i}/magnet_tip_state',
+                                         lambda m, dd=i: self._rejoin_tip_cb(dd, m), 10)
+                self.create_subscription(String, f'/drone_{i}/detachable_joint_state',
+                                         lambda m, dd=i: self._rejoin_joint_cb(dd, m), 10)
         # the tethers at construction only: a reserved (magnet) drone's latch belongs to the
         # magnet manager (weld ON, release OFF via /magnet/command), one path per radio
         self._magnet_pubs = ([self.create_publisher(String, f'/drone_{i}/magnet', 1)
@@ -762,8 +982,11 @@ class DissipativeController(LoadPlanner):
                 lambda msg, k=j: self._attach_drone_cb(msg, k), 5)
             self.ref_pub.append(self.create_publisher(
                 Float64MultiArray, f'/drone_{d}/reference_trajectory', 5))
-        if self.reserved_attach > 0:
+        if self.reserved_attach > 0 or self._rejoin_departed:
             self.create_subscription(Int32, '/fleet/attach', self._fleet_attach_cb, 10)
+        if self._rejoin_task:
+            self.create_subscription(String, '/fleet/task', self._fleet_task_cb, 10)
+        if self.reserved_attach > 0:
             self.create_subscription(Bool, '/magnet/object_attached',
                                      self._magnet_attached_cb, 10)
         # Re-dump params.json now that this subclass's parameters exist too (the parent
@@ -858,6 +1081,8 @@ class DissipativeController(LoadPlanner):
         self._contact_release_tick()
         self._release_seen_tick()
         self._land_take_back_tick()
+        if self._rejoin or self._rejoin_blend is not None:
+            self._rejoin_tick()
         if self._departed_hold:
             self._publish_departed_refs()
         self._newcomer_off_tick()
@@ -873,11 +1098,13 @@ class DissipativeController(LoadPlanner):
         self._detect_tick()
         # Freeze the trajectory clock across a resize, so a fleet that is still
         # settling into its new ring is not also asked to chase a moving target.
+        lap_hold = getattr(self, '_lap_hold_s', 0.0) > 0.0
         if self._reconfig_hold_left > 0.0:
             self._reconfig_hold_left -= 1.0 / PLANNER_HZ
             # cancel the advance super()._plan() makes; in hover it makes none (R0518 drifted
-            # to -10 s), so never below zero
-            self.traj_t = max(0.0, self.traj_t - 1.0 / PLANNER_HZ)
+            # to -10 s), so never below zero; with lap holds not in the descent either, where it makes none
+            if not (lap_hold and self.descending):
+                self.traj_t = max(0.0, self.traj_t - 1.0 / PLANNER_HZ)
             if self._settle_hold:
                 self._settle_dwell_tick()
             elif self._reconfig_hold_left <= 0.0:
@@ -892,6 +1119,8 @@ class DissipativeController(LoadPlanner):
             self._network_plan()
             return
         super()._plan()
+        if lap_hold:
+            self._lap_end_tick()
         if getattr(self, '_resize_log_ticks', 0) > 0:
             self._resize_log_ticks -= 1
             try:
@@ -905,6 +1134,23 @@ class DissipativeController(LoadPlanner):
                     'plan_load': None if X is None else [r(X[0:3, k]) for k in (0, 1, 3, 10, X.shape[1] - 1)]}))
             except Exception as e:
                 self.get_logger().warn(f'[dissipative] resize tick log failed: {e}')
+
+    def _lap_end_tick(self):
+        """traj_lap_hold_s (card 2026-10-23_scalability case 7): the clock passed the end of a lap but the last on this
+        tick (it began the tick before it), the ring at rest at the start point: the path is held traj_lap_hold_s through
+        the reconfiguration hold, the one clock hold (a longer one running keeps its length; a rejoin started in it
+        holds the path on as it does in hover), and 'lap k done' is logged. Once per lap end, never in the descent."""
+        T = self.traj.lap_s()
+        if T is None or self.traj.laps < 2 or self.descending or self._land_to_ground or self._dropped is not None:
+            return
+        done = min(int(float(self.traj_t) // T), self.traj.laps - 1)
+        if done <= self._lap_held or self._traj_t_tick >= done * T:
+            return
+        self._lap_held = done
+        self._reconfig_hold_left = max(self._reconfig_hold_left, self._lap_hold_s)
+        self.get_logger().warn(f'[dissipative] lap {done} done at t={self.traj_t:.2f} s: trajectory held '
+                               f'{self._reconfig_hold_left:.1f} s (traj_lap_hold_s; {self.traj.laps - done} of '
+                               f'{self.traj.laps} laps to fly)')
 
     def _release_magnet(self, d):
         """Rig release for a detached drone: latch its tether magnet OFF through the
@@ -939,6 +1185,12 @@ class DissipativeController(LoadPlanner):
                 return False
         return True
 
+    def _land_departed_wait_s(self):
+        """The LAND's wait for departed drones after touchdown, + REJOIN_OUT_EXTRA_S once a staged or rejoining drone
+        left for its own landing (critic M1: /fleet/landed must not disarm it in the air)."""
+        return LoadPlanner._land_departed_wait_s(self) + (
+            REJOIN_OUT_EXTRA_S if getattr(self, '_rejoin_landing', None) else 0.0)
+
     def _publish_departed_refs(self):
         """Keep every drone that has left the fleet on a reference of its own.
 
@@ -960,6 +1212,8 @@ class DissipativeController(LoadPlanner):
         for d, p_hold in self._departed_hold.items():
             if p_hold is None:
                 continue
+            if d in getattr(self, '_rejoin', {}) and not self._land_to_ground and self._dropped is None:
+                continue                        # rejoin_departed: _rejoin_tick flies it until LAND or a drop
             a_ff, a_c = _free_drone_ff(self, d, g)
             if d in getattr(self, '_comove', {}) and self._take_back_tick(d, p_hold, a_ff, a_c):
                 continue                        # the take-back's own reference; it hands over at its landing
@@ -969,6 +1223,8 @@ class DissipativeController(LoadPlanner):
                 self._publish_ref(d, [(p_hold, zero, a_ff, a_c)] * (self.N + 1))
                 continue
             alone = d in self._land_alone
+            # a staged or rejoining drone's way out is reached by its reference exactly, not within 2 cm (R2585)
+            reach = 1e-6 if d in getattr(self, '_rejoin_landing', ()) else 0.02
             if d in self._departed_step and (alone or not self._land_to_ground) \
                     and d not in self._departed_landing:
                 p_hold[:], _ = carrot_step(p_hold, self._departed_step[d], DETACH_STEP_VEL,
@@ -980,8 +1236,9 @@ class DissipativeController(LoadPlanner):
             down = td_prev is not None and td_prev.stalled
             # departed_land: straight down once the step-out is done, the fleet still flying
             if (((self._departed_land and not self._land_to_ground) or alone) and
+                    d not in getattr(self, '_held_unclear', {}) and
                     (d not in self._departed_step or
-                     float(np.linalg.norm(p_hold - self._departed_step[d])) < 0.02)):
+                     float(np.linalg.norm(p_hold - self._departed_step[d])) < reach)):
                 if d not in self._departed_landing:
                     self.get_logger().info(f'[dissipative] departed {_who(d)} lands now (departed_land)')
                 self._departed_landing.add(d)
@@ -995,11 +1252,17 @@ class DissipativeController(LoadPlanner):
                 c = np.asarray(self.load_state[0:2], float)
                 v = np.asarray(p_hold[0:2], float) - c
                 r = float(np.linalg.norm(v))
-                if r >= DEPARTED_CLEAR_R - 0.03:
+                clear_r = _departed_clear_r(self)
+                u = v / r if r > 1e-6 else np.array([1.0, 0.0])
+                # out to the clearance radius (already there: where it is), within the position limit's landing margin
+                goal = _land_clear(self, c, p_hold.copy() if r >= clear_r - 0.03
+                                   else np.array([*(c + u * clear_r), float(p_hold[2])]), clear_r)
+                if goal is None:
+                    _hold_unclear(self, d, clear_r)
+                elif float(np.linalg.norm(goal[:2] - p_hold[:2])) < 0.02:
                     self._departed_clear[d] = True
+                    getattr(self, '_held_unclear', {}).pop(d, None)
                 else:
-                    u = v / r if r > 1e-6 else np.array([1.0, 0.0])
-                    goal = np.array([*(c + u * DEPARTED_CLEAR_R), float(p_hold[2])])
                     p_new, _ = carrot_step(p_hold, goal, rate, 1.0 / PLANNER_HZ)
                     p_hold[:] = p_new
             if (self._land_to_ground and not alone and (down or self._departed_clear.get(d, False))) \
@@ -1171,7 +1434,7 @@ class DissipativeController(LoadPlanner):
                 ok, why, tip_z = False, 'off', None
                 if prof.tip is not None:
                     fr = list(self._tip_frames)
-                    ok, why = tip_valid(self.get_clock().now().nanoseconds * 1e-9, fr)
+                    ok, why = tip_valid(self.get_clock().now().nanoseconds * 1e-9, fr, self._attach_body_to_tip)
                     tip_z = float(fr[-1][1][2]) if fr else None
                 p_ref, v_ff, phase = prof.step(
                     self._attach_target,
@@ -1252,6 +1515,10 @@ class DissipativeController(LoadPlanner):
         if self.detached[d]:
             return
         if self._reconfig_mode == 'ocp':
+            busy = self._rejoin_busy() if getattr(self, '_rejoin_departed', False) else None
+            if busy is not None:
+                self.get_logger().warn(f'[dissipative] detach {d} refused: {busy}')
+                return
             if self._unload is not None:
                 if self._unload['d'] != d:
                     self.get_logger().warn(
@@ -1348,6 +1615,12 @@ class DissipativeController(LoadPlanner):
         lens_of = {self.slot2drone[sl]: self.cable_len_i[sl] for sl in range(len(self.slot2drone))
                    if sl < len(self.cable_len_i)}
         lens = [lens_of[x] for x in survivors] if all(x in lens_of for x in survivors) else None
+        # rejoin_departed: the plate point and rod length d leaves with, read before the resize renumbers the slots
+        left = None
+        if getattr(self, '_rejoin_departed', False) and d < getattr(self, '_n_carry0', 0) and d in self.slot2drone:
+            sl = self.slot2drone.index(d)
+            left = (np.asarray(self.rho[sl], float).copy(),
+                    float(self.cable_len_i[sl]) if sl < len(self.cable_len_i) else float(self.cable_len))
         if not self.resize_fleet(len(survivors), survivors, rho=rho_new, cable_lengths=lens):
             self.get_logger().error(
                 f'[dissipative] detach {d} ABORTED: no OCP for n={len(survivors)}')
@@ -1387,20 +1660,26 @@ class DissipativeController(LoadPlanner):
                                       self._release_up])
             self._release_state[d] = {'target': target, 'released': False, 'quiet': 0.0,
                                       'sent': None}
+        elif left is not None and self._departed_hold[d] is not None and self.load_state is not None:
+            self._stage_departed(d, *left)              # instead of the world-fixed step-out and the landing
         elif self._detach_step_out > 0.0 and self._departed_hold[d] is not None \
                 and self.load_state is not None:
             hold = self._departed_hold[d]
             out = hold[:2] - np.asarray(self.load_state[0:2], float)
             out = out / max(float(np.linalg.norm(out)), 1e-6)
-            self._departed_step[d] = hold + self._detach_step_out * np.array([out[0], out[1], 0.0])
+            step = _land_clear(self, self.load_state[0:2],
+                               hold + self._detach_step_out * np.array([out[0], out[1], 0.0]), _departed_clear_r(self))
+            if step is None:
+                _hold_unclear(self, d, _departed_clear_r(self))
+            self._departed_step[d] = hold.copy() if step is None else step
             self.get_logger().info(f'[dissipative] departed {_who(d)} steps {self._detach_step_out:.2f} m '
                                    f'out from the ring at {DETACH_STEP_VEL:.2f} m/s, then holds')
-            clear = self._path_clear_point(self._departed_step[d], out)
+            clear = None if step is None else self._path_clear_point(self._departed_step[d], out)
             if clear is not None:
                 self._departed_next[d] = clear
                 self.get_logger().info(
                     f'[dissipative] departed {_who(d)} then clears the {self.traj.kind}: to '
-                    f'({clear[0]:.2f}, {clear[1]:.2f}), {self.traj.radius + DEPARTED_PATH_CLEAR_M:.2f} m '
+                    f'({clear[0]:.2f}, {clear[1]:.2f}), {self.traj.radius + _path_clear_m(self):.2f} m '
                     f'from the path centre')
         self._reconfig_hold_left = self._reconfig_hold_s
         self.get_logger().warn(
@@ -1412,25 +1691,29 @@ class DissipativeController(LoadPlanner):
     def _path_clear_point(self, p, out):
         """During a circular trajectory: the point r_orbit + DEPARTED_PATH_CLEAR_M from the path
         centre, radially out through p (along `out`, the ring step, when p is at the centre).
-        None when p is already that far out or the trajectory is not a circle."""
+        None when p is already that far out or the trajectory is not a circle, or (the position
+        limit on) no point that far out is inside it: it lands from its ring step."""
         if self.traj.kind not in ('orbit', 'circle', 'spin') or self.hover_xy is None:
             return None
         # load_trajectory: offset (r sin th, r (1 - cos th)) from the captured hover point
         c = np.array([float(self.hover_xy[0]), float(self.hover_xy[1]) + float(self.traj.radius)])
         v = np.asarray(p[:2], float) - c
         n = float(np.linalg.norm(v))
-        r_clear = float(self.traj.radius) + DEPARTED_PATH_CLEAR_M
+        r_clear = float(self.traj.radius) + _path_clear_m(self)
         if n >= r_clear:
             return None
         u = v / n if n > 0.05 else np.asarray(out[:2], float) / max(float(np.linalg.norm(out[:2])), 1e-6)
-        return np.array([*(c + u * r_clear), float(p[2])])
+        return _land_clear(self, c, np.array([*(c + u * r_clear), float(p[2])]), r_clear)
 
     def _drop_due(self, d):
         """Why losing d means dropping the ring, or None to resize as usual: in LAND, fewer than
         min_survivors left, or the survivors' largest gap >= 180 deg (CoG on or outside them)."""
         if self._land_to_ground:
             return 'during LAND'
-        survivors = [x for x in self.slot2drone if x != d and not self.detached[x]]
+        # rejoin_departed: a rejoiner carries ~0.1 N until its fold-in blend ends, so it holds nothing up (critic M2)
+        blend = getattr(self, '_rejoin_blend', None)
+        survivors = [x for x in self.slot2drone if x != d and not self.detached[x]
+                     and (blend is None or x != blend['d'])]
         if len(survivors) < max(2, self._min_survivors):
             return f'{len(survivors)} would remain (min_survivors {self._min_survivors})'
         rho_of = {self.slot2drone[sl]: self.rho[sl] for sl in range(len(self.slot2drone))}
@@ -1486,10 +1769,15 @@ class DissipativeController(LoadPlanner):
             if self._drop_centre is not None:
                 v = hold[:2] - self._drop_centre
                 r = float(np.linalg.norm(v))
-                if r < DEPARTED_CLEAR_R:
-                    u = v / r if r > 1e-6 else np.array([1.0, 0.0])
-                    self._departed_step[d] = np.array([*(self._drop_centre + u * DEPARTED_CLEAR_R),
-                                                       float(hold[2])])
+                clear_r = _departed_clear_r(self)
+                u = v / r if r > 1e-6 else np.array([1.0, 0.0])
+                # out to the clearance radius; past the position limit's landing margin: in first, still clear
+                step = _land_clear(self, self._drop_centre, hold if r >= clear_r else
+                                   np.array([*(self._drop_centre + u * clear_r), float(hold[2])]), clear_r)
+                if step is None:
+                    _hold_unclear(self, d, clear_r)
+                elif not np.array_equal(step[:2], hold[:2]):
+                    self._departed_step[d] = step
         self._departed_next = {}
         self._departed_land = True
         self._dropped_pub.publish(Bool(data=True))
@@ -1498,6 +1786,8 @@ class DissipativeController(LoadPlanner):
             for j in range(self.reserved_attach):
                 if self.attach_pending[j]:
                     self._take_back(j, 'DROP')
+        for d in list(getattr(self, '_rejoin', {})):
+            self._rejoin_out(d, 'drop')                  # out to the clear radius (over its plate: up first), then down
 
     def _cancel_unload_quietly(self):
         if getattr(self, '_unload', None) is not None:
@@ -1525,7 +1815,8 @@ class DissipativeController(LoadPlanner):
         self._publish_departed_refs()
         if self._landed:
             return
-        wait = DROP_LAND_WAIT_S + (DROP_TAKE_BACK_EXTRA_S if takes_back and self._taken_back else 0.0)
+        wait = (DROP_LAND_WAIT_S + (DROP_TAKE_BACK_EXTRA_S if takes_back and self._taken_back else 0.0)
+                + (REJOIN_OUT_EXTRA_S if getattr(self, '_rejoin_landing', None) else 0.0))
         late = self.get_clock().now().nanoseconds * 1e-9 - self._drop_t > wait
         if self._departed_down() or late:
             self._landed = True
@@ -1839,7 +2130,7 @@ class DissipativeController(LoadPlanner):
                 'drone_pos': [None if p is None else r(p) for p in self.drone_pos],
                 'drone_vel': [None if v is None else r(v) for v in self.drone_vel],
                 't_before': r(t_before), 't_from': r(t_from), 's_from': [r(v) for v in s_from],
-                't_nom': r(self.refs._t_nom), 'load_nodes': load_nodes}))
+                't_nom': r(self.refs._t_nom), 'load_nodes': load_nodes, 'rho': [r(v) for v in self.rho[:self.n]]}))
         except Exception as e:
             self.get_logger().warn(f'[dissipative] resize input log failed: {e}')
 
@@ -2243,7 +2534,7 @@ class DissipativeController(LoadPlanner):
         btt = self._attach_body_to_tip
         if moves:
             centre = np.array([float(self.hover_xy[0]), float(self.hover_xy[1]) + float(self.traj.radius)])
-            r_clear = float(self.traj.radius) + DEPARTED_PATH_CLEAR_M
+            r_clear = float(self.traj.radius) + _path_clear_m(self)
             lowest = float(p_s[2]) - btt - (BALL_DIAM_M if self._ball_on else 0.0)
             if float(p_s[2]) < z_r - ZONE_BELOW_RING_M:
                 st['zone'] = 'b'
@@ -2262,7 +2553,7 @@ class DissipativeController(LoadPlanner):
         z = float(p_s[2])
         # with his ball on, the ball lands first and QUAD4 comes down beside it along the rod: clear by the rod too
         # (R1482: taken back at r 1.3 m, it landed at r 1.03, 0.33 m from carrier 1)
-        clear_r = DEPARTED_CLEAR_R + (btt if self._ball_on else 0.0)
+        clear_r = _departed_clear_r(self) + (btt if self._ball_on else 0.0)
         v = p_s[:2] - c_m
         r = float(np.linalg.norm(v))
         u = v / r if r >= self.attach_radius else self._reserved_plate_dir(j, c_m)
@@ -2272,20 +2563,21 @@ class DissipativeController(LoadPlanner):
         # above carrier 1 at 1.77 m)
         tip_clear_z = z_r + btt + TAKE_BACK_TIP_CLEAR_M
         rise_z = tip_clear_z if z_c is None else max(tip_clear_z, z_c + TAKE_BACK_OVER_CARRIERS_M)
-        out = np.array([*(c_m + u * clear_r), z]) if r < clear_r else None
+        out = _land_inside(self, np.array([*(c_m + u * clear_r), z]), c_m) if r < clear_r else None
         goals = []
         frame = ''
         if st['zone'] == 'c':
             frame = 'zone c, moving with the ring: '
             tip = z - btt
-            if r < ZONE_RISE_FAR_M and tip < z_r - TIP_AT_RING_BELOW_M:
+            rise_far = _zone_rise_far_m(self)
+            if r < rise_far and tip < z_r - TIP_AT_RING_BELOW_M:
                 z_dc = min(z, max(z_r - ZONE_BELOW_RING_M, btt + TIP_OVER_FLOOR_M))
                 goals.append(np.array([p_s[0], p_s[1], z_dc]))
                 st['clear'] = False
                 where = f'down with the ring to {z_dc:.2f} m (under the formation), then down where it stops'
                 self._departed_step[d] = goals[0]
                 return frame + where
-            zz = max(z, rise_z) if (tip < z_r + TAKE_BACK_TIP_CLEAR_M or r >= ZONE_RISE_FAR_M) else z
+            zz = max(z, rise_z) if (tip < z_r + TAKE_BACK_TIP_CLEAR_M or r >= rise_far) else z
             if zz > z + 1e-3:
                 goals.append(np.array([p_s[0], p_s[1], zz]))
             if out is not None:
@@ -2465,6 +2757,9 @@ class DissipativeController(LoadPlanner):
                 # both ends inside the tether's reach of the plate, so the straight move between them is too
                 st['stage'] = stage = 'land'
                 st['goal'] = q + np.r_[GUARD_OUT_M * st['u'], -GUARD_OUT_M]
+                if getattr(self, '_pos_limit_m', 0.0) > 0.0:
+                    D = np.r_[st['D'], 0.0]                # the goal is in the ring frame: the world point inside
+                    st['goal'] = _land_inside(self, st['goal'] + D, q + D) - D
                 self.get_logger().warn(f'[dissipative] RELEASE GUARD: {_who(d)}: ring down, out by the tether\'s '
                                        f'slack and down beside it ({GUARD_OUT_M:.2f} m out, {GUARD_OUT_M:.2f} m '
                                        f'down), then it lands alone')
@@ -2639,10 +2934,15 @@ class DissipativeController(LoadPlanner):
             v = hold[:2] - c
             r = float(np.linalg.norm(v))
             u = v / r if r > 1e-6 else np.array([1.0, 0.0])
-            if r < DEPARTED_CLEAR_R:
-                self._departed_step[d] = np.array([*(c + u * DEPARTED_CLEAR_R), float(hold[2])])
+            clear_r = _departed_clear_r(self)
+            step = _land_clear(self, c, np.array([*(c + u * clear_r), float(hold[2])]), clear_r) \
+                if r < clear_r else hold
+            if step is None:
+                _hold_unclear(self, d, clear_r)
+            elif step is not hold:
+                self._departed_step[d] = step
             # during a circle, on out past the ring's path before it lands (as a detached drone does)
-            clear = self._path_clear_point(self._departed_step.get(d, hold), u)
+            clear = None if step is None else self._path_clear_point(self._departed_step.get(d, hold), u)
             if clear is not None:
                 if d in self._departed_step:
                     self._departed_next[d] = clear
@@ -2651,7 +2951,7 @@ class DissipativeController(LoadPlanner):
         self._land_alone.add(d)
         self.get_logger().warn(f'[dissipative] {_who(d)} out of this flight ({why}): magnet OFF, '
                                f'{NEWCOMER_RELEASE_S:.1f} s for the release, then radially out to '
-                               f'{DEPARTED_CLEAR_R:.1f} m from the ring at its height and lands')
+                               f'{_departed_clear_r(self):.2f} m from the ring at its height and lands')
 
     def _announce_on_load(self):
         """Publish each unwelded newcomer's on_load False once the fleet has left the creep (LAND is acted on
@@ -2726,6 +3026,14 @@ class DissipativeController(LoadPlanner):
             self.get_logger().warn(f'[dissipative] /fleet/attach {d} out of range')
             return
         j = self._reserved_index(d)
+        if j is None and d < len(self.detached) and self.detached[d]:
+            # a carrier that left: only its rejoin brings it back (this folded it in at its BODY, with the typed rod
+            # and no weld in the twin, before 23 Oct)
+            if getattr(self, '_rejoin_departed', False):
+                self._start_rejoin(d)
+            else:
+                self.get_logger().warn(f'[dissipative] attach of departed {_who(d)} refused: rejoin_departed is off')
+            return
         why = self._weld_refused(j) if j is not None else None
         if why is not None:
             self.get_logger().warn(f'[dissipative] attach of {_who(d)} refused: {why}')
@@ -2840,7 +3148,7 @@ class DissipativeController(LoadPlanner):
                 and self._reconfig_mode == 'ocp' and not self.takeoff_seen
                 and self._reserved_index(d) is not None)
 
-    def _attach_ocp(self, d, start_creep=False):
+    def _attach_ocp(self, d, start_creep=False, rejoin=None):
         """Attach WITHOUT handing the fleet to the network: grow the OCP in place, the
         mirror of _detach_ocp. The newcomer's weld point becomes one more attach point of
         the (generally uneven) ring, its magnet arm one more rod, and the pre-built n+1
@@ -2849,25 +3157,32 @@ class DissipativeController(LoadPlanner):
 
         start_creep: the floor-start weld folded in before TAKEOFF. The creep is resized
         to sweep the newcomer with the carriers, and there is no weld transient to slew
-        or hold: at the hand-over its rod is at the creep elevation like the others."""
+        or hold: at the hand-over its rod is at the creep elevation like the others.
+
+        rejoin: a departed carrier's re-weld (rejoin_departed): the plate point and rod length it left with, not a
+        capture from its body, and the path held through the reconfiguration. True once the OCP has grown."""
         if d in self.slot2drone:
-            return                                            # already on the load
+            return False                                      # already on the load
         if start_creep and self.creep.sweep_started():
             self.get_logger().warn(f'[dissipative] start weld of drone {d} not folded into '
                                    f'the creep: the sweep has already started')
-            return
+            return False
         j = self._reserved_index(d)
         measured = self.attach_pos[j] if j is not None else (
             self.drone_pos[d] if d < len(self.drone_pos) else None)
         if measured is None or self.load_state is None:
             self.get_logger().warn(f'[dissipative] attach drone {d}: no mocap yet')
-            return
+            return False
         # the OCP's attach point for the newcomer is where its rod actually pivots: the
         # welded TIP (r up to 0.10 outside the ring, its true height), not the rim point
         # (R0547: the 7 cm between them made the planned 45-deg swing unreachable and
         # the rod yanked the newcomer over 3 s after the weld)
-        rho_new = self._capture_weld_rho(measured, d, clamp=False, keep_z=True)
-        if self._start_attached and not getattr(self, 'takeoff_seen', False):
+        slot_xy = getattr(self, '_slot_xy', None) if rejoin is None and j is not None else None
+        rho_new = (np.asarray(rejoin['rho'], float).copy() if rejoin is not None
+                   else self._capture_weld_rho(measured, d, clamp=False, keep_z=True))
+        if slot_xy is not None:
+            rho_new[:2] = slot_xy       # the slot arm moves xy only: z stays the catch's, as the measured arm's
+        if rejoin is None and self._start_attached and not getattr(self, 'takeoff_seen', False):
             # welded on the ground with its rod laid out like a carrier's: the body-minus-
             # arm estimate would put the weld 0.4 m under the ring. Use the plate.
             R = quat_to_rot_np(self.load_state[3:7])
@@ -2885,14 +3200,15 @@ class DissipativeController(LoadPlanner):
         rho_all = [np.asarray(self.rho[sl], float) for sl in range(len(self.slot2drone))]
         rho_all.append(rho_new)
         lens = [float(v) for v in self.cable_len_i[:len(self.slot2drone)]]
-        lens.append(float(self._attach_cable_len) if j is not None else float(self.cable_len))
+        lens.append(float(rejoin['len']) if rejoin is not None
+                    else float(self._attach_cable_len) if j is not None else float(self.cable_len))
         ids = list(self.slot2drone) + [int(d)]
         t_before = list(self.refs._t_nom)                    # incumbents' shares pre-resize
         if not self.resize_fleet(len(ids), ids, rho=rho_all, cable_lengths=lens):
             self.get_logger().error(
                 f'[dissipative] attach {d} ABORTED: no OCP for n={len(ids)}; the newcomer '
                 f'keeps its hold reference')
-            return
+            return False
         # the newcomer's nominal cable must point at the incumbents' common apex, or the
         # static balance gives it no load (see geometry.apex_direction)
         self._s_nom[-1] = apex_direction(self.rho[:-1], self._s_nom[:-1], self.rho[-1])
@@ -2905,7 +3221,7 @@ class DissipativeController(LoadPlanner):
         self.drone_pos[d] = np.asarray(measured, float).copy()
         self.drone_vel[d] = np.zeros(3)
         self._ocp_attached[d] = True
-        if getattr(self, '_partner_contact', False):
+        if getattr(self, '_partner_contact', False) or d in getattr(self, '_departed_hold', {}):
             self._drop_departed(d)                            # the OCP is its one reference from now on
         self._set_on_load(d, True)
         if j is not None:
@@ -2913,6 +3229,9 @@ class DissipativeController(LoadPlanner):
             getattr(self, '_warm_latched', set()).discard(j)
             self._approach.pop(j, None)
         self.detached[d] = False
+        for m in (getattr(self, '_detect_count', {}), getattr(self, '_detect_ok', {})):
+            m.pop(d, None)                                    # its loss detector starts afresh on its new slot
+        getattr(self, '_detect_refused', set()).discard(d)
         if getattr(self, '_tip_detect_m', 0.0) > 0.0:
             self._tip_forget(d)
         self._weld_time[d] = self.get_clock().now()          # cable-FF ramp for the newcomer
@@ -2924,17 +3243,20 @@ class DissipativeController(LoadPlanner):
                 f'plate at {ccw_to_cw_deg(np.degrees(np.arctan2(rho_new[1], rho_new[0]))):.0f} deg cw, '
                 f'rods {[round(v, 2) for v in lens]} m, '
                 f'tensions {[round(v, 2) for v in self.refs._t_nom]}')
-            return
+            return True
         # slew the cable references from the weld state: the newcomer's rod as measured
         # (drone -> rim, ~vertical) carrying nothing, the incumbents at their pre-resize
         # shares, to the new balanced split over the hold (R0541: the immediate 45-deg
         # re-plan rolled the Gazebo newcomer over 2 s after the weld)
-        blend_s = self._attach_traj_hold_s if self._attach_traj_hold_s > 0.0 else self._reconfig_hold_s
+        blend_s = (getattr(self, '_rejoin_blend_s', 10.0) if rejoin is not None else
+                   self._attach_traj_hold_s if self._attach_traj_hold_s > 0.0 else self._reconfig_hold_s)
         R = quat_to_rot_np(self.load_state[3:7])
         rim = np.asarray(self.load_state[0:3], float) + R @ rho_new
         dvec = rim - np.asarray(measured, float)
         s_new = dvec / max(float(np.linalg.norm(dvec)), 1e-6)
-        s_from = list(self._s_nom[:-1]) + [rot_z(-self.psi0) @ s_new]
+        # a rejoin may come back into a path held mid-turn: the nominal frame is turned by the planned yaw too
+        psi = self.psi0 + (float(self.traj.yaw_at(self.traj_t)[0]) if rejoin is not None else 0.0)
+        s_from = list(self._s_nom[:-1]) + [rot_z(-psi) @ s_new]
         # the newcomer's start tension acts off the incumbents' apex: a moment on the ring
         t_new0 = self._attach_t_start_new
         if (getattr(self, '_partner_contact', False) and j is not None
@@ -2958,7 +3280,7 @@ class DissipativeController(LoadPlanner):
         self.refs.start_blend(s_from, t_from, blend_s)
         for _ in range(2):
             self._prime_solver()
-        self._log_resize_inputs('attach', d, t_before, s_from, t_from)
+        self._log_resize_inputs('attach' if rejoin is None else 'rejoin', d, t_before, s_from, t_from)
         self._resize_log_ticks = 3
         if self.solver.last_X is None:
             self.get_logger().error(
@@ -2966,8 +3288,15 @@ class DissipativeController(LoadPlanner):
                 f'current state. The fleet is resized but the first solves may jump.')
         gap = _largest_gap_deg(self.rho)
         az = float(np.degrees(np.arctan2(rho_new[1], rho_new[0])))
+        point = ('rejoin plate point' if rejoin is not None else 'slot assumed' if slot_xy is not None
+                 else 'measured catch point')
         self._approach_hold_armed = False
-        if self._attach_traj_hold_s > 0.0 and self._hold_mode == 'settle':
+        if rejoin is not None:
+            # a rejoin pauses the path through its whole fold-in blend: _rejoin_cap's level ring is the ring now, which
+            # a resumed path would move on under it (critic M2, 23 Oct)
+            self._reconfig_hold_left = max(blend_s, self._reconfig_hold_s)
+            hold = f'held {self._reconfig_hold_left:.1f} s (the rejoin blend)'
+        elif self._attach_traj_hold_s > 0.0 and self._hold_mode == 'settle':
             self._reconfig_hold_left = self._hold_max_s
             self._settle_hold, self._settle_for, self._settle_elapsed = True, 0.0, 0.0
             self._settle_prev_tilt = None
@@ -2977,10 +3306,543 @@ class DissipativeController(LoadPlanner):
                                         else max(self._attach_traj_hold_s, self._reconfig_hold_s))
             hold = f'held {self._reconfig_hold_left:.1f} s'
         self.get_logger().warn(
-            f'[dissipative] ATTACH drone {d} (OCP resize): n={self.n}, weld at {ccw_to_cw_deg(az):.0f} deg cw '
+            f'[dissipative] ATTACH drone {d} (OCP resize{", rejoin" if rejoin is not None else ""}): n={self.n}, '
+            f'weld at {ccw_to_cw_deg(az):.0f} deg cw '
             f'(plate {plate_of_azimuth(az)}, r={float(np.hypot(rho_new[0], rho_new[1])):.2f}), rod {lens[-1]:.2f} m, '
             f'tensions {[round(v, 2) for v in self.refs._t_nom]}; '
-            f'trajectory {hold}; ring gap {gap:.0f} deg')
+            f'trajectory {hold}; ring gap {gap:.0f} deg; '
+            f'point ({rho_new[0]:+.4f},{rho_new[1]:+.4f},{rho_new[2]:+.4f}) m, {point}')
+        return True
+
+    # ── rejoin_departed (twin only; plan 2026-10-21 code design B, card 2026-10-23_rejoin_departed) ──────────────────
+    def _stage_departed(self, d, rho, length):
+        """Carrier d has just left: it holds at a staging point fixed in the ring frame instead of landing, on its own
+        plate's bearing REJOIN_STAGE_OUT_M beyond the formation's reach, at the height it left at. Its reference starts
+        at its measured position moving with the ring frame: not at its measured velocity, which a loaded release
+        kicks upward (braked at TAKE_BACK_ACCEL that would carry the reference far above it). The plate point and rod
+        length it leaves with are kept for its rejoin."""
+        rho = np.asarray(rho, float).reshape(3)
+        pos = np.asarray(self._departed_hold[d], float)
+        reach = float(np.hypot(rho[0], rho[1])) + float(length) * float(np.cos(np.radians(self.cable_elev_deg)))
+        az = float(np.arctan2(rho[1], rho[0]))
+        rj = self._rejoin[d] = {'rho': rho.copy(), 'len': float(length), 'az': az, 'mode': 'stage',
+                                'btt': body_to_tip(length, self.pivot_offset[2]), 'z': float(pos[2]),
+                                'r_stage': reach + REJOIN_STAGE_OUT_M, 'q': pos.copy(), 'tips': deque(maxlen=128),
+                                'frames': deque(maxlen=TIP_FROZEN_N + 2)}
+        rj['v'] = self._stage_point(rj)[1]
+        self.get_logger().info(
+            f'[dissipative] departed {_who(d)} stages {reach + REJOIN_STAGE_OUT_M:.2f} m from the ring on plate '
+            f'{plate_of_azimuth(np.degrees(az))}\'s bearing at {pos[2]:.2f} m (rejoin_departed: rod {length:.3f} m '
+            f'kept for /fleet/attach {d})')
+
+    def _rejoin_limit(self):
+        """The position limit a staged or rejoining drone keeps inside: pos_limit_m when set, else Wesley's 1.75 m."""
+        limit = float(getattr(self, '_pos_limit_m', 0.0))
+        return limit if limit > 0.0 else POSITION_LIMIT_M
+
+    def _stage_lim(self):
+        """The bound on a staged drone's |x| and |y|: STAGE_LIMIT_MARGIN_M inside the position limit, less STAGE_TRACK_M
+        for its tracking (the card's +-1.6 m is the drone's, R2586)."""
+        return self._rejoin_limit() - STAGE_LIMIT_MARGIN_M - STAGE_TRACK_M
+
+    def _stage_inside(self, q0, v, dt):
+        """(q, v) of a staged or retreating reference one step on from q0 at velocity v, braked at TAKE_BACK_ACCEL so it
+        stops on the staging bound instead of running past it (R2586: 5.6 cm at 0.19 m/s), and held inside it."""
+        lim = self._stage_lim()
+        q0 = np.asarray(q0, float)
+        v = np.asarray(v, float).copy()
+        h = 0.5 * TAKE_BACK_ACCEL * dt
+        for k in (0, 1):
+            if v[k] != 0.0:
+                room = max(lim - float(np.sign(v[k])) * float(q0[k]), 0.0)
+                # the speed that still stops within room in steps of dt, slowing by TAKE_BACK_ACCEL * dt each
+                v_stop = float(np.sqrt(h * h + 2.0 * TAKE_BACK_ACCEL * room)) - h
+                v[k] = float(np.sign(v[k])) * min(abs(float(v[k])), v_stop, room / dt)
+        return self._stage_hold(q0 + v * dt, v)
+
+    def _stage_hold(self, q, v):
+        """q with x and y held inside the staging bound, and v without a component carrying it further out there."""
+        lim = self._stage_lim()
+        q = np.asarray(q, float).copy()
+        v = np.asarray(v, float).copy()
+        for k in (0, 1):
+            if abs(float(q[k])) >= lim:
+                q[k] = float(np.clip(q[k], -lim, lim))
+                if float(v[k]) * float(q[k]) > 0.0:
+                    v[k] = 0.0
+        return q, v
+
+    def _stage_point(self, rj):
+        """(goal, velocity) of a staged drone now: on its plate's bearing r_stage from the PLANNED ring point, turned
+        with the planned yaw, at its own height (a held or finished clock is a still frame). Clamped inside the staging
+        bound (_stage_lim), where that axis gets no velocity."""
+        t = float(self.traj_t)
+        dx, dy, vx, vy = self.traj.offset_at(t)
+        yaw, rate = self.traj.yaw_at(t)
+        if not getattr(self, '_traj_running', False):
+            vx = vy = rate = 0.0
+        hx, hy = self.hover_xy if self.hover_xy is not None else self.load_state[0:2]
+        a = float(self.psi0) + float(yaw) + rj['az']
+        u = np.array([np.cos(a), np.sin(a)])
+        xy = np.array([float(hx) + dx, float(hy) + dy]) + rj['r_stage'] * u
+        v = np.array([vx, vy], float) + rj['r_stage'] * float(rate) * np.array([-u[1], u[0]])
+        lim = self._stage_lim()
+        v[np.abs(xy) > lim] = 0.0
+        xy = np.clip(xy, -lim, lim)
+        return np.array([xy[0], xy[1], rj['z']]), np.array([v[0], v[1], 0.0])
+
+    def _plate_world(self, rj):
+        """The rejoining drone's plate point in the world, on the measured ring."""
+        R = quat_to_rot_np(self.load_state[3:7])
+        return np.asarray(self.load_state[0:3], float) + R @ rj['rho']
+
+    def _rejoin_busy(self):
+        """Why a DETACH must wait: a rejoin flying (its approach, weld or retreat) or a rejoiner's fold-in blend
+        (critic M2), or None. A carrier on its task is away from the ring."""
+        for x, r in self._rejoin.items():
+            if r['mode'] not in ('stage', 'task'):
+                return f'{_who(x)} is rejoining (its {r["mode"]})'
+        b = getattr(self, '_rejoin_blend', None)
+        return None if b is None else f'{_who(b["d"])} is folding back in (its blend)'
+
+    def _rejoin_tick(self):
+        """Every tick before the departed references: each staged, rejoining or retreating carrier gets its reference
+        here (staged or retreating, its velocity changes by at most TAKE_BACK_ACCEL), and a fold-in blend is watched.
+        Under LAND or after a drop each one leaves for its own landing (_rejoin_out)."""
+        self._rejoin_blend_tick()
+        landing = self._land_to_ground or self._dropped is not None
+        g = np.array([0.0, 0.0, self.dyn.g])
+        zero = np.zeros(3)
+        dt = 1.0 / PLANNER_HZ
+        for d in list(self._rejoin):
+            rj = self._rejoin[d]
+            hold = self._departed_hold.get(d)
+            if hold is None:
+                self._rejoin.pop(d)             # no longer a departed drone (taken out of the flight)
+                continue
+            if landing:
+                self._rejoin_out(d, 'LAND' if self._land_to_ground else 'drop')
+                continue
+            if rj['mode'] in ('approach', 'weld'):
+                self._rejoin_approach_tick(d, rj, hold, g, zero)
+                continue
+            if rj['mode'] == 'task':
+                goal, v_goal = self._task_goal(rj)
+            else:
+                goal, v_goal = self._stage_point(rj) if rj['mode'] == 'stage' else (rj['goal'], zero)
+            vmax = APPROACH_VEL if rj['mode'] in ('retreat', 'task') else DETACH_STEP_VEL
+            _, v, _ = take_back_ramp(rj['q'], rj['v'], goal - v_goal * dt, np.zeros(2), dt, vmax=vmax, v_g=v_goal)
+            q, v = self._stage_inside(rj['q'], v, dt)
+            rj['q'], rj['v'] = q, v
+            hold[:] = q
+            if rj['mode'] == 'retreat':
+                if float(np.linalg.norm(goal - q)) < TAKE_BACK_REACHED_M:
+                    rj['mode'] = 'stage'
+                    self.get_logger().info(f'[dissipative] {_who(d)} clear above its plate: back to its staging point, '
+                                           f'the trajectory resumes')
+                else:
+                    self._reconfig_hold_left = max(self._reconfig_hold_left, 1.0)   # held until it is clear
+            elif rj['mode'] == 'task':
+                self._task_step(d, rj, goal, q, dt)
+            self._publish_ref(d, [(*self._stage_hold(q + v * (self.dt * k), v), g, zero) for k in range(self.N + 1)])
+
+    def _rejoin_refused(self, d, rj):
+        """Why departed carrier d cannot start its rejoin now, or None."""
+        if rj is None:
+            return 'it has no staging state (it left with no pose, or before the switch could keep its plate)'
+        if rj['mode'] != 'stage':
+            return f'it is already in its {rj["mode"]}'
+        if self._dropped is not None:
+            return 'the ring was dropped'
+        if self._land_to_ground or self.descending:
+            return 'LAND or the descent in progress'
+        lz0 = self.lift_z0
+        if self.phase != 'planner' or not self.takeoff_seen or lz0 is None \
+                or self.lift_progress < (self.target_z - lz0) - 1e-6:
+            return 'the ring is not up yet'
+        if getattr(self, '_traj_running', False):
+            # critic M3: the ATTACH would stop the ring in one tick and step the staged drone's reference
+            return 'the path is running (a rejoin flies in a hold: hover, or the path held)'
+        busy = [x for x, r in self._rejoin.items() if x != d and r['mode'] not in ('stage', 'task')]
+        if busy:
+            return f'{_who(busy[0])} is rejoining (one at a time)'
+        if self._unload is not None:
+            return f'{_who(self._unload["d"])} is unloading'
+        if len(self.slot2drone) + 1 not in self._solvers:
+            return f'no OCP built for n={len(self.slot2drone) + 1}'
+        t = self._rejoin_tip_t.get(d)
+        if t is None or time.monotonic() - t > REJOIN_TIP_FRESH_S:
+            return (f'its rod\'s end is not seen (/drone_{d}/magnet_tip_state: io tether_tips:=true and a world that '
+                    f'publishes the rod poses)')
+        if self.load_state is None or self.drone_pos[d] is None:
+            return 'no ring or drone pose'
+        return None
+
+    def _start_rejoin(self, d):
+        """/fleet/attach of a departed carrier: from its staging point it flies the newcomer's approach (climb, transit
+        over its plate, descent; the locked 0.2 m/s and 0.1 m/s down) until its rod's end sits on the plate point it
+        left, with the trajectory held. The tip loop (TipLoop, its band scaled to this rod) trims the body's height on
+        the measured end in the hold over the plate (critic B1: the departed hold sat 1-4 cm high, R2312)."""
+        rj = self._rejoin.get(d)
+        why = self._rejoin_refused(d, rj)
+        if why is not None:
+            self.get_logger().warn(f'[dissipative] REJOIN REFUSED {_who(d)}: {why}')
+            return
+        rj['tips'].clear()
+        rj['frames'].clear()
+        rj.update(mode='approach', phase=None, t0=self.get_clock().now().nanoseconds * 1e-9, said=-1e9, sent=None,
+                  prof=ApproachProfile(rj['q'], rj['btt'], 1.0 / PLANNER_HZ, tip_loop=TipLoop(1.0 / PLANNER_HZ)),
+                  target=self._plate_world(rj) - np.array([0.0, 0.0, TIP_STANDOFF_M]))
+        self._reconfig_hold_left = max(self._reconfig_hold_left, 1.0)     # renewed every tick of the rejoin
+        self.get_logger().warn(
+            f'[dissipative] REJOIN START {_who(d)}: from {np.round(rj["q"], 2)} back to plate '
+            f'{plate_of_azimuth(np.degrees(rj["az"]))} (rod {rj["len"]:.3f} m, body to its end {rj["btt"]:.3f} m), the '
+            f'end to sit within {100.0 * REJOIN_WELD_M:.1f} cm of it; trajectory held at t={self.traj_t:.2f} s')
+
+    def _rejoin_tip_cb(self, d, msg):
+        """The end of carrier d's rod (the twin's magnet marker). While d rejoins, each believable sample's offset from
+        its plate point (on the latest ring pose) goes to the weld gate, and the sample to the tip loop's frames; with
+        a stale ring or body pose, or the end off the rod's length from the body, it is no evidence (a gap: the run
+        restarts). Through d's fold-in blend its distance from the plate point is kept for the blend's line."""
+        p, st = msg.pose.position, msg.header.stamp
+        now = time.monotonic()
+        tip = np.array([p.x, p.y, p.z], float)
+        if not np.all(np.isfinite(tip)):
+            return
+        self._rejoin_tip_t[d] = now
+        b = getattr(self, '_rejoin_blend', None)
+        rj = self._rejoin.get(d) if b is None or b['d'] != d else b['rj']
+        if rj is None or rj['mode'] not in ('approach', 'weld', 'blend'):
+            return
+        load_t, t_d = getattr(self, '_load_t', None), getattr(self, '_drone_t', {}).get(d)
+        body = self.drone_pos[d] if d < len(self.drone_pos) else None
+        if (self.load_state is None or load_t is None or now - load_t > DETECT_STALE_S or body is None
+                or t_d is None or now - t_d > DETECT_STALE_S
+                or abs(float(np.linalg.norm(tip - body)) - rj['btt']) > REJOIN_TIP_BAND_M):
+            return
+        off = tip - self._plate_world(rj)
+        if rj['mode'] == 'blend':
+            b['max_off'] = max(b['max_off'], float(np.linalg.norm(off)))
+            return
+        ts = st.sec + 1e-9 * st.nanosec if (st.sec or st.nanosec) else now
+        rj['tips'].append((now, ts, off))
+        rj['frames'].append((self.get_clock().now().nanoseconds * 1e-9, tip, np.asarray(body, float).copy()))
+
+    def _rejoin_joint_cb(self, d, msg):
+        """The twin's tether joint of carrier d. 'attached' while d is off the ring and no weld of it is awaited (a
+        late one, after its back-out) is let go again at once, so a climbing drone never drags the ring."""
+        s = str(msg.data).strip().lower()
+        if s == 'attached':
+            self._rejoin_joint_t[d] = self.get_clock().now().nanoseconds * 1e-9
+            rj = self._rejoin.get(d)
+            if d < len(self.detached) and self.detached[d] and (rj is None or rj['mode'] != 'weld'):
+                self.detach_pub[d].publish(Empty())
+                self.get_logger().warn(f'[dissipative] the twin\'s tether joint of {_who(d)} welded with no rejoin '
+                                       f'waiting for it: /drone_{d}/detach')
+        if s in ('attached', 'detached') and s != self._rejoin_joint.get(d):
+            self._rejoin_joint[d] = s
+            self.get_logger().info(f'[dissipative] the twin\'s tether joint of {_who(d)}: {s}')
+
+    def _rejoin_approach_tick(self, d, rj, hold, g, zero):
+        """One tick of a rejoin: the approach toward the plate point on the measured ring (the end aims at it, not
+        TIP_STANDOFF_M above), the tip loop on the measured end, /drone_d/attach once rejoin_weld_gate passes in the
+        descent and no resize blend runs, the fold-in once the joint reports attached (critic B2), back out after
+        REJOIN_TIMEOUT_S. The path stays held."""
+        now = self.get_clock().now().nanoseconds * 1e-9
+        self._reconfig_hold_left = max(self._reconfig_hold_left, 1.0)     # a detach in the meantime must not resume it
+        if self.load_state is not None:
+            rj['target'] = self._plate_world(rj) - np.array([0.0, 0.0, TIP_STANDOFF_M])
+        fr = list(rj['frames'])
+        ok, _ = tip_valid(now, fr, rj['btt'])
+        p_ref, v_ff, phase = rj['prof'].step(rj['target'], tip_z=float(fr[-1][1][2]) if fr else None, tip_ok=ok)
+        if phase != rj['phase']:
+            rj['phase'] = phase
+            self.get_logger().info(f'[dissipative] rejoin: {_who(d)} {phase}')
+        loop = rj['prof'].tip
+        if loop.hold and not rj.get('hold_said'):
+            rj['hold_said'] = True
+            self.get_logger().info(f'[dissipative] rejoin: {_who(d)} end hold (its end {-100.0 * (loop.e or 0.0):+.1f} '
+                                   f'cm from its plate in z, + above): the tip loop trims its height')
+        off = None
+        if rj['mode'] == 'weld':
+            if self._rejoin_joint_t.get(d, -1e18) >= rj['sent']:
+                if self._rejoin_fold(d, rj, now):
+                    return
+            elif now - rj['sent'] > REJOIN_JOINT_S:
+                self.detach_pub[d].publish(Empty())
+                rj['q'] = p_ref
+                self._rejoin_retreat(d, rj, f'its tether joint did not report attached within {REJOIN_JOINT_S:.1f} s '
+                                            f'of /drone_{d}/attach')
+        elif phase == 'descend':
+            tips = rj['tips']
+            fresh = bool(tips) and time.monotonic() - tips[-1][0] <= DETECT_STALE_S
+            ready, off, speed = rejoin_weld_gate(tips) if fresh else (False, None, None)
+            if ready and self.refs.blend_active():
+                ready = False                    # one resize at a time: the weld waits for the blend
+            if ready:
+                self._rejoin_send_attach(d, rj, off, speed, now)
+            elif off is not None and now - rj['said'] >= 2.0:
+                rj['said'] = now
+                self.get_logger().info(f'[dissipative] rejoin: {_who(d)}\'s rod end {100.0 * off:.1f} cm from its '
+                                       f'plate point (tip loop {100.0 * loop.c:+.1f} cm, {loop.reason})')
+        if rj['mode'] == 'approach' and now - rj['t0'] >= REJOIN_TIMEOUT_S:
+            rj['q'] = p_ref
+            self._rejoin_retreat(d, rj, f'no weld {REJOIN_TIMEOUT_S:.0f} s after the ATTACH'
+                                 + (f', its rod end {100.0 * off:.1f} cm from the plate point' if off is not None
+                                    else ', its rod end not seen near the plate'))
+        hold[:] = p_ref
+        rj['q'], rj['v'] = p_ref.copy(), v_ff.copy()
+        self._publish_ref(d, [(p_ref + v_ff * (self.dt * k), v_ff, g, zero) for k in range(self.N + 1)])
+
+    def _rejoin_send_attach(self, d, rj, off, speed, now):
+        """The rod's end is on its plate point: /drone_d/attach re-welds it in the twin, sent only once the n+1 OCP and
+        the poses the fold-in needs are there (critic: an attach and a detach on two bridges have no order). The
+        fold-in waits for the joint (_rejoin_approach_tick)."""
+        n_new = len(self.slot2drone) + 1
+        why = (f'no OCP built for n={n_new}' if n_new not in self._solvers
+               else 'no ring or drone pose' if self.load_state is None or self.drone_pos[d] is None else None)
+        if why is not None:
+            self._rejoin_retreat(d, rj, why)
+            return
+        self._attach_pubs[d].publish(Empty())
+        rj.update(mode='weld', sent=now, off=off, speed=speed)
+        self.get_logger().warn(
+            f'[dissipative] REJOIN ON PLATE {_who(d)}: its rod end {100.0 * off:.1f} cm from plate '
+            f'{plate_of_azimuth(np.degrees(rj["az"]))}, {100.0 * speed:.1f} cm/s over {REJOIN_WELD_S:.1f} s, '
+            f'{now - rj["t0"]:.1f} s after the ATTACH: /drone_{d}/attach, the fold-in waits for the joint')
+
+    def _rejoin_fold(self, d, rj, now):
+        """The joint reports attached: the OCP grows with the plate point d left with and the rod it now hangs on, from
+        the plate point (the stub's pivot) to the drone's, which differs from the rod it left with by the weld's offset
+        (at most REJOIN_WELD_M). False if the OCP did not take it: the joint lets go and it backs out."""
+        length = rj['len']
+        body = self.drone_pos[d]
+        if body is not None and self.load_state is not None:
+            pivot = np.asarray(body, float) + np.array([0.0, 0.0, float(self.pivot_offset[2])])
+            length = float(np.clip(np.linalg.norm(pivot - self._plate_world(rj)),
+                                   rj['len'] - REJOIN_WELD_M, rj['len'] + REJOIN_WELD_M))
+        n_new = len(self.slot2drone) + 1
+        self.get_logger().warn(
+            f'[dissipative] REJOIN WELD {_who(d)}: its tether joint attached {now - rj["sent"]:.2f} s after '
+            f'/drone_{d}/attach (rod end {100.0 * rj["off"]:.1f} cm from plate '
+            f'{plate_of_azimuth(np.degrees(rj["az"]))}, {100.0 * rj["speed"]:.1f} cm/s), '
+            f'{now - rj["t0"]:.1f} s after the ATTACH; rod {length:.3f} m (left with {rj["len"]:.3f}), '
+            f'the OCP grows to n={n_new}')
+        if not self._attach_ocp(d, rejoin=dict(rj, len=length)):
+            self.detach_pub[d].publish(Empty())
+            self._rejoin_retreat(d, rj, 'the OCP did not take it')
+            return False
+        self._rejoin.pop(d, None)
+        rj['mode'] = 'blend'
+        self._rejoin_blend = {'d': d, 'rj': rj, 'max_off': 0.0, 'len': length, 'cap': float(body[2]),
+                              'bind_n': 0, 'bind_m': 0.0}
+        return True
+
+    def _rejoin_cap(self, i, nodes):
+        """The rejoiner's reference through its fold-in blend: no node above where a level ring puts it on its rigid rod
+        (the measured ring's centre and yaw, the rod it welded with), and its height never rising from the weld's.
+        E2 (R2584): on a T only the rider holds the ring's pitch about the pair's axis, and its plan starts from its
+        measured body (node 0 pinned), so the plan followed it up as the fold-in's thrust step lifted it, plate 3
+        with it: 4.6 cm, the ring 10.6 deg."""
+        b = getattr(self, '_rejoin_blend', None)
+        if (b is None or i != b['d'] or i not in self.slot2drone or self.detached[i] or self.load_state is None
+                or self._dropped is not None):
+            return nodes
+        R = quat_to_rot_np(self.load_state[3:7])
+        yaw = float(np.arctan2(R[1, 0], R[0, 0]))
+        plate = np.asarray(self.load_state[0:3], float) + rot_z(yaw) @ np.asarray(b['rj']['rho'], float)
+        up = -float(self.pivot_offset[2])            # body above its rod's pivot
+
+        def level_z(p):
+            h = float(np.hypot(float(p[0]) - plate[0], float(p[1]) - plate[1]))
+            return plate[2] + float(np.sqrt(max(b['len'] ** 2 - h * h, 0.0))) + up
+
+        b['cap'] = min(b['cap'], level_z(nodes[0][0]))
+        out, over = [], 0.0
+        for p, v, a, ac in nodes:
+            z = min(b['cap'], level_z(p))
+            if float(p[2]) > z:
+                over = max(over, float(p[2]) - z)
+                p = np.array([float(p[0]), float(p[1]), z])
+                v = np.array([float(v[0]), float(v[1]), min(float(v[2]), 0.0)])
+            out.append((p, v, a, ac))
+        if over > 0.0:          # the binding margin, for the blend's line (critic M1)
+            b['bind_n'], b['bind_m'] = b.get('bind_n', 0) + 1, over
+        return out
+
+    def _rejoin_blend_tick(self):
+        """A rejoiner counts as absent for the drop rule until its fold-in blend ends (critic M2): then its line, with
+        how far its rod's end strayed from the plate point through the blend, and how the cap bound."""
+        b = getattr(self, '_rejoin_blend', None)
+        if b is None:
+            return
+        if self.refs.blend_active() and b['d'] in self.slot2drone:
+            # the path stays held to the tick while the cap can act (critic M2): its hold and the blend count apart
+            self._reconfig_hold_left = max(self._reconfig_hold_left, 1.0 / PLANNER_HZ)
+            return
+        self._rejoin_blend = None
+        n = b.get('bind_n', 0)
+        cap = (f'the cap bound {n} ticks, the plan {100.0 * b["bind_m"]:.1f} cm above it at the last' if n
+               else 'the cap never bound')
+        self.get_logger().info(f'[dissipative] REJOIN BLEND OVER {_who(b["d"])}: its rod end at most '
+                               f'{100.0 * b["max_off"]:.1f} cm from its plate point through the blend; {cap}')
+
+    def _rejoin_retreat(self, d, rj, why):
+        """A rejoin with no weld: straight up until its rod's end clears the plate by CLEARANCE_M (the approach's own
+        transit height), with the path still held, then back to its staging point as the path resumes."""
+        q = np.asarray(rj['q'], float)
+        z_up = float(q[2])
+        if self.load_state is not None:
+            z_up = max(z_up, float(self._plate_world(rj)[2]) + rj['btt'] + CLEARANCE_M)
+        rj.update(mode='retreat', goal=np.array([q[0], q[1], z_up]), prof=None, sent=None)
+        rj['tips'].clear()
+        rj['frames'].clear()
+        self.get_logger().warn(f'[dissipative] REJOIN ABORT {_who(d)} ({why}): up to {z_up:.2f} m, then back to its '
+                               f'staging point; the trajectory resumes once it is clear')
+
+    def _rejoin_out(self, d, why):
+        """LAND or a drop: d leaves its staging or its rejoin for this flight and lands alone (the departed landing).
+        Over its plate (a rejoin, its weld or its retreat) it first climbs straight up until its rod's end clears the
+        ring by CLEARANCE_M; then out along its plate's bearing to its staging radius or the clear radius, whichever is
+        further, inside the position limit (_land_clear; 1.75 m while pos_limit_m is off). The fleet's landed wait
+        grows by REJOIN_OUT_EXTRA_S for it (critic M1)."""
+        rj = self._rejoin.pop(d, None)
+        hold = self._departed_hold.get(d)
+        if rj is None or hold is None:
+            return
+        if rj['mode'] == 'weld':
+            self.detach_pub[d].publish(Empty())          # /drone_d/attach is out: its joint must not tie it to the ring
+        p = np.asarray(hold, float)
+        z_up, c = float(p[2]), p[:2]
+        u = np.array([np.cos(self.psi0 + rj['az']), np.sin(self.psi0 + rj['az'])])
+        r_out = rj['r_stage']
+        if self.load_state is not None:
+            c = np.asarray(self.load_state[0:2], float)
+            w = (quat_to_rot_np(self.load_state[3:7]) @ rj['rho'])[:2]
+            if rj['mode'] == 'task':                     # away from the ring: out along its own bearing from where it is
+                w = p[:2] - c
+                r_out = float(np.linalg.norm(w))
+            u = w / max(float(np.linalg.norm(w)), 1e-6)
+            if rj['mode'] not in ('stage', 'task'):
+                z_up = max(z_up, float(self._plate_world(rj)[2]) + rj['btt'] + CLEARANCE_M)
+        r_clear = _departed_clear_r(self)
+        out = _land_clear(self, c, np.array([*(c + max(r_out, r_clear + REJOIN_OUT_MARGIN_M) * u), z_up]),
+                          r_clear, limit=self._rejoin_limit())
+        if out is None:
+            _hold_unclear(self, d, r_clear)
+            out = np.array([p[0], p[1], z_up])
+        steps = ([np.array([p[0], p[1], z_up])] if z_up > float(p[2]) + 0.01 else []) + [out]
+        self._departed_step[d] = steps[0]
+        if len(steps) > 1:
+            self._departed_next[d] = steps[1]
+        self._land_alone.add(d)
+        self._rejoin_landing.add(d)
+        what = (f'staged {_who(d)} leaves ({why})' if rj['mode'] == 'stage' else f'TASK ABORT {_who(d)} ({why})'
+                if rj['mode'] == 'task' else f'REJOIN ABORT {_who(d)} ({why})')
+        self.get_logger().warn(f'[dissipative] {what}: up to {z_up:.2f} m clear of the ring, '
+                               f'out to ({out[0]:.2f}, {out[1]:.2f}), then it lands alone')
+
+    # ── rejoin_task (twin only; card 2026-10-23_scalability case 6) ──────────────────────────────────────────────────
+    def _fleet_task_cb(self, msg):
+        """/fleet/task 'd x,y,z,dwell; ...' (world m, s): staged carrier d's task (_start_task)."""
+        try:
+            d, wps = parse_task(msg.data)
+        except ValueError as e:
+            self.get_logger().warn(f'[dissipative] TASK REFUSED {msg.data!r}: {e}')
+            return
+        self._start_task(d, wps)
+
+    def _task_ring_points(self):
+        """The planned ring points (xy) a task keeps clear of: the one now and, while a path is still to fly, every point
+        of it from here on (a lapped path: a whole lap; an orbit or line_x: a period), at the planner's tick."""
+        tr, t, dt = self.traj, float(self.traj_t), 1.0 / PLANNER_HZ
+        ts = [t]
+        if tr.kind != 'hover' and not tr.complete(t):
+            T = tr.lap_s()
+            if T is not None:
+                ts = np.r_[t, np.arange(0.0, T + dt, dt)]
+            else:
+                span = (ORBIT_RAMP_S + 2.0 * np.pi * max(tr.radius, 1e-6) / max(tr.speed, 1e-6) if tr.kind == 'orbit'
+                        else np.pi * max(tr.distance, 1e-6) / max(tr.speed, 1e-6))
+                ts = np.arange(t, t + span + dt, dt)
+        return np.array([tr.offset_at(s)[:2] for s in ts]) + np.asarray(self.hover_xy, float)
+
+    def _task_refused(self, d, rj, wps):
+        """Why staged carrier d cannot start this task now, or None. As a rejoin is refused (not staged, a drop, LAND or
+        the descent, the ring not up); a waypoint outside the staging bound, or with its rod's end under
+        TASK_TIP_FLOOR_M; or its route (from its reference through the waypoints and back to its staging point) closer
+        to a planned ring point (_task_ring_points) than its staging radius, the formation's reach + REJOIN_STAGE_OUT_M,
+        less TAKE_BACK_REACHED_M (it starts on that circle)."""
+        if not getattr(self, '_rejoin_task', False):
+            return 'rejoin_task is off'
+        if rj is None:
+            return 'it is not a staged carrier'
+        if rj['mode'] != 'stage':
+            return f'it is in its {rj["mode"]}'
+        if self._dropped is not None:
+            return 'the ring was dropped'
+        if self._land_to_ground or self.descending:
+            return 'LAND or the descent in progress'
+        lz0 = self.lift_z0
+        if self.phase != 'planner' or not self.takeoff_seen or lz0 is None or self.hover_xy is None \
+                or self.lift_progress < (self.target_z - lz0) - 1e-6:
+            return 'the ring is not up yet'
+        lim = self._stage_lim()
+        for k, w in enumerate(wps, 1):
+            if max(abs(w[0]), abs(w[1])) > lim + 1e-9:
+                return f'waypoint {k} ({w[0]:.2f}, {w[1]:.2f}) is outside the staging bound +-{lim:.2f} m'
+            if w[2] - rj['btt'] < TASK_TIP_FLOOR_M:
+                return f'waypoint {k} at z {w[2]:.2f} m puts its rod\'s end under {TASK_TIP_FLOOR_M:.2f} m'
+        route = [rj['q']] + [np.asarray(w[:3], float) for w in wps] + [self._stage_point(rj)[0]]
+        near = _min_dist_xy(route, self._task_ring_points())
+        if near < rj['r_stage'] - TAKE_BACK_REACHED_M:
+            return f'its route comes {near:.2f} m from a planned ring point (keep-out {rj["r_stage"]:.2f} m)'
+        return None
+
+    def _start_task(self, d, wps):
+        """/fleet/task of staged carrier d: at APPROACH_VEL to each waypoint in turn (world m; reached by its reference,
+        TAKE_BACK_REACHED_M), held there its dwell, then back to its staging point, where the task is done and an
+        ATTACH may fly it back to its plate. Its reference changes velocity by at most TAKE_BACK_ACCEL and stays inside
+        the staging bound, as a staged one's (_rejoin_tick)."""
+        rj = self._rejoin.get(d)
+        why = self._task_refused(d, rj, wps)
+        if why is not None:
+            self.get_logger().warn(f'[dissipative] TASK REFUSED {_who(d)}: {why}')
+            return
+        rj.update(mode='task', task=[np.asarray(w[:3], float) for w in wps], dwell=[float(w[3]) for w in wps], leg=0,
+                  dwell_left=None, task_t0=self.get_clock().now().nanoseconds * 1e-9)
+        pts = '; '.join(f'({w[0]:.2f}, {w[1]:.2f}, {w[2]:.2f}) {w[3]:.1f} s' for w in wps)
+        self.get_logger().warn(f'[dissipative] TASK START {_who(d)}: {pts}, at {APPROACH_VEL:.2f} m/s, then back to its '
+                               f'staging point')
+
+    def _task_goal(self, rj):
+        """(goal, its velocity) of a carrier on its task: its waypoint, still, then its staging point."""
+        k = rj['leg']
+        return (rj['task'][k], np.zeros(3)) if k < len(rj['task']) else self._stage_point(rj)
+
+    def _task_step(self, d, rj, goal, q, dt):
+        """A task after this tick's reference q: a waypoint reached starts its dwell, a dwell over moves on to the next,
+        and its staging point reached ends the task."""
+        k, n = rj['leg'], len(rj['task'])
+        reached = float(np.linalg.norm(goal - q)) < TAKE_BACK_REACHED_M
+        after = self.get_clock().now().nanoseconds * 1e-9 - rj['task_t0']
+        if k >= n:
+            if reached:
+                rj['mode'] = 'stage'
+                for key in ('task', 'dwell', 'leg', 'dwell_left', 'task_t0'):
+                    rj.pop(key, None)
+                self.get_logger().warn(f'[dissipative] TASK DONE {_who(d)}: back at its staging point {after:.1f} s '
+                                       f'after its TASK START; an ATTACH may fly it back to its plate')
+        elif rj['dwell_left'] is None:
+            if reached:
+                rj['dwell_left'] = rj['dwell'][k]
+                self.get_logger().info(f'[dissipative] TASK AT {_who(d)} waypoint {k + 1} of {n} ({goal[0]:.2f}, '
+                                       f'{goal[1]:.2f}, {goal[2]:.2f}) {after:.1f} s after its TASK START: '
+                                       f'{rj["dwell"][k]:.1f} s there')
+        else:
+            rj['dwell_left'] -= dt
+            if rj['dwell_left'] <= 1e-9:
+                rj['leg'], rj['dwell_left'] = k + 1, None
 
     def _net_slot2drone(self):
         """Network slot -> physical drone for ALL n_net nodes: the parent's (possibly
@@ -3012,8 +3874,16 @@ class DissipativeController(LoadPlanner):
         seeds = []
         for i in range(self.n_net):
             p = self._net_pos(i)
+            if self._net_twin and i < self.n and p is not None:
+                p = self._pivot_at(i)     # a node is the rod's drone end
             seeds.append(load_p if p is None else p)
         self.net.seed(seeds)
+        if self._net_twin:
+            for i in range(min(self.n, self.n_net)):
+                self.net.cable_len_i[i] = float(self.cable_len_i[i])
+            self.get_logger().info(
+                '[dissipative] network on the measured rods ' + ' '.join(
+                    f'{float(v):.3f}' for v in self.net.cable_len_i[:self.n]) + ' m, nodes seeded at the pivots')
         self.net.reset_load_trim()   # fresh trim per flight; not reset on attach/detach
         self._ho_ac = {i: v.copy() for i, v in self._last_ocp_ac.items()}
         self._ho_t0 = self.get_clock().now()
@@ -3173,14 +4043,16 @@ class DissipativeController(LoadPlanner):
         # Keep any LATERAL trajectory running after handover: advance the trajectory clock
         # and take the target xy from it (frozen only during LAND). Without this the load
         # trajectory would stop the instant a drone detached.
+        clock_ran = False
         if self._reconfig_hold_left > 0.0:
             # attach / resize hold: the target stays where it is (see _do_attach)
             self._reconfig_hold_left -= 1.0 / PLANNER_HZ
             if self._settle_hold:
                 self._settle_dwell_tick()
-        elif not self._net_landing:
+        elif not self._net_landing and not self._net_hold_tick():
             self.traj_t += 1.0 / PLANNER_HZ
-        dx, dy, _, _ = self.traj.offset_at(self.traj_t)
+            clock_ran = True
+        dx, dy, vx, vy = self.traj.offset_at(self.traj_t)
         # Commanded lateral acceleration of the load target -- the flatness term the
         # cone leans onto. Zero while hovering or landing. See net_traj_lean.
         def _a_at(tq):
@@ -3193,6 +4065,7 @@ class DissipativeController(LoadPlanner):
 
         # z: hold the handover height, or ramp down to the floor on LAND. Touchdown (both
         # target and measured load near the floor) announces /fleet/landed to disarm.
+        z_was = self._net_hold_z
         if self._net_landing:
             self._net_hold_z = max(self._net_land_z,
                                    self._net_hold_z - self.land_vel / PLANNER_HZ)
@@ -3219,12 +4092,15 @@ class DissipativeController(LoadPlanner):
         load_pos = self.load_state[0:3]
         load_quat = self.load_state[3:7]
         load_vel = self.load_state[7:10]
+        # the target's commanded velocity, which the pinned payload and anchor move with (net_damp_relative)
+        v_des = (np.array([vx if clock_ran else 0.0, vy if clock_ran else 0.0,
+                           (self._net_hold_z - z_was) * PLANNER_HZ]) if self.diss.damp_relative else None)
         # Freeze (not zero) the common-mode load trim during LAND/touchdown: the target
         # is ramping to the floor there, and integrating the descent error would wind
         # the trim against a motion that is commanded, not a deficit.
         self.net.step(load_pos, load_quat, load_vel, p_des, 1.0 / PLANNER_HZ,
                       load_accel=a_des,
-                      integrate_trim=not (self._net_landing or self._landed))
+                      integrate_trim=not (self._net_landing or self._landed), p_des_vel=v_des)
         net_s2d = self._net_slot2drone()
 
         # HORIZON: roll the network forward along the load target's own future so every
@@ -3245,15 +4121,16 @@ class DissipativeController(LoadPlanner):
         gates = [self._attach_ff_gate(net_s2d[i]) if net_s2d[i] >= self.n
                  else self._cable_taut_gate(i)[0] for i in range(self.n_net)]
         if self._net_preview and not self._net_landing:
-            p_seq, a_seq = [], []
+            p_seq, a_seq, v_seq = [], [], []
             for k in range(self.N + 1):
-                kx, ky, _, _ = self.traj.offset_at(self.traj_t + self.dt * k)
+                kx, ky, kvx, kvy = self.traj.offset_at(self.traj_t + self.dt * k)
                 p_seq.append(np.array([self.hover_xy[0] + kx,
                                        self.hover_xy[1] + ky, self._net_hold_z]))
                 a_seq.append(_a_at(self.traj_t + self.dt * k))
+                v_seq.append(np.array([kvx, kvy, 0.0]))
             horizon = self.net.horizon_references(
                 load_quat, p_seq, 1.0 / PLANNER_HZ, taut_gates=gates,
-                load_accel_seq=a_seq)
+                load_accel_seq=a_seq, p_des_vel_seq=v_seq if self.diss.damp_relative else None)
         else:
             horizon = None
         for i in range(self.n_net):
@@ -3271,13 +4148,32 @@ class DissipativeController(LoadPlanner):
             # newcomer is rigidly attached (taut), but its FF is RAMPED 0->1 over
             # attach_ff_ramp_s from the weld so the no-integrator tracker is not slammed.
             if horizon is not None and i < len(horizon):
-                self._publish_ref(drone, horizon[i])
+                self._publish_ref(drone, self._net_body_refs(i, horizon[i]))
             else:
                 node = self.net.reference(i, load_quat, p_des,
                                           taut_gate=gates[i] if i < len(gates) else 1.0,
                                           load_accel=a_des)
-                self._publish_ref(drone, [node] * (self.N + 1))
+                self._publish_ref(drone, self._net_body_refs(i, [node]) * (self.N + 1))
         self._net_diag(load_pos, load_quat, p_des)
+        self._log_tick()               # the planner's log.csv goes on through the network phase
+
+    def _net_hold_tick(self):
+        """net_hold_carry: one tick of the pre-path hover hold the OCP began (traj_hold_s), with the parent's line
+        at its end, so the path starts when it would under the OCP. True while it holds the trajectory clock."""
+        if not (self._net_hold_carry and self.load_traj != 'hover' and self._traj_hold_left > 0.0):
+            return False
+        self._traj_hold_left -= 1.0 / PLANNER_HZ
+        if self._traj_hold_left <= 0.0:
+            self.get_logger().info(f'[planner] hover hold done: {self.load_traj} starts')
+        return True
+
+    def _net_body_refs(self, i, nodes):
+        """net_twin_geometry: a tethered slot's nodes moved from the rod's drone end to the drone centre, at the
+        attitude each node's thrust asks for (the OCP's drone_kinematics); else unchanged."""
+        if not (self._net_twin and i < self.n and self.pivot_offset.any()):
+            return nodes
+        yaw = self._slot_yaw(i)
+        return [(centre_from_pivot(p_, a_, yaw, self.pivot_offset), v_, a_, ac_) for p_, v_, a_, ac_ in nodes]
 
     def _publish_status(self):
         """One line the operator can read off RViz: phase, what is holding the trajectory,
@@ -3292,14 +4188,17 @@ class DissipativeController(LoadPlanner):
             hold = (' | HOLD (approach)' if getattr(self, '_approach_hold_armed', False)
                     else f' | HOLD {self._reconfig_hold_left:.0f}s')
         n_on = self.net.n_attached() if self.phase == 'network' else self.n
+        held = ''.join(f' | {m}' for m in getattr(self, '_held_unclear', {}).values())
         self.status_pub.publish(String(
-            data=f'{self.phase.upper()}{hold} | {n_on} on load | tilt {tilt:.0f} deg'))
+            data=f'{self.phase.upper()}{hold} | {n_on} on load | tilt {tilt:.0f} deg{held}'))
 
     def _publish_ref(self, i, nodes):
         """Wraps the parent's publisher: remembers the OCP's last cable feedforward per
         drone, and blends an incumbent's network feedforward from it after the handover
         (see handover_blend_s). Wire format untouched."""
         if self.phase != 'network':
+            if getattr(self, '_rejoin_blend', None) is not None:
+                nodes = self._rejoin_cap(i, nodes)
             self._last_ocp_ac[i] = np.asarray(nodes[0][3], float).copy()
             if i in self._weld_time and self._ocp_attached.get(i, False):
                 gate = self._attach_ff_gate(i)
@@ -3332,7 +4231,7 @@ class DissipativeController(LoadPlanner):
         p_ref, v_ref, a_ff, a_cable = self.net.fly_away_reference(i)
         if self._net_landing:
             q = self.net.q[i]
-            p_ref = np.array([q[0], q[1], self._net_hold_z])
+            p_ref = _land_inside(self, np.array([q[0], q[1], self._net_hold_z]))
             v_ref = np.zeros(3)
         return p_ref, v_ref, a_ff, a_cable
 

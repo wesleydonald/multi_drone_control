@@ -25,7 +25,7 @@ from . import planner_ocp as _planner_ocp
 from . import load_cable_dynamics as _lcd
 from .load_cable_dynamics import observed_state_indices, LOAD_DIM, CABLE_DIM
 from .planner_ocp import generate_load_ocp, nominal_hover_state
-from .geometry import quat_to_rot_np, centre_from_pivot, quat_same_hemisphere
+from .geometry import quat_to_rot_np, centre_from_pivot, centre_from_pivot_many, quat_same_hemisphere
 
 # Reference horizon, baked into the compiled OCP (the tracker expects N+1 nodes).
 # Defined here rather than read off the OCP so the wire format is fixed regardless
@@ -47,6 +47,9 @@ MAX_BRIDGE_S = 0.5      # longest the fallback may bridge; + the 1.0 s tracker w
 JITTER_NODES = 0.25     # timer slack on the fallback's elapsed-time bound
 MAX_FAIL_DUMPS = 50     # planner_fail_<n>.npz files per process
 MAX_QP_DUMPS = 5        # of those with the last QP as JSON (~5 MB each at n=4)
+# a warm tick the publish gate does not check logs its KKT residual on every RES_EVERY-th tick (planner option
+# plan_res_every; 0 = never). It costs 4 ms at 4 quads and 43 ms at 9 at 1 iteration (card 2026-10-23_scalability).
+RES_EVERY = 1
 
 # acados solver cache: the .so bakes in the geometry (n, cable_len, load_mass, rho,
 # inertia) as compile-time constants, so a rebuild is needed when a SOURCE file
@@ -106,7 +109,42 @@ def write_solver_signature(code_dir, n, dyn, plan_n, plan_tf, logger=None):
             logger.warn(f'[planner] could not write build signature: {e}')
 
 
+def kinematics_funcs(dyn):
+    """Reference-extraction functions from a solved horizon state, one per drone, (x, p_geom) -> 3-vector:
+    (position, velocity, thrust acceleration, cable acceleration, rod acceleration or None). They take the
+    geometry parameter as a second input for the same reason the model does: quad_position and friends are
+    functions OF rho and l, so a drone's extracted reference has to be computed against the layout the fleet
+    actually has."""
+    n = dyn.n
+    pos = [ca.Function(f'p{i}', [dyn.x, dyn.p_geom], [dyn.quad_position(i)]) for i in range(n)]
+    vel = [ca.Function(f'v{i}', [dyn.x, dyn.p_geom], [dyn.quad_velocity(i)]) for i in range(n)]
+    # required specific thrust acceleration a_i = f_i / m_i (feedforward)
+    acc = [ca.Function(f'a{i}', [dyn.x, dyn.p_geom], [dyn.thrust_vec(i) / dyn.mi[i]]) for i in range(n)]
+    # cable tension acceleration a_cable_i = t_i s_i / m_i (world frame) — the
+    # known external pull the cable-aware tracker adds to its drone model
+    cable = [ca.Function(f'ac{i}', [dyn.x, dyn.p_geom], [dyn.cable_accel(i)]) for i in range(n)]
+    # massive rods only: the ungated rest of the trackers' external acceleration
+    rod = ([ca.Function(f'ar{i}', [dyn.x, dyn.p_geom], [dyn.rod_accel(i)]) for i in range(n)]
+           if getattr(dyn, 'mr', 0.0) > 0.0 else None)
+    return pos, vel, acc, cable, rod
+
+
+def horizon_map(funcs, nx, n_geom, n_nodes):
+    """One Function (X [nx x n_nodes], p_geom) -> each of `funcs` at every node (3 x n_nodes): every column is a
+    call of those very Functions, so it gives what they give node by node, bit for bit, in one call."""
+    x, g = ca.MX.sym('x', nx), ca.MX.sym('g', n_geom)
+    return ca.Function('kin', [x, g], [f(x, g) for f in funcs]).map(n_nodes)
+
+
 class PlannerSolver:
+    # residual bookkeeping (planner options plan_fast_refs, plan_res_every), class level so the
+    # PlannerSolver.__new__ stubs of the tests keep today's behaviour
+    defer_res = False          # a warm tick's residual waits for finish_tick(), after the references went out
+    res_every = RES_EVERY
+    _res_due = False
+    _res_tick = 0
+    last_res_ms = float('nan')
+
     def __init__(self, dyn, logger=None, pin_rates=False):
         self.dyn = dyn
         n = dyn.n
@@ -142,25 +180,12 @@ class PlannerSolver:
         # Must match idxbx_0 in generate_load_ocp. r_i/tensions stay free.
         self._obs_idx = observed_state_indices(n, rates=self.pin_rates)
 
-        # Reference-extraction functions from a solved horizon state. They take the
-        # geometry parameter as a second input for the same reason the model does:
-        # quad_position and friends are functions OF rho and l, so a drone's extracted
-        # reference has to be computed against the layout the fleet actually has.
-        self.pos_fun = [ca.Function(f'p{i}', [dyn.x, dyn.p_geom],
-                                    [dyn.quad_position(i)]) for i in range(n)]
-        self.vel_fun = [ca.Function(f'v{i}', [dyn.x, dyn.p_geom],
-                                    [dyn.quad_velocity(i)]) for i in range(n)]
-        # required specific thrust acceleration a_i = f_i / m_i (feedforward)
-        self.acc_fun = [ca.Function(f'a{i}', [dyn.x, dyn.p_geom],
-                                    [dyn.thrust_vec(i) / dyn.mi[i]])
-                        for i in range(n)]
-        # cable tension acceleration a_cable_i = t_i s_i / m_i (world frame) — the
-        # known external pull the cable-aware tracker adds to its drone model
-        self.cable_fun = [ca.Function(f'ac{i}', [dyn.x, dyn.p_geom],
-                                      [dyn.cable_accel(i)]) for i in range(n)]
-        # massive rods only: the ungated rest of the trackers' external acceleration
-        self.rod_fun = ([ca.Function(f'ar{i}', [dyn.x, dyn.p_geom], [dyn.rod_accel(i)])
-                         for i in range(n)] if getattr(dyn, 'mr', 0.0) > 0.0 else None)
+        # Reference-extraction functions from a solved horizon state (kinematics_funcs), and the
+        # same functions mapped over the horizon's N+1 nodes, one call per drone (horizon_kinematics)
+        self.pos_fun, self.vel_fun, self.acc_fun, self.cable_fun, self.rod_fun = kinematics_funcs(dyn)
+        self.kin_map = [horizon_map([self.pos_fun[i], self.vel_fun[i], self.acc_fun[i], self.cable_fun[i]]
+                                    + ([self.rod_fun[i]] if self.rod_fun is not None else []),
+                                    dyn.nx, len(self._geom), self.N + 1) for i in range(n)]
 
         # warm-start state. last_X is None => no valid warm start => reseed.
         self.last_X = None
@@ -177,6 +202,8 @@ class PlannerSolver:
         self.last_qp_iter = -1
         self.last_iters = 0
         self.last_res = None               # [stat, eq, ineq, comp] of the last solve
+        self.last_res_ms = float('nan')    # what computing it took
+        self._res_due = False
         self.pending_X = None              # iterate of an unconverged solve, to continue from
         self._unconverged = False
 
@@ -313,7 +340,18 @@ class PlannerSolver:
                     and time.perf_counter() - t0 > self.solve_budget_s):
                 cut = True
                 break
-        self.last_res = self._residuals()
+        # the residual: always where the gate below reads it and on a failed solve; a warm tick's per
+        # res_every, inside here or (defer_res) in finish_tick once the references are out
+        self.last_res, self.last_res_ms, self._res_due = None, float('nan'), False
+        if status != 0 or reseed or cut or self._unconverged:
+            self._compute_res()
+        else:
+            self._res_tick = self._res_tick + 1
+            if self.res_every > 0 and self._res_tick % self.res_every == 0:
+                if self.defer_res:
+                    self._res_due = True
+                else:
+                    self._compute_res()
         if (status == 0 and (reseed or cut or self._unconverged) and self.last_res is not None
                 and not self.last_res[1] <= RES_EQ_MAX):
             status = STATUS_UNCONVERGED
@@ -337,6 +375,19 @@ class PlannerSolver:
             return np.asarray(self.solver.get_residuals(recompute=True), float).ravel()
         except Exception:
             return None
+
+    def _compute_res(self):
+        t = time.perf_counter()
+        self.last_res = self._residuals()
+        self.last_res_ms = (time.perf_counter() - t) * 1e3
+
+    def finish_tick(self):
+        """The residual a warm solve left due (defer_res), from the same iterate, once the references
+        went out: the logged res_stat / res_eq keep their values. Nothing on a tick that left none (a
+        tick without a solve, or one whose residual the gate read inside solve_horizon)."""
+        if self._res_due:
+            self._res_due = False
+            self._compute_res()
 
     _fail_count = 0                          # shared by every solver in the process
 
@@ -384,6 +435,21 @@ class PlannerSolver:
                 np.array(self.vel_fun[i](xk, g)).flatten(),
                 acc,
                 np.array(self.cable_fun[i](xk, g)).flatten())
+
+    def horizon_kinematics(self, X, i, yaw=0.0):
+        """drone_kinematics plus rod_accel_at (zeros without a rod model) at every node of the horizon X
+        (nx x N+1) for the drone in OCP slot i: [(pos, vel, thrust_accel, cable_accel, rod_accel)], bit for
+        bit what those give node by node, from one mapped call (planner option plan_fast_refs)."""
+        kin = getattr(self, 'kin_map', None)
+        if kin is None:                      # a solver without them (the tests' stubs): node by node
+            return [(*self.drone_kinematics(X[:, k], i, yaw), rod_accel_at(self, X[:, k], i))
+                    for k in range(X.shape[1])]
+        out = [np.array(m) for m in kin[i](X, self._geom)]
+        P = centre_from_pivot_many(out[0], out[2], yaw, self.pivot_offset)
+        rows = [np.ascontiguousarray(m.T) for m in [P] + out[1:]]
+        zero = np.zeros(3)
+        return [(rows[0][k], rows[1][k], rows[2][k], rows[3][k], rows[4][k] if len(rows) > 4 else zero)
+                for k in range(rows[0].shape[0])]
 
 
 def rod_accel_at(solver, xk, i):

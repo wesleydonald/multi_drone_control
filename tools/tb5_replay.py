@@ -103,11 +103,12 @@ class Run:
         self.n = int(man.get('num_drones') or 3)
         self.attach_r = float(man.get('attach_radius') or 0.225)
         self.attach_z = float(man.get('attach_z') or 0.02)
-        self.btt = float(man.get('attach_cable_len') or 0.59) - float(man.get('pivot_offset_z') or -0.04)
+        # QUAD4's rod from its pivot as the planner took it (untyped: the carriers' cable_len; TB5/TB6 flew 0.55 m)
+        self.btt = (float(man.get('attach_cable_len') or man.get('cable_len') or 0.55)
+                    - float(man.get('pivot_offset_z') or -0.04))
         self.plate9 = np.array([float(man.get('attach_x_offset') or 0.0), float(man.get('attach_y_offset') or 0.225),
                                 self.attach_z])
-        self.traj = LoadTrajectory(man.get('load_traj', 'orbit'), float(man.get('traj_speed') or 0.125), 0.0,
-                                   float(man.get('traj_radius') or 0.5))
+        self.traj = LoadTrajectory.from_params(man, kind='orbit', speed=0.125, distance=0.0)
         self.lap = 2.0 * np.pi * self.traj.radius / self.traj.speed
         t = self.run.t.to_numpy()
         # the planner's clock against the runner's: fit the offset on the measured ring

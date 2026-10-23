@@ -1,0 +1,46 @@
+% 04a2_release_gap.tex -- the release transient against the survivors' largest gap (twin, 1 m and 0.55 m).
+\subsection{What sets the release transient}
+\label{sec:res_release_gap}
+
+The rig's slowest release left the largest gap between survivors (Section~\ref{sec:res_reconfig}). To isolate that
+variable, the twin flies the same unannounced release from four carriers in hover, with the carriers placed so that the
+three survivors leave a largest gap of 120 to 180$^\circ$ around the ring. Everything else is held fixed. We report the
+rise of the ring's tilt from the release to 15\,s after it, cut at the moment the ring is dropped or a fault stops the
+flight. One arm at 150$^\circ$ feeds the survivors' trackers the planned cable pull instead of the measured one
+(Section~\ref{sec:planner}). The 0.55\,m column is one run a cell.
+
+Table~\ref{tab:release_gap} gives the results. The tilt rise is steep in the gap: from 120 to 150$^\circ$ it more than
+doubles, at 165$^\circ$ it crosses the 30$^\circ$ line at which the ring is dropped and every carrier lands (2 of 2),
+and at 180$^\circ$, with the survivors on one half of the rim, it passes 60$^\circ$ and the fleet is stopped by the
+tilt fault. Every neighbouring pair of gaps is separated by more than the spread of its repeats at 1\,m.
+The longer cable changes the boundary only slightly: at 0.55\,m the 165$^\circ$ gap rose just under the drop line
+and the ring was held (one run). At 150$^\circ$ the measured pull holds the rise to about half of the rise with the planned pull at 0.55\,m and
+to about two thirds at 1\,m, where the planned arm stays just under the drop line instead of crossing it.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\caption{Rise of the ring's tilt after an unannounced release from four carriers in hover (twin), against the
+survivors' largest gap. Repeats as a\,/\,b; $\geq$: cut at the drop or the fault. Measured cable pull unless marked.}
+\label{tab:release_gap}
+\begin{tabular}{lccl}
+\toprule
+Largest gap & Tilt rise, 1\,m & Tilt rise, 0.55\,m & Outcome, 1\,m \\
+($^\circ$) & ($^\circ$) & ($^\circ$) & \\
+\midrule
+120 & 6.90\,/\,7.45\,/\,7.50 & 6.40 & held \\
+135 & 10.42\,/\,11.02 & 8.44 & held \\
+150 & 18.17\,/\,17.58 & 16.82 & held \\
+150, planned pull & 29.62\,/\,27.10 & $\geq$29.54 & held (0.55\,m: dropped) \\
+165 & $\geq$30.49\,/\,$\geq$29.84 & 28.02 & dropped (0.55\,m: held) \\
+180 & $\geq$62.46\,/\,$\geq$61.91 & $\geq$61.22 & tilt fault \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The controller cannot undo a bad geometry: once the survivors leave a wide gap, the ring has lost its support on that
+side, and no redistribution of pull among them restores it within the drop line. The leaving order is therefore part
+of the design. An order that keeps the survivors' gaps small keeps the transient small; opposite pairs are the simplest
+such order. The $8\to4\to8$ chain of Fig.~\ref{fig:s_chain} releases its carriers in opposite pairs, so each release
+leaves gaps of at most 90$^\circ$.

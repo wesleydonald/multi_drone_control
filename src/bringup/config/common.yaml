@@ -5,6 +5,8 @@
 # sim and rig fly differently for a mode.
 fleet_geometry:
   load_mass: 0.86
+  load_ixx: ''                 # kg m^2, '' = the M2A ring's per kg at load_mass; a different ring types both (S's R 0.5 m ring, card 2026-10-23_scalability)
+  load_izz: ''
   attach_azimuths_deg: ''
   measure_rod_len: true
   auto_slot_assign: true
@@ -25,7 +27,8 @@ height_hold:
   z_ki_in_orbit: true
 trajectory:
   load_traj: 'hover'
-  traj_radius: 0.5
+  traj_radius: 0.5             # m: the circle's, spin's and orbit's radius
+  fig8_size: 0.9               # m: the figure-8's size, x +-size, y +-size/2 (Wesley 22 Oct: the rig's at 1 m, the outboard quad at 1.625 m); '' = traj_radius, as before 22 Oct
   traj_distance: 1.0
   land_vel: 0.20
   land_unwind: true            # reverse creep after load down (Wesley 4 Oct; R0848/R0849/R0851, card 2026-10-03_land_unwind)
@@ -46,6 +49,8 @@ trajectory:
   plan_rate_ff: ''             # '' = off: zero cable angular-rate reference; true = the rate the flatness directions turn at (same card)
   plan_ref_lag_s: ''           # '' = 0: s the trajectory reference is evaluated behind the planner's clock (0.1 cancels its one-tick lead; same card)
   plan_sqp_iters: ''           # '' = 5: warm-start SQP iterations per planner tick (same card)
+  plan_fast_refs: ''           # '' = off: each drone's references from one mapped call (bit for bit) and a warm solve's logged residual after they went out (card 2026-10-23_scalability; the twin's default after its smoke run, the rig's after the reviewer)
+  plan_res_every: ''           # '' = 1: a warm tick logs its KKT residual every k-th tick; 0 = only where the publish gate needs it
   land_rearm_touchdown: ''     # '' = off: re-arm the LAND stall test at ring touchdown (card 2026-10-17_touchdown_height_gate)
   land_descend_to_stall: ''    # '' = off: after ring touchdown the LAND reference descends past z 0 until the stall (card 2026-10-17_land_ref_below_rest)
   int_mode: 'auto'             # auto = model where allowed, else reference (bringup real_mode.planner_options; Wesley 5 Oct)
@@ -53,6 +58,8 @@ trajectory:
   int_k_z: 7.13
   int_settle_s: ''             # s, model mode: the ring-speed gate only this long after the lift (default: always)
   traj_hold_s: ''              # s, '' = 0: hover this long at the target before a load trajectory starts (6 Oct)
+  traj_laps: ''                # '' = 1: a lapped path (fig_8, line_spin, circle, spin) flies this many laps, each from rest at its start point back to it, before the descent (twin only; card 2026-10-23_scalability case 7)
+  traj_lap_hold_s: ''          # s, '' = 0 (off): the path held this long at each lap end but the last, 'lap k done' logged (twin mode:=dissipative, reconfig_mode ocp; same card)
   detach_step_out_m: 0.5       # m: a detached drone steps this far radially out from the ring centre, then holds (Wesley 7 Oct: default, for safety)
   terminal_vel_ref: false
 thrust_map:
@@ -83,6 +90,10 @@ tracker:
 watchdogs:
   pose_timeout_s: 0.25
   safety_ref_timeout_s: 1.0
+  # m, '' = off: any quad's x or y past +-this from the mocap origin while airborne lands the fleet (a LAND, never a
+  # disarm), and every reference and landing point is kept inside it (Wesley 22 Oct: 1.75; off until the critic,
+  # card 2026-10-22_position_limit)
+  pos_limit_m: ''
 fleet_resize:
   reconfig_hold_s: 1.5
   min_survivors: 3
@@ -98,6 +109,8 @@ fleet_resize:
   drop_on_loss: true           # drop the ring and land every drone on a second loss or a capsize (card 2026-10-08_drop_and_land; on by default with detection, 8 Oct)
   drop_takes_back: ''          # a drop also takes a pending newcomer back from his stream ('' = off; card 2026-10-16_drop_takes_back)
   drop_gap_deg: ''             # deg, '' = off (a 180 deg gap drops): after the lift a loss keeps flying while the survivors' largest empty arc (a pair: its larger arc) is at most this; 200 flies the T and the opposite pair (Wesley 21 Oct; the pair needs min_survivors 2; card 2026-10-21_chain_release)
+  rejoin_departed: ''          # '' = off: a carrier that leaves holds at a ring-frame staging point, and /fleet/attach <d> flies it back to its own plate and re-welds its tether (twin mode:=dissipative only; needs departed_land false and io tether_tips; code design B, card 2026-10-23_rejoin_departed)
+  rejoin_task: ''              # '' = off: /fleet/task "d x,y,z,dwell; ..." flies a staged carrier to each waypoint and back to its staging point (twin mode:=dissipative only; needs rejoin_departed; card 2026-10-23_scalability case 6)
   drop_tilt_deg: ''            # deg, '' = 30: the trackers' ring-tilt drop threshold
   drop_samples: ''             # '' = 2: consecutive ring samples over it
   drop_glitch_step_deg: ''     # deg, '' = 15: a frame-to-frame ring attitude step above this is a pose glitch (rig bags: real capsizes stay under it)
@@ -105,6 +118,12 @@ network:
   auto_handover_settle_s: 1.5
   net_horizon_preview: true
   net_traj_lean: false
+  # card 2026-10-23_paper_method_compare, each off until its critic: damping relative to the moving target (the
+  # paper's Eq. 9), the references at the drone centre and the nodes on the measured pivots and rods, and the pre-path
+  # hover hold carried across the hand-over
+  net_damp_relative: false
+  net_twin_geometry: false
+  net_hold_carry: false
   net_land_z: 0.06
   diss_k_pay: 40.0
   diss_k_anchor: 40.0
@@ -121,7 +140,7 @@ attach:
   reserved_attach: 1
   enable_approach: true
   enable_approach_mpc: true
-  attach_cable_len: ''
+  attach_cable_len: ''         # '' = cable_len: QUAD4's rod from its pivot (1 m arm 1.0), not its body to tip
   attach_control_mode: ''
   attach_central: false
   attach_handout: true

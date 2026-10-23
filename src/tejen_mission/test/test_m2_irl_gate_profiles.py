@@ -13,6 +13,22 @@ ROOT = Path(__file__).resolve().parents[3]
 CONFIG = ROOT / "src" / "tejen_mission" / "config" / "m2_irl_two_drone.yaml"
 
 
+@pytest.mark.parametrize('layer', ['yaml', 'mission'])
+def test_overtravel_ceiling_is_50mm_in_both_validation_layers(layer):
+    from tejen_mission.m2_irl_launch_config import parse_gate_profiles
+    from tejen_mission.m2b_attachment_mission import M2BConfig
+    def validate(depth):
+        if layer == 'mission':
+            return M2BConfig(contact_overtravel_m=depth)
+        payload = deepcopy(yaml.safe_load(CONFIG.read_text()))
+        payload['m2_irl']['gate_profiles']['attachment_search']['contact_overtravel_m'] = depth
+        return parse_gate_profiles(payload)
+    validate(.020)
+    validate(.050)
+    with pytest.raises(ValueError): validate(.051)
+    with pytest.raises(ValueError): validate(-.001)
+
+
 def test_yaml_gate_profiles_are_complete_and_have_commissioned_values():
     from tejen_mission.m2_irl_launch_config import parse_gate_profiles
 

@@ -49,24 +49,96 @@ def test_rig_worlds_and_models_are_up_to_date():
 @pytest.mark.parametrize('name', RIG)
 def test_rig_world_reads_back_the_rig_geometry(name):
     g = world_geometry(ASSETS / name)
-    args = mcw.WORLDS[name]
-    mass = float(args[args.index('--payload-mass') + 1]) if '--payload-mass' in args else 0.86
-    late = mcw.WORLD_OVERRIDES.get(name, [])
-    cable = float(late[late.index('--cable-len') + 1]) if '--cable-len' in late else mcw.CABLE_LEN
-    for k, v in dict(mcw.EXPECT, load_mass=mass, cable_len=cable).items():
+    for k, v in mcw.world_expect(name).items():
         assert abs(g[k] - v) < 1e-4, f'{name}: {k} {g[k]:.4f} != {v}'
     assert not [k for k in g if k.startswith('_warn')], g
-    # ring inertia from load_mass: outer 0.255, inner 0.195, 40 mm
-    assert g['load_ixx'] == pytest.approx(2.227e-2 * mass / 0.86, rel=1e-3)
-    assert g['load_izz'] == pytest.approx(4.431e-2 * mass / 0.86, rel=1e-3)
+    ixx, izz = mcw.expected_inertia(name)
+    assert g['load_ixx'] == pytest.approx(ixx, rel=1e-3) and g['load_izz'] == pytest.approx(izz, rel=1e-3)
+
+
+def test_the_rig_ring_inertia_is_the_annulus_per_kg():
+    # outer 0.255, inner 0.195, 40 mm; the S ring R 0.5 m: outer 0.53, inner 0.47, 0.9 kg (card 2026-10-23_scalability)
+    for name, mass in (('four_rigid_ground_rig.sdf', 0.86), ('four_rigid_ground_rig_m070.sdf', 0.70)):
+        assert mcw.expected_inertia(name) == pytest.approx((2.227e-2 * mass / 0.86, 4.431e-2 * mass / 0.86), rel=1e-3)
+    assert mcw.expected_inertia('eight_rigid_ground_rig_R50_L100.sdf') == pytest.approx((0.113025, 0.22581))
 
 
 def test_rig_layouts():
     az = {n: world_geometry(ASSETS / n)['attach_azimuths'] for n in RIG}
     assert az['four_rigid_ground_rig.sdf'] == [0.0, 90.0, 180.0, 270.0]
     assert az['four_rigid_ground_rig_3915.sdf'] == [30.0, 90.0, 150.0, 270.0]
+    # the M1 layout at 1 m (Wesley 22 Oct): plates 3/11/7 and QUAD4's 9 as a fourth carrier
+    assert az['four_rigid_ground_rig_3915_L100.sdf'] == [30.0, 90.0, 150.0, 270.0]
+    assert world_geometry(ASSETS / 'four_rigid_ground_rig_3915_L100.sdf')['cable_len'] == 1.0
     assert az['three_rigid_ground_rig.sdf'] == [0.0, 120.0, 240.0]
     assert world_geometry(ASSETS / 'three_rigid_ground_rig.sdf')['num_drones'] == 3
+    assert az['eight_rigid_ground_rig_R50_L100.sdf'] == [45.0 * k for k in range(8)]
+    assert az['six_rigid_ground_rig_R50_L100.sdf'] == [60.0 * k for k in range(6)]
+    assert az['nine_rigid_ground_rig_R53_L100.sdf'] == [40.0 * k for k in range(9)]
+
+
+def test_the_1m_tier_b_and_push_worlds():
+    """Thesis R (card 2026-10-23_refly_1m, Wesley 23 Oct): each is its 0.55 m twin's layout on 1 m rods; a _push
+    world is its 1 m world plus the runner's WRENCH tool."""
+    for name in ('four_rigid_ground_rig_3969', 'four_rigid_ground_rig_gap135', 'four_rigid_ground_rig_gap165',
+                 'four_rigid_ground_rig_gap180', 'three_rigid_ground_rig_push'):
+        g, twin = world_geometry(ASSETS / f'{name}_L100.sdf'), world_geometry(ASSETS / f'{name}.sdf')
+        assert g['cable_len'] == pytest.approx(1.0) and twin['cable_len'] == pytest.approx(0.55)
+        assert g['attach_azimuths'] == twin['attach_azimuths']
+        for k in ('attach_radius', 'attach_z', 'load_mass', 'drone_mass', 'pivot_dz', 'num_drones'):
+            assert g[k] == pytest.approx(twin[k], abs=1e-5), (name, k)
+    # ... and the rejoin leaning-pair test's T (card 2026-10-23_rejoin_departed, Wesley 23 Oct ~08:00)
+    for name in ('three_rigid_ground_rig_push_L100.sdf', 'three_rigid_ground_rig_T_push_L100.sdf'):
+        push = (ASSETS / name).read_text().splitlines()
+        base = (ASSETS / name.replace('_push', '')).read_text().splitlines()
+        added = [ln for ln in push if ln not in base]
+        assert len(push) == len(base) + 2 and [ln for ln in push if ln not in added] == base, name
+        assert 'gz::sim::systems::ApplyLinkWrench' in added[1]
+        assert 'ApplyLinkWrench' not in '\n'.join(base)
+    assert world_geometry(ASSETS / 'three_rigid_ground_rig_T_push_L100.sdf')['attach_azimuths'] == [0.0, 180.0, 270.0]
+
+
+def test_the_hub_world_is_the_1m_four_with_every_rod_at_the_centre():
+    """The paper's own geometry (card 2026-10-23_paper_method_compare, Wesley 23 Oct): four_rigid_ground_rig_L100 with
+    every rod hinged on a 1 mm hub at the ring's centre on the plates' plane; the ring (plates still drawn on the rim),
+    rods, quads, masses and the rods' pose publishers as before; the hub only adds visuals."""
+    name, base = 'four_rigid_ground_rig_hub_L100.sdf', 'four_rigid_ground_rig_L100.sdf'
+    g, b = world_geometry(ASSETS / name), world_geometry(ASSETS / base)
+    assert g['attach_radius'] == pytest.approx(0.001, abs=1e-6) and b['attach_radius'] == pytest.approx(0.225)
+    assert g['attach_azimuths'] == b['attach_azimuths'] == [0.0, 90.0, 180.0, 270.0]
+    for k in ('attach_z', 'cable_len', 'load_mass', 'load_ixx', 'load_izz', 'drone_mass', 'rod_mass', 'pivot_dz',
+              'num_drones'):
+        assert g[k] == pytest.approx(b[k], abs=1e-6), k
+    lift = _lift(name)
+    for i in range(4):
+        stub = _xyz(lift.find(f"link[@name='stub_pay_{i}']"))
+        assert math.hypot(stub[0], stub[1]) == pytest.approx(0.001, abs=1e-6) and stub[2] == pytest.approx(0.04)
+        d = _xyz(next(inc for inc in lift.findall('include') if inc.findtext('name') == f'x3_drone{i}'))
+        assert math.dist(stub, [d[0], d[1], d[2] - 0.04]) == pytest.approx(1.0, abs=1e-5)
+    body, base_body = (_lift(w).find("model[@name='payload']/link[@name='body']") for w in (name, base))
+    plates = [v for v in body.findall('visual') if v.get('name').startswith('plate_')]
+    assert len(plates) == 12 and all(math.hypot(*_xyz(v)[:2]) == pytest.approx(0.225, abs=1e-5) for v in plates)
+    added = {v.get('name') for v in body.findall('visual')} - {v.get('name') for v in base_body.findall('visual')}
+    assert added == {'hub_visual'} | {f'spoke_{k}_visual' for k in range(4)}
+    for tag in ('inertial', 'collision'):
+        assert ET.tostring(body.find(tag)) == ET.tostring(base_body.find(tag))
+    text, base_text = ((ASSETS / w).read_text() for w in (name, base))
+    assert text.count('gz-sim-pose-publisher-system') == base_text.count('gz-sim-pose-publisher-system') == 5
+
+
+def test_the_s_rings_have_a_plate_per_quad_and_a_real_time_cap():
+    for name, n in (('eight_rigid_ground_rig_R50_L100.sdf', 8), ('six_rigid_ground_rig_R50_L100.sdf', 6)):
+        root = ET.parse(ASSETS / name).getroot()
+        assert root.findtext('world/physics/real_time_factor') == '0.4'
+        body = _lift(name).find("model[@name='payload']/link[@name='body']")
+        plates = [v for v in body.findall('visual') if v.get('name').startswith('plate_')]
+        assert len(plates) == n
+        for k, v in enumerate(plates):                         # one under each quad's magnet (poses to 1 um)
+            x, y = _xyz(v)[:2]
+            assert math.degrees(math.atan2(y, x)) % 360.0 == pytest.approx(360.0 * k / n, abs=1e-3)
+            assert math.hypot(x, y) == pytest.approx(0.5, abs=1e-5)
+    assert ET.parse(ASSETS / 'four_rigid_ground_rig.sdf').getroot().findtext(
+        'world/physics/real_time_factor') == '1.0'
 
 
 def _lift(name):
@@ -118,6 +190,19 @@ def test_rig_models_only_change_the_base_mass_and_inertia():
         diff = [(a.strip(), b.strip()) for a, b in zip(legacy, rig) if a != b]
         assert len(legacy) == len(rig)
         assert [a[:5] for a, _ in diff] == ['<mass', '<ixx>', '<iyy>', '<izz>']
+
+
+def test_models_above_four_are_drone0_renamed():
+    """x3_rig_drone4.. (card 2026-10-23_scalability) are x3_rig_drone0 with its name, IMU and namespaces renamed."""
+    base = (ASSETS / 'models' / 'x3_rig_drone0.sdf').read_text().splitlines()
+    assert mcw.N_MODELS >= 8
+    for i in range(4, mcw.N_MODELS):
+        model = [ln for ln in (ASSETS / 'models' / f'x3_rig_drone{i}.sdf').read_text().splitlines()
+                 if 'Rig twin of' not in ln]
+        body = '\n'.join(model)
+        assert 'x3_drone0' not in body and body.count(f'x3_drone{i}') == 7
+        ref = [ln.replace('x3_drone0', f'x3_drone{i}') for ln in base if 'Rig twin of' not in ln]
+        assert model == ref
 
 
 def test_a_legacy_config_on_a_rig_world_is_refused():

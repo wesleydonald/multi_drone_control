@@ -34,6 +34,13 @@ std::vector<ConvexCurveInterval> convexCurveIntervals(
     double start_s,
     double end_s);
 
+// Ordered unique endpoints and native knot/piece boundaries that cover the
+// requested interval.  Temporal collision certificates split at these physical
+// times before any recursive bisection.
+std::vector<double> trajectoryBreakpoints(const CommittedTrajectory& trajectory,
+                                          double start_s,
+                                          double end_s);
+
 // Concatenate the interval vertices into one conservative convex hull vertex
 // set covering the whole requested time interval.
 Eigen::MatrixXd convexCurveHullVertices(

@@ -1,0 +1,116 @@
+% Contact sheet for the 23 Oct best-flight review figures (revised 23 Oct on Wesley's answers: colour, ls3c, r302_3,
+% the spin column): every figure on its own page, at print size (the thesis's text width), with its one-line message.
+% Build: pdflatex contact_sheet.tex (in this folder, or with \graphicspath).
+\documentclass[12pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\graphicspath{{./}{/home/wesley/multi_drone_control/docs/figures/review_2026-10-23_best/}}
+\pagestyle{plain}
+\setlength{\parindent}{0pt}
+\newcommand{\fig}[4]{%
+  \section*{#1}
+  \textit{#2}\par\smallskip
+  {\small\color{black!60}#3}\par\vspace{1.2em}
+  \includegraphics{#4}%
+  \clearpage}
+\begin{document}
+
+\fig{1. The figure-8 with 2, 3 and 4 carriers (rig)}
+{With two, three or four carriers the ring follows the 2\,m by 1\,m figure-8 within about 2\,cm (25, 19 and 17\,mm
+RMS, clock-free), so at print scale its path lies on the reference.}
+{The best rig figure-8 of each fleet size, each in its fleet colour (2 orange, 3 rose, 4 purple, throughout the set).
+Four carriers flew on 7 Oct (the carry planner) at half the speed of the 22 Oct eights: to be replaced by Wed 28.}
+{fig_traj.pdf}
+
+\fig{2. Tracking error across fleet size and motion (recommended)}
+{On the rig the ring keeps within 14--36\,mm of its path on every motion flown with 2, 3 or 4 carriers, and within
+22\,mm of its hover point; the spin is the hardest (45 and 86\,mm). The twin (1\,m cables) keeps within 1--10\,mm in
+every cell, with no trend across 2--4 carriers.}
+{Each digit is a fleet size at its best flight's error, in its colour, on a log axis. Rig cells are not one variable
+(day, code, speed differ); the pair hover and the four-carrier cells are to be replaced by Wed 28.}
+{fig_summary.pdf}
+
+\fig{2b. The same as a grid (alternative)}
+{The same numbers as cells, darker = larger on a log scale, one scale for rig and twin.}
+{A table in figure form: the thesis can carry it as a table instead.}
+{fig_summary_grid.pdf}
+
+\fig{3. The error's parts (recommended)}
+{On the rig the sideways part of the error is the larger on every path but the spinny line (13--25\,mm against
+6--26\,mm of height), and the ring runs 0.05--0.23\,s behind its schedule, reported apart.}
+{Every chosen path flight but the spin (off this scale), in its fleet colour; open markers are the twin's spinny lines
+(no rig flight with 2 or 4 carriers).}
+{fig_components.pdf}
+
+\fig{3b. The error along one lap (alternative)}
+{Three carriers on the figure-8: sideways (+ inside the curve), height and lag against the ring's position, the four
+tight bends shaded.}
+{Shows where the error builds; busy for a results figure.}
+{fig_components_eight.pdf}
+
+\fig{4. Ring tilt (recommended)}
+{With two carriers the ring tilts $7^\circ$ on average (to $14^\circ$) about the pair's line, a rotation no cable
+resists; with three or four it stays under $6^\circ$ (median about $2^\circ$).}
+{Boxes: quartiles; whiskers 5--95\,\%; dot: the peak. The same three figure-8 flights.}
+{fig_tilt_box.pdf}
+
+\fig{4b. Ring tilt along the eight (alternative)}
+{The pair rocks at about 0.7\,Hz between $1^\circ$ and $14^\circ$; three and four stay low.}
+{}
+{fig_tilt.pdf}
+
+\fig{5. Throttle against the cap (recommended)}
+{No carrier reached its cap: four carriers flew at about 0.62 and three at 0.66 (cap 0.8); the pair flew at
+0.72--0.75 with its cap raised to 0.9, where the default 0.8 would have left 0.01--0.05.}
+{One row per carrier: the command sent to the flight controller over the figure-8.}
+{fig_throttle_box.pdf}
+
+\fig{5b. Throttle in time (alternative)}
+{The same in time, one panel per fleet size.}
+{Flat lines: it says less than 5.}
+{fig_throttle.pdf}
+
+\fig{6. Cable tension (recommended)}
+{The planner's tensions sit on the static share of the ring's weight ($mg/n\sin 60^\circ$: 4.9, 3.2 and 2.4\,N)
+within 3\,\%; the pull the rig measures reads 13--23\,\% above it.}
+{Blue: each cable's planned tension; red: each carrier's measured pull (mocap acceleration less the modelled
+thrust, so it carries any thrust-map error), its 5--95\,\% as a light bar. Means over the figure-8.}
+{fig_tension.pdf}
+
+\fig{6b. Cable tension in time (alternative)}
+{Three carriers: the plan holds 3.3\,N while the measured pull wanders 3.4--4.8\,N.}
+{}
+{fig_tension_eight.pdf}
+
+\fig{7. Reaction to a release (recommended)}
+{When one of four carriers lets go unannounced, the planner sees the cable stretch past its 6\,cm threshold 0.42\,s
+later, resizes to three 0.09\,s after that, and the ring's tilt, peaking at $6.5^\circ$, is back in its band 1.8\,s
+after the release.}
+{Rig, 8 Oct, hover. Released carrier red, survivors blue, the ring black. The band is the peak tilt of the 5\,s
+before the release plus $0.5^\circ$.}
+{fig_release.pdf}
+
+\fig{7b. Reaction times on every rig release (companion)}
+{On every rig release the planner detected the loose cable in 0.33--0.42\,s and resized 0.09--0.11\,s later; the
+ring was back in band 1.8--3.8\,s after the release (tilt 6.5--17.8$^\circ$). The announced detach (r302\_3) resized
+at once but tilted the ring to $15.4^\circ$.}
+{Diamond: detected; bar: resized; grey line: to back in band; the number: peak tilt.}
+{fig_reaction.pdf}
+
+\fig{8. Planner solve time on the rig}
+{Every solve finished inside the planner's 100\,ms period (median 16, 40 and 54\,ms); 16\,\% and 29\,\% of the ticks
+passed the 60\,ms budget with 3 and 4 carriers.}
+{Not one variable: four carriers is the 7 Oct carry planner. The controlled scaling is the S bench.}
+{fig_solve.pdf}
+
+\fig{9. Ring heading on the spinny line (rig)}
+{Through the full $360^\circ$ turn the ring's heading runs about 0.5\,s behind its reference: the error holds near
+$-12^\circ$ while the rate is constant (RMS $10.5^\circ$, at most $16^\circ$), about $2^\circ$ RMS once that delay is
+taken out.}
+{Three carriers, 22 Oct, today's constant-rate law (ls3c). The older law's flight (ls3, $229^\circ$): RMS $6.6^\circ$,
+delay 0.44\,s.}
+{fig_yaw.pdf}
+
+\end{document}

@@ -3,6 +3,8 @@ description: 'check run 10 Oct (merge gate for Wednesday): the sheet''s second r
   with the tip loop on, magnet OFF ~15 s into the hold (the abort: QUAD4 out and down, carriers fly on), LAND 25 s
   later. Also the R8b caught-nothing stop rule. Base twin_tf_weld_on with the weld off.'
 world: three_rigid_ground_rig_attach.sdf
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

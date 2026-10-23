@@ -14,6 +14,8 @@ current branch like any other file (it reaches main with the merges).
 - Keep it current at every milestone (a batch started or scored, a decision, a commit, a
   merge). Anything durable also goes where it belongs straight away: decisions in
   `docs/decisions.md`, run results in `results/registry.csv`, preferences here or in memory.
+- 22 Oct ultracode push: its authority, decided values and ordered work queue are at the top of
+  `docs/SESSION_STATE.md`; the designs and the critic's integration order are in `docs/analysis/push_1022_plan.md`.
 - The current plan is `docs/plan_thesis_results_2026-10-21.md` (approved 21 Oct: the supervisor's results spec,
   1 m cables, the 90 deg chain, rig 4->3->4 with the basket, sim U/S/C, videos). Its status table is how Wesley
   follows progress: update the row (status, commits, run ids) the moment a work package moves.
@@ -53,7 +55,7 @@ current branch like any other file (it reaches main with the merges).
 
 ## Gazebo (twin)
 - Wesley at the machine: he flies, Claude reads the log. Interactive runs don't count.
-- Headless (`tools/run_experiment.py`): laptop one at a time, no cap; lab PC up to 4 slots, evenings only (Wesley 12 Oct),
+- Headless (`tools/run_experiment.py`): laptop one at a time, no cap; lab PC up to 4 slots, whenever it is free (Wesley 22 Oct; was evenings only),
   only when nobody else is on it (check `who`, load, containers first). `/report` per matrix.
 - **Keep the laptop idle for the first ~3 min of every run** (no tests, no analysis): a
   starved planner voided runs on 9 Oct. Never type `pgrep "gz sim"` (it trips clean_slate).
@@ -61,6 +63,8 @@ current branch like any other file (it reaches main with the merges).
   notifications, never polling loops.
 - Never run SIL or Gazebo while the rig stack is up on this laptop (same topics).
 - Anything touching takeoff, the floor or contact gets a floor start; SIL is an air start.
+- The twin flies the rig's mocap velocity filter (`SIM_MOCAP_VEL_FILTER`: `ema` while that is the rig default; Wesley
+  22 Oct, after the twin's unfiltered pair missed the rig's 1.4 Hz swing). Older twin runs are unfiltered (`none`).
 
 ## Critic and reviewer
 - **Critic**: a new control law or estimator in the flight loop, or a change to a gate that
@@ -90,7 +94,9 @@ current branch like any other file (it reaches main with the merges).
   `configs/` and `tools/` are no longer git-ignored).
 
 ## Locked decisions (do not "fix")
-- No geofence. Fleet-wide disarm on any envelope fault, except: `drop_on_loss` is on in every
+- No geofence disarm; one position limit (Wesley 22 Oct): any quad's x or y beyond +-1.75 m (mocap/world origin) makes the
+  fleet LAND (not a disarm), and nothing is commanded or landed outside it. `pos_limit_m` 1.75 in real.yaml (on for
+  every rig flight; Wesley 22 Oct, after its critic and the LIM runs); off in the twin. Rig paths are 0.75 m (real.yaml). Fleet-wide disarm on any envelope fault, except: `drop_on_loss` is on in every
   mode, attach included (Wesley 14 Oct after RIG-1014-t5_2, critic waived; detach since 8 Oct): a
   loss leaving fewer than `min_survivors`, or ring tilt > 30 deg, drops the ring (every magnet OFF,
   a welded QUAD4's coil too) and lands every drone; and an unwelded QUAD4's fault lands the fleet

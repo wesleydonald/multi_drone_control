@@ -2,6 +2,7 @@
 #include <pluginlib/class_list_macros.hpp>
 #include <rviz_common/display_context.hpp>
 #include <QHBoxLayout>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStringList>
@@ -57,6 +58,9 @@ bool endsArm(const std::string& s)
   }
   return false;
 }
+
+// a carrier planned under this is the T's rider (dissipative_node TIP_RIDER_N)
+constexpr double RIDER_N = 1.0;
 
 QPushButton* flightButton(const char* text, const char* colour)
 {
@@ -153,6 +157,25 @@ ArmPanel::ArmPanel(QWidget* parent)
   detach_layout->addWidget(detach_button_, 1);
   layout->addWidget(detach_row_);
 
+  // RELEASE RIDER (22 Oct rig: a terminal's magnet OFF went to the wrong quad, the planner had matched the quads to
+  // other plates): the magnet OFF to the carrier the planner itself plans under RIDER_N, named by its plate
+  release_button_ = new QPushButton;
+  release_button_->setFixedHeight(60);
+  release_button_->setFocusPolicy(Qt::NoFocus);     // keeps SPACE for DISARM
+  layout->addWidget(release_button_);
+  release_confirm_timer_ = new QTimer(this);
+  release_confirm_timer_->setSingleShot(true);
+  release_send_timer_ = new QTimer(this);
+  rider_drone_ = -1;
+  rider_plate_ = -1;
+  rider_pull_ = 0.0;
+  release_confirm_drone_ = -1;
+  release_confirm_plate_ = -1;
+  release_sending_drone_ = -1;
+  release_sends_left_ = 0;
+  release_used_ = false;
+  updateReleaseButton();
+
   // ATTACH row: arm the approach drone's electromagnet. Publishes "ON" to /magnet/command;
   // the magnet then welds to the payload on contact and the drone folds into the fleet
   // (via /magnet/object_attached). Shown when the launch sets attach:=true.
@@ -204,6 +227,9 @@ ArmPanel::ArmPanel(QWidget* parent)
   connect(land_button_, &QPushButton::clicked, this, &ArmPanel::onLandPressed);
   connect(detach_button_, &QPushButton::clicked, this, &ArmPanel::onDetachPressed);
   connect(attach_button_, &QPushButton::clicked, this, &ArmPanel::onAttachPressed);
+  connect(release_button_, &QPushButton::clicked, this, &ArmPanel::onReleasePressed);
+  connect(release_confirm_timer_, &QTimer::timeout, this, &ArmPanel::onReleaseConfirmTimeout);
+  connect(release_send_timer_, &QTimer::timeout, this, &ArmPanel::onReleaseSend);
   connect(disarm_timer_, &QTimer::timeout, this, &ArmPanel::onDisarmRepeat);
   connect(refresh_timer_, &QTimer::timeout, this, &ArmPanel::refreshDroneLabels);
   connect(graph_timer_, &QTimer::timeout, this, &ArmPanel::refreshGraph);
@@ -243,6 +269,27 @@ void ArmPanel::onInitialize()
     [this](const std_msgs::msg::String::SharedPtr msg) {
       phase_message_ = msg->data;
       phase_label_->setText(QString("Phase: %1").arg(QString::fromStdString(msg->data)));
+    });
+  carrier_map_sub_ = node_->create_subscription<std_msgs::msg::String>(
+    "/fleet/carrier_map", latched,
+    [this](const std_msgs::msg::String::SharedPtr msg) {
+      const auto carriers = QJsonDocument::fromJson(QByteArray::fromStdString(msg->data))
+                              .object().value("carriers").toArray();
+      int drone = -1;
+      int plate = -1;
+      double pull = RIDER_N;
+      for (const auto& v : carriers) {
+        const auto c = v.toObject();
+        if (c.value("pull_n").isDouble() && c.value("pull_n").toDouble() < pull) {
+          pull = c.value("pull_n").toDouble();
+          drone = c.value("drone").toInt();
+          plate = c.value("plate").toInt();
+        }
+      }
+      rider_drone_ = drone;
+      rider_plate_ = plate;
+      rider_pull_ = pull;
+      updateReleaseButton();
     });
   his_cmd_pub_ = node_->create_publisher<std_msgs::msg::String>("/tejen/drone_command", 10);
   give_up_pub_ = node_->create_publisher<std_msgs::msg::Bool>("/join_planner/give_up", 10);
@@ -669,6 +716,89 @@ void ArmPanel::onAttachPressed()
   updateStatusLabel();
 }
 
+void ArmPanel::onReleasePressed()
+{
+  if (!is_armed_ || release_used_ || rider_drone_ < 0) {
+    return;
+  }
+  if (release_confirm_drone_ != rider_drone_) {          // the first click names it; the second sends
+    release_confirm_drone_ = rider_drone_;
+    release_confirm_plate_ = rider_plate_;
+    release_confirm_timer_->start(3000);
+    updateReleaseButton();
+    return;
+  }
+  release_confirm_timer_->stop();
+  const int d = release_confirm_drone_;
+  release_confirm_drone_ = -1;
+  if (d >= static_cast<int>(magnet_pubs_.size()) || !magnet_pubs_[d] || magnet_pubs_[d]->get_subscription_count() == 0) {
+    status_message_ = "RELEASE not sent: nothing listens on /drone_" + std::to_string(d) + "/magnet";
+    status_alarm_ = true;
+    updateStatusLabel();
+    updateReleaseButton();
+    return;
+  }
+  release_used_ = true;
+  release_sending_drone_ = d;
+  release_sends_left_ = 10;        // OFF at 10 Hz for 1 s: one lost sample cannot leave the coil on
+  onReleaseSend();
+  release_send_timer_->start(100);
+  RCLCPP_WARN(node_->get_logger(), "[panel] RELEASE RIDER: magnet OFF to /drone_%d (plate %d, planned %.1f N)",
+              d, release_confirm_plate_, rider_pull_);
+  status_message_ = "RELEASE RIDER: magnet OFF to /drone_" + std::to_string(d) + " (plate " +
+                    std::to_string(release_confirm_plate_) + ")";
+  status_alarm_ = false;
+  updateStatusLabel();
+  updateReleaseButton();
+}
+
+void ArmPanel::onReleaseConfirmTimeout()
+{
+  release_confirm_drone_ = -1;
+  updateReleaseButton();
+}
+
+void ArmPanel::onReleaseSend()
+{
+  const int d = release_sending_drone_;
+  if (release_sends_left_ <= 0 || d < 0 || d >= static_cast<int>(magnet_pubs_.size()) || !magnet_pubs_[d]) {
+    release_send_timer_->stop();
+    return;
+  }
+  std_msgs::msg::String msg;
+  msg.data = "OFF";
+  magnet_pubs_[d]->publish(msg);
+  if (--release_sends_left_ <= 0) {
+    release_send_timer_->stop();
+  }
+}
+
+void ArmPanel::updateReleaseButton()
+{
+  if (!release_button_) {
+    return;
+  }
+  QString text;
+  QString colour = "#f08c00";
+  if (release_used_) {
+    text = QString("RELEASED /drone_%1 (one per flight)").arg(release_sending_drone_);
+  } else if (rider_drone_ < 0) {
+    text = QString("RELEASE RIDER: no rider (no carrier planned under %1 N)").arg(RIDER_N, 0, 'f', 1);
+  } else if (release_confirm_drone_ >= 0) {
+    text = QString("CONFIRM: click again to release /drone_%1 (plate %2)")
+             .arg(release_confirm_drone_).arg(release_confirm_plate_);
+    colour = "#e03131";
+  } else {
+    text = QString("RELEASE RIDER   /drone_%1 on plate %2 (planned %3 N)")
+             .arg(rider_drone_).arg(rider_plate_).arg(rider_pull_, 0, 'f', 1);
+  }
+  release_button_->setText(text);
+  release_button_->setStyleSheet(QString("QPushButton { background-color: %1; color: white; font-weight: bold; }"
+                                         "QPushButton:disabled { background-color: #e9ecef; color: #868e96; }")
+                                   .arg(colour));
+  release_button_->setEnabled(is_armed_ && !release_used_ && rider_drone_ >= 0);
+}
+
 void ArmPanel::updateMagnetButton(int i)
 {
   if (i < 0 || i >= static_cast<int>(magnet_buttons_.size())) {
@@ -703,6 +833,9 @@ void ArmPanel::applyShowMagnets()
   for (size_t i = 0; i < magnet_buttons_.size(); ++i) {
     magnet_buttons_[i]->setVisible(show_magnets_ && !magnetHidden(static_cast<int>(i)));
   }
+  if (release_button_) {
+    release_button_->setVisible(show_detach_ || show_magnets_);
+  }
 }
 
 bool ArmPanel::magnetHidden(int i) const
@@ -714,6 +847,9 @@ void ArmPanel::applyShowDetach()
 {
   if (detach_row_) {
     detach_row_->setVisible(show_detach_);
+  }
+  if (release_button_) {
+    release_button_->setVisible(show_detach_ || show_magnets_);
   }
 }
 
@@ -796,6 +932,8 @@ void ArmPanel::updateButtonState()
     arm_button_->setStyleSheet(his_first ? "background-color: #e9ecef; color: #868e96;"
                                          : "background-color: #51cf66; color: white; font-weight: bold;");
     detach_used_ = false;        // a new flight may detach again
+    release_used_ = false;       // and release again
+    release_confirm_drone_ = -1;
   }
   arm_button_->setEnabled(is_armed_ || !partner_present_ || his_armed_);
   // TAKEOFF only after the manager's "ARM sequence complete" with the whole fleet armed.
@@ -803,6 +941,7 @@ void ArmPanel::updateButtonState()
   land_button_->setEnabled(is_armed_);
   detach_button_->setEnabled(is_armed_ && !detach_used_);
   attach_button_->setEnabled(is_armed_);
+  updateReleaseButton();
   // Tether magnets stay as they are while anything is armed: a mis-click would drop one.
   for (int i = 0; i < static_cast<int>(magnet_buttons_.size()); ++i) {
     magnet_buttons_[i]->setEnabled(!is_armed_);

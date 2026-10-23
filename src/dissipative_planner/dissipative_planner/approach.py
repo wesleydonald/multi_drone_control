@@ -38,16 +38,19 @@ TIP_DB_IN, TIP_DB_IN_S, TIP_DB_OUT = 0.005, 2.0, 0.015   # deadband on the raw e
 TIP_CONTACT_S, TIP_CONTACT_DC, TIP_CONTACT_RATIO = 2.0, 0.003, 0.3
 HOLD_AT_GOAL_M, HOLD_AT_GOAL_S = 0.005, 1.0
 HOLD_SPEED_IN, HOLD_SPEED_OUT = 0.05, 0.08   # m/s, the target's 1 s mean (rig 8 Oct: hover p50 0.02-0.03, circle 0.12)
-TIP_BODY_MIN, TIP_BODY_MAX = 0.55, 0.63      # m, |tip - body| of a believable tip
+TIP_BODY_MIN, TIP_BODY_MAX = 0.55, 0.63      # m, |tip - body| of a believable tip on the 0.55 m arm (0.59 + -0.04)
+TIP_BODY_TOL_M = 0.04           # m: any other arm's believable tip is its body-to-tip +- this (1 m: 1.00-1.08)
 TIP_XY_MAX, TIP_STEP_MAX, TIP_FRESH_S = 0.15, 0.03, 0.1
 TIP_FROZEN_S = 0.2              # s: a bit-identical tip this long is frozen (still mocap noise never repeats so);
 TIP_FROZEN_N = 64               # frames kept for the checks (~0.5 s at 120 Hz)
 
 
-def tip_valid(now, frames):
+def tip_valid(now, frames, btt=None):
     """frames: the last tip samples as (t, tip xyz, body xyz), oldest first. The tip passes as a measurement:
     fresh, at a believable distance and lean from the body, no jump, and not frozen (bit-identical for
-    TIP_FROZEN_S: the body-moved test of rev 3 could not see a freeze in a still hold, R1340). Returns (ok, why)."""
+    TIP_FROZEN_S: the body-moved test of rev 3 could not see a freeze in a still hold, R1340). Returns (ok, why).
+    btt: the newcomer's body-to-tip; an arm outside the 0.55 m arm's band (1 m: every sample read 'distance') gets
+    btt +- TIP_BODY_TOL_M and the lean limit at the same angle."""
     if not frames:
         return False, 'no tip'
     t, tip, body = frames[-1]
@@ -55,9 +58,13 @@ def tip_valid(now, frames):
     if now - t > TIP_FRESH_S:
         return False, 'stale'
     d = tip - body
-    if not TIP_BODY_MIN <= float(np.linalg.norm(d)) <= TIP_BODY_MAX:
+    lo, hi, lean = TIP_BODY_MIN, TIP_BODY_MAX, TIP_XY_MAX
+    if btt is not None and not TIP_BODY_MIN <= btt <= TIP_BODY_MAX:
+        lo, hi = btt - TIP_BODY_TOL_M, btt + TIP_BODY_TOL_M
+        lean = TIP_XY_MAX * btt / (0.5 * (TIP_BODY_MIN + TIP_BODY_MAX))
+    if not lo <= float(np.linalg.norm(d)) <= hi:
         return False, 'distance'
-    if float(np.hypot(d[0], d[1])) > TIP_XY_MAX:
+    if float(np.hypot(d[0], d[1])) > lean:
         return False, 'lean'
     tips = [np.asarray(f[1], float) for f in frames]
     if any(float(np.linalg.norm(b - a)) > TIP_STEP_MAX for a, b in zip(tips, tips[1:])):

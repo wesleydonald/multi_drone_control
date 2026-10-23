@@ -202,6 +202,8 @@ int main() {
                         "scripted target was not treated as high-confidence future");
             requireTrue(result.moving_target_terminal_active,
                         "high-confidence target was not used as a moving terminal state");
+            requireTrue(result.accepted,
+                        "final moving rendezvous was not accepted: " + result.status);
             requireNear(
                 result.predicted_target_time_s,
                 result.splice_time_s + result.local_duration_s,
@@ -218,13 +220,18 @@ int main() {
                                   "moving-rendezvous goal is not the terminal target position");
                 requireMatrixNear(result.terminal_target_velocity, expected.velocity, 1e-10,
                                   "moving-rendezvous velocity is not the terminal target velocity");
+                const auto nominal_terminal = planner.committedTrajectory().evaluate(
+                    result.splice_time_s + result.local_duration_s);
+                requireMatrixNear(nominal_terminal.position, expected.position, 1e-7,
+                                  "soft intermediate change relaxed final rendezvous position");
+                requireMatrixNear(nominal_terminal.velocity, expected.velocity, 1e-7,
+                                  "soft intermediate change relaxed final rendezvous velocity");
             }
         }
 
-        // C1F.8c: a high-confidence target outside the local planning radius is
-        // an intermediate continuation, not a physical rendezvous. The local
-        // planner hard-constrains its position but must not hard-match the
-        // platform's tangential velocity at an artificial point in free space.
+        // A projected intermediate goal is only guidance, as in MADER. Its
+        // terminal position must remain soft, with a stopped tail, rather than
+        // hard-constraining an artificial waypoint that may lie in an obstacle.
         {
             RecedingHorizonConfig continuation_config = config(0.0);
             continuation_config.fixed_splice_lookahead_s = 0.10;
@@ -253,16 +260,21 @@ int main() {
                         "far high-confidence target did not reach the local-planner contract");
             requireTrue(
                 result.local_plan->requested_terminal_boundary.mode ==
-                    dynamic_planner::TerminalMode::Continuation,
-                "far high-confidence target did not request continuation semantics");
+                    dynamic_planner::TerminalMode::Stopped,
+                "far high-confidence target still hard-constrains the projected waypoint");
             requireTrue(
                 result.local_plan->requested_terminal_boundary.mode !=
                     dynamic_planner::TerminalMode::MovingRendezvous,
                 "far local waypoint was incorrectly requested as true rendezvous");
-            // `local_continuation_active` describes the surviving complete candidate.
-            // A later safe padded partial intentionally clears it and switches the
-            // effective terminal boundary to STOPPED, so it is not a valid proxy for
-            // the mode originally requested from LocalPlanner.
+            requireTrue(!result.local_continuation_active,
+                        "soft intermediate goal incorrectly reports hard continuation mode");
+            requireTrue(result.accepted,
+                        "clear soft intermediate plan was not accepted: " + result.status);
+            const auto terminal = planner.committedTrajectory().endState();
+            requireMatrixNear(terminal.velocity, Vec3::Zero(), 1e-7,
+                              "soft intermediate endpoint velocity is not zero");
+            requireMatrixNear(terminal.acceleration, Vec3::Zero(), 1e-7,
+                              "soft intermediate endpoint acceleration is not zero");
             requireTrue(result.global_distance_from_splice_m > continuation_config.planning_radius_m,
                         "continuation fixture unexpectedly placed target inside local radius");
             requireNear((result.local_goal - result.splice_state.position).norm(),
@@ -272,11 +284,9 @@ int main() {
                               "continuation waypoint retained a fake hard terminal velocity");
         }
 
-        // M2D regression: a continuation candidate can put its nominal/local
-        // endpoint inside the mission goal tolerance while still carrying a
-        // brake-to-hover safety tail. That candidate must remain replannable;
-        // latching goal_seen here would execute the safety tail as the nominal
-        // mission trajectory and can stop well past the capture target.
+        // A projected soft endpoint must remain replannable even if a coarse
+        // tolerance puts it near the predicted target. Stopped terminal mode
+        // does not mean that an intermediate waypoint is the final rendezvous.
         {
             RecedingHorizonConfig continuation_goal_config = config(0.0);
             continuation_goal_config.fixed_splice_lookahead_s = 0.10;
@@ -289,7 +299,7 @@ int main() {
             continuation_goal_config.target_prediction_high_confidence_horizon_s = 10.0;
             // Test-only: make the old latch-distance predicate deterministic while
             // keeping the measured start (1.0 m from goal) outside goalReached().
-            // The production guard must reject goal_seen for continuation candidates
+            // The production guard must reject goal_seen for intermediate candidates
             // regardless of the particular tolerance value that made the old branch true.
             continuation_goal_config.goal_tolerance_m = 0.50;
             continuation_goal_config.close_to_goal_m = 0.50;
@@ -312,8 +322,9 @@ int main() {
             requireTrue(result.accepted,
                         std::string("continuation-goal regression was not accepted: ") +
                             result.status);
-            requireTrue(result.local_continuation_active,
-                        "continuation-goal regression did not preserve continuation semantics");
+            requireTrue(!result.local_continuation_active &&
+                            !result.moving_target_terminal_active,
+                        "intermediate soft endpoint reports an exact terminal contract");
             requireTrue(result.candidate_kind == dynamic_planner::CandidateKind::Complete,
                         "continuation-goal regression unexpectedly returned a padded partial");
             requireTrue(result.committed_endpoint_distance_m <=
@@ -370,7 +381,7 @@ int main() {
         std::cout << "trajectory-time-seeded fresh shadow solve keeps future C2 splice: true\n";
         std::cout << "C1F.5p2 useful deadline follows trajectory clock with certification reserve: true\n";
         std::cout << "C1F.8c target state is evaluated at the actual candidate terminal time: true\n";
-        std::cout << "C1F.8c far moving target uses continuation rather than fake rendezvous velocity: true\n";
+        std::cout << "far moving target uses MADER soft position / stopped tail: true\n";
         std::cout << "C1F.8c low-confidence prediction cannot overclaim rendezvous horizon: true\n";
         return 0;
     } catch (const std::exception& exc) {

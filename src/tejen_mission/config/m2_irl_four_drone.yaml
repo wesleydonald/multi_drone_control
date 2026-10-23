@@ -1,9 +1,17 @@
 # Four-drone mapping: drone_N = QUAD(N+1). Two-drone YAML keeps QUAD2/QUAD4.
 # Geometry and gate values are copied from successful two-drone run 160421.
 m2_irl:
+  # Used only with completion_mode:=attach_park. Distances are metres.
+  parking:
+    max_radius_m: 0.4
+    slack_margin_m: 0.02
+    disarm_height_above_rest_m: 0.12
+    speed_mps: 0.16
+    final_speed_mps: 0.064
+    final_height_band_m: 0.15
   attachment_policy: measured_contact_15deg
   # QUAD3 first to distinguish airframe response from third-airborne workload.
-  flight_order: [drone_2, drone_0, drone_1, drone_3]
+  flight_order: [drone_1, drone_3, drone_2, drone_0]
   mocap:
     bind_address: 0.0.0.0
     bind_port: 1511
@@ -97,19 +105,20 @@ m2_irl:
       proof_dwell_s: 0.50
       proof_angle_deg: 15.0
       proof_angle_tolerance_deg: 2.0
-      proof_duration_s: 10.0
-      proof_speed_mps: 0.03
+      proof_duration_s: 6.25
+      proof_speed_mps: 0.048
       release_dwell_s: 0.25
       release_speed_mps: 0.03
       loss_xy_m: 0.045
       loss_normal_m: 0.045
       loss_dwell_s: 0.12
     attachment_search:
-      contact_overtravel_m: 0.010
+      contact_overtravel_m: 0.020
       max_contact_correction_m: 0.030
       contact_correction_rate_mps: 0.010
       capture_normal_m: 0.015
       candidate_xy_m: 0.025
+      proof_xy_m: 0.040
       candidate_normal_m: 0.015
       proof_normal_m: 0.015
       proof_relative_speed_mps: 0.030

@@ -1,0 +1,5 @@
+# 22 Oct rig, two carriers (plates 0 and 6): as two_quad_nohold.yaml with the trackers on the planner's planned pull
+# instead of the measured one (one variable against RIG-1022-h2, whose see-saw grew 6.6 -> 15 deg p-p in the lift
+# until QUAD3's magnet let go); the trackers' ring-tilt drop at 55 deg
+drop_tilt_deg: 55.0
+cable_source: 'model'          # the cap (cable_accel_cap) applies to the measured pull only

@@ -8,6 +8,8 @@ ball_start:
 - 1.0
 - 1.6
 - 0.08
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

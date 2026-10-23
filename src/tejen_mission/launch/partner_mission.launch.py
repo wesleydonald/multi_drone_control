@@ -28,13 +28,24 @@ ball weld made at spawn reads free (repeated /pickup/detach), instead of one gz 
 real:=true (the rig, combined M1; default false = everything above, unchanged): no Gazebo node, the wall
 clock, his IRL values (irl_commissioning.yaml blocks copied in with every topic written out; never the file
 as a whole: its root topics include our /magnet/object_attached), geometry 'rig', contact_attach required and
-contact_target_z typed (the 09:00 calibration's weld_point_z: the marker height with the face on plate 9).
+contact_target_z typed (the 09:00 calibration's weld_point_z: the marker height with the face on plate 9), and
+ring_cable_len typed (the carriers' cable_len; our attach launch passes it with QUAD4's record: his drop is the taut
+length, his MPC's cable the drop - 0.044).
 His mocap inputs come from our mocap node through partner_rig_state; his ball manager is his IRL one (no
 radio output: QUAD4's one coil goes through our magnet_gate). ARM and TAKEOFF stay manual
 (/tejen/drone_command), as in his IRL launches; supervisor:=true adds his supervisor, whose stops request a
 LAND (land_now), never a disarm. Usually included by real_control_launch.py mode:=attach partner_nodes:=true.
+
+Transit height and collision avoidance (Wesley 21 Oct): unless typed, pickup_lift_height, drop_approach_clearance,
+minimum_search_z_m and attach_transit_clearance put the lowest point QUAD4 carries (the object, or the magnet on its
+way to the plate) carry_clearance (default half the carriers' cable) above the carriers' bodies, so his C++ planner
+has to route it past them (carry_heights). carrier_model:=tether (default) gives his planner the carriers' rods
+(his attached-tether model, fed by ring_bridge) and his small carrier boxes; column is the old tall carrier boxes.
+attach_cpp_transit:=true (default) flies floor_join's leg to the plate on his C++ planner (TRANSIT_TO_REATTACH).
 """
+import math
 import os
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -71,6 +82,7 @@ GEOMETRY = {
         'magnet_drop_below_quad': 0.49, 'mpc_cable_length': 0.49,
         'thrust_ratio': 82.7, 'thrust_ratio_feedback': False, 'vehicle_mass': 0.643,
         'plate': '3', 'carrier_azimuths_deg': '[30.0, 270.0, 150.0]', 'contact_attach_z_m': None,
+        'object_bottom_below_tip': 0.16, 'object_rest_z': 0.08,
     },
     'rig_twin': {
         'ring_radius': 0.225, 'ring_cable_len': 0.55, 'ring_cable_elev_deg': 60.0,
@@ -78,6 +90,7 @@ GEOMETRY = {
         'magnet_drop_below_quad': 0.59, 'mpc_cable_length': 0.55,
         'thrust_ratio': 22.0, 'thrust_ratio_feedback': True, 'vehicle_mass': 0.55,
         'plate': '9', 'carrier_azimuths_deg': '[90.0, 330.0, 210.0]', 'contact_attach_z_m': 0.032,
+        'object_bottom_below_tip': 0.16, 'object_rest_z': 0.08,
     },
     # rig_twin with 1 m cables (the carriers' rods and QUAD4's arm; plan 2026-10-15 A1): world
     # three_rigid_ground_rig_attach_pickup_L100.sdf (tools/make_attach_worlds_L100.py)
@@ -87,27 +100,86 @@ GEOMETRY = {
         'magnet_drop_below_quad': 1.04, 'mpc_cable_length': 1.0,
         'thrust_ratio': 22.0, 'thrust_ratio_feedback': True, 'vehicle_mass': 0.55,
         'plate': '9', 'carrier_azimuths_deg': '[90.0, 330.0, 210.0]', 'contact_attach_z_m': 0.032,
+        'object_bottom_below_tip': 0.16, 'object_rest_z': 0.08,
     },
     # real:=true only. The rig layout as rig_twin, his IRL values for QUAD4: body origin to magnet marker 0.575
     # (irl_commissioning.yaml, also his M2 QUAD4 geometry), his MPC's own cable length and kT (his IRL launches
     # set neither: the code defaults 0.531 and 22, with his UKF and kT feedback). The contact target is typed
-    # (contact_target_z), not a geometry constant.
+    # (contact_target_z), not a geometry constant. On the rig the carriers' cable is typed (ring_cable_len, from our
+    # launch's cable_len) and his MPC's cable follows QUAD4's typed drop (MPC_CABLE_BELOW_DROP): the 0.55 / 0.531
+    # here are the 0.55 m era's.
     'rig': {
         'ring_radius': 0.225, 'ring_cable_len': 0.55, 'ring_cable_elev_deg': 60.0,
         'ring_pitch_diameter': 0.45, 'ring_collision_outer_diameter': 0.51,
         'magnet_drop_below_quad': 0.575, 'mpc_cable_length': 0.531,
         'thrust_ratio': 22.0, 'thrust_ratio_feedback': True, 'vehicle_mass': 0.55,
         'plate': '9', 'carrier_azimuths_deg': '[90.0, 330.0, 210.0]', 'contact_attach_z_m': None,
+        'object_bottom_below_tip': 0.05, 'object_rest_z': 0.03,
     },
 }
 # real:=true: the rig's values where the sim launch has its own defaults (a typed value wins)
 RIG = {
     'contact_dz': -0.01,          # Wesley 10 Oct: his descent aims the magnet face 1 cm below the plate
     'proof_rise_max': 0.03,       # card rev 5: the rig's lift-proof cap (the twin's is 0.01)
-    # the twin subtest's high transit (m1c_*: the ball under QUAD4 clears the carriers' bodies at ~1.5 m)
-    'pickup_lift_height': 2.3, 'minimum_search_z_m': 2.7, 'drop_approach_clearance': 1.35,
     'anchor_offset_z': -0.030,    # his IRL mocap: QUAD4's body origin to its tether anchor
 }
+# his calibration on QUAD2 (m1_irl_pickup.launch.py): body to marker 0.575, his controller's pendulum 0.531
+MPC_CABLE_BELOW_DROP = 0.044
+# the transit height (Wesley 21 Oct): the lowest point QUAD4 carries sits carry_clearance above the carriers' bodies
+CARRIER_BODY_ABOVE_PIVOT = 0.04    # pivot_offset_z -0.04: the rod pivot 4 cm below a carrier's body centre
+MAGNET_BOTTOM_BELOW_TIP = 0.05     # his ego model's magnet disk: centre 0.025 below the cable end, half-height 0.025
+DROP_OFFSET_Z = 0.15               # his planner's drop_offset_z: the drop point above the ring origin
+SEARCH_FLOOR_MARGIN = 0.05         # his C++ search floor this far under the transit height
+
+
+def carry_heights(G, *, ring_z, rod, attach_z, clearance=None):
+    """His heights for a transit that carries the object's bottom (or, on the way to the plate, the magnet's)
+    clearance (default half the carriers' cable) above the carriers' bodies: pickup_lift_height (the tip above the
+    object at rest), drop_approach_clearance (tip above the drop point), attach_transit_clearance (tip above the
+    plate) and the C++ search floor (body) for the loaded and the unloaded transit."""
+    carriers = ring_z + G['ring_cable_len'] * math.sin(math.radians(G['ring_cable_elev_deg'])) \
+        + CARRIER_BODY_ABOVE_PIVOT
+    clearance = 0.5 * G['ring_cable_len'] if clearance is None else clearance
+    loaded_tip = carriers + clearance + G['object_bottom_below_tip']
+    empty_tip = carriers + clearance + MAGNET_BOTTOM_BELOW_TIP
+    return {'pickup_lift_height': loaded_tip - G['object_rest_z'],
+            'drop_approach_clearance': loaded_tip - (ring_z + DROP_OFFSET_Z),
+            'attach_transit_clearance': empty_tip - (ring_z + attach_z),
+            'minimum_search_z_m': loaded_tip + rod - SEARCH_FLOOR_MARGIN,
+            'minimum_search_z_m_empty': empty_tip + rod - SEARCH_FLOOR_MARGIN}
+
+
+def check_search_floor(floor, *, start_body_z, what):
+    """His backend waits below its search floor (WAITING_ABOVE_SEARCH_FLOOR) for ever: refuse a floor above where the
+    transit starts (an old typed minimum_search_z_m with the new transit heights, say)."""
+    if floor > start_body_z + 1e-6:
+        raise RuntimeError(f'partner_mission: minimum_search_z_m {floor:.2f} is above the {what} ({start_body_z:.2f} m '
+                           'body): his C++ transit would never start; type a lower floor or matching heights')
+
+
+def _backend_overrides(base, G, *, rod, floor_join, carrier_model):
+    """His backend's overrides: our file, then one written here with QUAD4's own cable length, no wait for an object
+    on the empty (floor_join) transit, and with carrier_model tether his attached-tether model of the carriers' rods
+    (their plates and the ring pose from ring_bridge) with his small carrier boxes. Returns the comma list."""
+    params = {'suspended_cable_length_m': float(rod),
+              'require_payload_attached_for_enable': not floor_join}
+    if carrier_model == 'tether':
+        params.update({
+            'cooperative_body_half_x_m': 0.105, 'cooperative_body_half_y_m': 0.105, 'cooperative_body_half_z_m': 0.060,
+            'cooperative_attached_tether_enabled': True,
+            'cooperative_attached_plate_topics': [f'/fake_obstacles/drone_{i}/attached_plate' for i in range(3)],
+            'cooperative_ring_pose_topic': '/fake_payload/pose_array',
+            'cooperative_ring_pose_index': 0,
+            'cooperative_ring_plate_pitch_diameter_m': float(G['ring_pitch_diameter']),
+            'cooperative_ring_angle_zero_rad': 0.0,
+            'cooperative_tether_anchor_z_m': -CARRIER_BODY_ABOVE_PIVOT,
+        })
+    out = tempfile.NamedTemporaryFile('w', prefix='partner_backend_', suffix='.yaml', delete=False)
+    yaml.safe_dump({'dynamic_planner_transfer_backend': {'ros__parameters': params}}, out)
+    out.close()
+    return f'{base},{out.name}'
+
+
 # his planner's pickup values from his last successful IRL pickup (m1_ground_ring.yaml, 7 Oct 17:53); the
 # rest of that file is his ground-ring trial, which contact_attach refuses
 GROUND_RING_PICKUP_KEYS = ('min_reference_z', 'pickup_overtravel', 'pickup_max_overtravel',
@@ -171,6 +243,22 @@ def _nodes(context):
     dyn_share = Path(get_package_share_directory('tejen_dynamic_planner'))
     state = f'/drone_{DRONE}/motion_capture_state'
     L = LaunchConfiguration
+    typed = set(context.launch_configurations.get(TYPED_KEY, '').split(','))
+    floor_join = L('mission_mode').perform(context).strip() == 'floor_join'
+    carrier_model = L('carrier_model').perform(context)
+    clearance = L('carry_clearance').perform(context).strip()
+    H = carry_heights(G, ring_z=float(L('ring_z').perform(context)), rod=G['magnet_drop_below_quad'],
+                      attach_z=G['contact_attach_z_m'] or 0.025, clearance=float(clearance) if clearance else None)
+    if not floor_join:
+        H['minimum_search_z_m_empty'] = H['minimum_search_z_m']
+    # a typed value wins (the m1c_*/m1x_* configs type the old high transit: 2.3 / 2.7 / 1.35)
+    height = lambda name, key=None: float(L(name).perform(context)) if name in typed else H[key or name]  # noqa: E731
+    attach_z = G['contact_attach_z_m'] or 0.025
+    check_search_floor(height('minimum_search_z_m', 'minimum_search_z_m_empty'), what='climb end' if floor_join
+                       else 'lift end', start_body_z=(float(L('ring_z').perform(context)) + attach_z
+                                                      + height('attach_transit_clearance') if floor_join
+                                                      else G['object_rest_z'] + height('pickup_lift_height'))
+                       + G['magnet_drop_below_quad'])
 
     object_bridge = Node(
         package='ros_gz_bridge', executable='parameter_bridge', name='pickup_object_pose_bridge',
@@ -199,6 +287,7 @@ def _nodes(context):
             'fake_drone_radius': 0.12,
             'fake_drone_safety_radius': 0.35,
             'publish_shared_trajectories': True,
+            'publish_attached_plates': carrier_model == 'tether',
             # rolling commitments: our ring's path is only known from its live
             # trajectory state (his fake ring published one analytic 180 s plan)
             'shared_trajectory_duration_s': 30.0,
@@ -290,8 +379,10 @@ def _nodes(context):
                 # ~1.9 m at the pickup, fly the C++ transit above a 1.8 m floor so the
                 # 0.49 m rod + ball clear the carriers (tops ~1.1 m), and only descend
                 # inside the ring's clear centre (R0629/R0636 swept the rod into carrier 0)
-                'pickup_lift_height': L('pickup_lift_height'),
-                'drop_approach_clearance': L('drop_approach_clearance'),
+                'pickup_lift_height': height('pickup_lift_height'),
+                'drop_approach_clearance': height('drop_approach_clearance'),
+                'attach_cpp_transit': _flag(context, 'attach_cpp_transit'),
+                'attach_transit_clearance': height('attach_transit_clearance'),
                 'pickup_lift_speed': 0.12,
                 'pickup_z_tolerance': 0.20,
                 'max_reference_speed': 2.0,
@@ -354,13 +445,16 @@ def _nodes(context):
     backend = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             str(dyn_share / 'launch' / 'c1f6_moving_rendezvous_backend.launch.py')),
-        launch_arguments={'planner_rate_hz': '5.0', 'minimum_search_z_m': L('minimum_search_z_m'),
+        launch_arguments={'planner_rate_hz': '5.0',
+                          'minimum_search_z_m': str(height('minimum_search_z_m', 'minimum_search_z_m_empty')),
                           'cooperative_preview_count': '3',
                           # drone 3's state and HIS object flag (/magnet/object_attached is
                           # our ring weld): R0609's backend waited on both forever
                           # the shared trajectories (ring_bridge) are stamped in sim time
                           'use_sim_time': 'true',
-                          'extra_params_file': str(share / 'config' / 'partner_backend_overrides.yaml'),
+                          'extra_params_file': _backend_overrides(
+                              str(share / 'config' / 'partner_backend_overrides.yaml'), G,
+                              rod=G['magnet_drop_below_quad'], floor_join=floor_join, carrier_model=carrier_model),
                           'state_topic': state,
                           'object_attached_topic': f'/{NS}/object_attached'}.items())
 
@@ -471,7 +565,13 @@ def _rig_nodes(context):
     geometry = val('geometry', 'rig')
     if geometry != 'rig':
         raise RuntimeError(f'partner_mission real:=true flies geometry:=rig, got {geometry!r}')
-    G = GEOMETRY['rig']
+    # the carriers' cable is ours (bringup passes cable_len): a stale one misplaces his carrier obstacles and transit
+    # heights (the 0.55 m table on 1 m cables: carriers 0.23 m further out and 0.39 m higher than he models them)
+    if not val('ring_cable_len', ''):
+        raise RuntimeError('partner_mission real:=true: type ring_cable_len:=<the carriers\' cable_len> (our attach '
+                           'launch passes it); the rig table\'s 0.55 is the 0.55 m era\'s')
+    G = {**GEOMETRY['rig'], 'ring_cable_len': float(val('ring_cable_len', '')),
+         'ring_cable_elev_deg': float(val('ring_cable_elev_deg', '') or GEOMETRY['rig']['ring_cable_elev_deg'])}
     if not _flag(context, 'contact_attach'):
         raise RuntimeError('partner_mission real:=true is the combined M1 contact attach: contact_attach:=true '
                            '(the ATTACH_READY hand-back is not for the rig, decisions 10 Oct)')
@@ -498,6 +598,17 @@ def _rig_nodes(context):
     state = f'/drone_{DRONE}/motion_capture_state'
     tip, ball_pose, ball_attached = f'/{NS}/magnet_tip_pose', f'/{NS}/pickup_object/pose', f'/{NS}/object_attached'
     f = lambda name, default: float(val(name, default))  # noqa: E731
+    floor_join = val('mission_mode', 'pickup_delivery') == 'floor_join'
+    carrier_model = LaunchConfiguration('carrier_model').perform(context)
+    rod = f('magnet_drop_below_quad', G['magnet_drop_below_quad'])
+    clearance = LaunchConfiguration('carry_clearance').perform(context).strip()
+    H = carry_heights(G, ring_z=float(LaunchConfiguration('ring_z').perform(context)), rod=rod,
+                      attach_z=float(target_z), clearance=float(clearance) if clearance else None)
+    search_floor = f('minimum_search_z_m', H['minimum_search_z_m_empty' if floor_join else 'minimum_search_z_m'])
+    check_search_floor(search_floor, what='climb end' if floor_join else 'lift end', start_body_z=(
+        float(LaunchConfiguration('ring_z').perform(context)) + float(target_z)
+        + f('attach_transit_clearance', H['attach_transit_clearance']) if floor_join
+        else G['object_rest_z'] + f('pickup_lift_height', H['pickup_lift_height'])) + rod)
 
     ring = Node(
         package='tejen_mission', executable='ring_bridge', name='fake_cooperative_transport_world',
@@ -525,6 +636,7 @@ def _rig_nodes(context):
             'shared_trajectory_duration_s': 30.0,
             'shared_trajectory_control_interval_s': 0.50,
             'shared_trajectory_refresh_period_s': 1.0,
+            'publish_attached_plates': carrier_model == 'tether',
             # his contact target = our weld point: the calibrated marker height, the full ring attitude
             'bridge_attach_z_m': float(target_z),
             # one plate point for both stacks (plan 2026-10-14 WP3): our weld point's x, y in the ring frame
@@ -595,8 +707,10 @@ def _rig_nodes(context):
                 'external_landing_topic': '/join_planner/land_now',
                 'drop_point_source': 'payload',
                 'static_obstacle_count': 0,
-                'pickup_lift_height': f('pickup_lift_height', RIG['pickup_lift_height']),
-                'drop_approach_clearance': f('drop_approach_clearance', RIG['drop_approach_clearance']),
+                'pickup_lift_height': f('pickup_lift_height', H['pickup_lift_height']),
+                'drop_approach_clearance': f('drop_approach_clearance', H['drop_approach_clearance']),
+                'attach_cpp_transit': _flag(context, 'attach_cpp_transit'),
+                'attach_transit_clearance': f('attach_transit_clearance', H['attach_transit_clearance']),
                 'magnet_drop_below_quad': f('magnet_drop_below_quad', G['magnet_drop_below_quad']),
                 # no auto-land from ATTACH_READY (its magnet OFF would drop QUAD4 off the ring)
                 'attach_ready_land_after_s': 0.0,
@@ -661,10 +775,12 @@ def _rig_nodes(context):
         PythonLaunchDescriptionSource(
             str(dyn_share / 'launch' / 'c1f6_moving_rendezvous_backend.launch.py')),
         launch_arguments={'planner_rate_hz': '5.0',
-                          'minimum_search_z_m': str(f('minimum_search_z_m', RIG['minimum_search_z_m'])),
+                          'minimum_search_z_m': str(search_floor),
                           'cooperative_preview_count': '3',
                           'use_sim_time': 'false',
-                          'extra_params_file': str(share / 'config' / 'partner_backend_overrides_rig.yaml'),
+                          'extra_params_file': _backend_overrides(
+                              str(share / 'config' / 'partner_backend_overrides_rig.yaml'), G, rod=rod,
+                              floor_join=floor_join, carrier_model=carrier_model),
                           'state_topic': state,
                           'object_attached_topic': ball_attached}.items())
 
@@ -676,7 +792,7 @@ def _rig_nodes(context):
             'use_external_reference': True,
             'thrust_ratio': f('mpc_thrust_ratio', G['thrust_ratio']),
             'enable_thrust_ratio_feedback': G['thrust_ratio_feedback'],
-            'cable_length': f('mpc_cable_length', G['mpc_cable_length']),
+            'cable_length': f('mpc_cable_length', round(rod - MPC_CABLE_BELOW_DROP, 4)),
             'acados_cache_dir': os.path.expanduser('~/.cache/multi_drone_control/tejen_payload_mpc'),
             'pose_timeout_s': 0.25,
             'arming_state_feedback_period_s': 0.5,
@@ -747,9 +863,18 @@ def _arguments():
         # contact_attach: no fleet switch 1 s after TAKEN_BACK -> out 1.2 m from the ring, land, disarm (card
         # 2026-10-11_quad4_tilt_cut); false = TAKEN_BACK holds where it is, as before
         DeclareLaunchArgument('taken_back_self_land', default_value='false'),
-        DeclareLaunchArgument('pickup_lift_height', default_value='1.40'),   # lift ends ~1.9 m, above the 1.8 m search floor (R0639 ended at 1.75)
-        DeclareLaunchArgument('drop_approach_clearance', default_value='0.60'),
-        DeclareLaunchArgument('minimum_search_z_m', default_value='1.8'),
+        # the transit heights: '' = carry_heights (the carried object's bottom carry_clearance above the carriers);
+        # typed values win (the old high transit: 2.3 / 2.7 / 1.35)
+        DeclareLaunchArgument('pickup_lift_height', default_value=''),
+        DeclareLaunchArgument('drop_approach_clearance', default_value=''),
+        DeclareLaunchArgument('minimum_search_z_m', default_value=''),
+        DeclareLaunchArgument('attach_transit_clearance', default_value=''),   # floor_join: tip above the plate
+        DeclareLaunchArgument('carry_clearance', default_value=''),   # m above the carriers' bodies; '' = cable/2
+        DeclareLaunchArgument('ring_z', default_value='1.0'),          # the carried ring's height (target_z)
+        # tether: his attached-tether model of the carriers' rods; column: the old tall carrier boxes
+        DeclareLaunchArgument('carrier_model', default_value='tether', choices=['tether', 'column']),
+        # floor_join's leg to the plate on his C++ planner (collision avoidance); false = his Python transfer
+        DeclareLaunchArgument('attach_cpp_transit', default_value='true'),
         DeclareLaunchArgument('start_gate_topic', default_value='/payload/trajectory_state'),
         # his MPC learns kT from where it arms (no climb first); 'auto' = true when the gate is /partner/release.
         # Applied only where his kT feedback flies (rig_twin)
@@ -773,7 +898,9 @@ def _arguments():
         DeclareLaunchArgument('magnet_drop_below_quad', default_value=''),   # QUAD4's, typed (refused untyped)
         DeclareLaunchArgument('proof_rise_max', default_value=''),       # '' = the rig's 0.03
         DeclareLaunchArgument('mpc_thrust_ratio', default_value=''),     # QUAD4's, typed (refused untyped)
-        DeclareLaunchArgument('mpc_cable_length', default_value=''),     # '' = his MPC's 0.531
+        DeclareLaunchArgument('mpc_cable_length', default_value=''),     # '' = magnet_drop_below_quad - 0.044
+        DeclareLaunchArgument('ring_cable_len', default_value=''),       # the carriers' cable (m; typed by our launch)
+        DeclareLaunchArgument('ring_cable_elev_deg', default_value=''),  # their elevation ('' = 60)
         DeclareLaunchArgument('anchor_offset_z', default_value=''),      # '' = his IRL -0.030
         DeclareLaunchArgument('supervisor', default_value='false'),      # his supervisor (manual, stops land)
         # his MPC version, sim and rig (Wesley 14 Oct, twin first): oct10 = his 11a0683f controller, flown to

@@ -1,7 +1,8 @@
 online_join_planner:
   ros__parameters:
-    # Passive only: the nominal mission reference is still published unchanged.
-    visual_astar_enabled: true
+    # Retired runtime diagnostic: keep the C++ planner, not background voxel searches.
+    # Explicit opt-in only; this worker never controls the nominal mission reference.
+    visual_astar_enabled: false
 
     # Recommended experiment range for the current cage/drone scale: 0.05-0.12 m.
     visual_astar_resolution: 0.08

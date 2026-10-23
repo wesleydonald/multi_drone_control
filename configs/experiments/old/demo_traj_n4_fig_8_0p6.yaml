@@ -8,7 +8,7 @@ launch:
     mode: mpc
     load_traj: fig_8
     traj_speed: 0.6
-    traj_radius: 0.5
+    fig8_size: 0.5
     num_drones: 4
     cable_len: 0.5
     load_mass: 0.86

@@ -270,6 +270,14 @@ target_link_libraries(test_recheck_commit PRIVATE dynamic_planner_receding)
 add_test(NAME test_recheck_commit COMMAND test_recheck_commit)
 set_tests_properties(test_recheck_commit PROPERTIES TIMEOUT 30)
 
+add_executable(test_execution_timing tests/test_execution_timing.cpp)
+target_include_directories(test_execution_timing PRIVATE include tests)
+target_link_libraries(test_execution_timing PRIVATE Eigen3::Eigen)
+add_test(NAME test_execution_timing COMMAND test_execution_timing)
+add_executable(test_execution_authority tests/test_execution_authority.cpp)
+target_link_libraries(test_execution_authority PRIVATE dynamic_planner_receding)
+add_test(NAME test_execution_authority COMMAND test_execution_authority)
+
 # R6.3B.4 whole suspended-system physical/C-space regressions.
 add_executable(test_suspended_world tests/test_suspended_world.cpp)
 target_link_libraries(test_suspended_world PRIVATE dynamic_planner_receding)
@@ -323,3 +331,21 @@ add_test(
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_suspended_system_tests.cmake
 )
 set_tests_properties(test_suspended_system PROPERTIES TIMEOUT 240)
+
+# PB.55 shared-core merge; no benchmark/YAML dependency.
+add_executable(test_native_replacement_policy tests/test_native_replacement_policy.cpp)
+target_link_libraries(test_native_replacement_policy PRIVATE dynamic_planner_receding)
+add_test(NAME test_native_replacement_policy COMMAND test_native_replacement_policy)
+
+# Recovered bounded certificate implementation; all opt-ins default off in the
+# shared native API. No optimizer/search-policy changes or second source tree.
+add_library(dynamic_planner_temporal_certificate src/temporal_collision_certificate.cpp)
+target_include_directories(dynamic_planner_temporal_certificate PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(dynamic_planner_temporal_certificate PUBLIC dynamic_planner_math dynamic_planner_separator)
+target_link_libraries(dynamic_planner_octopus PUBLIC dynamic_planner_temporal_certificate)
+add_executable(test_initial_authority tests/test_initial_authority.cpp)
+target_link_libraries(test_initial_authority PRIVATE dynamic_planner_receding)
+add_test(NAME test_initial_authority COMMAND test_initial_authority)
+add_executable(test_temporal_refinement tests/test_temporal_refinement.cpp)
+target_link_libraries(test_temporal_refinement PRIVATE dynamic_planner_receding dynamic_planner_validation_scenarios)
+add_test(NAME test_temporal_refinement COMMAND test_temporal_refinement)

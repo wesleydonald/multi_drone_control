@@ -62,7 +62,7 @@ launch:
     thrust_ratio: 35.2
     z_i_gate: 0.25
     z_taut_gate: 0.9
-    traj_radius: 1.0
+    fig8_size: 1.0
     traj_speed: 0.25
     params_file: /home/wesley/multi_drone_control/configs/rig/traj_fix.yaml
   file: sim_control_launch.py

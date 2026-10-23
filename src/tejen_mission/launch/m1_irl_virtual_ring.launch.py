@@ -40,6 +40,7 @@ def generate_launch_description() -> LaunchDescription:
         launch_arguments={
             'planner_rate_hz': '5.0',
             'minimum_search_z_m': '0.20',
+            'stopped_continuation_enabled': 'true',
         }.items(),
     )
 
@@ -55,6 +56,8 @@ def generate_launch_description() -> LaunchDescription:
             str(drone_share / 'config' / 'm1_measured_tip_pickup.yaml'),
             str(drone_share / 'config' / 'm1_measured_tip_tracking.yaml'),
             {'pickup_alignment_mode': pickup_alignment_mode,
+             'm1_gentle_takeoff_enabled': True,
+             'c1f2_stopped_continuation_enabled': True,
              'target_alignment_mode': LaunchConfiguration('target_alignment_mode')},
         ],
     )
@@ -64,7 +67,7 @@ def generate_launch_description() -> LaunchDescription:
         executable='main',
         name='tejen_mpc',
         output='screen',
-        parameters=[str(config)],
+        parameters=[str(config), {'external_reference_validate_timing': True}],
     )
 
     elrs = Node(

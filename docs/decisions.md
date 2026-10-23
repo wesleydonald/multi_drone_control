@@ -319,3 +319,228 @@ DECIDED 2026-10-22  The ring's centre of mass (Wesley 08:20, bench item 0): the 
 DECIDED 2026-10-22  The rig's path baselines fly with no hover hold (Wesley ~08:59, after A2: the integral's lean ~1 deg):
   the path starts as the lift ends, as in the twin's baseline B configs, so the twin-vs-rig table compares like for
   like.
+DECIDED 2026-10-22  Path flights fly a 5 s hover hold again, and the figure-8 is the 7 Oct size (Wesley ~09:20, after
+  RIG-1022-f3big; supersedes the no-hold line above). Every flight today lifted 2-5 cm toward -x of its rest spot and,
+  with no hold, the model integral never runs on a path flight (its gate opens only in hover), so the whole lap kept
+  the offset (f3big lap centre -4.7, -1.3 cm; 7 Oct with its 5 s hold -0.8, +0.9). A2's hold leaned ~1 deg after the
+  pivot fix. The figure-8 becomes traj_radius 1.0 (x +-1.0, y +-0.5 m, corners 0.21 m): the size 0.5 one has 0.10 m
+  corners that ask 0.38 m/s^2 at 0.2 m/s, where the rig's ~0.19 s lag cuts them by ~4 cm (A3 f3). Today it is typed on
+  the sheet (configs/rig/traj_hold.yaml, two_quad_hold5.yaml, traj_radius:=1.0). After the rig: a figure-8-only size
+  default (traj_radius also sets the circle, spin and orbit radius, which stay 0.5), the twin's baseline B configs at
+  the same size and hold, and the figure-8 bands re-derived for size 1.0 (the frozen 0.55 m and the 1 m ones are size
+  0.5), so the rig's size-1.0 figure-8s stay exploratory until those exist.
+DECIDED 2026-10-22  The spinny line spins at a constant yaw rate (Wesley ~09:33, after RIG-1022-ls3): one full turn
+  (360 deg) over the out-and-back, the rate ramped up and down once (smootherstep, 4 s as the orbit and figure-8; ~24.4
+  deg/s held through both legs and the turnaround), REPLACING the 1-rad-per-radius law (229 deg, the rate through zero
+  at the turnaround). ls3 showed the ring's yaw 0.43 s behind the desired (error -5.6 mean, max 11.5 deg, growing with
+  the rate) and a +-8 deg/s yaw wobble set off around the turnaround. Expect the stop-start wobble gone and the delay
+  error steady at ~0.43 s x the rate (~10 deg); removing that needs a yaw lead (separate card, critic). Built after the
+  rig (src stays as flown today), twin first; RIG-1022-ls3 and the overnight twin line_spin runs are the old law.
+OPEN    2026-10-22  The carriers' mocap velocity filter `slope` (card 2026-10-14_tracker_timing B; T1 env
+  MDC_MOCAP_VEL_FILTER=slope MDC_MOCAP_VEL_DRONES=...) as the rig default? Rig evidence 22 Oct: every two-quad lift
+  over two days swung at 1.3-1.6 Hz; the plan's age (ref_time_shift, h2rts) did not help; with the slope filter (the
+  quads' velocity 45-47 -> 16-17 ms behind) the two climbs had about half the 1.4 Hz swing and it decayed (h2slope),
+  and the pair flew the first full two-quad figure-8 (f2slope, 3-D RMSE 3.7 cm, path lag 0.10 s). Reviewer [weak]: one
+  flight per config, drained packs on h2slope, not interleaved, c2q (ema) as calm, mechanism unproven (the throttle's
+  lag behind -vz fell 41-72 -> 22-24 ms; the commanded-position trail did not change). Wesley ~11:50: Wed 28 flies the
+  carriers on slope if the twin and the reviewer agree; the twin copies the rig's filter from now on; the ring on slope
+  twin first. Wed opens with the interleaved A/B (bars frozen first).
+DECIDED 2026-10-22  Rig-day review answers (Wesley ~11:50-12:05; docs/reports/rig_review_2026-10-22.md):
+  (1) Wed 28 carriers fly the `slope` velocity filter if the twin and the reviewer agree; the reviewer rated today's
+      evidence weak, so Wed opens with the interleaved two-quad A/B (old filter / slope x2, plus P4 on drained packs,
+      >= 10 s at the top, bars frozen in the card first).
+  (2) The twin copies the rig's mocap velocity filter from now on (SIM_MOCAP_VEL_FILTER = the rig's filter: ema while
+      that is the rig default). Bands are frozen for both filters (the nine 1 m cells x {ema, slope} x 2).
+  (3) The ring's own velocity on slope: twin first, then the rig.
+  (4) Four-quad flights are approved for Wed 28.
+  (5) Releases on the rig: a button in the RViz panel that releases the rider (Wesley prefers RViz to the console),
+      not a T4 line. Part C again on Wed 28 at 1 m, after the pair A/B.
+  (6) The Wed sheet carries everything in priority order; overfull is fine.
+  (7) QUAD2's FC `!ERR*` ARM refusals: live with it (a re-ARM clears it).
+  (8) The spinny line's ~0.45 s yaw lag: see what the slope filter does first; card a yaw lead (critic first) only if
+      the lag stays above ~0.3 s.
+  (9) The -x push: accept the 5 s hold (the integral learns it); no rig time on its cause.
+  (10) Chain step 2a (the force-vector split) is DROPPED: the rig T hung 2.6 deg mean, 2.2 median (t3p_2, 49 s,
+      int_k_xy 0), as the twin's 2.3; the chain work goes to step 2b (the reaction to a loaded release).
+  (11) If the interleaved repeat confirms it, the velocity-filter finding is a thesis result (the twin had no filter
+      lag and missed the pair swing).
+  (12) The magnet margin (releases at ~6.4 N under a swing, ~5 N steady per magnet in a pair): nothing for now.
+DECIDED 2026-10-22  Band scoring for path flights (Wesley ~14:15: "path only, and in general I am not worried about error
+  due to lag, as long as the trajectory is followed closely, that is fine"), from the Wed 28 flights on (this morning's
+  RIG-1022-f3 score stays as scored): the N2 band's path error for a figure-8 or spinny line is CLOCK-FREE, the ring's
+  distance to the path (sideways, from the path the reference traces, and height), RMS from the path's first move to
+  the start of the planner's own descent (or LAND if earlier), for the twin and the rig alike; the tilt peak over the
+  same window; the lag in seconds is reported beside it, not banded. Hover cells unchanged (2 s after the top to LAND).
+  Reason: the old window ran to LAND, which in the twin takes in the descent and 17-31 s on the floor (reviewer 22 Oct)
+  and on the rig depends on when LAND is pressed; and a time-indexed error counts the lag twice.
+DECIDED 2026-10-22  Ultracode push scope (Wesley ~14:20): Wednesday readiness (the clock-free bands, the Wed sheet, the
+  RViz release button's visibility; the 1 m defaults and a figure-8-only size default of 1.0; finding what makes the
+  rig pair swing), and the thesis sim results U (magnet off its slot), S (scalability), C (the paper's method against
+  ours) and R (the 0.55 m twin tables re-flown at 1 m). Chain step 2b not in this push. The lab PC may be used whenever
+  it is free (who / load / containers checked before every batch, at most 4 slots, yield to anyone). Code: "as far as
+  you like, just make sure to report stuff that doesn't work and delete it, and inform me if something you do
+  improves results" (this push's word for code and defaults; still no commits until Wesley says).
+DECIDED 2026-10-22  Push plan answers (Wesley ~15:30; docs/analysis/push_1022_plan.md): (1) the R, U, C and S claim tables
+  fly the UNDELAYED twin (today's bands hold); the delayed twin (~50 ms extra command delay, calibrated on R2397-R2404
+  against rig f3h / ls3c) is a named rig-timing arm for the pair work and key cells, once its landing no longer faults.
+  (2) S: 8 quads WITH the return: 8 -> 4 (-> 2) -> 8, so rejoin_departed (code design B) is built in this push (card +
+  critic); a 9-quad steady hover only as an extra. (3) Up to 3 agents implement in parallel git worktrees (code and
+  offline tests only, today's uncommitted diff applied first, integrated into the main tree between runs, nothing
+  committed). The remaining 24 questions: asked one by one.
+DECIDED 2026-10-22  Push answers 1-6 (Wesley ~15:40): (1) the rig on Wed 28 / Thu 29 gets the 1 m defaults and the
+  read-only tools, plus anything found that improves results; (2) attach_cable_len stays QUAD4's rod from its pivot, a
+  config that disagrees with its world is refused, old configs keep a named exemption and run as flown, new 1 m configs
+  leave it untyped; (3) the ring's measured centre of mass becomes the rig default (real.yaml attach_z 0.0175,
+  payload_rest_z 0.0275; the attach/M2 modes' forced rest 0.05 -> 0.0275); the twin keeps 0.02/0.02; (4)
+  DEPARTED_CLEAR_R stays 1.2 m for the rig ring (scaled for S's bigger ring), the path-clear and take-back distances
+  scale with the formation's reach, after one 1 m twin take-back test; AND a general limit: any quad's x or y beyond
+  +-1.75 m (the mocap/world origin) makes the fleet LAND (an envelope LAND, not a disarm), with every commanded or
+  landing point kept inside it; (5) THE FIGURE-8 IS SIZE 0.9 at 1 m (x +-0.9, y +-0.45 m; the outboard quad peaks at
+  +-1.625 m), not 1.0: the twin's figure-8 bands are re-flown at 0.9; (6) one approval for every generated world and
+  model in the push (1 m attach family and QUAD4 models, the M1 layout at 1 m, R's 1 m layouts, S's bigger-ring worlds
+  and drone models 4-7); params.py gains fig8_size (0 = follow traj_radius), load_ixx/load_izz (0 = from the mass) and
+  prebuild_sizes.
+DECIDED 2026-10-22  Push answers 7-24 (Wesley ~15:45-16:05):
+  (7) one frozen code tree for the R, U, C and S claims (S's new code behind its switch); the carriers' velocity filter
+      is typed in every claim config after Wed 28's A/B. (8) The twin may keep the size-1.0 figure-8 for its own tables
+      ("it is fine to run 1 meter on sim, keep those results": R2329-R2364 stand); the rig flies size 0.9 with bands from
+      twin runs at 0.9; T7t on the 22 Oct clock-free path-only ruler with the carry card's values. (9) A 1 m band for
+      Thu 29's QUAD4 releases (Nr hover): 3 twin runs as soon as possible, 2 sigma_rig from Wed's first 1 m hover; and
+      in general NO time constraints: work through the plan in order as things get done. (10) R: the 0.55 m twin-rig
+      pairs and the attach-sequence figures stay 0.55 m history; the 1 m tables replace the 0.55 m twin tables, one
+      appendix table compares them, the 22 Oct bands replace the old 1 m band table, F12b drops the 0.55 m rig points.
+      (11) The integral gains stay (revisit if Wed's 1 m holds oscillate). (12) Tip-hinge twin world approved; Wesley
+      measured the cable's rotation point 4 cm above the magnet face, ~8.5 cm above the floor with the ring down, i.e.
+      ~5.75 cm above the ring's centre of mass (the rig types 1.75 cm today); the marker bodies' origins are not the
+      rotation point; rig typing later, as its own A/B. (13) Betaflight read-only diff: Wesley can do it today (no
+      ring needed). (14) Wed flies the pair A/B as carded, readouts from its logs. (15) drone_mass 0.583 at 1 m now
+      (rig and prebuilt solvers). (16) QUAD4's 1 m tether: our typed QUAD4 record feeds his launch (after the sync2
+      merge, Wesley's call). (17) U as designed (M1 layout; the catch point moves with the aim, weld radius 0.025;
+      along the rim and inward, outward once at 8 cm; a newcomer within 0.30 m of a carrier after the weld fails;
+      extend to 20 cm; the critic waived for the twin-only slot arm). (18) S's ring R 0.5 m, 0.9 kg, and its 'not
+      heavily worse' bars as proposed. (19) Two 12-core lab slots for S's 8-quad batches. (20) S's speed-ups default in
+      the twin after a smoke run and identity tests, on the rig after the reviewer. (21) C flies both network forms.
+      (22) C's headline: clock-free path error plus a reach term, lag and time-indexed error beside; hover from the
+      hand-over with the first 5 s reported; 'our port of Quan et al.'s method' with its deviations listed. (23) The
+      twin network mode's defaults approved, and may be changed where something seems off or to test improvements.
+      (24) C2 after R, if there is room. Disk: delete nothing; Wesley is getting 400 GB of storage, will update.
+DECIDED 2026-10-22  Evening answers (Wesley ~22:05, after the critics):
+      (1) The rig's paths shrink to 0.75 m so the position limit has margin: real.yaml fig8_size 0.75 and traj_distance
+      0.75 (outboard quad ~1.475 m at 1 m cables, 27 cm inside +-1.75). The twin profile keeps 0.9 / 1.0; claim configs
+      type their sizes. How the rig turns pos_limit_m on (real.yaml or each rig params file) stays open until the LIM
+      runs (critic M2). (2) The rig gets its own solver folder: rig_flight.sh and the rctl/rdiss shortcuts export
+      MDC_ACADOS_ROOT=~/mdc_rig_generated, filled by tools/prebuild_rig.sh at 0.583 kg; twin runs keep <repo>/generated.
+      (3) QUAD4 landed by Tejen's own LAND (before we fly it) may land outside the limit: accepted, noted in the card.
+      (4) At most 2 agents running at a time (token control).
+DECIDED 2026-10-22  The 1 m clearance scaling stands (Wesley ~22:40, push answer 4's condition): TB-1m R2422 kept every
+      clearance (QUAD4 1.39 m, its ball 0.63 m from any carrier); its tip at touchdown is the twin's rigid 1 m rod
+      (TB14 mechanism: the ball reaches the floor first), recorded as a twin effect, no twin fix. The rig's tether goes
+      slack.
+DECIDED 2026-10-22  After batch 2 (Wesley ~23:20): (1) a dropped quad landing near or on the ring does not matter on the
+      rig ("in real life it does not matter if the quads land on top of the payload"): no fix to the drop step-out;
+      LIM-c's clearance bar failures (R2441-R2444, both arms) are recorded, not acted on. (2) No 1 m push world: the
+      WRENCH breach test LIM-e2 is dropped (its config removed); the limit's trip rests on its unit tests, on LIM-e
+      R2439/R2440 (it fired once, as built, on a quad that started outside 1.2 m) and on LIM-a R2435-R2437 (no trip
+      at 0.75 m, reach <= 1.469 m).
+DECIDED 2026-10-22  The position limit is on for the rig through real.yaml: pos_limit_m 1.75 (Wesley ~23:40, critic M2).
+      The twin and legacy profiles keep it off (their tables fly paths past it). Evidence: LIM-a R2435-R2437 (no trip on
+      the 0.75 m paths, reach <= 1.469 m), LIM-e R2439/R2440 (one LAND when a quad was past the line), unit tests.
+DECIDED 2026-10-23  Morning answers (Wesley ~07:25, after the overnight report):
+      (1) Wed 28: MDC_PLANNER_CPUS=0-7 (the planner pinned to the rig laptop's P-cores), no desk check first. (2) Wed flies
+      the full merged tree (every new feature behind its switch, off on the rig). (3) Pair-swing round C approved: the
+      tip-hinge twin world (hinge 5.75 cm above the ring's centre of mass); the rig-timing switches stay until it reads.
+      (4) R2511 (runner stall after landing) stays a valid run. (5) S: 8 quads reported as "twin only, not real time",
+      the real-time limit (~4 quads on the rig laptop) its own number; its bars accepted ("not so important as long as it
+      works"). (6) C: reported as is ("the network as ported cannot hold the ring's yaw in the twin"; our planner 46 mm vs
+      156 mm on the 0.4 m/s line); no harness fix; its seven card values accepted. (7) U: separation reported apart from
+      the arm comparison; the 11.6 cm wrong-plate cell x2; "model-error tolerance" wording past ~2.5 cm; the mechanism
+      bar kept. (8) R: build all five missing 1 m worlds (Tier B's four gap layouts and the push world) and fly those
+      tables. (9) The 2-quad landing (L-S) at 1 m is not reported in the sim results. (10) Rejoin: fly the leaning-pair
+      neighbour. (11) Videos: render the overnight highlights plus a reel.
+DECIDED 2026-10-23  The rejoin leaning-pair test's world approved (Wesley ~08:00): the 1 m world the rejoin E2 test flies,
+      with Gazebo's ApplyLinkWrench (the push plugin) added (it is the 3-quad T world, three_rigid_ground_rig_T_push_L100), so a steady 0.0066 N m push holds the pair 3 deg toward the
+      rejoin plate (and -3 deg the other way); no config-only lever exists (the ring pivots on two ball joints).
+DECIDED 2026-10-23  Late-morning answers (Wesley ~10:00-11:10):
+      (1) C: fly the network search's real best point in the twin (`c_net_portfinal`: diss_c 12, k_pay = k_anchor 80,
+      k_ring 40, k_slot 18, ki_load 0.5, vel_k_att 8, vel_kp_pos 1, vel_kv 3; J 115, every offline guard passes). The
+      "retuned" runs R2468/R2469 flew the search's stage-1 point (only diss_c and vel_kp_pos typed; the emit filled the
+      rest from DEFAULTS), so (6) of the morning answers was decided on a wrong premise; hover, line 0.2 and line 0.4 x2
+      in lab batch 17. (2) Thesis text corrected to the measurements (thesis worktree, uncommitted): system_overview's
+      latency (radio + FC ~10-15 ms; throttle-to-lift 44-67 ms rig vs ~15-25 twin; body rate 17-24 vs 49-57) and
+      reconfiguration's drop rule (default: fewer than three drops; the chains' 200 deg gap rule). (3) Pair swing:
+      round C null (R2598-R2601, typed0175 M1(b) 0.09/0.08 deg < the 1.0 testbed bar), so round D is reduced to the
+      config-only rig candidates on the thr060 testbed (slope x2, cable_source model x2; bars frozen 11:14); D3-D5 not
+      flown; Wed 28's 1 m rig pair is the test. (4) Delete rate_kff, thr_tau_s, the body-rate filter emulation and the
+      tip-hinge world (the card's §8 rule; backups in the scratchpad's del_rt/); keep the per-channel command delay
+      (default off) as round D's testbed.
+DECIDED 2026-10-23  Thu 29 (Wesley ~11:20, after the readiness pass: tejen-sync2 merged into the tree, uncommitted):
+      (1) QUAD4's transit at 1 m with carry_clearance 0.25 (body ~3.25 m, 0.75 m under the ceiling; the tether tip
+      0.25 m over the carriers' bodies; the default half-cable gave ~3.5 m): in the sheet's $H and the twin rehearsal
+      configs. (2) Nr flies our announced DETACH (his unannounced release is not built); the sheet orders his planner
+      before his controller and gives the QUAD4 dip > ~0.3 m -> GIVE UP rule.
+DECIDED 2026-10-23  U after batch 16 (Wesley ~14:01): (1) the 6 owed U runs (u_meas_t08 and u_slot_t04 re-flies, the
+      pre-registered 20 cm radial extension x2 per arm) fly on today's tree beside batch 16's 54 counted runs, the table
+      noting the two trees (what U executes is unchanged: graph_attach's changes are partner-only, the deleted
+      switches were off in every U run); U re-flies whole on the final tree at the results freeze, like R. R2634 is a
+      runner race (mocap staleness raced the 2 s stop after /fleet/landed), VOID and re-flown; the runner no longer
+      checks staleness after /fleet/landed (tools/experiment/runner_node.py, test added). (2) Along the rim the mechanism
+      is NOT SHOWN (the scorer's pre-written code; radially in it is shown); the thesis says the slot arm folds in more
+      gently along the rim, not that the model point does not matter.
+DECIDED 2026-10-23  Lab busy and E5 (Wesley ~14:05): (1) another user took the lab PC at ~14:00 (15.6 -> 23 of 24 cores:
+      a DOPE detector, a relative-position node, their Gazebo); batch 18u was stopped at 14:03 under the "only when
+      nobody else is on it" rule (R2714-R2724 VOID, containers removed). Wait until it is free (a watcher probes every
+      5 min), then relaunch U's 6 owed runs + our planner's 5 C cells, then S's 8-quad batch. (2) E5 reported as is:
+      1 of 2 clean toward the weld plate (R2712: fold-in 5.28 deg for 0.19 s, the weld-height cap's 1.1 cm dip, the
+      critic's M1); no change to the cap.
+DECIDED 2026-10-23  Thu 29, his install gate (Wesley ~14:28): the merged C1F backend discards any finished transit plan
+      when the world version moved since its final check, and our carrier (50 Hz) and ring pose (20 Hz) updates move it
+      constantly: 3,533 of 3,541 accepted plans discarded in the five twin rehearsals (R2695-R2699), grants after 8 s to
+      over 3 min (pre-merge handoff < 0.6 s); the rig runs the same code. (1) The fix is Tejen's: his install re-checks
+      the finished plan against the current world instead of discarding it (note for Wesley to send:
+      docs/rig/note_tejen_install_gate_2026-10-23.md; a critic looks at the change when it comes). Meanwhile the Thu 29
+      sheet has a stop rule: GIVE UP if no TRANSIT_TO_REATTACH 60 s after his 'settled' line. (2) carry_clearance stays
+      0.25 (asked again with the new number: ~5-10 cm magnet to a carrier's body in his model on the transit, ~30-35 cm
+      at 0.5). The twin A/B (0.25 vs 0.5, x2) and the R2696/R2697 re-flies fly when the lab is free (wall cap 60 min).
+DECIDED 2026-10-23  S (Wesley ~14:33): (1) N4's window opens 2 s after the last REJOIN_BLEND_OVER for the not-yet-flown
+      8-quad claim runs (the 10 s rejoin blend postdates the card and put the last fold-in inside the original window;
+      the fold-in is scored by N3 and the rejoin card); the original window is reported beside it (s_metrics n4 /
+      n4_resize; test added). Exploratory R2597: revised 6.3 mm / 0.89 deg, original 19.3 mm / 1.65 deg (bars 5.72 mm /
+      1.44 deg). (2) Design harder S cases (the chain on trajectories, departed quads doing tasks before rejoining,
+      overlapping events): an agent drafts a ranked, PROPOSED addendum in the S card with configs where no code is
+      needed; Wesley picks what flies.
+DECIDED 2026-10-23  S's iteration count (Wesley ~14:37): the 8-quad claims fly at 5 SQP iterations, as the card's frozen rule
+      says after Q6 (n = 8: i1 misses Q1-Q4, i2 misses Q4 by 0.016 m/s^2; i5 passes all): configs
+      s8_hover_R50_L100_it5 and s8_chain4back_R50_L100_it5 (N1's comparator s4_hover_L100_it5, R2700/R2701), x2 each,
+      lab --slots 2 --cpus 12 --wall-cap-min 150 --warm-from-config; still "twin only, not real time". The it1 8-quad
+      runs stay exploratory; the nine-flight replay (Q1-Q5) is reported when it ends.
+DECIDED 2026-10-23  S's harder cases and N2 (Wesley ~15:12): (1) the five no-code cases fly as exploratory first passes in
+      the addendum's rank order (case 1's neighbours s8_chain4b2b and s8_orbit before its orbit chain; then the figure-8
+      pair, two-at-once, release-in-blend, relay), 9 runs after the 8-quad claims (batch 18, now 13 runs). (2) N2's
+      comparator for the claims (5 iterations): the 5-iteration release cell, mean(R2708/R2709) + 1 = 8.83 deg (was
+      9.23 from the it1 cell); written in the card before the runs. (3) Cases 6 (a freed quad's task before the rejoin)
+      and 7 (the lap-by-lap chain): critic WAIVED by Wesley; built behind switches (default off, twin only) when an agent
+      slot frees; the waiver goes in their registry rows.
+DECIDED 2026-10-23  Network yaw, figures (Wesley ~15:26): (1) Why the network lets the ring's yaw grow: Quan et al. model
+      the load as a point with every cable at its centre of mass (their Eq. 1: load position only), while our ring hangs
+      from four rim plates, so it has a yaw mode the method has no term for; our port's yaw-following formation (the
+      locked yaw-only design) feeds it (offline: x1.6/s from a 0.5 deg kick; formation held in yaw: x1.1-1.3/s). No
+      coding bug found yet. Wesley: fly the paper's OWN geometry, all four cables hooked at the ring's centre, both
+      controllers, in the twin (world SDF and attach geometry approved for this test); an agent builds the world and
+      configs (PROPOSED section in the C card). (2) The ring is black in every thesis figure: plot_style.PAYLOAD_LINE
+      '#000000' (was gold); existing thesis figures change on their next render. (3) The rig pair-swing figure is like
+      for like: ema h2t9p vs slope h2slope (h2, h2rts, f2slope in the text). (4) Time axes read "t after <event>".
+DECIDED 2026-10-23  C and the drafts (Wesley ~15:44): (1) Fly the paper's own FORM of the network (Eq. 9 damping relative to
+      the formation + Eq. 10 acceleration) at its search-best gains (configs/twin/c_net_paperfinal.yaml: diss_c 3, k_pay
+      = k_anchor 80, k_ring 40, k_slot 18, ki_load 0.5, vel_k_att 16, vel_kp_pos 1.5, vel_kv 3; offline J 12.1 vs the
+      port's 115, excluded only by the 0.6 m/s line's tilt guard): hover, line 0.2, line 0.4 x2 in batch 18u. (2) C's
+      draft: the grid's-point twin rows (R2468/R2469) and the inferred trade-off sentence cut; the paper's form and
+      geometry tests named as pending. Also (my calls, told to Wesley): system_overview's body-rate numbers now the
+      pair-swing card's (loop_timing: 25-35 vs 48-62 ms, was the Betaflight note's 17-24 vs 49-57); tab:faults' tilt and
+      drop-off rows carry the 1 m results (G165 drop; G180 disarm 1.84-2.00 m). Thesis builds (148 pp, 0 undefined).
+DECIDED 2026-10-23  The paper's own geometry and the figures (Wesley ~16:22): (1) the centre-hook test: world
+      four_rigid_ground_rig_hub_L100.sdf (every rod on a 1 mm hub on the plates' plane, 2 cm above the ring's CoM, as
+      built), configs c_{net,pl}_hub_{hover,linex_v200,linex_v400}_L100 (attach_radius 0.001; zero-radius planner code
+      NOT funded), bars G/P/A/O FROZEN as written; smoke pair first (front of batch 18u), then the 6 cells x2 + the
+      network as first ported on the hub x1 each (c_net_smoke_hub_*; batch 18h). (2) Best-results figures: detach
+      r302_3; the spin goes in the summary; spinny line ls3c; "too much black": colour the data, one palette for fleet
+      size, grey for references, black only for the ring among drones (memory updated).

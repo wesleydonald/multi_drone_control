@@ -2,6 +2,8 @@ name: m1_full_hover
 description: 'Full M1 on the rig twin, hover (Wesley 10 Oct; exploratory): all four start on the floor, QUAD4 welded on plate 9 (the start weld under contact_lift); lift, hover; DETACH 3 (its magnet OFF), our step-out 0.5 m out and 0.3 m up, /partner/release hands it to his mission from the air (pickup, high transit, drop into the net), then the subtest''s contact attach: his descent to contact, lift proof, our confirmation, bumpless hand-over, fold-in; LAND 8 s after the re-attach. As m1c_hover (proof_h_plate 2.5 mm, seed start) with partner_attached and his start gate /partner/release.'
 world: three_rigid_ground_rig_attach_welded_pickup.sdf
 ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

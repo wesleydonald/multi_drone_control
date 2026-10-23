@@ -54,8 +54,12 @@ class PayloadMocapEmulator(Node):
         # rig's mocap, relay and network latency (default from SIM_MOCAP_DELAY_S; 0 = off)
         self.declare_parameter('mocap_delay_s', float(os.environ.get('SIM_MOCAP_DELAY_S', '0.0')))
         # the rig mocap node's velocity filter (card 2026-10-14_tracker_timing): 'none' keeps the plain difference,
-        # 'ema' is the rig's alpha 0.2 (its ~45 ms lag), 'slope' the least-squares slope
-        self.declare_parameter('velocity_filter', os.environ.get('SIM_MOCAP_VEL_FILTER', 'none'))
+        # 'ema' is the rig's alpha 0.2 (its ~45 ms lag), 'slope' the least-squares slope. The twin flies the rig's
+        # filter, so 'ema' by default (Wesley 22 Oct; 'none' before, which hid the rig's pair swing)
+        self.declare_parameter('velocity_filter', os.environ.get('SIM_MOCAP_VEL_FILTER', 'ema'))
+        # the ring's own filter when the carriers are filtered: the rig's ema, or slope (card 2026-10-22_velocity_filter,
+        # the ring arm; default ema)
+        self.declare_parameter('ring_velocity_filter', os.environ.get('SIM_MOCAP_VEL_RING', 'ema'))
         # sim time (s) from which the delay and the filter apply (default from SIM_MOCAP_DELAY_FROM_S; 0 = from the
         # start). The drones flip in the takeoff creep with the delay on (R1100, R2117): starting it after the lift
         # lets the rig-latency twin carry.
@@ -78,8 +82,11 @@ class PayloadMocapEmulator(Node):
             # as the rig: the chosen filter on the listed carriers, the rig's ema on the ring and QUAD4
             carriers = [int(v) for v in os.environ.get('MDC_MOCAP_VEL_DRONES', '0,1,2').split(',') if v.strip()]
             dmode = vmode if (vmode == 'ema' or int(drone_id) in carriers) else 'ema'
-            self._vfilt = {'drone': VelocityFilter(dmode), 'payload': VelocityFilter('ema')}
-            self.get_logger().warn(f'[MOCAP{drone_id}] velocity filter {dmode} (ring ema)')
+            rmode = str(self.get_parameter('ring_velocity_filter').value)
+            self._vfilt = {'drone': VelocityFilter(dmode), 'payload': VelocityFilter(rmode)}
+            self.get_logger().warn(f'[MOCAP{drone_id}] velocity filter {dmode} (ring {rmode})')
+        else:
+            self.get_logger().warn(f'[MOCAP{drone_id}] velocity filter none (plain difference, ring too)')
         self._queues = {}
         if self._delay > 0.0:
             self.get_logger().warn(f'[MOCAP{drone_id}] mocap delay {self._delay:.3f} s from t {self._delay_from:.1f} s')
@@ -118,7 +125,8 @@ class PayloadMocapEmulator(Node):
         # the magnet marker the rig has on every carrier (Motive bodies 21-24): the payload end of this drone's rod,
         # from the rod model's pose (the world publishes it for the chain's worlds); off with tether_pose_topic ''
         tether_topic = str(self.declare_parameter('tether_pose_topic', '').value)
-        self._tether_half = 0.5 * float(self.declare_parameter('tether_len', 0.55).value)
+        # the world's rods (1 m since 22 Oct)
+        self._tether_half = 0.5 * float(self.declare_parameter('tether_len', 1.0).value)
         self._tip_last_pub = None
         self._tip_noise = float(self.declare_parameter('tether_tip_noise_m', 0.0005).value)   # Motive marker jitter
         self._tip_rng = np.random.default_rng(int(drone_id))

@@ -56,6 +56,8 @@ DEFAULT_WORK = os.path.join(REPO, 'generated', 'latency_bench')    # git-ignored
 G = 9.81
 TWIN_RING_I = (2.227e-2, 2.227e-2, 4.431e-2)
 ROD_MASS, ROD_COM_FROM_RING, JOINT_DAMP = 0.075, 0.147, 0.1
+# m, the rod ROD_COM_FROM_RING was taken on: the twin's rod CoM is that share of any rod (L100 0.267)
+ROD_COM_LEN = 0.55
 ROD_K, ROD_C = 10000.0, 40.0
 DT_SIM, LOG_DT, TICK = 0.0005, 0.02, 0.1
 
@@ -74,12 +76,18 @@ def load_modules(src):
     return argparse.Namespace(geometry=geometry, lcd=lcd, lt=lt, params=params, ocp=ocp, ps=ps, rb=rb)
 
 
-def build_solver(mods, n, work, load=0.86, drone=0.55, rod=0.55, radius=0.225, attach_z=0.02):
+def build_solver(mods, n, work, load=0.86, drone=0.55, rod=0.55, radius=0.225, attach_z=0.02, inertia=None):
+    """inertia: the ring's [Ixx, Iyy, Izz] (None = the M2A ring per kg, params.load_inertia)."""
     rho = mods.geometry.attach_points(n, radius, attach_z)
-    dyn = mods.lcd.LoadCableDynamics(n, load, mods.params.load_inertia(load), [rod] * n, rho, drone)
-    code = os.path.join(work, f'n{n}_m{drone:.3f}_M{load:.3f}')
+    J = mods.params.load_inertia(load) if inertia is None else [float(v) for v in inertia]
+    dyn = mods.lcd.LoadCableDynamics(n, load, J, [rod] * n, rho, drone)
+    tag = '' if inertia is None else f'_I{J[0]:.4f}_{J[2]:.4f}'
+    code = os.path.join(work, f'n{n}_m{drone:.3f}_M{load:.3f}{tag}')
     os.makedirs(code, exist_ok=True)
     os.environ['MDC_ACADOS_ROOT'] = code
+    # the solver's cache check and build signature live in its import-time CODE_DIR: here too, or the bench judges
+    # and overwrites the planner's own cache signatures (the 22 Oct sweep left .build_sig_5..10 in generated/)
+    mods.ps.CODE_DIR = os.path.join(code, 'c_generated_code_load_planner')
     cwd = os.getcwd()
     os.chdir(code)
     try:
@@ -118,7 +126,7 @@ class RingPlant:
         m, I = load, np.diag(planner_inertia if plant == 'p0' else TWIN_RING_I)
         self.joint_c = 0.0
         if plant == 'p1':
-            me = ROD_MASS * (1.0 - ROD_COM_FROM_RING / rod_len)
+            me = ROD_MASS * (1.0 - ROD_COM_FROM_RING / ROD_COM_LEN)      # the same ring-end share at every length
             for r in self.rho:
                 I = I + me * (float(r @ r) * np.eye(3) - np.outer(r, r))
             m = m + me * len(self.rho)
@@ -195,18 +203,19 @@ def flown(dense, e):
 def run(args, mods=None, built=None):
     mods = mods or load_modules(args.src)
     n = 3
-    dyn, solver, rho = built or build_solver(mods, n, args.work)
+    dyn, solver, rho = built or build_solver(mods, n, args.work, rod=args.rod)
     solver.steady_iters = int(args.iters)
     solver.last_X, solver.recover = None, False
-    traj = mods.lt.LoadTrajectory(args.kind, args.speed, 1.0, args.radius)
+    traj = mods.lt.LoadTrajectory(args.kind, args.speed, 1.0, args.fig8_size if args.kind == 'fig_8' else args.radius)
     s_nom = mods.geometry.nominal_cable_dirs(rho, args.elev)
     refs = mods.rb.ReferenceBuilder(dyn, n, s_nom, solver.dt, traj)
     refs.ref_lag_s = float(args.ref_lag)
     z0 = 1.0
-    plant = RingPlant(rho, dyn.l[0] if hasattr(dyn, 'l') else 0.55, args.plant, planner_inertia=mods.params.load_inertia(0.86))
+    rod = dyn.l[0] if hasattr(dyn, 'l') else args.rod
+    plant = RingPlant(rho, rod, args.plant, planner_inertia=mods.params.load_inertia(0.86))
     plant.x = np.array([0.0, 0.0, z0])
     x_nom = mods.ocp.nominal_hover_state(dyn, load_pos=(0.0, 0.0, z0), elevation_deg=args.elev)
-    piv = np.array([plant.x + rho[i] - 0.55 * x_nom[mods.lcd.LOAD_DIM + mods.lcd.CABLE_DIM * i:
+    piv = np.array([plant.x + rho[i] - rod * x_nom[mods.lcd.LOAD_DIM + mods.lcd.CABLE_DIM * i:
                                                      mods.lcd.LOAD_DIM + mods.lcd.CABLE_DIM * i + 3] for i in range(n)])
     piv_v = np.zeros((n, 3))
     hist, hist_t = [], []                          # measured states for the pose age
@@ -306,16 +315,22 @@ def score(log, fails, solve_ms, ticks):
 
 
 # G1: the bench must reproduce today's twin before its numbers rank anything (plan of 16 Oct). Twin ranges from
-# docs/experiments/2026-10-16_corner_cutting.md (correction section; corner_metrics on R1859-R1991).
+# docs/experiments/2026-10-16_corner_cutting.md (correction section; corner_metrics on R1859-R1991): 0.55 m rods, the
+# figure-8 at size 0.5, as those runs flew.
+G1 = dict(rod=0.55, fig8_size=0.5)
 VALIDATE = [
-    ('base fig_8', dict(kind='fig_8', rts=False, sigma=0.023, ref_lag=0.0, iters=5), {'cut_topq_mean_mm': (14, 39)}),
-    ('base orbit', dict(kind='orbit', rts=False, sigma=0.023, ref_lag=0.0, iters=5), {'across_mean_mm': (9, 19)}),
-    ('base circle', dict(kind='circle', rts=False, sigma=0.023, ref_lag=0.0, iters=5), {'across_mean_mm': (6, 16)}),
-    ('combo circle', dict(kind='circle', rts=True, sigma=0.023, ref_lag=0.05, iters=2),
+    ('base fig_8', dict(kind='fig_8', rts=False, sigma=0.023, ref_lag=0.0, iters=5, **G1),
+     {'cut_topq_mean_mm': (14, 39)}),
+    ('base orbit', dict(kind='orbit', rts=False, sigma=0.023, ref_lag=0.0, iters=5, **G1),
+     {'across_mean_mm': (9, 19)}),
+    ('base circle', dict(kind='circle', rts=False, sigma=0.023, ref_lag=0.0, iters=5, **G1),
+     {'across_mean_mm': (6, 16)}),
+    ('combo circle', dict(kind='circle', rts=True, sigma=0.023, ref_lag=0.05, iters=2, **G1),
      {'across_mean_mm': (-8, -1), 'lag_s': (-0.09, -0.03)}),
-    ('combo orbit', dict(kind='orbit', rts=True, sigma=0.023, ref_lag=0.05, iters=2),
+    ('combo orbit', dict(kind='orbit', rts=True, sigma=0.023, ref_lag=0.05, iters=2, **G1),
      {'across_mean_mm': (-8, -1), 'lag_s': (-0.07, -0.02)}),
-    ('combo fig_8', dict(kind='fig_8', rts=True, sigma=0.023, ref_lag=0.05, iters=2), {'cut_topq_mean_mm': (-4, 9)}),
+    ('combo fig_8', dict(kind='fig_8', rts=True, sigma=0.023, ref_lag=0.05, iters=2, **G1),
+     {'cut_topq_mean_mm': (-4, 9)}),
 ]
 
 
@@ -323,7 +338,9 @@ def parser():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--kind', default='orbit', choices=['orbit', 'circle', 'fig_8'])
     ap.add_argument('--speed', type=float, default=0.3)
-    ap.add_argument('--radius', type=float, default=0.5)
+    ap.add_argument('--radius', type=float, default=0.5, help='the orbit\'s and circle\'s radius (m)')
+    ap.add_argument('--fig8-size', type=float, default=0.9, help='the figure-8\'s size (m; the profile\'s fig8_size)')
+    ap.add_argument('--rod', type=float, default=1.0, help='rod length (m; 1 m cables since 22 Oct)')
     ap.add_argument('--plant', default='p1', choices=['p0', 'p1'])
     ap.add_argument('--rts', action='store_true', help='trackers fly the plan advanced by its age (ref_time_shift)')
     ap.add_argument('--sigma', type=float, default=0.023, help='tick to arrival at the trackers (s)')
@@ -347,7 +364,7 @@ def parser():
 def main(argv=None):
     args = parser().parse_args(argv)
     mods = load_modules(args.src)
-    built = build_solver(mods, 3, args.work)
+    built = build_solver(mods, 3, args.work, rod=G1['rod'] if args.validate else args.rod)
     if not args.validate:
         out = run(args, mods, built)
         print(json.dumps(out, indent=1) if args.json else

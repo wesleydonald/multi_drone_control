@@ -2,6 +2,7 @@
 attach (card 2026-10-10_combined_m1_contact). No Gazebo node, the wall clock, his IRL values with every topic
 written out (never a root /magnet/* topic of ours: his IRL file's /magnet/object_attached is our attach signal),
 his contact target on our calibrated weld point, his supervisor optional and landing instead of disarming."""
+import math
 import importlib.util
 from pathlib import Path
 
@@ -27,7 +28,7 @@ def _module():
 def _rig(**typed):
     """(module, context, entities) as `ros2 launch ... real:=true contact_attach:=true contact_target_z:=0.031`."""
     typed = {'real': 'true', 'contact_attach': 'true', 'contact_target_z': '0.031',
-             'magnet_drop_below_quad': '0.575', 'mpc_thrust_ratio': '22.0', **typed}
+             'magnet_drop_below_quad': '0.575', 'mpc_thrust_ratio': '22.0', 'ring_cable_len': '0.55', **typed}
     mod = _module()
     ctx = LaunchContext()
     ctx.launch_configurations.update(typed)
@@ -101,7 +102,12 @@ def test_contact_target_is_our_weld_point_and_the_rig_values():
     assert (p['proof_rise_max'], p['attach_ready_target_lead_time'], p['attach_ready_land_after_s']) == (
         0.03, 0.0, 0.0)
     assert p['magnet_drop_below_quad'] == 0.575                                       # his IRL value
-    assert (p['pickup_lift_height'], p['drop_approach_clearance']) == (2.3, 1.35)
+    # the puck's bottom half the carriers' cable above them (Wesley 21 Oct): carriers 1.0 + 0.55 sin 60 + 0.04,
+    # + 0.275, + 0.05 puck bottom below the marker, from the puck's 0.03 rest and to the drop point 0.15 up
+    tip = 1.0 + 0.55 * math.sin(math.radians(60.0)) + 0.04 + 0.275 + 0.05
+    assert p['pickup_lift_height'] == pytest.approx(tip - 0.03)
+    assert p['drop_approach_clearance'] == pytest.approx(tip - 1.15)
+    assert p['attach_cpp_transit'] is True
     assert (p['min_reference_z'], p['pickup_alignment_mode']) == (0.58, 'measured_tip_tiered')
     mpc = g['tejen_mpc']
     assert (mpc['params']['thrust_ratio'], mpc['params']['cable_length'], mpc['params']['pose_timeout_s'],
@@ -148,7 +154,8 @@ def test_drop_ends_on_the_measured_object():
                                          ({'contact_target_z': ''}, 'contact_target_z'),
                                          ({'geometry': 'rig_twin'}, 'geometry'),
                                          ({'magnet_drop_below_quad': ''}, 'magnet_drop_below_quad'),
-                                         ({'mpc_thrust_ratio': ''}, 'mpc_thrust_ratio')])
+                                         ({'mpc_thrust_ratio': ''}, 'mpc_thrust_ratio'),
+                                         ({'ring_cable_len': ''}, 'ring_cable_len')])
 def test_refusals(typed, match):
     with pytest.raises(RuntimeError, match=match):
         _rig(**typed)
@@ -263,3 +270,22 @@ def test_zero_twist_reaches_both_bridges_only_when_typed():
     assert 'attach_twist' not in g['fake_cooperative_transport_world']['params']
     g, _ = _nodes(attach_twist='zero')
     assert g['fake_cooperative_transport_world']['params']['attach_twist'] == 'zero'
+
+
+def test_one_metre_cables_reach_his_carrier_model_heights_and_mpc():
+    """Thu 29 (1 m cables): the carriers' cable is typed (our launch passes cable_len), so his bridge places the
+    carriers on 1 m rods and his transit clears them; his MPC's cable follows QUAD4's typed drop (his calibration:
+    0.044 under it, 0.531 at the 0.55 m era's 0.575); a typed value still wins."""
+    g, _ = _nodes(ring_cable_len='1.0', magnet_drop_below_quad='1.037', contact_target_z='0.048',
+                  mission_mode='floor_join')
+    ring = g['fake_cooperative_transport_world']['params']
+    assert (ring['bridge_cable_len_m'], ring['bridge_cable_elev_deg']) == (1.0, 60.0)
+    carriers = 1.0 + 1.0 * math.sin(math.radians(60.0)) + 0.04
+    p = g['online_join_planner']['params']
+    assert 1.048 + p['attach_transit_clearance'] - 0.05 == pytest.approx(carriers + 0.5)    # the magnet's bottom
+    assert p['pickup_lift_height'] == pytest.approx(carriers + 0.5 + 0.05 - 0.03)
+    assert g['tejen_mpc']['params']['cable_length'] == pytest.approx(1.037 - 0.044)
+    assert _nodes()[0]['tejen_mpc']['params']['cable_length'] == pytest.approx(0.531)           # as flown at 0.55 m
+    assert _nodes(mpc_cable_length='1.0')[0]['tejen_mpc']['params']['cable_length'] == 1.0
+    ring = _nodes(ring_cable_len='1.0', ring_cable_elev_deg='55.0')[0]['fake_cooperative_transport_world']['params']
+    assert ring['bridge_cable_elev_deg'] == 55.0

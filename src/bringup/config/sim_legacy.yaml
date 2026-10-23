@@ -23,6 +23,7 @@ height_hold:
   z_i_gate: ''
 trajectory:
   traj_speed: 0.6
+  fig8_size: ''               # the figure-8 sized by traj_radius, as before 22 Oct
 tracker:
   cable_source: 'model'
   cable_accel_cap: 6.0

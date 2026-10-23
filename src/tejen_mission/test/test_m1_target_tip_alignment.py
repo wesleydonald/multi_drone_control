@@ -107,6 +107,7 @@ def test_adapter_uses_surface_not_elevated_drop_goal_and_respects_ownership():
         target_state=lambda source:SimpleNamespace(position=np.array([0,0,.20]),velocity=np.zeros(3)),
         desired_tip_offset=lambda:np.array([0,0,.3]))
     obj.target_alignment_group=MethodType(method('target_alignment_group'),obj)
+    obj.ground_ring_tiered_active=MethodType(method('ground_ring_tiered_active'),obj)
     fn(obj)
     assert obj.target_drop_trim.clearance_m == pytest.approx(.1275)
     clock[0]=1.04; obj.last_magnet_tip_pose_time=1.04

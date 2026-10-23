@@ -160,6 +160,22 @@ std::vector<ConvexCurveInterval> convexCurveIntervals(
     return result;
 }
 
+std::vector<double> trajectoryBreakpoints(const CommittedTrajectory& trajectory,
+                                          double start_s,
+                                          double end_s) {
+    const auto intervals = convexCurveIntervals(trajectory, start_s, end_s);
+    std::vector<double> result;
+    result.reserve(intervals.size() + 1U);
+    for (const auto& interval : intervals) {
+        appendUniqueBreakpoint(result, interval.start_s);
+        appendUniqueBreakpoint(result, interval.end_s);
+    }
+    if (result.empty()) {
+        throw std::runtime_error("requested trajectory interval has no breakpoints");
+    }
+    return result;
+}
+
 Eigen::MatrixXd convexCurveHullVertices(
     const CommittedTrajectory& trajectory,
     double start_s,

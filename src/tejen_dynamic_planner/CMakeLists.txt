@@ -38,6 +38,7 @@ foreach(required_file
     src/bspline.cpp
     src/minvo.cpp
     src/separator.cpp
+    src/temporal_collision_certificate.cpp
     src/octopus_search.cpp
     src/trajectory_refinement.cpp
     src/ego_collision_model.cpp
@@ -96,11 +97,16 @@ target_include_directories(dynamic_planner_separator_ros PUBLIC "${CORE_INCLUDE}
 target_link_libraries(dynamic_planner_separator_ros PUBLIC Eigen3::Eigen PRIVATE "${GLPK_LIBRARY}")
 target_compile_options(dynamic_planner_separator_ros PRIVATE -Wall -Wextra -Wpedantic)
 
+add_library(dynamic_planner_temporal_ros STATIC
+    "${DYNAMIC_PLANNER_CORE_ROOT}/src/temporal_collision_certificate.cpp")
+target_include_directories(dynamic_planner_temporal_ros PUBLIC "${CORE_INCLUDE}")
+target_link_libraries(dynamic_planner_temporal_ros PUBLIC dynamic_planner_math_ros dynamic_planner_separator_ros)
+
 add_library(dynamic_planner_octopus_ros STATIC
     "${DYNAMIC_PLANNER_CORE_ROOT}/src/octopus_search.cpp")
 target_include_directories(dynamic_planner_octopus_ros PUBLIC "${CORE_INCLUDE}")
 target_link_libraries(dynamic_planner_octopus_ros
-    PUBLIC dynamic_planner_math_ros dynamic_planner_separator_ros Eigen3::Eigen)
+    PUBLIC dynamic_planner_math_ros dynamic_planner_separator_ros dynamic_planner_temporal_ros Eigen3::Eigen)
 target_compile_options(dynamic_planner_octopus_ros PRIVATE -Wall -Wextra -Wpedantic)
 
 add_library(dynamic_planner_refinement_ros STATIC
@@ -218,6 +224,7 @@ install(TARGETS
     dynamic_planner_math_ros
     dynamic_planner_collision_ros
     dynamic_planner_separator_ros
+    dynamic_planner_temporal_ros
     dynamic_planner_octopus_ros
     dynamic_planner_refinement_ros
     dynamic_planner_receding_ros
@@ -243,6 +250,28 @@ install(PROGRAMS
 
 if(BUILD_TESTING)
     enable_testing()
+
+    add_executable(test_experiment_workspace test/test_experiment_workspace.cpp)
+    target_include_directories(test_experiment_workspace PRIVATE "${CORE_INCLUDE}" "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_link_libraries(test_experiment_workspace dynamic_planner_collision_ros dynamic_planner_receding_ros Eigen3::Eigen)
+    add_test(NAME test_experiment_workspace COMMAND test_experiment_workspace)
+
+    add_executable(test_pb40_execution_timing "${DYNAMIC_PLANNER_CORE_ROOT}/tests/test_execution_timing.cpp")
+    target_include_directories(test_pb40_execution_timing PRIVATE "${CORE_INCLUDE}" "${DYNAMIC_PLANNER_CORE_ROOT}/tests")
+    target_link_libraries(test_pb40_execution_timing PRIVATE Eigen3::Eigen)
+    add_test(NAME test_pb40_execution_timing COMMAND test_pb40_execution_timing)
+    add_executable(test_pb40_execution_authority "${DYNAMIC_PLANNER_CORE_ROOT}/tests/test_execution_authority.cpp")
+    target_include_directories(test_pb40_execution_authority PRIVATE "${DYNAMIC_PLANNER_CORE_ROOT}/tests")
+    target_link_libraries(test_pb40_execution_authority PRIVATE dynamic_planner_receding_ros)
+    add_test(NAME test_pb40_execution_authority COMMAND test_pb40_execution_authority)
+    add_executable(test_pb58_initial_authority "${DYNAMIC_PLANNER_CORE_ROOT}/tests/test_initial_authority.cpp")
+    target_include_directories(test_pb58_initial_authority PRIVATE "${DYNAMIC_PLANNER_CORE_ROOT}/tests")
+    target_link_libraries(test_pb58_initial_authority PRIVATE dynamic_planner_receding_ros)
+    add_test(NAME test_pb58_initial_authority COMMAND test_pb58_initial_authority)
+    add_executable(test_pb61_native_replacement_policy "${DYNAMIC_PLANNER_CORE_ROOT}/tests/test_native_replacement_policy.cpp")
+    target_include_directories(test_pb61_native_replacement_policy PRIVATE "${DYNAMIC_PLANNER_CORE_ROOT}/tests")
+    target_link_libraries(test_pb61_native_replacement_policy PRIVATE dynamic_planner_receding_ros)
+    add_test(NAME test_pb61_native_replacement_policy COMMAND test_pb61_native_replacement_policy)
 
     add_executable(test_reference_message test/test_reference_message.cpp)
     target_link_libraries(test_reference_message dynamic_planner_reference_message)
@@ -279,6 +308,7 @@ if(BUILD_TESTING)
     add_test(NAME test_c1f3b_scene COMMAND test_c1f3b_scene)
 
     add_executable(test_c1f4_execution_contract test/test_c1f4_execution_contract.cpp)
+    target_include_directories(test_c1f4_execution_contract PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_include_directories(test_c1f4_execution_contract PRIVATE "${CORE_INCLUDE}")
     target_link_libraries(test_c1f4_execution_contract
         dynamic_planner_reference_ros

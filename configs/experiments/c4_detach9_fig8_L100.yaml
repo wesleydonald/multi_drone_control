@@ -46,6 +46,7 @@ launch:
     lift_ramp_vel: 0.15
     load_mass: 0.86
     load_traj: fig_8
+    fig8_size: 0.5
     traj_speed: 0.2
     measure_rod_len: true
     mode: dissipative

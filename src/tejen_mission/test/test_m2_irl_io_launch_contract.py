@@ -213,13 +213,14 @@ def test_launch_router_and_manager_receive_identical_yaml_identity(tmp_path):
     assert json.loads(yaml.safe_load(router_identity))["m2_irl"]["vehicles"]["drone_0"]["body_id"] == 16
 
 
-def _mission_backend_parameters(tmp_path):
+def _mission_backend_parameters(tmp_path, vehicle_count=2):
     """Inspect both constructed backend nodes, including their YAML defaults."""
     import importlib.util
     from launch import LaunchContext
     from launch.utilities import perform_substitutions
 
-    payload = yaml.safe_load((PKG / "config" / "m2_irl_two_drone.yaml").read_text())
+    name = "m2_irl_two_drone.yaml" if vehicle_count == 2 else "m2_irl_four_drone.yaml"
+    payload = yaml.safe_load((PKG / "config" / name).read_text())
     for vehicle in payload["m2_irl"]["vehicles"].values():
         vehicle["props_off_verified"] = True
     config = tmp_path / "m2_timing_test.yaml"
@@ -232,6 +233,7 @@ def _mission_backend_parameters(tmp_path):
     context.launch_configurations.update({
         "mode": "mission", "config_file": str(config),
         "log_dir": str(tmp_path / "logs"), "rviz": "false",
+        "expected_vehicle_count": str(vehicle_count),
     })
     actions = module._launch_setup(context)
     backends = {}
@@ -255,12 +257,33 @@ def _mission_backend_parameters(tmp_path):
                     "shadow_reference_topic",
                     "cooperative_shared_start_skew_s",
                     "cooperative_shared_start_skew_max_speed_mps",
+                    "execution_tracking_safety_enabled",
+                    "cooperative_tracking_safety_enabled",
+                    "ego_tracking_half_x_m",
+                    "ego_tracking_half_y_m",
+                    "ego_tracking_half_z_m",
                 }
             }
             if params.get("cooperative_prediction_mode") == "shared_trajectory":
                 backends[params["vehicle_id"]] = params
-    assert set(backends) == {"drone_0", "drone_1"}
+    assert set(backends) == {f"drone_{i}" for i in range(vehicle_count)}
     return backends
+
+
+@pytest.mark.parametrize("vehicle_count", [2, 4])
+def test_irl_tracking_brakes_disabled_without_removing_collision_inflation(tmp_path, vehicle_count):
+    for backend in _mission_backend_parameters(tmp_path, vehicle_count).values():
+        assert backend["execution_tracking_safety_enabled"].lower() == "false"
+        assert backend["cooperative_tracking_safety_enabled"].lower() == "false"
+        assert tuple(float(backend[f"ego_tracking_half_{a}_m"]) for a in "xyz") == (0.05, 0.05, 0.05)
+    m1 = yaml.safe_load((ROOT / "src/tejen_dynamic_planner/config/c1f_irl_m1_virtual_ring.yaml").read_text())
+    m1_params = m1["dynamic_planner_transfer_backend"]["ros__parameters"]
+    assert m1_params["cooperative_tracking_safety_enabled"] is False
+    assert tuple(m1_params[f"cooperative_tracking_half_{a}_m"] for a in "xyz") == (0.05, 0.05, 0.05)
+    source = (ROOT / "src/tejen_dynamic_planner/src/transfer_backend_node.cpp").read_text()
+    assert '"cooperative_tracking_safety_enabled", true' in source
+    sim = yaml.safe_load((ROOT / "src/tejen_dynamic_planner/config/c1f6_moving_rendezvous.yaml").read_text())
+    assert sim["dynamic_planner_transfer_backend"]["ros__parameters"]["execution_tracking_safety_enabled"] is True
 
 
 def test_irl_backends_seed_passive_pre_authority_future_splice(tmp_path):
@@ -274,7 +297,7 @@ def test_rolling_commitment_recheck_has_future_coverage_or_rejects_late(tmp_path
     """A commitment rolled forward during a short solve must still cover splice."""
     core = (ROOT / "src" / "tejen_dynamic_planner" / "standalone" / "src"
             / "receding_horizon_planner.cpp").read_text(encoding="utf-8")
-    assert "if (had_incumbent && result.candidate_finish_time_s >= splice_time" in core
+    assert "if (had_incumbent && !strictlyBeforeSplice(result.candidate_finish_time_s, splice_time))" in core
     request_s = 100.0
     latest_obstacle_start_s = request_s + 0.025
     ordinary_finish_s = request_s + 0.030
@@ -290,6 +313,8 @@ def test_rolling_commitment_recheck_has_future_coverage_or_rejects_late(tmp_path
 
 
 def test_launch_runner_and_udev_contract_preserve_manual_authority():
+    launch_text = (PKG / "launch/m2_irl_two_drone.launch.py").read_text()
+    assert '"external_reference_validate_timing": True' in launch_text
     launch = (PKG / "launch" / "m2_irl_two_drone.launch.py").read_text(encoding="utf-8")
     runner = (ROOT / "tools" / "irl_test" / "run_m2_irl_two_drone.sh").read_text(encoding="utf-8")
     rules = (ROOT / "tools" / "irl_test" / "99-elrs-m2.rules").read_text(encoding="utf-8")
@@ -310,6 +335,7 @@ def test_launch_runner_and_udev_contract_preserve_manual_authority():
     assert '"ring_marker_translation_x": float(geometry["ring_marker_translation_m"][0])' in launch
 
     assert "elrs_interface_irl" in launch
+    assert '"xy_integral_limit": 0.45' in launch
     assert "TimerAction" in launch
     assert "props_off_verified" in launch
     assert "ros2 topic pub" not in runner
@@ -325,9 +351,16 @@ def test_launch_runner_and_udev_contract_preserve_manual_authority():
     assert '"m2b_takeoff_magnet_clearance_m": 0.03' in launch
     assert '"m2b_takeoff_hover_timeout_s":' not in launch
     assert '**progressive["planner"]' in launch
+    assert '"m2b_freeze_attached_hold_reference": True' in launch
     assert '"m2b_takeoff_settle_swing_deg": profiles.takeoff_swing_deg' in launch
     assert '"m2b_link_statistics_timeout_s": profiles.link_statistics_timeout_s' in launch
     assert '"c1f2_prepare_settle_acceleration_mps2": profiles.c1f2_acceleration_mps2' in launch
+    assert '"c1f2_reference_recovery_enabled": True' in launch
+    assert '"reference_recovery_enabled": True' in launch
+    for name in ('c1f2_recovery_continuation_topic', 'recovery_continuation_topic'):
+        assert f'"{name}": f"{{ns}}/dynamic_planner/transfer_reference_continuation"' in launch
+    for suffix in ("reference_recovery_request", "reference_recovery_status"):
+        assert launch.count(f'f"{{ns}}/dynamic_planner/{suffix}"') == 2
     assert "source /opt/ros/humble/setup.bash" in runner
     assert "set -euo pipefail" in runner
     assert 'ATTRS{serial}=="FTF0AROT"' in rules and 'SYMLINK+="QUAD2"' in rules
@@ -407,3 +440,74 @@ def test_irl_backend_allows_only_bounded_stationary_peer_start_overlap(tmp_path)
     assert 'state.velocity.norm() > cooperative_shared_start_skew_max_speed_mps_' in backend
     assert 'advertised.velocity.norm() > cooperative_shared_start_skew_max_speed_mps_' in backend
     assert 'trajectory.evaluate(validation_time_s)' in backend
+
+
+@pytest.mark.parametrize('id_format', [lambda i: i, str, lambda i: f'ID: {i}'])
+def test_router_cached_magnet_keeps_its_packet_time_when_body_updates(id_format):
+    from tejen_mission.m2_irl_mocap_router import M2IRLMocapRouter
+    from rclpy.time import Time
+
+    node = object.__new__(M2IRLMocapRouter)
+    now = [10.]
+    packets = [22, 12]
+    def receive(_size):
+        if not packets:
+            raise BlockingIOError
+        body_id = packets.pop(0)
+        now[0] = 10. if body_id == 22 else 11.
+        return str(body_id).encode() + b"|pose", None
+    def body(i):
+        return SimpleNamespace(id=id_format(i), timestamp=now[0], position=[0., 0., .6],
+            rotation=[1., 0., 0., 0.], velocity=[0., 0., 0.], angular_velocity=[0., 0., 0.])
+    node.sock = SimpleNamespace(recvfrom=receive)
+    node.parsers = {i: SimpleNamespace(parse=lambda _p, i=i: body(i)) for i in (12,22)}
+    node.throttle = SimpleNamespace(accept=lambda *a: True)
+    node.latest = {}; node.last_rx_monotonic = {}; node.sample_stamps = {}
+    node.ring_id = 8; node.hardware = {"drone_0": None}
+    node.body_ids = {"drone_0": 12}; node.magnet_ids = {"drone_0": 22}
+    published = []
+    node.tf_pubs = {"drone_0": SimpleNamespace(publish=published.append)}
+    node.motion_pubs = node.magnet_pubs = {"drone_0": SimpleNamespace(publish=lambda m: None)}
+    node._publish_pendulum = lambda v: None
+    node.get_clock = lambda: SimpleNamespace(now=lambda: Time(seconds=now[0]))
+    node._poll_socket()
+    assert published[-1].transforms[0].header.stamp.sec == 11
+    assert published[-1].transforms[1].header.stamp.sec == 10
+
+
+@pytest.mark.parametrize("policy", ["legacy", "measured_contact_15deg"])
+@pytest.mark.parametrize("frame_prefix", ["drone_0/", "x3::"])
+def test_observer_respects_individual_source_stamps_only_for_measured_policy(policy, frame_prefix):
+    from tejen_mission.m2_attachment_observer import M2AttachmentObserver
+    from geometry_msgs.msg import TransformStamped, PoseArray, Pose
+    from tf2_msgs.msg import TFMessage
+
+    node = object.__new__(M2AttachmentObserver)
+    node.attachment_policy = policy
+    node._now_s = lambda: 10.
+    node.latest_drone_world = node.latest_magnet_world = node.latest_ring_world = None
+    node.carrier_frame_leaf = "base_link"; node.magnet_frame_leaf = "magnet_tip_link"
+    transforms = []
+    for leaf, stamp in (("base_link", 10), ("magnet_tip_link", 8)):
+        tf = TransformStamped(); tf.header.frame_id = "map"; tf.header.stamp.sec = stamp
+        tf.child_frame_id = frame_prefix + leaf; tf.transform.rotation.w = 1.
+        transforms.append(tf)
+    node._carrier_tf_callback(TFMessage(transforms=transforms))
+    assert node.latest_magnet_world[2] == (8. if policy != "legacy" else 10.)
+    transforms[1].transform.translation.x = 1.  # same source sample, changed serialization
+    node._carrier_tf_callback(TFMessage(transforms=transforms))
+    assert node.latest_magnet_world[0][0] == (0. if policy != "legacy" else 1.)
+    poses = PoseArray(); poses.header.stamp.sec = 9
+    pose = Pose(); pose.orientation.w = 1.; poses.poses = [pose, pose]
+    node.drone_index = 0; node.magnet_index = 1; node.ring_pose_index = 0
+    node.x3_link_poses_are_relative = False
+    node.latest_drone_world = node.latest_magnet_world = None
+    node._x3_pose_callback(poses); node._ring_pose_callback(poses)
+    assert node.latest_magnet_world[2] == (9. if policy != "legacy" else 10.)
+    assert node.latest_ring_world[2] == (9. if policy != "legacy" else 10.)
+    if policy != "legacy":
+        for stamp in (8, 9, 11):  # out-of-order, duplicate, future
+            poses.header.stamp.sec = stamp; poses.poses[0].position.x = 2.
+            node._x3_pose_callback(poses); node._ring_pose_callback(poses)
+        assert node.latest_drone_world[2] == node.latest_ring_world[2] == 9.
+        assert node.latest_drone_world[0][0] == node.latest_ring_world[0][0] == 0.

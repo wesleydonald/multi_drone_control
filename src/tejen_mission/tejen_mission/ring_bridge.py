@@ -10,7 +10,10 @@ of an analytic path:
   datum, clock, hold), so the commitment is the path the ring is being flown along, not a
   fit to noisy mocap;
 * the carrying drones are fixed points in the ring frame (Tejen's 'three_attached' model):
-  attach point + cable at the flight elevation, per carrier azimuth.
+  attach point + cable at the flight elevation, per carrier azimuth;
+* publish_attached_plates (default off): each carrier's plate (his numbering, std_msgs/Int32, latched) and the
+  measured ring pose (PoseArray, index 0), the inputs of his planner's attached-tether model, so his collision
+  avoidance sees the carriers' rods down to the ring (Wesley 21 Oct).
 
 The drone flying Tejen's mission is simply not listed as a carrier.
 """
@@ -19,8 +22,10 @@ import math
 from typing import List, Tuple
 
 import rclpy
+from geometry_msgs.msg import Pose, PoseArray
 from interfaces.msg import MotionCaptureState
-from std_msgs.msg import String
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import Int32, String
 
 from tejen_mission.fake_cooperative_transport_world import (
     FakeCooperativeTransportWorld, RigidBodyState)
@@ -55,6 +60,19 @@ class RingBridge(FakeCooperativeTransportWorld):
         self.create_subscription(String, '/payload/trajectory_state', self._traj_cb, 5)
         self.create_subscription(MotionCaptureState, '/payload/motion_capture_state',
                                  self._ring_cb, 10)
+        self._ring_pose_pub = None
+        if self._param('publish_attached_plates', False):
+            latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                                 durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            plates = self.carrier_plates()
+            self._plate_pubs = [self.create_publisher(Int32, f'/fake_obstacles/drone_{i}/attached_plate', latched)
+                                for i in range(len(plates))]
+            for pub, plate in zip(self._plate_pubs, plates):
+                pub.publish(Int32(data=plate))
+            self._ring_pose_pub = self.create_publisher(
+                PoseArray, str(self._param('ring_pose_array_topic', '/fake_payload/pose_array')), 10)
+            self.create_timer(0.05, self._publish_ring_pose)
+            self.get_logger().info(f'[ring_bridge] carriers\' plates for his tether model (his numbering): {plates}')
         # shown as typed (clockwise degrees, our plate number); the parameters are his (counter-clockwise)
         self.get_logger().info(
             f'[ring_bridge] carriers (cw) {cw_text(self._carrier_azimuths())} deg, cable '
@@ -79,6 +97,22 @@ class RingBridge(FakeCooperativeTransportWorld):
         self._ring = RigidBodyState(x=p.x, y=p.y, z=p.z, yaw=_yaw_from_quat(q.w, q.x, q.y, q.z),
                                     vx=v.x, vy=v.y, vz=v.z, yaw_rate=0.0)
         self._ring_q = (q.w, q.x, q.y, q.z)
+
+    def carrier_plates(self) -> List[int]:
+        """Each carrier's plate in his numbering (counter-clockwise from the ring's +x, 30 deg apart)."""
+        return [int(round(a / 30.0)) % 12 for a in self._carrier_azimuths()]
+
+    def _publish_ring_pose(self) -> None:
+        if self._ring is None or self._ring_q is None:
+            return
+        pose = Pose()
+        pose.position.x, pose.position.y, pose.position.z = self._ring.x, self._ring.y, self._ring.z
+        pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z = self._ring_q
+        msg = PoseArray()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'map'
+        msg.poses = [pose]
+        self._ring_pose_pub.publish(msg)
 
     # ── parameters (declared lazily: the parent calls the offsets in its __init__) ─
     def _param(self, name, default):
@@ -118,7 +152,7 @@ class RingBridge(FakeCooperativeTransportWorld):
             return RigidBodyState(x=0.0, y=0.0, z=0.0, yaw=0.0, vx=0.0, vy=0.0, vz=0.0,
                                   yaw_rate=0.0)
         s = self._traj_state
-        traj = LoadTrajectory(s['kind'], s['speed'], s.get('distance', 1.0), s['radius'])
+        traj = LoadTrajectory(s['kind'], s['speed'], s.get('distance', 1.0), s['radius'], laps=s.get('laps', 1))
         age = max(0.0, self.get_clock().now().nanoseconds * 1e-9 - float(self._traj_rx_s))
         run = max(0.0, ahead + age - float(s.get('hold_s', 0.0)))
         moving = bool(s.get('running', False))

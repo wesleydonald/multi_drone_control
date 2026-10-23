@@ -4,6 +4,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <unordered_set>
+#include <utility>
 
 #include "dynamic_planner/trajectory_geometry.hpp"
 
@@ -41,6 +42,7 @@ bool sameCooperativeObstacle(const CooperativeObstacleTrajectory& a,
     }
     return true;
 }
+
 
 void validateStaticObstacle(const StaticConvexObstacle& obstacle) {
     if (obstacle.name.empty() || obstacle.vertices.rows() < 1 ||
@@ -82,6 +84,68 @@ void validateUniqueNames(const std::vector<StaticConvexObstacle>& legacy,
 Eigen::MatrixXd shiftedVertices(const Eigen::MatrixXd& vertices, const Vec3& shift) {
     Eigen::MatrixXd result = vertices;
     result.rowwise() += shift.transpose();
+    return result;
+}
+
+void attachTemporalHullSource(TimeIndexedObstacle* obstacle,
+                              const CommittedTrajectory& trajectory,
+                              int num_segments,
+                              double start_s,
+                              double end_s,
+                              TemporalHullBuilder hull_builder,
+                              TemporalClearanceBuilder clearance_builder) {
+    if (obstacle == nullptr || !hull_builder || !clearance_builder || num_segments < 1 ||
+        !(end_s > start_s)) {
+        throw std::invalid_argument("invalid temporal obstacle-hull source");
+    }
+    obstacle->interval_start_s.resize(static_cast<std::size_t>(num_segments));
+    obstacle->interval_end_s.resize(static_cast<std::size_t>(num_segments));
+    const double dt = (end_s - start_s) / static_cast<double>(num_segments);
+    for (int interval = 0; interval < num_segments; ++interval) {
+        obstacle->interval_start_s.at(static_cast<std::size_t>(interval)) =
+            start_s + static_cast<double>(interval) * dt;
+        obstacle->interval_end_s.at(static_cast<std::size_t>(interval)) =
+            interval + 1 == num_segments
+                ? end_s
+                : start_s + static_cast<double>(interval + 1) * dt;
+    }
+    obstacle->temporal_breakpoints_s = trajectoryBreakpoints(
+        trajectory, start_s, end_s);
+    obstacle->temporal_hull_builder = std::move(hull_builder);
+    obstacle->temporal_clearance_builder = std::move(clearance_builder);
+}
+
+TemporalClearanceDiagnostic sampledAabbClearance(
+    const TemporalEgoPosition& ego_position,
+    const std::function<Vec3(double)>& obstacle_position,
+    const Vec3& combined_half_extents,
+    double start_s,
+    double end_s) {
+    if (!ego_position || !obstacle_position || !combined_half_extents.allFinite() ||
+        (combined_half_extents.array() < 0.0).any() || !std::isfinite(start_s) ||
+        !std::isfinite(end_s) || !(end_s > start_s)) {
+        throw std::invalid_argument("invalid equal-time clearance diagnostic request");
+    }
+    constexpr double sample_period_s = 0.01;
+    const std::size_t steps = std::max<std::size_t>(
+        1U, static_cast<std::size_t>(std::ceil((end_s - start_s) / sample_period_s)));
+    TemporalClearanceDiagnostic result;
+    result.sampled_points = steps + 1U;
+    for (std::size_t index = 0; index <= steps; ++index) {
+        const double fraction = static_cast<double>(index) / static_cast<double>(steps);
+        const double time_s = start_s + fraction * (end_s - start_s);
+        const Vec3 gap = (ego_position(time_s) - obstacle_position(time_s)).cwiseAbs() -
+                         combined_half_extents;
+        const Vec3 positive_gap = gap.cwiseMax(Vec3::Zero());
+        const double clearance = positive_gap.squaredNorm() > 0.0
+            ? positive_gap.norm()
+            : gap.maxCoeff();
+        if (clearance < result.minimum_sampled_clearance_m ||
+            !std::isfinite(result.minimum_sampled_clearance_m)) {
+            result.minimum_sampled_clearance_m = clearance;
+            result.minimum_sample_time_s = time_s;
+        }
+    }
     return result;
 }
 
@@ -187,6 +251,22 @@ std::vector<TimeIndexedObstacle> WorldSnapshot::timeIndexedObstacles(
                     inflateVerticesByAabb(
                         center_hulls.at(static_cast<std::size_t>(i)), inflation));
             }
+            const CommittedTrajectory trajectory = obstacle.trajectory;
+            attachTemporalHullSource(
+                &timed, trajectory, num_segments, t_start_s, t_end_s,
+                [trajectory, inflation](double start_s, double end_s) {
+                    return inflateVerticesByAabb(
+                        convexCurveHullVertices(trajectory, start_s, end_s), inflation);
+                },
+                [trajectory, inflation](const TemporalEgoPosition& ego_position,
+                                        double start_s, double end_s) {
+                    return sampledAabbClearance(
+                        ego_position,
+                        [trajectory](double time_s) {
+                            return trajectory.evaluate(time_s).position;
+                        },
+                        inflation, start_s, end_s);
+                });
             result.push_back(std::move(timed));
             continue;
         }
@@ -223,6 +303,28 @@ std::vector<TimeIndexedObstacle> WorldSnapshot::timeIndexedObstacles(
                             center_hulls.at(static_cast<std::size_t>(i)), relative_shift),
                         pair_half));
                 }
+                const CommittedTrajectory trajectory = obstacle.trajectory;
+                attachTemporalHullSource(
+                    &timed, trajectory, num_segments, t_start_s, t_end_s,
+                    [trajectory, relative_shift, pair_half](double start_s, double end_s) {
+                        return inflateVerticesByAabb(
+                            shiftedVertices(
+                                convexCurveHullVertices(trajectory, start_s, end_s),
+                                relative_shift),
+                            pair_half);
+                    },
+                    [trajectory, ego_center, other_center, pair_half](
+                            const TemporalEgoPosition& ego_position,
+                            double start_s, double end_s) {
+                        return sampledAabbClearance(
+                            [ego_position, ego_center](double time_s) {
+                                return ego_position(time_s) + ego_center;
+                            },
+                            [trajectory, other_center](double time_s) {
+                                return trajectory.evaluate(time_s).position + other_center;
+                            },
+                            pair_half, start_s, end_s);
+                    });
                 result.push_back(std::move(timed));
             }
         }

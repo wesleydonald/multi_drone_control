@@ -1,6 +1,8 @@
 name: twin_tf_em_off
 description: 'card 2026-10-09_approach_tip_feedback rev 5, arm E-: assumed rod 4 cm short (switch off)'
 world: three_rigid_ground_rig_attach.sdf
+geometry_exempt:
+  attach_cable_len: 'deliberate arm (card 2026-10-09_approach_tip_feedback)'
 launch:
   package: bringup
   file: sim_control_launch.py

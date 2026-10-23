@@ -5,6 +5,8 @@ description: 'Exploratory (22 Oct overnight, Wesley: his pickup and the basket o
   pickup_lift_height 2.49 minimum_search_z_m 3.56 drop_approach_clearance 1.42). Falsifier: no pickup, the ball not in the net after the drop, no weld, or any abort.'
 world: three_rigid_ground_rig_attach_pickup_L100.sdf
 ball_start: [1.6, 2.0, 0.08]       # tools/make_attach_worlds_L100.py BALL_XY (the 1 m world moves the ball out)
+geometry_exempt:
+  attach_cable_len: 'as flown (R2306-R2322): QUAD4''s body-to-tip (rod 1.0 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

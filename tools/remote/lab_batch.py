@@ -179,6 +179,8 @@ def slots_up():
 # ── one run ──────────────────────────────────────────────────────────────────
 
 class Job:
+    warm_from_config = False         # --warm-from-config: the planner warm-up builds what this config's planner loads
+
     def __init__(self, cfg_path, cfg, rid, local_dir, date):
         self.cfg_path, self.cfg, self.rid, self.local_dir, self.date = cfg_path, cfg, rid, local_dir, date
         self.name = os.path.basename(local_dir)
@@ -205,6 +207,10 @@ class Job:
                    'c._solver_is_fresh() or c.generate_ocp_controller()')
         planner = ('' if str(la.get('reference', 'planner')) == 'free_hover'
                    else f'python3 {CTR_REPO}/tools/prebuild_planner.py {n}{masses} && ')
+        if planner and self.warm_from_config:
+            # every resize size, the ring inertia and the rod model too (card 2026-10-23_scalability)
+            rel = os.path.relpath(os.path.abspath(self.cfg_path), REPO)
+            planner = f'python3 {CTR_REPO}/tools/prebuild_planner.py --from-config {CTR_REPO}/{rel} && '
         return (f'cd {scratch} && {planner}'
                 f'python3 -c {shlex.quote(tracker)} && cd {CTR_REPO} && exec "$@"')
 
@@ -219,6 +225,19 @@ class Job:
                 'bash', '-c', self.warm_script(scratch), 'warm',
                 'python3', 'tools/run_experiment.py', rel, '--run-dir', self.ctr_dir(slot),
                 '--git-state-file', f'{scratch}/git_state.json', '--gz-nice', str(gz_nice)]
+
+
+def planner_sizes(cfg_path):
+    """Every fleet size the config's planner builds at its start (prebuild_planner.config_builds), [] if that fails
+    here (said loudly). A slot's cache holds one solver per size, so after a batch on another ring (S's 0.9 kg) a size
+    the warm-up skips compiles in the run's ready window."""
+    try:
+        from prebuild_planner import config_builds
+        return config_builds(cfg_path)[0]
+    except Exception as e:  # noqa: BLE001
+        print(f'WARNING {os.path.relpath(cfg_path, REPO)}: planner sizes not resolved ({e}): the warm-up builds its '
+              f'fleet size only, any resize size compiles in the ready window', file=sys.stderr)
+        return []
 
 
 def reserve(configs, date, dry):
@@ -309,7 +328,12 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('config', nargs='+', help='experiment YAMLs inside this repo')
     ap.add_argument('--slots', type=int, default=DEFAULT_SLOTS, help='at most this many in parallel (<= 6)')
-    ap.add_argument('--cpus', type=float, default=4, help='cores per container (3-4)')
+    ap.add_argument('--cpus', type=float, default=4,
+                    help='cores per container (3-4; up to 12 for the 8-quad S runs, Wesley 22 Oct)')
+    ap.add_argument('--warm-from-config', action='store_true',
+                    help="the planner warm-up builds what each config's planner loads (every resize size, the "
+                         'ring inertia, the rod model: tools/prebuild_planner.py --from-config) instead of its '
+                         'fleet size with its masses; a config whose planner resizes gets it without the flag')
     ap.add_argument('--gz-nice', type=int, default=10)
     ap.add_argument('--wall-cap-min', type=float, default=30.0,
                     help='stop a run still going after this many wall minutes (a hung runner)')
@@ -319,8 +343,8 @@ def main(argv=None):
     ap.add_argument('--no-build', action='store_true', help='skip the colcon build on the lab')
     a = ap.parse_args(argv)
     sys.stdout.reconfigure(line_buffering=True)     # keep order with the sync/build output
-    if not 3 <= a.cpus <= 4:
-        ap.error('--cpus must be 3-4')
+    if not 3 <= a.cpus <= 12:
+        ap.error('--cpus must be 3-12')
 
     configs = []
     for path in a.config:
@@ -360,6 +384,12 @@ def main(argv=None):
         if not a.no_build:
             subprocess.run([os.path.join(HERE, 'lab_build.sh'), '--ws'], check=True)
     jobs = reserve(configs, date, a.dry_run)
+    for job in jobs:
+        sizes = planner_sizes(job.cfg_path)
+        job.warm_from_config = a.warm_from_config or len(sizes) > 1
+        if len(sizes) > 1 and not a.warm_from_config:
+            print(f'  {job.rid}: the warm-up builds every size its planner resizes through, {sizes} '
+                  f'(prebuild_planner.py --from-config)')
     gs = laptop_git_state()              # after the sync: the tree the runs got
     print(f'laptop tree: {gs["git_branch"]} {gs["git_sha"][:10]}, {gs["dirty_files"]} dirty, '
           f'diff {len(gs["diff"]) / 1024:.0f} kB' + (f', untracked skipped {gs["untracked_skipped"]}'

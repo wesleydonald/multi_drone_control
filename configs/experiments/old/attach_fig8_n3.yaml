@@ -28,7 +28,7 @@ launch:
     start_taut: true
     load_traj: fig_8
     traj_speed: 0.2
-    traj_radius: 0.5
+    fig8_size: 0.5
     cable_len: 0.5
     load_mass: 0.86
     target_z: 0.6

@@ -31,6 +31,7 @@ def generate_launch_description() -> LaunchDescription:
     return LaunchDescription([
         DeclareLaunchArgument('planner_rate_hz', default_value='5.0'),
         DeclareLaunchArgument('minimum_search_z_m', default_value='0.20'),
+        DeclareLaunchArgument('stopped_continuation_enabled', default_value='false'),
         DeclareLaunchArgument('ring_commitment_topic',
                               default_value='/fake_payload/committed_trajectory'),
         LogInfo(msg='M1 IRL backend: current C1F.8d moving-target contract, virtual ring, no cooperative companions.'),
@@ -53,6 +54,9 @@ def generate_launch_description() -> LaunchDescription:
                     ),
                     'moving_basket_committed_trajectory_topic':
                         LaunchConfiguration('ring_commitment_topic'),
+                    'stopped_continuation_enabled': ParameterValue(
+                        LaunchConfiguration('stopped_continuation_enabled'), value_type=bool
+                    ),
                     'csv_path': str(run_dir / 'backend.csv'),
                     'replan_csv_path': str(run_dir / 'replans.csv'),
                 },

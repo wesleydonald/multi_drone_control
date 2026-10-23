@@ -94,6 +94,52 @@ def centre_from_pivot(pivot, acc, yaw, pivot_offset):
     return np.asarray(pivot, float) - thrust_attitude(acc, yaw) @ b
 
 
+def _rows16(V, width):
+    """Rows of V (M x 3, or M x 3 x 3) in a buffer whose rows start 16-byte aligned, as a fresh numpy array does:
+    a 3-vector's dot with itself differs in its last bit off that alignment (numpy 1.24, OpenBLAS)."""
+    M = V.shape[0]
+    buf = np.zeros((M, width))
+    rows = buf[:, :V[0].size].reshape((M,) + V.shape[1:])
+    rows[...] = V
+    return rows
+
+
+def centre_from_pivot_many(P, A, yaw, pivot_offset):
+    """centre_from_pivot for every column of P (3 x M pivots) and A (3 x M thrust accelerations) at one heading,
+    bit for bit: the elementwise steps (the two cross products, the divisions) run on all nodes at once, the three
+    reductions (|a|, |y_b|, R b) per node with the numpy calls thrust_attitude makes, on rows laid out as its fresh
+    arrays are, and a node with |a| ~ 0 or its thrust along the heading goes through centre_from_pivot itself.
+    Returns 3 x M; P itself for a zero offset."""
+    b = np.asarray(pivot_offset, float)
+    P = np.asarray(P, float)
+    if not b.any():
+        return P
+    A = _rows16(np.asarray(A, float).T, 4)
+    PT = np.ascontiguousarray(P.T)
+    M = A.shape[0]
+    na = np.array([np.sqrt(A[k].dot(A[k])) for k in range(M)])      # np.linalg.norm's own steps
+    odd = ~(na > 1e-9)                                    # as thrust_attitude's test: a NaN |a| is level too
+    zb = A / np.where(odd, 1.0, na)[:, None]
+    c, s = np.cos(yaw), np.sin(yaw)
+    yb = _rows16(np.zeros((M, 3)), 4)                     # np.cross(zb, [c, s, 0]): its operations, in its order
+    yb[:, 0] = zb[:, 1] * 0.0 - zb[:, 2] * s
+    yb[:, 1] = zb[:, 2] * c - zb[:, 0] * 0.0
+    yb[:, 2] = zb[:, 0] * s - zb[:, 1] * c
+    ny = np.array([np.sqrt(yb[k].dot(yb[k])) for k in range(M)])
+    odd |= ny < 1e-9
+    yb /= np.where(odd, 1.0, ny)[:, None]
+    R = _rows16(np.zeros((M, 3, 3)), 10)                  # np.column_stack([y_b x z_b, y_b, z_b])
+    R[:, 0, 0] = yb[:, 1] * zb[:, 2] - yb[:, 2] * zb[:, 1]
+    R[:, 1, 0] = yb[:, 2] * zb[:, 0] - yb[:, 0] * zb[:, 2]
+    R[:, 2, 0] = yb[:, 0] * zb[:, 1] - yb[:, 1] * zb[:, 0]
+    R[:, :, 1] = yb
+    R[:, :, 2] = zb
+    out = np.empty_like(PT)
+    for k in range(M):
+        out[k] = centre_from_pivot(PT[k], A[k], yaw, b) if odd[k] else PT[k] - R[k] @ b
+    return out.T
+
+
 def parse_azimuths_deg(spec):
     """'0,90,180' / [0, 90, 180] / '' -> list of azimuths (deg) or None (= even ring).
     The rig's rim magnets sit where they were placed, not on an even ring; this is how

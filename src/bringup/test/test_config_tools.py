@@ -24,7 +24,7 @@ WORLDS = REPO / 'simulation_assets'
 LEGACY_WORLDS = WORLDS / 'old_worlds'
 LAUNCHES = REPO / 'src/bringup/launch'
 PROFILES = [f'{side}/{mode}' for side, modes in
-            (('sim', ('mpc', 'free_hover', 'dissipative', 'attach')),
+            (('sim', ('mpc', 'free_hover', 'dissipative', 'network', 'attach')),
              ('sim_legacy', ('mpc', 'free_hover', 'dissipative', 'network', 'attach')),
              ('real', ('mpc', 'free_hover', 'dissipative', 'attach', 'm2'))) for mode in modes]
 
@@ -91,7 +91,7 @@ def test_launch_args_are_parsed_without_executing_the_launch():
 
 THRUST_MAP = ('thrust_ratio', 'takeoff_thrust_ratio', 'thrust_offset', 'thrust_offset_v_slope',
               'thrust_v_ref', 'throttle_max', 'kt_trim')
-RIG_GEOMETRY = ('cable_len', 'drone_mass', 'attach_radius', 'pivot_offset_z', 'rod_tol_frac',
+RIG_GEOMETRY = ('cable_len', 'attach_radius', 'pivot_offset_z', 'rod_tol_frac',
                 'rod_spread_m', 'lift_ramp_vel', 'z_taut_gate', 'z_i_gate', 'reconfig_mode',
                 'auto_network_handover')
 
@@ -99,19 +99,53 @@ RIG_GEOMETRY = ('cable_len', 'drone_mass', 'attach_radius', 'pivot_offset_z', 'r
 @pytest.mark.parametrize('mode', ['mpc', 'dissipative'])
 def test_the_twin_flies_the_rig_thrust_map_and_geometry(mode):
     """The sim default is the rig twin (5 Oct 2026): the identified affine map (gain 35.2
-    above the 0.185 offset, 30 Sep 2026) and the rig's geometry, never a derived kT."""
+    above the 0.185 offset, 30 Sep 2026) and the rig's geometry, never a derived kT. 1 m cables
+    on both since 22 Oct; the drone mass differs by decision: the twin flies its model's 0.55 kg
+    (airframe, rod and magnet), the rig 0.583 with its 1 m cable (Wesley 22 Oct)."""
     sim, real = profile_args(f'sim/{mode}'), profile_args(f'real/{mode}')
     for k in THRUST_MAP + RIG_GEOMETRY:
         assert sim[k] == real[k], f'{k}: sim {sim[k]} vs rig {real[k]}'
     assert float(real['thrust_ratio']) == 35.2
     assert (sim['sim_thrust_map'], sim['sim_pack_v0'], sim['legacy']) == ('rig', '23.8', 'false')
+    assert (sim['cable_len'], sim['drone_mass'], real['drone_mass']) == ('1.0', '0.55', '0.583')
+
+
+def test_the_rig_types_the_rings_centre_of_mass_and_the_twin_keeps_its_ring():
+    """Wesley 22 Oct: the rig's plates sit 1.75 cm above the ring's centre of mass, which rests at 2.75 cm (Motive's
+    pivot moved there); the twin's worlds keep their symmetric ring (0.02 / 0.02) until regenerated."""
+    for mode in ('mpc', 'dissipative', 'attach', 'm2'):
+        real = profile_args(f'real/{mode}')
+        assert (real['attach_z'], real['payload_rest_z']) == ('0.0175', '0.0275'), mode
+    sim = profile_args('sim/dissipative')
+    assert (sim['attach_z'], sim['payload_rest_z']) == ('0.02', '0.02')
+
+
+def test_the_figure8_has_its_own_size_knob():
+    """Wesley 22 Oct: fig8_size sizes the figure-8 (0.9 in the twin: x +-0.9, y +-0.45 m; the rig's paths 0.75, inside
+    the position limit), traj_radius the circle, spin and orbit; the legacy profile leaves it '' (traj_radius, as before
+    22 Oct)."""
+    for prof, size, dist in (('sim/mpc', '0.9', '1.0'), ('sim/dissipative', '0.9', '1.0'), ('sim/attach', '0.9', '1.0'),
+                             ('real/mpc', '0.75', '0.75'), ('real/dissipative', '0.75', '0.75'),
+                             ('real/attach', '0.75', '0.75')):
+        a = profile_args(prof)
+        assert (a['fig8_size'], a['traj_radius'], a['traj_distance']) == (size, '0.5', dist), prof
+    assert profile_args('sim_legacy/mpc')['fig8_size'] == ''
+
+
+def test_the_position_limit_is_on_for_the_rig_only():
+    """pos_limit_m: 1.75 m on every rig profile (Wesley 22 Oct, after its critic and the LIM runs), off in the twin and
+    legacy profiles (their claim tables fly paths past it)."""
+    for name_, a in every_default():
+        if 'pos_limit_m' in a:
+            want = '1.75' if name_.startswith('real') else ''
+            assert a['pos_limit_m'] == want, f'{name_}: pos_limit_m {a["pos_limit_m"]!r}'
 
 
 def test_the_legacy_profile_is_the_sim_default_of_4_oct():
     """legacy:=true flies what sim.yaml held before the twin became the default: the x3
     plant of the worlds in old_worlds/ ('auto' is the secant gain of Gazebo's quadratic motor
     model at hover, thrust_model.py), so the runs flown there stay reproducible."""
-    was = {'mpc': dict(num_drones='2', cable_len='0.5', drone_mass='0.64', attach_radius='',
+    was = {'mpc': dict(num_drones='2', cable_len='0.5', drone_mass='0.64', attach_radius='', fig8_size='',
                        attach_z='', pivot_offset_z='0.0', ff_cap_force='0.0',
                        lift_ramp_vel='0.22', z_taut_gate='0.99', payload_rest_z='-0.1',
                        z_i_gate='', traj_speed='0.6', thrust_ratio='auto',
@@ -134,11 +168,32 @@ def test_the_legacy_profile_is_the_sim_default_of_4_oct():
         assert {k: got[k] for k in want} == want, mode
 
 
-def test_network_is_refused_on_the_twin_and_attach_flies_it():
-    """No rig-twin network world yet; attach flies the twin attach worlds since 8 Oct."""
-    with pytest.raises(RuntimeError, match='legacy:=true'):
-        profile_args('sim/network')
+def test_the_twin_network_flies_the_rig_map_and_the_approved_network_values():
+    """Card 2026-10-23_paper_method_compare (Wesley 22 Oct, push answers 21-23): the network flies the twin, with the
+    rig's map and geometry as the twin dissipative mode, the automatic hand-over to the velocity loop (vel_ki 0), the
+    trim 1.0, the planned 60 deg, no preview; every switch the critic has not seen is off."""
+    sim, real = profile_args('sim/network'), profile_args('real/dissipative')
+    for k in THRUST_MAP + RIG_GEOMETRY:
+        if k not in ('reconfig_mode', 'auto_network_handover'):
+            assert sim[k] == real[k], f'{k}: sim {sim[k]} vs rig {real[k]}'
+    want = dict(num_drones='4', reconfig_mode='network', auto_network_handover='true',
+                control_mode='velocity_after_handover', vel_ki='0.0', diss_ki_load='1.0', diss_elev_deg='60.0',
+                cable_elev_deg='60.0', net_horizon_preview='false', handover_blend_s='0.0', legacy='false',
+                net_twin_geometry='false', net_damp_relative='false', net_hold_carry='false', net_traj_lean='false',
+                sim_thrust_map='rig')
+    assert {k: sim[k] for k in want} == want
+    for mode in ('mpc', 'dissipative', 'attach'):          # the switches are off in every other profile
+        for side in ('sim', 'sim_legacy', 'real'):
+            p = profile_args(f'{side}/{mode}')
+            assert (p['net_damp_relative'], p['net_twin_geometry'], p['net_hold_carry']) == ('false',) * 3
+    from bringup.profiles import MODES
+    assert 'network' not in MODES['real']
+
+
+def test_the_legacy_network_and_the_twin_attach_are_unchanged():
+    """legacy:=true keeps the old network profile; attach flies the twin attach worlds since 8 Oct."""
     assert profile_args('sim_legacy/network')['legacy'] == 'true'
+    assert profile_args('sim_legacy/network')['control_mode'] == 'mpc'
     a = profile_args('sim/attach')
     assert a['attach_azimuths_deg'] == '90,330,210' and a['legacy'] == 'false'     # typed clockwise: plates 3/11/7
     assert profile_args('sim_legacy/attach')['legacy'] == 'true'

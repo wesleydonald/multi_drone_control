@@ -98,8 +98,9 @@ mocap (/drone_i, /payload motion_capture_state)
   worlds (0.5 m rods, centre pivot, 0.64 kg drones, linear plant kT 83.1, `thrust_ratio:=auto`,
   `kt_trim` on, §4.10) are in `simulation_assets/old_worlds/` and fly on `sim_legacy.yaml`
   with `legacy:=true`, which `tools/run_experiment.py` infers from an `old_worlds/` or
-  `tejen/` world path. The SIL bench and `mode:=attach` / `mode:=network` exist only on the
-  legacy profile until ported; what has to be flown again on the twin is `docs/archive/redo_on_twin.md`.
+  `tejen/` world path. The SIL bench exists only on the legacy profile until ported; `mode:=attach` flies the twin
+  since 8 Oct; `mode:=network` is built on the twin (22 Oct; the paper's method on the trackers' velocity loop after
+  our OCP's lift, card 2026-10-23_paper_method_compare) and flies after the card's critic. What has to be flown again on the twin is `docs/archive/redo_on_twin.md`.
 - **Detach** has two modes: `reconfig_mode:=network` (network redistributes, then hands
   back to a pre-built OCP for the new n) and `reconfig_mode:=ocp` (the OCP resizes
   directly; attach geometry is a runtime parameter so the survivors keep their true
@@ -161,7 +162,11 @@ Pre-arm checklist: `tools/preflight.py --real`. Rig checklist for attach:
 
 Rig facts (updated 2026-09-29): our drones 0-3 = Tejen's quad1-4 = `/dev/QUAD1..4` (udev: four unique serials) =
 Motive bodies 11-14 (`mocap_drone_body_ids`), ring body 8, Tejen's pickup object 6 (Wesley 2026-09-29; the code defaults
-match); airframes 0.55 kg (`drone_mass` default, 30 Sep); the magnet tip
+match); airframes 0.55 kg with the 0.55 m cable (30 Sep), 0.583 kg with the 1 m cable (`drone_mass` default since
+22 Oct; the twin keeps its model's 0.55); 1 m cables by default since 22 Oct (`cable_len` 1.0 in real.yaml and sim.yaml,
+each cable measured at the hand-over; the 0.55 m worlds and configs stay as flown with 0.55 typed); the ring's centre
+of mass as the default plate height and rest (`attach_z` 0.0175, `payload_rest_z` 0.0275, 22 Oct); the figure-8 sized
+by `fig8_size` (0.9: x +-0.9, y +-0.45 m), `traj_radius` the circle, spin and orbit; the magnet tip
 needs its own rigid body; the affine thrust map (`real_control_launch.py` defaults); floor start on the CREEP path,
 `start_taut:=false handover_elev_deg:=45 handover_settle_s:=2.0` (the launch default
 `start_taut:=true` runs the OCP from tick 1, whose references sit 18–22 cm inward of a

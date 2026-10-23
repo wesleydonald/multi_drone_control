@@ -7,8 +7,7 @@ POLICY = "measured_contact_15deg"
 LEGACY = "legacy"
 
 class QuietMissTracker:
-    """One-shot accumulated eligible-time timer; caller owns recovery. (His d2eaf41e version: time while ineligible is
-    paused, not a reset.)"""
+    """One-shot accumulated eligible-time timer; caller owns recovery."""
 
     def __init__(self, *, wait_s=10., improvement_m=.005):
         if not all(math.isfinite(v) and v > 0 for v in (wait_s, improvement_m)):
@@ -67,6 +66,7 @@ class ContactProofConfig:
     loss_normal_m: float = .045
     loss_dwell_s: float = .12
     initial_contact_max_normal_m: float = 0.0
+    proof_xy_m: float | None = None
 
 class ContactProofEvidence:
     """Freshness pauses evidence; only fresh geometric separation establishes loss."""
@@ -120,7 +120,7 @@ class ContactProofEvidence:
             desired=np.array([math.sin(math.radians(c.angle_deg)),0.,math.cos(math.radians(c.angle_deg))])
             self.angle_error_deg=math.degrees(math.acos(float(np.clip(np.dot(vector,desired)/length,-1,1)))) if length>1e-9 else float("nan")
             self.proof_condition=bool(proving and magnet_on and not self.lost
-                and xy<=c.xy_m and abs(normal)<=c.normal_m and speed<=c.speed_mps
+                and xy<=(c.xy_m if c.proof_xy_m is None else c.proof_xy_m) and abs(normal)<=c.normal_m and speed<=c.speed_mps
                 and self.drift<=c.drift_m and math.isfinite(self.angle_error_deg)
                 and self.angle_error_deg<=c.angle_tolerance_deg and motion_complete)
         if self.proof_condition:
@@ -182,3 +182,96 @@ class RetryBudget:
     def manual_retry(self):
         self.attempt+=1
         self.awaiting_operator=False
+
+
+@dataclass(frozen=True)
+class ParkingConfig:
+    max_radius_m: float = .50
+    slack_margin_m: float = .02
+    disarm_height_above_rest_m: float = .02
+    speed_mps: float = .10
+    final_speed_mps: float = .04
+    final_height_band_m: float = .15
+
+    def __post_init__(self):
+        for name, value in vars(self).items():
+            if not math.isfinite(value) or value < 0 or (name != 'slack_margin_m' and value == 0):
+                raise ValueError(f'parking.{name} must be finite and positive (slack may be zero)')
+        if self.final_speed_mps > self.speed_mps:
+            raise ValueError('parking final speed must not exceed cruise speed')
+
+
+class ParkingArc:
+    """Frozen-world shrinking arc; body reference, not a physical slack-cable model.
+
+    The anchor rotates by spherical interpolation while radius decreases linearly
+    in a quintic progress variable. Analytic P/V/A share exactly that progress.
+    A conservative derivative bound sets duration for both speed caps.
+    """
+    def __init__(self, contact, start_body, body_to_anchor, outward, *,
+                 measured_reach_m, resting_body_z, config=None):
+        self.config = config or ParkingConfig()
+        self.contact, self.start_body, self.body_to_anchor = (
+            np.asarray(x, dtype=float).copy() for x in (contact, start_body, body_to_anchor))
+        direction = np.asarray(outward, dtype=float).copy()
+        values = (self.contact, self.start_body, self.body_to_anchor, direction)
+        if any(x.shape != (3,) or not np.all(np.isfinite(x)) for x in values):
+            raise ValueError('parking requires finite 3D geometry')
+        if not math.isfinite(measured_reach_m) or not math.isfinite(resting_body_z):
+            raise ValueError('parking requires finite measured reach and resting height')
+        direction[2] = 0.
+        norm = float(np.linalg.norm(direction))
+        if norm <= 1e-9:
+            raise ValueError('parking outward direction must have horizontal extent')
+        direction /= norm
+        start = self.start_body + self.body_to_anchor - self.contact
+        self.start_radius = float(np.linalg.norm(start))
+        self.end_radius = min(self.config.max_radius_m,
+                              measured_reach_m-self.config.slack_margin_m, self.start_radius)
+        height = resting_body_z+self.body_to_anchor[2]-self.contact[2]
+        if self.end_radius <= abs(height) or self.start_body[2] <= resting_body_z:
+            raise ValueError('parking endpoint is outside reach or not below entry')
+        end = math.sqrt(self.end_radius**2-height**2)*direction + np.array([0., 0., height])
+        self.d0 = start/self.start_radius
+        df = end/self.end_radius
+        self.angle = math.acos(float(np.clip(self.d0 @ df, -1., 1.)))
+        if not 1e-8 < self.angle < math.pi-1e-8:
+            raise ValueError('parking arc directions must define a nondegenerate sweep')
+        self.tangent = (df-math.cos(self.angle)*self.d0)/math.sin(self.angle)
+        self.delta_radius = self.end_radius-self.start_radius
+        self.cutoff_z = resting_body_z+self.config.disarm_height_above_rest_m
+        self.duration = 1.
+        # A sampled geometric sanity check, not collision certification.
+        for q in np.linspace(0., 1., 257):
+            if self._geometry(q)[1][2] > 1e-9:
+                raise ValueError('parking geometry must descend monotonically')
+        # |dp/dq| <= |dr/dq| + r0*angle, and max dq/du = 1.875.
+        bound = abs(self.delta_radius)+self.start_radius*self.angle
+        self.duration = max(1., 1.875*bound/self.config.speed_mps)
+        low_z = self.cutoff_z+self.config.final_height_band_m
+        lo, hi = 0., 1.
+        for _ in range(50):
+            mid = (lo+hi)/2.
+            if self._geometry(ProofArc.blend(mid))[0][2] > low_z:
+                lo = mid
+            else:
+                hi = mid
+        u = max(.5, lo)  # quintic speed decreases monotonically after u=.5
+        self.duration = max(self.duration, 30*u*u*(1-u)**2*bound/self.config.final_speed_mps)
+
+    def _geometry(self, q):
+        theta = self.angle*q
+        d = math.cos(theta)*self.d0 + math.sin(theta)*self.tangent
+        dq = self.angle*(-math.sin(theta)*self.d0 + math.cos(theta)*self.tangent)
+        radius = self.start_radius+self.delta_radius*q
+        p = self.contact+radius*d-self.body_to_anchor
+        first = self.delta_radius*d+radius*dq
+        second = 2*self.delta_radius*dq-radius*self.angle**2*d
+        return p, first, second
+
+    def sample(self, elapsed):
+        u = float(np.clip(elapsed/self.duration, 0., 1.))
+        p, first, second = self._geometry(ProofArc.blend(u))
+        qdot = 30*u*u*(1-u)**2/self.duration
+        qddot = (60*u-180*u*u+120*u**3)/self.duration**2
+        return p, first*qdot, second*qdot*qdot+first*qddot

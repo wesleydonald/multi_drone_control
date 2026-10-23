@@ -2,6 +2,8 @@ name: tc_c2_hover_default
 description: 'C2: F1 with the likely default set (partner_tilt_cut + warm_fault_not_live + fc_disarm_land; critic round 2 M-C): nominal, no TILT_FAULT, no cut, no not-live, no FC LAND (card 2026-10-11_quad4_tilt_cut rev 3; exploratory until the claim)'
 world: three_rigid_ground_rig_attach_pickup.sdf
 ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

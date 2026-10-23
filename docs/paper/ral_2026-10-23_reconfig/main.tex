@@ -1,0 +1,43 @@
+\documentclass[journal]{IEEEtran}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{cite}
+\usepackage{tikz}
+\usetikzlibrary{angles, quotes, decorations.pathreplacing, shapes.geometric, arrows.meta, positioning, backgrounds, fit}
+\usepackage[hidelinks]{hyperref}
+
+% results still to fly or to be measured: red, so none survives into a submission unnoticed
+\newcommand{\placeholder}[1]{\textcolor{red}{[#1]}}
+\definecolor{RED}{rgb}{1,0,0}   % IEEEtran upper-cases running heads, \textcolor{red} included
+
+\begin{document}
+
+\title{In-Flight Reconfiguration of a Cable-Suspended Ring Carried by a Team of Quadrotors}
+
+\author{Wesley~Donald, Mitchell~Torok, and~Mohammad~Deghat%
+\thanks{The authors are with the School of Mechanical and Manufacturing Engineering, UNSW Sydney, Australia
+\placeholder{affiliations and e-mail addresses to confirm}.}}
+
+\markboth{IEEE Robotics and Automation Letters. Preprint version, 2026}%
+{Donald \MakeLowercase{\textit{et al.}}: In-Flight Reconfiguration of a Cable-Suspended Ring}
+
+\maketitle
+
+\input{sections/00_abstract}
+\input{sections/fig_snapshots}
+\input{sections/01_intro}
+\input{sections/02_system}
+\input{sections/fig_geometry}
+\input{sections/03_method}
+\input{sections/04_results}
+\input{sections/04a2_release_gap}
+\input{sections/04a3_attach_offset}
+\input{sections/04b_scalability}
+\input{sections/05_discussion}
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\end{document}

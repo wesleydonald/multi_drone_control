@@ -45,6 +45,9 @@ private Q_SLOTS:
   void onLandPressed();
   void onDetachPressed();
   void onAttachPressed();
+  void onReleasePressed();
+  void onReleaseConfirmTimeout();
+  void onReleaseSend();
   void onDisarmRepeat();
   void refreshDroneLabels();
   // Tejen's stack (his MPC in the graph): his ARM / TAKEOFF / DISARM on /tejen/drone_command and GIVE UP
@@ -56,6 +59,7 @@ private Q_SLOTS:
 
 private:
   void updateButtonState();
+  void updateReleaseButton();
   void updateStatusLabel();
   void applyShowDetach();
   void applyShowAttach();
@@ -108,6 +112,20 @@ private:
   QWidget* detach_row_;
   QPushButton* attach_button_;
   QWidget* attach_row_;
+  // RELEASE RIDER: the magnet OFF to the carrier the planner plans under RIDER_N (the T's rider), named by plate from
+  // the planner's latched /fleet/carrier_map; a second click within 3 s sends it, OFF at 10 Hz for 1 s
+  QPushButton* release_button_;
+  QTimer* release_confirm_timer_;
+  QTimer* release_send_timer_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr carrier_map_sub_;
+  int rider_drone_;            // -1: no carrier planned under RIDER_N
+  int rider_plate_;
+  double rider_pull_;
+  int release_confirm_drone_;  // -1 unless the first click is waiting for the second
+  int release_confirm_plate_;
+  int release_sending_drone_;
+  int release_sends_left_;
+  bool release_used_;          // one release per flight; cleared when the fleet disarms
   QWidget* partner_row_;
   QPushButton* his_arm_button_;
   QPushButton* his_takeoff_button_;

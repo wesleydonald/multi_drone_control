@@ -2,10 +2,14 @@
 #include "tejen_dynamic_planner/kinematics_filter.hpp"
 #include "tejen_dynamic_planner/moving_basket_geometry.hpp"
 #include "tejen_dynamic_planner/reference_message.hpp"
+#include "tejen_dynamic_planner/reference_recovery.hpp"
+#include "tejen_dynamic_planner/execution_fallback.hpp"
+#include "tejen_dynamic_planner/experiment_workspace.hpp"
 
 #include "dynamic_planner/bspline.hpp"
 #include "dynamic_planner/committed_trajectory.hpp"
 #include "dynamic_planner/ego_collision_model.hpp"
+#include "dynamic_planner/execution_authority.hpp"
 #include "dynamic_planner/minimum_time.hpp"
 #include "dynamic_planner/receding_horizon_planner.hpp"
 #include "dynamic_planner/reference_window.hpp"
@@ -45,6 +49,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -159,7 +164,7 @@ RecedingHorizonConfig recedingConfig(
     return config;
 }
 
-LocalPlannerConfig localConfig(
+LocalPlannerConfig unboundedLocalConfig(
     const Vec3& start,
     const Vec3& goal,
     double minimum_search_z_m,
@@ -491,7 +496,13 @@ struct PlannerOutcome {
     State request_state;
     Vec3 target = Vec3::Zero();
     std::unique_ptr<RecedingHorizonPlanner> planner;
+    std::unique_ptr<RecedingHorizonPlanner> retained_planner;
     ReplanResult result;
+    double candidate_available_time_s = std::numeric_limits<double>::quiet_NaN();
+    double previous_timing_s = 0.0;
+    bool authority_installed = false;
+    double authority_install_time_s = std::numeric_limits<double>::quiet_NaN();
+    std::string installation_rejection;
     bool worker_exception = false;
     std::string worker_error;
 };
@@ -534,8 +545,17 @@ public:
             "authority_topic", "/dynamic_planner/transfer_authority");
         authority_ack_topic_ = declare_parameter<std::string>(
             "authority_ack_topic", "/dynamic_planner/transfer_authority_ack");
+        reference_recovery_enabled_ = declare_parameter<bool>("reference_recovery_enabled", false);
+        stopped_continuation_enabled_ = declare_parameter<bool>("stopped_continuation_enabled", false)
+            || reference_recovery_enabled_;
+        recovery_request_topic_ = declare_parameter<std::string>(
+            "recovery_request_topic", "/dynamic_planner/reference_recovery_request");
+        recovery_status_topic_ = declare_parameter<std::string>(
+            "recovery_status_topic", "/dynamic_planner/reference_recovery_status");
         shadow_reference_topic_ = declare_parameter<std::string>(
             "shadow_reference_topic", "/dynamic_planner/transfer_reference");
+        recovery_continuation_topic_ = declare_parameter<std::string>(
+            "recovery_continuation_topic", shadow_reference_topic_ + "_continuation");
         diagnostics_topic_ = declare_parameter<std::string>(
             "diagnostics_topic", "/dynamic_planner/transfer_status");
         marker_topic_ = declare_parameter<std::string>(
@@ -554,6 +574,8 @@ public:
         initial_splice_timing_s_ = declare_parameter<double>("initial_splice_timing_s", 0.16);
         fixed_splice_lookahead_s_ = declare_parameter<double>(
             "fixed_splice_lookahead_s", 0.0);
+        temporal_refinement_enabled_ = declare_parameter<bool>(
+            "temporal_refinement_enabled", false);
         octopus_max_runtime_s_ = declare_parameter<double>(
             "octopus_max_runtime_s", 2.0);
         octopus_pre_authority_max_runtime_s_ = declare_parameter<double>(
@@ -661,6 +683,16 @@ public:
 
         max_swing_angle_rad_ = declare_parameter<double>(
             "max_swing_angle_rad", 15.0 * kPi / 180.0);
+        suspended_cable_length_m_ = declare_parameter<double>("suspended_cable_length_m", 0.50);
+        magnet_center_below_cable_end_m_ = declare_parameter<double>("magnet_center_below_cable_end_m", 0.025);
+        workspace_bounds_enabled_ = declare_parameter<bool>("workspace_bounds_enabled", false);
+        const auto workspace_vector = [this](const char* name, std::vector<double> fallback) {
+            const auto values = declare_parameter<std::vector<double>>(name, fallback);
+            if (values.size() != 3) throw std::invalid_argument(std::string(name)+" requires XYZ");
+            return Vec3(values[0], values[1], values[2]);
+        };
+        workspace_min_ = workspace_vector("workspace_min", {-2.5, -2.5, 0.});
+        workspace_max_ = workspace_vector("workspace_max", {2.5, 2.5, 3.5});
         payload_collision_enabled_ = declare_parameter<bool>(
             "payload_collision_enabled", false);
         require_payload_attached_for_enable_ = declare_parameter<bool>(
@@ -674,6 +706,10 @@ public:
             declare_parameter<double>("payload_center_from_magnet_y_m", 0.0),
             declare_parameter<double>("payload_center_from_magnet_z_m", -0.028));
         static_scene_enabled_ = declare_parameter<bool>("static_scene_enabled", true);
+        body_half_extents_ = Vec3(
+            declare_parameter<double>("ego_body_half_x_m", 0.105),
+            declare_parameter<double>("ego_body_half_y_m", 0.105),
+            declare_parameter<double>("ego_body_half_z_m", 0.060));
         require_scene_witness_ = declare_parameter<bool>("require_scene_witness", true);
         obstacle_name_ = declare_parameter<std::string>(
             "obstacle_name", "c1e_commissioning_obstacle");
@@ -710,6 +746,8 @@ public:
             declare_parameter<double>("cooperative_body_half_x_m", 0.105),
             declare_parameter<double>("cooperative_body_half_y_m", 0.105),
             declare_parameter<double>("cooperative_body_half_z_m", 0.060));
+        cooperative_tracking_safety_enabled_ = declare_parameter<bool>(
+            "cooperative_tracking_safety_enabled", true);
         cooperative_tracking_error_half_extents_ = Vec3(
             declare_parameter<double>("cooperative_tracking_half_x_m", 0.10),
             declare_parameter<double>("cooperative_tracking_half_y_m", 0.10),
@@ -808,6 +846,8 @@ public:
         }
 
         suspended_geometry_ = suspendedGeometry(max_swing_angle_rad_);
+        suspended_geometry_.cable_length_m = suspended_cable_length_m_;
+        suspended_geometry_.magnet_center_below_cable_end_m = magnet_center_below_cable_end_m_;
         suspended_geometry_.payload_half_extents = payload_half_extents_;
         suspended_geometry_.payload_center_from_magnet_center =
             payload_center_from_magnet_center_;
@@ -904,6 +944,17 @@ public:
             diagnostics_topic_, rclcpp::QoS(10));
         authority_ack_pub_ = create_publisher<std_msgs::msg::Bool>(
             authority_ack_topic_, rclcpp::QoS(10));
+        if (stopped_continuation_enabled_) {
+            recovery_continuation_pub_ = create_publisher<trajectory_msgs::msg::MultiDOFJointTrajectory>(
+                recovery_continuation_topic_, rclcpp::QoS(10));
+        }
+        // Initial handoff also uses the existing common-hold transaction.
+        // The opt-in flag still controls the in-flight stopped-tail transport.
+        recovery_status_pub_ = create_publisher<std_msgs::msg::String>(
+            recovery_status_topic_, rclcpp::QoS(10));
+        recovery_request_sub_ = create_subscription<std_msgs::msg::String>(
+            recovery_request_topic_, rclcpp::QoS(10),
+            std::bind(&TransferBackendNode::recoveryRequestCallback, this, std::placeholders::_1));
         rclcpp::QoS marker_qos(1);
         marker_qos.reliable().transient_local();
         marker_pub_ = create_publisher<MarkerArray>(marker_topic_, marker_qos);
@@ -953,7 +1004,31 @@ public:
     }
 
 private:
+    LocalPlannerConfig localConfig(const Vec3& start, const Vec3& goal, double minimum_z,
+        double jerk_weight, double goal_weight, double runtime_s) const {
+        auto config = unboundedLocalConfig(start, goal, minimum_z, jerk_weight, goal_weight, runtime_s);
+        if (workspace_bounds_enabled_) {
+            const auto bounds = assemblyWorkspaceBounds(workspace_min_, workspace_max_,
+                body_half_extents_, suspended_geometry_, ego_tracking_error_half_extents_);
+            config.octopus.xyz_min = config.octopus.xyz_min.cwiseMax(bounds.first);
+            config.octopus.xyz_max = config.octopus.xyz_max.cwiseMin(bounds.second);
+            if ((config.octopus.xyz_min.array() >= config.octopus.xyz_max.array()).any())
+                throw std::invalid_argument("local search does not intersect experiment workspace");
+            config.refinement.xyz_min = config.octopus.xyz_min;
+            config.refinement.xyz_max = config.octopus.xyz_max;
+        }
+        return config;
+    }
+
     void validateParameters() const {
+        if (!body_half_extents_.allFinite() || (body_half_extents_.array() <= 0.).any())
+            throw std::invalid_argument("invalid ego body dimensions");
+        if (!std::isfinite(suspended_cable_length_m_) || suspended_cable_length_m_ <= 0. ||
+            !std::isfinite(magnet_center_below_cable_end_m_) || magnet_center_below_cable_end_m_ < 0.)
+            throw std::invalid_argument("invalid suspended marker geometry");
+        if (workspace_bounds_enabled_ && (!workspace_min_.allFinite() || !workspace_max_.allFinite() ||
+            (workspace_min_.array() >= workspace_max_.array()).any()))
+            throw std::invalid_argument("invalid experiment workspace");
         if (shadow_reference_topic_ == kMpcAuthorityTopic) {
             throw std::invalid_argument(
                 "C1F.0 is PASSIVE ONLY: shadow_reference_topic must not be /join_planner/reference");
@@ -1072,9 +1147,10 @@ private:
                 "committed_trajectory target prediction requires moving_basket_scene_enabled");
         }
         if (moving_basket_collision_mode_ != "solid_box" &&
-            moving_basket_collision_mode_ != "segmented_ring") {
+            moving_basket_collision_mode_ != "segmented_ring" &&
+            moving_basket_collision_mode_ != "target_only") {
             throw std::invalid_argument(
-                "moving_basket_collision_mode must be solid_box or segmented_ring");
+                "moving_basket_collision_mode must be solid_box, segmented_ring or target_only");
         }
         if (moving_basket_collision_mode_ == "segmented_ring" &&
             cooperative_ring_pose_topic_.empty()) {
@@ -1227,7 +1303,7 @@ private:
                                "terminal_hold_rejections,incumbent_remaining_unsafe,"
                                "planning_world_version,recheck_world_version,final_recheck_world_version,recheck_error,"
                                "incumbent_recheck_performed,incumbent_recheck_world_version,"
-                               "worker_exception,worker_error\n";
+                               "worker_exception,worker_error,previous_trajectory_elapsed_s,trajectory_elapsed_s,candidate_available_time_s,certified_world_version,authority_installed,authority_install_time_s,installation_rejection\n";
             } else {
                 RCLCPP_WARN(get_logger(), "Could not open C1F.0 replan CSV: %s", replan_csv_path_.c_str());
             }
@@ -1547,6 +1623,12 @@ private:
         const auto& sample = moving_basket_trajectory_sample_;
         if (!sample.received || sample.trajectory.empty()) return false;
 
+        if (moving_basket_collision_mode_ == "target_only") {
+            // Keep the committed predictor/freshness contract, not a phantom net.
+            moving_basket_collision_sequence_ = sample.sequence;
+            return true;
+        }
+
         if (moving_basket_collision_mode_ == "solid_box") {
             CooperativeObstacleTrajectory obstacle;
             obstacle.name = "moving_drop_basket";
@@ -1673,6 +1755,73 @@ private:
         return cooperativeFreshCount(now_s, max_age_s) == cooperative_state_samples_.size();
     }
 
+    std::string cooperativeSharedBlocker(std::size_t i, double now_s,
+        double* coverage_out = nullptr, double* ratio_out = nullptr) const {
+        const auto& sample = cooperative_trajectory_samples_.at(i);
+        if (!sample.received || sample.trajectory.empty()) return "commitment_missing";
+        const auto& trajectory = sample.trajectory;
+        if (now_s < trajectory.startTime() - dynamic_planner::kTrajectoryTimeToleranceS)
+            return "commitment_starts_in_future";
+        const double coverage = trajectory.endsInStoppedHold()
+            ? std::numeric_limits<double>::infinity() : trajectory.endTime() - now_s;
+        if (coverage < -dynamic_planner::kTrajectoryTimeToleranceS) return "commitment_expired";
+        if (i >= cooperative_state_samples_.size()) return "state_missing";
+        const auto& state = cooperative_state_samples_[i];
+        if (!state.received || !std::isfinite(state.receive_ros_s)) return "state_missing";
+        const double state_age = now_s - state.receive_ros_s;
+        if (!std::isfinite(state_age) || state_age < -0.02 || state_age > cooperative_state_timeout_s_)
+            return "state_stale";
+        double validation_time_s = state.receive_ros_s;
+        const double start_skew_s = trajectory.startTime() - validation_time_s;
+        if (start_skew_s > dynamic_planner::kTrajectoryTimeToleranceS) {
+            if (!(cooperative_shared_start_skew_s_ > 0.0) ||
+                start_skew_s > cooperative_shared_start_skew_s_ ||
+                state.velocity.norm() > cooperative_shared_start_skew_max_speed_mps_) return "start_skew";
+            validation_time_s = trajectory.startTime();
+        }
+        State advertised;
+        try { advertised = trajectory.evaluate(validation_time_s); }
+        catch (const std::exception&) { return "state_time_not_covered"; }
+        if (validation_time_s != state.receive_ros_s &&
+            advertised.velocity.norm() > cooperative_shared_start_skew_max_speed_mps_) return "start_skew_speed";
+        const Vec3 error = (state.position - advertised.position).cwiseAbs();
+        double ratio = 0.;
+        bool inside = true;
+        for (int axis = 0; axis < 3; ++axis) {
+            const double bound = cooperative_tracking_error_half_extents_(axis);
+            if (bound <= 1e-12) inside = inside && error(axis) <= 1e-6;
+            else {
+                ratio = std::max(ratio, error(axis) / bound);
+                inside = inside && error(axis) <= bound + 1e-6;
+            }
+        }
+        // Approved IRL/experiment policy: tracking is diagnostic-only, not
+        // missing future evidence. Collision inflation above remains unchanged.
+        if (cooperative_tracking_safety_enabled_ && !inside) return "tracking_mismatch";
+        if (coverage_out) *coverage_out = coverage;
+        if (ratio_out) *ratio_out = ratio;
+        return "";
+    }
+
+    std::string cooperativeInputBlockers(double now_s) const {
+        std::ostringstream out;
+        if (cooperative_scene_enabled_) {
+            for (std::size_t i = 0; i < cooperative_state_samples_.size(); ++i) {
+                std::string reason;
+                if (cooperative_prediction_mode_ == "shared_trajectory") reason = cooperativeSharedBlocker(i, now_s);
+                else {
+                    const auto& state = cooperative_state_samples_[i];
+                    if (!state.received || now_s - state.receive_ros_s > cooperative_state_timeout_s_)
+                        reason = "state_stale";
+                }
+                if (!reason.empty()) out << (cooperative_vehicle_ids_.empty()
+                    ? cooperative_drone_state_topics_.at(i) : cooperative_vehicle_ids_.at(i)) << ':' << reason << ';';
+            }
+        }
+        if (!movingBasketTrajectoryFresh(now_s)) out << "ring:commitment_or_pose_invalid;";
+        return out.str();
+    }
+
     std::size_t cooperativeSharedFreshCount(
         double now_s, double* minimum_future_coverage_s = nullptr,
         double* maximum_tracking_ratio = nullptr) const {
@@ -1687,53 +1836,9 @@ private:
         double min_coverage = std::numeric_limits<double>::infinity();
         double max_ratio = 0.0;
         for (std::size_t i = 0; i < cooperative_trajectory_samples_.size(); ++i) {
-            const auto& trajectory_sample = cooperative_trajectory_samples_[i];
-            if (!trajectory_sample.received || trajectory_sample.trajectory.empty()) continue;
-            const auto& trajectory = trajectory_sample.trajectory;
-            if (now_s < trajectory.startTime() - dynamic_planner::kTrajectoryTimeToleranceS) continue;
-            double coverage = std::numeric_limits<double>::infinity();
-            if (!trajectory.endsInStoppedHold()) {
-                coverage = trajectory.endTime() - now_s;
-                if (coverage < -dynamic_planner::kTrajectoryTimeToleranceS) continue;
-            }
-            if (i >= cooperative_state_samples_.size()) continue;
-            const auto& state = cooperative_state_samples_[i];
-            if (!state.received || !std::isfinite(state.receive_ros_s)) continue;
-            const double state_age = now_s - state.receive_ros_s;
-            if (!std::isfinite(state_age) || state_age < -0.02 ||
-                state_age > cooperative_state_timeout_s_) continue;
-            double validation_time_s = state.receive_ros_s;
-            const double start_skew_s = trajectory.startTime() - validation_time_s;
-            if (start_skew_s > dynamic_planner::kTrajectoryTimeToleranceS) {
-                // ROS callbacks can deliver a new peer future just before the next
-                // peer state. Only the IRL opt-in accepts this short, slow-peer
-                // overlap; state age and the spatial tracking tube stay unchanged.
-                if (!(cooperative_shared_start_skew_s_ > 0.0) ||
-                    start_skew_s > cooperative_shared_start_skew_s_ ||
-                    state.velocity.norm() > cooperative_shared_start_skew_max_speed_mps_) continue;
-                validation_time_s = trajectory.startTime();
-            }
-            State advertised;
-            try {
-                advertised = trajectory.evaluate(validation_time_s);
-            } catch (const std::exception&) {
-                continue;
-            }
-            if (validation_time_s != state.receive_ros_s &&
-                advertised.velocity.norm() > cooperative_shared_start_skew_max_speed_mps_) continue;
-            const Vec3 error = (state.position - advertised.position).cwiseAbs();
+            double coverage = 0.0;
             double ratio = 0.0;
-            bool inside = true;
-            for (int axis = 0; axis < 3; ++axis) {
-                const double bound = cooperative_tracking_error_half_extents_(axis);
-                if (bound <= 1e-12) {
-                    inside = inside && error(axis) <= 1e-6;
-                } else {
-                    ratio = std::max(ratio, error(axis) / bound);
-                    inside = inside && error(axis) <= bound + 1e-6;
-                }
-            }
-            if (!inside) continue;
+            if (!cooperativeSharedBlocker(i, now_s, &coverage, &ratio).empty()) continue;
             ++fresh;
             min_coverage = std::min(min_coverage, coverage);
             max_ratio = std::max(max_ratio, ratio);
@@ -1981,9 +2086,13 @@ private:
 
     void enableCallback(const std_msgs::msg::Bool::SharedPtr msg) {
         if (!msg->data) {
+            if (!recovery_.request_id.empty()) {
+                recovery_.apply(RecoveryRequest{recovery_.request_id, RecoveryAction::Cancel});
+            }
             disableBackend("DISABLED_BY_COMMAND");
             return;
         }
+        if (!recovery_.request_id.empty() && (recovery_.cancelled || !recovery_.seed)) return;
         enable_requested_ = true;
         if (!enabled_) latest_status_ = "ENABLE_REQUESTED";
         tryActivate();
@@ -1994,6 +2103,8 @@ private:
         // False is intentionally not a revocation command; transfer_enable=false
         // resets the backend atomically when the commissioned phase ends.
         if (!msg->data || authority_granted_ || authority_fresh_plan_pending_) return;
+        if (!recovery_.request_id.empty() &&
+            (recovery_.cancelled || !recovery_.grant_requested || !recovery_.seed)) return;
         pollPlannerFuture();
         if (!enabled_ || !prepared_candidate_ready_ || !shadow_commit_.has_value() ||
             !active_target_.has_value() || planner_future_.valid()) {
@@ -2031,6 +2142,11 @@ private:
             latest_status_ = "AUTHORITY_GRANT_REJECTED_NOT_STATIONARY";
             return;
         }
+        Vec3 grant_origin = measured.position;
+        if (recovery_.seed) {
+            if (!recoverySeedReady(now_s, measured)) return;
+            grant_origin = *recovery_.seed;
+        }
         if ((cooperative_scene_enabled_ || moving_basket_scene_enabled_) &&
             !refreshCooperativeWorld(now_s)) {
             latest_status_ = cooperativeAuthorityRejectStatus(now_s);
@@ -2051,16 +2167,16 @@ private:
             // certified kinematics; only the time-dependent collision certificate
             // needs to be renewed. Other C1F.8c users keep the commissioned fresh-
             // solve behavior unless they explicitly opt in.
-            if (reuse_prepared_commit_on_authority_) {
+            if (reuse_prepared_commit_on_authority_ && recovery_.request_id.empty()) {
                 const CommittedTrajectory rebased = shadow_commit_->shiftedToStartTime(now_s);
                 const WorldSnapshot latest_world = world_->snapshot(now_s);
-                dynamic_planner::TrajectorySafetyChecker checker(1e-7);
+                auto checker = plannerSafetyChecker();
                 const auto safety = checker.checkCommitted(
                     rebased, now_s, rebased.endTime(), latest_world);
                 if (safety.safe) {
                     auto normal_planner = std::make_unique<RecedingHorizonPlanner>(
                         *active_target_,
-                        recedingConfig(
+                        withPlannerFeatures(recedingConfig(
                             0.0, fixed_splice_lookahead_s_, spline_time_factor_, factor_alloc_,
                             factor_alloc_close_, close_to_goal_m_,
                             incumbent_failure_recheck_horizon_s_,
@@ -2071,7 +2187,7 @@ private:
                             moving_rendezvous_enabled_, active_target_velocity_.value_or(Vec3::Zero()),
                             terminal_time_target_prediction_enabled_, target_time_fixed_point_iterations_,
                             target_time_fixed_point_tolerance_s_, target_lead_max_s_,
-                            target_lead_high_confidence_max_s_, target_lead_max_distance_m_),
+                            target_lead_high_confidence_max_s_, target_lead_max_distance_m_)),
                         localConfig(
                             measured.position, *active_target_, minimum_search_z_m_,
                             smoother_jerk_weight_, smoother_goal_weight_, octopus_max_runtime_s_));
@@ -2132,7 +2248,7 @@ private:
             const double authority_handoff_splice_s = preAuthoritySpliceLookaheadS();
             auto fresh_planner = std::make_unique<RecedingHorizonPlanner>(
                 *active_target_,
-                recedingConfig(
+                withPlannerFeatures(recedingConfig(
                     0.0, authority_handoff_splice_s, spline_time_factor_, factor_alloc_,
                     factor_alloc_close_, close_to_goal_m_,
                     incumbent_failure_recheck_horizon_s_,
@@ -2143,9 +2259,9 @@ private:
                     moving_rendezvous_enabled_, active_target_velocity_.value_or(Vec3::Zero()),
                     terminal_time_target_prediction_enabled_, target_time_fixed_point_iterations_,
                     target_time_fixed_point_tolerance_s_, target_lead_max_s_,
-                    target_lead_high_confidence_max_s_, target_lead_max_distance_m_),
+                    target_lead_high_confidence_max_s_, target_lead_max_distance_m_)),
                 localConfig(
-                    measured.position, *active_target_, minimum_search_z_m_,
+                    grant_origin, *active_target_, minimum_search_z_m_,
                     smoother_jerk_weight_, smoother_goal_weight_,
                     octopus_pre_authority_max_runtime_s_));
             // Keep a stationary seed longer than one 5 Hz timer period. The first
@@ -2155,7 +2271,7 @@ private:
             const double fresh_authority_hold_s = std::max(
                 0.50, fixed_splice_lookahead_s_ + 2.0 / std::max(1.0, planner_rate_hz_));
             CommittedTrajectory stationary_seed = dynamic_planner::makeStationaryHoverTrajectory(
-                measured.position, now_s, fresh_authority_hold_s);
+                grant_origin, now_s, fresh_authority_hold_s);
             fresh_planner->initializeCommittedTrajectory(stationary_seed);
             planner_ = std::move(fresh_planner);
             shadow_commit_ = std::move(stationary_seed);
@@ -2191,12 +2307,21 @@ private:
     }
 
     void disableBackend(const std::string& reason) {
+        if (reason == "COOPERATIVE_SHARED_INPUT_INVALID_DISABLED" ||
+            reason == "COOPERATIVE_STATE_STALE_DISABLED" ||
+            reason == "MOVING_BASKET_INPUT_INVALID_DISABLED") {
+            RCLCPP_WARN(get_logger(), "Backend disabled at ROS %.6f: %s; cooperative blockers=%s",
+                get_clock()->now().seconds(), reason.c_str(),
+                cooperativeInputBlockers(get_clock()->now().seconds()).c_str());
+        }
         ++epoch_;
         enable_requested_ = false;
         enabled_ = false;
         prepared_candidate_ready_ = false;
         authority_granted_ = false;
         authority_fresh_plan_pending_ = false;
+        recovery_.grant_requested = false;
+        recovery_reference_stamp_ns_ = 0;
         planner_.reset();
         shadow_commit_.reset();
         latest_reference_positions_.clear();
@@ -2223,6 +2348,75 @@ private:
         ack.data = false;
         authority_ack_pub_->publish(ack);
         latest_status_ = reason;
+        publishRecoveryStatus();
+    }
+
+    void publishRecoveryStatus(std::int64_t reference_stamp_ns = 0) {
+        if (!recovery_status_pub_) return;
+        if (reference_stamp_ns != 0) {
+            recovery_reference_stamp_ns_ = reference_stamp_ns;
+            recovery_reference_granted_ = authority_granted_;
+        }
+        std::ostringstream out;
+        out << "{\"request_id\":" << std::quoted(recovery_.request_id)
+            << ",\"epoch\":" << epoch_ << ",\"stamp_ns\":" << get_clock()->now().nanoseconds()
+            << ",\"prepared\":" << (prepared_candidate_ready_ ? "true" : "false")
+            << ",\"granted\":" << (authority_granted_ ? "true" : "false")
+            << ",\"reference_stamp_ns\":" <<
+                (recovery_reference_granted_ == authority_granted_ ? recovery_reference_stamp_ns_ : 0)
+            << ",\"reason\":" << std::quoted(latest_status_)
+            << ",\"blockers\":" << std::quoted(cooperativeInputBlockers(get_clock()->now().seconds())) << "}";
+        std_msgs::msg::String message;
+        message.data = out.str();
+        recovery_status_pub_->publish(message);
+    }
+
+    void recoveryRequestCallback(const std_msgs::msg::String::SharedPtr msg) {
+        const auto request = parseRecoveryRequest(msg->data);
+        if (!request) return;
+        const double now_s = get_clock()->now().seconds();
+        if ((request->action == RecoveryAction::Seed || request->action == RecoveryAction::Grant) &&
+            (now_s - 1e-9 * static_cast<double>(request->stamp_ns) < -0.02 ||
+             now_s - 1e-9 * static_cast<double>(request->stamp_ns) > state_timeout_s_)) return;
+        switch (recovery_.apply(*request)) {
+        case RecoveryAction::Reset:
+            disableBackend("RECOVERY_WAITING_COMMON_STOPPED_REFERENCE");
+            break;
+        case RecoveryAction::Seed:
+            enable_requested_ = true;
+            tryActivate();
+            break;
+        case RecoveryAction::Grant: {
+            auto grant = std::make_shared<std_msgs::msg::Bool>();
+            grant->data = true;
+            authorityCallback(grant);
+            break;
+        }
+        case RecoveryAction::Cancel:
+            disableBackend("RECOVERY_CANCELLED");
+            break;
+        case RecoveryAction::Ignore:
+            break;
+        }
+        publishRecoveryStatus();
+    }
+
+    bool recoverySeedReady(double now_s, const State& measured) {
+        if (!recovery_.seed || recovery_.cancelled ||
+            now_s - 1e-9 * static_cast<double>(recovery_.seed_stamp_ns) > state_timeout_s_) {
+            latest_status_ = "RECOVERY_WAITING_FRESH_COMMON_SEED";
+            return false;
+        }
+        if (((measured.position - *recovery_.seed).cwiseAbs().array() >
+             ego_tracking_error_half_extents_.array()).any()) {
+            latest_status_ = "RECOVERY_WAITING_EXISTING_TRACKING_ENVELOPE";
+            return false;
+        }
+        if (recovery_.seed->z() < minimum_search_z_m_) {
+            latest_status_ = "RECOVERY_SEED_BELOW_SEARCH_FLOOR";
+            return false;
+        }
+        return true;
     }
 
     bool currentState(double now_s, State* state, double* age_s) const {
@@ -2271,13 +2465,29 @@ private:
         return now_s - best_time;
     }
 
-    bool activateExecutionFallback(
+    void requestExecutionFallback(const std::string& reason) {
+        if (execution_fallback_pending_reason_.empty()) ++epoch_;
+        execution_fallback_pending_reason_ = reason;
+        prepared_candidate_ready_ = false;
+    }
+
+    ExecutionFallbackOutcome activateExecutionFallback(
         const std::string& reason,
         double now_s,
         const State& measured) {
-        if (!authority_granted_ || !active_target_.has_value()) return false;
-
-        try {
+        if (!authority_granted_ || !active_target_.has_value()) {
+            return ExecutionFallbackOutcome::NotInstalled;
+        }
+        // Exclude old worker results before any construction/check can fail.
+        ++epoch_;
+        execution_fallback_pending_reason_ = reason;
+        const auto attempt = attemptExecutionFallback(
+            [&]() {
+                return dynamic_planner::makeBrakingHoverTrajectory(
+                    measured, now_s, execution_brake_accel_limit_,
+                    execution_brake_min_duration_s_);
+            },
+            [&](const CommittedTrajectory& brake) {
             // Refresh the cooperative world immediately before certifying the
             // fallback. Replan-time world refreshes run at only 5 Hz and can be
             // older than the 30 Hz execution-certificate event that brought us
@@ -2288,11 +2498,9 @@ private:
                 (!cooperative_scene_enabled_ && !moving_basket_scene_enabled_) ||
                 refreshCooperativeWorld(now_s);
             const WorldSnapshot latest_world = world_->snapshot(now_s);
-            dynamic_planner::TrajectorySafetyChecker checker(1e-7);
+            auto checker = plannerSafetyChecker();
 
-            CommittedTrajectory fallback = dynamic_planner::makeBrakingHoverTrajectory(
-                measured, now_s, execution_brake_accel_limit_,
-                execution_brake_min_duration_s_);
+            CommittedTrajectory fallback = brake;
             const double smooth_check_until =
                 fallback.endTime() + incumbent_failure_recheck_horizon_s_;
             auto safety = checker.checkCommitted(
@@ -2309,23 +2517,27 @@ private:
                 fallback = dynamic_planner::makeStationaryHoverTrajectory(
                     measured.position, now_s, 0.10);
                 const double hold_check_until = now_s + incumbent_failure_recheck_horizon_s_;
-                safety = checker.checkCommitted(
-                    fallback, now_s, hold_check_until, latest_world);
                 // A stationary reference is not a physically certified transition
                 // from nonzero measured velocity. Even if the hold point itself is
                 // collision-free, label this last-resort discontinuous fallback as
                 // uncertified rather than overclaiming a safe stop.
                 certified = false;
                 mode = "UNCERTIFIED_HARD_HOVER";
+                try {
+                    safety = checker.checkCommitted(
+                        fallback, now_s, hold_check_until, latest_world);
+                } catch (const std::exception& exc) {
+                    return PreparedExecutionFallback{std::move(fallback), false, mode, exc.what()};
+                }
             }
-
-            // Invalidate any in-flight worker. It cannot be cancelled, but its
-            // epoch is now stale and pollPlannerFuture() will discard it without
-            // overwriting this fallback planner/commit.
-            ++epoch_;
+            return PreparedExecutionFallback{std::move(fallback), certified, mode, ""};
+            },
+            [&](const PreparedExecutionFallback& prepared) {
+            // Finish all potentially-throwing preparation before touching the
+            // live planner/commit. The final swaps and scalar updates do not allocate.
             auto fallback_planner = std::make_unique<RecedingHorizonPlanner>(
                 *active_target_,
-                recedingConfig(
+                withPlannerFeatures(recedingConfig(
                     initial_splice_timing_s_, fixed_splice_lookahead_s_, spline_time_factor_, factor_alloc_,
                     factor_alloc_close_, close_to_goal_m_,
                     incumbent_failure_recheck_horizon_s_,
@@ -2336,41 +2548,53 @@ private:
                     moving_rendezvous_enabled_, active_target_velocity_.value_or(Vec3::Zero()),
                     terminal_time_target_prediction_enabled_, target_time_fixed_point_iterations_,
                     target_time_fixed_point_tolerance_s_, target_lead_max_s_,
-                    target_lead_high_confidence_max_s_, target_lead_max_distance_m_),
+                    target_lead_high_confidence_max_s_, target_lead_max_distance_m_)),
                 localConfig(
-                    fallback.endState().position, *active_target_, minimum_search_z_m_,
+                    prepared.trajectory.endState().position, *active_target_, minimum_search_z_m_,
                     smoother_jerk_weight_, smoother_goal_weight_, octopus_max_runtime_s_));
-            fallback_planner->initializeCommittedTrajectory(fallback);
-            const State fallback_restart_state = fallback.endState();
+            fallback_planner->initializeCommittedTrajectory(prepared.trajectory);
+            std::optional<CommittedTrajectory> fallback_commit{prepared.trajectory};
+            std::string fallback_reason = reason;
+            std::string fallback_mode = prepared.mode;
+            std::string fallback_status = "EXECUTION_FALLBACK_" + prepared.mode + ":" + reason;
+            if (!prepared.error.empty()) fallback_status += ":" + prepared.error;
+            const State fallback_restart_state = prepared.trajectory.endState();
+            static_assert(std::is_nothrow_swappable_v<std::optional<CommittedTrajectory>>,
+                          "fallback commitment swap must be non-throwing");
+            planner_.swap(fallback_planner);
+            shadow_commit_.swap(fallback_commit);
+            execution_fallback_reason_.swap(fallback_reason);
+            execution_fallback_mode_.swap(fallback_mode);
+            latest_status_.swap(fallback_status);
             execution_fallback_restart_blocked_ =
                 fallback_restart_state.position.z() < minimum_search_z_m_ - 1e-6;
             execution_fallback_restart_z_m_ = fallback_restart_state.position.z();
-            planner_ = std::move(fallback_planner);
-            shadow_commit_ = std::move(fallback);
             prepared_candidate_ready_ = false;
             execution_fallback_active_ = true;
-            execution_fallback_certified_ = certified;
-            execution_fallback_reason_ = reason;
-            execution_fallback_mode_ = mode;
+            execution_fallback_certified_ = prepared.certified;
+            execution_fallback_pending_reason_.clear();
             execution_tracking_consecutive_violations_ = 0;
             ++execution_fallback_count_;
-            latest_status_ = "EXECUTION_FALLBACK_" + mode + ":" + reason;
+            });
+        if (attempt.outcome != ExecutionFallbackOutcome::NotInstalled) {
             RCLCPP_ERROR(
                 get_logger(),
                 "C1F.4 execution certificate invalid (%s). Installed %s fallback; certified=%s.",
-                reason.c_str(), mode.c_str(), certified ? "true" : "false");
-            return certified;
-        } catch (const std::exception& exc) {
-            execution_fallback_active_ = true;
+                reason.c_str(), attempt.mode.c_str(),
+                execution_fallback_certified_ ? "true" : "false");
+        } else {
+            execution_fallback_active_ = false;
             execution_fallback_certified_ = false;
             execution_fallback_reason_ = reason;
             execution_fallback_mode_ = "INSTALL_FAILED";
-            ++execution_fallback_count_;
-            latest_status_ = std::string("EXECUTION_FALLBACK_INSTALL_FAILED:") + exc.what();
-            RCLCPP_ERROR(
-                get_logger(), "C1F.4 failed to install execution fallback: %s", exc.what());
-            return false;
+            prepared_candidate_ready_ = false;
+            latest_status_ = "EXECUTION_FALLBACK_INSTALL_FAILED:" + attempt.error;
+            RCLCPP_ERROR_THROTTLE(
+                get_logger(), *get_clock(), 1000,
+                "C1F.4 fallback not installed; publication suppressed, retry pending: %s",
+                attempt.error.c_str());
         }
+        return attempt.outcome;
     }
 
     void updateExecutionTrackingDiagnostics(double now_s, const State& measured) {
@@ -2407,6 +2631,19 @@ private:
         const bool velocity_valid = execution_velocity_error_limit_mps_ <= 0.0 ||
             execution_velocity_error_.norm() <= execution_velocity_error_limit_mps_;
         return position_valid && velocity_valid;
+    }
+
+    RecedingHorizonConfig withPlannerFeatures(RecedingHorizonConfig config) const {
+        // Shared core owns certification semantics. This opt-in does not enable
+        // a flight profile, change goals or introduce recovery.
+        config.temporal_refinement.enabled = temporal_refinement_enabled_;
+        return config;
+    }
+
+    dynamic_planner::TrajectorySafetyChecker plannerSafetyChecker() const {
+        dynamic_planner::TemporalRefinementConfig temporal;
+        temporal.enabled = temporal_refinement_enabled_;
+        return dynamic_planner::TrajectorySafetyChecker(1e-7, temporal);
     }
 
     double preAuthoritySpliceLookaheadS() const {
@@ -2498,19 +2735,20 @@ private:
             scene_witness_summary_ = "NOT_REQUIRED";
         }
 
-        ++epoch_;
-        prepared_candidate_ready_ = false;
-        authority_granted_ = false;
-        authority_fresh_plan_pending_ = false;
-        active_source_target_ = *latest_target_;
-        active_target_ = planningGoalForState(measured);
-        // Position and velocity must describe the same predicted rendezvous
-        // instant. This matters for curved targets: current velocity is not the
-        // terminal velocity several seconds around the scripted circle.
-        active_target_velocity_ = last_target_prediction_velocity_;
-        planner_ = std::make_unique<RecedingHorizonPlanner>(
-            *active_target_,
-            recedingConfig(
+        Vec3 activation_origin = measured.position;
+        if (recovery_.seed) {
+            if (!recoverySeedReady(now_s, measured) || !refreshCooperativeWorld(now_s)) return false;
+            activation_origin = *recovery_.seed;
+        }
+        // Resolve coverage from the exact planner/configuration being activated.
+        // In adaptive mode preAuthoritySpliceLookaheadS() is a zero sentinel,
+        // not a valid initial certification horizon. Keep authority unchanged
+        // until the optional recovery-seed check succeeds.
+        const Vec3 activation_target = planningGoalForState(measured);
+        const auto activation_target_velocity = last_target_prediction_velocity_;
+        auto activation_planner = std::make_unique<RecedingHorizonPlanner>(
+            activation_target,
+            withPlannerFeatures(recedingConfig(
                 initial_splice_timing_s_, preAuthoritySpliceLookaheadS(), spline_time_factor_, factor_alloc_,
                 factor_alloc_close_, close_to_goal_m_,
                 incumbent_failure_recheck_horizon_s_,
@@ -2518,14 +2756,42 @@ private:
                 require_terminal_hold_for_nominal_, require_rendezvous_backup_for_nominal_,
                 defer_incumbent_conflict_until_reaction_horizon_, emergency_panic_horizon_s_,
                 enable_octopus_useful_deadline_, octopus_post_search_reserve_s_,
-                moving_rendezvous_enabled_, active_target_velocity_.value_or(Vec3::Zero()),
+                moving_rendezvous_enabled_, activation_target_velocity,
                     terminal_time_target_prediction_enabled_, target_time_fixed_point_iterations_,
                     target_time_fixed_point_tolerance_s_, target_lead_max_s_,
-                    target_lead_high_confidence_max_s_, target_lead_max_distance_m_),
+                    target_lead_high_confidence_max_s_, target_lead_max_distance_m_)),
             localConfig(
-                measured.position, *active_target_, minimum_search_z_m_,
+                activation_origin, activation_target, minimum_search_z_m_,
                 smoother_jerk_weight_, smoother_goal_weight_,
                 octopus_pre_authority_max_runtime_s_));
+        if (recovery_.seed) {
+            try {
+                const auto current_world = world_->snapshot(now_s);
+                const auto hold = dynamic_planner::makeStationaryHoverTrajectory(activation_origin, now_s, .10);
+                auto checker = plannerSafetyChecker();
+                const auto safety = checker.checkCommitted(hold, now_s,
+                    now_s + activation_planner->chooseSpliceLookahead(), current_world);
+                if (!safety.safe || !world_->runIfVersionCurrent(current_world.version, []() {})) {
+                    latest_status_ = "RECOVERY_COMMON_HOLD_NOT_CERTIFIED";
+                    return false;
+                }
+            } catch (const std::exception& exc) {
+                latest_status_ = std::string("RECOVERY_COMMON_HOLD_NOT_CERTIFIED:") + exc.what();
+                return false;
+            }
+        }
+
+        ++epoch_;
+        prepared_candidate_ready_ = false;
+        authority_granted_ = false;
+        authority_fresh_plan_pending_ = false;
+        active_source_target_ = *latest_target_;
+        active_target_ = activation_target;
+        // Position and velocity must describe the same predicted rendezvous
+        // instant. This matters for curved targets: current velocity is not the
+        // terminal velocity several seconds around the scripted circle.
+        active_target_velocity_ = activation_target_velocity;
+        planner_ = std::move(activation_planner);
         // When the pre-authority Octopus budget is intentionally longer than
         // the active-flight budget, preAuthoritySpliceLookaheadS() moves the
         // splice into the future. A future splice only exists if the core has an
@@ -2537,7 +2803,7 @@ private:
             octopus_pre_authority_max_runtime_s_ > octopus_max_runtime_s_ + 1e-12;
         if (seed_stationary_on_activation_ || extended_pre_authority_seed) {
             CommittedTrajectory stationary_seed = dynamic_planner::makeStationaryHoverTrajectory(
-                measured.position, now_s, 0.10);
+                activation_origin, now_s, 0.10);
             planner_->initializeCommittedTrajectory(stationary_seed);
             shadow_commit_ = std::move(stationary_seed);
         } else {
@@ -2565,10 +2831,50 @@ private:
             std::numeric_limits<double>::infinity()};
         PlannerOutcome outcome = planner_future_.get();
         const bool discarded = outcome.epoch != epoch_;
-        writeReplanCsvRow(outcome, discarded);
-        if (discarded) return;
+        if (discarded) {
+            outcome.installation_rejection = "obsolete_authority_epoch";
+            writeReplanCsvRow(outcome, true);
+            return;
+        }
 
-        planner_ = std::move(outcome.planner);
+        // Native acceptance occurred on the worker's shadow planner. Install
+        // only while its world/epoch/splice certificate is still applicable.
+        // Prepare the throwing commitment copy before either live object moves.
+        if (!outcome.worker_exception && outcome.result.accepted) {
+            try {
+                std::optional<CommittedTrajectory> replacement_commit{
+                    outcome.planner->committedTrajectory()};
+                static_assert(std::is_nothrow_swappable_v<decltype(replacement_commit)>);
+                outcome.installation_rejection = dynamic_planner::installCertifiedReplacement(
+                    *world_, outcome.result, outcome.epoch, epoch_,
+                    outcome.candidate_available_time_s, get_clock()->now().seconds(),
+                    outcome.request_ros_time_s, authority_granted_, [&]() noexcept {
+                        planner_.swap(outcome.planner);
+                        shadow_commit_.swap(replacement_commit);
+                        outcome.authority_installed = true;
+                    }, [this] { return get_clock()->now().seconds(); },
+                    &outcome.authority_install_time_s);
+            } catch (const std::exception& exc) {
+                outcome.installation_rejection = std::string("installation_exception:") + exc.what();
+            }
+        }
+        if (!outcome.authority_installed) {
+            if (!outcome.worker_exception && !outcome.result.accepted) {
+                // No replacement occurred: preserve native bookkeeping such as
+                // measured GOAL_REACHED, matching the pre-port behaviour.
+                planner_ = std::move(outcome.planner);
+            } else {
+                planner_ = std::move(outcome.retained_planner);
+            }
+            // A completed rejected solve informs timing, not executable state
+            // or goal latches. Obsolete epochs returned above never seed history.
+            if (!outcome.worker_exception && outcome.result.attempted &&
+                std::isfinite(outcome.result.trajectory_elapsed_s) &&
+                outcome.result.trajectory_elapsed_s >= 0.0) {
+                planner_->setPreviousSpliceTiming(outcome.result.trajectory_elapsed_s);
+            }
+        }
+        writeReplanCsvRow(outcome, false);
         if (!terminal_time_target_prediction_enabled_ &&
             !outcome.worker_exception && outcome.result.attempted &&
             std::isfinite(outcome.result.replan_runtime_s) &&
@@ -2584,7 +2890,8 @@ private:
             return;
         }
         latest_replan_result_ = outcome.result;
-        latest_status_ = outcome.result.status;
+        latest_status_ = outcome.result.accepted && !outcome.authority_installed
+            ? "CALLER_REJECTED:" + outcome.installation_rejection : outcome.result.status;
         if (outcome.result.candidate_late) ++late_candidates_;
         if (!outcome.result.accepted && outcome.result.attempted) {
             const auto witness = finalCheckFailureWitness(outcome.result);
@@ -2607,16 +2914,8 @@ private:
 
         if (outcome.result.incumbent_prefix_unsafe && authority_granted_) {
             if (outcome.result.attempted) ++failed_candidates_;
-            State measured;
-            double age_s = 0.0;
-            const double now_s = get_clock()->now().seconds();
-            if (currentState(now_s, &measured, &age_s)) {
-                (void)activateExecutionFallback(
-                    "INCUMBENT_REVALIDATION_UNSAFE", now_s, measured);
-            } else {
-                execution_fallback_pending_reason_ = "INCUMBENT_REVALIDATION_UNSAFE";
-                latest_status_ = "INCUMBENT_UNSAFE_STATE_STALE_FALLBACK_PENDING";
-            }
+            requestExecutionFallback("INCUMBENT_REVALIDATION_UNSAFE");
+            latest_status_ = "INCUMBENT_UNSAFE_FALLBACK_PENDING";
             return;
         }
 
@@ -2626,24 +2925,15 @@ private:
         // reaction horizon, install the existing measured-state emergency layer.
         if (!outcome.result.accepted &&
             outcome.result.incumbent_reaction_horizon_reached && authority_granted_) {
-            State measured;
-            double age_s = 0.0;
-            const double now_s = get_clock()->now().seconds();
-            if (currentState(now_s, &measured, &age_s)) {
-                (void)activateExecutionFallback(
-                    "INCUMBENT_REACTION_HORIZON_REACHED", now_s, measured);
-            } else {
-                execution_fallback_pending_reason_ = "INCUMBENT_REACTION_HORIZON_REACHED";
-                latest_status_ = "INCUMBENT_REACTION_HORIZON_STATE_STALE_FALLBACK_PENDING";
-            }
+            requestExecutionFallback("INCUMBENT_REACTION_HORIZON_REACHED");
+            latest_status_ = "INCUMBENT_REACTION_HORIZON_FALLBACK_PENDING";
             return;
         }
 
-        if (outcome.result.accepted) {
+        if (outcome.authority_installed) {
             const bool recovering_from_fallback = execution_fallback_active_;
             ++accepted_candidates_;
             if (planner_ && !planner_->committedTrajectory().empty()) {
-                shadow_commit_ = planner_->committedTrajectory();
                 if (!authority_granted_) {
                     if (authority_fresh_plan_pending_) {
                         // The first post-request solve uses a slightly longer handoff splice
@@ -2654,8 +2944,8 @@ private:
                         try {
                             auto normal_planner = std::make_unique<RecedingHorizonPlanner>(
                                 *active_target_,
-                                recedingConfig(
-                                    0.0, fixed_splice_lookahead_s_, spline_time_factor_, factor_alloc_,
+                                withPlannerFeatures(recedingConfig(
+                                    planner_->previousSpliceTiming(), fixed_splice_lookahead_s_, spline_time_factor_, factor_alloc_,
                                     factor_alloc_close_, close_to_goal_m_,
                                     incumbent_failure_recheck_horizon_s_,
                                     terminal_hold_guard_s_, terminal_hold_guard_interval_s_,
@@ -2665,7 +2955,7 @@ private:
                                     moving_rendezvous_enabled_, active_target_velocity_.value_or(Vec3::Zero()),
                                     terminal_time_target_prediction_enabled_, target_time_fixed_point_iterations_,
                                     target_time_fixed_point_tolerance_s_, target_lead_max_s_,
-                                    target_lead_high_confidence_max_s_, target_lead_max_distance_m_),
+                                    target_lead_high_confidence_max_s_, target_lead_max_distance_m_)),
                                 localConfig(
                                     outcome.request_state.position, *active_target_, minimum_search_z_m_,
                                     smoother_jerk_weight_, smoother_goal_weight_, octopus_max_runtime_s_));
@@ -2734,6 +3024,7 @@ private:
                     movingBasketTrajectoryFresh(certificate_now_s);
                 const std::uint64_t current_world_version = world_->currentVersion();
                 const bool core_recheck_is_current =
+                    !outcome.result.accepted &&
                     version_tracks_live_dynamic_inputs &&
                     live_dynamic_inputs_still_valid &&
                     outcome.result.incumbent_recheck_performed &&
@@ -2751,7 +3042,7 @@ private:
                          refreshCooperativeWorld(now_s))) {
                         try {
                             const WorldSnapshot latest_world = world_->snapshot(now_s);
-                            dynamic_planner::TrajectorySafetyChecker checker(1e-7);
+                            auto checker = plannerSafetyChecker();
                             const double check_until_s = shadow_commit_->endsInStoppedHold()
                                 ? std::max(shadow_commit_->endTime(),
                                            now_s + incumbent_failure_recheck_horizon_s_)
@@ -2775,10 +3066,9 @@ private:
                                     defer_incumbent_conflict_until_reaction_horizon_ &&
                                     time_to_conflict_s > fallback_horizon_s;
                                 if (!defer_conflict) {
-                                    (void)activateExecutionFallback(
+                                    requestExecutionFallback(
                                         "FAILED_REPLAN_LIVE_INCUMBENT_IMMINENT:" +
-                                        incumbent.obstacle_name,
-                                        now_s, measured);
+                                        incumbent.obstacle_name);
                                 } else {
                                     latest_status_ =
                                         "FAILED_REPLAN_FUTURE_CONFLICT_REPLAN_CONTINUES:" +
@@ -2786,8 +3076,8 @@ private:
                                 }
                             }
                         } catch (const std::exception& exc) {
-                            execution_fallback_pending_reason_ =
-                                std::string("FAILED_REPLAN_INCUMBENT_RECHECK_EXCEPTION:") + exc.what();
+                            requestExecutionFallback(
+                                std::string("FAILED_REPLAN_INCUMBENT_RECHECK_EXCEPTION:") + exc.what());
                             latest_status_ = "FAILED_REPLAN_INCUMBENT_RECHECK_EXCEPTION_FALLBACK_PENDING";
                         }
                     }
@@ -2800,6 +3090,10 @@ private:
         pollPlannerFuture();
         if (!enabled_) {
             tryActivate();
+            return;
+        }
+        if (!execution_fallback_pending_reason_.empty()) {
+            // Only referenceTimer retries installation with fresh measured state.
             return;
         }
         if (planner_future_.valid()) {
@@ -2892,7 +3186,7 @@ private:
                     : fixed_splice_lookahead_s_;
                 planner_ = std::make_unique<RecedingHorizonPlanner>(
                     *active_target_,
-                    recedingConfig(
+                    withPlannerFeatures(recedingConfig(
                         carried_timing_s, rebuild_splice_lookahead_s, spline_time_factor_, factor_alloc_,
                         factor_alloc_close_, close_to_goal_m_,
                         incumbent_failure_recheck_horizon_s_,
@@ -2903,7 +3197,7 @@ private:
                         moving_rendezvous_enabled_, active_target_velocity_.value_or(Vec3::Zero()),
                     terminal_time_target_prediction_enabled_, target_time_fixed_point_iterations_,
                     target_time_fixed_point_tolerance_s_, target_lead_max_s_,
-                    target_lead_high_confidence_max_s_, target_lead_max_distance_m_),
+                    target_lead_high_confidence_max_s_, target_lead_max_distance_m_)),
                     localConfig(
                         local_bounds_start, *active_target_, minimum_search_z_m_,
                         smoother_jerk_weight_, smoother_goal_weight_,
@@ -2924,6 +3218,16 @@ private:
             return;
         }
 
+        // Keep the pre-solve incumbent and goal state until caller installation.
+        // Copy before moving planner_ so allocation failure cannot remove it.
+        std::unique_ptr<RecedingHorizonPlanner> retained_planner;
+        try {
+            retained_planner = std::make_unique<RecedingHorizonPlanner>(*planner_);
+        } catch (const std::exception& exc) {
+            ++planner_worker_errors_;
+            latest_status_ = std::string("WORKER_PREPARATION_FAILED:") + exc.what();
+            return;
+        }
         auto planner = std::move(planner_);
         const std::uint64_t epoch = epoch_;
         const std::uint64_t sequence = ++replan_sequence_;
@@ -2943,7 +3247,7 @@ private:
         auto ros_clock = get_clock();
         planner_future_ = std::async(
             std::launch::async,
-            [sequence, epoch, planner = std::move(planner), target, target_predictor, world,
+            [sequence, epoch, planner = std::move(planner), retained_planner = std::move(retained_planner), target, target_predictor, world,
              ros_clock, measured, now_s, submitted_octopus_wall_budget_s]() mutable {
                 PlannerOutcome outcome;
                 outcome.sequence = sequence;
@@ -2953,6 +3257,8 @@ private:
                 outcome.request_state = measured;
                 outcome.target = target;
                 outcome.planner = std::move(planner);
+                outcome.retained_planner = std::move(retained_planner);
+                outcome.previous_timing_s = outcome.planner->previousSpliceTiming();
                 try {
                     const TrajectoryTimeSource trajectory_clock = [ros_clock]() {
                         return ros_clock->now().seconds();
@@ -2967,6 +3273,7 @@ private:
                     outcome.worker_exception = true;
                     outcome.worker_error = "unknown exception";
                 }
+                outcome.candidate_available_time_s = ros_clock->now().seconds();
                 return outcome;
             });
     }
@@ -2989,11 +3296,10 @@ private:
             return;
         }
 
-        if (!execution_fallback_pending_reason_.empty() && authority_granted_ &&
-            !execution_fallback_active_) {
+        if (!execution_fallback_pending_reason_.empty() && authority_granted_) {
             const std::string pending_reason = execution_fallback_pending_reason_;
-            execution_fallback_pending_reason_.clear();
-            (void)activateExecutionFallback(pending_reason, now_s, measured);
+            if (activateExecutionFallback(pending_reason, now_s, measured) ==
+                ExecutionFallbackOutcome::NotInstalled) return;
         }
 
         updateExecutionTrackingDiagnostics(now_s, measured);
@@ -3012,7 +3318,8 @@ private:
                        << execution_position_error_.y() << ' '
                        << execution_position_error_.z() << "] vel_norm="
                        << execution_velocity_error_.norm();
-                (void)activateExecutionFallback(reason.str(), now_s, measured);
+                if (activateExecutionFallback(reason.str(), now_s, measured) ==
+                    ExecutionFallbackOutcome::NotInstalled) return;
                 // Re-evaluate diagnostics against the newly installed fallback
                 // before publishing its first rolling window.
                 updateExecutionTrackingDiagnostics(now_s, measured);
@@ -3022,7 +3329,12 @@ private:
         auto publish_window = [&](
             const dynamic_planner::ReferenceWindow& window, double sampled_at_s) {
             const rclcpp::Time publish_time = get_clock()->now();
-            const builtin_interfaces::msg::Time publish_stamp = publish_time;
+            // Opt-in executing references carry sample time, not serialization
+            // time. Pre-authority frozen windows remain readiness evidence only.
+            const builtin_interfaces::msg::Time publish_stamp =
+                (stopped_continuation_enabled_ && authority_granted_)
+                ? rclcpp::Time(static_cast<std::int64_t>(std::llround(sampled_at_s * 1e9)),
+                               get_clock()->get_clock_type()) : publish_time;
             const auto message = makeReferenceMessage(
                 window, publish_stamp, frame_id_, vehicle_id_);
             if (message.points.size() != 61U) {
@@ -3034,6 +3346,13 @@ private:
                 latest_reference_positions_.push_back(sample.state.position);
             }
             shadow_reference_pub_->publish(message);
+            if (recovery_continuation_pub_) {
+                const auto full = sampleStoppedContinuation(*shadow_commit_, sampled_at_s, reference_config_);
+                recovery_continuation_pub_->publish(makeReferenceMessage(
+                    full, publish_stamp, frame_id_, vehicle_id_));
+            }
+            publishRecoveryStatus(static_cast<std::int64_t>(publish_stamp.sec) * 1000000000LL +
+                                  publish_stamp.nanosec);
             if (last_reference_ros_s_.has_value()) {
                 last_reference_period_ms_ = 1e3 * (now_s - *last_reference_ros_s_);
             }
@@ -3602,7 +3921,13 @@ private:
                     << safeCsvField(result.recheck_error) << ','
                     << result.incumbent_recheck_performed << ','
                     << result.incumbent_recheck_world_version << ','
-                    << outcome.worker_exception << ',' << safeCsvField(outcome.worker_error) << '\n';
+                    << outcome.worker_exception << ',' << safeCsvField(outcome.worker_error) << ','
+                    << outcome.previous_timing_s << ',' << result.trajectory_elapsed_s << ','
+                    << outcome.candidate_available_time_s << ',';
+        if (result.certified_world_version) replan_csv_ << *result.certified_world_version;
+        replan_csv_ << ',' << outcome.authority_installed << ',';
+        if (outcome.authority_installed) replan_csv_ << outcome.authority_install_time_s;
+        replan_csv_ << ',' << safeCsvField(outcome.installation_rejection) << '\n';
         replan_csv_.flush();
     }
 
@@ -3723,7 +4048,8 @@ private:
              << cooperative_state_samples_.size() << " min_future_s="
              << (std::isfinite(cooperative_min_future_coverage_s)
                     ? cooperative_min_future_coverage_s : -1.0)
-             << " max_track_ratio=" << cooperative_max_tracking_ratio << "\n"
+             << " max_track_ratio=" << cooperative_max_tracking_ratio
+             << " tracking_enforced=" << cooperative_tracking_safety_enabled_ << "\n"
              << "terminal-hold guard s: " << terminal_hold_guard_s_ << "\n"
              << "coalesced/stale-replan/stale-reference/worker-errors: "
              << coalesced_replan_triggers_ << " / " << stale_state_replan_skips_ << " / "
@@ -3858,6 +4184,17 @@ private:
     std::string enable_topic_;
     std::string authority_topic_;
     std::string authority_ack_topic_;
+    bool reference_recovery_enabled_ = false;
+    bool stopped_continuation_enabled_ = false;
+    std::string recovery_request_topic_;
+    std::string recovery_status_topic_;
+    std::string recovery_continuation_topic_;
+    rclcpp::Publisher<trajectory_msgs::msg::MultiDOFJointTrajectory>::SharedPtr recovery_continuation_pub_;
+    ReferenceRecoveryContext recovery_;
+    std::int64_t recovery_reference_stamp_ns_ = 0;
+    bool recovery_reference_granted_ = false;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr recovery_status_pub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr recovery_request_sub_;
     std::string shadow_reference_topic_;
     std::string diagnostics_topic_;
     std::string marker_topic_;
@@ -3881,6 +4218,7 @@ private:
     double minimum_search_z_m_ = 0.20;
     double initial_splice_timing_s_ = 0.16;
     double fixed_splice_lookahead_s_ = 0.0;
+    bool temporal_refinement_enabled_ = false;
     double octopus_max_runtime_s_ = 2.0;
     double octopus_pre_authority_max_runtime_s_ = 2.0;
     bool reuse_prepared_commit_on_authority_ = false;
@@ -3930,6 +4268,11 @@ private:
     double estimated_solve_runtime_s_ = 0.50;
     bool seed_stationary_on_activation_ = true;
     double max_swing_angle_rad_ = 15.0 * kPi / 180.0;
+    double suspended_cable_length_m_ = 0.50;
+    double magnet_center_below_cable_end_m_ = 0.025;
+    bool workspace_bounds_enabled_ = false;
+    Vec3 workspace_min_ = Vec3(-2.5, -2.5, 0.);
+    Vec3 workspace_max_ = Vec3(2.5, 2.5, 3.5);
     bool payload_collision_enabled_ = false;
     bool require_payload_attached_for_enable_ = false;
     Vec3 payload_half_extents_ = Vec3(0.05, 0.01, 0.003);
@@ -3946,6 +4289,7 @@ private:
     double cooperative_state_timeout_s_ = 0.30;
     double cooperative_prediction_horizon_s_ = 20.0;
     Vec3 cooperative_physical_half_extents_ = Vec3(0.105, 0.105, 0.060);
+    bool cooperative_tracking_safety_enabled_ = true;
     Vec3 cooperative_tracking_error_half_extents_ = Vec3::Constant(0.10);
     bool cooperative_attached_tether_enabled_ = false;
     int cooperative_ring_pose_index_ = 1;

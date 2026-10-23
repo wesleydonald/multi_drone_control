@@ -2,6 +2,8 @@ name: m1_full_orbit
 description: 'Full M1 on the rig twin on the circle (0.125 m/s, Wesley 10 Oct; exploratory): as m1_full_hover with the ring orbiting from 5 s after the lift; DETACH 3 half way round (the ring at its far +y point, so QUAD4 steps out clear of the carriers'' path); his rejoin on the moving ring as m1c_orbit.'
 world: three_rigid_ground_rig_attach_welded_pickup.sdf
 ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

@@ -1,6 +1,7 @@
 #include "tejen_dynamic_planner/reference_message.hpp"
 
 #include <cmath>
+#include <algorithm>
 #include <cstddef>
 #include <builtin_interfaces/msg/duration.hpp>
 #include <cstdint>
@@ -49,6 +50,27 @@ void validateState(const dynamic_planner::State& state) {
 }
 
 }  // namespace
+
+dynamic_planner::ReferenceWindow sampleStoppedContinuation(
+    const dynamic_planner::CommittedTrajectory& trajectory,
+    double now_s,
+    const dynamic_planner::ReferenceWindowConfig& config) {
+    if (trajectory.empty() || !trajectory.endsInStoppedHold()) {
+        throw std::invalid_argument("recovery companion requires an actual committed stopped tail");
+    }
+    auto result = dynamic_planner::sampleCommittedReferenceWindow(trajectory, now_s, config);
+    const double last_offset = std::max(0., trajectory.endTime() - now_s);
+    const double count = std::ceil(last_offset / result.sample_period_s) + 1.;
+    if (!std::isfinite(count) || count >= static_cast<double>(std::numeric_limits<std::size_t>::max())) {
+        throw std::overflow_error("stopped continuation sample count overflow");
+    }
+    const auto required = static_cast<std::size_t>(count);
+    for (std::size_t k = result.samples.size(); k < required; ++k) {
+        const double offset = static_cast<double>(k) * result.sample_period_s;
+        result.samples.push_back({now_s + offset, offset, trajectory.evaluate(now_s + offset)});
+    }
+    return result;
+}
 
 trajectory_msgs::msg::MultiDOFJointTrajectory makeReferenceMessage(
     const dynamic_planner::ReferenceWindow& window,

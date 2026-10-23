@@ -36,9 +36,9 @@ def _hex(rviz_colour):
 DRONE_HEX = [_hex(c) for c, _ in _RVIZ_DRONE_COLOURS]
 PAYLOAD_HEX = _hex(_RVIZ_PAYLOAD_COLOUR)
 
-# The one deliberate divergence from the RViz palette: RViz's gold reads against a dark
-# viewport, not against white paper.
-PAYLOAD_LINE = '#b8860b'
+# The one deliberate divergence from the RViz palette: the ring is black on paper (Wesley, 23 Oct),
+# which leaves red and blue free for comparisons.
+PAYLOAD_LINE = '#000000'
 
 # For cross-run overlays, and deliberately NOT the drone palette: there colour means
 # "which run", and sharing would make the same blue mean drone 0 on the facing page.

@@ -9,6 +9,7 @@ launch:
   file: sim_control_launch.py
   args:
     mode: mpc
+    cable_len: 0.55        # pinned 22 Oct: the default before the 1 m cables
     num_drones: 3
 io_launch:
   file: sim_io_launch.py

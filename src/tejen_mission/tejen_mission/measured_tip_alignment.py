@@ -178,6 +178,7 @@ class TrackingTipAlignment:
         self.xy_error_m = self.clearance_m = float('nan')
         self.updating = False
         self.reason = 'inactive'
+        self.descent = None
 
     @property
     def saturated(self):
@@ -190,8 +191,11 @@ class TrackingTipAlignment:
         self.speed_ready = self.updating = False
         self.relative_speed_mps = float('nan')
         self.reason = reason
+        if self.descent is not None:
+            self.descent.invalidate()
 
     def reset(self):
+        self.descent = None
         self.offset_xy[:] = 0.
         self.xy_error_m = self.clearance_m = float('nan')
         self.invalidate('inactive')
@@ -231,6 +235,33 @@ class TrackingTipAlignment:
             self.offset_xy, self.filtered_error_xy = bounded_xy_trim(
                 self.offset_xy, self.filtered_error_xy, error, dt, self.config)
 
+    def start_descent(self, **geometry):
+        """Transfer the learned trim to the existing tier kernel; one trim owner."""
+        alignment = TipAlignment(self.config)
+        alignment.offset_xy = self.offset_xy.copy()
+        alignment.filtered_error_xy = self.filtered_error_xy.copy()
+        self.descent = TieredDescent(alignment, **geometry)
+
+    def step_descent(self, *, now_s, sample_stamp_s, relative_position,
+                     error_world_xy, clearance_m, fresh):
+        # Keep the existing relative-motion filter, but only the tier kernel
+        # integrates trim during descent. LOW and stale data freeze both clocks.
+        self.step(now_s=now_s, sample_stamp_s=sample_stamp_s,
+                  relative_position=relative_position, error_world_xy=error_world_xy,
+                  clearance_m=clearance_m, fresh=fresh, learning=False)
+        if self.descent is None:
+            return
+        self.descent.step(now_s=now_s, error_world_xy=error_world_xy,
+                          clearance_m=clearance_m,
+                          relative_speed_mps=self.relative_speed_mps,
+                          fresh=fresh and self.speed_ready)
+        self.offset_xy = self.descent.alignment.offset_xy.copy()
+        self.filtered_error_xy = self.descent.alignment.filtered_error_xy.copy()
+        self.reason = self.descent.reason
+        self.updating = bool(fresh and self.speed_ready and self.descent.band == 'HIGH'
+                             and clearance_m >= self.config.min_normal_m
+                             and self.relative_speed_mps <= self.config.max_relative_speed_mps)
+
 
 class TieredDescent:
     """M1's local HIGH/LOW progress, not a separate mission state machine.
@@ -240,16 +271,24 @@ class TieredDescent:
     """
 
     def __init__(self, alignment, *, start_height_m, floor_m, speed_mps,
-                 high_xy_m=.05):
+                 high_xy_m=.05, low_speed_mps=None, low_entry_height_m=None,
+                 pause_low_for_xy=True):
         self.alignment = alignment
         self.height_m = float(start_height_m)
         self.raise_ceiling_m = max(float(start_height_m), alignment.config.pre_low_normal_m)
         self.floor_m = float(floor_m)
         self.speed_mps = float(speed_mps)
         self.high_xy_m = float(high_xy_m)
+        self.low_speed_mps = self.speed_mps if low_speed_mps is None else float(low_speed_mps)
+        self.low_entry_height_m = (alignment.config.min_normal_m if low_entry_height_m is None
+                                  else float(low_entry_height_m))
+        self.pause_low_for_xy = bool(pause_low_for_xy)
         if (not all(math.isfinite(v) for v in
-                    (self.height_m, self.floor_m, self.speed_mps, self.high_xy_m))
-                or self.speed_mps <= 0 or self.high_xy_m < alignment.config.low_xy_m
+                    (self.height_m, self.floor_m, self.speed_mps, self.high_xy_m,
+                     self.low_speed_mps, self.low_entry_height_m))
+                or min(self.speed_mps, self.low_speed_mps) <= 0
+                or not self.floor_m < self.low_entry_height_m <= alignment.config.min_normal_m
+                or self.high_xy_m < alignment.config.low_xy_m
                 or self.height_m < self.floor_m
                 or self.floor_m >= alignment.config.min_normal_m):
             raise ValueError('invalid tiered pickup descent geometry or speed')
@@ -295,14 +334,15 @@ class TieredDescent:
                 self.reason = tip.reason
                 return
             if not tip.pre_low_ready and (tip.pre_low_active or
-                    self.height_m <= cfg.min_normal_m+self.speed_mps*dt):
+                    self.height_m <= self.low_entry_height_m+self.speed_mps*dt):
                 self.reason = tip.reason
                 return
         tolerance = cfg.low_xy_m if self.band == 'LOW' else self.high_xy_m
-        if xy > tolerance:
+        if xy > tolerance and (self.band == 'HIGH' or self.pause_low_for_xy):
             self.reason = 'Z frozen while XY catches up'
             return
-        self.height_m = advance_contact_height(self.height_m, self.floor_m, self.speed_mps, dt)
-        if self.height_m <= cfg.min_normal_m and tip.pre_low_ready:
+        speed = self.low_speed_mps if self.band == 'LOW' else self.speed_mps
+        self.height_m = advance_contact_height(self.height_m, self.floor_m, speed, dt)
+        if self.height_m <= self.low_entry_height_m and tip.pre_low_ready:
             self.band = 'LOW'
         self.reason = 'contact_height_reached' if self.complete else 'descent advancing'

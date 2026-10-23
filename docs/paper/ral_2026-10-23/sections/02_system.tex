@@ -1,0 +1,21 @@
+\section{System}
+\label{sec:system}
+
+\emph{Payload.} The payload is a ring of mass $m_L = 0.86$\,kg carrying twelve magnet plates every $30^\circ$ at
+radius $r = 0.225$\,m (Fig.~\ref{fig:geometry}). Plates are numbered clockwise from the ring's $+x$ axis seen from
+above. A carrier hangs from a plate on a link of length $l_i$, 1\,m in the results here, whose lower end holds an
+electromagnet switched over the carrier's radio channel; the links fly at about $60^\circ$ from horizontal. The
+magnet catches only on contact with its plate, so a release needs no mechanism beyond switching it off.
+
+\emph{Rig.} The carriers are 0.55\,kg quadrotors on unmodified Betaflight flight controllers, whose inner rate loop
+is kept; our trackers send a collective throttle and three body-rate commands over the radio link. A motion-capture
+system measures the pose of every quadrotor, the ring and the links' lower ends in a $6\times6\times4$\,m cage, and a
+position limit of $\pm1.75$\,m lands the fleet if any quadrotor leaves it. Thrust is affine in throttle, with an
+offset that grows with the carried mass and falls with battery voltage; the map was identified on the rig from free
+hovers with hung masses over the battery's range.
+
+\emph{Digital twin.} A Gazebo \cite{koenig2004gazebo} model under ROS~2 \cite{macenski2022ros2} reproduces the
+rig: the same masses, geometry, identified thrust map and rate-loop model, the motion-capture velocity filter, and
+the same planner, trackers and safety logic, launched unchanged against simulated topics. The twin models every link
+as rigid, whereas the rig's tethers can go slack; slack-cable effects and the rig's unmodelled aerodynamics are
+therefore its honest limit, and the rig flights are the check on it.

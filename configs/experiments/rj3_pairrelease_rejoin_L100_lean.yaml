@@ -1,0 +1,107 @@
+criteria:
+  forbid_abort: false
+  min_payload_z: -1.0
+  min_peak_payload_z: 0.5
+description: 'Card 2026-10-23_rejoin_departed E5 (world three_rigid_ground_rig_T_push_L100, Wesley 23 Oct
+  ~08:00): E2 with a +0.0066 N m torque on the ring about world x from 1 s after the RELEASE, so the
+  opposite pair leans 3.0 deg toward plate 3 (with the release stub''s 0.75) when drone 1 re-welds there.'
+events:
+- do: ARM
+  t: 3.0
+- do: TAKEOFF
+  t: 6.0
+- arg: 0.3 60
+  do: WAIT_LIFT
+  t: 8.0
+- arg: 1
+  do: RELEASE
+  t: 35.0
+- arg: 0 0 0 0.0066 0 0
+  do: WRENCH
+  t: 36.0
+- arg: 1
+  do: ATTACH
+  t: 55.0
+- arg: 50 REJOIN WELD drone 2
+  do: WAIT_LOG
+  t: 56.0
+- do: LAND
+  t: 86.0
+fleet:
+  num_drones: 3
+  n_total: 3
+io_launch:
+  args:
+    detach: true
+    num_drones: 3
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    tether_tips: true
+    tether_len: 1.0
+  file: sim_io_launch.py
+launch:
+  args:
+    departed_land: false
+    attach_azimuths_deg: 0,90,180
+    attach_radius: 0.225
+    attach_z: 0.02
+    cable_len: 1.0
+    creep_vel: 0.2
+    drone_mass: 0.55
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.15
+    load_mass: 0.86
+    load_traj: hover
+    measure_rod_len: true
+    mode: dissipative
+    num_drones: 3
+    params_file: /home/wesley/multi_drone_control/configs/rig/chain_pair_tip.yaml
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    reconfig_mode: ocp
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.0
+    throttle_max: 0.8
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    departed_ground_idle: true
+    rejoin_departed: true
+  file: sim_control_launch.py
+  package: bringup
+name: rj3_pairrelease_rejoin_L100_lean
+timing:
+  duration_s: 220.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+world: three_rigid_ground_rig_T_push_L100.sdf
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    baseline:
+      pos:
+      - 2.0
+      - -4.6
+      - 2.9
+      look_at:
+      - 0.35
+      - 0.0
+      - 1.1
+      hfov_deg: 60.0
+      size:
+      - 1280
+      - 720

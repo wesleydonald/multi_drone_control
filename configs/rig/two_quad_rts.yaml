@@ -1,0 +1,5 @@
+# 22 Oct rig, two carriers: as two_quad_nohold.yaml with the trackers flying the plan advanced by its age
+# (ref_time_shift, flown in the twin's corner study, never on the rig). One variable against RIG-1022-h2t9p: the pair's
+# 1.4 Hz swing, where the quads' references follow their own motion ~90-100 ms late
+drop_tilt_deg: 55.0
+ref_time_shift: true

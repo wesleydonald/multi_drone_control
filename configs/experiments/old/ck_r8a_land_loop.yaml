@@ -3,6 +3,8 @@ description: 'check run 10 Oct (merge gate for Wednesday): the sheet''s first r8
   with the tip loop on as attach_m1.yaml flies it, LAND ~15 s into the hold over plate 9 (QUAD4 steps out and lands
   by itself; the fleet disarm at LANDED takes it). Base twin_tf_weld_on (rev 5 arm W) with the weld off.'
 world: three_rigid_ground_rig_attach.sdf
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

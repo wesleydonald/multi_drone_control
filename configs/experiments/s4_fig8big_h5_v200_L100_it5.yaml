@@ -1,0 +1,99 @@
+name: s4_fig8big_h5_v200_L100_it5
+description: 'Scalability S (card docs/experiments/2026-10-23_scalability.md): b4_fig8big_h5_v200_L100_ema with plan_sqp_iters
+  5 and plan_fast_refs on: the 5-iteration base of the closed-loop table, flown with the speed-ups on (it doubles as the switch''s
+  twin smoke run against the b22 bands). The carriers'' velocity filter is typed after Wed 28''s A/B. Falsifier (exploratory
+  until the card''s claim runs): an abort or drop, a failed solve, or ring rocking that grows over the flight.'
+lab_env:
+  SIM_MOCAP_VEL_FILTER: 'ema'
+  MDC_MOCAP_VEL_DRONES: '0,1,2,3'
+world: four_rigid_ground_rig_L100.sdf
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    mode: dissipative
+    num_drones: 4
+    attach_azimuths_deg: 0,270,180,90
+    load_traj: fig_8
+    fig8_size: 1.0
+    target_z: 1.0
+    lift_ramp_vel: 0.15
+    creep_vel: 0.2
+    pretension_s: 3.0
+    start_taut: false
+    cable_len: 1.0
+    attach_radius: 0.225
+    attach_z: 0.02
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    load_mass: 0.86
+    drone_mass: 0.55
+    measure_rod_len: true
+    rod_tol_frac: 0.25
+    rod_spread_m: 0.08
+    z_taut_gate: 0.9
+    z_i_gate: 0.25
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    reconfig_mode: ocp
+    thrust_ratio: 35.2
+    takeoff_thrust_ratio: 0.0
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    throttle_max: 0.8
+    kt_trim: false
+    departed_land: true
+    departed_ground_idle: true
+    params_file: /home/wesley/multi_drone_control/configs/rig/drop_and_land_hold5.yaml
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    sim_pack_v0: 23.8
+    traj_speed: 0.2
+    plan_sqp_iters: 5
+    plan_fast_refs: true
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 4
+    sim_thrust_map: rig
+    sim_pack_v0: 23.8
+fleet:
+  num_drones: 4
+  n_total: 4
+timing:
+  duration_s: 146.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 91.0
+  do: LAND
+criteria:
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    baseline:
+      pos:
+      - 2.0
+      - -4.6
+      - 2.9
+      look_at:
+      - 0.35
+      - 0.0
+      - 1.1
+      hfov_deg: 60.0
+      size:
+      - 1280
+      - 720

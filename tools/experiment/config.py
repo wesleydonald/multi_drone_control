@@ -12,6 +12,7 @@ durations. A config that is wrong in one of those ways still runs happily for a 
 and produces a directory full of numbers, which is worse than not running at all. So
 anything checkable is checked before Gazebo is started.
 """
+import math
 import re
 import os
 
@@ -33,7 +34,8 @@ EVENT_KINDS = {
     'DISARM',     # /fleet/command "DISARM": the operator's kill switch (panel/spacebar); latches the
                   # muxes like ESTOP (Wesley 2026-09-28) through the service disarm path
     'MAGNET',     # /magnet/command "ON"/"OFF"  -> starts the approach + weld
-    'ATTACH',     # /fleet/attach <drone id>    -> tell the network directly
+    'ATTACH',     # /fleet/attach <drone id>    -> tell the network directly; a carrier's id (below
+                  # num_drones) is a departed carrier's rejoin (rejoin_departed, card 2026-10-23_rejoin_departed)
     'DETACH',     # /fleet/detach <drone id>
     'RELEASE',    # /drone_<id>/detach only: the joint lets go and the planner is NOT told
                   # (an unannounced detach, a magnet failing mid-mission; 7 Oct)
@@ -86,7 +88,84 @@ EVENT_KINDS = {
                   # the arg's regex (any time this run), then time later events from that line; arg
                   # '[timeout_s] regex', e.g. '60 approach: drone 3 descend' (event LOGGED or
                   # LOG_TIMEOUT). Times an event into a planner phase that has no topic of its own.
+    'TASK',       # /fleet/task "d x,y,z,dwell; ...": staged carrier d flies to each waypoint (world m), holds there
+                  # dwell s, then back to its staging point (rejoin_task, card 2026-10-23_scalability case 6)
+    'WAIT_TRAJ',  # not published: block until the planner's trajectory clock (/payload/trajectory_state) has reached
+                  # the arg, then time later events from that sample; arg 't_s [timeout_s]' or 'lap laps [timeout_s]'
+                  # ('lap 1.5': half way round the second lap; card 2026-10-23_scalability case 7) (event TRAJ_REACHED
+                  # or TRAJ_TIMEOUT)
 }
+
+# rejoin_task's waypoints, as the planner bounds them: inside its staging bound (the 1.75 m limit less 0.18 m,
+# dissipative_node._stage_lim) and high enough that the rod's end clears the floor
+TASK_LIMIT_INSET_M = 0.18
+TASK_ROD_CLEAR_M = 0.35
+# the paths that fly laps (mpc_planner.load_trajectory.LAPPED)
+LAPPED_KINDS = ('circle', 'spin', 'fig_8', 'line_spin')
+
+# The twin's rig-fidelity switches, read from the environment by the sim nodes at start (cards
+# 2026-10-14_tracker_timing, 2026-10-22_velocity_filter). run_experiment.py sets a config's `lab_env:` for every
+# process of the run, on the laptop and in the lab container alike, and records it in the manifest.
+LAB_ENV = {'SIM_CMD_DELAY_S': float, 'SIM_CMD_DELAY_FROM_S': float, 'SIM_MOCAP_DELAY_S': float,
+           'SIM_MOCAP_DELAY_FROM_S': float, 'SIM_MOCAP_VEL_FILTER': ('none', 'ema', 'slope'),
+           'SIM_MOCAP_VEL_RING': ('ema', 'slope'), 'MDC_MOCAP_VEL_DRONES': str,
+           'TRACKER_CMD_NEXT_TICK': ('0', '1'), 'TRACKER_DELAY_COMP_S': float,
+           # per-channel command delay (card 2026-10-23_pair_mode_timing)
+           'SIM_CMD_DELAY_THR_S': float, 'SIM_CMD_DELAY_ATT_S': float}
+
+
+def lab_env(raw, path='config'):
+    """{name: string value} from a config's `lab_env:` mapping, refused on an unknown name or a bad value."""
+    env = {}
+    for k, v in (raw or {}).items():
+        kind = LAB_ENV.get(k)
+        if kind is None:
+            raise ValueError(f'{path}: lab_env {k} is not a known switch ({", ".join(sorted(LAB_ENV))})')
+        v = str(v).strip()
+        if kind is float:
+            try:
+                x = float(v)
+            except ValueError:
+                raise ValueError(f'{path}: lab_env {k}={v!r} is not a number') from None
+            # every numeric switch is a time or a gain: a negative or non-finite one is a typo
+            if not math.isfinite(x) or x < 0.0:
+                raise ValueError(f'{path}: lab_env {k}={v!r}, want a finite number >= 0')
+        elif isinstance(kind, tuple) and v not in kind:
+            raise ValueError(f'{path}: lab_env {k}={v!r}, want one of {kind}')
+        env[k] = v
+    return env
+
+
+def params_file_path(path):
+    """The file a config's params_file names, or None if there is none. A laptop path read in a lab slot's copy of
+    the tree is looked up under this tree's configs/."""
+    if not path:
+        return None
+    p = os.path.expanduser(str(path))
+    if not os.path.isabs(p):
+        p = os.path.join(REPO, p)
+    if not os.path.exists(p) and '/configs/' in p:
+        p = os.path.join(REPO, 'configs', p.split('/configs/', 1)[1])
+    return p if os.path.isfile(p) else None
+
+
+def params_file_knobs(path):
+    """{knob: value} of a config's params_file (sections flattened), or {} where it cannot be read."""
+    p = params_file_path(path)
+    if p is None:
+        return {}
+    try:
+        with open(p) as fh:
+            raw = yaml.safe_load(fh) or {}
+    except OSError:
+        return {}
+    out = {}
+    for k, v in raw.items():
+        if k == 'modes':
+            continue
+        out.update(v if isinstance(v, dict) else {k: v})
+    return out
+
 
 def wrench_arg(arg):
     """WRENCH arg -> (force (fx, fy, fz) in N, torque (tx, ty, tz) in N m, scoped link name):
@@ -169,6 +248,34 @@ def wait_log_arg(arg):
     return re.compile(rest.strip()), timeout
 
 
+def wait_traj_arg(arg):
+    """WAIT_TRAJ arg -> (target, in laps, timeout SIM s or None): 't_s [timeout_s]' (the trajectory clock) or
+    'lap laps [timeout_s]' (that many laps of the path)."""
+    parts = str(arg if arg is not None else '').split()
+    laps = bool(parts) and parts[0].lower() == 'lap'
+    try:
+        vals = [float(v) for v in (parts[1:] if laps else parts)]
+    except ValueError:
+        vals = []
+    if not 1 <= len(vals) <= 2 or not all(math.isfinite(v) and v > 0.0 for v in vals):
+        raise ValueError(f"WAIT_TRAJ arg {arg!r}: expected 't_s [timeout_s]' or 'lap laps [timeout_s]', each > 0")
+    return vals[0], laps, (vals[1] if len(vals) == 2 else None)
+
+
+def task_arg(arg):
+    """TASK arg -> (drone id, [(x, y, z, dwell s), ...]): 'd x,y,z,dwell; x,y,z,dwell; ...' (world m), as the planner
+    reads /fleet/task (dissipative_node.parse_task)."""
+    head, _, rest = str(arg if arg is not None else '').strip().partition(' ')
+    try:
+        d = int(head)
+        wps = [tuple(float(v) for v in part.split(',')) for part in rest.split(';') if part.strip()]
+    except ValueError:
+        d, wps = -1, []
+    if d < 0 or not wps or any(len(w) != 4 or not all(math.isfinite(v) for v in w) or w[3] < 0.0 for w in wps):
+        raise ValueError(f"TASK arg {arg!r}: expected 'drone_id x,y,z,dwell[; x,y,z,dwell ...]', finite, dwell >= 0")
+    return d, wps
+
+
 # SIM seconds an ESTOP run must keep recording after /fleet/abort (drones staying down)
 ESTOP_STAY_DOWN_S = 5.0
 
@@ -210,6 +317,10 @@ class Event:
             wait_reweld_arg(self.arg, self.do)
         if self.do == 'WAIT_LOG':
             wait_log_arg(self.arg)
+        if self.do == 'WAIT_TRAJ':
+            wait_traj_arg(self.arg)
+        if self.do == 'TASK':
+            task_arg(self.arg)
         if self.do == 'WAIT_THRUST' and self.arg is not None and '{i}' not in str(self.arg):
             raise ValueError(f"WAIT_THRUST arg {self.arg!r} has no '{{i}}' for the drone id")
         if self.do == 'WRENCH':
@@ -341,6 +452,7 @@ class ExperimentConfig:
         c = ExperimentConfig(raw.get('name') or
                              os.path.splitext(os.path.basename(path))[0])
         c.description = raw.get('description', '')
+        c.env = lab_env(raw.get('lab_env'), path)
         c.mis_seed = bool(raw.get('mis_seed', False))
         c.geometry_exempt = dict(raw.get('geometry_exempt') or {})
         c.world = raw.get('world', c.world)
@@ -418,10 +530,84 @@ class ExperimentConfig:
         if self.criteria and self.criteria.window_from == 'weld':
             if not any(e.do in ('MAGNET', 'ATTACH', 'WAIT_WELD') for e in self.events):
                 bad.append("criteria window_from='weld' but no weld event is scheduled")
+        knobs = {**params_file_knobs(self.launch_args.get('params_file')), **self.launch_args}
+        if str(knobs.get('load_traj', '')).strip() == 'fig_8' and knobs.get('fig8_size') in (None, ''):
+            # Wesley 22 Oct: fig8_size sizes the figure-8 (profile 0.9), traj_radius only the circle, spin and orbit
+            bad.append('load_traj fig_8 without fig8_size: since 22 Oct the figure-8 is sized by fig8_size (profile '
+                       '0.9), no longer traj_radius; type the size it flies (before 22 Oct it flew traj_radius, '
+                       '0.5 untyped)')
+        bad += self._rejoin_problems(knobs)
+        bad += self._traj_problems(knobs)
         if bad:
             raise ValueError(f'{self.name}: invalid experiment config:\n  '
                              + '\n  '.join(bad))
         return True
+
+    def _rejoin_problems(self, knobs):
+        """An ATTACH of a carrier (an id below num_drones) is a departed carrier's rejoin: the planner refuses it
+        without rejoin_departed, and the rejoin flies only with its prerequisites typed (card
+        2026-10-23_rejoin_departed). knobs: launch.args over the typed params_file."""
+        def on(v):
+            return str(v).strip().lower() in ('1', 'true', 'yes')
+        carriers = sorted({e.arg for e in self.events if e.do == 'ATTACH' and e.arg < self.num_drones})
+        tasks = [task_arg(e.arg) for e in self.events if e.do == 'TASK']
+        if tasks and not (on(knobs.get('rejoin_task', '')) and on(knobs.get('rejoin_departed', ''))):
+            return ['TASK: a staged carrier flies a task only with rejoin_departed: true and rejoin_task: true']
+        if not on(knobs.get('rejoin_departed', '')):
+            return ([f'ATTACH of carrier(s) {carriers}: a departed carrier rejoins only with rejoin_departed: true']
+                    if carriers else [])
+        bad = []
+        if str(knobs.get('departed_land', '')).strip().lower() not in ('false', '0', 'no'):
+            bad.append('rejoin_departed needs departed_land: false (a staged carrier holds, it does not land)')
+        if str(knobs.get('reconfig_mode', 'ocp')).strip().lower() != 'ocp':
+            bad.append('rejoin_departed needs reconfig_mode ocp')
+        if self.launch_file != 'sim_control_launch.py' or str(self.launch_args.get('mode', '')) != 'dissipative':
+            bad.append('rejoin_departed flies only sim_control_launch.py mode: dissipative')
+        if not on(self.io_launch_args.get('tether_tips', False)):
+            bad.append("rejoin_departed needs io_launch tether_tips: true (the weld reads each rod's end)")
+        # rejoin_task (card 2026-10-23_scalability case 6): a carrier's id, every waypoint inside the planner's staging
+        # bound and high enough that the rod's end clears the floor
+        bound = float(knobs.get('pos_limit_m') or 1.75) - TASK_LIMIT_INSET_M
+        rod = float(knobs.get('cable_len') or self.io_launch_args.get('tether_len') or 1.0)
+        for d, wps in tasks:
+            if d >= self.num_drones:
+                bad.append(f'TASK of drone {d}: only a carrier (an id below num_drones {self.num_drones}) stages')
+            for x, y, z, _ in wps:
+                if max(abs(x), abs(y)) > bound + 1e-9:
+                    bad.append(f'TASK of drone {d}: waypoint ({x:g}, {y:g}) outside the staging bound +-{bound:.2f} m')
+                if z < rod + TASK_ROD_CLEAR_M - 1e-9:
+                    bad.append(f'TASK of drone {d}: waypoint z {z:g} m under the rod + {TASK_ROD_CLEAR_M:g} m '
+                               f'({rod + TASK_ROD_CLEAR_M:.2f} m): its end would near the floor')
+        return bad
+
+    def _traj_problems(self, knobs):
+        """traj_laps on a lapped path; traj_lap_hold_s with traj_laps over 1 in the twin's mode:=dissipative with
+        reconfig_mode ocp; WAIT_TRAJ on a path whose clock runs, 'lap x' within its laps (card 2026-10-23_scalability
+        case 7). knobs: launch.args over the typed params_file."""
+        kind = str(knobs.get('load_traj', '')).strip()
+        laps = knobs.get('traj_laps')
+        laps = 1 if laps in (None, '') else float(laps)
+        bad = []
+        if laps != 1 and (laps != int(laps) or laps < 1 or kind not in LAPPED_KINDS):
+            bad.append(f'traj_laps {laps:g} on load_traj {kind or "hover"}: a whole number of laps of '
+                       f'{", ".join(LAPPED_KINDS)}')
+        if float(knobs.get('traj_lap_hold_s') or 0.0) > 0.0:
+            if laps < 2:
+                bad.append('traj_lap_hold_s holds the path at the lap ends but the last: it needs traj_laps over 1')
+            if (self.launch_file != 'sim_control_launch.py' or str(self.launch_args.get('mode', '')) != 'dissipative'
+                    or str(knobs.get('reconfig_mode', 'ocp')).strip().lower() != 'ocp'):
+                bad.append('traj_lap_hold_s flies only sim_control_launch.py mode: dissipative with reconfig_mode ocp')
+        for e in self.events:
+            if e.do != 'WAIT_TRAJ':
+                continue
+            x, in_laps, _ = wait_traj_arg(e.arg)
+            if kind in ('', 'hover'):
+                bad.append(f'{e!r}: load_traj {kind or "hover"} has no trajectory clock to wait on')
+            elif in_laps and kind not in LAPPED_KINDS:
+                bad.append(f'{e!r}: a lap target needs a lapped path ({", ".join(LAPPED_KINDS)})')
+            elif in_laps and x > laps + 1e-9:
+                bad.append(f'{e!r}: the path flies {laps:g} lap(s), so lap {x:g} never comes')
+        return bad
 
     # ── launch plumbing ──────────────────────────────────────────────────────
 

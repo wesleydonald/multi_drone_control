@@ -466,6 +466,11 @@ class MotionCapturePublisher(Node):
                 if d in self.drone_parsers:
                     self.drone_parsers[d].vel_filter = VelocityFilter(mode, frames=frames)
             self.get_logger().warn(f'velocity filter {mode} ({frames} frames) on drones {drones}; the rest ema')
+        # the ring's own filter (card 2026-10-22_velocity_filter, the ring arm; critic before the rig): off = ema
+        ring_mode = os.environ.get('MDC_MOCAP_VEL_RING', 'ema').strip()
+        if ring_mode != 'ema':
+            self.payloadParseData.vel_filter = VelocityFilter(ring_mode, frames=int(os.environ.get('MDC_MOCAP_VEL_FRAMES', '4')))
+            self.get_logger().warn(f'velocity filter {ring_mode} on the ring')
         # Per-rigid-body publish throttle. Keyed by rb_id; the decimation happens
         # before parse_packet so the velocity dt widens with the actual spacing.
         min_period = (1.0 / MOCAP_MAX_PUBLISH_HZ) if MOCAP_MAX_PUBLISH_HZ > 0 else 0.0

@@ -111,6 +111,9 @@ def test_a_mocap_loss_the_run_injected_is_not_a_harness_failure():
     assert bad.check_health() is True and 'drone 3 mocap stale' in bad.failures[0]
     other = runner([0])
     assert other.check_health() is True                            # only the drone that was cut
+    landed = runner([])
+    landed.t_landed = 47.9                                         # R2634: at rest after /fleet/landed
+    assert landed.check_health() is False and not landed.failures
 
 
 def test_wait_reweld_holds_until_the_reweld_then_shifts():
@@ -339,3 +342,110 @@ def test_wait_pickup_free_arg_is_checked_when_the_config_loads():
     Event(2.0, 'WAIT_PICKUP_FREE')
     with pytest.raises(ValueError):
         Event(2.0, 'WAIT_PICKUP_FREE', '-1')
+
+
+# ── WAIT_TRAJ (card 2026-10-23_scalability case 7): the schedule timed on the planner's trajectory clock ─────────────
+
+def _traj_runner(events):
+    import json
+    from types import MethodType
+    from std_msgs.msg import String
+    from experiment.runner_node import ExperimentRunner
+    r = _waiting_runner(events)
+    r._traj_samples = []
+    r._traj_state_cb = MethodType(ExperimentRunner._traj_state_cb, r)
+
+    def state(t, traj_t, running=True, lap_s=0.0):
+        r.now = t
+        r._traj_state_cb(String(data=json.dumps({'traj_t': traj_t, 'running': running, 'lap_s': lap_s})))
+        r.fire_due_events()
+    r.state = state
+    return r
+
+
+def test_the_clock_a_planner_tick_flies():
+    """The state goes out at the start of the planner's tick, before a running path's clock advances (a hold takes
+    the advance back after it), so the tick flies traj_t + one tick; not before the path starts nor in the descent."""
+    pytest.importorskip('interfaces.msg')
+    from experiment.runner_node import traj_clock
+    assert traj_clock({'traj_t': 0.0, 'running': True}) == 0.0
+    assert traj_clock({'traj_t': 19.95, 'running': True}) == pytest.approx(20.05)
+    assert traj_clock({'traj_t': 173.2, 'running': False}) == 173.2
+
+
+def test_wait_traj_holds_the_schedule_until_the_clock_then_times_the_rest_from_it():
+    pytest.importorskip('interfaces.msg')
+    from experiment.config import Event
+    r = _traj_runner([Event(5.0, 'WAIT_TRAJ', '12 60'), Event(5.0, 'RELEASE', 1), Event(9.0, 'LAND')])
+    r.now = 5.0
+    r.fire_due_events()
+    r.state(6.0, 11.8)
+    assert [d for _, d in r.fired] == ['WAIT_TRAJ']                   # RELEASE held back
+    r.state(6.1, 11.9)                                                # this tick flies 12.0
+    assert r.event_log[-1][1] == 'TRAJ_REACHED' and r.fired[-1] == (6.1, 'RELEASE')
+    r.state(10.0, 15.8)
+    assert r.fired[-1] == (6.1, 'RELEASE')
+    r.state(10.1, 15.9)                                               # 9 s + the 1.1 s the wait took
+    assert r.fired[-1] == (10.1, 'LAND')
+
+
+def test_wait_traj_counts_laps_a_lap_end_hold_and_a_sample_before_it_and_times_out():
+    pytest.importorskip('interfaces.msg')
+    from experiment.config import Event
+    r = _traj_runner([Event(30.0, 'WAIT_TRAJ', 'lap 2.5 60'), Event(30.0, 'RELEASE', 5)])
+    r.state(29.0, 24.8, lap_s=10.0)
+    r.state(29.1, 24.9, lap_s=10.0)                                   # before the wait fired: it counts
+    r.now = 30.0
+    r.fire_due_events()                                               # the wait fires,
+    assert r.fired[-1] == (30.0, 'WAIT_TRAJ')
+    r.fire_due_events()                                               # and ends on that sample: 0.9 s ago
+    assert r.event_log[-1][1:] == ('TRAJ_REACHED', '-0.90') and r.fired[-1] == (30.0, 'RELEASE')
+    held = _traj_runner([Event(1.0, 'WAIT_TRAJ', 'lap 2'), Event(1.0, 'ATTACH', 7)])
+    held.now = 1.0
+    held.fire_due_events()
+    for k in range(20):                     # a lap-end hold: the clock stood at 20.05, each state 19.95
+        held.state(40.0 + 0.1 * k, 19.95, lap_s=10.0)
+    assert held.fired[-1] == (40.0, 'ATTACH')                         # inside the hold, not after it
+    q = _traj_runner([Event(1.0, 'WAIT_TRAJ', '50 5'), Event(2.0, 'LAND')])
+    q.now = 1.0
+    q.fire_due_events()
+    for t in (3.0, 5.9):
+        q.state(t, 1.0)
+    assert [d for _, d in q.fired] == ['WAIT_TRAJ']
+    q.state(6.0, 1.1)
+    assert 'TRAJ_TIMEOUT' in [n for _, n, _ in q.event_log]
+    q.state(7.0, 2.0)                                                 # 2 s + the 5 s timeout
+    assert q.fired[-1] == (7.0, 'LAND')
+
+
+def test_wait_traj_arg_and_the_path_it_needs_are_checked_when_the_config_loads(tmp_path):
+    import yaml
+    from experiment.config import Event, ExperimentConfig, LAPPED_KINDS, wait_traj_arg
+    assert wait_traj_arg('12.5') == (12.5, False, None) and wait_traj_arg('lap 1.5 60') == (1.5, True, 60.0)
+    for bad in (None, '', 'lap', 'lap x', '0', '-1', 'lap 0', 'lap 1 0', '1 2 3', 'nan'):
+        with pytest.raises(ValueError):
+            Event(1.0, 'WAIT_TRAJ', bad)
+
+    def load(**args):
+        launch = {'num_drones': 4, 'mode': 'dissipative', 'reconfig_mode': 'ocp', **args}
+        doc = {'name': 'laps', 'world': 'four_rigid_ground_rig_L100.sdf',
+               'launch': {'package': 'bringup', 'file': 'sim_control_launch.py', 'args': launch},
+               'fleet': {'num_drones': 4, 'n_total': 4}, 'timing': {'duration_s': 300.0},
+               'events': [{'t': 3.0, 'do': 'ARM'}, {'t': 6.0, 'do': 'TAKEOFF'},
+                          {'t': 9.0, 'do': 'WAIT_TRAJ', 'arg': 'lap 2.5 200'}, {'t': 9.0, 'do': 'LAND'}]}
+        p = tmp_path / 'laps.yaml'
+        p.write_text(yaml.safe_dump(doc, sort_keys=False))
+        return ExperimentConfig.from_yaml(str(p))
+    assert load(load_traj='fig_8', fig8_size=0.5, traj_laps=3, traj_lap_hold_s=3.0).validate()
+    for args, why in (({'load_traj': 'hover'}, 'no trajectory clock'),
+                      ({'load_traj': 'orbit'}, 'needs a lapped path'),
+                      ({'load_traj': 'fig_8', 'fig8_size': 0.5, 'traj_laps': 2}, 'lap 2.5 never comes'),
+                      ({'load_traj': 'orbit', 'traj_laps': 3}, 'a whole number of laps'),
+                      ({'load_traj': 'fig_8', 'fig8_size': 0.5, 'traj_laps': 3, 'traj_lap_hold_s': 3.0,
+                        'reconfig_mode': 'network'}, 'traj_lap_hold_s flies only'),
+                      ({'load_traj': 'fig_8', 'fig8_size': 0.5, 'traj_laps': 3, 'traj_lap_hold_s': 3.0,
+                        'mode': 'mpc'}, 'traj_lap_hold_s flies only')):
+        with pytest.raises(ValueError, match=why):
+            load(**args)
+    lt = pytest.importorskip('mpc_planner.load_trajectory')
+    assert tuple(LAPPED_KINDS) == tuple(lt.LAPPED)

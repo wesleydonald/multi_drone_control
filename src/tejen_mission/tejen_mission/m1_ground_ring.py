@@ -105,7 +105,11 @@ class GroundRingExitDecision:
 
 
 class GroundRingExit:
-    """OFF, vertical-only clearance, return to takeoff XY, then LAND."""
+    """OFF, verify vertical clearance once, return to takeoff XY, then LAND.
+
+    Entering return retains the verified release history. Plate-plane height is
+    not a contact test during outward travel; stale evidence pauses that travel.
+    """
 
     def __init__(self, start_position, pad_xy, *, started_s: float,
                  release_dwell_s: float = .25, rise_limit_m: float = .20,
@@ -126,6 +130,7 @@ class GroundRingExit:
         self.stage = "release_wait"
         self.separated_since_s: float | None = None
         self.return_z_m: float | None = None
+        self.return_pause_target: np.ndarray | None = None
         self.blocked_target: np.ndarray | None = None
 
     def step(self, now_s: float, *, face_gap_m: float, fresh: bool,
@@ -164,9 +169,14 @@ class GroundRingExit:
                         np.array([self.start[0], self.start[1], self.start[2] + rise]),
                         waiting_reason="vertical separation not yet proven")
         if self.stage == "return":
-            if not fresh or not math.isfinite(face_gap_m) or face_gap_m < self.required_face_gap_m:
-                self.stage = "blocked"
-            elif (np.linalg.norm(body[:2] - self.pad_xy) <= self.pad_tolerance_m
+            if not fresh or not math.isfinite(face_gap_m):
+                if self.return_pause_target is None:
+                    self.return_pause_target = body.copy()
+                return GroundRingExitDecision(self.stage,
+                    self.return_pause_target.copy(),
+                    waiting_reason="fresh ring/magnet evidence required; return paused")
+            self.return_pause_target = None
+            if (np.linalg.norm(body[:2] - self.pad_xy) <= self.pad_tolerance_m
                     and math.isfinite(body_speed_mps) and body_speed_mps <= .08):
                 self.stage = "land_ready"
             else:

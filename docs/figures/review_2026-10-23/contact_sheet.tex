@@ -1,0 +1,98 @@
+% Contact sheet for the 23 Oct review figures: every figure on its own page, at print size (the thesis's text
+% width), with its one-line message. Build: pdflatex contact_sheet.tex (in this folder, or with \graphicspath).
+\documentclass[12pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\graphicspath{{./}{/home/wesley/multi_drone_control/docs/figures/review_2026-10-23/}}
+\pagestyle{plain}
+\setlength{\parindent}{0pt}
+\newcommand{\fig}[4]{%
+  \section*{#1}
+  \textit{#2}\par\smallskip
+  {\small\color{black!60}#3}\par\vspace{1.2em}
+  \includegraphics{#4}%
+  \clearpage}
+\begin{document}
+
+\fig{1. U: the magnet caught off its slot}
+{Radially inward, folding in at the measured catch point keeps the fold-in tilt under $2.7^\circ$ to 16\,cm, while
+assuming the slot passes the $5^\circ$ bar from 8\,cm. Along the rim the order reverses past 8\,cm.}
+{Preliminary: 6 runs owed (two re-flies, the 20\,cm extension); U re-flies whole on the final tree.}
+{fig_u_catch_offset.pdf}
+
+\fig{2. C: our planner against the network on the 0.4\,m/s line}
+{Our planner keeps the ring within 3\,mm of the line. The network (our port of Quan et al., best gains) wanders up to
+28\,mm and turns further short of the ends.}
+{Preliminary: our planner's line has one run; its second and the claim repeats are owed.}
+{fig_c_line.pdf}
+
+\fig{3. C: the ring's yaw}
+{Our planner holds the ring's yaw within $0.2^\circ$. At its best gains the network lets it swing $22$--$51^\circ$ in
+hover and $14^\circ$ on the 0.4\,m/s line, still growing at 60\,s. As ported, the swing grows until the ring
+capsizes.}
+{Preliminary: our planner's hover is B's baseline hover (same world and plant) until C's own hover cells fly.}
+{fig_c_yaw.pdf}
+
+\fig{4. S: solve time against fleet size}
+{Fewer SQP iterations per tick let the planner solve bigger fleets within the 60\,ms budget: 4, 5 and 6 quads at
+5, 2 and 1 iterations (idle laptop).}
+{Preliminary: the bench before the speed-ups; bar B (with the speed-ups and the rig factor) replaces it.}
+{fig_s_solve_time.pdf}
+
+\fig{4b. S: plan quality at 8 quads}
+{At 8 quads, one iteration per tick leaves the plan outside every quality bar, and two iterations miss the
+feed-forward bar by 0.016\,m\,s$^{-2}$. Five pass them all, so the 8-quad claims fly at five.}
+{Final for Q6 (the untimed $n=8$ bench).}
+{fig_s_quality_n8.pdf}
+
+\fig{5. S: the 8\,$\to$\,4\,$\to$\,8 chain}
+{Eight quads carry the 0.9\,kg, 0.5\,m ring through four unannounced releases down to four and four rejoins back to
+eight. The ring's tilt peaks at $3.35^\circ$.}
+{Preliminary: one exploratory run at 1 iteration; the claim runs at 5 iterations are owed.}
+{fig_s_chain.pdf}
+
+\fig{6. The rejoin of a departed carrier}
+{A carrier released from the T flies back to its own plate, re-welds 17.8\,s after the rejoin command and folds back
+in. The ring's tilt peaks at $1.45^\circ$ in the fold-in (bar $5^\circ$).}
+{Final data (E2 passes its frozen bars).}
+{fig_rejoin.pdf}
+
+\fig{7a. The pair's swing on the rig, ema against slope}
+{With the ema filter, the 0.55\,m pair's 1.4\,Hz see-saw grows after lift-off until the flight is cut. With the slope
+filter it stays about half as large and does not grow.}
+{Final (rig, 22 Oct). One flight was dropped ($\times$); two were landed by the operator ($\circ$).}
+{fig_pair_rig.pdf}
+
+\fig{7b. The pair's swing in the twin}
+{In the twin the pair swings only when the throttle is delayed by about 50--60\,ms. Delay on the rates, the rig's
+measured timing and the tip hinge stay calm, and both fixes remove the 60\,ms throttle swing.}
+{Final (rounds A--D).}
+{fig_pair_twin.pdf}
+
+\fig{8. R: what changed at 1\,m}
+{At 1\,m the 0.3\,m/s orbit's clock-free path error crosses the 25\,mm envelope. Most of the rise came with the code;
+the longer cable adds about 2.6\,mm.}
+{Final (the attribution re-fly is in).}
+{fig_refly_orbit.pdf}
+
+\fig{9a. Re-render at 1\,m: one flight from the floor}
+{From the floor at 1\,m: creep, pretension, lift to 1.0\,m, hold, LAND and unwind. The rods hold their planned
+$60^\circ$ through the hold.}
+{Re-render of the thesis figure (ring blue instead of gold).}
+{fig_flight_1m.pdf}
+
+\fig{9b. Re-render at 1\,m: circle and figure-8}
+{At 1\,m, three quads carry the ring around the circle and the figure-8 at 0.125\,m/s about a centimetre from the
+reference.}
+{Re-render of the thesis figure (ring blue instead of gold; the figure-8 cropped to its path).}
+{fig_traj_1m.pdf}
+
+\fig{9c. Re-render at 1\,m: an unannounced detach}
+{When one quad of four lets go unannounced at 1\,m, the planner hands its load to the three survivors. The ring's
+tilt peaks at $5.9^\circ$ and is back in band in 3.4\,s.}
+{Re-render of the thesis figure (ring blue instead of gold).}
+{fig_detach_1m.pdf}
+
+\end{document}

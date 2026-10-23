@@ -79,6 +79,7 @@ def test_planner_routes_proof_and_precontact_failures_through_vertical_release()
     assert "self.m1_pickup_release.target" in source
     assert "self.update_m1_pickup_recovery()" in source
     assert "self.pickup_magnet_command(spec.magnet_command)" in source
-    # his contact-wait stall: no object (contact_attach: not aligned on it either)
-    assert "stalled = not aligned if getattr(self, 'contact_attach', False) else not self.object_attached" in source
-    assert "blocked=stalled, key='CONTACT_WAIT'" in source
+    # his measured contact evidence; contact_attach: not aligned on it either is a stall
+    assert "stalled = not aligned if getattr(self, 'contact_attach', False) else not contact" in source
+    assert "blocked=fresh and stalled, key='CONTACT_WAIT'" in source
+    assert "progress_m=-gap" in source

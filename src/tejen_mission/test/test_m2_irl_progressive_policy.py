@@ -1,5 +1,100 @@
 """Compact behavioural checks for measured-contact 15-degree policy."""
 import numpy as np
+from dataclasses import replace
+
+def measured_detector_fixture():
+    from tejen_mission.attachment_detection import AttachmentDetector, AttachmentObservation, MagnetContactCalibration
+    from tejen_mission.cooperative_trajectory import RingNetGeometry
+    from tejen_mission.m2a_attachment_runtime import default_detector_config
+    cfg = replace(default_detector_config(), attachment_policy="measured_contact_15deg",
+                  candidate_dwell_s=.3, proof_dwell_s=.5, proof_speed_mps=.03,
+                  proof_max_contact_drift_m=.008, pose_timeout_s=.5)
+    geometry = RingNetGeometry()
+    detector = AttachmentDetector(geometry=geometry, assigned_plate_id=0,
+        calibration=MagnetContactCalibration(np.zeros(3), np.eye(3)), config=cfg)
+    plate = geometry.plate_body_offset(0)
+    def step(now, stamp=None, contact=(0.,0.,-.001), **kw):
+        stamp = now if stamp is None else stamp
+        return detector.update(AttachmentObservation(time_s=now,
+            ring_position_world=np.zeros(3), rotation_world_from_ring=np.eye(3), ring_time_s=now,
+            magnet_position_world=plate+contact, rotation_world_from_magnet=np.eye(3), magnet_time_s=stamp,
+            drone_position_world=plate+[0.,0.,.5565], drone_time_s=now,
+            anchor_position_world=plate+kw.pop("anchor", [0.,0.,.5565]),
+            magnet_on=True, proof_requested=kw.pop("proof", False),
+            proof_motion_complete=kw.pop("complete", False)))
+    return detector, step
+
+def test_wider_proof_xy_does_not_widen_initial_contact():
+    d, step = measured_detector_fixture()
+    d.config = replace(d.config, candidate_xy_m=.025, proof_xy_m=.040,
+                       proof_max_contact_drift_m=.040)
+    d.reset()
+    step(1., contact=(.035,0.,-.001))
+    assert not step(1.5, contact=(.035,0.,-.001)).initial_contact
+    step(2.); step(2.4); assert step(2.8).initial_contact
+    end = ProofArc(d.progressive.contact_seed, d.progressive.anchor_seed,
+                   d.progressive.anchor_seed).position(100.)
+    for now in np.arange(10., 10.8, .1):
+        result = step(now, contact=(.035,0.,-.001), anchor=end, proof=True, complete=True)
+    assert result.velocity_valid
+    assert result.confirmed
+
+def test_irl_proof_xy_40mm_is_yaml_owned_separate_from_contact_and_loss():
+    from pathlib import Path
+    import yaml, pytest
+    from tejen_mission.m2_irl_launch_config import progressive_ros_parameters
+    for count in ('two', 'four'):
+        payload = yaml.safe_load((Path(__file__).parents[1]/f'config/m2_irl_{count}_drone.yaml').read_text())
+        observer = progressive_ros_parameters(payload)['observer']
+        assert observer['proof_xy_m'] == .040
+        assert observer['candidate_xy_m'] == .025
+        assert observer['proof_max_contact_drift_m'] == .040
+        assert observer['loss_xy_m'] == .045
+        payload['m2_irl']['gate_profiles']['attachment_search']['proof_xy_m'] = .050
+        with pytest.raises(ValueError): progressive_ros_parameters(payload)
+
+def test_cached_contact_proof_and_loss_samples_cannot_earn_dwell():
+    d, step = measured_detector_fixture()
+    first = step(1.)
+    assert not first.candidate_condition, "one pose cannot establish low relative velocity"
+    assert not step(1.4, stamp=1.).initial_contact
+    step(1.41); assert step(1.72).initial_contact
+    end = ProofArc(d.progressive.contact_seed, d.progressive.anchor_seed,
+                   d.progressive.anchor_seed).position(100.)
+    step(2., anchor=end, proof=True, complete=True)
+    assert not step(2.49, stamp=2., anchor=end, proof=True, complete=True).confirmed
+    # Once the distinct samples span the proof dwell, confirmation is possible.
+    assert step(2.5, anchor=end, proof=True, complete=True).confirmed
+    step(2.6, contact=(.06,0.,0.), proof=True)
+    assert not step(2.74, stamp=2.6, contact=(.06,0.,0.), proof=True).lost
+    assert step(2.75, contact=(.06,0.,0.), proof=True).lost
+
+def test_measurement_velocity_and_dwell_are_independent_of_timer_frequency():
+    results = []
+    for ticks in ([], [.03, .05, .09]):
+        d, step = measured_detector_fixture()
+        step(1., contact=(0.,0.,-.001))
+        for dt in ticks:
+            step(1.+dt, stamp=1., contact=(0.,0.,-.001))
+        out = step(1.1, contact=(.01,0.,-.001))
+        results.append(out)
+    assert np.isclose(results[0].relative_speed_mps, results[1].relative_speed_mps)
+    assert results[0].candidate_dwell_s == results[1].candidate_dwell_s
+
+def test_dropout_does_not_credit_missing_contact_time_or_erase_history():
+    d, step = measured_detector_fixture()
+    step(1.); step(1.1)
+    assert not step(1.7, stamp=1.1).fresh
+    assert not step(1.8).initial_contact
+    step(1.9); assert step(2.21).initial_contact
+    assert not step(2.8, stamp=2.21).fresh
+    assert d.progressive.initial_contact and not d.progressive.lost
+    # Reacquisition has no velocity pair and therefore cannot complete proof.
+    out = step(3., proof=True, complete=True)
+    assert out.initial_contact and not out.proof_condition and not out.confirmed
+    # Clock rollback reacquires kinematics, never erases contact history or credits dwell.
+    out = step(.1, proof=True, complete=True)
+    assert out.initial_contact and not out.velocity_valid and not out.proof_condition
 from tejen_mission.m2_irl_attachment_policy import ContactProofEvidence, ProofArc, RetryBudget
 
 def sample(d, t, contact=(0,0,-.001), anchor=(0,0,.5565), **kw):
@@ -74,7 +169,14 @@ def test_quiet_miss_adapter_reuses_release_and_excludes_motion_contact_and_other
     p.publish_committed_trajectory=p.m2c_ground_reference_enabled=False
     p.inputs_ready=lambda:False
     p.timer_callback()
-    assert p.m2b_quiet_miss.elapsed_s == 0, "skipped stale tick retained quiet-miss time"
+    assert p.m2b_quiet_miss.elapsed_s == 9, "skipped stale tick erased earned quiet-miss time"
+    assert not p.m2b_quiet_miss.step(now=100., xy_error_m=.061, eligible=True, key=("LOW",3))
+    assert p.m2b_quiet_miss.elapsed_s == 9, "stale interval earned catch-up time"
+    assert p.m2b_quiet_miss.step(now=101., xy_error_m=.061, eligible=True, key=("LOW",3))
+    # Contact cancels the precontact timer even if other evidence is inconclusive.
+    p.phase = MissionPhase.M2_ATTACH_APPROACH_LOW
+    p.m2b_attachment_diagnostics.update(initial_contact=True, fresh=False)
+    assert not tick(102.) and p.m2b_quiet_miss.elapsed_s == 0
 
 def test_sim_contact_allowance_starts_proof_without_relaxing_irl_or_confirmation():
     from dataclasses import replace
@@ -239,6 +341,7 @@ def planner_adapter():
     from tejen_mission.m2b_attachment_mission import M2BConfig
     p=object.__new__(OnlineJoinPlanner)
     p.m2b_progressive=p.is_m2b=p.m2b_controller_armed=True
+    p.m2b_freeze_attached_hold_reference=False
     p.m2d_enabled=False
     p.ground_ring_exit=None; p.ground_ring_attach_trial=False
     p.phase=MissionPhase.M2_ATTACH_CAPTURE_WAIT
@@ -269,6 +372,58 @@ def planner_adapter():
     p.m2b_request_detector_reset=lambda:None
     p.m2b_capture_body_target=lambda:np.array([.1,0.,.9])
     return p
+
+def test_irl_hold_freezes_last_command_without_disabling_live_evidence_or_land():
+    from tejen_mission.online_join_planner import MissionPhase
+    p=planner_adapter()
+    p.m2b_freeze_attached_hold_reference=True
+    p.horizon_samples=3; p.min_reference_z=0.
+    p.m2b_attachment_diagnostics.update(initial_contact=True,
+        contact_seed_plate=[0.,0.,-.001], anchor_seed_plate=[0.,0.,.5575])
+    p.update_m2b_progressive(0.)
+    assert p.phase==MissionPhase.M2_ATTACH_PROOF
+    p.progressive_proof_time=p.progressive_arc.duration
+    p.update_m2b_progressive(.1)
+    p.last_reference=p.build_m2b_b1_reference()
+    commanded=p.last_reference.positions[0].copy()
+    # A new ring pose on the confirmation tick must not introduce a target jump.
+    angle=np.deg2rad(2.)
+    rotation=np.array([[np.cos(angle),0.,np.sin(angle)], [0.,1.,0.],
+                       [-np.sin(angle),0.,np.cos(angle)]])
+    p.m2b_plate_pose_world=lambda:(np.array([.003,.004,.002]),rotation)
+    p.m2b_attachment_diagnostics["confirmed"]=True
+    p.update_m2b_progressive(.2)
+    assert p.phase==MissionPhase.M2_ATTACHED_HOLD
+    np.testing.assert_allclose(p.progressive_target,commanded)
+    for now in (.3,10.,100.):
+        p.update_m2b_progressive(now)
+        np.testing.assert_allclose(p.build_m2b_b1_reference().positions,
+                                   np.tile(commanded,(p.horizon_samples,1)))
+    p.m2b_attachment_diagnostics["fresh"]=False
+    p.update_m2b_progressive(101.)
+    assert p.progressive_evidence_paused and p.m2b_magnet_on_requested
+    p.m2b_attachment_diagnostics.update(fresh=True,lost=True)
+    p.update_m2b_progressive(102.)
+    assert "contact lost" in p.progressive_waiting_reason
+    assert p.phase==MissionPhase.M2_ATTACHED_HOLD and p.m2b_magnet_on_requested
+    np.testing.assert_allclose(p.progressive_target,commanded)
+    from types import SimpleNamespace
+    p.external_landing_callback(SimpleNamespace(data=True))
+    assert p.phase==MissionPhase.M2_LANDING_STAGE
+    assert not p.m2b_magnet_on_requested and p.m2b_retreat_stage=="release"
+
+def test_default_progressive_hold_still_follows_ring_pose():
+    from tejen_mission.online_join_planner import MissionPhase
+    p=planner_adapter()
+    p.phase=MissionPhase.M2_ATTACHED_HOLD
+    p.progressive_arc=ProofArc([0.,0.,-.001],[0.,0.,.5575],[0.,0.,.5575])
+    p.progressive_proof_time=p.progressive_arc.duration
+    p.update_m2b_progressive(0.)
+    target=p.progressive_target.copy()
+    shift=np.array([.003,.004,.002])
+    p.m2b_plate_pose_world=lambda:(shift,np.eye(3))
+    p.update_m2b_progressive(.1)
+    np.testing.assert_allclose(p.progressive_target,target+shift)
 
 def test_adapter_contact_before_floor_proof_wait_and_vertical_release():
     from tejen_mission.online_join_planner import MissionPhase

@@ -1,0 +1,168 @@
+{
+ "arms": [
+  "base",
+  "i1",
+  "i1+v"
+ ],
+ "quality": false,
+ "q_source": "auto",
+ "flown_pivot": true,
+ "src": "/home/wesley/multi_drone_control/src/mpc_planner",
+ "flights": {
+  "results/rig/2026-10-22/h3_logs": {
+   "base": {
+    "arm": "base",
+    "ticks": 264,
+    "fail_pre": 0,
+    "fail_post": 0,
+    "first_fail": null,
+    "matched": 0,
+    "max_ms": 19.883429999026703,
+    "over_100ms": 0,
+    "ratio_med": 1.0935617558906148,
+    "ratio_air_med": 1.0949651735245154,
+    "ratio_min": 1.0655810590616865,
+    "ratio_max": 1.1611417436388154,
+    "timing": {
+     "all": {
+      "ticks": 264,
+      "logged_p50": 36.7,
+      "logged_p95": 67.77,
+      "replay_p50": 18.51965649984777,
+      "replay_p95": 19.366647449714947,
+      "ratio_p50": 1.9692812385444323,
+      "ratio_p95": 3.6454841764277757
+     },
+     "same_iters": {
+      "ticks": 253,
+      "logged_p50": 36.1,
+      "logged_p95": 63.37999999999997,
+      "replay_p50": 18.52555599907646,
+      "replay_p95": 19.372537799790734,
+      "ratio_p50": 1.9529265926959576,
+      "ratio_p95": 3.4144208190988943
+     }
+    },
+    "quality": null
+   },
+   "i1": {
+    "arm": "i1",
+    "ticks": 264,
+    "fail_pre": 0,
+    "fail_post": 0,
+    "first_fail": null,
+    "matched": 0,
+    "max_ms": 7.24221100063005,
+    "over_100ms": 0,
+    "ratio_med": 1.0934939994085935,
+    "ratio_air_med": 1.094952489300014,
+    "ratio_min": 1.064664988618147,
+    "ratio_max": 1.1608253123770769,
+    "timing": null,
+    "quality": null
+   },
+   "i1+v": {
+    "arm": "i1+v",
+    "ticks": 264,
+    "fail_pre": 0,
+    "fail_post": 0,
+    "first_fail": null,
+    "matched": 0,
+    "max_ms": 5.017952998969122,
+    "over_100ms": 0,
+    "ratio_med": 1.0934939994085935,
+    "ratio_air_med": 1.094952489300014,
+    "ratio_min": 1.064664988618147,
+    "ratio_max": 1.1608253123770769,
+    "timing": null,
+    "quality": null
+   }
+  },
+  "results/rig/2026-10-22/f3h_logs": {
+   "base": {
+    "arm": "base",
+    "ticks": 573,
+    "fail_pre": 0,
+    "fail_post": 0,
+    "first_fail": null,
+    "matched": 0,
+    "max_ms": 27.939497000261326,
+    "over_100ms": 0,
+    "ratio_med": 1.0929229232356201,
+    "ratio_air_med": 1.0928623299332496,
+    "ratio_min": 1.0170346073650625,
+    "ratio_max": 1.1605655594896727,
+    "timing": {
+     "all": {
+      "ticks": 573,
+      "logged_p50": 40.4,
+      "logged_p95": 69.44,
+      "replay_p50": 19.21335699989868,
+      "replay_p95": 20.632347200808,
+      "ratio_p50": 2.100552916686582,
+      "ratio_p95": 3.5868771922729286
+     },
+     "same_iters": {
+      "ticks": 536,
+      "logged_p50": 39.0,
+      "logged_p95": 64.625,
+      "replay_p50": 19.219388998862996,
+      "replay_p95": 20.592621001014777,
+      "ratio_p50": 2.0243367197749302,
+      "ratio_p95": 3.376942020584448
+     }
+    },
+    "quality": null
+   },
+   "i1": {
+    "arm": "i1",
+    "ticks": 573,
+    "fail_pre": 0,
+    "fail_post": 0,
+    "first_fail": null,
+    "matched": 0,
+    "max_ms": 11.191112000233261,
+    "over_100ms": 0,
+    "ratio_med": 1.092780713071026,
+    "ratio_air_med": 1.09258480760844,
+    "ratio_min": 1.0160722224691183,
+    "ratio_max": 1.1589309255833309,
+    "timing": null,
+    "quality": null
+   },
+   "i1+v": {
+    "arm": "i1+v",
+    "ticks": 573,
+    "fail_pre": 0,
+    "fail_post": 0,
+    "first_fail": null,
+    "matched": 0,
+    "max_ms": 6.428848000723519,
+    "over_100ms": 0,
+    "ratio_med": 1.092780713071026,
+    "ratio_air_med": 1.09258480760844,
+    "ratio_min": 1.0160722224691183,
+    "ratio_max": 1.1589309255833309,
+    "timing": null,
+    "quality": null
+   }
+  }
+ },
+ "calibration": {
+  "bench_json": "results/analysis/s_calib_bench_n3_resin_2026-10-22.json",
+  "bench_n3_it5_solve_ms": {
+   "p50": 19.77896350035735,
+   "p95": 20.142060751186364,
+   "max": 20.679536999523407
+  },
+  "pooled": {
+   "ticks": 837,
+   "logged_p50": 38.8,
+   "logged_p95": 69.0,
+   "replay_p50": 18.957787000545068,
+   "replay_p95": 20.36477159927017,
+   "k50": 1.9616801456405435,
+   "k95": 3.425667356103864
+  }
+ }
+}

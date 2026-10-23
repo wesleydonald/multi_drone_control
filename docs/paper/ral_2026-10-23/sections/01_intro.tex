@@ -1,0 +1,46 @@
+\section{Introduction}
+\label{sec:intro}
+
+Several quadrotors sharing a payload on cables can lift what none of them could carry alone, and spread the load so
+that each flies with margin \cite{olleroPresentFutureAerial2022, estevezReviewAerialTransportation2024}. Such a team
+is almost always treated as fixed: the carriers are attached on the ground, take off together and land together. A
+team that could change in the air would be more useful and more robust. A carrier with a low battery or a fault could
+leave and come back; a fresh carrier could join to take up a heavier load or relieve another; and a carrier that is
+lost without warning, a released magnet or a failed motor, need not bring the payload down with it. This letter
+asks what a controller needs to let a team carrying a cable-suspended payload lose and gain carriers in flight.
+
+\emph{Cooperative cable transport.} The statics of a rigid payload hung from several cables, and the internal forces
+the team may choose freely, are well understood \cite{michael2011cooperative, tognon2018internal,
+gabellieri2023equilibria}. Controllers range from decentralised schemes that need no communication between carriers
+\cite{tognon2018internal, gabellieri2023force, klausen2020cooperative} through geometric and leader--follower designs
+\cite{lee2018geometric, loianno2018cooperative} to the passivity-based dissipative network of Quan et
+al.~\cite{quan2025swarm}. Model predictive control (MPC) suits the problem because cable tensions are bounded and
+the payload's motion couples every carrier: nonlinear MPC of the full payload pose \cite{sunNonlinearMPCFullPose2023,
+liNonlinearModelPredictive2023}, kinodynamic planning for the team \cite{wahbaKinodynamicMotionPlanning2024}, and
+distributed formulations \cite{decarliDistributedNMPCCooperative, distributedNMPC} all fly a team of a fixed size.
+
+\emph{Reconfiguration and attach.} Plug-and-play MPC adds and removes subsystems from a distributed controller
+\cite{riverso2013plug, zeilinger2013plug, aboudonia2022reconfigurable, saccani2023model}, but for networks of
+loosely coupled plants, not for carriers that share one payload. Modular aerial robots dock and undock in flight
+\cite{saldana2018modquad, sugihara2023trady, sugihara2026legion}, and magnetic grippers let a multirotor pick up and
+release objects \cite{gawel2017magnetic, miyazaki2018airborne}. Fault-tolerant cooperative transport keeps a payload
+up after a carrier fails \cite{liang2021fault, farrasFaultTolerantControlMultiQuadcopter2024}. We know of no work
+in which a team carrying a cable-suspended payload both loses carriers without warning and admits carriers that join
+in the air, nor of one flown on hardware.
+
+The working hypothesis of this letter is that a centralised optimal control problem suits a change of team because
+the planner solves for the force distribution of the team it actually has in the first tick after the event,
+instead of leaving the survivors to find it from the motion that follows. The contributions are:
+\begin{itemize}
+  \item a cooperative MPC for a cable-suspended ring whose attachment geometry is a runtime parameter, so that a
+  change of team is a switch to a pre-built problem of the new size, warm-started from the measured state
+  (Section~\ref{sec:method});
+  \item detection of an unannounced release from motion capture alone, a drop rule from the support margin of the
+  survivors, and the rejoin of a departed carrier to its own plate in flight (Sections~\ref{sec:reconfig}
+  and~\ref{sec:rejoin});
+  \item the attach of a newcomer flown by another team's controller, admitted only on a motion-capture proof that its
+  magnet moves with the ring;
+  \item validation in a digital twin built from the rig's identified thrust map and geometry and on a
+  motion-capture rig with unmodified Betaflight quadrotors, with a scalability study and a comparison against our
+  port of Quan et al.'s method \cite{quan2025swarm} (Sections~\ref{sec:res_reconfig}--\ref{sec:res_compare}).
+\end{itemize}

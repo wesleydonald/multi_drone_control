@@ -1,0 +1,18 @@
+# Retune candidate paperfinal (paper), card docs/experiments/2026-10-23_paper_method_compare.md §3.3: twin/c_compare_paper.yaml plus its knobs (tools/network_tune.py --emit)
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+traj_hold_s: 5.0
+net_hold_carry: true
+net_twin_geometry: true
+net_damp_relative: true
+net_traj_lean: true
+diss_c: 3.0
+diss_k_slot: 18.0
+diss_k_pay: 80.0
+diss_k_anchor: 80.0
+diss_k_ring: 40.0
+diss_ki_load: 0.5
+vel_kp_pos: 1.5
+vel_kv: 3.0
+vel_k_att: 16.0

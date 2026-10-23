@@ -2,6 +2,8 @@ name: m1x_r11a_hover
 description: 'TB6 / beside the claim (card 2026-10-10_combined_m1_contact rev 10 §6.2, §6.3), exploratory: the rig''s R11a rehearsed on the hover: his contact target 3 cm above the plate (contact_dz +0.03), a planned no-catch: no contact, his give-up, our take-back; falsifier: a contact or attach declared, a TB4 falsifier'
 world: three_rigid_ground_rig_attach_pickup.sdf
 ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

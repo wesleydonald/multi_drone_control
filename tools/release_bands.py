@@ -6,6 +6,7 @@
     python3 tools/release_bands.py sigma                                 # sigma_rig from the 8 Oct rig flights
     python3 tools/release_bands.py band W4 R1459 R1460 R1xxx              # a frozen band from its twin runs
     python3 tools/release_bands.py band W5 R1457 R1xxx
+    python3 tools/release_bands.py band W4 R25xx R25yy R25zz --factors 1,1 --sigma-runs rig:2026-10-28/h1   # a 1 m band
 
 Reads only run.csv and events.csv: results/<date>/R####_*/logs for twin runs, and for rig flights
 results/rig/<date>/<run>_run/logs as tools/rig_to_run.py writes them (the ring pose needs the bag). The open
@@ -32,6 +33,7 @@ POST_MIN_S = 10.0      # ... scored only when LAND comes at least this long afte
 BAND_HORIZON_S = 15.0  # Q1: W4/W5 band and rig values cut at event + the D5 minimum hold
 NULL_PAD_S = 2.0       # Q4 alternative: pseudo-events start this long after the lift top
 NULL_W_S = 2.0         # Q4 alternative: pseudo-event window
+SIGMA_HOVER_S = 8.0    # --sigma-runs, a flight with no event: the N2 window before LAND (n2_bands.sigma_rig)
 
 # The 8 Oct rig/twin pairs (registry rows RIG-1008-*); the twin runs are the registry's pairs.
 PAIRS = [
@@ -199,16 +201,65 @@ def sigma_rig(a):
     return float(np.std(vals, ddof=1)), len(vals)
 
 
+def sigma_from(tags):
+    """sigma_rig from given flights (push answer 9: the 1 m band takes it from the first 1 m rig hover): the tilt
+    vector's RMS about its mean over the PRE_S before a flight's event, or over the SIGMA_HOVER_S before LAND for a
+    flight with none, pooled over the flights."""
+    sq, n = 0.0, 0
+    for tag in tags:
+        ev = pd.read_csv(os.path.join(locate(tag), 'events.csv'))
+        evd = {str(k): float(v) for k, v in zip(ev['event'][::-1], ev['sim_time'][::-1])}
+        if 'RELEASE' in evd or 'DETACH' in evd:
+            r = Run(tag)
+            m = r.win(r.te - PRE_S, r.te)
+        elif 'LAND' in evd:
+            r = Run(tag, te=evd['LAND'], kind='hover')
+            m = r.win(r.te - SIGMA_HOVER_S, r.te)
+        else:
+            sys.exit(f'{tag}: no RELEASE, DETACH or LAND event to time the sigma window')
+        th = r.th[m]
+        sq += float(np.sum(np.sum((th - th.mean(0)) ** 2, 1)))
+        n += int(m.sum())
+    if n < 2:
+        sys.exit(f'sigma from {", ".join(tags)}: {n} samples')
+    return math.sqrt(sq / n), n
+
+
+def band(a, cell, twins):
+    """A ledger band from its twin runs: [min * f_lo - 2 sigma, max * f_hi + 2 sigma], floored at 0. f from
+    --factors when given (a 1 m band: 1,1), else the 8 Oct class factors; sigma from --sigma-runs when given, else
+    the 8 Oct rig flights."""
+    if a.factors:
+        lo_f, hi_f = (float(v) for v in a.factors.split(','))
+        src = 'given'
+    else:
+        _, out = factors(a)
+        lo_f, hi_f, n = out.get(class_key(*CELLS[cell], a.classes), (1.0, 1.0, 0))
+        src = f'{n} pair(s)'
+    s = sigma_from(a.sigma_runs.split(','))[0] if a.sigma_runs else sigma_rig(a)[0]
+    tw = [Run(t).metrics(a.band_horizon or None)['dtheta'] for t in twins]
+    return dict(cell=cell, twins=list(twins), dtheta=tw, f_lo=lo_f, f_hi=hi_f, f_source=src, sigma=s,
+                lo=max(0.0, min(tw) * lo_f - 2 * s), hi=max(tw) * hi_f + 2 * s)
+
+
 def choices(a):
     return (f'choices: pair_horizon={a.pair_horizon} classes={a.classes} ratio={a.ratio} sigma={a.sigma} '
-            f'band_horizon={a.band_horizon} (defaults = the answers signed 11 Oct)')
+            f'band_horizon={a.band_horizon} factors={a.factors or "8 Oct classes"} '
+            f'sigma_runs={a.sigma_runs or "8 Oct rig flights"} (defaults = the answers signed 11 Oct)')
 
 
 def fmt(x, nd=2):
     return '-' if x is None else (f'{x:.{nd}f}' if isinstance(x, float) else str(x))
 
 
-def main():
+def _num(v):
+    try:
+        return float(v) > 0
+    except ValueError:
+        return False
+
+
+def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('cmd', choices=['metrics', 'factors', 'sigma', 'band'])
     ap.add_argument('args', nargs='*')
@@ -217,7 +268,12 @@ def main():
     ap.add_argument('--classes', choices=['announce', 'announce_traj', 'all'], default='announce', help='Q5')
     ap.add_argument('--ratio', choices=['mean', 'minmax'], default='mean', help='Q6')
     ap.add_argument('--sigma', choices=['pre', 'null'], default='pre', help='Q4')
-    a = ap.parse_args()
+    ap.add_argument('--factors', help='band: f_lo,f_hi instead of the 8 Oct class factors (a 1 m band: 1,1)')
+    ap.add_argument('--sigma-runs', help='sigma/band: sigma_rig from these flights (rig:<date>/<run>,...) instead '
+                                         'of the 8 Oct ones; a flight with no event: the 8 s before LAND')
+    a = ap.parse_args(argv)
+    if a.factors and (len(a.factors.split(',')) != 2 or not all(_num(v) for v in a.factors.split(','))):
+        ap.error('--factors wants two numbers, f_lo,f_hi')
     print(choices(a))
 
     if a.cmd == 'metrics':
@@ -240,23 +296,17 @@ def main():
         for key, (lo, hi, n) in out.items():
             print(f'class {key}: f_lo {lo:.3f}, f_hi {hi:.3f} from {n} pair(s)' + ('' if n >= 2 else ' -> f = 1'))
     elif a.cmd == 'sigma':
-        s, n = sigma_rig(a)
+        s, n = sigma_from(a.sigma_runs.split(',')) if a.sigma_runs else sigma_rig(a)
         print(f'sigma_rig {s:.3f} deg from {n} samples')
     else:
         if len(a.args) < 2 or a.args[0] not in CELLS:
             sys.exit('band W4|W5 TWIN_RUN...')
-        cell, twins = a.args[0], a.args[1:]
-        _, out = factors(a)
-        lo_f, hi_f, n = out.get(class_key(*CELLS[cell], a.classes), (1.0, 1.0, 0))
-        s, _ = sigma_rig(a)
+        b = band(a, a.args[0], a.args[1:])
         hz = a.band_horizon or None
-        tw = [Run(t).metrics(hz)['dtheta'] for t in twins]
-        lo = max(0.0, min(tw) * lo_f - 2 * s)
-        hi = max(tw) * hi_f + 2 * s
-        print(f"{cell}: twin dtheta {' / '.join(fmt(x) for x in tw)} ({', '.join(twins)}); f_lo {lo_f:.3f}, "
-              f"f_hi {hi_f:.3f} ({n} pair(s)); sigma_rig {s:.3f}")
-        print(f'{cell} band: [{lo:.2f}, {hi:.2f}] deg (dtheta, event to +{fmt(hz, 0)} s or LAND); '
-              f'twin midpoint {(min(tw) + max(tw)) / 2:.2f}')
+        print(f"{b['cell']}: twin dtheta {' / '.join(fmt(x) for x in b['dtheta'])} ({', '.join(b['twins'])}); "
+              f"f_lo {b['f_lo']:.3f}, f_hi {b['f_hi']:.3f} ({b['f_source']}); sigma_rig {b['sigma']:.3f}")
+        print(f"{b['cell']} band: [{b['lo']:.2f}, {b['hi']:.2f}] deg (dtheta, event to +{fmt(hz, 0)} s or LAND); "
+              f"twin midpoint {(min(b['dtheta']) + max(b['dtheta'])) / 2:.2f}")
 
 
 if __name__ == '__main__':

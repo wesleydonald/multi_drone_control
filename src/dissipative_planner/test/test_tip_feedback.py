@@ -133,3 +133,34 @@ def test_the_deadband_does_not_freeze_past_the_setpoint():
     for assumed in (0.55, 0.63):
         out, loop = _fly(assumed, seconds=40.0)
         assert abs(out[-1][1] - _setpoint()) <= 0.003, (assumed, out[-1][1] - _setpoint())
+
+
+def _hung(btt, lean=0.0, n=12):
+    """Frames of a tip hanging btt below the body, `lean` m sideways, with a little noise so it is not frozen."""
+    return [(10.0 + 0.01 * i, np.array([lean, 0.25, 1.65 - np.sqrt(btt ** 2 - lean ** 2) + 1e-4 * i]),
+             np.array([0.0, 0.25, 1.65])) for i in range(n)]
+
+
+def test_the_believable_tip_follows_a_1m_arm():
+    """22 Oct: at 1 m every sample read 'distance' and the tip loop never engaged. Given the arm's body-to-tip, an arm
+    outside the 0.55 m arm's band gets btt +- 4 cm and the lean limit at the same angle (0.15 m on 0.59)."""
+    fr = _hung(1.04)
+    assert tip_valid(fr[-1][0] + 0.01, fr)[1] == 'distance'                    # the old fixed band
+    assert tip_valid(fr[-1][0] + 0.01, fr, btt=1.04) == (True, '')
+    fr = _hung(0.59)
+    assert tip_valid(fr[-1][0] + 0.01, fr, btt=1.04)[1] == 'distance'         # the 0.55 m tip on a 1 m arm
+    fr = _hung(1.04, lean=0.25)                                               # 13.9 deg: inside 0.15 x 1.04 / 0.59
+    assert tip_valid(fr[-1][0] + 0.01, fr, btt=1.04) == (True, '')
+    fr = _hung(1.04, lean=0.30)
+    assert tip_valid(fr[-1][0] + 0.01, fr, btt=1.04)[1] == 'lean'
+
+
+def test_every_0p55m_arm_keeps_its_band_as_flown():
+    """The 0.55 m arm's body-to-tip 0.59, the 0.63 the configs typed before 22 Oct, the 0.55 of the deliberate arm:
+    the band and the lean are the ones they flew with."""
+    for btt in (0.55, 0.59, 0.63):
+        for d in (0.552, 0.59, 0.628):
+            fr = _hung(d)
+            assert tip_valid(fr[-1][0] + 0.01, fr, btt=btt) == tip_valid(fr[-1][0] + 0.01, fr)
+        fr = _hung(0.59, lean=0.16)
+        assert tip_valid(fr[-1][0] + 0.01, fr, btt=btt)[1] == 'lean'

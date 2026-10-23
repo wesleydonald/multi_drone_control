@@ -2,6 +2,8 @@ name: twin_tf_weld_on
 description: 'card 2026-10-09_approach_tip_feedback rev 5, arm W: E+, weld at the setpoint (weld_point_z 0.04, radius
   0.025), rig gate 0.05 m/s (switch ON)'
 world: three_rigid_ground_rig_attach.sdf
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

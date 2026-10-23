@@ -27,6 +27,9 @@ public:
     virtual TargetPrediction evaluate(double future_time_s) const = 0;
     virtual const char* type() const noexcept = 0;
     virtual bool highConfidenceFuture() const noexcept = 0;
+    // Definition-level identity, not a sampled speed/position tolerance. Unknown
+    // providers conservatively decline stationary-goal progress suppression.
+    virtual bool isStationaryAt(const Vec3&) const noexcept { return false; }
 };
 
 class ConstantVelocityTargetPredictor final : public TargetPredictor {
@@ -45,6 +48,10 @@ public:
     }
     const char* type() const noexcept override { return "constant_velocity"; }
     bool highConfidenceFuture() const noexcept override { return false; }
+    bool isStationaryAt(const Vec3& position) const noexcept override {
+        return position_.allFinite() && velocity_.isZero(0.0) &&
+            std::isfinite(reference_time_s_) && (position_.array() == position.array()).all();
+    }
 
 private:
     Vec3 position_;
@@ -126,6 +133,19 @@ public:
     }
     const char* type() const noexcept override { return "committed_trajectory"; }
     bool highConfidenceFuture() const noexcept override { return true; }
+    bool isStationaryAt(const Vec3& position) const noexcept override {
+        // Identical controls define a constant spline exactly, even when its
+        // basis evaluation has floating-point roundoff. A stopped endpoint of
+        // an otherwise moving commitment is deliberately not sufficient.
+        const Vec3 anchor = trajectory_.pieces().front().control_points.row(0).transpose();
+        if (!(anchor + position_offset_).allFinite() ||
+            !((anchor + position_offset_).array() == position.array()).all()) return false;
+        for (const auto& piece : trajectory_.pieces())
+            for (Eigen::Index row = 0; row < piece.control_points.rows(); ++row)
+                if (!(piece.control_points.row(row).array() == anchor.transpose().array()).all())
+                    return false;
+        return true;
+    }
 
 private:
     CommittedTrajectory trajectory_;

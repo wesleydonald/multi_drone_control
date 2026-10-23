@@ -50,6 +50,7 @@ class M2DFleetSupervisor(Node):
             operator_hold_after_goal=self.operator_hold_after_goal,
             simultaneous=bool(self.declare_parameter("simultaneous", False).value),
             progressive_policy=str(self.declare_parameter("attachment_policy", "legacy").value) == "measured_contact_15deg",
+            completion_mode=str(self.declare_parameter("completion_mode", "airborne_hold").value),
         )
         self.assignment_topic = str(
             self.declare_parameter("m2c_assignment_topic", "/m2c/assignment").value
@@ -88,6 +89,10 @@ class M2DFleetSupervisor(Node):
         self.land_request_pubs = {}
         for vehicle_id in self.vehicle_ids:
             ns = f"/{vehicle_id}"
+            self.create_subscription(
+                Bool, f"{ns}/arming_state_feedback",
+                lambda msg, vehicle_id=vehicle_id: self.core.update_arming_state(
+                    vehicle_id, bool(msg.data), stamp_s=self._now_s()), 10)
             self.create_subscription(
                 String,
                 f"{ns}/join_planner/phase",
@@ -167,7 +172,7 @@ class M2DFleetSupervisor(Node):
             )
         else:
             self.get_logger().warning(
-                "Operator fleet LAND ignored: request is only accepted from M2D_SUCCESS_HOLD."
+                "Operator fleet LAND ignored: accepted from M2D_SUCCESS_HOLD or M2D_PARKED."
             )
 
     def _publish_current_landing_request(self, snapshot) -> None:
@@ -180,7 +185,7 @@ class M2DFleetSupervisor(Node):
         # operator request robust to one dropped volatile message without changing
         # per-vehicle landing authority. Once the planner acknowledges by entering
         # M2_LANDING_STAGE/LANDING, it owns the remainder of the sequence.
-        if self.core.phases[vehicle_id] == ATTACHED_PHASE:
+        if self.core.phases[vehicle_id] in {ATTACHED_PHASE, "M2_PARKED_ATTACHED"}:
             request = Bool()
             request.data = True
             self.land_request_pubs[vehicle_id].publish(request)
@@ -226,6 +231,8 @@ class M2DFleetSupervisor(Node):
             "operator_hold_after_goal": self.operator_hold_after_goal,
             "landing_vehicle_id": snapshot.landing_vehicle_id,
             "landed_vehicle_ids": list(snapshot.landed_vehicle_ids),
+            "parked_vehicle_ids": list(snapshot.parked_vehicle_ids),
+            "completion_mode": snapshot.completion_mode,
         }
         status = String()
         status.data = json.dumps(payload, separators=(",", ":"), sort_keys=True)

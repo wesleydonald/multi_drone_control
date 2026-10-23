@@ -121,16 +121,19 @@ Arm and takeoff from the RViz panel, or by topic — see `docs/reference.md` §9
 1. **Start Gazebo from inside `simulation_assets/`.** The worlds include their drone models by *relative* path (`models/x3_drone0.sdf`), so running `gz sim simulation_assets/foo.sdf` from the repo root fails with `FrameAttachedToGraph unable to find ... x3_drone0::base_link` and the world comes up empty.
 2. **Start the RViz launch before the controller launch.** It owns the Gazebo pose bridges and the mocap emulators, so without it the trackers and planner both sit forever on "waiting for mocap".
 
+The defaults fly 1 m cables (22 Oct): the `_L100` worlds. A 0.55 m world (no suffix) needs `cable_len:=0.55` typed.
+The figure-8's size is `fig8_size` (default 0.9: x +-0.9, y +-0.45 m); `traj_radius` sizes the circle, spin and orbit.
+
 ## Cooperative carry (the OCP baseline)
 ```bash
-cd simulation_assets && gz sim three_rigid_ground_rig.sdf -v4 -r     # the rig twin
+cd simulation_assets && gz sim three_rigid_ground_rig_L100.sdf -v4 -r     # the rig twin
 ros2 launch bringup sim_io_launch.py num_drones:=3
 ros2 launch bringup sim_control_launch.py mode:=mpc num_drones:=3 load_traj:=circle
 ```
 
 ## Detach (a drone leaves mid-flight)
 ```bash
-cd simulation_assets && gz sim four_rigid_ground_rig.sdf -v4 -r
+cd simulation_assets && gz sim four_rigid_ground_rig_L100.sdf -v4 -r
 ros2 launch bringup sim_io_launch.py num_drones:=4 detach:=true
 ros2 launch bringup sim_control_launch.py mode:=dissipative num_drones:=4
 #   ARM -> TAKEOFF -> hit DETACH
@@ -138,10 +141,10 @@ ros2 launch bringup sim_control_launch.py mode:=dissipative num_drones:=4
 
 ## Attach (a drone joins mid-flight)
 ```bash
-# no rig-twin attach world yet: a legacy world (old_worlds/), the linear plant and legacy:=true
-cd simulation_assets && gz sim old_worlds/three_attach.sdf -v4 -r
-ros2 launch bringup sim_io_launch.py num_drones:=3 attach:=true sim_thrust_map:=linear
-ros2 launch bringup sim_control_launch.py mode:=attach legacy:=true
+# the rig-twin attach world: carriers on plates 3/11/7, QUAD4 free on the floor (1 m rods and arm)
+cd simulation_assets && gz sim three_rigid_ground_rig_attach_L100.sdf -v4 -r
+ros2 launch bringup sim_io_launch.py num_drones:=3 attach:=true
+ros2 launch bringup sim_control_launch.py mode:=attach
 #   ARM -> TAKEOFF -> hit ATTACH
 ```
 

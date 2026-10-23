@@ -63,7 +63,7 @@ LocalPlanResult LocalPlanner::plan(const LocalPlanRequest& request) const {
 
     output.partial = output.search.status.find("PADDED_CLOSEST_PARTIAL") != std::string::npos;
     output.effective_terminal_boundary = request.terminal_boundary;
-    if (output.partial && request.terminal_boundary.mode != TerminalMode::Stopped) {
+    if (output.partial) {
         output.effective_terminal_boundary.mode = TerminalMode::Stopped;
         output.effective_terminal_boundary.position =
             output.search.control_points->row(output.search.control_points->rows() - 1).transpose();

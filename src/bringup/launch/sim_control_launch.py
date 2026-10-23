@@ -8,12 +8,12 @@ mode:=
     mpc          carry on the load planner (mpc_planner)                    [default]
     free_hover   free_hover at target_z instead of the planner (no ring)
     dissipative  carry + mid-flight detach (/fleet/detach k); --detachable world
-    network      the dissipative network flies the whole flight after the lift
+    network      the paper's method (our port) flies the whole flight after the OCP's lift
     attach       three carriers + a newcomer that welds on (M1); sil:=true for tools/sil_bench.py
 
 Defaults: bringup/config/common.yaml, sim.yaml and its modes: entry (bringup/profiles.py).
 sim.yaml is the rig twin (the *_rig worlds). legacy:=true flies the worlds in
-simulation_assets/old_worlds/ on sim_legacy.yaml; network exists only there (attach: the twin attach worlds).
+simulation_assets/old_worlds/ on sim_legacy.yaml (every mode flies both).
 Knobs that are not launch arguments go in params_file:=<yaml>. What each mode starts, and why:
 bringup/graph_carry.py, graph_detach.py, graph_attach.py.
 """

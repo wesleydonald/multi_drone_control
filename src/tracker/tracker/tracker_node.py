@@ -72,6 +72,7 @@ def _solver_is_fresh():
 from utility_objects.visualization import TrajectoryVisualizer
 from utility_objects.data_logger import DataLogger, node_params, write_params
 from utility_objects.safety import EnvelopeChecker, EnvelopeLimits, tilt_deg_from_quat
+from utility_objects.position_limit import POS_LIMIT_REF_MARGIN_M, limit_horizon
 from utility_objects.callback_manager_multi import CallbackManagerMulti
 from interfaces.msg import MotionCaptureState, ELRSCommand, Telemetry
 from std_msgs.msg import Bool, Int32, Float64, Float64MultiArray, String
@@ -111,8 +112,9 @@ MODEL_CAP_PERIOD_S = 1.0       # the model throttle cap follows the pack voltage
 # acx/acy/acz = node-0 cable accel the model was given, ref_age = s since the last reference.
 TRACKER_W1_COLS = ('thr_out', 'thr_off', 'acx', 'acy', 'acz',
                    'ff_active', 'grounded', 'ref_age',
-                   'acm_x', 'acm_y', 'acm_z')   # the raw measured cable accel, before the cap and the slew limit
+                   'acm_x', 'acm_y', 'acm_z',   # the raw measured cable accel, before the cap and the slew limit
                                                  # (x the drone's mass = the cable's pull on it; Wesley 21 Oct)
+                   'solve_ms')                   # this tick's MPC solve (card 2026-10-23_paper_method_compare)
 
 # Height above spawn z at which the drone counts as AIRBORNE, which is when kT
 # switches from takeoff_thrust_ratio to thrust_ratio.
@@ -827,8 +829,15 @@ class Controller(Node):
             return
         arr = np.array(data[2:2 + fields * n_nodes],
                        dtype=float).reshape(n_nodes, fields)
-        self.planner_ref_pos = arr[:, 0:3]
-        self.planner_ref_vel = arr[:, 3:6]
+        pos, vel = arr[:, 0:3], arr[:, 3:6]
+        limit = getattr(self, 'pos_limit_m', 0.0)
+        if limit > 0.0:
+            pos, vel, k = limit_horizon(pos, vel, limit - POS_LIMIT_REF_MARGIN_M)
+            if k:
+                self.get_logger().warn(f"[Drone {self.drone_id + 1}] reference past the position limit: {k} nodes "
+                                       f"held at +-{limit - POS_LIMIT_REF_MARGIN_M:.2f} m", throttle_duration_sec=1.0)
+        self.planner_ref_pos = pos
+        self.planner_ref_vel = vel
         self.planner_ref_acc = arr[:, 6:9]
         self.planner_ref_cable = arr[:, 9:12] if fields >= 12 else None
         self._ref_arrival_sim = self.get_clock().now().nanoseconds * 1e-9
@@ -932,6 +941,9 @@ class Controller(Node):
         self.drop_tilt_deg = float(p('drop_tilt_deg', 30.0).value)
         self.drop_samples = int(p('drop_samples', 2).value)
         self.drop_glitch_step_deg = float(p('drop_glitch_step_deg', 15.0).value)
+        # the position limit (Wesley 22 Oct; 0 = off, card 2026-10-22_position_limit): every reference this tracker
+        # flies is kept POS_LIMIT_REF_MARGIN_M inside +-pos_limit_m in x and y, whoever sent it
+        self.pos_limit_m = float(p('pos_limit_m', 0.0).value)
         self._drop_requested_t = None
         self._drop_count = 0
         self._drop_prev_q = None
@@ -1206,7 +1218,8 @@ class Controller(Node):
                 num(lambda: ac[0]), num(lambda: ac[1]), num(lambda: ac[2]),
                 num(lambda: self._planner_ff_active), num(lambda: self._load_grounded()),
                 num(lambda: (self._safety_clock.now() - last).nanoseconds * 1e-9),
-                num(lambda: raw[0]), num(lambda: raw[1]), num(lambda: raw[2])]
+                num(lambda: raw[0]), num(lambda: raw[1]), num(lambda: raw[2]),
+                num(lambda: self._last_solve_ms)]
 
     def _publish_channels(self, u, u_rate):
         """Send [roll, pitch, throttle, yaw] to the FC, or armed-idle before TAKEOFF.
@@ -1904,6 +1917,7 @@ class Controller(Node):
             status = self.ocp.solve()
             self._last_solve_status = int(status)
             solve_ms = (time.perf_counter() - t0) * 1000
+            self._last_solve_ms = solve_ms
             #self.get_logger().info(f"Solve time: {solve_ms:.2f}ms")
             if status != 0:
                 # NON-FATAL: a single bad solve should not kill the node. Hold the

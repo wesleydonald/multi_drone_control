@@ -639,6 +639,86 @@ def test_contour_lag_is_empty_without_motion():
     assert M.contour_lag(t, np.zeros((460, 2)), np.zeros((460, 2))) == {}
 
 
+# ── the line's clock-free error and its reach (card 2026-10-23_paper_method_compare) ────────────────────
+
+def _shuttle(t, d=0.9, v=0.4, delay=0.0, amp=1.0, x0=0.2):
+    """line_x on the planner's schedule, from rest at x0: x0 + amp * d/2 (1 - cos(w (t - delay)))."""
+    w = 2.0 * v / d
+    tt = np.maximum(np.asarray(t, float) - delay, 0.0)
+    return x0 + amp * 0.5 * d * (1.0 - np.cos(w * tt))
+
+
+def test_segment_error_is_the_sideways_and_height_error_inside_the_segment():
+    p = np.array([[0.5, 0.03, 1.04], [0.2, 0.0, 1.0], [1.1, 0.0, 1.0]])
+    e = M.segment_error(p, 0.2, 1.1, 0.0, 1.0)
+    assert e == pytest.approx([0.05, 0.0, 0.0], abs=1e-12)
+
+
+def test_segment_error_scores_an_overshoot_past_either_end_and_takes_a_per_sample_reference():
+    p = np.array([[1.13, 0.0, 1.0], [0.16, 0.0, 1.0], [1.13, 0.03, 0.96]])
+    e = M.segment_error(p, 1.1, 0.2, np.array([0.0, 0.0, 0.0]), np.array([1.0, 1.0, 1.0]))
+    assert e == pytest.approx([0.03, 0.04, math.sqrt(0.03 ** 2 * 2 + 0.04 ** 2)], abs=1e-12)
+
+
+def test_segment_error_without_the_along_line_term_is_the_distance_to_the_line():
+    """The C headline adds the reach, which already counts an overshoot (the card's critic, M2)."""
+    p = np.array([[1.13, 0.0, 1.0], [0.16, 0.0, 1.0], [1.13, 0.03, 0.96], [0.5, 0.03, 1.04]])
+    e = M.segment_error(p, 1.1, 0.2, 0.0, 1.0, past_end=False)
+    assert e == pytest.approx([0.0, 0.0, 0.05, 0.05], abs=1e-12)
+
+
+def test_turnaround_reach_waits_half_a_period_for_a_late_ring():
+    """1.6 s late at 0.6 m/s (past a quarter period, 1.18 s; a quarter read it 7 cm short): it still turns at the end,
+    so no shortfall."""
+    d, v = 0.9, 0.6
+    T = math.pi * d / v
+    t = np.arange(0.0, 4 * T + 0.01, 0.02)
+    r = M.turnaround_reach(t, _shuttle(t, v=v, delay=1.6), 0.0, T, 0.2, 1.1, t_end=4 * T)
+    assert len(r) == 7 and max(abs(x[2]) for x in r) < 1e-3
+
+
+def test_a_late_ring_on_the_line_is_not_charged_clock_free():
+    """0.47 s late (the port's offline lag) on 4 cycles of the 0.9 m line: the clock-free error stays 0, the reach
+    stays 0, only the lag and the time-indexed error see it."""
+    d, v = 0.9, 0.4
+    T = math.pi * d / v
+    t = np.arange(0.0, 4 * T, 0.02)
+    ref, ring = _shuttle(t), _shuttle(t, delay=0.47)
+    e = M.segment_error(np.c_[ring, np.zeros_like(t), np.ones_like(t)], 0.2, 1.1, 0.0, 1.0)
+    assert np.max(e) < 1e-12
+    reach = M.turnaround_reach(t, ring, 0.0, T, 0.2, 1.1)
+    w = t > 1.0
+    assert M.phase_lag_s(t[w], ref[w], ring[w]) == pytest.approx(0.47, abs=0.01)
+    assert max(abs(r[2]) for r in reach) < 1e-4
+
+
+def test_turnaround_reach_sees_a_line_flown_short_and_a_line_flown_long():
+    """The blind spot it closes: a shuttle flown at 92.5 % of its 0.9 m is 6.75 cm short at the far end and inside the
+    segment everywhere, so its clock-free error is 0. Reach reads +6.75 cm at every far end, 0 at the near ones; an
+    overshooting ring reads minus."""
+    d, v = 0.9, 0.2
+    T = math.pi * d / v
+    t = np.arange(0.0, 4 * T, 0.02)
+    short = _shuttle(t, v=v, amp=0.925)
+    assert np.max(M.segment_error(np.c_[short, np.zeros_like(t), np.ones_like(t)], 0.2, 1.1, 0.0, 1.0)) < 1e-12
+    r = M.turnaround_reach(t, short, 0.0, T, 0.2, 1.1)
+    assert [round(x[1], 3) for x in r] == [1.1, 0.2, 1.1, 0.2, 1.1, 0.2, 1.1]        # 7 reversals in 4 cycles
+    assert [x[2] for x in r[0::2]] == pytest.approx([0.0675] * 4, abs=2e-4)
+    assert [x[2] for x in r[1::2]] == pytest.approx([0.0] * 3, abs=1e-5)      # the 0.02 s samples miss the minimum
+    over = M.turnaround_reach(t, _shuttle(t, v=v, amp=1.04), 0.0, T, 0.2, 1.1)
+    assert over[0][2] == pytest.approx(-0.036, abs=2e-4)
+
+
+def test_turnaround_reach_counts_only_reversals_inside_the_window_and_runs_either_way():
+    d, v = 0.9, 0.4
+    T = math.pi * d / v
+    t = np.arange(0.0, 2 * T, 0.02)
+    back = 1.3 - (_shuttle(t) - 0.2)                         # x0 1.3 -> x1 0.4 and back
+    r = M.turnaround_reach(t, back, 0.0, T, 1.3, 0.4, t_end=1.6 * T)
+    assert [round(x[0] / T, 2) for x in r] == [0.5, 1.0]     # the third (1.5 T) needs the window to 1.75 T
+    assert max(abs(x[2]) for x in r) < 1e-3
+
+
 def test_fit_circle_recovers_centre_and_radius():
     th = np.linspace(0, 2 * math.pi, 50)
     c, r = M.fit_circle(np.column_stack([0.3 + 0.48 * np.cos(th), -0.2 + 0.48 * np.sin(th)]))

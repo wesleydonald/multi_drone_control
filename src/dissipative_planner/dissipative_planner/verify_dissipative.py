@@ -36,6 +36,7 @@ Exit code is nonzero on any failure. A PNG (load height, drone elevations, tensi
 outward guards, 3D formation) is written to generated/dissipative_verify/ (path printed).
 
 Run:  python3 -m dissipative_planner.verify_dissipative
+      python3 -m dissipative_planner.verify_dissipative --geometry c   # A-D at result C's 1 m / 60 deg geometry
 """
 import os
 import sys
@@ -70,6 +71,11 @@ SETTLE_S = 1.0
 FF_EASE_S = 1.0
 LEVEL = np.array([1.0, 0.0, 0.0, 0.0])
 OUT_TOL = 1e-6
+# result C's twin geometry (card 2026-10-23_paper_method_compare): 4 quads, 1 m rods at 60 deg, the 0.86 kg ring of
+# radius 0.225, 0.55 kg quads, lifted from 0.85 to 1.0 m. --geometry c runs tests A-D there; the network's mode on the
+# velocity loop is tools/network_tune.py
+GEOMETRY_C = dict(N=4, CABLE_LEN=1.0, LOAD_MASS=0.86, DRONE_MASS=0.55, ATTACH_RADIUS=0.225, ATTACH_Z=0.02,
+                  GROUND_Z=0.02, START_LOAD_Z=0.85, START_ELEV_DEG=60.0, TARGET_Z=1.0)
 
 
 def lift_target(load_pos, hover_xy, target_z, ramp_z):
@@ -637,5 +643,22 @@ def main(args=None):
     return all_ok
 
 
+def main_geometry_c():
+    """Tests A-D (hold and lift, outward hold, a 4->3 detach, the inward guard) at GEOMETRY_C on the twin network
+    mode's 60 deg cone. No plot. Returns all passed."""
+    globals().update(GEOMETRY_C)
+    p = DissipativeParams(elev_deg=60.0)
+    lift = run_closed_loop(sim_t=16.0, params=p)
+    detach = run_closed_loop(detach_slot=1, detach_t=11.0, sim_t=16.0, params=p)
+    ok, results = check(lift, detach)
+    print('\n=== the network, CLOSED-LOOP verification at result C\'s geometry (1 m rods, 60 deg) ===')
+    for name, good, detail in results:
+        print(f'  [{"PASS" if good else "FAIL"}] {name:22s} {detail}')
+    print(f'\n  RESULT: {"ALL PASSED" if ok else "FAILURES ABOVE"}\n')
+    return ok
+
+
 if __name__ == '__main__':
+    if sys.argv[1:3] == ['--geometry', 'c']:
+        sys.exit(0 if main_geometry_c() else 1)
     main()

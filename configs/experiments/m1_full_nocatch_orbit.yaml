@@ -2,6 +2,8 @@ name: m1_full_nocatch_orbit
 description: 'TB6 (card 2026-10-10_combined_m1_contact rev 10 §6.2), exploratory: the full M1 on the circle (welded start, DETACH 3 half way round, his whole mission) with sim_catch false: his give-up and our co-moving take-back after a detach, newcomer_fault_land off; falsifier: an attach declared, a fleet stop, a TB4 falsifier'
 world: three_rigid_ground_rig_attach_welded_pickup.sdf
 ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

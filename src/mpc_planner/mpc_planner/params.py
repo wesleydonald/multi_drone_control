@@ -48,6 +48,15 @@ SOLVE_BUDGET_S = 0.0           # s wall cap on a solve's SQP iterations; 0 = off
 MAX_SHIFT_PUBLISHES = 3        # failed solves bridged by the shifted last horizon, then stale
 
 
+def prebuild_sizes(n, reserved_attach=0, min_survivors=3):
+    """Every fleet size a flight of n carriers and reserved_attach newcomers can be resized to: n - reserved - 2 up
+    to n + reserved as before, and down to min_survivors (never below 2), so an 8-quad chain reaches its pair.
+    The same as before for n <= 4; tools/prebuild_planner.py builds the same set."""
+    n, r = int(n), int(reserved_attach)
+    lo = max(2, min(n - r - 2, int(min_survivors)))
+    return sorted({n} | set(range(lo, n + r + 1)))
+
+
 class PlannerConfig:
     """Declares and resolves every load-planner ROS parameter. Attributes mirror the
     node fields the rest of the planner reads; the node copies them onto itself."""
@@ -69,7 +78,12 @@ class PlannerConfig:
         # Must match the payload mass in the world SDF: cable tension is sized
         # off this, so a mismatch scales every drone's tension FF.
         self.load_mass = float(p('load_mass', LOAD_MASS).value)
-        self.load_inertia = load_inertia(self.load_mass)
+        # The ring's inertia about its CoG (kg m^2), Ixx = Iyy: 0 = the M2A ring's per kg at load_mass, as
+        # before; another ring (S's R 0.5 m, card 2026-10-23_scalability) types both. The OCP bakes it in.
+        ixx, izz = float(p('load_ixx', 0.0).value), float(p('load_izz', 0.0).value)
+        if ixx < 0.0 or izz < 0.0 or (ixx > 0.0) != (izz > 0.0):
+            raise ValueError(f'load_ixx {ixx:g} / load_izz {izz:g}: type both (> 0) or neither')
+        self.load_inertia = [ixx, ixx, izz] if ixx > 0.0 else load_inertia(self.load_mass)
         # Per-drone mass (with pack): the OCP's tension -> drone-acceleration relation
         # and the static cable share the trackers' kt_trim uses both divide by it.
         self.drone_mass = float(p('drone_mass', DRONE_MASS).value)
@@ -140,7 +154,9 @@ class PlannerConfig:
         self.load_traj = str(p('load_traj', 'hover').value)
         self.traj_speed = float(p('traj_speed', 0.1).value)      # m/s lateral
         self.traj_distance = float(p('traj_distance', 1.0).value)  # m (line_x)
-        self.traj_radius = float(p('traj_radius', 0.5).value)    # m (circle)
+        self.traj_radius = float(p('traj_radius', 0.5).value)    # m (circle, spin, orbit)
+        # the figure-8's own size (x +-size, y +-size/2; Wesley 22 Oct); 0 = traj_radius, as before
+        self.fig8_size = float(p('fig8_size', 0.0).value)
         # Separate from lift_ramp_vel so a slow takeoff doesn't force a slow land.
         self.land_vel = float(p('land_vel', LAND_VEL).value)
 
@@ -149,8 +165,9 @@ class PlannerConfig:
             f'[planner] geometry: n={self.n} cable_len={self.cable_len:.3f} '
             f'attach_radius={self.attach_radius:.3f} attach_z={self.attach_z:.3f} '
             f'load_mass={self.load_mass:.3f} '
+            f'load_inertia=[{self.load_inertia[0]:.4g}, {self.load_inertia[2]:.4g}] '
             f'pivot_offset={[round(v, 3) for v in self.pivot_offset]} '
             f'start_taut={self.start_taut} target_z={self.target_z:.3f} '
             f'lift_ramp_vel={self.lift_ramp_vel:.3f} load_traj={self.load_traj} '
             f'traj_speed={self.traj_speed:.3f} traj_distance={self.traj_distance:.3f} '
-            f'traj_radius={self.traj_radius:.3f}')
+            f'traj_radius={self.traj_radius:.3f} fig8_size={self.fig8_size:.3f}')

@@ -8,6 +8,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -38,6 +39,7 @@ def generate_launch_description() -> LaunchDescription:
         launch_arguments={
             'planner_rate_hz': '5.0',
             'minimum_search_z_m': '0.20',
+            'stopped_continuation_enabled': 'true',
             'ring_commitment_topic': '/irl/ring/committed_trajectory',
         }.items(),
     )
@@ -52,12 +54,20 @@ def generate_launch_description() -> LaunchDescription:
             str(ground_ring),
             str(drone_share / 'config' / 'm1_measured_tip_tracking.yaml'),
             {'pickup_alignment_mode': 'measured_tip_tiered',
-             'target_alignment_mode': LaunchConfiguration('target_alignment_mode')},
+             'm1_gentle_takeoff_enabled': True,
+             'c1f2_stopped_continuation_enabled': True,
+             'target_alignment_mode': LaunchConfiguration('target_alignment_mode'),
+             'ring_descent_mode': LaunchConfiguration('ring_descent_mode')},
         ],
     )
     controller = Node(
         package='tejen_mpc', executable='main',
-        name='tejen_mpc', output='screen', parameters=[str(base)],
+        name='tejen_mpc', output='screen',
+        parameters=[str(base), LaunchConfiguration('controller_tuning_file'), {
+            'external_reference_validate_timing': True,
+            'lateral_disturbance_diagnostics_enabled': ParameterValue(
+                LaunchConfiguration('lateral_disturbance_diagnostics_enabled'), value_type=bool),
+        }],
     )
     elrs = Node(
         package='tejen_mission', executable='elrs_interface_irl',
@@ -70,9 +80,17 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription([
         DeclareLaunchArgument('gui', default_value='true'),
+        DeclareLaunchArgument('lateral_disturbance_diagnostics_enabled', default_value='false',
+                              choices=['false', 'true'], description='Log the existing observer without changing bias compensation'),
+        DeclareLaunchArgument('controller_tuning_file', default_value=str(base),
+                              description='Optional controller-only YAML overlay; default retains base settings'),
+        LogInfo(msg=['M1 controller tuning file: ', LaunchConfiguration('controller_tuning_file')]),
         DeclareLaunchArgument('target_alignment_mode', default_value='legacy',
                               choices=['legacy', 'measured_tip_trim']),
         LogInfo(msg=['M1 local target alignment: ', LaunchConfiguration('target_alignment_mode')]),
+        DeclareLaunchArgument('ring_descent_mode', default_value='legacy',
+                              choices=['legacy', 'measured_tip_tiered']),
+        LogInfo(msg=['M1 ground-ring descent: ', LaunchConfiguration('ring_descent_mode')]),
         LogInfo(msg='M1 GROUND RING: real pickup ID6, quad ID12, magnet ID22, measured ring ID8.'),
         LogInfo(msg='Ring contact is an UNVERIFIED trial. ARM/TAKEOFF and LAND remain manual.'),
         mocap,

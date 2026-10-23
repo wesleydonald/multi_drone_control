@@ -44,6 +44,8 @@ esac; done
 # mode:=attach counts only the tethered drones (default 3); the newcomer is one more radio
 if [ "$MODE" = attach ]; then N=$(( ${N:-3} + 1 )); else N=${N:-4}; fi
 
+# the planner on the P-cores (card 2026-10-23_scalability): the bringup graphs prefix it with taskset -c <cpus>
+[ -n "${MDC_PLANNER_CPUS:-}" ] && echo "rig_flight: MDC_PLANNER_CPUS=$MDC_PLANNER_CPUS (the planner's CPUs)"
 if [ "${RIG_FLIGHT_DRY_RUN:-0}" = 1 ]; then
   echo "rig_flight: DRY RUN F=$F LAUNCH=$LAUNCH N=$N DIR=$D ARGS=$*"; exit 0
 fi
@@ -70,6 +72,10 @@ export MDC_RUN_DIR="$PWD/$D/${F}_logs"
 # lean rclpy (Wesley 14 Oct): no default QoS event handlers in any Python node, -11 % CPU on the desk graph
 # (tools/lean_rclpy/sitecustomize.py, docs/analysis/rig_load_2026-10-14.md). MDC_LEAN_RCLPY=0 turns it off.
 export MDC_LEAN_RCLPY="${MDC_LEAN_RCLPY:-1}" PYTHONPATH="$REPO/tools/lean_rclpy${PYTHONPATH:+:$PYTHONPATH}"
+# the rig's own solver folder (Wesley 22 Oct): twin runs on this laptop rebuild <repo>/generated at the twin's mass;
+# tools/prebuild_rig.sh fills this one at the rig's
+export MDC_ACADOS_ROOT="${MDC_RIG_ACADOS_ROOT:-$HOME/mdc_rig_generated}"
+[ -f "$MDC_ACADOS_ROOT/c_generated_code_load_planner/.build_sig_${N:-3}" ] || echo "rig_flight: WARNING no prebuilt planner for ${N:-3} quads in $MDC_ACADOS_ROOT: it compiles at launch; run tools/prebuild_rig.sh first" >&2
 # card 2026-10-14_tracker_timing: twin first. A stray export of its switches must not reach the rig
 if [ "${RIG_TIMING_SWITCHES:-0}" != 1 ]; then
   for v in TRACKER_CMD_NEXT_TICK MDC_MOCAP_VEL_FILTER MDC_MOCAP_VEL_FRAMES MDC_MOCAP_VEL_DRONES; do

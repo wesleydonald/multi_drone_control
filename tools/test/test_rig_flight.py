@@ -50,3 +50,13 @@ def test_refuses_without_a_local_dds_domain(tmp_path):
     r = subprocess.run(['bash', SH, 'real_control_launch.py', 'r403'], env=env, capture_output=True, text=True)
     assert r.returncode == 1 and 'ROS_LOCALHOST_ONLY=1' in r.stderr
     assert not list(tmp_path.iterdir()), 'nothing may be written before the check'
+
+
+def test_the_planner_cpus_are_echoed_when_set(tmp_path):
+    env = {k: v for k, v in os.environ.items() if k != 'MDC_PLANNER_CPUS'}
+    env.update(RIG_FLIGHT_DRY_RUN='1', RIG_FLIGHT_DIR=str(tmp_path))
+    r = subprocess.run(['bash', SH, 'real_control_launch.py', 'r500'], env=env, capture_output=True, text=True)
+    assert r.returncode == 0 and 'MDC_PLANNER_CPUS' not in r.stdout
+    env['MDC_PLANNER_CPUS'] = '0-7'
+    r = subprocess.run(['bash', SH, 'real_control_launch.py', 'r500'], env=env, capture_output=True, text=True)
+    assert r.returncode == 0 and 'rig_flight: MDC_PLANNER_CPUS=0-7' in r.stdout

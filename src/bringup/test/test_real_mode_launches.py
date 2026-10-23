@@ -89,6 +89,7 @@ def _record(ctx, e):
         'use_sim_time': bool(params.get('use_sim_time', glob.get('use_sim_time', False))),
         'remappings': sorted((_s(ctx, k), _s(ctx, v)) for k, v in (e._Node__remappings or [])),
         'arguments': [_s(ctx, a) for a in (e._Node__arguments or [])],
+        'prefix': _s(ctx, e.process_description.prefix),
     }
 
 
@@ -141,9 +142,9 @@ def evaluate(launch_file, **args):
 
 
 def sim(mode, **args):
-    # network exists only on the legacy profile; the legacy attach graph is what these tests
-    # check unless legacy=False is typed (the twin attach worlds, 8 Oct)
-    if mode in ('attach', 'network'):
+    # the legacy attach graph is what these tests check unless legacy=False is typed (the twin attach worlds,
+    # 8 Oct); network flies the twin unless legacy=True is typed (22 Oct)
+    if mode == 'attach':
         args.setdefault('legacy', True)
     return evaluate('sim_control_launch.py', mode=mode, **args)
 
@@ -188,7 +189,7 @@ def _assert_rig_graph(nodes, n_radio, kt):
             assert isinstance(p['thrust_ratio'], float) and p['thrust_ratio'] == kt
             assert p['takeoff_thrust_ratio'] == 0.0            # ground takeoff: = thrust_ratio
             assert p['pose_timeout_s'] == 0.25 and p['safety_ref_timeout_s'] == 1.0
-            assert p['payload_rest_z'] == 0.05
+            assert p['payload_rest_z'] == 0.0275                 # the ring's centre of mass at rest (22 Oct)
     return g
 
 
@@ -752,6 +753,159 @@ def test_legacy_attach_unchanged_by_the_twin_plumbing():
     assert all('thrust_map' not in n['params'] for k, n in g.items() if '/bf_comm_' in k)
 
 
+# ── sim U: the magnet caught off its slot (card 2026-10-23_catch_offset), twin only ─────────────────────────────
+
+def _aim(**args):
+    """(attach target x, y) after checking the twin's weld point moved with it and the weld trigger did not."""
+    g = _by_name(sim('attach', legacy=False, num_drones=3, **args))
+    t, m = g['/attach_target_publisher']['params'], g['/magnet_attachment_manager']['params']
+    assert (m['object_x_offset'], m['object_y_offset']) == pytest.approx((t['x_offset'], t['y_offset']), abs=1e-12)
+    assert (m['attach_radius'], m['object_z_offset']) == (0.025, 0.04)
+    return t['x_offset'], t['y_offset']
+
+
+def test_catch_offset_moves_the_aim_and_the_twin_weld_point_together():
+    w = {'weld_radius': 0.025, 'weld_point_z': 0.04}
+    assert _aim(**w) == (0.0, 0.225)
+    assert _aim(catch_offset_t=0.04, **w) == pytest.approx((0.0398, 0.2214), abs=1e-4)    # a 4 cm chord, clockwise
+    assert _aim(catch_offset_t=-0.04, **w) == pytest.approx((-0.0398, 0.2214), abs=1e-4)
+    assert _aim(catch_offset_r=-0.04, **w) == pytest.approx((0.0, 0.185), abs=1e-12)
+    assert _aim(catch_offset_r=0.08, **w) == pytest.approx((0.0, 0.305), abs=1e-12)
+
+
+def test_the_default_attach_graph_is_unchanged_by_the_catch_offset_knobs():
+    """Zero offsets and the measured point typed give the very graph of the untyped default: the slot to the target and
+    the manager, no new planner parameter."""
+    base = sim('attach', legacy=False, num_drones=3)
+    typed = sim('attach', legacy=False, num_drones=3, catch_offset_t=0.0, catch_offset_r=0.0,
+                attach_point_source='measured')
+    strip = lambda nodes: [(n['name'], {k: v for k, v in n['params'].items() if k != 'params_file'})  # noqa: E731
+                           for n in nodes]
+    assert strip(base) == strip(typed)
+    p = _by_name(base)['/dissipative_planner']['params']
+    assert not {'attach_point_source', 'attach_x_offset', 'attach_y_offset', 'weld_point_z'} & set(p)
+
+
+def _head_graph_attach():
+    """HEAD's bringup/graph_attach.py as a module, or None (no git, or HEAD already carries the U knobs: then this
+    comparison was the pre-commit check)."""
+    import subprocess
+    import tempfile
+    try:
+        src = subprocess.run(['git', 'show', 'HEAD:src/bringup/bringup/graph_attach.py'], capture_output=True,
+                             text=True, check=True, cwd=os.path.dirname(LAUNCH_DIR)).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    if 'catch_offset' in src:
+        return None
+    with tempfile.NamedTemporaryFile('w', suffix='.py', delete=False) as fh:
+        fh.write(src)
+    spec = importlib.util.spec_from_file_location('graph_attach_head', fh.name)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_default_attach_graphs_match_heads(monkeypatch):
+    """Critic 23 Oct (card 2026-10-23_catch_offset): the default twin attach graph, typed at zero or not, and the rig's
+    attach graph are HEAD's graphs (HEAD's graph_attach.py on today's profiles; the rig's pos_limit_m, its own change
+    of 22 Oct, left out)."""
+    import bringup
+    head = _head_graph_attach()
+    if head is None:
+        pytest.skip('no git, or HEAD already has the catch-offset knobs')
+    strip = lambda nodes: [(n['name'], n['executable'], n['remappings'], n['arguments'],  # noqa: E731
+                            {k: v for k, v in n['params'].items() if k not in ('params_file', 'pos_limit_m')})
+                           for n in nodes]
+    now = {'twin': strip(sim('attach', legacy=False, num_drones=3)),
+           'twin typed 0': strip(sim('attach', legacy=False, num_drones=3, catch_offset_t=0.0, catch_offset_r=0.0,
+                                     attach_point_source='measured')),
+           'legacy': strip(sim('attach', num_drones=3)),
+           'rig': strip(rig('attach', enable_approach_mpc=False))}
+    monkeypatch.setattr(bringup, 'graph_attach', head)
+    then = {'twin': strip(sim('attach', legacy=False, num_drones=3)),
+            'legacy': strip(sim('attach', num_drones=3)),
+            'rig': strip(rig('attach', enable_approach_mpc=False))}
+    then['twin typed 0'] = then['twin']
+    assert now == then
+
+
+def test_attach_point_source_slot_reaches_the_planner_with_the_slot_not_the_aim():
+    g = _by_name(sim('attach', legacy=False, num_drones=3, attach_point_source='slot', catch_offset_t=0.04))
+    p = g['/dissipative_planner']['params']
+    assert (p['attach_point_source'], p['attach_x_offset'], p['attach_y_offset']) == ('slot', 0.0, 0.225)
+    assert 'weld_point_z' not in p                                      # the take-back's weld point stays unset
+    assert g['/attach_target_publisher']['params']['x_offset'] == pytest.approx(0.0398, abs=1e-4)
+
+
+def test_catch_offset_and_the_slot_arm_are_refused_off_our_twin_approach():
+    with pytest.raises(RuntimeError, match='catch_offset'):
+        _twin_partner(catch_offset_t=0.04)
+    with pytest.raises(RuntimeError, match='attach_point_source slot'):
+        _twin_partner(attach_point_source='slot')
+    with pytest.raises(RuntimeError, match='measured or slot'):
+        sim('attach', legacy=False, num_drones=3, attach_point_source='tip')
+    with pytest.raises(RuntimeError, match='chord'):
+        sim('attach', legacy=False, num_drones=3, catch_offset_t=0.5)
+    for knob in ({'catch_offset_t': 0.04}, {'attach_point_source': 'slot'}):    # the rig profile does not know them
+        with pytest.raises(RuntimeError, match='unknown knob'):
+            rig('attach', enable_approach_mpc=False, **knob)
+
+
+# ── the paper's method on the twin (card 2026-10-23_paper_method_compare) ──────────────────────────────
+
+NET_PLANNER_KEYS = ('auto_network_handover', 'auto_handover_settle_s', 'diss_ki_load', 'diss_a_i_load_max',
+                    'diss_trim_share_weighted', 'handover_blend_s', 'net_damp_relative', 'net_twin_geometry',
+                    'net_hold_carry')
+VEL_KEYS = ('control_mode', 'vel_kp_pos', 'vel_kv', 'vel_ki', 'vel_k_att', 'vel_swing_k')
+
+
+def test_twin_network_flies_the_twin_plant_and_hands_over_to_the_velocity_loop():
+    """mode:=network on the twin: the dissipative graph's plant, map and geometry, the trackers' velocity loop after
+    the hand-over, the planner's approved network values, every switch the critic has not seen off."""
+    g = _by_name(sim('network', sim_thrust_offset='0.181,0.185,0.187,0.187'))
+    bf = {k: n['params'] for k, n in g.items() if '/bf_comm_' in k}
+    assert sorted(bf) == [f'/bf_comm_{i}' for i in range(4)]
+    assert all(v['thrust_map'] == 'rig' for v in bf.values())
+    assert [bf[f'/bf_comm_{i}']['thrust_offset'] for i in range(4)] == [0.181, 0.185, 0.187, 0.187]
+    for i in range(4):
+        t = g[f'/tracker_{i}']['params']
+        assert t['control_mode'] == 'velocity_after_handover' and t['vel_ki'] == 0.0
+        assert (t['thrust_offset'], t['throttle_max']) == (0.185, 0.8)
+    p = g['/dissipative_planner']['params']
+    assert p['auto_network_handover'] is True and p['reconfig_mode'] == 'network'
+    assert p['diss_elev_deg'] == 60.0 and p['diss_ki_load'] == 1.0 and p['net_horizon_preview'] is False
+    assert list(p['pivot_offset']) == [0.0, 0.0, -0.04] and p['handover_blend_s'] == 0.0
+    assert (p['net_twin_geometry'], p['net_damp_relative'], p['net_hold_carry']) == (False, False, False)
+    assert 'diss_balanced_tensions' not in p and 'reserved_attach' not in p
+
+
+def test_twin_network_switches_reach_the_planner_from_a_params_file():
+    p = _by_name(sim('network', net_damp_relative=True, net_traj_lean=True, net_twin_geometry=True,
+                     net_hold_carry=True, traj_hold_s=5.0))['/dissipative_planner']['params']
+    assert (p['net_damp_relative'], p['net_traj_lean'], p['net_twin_geometry'], p['net_hold_carry']) == (True,) * 4
+    assert p['traj_hold_s'] == 5.0
+
+
+def test_twin_dissipative_graph_carries_no_network_knob():
+    """The dissipative mode's graph is unchanged by the network mode: a network switch in its params file is not
+    passed, and its trackers have no velocity loop."""
+    g = _by_name(sim('dissipative', net_damp_relative=True))
+    assert not set(NET_PLANNER_KEYS) & set(g['/dissipative_planner']['params'])
+    for i in range(4):
+        assert not set(VEL_KEYS) & set(g[f'/tracker_{i}']['params'])
+
+
+def test_legacy_network_graph_is_unchanged():
+    g = _by_name(sim('network', legacy=True))
+    p = g['/dissipative_planner']['params']
+    assert p['auto_network_handover'] is True and p['reconfig_mode'] == 'network'
+    assert not {'pivot_offset', 'handover_blend_s', 'net_damp_relative', 'net_twin_geometry'} & set(p)
+    assert all('thrust_map' not in n['params'] for k, n in g.items() if '/bf_comm_' in k)
+    assert not any('detach_bridge' in k for k in g)
+    assert g['/tracker_0']['params']['control_mode'] == 'mpc'
+
+
 # ── typed angles clockwise, node parameters counter-clockwise (Wesley 14 Oct) ─────────────────────────
 
 def _planner_az(nodes):
@@ -846,8 +1000,9 @@ def test_partner_contact_twin_graph():
     assert mgr['sim_catch'] is False and mgr['proof_d_ok'] == 0.006    # _nocatch; E1's values
 
 
-# QUAD4's record on the combined rig (rig-port critic round 2, A3: refused untyped)
-QUAD4_RECORD = {'weld_point_z': 0.031, 'attach_cable_len': 0.54}
+# QUAD4's record on the combined rig (rig-port critic round 2, A3: refused untyped): the 0.55 m cables' record, flown
+# with those cables (a record 0.15 m off the carriers' cable_len is refused, 22 Oct)
+QUAD4_RECORD = {'weld_point_z': 0.031, 'attach_cable_len': 0.54, 'cable_len': 0.55}
 
 
 @pytest.fixture
@@ -941,7 +1096,7 @@ def test_combined_rig_with_his_nodes(dds):
     """partner_nodes: his rig launch in its own scope, our weld point as his contact target, his planner and MPC
     on the wall clock with his topics; still one mocap node, one radio per drone, no Gazebo node."""
     nodes = rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01,
-                weld_point_z=0.031, attach_cable_len=0.54, partner_nodes=True, proof_taut_len=0.577,
+                weld_point_z=0.031, attach_cable_len=0.54, cable_len=0.55, partner_nodes=True, proof_taut_len=0.577,
                 partner_args='pickup_lift_height:=2.1 magnet_drop_below_quad:=0.582 mpc_thrust_ratio:=21.5')
     g = _assert_rig_graph(nodes, 4, 35.2)
     p = g['/online_join_planner']['params']
@@ -951,7 +1106,8 @@ def test_combined_rig_with_his_nodes(dds):
     # one plate point for both stacks (plan 2026-10-14 WP3): his target is our weld point in x, y too
     assert tuple(g['/fake_cooperative_transport_world']['params']['bridge_attach_xy_m']) == pytest.approx((0.0, 0.225))
     moved = _by_name(rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01,
-                         weld_point_z=0.031, attach_cable_len=0.54, partner_nodes=True, proof_taut_len=0.577,
+                         weld_point_z=0.031, attach_cable_len=0.54, cable_len=0.55, partner_nodes=True,
+                         proof_taut_len=0.577,
                          attach_x_offset=0.013, attach_y_offset=0.21,
                          partner_args='magnet_drop_below_quad:=0.582 mpc_thrust_ratio:=21.5'))
     assert tuple(moved['/fake_cooperative_transport_world']['params']['bridge_attach_xy_m']) == pytest.approx(
@@ -1247,3 +1403,157 @@ def test_typed_attach_angles_are_clockwise_and_reach_the_planner_counter_clockwi
     assert g['/dissipative_planner']['params']['attach_azimuths_deg'] == '270,30,150'
     g = _combined_rig(attach_azimuths_deg='90,330,210')
     assert g['/dissipative_planner']['params']['attach_azimuths_deg'] == '270,30,150'
+
+
+# ── 1 m defaults and the figure-8's own size (Wesley 22 Oct) ─────────────────────────────────────────────────────
+
+def _planner(g):
+    return next(n for k, n in g.items() if n['executable'] in ('mpc_planner', 'dissipative_planner'))['params']
+
+
+def test_the_planners_fly_1m_cables_and_the_figure8_at_its_own_size():
+    """The profiles' 1 m cables and fig8_size (twin 0.9, rig 0.75 with its lines 0.75 m out) reach every planner
+    (passed when set, as PLANNER_OPTIONAL); the legacy profile passes no fig8_size (traj_radius sizes its figure-8, as
+    before 22 Oct)."""
+    for g, size, dist in ((_by_name(sim('mpc')), 0.9, 1.0), (_by_name(sim('dissipative')), 0.9, 1.0),
+                          (_by_name(sim('attach', legacy=False, num_drones=3)), 0.9, 1.0),
+                          (_by_name(rig('mpc', thrust_ratio=35.2)), 0.75, 0.75),
+                          (_by_name(rig('dissipative', thrust_ratio=35.2)), 0.75, 0.75)):
+        p = _planner(g)
+        assert (p['cable_len'], p['fig8_size'], p['traj_radius'], p['traj_distance']) == (1.0, size, 0.5, dist)
+    assert 'fig8_size' not in _planner(_by_name(sim('mpc', legacy=True)))
+
+
+def test_a_figure8_refuses_a_typed_traj_radius_that_is_not_its_size(tmp_path):
+    """A typed traj_radius on a figure-8 would be ignored without a word (fig8_size sizes it): refused unless it equals
+    the size (the sheet's traj_radius:=0.9) or fig8_size is typed too."""
+    with pytest.raises(RuntimeError, match='fig8_size'):
+        sim('dissipative', load_traj='fig_8', traj_radius=0.5)
+    assert _planner(_by_name(sim('dissipative', load_traj='fig_8', traj_radius=0.9)))['fig8_size'] == 0.9
+    p = _planner(_by_name(sim('dissipative', load_traj='fig_8', traj_radius=0.5, fig8_size=0.5)))
+    assert (p['fig8_size'], p['traj_radius']) == (0.5, 0.5)
+    assert _planner(_by_name(sim('dissipative', load_traj='orbit', traj_radius=0.4)))['traj_radius'] == 0.4
+    pf = tmp_path / 'r.yaml'
+    pf.write_text('traj_radius: 1.0\n')
+    with pytest.raises(RuntimeError, match='fig8_size'):        # a params_file value counts as typed
+        sim('dissipative', load_traj='fig_8', params_file=str(pf))
+
+
+def test_combined_rig_refuses_a_quad4_record_from_other_cables(dds):
+    """QUAD4's 0.55 m-era record (rod 0.54, taut 0.577) is self-consistent, so only the carriers' 1 m cables show it
+    is stale; QUAD4's 1 m record passes."""
+    with pytest.raises(RuntimeError, match='other cables'):
+        _combined_rig(cable_len=1.0)
+    p = _combined_rig(cable_len=1.0, attach_cable_len=1.0, proof_taut_len=1.037)['/dissipative_planner']['params']
+    assert (p['cable_len'], p['attach_cable_len']) == (1.0, 1.0)
+
+
+def test_combined_rig_feeds_his_launch_the_cables_and_quad4s_record(dds):
+    """Thu 29 on 1 m cables (decisions 22 Oct, answer 16): his rig launch gets our carriers' cable_len and elevation
+    (his carrier model and transit heights) and QUAD4's record: his drop is the taut length (proof_taut_len + 0.003),
+    his MPC's cable 0.044 under it. A typed partner_args drop still wins; the carriers' cable is ours alone."""
+    g = _combined_rig(cable_len=1.0, attach_cable_len=1.0, proof_taut_len=1.037, partner_nodes=True,
+                      partner_args='mpc_thrust_ratio:=22')
+    ring = g['/fake_cooperative_transport_world']['params']
+    assert (ring['bridge_cable_len_m'], ring['bridge_cable_elev_deg']) == (1.0, 60.0)
+    assert g['/online_join_planner']['params']['magnet_drop_below_quad'] == pytest.approx(1.04)
+    assert g['tejen/tejen_mpc']['params']['cable_length'] == pytest.approx(0.996)
+    typed = _combined_rig(cable_len=1.0, attach_cable_len=1.0, proof_taut_len=1.037, partner_nodes=True,
+                          partner_args='mpc_thrust_ratio:=22 magnet_drop_below_quad:=1.045')
+    assert typed['/online_join_planner']['params']['magnet_drop_below_quad'] == 1.045
+    with pytest.raises(RuntimeError, match='ring_cable_len'):
+        _combined_rig(partner_nodes=True, partner_args='mpc_thrust_ratio:=22 ring_cable_len:=0.55')
+
+
+def test_the_position_limit_passes_nothing_until_set_then_reaches_every_node(tmp_path):
+    """pos_limit_m (Wesley 22 Oct): off in the twin, 1.75 by default on the rig (real.yaml); unset, no twin node gets
+    it; set (or by the rig's default), the fleet manager, the planner and every tracker, the newcomer's too, carry it."""
+    twin = lambda **a: (_by_name(sim('mpc', **a)), _by_name(sim('dissipative', **a)),  # noqa: E731
+                        _by_name(sim('attach', legacy=False, num_drones=3, enable_approach_mpc=False, **a)))
+    rigs = lambda **a: (_by_name(rig('attach', enable_approach_mpc=False, **a)),  # noqa: E731
+                        _by_name(rig('mpc', thrust_ratio=35.2, **a)),
+                        _by_name(rig('free_hover', thrust_ratio=35.2, **a)))
+    for g in twin():
+        assert not [k for k, n in g.items() if 'pos_limit_m' in n['params']]
+    for g in twin(pos_limit_m=1.75) + rigs():
+        want = [k for k, n in g.items() if n['executable'] in ('tracker', 'fleet_manager', 'mpc_planner',
+                                                                 'dissipative_planner')]
+        assert want and all(g[k]['params']['pos_limit_m'] == 1.75 for k in want), want
+
+
+def test_rejoin_departed_bridges_each_tether_joint_in_the_twin_only():
+    """Code design B (card 2026-10-23_rejoin_departed): the switch reaches the planner and one bridge carries each
+    tether's /drone_i/attach to its gz joint and the joint's state back; off, the graph is as before. Refused on the
+    rig and outside the twin's mode:=dissipative, which have no such bridge."""
+    on = _by_name(sim('dissipative', num_drones=4, rejoin_departed=True, departed_land=False))
+    p = on['/dissipative_planner']['params']
+    assert p['rejoin_departed'] is True and p['departed_land'] is False
+    args = on['/rejoin_bridge']['arguments']
+    assert sorted(args) == sorted([f'/drone_{i}/attach@std_msgs/msg/Empty]gz.msgs.Empty' for i in range(4)]
+                                  + [f'/drone_{i}/detachable_joint_state@std_msgs/msg/String[gz.msgs.StringMsg'
+                                     for i in range(4)])
+    off = _by_name(sim('dissipative', num_drones=4))
+    assert '/rejoin_bridge' not in off and 'rejoin_departed' not in off['/dissipative_planner']['params']
+    for launch in (lambda: rig('dissipative', num_drones=4, rejoin_departed=True, departed_land=False),
+                   lambda: sim('attach', num_drones=3, rejoin_departed=True),
+                   lambda: sim('mpc', num_drones=3, rejoin_departed=True),
+                   # the twin network graph is the detach graph: the switch is refused there, not a planner crash
+                   lambda: sim('network', rejoin_departed=True, departed_land=False, reconfig_mode='ocp'),
+                   lambda: sim('network', legacy=True, rejoin_departed=True, departed_land=False)):
+        with pytest.raises(RuntimeError, match='rejoin_departed flies only'):
+            launch()
+    # without what the planner needs it is refused at the launch, not by the planner dying at construction
+    for args in ({}, {'departed_land': True}, {'departed_land': False, 'reconfig_mode': 'network'}):
+        with pytest.raises(RuntimeError, match='rejoin_departed needs departed_land:=false'):
+            sim('dissipative', num_drones=4, rejoin_departed=True, **args)
+
+
+def test_the_task_and_lap_switches_reach_the_twin_planner_only_when_set():
+    """Card 2026-10-23_scalability cases 6 and 7 (twin only, off by default): rejoin_task (with rejoin_departed),
+    traj_laps and traj_lap_hold_s reach the twin's mode:=dissipative planner, traj_laps any twin planner; unset, no
+    planner gets them (one lap, no task, no lap-end hold). Refused on the rig, rejoin_task without rejoin_departed and
+    the lap-end hold outside the twin's dissipative graph with reconfig_mode ocp."""
+    p = _planner(_by_name(sim('dissipative', num_drones=4, rejoin_departed=True, departed_land=False, rejoin_task=True,
+                              load_traj='fig_8', fig8_size=0.5, traj_laps=9, traj_lap_hold_s=3.0)))
+    assert (p['rejoin_task'], p['traj_laps'], p['traj_lap_hold_s']) == (True, 9, 3.0)
+    assert _planner(_by_name(sim('mpc', load_traj='fig_8', traj_laps=3)))['traj_laps'] == 3
+    for g in (sim('mpc'), sim('dissipative'), sim('network'), rig('dissipative', thrust_ratio=35.2)):
+        assert not {'rejoin_task', 'traj_laps', 'traj_lap_hold_s'} & set(_planner(_by_name(g)))
+    for launch, why in ((lambda: sim('dissipative', num_drones=4, rejoin_task=True), 'rejoin_task flies only'),
+                        (lambda: sim('mpc', rejoin_task=True), 'rejoin_task flies only'),
+                        (lambda: rig('dissipative', thrust_ratio=35.2, rejoin_task=True), 'rejoin_task flies only'),
+                        (lambda: rig('mpc', thrust_ratio=35.2, load_traj='fig_8', traj_laps=3), 'traj_laps flies only'),
+                        (lambda: sim('mpc', load_traj='fig_8', traj_lap_hold_s=3.0), 'traj_lap_hold_s flies only'),
+                        (lambda: sim('dissipative', load_traj='fig_8', traj_lap_hold_s=3.0, reconfig_mode='network'),
+                         'traj_lap_hold_s flies only'),
+                        (lambda: rig('dissipative', thrust_ratio=35.2, traj_lap_hold_s=3.0), 'traj_lap_hold_s flies')):
+        with pytest.raises(RuntimeError, match=why):
+            launch()
+
+
+# ── MDC_PLANNER_CPUS: the planner pinned with taskset (card 2026-10-23_scalability; default unset) ─────────────
+
+PLANNERS = {'mpc_planner', 'dissipative_planner'}
+CPU_GRAPHS = [('rig', m, {'thrust_ratio': 24}) for m in ('mpc', 'free_hover', 'dissipative', 'm2')] + \
+    [('rig', 'attach', {'thrust_ratio': 24, 'enable_approach_mpc': False})] + \
+    [('sim', m, {}) for m in ('mpc', 'free_hover', 'dissipative', 'network', 'attach')] + \
+    [('sim', 'attach', {'legacy': False}), ('sim', 'mpc', {'legacy': True})]
+
+
+@pytest.mark.parametrize('side, mode, args', CPU_GRAPHS)
+def test_planner_cpus_pin_the_planner_only(side, mode, args, monkeypatch):
+    monkeypatch.delenv('MDC_PLANNER_CPUS', raising=False)
+    graph = (rig if side == 'rig' else sim)(mode, **args)
+    assert {n['prefix'] for n in graph} == {''}, 'unset: every node keeps the default prefix'
+    monkeypatch.setenv('MDC_PLANNER_CPUS', '0-7')
+    pinned = (rig if side == 'rig' else sim)(mode, **args)
+    planners = [n for n in pinned if n['executable'] in PLANNERS]
+    assert len(planners) == (0 if mode == 'free_hover' else 1)
+    assert all(n['prefix'] == 'taskset -c 0-7' for n in planners)
+    assert [dict(n, prefix='') for n in pinned] == graph, 'set: only the planner\'s prefix changes'
+
+
+def test_planner_cpus_refuse_a_list_taskset_cannot_read(monkeypatch):
+    monkeypatch.setenv('MDC_PLANNER_CPUS', 'P-cores')
+    with pytest.raises(RuntimeError, match='MDC_PLANNER_CPUS'):
+        rig('mpc', thrust_ratio=24)

@@ -236,20 +236,23 @@ PICKUP_PHASES = (
 )
 
 
-def floor_join_mission(contact_attach: bool = False) -> MissionDefinition:
+def floor_join_mission(contact_attach: bool = False, cpp_transit: bool = False) -> MissionDefinition:
     """floor_join (Wesley 14 Oct 2026): pickup_delivery's start on the mat, then join_only's rejoin; no pickup, no
-    drop. The planner's takeoff climbs to the approach height before the transfer to the plate."""
+    drop. The planner's takeoff climbs to the approach height before the transfer to the plate. cpp_transit
+    (multi_drone_control, Wesley 21 Oct): the climb ends at the transit height and the C++ planner flies
+    TRANSIT_TO_REATTACH to above the plate, avoiding the carriers, before the approach."""
     start = pickup_delivery_mission(contact_attach).phases
     phases = {
         MissionPhase.WAIT_FOR_TAKEOFF: start[MissionPhase.WAIT_FOR_TAKEOFF],
         MissionPhase.TAKEOFF: start[MissionPhase.TAKEOFF],
+        **({MissionPhase.TRANSIT_TO_REATTACH: start[MissionPhase.TRANSIT_TO_REATTACH]} if cpp_transit else {}),
         **join_only_mission(contact_attach).phases,
     }
     return MissionDefinition(
         name="floor_join",
         initial_phase=MissionPhase.WAIT_FOR_TAKEOFF,
         phases=phases,
-        takeoff_exit=MissionPhase.APPROACH_ABOVE_TARGET,
+        takeoff_exit=MissionPhase.TRANSIT_TO_REATTACH if cpp_transit else MissionPhase.APPROACH_ABOVE_TARGET,
     )
 
 
@@ -347,6 +350,8 @@ def m2b_single_attachment_mission(attachment_policy: str = "legacy") -> MissionD
         _spec(MissionPhase.M2_ATTACH_CAPTURE_WAIT, ReferenceType.STATIONARY_REGULATION, TargetSource.CURRENT_POSE, "ON", "Near-contact hold while simulated physical latch and software candidate evidence develop; after latch, freeze the pre-proof reference until measured dynamics settle."),
         _spec(MissionPhase.M2_ATTACH_PROOF, ReferenceType.RATE_CONTROLLED_MANOEUVRE, TargetSource.CURRENT_POSE, "ON", "Execute the configured measured-excitation proof pull; simulation defaults to radial-outward."),
         _spec(MissionPhase.M2_ATTACHED_HOLD, ReferenceType.STATIONARY_REGULATION, TargetSource.CURRENT_POSE, "ON", "Hold the confirmed attachment at the outward tension angle."),
+        _spec(MissionPhase.M2_PARKING_ATTACHED, ReferenceType.RATE_CONTROLLED_MANOEUVRE, TargetSource.CURRENT_POSE, "ON", "Opt-in outward/downward parking; retain contact and magnet ON through disarm."),
+        _spec(MissionPhase.M2_PARKED_ATTACHED, ReferenceType.STATIONARY_REGULATION, TargetSource.CURRENT_POSE, "ON", "Grounded, disarmed attached parking; explicit LAND releases without restarting motors.", authority=ControllerAuthority.DISARMED),
         _spec(MissionPhase.M2_DETACHED_RETREAT, ReferenceType.RATE_CONTROLLED_MANOEUVRE, TargetSource.CURRENT_POSE, "OFF", "Retreat clear and return to the same capture point before a same-plate retry."),
         _spec(MissionPhase.M2_LANDING_STAGE, ReferenceType.TRANSFER, TargetSource.CURRENT_POSE, "OFF", "After terminal failure, move clear to the landing column before vertical landing."),
         _spec(MissionPhase.M2_FAULT, ReferenceType.STATIONARY_REGULATION, TargetSource.CURRENT_POSE, "OFF", "Latched pre-arm or mission safety fault; flight authority is not granted.", authority=ControllerAuthority.DISARMED),
@@ -370,14 +375,21 @@ def m2b_single_attachment_mission(attachment_policy: str = "legacy") -> MissionD
     )
 
 def mission_for_mode(mode: str, *, attachment_policy: str = "legacy",
-                     contact_attach: bool = False) -> MissionDefinition:
+                     contact_attach: bool = False, attach_cpp_transit: bool = False) -> MissionDefinition:
     normalized = str(mode).strip().lower()
+    if normalized == "preloaded_navigation":
+        base = pickup_delivery_mission()
+        phases = dict(base.phases)
+        for phase in (MissionPhase.WAIT_FOR_TAKEOFF, MissionPhase.TAKEOFF):
+            phases[phase] = replace(phases[phase], magnet_command="ON",
+                description="Operator-preloaded navigation; preserve magnet ON, no pickup/proof claim.")
+        return replace(base, name="preloaded_navigation", phases=phases)
     if normalized in {"pickup_delivery", "pickup-delivery", "full"}:
         return pickup_delivery_mission(contact_attach)
     if normalized in {"join", "join_only", "reattach"}:
         return join_only_mission(contact_attach)
     if normalized in {"floor_join", "floor-join"}:
-        return floor_join_mission(contact_attach)
+        return floor_join_mission(contact_attach, attach_cpp_transit)
     if normalized in {"delivery_rejoin", "delivery-rejoin"}:
         return delivery_rejoin_mission(contact_attach)
     if normalized in {"m2b", "m2b_single_attachment", "single_attachment"}:

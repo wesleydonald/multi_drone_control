@@ -3,7 +3,7 @@
 tools/tip_replay.py -- the magnet-marker release check replayed over a rig flight's bag, offline (Wesley 21 Oct: Part C
 flies with the check on only if this is clean over the A/B flights; card 2026-10-21_tip_detect).
 
-    tools/tip_replay.py results/rig/2026-10-22/h3 --azimuths 0,240,120 --attach-z 0.02
+    tools/tip_replay.py results/rig/2026-10-22/h3                     # the flight's own geometry
     tools/tip_replay.py results/rig/2026-10-22/f2 --azimuths 0,180 --attach-z 0.02 --tip-m 0.04
 
 It feeds every recorded /drone_<i>/magnet_tip_state sample, in time order, with the ring's and the drones' latest
@@ -11,13 +11,20 @@ poses, through the planner's own DissipativeController._tip_check / _tip_learn_s
 glitch guard _tip_ring_sample (no ROS). Before LAND
 (/fleet/command), after the ring first reaches target_z - 0.05. Prints, per drone: armed or not (its learnt offset and
 body-to-marker length), the largest deviation after arming against tip_detect_m, and every would-fire (a release
-acted on, or a lone marker's logged WOULD-FIRE). Exit status 1 if anything would have fired.
+acted on, or a lone marker's logged WOULD-FIRE). Exit status 1 if anything would have fired, 2 if a marker never armed
+(the replay then tested nothing for that drone: no pass).
+
+The geometry not typed (cable_len, attach_z, the angles, target_z, the pivot) is the flight's own, from its planner's
+params.json beside the bag (<bag>_logs); with neither the replay refuses. A cable length that is not the flight's
+leaves every marker unarmed (22 Oct: the 0.55 m default against the 1 m cables).
 
 Typed angles are the sheet's (clockwise, as the launch takes them); the drones are matched to them by position at
 the start, as the planner does. Not modelled: detachments, the unload; a flight with a release is not a false-fire
 check.
 """
 import argparse
+import json
+import os
 import re
 import sys
 from types import SimpleNamespace
@@ -153,26 +160,67 @@ def replay(events, azimuths_cw, attach_z, tip_m=0.04, target_z=1.0, radius=0.225
     return f, fires, devmax
 
 
-def main():
+def flight_params(bag):
+    """(params, session dir) of the flight's planner (its last session under <bag>_logs), or (None, None)."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import run_logs
+    logs = os.path.normpath(bag) + '_logs'
+    dirs = [d for kind in ('mpc_planner', 'dissipative_planner') for d in run_logs.node_dirs(logs, kind)
+            if os.path.exists(os.path.join(d, 'params.json'))]
+    if not dirs:
+        return None, None
+    d = max(dirs, key=lambda x: run_logs.stamp_of(x) or '')
+    with open(os.path.join(d, 'params.json')) as fh:
+        return json.load(fh), d
+
+
+def geometry(a, prm):
+    """{cable_len, attach_z, azimuths (clockwise), target_z, pivot_z}: typed, else the flight's params.json."""
+    def flown(key, flag):
+        if prm is None or prm.get(key) in (None, ''):
+            sys.exit(f'{flag} not typed and no planner params.json beside the bag ({a.bag}_logs): type {flag}')
+        return prm[key]
+    if a.azimuths is not None:
+        az = [float(v) for v in a.azimuths.split(',')]
+    else:
+        n = int(flown('num_drones', '--azimuths'))
+        ccw = str(prm.get('attach_azimuths_deg') or '').strip()       # as the node reads it: counter-clockwise
+        az = [(-float(v)) % 360.0 for v in ccw.split(',')] if ccw else [(-360.0 * k / n) % 360.0 for k in range(n)]
+    pivot = prm.get('pivot_offset') if prm else None
+    if isinstance(pivot, str):                     # params.json holds some lists as their string
+        pivot = json.loads(pivot)
+    return {'cable_len': float(a.cable_len if a.cable_len is not None else flown('cable_len', '--cable-len')),
+            'attach_z': float(a.attach_z if a.attach_z is not None else flown('attach_z', '--attach-z')),
+            'azimuths': az,
+            'target_z': float(a.target_z if a.target_z is not None else (prm or {}).get('target_z', 1.0)),
+            'pivot_z': float(pivot[2]) if pivot else -0.04}
+
+
+def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('bag', help='the flight\'s bag directory (results/rig/<date>/<flight>)')
-    ap.add_argument('--azimuths', required=True, help='the typed attach_azimuths_deg (clockwise), e.g. 0,240,120')
-    ap.add_argument('--attach-z', type=float, required=True, help='the typed attach_z (0.02 after the CoM fix)')
+    ap.add_argument('--azimuths', help='the typed attach_azimuths_deg (clockwise), e.g. 0,240,120 (default: the '
+                    'flight\'s)')
+    ap.add_argument('--attach-z', type=float, help='the typed attach_z (default: the flight\'s)')
     ap.add_argument('--tip-m', type=float, default=0.04)
-    ap.add_argument('--target-z', type=float, default=1.0)
-    ap.add_argument('--cable-len', type=float, default=0.55)
+    ap.add_argument('--target-z', type=float, help='default: the flight\'s, else 1.0')
+    ap.add_argument('--cable-len', type=float, help='the typed cable_len (default: the flight\'s)')
     ap.add_argument('--rider', type=int, help='the drone index carrying ~0 (the T\'s quad opposite the gap): its band '
                     'reaches up to the rod, as the planner\'s')
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
+    prm, src = flight_params(a.bag)
+    geo = geometry(a, prm)
     ev = read(a.bag)
     n_tip = sum(1 for e in ev if e[1] == 'tip')
-    print(f'{a.bag}: {n_tip} magnet-marker samples, {sum(1 for e in ev if e[1] == "ring")} ring poses')
+    print(f'{a.bag}: {n_tip} magnet-marker samples, {sum(1 for e in ev if e[1] == "ring")} ring poses; cable_len '
+          f'{geo["cable_len"]:g}, attach_z {geo["attach_z"]:g}, angles {",".join(f"{v:g}" for v in geo["azimuths"])} '
+          f'(clockwise), target_z {geo["target_z"]:g}' + (f' (untyped ones from {src})' if src else ''))
     if not n_tip:
         sys.exit('no /drone_<i>/magnet_tip_state in the bag: were the markers routed (mocap_extra_bodies)?')
-    az = [float(v) for v in a.azimuths.split(',')]
+    az = geo['azimuths']
     stats = {}
-    f, fires, devmax = replay(ev, az, a.attach_z, a.tip_m, a.target_z, cable_len=a.cable_len, rider=a.rider,
-                              stats=stats)
+    f, fires, devmax = replay(ev, az, geo['attach_z'], a.tip_m, geo['target_z'], cable_len=geo['cable_len'],
+                              pivot_z=geo['pivot_z'], rider=a.rider, stats=stats)
     long_runs = 0
     for d in range(len(az)):
         state = ('armed' if d in f._tip_v0 else 'NOT armed' if d in f._tip_unarmed else 'never learnt (its marker '
@@ -185,7 +233,14 @@ def main():
               f'{"PASS" if st["run"][0] < RUN_BAR_S else "FAIL"}); {st["rejected"]} samples off the band')
     print(f'WOULD-FIRES: {len(fires)}' + ''.join(f'\n  t={t:.2f} drone {d}: {m}' for t, d, m in fires))
     print(f'RUNS OVER {1000.0 * RUN_BAR_S:.0f} ms: {long_runs}')
-    sys.exit(1 if fires or long_runs else 0)
+    unarmed = [d for d in range(len(az)) if d not in f._tip_v0]
+    if fires or long_runs:
+        sys.exit(1)
+    if unarmed:
+        print(f'NOT A PASS: drone(s) {unarmed} never armed, so nothing was tested for them (a cable_len that is not the '
+              f'flight\'s, a marker not routed, or a magnet off its plate)')
+        sys.exit(2)
+    sys.exit(0)
 
 
 if __name__ == '__main__':

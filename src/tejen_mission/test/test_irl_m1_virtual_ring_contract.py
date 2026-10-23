@@ -89,6 +89,10 @@ def test_virtual_ring_is_moving_and_fake_companions_are_disabled_for_irl_m1():
     assert backend["moving_basket_committed_trajectory_topic"] == "/fake_payload/committed_trajectory"
     assert backend["target_predictor_type"] == "committed_trajectory"
     assert backend["spline_time_factor"] == 3.0
+    # IRL retains collision inflation but disables tracking-only braking.
+    assert tuple(backend[f"ego_tracking_half_{axis}_m"] for axis in "xyz") == (0.10, 0.10, 0.05)
+    assert backend["execution_tracking_safety_enabled"] is False
+    assert backend["execution_tracking_violation_samples"] == 3
 
 
 def test_controller_settings_explicitly_select_xy_bias_mode_and_thrust_feedback():
@@ -111,6 +115,10 @@ def test_single_runner_owns_full_irl_stack_without_pipefail():
     assert "view_frame.launch.py" in launch
 
     backend_launch = BACKEND_LAUNCH.read_text()
+    assert "'stopped_continuation_enabled': 'true'" in launch
+    assert "'c1f2_stopped_continuation_enabled': True" in launch
+    assert "'external_reference_validate_timing': True" in launch
+    assert "DeclareLaunchArgument('stopped_continuation_enabled', default_value='false')" in backend_launch
     assert "c1f_irl_m1_virtual_ring.yaml" in backend_launch
     assert "irl_commissioning.yaml" in backend_launch
 

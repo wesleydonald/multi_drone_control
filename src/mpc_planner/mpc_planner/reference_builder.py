@@ -258,10 +258,14 @@ class ReferenceBuilder:
         the rig was placed at (psi0). For 'spin' / 'line_spin' the commanded load rotation is added
         on top, tracking the load yaw along the horizon so the OCP holds the rotating
         attitude while the yaw-rate term in yref_at drives the rotation."""
+        return yaw_quat(self.yaw_ref_at(k))
+
+    def yaw_ref_at(self, k):
+        """Stage-k load yaw reference (rad, not wrapped): the datum psi0 plus the commanded rotation."""
         yaw = 0.0
         if self.traj_t > 0.0:
             yaw, _ = self.traj.yaw_at(self.traj_t + self.dt * k - self.ref_lag_s)
-        return yaw_quat(self.psi0 + yaw)
+        return self.psi0 + yaw
 
     def hold_yref(self, load_state):
         """Static hold reference for priming: keep the load at its current measured

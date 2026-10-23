@@ -23,7 +23,8 @@ def _runner(mode, refs):
 @pytest.mark.parametrize('mode, refs, ready', [
     ('dissipative', [None, None], False), ('dissipative', [(0,), None], False),
     ('dissipative', [(0,), (0,)], True), ('mpc', [None, None], False), (None, [None, None], False),
-    ('attach', [None, None], False), ('attach', [(0,), (0,)], True), ('free_hover', [None, None], True)])
+    ('attach', [None, None], False), ('attach', [(0,), (0,)], True), ('free_hover', [None, None], True),
+    ('network', [None, None], False), ('network', [(0,), (0,)], True)])
 def test_planner_modes_wait_for_references(mode, refs, ready):
     pytest.importorskip('interfaces.msg')
     assert _runner(mode, refs)() is ready
@@ -44,6 +45,24 @@ def test_grounded_before_takeoff_stops_the_run():
     assert rn.ExperimentRunner.finished(f) is False
     t[0] = 6.1
     assert rn.ExperimentRunner.finished(f) is True and 'grounded before TAKEOFF' in f.stop_reason
+
+
+def test_the_hand_over_and_the_path_start_are_events():
+    """Card 2026-10-23_paper_method_compare: the network's hand-over and the path's start after the hover hold are
+    events.csv rows on the run clock, from either generator's line (C's scorer windows on them)."""
+    pytest.importorskip('interfaces.msg')
+    from experiment import runner_node as rn
+    ev = []
+    f = types.SimpleNamespace(failures=[], _rel=lambda: 12.5, _log_event=lambda *a: ev.append(a),
+                              t_partner_release=None, t_grounded=None, _ROSOUT=rn.ExperimentRunner._ROSOUT,
+                              _planner_lines=[])
+    for line in ('[planner] hover hold 5.0 s before the line_x',
+                 '[dissipative] handover OCP -> dissipative network (airborne)',
+                 '[planner] hover hold done: line_x starts'):
+        rn.ExperimentRunner._rosout_cb(f, types.SimpleNamespace(name='dissipative_planner', msg=line))
+    rn.ExperimentRunner._rosout_cb(f, types.SimpleNamespace(name='mpc_planner',
+                                                            msg='[planner] hover hold done: fig_8 starts'))
+    assert ev == [('NET_HANDOVER', None), ('PATH_START', 'line_x')]
 
 
 def test_attach_waits_for_the_carriers_references_not_the_newcomers():

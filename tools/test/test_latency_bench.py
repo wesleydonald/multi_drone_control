@@ -17,15 +17,17 @@ def _hung(plant, elev=60.0):
     """Pivots that hold the ring level at (0, 0, 1) with rods at elev above horizontal."""
     plant.x = np.array([0.0, 0.0, 1.0])
     ph = math.radians(elev)
-    return np.array([plant.x + r + 0.55 * np.array([math.cos(math.atan2(r[1], r[0])) * math.cos(ph),
-                                                    math.sin(math.atan2(r[1], r[0])) * math.cos(ph), math.sin(ph)])
+    return np.array([plant.x + r + plant.L * np.array([math.cos(math.atan2(r[1], r[0])) * math.cos(ph),
+                                                       math.sin(math.atan2(r[1], r[0])) * math.cos(ph), math.sin(ph)])
                      for r in RHO])
 
 
 @pytest.mark.parametrize('kind', ['p0', 'p1'])
-def test_ring_hangs_still_from_fixed_pivots(kind):
-    """The ring released level under three fixed pivots settles within the rods' stretch and stays level."""
-    plant = B.RingPlant(RHO, 0.55, kind, planner_inertia=(0.0235, 0.0235, 0.047))
+@pytest.mark.parametrize('rod', [0.55, 1.0])
+def test_ring_hangs_still_from_fixed_pivots(kind, rod):
+    """The ring released level under three fixed pivots settles within the rods' stretch and stays level (the rig's
+    0.55 m rods and the 1 m cables)."""
+    plant = B.RingPlant(RHO, rod, kind, planner_inertia=(0.0235, 0.0235, 0.047))
     piv = _hung(plant)
     for _ in range(4000):
         plant.step(B.DT_SIM, piv, np.zeros((3, 3)))
@@ -40,6 +42,8 @@ def test_p1_carries_the_rods_mass_at_the_ring_end():
     assert p0.m == pytest.approx(0.86) and p1.m == pytest.approx(0.86 + 3 * me)
     assert p1.I[2, 2] == pytest.approx(4.431e-2 + 3 * me * 0.225 ** 2, rel=1e-6)
     assert p1.joint_c == 0.1 and p0.joint_c == 0.0
+    p1m = B.RingPlant(RHO, 1.0, 'p1')                         # 1 m rods: the twin's rod CoM keeps its ring-end share
+    assert (p1m.m, p1m.L) == (pytest.approx(p1.m), 1.0) and np.allclose(p1m.I, p1.I)
 
 
 def test_ring_follows_pivots_moving_together():

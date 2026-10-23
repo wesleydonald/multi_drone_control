@@ -34,6 +34,7 @@ from tejen_mission.m2a_attachment_runtime import (
     reconstruct_relative_pose_world,
     resolve_named_transform_world,
     rotation_to_quaternion_xyzw,
+    _frame_leaf,
 )
 
 
@@ -323,8 +324,35 @@ class M2AttachmentObserver(Node):
             )
         except (KeyError, ValueError):
             return
-        self.latest_drone_world = (p_carrier, R_carrier, now)
-        self.latest_magnet_world = (p_magnet, R_magnet, now)
+        if self.attachment_policy == "measured_contact_15deg":
+            for name, leaf, position, rotation in (
+                ("latest_drone_world", self.carrier_frame_leaf, p_carrier, R_carrier),
+                ("latest_magnet_world", self.magnet_frame_leaf, p_magnet, R_magnet),
+            ):
+                transform = next(t for t in msg.transforms
+                                 if _frame_leaf(t.child_frame_id) == leaf)
+                self._store_measured_pose(name, position, rotation, transform.header, now)
+        else:
+            self.latest_drone_world = (p_carrier, R_carrier, now)
+            self.latest_magnet_world = (p_magnet, R_magnet, now)
+
+    def _store_measured_pose(self, name, position, rotation, header, now):
+        """Source ordering/freshness is independent of observer timer frequency."""
+        previous_now = getattr(self, "_measurement_clock_s", None)
+        if previous_now is not None and now < previous_now:
+            # New ROS clock epoch: reacquire poses without resetting contact history.
+            self.latest_drone_world = self.latest_magnet_world = self.latest_ring_world = None
+        self._measurement_clock_s = now
+        try:
+            sec, ns = header.stamp.sec, header.stamp.nanosec
+            stamp = float(sec) + 1e-9 * float(ns)
+        except (AttributeError, TypeError, ValueError):
+            return
+        if not np.isfinite(stamp) or stamp < 0. or not 0 <= ns < 1_000_000_000 or stamp > now + 1e-9:
+            return
+        previous = getattr(self, name)
+        if previous is None or stamp > previous[2]:
+            setattr(self, name, (position, rotation, stamp))
 
     def _x3_pose_callback(self, msg: PoseArray) -> None:
         now = self._now_s()
@@ -345,19 +373,24 @@ class M2AttachmentObserver(Node):
         else:
             p_magnet = _pose_position(magnet_pose)
             R_magnet = quaternion_xyzw_to_rotation(_pose_quaternion(magnet_pose))
-        self.latest_drone_world = (p_drone, R_drone, now)
-        self.latest_magnet_world = (p_magnet, R_magnet, now)
+        if self.attachment_policy == "measured_contact_15deg":
+            self._store_measured_pose("latest_drone_world", p_drone, R_drone, msg.header, now)
+            self._store_measured_pose("latest_magnet_world", p_magnet, R_magnet, msg.header, now)
+        else:
+            self.latest_drone_world = (p_drone, R_drone, now)
+            self.latest_magnet_world = (p_magnet, R_magnet, now)
 
     def _ring_pose_callback(self, msg: PoseArray) -> None:
         pose = _select_pose(msg, self.ring_pose_index)
         if pose is None:
             return
         now = self._now_s()
-        self.latest_ring_world = (
-            _pose_position(pose),
-            quaternion_xyzw_to_rotation(_pose_quaternion(pose)),
-            now,
-        )
+        position = _pose_position(pose)
+        rotation = quaternion_xyzw_to_rotation(_pose_quaternion(pose))
+        if self.attachment_policy == "measured_contact_15deg":
+            self._store_measured_pose("latest_ring_world", position, rotation, msg.header, now)
+        else:
+            self.latest_ring_world = (position, rotation, now)
 
     def _assigned_plate_callback(self, msg: Int32) -> None:
         plate = int(msg.data)
@@ -418,6 +451,7 @@ class M2AttachmentObserver(Node):
             "proof_xy_m", "proof_normal_m", "proof_speed_mps", "proof_dwell_limit_s", "proof_min_excitation_m", "proof_max_contact_drift_m",
             "loss_xy_m", "loss_normal_m", "loss_dwell_limit_s", "joint_detached_truth",
         ]
+        fields += ["evidence_sample_time_s", "new_measurement", "velocity_valid"]
         return fields
 
     def _publish_diagnostics(self, result, *, center_plate: np.ndarray) -> None:
@@ -456,6 +490,8 @@ class M2AttachmentObserver(Node):
         if self.attachment_policy == "measured_contact_15deg":
             e = self.detector.progressive
             payload.update(initial_contact=result.initial_contact,
+                evidence_sample_time_s=result.evidence_sample_time_s,
+                new_measurement=result.new_measurement, velocity_valid=result.velocity_valid,
                 proof_angle_error_deg=result.proof_angle_error_deg,
                 proof_motion_complete=self.proof_motion_complete,
                 contact_seed_plate=None if e.contact_seed is None else e.contact_seed.tolist(),
@@ -530,6 +566,9 @@ class M2AttachmentObserver(Node):
             "initial_contact": result.initial_contact,
             "proof_angle_error_deg": result.proof_angle_error_deg,
             "proof_motion_complete": self.proof_motion_complete,
+            "evidence_sample_time_s": result.evidence_sample_time_s,
+            "new_measurement": result.new_measurement,
+            "velocity_valid": result.velocity_valid,
             "detector_state": result.state.value,
             "fresh": str(result.fresh).lower(),
             "radial_error_m": result.radial_error_m,

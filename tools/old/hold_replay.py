@@ -49,6 +49,8 @@ def setup(mods, prm, work, pin=False):
     code = os.path.join(work, f"hold_n{n}_m{float(prm['drone_mass']):.3f}_M{load:.3f}_r{m_r:.3f}{'_pr' if pin else ''}")
     os.makedirs(code, exist_ok=True)
     os.environ['MDC_ACADOS_ROOT'] = code
+    # the solver's cache check and signature live in its import-time CODE_DIR: here too, never the planner's cache
+    mods.ps.CODE_DIR = os.path.join(code, 'c_generated_code_load_planner')
     cwd = os.getcwd()
     os.chdir(code)
     try:

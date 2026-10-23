@@ -1,0 +1,44 @@
+{
+ "what": "card 2026-10-23_scalability, B calibration: rig h3 replayed (arm base, --q-source auto --flown-pivot) pinned with taskset to one logical CPU of the rig laptop tuf (Core 5 210H: CPUs 0-7 P-cores 4.8 GHz, 8-11 E-cores 3.6 GHz), idle, 22 Oct 23:5x",
+ "cmd": "taskset -c <cpu> python3 tools/planner_replay.py --flight results/rig/2026-10-22/h3_logs --arms base --q-source auto --flown-pivot",
+ "cpu8": {
+  "all": {
+   "ticks": 264,
+   "logged_p50": 36.7,
+   "logged_p95": 67.77,
+   "replay_p50": 47.73006799950963,
+   "replay_p95": 48.86377099992387,
+   "ratio_p50": 0.7633462771039197,
+   "ratio_p95": 1.4165613480372257
+  },
+  "same_iters": {
+   "ticks": 253,
+   "logged_p50": 36.1,
+   "logged_p95": 63.37999999999997,
+   "replay_p50": 47.728051999001764,
+   "replay_p95": 48.87393760000123,
+   "ratio_p50": 0.7551438194536626,
+   "ratio_p95": 1.3202968124693806
+  }
+ },
+ "cpu2": {
+  "all": {
+   "ticks": 264,
+   "logged_p50": 36.7,
+   "logged_p95": 67.77,
+   "replay_p50": 18.408941999950912,
+   "replay_p95": 18.937621599980048,
+   "ratio_p50": 1.9801370491436927,
+   "ratio_p95": 3.7064019906334287
+  },
+  "same_iters": {
+   "ticks": 253,
+   "logged_p50": 36.1,
+   "logged_p95": 63.37999999999997,
+   "replay_p50": 18.404501999611966,
+   "replay_p95": 18.94464479992166,
+   "ratio_p50": 1.962148619393714,
+   "ratio_p95": 3.4332621479702596
+  }
+ }
+}

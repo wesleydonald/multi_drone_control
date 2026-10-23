@@ -1,26 +1,29 @@
-# Rig defaults (real_control_launch.py): the 30 Sep 2026 lab values (affine thrust map,
-# drone 0.55 kg, rod 0.55 m pivoting 4 cm below the drone centre, magnets at r 0.225).
+# Rig defaults (real_control_launch.py): the 30 Sep 2026 lab values (affine thrust map, rods pivoting 4 cm below
+# the drone centre, magnets at r 0.225) with the 1 m cables of 22 Oct (each measured at the hand-over) and the
+# ring's measured centre of mass (Wesley 22 Oct).
 # The base is the carry (mode:=mpc); each `modes:` entry lists only what that mode changes.
 # attach and m2 are the M1/M2 rig modes (the sim graphs with bringup/real_mode.py's rig
 # watchdogs and creep start); they fly the same rig thrust map and geometry (Wesley 2026-10-03).
 fleet_geometry:
   num_drones: 4
-  cable_len: 0.55
-  drone_mass: 0.55
+  cable_len: 1.0
+  drone_mass: 0.583            # kg with pack, cable and magnet: the 0.55 m cable's 0.040 kg is ~0.073 at 1 m (Wesley 22 Oct)
   attach_radius: 0.225
-  attach_z: 0.0
+  attach_z: 0.0175             # the plates 1.75 cm above the ring's centre of mass, where Motive's pivot is (22 Oct)
   pivot_offset_z: -0.04
   rod_tol_frac: 0.25
   rod_spread_m: 0.08
 takeoff:
   lift_ramp_vel: 0.1
   z_taut_gate: 0.9
-  payload_rest_z: 0.05
+  payload_rest_z: 0.0275       # the ring's centre of mass at rest (22 Oct pivot move; it read 0.0276)
 height_hold:
   z_i_gate: 0.25
 trajectory:
   land_unwind: false           # rig: straight down after touchdown; the rig tethers are cables that go slack (Wesley 7 Oct); the twin keeps the unwind (rigid links)
   traj_speed: 0.125            # m/s path speed (Wesley 7 Oct; the figure-8 now holds it along the whole lap)
+  fig8_size: 0.75              # m: the rig's paths shrink to 0.75 so the outboard quad stays ~1.475 m out, well inside
+  traj_distance: 0.75          # the +-1.75 m position limit (Wesley 22 Oct); line_x / line_spin go 0.75 m out
   hover_z: 0.8
   climb_vel: 0.15
   land_tol: 0.10
@@ -34,6 +37,7 @@ thrust_map:
 watchdogs:
   solve_budget_s: 0.06
   require_fc_armed: true
+  pos_limit_m: 1.75             # the rig's +-1.75 m position limit, on (Wesley 22 Oct, after its critic and the LIM runs)
 fleet_resize:
   reconfig_mode: 'ocp'
   detach_magnet: true

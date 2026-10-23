@@ -2,6 +2,8 @@ name: tc_h1_stuck
 description: 'H1: partner_stuck_guard alone: our warm tracker latches in his transit (MOCAP_TILT 65 deg 0.1 s): the hand-over block announced, no attach confirmed, his give-up, the LAND take-back stuck; at LANDED a mux still on the partner is cut only if QUAD4 is down and still (z < 0.25 m, < 0.1 m/s), else the DISARM line (card 2026-10-11_quad4_tilt_cut rev 3; exploratory until the claim)'
 world: three_rigid_ground_rig_attach_pickup.sdf
 ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

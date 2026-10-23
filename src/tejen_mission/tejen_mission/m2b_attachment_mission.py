@@ -34,6 +34,8 @@ M2B_B1_LOCAL_REFERENCE_PHASES = frozenset({
     MissionPhase.M2_ATTACH_CAPTURE_WAIT,
     MissionPhase.M2_ATTACH_PROOF,
     MissionPhase.M2_ATTACHED_HOLD,
+    MissionPhase.M2_PARKING_ATTACHED,
+    MissionPhase.M2_PARKED_ATTACHED,
     MissionPhase.M2_DETACHED_RETREAT,
     MissionPhase.M2_LANDING_STAGE,
     MissionPhase.M2_FAULT,
@@ -164,8 +166,8 @@ class M2BConfig:
         if not math.isfinite(hold_angle) or not 0.0 < hold_angle < 90.0:
             raise ValueError("attached_hold_angle_deg must lie strictly between 0 and 90 degrees")
         object.__setattr__(self, "attached_hold_angle_deg", hold_angle)
-        if self.contact_overtravel_m > 0.010:
-            raise ValueError("contact_overtravel_m must be <= 0.010 m")
+        if self.contact_overtravel_m > 0.050:
+            raise ValueError("contact_overtravel_m must be <= 0.050 m")
         if self.latch_settle_timeout_s < self.latch_settle_dwell_s:
             raise ValueError("latch_settle_timeout_s must be >= latch_settle_dwell_s")
         if self.latch_abort_speed_mps <= self.latch_settle_speed_mps:
@@ -851,7 +853,8 @@ def m2b_mpc_mode_for_phase(phase: MissionPhase) -> str:
         return "ATTACH_APPROACH"
     if phase == MissionPhase.M2_ATTACH_PROOF:
         return "ATTACH_PROOF"
-    if phase == MissionPhase.M2_ATTACHED_HOLD:
+    if phase in {MissionPhase.M2_ATTACHED_HOLD, MissionPhase.M2_PARKING_ATTACHED,
+                 MissionPhase.M2_PARKED_ATTACHED}:
         return "ATTACHED_HOLD"
     if phase == MissionPhase.M2_DETACHED_RETREAT:
         return "DETACHED_RETREAT"

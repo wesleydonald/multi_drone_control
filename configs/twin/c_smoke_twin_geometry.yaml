@@ -1,0 +1,8 @@
+# Thesis result C (card docs/experiments/2026-10-23_paper_method_compare.md, §5 the switches' own bars):
+# configs/rig/drop_and_land_hold5.yaml (the smoke runs' params) plus net_twin_geometry, so
+# c_net_smoke_hover_twingeo_L100 and c_net_smoke_hover_L100 differ only in this switch.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+traj_hold_s: 5.0
+net_twin_geometry: true

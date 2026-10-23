@@ -35,9 +35,11 @@ from std_msgs.msg import Bool, Empty, Float64, Float64MultiArray, Int32, String
 
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
-from .config import mocap_loss_arg, mocap_tilt_arg, wait_lift_arg, wait_log_arg, wait_reweld_arg, wrench_arg
+from .config import (mocap_loss_arg, mocap_tilt_arg, wait_lift_arg, wait_log_arg, wait_reweld_arg, wait_traj_arg,
+                     wrench_arg)
 
 ARM_FAIL = 'fleet manager ARM failed or refused'
+PLANNER_TICK_S = 0.1    # the load planner's tick (PLANNER_HZ 10)
 # WAIT_PICKUP_FREE: his ball weld reads detached this long (SIM s) before the schedule goes on (his gate's hold)
 PICKUP_FREE_HOLD_S = 1.0
 PICKUP_STUCK = 'the ball weld never read free'
@@ -70,6 +72,14 @@ def schedule(events):
     events in place; on the config's own objects that shift carried into the next --repeats run
     (every second repeat started ~10 s late, R1158/R1160/R1162/R1168; reviewer 8 Oct)."""
     return sorted((copy.copy(e) for e in events), key=lambda e: e.t)
+
+
+def traj_clock(state):
+    """The trajectory clock this planner tick's references fly, from its /payload/trajectory_state: the state goes out
+    at the start of the tick, before a running path's clock advances (or a hold takes the advance back), so traj_t +
+    one tick while the path runs; traj_t itself before it starts and in the descent."""
+    t = float(state.get('traj_t', 0.0))
+    return t + PLANNER_TICK_S if state.get('running') and t > 0.0 else t
 
 class ExperimentRunner(Node):
     def __init__(self, cfg, run_dir):
@@ -121,6 +131,8 @@ class ExperimentRunner(Node):
         self._partner_release_wait = None   # t the WAIT_PARTNER_RELEASE event fired
         self._log_wait = None               # (regex, t fired, timeout) of a WAIT_LOG
         self._planner_lines = []            # (t, text) of every dissipative planner /rosout line this run
+        self._traj_wait = None              # (target, in laps, t fired, timeout) of a WAIT_TRAJ
+        self._traj_samples = []             # (t, trajectory clock, lap_s) per /payload/trajectory_state, for WAIT_TRAJ
         self._mocap_cut = set()             # drones whose mocap a MOCAP_LOSS silenced on purpose
         self.stop_reason = None            # set when the run ends early, for the manifest
 
@@ -196,6 +208,11 @@ class ExperimentRunner(Node):
         self.attach_pub = self.create_publisher(Int32, '/fleet/attach', 10)
         self.detach_pub = self.create_publisher(Int32, '/fleet/detach', 10)
         self.drop_pub = self.create_publisher(String, '/fleet/drop', 10)
+        # TASK and WAIT_TRAJ (card 2026-10-23_scalability cases 6 and 7): only in runs that have them
+        self.task_pub = (self.create_publisher(String, '/fleet/task', 10)
+                         if any(e.do == 'TASK' for e in cfg.events) else None)
+        if any(e.do == 'WAIT_TRAJ' for e in cfg.events):
+            self.create_subscription(String, '/payload/trajectory_state', self._traj_state_cb, 10)
         # RELEASE: the joint's own topic, made at start so it is matched before the event
         self.release_pubs = {int(e.arg): self.create_publisher(Empty, f'/drone_{int(e.arg)}/detach', 1)
                              for e in cfg.events if e.do == 'RELEASE'}
@@ -273,6 +290,16 @@ class ExperimentRunner(Node):
         if len(msg.data) >= 3:
             self.payload_ref = (float(msg.data[0]), float(msg.data[1]),
                                 float(msg.data[2]))
+
+    def _traj_state_cb(self, msg):
+        t = self._rel()
+        if math.isnan(t):
+            return
+        try:
+            s = json.loads(msg.data)
+            self._traj_samples.append((t, traj_clock(s), float(s.get('lap_s') or 0.0)))
+        except (ValueError, TypeError, AttributeError):
+            return
 
     def _cmd_cb(self, msg, i):
         # channel_2 is throttle mapped to [-1, 1] by the tracker; decode it the way
@@ -357,11 +384,33 @@ class ExperimentRunner(Node):
             self._proof = p
 
     _ROSOUT = ((re.compile(r'\] ATTACH drone (\d+)'), 'FOLD_IN'),
+               # a departed carrier's rejoin (rejoin_departed): ATTACH accepted, its end on the plate (attach sent), the
+               # twin's joint, the fold-in, its blend over, given up, refused; a staged drone leaving for LAND or a drop
+               (re.compile(r'REJOIN START drone \d+ \(/drone_(\d+)\)'), 'REJOIN_START'),
+               (re.compile(r'REJOIN ON PLATE drone \d+ \(/drone_(\d+)\)'), 'REJOIN_ON_PLATE'),
+               (re.compile(r'tether joint of drone \d+ \(/drone_(\d+)\): attached'), 'JOINT_ATTACHED'),
+               (re.compile(r'tether joint of drone \d+ \(/drone_(\d+)\): detached'), 'JOINT_DETACHED'),
+               (re.compile(r'REJOIN WELD drone \d+ \(/drone_(\d+)\)'), 'REJOIN_WELD'),
+               (re.compile(r'REJOIN BLEND OVER drone \d+ \(/drone_(\d+)\)'), 'REJOIN_BLEND_OVER'),
+               (re.compile(r'REJOIN ABORT drone \d+ \(/drone_(\d+)\)'), 'REJOIN_ABORT'),
+               (re.compile(r'REJOIN REFUSED drone \d+ \(/drone_(\d+)\)'), 'REJOIN_REFUSED'),
+               (re.compile(r'staged drone \d+ \(/drone_(\d+)\) leaves'), 'STAGED_LEAVES'),
+               # a staged carrier's task (rejoin_task) and a lapped path's lap-end hold (card 2026-10-23_scalability)
+               (re.compile(r'TASK START drone \d+ \(/drone_(\d+)\)'), 'TASK_START'),
+               (re.compile(r'TASK AT drone \d+ \(/drone_(\d+)\)'), 'TASK_AT'),
+               (re.compile(r'TASK DONE drone \d+ \(/drone_(\d+)\)'), 'TASK_DONE'),
+               (re.compile(r'TASK ABORT drone \d+ \(/drone_(\d+)\)'), 'TASK_ABORT'),
+               (re.compile(r'TASK REFUSED(?: drone \d+ \(/drone_(\d+)\))?'), 'TASK_REFUSED'),
+               (re.compile(r'\] lap (\d+) done at t='), 'LAP_DONE'),
                (re.compile(r'PARTNER RELEASE: drone (\d+)'), 'PARTNER_RELEASE'),
                (re.compile(r'PARTNER HANDOFF()'), 'PARTNER_HANDOFF'),
                # a newcomer taken out of the flight, and the planner hearing LAND (card newcomer_fault_scope)
                (re.compile(r'out of this flight \((\w+)\)'), 'NEWCOMER_OUT'),
-               (re.compile(r"/fleet/command received: 'LAND'()"), 'PLANNER_LAND'))
+               (re.compile(r"/fleet/command received: 'LAND'()"), 'PLANNER_LAND'),
+               # the network's hand-over and the path's start after the hover hold, either generator
+               # (card 2026-10-23_paper_method_compare)
+               (re.compile(r'handover OCP -> dissipative network()'), 'NET_HANDOVER'),
+               (re.compile(r'hover hold done: (\w+) starts'), 'PATH_START'))
 
     def _rosout_cb(self, msg):
         if (getattr(self, '_pickup_watch', False) and msg.name.endswith('simulation_test_supervisor')
@@ -442,7 +491,7 @@ class ExperimentRunner(Node):
         # attach mode was not in the list, and the clock started while the planner compiled its
         # resize solvers for 126 s). In attach only the carriers have one before the approach.
         mode = str(self.cfg.launch_args.get('mode', 'mpc'))
-        if mode in ('mpc', 'dissipative', 'attach'):
+        if mode in ('mpc', 'dissipative', 'attach', 'network'):
             n_ref = self.cfg.num_drones if mode == 'attach' else self.n
             ok = ok and all(r is not None for r in self.ref[:n_ref])
         # the fleet manager must be discovered on /fleet/command, and stay so for 2 s:
@@ -524,6 +573,22 @@ class ExperimentRunner(Node):
             self._log_event('LOGGED' if seen else 'LOG_TIMEOUT', f'{shift:.2f}')
             self.get_logger().warn(f'[exp] t={t:6.2f} {"logged" if seen else "NOT logged (timeout)"} '
                                    f'/{pat.pattern}/; later events shifted {shift:+.2f} s')
+        if getattr(self, '_traj_wait', None) is not None:
+            x, in_laps, t0, timeout = self._traj_wait
+            hit = next((tl for tl, clock, lap_s in self._traj_samples
+                        if (lap_s > 0.0 or not in_laps) and clock >= (x * lap_s if in_laps else x) - 1e-9), None)
+            seen = hit is not None
+            if not seen and not (timeout and t - t0 >= timeout):
+                return                      # WAIT_TRAJ blocks the rest of the schedule
+            # timed from the sample that reached it, which may have come before the wait fired
+            shift = (hit if seen else t) - t0
+            for e in self._pending:
+                e.t += shift
+            self._traj_wait = None
+            self._log_event('TRAJ_REACHED' if seen else 'TRAJ_TIMEOUT', f'{shift:.2f}')
+            what = f'lap {x:g}' if in_laps else f't={x:g} s'
+            self.get_logger().warn(f'[exp] t={t:6.2f} trajectory {"at" if seen else "NOT at (timeout)"} {what}; '
+                                   f'later events shifted {shift:+.2f} s')
         if self._thrust_wait is not None:
             tpl, t0 = self._thrust_wait
             if not all(self._thrust_seen[tpl]):
@@ -590,6 +655,10 @@ class ExperimentRunner(Node):
             if ev.do == 'WAIT_LOG':
                 pat, timeout = wait_log_arg(ev.arg)
                 self._log_wait = (pat, t, timeout)
+                return
+            if ev.do == 'WAIT_TRAJ':
+                x, in_laps, timeout = wait_traj_arg(ev.arg)
+                self._traj_wait = (x, in_laps, t, timeout)
                 return
             if ev.do == 'WAIT_PICKUP_FREE':
                 self._pickup_wait = (t, wait_reweld_arg(ev.arg, 'WAIT_PICKUP_FREE'))
@@ -672,6 +741,8 @@ class ExperimentRunner(Node):
         elif ev.do == 'DROP':
             why = str(ev.arg) if ev.arg else 'forced by the runner'
             self._publish(self.drop_pub, String(data=why), f'/fleet/drop {why}')
+        elif ev.do == 'TASK':
+            self._publish(self.task_pub, String(data=str(ev.arg)), f'/fleet/task {ev.arg}')
         elif ev.do == 'RELEASE':
             # the joint only, as a magnet that fails: the planner has to notice by itself
             pub = self.release_pubs[int(ev.arg)]
@@ -722,7 +793,7 @@ class ExperimentRunner(Node):
         elif ev.do == 'WRENCH':
             self._set_wrench(*wrench_arg(ev.arg))
         elif ev.do in ('WAIT_WELD', 'WAIT_LIFT', 'WAIT_REWELD', 'WAIT_PARTNER_RELEASE',
-                       'WAIT_THRUST', 'WAIT_LOG', 'WAIT_PICKUP_FREE'):
+                       'WAIT_THRUST', 'WAIT_LOG', 'WAIT_PICKUP_FREE', 'WAIT_TRAJ'):
             pass
         elif ev.do == 'LAUNCH':
             self.launch_requests.append(str(ev.arg))     # started by run_experiment's loop
@@ -751,7 +822,9 @@ class ExperimentRunner(Node):
         # dead mocap still trips it, just one pose_timeout_s later.
         if t < self.cfg.pose_timeout_s:
             return False
-        for i in range(self.n):
+        # after /fleet/landed the run only waits out stop_after_landed_s; a drone at rest can stop getting fresh
+        # mocap in that window, which raced the stop and failed a clean run (R2634)
+        for i in (range(self.n) if getattr(self, 't_landed', None) is None else ()):
             st = self.pose_stamp[i]
             if st is None or i in getattr(self, '_mocap_cut', ()):
                 continue                    # no pose yet, or silenced by the run's own MOCAP_LOSS

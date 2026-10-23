@@ -73,6 +73,67 @@ def test_aligned_crossing_and_near_plate_vertical_return():
     assert d.band == 'HIGH'
 
 
+def test_fast_low_trial_keeps_entry_alignment_then_finishes_stroke_without_xy_pause():
+    from tejen_mission.measured_tip_alignment import TieredDescent, TipAlignment
+    d = TieredDescent(TipAlignment(), start_height_m=.12, floor_m=-.036,
+                     speed_mps=.04, low_speed_mps=.08, low_entry_height_m=.05,
+                     pause_low_for_xy=False)
+    for i in range(30):
+        d.step(now_s=i/30, error_world_xy=[.04, 0], clearance_m=d.height_m,
+               relative_speed_mps=.01, fresh=True)
+    assert d.band == 'HIGH' and d.height_m >= .08
+    for i in range(30,150):
+        before = d.height_m
+        d.step(now_s=i/30, error_world_xy=[.01, 0], clearance_m=d.height_m,
+               relative_speed_mps=.01, fresh=True)
+        assert before-d.height_m <= .04/30 + 1e-9
+        if d.band == 'LOW':
+            break
+    assert d.band == 'LOW' and d.height_m <= .05
+    frozen = d.alignment.offset_xy.copy()
+    before = d.height_m
+    d.step(now_s=(i+1)/30, error_world_xy=[.06, 0], clearance_m=d.height_m,
+           relative_speed_mps=.09, fresh=True)
+    assert before-d.height_m == pytest.approx(.08/30)
+    before = d.height_m
+    d.step(now_s=100., error_world_xy=[.06, 0], clearance_m=d.height_m,
+           relative_speed_mps=.09, fresh=False)
+    d.step(now_s=200., error_world_xy=[.06, 0], clearance_m=d.height_m,
+           relative_speed_mps=.09, fresh=True)
+    assert d.height_m == before  # no stale catch-up, despite no XY gate
+    for j in range(1,50):
+        d.step(now_s=200+j/30, error_world_xy=[.06, 0], clearance_m=d.height_m,
+               relative_speed_mps=.09, fresh=True)
+    assert d.complete and d.height_m == -.036
+    np.testing.assert_array_equal(d.alignment.offset_xy, frozen)
+
+
+def test_ground_trial_extra_8mm_reaches_geometry_endpoint_without_support_or_body_clamp():
+    from tejen_mission.payload_geometry import PayloadGeometryProfile
+    cfg = yaml.safe_load((ROOT/'config/m1_ground_ring.yaml').read_text())['online_join_planner']['ros__parameters']
+    assert cfg['pickup_overtravel'] == cfg['pickup_max_overtravel'] == .036
+    assert cfg['pickup_support_surface_overtravel_allowance_m'] == .024
+    assert cfg['pickup_low_descent_speed_mps'] == .08
+    assert cfg['pickup_low_entry_height_m'] == .05
+    base = yaml.safe_load((ROOT/'config/irl_commissioning.yaml').read_text())['online_join_planner']['ros__parameters']
+    tuning = yaml.safe_load((ROOT/'config/m1_measured_tip_pickup.yaml').read_text())['online_join_planner']['ros__parameters']
+    assert tuning['pickup_alignment_min_normal_m'] == .08
+    assert tuning['pickup_alignment_low_xy_m'] == .025
+    assert tuning['pickup_proof_maximum_contact_drift_m'] == .015
+    p = PayloadGeometryProfile('trial', [.086,.086,.022], [0,0,.003],
+                              [0,0,.012], [0,0,-.0225])
+    args = dict(pose_position=[0,0,.03225], yaw=0., contact_gap=0.,
+                support_surface_z=base['support_surface_z'])
+    old = p.pickup_target_geometry(**args, overtravel=.028, max_overtravel=.028,
+                                  support_surface_overtravel_allowance_m=.016)
+    new = p.pickup_target_geometry(**args, overtravel=cfg['pickup_overtravel'],
+        max_overtravel=cfg['pickup_max_overtravel'],
+        support_surface_overtravel_allowance_m=cfg['pickup_support_surface_overtravel_allowance_m'])
+    assert old.contact_face_target_world[2]-new.contact_face_target_world[2] == pytest.approx(.008)
+    assert not new.support_surface_clamped
+    assert new.magnet_marker_target_world[2]+base['magnet_drop_below_quad'] > cfg['min_reference_z']
+
+
 def planner_method(name, **namespace):
     tree = ast.parse(PLANNER.read_text())
     cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'OnlineJoinPlanner')

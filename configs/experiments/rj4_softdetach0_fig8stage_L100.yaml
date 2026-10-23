@@ -1,0 +1,111 @@
+criteria:
+  forbid_abort: false
+  min_payload_z: -1.0
+  min_peak_payload_z: 0.5
+description: 'Card 2026-10-23_rejoin_departed E4 neighbour (staging on a path, critic M3): the square
+  at 1 m, plate 0 (+x) soft-detached in a 30 s hover hold before one figure-8 lap (fig8_size 0.9, 0.2
+  m/s), drone 0 staged through the lap (clamped 1.6 m at the +x lobe), ATTACH 0 mid-lap (refused: the
+  path runs), LAND after the lap. Proposed falsifier: no REJOIN_REFUSED for the mid-lap ATTACH; the staged
+  drone past +-1.6 m, within 0.6 m of the ring centre or 0.8 m of a carrier body; no STAGED_LEAVES at
+  the LAND; a quad not landing; a drop or abort.'
+events:
+- do: ARM
+  t: 3.0
+- do: TAKEOFF
+  t: 6.0
+- arg: 0.3 60
+  do: WAIT_LIFT
+  t: 8.0
+- arg: 0
+  do: DETACH
+  t: 20.0
+- arg: 0
+  do: ATTACH
+  t: 53.0
+- arg: 90 load trajectory complete
+  do: WAIT_LOG
+  t: 54.0
+- do: LAND
+  t: 57.0
+fleet:
+  n_total: 4
+  num_drones: 4
+io_launch:
+  args:
+    detach: true
+    num_drones: 4
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    tether_tips: true
+    tether_len: 1.0
+  file: sim_io_launch.py
+launch:
+  args:
+    rejoin_departed: true
+    departed_land: false
+    attach_azimuths_deg: 0,270,180,90
+    attach_radius: 0.225
+    attach_z: 0.02
+    cable_len: 1.0
+    creep_vel: 0.2
+    drone_mass: 0.55
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.15
+    load_mass: 0.86
+    detach_unload_s: 3.0
+    load_traj: fig_8
+    measure_rod_len: true
+    mode: dissipative
+    num_drones: 4
+    params_file: /home/wesley/multi_drone_control/configs/rig/chain_pair_noxy.yaml
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    reconfig_mode: ocp
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.0
+    throttle_max: 0.8
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    departed_ground_idle: true
+    fig8_size: 0.9
+    traj_speed: 0.2
+    traj_hold_s: 30.0
+  file: sim_control_launch.py
+  package: bringup
+name: rj4_softdetach0_fig8stage_L100
+timing:
+  duration_s: 220.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+world: four_rigid_ground_rig_L100.sdf
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    baseline:
+      pos:
+      - 2.0
+      - -4.6
+      - 2.9
+      look_at:
+      - 0.35
+      - 0.0
+      - 1.1
+      hfov_deg: 60.0
+      size:
+      - 1280
+      - 720

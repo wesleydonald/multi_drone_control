@@ -43,10 +43,24 @@ STAMP = re.compile(r'\[(\d{10}\.\d+)\]')
 PHASE = re.compile(r'approach: drone (\d+) (climb|transit|descend)\b')
 OUT = re.compile(r'out of this flight \((\w+)\)')
 RIM_R = 0.225
-BODY_TIP = 0.59                   # the twin newcomer's body to magnet tip
+BODY_TIP = 0.59                   # the twin newcomer's body to magnet tip on the 0.55 m arm (else its world's: body_tip)
 DOWN_Z = 0.15
 AIR_Z = 0.2
 CLEAR_R = 1.15
+
+
+def body_tip(d):
+    """The newcomer's body to magnet tip in the run's world (its arm less its pivot's height: 1.04 at 1 m), else
+    BODY_TIP (no manifest.json, or no world in it)."""
+    from check_geometry import newcomer_arm
+    try:
+        with open(os.path.join(d, 'manifest.json')) as f:
+            w = str(json.load(f).get('world') or '')
+    except (OSError, ValueError, AttributeError):
+        w = ''
+    path = w if os.path.isabs(w) else os.path.join(REPO, 'simulation_assets', w)
+    arm = newcomer_arm(path) if w and os.path.exists(path) else None
+    return arm[0] - arm[1] if arm else BODY_TIP
 
 
 def run_dir(rid):
@@ -156,7 +170,7 @@ def analyse(rid):
         i = drop[0] + 1
         z = new[i, 2]
         if not np.isfinite(z) and 'tip_z' in run:
-            z = float(run.tip_z.iloc[i]) + BODY_TIP      # its mocap was cut: the hanging tip, at the disarm
+            z = float(run.tip_z.iloc[i]) + body_tip(d)   # its mocap was cut: the hanging tip, at the disarm
         r['fault'] = {'disarm_t': round(float(t[i]), 2), 'disarm_z': round(float(z), 3) if np.isfinite(z) else None,
                       'fault_land': event_t(ev, 'FAULT_LAND'), 'planner_land': event_t(ev, 'PLANNER_LAND'),
                       'fleet_abort': event_t(ev, 'FLEET_ABORT')}

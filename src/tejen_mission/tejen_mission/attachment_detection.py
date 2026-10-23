@@ -252,6 +252,9 @@ class AttachmentDetectorOutput:
     lost: bool
     initial_contact: bool = False
     proof_angle_error_deg: float = float("nan")
+    evidence_sample_time_s: float = float("nan")
+    new_measurement: bool = False
+    velocity_valid: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -301,6 +304,7 @@ class AttachmentDetector:
         c = self.config
         self.progressive = ContactProofEvidence(ContactProofConfig(
             xy_m=c.candidate_xy_m, normal_m=c.candidate_normal_m,
+            proof_xy_m=c.proof_xy_m,
             initial_contact_max_normal_m=c.initial_contact_max_normal_m,
             speed_mps=c.proof_speed_mps, contact_dwell_s=c.candidate_dwell_s,
             proof_dwell_s=c.proof_dwell_s, drift_m=c.proof_max_contact_drift_m or .008,
@@ -319,6 +323,9 @@ class AttachmentDetector:
         self._loss_start_s: Optional[float] = None
         self._confirmed = False
         self._lost = False
+        self._last_measured_stamp_s: Optional[float] = None
+        self._previous_observation_time_s: Optional[float] = None
+        self._measurement_velocity_valid = False
 
     @staticmethod
     def _dwell(now_s: float, start_s: Optional[float]) -> float:
@@ -409,6 +416,8 @@ class AttachmentDetector:
     def update(self, observation: AttachmentObservation) -> AttachmentDetectorOutput:
         p_pc, p_pq, orientation_error = self._geometry(observation)
         fresh = self._fresh(observation)
+        if self.config.attachment_policy == POLICY:
+            return self._update_measured(observation, p_pc, orientation_error, fresh)
         if fresh:
             velocity = self._relative_velocity(
                 now_s=observation.time_s,
@@ -426,37 +435,6 @@ class AttachmentDetector:
             xy_error > self.config.loss_xy_m
             or abs(normal_error) > self.config.loss_normal_m
         )
-
-        if self.config.attachment_policy == POLICY:
-            p_wp = self.geometry.plate_position_world(
-                ring_position=observation.ring_position_world,
-                rotation_world_from_ring=observation.rotation_world_from_ring,
-                plate_index=self.assigned_plate_id)
-            r_wp = self.geometry.plate_rotation_world(
-                rotation_world_from_ring=observation.rotation_world_from_ring,
-                plate_index=self.assigned_plate_id)
-            anchor = observation.anchor_position_world
-            fresh = fresh and anchor is not None
-            anchor_plate = np.zeros(3) if anchor is None else r_wp.T @ (anchor - p_wp)
-            e = self.progressive.update(now=observation.time_s, contact=p_pc,
-                anchor=anchor_plate, speed=relative_speed, fresh=fresh,
-                magnet_on=observation.magnet_on, proving=observation.proof_requested,
-                motion_complete=observation.proof_motion_complete)
-            self._confirmed, self._lost = e.confirmed, e.lost
-            state = (AttachmentEvidenceState.UNAVAILABLE if not fresh else
-                     AttachmentEvidenceState.LOST if e.lost else
-                     AttachmentEvidenceState.CONFIRMED if e.confirmed else
-                     AttachmentEvidenceState.PROVING if observation.proof_requested and e.initial_contact else
-                     AttachmentEvidenceState.CONTACT_CANDIDATE if e.initial_contact or e.candidate_condition else
-                     AttachmentEvidenceState.SEPARATED)
-            result = self._output(state=state, fresh=fresh, position=p_pc, velocity=velocity,
-                orientation_error=orientation_error, candidate_condition=e.candidate_condition,
-                candidate_dwell=e.candidate_dwell, proof_condition=e.proof_condition,
-                proof_dwell=e.proof_dwell, proof_excitation=0., proof_contact_drift=e.drift,
-                lost_condition=bool(fresh and e.initial_contact and geometry_separated),
-                geometry_separated=bool(fresh and geometry_separated), loss_dwell=e.loss_dwell)
-            return replace(result, initial_contact=e.initial_contact,
-                           proof_angle_error_deg=e.angle_error_deg)
 
         candidate_condition = bool(
             fresh
@@ -633,6 +611,77 @@ class AttachmentDetector:
             geometry_separated=geometry_separated,
             loss_dwell=loss_dwell,
         )
+
+    def _update_measured(self, observation, p_pc, orientation_error, fresh):
+        stamp = observation.magnet_time_s
+        now = observation.time_s
+        clock_reset = (self._previous_observation_time_s is not None
+                       and now < self._previous_observation_time_s)
+        self._previous_observation_time_s = now
+        if clock_reset:
+            self._last_measured_stamp_s = None
+        source_valid = 0. <= stamp <= now + 1e-9
+        new_sample = source_valid and (self._last_measured_stamp_s is None
+                                      or stamp > self._last_measured_stamp_s)
+        gap = (new_sample and self._previous_time_s is not None
+               and stamp - self._previous_time_s > self.config.pose_timeout_s)
+        p_wp = self.geometry.plate_position_world(
+            ring_position=observation.ring_position_world,
+            rotation_world_from_ring=observation.rotation_world_from_ring,
+            plate_index=self.assigned_plate_id)
+        r_wp = self.geometry.plate_rotation_world(
+            rotation_world_from_ring=observation.rotation_world_from_ring,
+            plate_index=self.assigned_plate_id)
+        anchor = observation.anchor_position_world
+        fresh = bool(fresh and source_valid and anchor is not None
+                     and np.all(np.isfinite(anchor)))
+        anchor_plate = np.zeros(3) if anchor is None else r_wp.T @ (anchor - p_wp)
+        if not fresh or clock_reset or gap:
+            self._previous_time_s = self._previous_plate_relative_position_m = None
+            self._filtered_relative_velocity_mps = np.zeros(3)
+            self._measurement_velocity_valid = False
+            # Clear unfinished dwell only. Initial/proven contact and seeds survive.
+            self.progressive.update(now=stamp, contact=p_pc, anchor=anchor_plate,
+                speed=float("inf"), fresh=False, magnet_on=observation.magnet_on)
+        if new_sample:
+            self._last_measured_stamp_s = stamp
+        if fresh and new_sample:
+            self._measurement_velocity_valid = self._previous_time_s is not None
+            self._relative_velocity(now_s=stamp, position_m=p_pc)
+            speed = (float(np.linalg.norm(self._filtered_relative_velocity_mps))
+                     if self._measurement_velocity_valid else float("inf"))
+            self.progressive.update(now=stamp, contact=p_pc, anchor=anchor_plate,
+                speed=speed, fresh=True, magnet_on=observation.magnet_on,
+                proving=observation.proof_requested,
+                motion_complete=observation.proof_motion_complete)
+        e = self.progressive
+        if not observation.magnet_on:
+            e.contact_since = e.proof_since = None
+            e.candidate_condition = e.proof_condition = False
+            e.candidate_dwell = e.proof_dwell = 0.
+        elif not observation.proof_requested:
+            e.proof_since = None; e.proof_condition = False; e.proof_dwell = 0.
+        self._confirmed, self._lost = e.confirmed, e.lost
+        separated = bool(np.linalg.norm(p_pc[:2]) > self.config.loss_xy_m
+                         or abs(p_pc[2]) > self.config.loss_normal_m)
+        state = (AttachmentEvidenceState.UNAVAILABLE if not fresh else
+                 AttachmentEvidenceState.LOST if e.lost else
+                 AttachmentEvidenceState.CONFIRMED if e.confirmed else
+                 AttachmentEvidenceState.PROVING if observation.proof_requested and e.initial_contact else
+                 AttachmentEvidenceState.CONTACT_CANDIDATE if e.initial_contact or e.candidate_condition else
+                 AttachmentEvidenceState.SEPARATED)
+        result = self._output(state=state, fresh=fresh, position=p_pc,
+            velocity=self._filtered_relative_velocity_mps,
+            orientation_error=orientation_error, candidate_condition=e.candidate_condition,
+            candidate_dwell=e.candidate_dwell, proof_condition=e.proof_condition,
+            proof_dwell=e.proof_dwell, proof_excitation=0., proof_contact_drift=e.drift,
+            lost_condition=bool(fresh and e.initial_contact and separated),
+            geometry_separated=bool(fresh and separated), loss_dwell=e.loss_dwell)
+        return replace(result, initial_contact=e.initial_contact,
+            proof_angle_error_deg=e.angle_error_deg, evidence_sample_time_s=stamp,
+            new_measurement=bool(new_sample and fresh),
+            velocity_valid=self._measurement_velocity_valid,
+            relative_speed_mps=result.relative_speed_mps if self._measurement_velocity_valid else float("nan"))
 
     def _output(
         self,

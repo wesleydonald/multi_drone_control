@@ -14,6 +14,144 @@ import numpy as np
 from .reference_generators import TargetState, TrajectoryReference
 
 
+class ReferenceRecovery:
+    """One interrupted-backend transaction, not a second mission phase machine.
+
+    The existing continuation is retained exactly. Only a genuinely stopped
+    command may become the common seed. Status binds a grant to both a backend
+    epoch and the exact reference publication; an untagged Bool ACK is insufficient.
+    """
+
+    def __init__(self) -> None:
+        self.active = False
+        self.request_id = ""
+        self.status = None
+        self.status_time_s = None
+        self.epoch = -1
+        self.hold_position = None
+        self.references = {}
+        self.full_references = {}
+        self.waiting_reason = "inactive"
+
+    def begin(self, *, request_id, reference, now_s, ros_time_ns) -> None:
+        if self.active:
+            return
+        if reference is None or not all(np.all(np.isfinite(v)) for v in
+                                       (reference.positions, reference.velocities, reference.accelerations)):
+            raise ValueError("recovery requires a finite authoritative reference")
+        self.__init__()
+        self.active = True
+        self.request_id = request_id
+        self.continuation = reference
+        self.started_s = float(now_s)
+        self.started_ros_ns = int(ros_time_ns)
+        self.waiting_reason = "reset_backend"
+
+    def reference(self, *, now_s, dt_s):
+        continued = advance_reference_window(self.continuation,
+            elapsed_s=max(0., now_s - self.started_s), sample_dt_s=dt_s, output_count=61)
+        # Do not zero a moving sampled tail or infer a stop from elapsed time.
+        if (np.max(np.abs(continued.velocities)) <= 1e-5 and
+                np.max(np.abs(continued.accelerations)) <= 1e-5 and
+                np.max(np.abs(continued.positions - continued.positions[0])) <= 1e-7):
+            self.hold_position = continued.positions[0].copy()
+        return continued
+
+    def request(self, *, now_s, ros_time_ns, dt_s):
+        if not self.active:
+            return None
+        self.reference(now_s=now_s, dt_s=dt_s)
+        if self.status is None:
+            self.waiting_reason = "reset_backend"
+            return f"{self.request_id} reset"
+        if self.hold_position is None:
+            self.waiting_reason = "continuation_not_stationary"
+            return None
+        if self.status["prepared"] or self.status["granted"]:
+            self.waiting_reason = "waiting_current_grant_reference"
+            return f"{self.request_id} grant {int(ros_time_ns)}"
+        self.waiting_reason = self.status.get("reason", "preparing_common_hold")
+        p = " ".join(format(v, ".17g") for v in self.hold_position)
+        return f"{self.request_id} seed {p} {int(ros_time_ns)}"
+
+    def observe_status(self, status, *, now_s):
+        if (not self.active or status.get("request_id") != self.request_id or
+                type(status.get("epoch")) is not int or status["epoch"] < self.epoch or
+                type(status.get("prepared")) is not bool or type(status.get("granted")) is not bool or
+                type(status.get("reference_stamp_ns")) is not int):
+            return
+        self.epoch = status["epoch"]
+        self.status = dict(status)
+        self.status_time_s = float(now_s)
+
+    def observe_reference(self, reference, *, source_stamp_ns, receive_time_s, full_reference=None):
+        """Retain a bounded set of publications until their companion status arrives."""
+        if (not self.active or reference is None or type(source_stamp_ns) is not int
+                or source_stamp_ns <= self.started_ros_ns
+                or not np.isfinite(receive_time_s) or reference.positions.shape != (61, 3)):
+            return
+        # Duplicates must not renew receipt freshness. Eight windows cover the
+        # existing 0.2 s timeout at 30 Hz without retaining a trajectory history.
+        self.references.setdefault(source_stamp_ns, (reference, float(receive_time_s)))
+        if full_reference is not None:
+            self.full_references.setdefault(source_stamp_ns, full_reference)
+        while len(self.references) > 8:
+            oldest = next(iter(self.references))
+            self.references.pop(oldest)
+            self.full_references.pop(oldest, None)
+
+    def matching_reference(self, *, now_s, timeout_s):
+        if not self.active or self.status is None or not self.status["granted"]:
+            return None
+        stamp = self.status["reference_stamp_ns"]
+        item = self.references.get(stamp)
+        if (item is None or not 0. <= now_s - item[1] <= timeout_s
+                or not self.source_is_fresh(stamp, now_s=now_s, timeout_s=timeout_s)):
+            return None
+        return item[0], stamp, item[1]
+
+    def source_is_fresh(self, stamp_ns, *, now_s, timeout_s):
+        # Use the transaction's clock correspondence, not packet arrival time.
+        age = now_s - self.started_s - (stamp_ns - self.started_ros_ns) * 1e-9
+        return np.isfinite(age) and -1e-9 <= age <= timeout_s
+
+    def accept_reference(self, reference, *, source_stamp_ns, now_s, timeout_s,
+                         position_tolerance_m, velocity_tolerance_mps,
+                         acceleration_tolerance_mps2):
+        if not (self.active and self.status is not None and self.status["granted"] and
+                self.status["reference_stamp_ns"] == source_stamp_ns and
+                source_stamp_ns > self.started_ros_ns and self.status_time_s is not None and
+                0. <= now_s - self.status_time_s <= timeout_s and
+                self.source_is_fresh(source_stamp_ns, now_s=now_s, timeout_s=timeout_s)):
+            return False
+        if self.hold_position is None:
+            self.reference(now_s=now_s, dt_s=1/30)
+        if self.hold_position is None or reference.positions.shape != (61, 3):
+            return False
+        held = TrajectoryReference(np.tile(self.hold_position, (61, 1)),
+                                   np.zeros((61, 3)), np.zeros((61, 3)))
+        source_age = max(0., now_s - self.started_s - (source_stamp_ns-self.started_ros_ns)*1e-9)
+        current = advance_reference_window(reference, elapsed_s=source_age,
+                                            sample_dt_s=1/30, output_count=61)
+        if not handoff_allowed(stage0_errors(held, current),
+                position_tolerance_m=position_tolerance_m,
+                velocity_tolerance_mps=velocity_tolerance_mps,
+                acceleration_tolerance_mps2=acceleration_tolerance_mps2):
+            self.waiting_reason = "reference_discontinuous"
+            return False
+        self.active = False
+        self.waiting_reason = "resumed"
+        return True
+
+    def cancel(self):
+        if not self.active:
+            return None
+        request = f"{self.request_id} cancel"
+        self.active = False
+        self.waiting_reason = "cancelled"
+        return request
+
+
 @dataclass(frozen=True)
 class HandoffErrors:
     position_m: float

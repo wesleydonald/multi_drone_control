@@ -2,6 +2,8 @@ name: twin_tf_freeze_on
 description: 'card 2026-10-09_approach_tip_feedback rev 5, arm F: E+ and the tip frozen 2 s from 0.5 s into the
   tip hold (switch ON)'
 world: three_rigid_ground_rig_attach.sdf
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
 launch:
   package: bringup
   file: sim_control_launch.py

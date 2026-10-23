@@ -245,9 +245,10 @@ def generate_launch_description():
         DeclareLaunchArgument('clock_hz', default_value='500'),
         DeclareLaunchArgument('mocap_hz', default_value='120'),
         # true: each carrier's magnet marker as on the rig (/drone_<i>/magnet_tip_state), from its rod's pose; the
-        # world must publish the rods (the chain's worlds do), tether_len = their length (card 2026-10-21_tip_detect)
+        # world must publish the rods (the chain's worlds do), tether_len = their length (card 2026-10-21_tip_detect;
+        # 1 m worlds by default since 22 Oct; run_experiment refuses one that is not the world's)
         DeclareLaunchArgument('tether_tips', default_value='false'),
-        DeclareLaunchArgument('tether_len', default_value='0.55'),
+        DeclareLaunchArgument('tether_len', default_value='1.0'),
         DeclareLaunchArgument('viz_hz', default_value='30'),
         # RViz-only TF/markers; off for headless batches (26 % of a core, 2026-09-26)
         DeclareLaunchArgument('fleet_viz', default_value='true'),

@@ -28,8 +28,9 @@ are numbered CLOCKWISE since 8 Oct (plate k at -30*k deg, so 30/90/150/270 are p
 11/9/7/3). Drone i sits at the i-th azimuth; --yaw-deg rotates the payload and the whole ring
 with it. --drone-z puts the drones at that height with the rod still cable_len long (rods near
 flat, the creep floor start) instead of on the --elev-deg cone. --rig takes the rig geometry
-(rod 0.55, magnets at r 0.225, 60 deg); --tip adds the newcomer's magnet tip resting on the floor
---tip-len from its body (0.58: QUAD4's pivot-to-plate 0.54 m in the 8 Oct logs + the 4 cm pivot);
+(rod 1.0 since 22 Oct, 0.55 before; magnets at r 0.225, 60 deg); --tip adds the newcomer's magnet tip resting on the
+floor --tip-len from its body (--rig 1.03: QUAD1's 1 m body-to-marker on 21 Oct; else 0.58: QUAD4's pivot-to-plate
+0.54 m in the 8 Oct logs + the 4 cm pivot);
 --tip-plate k puts that tip over plate k instead, --tip-dz above the ring origin plane, QUAD4 hanging
 straight above it.
 
@@ -64,7 +65,7 @@ TIP_TOPIC = '/magnet_tip_pose'
 LOAD_TOPIC = '/payload/motion_capture_state'
 BALL_TOPIC = '/pickup/motion_capture_state'
 BALL_Z = 0.011                # his 22 mm puck's body origin resting on the floor
-RIG = {'cable_len': 0.55, 'attach_radius': 0.225, 'elev_deg': 60.0}
+RIG = {'cable_len': 1.0, 'attach_radius': 0.225, 'elev_deg': 60.0}     # the 1 m cables of 22 Oct
 
 
 def compute_poses(n, attach=False, cable_len=0.5, radius=0.25, elev_deg=45.0, load_z=0.05,
@@ -257,12 +258,13 @@ def main(argv=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--num-drones', type=int, default=3)
     ap.add_argument('--attach', action='store_true', help='also publish the newcomer (id num_drones)')
-    ap.add_argument('--cable-len', type=float, default=None, help='rod length (m); default 0.5, --rig 0.55')
+    ap.add_argument('--cable-len', type=float, default=None, help='rod length (m); default 0.5, --rig 1.0')
     ap.add_argument('--attach-radius', type=float, default=None, help='plate radius (m); default 0.25, --rig 0.225')
     ap.add_argument('--elev-deg', type=float, default=None, help='rod elevation (deg); default 45, --rig 60')
-    ap.add_argument('--rig', action='store_true', help='rig geometry: rod 0.55, plates at r 0.225, 60 deg')
+    ap.add_argument('--rig', action='store_true', help='rig geometry: rod 1.0, plates at r 0.225, 60 deg')
     ap.add_argument('--tip', action='store_true', help='with --attach: also publish the newcomer magnet tip')
-    ap.add_argument('--tip-len', type=float, default=0.58, help='body-to-tip length of the newcomer (m)')
+    ap.add_argument('--tip-len', type=float, default=None,
+                    help='body-to-tip length of the newcomer (m); default 0.58, --rig 1.03')
     ap.add_argument('--tip-plate', type=int, default=None,
                     help='with --tip: the tip over this plate (0-11, clockwise from +x), QUAD4 above it')
     ap.add_argument('--tip-dz', type=float, default=0.0,
@@ -292,7 +294,7 @@ def main(argv=None):
     ap.add_argument('--dry-run', action='store_true', help='print the poses and exit (no ROS)')
     a = ap.parse_args(argv)
     base = RIG if a.rig else {'cable_len': 0.5, 'attach_radius': 0.25, 'elev_deg': 45.0}
-    for k, v in base.items():
+    for k, v in {**base, 'tip_len': 1.03 if a.rig else 0.58}.items():
         if getattr(a, k) is None:
             setattr(a, k, v)
     if a.tip and not a.attach:

@@ -1,0 +1,9 @@
+# Combined M1 on 1 m cables (Thu 29 Oct, docs/rig/thu_2026-10-29.md): QUAD4 = drone 4 (/drone_3) onto plate 9 by
+# Tejen's controller. attach_m1.yaml's switches (Wesley 9 Oct) and drop_takes_back (Wesley 16 Oct: a ring drop during
+# his flight takes QUAD4 back and lands it; one params_file per line, so it lives here). No weld_point_z: attach_m1's
+# 0.024 was measured above the ring's old Motive pivot (moved 2.4 cm down on 22 Oct), so the sheet types the bench's W
+# and the launch refuses without it. Our own approach's tip feedback is not flown on the rig (his controller attaches).
+newcomer_lifecycle: true
+newcomer_fault_land: true
+departed_ground_idle: true
+drop_takes_back: true
