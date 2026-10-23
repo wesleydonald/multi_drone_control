@@ -1,0 +1,305 @@
+% res_scale.tex -- DRAFT 23 Oct 2026 (thesis result S): scalability. Updated 23 Oct afternoon with C, Q6 and Q1-Q5.
+% Sources: card docs/experiments/2026-10-23_scalability.md (critic answered 22 Oct; bars FROZEN 23 Oct ~07:25 on Wesley's
+% approval, decisions.md DECIDED 2026-10-23 (5): "not so important as long as it works"; eight quads reported "twin
+% only, not real time", the real-time limit its own number); its "Results, C" (14:12, lab batch 17, R2700-R2711,
+% results/analysis/s_c_twin_2026-10-23.json), "Results, Q6" (14:35, results/analysis/s_quality_bench_n8_2026-10-23.json)
+% and "Results, Q1-Q5" (14:58, results/analysis/s_quality_replay_2026-10-23.json); decisions.md DECIDED 2026-10-23 S
+% (Wesley ~14:33: N4's window opens 2 s after the last REJOIN_BLEND_OVER for the claim runs; the original window is
+% reported beside it) and S's iteration count (~14:37: the 8-quad claims fly at 5 SQP iterations, s8_hover_R50_L100_it5
+% and s8_chain4back_R50_L100_it5 x2 each, N1's comparator s4_hover_L100_it5 R2700/R2701; still "twin only, not real
+% time"; the it1 8-quad runs stay exploratory). By the card's frozen rule (section 5 B and Q) the rig N_max is read at
+% that count too: 5 iterations.
+% Bench: registry S-BENCH-1022 (results/analysis/solve_scaling_tuf_2026-10-22.json), S-CALIB-1022
+% (s_calib_replay_2026-10-22.json, s_calib_bench_n3_resin/_fast_2026-10-22.json, s_calib_replay_cores_2026-10-22.json;
+% rig flights RIG-1022-h3 and -f3h). The bench rows are BEFORE the two speed-ups (plan_fast_refs), the residual inside the
+% solve, and no 4 cm pivot in the reference extraction (the pivot adds about 4 ms at n = 3: whole tick p95 32.1 against
+% 27.9 ms; 3.5 x 32.1 = 112 ms). Rig-scaled limit: 3.5 x whole tick p95 <= 100 ms, i.e. idle p95 <= 28.6 ms: n = 3 at
+% 5 / 2 iterations (27.9 / 18.3 ms; n = 4 48.8 / 29.9), n = 4 at 1 (23.4; n = 5 40.7). Idle limit on latency p95 <= 60
+% ms: 4 / 5 / 6.
+% Eight-quad exploratory runs (1 iteration): R2464 (s8_hover), R2587 (s8_chain4), R2588 (s8_chain4back before the rejoin
+% fixes), R2597 (s8_chain4back on the final rejoin tree).
+% Not yet run: bar B (the bench with the speed-ups and the pivot, rig-scaled); the claim cells at 5 iterations (lab batch
+% 18: s8_hover_R50_L100_it5 x2, s8_chain4back_R50_L100_it5 x2). NOT written up (Wesley has not decided): the card's
+% PROPOSED "More complex cases" addendum (23 Oct ~15:05).
+% Open, not in the text: two iterations on the rig (n <= 4 converged by every Q bar) would need a twin closed-loop check
+% at it2, the reviewer and Wesley's word (a launch default).
+
+\subsection{Scalability}
+\label{sec:res_scale}
+
+This section asks how many UAVs our planner can fly in real time on the rig's laptop, at how few solver iterations
+per tick, and whether a larger team can carry a ring down a chain of unannounced releases and back. It gives three
+answers apart. The real-time limit comes from a bench calibrated against the rig's own flights. How few iterations
+are enough comes from the plans themselves, replayed against converged ones, and from the four-UAV twin flown at one
+iteration and at five. The eight-UAV chain is a twin result, flown at a fraction of real time, and says nothing about
+real time.
+
+\subsubsection{The real-time limit on the rig laptop}
+
+The planner's tick is one callback of its 100\,ms timer: the solve, the extraction of every UAV's references, and the
+dynamics residual that the publish gate reads (Section~\ref{sec:controller}); a tick longer than the period delays
+the next. A bench times that tick for a team of $n$ UAVs on the idle laptop, warm-started from its own previous plan
+on a figure-eight at 0.2\,m/s and 1\,m cables, for 5, 2 and 1 sequential-quadratic-programming iterations per tick.
+
+The bench is not the rig. Two rig flights of 22 October (three UAVs, five iterations), replayed tick by tick on the
+same laptop with nothing else running, took the bench's time; the same ticks in flight took two to three and a half
+times as long (Table~\ref{tab:scale_calib}). The factor is therefore the laptop in flight, shared with the rig's stack,
+three trackers, motion capture and the recording, and not the flights' states. The limit uses the larger flight's
+factor on the 95th percentile, rounded up to 3.5. It is a lower bound for a larger team, which would run more
+trackers. One lead, untested on the rig: the laptop has performance and efficiency cores, the replay pinned to an
+efficiency core took two and a half times as long as on a performance core, and in flight no tick was as fast as the
+performance core's; the planner probably ran partly on the efficiency cores, and the next rig day pins it to the
+performance cores.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption[The bench calibrated against flight]{The planner's solve time on the rig laptop in flight against the same
+laptop idle: three UAVs, five iterations, the residual inside the solve; warm ticks only. Replay: the flights' own
+ticks solved again on the idle laptop. Bench: the timing bench at three UAVs. The rig factor is the flights' time over
+the bench's; the limit of Table~\ref{tab:scale_nmax} uses 3.5 on the 95th percentile (2.1 on the median).}
+\label{tab:scale_calib}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xccc}
+\toprule
+ & Ticks & Median (ms) & 95th percentile (ms) \\
+\midrule
+Rig laptop in flight, hover & 264 & 36.7 & 67.8 \\
+Rig laptop in flight, figure-eight & 573 & 40.4 & 69.4 \\
+The same ticks replayed, idle (hover / figure-eight) & 264 / 573 & 18.5 / 19.2 & 19.4 / 20.6 \\
+Bench, idle & 200 & 19.8 & 20.1 \\
+\addlinespace
+Rig factor, both flights pooled & 837 & 1.96 & 3.43 \\
+\addlinespace
+Hover replayed on one performance / one efficiency core & 264 & 18.4 / 47.7 & 18.9 / 48.9 \\
+\midrule
+Tick spacing in flight (both flights) & & -- & 116--117$^a$ \\
+\bottomrule
+\multicolumn{4}{p{0.95\textwidth}}{\footnotesize $^a$\,Measured near each tick's start: 10--12\,\% of ticks more than
+110\,ms apart, none more than 150\,ms; the 10\,Hz loop lost no tick.}
+\end{tabularx}
+\end{table}
+% S-CALIB-1022: h3 264 ticks 36.7/67.8 vs replay 18.5/19.4; f3h 573 ticks 40.4/69.4 vs 19.2/20.6; bench n = 3 19.8/20.1;
+% k50/k95 1.86/3.37 (h3), 2.04/3.45 (f3h), pooled 1.96/3.43; pinned replay of h3 P-core 18.4/18.9, E-core 47.7/48.9.
+% Lower bound: the rig's 60 ms budget cut held 11 (h3) and 37 (f3h) slow ticks to 3-4 iterations.
+
+On that measure the rig laptop flies three UAVs in real time at five or two iterations a tick, and four at one
+(Table~\ref{tab:scale_nmax}, Figure~\ref{fig:scale_bench}). The limit is read at five iterations, the count that the
+checks of the next part pick: three UAVs. The calibration flights agree: with three UAVs at five iterations the rig's
+ticks already came at about its period. The rig has flown four UAVs at five iterations (Section~\ref{sec:res_compute})
+because its 60\,ms solve budget cuts the iterations of a slow tick; the limit here is for a tick that finishes its
+iterations. The bench with the two speed-ups of the eight-UAV runs and the pivot, which gives the final number, is still
+to run.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption[The real-time limit]{The largest team the planner flies in real time, by solver iterations per tick. Idle:
+the bench's latency (the solve and the references' extraction) under 60\,ms at the 95th percentile, the solver's own
+throughput. Rig laptop: 3.5 times the bench's whole tick (with the residual) under the 100\,ms period at the 95th
+percentile; the limit is read at five iterations. The bench ran before the two speed-ups of the eight-UAV runs and
+without the 4\,cm pivot in the extraction, which adds about 4\,ms at three UAVs. No solve failed at any size.}
+\label{tab:scale_nmax}
+\begin{tabular}{lccc}
+\toprule
+Iterations per tick & 5 & 2 & 1 \\
+\midrule
+Idle laptop & 4 & 5 & 6 \\
+Rig laptop & 3 & 3 & 4 \\
+\addlinespace
+Rig laptop, with the speed-ups and the pivot & [\dots] & [\dots] & [\dots] \\
+\bottomrule
+\end{tabular}
+\end{table}
+% Last row: the card's bar B (solve_scaling.py --n 2..10 --iters 5 2 1 --fast --pivot-dz 0.04 --rig-factor 3.5
+% --tick-budget 100), not yet run (needs the laptop idle with no lab sync). That row is the thesis's number; the S-BENCH
+% rows above are its baseline. By the card's rule (section 5: Q and C pick the count; Q6 missed i1 and i2) the rig N_max is
+% read at 5 iterations: 3 on the old bench (the morning's "~4 quads" was the 1-iteration column).
+
+\pendingfig{fig:scale_bench}{The planner's whole tick against team size on the idle rig laptop: the 95th percentile
+of the solve, the references' extraction and the residual, warm-started, at 5, 2 and 1 iterations per tick (one line
+each); dashed: 28.6\,ms, which the rig factor of 3.5 puts at the 100\,ms period in flight; the eight-UAV whole tick of
+the twin's hover run, in wall time on the lab computer, for scale.}{the bench with the two speed-ups and the pivot}
+% Data: results/analysis/solve_scaling_tuf_2026-10-22.json (now) and the bar-B bench JSON (to run); R2464's planner log
+% for the twin point (tick_ms p95 101.2 ms wall). Tool: tools/solve_scaling.py output -> a new thesis_sim_figures
+% function through the thesis-figure skill (log y axis; n = 2..9 or 10).
+
+\subsubsection{How few iterations are enough}
+
+Fewer iterations a tick leave the plan short of convergence. Two checks measure what that costs. Replayed tick by
+tick, nine recorded flights, five from the twin and four from the rig with two to four UAVs, were solved again at one
+and at two iterations from the iterate each tick started from, against the plan converged from the same iterate; an
+untimed bench did the same at eight UAVs, with each warm start moved off the plan by about the rig's ring error
+(Table~\ref{tab:scale_quality}). And the four-UAV twin flew a hover, the figure-eight at 0.2\,m/s and an unannounced
+release at one iteration and at five, each from a floor start (Table~\ref{tab:scale_c}). The bars of both were written
+before the runs.
+
+At up to four UAVs, two iterations converge by every bar on all nine flights, the rig's among them. One iteration does
+not: on every rig flight, and on the twin's line with a turn of the ring's yaw, its plans break the dynamics by more
+than the bar allows. At eight UAVs one iteration misses every bar, and two miss only the thrust feed-forward's,
+narrowly. Five pass every bar at eight, so by the rule written before the runs the eight-UAV claims fly at five
+iterations, and the real-time limit above is read at five.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\caption[The plan at fewer iterations]{The plan at fewer iterations per tick against the plan converged from the same
+iterate, replayed tick by tick: nine recorded flights (warm ticks only) and an untimed bench at eight UAVs on the
+figure-eight at 0.2\,m/s, each warm start 1\,cm and 10\,cm/s off the plan. 95th percentiles of the dynamics residual (bar $10^{-3}$), of the error of the
+references the trackers fly at the next node and the fifth (Ref., bars 5 and 10\,mm), and of the error of the thrust
+feed-forward (FF, bar 0.3\,m/s$^2$). Bold: over a bar. The cost's ratio to the converged plan's (bars 1.10 on the median
+and 1.50 on the 95th percentile, a tick over the residual bar counted as a miss) failed exactly where the residual did,
+and no arm failed a solve. Five iterations at eight UAVs: $3.2 \times 10^{-7}$, 0.9 / 0.9\,mm and 0.12\,m/s$^2$.}
+\label{tab:scale_quality}
+\begin{tabular}{lcccccc}
+\toprule
+ & \multicolumn{3}{c}{Two iterations} & \multicolumn{3}{c}{One iteration} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+Flight (UAVs) & Residual & Ref.\ (mm) & FF (m/s$^2$) & Residual & Ref.\ (mm) & FF (m/s$^2$) \\
+\midrule
+Twin, hover (4) & $1.6{\times}10^{-7}$ & 0.2 / 0.2 & 0.023 & $1.9{\times}10^{-5}$ & 0.3 / 0.5 & 0.036 \\
+Twin, figure-eight (4) & $1.3{\times}10^{-7}$ & 0.2 / 0.3 & 0.030 & $1.3{\times}10^{-5}$ & 0.4 / 0.7 & 0.045 \\
+Twin, line, yaw turn (4) & $6.1{\times}10^{-6}$ & 0.5 / 0.7 & 0.062 & $\mathbf{2.3{\times}10^{-3}}$ & 1.2 / 2.6 & 0.107 \\
+Twin, figure-eight (3) & $2.9{\times}10^{-7}$ & 0.3 / 0.3 & 0.033 & $2.0{\times}10^{-5}$ & 0.4 / 0.7 & 0.050 \\
+Twin, figure-eight (2) & $3.1{\times}10^{-7}$ & 0.3 / 0.4 & 0.041 & $4.3{\times}10^{-5}$ & 0.6 / 0.9 & 0.063 \\
+\addlinespace
+Rig, hover (3) & $6.3{\times}10^{-5}$ & 0.8 / 2.2 & 0.098 & $\mathbf{3.0{\times}10^{-3}}$ & 1.6 / 4.1 & 0.154 \\
+Rig, figure-eight (3) & $5.5{\times}10^{-5}$ & 1.3 / 3.0 & 0.144 & $\mathbf{2.3{\times}10^{-3}}$ & 2.3 / 5.6 & 0.227 \\
+Rig, line, yaw turn (3) & $1.3{\times}10^{-4}$ & 1.5 / 3.3 & 0.165 & $\mathbf{6.6{\times}10^{-3}}$ & 3.1 / 6.8 & 0.279 \\
+Rig, figure-eight (2) & $8.6{\times}10^{-5}$ & 2.2 / 4.6 & 0.247 & $\mathbf{7.4{\times}10^{-3}}$ & 3.7 / 10.0 & \textbf{0.378} \\
+\addlinespace
+Bench, figure-eight (8) & $8.8{\times}10^{-5}$ & 3.2 / 5.1 & \textbf{0.316} & $\mathbf{9.3{\times}10^{-3}}$ & \textbf{7.3} / \textbf{14.5} & \textbf{0.60} \\
+\bottomrule
+\end{tabular}
+\end{table}
+% Q1-Q5: twin R2348 (b4 hover), R2352 (b4 figure-8 size 1.0), R2356 (b4 line_spin, constant-rate turn), R2343 (b3
+% figure-8), R2360 (b2 figure-8); rig RIG-1022-h3, -f3h, -ls3c, -f2slope. i1 ticks over the residual bar: R2356 117,
+% h3 49, f3h 148, ls3c 232, f2slope 294; i2: f2slope 4. Q6 (n = 8, noise 0.01, untimed): i5 1.000/1.001, 3.2e-7,
+% 0.9/0.9, 0.12; i2 1.003/1.010, 8.8e-5, 3.2/5.1, 0.316; i1 170 of 200 ticks over the residual bar. The bench flies
+% solve_scaling's figure-8 (size 1.0, 0.2 m/s; --traj-radius 1.0) with a kinematic plant, --noise 0.01 (1 cm, 10 cm/s).
+
+In the twin's closed loop one iteration a tick flew four UAVs as well as five in every cell: inside the carry bands of
+the hover and the figure-eight, within the bars set from the five-iteration runs through the lift, the path and the
+release, and with no published plan's residual over the bars' limit. It flew the figure-eight a little closer in both repeats, likely because its plan
+reached the trackers younger, which was not tested. Its published plans did carry a residual, largest at the release,
+that the planner's publish gate never reads at one iteration, since the gate reads it only when the solve budget cuts
+a tick; it stayed under the closed loop's limit but over the replay's bar.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{2.4pt}
+\caption[Four UAVs at five and at one iteration]{The four-UAV twin at five and at one iteration per tick: the 0.86\,kg
+ring at 1.0\,m on 1\,m cables, floor start; hover and the figure-eight (size 1.0 at 0.2\,m/s after a 5\,s hold) on
+plates 0, 3, 6 and 9; the release on the join's layout (plates 3, 7 and 11, the UAV on plate 9 released unannounced,
+leaving a Y). Two runs each (a / b), one code tree. Path error: the clock-free path error (the hover from 2\,s after
+the top to LAND); path tilt peak over the same window, which in the release cell holds the release; lift: from the ring's
+reference 1\,cm above its start to 2\,s after the top; release: from the 5\,s mean before it. Residual: the largest
+of a published plan, against the closed loop's limit of $10^{-2}$. In brackets, the bars for one iteration, set from
+the two runs at five. No run aborted, dropped or failed a solve; the planner flew three UAVs 0.28--0.32\,s after the
+release and the ring settled within 0.11$^\circ$ of level.}
+\label{tab:scale_c}
+\begin{tabular}{llccccc}
+\toprule
+ & & Path & \multicolumn{3}{c}{Tilt peak ($^\circ$)} & \\
+\cmidrule(lr){4-6}
+Cell & Iter. & error (mm) & Path & Lift & Release & Residual \\
+\midrule
+Hover & 5 & 1.34 / 1.32 & 0.25 / 0.20 & 1.77 / 1.87 & -- & $1.1{\times}10^{-8}$ \\
+ & 1 & 1.35 / 1.37 [4.33] & 0.24 / 0.21 [1.23] & 1.82 / 1.87 [2.82] & -- & $1.5{\times}10^{-4}$ \\
+\addlinespace
+Figure-eight & 5 & 11.21 / 11.43 & 1.05 / 1.05 & 1.80 / 1.78 & -- & $1.2{\times}10^{-8}$ \\
+ & 1 & 9.66 / 9.84 [14.32] & 0.89 / 0.93 [2.05] & 1.82 / 1.75 [2.79] & -- & $4.2{\times}10^{-4}$ \\
+\addlinespace
+Release & 5 & -- & 6.75 / 5.79 & 2.57 / 2.54 & 8.25 / 7.40 & $2.5{\times}10^{-7}$ \\
+ & 1 & -- & 6.46 / 6.96 [7.27] & 2.63 / 2.66 [3.55] & 8.00 / 8.46 [8.82] & $2.3{\times}10^{-3}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+% R2700/R2701 | R2702/R2703 | R2704/R2705 | R2706/R2707 | R2708/R2709 | R2710/R2711 (lab batch 17, tree be34f95 + patch
+% 537551ba, RTF 0.22-0.27, all 12 valid; C1-C7 hold in both repeats of every cell: C CONFIRMS). Closest margins R2711:
+% C3 by 0.31 deg, C7's release peak by 0.37 deg. b22 bands: hover <= 22.0 mm / 3.21 deg, figure-8 <= 33.0 / 4.06.
+% Published res_eq over 1e-3: 5 ticks in each it1 release run. The it5 pair is also plan_fast_refs' twin smoke run.
+
+One iteration is therefore enough for four UAVs in the twin's closed loop, but its plans are not converged on the
+rig's flights and fall short of every bar at eight; two converge for every fleet of up to four, the rig's flights
+included.
+
+\subsubsection{Eight UAVs in the twin}
+
+The twin's large ring is 0.5\,m in radius and weighs 0.9\,kg, larger than the rig's ring and not much heavier, with
+eight UAVs at 45$^\circ$ on 1\,m cables. The runs flown so far, all exploratory, flew one iteration a tick; the claim
+runs fly five. Both fly two changes that shorten the tick without changing its values: every UAV's references come
+from one mapped call, and the residual is computed after the references go out. The world runs at a capped fraction
+of real time, so a tick that takes the planner its whole period in wall time takes a fraction of it in simulated time:
+the result is about the plan and the physics, not about real time, and each run reports its achieved real-time factor
+and its late ticks first. Table~\ref{tab:scale_twin} gives the four runs flown so far, one each.
+
+Eight UAVs lifted the ring from the floor and hovered it level. In the chain, every other UAV was released
+unannounced, in opposite pairs, so that each release left gaps of at most 90$^\circ$, down to a square of four; the
+ring's tilt peaked at a few degrees and the drop rule never fired. In the return, the four freed UAVs, held at
+staging points beyond their own plates, rejoined one at a time onto those plates (Section~\ref{sec:res_rejoin}), the
+team grew back to eight and landed. Flown again on the final code tree of the rejoin, the chain gave the same
+picture (Figure~\ref{fig:scale_chain}). Even in the twin, with the world slowed, the eight-UAV tick at one iteration
+took about its whole period of wall time on a 12-core slot of the lab computer, half of it the residual: it is the
+whole tick, not the solve, that would overrun first.
+
+The claim runs, two hovers and two chains with the return at five iterations, are still to fly. Their bars were
+frozen first, and one has been moved since, still before any claim run flew: the team back at eight is scored from
+2\,s after the last rejoin's blend ends, because the rejoin's 10\,s blend, added after the bars were written, put the
+last fold-in inside the window first written, from 2\,s after the resize to eight; that window is reported beside it.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\caption[Eight UAVs in the twin]{Eight UAVs in the rig twin, twin only and not real time: the 0.9\,kg ring of radius
+0.5\,m at 1.0\,m, eight UAVs at 45$^\circ$ on 1\,m cables, floor start, hover, one iteration per tick; one run each,
+exploratory. Releases unannounced, in opposite pairs, down to the square; each rejoin starts 20\,s after the previous
+weld and holds the ring through a 10\,s fold-in blend. The first three runs flew before the rejoin's fixes
+(Section~\ref{sec:res_rejoin}), the last on its final tree. Ring tilt over the airborne flight. $^a$\,From each
+rejoin's start to its rod's end on the plate (before the fixes) or to the weld (final tree); the weld follows the
+plate by about 0.1\,s. $^b$\,Ring position error (rms) and tilt peak with the team back at eight, from 2\,s after the
+last blend ends to LAND, and in brackets from 2\,s after the resize to eight.}
+\label{tab:scale_twin}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\centering\arraybackslash}p{1.9cm}c}
+\toprule
+Run & Releases & Rejoins$^a$ & Ring tilt, median / peak ($^\circ$) & Real-time factor \\
+\midrule
+Hover & -- & -- & 0.02 / 0.08 & 0.28 \\
+8 $\to$ 4 & four, no drop or abort & -- & 0.13 / 3.48 & -- \\
+8 $\to$ 4 $\to$ 8, before the fixes & four, no drop or abort & four, 16.1--18.4\,s & 0.18 / 3.25 & 0.2 \\
+8 $\to$ 4 $\to$ 8, final tree & four, no drop or abort & four, 15.1--19.4\,s; each rod's end within 1.3--1.6\,cm of
+  its plate through the blend; back at eight$^b$ 6.3\,mm, 0.89$^\circ$ (19.3\,mm, 1.65$^\circ$) & 0.52 / 3.35 & -- \\
+\addlinespace
+Claim cells, five iterations: hover; 8 $\to$ 4 $\to$ 8 & [two runs each, to fly] & [\dots] & [\dots] & [\dots] \\
+\midrule
+\multicolumn{5}{p{0.93\textwidth}}{Planner tick in the hover run, wall time on the lab computer: solve 44 / 60\,ms
+(median / 95th percentile), whole tick 79 / 101\,ms, of which the residual 44--51\,ms; 0.5\,\% of ticks late in
+simulated time.} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+% R2464 | R2587 | R2588 (wall 28 min, RTF ~0.2) | R2597. Every run landed. R2597's back-at-eight (s_metrics n4 / n4_resize,
+% decisions 23 Oct S (1)): revised 6.3 mm / 0.89 deg, original 19.3 mm / 1.65 deg; the bars the 1-iteration claim would
+% have had were 5.72 mm / 1.44 deg (N1 from R2702/R2703); the claim runs at 5 iterations take N1 from R2700/R2701. The
+% claim cells (N1-N6 of the card): s8_hover_R50_L100_it5 x2, s8_chain4back_R50_L100_it5 x2 (lab batch 18, --slots 2
+% --cpus 12 --wall-cap-min 150), scored by tools/s_metrics.py (clock fix of 23 Oct 14:33).
+
+\pendingfig{fig:scale_chain}{Eight UAVs to four and back in the rig twin (twin only, not real time): the 0.9\,kg ring
+of radius 0.5\,m, hover, five iterations per tick. (a) The team size the planner flies, with each unannounced release
+and each rejoin's start, weld and end of blend marked; (b) the ring's tilt, against the chain's bars of 15$^\circ$ at a
+release and 10$^\circ$ at a rejoin; (c) plan views of the formation at eight, at four and back at eight.}{a claim run
+of the eight-UAV chain with the return}
+% Data: R2597 now (events.csv, run.csv, planner log n), the claim runs later. Tool: tools/s_metrics.py windows -> a new
+% thesis_sim_figures function through the thesis-figure skill; panel (c) could be three frames of the run's video
+% (results/videos, tools/render_video.py) instead.
+
+\paragraph{Answer.} On the rig laptop our planner flies three UAVs in real time at five iterations a tick, the count
+its quality checks pick, on a bench calibrated against the rig's own flights; the final number waits for the bench
+with the speed-ups. Fewer iterations are not free: one iteration is enough for four UAVs in the twin's closed
+loop, but its plans are not converged on the rig's flights and miss every bar at eight UAVs, while two converge
+for every fleet of up to four. In the twin, with the clock taken away, eight UAVs at one iteration carried a larger
+ring through four unannounced releases to a square and back to eight, with its tilt peaking at a few degrees, in single
+exploratory runs; the claim runs, at five iterations, are to fly. The eight-UAV result is the twin's, and not real
+time.

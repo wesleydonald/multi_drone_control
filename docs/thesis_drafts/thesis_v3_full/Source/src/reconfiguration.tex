@@ -97,8 +97,10 @@ solver for the new size, sets the attachment points and rod lengths (for a newco
 in the ring frame at the confirmation), and warm-starts the new problem from the measured state with the tensions
 and rod directions free at its first node (Section~\ref{sec:controller}); the first solve redistributes the load,
 and there is no separate hand-off phase. An announced leave is refused during LAND and when it would leave fewer
-than three UAVs, since a rigid ring on two rim points is a pendulum about the line between them; an unannounced
-loss that leaves fewer than three is a fault, which drops the ring (Section~\ref{sec:safety}).
+than three UAVs, since a rigid ring on two rim points is a pendulum about the line between them. By default an
+unannounced loss that leaves fewer than three is a fault, which drops the ring (Section~\ref{sec:safety}); the
+release chains instead keep flying while the survivors' largest empty arc is at most 200$^\circ$, which keeps a T and
+an opposite pair (an opposite pair counted by its larger arc) and drops the ring on any other pair or a single UAV.
 
 \subsubsection{Redistribute}
 

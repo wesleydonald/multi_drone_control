@@ -1,0 +1,351 @@
+% res_refly_1m.tex -- DRAFT 23 Oct 2026 (thesis result R): every 0.55 m twin table re-flown on 1 m cables.
+% Updated 23 Oct afternoon with batch 16 (the five 1 m worlds' tables) and reviewer 2's corrections.
+% Sources: card docs/experiments/2026-10-23_refly_1m.md (bars frozen 23 Oct 02:15: each original card's own claim and
+% thresholds); docs/analysis/refly_1m_table_2026-10-23.md (tools/refly_score.py, tools/thesis_runsets.py; batch 16 with
+% the original cards' own scorers through a scratchpad wrapper); registry R2483-R2577 (1 m, lab PC, 4 slots; W4
+% R2483-R2485, Tier A R2486-R2489/R2495-R2498/R2504-R2507, T15 R2490/R2491/R2499/R2500, W5 R2492/R2501, drop
+% R2493/R2494/R2502/R2503, T7t R2508-R2537, appendix R2538-R2577); attribution re-flies R2580-R2583 on the same tree at
+% 0.55 m; batch 16 R2604-R2628 (Tier B R2604-R2614, the push rows R2615-R2624, gain R2625-R2628; tree be34f95 + patch
+% cf1ab9ad, whose only src/ change since R2483-R2577 is the rejoin's fixes, off in every R config).
+% Reviewer [weak], 23 Oct 05:15, corrections applied here: C-L2 out of the table (both 1 m L-S runs R2564/R2577 miss S);
+% C-D5's mapneg cells out on S and unresolved (footnote c); T7t orbit_v300 attributed by re-fly, not by argument; the
+% read-back of R2485, R2521-R2536, R2542-R2550, R2564-R2577 lacks /tracker_2 (registry correction rows).
+% Reviewer 2 [weak], 23 Oct 11:47 (Tier B, gain, pushes; every number reproduces to 0.01, all 25 runs valid, no bar
+% re-set), corrections applied here: B4 a MARGINAL hold (R2606 0.19 deg under the line, R2612 2.50 under; n = 2, under the
+% card's 0.5 deg tilt floor; the tier_b must-not-say stands: nothing says a gap up to 150 deg stays under the line with
+% the planned pull); B5 NOT CONFIRMED, not "does not hold" (its falsifier, an abort or fault latch, did not fire); G165's
+% drop (R2607/R2613) is an S MISS in both runs (the frozen S exempts only D1/D4/A2/A6; the ">=" reading came after the
+% runs); C-D1 vertically and C-D4 EMPTY holds (D-Z0 without the integral already reads 0.06/0.06 cm).
+% Tally (refly table doc, 11:47): 19 hold (W4, W5, T3, T8, T9, T15, drop, C-X1, C-X2, C-R1-R4, B1-B4, C-D1, C-D4), 5 do
+% not (T7t new; C-L1, C-D2, C-D3, C-D5 as at 0.55 m), 2 unresolved (C-G1, C-G2), 1 not confirmed (B5); 0 void, 0
+% skipped. S misses: mapneg R2542/R2549/R2543/R2550 (as at 0.55 m) and G165 R2607/R2613.
+% tab:faults' "tilt over 30 deg" row: at 1 m it cites G165 (the integrator's call under Wesley's re-fly-at-1-m decision,
+% SESSION_STATE 23 Oct 11:33; he can keep the 0.55 m history instead). tab:faults itself (Appendices.tex) is NOT edited
+% here: it still cites the 0.55 m G150p drop.
+% NOT REPORTED (Wesley 23 Oct, decisions.md DECIDED 2026-10-23 (9)): the straight-descent landing L-S (C-L2) at 1 m. Its
+% two runs stalled 0.14-0.17 m up on the rigid 1 m rods and the stall exit fired; at 0.55 m on this tree it passes
+% (R2582/R2583), so the stall is the twin's rigid 1 m rod. (The decision calls it "the 2-quad landing"; the config,
+% app_land_straight, has three carriers.)
+% The tree changed since the 0.55 m runs (card section 3): land_rearm_touchdown on in the twin (17 Oct); cable_accel_cap
+% 12 -> 14.5 m/s^2 (6.6 -> 8 N, 21 Oct); the twin's mocap velocity filter none -> ema (22 Oct); the 1 m defaults (the
+% freed UAV's path-clear distance 1.225 m); the 5 s hover hold before every path (T7t's 15 cells, X0-O0/O1). T7t's
+% figure-eight is size 0.5 (as flown at 0.55 m; one variable), the rig's is 0.75.
+% Must not say (card section 10): no 1 m twin number against a 0.55 m rig flight; "the cable changed X" only with an
+% attribution re-fly; W4's 0.55 m column is n = 1; the integral gains are the 0.55 m ones, not re-tuned; the rod error is
+% +5 cm absolute (5 % of the rod at 1 m, 9 % at 0.55 m). D-X0's larger steady offset at 1 m (6.6 against 4.8 cm) is not
+% put on the cable (no attribution re-fly).
+
+\subsection{The claims on \texorpdfstring{1\,m}{1 m} cables}
+\label{sec:res_refly}
+
+This section asks whether the claims that the twin tables of Sections~\ref{sec:res_carry} and~\ref{sec:res_leave}
+make on 0.55\,m rods still hold on 1\,m cables, the cables the rig flies from 28 October. Every table was re-flown at
+1\,m with its own arms, layouts and repeats, and each claim was scored against its own card's bars, unchanged and
+frozen before the re-fly. The baseline is the set of 0.55\,m runs that each table cites. Of the 27 claims scored, 19
+hold, 5 do not, 2 stay unresolved as they were at 0.55\,m, and 1 is not confirmed (Tables~\ref{tab:refly_claims},
+\ref{tab:refly_steady}, \ref{tab:refly_push} and~\ref{tab:refly_margin}). One of the holds is marginal, and the vertical part of two is
+empty: the vertical push left nothing for the remedy to remove.
+
+The comparison is not one variable. Between the 0.55\,m runs and the re-fly the code tree moved: the touchdown test
+is re-armed at ring touchdown, the cap on the rod pull that the trackers feed forward was raised, the twin's motion
+capture filters velocities as the rig's does, and every path now starts after a 5\,s hover hold. A difference between
+the two columns is therefore put on the cable only where the 0.55\,m configuration, re-flown on the new tree,
+separates the two (Table~\ref{tab:refly_attrib}). The integral's gains are the ones identified on 0.55\,m rods; they
+were not re-tuned for 1\,m. The tables of the release margin, the integral's gain and the constant pushes needed 1\,m
+worlds of their own; these were built from the rig's geometry with the cable the only change and flown after the rest,
+on the same code but for the rejoin's fixes (Section~\ref{sec:res_rejoin}), which these runs leave off.
+
+\begin{table}[htbp]
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \caption[The twin's claims on 1\,m cables: leaving and carrying]{The release and carry claims of the twin's
+  0.55\,m tables, re-flown on 1\,m cables and scored against each card's own bars, frozen before the runs: four UAVs in
+  the release rows and three in the carry row, the 0.86\,kg ring at 1.0\,m, floor start, the default controller; runs
+  per cell in brackets. The 1\,m runs were flown on one code tree, newer than that of the 0.55\,m runs (see text).
+  Release rows: the tilt rise $\Delta\theta$ and the resolution rule of Section~\ref{sec:metrics} (the gap between the
+  two arms' means, and the gap the rule needs). $^a$\,With detection off the 1\,m ring peaked lower than the 0.55\,m
+  ring, and no 1\,m run ended in an abort in its LAND (0.55\,m: three of three).}
+  \label{tab:refly_claims}
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.9cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{1.8cm}}
+    \toprule
+    Claim (table) & 0.55\,m & 1\,m & At 1\,m \\
+    \midrule
+    \multicolumn{4}{l}{\emph{Leaving the team}} \\
+    The freed UAV is disarmed alone, hover (Table~\ref{tab:T13}) & rest to disarm 0.28\,s; $\Delta\theta$ 6.1$^\circ$ (1)
+      & 0.35--0.36\,s; 7.0--7.2$^\circ$ (3) & holds \\ % R1887 | R2483-R2485 (P3 <= 0.003 m, P4 0)
+    The freed UAV is disarmed alone, circle (Table~\ref{tab:T13}) & 0.27--0.28\,s; 6.7--7.1$^\circ$ (2)
+      & 0.32--0.34\,s; 7.9--8.0$^\circ$ (2) & holds \\ % R1913/R1914 | R2492/R2501
+    Pull source, 120$^\circ$ gap: measured $<$ planned (Table~\ref{tab:T9}) & 6.4 against 16.8$^\circ$; gap 10.4, needed 4.4 (3)
+      & 7.3 against 17.1$^\circ$; gap 9.8, needed 1.2 (3) & holds \\ % T3: A1 vs A2
+    Detection, planner's pull: on $<$ off (Table~\ref{tab:T9}) & 16.8 against 28.2$^\circ$; gap 11.4, needed 1.0 (3)
+      & 17.1 against 21.7$^\circ$$^a$; gap 4.6, needed 1.0 (3) & holds \\ % T8: A2 vs A6
+    Detection, measured pull: no sign (Table~\ref{tab:T9}) & gap $-$0.8, needed 4.4: unresolved (3)
+      & gap $+$0.3, needed 1.4: unresolved (3) & holds \\ % T9: A1 vs A5
+    Pull source, 60$^\circ$ circle, no event: planned $<$ measured (Table~\ref{tab:T9}) & 0.53 against 0.93\,cm; gap 0.39, needed 0.30 (2)
+      & 0.61 against 0.96\,cm; gap 0.35, needed 0.30 (2) & holds \\ % T15: A8 vs A7
+    A second loss, or a 240$^\circ$ gap, drops the ring and lands every UAV (Table~\ref{tab:faults})
+      & 4 of 4: dropped 0.22--0.23\,s after the loss; UAV tilt at most 13.6$^\circ$; all down in 8.5--8.9\,s
+      & 4 of 4: 0.20--0.22\,s; at most 13.7$^\circ$; 8.1--8.5\,s & holds \\ % D1 R1915/R1916, D4 R1917/R1918 | R2493/R2502, R2494/R2503
+    \midrule
+    \multicolumn{4}{l}{\emph{Carrying}} \\
+    Every cell inside the envelope at 0.55\,m stays inside (Table~\ref{tab:refly_T7t})
+      & 14 of 15 cells inside; the spin at 0.3\,m/s outside & 14 of 15 inside; the orbit at 0.3\,m/s outside, the spin
+      at 0.3\,m/s inside & does not hold \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{table}[htbp]
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \caption[The twin's claims on 1\,m cables: steady errors]{The steady-error claims of the twin's 0.55\,m tables,
+  re-flown on 1\,m cables as Table~\ref{tab:refly_claims}: three carriers, hover unless stated. $^b$\,A UAV more than
+  10\,cm above its rest when the fleet was declared landed; in every case, at both lengths, one UAV was stronger than its
+  thrust map; the 1\,m count includes the landings of Table~\ref{tab:refly_push}, all clean. $^c$\,These runs also
+  disarm a UAV in the air (footnote~$b$).}
+  \label{tab:refly_steady}
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.9cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{1.8cm}}
+    \toprule
+    Claim (table) & 0.55\,m & 1\,m & At 1\,m \\
+    \midrule
+    The tracker's relaxed initial condition ($\epsilon = 0.025$) raises the hover by at least 2\,cm (Table~\ref{tab:x0}) & $+$13.1\,cm (2) & $+$18.7\,cm (2) & holds \\ % C-X1
+    Pinning the tracker's initial condition ($\epsilon = 0$) at least halves the orbit's error (Table~\ref{tab:x0}) & 0.74 against 3.87\,cm, ratio 0.19 (2)
+      & 0.63 against 3.98\,cm, ratio 0.16 (2) & holds \\ % C-X2
+    Inside the integral's gate every model error is removed to within 1.0\,cm (Table~\ref{tab:robust})
+      & worst 0.87\,cm & worst 0.41\,cm & holds \\ % C-R1
+    With the mass typed 20\,\% high, or the rods typed 5\,cm long and not measured, the integral changes the error by
+      at most 1.0\,cm (Table~\ref{tab:robust}) & 0.01 and 0.00\,cm; the unmeasured rods leave $+$17.1\,cm
+      & 0.01 and 0.00\,cm; $+$17.8\,cm & holds \\ % C-R2: rod+5nomeas +17.09 -> +17.75 both columns
+    Measuring the rods absorbs a 5\,cm length error (Table~\ref{tab:robust}) & within 0.00\,cm of the error-free hover
+      & within 0.00\,cm & holds \\ % C-R3
+    Every robustness flight lands, no UAV past 45$^\circ$ (Table~\ref{tab:robust}) & 28 of 28 & 28 of 28 & holds \\ % C-R4
+    The default landing tips no UAV and disarms none in the air$^b$ (Table~\ref{tab:land})
+      & no tip; 4 of 82 disarmed in the air, 0.26--0.53\,m up & no tip; 4 of 82 disarmed in the air, 0.17\,m up;
+      outward at most 0.8\,cm, tilt at most 5.3$^\circ$ & does not hold, as at 0.55\,m \\ % C-L1: R2542/R2549/R2543/R2550; 68 + the 14 push-arm landings R2615-R2628, all clean
+    The model integral removes a thrust-map error's horizontal error better than the target shift
+      (Table~\ref{tab:disturbance}) & 0.01 against 0.01\,cm: unresolved (2) & 0.00 against 0.01\,cm: unresolved$^c$ (2)
+      & does not hold, as at 0.55\,m \\ % C-D5: D-MM vs D-MR
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{table}[htbp]
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \caption[The twin's claims on 1\,m cables: pushes and the integral's gain]{The claims of the twin's 0.55\,m tables on
+  a constant push and on the integral's gain, re-flown on 1\,m cables as Table~\ref{tab:refly_claims}, on the 1\,m world
+  built for them: three carriers in hover, a 0.6\,N vertical or 0.4\,N horizontal push on the ring for 15\,s. Push
+  rows: the steady offset (vertical; horizontal) and the force the integral learned. Gain rows: the peak or the
+  overshoot of the vertical push against the default's. $^a$\,Without any integral the vertical push already leaves
+  almost no offset (0.06\,cm at 1\,m, at most 0.03\,cm at 0.55\,m): the measured pull takes it up
+  (Section~\ref{sec:res_force}), so these vertical holds show nothing.}
+  \label{tab:refly_push}
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.9cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{1.8cm}}
+    \toprule
+    Claim (table) & 0.55\,m & 1\,m & At 1\,m \\
+    \midrule
+    The model integral removes a constant push to within 1.0\,cm (Table~\ref{tab:disturbance})
+      & 0.01--0.02; $-$0.01--0.00\,cm (2) & 0.03--0.06; 0.05\,cm (2) & holds; vertically empty$^a$ \\ % C-D1: D-ZM R2617/R2622, D-XM R2619/R2624
+    Without it the push leaves at least 2\,cm (Table~\ref{tab:disturbance})
+      & 0.01--0.03; 4.81--4.82\,cm (2) & 0.06; 6.56--6.58\,cm (2) & does not hold vertically, as at 0.55\,m \\ % C-D2: D-Z0 R2615/R2620, D-X0 R2618/R2623
+    The integral learns the applied force: 0.45--0.75\,N vertically, 0.30--0.50\,N horizontally (Table~\ref{tab:disturbance})
+      & 0.099--0.102; 0.325\,N (2) & 0.112--0.120; 0.325--0.327\,N (2) & does not hold vertically, as at 0.55\,m \\ % C-D3
+    The target shift removes the vertical push to within 1.0\,cm (Table~\ref{tab:disturbance})
+      & 0.00--0.02\,cm (2) & $-$0.07 to $-$0.06\,cm (2) & holds; empty$^a$ \\ % C-D4: D-ZR R2616/R2621
+    Doubling the integral's gain lowers the vertical push's peak (Table~\ref{tab:gain})
+      & 1.26--1.44 against 1.25--1.41\,cm: unresolved (2) & 1.42--1.44 against 1.42--1.47\,cm: unresolved (2)
+      & unresolved, as at 0.55\,m \\ % C-G1: G-K8 R2625/R2627 vs D-ZM R2617/R2622
+    Keeping the speed gate only for 5\,s after the lift lowers the overshoot (Table~\ref{tab:gain})
+      & 1.31--1.33 against 1.39\,cm: under the floor (2) & 1.39--1.40 against 1.41--1.44\,cm: under the floor (2)
+      & unresolved, as at 0.55\,m \\ % C-G2: G-S5 R2626/R2628 vs D-ZM
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The release claims keep their signs at 1\,m. The freed UAV is still disarmed alone, the measured pull still halves the
+tilt rise or better at a 120$^\circ$ gap, and a second loss still drops the ring and lands every UAV. With detection
+off and the planner's pull, the 1\,m ring rose less than the 0.55\,m ring did and no run ended in an abort, so the
+claim holds on a smaller gap. The steady-error claims hold with the same signs: the tracker's relaxed initial condition raises
+the hover further on the longer cables, and the unmeasured 5\,cm rod error left the same height error, although the same 5\,cm
+is a smaller part of a 1\,m rod. The tables reported without a bar (the hover and paths of Table~\ref{tab:traj}, the
+flight of Figure~\ref{fig:flight}) were flown at 1\,m as well, and the landing-lean rows of Table~\ref{tab:T9} were not
+re-scored. [Table~\ref{tab:traj} and Figures~\ref{fig:flight}, \ref{fig:traj} and~\ref{fig:detach}: to regenerate from
+the 1\,m runs.]
+% traj: R2544/R2551 hover 0.03/0.04 cm mean, 0.06 deg (0.55 m 0.04/0.04, 0.06); flight: R2544 (S PASS); K1 not scored.
+
+Four of the five claims that do not hold at 1\,m failed in the same way at 0.55\,m. The landing still disarms the fleet
+with a UAV in the air when that UAV is stronger than its thrust map (Section~\ref{sec:sim_landing}); at 1\,m that UAV
+was lower when it happened, and the landings of the push rows were all clean. The model integral and the target shift
+still leave a thrust-map error's horizontal error equally small, so the integral's advantage there remains unshown.
+The vertical push still leaves no offset to remove, so the claims that the push shows without the integral and that
+the integral learns its force fail vertically, as they did, and hold horizontally, where the integral removes the
+offset and learns the force it learned at 0.55\,m. The integral's gain and its speed gate still make no difference
+the resolution rule can resolve. The fifth, the carry envelope, is new at 1\,m.
+
+\subsubsection{The carry envelope at \texorpdfstring{1\,m}{1 m}}
+
+Table~\ref{tab:refly_T7t} gives the carry envelope of Table~\ref{tab:T7t} at both lengths, scored on the clock-free
+path error: the rms, over the path, of the ring's distance across the path it was sent and of its height error, with
+no schedule in it. The bars are the carry card's: a path error of at most 25\,mm, a peak ring tilt over the path of at
+most 6$^\circ$ and a radius ratio of at least 0.95. At 1\,m the orbit at 0.3\,m/s leaves the envelope on two bars at
+once, by a small margin on each, and the spin at 0.3\,m/s, outside at 0.55\,m on one run's tilt, comes inside.
+Across the envelope the path error rose in every cell but the line's, the radius ratio fell in every cell, and the
+path tilt fell or stayed.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{2.6pt}
+\caption[The carry envelope on 1\,m cables]{The three-carrier carry envelope in the rig twin on 0.55\,m rods and on
+1\,m cables: the 0.86\,kg ring at 1.0\,m, floor start, the default controller, two runs per cell on one code tree per
+length (the 1\,m tree is the newer); each cell gives the range over its two runs. Path error: the clock-free path
+error (bar 25\,mm); path tilt: the peak ring tilt over the path (bar 6$^\circ$); ratio: the ring's path radius over the
+reference's (for the line, the ratio of amplitudes about its centre; bar 0.95). Speed: the peak path speed. Beside
+them, not scored: the frozen ring RMSE of Table~\ref{tab:T7t} at 1\,m (its frozen peak tilt was at most 3.0$^\circ$ in
+every 1\,m run). $^a$\,Over a bar: the cell is
+outside the envelope. $^b$\,Four decimals near the bar.}
+\label{tab:refly_T7t}
+\begin{tabular}{llcccccc}
+\toprule
+ & & \multicolumn{2}{c}{Path error (mm)} & \multicolumn{2}{c}{Path tilt ($^\circ$)} & Ratio & Frozen RMSE \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+Path & Speed (m/s) & 0.55\,m & 1\,m & 0.55\,m & 1\,m & 1\,m & 1\,m (mm) \\
+\midrule
+Circle & 0.125 & 2.5 & 3.4--3.5 & 0.86--1.11 & 0.69--0.74 & 0.995 & 9.2--9.8 \\
+ & 0.2 & 3.7--6.3 & 7.9--8.1 & 1.45--1.58 & 1.01--1.13 & 0.987--0.988 & 11.7--11.9 \\
+ & 0.3 & 11.0--11.7 & 14.7--15.1 & 2.04--2.79 & 1.55--1.60 & 0.975 & 14.9--15.1 \\
+\addlinespace
+Figure-eight & 0.125 & 3.8--6.8 & 8.1--8.2 & 0.97--1.06 & 0.87--0.91 & 0.987 & 12.0 \\
+ & 0.2 & 9.3--10.0 & 14.3--15.0 & 1.48--1.73 & 1.40--1.47 & 0.972--0.974 & 15.5--16.3 \\
+ & 0.3 & 15.4--17.6 & 20.5--20.8 & 2.31--2.32 & 2.26--2.33 & 0.955--0.957 & 19.5--19.8 \\
+\addlinespace
+Line & 0.125 & 1.2--1.4 & 1.1--1.2 & 0.91--0.99 & 0.77--0.79 & 0.990 & 7.8 \\
+ & 0.2 & 1.7 & 1.5 & 1.54--1.88 & 1.03--1.18 & 0.973--0.974 & 11.3 \\
+ & 0.3 & 2.4--2.6 & 1.5--1.6 & 2.42--2.96 & 2.14--2.18 & 0.951 & 18.0--18.1 \\
+\addlinespace
+Orbit & 0.125 & 4.1--5.2 & 5.2--5.5 & 0.98--1.07 & 0.75--0.79 & 0.990 & 8.5--8.7 \\
+ & 0.2 & 9.0--9.9 & 13.4--13.7 & 1.67--1.88 & 1.09--1.13 & 0.974 & 14.0--14.3 \\
+ & 0.3 & 13.2--15.2 & 25.7--25.9$^a$ & 2.49--2.85 & 1.76 & 0.9495--0.9499$^{a,b}$ & 23.8--24.0 \\
+\addlinespace
+Spin & 0.125 & 2.5--3.5 & 4.5 & 1.05--1.09 & 0.71--0.77 & 0.993--0.994 & 9.5--9.9 \\
+ & 0.2 & 3.1--6.0 & 8.2--8.3 & 1.94--2.20 & 1.02--1.15 & 0.987--0.988 & 11.6--12.3 \\
+ & 0.3 & 9.0--12.1 & 15.3--15.7 & 3.76--6.31$^a$ & 1.81--1.83 & 0.976 & 15.0--15.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+% 0.55 m: R1847-R1876 (freeze tree, flight code 4b3560e), re-scored on the 22 Oct ruler by tools/refly_score.py (each
+% reproduces the carry card's verdicts). 1 m: R2508-R2537 (re-fly tree). R2511 (orbit_v125) is a runner stall 2.4 s
+% after LANDED, the flight complete: scored valid (Wesley 23 Oct (4)). Five cells rose more than 1.5x (circle 0.2,
+% figure-eight 0.125 and 0.2, orbit 0.3, spin 0.2): informational (card section 5, A), not attributed except orbit 0.3.
+
+The attribution re-fly puts most of the orbit's rise on the code tree, not on the cable
+(Table~\ref{tab:refly_attrib}): the same 0.55\,m configuration flown on the new tree already came within a few
+millimetres of the bar, and the 1\,m cable added about 2.6\,mm and took the cell over it. Which of the tree's changes
+raised the error is not separated. Figure~\ref{fig:refly_orbit} shows where along the orbit the ring runs inside its
+path in the three conditions.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption[Attribution of the orbit's rise]{Attribution of the orbit at 0.3\,m/s, the one cell that leaves the
+envelope at 1\,m: the same configuration on 0.55\,m rods flown on the code tree of the 0.55\,m table and on the
+re-fly's tree, and the 1\,m cell on the re-fly's tree; two runs each. Bars: path error at most 25\,mm, ratio at least
+0.95.}
+\label{tab:refly_attrib}
+\begin{tabular}{lccc}
+\toprule
+Cables, code tree & Path error (mm) & Ratio & Path tilt ($^\circ$) \\
+\midrule
+0.55\,m, the 0.55\,m table's tree & 13.2--15.2 & 0.975--0.977 & 2.49--2.85 \\
+0.55\,m, the re-fly's tree & 22.7--23.7 & 0.954--0.956 & 1.75--1.77 \\
+1\,m, the re-fly's tree & 25.7--25.9 & 0.9495--0.9499 & 1.76 \\
+\bottomrule
+\end{tabular}
+\end{table}
+% R1871/R1872 | R2580/R2581 | R2521/R2536.
+
+\pendingfig{fig:refly_orbit}{The orbit at 0.3\,m/s, the cell that leaves the carry envelope on 1\,m cables: plan view
+of the ring's centre over one lap against the reference circle (dotted), on 0.55\,m rods with the 0.55\,m table's code
+tree (grey), on 0.55\,m rods with the re-fly's tree (light gold) and on 1\,m cables with the re-fly's tree (gold);
+(b) the signed distance across the path along the lap, positive inside, with the tightest quarter shaded.}{the
+orbit runs at 0.3\,m/s of the three conditions of Table~\ref{tab:refly_attrib}}
+% Data: R1871 (0.55 m, old tree), R2580 (0.55 m, re-fly tree), R2521 (1 m); run.csv payload_x/y and payload_ref_x/y,
+% the path from metrics.path_through / project_on_path as tools/n2_bands.path_metrics_clock_free. Tool: a new function
+% in tools/thesis_sim_figures.py through the thesis-figure skill.
+
+\subsubsection{The release margin at \texorpdfstring{1\,m}{1 m}}
+
+Table~\ref{tab:refly_margin} gives the margin curve of Table~\ref{tab:T9} on 1\,m cables: a hover release on the
+rig's plates that leaves the survivors a gap of 120 to 180$^\circ$, and with it a smaller margin of the ring's centre
+of mass inside them. The curve keeps its order: the smaller the margin, the larger the tilt rise, and the measured pull
+still rises less than the planner's at 150$^\circ$. Its shape is cleaner at 1\,m, with every step between neighbouring
+gaps now resolved with its sign.
+
+Two things changed at the drop line. With the planner's pull at 150$^\circ$ the 1\,m ring no longer reached the
+30$^\circ$ line, which it did in both runs at 0.55\,m; one run came within a fraction of a degree of it, so the claim
+holds only by its letter, and nothing here says that a gap of up to 150$^\circ$ stays under the line on the planner's
+pull. At 165$^\circ$ with the measured pull, under the line at 0.55\,m, the 1\,m ring crossed it in both runs: the
+trackers' drop rule dropped the ring and every UAV landed. That is the exit of Table~\ref{tab:faults} working as
+built, and at 1\,m these are the runs that stand for its tilt row. The re-fly's safety bar did not allow for a drop
+there, so both runs miss it; and in both the freed UAV, already at rest, was disarmed with the fleet when the drop's
+landing was declared, not alone. Nothing aborted and no fault fired, which is what that claim's falsifier asks, so it
+is not confirmed rather than failed.
+
+\begin{table}[htbp]
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \caption[The release margin on 1\,m cables]{The release-margin claims of the twin's 0.55\,m tables, re-flown on
+  1\,m cables and scored as Table~\ref{tab:refly_claims}: four UAVs on the rig's plates, an unannounced hover release
+  that leaves the survivors a gap of 120 to 180$^\circ$, the measured pull unless stated; two runs per gap, three at
+  120$^\circ$, one for the default rules at 180$^\circ$. Values: the tilt rise $\Delta\theta$ ($^\circ$), the means;
+  $\geq$, cut at the drop or the latch. $^a$\,One run came 0.19$^\circ$ under the line, less than the re-fly's
+  0.5$^\circ$ floor for a tilt, and its repeat 2.69$^\circ$ under it. $^b$\,Every UAV was disarmed at rest and nothing aborted;
+  at 165$^\circ$ the freed UAV was disarmed with the fleet when the drop's landing was declared. $^c$\,A drop the
+  re-fly's safety bar did not allow for: both runs miss it.}
+  \label{tab:refly_margin}
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.9cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{1.8cm}}
+    \toprule
+    Claim (table) & 0.55\,m & 1\,m & At 1\,m \\
+    \midrule
+    A smaller margin gives a larger rise: gaps of 120, 150 and 180$^\circ$, both steps resolved (Table~\ref{tab:T9})
+      & 6.4, 16.8 and $\geq$61.2; gaps 10.4 and 44.4, needed 4.4 and 2.0 & 7.3, 17.9 and $\geq$62.2; gaps 10.6 and 44.3,
+      needed 1.2 and 1.2 & holds \\ % B1: G120 (A1) / G150 R2605/R2611 / G180 R2608/R2614
+    The curve's shape: no step between neighbouring gaps resolved the other way (Table~\ref{tab:T9})
+      & 120 to 135$^\circ$ unresolved (gap 2.0, needed 4.4); the rest resolved & every step resolved with its sign
+      (120 to 135$^\circ$: gap 3.4, needed 1.2) & holds \\ % B2: G135 R2604/R2610 10.72, G165 R2607/R2613 >= 30.16
+    Pull source, 150$^\circ$ gap: measured $<$ planned (Table~\ref{tab:T9}) & 16.8 against $\geq$29.5; gap 12.7, needed 4.3
+      & 17.9 against 28.4; gap 10.5, needed 5.0 & holds \\ % B3: G150 vs G150p R2606/R2612
+    Every absolute peak under the 30$^\circ$ drop line, gaps 120--150$^\circ$, either pull (Table~\ref{tab:T9})
+      & the planner's pull at 150$^\circ$ reached the line in 2 of 2 & largest 29.8$^\circ$, the planner's pull at
+      150$^\circ$; no drop$^a$ & holds, marginal \\ % B4: R2606 29.81, R2612 27.31
+    Gaps 120--165$^\circ$, the planner's pull at 150$^\circ$ included: no abort, every UAV lands, the freed UAV is
+      disarmed alone & 11 of 11; the freed UAV disarmed 0.19--0.43\,s after it came to rest
+      & 9 of 11, 0.33--0.37\,s; at 165$^\circ$ disarmed with the fleet$^b$ & not confirmed \\ % B5: G165 0.04 s after LANDED
+    \midrule
+    \multicolumn{4}{l}{\emph{Reported, no bar (Table~\ref{tab:faults})}} \\
+    Ring tilt over 30$^\circ$: the ring dropped, every UAV landed & the planner's pull at 150$^\circ$: 2 of 2
+      & the measured pull at 165$^\circ$: 2 of 2, all down in 8.2\,s$^c$; the planner's pull at 150$^\circ$: no drop
+      & -- \\ % G165 R2607/R2613 (trackers' 30 deg request +0.50/+0.51 s); 0.55 m G165 landed, abs peaks 28.10/27.84
+    A 180$^\circ$ gap with the drop rule off: the fleet disarmed in the air at the 60$^\circ$ latch
+      & 1.45--1.62\,m up (2) & 1.84--2.00\,m up (2) & -- \\ % G180 R2608/R2614 (fault at +0.64/+0.65 s)
+    The same gap on the default rules: dropped by the gap rule at detection & $\geq$24.1 (1) & $\geq$23.2 (1)
+      & -- \\ % G180d R2609 (+0.30 s; 0.55 m +0.32 s)
+    \bottomrule
+  \end{tabularx}
+\end{table}
+% Per run (refly table doc, "Batch 16"): G120 R2486/R2495/R2504 6.90/7.45/7.50; G135 10.42/11.02; G150 18.17/17.58;
+% G150p 29.62/27.10 (abs 29.81/27.31; back in band 10.11/8.12 s); G165 >=30.49/>=29.84 (abs 30.30/29.57); G180
+% >=62.46/>=61.91; G180d >=23.15. A agrees on every arm.
+
+\paragraph{Answer.} On 1\,m cables the twin's claims hold as they did on 0.55\,m rods, with three changes of verdict:
+the orbit at 0.3\,m/s now sits just outside the carry envelope, mostly from the code tree and a little from the cable;
+the planner's pull at a 150$^\circ$ gap now stays under the drop line, but only just; and at a 165$^\circ$ gap, where
+the 1\,m ring now crosses the line and is dropped, the freed UAV is disarmed with the fleet rather than alone. The
+claims that failed at 0.55\,m fail the same way at 1\,m, and the gain's two stay unresolved. The 1\,m tables
+therefore replace the 0.55\,m twin tables, with this section as the comparison; at 1\,m the drop at 165$^\circ$ stands
+for the tilt row of Table~\ref{tab:faults}. The twin's rigid 1\,m rods remain its largest difference from the rig's
+slack cables.

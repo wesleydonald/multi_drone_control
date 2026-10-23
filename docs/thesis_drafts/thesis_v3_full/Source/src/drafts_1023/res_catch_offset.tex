@@ -1,0 +1,235 @@
+% res_catch_offset.tex -- DRAFT 23 Oct 2026 (thesis result U): the magnet caught off its slot, twin only.
+% Sources: card docs/experiments/2026-10-23_catch_offset.md (critic 23 Oct answered; section 5 FROZEN 07:56 on Wesley's
+% four answers, decisions.md DECIDED 2026-10-23 (7): the separation reported apart from the arm comparison (d_sep,
+% d_task); t116 a grid cell x2; past ~2.5 cm the claim is worded as a model-error tolerance; the mechanism bar kept);
+% its Results (12:41, lab batch 16, R2629-R2684, tools/catch_offset.py as frozen, last edited 00:52); decisions.md
+% DECIDED 2026-10-23 "U after batch 16" (Wesley ~14:01): (1) the 6 owed runs fly on today's tree beside batch 16's 54
+% counted runs, the table noting both trees; U re-flies whole on the final tree at the results freeze, like R; R2634 is
+% a runner race (mocap staleness after /fleet/landed), VOID and re-flown; (2) along the rim the mechanism is NOT SHOWN
+% (the scorer's pre-written code), radially in it is shown; the thesis says the slot arm folds in more gently along the
+% rim, not that the model point does not matter.
+% Runs (repeats a / b). Shared d = 0: measured R2629/R2657, slot R2630/R2658. Along the rim, measured: t02 R2631/R2659,
+% t04 R2633/R2661, t06 R2635/R2663, t08 R2637 (VOID: weld 56.3 s after MAGNET ON, 14.3 s before the path)/R2665, t116
+% R2639/R2667, t12 R2641/R2669 (R2669 never settled), t16 R2643/R2671 (separation FAIL 0.22/0.23 m). Along the rim, slot:
+% t02 R2632/R2660, t04 R2634 (VOID, runner race after LANDED; scorer's code counts it FAIL)/R2662, t06 R2636 (FAIL 1, no
+% weld, WELD_TIMEOUT 90 s)/R2664, t08 R2638/R2666, t116 R2640/R2668, t12 R2642/R2670, t16 R2644/R2672 (FAIL 1: weld 68.9 s
+% after MAGNET ON; not re-flown). Radially in, measured: ri02 R2645/R2673, ri04 R2647/R2675, ri06 R2649/R2677, ri08
+% R2651/R2679, ri12 R2653/R2681, ri16 R2655/R2683; slot: R2646/R2674, R2648/R2676, R2650/R2678, R2652/R2680, R2654/R2682,
+% R2656/R2684. Tree be34f95 + patch cf1ab9ad, lab PC, 4 slots, RTF 0.20-0.25, world three_rigid_ground_rig_attach_L100,
+% SIM_MOCAP_VEL_FILTER ema. The E-runs R2459-R2463 and the neighbours (u_meas_ta08, u_meas_ro08, u_slot_ro08) are
+% exploratory and not in the tables.
+% PENDING (owed, 6 runs on today's tree; the lab was taken by another user at ~14:00): re-fly u_meas_t08 (decides the
+% falsifier at 8 cm and the measured rim limits: d_tol / d_sep / d_task 8 / 12 / 8, or 6 / 6 / 6); re-fly u_slot_t04
+% (the slot rim limits, 4 or 2); u_meas_ri20 x2 and u_slot_ri20 x2 (the pre-registered 20 cm extension radially in).
+% Then the reviewer, and U re-flown whole on the final tree.
+% Must not say: anything for the rig beyond ~2.5 cm (a real magnet catches only on its 60 mm plate: 16 Oct, three
+% slides 3.3-4.3 cm off went past its edge; our contact check confirms within ~24 mm of plate 9); "the model point does
+% not matter" along the rim (it matters there, in the slot arm's favour); that the mechanism is shown along the rim; that
+% the measured arm's static balance is right at every offset (it is radially in only).
+
+\subsection{The magnet caught off its slot}
+\label{sec:res_catch}
+
+This section asks how far off its slot the magnet can catch before the task fails, with the fold-in at the measured
+catch point, as the rig folds in, and with the slot assumed instead. It is a twin result. A real magnet catches only on
+its 60\,mm plate, and the contact check confirms a catch only within 24\,mm of the plate point
+(Table~\ref{tab:constants}); the twin's magnet welds in the air wherever it is told. Up to about 2.5\,cm the sweep is
+therefore the rig's case, a real catch error folded in as the rig folds it in. Beyond that it measures the fold-in's
+model-error tolerance: how far the attach point the planner is given may lie from the true one before the fold-in
+fails, not how far off a real magnet catches. The one real off-slot catch in the sweep is the centre of the next plate
+along the rim, 11.6\,cm away: a catch on the wrong plate, which the contact check would refuse on the rig.
+
+\paragraph{How it was flown.} Three carriers on plates 3, 7 and 11 lift the 0.86\,kg ring on 1\,m cables and hold it at
+1.0\,m. The newcomer flies this work's own approach to plate 9, which exists only in the twin
+(Appendix~\ref{sec:app_proximity_weld}), and the twin's magnet welds its rod's end once it is within 2.5\,cm of the aim
+and slower than 0.05\,m/s for 0.15\,s. The aim and the weld point move together by the offset $d$, along the rim
+(clockwise, toward the carrier on plate 11) or radially inward, from 0 to 16\,cm. Two arms fold the newcomer in at the
+weld: the measured arm at the caught point, as the rig does, and the slot arm at the slot, while the rod pulls from the
+caught point, an unmodelled moment that grows with $d$. Both take the caught tip's height, so the arms differ only in
+where the planner places the attach point in the ring's plane. The four UAVs then hover, fly one figure-eight
+($a = 1.0$\,m) at 0.2\,m/s and land. Two runs per cell, on one host and one code tree.
+
+\paragraph{The bars.} A run fails the task on any of: no weld within 60\,s of the magnet's switch-on, no fold-in within
+2\,s of the weld, an abort, a drop, the figure-eight not completed before LAND, or a UAV not landed. The fold-in's bar is
+the ring's tilt peak, at most 5$^\circ$ from 1\,s before the weld to 15\,s after it. The arms are compared on
+$d_\mathrm{tol}$, the largest offset up to which every cell completed within the bar in both runs. The rule that the
+newcomer must stay 0.30\,m from every carrier is scored apart, as $d_\mathrm{sep}$: where the newcomer flies is set by
+the arm itself, and the planner has no separation constraint, so crowding is a finding of its own and not a test of
+the balance the arms are compared on. The task's limit, $d_\mathrm{task}$, is the smaller of the two. Because equal
+limits would show nothing, a mechanism bar asks that the slot arm's excess tilt, at the fold-in or in the steady hover,
+grow beyond the repeat spread at $d = 0$ at the two largest offsets both arms flew. All of it was frozen before the
+runs.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\caption[The magnet caught off its slot, along the rim]{The magnet caught off its slot along the rim, clockwise toward
+the carrier on plate 11, in the rig twin: two runs per cell (a / b). Fold-in: the ring's tilt peak from 1\,s before the
+weld to 15\,s after it (bar 5$^\circ$). Steady: the ring's mean tilt in the four-UAV hover, from 15\,s after the weld to
+the path. Separation: the newcomer's body to the nearest carrier's, from the weld to LAND (line 0.30\,m). Bold: over the
+bar or under the line. Every weld caught within 2.0\,cm of its aim; in every run the tip was within 1\,cm of the aim
+19.0--21.1\,s after the magnet's switch-on, and the weld then waited 2.1--48.3\,s for the trigger's speed gate.
+$^a$\,Void: a fault of the test runner after the landing (as flown 1.65$^\circ$, 0.62\,m); re-fly owed. $^b$\,No weld
+within 60\,s: a task failure. $^c$\,Void: the weld came too late to settle before the path (as flown 2.41$^\circ$,
+0.49\,m); re-fly owed. $^d$\,The centre of plate 10: a catch on the wrong plate. $^e$\,This run never settled: the ring
+wobbled 3--13$^\circ$ and 6--18\,cm off its reference through the hover and the figure-eight. $^f$\,Welded 68.9\,s after
+the switch-on, over the 60\,s allowed: a task failure; its fold-in ran into the path.}
+\label{tab:catch_rim}
+\begin{tabular}{lcccccc}
+\toprule
+ & \multicolumn{3}{c}{Measured catch point} & \multicolumn{3}{c}{Slot assumed} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+$d$ (cm) & Fold-in ($^\circ$) & Steady ($^\circ$) & Separation (m) & Fold-in ($^\circ$) & Steady ($^\circ$) & Separation (m) \\
+\midrule
+0 & 2.21 / 2.02 & 2.29 / 1.93 & 0.65 / 0.65 & 1.58 / 1.70 & 1.02 / 1.46 & 0.65 / 0.65 \\
+2 & 1.93 / 1.75 & 2.25 / 1.62 & 0.61 / 0.62 & 1.71 / 1.66 & 1.52 / 1.63 & 0.63 / 0.63 \\
+4 & 1.83 / 1.76 & 4.04 / 2.47 & 0.58 / 0.58 & void$^a$ / 1.90 & -- / 2.13 & -- / 0.62 \\
+6 & 2.06 / 1.88 & 4.27 / 5.39 & 0.54 / 0.54 & no weld$^b$ / 1.93 & -- / 2.30 & -- / 0.60 \\
+8 & void$^c$ / 2.33 & -- / 6.18 & -- / 0.48 & 3.75 / 2.67 & 4.96 / 3.98 & 0.59 / 0.59 \\
+11.6$^d$ & \textbf{7.57} / \textbf{7.62} & 5.91 / 6.19 & 0.37 / 0.37 & 3.50 / 3.60 & 4.63 / 5.72 & 0.56 / 0.56 \\
+12 & \textbf{5.82} / \textbf{5.14} & 6.36 / 4.93$^e$ & 0.36 / 0.32 & 3.78 / 4.65 & 5.69 / 6.92 & 0.56 / 0.56 \\
+16 & \textbf{7.96} / \textbf{8.87} & 7.60 / 5.01 & \textbf{0.22} / \textbf{0.23} & 3.69 / \textbf{7.09}$^f$ & 6.27 / -- & 0.54 / 0.54 \\
+\bottomrule
+\end{tabular}
+\end{table}
+% Measured | slot, by d: 0 R2629/R2657 | R2630/R2658; 2 R2631/R2659 | R2632/R2660; 4 R2633/R2661 | R2634/R2662; 6
+% R2635/R2663 | R2636/R2664; 8 R2637/R2665 | R2638/R2666; 11.6 R2639/R2667 | R2640/R2668; 12 R2641/R2669 | R2642/R2670;
+% 16 R2643/R2671 | R2644/R2672. True offset (cm), measured: 0.7/0.5, 2.3/2.4, 3.8/4.1, 5.9/5.9, 7.8/7.7, 11.5/11.7,
+% 12.0/11.9, 15.8/15.7; slot: 1.1/0.1, 2.2/1.7, 4.0/4.0, -/5.5, 8.5/8.1, 11.9/12.0, 12.3/12.6, 15.0/15.9. Model error xy:
+% measured 0.1-0.8 cm (the tip's miss of the aim inside the trigger sphere); slot = the true offset. Carrier dip (card
+% observation 1, beside the 11.6-16 cm fold-in peaks): slot 36-48 mm (completed runs), measured 85-127 mm. The section 2 static check predicted the
+% measured arm's planned body 0.73, 0.67, 0.61, 0.49, 0.36 and 0.23 m from the plate-11 carrier at 0, 2, 4, 8, 12 and 16 cm.
+
+Along the rim the measured arm completed every cell to 6\,cm, and 8\,cm in its one counted run, with its fold-in well
+inside the bar (Table~\ref{tab:catch_rim}). From the next plate's centre on, at 11.6, 12 and 16\,cm, its fold-in tilted
+the ring past the bar in every run, and at 16\,cm its newcomer came within 0.30\,m of the carrier on plate 11, as the
+static check before the runs had predicted. Its steady tilt grew with the offset although its attach point stayed within
+a few millimetres of the true one, so the static balance the hypothesis expected at any offset held radially but not
+along the rim; why was not separated. The slot arm folds in more gently along the rim: wherever it welded in time its
+fold-in stayed under the bar, with a smaller dip of the carriers, and it kept its newcomer near plate 9, clear of the
+carriers. Its limit along the rim was set not by the fold-in but by the twin's magnet: at 6\,cm one run never welded,
+its tip near the aim but never slow enough for the trigger's speed gate, and at 16\,cm one welded too late and ran into
+the path. Those belong to the trigger, which the two arms share until the fold-in, and the rig's magnet has no speed
+gate.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\caption[The magnet caught off its slot, radially in]{The magnet caught off its slot radially inward, in the rig twin,
+as Table~\ref{tab:catch_rim}. Steady offset: the ring's mean distance from its reference in the four-UAV hover (mm).
+Every radial run kept the newcomer at least 0.64\,m from every carrier. The slot arm's newcomer peaked at 0.78--0.79
+throttle, against its cap of 0.8, in every radial run with an offset.}
+\label{tab:catch_in}
+\begin{tabular}{lcccccc}
+\toprule
+ & \multicolumn{3}{c}{Measured catch point} & \multicolumn{3}{c}{Slot assumed} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+$d$ (cm) & Fold-in ($^\circ$) & Steady ($^\circ$) & Offset (mm) & Fold-in ($^\circ$) & Steady ($^\circ$) & Offset (mm) \\
+\midrule
+0 & 2.21 / 2.02 & 2.29 / 1.93 & 2 / 1 & 1.58 / 1.70 & 1.02 / 1.46 & 3 / 1 \\
+2 & 1.84 / 1.68 & 1.77 / 1.65 & 1 / 1 & 3.23 / 3.29 & 3.82 / 3.98 & 7 / 8 \\
+4 & 2.63 / 1.54 & 3.02 / 1.04 & 5 / 2 & 1.83 / 1.81 & 1.31 / 0.99 & 121 / 75 \\
+6 & 1.54 / 1.68 & 0.93 / 1.22 & 1 / 1 & 3.45 / 3.27 & 3.15 / 3.05 & 173 / 170 \\
+8 & 1.41 / 1.63 & 0.81 / 1.32 & 2 / 1 & \textbf{5.76} / 4.20 & 5.45 / 3.83 & 237 / 192 \\
+12 & 1.01 / 1.39 & 0.30 / 1.04 & 3 / 1 & \textbf{10.38} / \textbf{11.71} & 10.44 / 11.91 & 337 / 353 \\
+16 & 1.04 / 0.93 & 0.44 / 0.08 & 1 / 3 & \textbf{16.96} / \textbf{14.99} & 16.43 / 15.00 & 396 / 372 \\
+\bottomrule
+\end{tabular}
+\end{table}
+% Measured | slot, by d: 0 as along the rim; 2 R2645/R2673 | R2646/R2674; 4 R2647/R2675 | R2648/R2676; 6 R2649/R2677 |
+% R2650/R2678; 8 R2651/R2679 | R2652/R2680; 12 R2653/R2681 | R2654/R2682; 16 R2655/R2683 | R2656/R2684. True offset (cm),
+% measured: 2.6/2.5, 5.7/3.8, 5.9/6.3, 7.6/8.5, 10.0/12.9, 16.2/14.6; slot: 1.9/2.0, 4.4/3.4, 5.8/5.7, 7.8/6.4,
+% 11.4/12.2, 15.4/14.3. Path error after (clock-free figure-8, mm): measured 14.6-17.1; slot 18.4-19.8 at 2 cm, 60.0-90.8
+% at 4, 122-124 at 6, 139-168 at 8, 225-238 at 12, 247-265 at 16.
+
+Radially inward the measured arm completed every cell to the largest offset flown, 16\,cm, with its fold-in well inside
+the bar and its steady tilt, from 6\,cm on, lower than at $d = 0$ (Table~\ref{tab:catch_in}). The slot arm held the bar
+to 6\,cm. From 8\,cm its fold-in tilted the ring past the bar, in one run at 8\,cm and in both beyond, its ring hung
+well off its reference in the hover from 4\,cm on, and its newcomer flew near the throttle cap: the unmodelled moment,
+as the hypothesis said. Here the attach point matters, and the mechanism bar shows it.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\caption[The catch offset's limits and verdict]{The limits and the verdict of the catch-offset test against its bars,
+frozen before the runs. Limits in cm of the nominal offset, with $d_\mathrm{tol}$ on the true offset, run by run, beside
+it. In brackets: the value if the void cell's re-fly completes within the bar (and keeps the separation). The
+mechanism: the growth of the slot arm's excess tilt over the measured arm's from $d = 0$, against the larger of the two
+arms' repeat spreads at $d = 0$ (0.20$^\circ$ at the fold-in, 0.44$^\circ$ steady), at the two largest offsets both arms
+flew; the scorer needs two runs a cell, and reads 11.6\,cm where the slot arm's 16\,cm cell has one steady value.}
+\label{tab:catch_verdict}
+\begin{tabular}{llccccl}
+\toprule
+Arm & Direction & $d_\mathrm{tol}$ & on the true offset & $d_\mathrm{sep}$ & $d_\mathrm{task}$ & Still to fly \\
+\midrule
+Measured & along the rim & 6 [8] & 7.7 & 6 [12] & 6 [8] & the 8\,cm re-fly \\
+ & radially in & 16 & 16.2 & 16 & 16 & the 20\,cm extension \\
+Slot & along the rim & 2 [4] & 5.5 & 2 [4] & 2 [4] & the 4\,cm re-fly \\
+ & radially in & 6 & 6.4 & 16 & 6 & the 20\,cm extension \\
+\bottomrule
+\end{tabular}
+
+\vspace{1ex}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.3cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{2.6cm}}
+\toprule
+Bar & As flown & Verdict \\
+\midrule
+Confirms: the measured arm's $d_\mathrm{task}$ at least 12\,cm along the rim & 6, at most 8: the fold-in bar from 11.6\,cm
+  & not met \\
+Confirms: the measured arm's $d_\mathrm{task}$ at least 16\,cm radially in & 16 & met \\
+Confirms: the measured arm's $d_\mathrm{tol}$ at least the slot arm's, both directions & along the rim 6 against 2;
+  radially 16 against 6 & met; along the rim only through the slot arm's no-weld \\
+Confirms: the mechanism shown, both directions & radially: fold-in $+$10.3 and $+$15.5$^\circ$, steady $+$11.4 and
+  $+$16.3$^\circ$ at 12 and 16\,cm; along the rim: fold-in $-$0.8 and $-$2.6$^\circ$, steady $+$1.5$^\circ$ at 12\,cm and
+  $-$0.01$^\circ$ at 11.6\,cm & radially shown; along the rim not shown \\
+Falsifies: the measured arm's $d_\mathrm{task}$ under 8\,cm, either direction & no failure, crowding or tilt over the bar
+  at 8\,cm or less (fold-in at most 2.63$^\circ$, separation at least 0.48\,m) & not fired; 8\,cm along the rim has one
+  counted run \\
+Falsifies: its fold-in over 5$^\circ$ at 4\,cm or less & at most 2.63$^\circ$ & not fired \\
+Falsifies: the slot arm's $d_\mathrm{tol}$ over the measured arm's & along the rim 2 against 6; radially 6 against 16
+  & not fired \\
+\midrule
+Overall & & between: neither confirmed nor falsified \\
+\bottomrule
+\end{tabularx}
+\end{table}
+% Card Results, "The limits" and "Verdict per frozen bar". Mechanism along the rim by the card's words ("cell mean",
+% failed runs included) would read shown (+1.52 at 12 cm, +0.83 at 16 cm on a one-run slot cell); Wesley 23 Oct: the
+% scorer's code stands, NOT SHOWN.
+
+Against its bars the result is between: neither confirmed nor falsified (Table~\ref{tab:catch_verdict}). Radially
+inward the measured arm reached the 16\,cm asked of it, beat the slot arm, and the mechanism is shown. Along the rim it
+fell short of the 12\,cm asked, on the fold-in bar from the next plate's centre on, and the mechanism is not shown: at
+the fold-in the slot arm tilted the ring less than the measured arm, and its steady excess did not grow past the repeat
+spread at both offsets the scorer read. The measured arm's lead along the rim rests on the slot arm's no-weld at 6\,cm,
+which is the trigger's and not the arm's; on the fold-in bar alone the slot arm holds to 12\,cm and the measured arm to
+8\,cm. No falsifier fired, though the one at 8\,cm waits for that cell's re-fly.
+
+The twin flatters the attach: its rods are rigid and can push, there is no rotor wash and no contact between rods, and
+its magnet welds in the air wherever it is told. At 16\,cm along the rim the newcomer's rod meets the ring about 7\,cm
+from the next carrier's, which the rig's rods would not allow.
+
+Six runs are owed and still to fly: a re-fly of each void cell, the measured arm at 8\,cm along the rim, which decides
+the falsifier there and the measured arm's limits along the rim, and the slot arm at 4\,cm, which decides the slot
+arm's; and the 20\,cm extension radially inward, two runs per arm, pre-registered for a direction in which neither arm
+failed by 16\,cm. They fly on a newer code tree than the grid's 54 counted runs, whose flight code differs only in parts
+that no run of this test executes; the whole table is re-flown on the final tree before the reviewer sees it.
+
+\pendingfig{fig:catch_offset}{The magnet caught off its slot in the rig twin: the fold-in's ring tilt peak against the
+true catch offset, (a) along the rim and (b) radially inward, both arms and both runs of each cell, against the
+5$^\circ$ bar, with the 2.5\,cm a real magnet can catch within shaded and the wrong plate's centre marked; (c) along the
+rim, the newcomer's closest approach to a carrier against the 0.30\,m line.}{the grid with the two re-flies and the
+20\,cm extension}
+% Data: tools/catch_offset.py (its JSON for the figure) on R2629-R2684 and the six owed runs. Tool: a new
+% thesis_sim_figures function through the thesis-figure skill (Wesley reviews it first).
+
+\paragraph{Answer.} In the twin, with the fold-in at the measured catch point as the rig does it, the task completes
+radially inward to the largest offset flown, 16\,cm, and along the rim to 6\,cm, or 8\,cm if that cell's re-fly
+completes: from the next plate's centre on, the fold-in tilts the ring past its bar, and at 16\,cm the newcomer crowds
+the next carrier. Within the rig's own catch errors, up to about 2.5\,cm, both arms fold in inside the bar. Beyond that
+the sweep measures the fold-in's model-error tolerance rather than a real catch: radially the measured point matters,
+and with the slot assumed the fold-in fails from 8\,cm; along the rim the mechanism is not shown, and the slot arm folds
+in more gently. The result is between, neither confirmed nor falsified, with six runs owed.

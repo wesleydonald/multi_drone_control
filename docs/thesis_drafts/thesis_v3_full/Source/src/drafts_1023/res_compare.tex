@@ -1,0 +1,184 @@
+% res_compare.tex -- DRAFT 23 Oct 2026 (thesis result C): our planner against our port of Quan et al.'s method, twin.
+% Updated 23 Oct afternoon with the search's real best point (lab batch 17).
+% Sources: card docs/experiments/2026-10-23_paper_method_compare.md (critic 22 Oct, Response 22 Oct; deviations section
+% 3.1; Results scored 14:01 with tools/c_metrics.py); results/analysis/network_tune_search_2026-10-23.json (the offline
+% retune); decisions.md DECIDED 2026-10-23 morning (6) (report as is, no harness fix, the card's seven values accepted)
+% and late morning (1) (fly the search's real best point, c_net_portfinal: diss_c 12, k_pay = k_anchor 80, k_ring 40,
+% k_slot 18, ki_load 0.5, vel_k_att 8, vel_kp_pos 1, vel_kv 3; J 115, every offline guard passes).
+% Registry: R2446 (c_net_smoke_hover_L100, as ported), R2447 (c_net_smoke_linex_v200_L100, as ported), R2448
+% (c_pl_linex_v400_L100, our planner), R2468/R2469 (c_net_tune_portbest_*: the search's STAGE-1 point, diss_c 12 and
+% vel_kp_pos 1 with the rest at the DEFAULTS, flown first in error as "the best"; corrected 23 Oct ~10:00), R2685-R2690
+% (c_net_tune_portfinal_*: the search's best, hover / line 0.2 / line 0.4, two each). Our planner's hover: the B baseline
+% b4_hover_L100_ema R2348/R2351, scored by tools/c_metrics.py read-only (card section 4; LAND at 40 s cut the 60 s
+% window).
+% As-ported numbers are the card's Results (c_metrics, in the scored window): yaw largest change 124.7 / 473.7 deg, tilt
+% peak 44.81 / 57.67 deg (the registry's whole-run values, yaw range 230 / 602 deg and tilt 44.8 / 67.7 deg, run past the
+% loss). Lost runs: their errors are left out of the cell (card section 5).
+% PENDING (card Results): our planner's hover x2 (c_pl_hover_L100), line 0.2 x2 (c_pl_linex_v200_L100) and line 0.4 x1
+% more (c_pl_linex_v400_L100), so that every case has both arms at n = 2; they wait for the lab (busy since 14:00). The
+% paper's form was never flown in the twin. The claim (3 runs per cell on one code tree) was not flown; Wesley: report
+% as is, the bars matter less than that it works.
+% Must not say: that Quan et al.'s method cannot hold the ring (the capsize comes from our port's yaw-following formation,
+% the locked yaw-only design; the paper's payload is a point with no yaw); "dissipative" for our controller.
+
+\subsection{Our planner against our port of Quan et al.'s method}
+\label{sec:res_compare}
+
+This section asks how closely our port of Quan et al.'s method \cite{quan2025swarm} carries the ring compared with
+our planner. The method holds a team in formation with a virtual spring--damper network and drives each UAV through
+a velocity loop; a member leaving or joining needs no new solver, which is why it is the natural comparison for a
+team that changes in flight. Both were flown in the rig twin with four UAVs on plates 0, 3, 6 and 9, 1\,m cables and
+the ring at 1.0\,m, in hover and on a 0.9\,m line out and back. Up to the hand-over both arms are our planner (the
+creep, the lift and a 5\,s hover). After it, our arm keeps our planner and its trackers with the model integral,
+while the port's network drives the trackers' velocity loop with no integral per UAV. The comparison is therefore
+between the two methods as flown after the lift, not of the network alone. Every run here is exploratory, one or two
+per cell (Table~\ref{tab:compare_twin}), and our planner's hover and its line at 0.2\,m/s are still to fly.
+
+\paragraph{The port.} The port follows the authors' description and simulation code where the rig allows, and
+departs from the paper in these ways:
+\begin{itemize}
+  \item \emph{Nodes:} integrated virtual nodes, sprung to a payload node pinned at the target and to an anchor above
+  it, as in the authors' simulation code, where the paper's nodes are a kinematic projection.
+  \item \emph{Damping:} against the pinned nodes as if they were still, where the paper's friction is relative to the
+  formation's centre.
+  \item \emph{The command:} our trackers' velocity loop stands in for the authors' autopilot; the thrust feed-forward
+  carries a modelled rod pull, not a measured one; the expected acceleration is not fed forward.
+  \item \emph{Rod lengths:} at the retuned gains, the rods the planner measured at the hand-over.
+  \item \emph{Yaw:} the formation turns with the ring's measured yaw; the paper's payload is a point with no yaw.
+  \item \emph{Takeoff:} our planner creeps and lifts; the network takes over 1.5\,s after the lift tops out, seeded at
+  the measured UAVs, with its datum moved onto the measured ring.
+  \item \emph{Integrators:} one common height trim for the team, none per UAV.
+  \item \emph{Plant:} the twin's rigid rods.
+\end{itemize}
+
+\paragraph{As ported, the ring capsizes in yaw.} At its first gains the port lost the ring in the twin, in hover and
+on the line at 0.2\,m/s: the ring's yaw swung with a growing amplitude until the ring tipped past the abort limits
+(Table~\ref{tab:compare_twin}, Figure~\ref{fig:compare_yaw}). The offline harness had predicted this mode: kicked
+0.5$^\circ$ in yaw, the ring's yaw grew about one and a half times a second, then it spun and capsized.
+
+\paragraph{Retuned, the port holds the ring but not its yaw.} The retune was set before the comparison flew and
+bounded in time: offline, a grid over the network's damping and the velocity loop's position gain, then a descent over
+eight gains from the grid's best point, ranked first on guards (no divergence, ring tilt at most 15$^\circ$, UAV tilt at
+most 35$^\circ$, throttle at most 0.78, the ring's yaw within 10$^\circ$ and not growing, the hover no worse) and then on
+the line's error at 0.4\,m/s (Table~\ref{tab:compare_offline}). The descent's best point passed every offline guard.
+Flown in the twin, twice per case, it held the ring in every run, but not its yaw: the ring's yaw swung through tens of
+degrees in hover and on the slow line, and least on the fast line, against the guard's 10$^\circ$, and the ring's tilt
+peaked well above our planner's. Offline and the twin disagree on the yaw. The harness hangs the
+rods from the UAVs' centres and leaves out the 4\,cm pivot below them, which turns a position mismatch into a torque;
+that is the likeliest reason it misses the twin's yaw mode, but it was not tested. The paper's own form of the damping
+and feed-forward failed only the tilt guard on the 0.6\,m/s line, a speed this comparison does not fly; it is to fly in
+the twin.
+
+\paragraph{On the line, a second late and short of the ends.} On the line at 0.4\,m/s the retuned port ran about a
+second behind its schedule and turned short of each end, as the harness had predicted. Its error, the distance across
+the line plus the shortfall at the ends, was about twice our planner's (Table~\ref{tab:compare_twin},
+Figure~\ref{fig:compare_line}). Our planner also turned short of the ends, by less, and ran a few hundredths of a
+second late. The error across the line alone would hide the port's shortfall, which is why the comparison adds the
+reach. At 0.2\,m/s the port ran later still and turned closer to the ends; our planner's line at that speed is still to
+fly.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{2.6pt}
+\caption[Our planner against our port in the twin]{Our planner against our port of Quan et al.'s method in the rig
+twin: four UAVs on plates 0, 3, 6 and 9, the 0.86\,kg ring at 1.0\,m on 1\,m cables; $n$ runs each, exploratory (our
+planner's hover and its line at 0.2\,m/s, and a second run of its line at 0.4\,m/s, are to fly). Both arms are scored
+against the target from just before the hand-over. Error: in hover the ring's 3-D error from the hand-over; on the
+line the error across the line and in height (clock-free) plus the reach, the shortfall at the line's ends ($+$ short).
+Lag: behind the schedule. Yaw: the ring's largest change of yaw in the window. Search's best: the retune's best point
+offline, with the measured rods. $^a$\,The four-UAV hover of the baseline set, on a shorter window (LAND at 40\,s). $^b$\,The ring's yaw grew until
+it tipped past the abort limits: aborted 27\,s (hover) and 31\,s (line) after the hand-over; the error of a lost run is
+not scored.}
+\label{tab:compare_twin}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}p{1.3cm}c>{\raggedright\arraybackslash}Xcccccc}
+\toprule
+ & & & & Error & Clock-free / & Lag & Ring tilt & Yaw \\
+Arm & Case & $n$ & Outcome & (mm) & reach (mm) & (s) & peak ($^\circ$) & ($^\circ$) \\
+\midrule
+Our planner & hover$^a$ & 2 & held & 1.3--1.4 & -- & -- & 0.21 & -- \\
+ & hover & [2] & [to fly] & [\dots] & -- & -- & [\dots] & [\dots] \\
+ & line, 0.2\,m/s & [2] & [to fly] & [\dots] & [\dots] & [\dots] & [\dots] & [\dots] \\
+ & line, 0.4\,m/s & 1 & held & 46.2 & 1.7 / 44.5 & $+$0.03 & 3.5 & 0.2 \\
+\addlinespace
+Our port, as ported & hover & 1 & capsized$^b$ & -- & -- & -- & 44.8 & 125 \\
+ & line, 0.2\,m/s & 1 & capsized$^b$ & -- & -- & -- & 57.7 & 474 \\
+\addlinespace
+Our port, the search's best & hover & 2 & held & 16.1--18.7 & -- & -- & 8.4--12.9 & 22--51 \\
+ & line, 0.2\,m/s & 2 & held & 41.5--42.1 & 9.1--9.9 / 32.2--32.4 & $+$1.25 & 5.0--8.2 & 29--48 \\
+ & line, 0.4\,m/s & 2 & held & 99.3--104.5 & 9.3--9.5 / 89.8--95.1 & $+$1.12--1.13 & 11.2--16.4 & 14 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+% R2348/R2351 | c_pl_hover_L100 x2 (to fly) | c_pl_linex_v200_L100 x2 (to fly) | R2448 (+ one more to fly) | R2446
+% (hand-over 27.47 s, FLEET_ABORT 54.1 s) | R2447 (abort 58.4 s) | R2685/R2686 (first 5 s 22.4/22.5 mm; height -2.9/-3.1
+% mm; quad tilt peak 12.9/11.6 deg; throttle peak 0.635/0.615) | R2687/R2688 (reach mean +31.5/+31.2 mm; time-indexed
+% error 170.2/170.0 mm; amplitude ratio 0.930/0.931) | R2689/R2690 (reach mean +94.1/+86.3 mm; time-indexed 279.2/278.3
+% mm, ours 33.2; amplitude ratio 0.797/0.800; quad tilt 12.0/12.7 deg; throttle 0.624/0.632; path start after the top
+% 4.98 s, so net_hold_carry passes) | R2468 (first 5 s 19.0 mm; yaw first over 10 deg at hand-over + 38.9 s; growth
+% x1.14/s against x1.43/s as ported) | R2469 (yaw first over 10 deg at + 33.8 s; time-indexed 261.0 mm; amplitude ratio
+% 0.712 vs ours 0.909). R2446/R2447 flew with net_twin_geometry off; R2468/R2469 and R2685-R2690 with it on (its own bar
+% run was never flown). After LAND the network's quads drop from the cone (quad tilt 174-176 deg): a note only, the
+% landings are not compared.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\caption[The port's retune, offline]{The port's retune in the offline harness, not the twin: the
+software-in-the-loop plant at the comparison's geometry (the rig's thrust map, the twin UAVs' offsets, the
+motion-capture velocity filter), the network at 10\,Hz and the velocity loop at 50\,Hz, started on the taut
+60$^\circ$ cone with the ring 0.5$^\circ$ off in yaw, the rods hung from the UAVs' centres. Each point flies hover, the
+line at 0.2, 0.4 and 0.6\,m/s and a margin flight (the line at 0.4\,m/s with the velocity loop's gains 1.25 times
+higher); the guards are listed in the text. Paper's form: the damping relative to the target's velocity and the
+expected acceleration fed forward. Line: as Table~\ref{tab:compare_twin}. Its numbers are not comparable with the
+twin's.}
+\label{tab:compare_offline}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}Xcccl}
+\toprule
+ & Hover & Line 0.4\,m/s: error & Lag & \\
+Form and gains & (mm) & (clock-free / reach) (mm) & (s) & Guards failed \\
+\midrule
+Port, first gains & \multicolumn{3}{c}{capsized 7--15\,s after the start in every case} & all \\
+Paper's form, first gains & \multicolumn{3}{c}{capsized 8--16\,s after the start in every case} & all \\
+Port, the grid's point: damping doubled, position gain halved & 8.7 & 151.6 (7.2 / 144.4) & $+$1.01 & margin flight; tilt at 0.6\,m/s \\
+Port, the search's best (flown in the twin) & 10.2 & 115.1 (6.9 / 108.3) & $+$1.09 & none \\
+Paper's form, the search's best & 8.3 & 12.1 (5.3 / 6.7) & $-$0.01 & tilt at 0.6\,m/s \\
+\bottomrule
+\end{tabularx}
+\end{table}
+% network_tune_search_2026-10-23.json: port today's diverged hover 15.4, linex 0.2 12.1, 0.4 12.05, 0.6 14.35, margin
+% 7.35 s; paper today's 15.4, 16.1, 11.9, 11.4, 7.6 s (the margin flight is the earliest in both forms). Stage-1 point (12, kp 1): J 151.57, guards
+% 'linex_v600 ring tilt 15.3 deg', 'margin_linex_v400 diverged at 17.4 s'. Port best J 115.11 (lag 1.087 s): diss_c 12,
+% k_pay = k_anchor 80, k_ring 40, k_slot 18, ki_load 0.5, k_att 8, kp_pos 1, kv 3. Paper best J 12.06 (diss_c 3, k_pay 80,
+% k_ring 40, k_slot 18, ki_load 0.5, k_att 16, kp_pos 1.5, kv 3), guard 'linex_v600 ring tilt 20.1 deg'. 54 port and 56
+% paper candidates; 12 port candidates pass every guard.
+
+The yaw failure belongs to our port. Its formation turns with the ring's measured yaw, a choice made for the ring of
+this work, while the paper's payload is a point with no yaw, so these runs say nothing about Quan et al.'s method as
+published. Two further twin tests are to fly: the paper's own form of the damping and feed-forward at its best gains, and
+the paper's own geometry, with every cable hooked at the ring's centre.
+% Wesley 23 Oct: the grid's-point rows (R2468/R2469, flown by an emit error) and the inferred trade-off sentence cut;
+% the paper's form (c_net_tune_paperfinal_*) and the centre-hooked geometry to fly (docs/decisions.md).
+
+\pendingfig{fig:compare_yaw}{The ring's yaw after the hand-over in the rig twin, hover, four UAVs on 1\,m cables: our
+port as ported (it capsizes, and the run aborts), our port at the search's best gains (the yaw swings but the ring is
+held), and our planner (grey; it does not hand over, so its window starts where the port's would).}{the twin hovers of
+both arms, our planner's hover cell included}
+% Data: R2446, R2685 (or R2686), our planner's c_pl_hover_L100 (to fly; R2348 meanwhile); run.csv ring quaternion ->
+% yaw; window from NET_HANDOVER, ours from the top + 1.5 s. Tool: tools/yaw_excursion.py and tools/c_metrics.py windows ->
+% a new thesis_sim_figures function through the thesis-figure skill.
+
+\pendingfig{fig:compare_line}{The line at 0.4\,m/s in the rig twin, four UAVs on 1\,m cables, from the path's start:
+(a) the ring's position along the line against the schedule (dotted), our planner (gold) and our port at the search's
+best gains (blue; about a second late and short of each end); (b) the ring's yaw over the same window.}{the twin line
+runs at 0.4\,m/s of both arms}
+% Data: R2448 (ours), R2689 or R2690 (the port's best): run.csv payload_x and the reference; PATH_START from events.csv.
+% Tool: tools/c_metrics.py windows -> thesis_sim_figures through the thesis-figure skill. Palette: the port is context,
+% so grey may suit it better than a colour; the thesis-figure skill decides.
+
+\paragraph{Answer.} In the rig twin our port of Quan et al.'s method as ported capsizes the ring in yaw. At the best
+gains of a bounded retune it holds the ring in every run, but not its yaw, which swings most in hover; on the line at
+0.4\,m/s its error is about twice our planner's, from running about a second late and turning short of the ends. Our
+planner held the ring level and on its path on the fast line; its hover and its slow line are still to fly. The
+failure to hold the yaw is our port's, not the published method's.

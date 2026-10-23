@@ -1,0 +1,212 @@
+% res_pair_swing.tex -- DRAFT 23 Oct 2026: the pair's 1.4 Hz swing on the rig (findings; exploratory throughout).
+% Sources: rig review docs/reports/rig_review_2026-10-22.md (finding 1, reviewer [weak]: one flight per config, slope
+% flights last and h2slope on drained packs, not interleaved); card docs/experiments/2026-10-22_velocity_filter.md (M1:
+% the ring normal's horizontal tip band-passed 1.1-1.9 Hz, rms over (a) 0-6 s after lift-off and (b) the hover from the
+% top to LAND / drop / detection; tools/pair_swing.py); card docs/experiments/2026-10-23_pair_mode_timing.md (rounds A and
+% B, bars frozen 23 Oct 00:42; round C frozen 08:05, R2598-R2601, null; round D reduced, frozen 11:14, R2691-R2694, both
+% arms confirm on the thr060 testbed); docs/rig/betaflight_2026-10-22.md (QUAD3
+% read-only CLI; ELRS RF mode 8 read as 333 Hz Full from the 14 Oct link statistics: an inference from the mode number).
+% Rig rows: RIG-1022-h2, -h2t9p, -h2rts (EMA), -h2slope, -f2slope (slope); -h2m (planned pull) left out (its ring stalled
+% 0.37 m short). Twin rows: round A R2449 (cd060 re-fly), R2450/R2451 (thr060), R2452/R2453 (att060), R2454/R2455
+% (thr040); round B R2465/R2470 (rt ema 0.55 m), R2471/R2472 (rt slope), R2473/R2474 (rt ema 1 m), R2475/R2476 (rt slope
+% 1 m), R2477/R2478 (_rt_norate), R2479/R2480 (_rt050), R2481/R2482 (_rt_nokff). rate_kff 0.027 after the calibration
+% run R2456 (0.012) fell outside its band; R2465 is the calibration re-fly, in band at its edge (pitch 35/37 ms).
+% Two runner FAILs in round A (R2449, R2453): an envelope fault at touchdown (77.9 deg), after the scored window.
+% Decisions 23 Oct late morning: (2) system_overview's latency corrected (done, outside these drafts); (3) round C null,
+% round D reduced to the config-only rig candidates on the thr060 testbed; Wed 28's 1 m rig pair is the test; (4)
+% rate_kff, thr_tau_s, the body-rate filter emulation and the tip-hinge world DELETED (11:19; backups in the scratchpad's
+% del_rt/); the per-channel command delay kept, default off.
+% NUMBERS DIFFER (for Wesley): system_overview.tex (i) now gives body rate 17-24 (rig) against 49-57 ms (twin) and
+% throttle-to-lift ~15-25 ms in the twin, from the Betaflight note's design numbers; Table pair_timing below gives the
+% card's later loop_timing.py readings, 25-35 against 48-62 ms and 17-29 ms. Not edited outside these drafts.
+
+\subsection{The pair's swing on the rig}
+\label{sec:res_pair_swing}
+
+This section records a rig finding that the twin does not yet explain. Two UAVs carrying the ring on opposite plates,
+the stage that every chain of releases passes through, swing at about 1.4\,Hz on the rig, and the twin's pair does
+not. It asks which command path can carry such a swing, and whether a twin given the rig's measured timing reproduces
+it. Everything here is exploratory; the first pair on 1\,m cables, on the rig day of 28 October, is the test.
+
+\subsubsection{On the rig}
+
+On 22 October, with the motion-capture velocity filter that was then the rig's default (an exponential moving average),
+every two-UAV lift on 0.55\,m rods swung at 1.3--1.6\,Hz, and the swing grew (Table~\ref{tab:pair_rig},
+Figure~\ref{fig:pair_rig}). One flight lost the ring when a magnet let go near the top of the lift; the others ended
+with the operator's LAND. A higher throttle cap, other plates and references shifted by the plan's age left the swing
+as it was. With a filter about 30\,ms faster (the slope of a short window) on the two UAVs the swing halved and
+decayed, and the pair carried the ring through a whole figure-eight, the first full lap with two UAVs, with the ring
+hanging tilted about the pair's line. Each configuration flew once, and the two slope flights came last, one on drained
+packs: the filter is a lead, not a result, until the interleaved repeat of the next rig day.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\caption[The pair on the rig]{Two UAVs carrying the 0.86\,kg ring on opposite plates on the rig, 0.55\,m rods, hover
+unless stated, 22 October; one flight each. Velocity filter: the motion-capture velocity estimate the trackers use,
+an exponential moving average (about 45\,ms of lag) or the slope of a short window (about 17\,ms). Swing: the rms of
+the ring's tip band-passed at 1.1--1.9\,Hz, over the first 6\,s after lift-off (climb) and over the hover. A flight on
+the planner's pull, whose ring stalled short of its height, is left out. $^a$\,The flight hovered less than a second.}
+\label{tab:pair_rig}
+\begin{tabularx}{\textwidth}{c>{\raggedright\arraybackslash}p{1.6cm}>{\raggedright\arraybackslash}p{3.4cm}cc>{\raggedright\arraybackslash}X}
+\toprule
+ & Velocity & & \multicolumn{2}{c}{Swing ($^\circ$)} & \\
+\cmidrule(lr){4-5}
+Flight & filter & Change & Climb & Hover & Outcome \\
+\midrule
+1 & average & plates 0 and 6 & 3.72 & --$^a$ & a magnet let go near the top of the lift (6.4\,N peak pull); ring dropped, every UAV landed \\
+2 & average & plates 11 and 5; throttle cap 0.9 & 2.60 & --$^a$ & operator LAND, swing growing \\
+3 & average & as 2; references shifted by the plan's age & 2.99 & --$^a$ & operator LAND, swing growing \\
+4 & slope & as 2 & 1.46 & 0.79 & swing decaying; landed \\
+5 & slope & as 2; figure-eight at 0.2\,m/s & 1.35 & 0.74 & the whole lap; the ring hung about 7$^\circ$ about the pair's line \\
+\bottomrule
+\end{tabularx}
+\end{table}
+% 1 RIG-1022-h2 (1.41 Hz; QUAD3's magnet at ring z 0.94 m, lift 95 %; UNANNOUNCED DETACH, DROP AND LAND, ring 62 deg);
+% 2 -h2t9p (1.49 Hz; throttle never above 0.77, so the cap was never used; LAND 6.2 s after lift-off); 3 -h2rts (1.45 Hz,
+% ref_time_shift on); 4 -h2slope (the 0.71 Hz pendulum left); 5 -f2slope (3-D RMSE 3.7 cm, tilt peak 14.3, mean on the
+% path 7.3 deg, lag 0.10 s). Climb values: the velocity-filter reviewer's, reproduced by tools/pair_swing.py within 0.1 deg.
+
+\pendingfig{fig:pair_rig}{The pair's swing on the rig, 22 October: the ring's tip band-passed at 1.1--1.9\,Hz against
+time from lift-off, two UAVs on opposite plates, 0.55\,m rods. (a) The three flights with the averaging velocity
+filter, the swing growing until LAND or a magnet's release; (b) the two flights with the slope filter, the swing
+decaying.}{the five rig flights of Table~\ref{tab:pair_rig}}
+% Data: results/rig/2026-10-22/{h2,h2t9p,h2rts,h2slope,f2slope}_logs (ring pose). Tool: tools/pair_swing.py (its
+% band-pass and windows) -> a new thesis_rig_figures function through the thesis-figure skill.
+
+\subsubsection{Hardware and timing}
+
+The flight controllers run Betaflight in rate mode: each holds the three body rates it is sent, with a feed-forward on
+the rate command and a fast rate loop, and passes the collective throttle to the motors with no loop on it. The tracker
+sends its commands at 50\,Hz, the laptop writes the latest frame to each radio every 10\,ms, and the ExpressLRS link
+runs at 333\,Hz (inferred from the mode its link statistics report). Radio and flight controller together add only about 10--15\,ms
+(Table~\ref{tab:pair_timing}). Measured end to end, the rig differs from the twin per channel: it turns a body-rate
+command into body rate faster than the twin, and a throttle command into lift slower, since nothing on the flight
+controller closes a loop on thrust and the motors' spin-up shows in full; and the body rate the trackers see lags by
+the motion-capture node's own filter. A single command delay in the twin therefore stood for two different things.
+No setting of the flight controllers was changed for this work.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption[The rig's command timing]{The rig's command timing, from the flight controller's configuration (read only)
+and the rig's logs of 22 October, against the twin before the timing rounds. Estimates per stage add to the radio and
+flight controller's share; the end-to-end paths are measured as an equivalent delay. $^a$\,From the trackers' log
+(14--28\,ms from the recordings). $^b$\,The motion-capture node's moving average on the body rates (always on).}
+\label{tab:pair_timing}
+\begin{tabular}{lcc}
+\toprule
+ & Rig (ms) & Twin (ms) \\
+\midrule
+\multicolumn{3}{l}{\emph{Stages, estimated}} \\
+Laptop frame hold (a 100\,Hz writer after the 50\,Hz tracker) & 0--10 & -- \\
+Radio packet wait and air time at 333\,Hz & 2--3 & -- \\
+Command smoothing on the flight controller & 2 (6 at worst) & -- \\
+Gyro and rate-loop filters & 1--2 & -- \\
+Radio and flight controller together & 10--15 & -- \\
+\midrule
+\multicolumn{3}{l}{\emph{Paths, measured end to end}} \\
+Body-rate command to body rate & 25--35$^a$ & 48--62 \\
+Throttle to lift & 44--67 & 17--29 \\
+Body rate as the trackers see it$^b$ & 36--48 & 4--5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+% Betaflight 4.3.1 (STM32F722), rate profile ACTUAL 100 deg/s linear; rate PID roll P45 I80 D40 F120, pitch P47 I84 D46
+% F125, yaw F120; gyro and PID 8 kHz; RC smoothing auto, factor 30; DShot600, airmode; no RPM filter (bidirectional DShot
+% off); failsafe: drop after 1.5 s. Twin paths: R2381/R2384/R2385/R2388 after their 60 ms delay was removed (tools/
+% loop_timing.py att / lift / filter). QUAD3 read; QUAD1, 2 and 4 assumed the same (not read).
+
+\subsubsection{In the twin}
+
+Four twin rounds asked which path carries the swing, whether the rig's timing or its hinge reproduces it, and what
+removes it, each on the twin's pair hover with its delays switched on after the lift (Table~\ref{tab:pair_twin}). In
+the first, a 60\,ms delay on every channel made the twin's pair swing; the same delay on the throttle alone swung as
+much, and on the body rates alone the pair stayed calm. In the twin, then, the throttle path carries the swing. With
+the delay on the body rates alone, though, a slower mode grew until LAND whose shape is the rig's: the ring slid along
+the pair's line, and the thrust along the line fed the swing (Figure~\ref{fig:pair_mode}).
+
+In the second round the twin was given the rig's measured timing per channel: the throttle 35\,ms slower, a
+feed-forward on the rate loop set so that the body-rate path matches the rig's, and the motion-capture node's filter
+on the body rates. It stayed calm with either velocity filter, on 0.55\,m rods and on 1\,m cables, and without the
+filter or the feed-forward, which falsifies the reading that the rig's timing alone makes the rig's pair swing. With
+the throttle 50\,ms slower it swung, but in the twin's own mode, the UAVs' heights moving with the plates, not in the
+rig's. For the first 1\,m pair on the rig the twin therefore predicts no swing with either filter, a weak prediction
+from a twin that missed the 0.55\,m pair.
+
+The third round moved the twin's hinge to the magnet tip, 5.75\,cm above the ring's centre of mass as measured on the
+rig, with the rig's timing and the planner typed either as on the rig or to the hinge. The pair stayed calm both ways,
+so in the twin the hinge's height does not make the rig's swing either. With the second round's reading falsified and
+the third null, the rig-timing emulation and the tip-hinge world were removed from the twin; the per-channel delay
+stays, off by default, as the instrument of the first and fourth rounds.
+
+The fourth round tried, on the swinging twin, the two changes the rig can fly without new code: the slope filter, and
+the trackers on the planner's pull instead of the measured one. Its testbed was the first round's 60\,ms on the
+throttle alone. Both removed the swing; on the planner's pull the swing's mode was gone altogether, which places the
+twin's swing in the measured pull. The testbed's swing is the twin's own, the UAVs' heights moving with the plates,
+not the rig's, so the round shows that each change damps a throttle-delayed swing in the twin, not that either removes
+the rig's. The slope filter is already the pair's comparison on the rig on 28 October; the planner's pull would be a
+change for the pair alone, since the measured pull is what keeps a release's tilt small (Section~\ref{sec:res_leave}).
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\caption[The pair's swing in the twin]{The pair's swing in the rig twin: two UAVs on opposite plates, the 0.86\,kg
+ring, hover, 0.55\,m rods unless stated, the averaging velocity filter and the measured pull unless stated; each delay
+switched on after the lift. Swing: the hover swing of Table~\ref{tab:pair_rig}; a twin pair counts as swinging at
+1.0$^\circ$ or more. Rig timing: the throttle 35\,ms slower, a rate feed-forward matching the rig's body-rate path, and
+the motion-capture node's filter on the body rates. Round 3: the rig's timing with the hinge at the magnet tip. Round
+4: the first round's 60\,ms on the throttle only, its swing 7.36--7.39$^\circ$ without a change.}
+\label{tab:pair_twin}
+\begin{tabularx}{\textwidth}{c>{\raggedright\arraybackslash}Xccl}
+\toprule
+Round & Arm & $n$ & Swing ($^\circ$) & Reading \\
+\midrule
+1 & 60\,ms on every channel & 1 & 6.95 & swings \\
+ & 60\,ms on the throttle only & 2 & 7.36--7.39 & swings as with every channel \\
+ & 60\,ms on the body rates only & 2 & 0.56--0.81 & calm; a slower mode grows \\
+ & 40\,ms on the throttle only & 2 & 0.10--0.12 & calm \\
+\midrule
+2 & rig timing & 2 & 0.066--0.081 & calm \\
+ & rig timing, slope filter & 2 & 0.029 & calm \\
+ & rig timing, 1\,m cables & 2 & 0.065--0.069 & calm \\
+ & rig timing, slope filter, 1\,m cables & 2 & 0.029 & calm \\
+ & rig timing without the body-rate filter & 2 & 0.077--0.082 & calm \\
+ & rig timing without the rate feed-forward & 2 & 0.070--0.089 & calm \\
+ & rig timing, the throttle 50\,ms slower & 2 & 4.07--5.14 & swings, in the twin's own mode \\
+\midrule
+3 & planner typed as on the rig & 2 & 0.08--0.09 & calm \\
+ & planner typed to the hinge & 2 & 0.08 & calm \\
+\midrule
+4 & slope filter & 2 & 0.06--0.07 & calm \\
+ & the planner's pull & 2 & 0.01 & calm; no mode at the swing's frequency \\
+\bottomrule
+\end{tabularx}
+\end{table}
+% Round A confirms (frozen bars: thr060 >= 0.5x the re-fly, att060 < 0.3x); att060's slower mode 1.0-1.1 Hz, ring slide
+% 0.64-0.67 cm/deg, c_u < 0. Round B falsifies (both ema runs < 1 deg and both ring slides < 0.1 cm/deg; items 1, 4, 5
+% fail). _rt050 grows to ~19 deg p-p, c_u > 0 (the twin's vertical mode). Checks: att pitch 31-39 ms (rig 25-35).
+% Round C (R2598/R2600 typed0175, R2599/R2601 typed0575): the testbed bar fails (typed0175 M1(b) 0.09/0.08 < 1.0 deg;
+% ring slide 0.054/0.050 < 0.15): null, no margin claim. Round D (R2691/R2692 slope, R2693/R2694 cable_source model; no-fix
+% arm R2450/R2451 7.39/7.36): both arms CONFIRM (both runs <= 3.69 deg, no new fault); D2's f0 1.00 Hz, no 1.5 Hz mode;
+% c_u > 0 (the twin's mode). D2 is a candidate for the pair only, after Wed's slope A/B, not a default (the measured pull
+% carries Tier A's gains, R1706-R1711). D3-D5 not flown. rate_kff / thr_tau_s / the rate filter / the tip world deleted
+% 23 Oct 11:19 (card section 8).
+
+\pendingfig{fig:pair_mode}{The shape of the pair's swing at its frequency, per degree of the ring's see-saw: how far
+the ring slides along the pair's line against how far the UAVs' heights move. The rig's flights with the averaging
+filter and with the slope filter, against the twin's delayed arms (60\,ms on every channel, on the body rates only)
+and the rig-timing twin; the rig's swing slides the ring, the twin's moves the UAVs' heights.}{the rig flights of
+Table~\ref{tab:pair_rig} and the twin arms of Table~\ref{tab:pair_twin}, rounds 1--4}
+% Data: tools/pair_mode.py on RIG-1022-h2, -h2t9p, -h2rts, -h2slope, -f2slope and on R2381/R2384/R2385/R2388 (cd060),
+% R2452/R2453 (att060), R2465/R2470 (rt), R2598-R2601 (round C), R2691-R2694 (round D); slide and dz in cm per deg, c_u as
+% the marker's fill (feeds or
+% damps). Tool: tools/pair_mode.py -> a new figure function through the thesis-figure skill.
+
+\paragraph{Answer.} The pair's 1.4\,Hz swing is a rig finding. In the twin a delayed throttle carries a swing of the
+same frequency, but a twin with the rig's measured timing stays calm, and so does one with the rig's hinge height, so
+neither explains the rig's swing. On the twin's own throttle-delayed swing, the faster velocity filter and the
+planner's pull each remove it, which says what damps the twin's mode, not the rig's. The faster filter, which calmed
+the rig's pair in one flight, waits for its interleaved repeat on the rig, with the first pair on 1\,m cables.

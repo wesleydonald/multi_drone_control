@@ -63,8 +63,9 @@ Section~\ref{sec:discussion}.
 
 \paragraph{What the twin does not model.} The twin is built from the rig's thrust map, geometry and masses, and
 it leaves out six things, each of which the results chapters name where it matters. (i) Loop latency: the rig's
-command path carries about 50\,ms through the radio and 30\,ms through the flight controller, and the twin has only
-the latency its own bridges model; in an exploratory check, 15 and 30\,ms of command delay added in the twin left the carry at 0.3\,m/s
+radio and flight controller add about 10--15\,ms to the command path, but the rig turns a throttle command into lift
+in 44--67\,ms (nothing on the flight controller closes a loop on collective thrust) against about 15--25\,ms in the
+twin, and answers a body-rate command faster than the twin (25--35 against 48--62\,ms); in an exploratory check, 15 and 30\,ms of command delay added in the twin left the carry at 0.3\,m/s
 as it was, and 45\,ms tipped a carrier at takeoff. (ii) Solver
 timing: in the twin the planner always finishes before its next tick, because simulated time waits for it; on the
 rig it has 60\,ms. (iii) Motion-capture noise: the twin's poses are exact. (iv) Rotor wake on the ring and on the

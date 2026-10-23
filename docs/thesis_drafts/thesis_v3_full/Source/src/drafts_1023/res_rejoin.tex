@@ -1,0 +1,167 @@
+% res_rejoin.tex -- DRAFT 23 Oct 2026: a departed carrier rejoins its own plate (rejoin_departed; twin only).
+% Source: card docs/experiments/2026-10-23_rejoin_departed.md (critic 22 Oct answered; E0 bars frozen 23 Oct 00:08, E1
+% 00:42, E2-E4 05:13, E5 07:57; critic on the 23 Oct fixes 06:25 "run it", its M2 fixed and M1 logged). Registry: E0 R2445;
+% E1 R2457/R2458 (FAIL, 1.5 s blend), R2466/R2467 (VOID as E1b, FAIL as E1), R2578/R2579 (blend fix, PASS), R2592
+% (05:59 fixes, PASS), R2596 (hold fix = final tree, PASS); E2 R2584 (FAIL 10.61 deg), R2589 (05:59, PASS), R2594/R2595
+% (final, PASS); E3 R2585 (FAIL 1.179 m), R2590 (05:59, PASS); E4 R2586 (FAIL 1.709 m), R2591 (05:59, PASS).
+% Code trees: (i) be34f95 + rejoin_blend_s (the rejoin's own 10 s blend); (ii) (i) + the 05:59 fixes (_rejoin_cap,
+% REJOIN_OUT_MARGIN_M and the exact way out, the staging bound STAGE_TRACK_M); (iii) (ii) + the path held for
+% rejoin_blend_s and the cap's binding logged (the final tree). E3 and E4 flew on (ii): the hold fix acts only through a
+% fold-in's blend, which neither reaches (E3 aborts in the descent, E4's ATTACH is refused) -- an inference from the code,
+% not a re-fly. E5 (the pair leaning ~3 deg toward / away from the rejoin plate, world three_rigid_ground_rig_T_push_L100,
+% Wesley 23 Oct (10); bars frozen 07:57, as E2's): toward R2602 (+3.26 deg at the weld, PASS 3.12 deg) and R2712 (+2.95,
+% FAIL 5.28 deg, over 5 from weld +0.22 to +0.41 s: the weld-height cap dipped the rejoiner's reference 1.1 cm, 2.044 ->
+% 2.033 m, the critic's M1); away R2603 (-2.67, PASS 2.91) and R2713 (-3.11, PASS 3.37; lean before LAND 1.88 / 1.93
+% against 2, the torque on to LAND). Wesley 23 Oct ~14:05: E5 reported as is, 1 of 2 clean toward the plate; no change
+% to the cap. Every other E5 bar passes in all four runs.
+% Must not say: anything for the rig (the twin's rods are rigid, can push, have no collision geometry, and its joint welds
+% at any distance; the rig's magnet catches only on contact, and on the rig the collaborator's controller flies every
+% attach). The cap patches a twin mismatch (on a T the rider's rigid rod height IS the ring's pitch), during the blend only.
+
+\subsection{A departed carrier rejoins}
+\label{sec:res_rejoin}
+
+This section asks whether a carrier that has left the ring can be flown back to its own plate, re-attached and folded
+back into the team, so that the team returns to its size with the ring level. It is the step that closes the chains of
+Section~\ref{sec:res_scale}, and it is a twin result only: the twin's joint welds the rod wherever its end is, while
+the rig's magnet catches only on contact, and on the rig every attach is flown by the collaborator's controller
+(Section~\ref{sec:res_join}). The bars were frozen before each check flew.
+
+\paragraph{How the rejoin flies.} % [Method: move to Section~\ref{sec:reconfig} when this section is placed.]
+A freed carrier is not landed. It holds a staging point on its own plate's bearing, 0.3\,m beyond the formation's
+reach, which moves and turns with the planned ring and stays inside the position limit. On the operator's ATTACH,
+accepted only while the path is held, it flies the newcomer's approach (a climb, a transit over its plate and a
+descent at the attach speed), aimed so that its rod's end lands on the plate point it left, with a loop on the
+measured end's height. When the end has stayed within 1.5\,cm of the plate point for 0.3\,s and moves slower than
+2\,cm/s, the planner asks the twin's joint to weld, waits for the joint to report it, and only then grows its
+problem by one UAV, with the remembered plate point and the rod re-measured from the pivot to that point. The fold-in
+is the newcomer's: the rejoiner from a vertical rod and a near-zero pull, blended to its share over 10\,s, with the
+path held through the blend and the rejoiner's reference held at or below its weld height. A LAND or a drop during a
+rejoin sends the rejoiner up, out past the clear radius and down alone.
+
+Table~\ref{tab:rejoin} gives the fold-ins, Table~\ref{tab:rejoin_neighbours} the checks around them. A rejoin is
+scored in stages: the rod's end on its plate within 30\,s of the rejoin's start; the joint attached within 0.5\,s of
+that; and the fold-in, with the ring's tilt at most 5$^\circ$ from the weld to 15\,s after it, the end within 2\,cm of
+its plate through the blend, the rejoiner's planned pull at the blend's end within 10\,\% of its balanced share, the
+ring's lean over the last 10\,s before LAND at most 2$^\circ$, and every UAV landed with no drop or abort. Every
+neighbouring check passed, and on the final code tree every fold-in but one. The rejoin onto the square (four UAVs back from
+three) and onto the T (three back from the opposite pair) both brought the rod's end to its plate inside the 30\,s
+allowed, the joint answered within a few hundredths of a second, and the ring stayed well inside its tilt bar through
+the fold-in. With the T's pair leaning toward the rejoin plate, one of two fold-ins tipped the ring just past the bar,
+briefly; leaning away, both passed, with the ring's lean before LAND the closest to its bar.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{2.4pt}
+\caption[A departed carrier rejoins]{A departed carrier rejoins its own plate in the rig twin: the 0.86\,kg ring at
+1.0\,m on 1\,m cables, hover, against the bars frozen before the runs (in brackets). Square: the UAV on plate 9 leaves
+the square by a ramped release and rejoins it. T: the T's rider (plate 3) is released unannounced, the opposite pair
+carries on, and the rider rejoins. Code trees, in order: (i) the rejoin's own 10\,s blend; (ii) with the reference
+held at or below its weld height through the blend, the exact way out and the staging bound; (iii) the final tree, with
+the path held through the whole blend. Leaning: a steady torque on the ring leans the T's pair about 3$^\circ$ toward
+the rejoin plate or away from it. Ranges over $n$ runs. Share: the rejoiner's planned pull at the blend's end against
+its balanced share. Lean: the ring's mean tilt over the last 10\,s before LAND (when leaning, with the push still on).
+$^a$\,The blend ran for 1.5\,s, not 10\,s (a configuration error, fixed by tree (i)); two more runs with the same short
+blend tilted 5.75--5.82$^\circ$. $^b$\,The rejoiner's reference rose 4.6\,cm as the blend swung its rod out, and its
+rigid rod lifted the T's free side. $^c$\,5.28$^\circ$ in one run, over the bar for 0.19\,s: at the fold-in the weld-height hold
+dipped the rejoiner's reference 1.1\,cm while the pair leaned toward the plate.}
+\label{tab:rejoin}
+\begin{tabular}{llccccccc}
+\toprule
+ & & & On its plate & Joint & Ring tilt, weld & End from & & Lean \\
+Rejoin & Tree & $n$ & after start (s) & after (s) & to $+$15\,s ($^\circ$) & plate (cm) & Share & ($^\circ$) \\
+ & & & [30] & [0.5] & [5] & [2] & [10\,\%] & [2] \\
+\midrule
+Square & (i) & 2 & 24.86--24.87 & 0.029--0.033 & 1.27--1.30 & 1.3--1.4 & $+$2.5\,\% & 0.08--0.09 \\
+ & (ii) & 1 & 24.81 & 0.036 & 1.45 & 1.4 & $+$2.5\,\% & 0.09 \\
+ & (iii) & 1 & 23.87 & 0.030 & 1.55 & 1.6 & $+$2.1\,\% & 0.09 \\
+T & (ii) & 1 & 17.47 & 0.021 & 3.02 & 1.4 & $-$2\,\% & 0.71 \\
+ & (iii) & 2 & 16.58--17.66 & 0.012--0.015 & 1.45--2.25 & 1.3--1.5 & $-$1 to 0\,\% & 0.72--0.79 \\
+T, leaning toward & (iii) & 2 & 15.56--16.47 & 0.015--0.018 & 3.12--5.28$^c$ & 1.3--1.5 & $-$1 to 0\,\% & 0.49--0.52 \\
+T, leaning away & (iii) & 2 & 17.67--18.56 & 0.015--0.018 & 2.91--3.37 & 1.4--1.5 & $-$1 to 0\,\% & 1.88--1.93 \\
+\midrule
+\multicolumn{9}{l}{\emph{Before the fixes (failed, kept as results)}} \\
+Square$^a$ & -- & 2 & 24.87--25.80 & 0.024--0.027 & 5.32--5.83 & 1.3--1.4 & $-$2\,\% & 0.08--0.09 \\
+T & (i) & 1 & 17.47 & 0.021 & 10.61$^b$ & 1.3 & 0\,\% & 0.74 \\
+\bottomrule
+\end{tabular}
+\end{table}
+% Square (i) R2578/R2579; (ii) R2592; (iii) R2596. T (ii) R2589; (iii) R2594/R2595. Leaning toward: R2602 / R2712 (lab
+% batches 16 / 17; pair lean at the weld +3.26 / +2.95 deg; share +0 / -0.9 %); away: R2603 / R2713 (-2.67 / -3.11 deg;
+% -1 / +0.1 %). The cap bound 101 ticks in R2602/R2603, the plan 2.7 / 2.3 cm above it at the last.
+% Short blend: R2457/R2458 (scored E1, FAIL); footnote a's two runs R2466/R2467 (VOID as E1b, FAIL as E1 repeats,
+% 5.82/5.75 deg).
+% T before the fixes: R2584 (tree (i)). Lean column: the registry rows (R2457/R2458 0.09/0.08; R2466/R2467 not recorded
+% beyond '<= 2'). Every run landed every UAV, no drop, abort or refusal.
+
+The two failures before the fixes are results. With a 1.5\,s blend the rejoiner took its share almost at once and the
+ring tipped just past the bar for a fraction of a second; the full 10\,s blend removed it. On the T the failure was a
+twin mismatch: on a T only the rider holds the ring's pitch about the pair's line, and in the twin the rider's rigid
+rod makes its height the ring's pitch. As the blend swung the rejoiner's rod out from vertical, its planned height
+rose and its rod lifted the T's free side while it carried almost nothing. Holding its reference at or below its weld
+height through the blend removed the lift. The hold patches the twin's rigid rod during the blend only; on the rig's
+slack tether the mismatch does not arise. Its own small dip at the fold-in, and its release at the blend's end, give
+the T's remaining tilt. The hold clamps the reference outside the planner's problem, so its dip is a disturbance of its
+own, and it is least sure of itself when the pair leans toward the rejoin plate. Flown with the pair leaning about
+3$^\circ$ either way, the fold-ins stayed inside the bar but for one run leaning toward the plate, where the hold's dip
+at the fold-in tipped the ring just past it, briefly. That run is reported as it flew; the hold was not changed. With
+the pair leaning away, the push that leans it, left on to the end, keeps the ring's lean before LAND close to its bar.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption[Around the rejoin]{The checks around the rejoin in the rig twin, one run each, against the bars frozen
+before the runs. $^a$\,On the floor before the flight the twin's joint welded the rod with its end where it lay, off
+the plate; in flight the weld gate prevents this.}
+\label{tab:rejoin_neighbours}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.4cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{1.3cm}}
+\toprule
+Check & Bar & Measured & Verdict \\
+\midrule
+A rod re-welded on the floor, then the square lifts and hovers (first tree)
+  & joint released and re-welded; hover with ring tilt at most 2$^\circ$; every UAV lands
+  & both joint states within 0.6\,s; ring tilt 5.6$^\circ$ (median), 6.7$^\circ$ (peak)$^a$; all landed & fails \\
+LAND 1.5\,s into the rejoin's descent (tree ii)
+  & the rejoin aborts; it climbs until its end is 0.25\,m over its plate before moving out; it lands alone at least
+  1.2\,m from the ring centre; no UAV in the air when the fleet is declared landed
+  & aborted 0.10\,s after LAND; end 0.27\,m over its plate; landed 1.245\,m out; within 1\,cm of its rest at the
+  declaration & passes \\
+Staging through a figure-eight lap of the T, with an ATTACH mid-lap (tree ii)
+  & the ATTACH refused; the staged UAV inside $\pm$1.6\,m, at least 0.6\,m from the ring centre and 0.8\,m from every
+  carrier
+  & refused; at most 1.575\,m out along $x$; 0.739\,m from the centre, 1.028\,m from the nearest carrier & passes \\
+\midrule
+\multicolumn{4}{l}{\emph{Before the fixes (first tree)}} \\
+LAND in the descent & as above & landed 1.179\,m out: the way out stopped short & failed \\
+Staging on a path & as above & reached 1.709\,m: the staging reference overshot its bound & failed \\
+\bottomrule
+\end{tabularx}
+\end{table}
+% E0 R2445 (JOINT_DETACHED 0.004 s after RELEASE, JOINT_ATTACHED 0.58 s after the publish; the re-welded quad sat
+% 0.761 m out against 0.733 for its neighbours). E3 R2590 (R2585 before). E4 R2591 (R2586 before); the T's path error in
+% the lap 45.5 mm, ring tilt peak 2.74 deg (reported, no bar).
+
+The rejoin also closes the eight-UAV chain of Section~\ref{sec:res_scale}: on the final tree four freed UAVs
+rejoined a 0.5\,m ring one at a time, each welded within 20\,s of its start, with every rod's end within 2\,cm of its
+plate through its blend (exploratory, one run).
+
+\pendingfig{fig:rejoin}{A freed rider rejoins the T in the rig twin (final code tree, hover, 1\,m cables). (a) The
+distance of its rod's end from the plate point it left, against the 1.5\,cm weld gate, with the start, the end on the
+plate, the weld and the end of the blend marked; (b) the rejoiner's height reference through the 10\,s blend, with
+the cap at its weld height; (c) the ring's tilt against the 5$^\circ$ bar; (d) the rejoiner's planned pull rising to
+its share.}{a final-tree rejoin onto the T}
+% Data: R2594 (or R2595): run.csv (tether tip poses, payload tilt), the planner log (the rejoiner's reference z and
+% planned tension), events.csv (REJOIN_START, REJOIN_ON_PLATE, JOINT_ATTACHED, REJOIN_WELD, REJOIN_BLEND_OVER). Tool: a
+% new thesis_sim_figures function through the thesis-figure skill; R2596 (the square) as a second column if it earns it.
+
+\paragraph{Limits.} A rejoin flies only while the path is held; on a path the staged UAV follows its plate and the
+ATTACH is refused. The weld waits for the released rod's swing to die by itself: the loop on the measured end trims its
+height, not its swing. And the twin flatters the rejoin: its rods are rigid, can push and have no collision geometry,
+and its joint welds within the gate wherever the end is.
+
+\paragraph{Answer.} In the twin, a carrier that has left the ring flies back to its own plate, is re-welded and is
+folded back in with the ring level, onto a square and onto a T, and the neighbouring checks of a LAND mid-rejoin and of
+staging on a path pass. It needed two fixes that the twin's rigid rods and one configuration error forced. With the
+T's pair leaning toward the rejoin plate, one fold-in in two went just past the tilt bar, from the dip of the hold that
+the rigid rods forced. It is not a rig result.
