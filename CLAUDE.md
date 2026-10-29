@@ -63,8 +63,17 @@ current branch like any other file (it reaches main with the merges).
   notifications, never polling loops.
 - Never run SIL or Gazebo while the rig stack is up on this laptop (same topics).
 - Anything touching takeoff, the floor or contact gets a floor start; SIL is an air start.
-- The twin flies the rig's mocap velocity filter (`SIM_MOCAP_VEL_FILTER`: `ema` while that is the rig default; Wesley
-  22 Oct, after the twin's unfiltered pair missed the rig's 1.4 Hz swing). Older twin runs are unfiltered (`none`).
+- The twin flies the rig's mocap velocity filter: `slope` on every carrier, the default in both since Wesley's decision of
+  28 Oct (hE1/hS1); `MDC_MOCAP_VEL_FILTER=ema` / `SIM_MOCAP_VEL_FILTER=ema` fly the old one. In attach mode the
+  newcomer keeps `ema` (Tejen's controller reads it). Twin runs 22-28 Oct flew `ema`, older ones none.
+- The rig's trackers put their measured cable pull through a band-stop at 5.3 Hz (`cable_notch_hz` 5.3, Q 1, in
+  real.yaml; Wesley 29 Oct): the 1 m ring bends at 5.3 Hz (RIG-1029-h4); two 2 Hz low-pass stages stopped it but their lag
+  let the triangle swing at 1.1 Hz (RIG-1029-sq2_2/-sq2_4), so the low-pass is off (`cable_lp_hz` 0). common.yaml: both
+  off (the twin's ring is rigid).
+- The payload is the 1.15 kg ring of 28 Oct (real.yaml: load_mass, inertia estimate, attach_radius 0.204, attach_z
+  0.025 estimate, payload_rest_z 0.013; the planner solver is built at its mass). The 0.86 kg M2A ring flies with its
+  values typed (`configs/rig/ring_m2a.yaml`) and solvers prebuilt at 0.86 (a copy: `~/mdc_rig_generated_m2a_0p86`).
+  Twin worlds of the new ring carry `_p115`; the older worlds stay the M2A ring.
 
 ## Critic and reviewer
 - **Critic**: a new control law or estimator in the flight loop, or a change to a gate that
@@ -117,7 +126,9 @@ current branch like any other file (it reaches main with the merges).
 - The model integral (`int_mode auto`) is the default everywhere (5 and 8 Oct).
 - The network is yaw-only and open-loop in load pose except the bounded common-mode trim.
 - Attach at 0.2 m/s.
-- The twin models every link as rigid, QUAD4's tether included (9 Oct); the rig's tethers go slack.
+- The twin's links become cables like the rig's, every one the same (Wesley 29 Oct: they are all the same cable in
+  real life; QUAD4's first, for Tejen's timing test, then the carriers). Until built, the twin flies rigid links
+  (9 Oct); the rig's are metal cables that bend but do not stretch once taut.
 - Combined M1 (11 Oct): `contact_still` is on by default (c0 from a still window). A take-back during a trajectory
   moves with the ring; until that is reviewed the rig refuses an orbit under `partner_contact` (hover only).
   week4 stays as it is. `week5` (12 Oct: rig-wed + the take-back race fix) is the testing tree from Wed 14, rig and twin.

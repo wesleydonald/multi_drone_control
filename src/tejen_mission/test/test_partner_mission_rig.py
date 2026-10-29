@@ -96,7 +96,14 @@ def test_contact_target_is_our_weld_point_and_the_rig_values():
     ring = g['fake_cooperative_transport_world']['params']
     assert (ring['bridge_attach_z_m'], ring['full_pose_attachment'], ring['ring_attachment_plate_index']) == (
         0.031, True, 3)
-    assert ring['bridge_carrier_azimuths_deg'] == [270.0, 30.0, 150.0] and ring['bridge_attach_radius_m'] == 0.225
+    assert ring['bridge_carrier_azimuths_deg'] == [270.0, 30.0, 150.0] and ring['bridge_attach_radius_m'] == 0.204
+    # the 28 Oct payload (RIG-1028-payload); geometry:=rig_m2a keeps the M2A ring
+    assert (ring['ring_plate_pitch_diameter_m'], ring['ring_plate_diameter_m']) == (0.408, 0.09)
+    old = _nodes(geometry='rig_m2a')[0]['fake_cooperative_transport_world']['params']
+    assert (old['bridge_attach_radius_m'], old['ring_plate_pitch_diameter_m'], old['ring_plate_diameter_m']) == (
+        0.225, 0.45, 0.06)
+    with pytest.raises(RuntimeError, match='rig_m2a'):
+        _nodes(geometry='rig_twin')
     p = g['online_join_planner']['params']
     assert p['contact_attach'] is True and p['final_attach_offset_z'] == -0.01       # 1 cm below the plate
     assert (p['proof_rise_max'], p['attach_ready_target_lead_time'], p['attach_ready_land_after_s']) == (

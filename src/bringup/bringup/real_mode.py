@@ -305,6 +305,9 @@ def rig_io(launch_dir, n_radio, magnet_initial, attach=False, detach=False, extr
             'detach': 'true' if (attach or detach) else 'false'}
     if extra_bodies is not None:
         args['mocap_extra_bodies'] = extra_bodies
+    if attach:
+        # the slope filter on the carriers only: QUAD4 (the last radio) feeds the partner's controller, which keeps ema
+        args['mocap_vel_drones'] = ','.join(str(i) for i in range(n_radio - 1))
     if magnet_topic_overrides is not None:
         args['magnet_topic_overrides'] = magnet_topic_overrides
     for i in range(n_radio):

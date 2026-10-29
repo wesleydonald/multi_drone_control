@@ -481,8 +481,9 @@ class DissipativeController(LoadPlanner):
             range_m=float(p('quan_range_m', 2.0).value), v_max=float(p('quan_v_max', 2.0).value),
             nodes=str(p('quan_nodes', 'algebraic').value), vcmd=str(p('quan_vcmd', 'measured').value),
             node_mass=float(p('quan_node_mass', 1.0).value), rod_mass=float(p('quan_rod_mass', 0.0).value),
-            fz=str(p('quan_fz', 'model').value), fz_ki=float(p('quan_fz_ki', 2.0).value),
-            fz_max=float(p('quan_fz_max', 3.0).value))
+            aexp=str(p('quan_aexp', 'path').value), centre=str(p('quan_centre', 'path').value),
+            centre_mass=float(p('quan_centre_mass', 2.0).value), centre_kp=float(p('quan_centre_kp', 1.0).value),
+            centre_kd=float(p('quan_centre_kd', 5.0).value))
         self._quan = None
         # ATTACH capacity: the network is provisioned with reserved_attach EXTRA nodes
         # beyond the n tethered drones the OCP flies. The reserved slots start off-network
@@ -3923,16 +3924,14 @@ class DissipativeController(LoadPlanner):
             self._quan = QuanLaw(self.n, self.drone_mass, self.load_mass, self._quan_params, self.dyn.g)
             x, xd = self._quan_view()
             self._quan.start(x, xd, load_p, self._net_p_des, self._net_hold_z + self._quan_params.hc_m,
-                             xd_L=self.load_state[7:10] if self.load_state is not None else None,
-                             a_cable0=[self._ho_ac.get(self.slot2drone[i]) for i in range(self.n)])
-            fz = ('' if self._quan_params.fz == 'model' else
-                  f', f_i,z autopilot ki {self._quan_params.fz_ki:g} from b ' +
-                  ' '.join(f'{v:+.2f}' for v in self._quan.b_z) + ' m/s^2')
+                             xd_L=self.load_state[7:10] if self.load_state is not None else None)
+            qp = self._quan_params
             self.get_logger().info(
                 f'[dissipative] the law after the hand-over: Quan et al. Eq. 3, 7-10 (net_law quan, '
                 f'{self._quan_params.nodes} nodes, v_d {self._quan_params.vcmd}), node plane '
                 f'{self._net_hold_z + self._quan_params.hc_m:.2f} m, l_i(0) ' + ' '.join(
-                    f'{v:.3f}' for v in self._quan.li0) + ' m' + fz)
+                    f'{v:.3f}' for v in self._quan.li0) + f' m, pull split rod {qp.rod_mass:g} kg, a_expected '
+                f'{qp.aexp}, centre {qp.centre}')
         self.phase_pub.publish(String(data='network'))
         self.get_logger().info(
             '[dissipative] handover OCP -> dissipative network (airborne)')
@@ -4224,7 +4223,7 @@ class DissipativeController(LoadPlanner):
             a_exp = np.array([float(ax), float(ay), 0.0])
         h_c = self._net_hold_z + self._quan_params.hc_m
         hc_dot = (self._net_hold_z - z_was) * PLANNER_HZ
-        self._quan.advance_nodes(x, xd, p_des, v_path, h_c, dt, hc_dot=hc_dot)
+        self._quan.advance_nodes(x, xd, p_des, v_path, h_c, dt, hc_dot=hc_dot, x_L=x_L, xd_L=self.load_state[7:10])
         for i in range(self.n):
             d = self.slot2drone[i]
             if self.detached[d]:

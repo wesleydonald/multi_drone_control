@@ -71,9 +71,20 @@ def test_rig_twin_values():
             mpc['object_vehicle_mass_kg']) == (22.0, True, 0.55, 0.55)
 
 
+def test_rig_twin_L100_p115_is_the_28_oct_payload():
+    ring = _params('rig_twin_L100_p115')['fake_cooperative_transport_world']
+    assert (ring['bridge_attach_radius_m'], ring['bridge_cable_len_m'], ring['ring_plate_pitch_diameter_m'],
+            ring['ring_plate_diameter_m'], ring['ring_collision_outer_diameter_m']) == (0.204, 1.0, 0.408, 0.09, 0.51)
+    assert _params('rig_twin_L100')['fake_cooperative_transport_world']['ring_plate_diameter_m'] == 0.06
+    contact = _params('rig_twin_L100_p115', contact_attach='true')['fake_cooperative_transport_world']
+    assert contact['bridge_attach_z_m'] == 0.037       # plate face 0.025 + the 0.012 tip sphere
+
+
 def test_unknown_geometry_is_refused():
     with pytest.raises(RuntimeError, match='geometry'):
         _params('rig')
+    with pytest.raises(RuntimeError, match='geometry'):
+        _params('rig_m2a')
 
 
 # ---- the geometry owns his plate and carriers; the contact attach (combined M1, 10 Oct late) ----

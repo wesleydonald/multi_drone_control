@@ -251,6 +251,14 @@ install(PROGRAMS
 if(BUILD_TESTING)
     enable_testing()
 
+    add_executable(test_planner_completion test/test_planner_completion.cpp)
+    target_include_directories(test_planner_completion PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CORE_INCLUDE}")
+    target_link_libraries(test_planner_completion dynamic_planner_receding_ros)
+    ament_target_dependencies(test_planner_completion rclcpp)
+    target_compile_options(test_planner_completion PRIVATE -Wall -Wextra -Wpedantic)
+    add_test(NAME test_planner_completion COMMAND test_planner_completion)
+    set_tests_properties(test_planner_completion PROPERTIES TIMEOUT 15)
+
     add_executable(test_experiment_workspace test/test_experiment_workspace.cpp)
     target_include_directories(test_experiment_workspace PRIVATE "${CORE_INCLUDE}" "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_link_libraries(test_experiment_workspace dynamic_planner_collision_ros dynamic_planner_receding_ros Eigen3::Eigen)

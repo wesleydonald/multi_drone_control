@@ -54,10 +54,13 @@ the bars fixed before the runs. One iteration misses every bar, two miss only th
 \end{figure}
 
 What this means for real time is set by the slowest tick. On the rig laptop, a bench calibrated against the rig's own
-flights gives the largest team our planner flies within the 100\,ms period at five iterations as
-\placeholder{$N_{\max}$ on the rig laptop at 5 iterations, from the bench with the speed-ups and the pivot}. At
+flights projects, as an upper bound, the largest team whose every tick runs its full iterations within the 100\,ms period:
+three carriers at five iterations and four at two (the bench with the reference speed-ups on, scaled by the rig's
+measured in-flight slowdown of 3.5 from three-carrier flights). This is not a flight limit: the rig has flown four
+carriers at five iterations under its 60\,ms solve budget, which cuts a late tick's iterations short. At
 eight carriers the plan must be read at five iterations, which the rig laptop cannot run in real time; the
-eight-carrier results are therefore the twin's, with its clock slowed, and say nothing about real time. The exploratory $8\to4\to8$ chain
-(Fig.~\ref{fig:s_chain}) flew one iteration a tick. \placeholder{the eight-carrier claim runs at 5 iterations, hover and $8 \to 4 \to 8$, two each:
-ring position error and tilt peak with the team back at eight, scored from 2\,s after the last rejoin's blend ends;
-release tilt peak; achieved real-time factor and late ticks}.
+eight-carrier results are therefore the twin's, with its clock slowed, and say nothing about real time. In the twin, at five iterations and two runs each, eight carriers held a hover with the ring within 1.3\,mm (rms) and
+0.06$^\circ$ of tilt, and carried the ring $8\to4\to8$ (Fig.~\ref{fig:s_chain}) with no drop: each release raised the ring's
+tilt by at most 2.9$^\circ$, and back at eight the tilt held its bar while the position error, 6.4\,mm, missed its bar of
+5.7\,mm (Section~\ref{sec:res_reconfig}'s chain). These runs flew at about a quarter of real time, with late ticks under
+0.3\,\%.

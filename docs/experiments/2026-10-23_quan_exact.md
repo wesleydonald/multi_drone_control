@@ -57,7 +57,8 @@ Everything before the hand-over is our planner in every arm (creep, our OCP's li
 | R3 | `x_0 = q_0` | the commanded path point on the node plane, a rigid leader, `ẋ_0` the path's velocity, `w_i0 = 1` | S2: "the center ... can be a specific robot ... leader-follower"; init.m's desired centre `p00` on the node plane | no (critic: defensible; the code's centre is a 2 kg dynamic node) |
 | R4 | `h_c` | the node plane **3.41 m** (3.41 cable lengths) above the load's commanded height, moving with it | init.m l.12-24: each robot placed at `mass + r(i)/rr*r0` with `r = rr = 2.02`, i.e. **1.0 m** from the payload; node plane `h0` -12 against the payload's -8.5858: 3.41; 2.02 is the node-node rest length `L0` (l.90). Conflict: Fig. 5's caption and S6 call 2.02 m the mean cable length; under that reading the plane is 1.69 cable lengths up (the first build's value) | yes: 1.69 -> 3.41 |
 | R5 | `a_expected,i` | the path's commanded acceleration (zero in hover and holds) | Eq. 10 | no |
-| R6 | `f_i`, `g` in Eq. 10 | they cancel (`a_cmd = a_expected + (h1+h2)/m_i`); the stand-in autopilot's thrust feed-forward carries the weight and a modelled pull `(m_L/n_i + m_rod) g / sin φ_i` along the measured load-to-quad line, the rods' 0.075 kg each included (`quan_rod_mass`; the offline harness's rods are massless, so 0 there) | S2 l.396 (`m ẍ = m g + f_i + u_i`); the model is the stand-in's, not the paper's | yes: the rod mass added |
+| R6 | `f_i`, `g` in Eq. 10 | they cancel (`a_cmd = a_expected + (h1+h2)/m_i`); the stand-in autopilot's thrust feed-forward carries the weight and a modelled pull `(m_L/n_i + m_rod) g / sin φ_i` along the measured load-to-quad line, the rods' 0.075 kg each included (`quan_rod_mass`; the offline harness's rods are massless, so 0 there) | S2 l.396 (`m ẍ = m g + f_i + u_i`); the model is the stand-in's, not the paper's | yes: the rod mass added; **superseded by R6c (24 Oct)** |
+| R6c | the modelled pull, split (Wesley 24 Oct ~09:10, decision (2)) | vertical `(m_L/n_i) g`; horizontal `(m_L/n_i + r) g cot φ_i` along the rod's measured horizontal direction, toward the load; `r` = `quan_rod_mass` = the rod's load-end share, **0.055 kg** in the twin (magnet 0.035 + half the 0.040 rod). No seed, no estimator. `drone_mass` 0.55 already holds rod and magnet, so vertically the rod is counted once (R2793's climb); horizontally `r`'s weight leans the rod (moments about the quad's joint: `0.27 g cot φ`) | the R6b critic's point (3) (below, "## Critic (R6b)"); exact for the twin's SDF split, a guess physically. The stand-in's, not the paper's (as R6) | new; R6b deleted (below) |
 | R7 | acceleration to velocity command | **R7b** (`quan_vcmd measured`): `v_d = ẋ_i + a_cmd dt`, no accumulated state, with `a_cmd` also the acceleration feed-forward; R7 (`integrated`, `v_d` accumulating `a_cmd`) kept for the comparison | S1 l.113: PX4 "executes velocity and acceleration commands"; Fig. 2 feeds `v_self` to the controller | yes: R7 -> R7b (Wesley ~23:20) |
 | R8 | gains, range | `r` 2 m; `k_ij` 0.5, `c_ij` 0.25, `f_c` 0.5, `k_i` 1, `c_i` 1, `vel_kv` 3, `vel_k_att` 16 (§3.3's best) | their LiDAR filter (p.22); init.m's coefficients (k 10 per edge, c 10, 1 kg nodes, the Simulink friction gain `mu` 5) start the first searches | yes: re-searched |
 | R9 | rate | the planner's 10 Hz | their simulation runs at 100 Hz (init.m `step` 0.01) | no |
@@ -518,3 +519,116 @@ noted. The law = Eq. 3, 7-10 as read (algebraic nodes, R7b), c_net_quan.yaml's o
 critic's split of R6's pull into vertical (m_L/n) g and horizontal (m_L/n + r) g cot phi, which gives the same without the
 OCP seed) needs his word as a §3.1 row; vel_k_att 8 for the law's arm (a gain of the stand-in autopilot, not the law);
 the bars; the line overshoot (R5's a_expected, R3's leader, or the gains: not separated).
+
+## 24 Oct: the split (R6c) flies; R6b deleted (offline only; nothing flown)
+Wesley's decisions of 24 Oct ~09:10 (decisions.md, (2), (4), (5)): `vel_k_att` 8 for the law's arm; the vertical by the
+split of R6's modelled pull (R6c, §3.1); R6b's integral recorded and its code deleted; the line overshoot's cause found;
+`h_c` stays 3.41 cable lengths (init.m), the Fig. 5 / S6 "2.02 m mean cable" stated beside it.
+
+- **R6c is THE law's pull** (`quan_law.py` `cable_pull`; `net_law quan` stays default off). `configs/twin/c_net_quan.yaml`
+  is now the law's current reading: rod 0.055 under the split, `vel_k_att` 8, the rest as R2805 flew. Its new runs:
+  `c_net_quan_split_hubcom_{hover,linex_v200,linex_v400}_L100` (one-line descriptions with falsifiers). The older
+  `c_net_quan_hubcom_*` point at the same params file, so they now fly R6c too; R2793 flew that file as it was at
+  413ec0e (rod 0.075 under R6, `vel_k_att` 16).
+- **R6b deleted** (code, tests, keys): `quan_fz`, `quan_fz_ki`, `quan_fz_max`, `QuanLaw.b_z`, the seeded start
+  (`start(a_cable0=)`), the hand-over line's `f_i,z` part, the three `test_quan_law.py` tests and the `test_quan_switch.py`
+  test, the `graph_detach.py` / `common.yaml` keys and the `network_tune.py` knob `quan_fz_ki`. The hand-over line now
+  ends `pull split rod 0.055 kg, a_expected path, centre path`. **Configs removed from the tree** (`git rm`, flown history
+  at 413ec0e): `configs/twin/c_net_quan_const.yaml` (R2802), `configs/twin/c_net_quan_const_katt8.yaml` (R2805, R2808,
+  R2809, R2812) and the four `configs/experiments/c_net_quan_const*` that named them.
+- **Offline, the split holds the hover at the right height and reproduces the seeded constant to the mm**
+  (`results/analysis/quan_overshoot_2026-10-24/`: `before_seeded_constant_413ec0e.*` ran on 413ec0e's code before the
+  deletion, `arms.*` after; plant `fly(twin_rods=True)`, hover 40 s, lines of 4 / 8 cycles):
+
+| Reading (twin rods) | Hover: 3-D RMS / height held / horizontal RMS (mm) | Line 0.2: amplitude / overrun at the ends / headline (mm) | Line 0.4: amplitude / overrun / headline | Twin (same reading) |
+|---|---|---|---|---|
+| seeded constant (R6b code at `fz_ki` 0, rod 0.055; 413ec0e) | 111 / -1.8 / 117 | 1.32 / 117 / 207 | 1.50 / 209 / 280 | R2805/R2812 hover 110/118, -3.6/-3.7; R2808 1.29 / 102 / 202; R2809 1.42 / 175 / 253 |
+| **R6c split** (rod 0.055) | **111 / -1.8 / 117** | **1.32 / 117 / 207** | **1.50 / 209 / 280** | not flown |
+
+  Identical because the seed was exactly the constant `-r g / m` the split leaves out (the harness's rods are always
+  taut). In the twin the two differ only while a rod is slack: the split's vertical scales with the taut gate, the seed
+  did not. The harness reproduces the twin's overshoot (amplitude 1.32 / 1.50 against 1.29 / 1.42; overrun 117 / 209
+  against 102 / 175 mm).
+
+## Line overshoot: the cause (offline)
+One variable at a time from the R6c reading (the table's first row; plant and cases as above; `arms.py`). Hover:
+3-D RMS from the hand-over / height held. Lines: amplitude ratio (flown over commanded, c_metrics' `radius_ratio`) /
+overrun past the ends (mean, + = past; c_metrics' reach with the sign flipped) / headline / lag.
+
+| Arm | Hover (mm) | Line 0.2 m/s | Line 0.4 m/s |
+|---|---|---|---|
+| R6c split (baseline) | 111 / -1.8 | 1.32 / +117 / 207 / -0.38 s | 1.50 / +209 / 280 / +0.19 s |
+| (a) R5 `quan_aexp zero` | 111 / -1.8 | 1.34 / +144 / 219 / **+2.31 s** | **0.69 / -192** / 259 / **+1.94 s** |
+| (b) R3 `quan_centre dynamic` (2 kg, kp 1, kd 5) | 237 / -1.8 | 1.42 / +92 / 347 / -0.10 s | 1.48 / +138 / 368 / +0.21 s |
+| (c) damping x2 (`c_ij`, `c_i`, `f_c`) | diverged 20.1 s | diverged 20.1 s | diverged 20.1 s |
+| (c) damping x1.5 | 106 / -1.6 | 1.23 / +78 / 176 / -0.33 s | 1.49 / +208 / 279 / +0.15 s |
+| (c) damping x0.5 | 117 / -2.0 | 1.52 / +209 / 294 / -0.33 s | 1.47 / +195 / 274 / +0.23 s |
+| (c) springs x2 (`k_ij`, `k_i`) | **51** / -1.5 | **1.14 / +47 / 86** / -0.59 s | 1.52 / +233 / 259 / +0.17 s |
+| (c) springs x0.5 | 219 / -2.5 | 1.44 / +113 / 341 / -0.26 s | 1.58 / +197 / 390 / +0.20 s |
+| (d) R7c `quan_vcmd feedforward` (v_d = v) | 149 / -2.1 | **1.18 / +34** / 206 / +0.24 s | **1.19 / +46 / 211** / +0.32 s |
+| (d) `vel_kv` 1.5 / 6 | 127 / 87 | 1.31 / 1.34 amplitude | 1.42 / 1.62 amplitude |
+| diagnostic: a_expected x 1/1.15 | 111 | 1.16 / +45 / 159 | 1.32 / +124 / 209 |
+| diagnostic: a_expected x 1/1.3 | 111 | 1.11 / +20 / 149 | 0.82 / -117 / 196 |
+
+Quad tilt peaks 12-15 deg and throttle 0.60-0.62 in every arm that held, except damping x1.5 (19-21 deg, 0.67-0.70).
+The damping x2 arm is unstable (its `c_ij` and `f_c` doubled alone take the quads to 34 deg and the 0.8 throttle cap;
+`c_i` doubled alone changes nothing: 1.31 / 1.46).
+
+**Verdict: the overshoot is the path's acceleration (R5) fed forward harder than 1:1, through R7b, on a soft
+translation mode; R3 and the gains are not its cause.**
+- **(a) a_expected drives it.** Without it the 0.4 m/s line stops 192 mm short of each end (amplitude 0.69) and runs
+  1.9 s late; at 0.2 m/s the amplitude stays 1.34 but now 2.3 s late. Fitting a second-order model to (a)'s two
+  cells gives the formation's translation mode at 0.40 rad/s (period 15.5 s), damping ratio 0.43 (the critic's
+  "~20 s period" for R3's leader); the 0.2 m/s line (0.44 rad/s) sits on that resonance, the 0.4 m/s line (0.89 rad/s)
+  above it.
+- **R7b over-applies it.** R7b sends `a_cmd` both as the acceleration feed-forward and as `v_d - v = a_cmd dt`, which
+  the velocity loop multiplies by `kv`: `a_sp = g - a_cable + (1 + kv dt) a_cmd` at the tick (1.3 at `kv` 3), falling
+  through the tick. Above the mode the ring's amplitude follows the feed-forward's gain: (d) R7c (`a_cmd` in the
+  feed-forward only) takes 0.4 m/s from 1.50 to 1.19 and the overrun from 209 to 46 mm (0.2 m/s: 117 to 34 mm);
+  `vel_kv` 1.5 / 3 / 6 gives 1.42 / 1.50 / 1.62; a_expected scaled by 1/1.15 or 1/1.3 gives 1.32 or 0.82. R7c costs the
+  hover (111 to 149 mm: the springs act 1/1.3 as hard) and the clock-free error (39 to 53 mm).
+- **The gains only matter near the mode (0.2 m/s).** Springs x2 brings 0.2 m/s to 1.14 (headline 207 to 86 mm, hover
+  111 to 51 mm) and leaves 0.4 m/s at 1.52; damping x0.5 / x1.5 gives 1.52 / 1.23 at 0.2 m/s and 1.47 / 1.49 at 0.4 m/s.
+- **(b) R3's dynamic centre (S2 Eq. 16) is not the cause and is worse.** Chosen over a filter or the nodes' mean
+  because Eq. 16 is the text's (the centre a 2 kg node the nodes' springs, dampers and friction act on) and the
+  authors' Simulink model drives it to the path point by `1 (p_d - p_1) + 5 (p'_d - p'_1)` (system_292: `pd_hor` minus
+  `p(1:2)` through Gain6 1 and a derivative through Gain7 5, into the centre's row only); the nodes' mean has nothing
+  tying it to the path. It doubles the hover error (237 mm) and leaves the lines at 1.42 / 1.48 (a second soft mode).
+- **Not separated:** the 1.19 left at 0.4 m/s under R7c (the soft mode explains 0.2 m/s; at 0.4 m/s the residual is
+  not tested: possibly the pull model's horizontal response to the ring's lag). Whether R7c or R7b is the closer
+  reading of S1 ("PX4 executes velocity and acceleration commands") is Wesley's word: R7c is a reading of the
+  stand-in in the flight loop, so a critic look (or his waiver) before it flies.
+
+**Code** (all default off; `net_law port` untouched): `quan_law.py` R6c in `cable_pull`, R5 `QuanParams.aexp`
+(`path|zero`), R3 `QuanParams.centre` (`path|dynamic`, `centre_mass|kp|kd` 2.0 / 1.0 / 5.0; the centre advanced in
+`advance_nodes`, which now takes `x_L`, `xd_L`), R7c `vcmd feedforward`; `common.yaml` `quan_aexp`, `quan_centre`,
+`quan_centre_mass|kp|kd` and the `quan_vcmd` comment; `graph_detach.py` passes them; `dissipative_node.py` reads them,
+passes the ring's state to `advance_nodes`, names the split on the hand-over line; `network_tune.py` knobs
+`quan_aexp_zero`, `quan_centre_dyn`, `quan_centre_mass|kp|kd`, structure `quan_r7c`, `amp_ratio` in `score()`. Tests:
+the split, a_expected zero, the dynamic centre, R7c (`test_quan_law.py`), the hand-over on the split
+(`test_quan_switch.py`), the launch test's keys and c_net_quan.yaml's values. `tools/gate.sh --quick` PASSED (1952).
+
+### Proposed twin runs (exploratory, x1 each, one registry row each; bars still PROPOSED)
+| # | Config | One variable (vs) | Offline prediction | Falsifier |
+|---|---|---|---|---|
+| T0 | `c_net_quan_split_hubcom_{hover,linex_v200,linex_v400}_L100` | R6c on this tree (vs R2805/R2808/R2809, the seeded constant at 413ec0e) | as R2805/R2808/R2809 | in each config's description: hover > 0.10 m off 1.0 m or horizontal RMS > 150 mm or no load down; lines: mean height off by > 0.03 m |
+| T1 | `c_net_quan_aexp0_hubcom_linex_v400_L100` | `quan_aexp zero` (vs T0 v400) | amplitude 0.69, the ends 190 mm short, lag ~1.9 s | amplitude >= 1.2 or overrun >= 100 mm: a_expected does not drive the twin's overshoot |
+| T2 | `c_net_quan_r7c_hubcom_linex_v400_L100` | `quan_vcmd feedforward` (vs T0 v400); critic or waiver first | amplitude 1.19, overrun ~46 mm, headline ~211 mm | amplitude >= 1.35 or overrun >= 120 mm: R7b's `kv dt a_cmd` is not what amplifies it |
+| T3 | `c_net_quan_k2_hubcom_linex_v200_L100` | springs x2, `k_ij` 1.0, `k_i` 2.0 (vs T0 v200) | amplitude 1.14, headline ~86 mm | amplitude >= 1.25 or a quad over 35 deg: the soft mode is not the 0.2 m/s share |
+
+`run_experiment.py --check`: ok for all six (C's params.py inertia warning). Cost: 6 twin runs.
+
+**R7c critic: WAIVED by Wesley (24 Oct ~09:55; docs/decisions.md).** T2 flies exploratory; its registry row says so.
+
+## Line overshoot: the twin check (24 Oct; rows R2813-R2818, R2818c; exploratory, bars PROPOSED)
+| Run | Reading (one change) | Case | Amplitude | Ends | Headline (mm) | Height (mm) | Outcome |
+|---|---|---|---|---|---|---|---|
+| R2813 | R6c split (current) | hover | | | 109.1 RMS | -5.0 | valid = R2805/R2812 |
+| R2814 / R2815 | R6c | line 0.2 / 0.4 | 1.31 / 1.40 | overrun 114 / 164 mm mean | 201.7 / 244.9 | -5.1 / -4.5 | valid |
+| R2816 | a_expected zero | line 0.4 | 0.66 | 209 mm SHORT, 2.0 s late | 275.6 | -7.5 | valid: the path's acceleration drives the ends |
+| R2817 | springs x2 | line 0.2 | 1.16 | overrun 56 mm | 96.7 | -2.9 | valid: near the formation mode the springs matter |
+| R2818 | R7c (critic waived) | line 0.4 | 1.12 | far end short (0.82 of 0.90 m), start end ~0.15 m past | 204.5 | -6.0 | valid: most, not all, of the overshoot |
+
+The twin confirms the offline cause: R7b applies the path's acceleration ~1.3x; R7c (once) takes out most of the overshoot,
+leaving an asymmetric residue; without a_expected the law lags 2 s and falls short. Figure:
+docs/figures/review_2026-10-24/fig_quan_lines.png (ours / R6c / R7c on both lines, two cycles).

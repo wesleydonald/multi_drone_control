@@ -544,3 +544,97 @@ DECIDED 2026-10-23  The paper's own geometry and the figures (Wesley ~16:22): (1
       network as first ported on the hub x1 each (c_net_smoke_hub_*; batch 18h). (2) Best-results figures: detach
       r302_3; the spin goes in the summary; spinny line ls3c; "too much black": colour the data, one palette for fleet
       size, grey for references, black only for the ring among drones (memory updated).
+DECIDED 2026-10-23  Quan et al. exactly (Wesley ~21:10): the comparison arm should be their method as published, not
+      our port; changing the world's geometry to match their model is fine (his word for the world SDF and the attach
+      geometry of this arm). Next: a gap analysis of every remaining deviation (card §3.1) against the paper
+      (docs/papers/quan2025_self_organizing_aerial_swarm_2509.03563.pdf), each marked config / switch / code; code in the
+      flight loop gets the critic, switches default off; then a card with frozen bars before any run.
+DECIDED 2026-10-23  Quan et al. exactly, the choices (Wesley ~21:45, on docs/analysis/quan_exact_gap_2026-10-23.md):
+      (1) "as published" = the paper's TEXT (Eq. 3, 7-10, a per-robot force law), their code only to settle what the
+      text leaves open, each reading stated in the card and thesis; built as a new module behind `net_law: port|quan`
+      (default port): new flight-loop law -> critic before any run. (2) World C: every cable on a 1 mm hub AT THE RING'S
+      CENTRE OF MASS (--attach-z 0) with the cable joint at the drone's centre (--pivot-dz 0); 4 quads, 1 m kept; the
+      ring's tilt is then free, so the 30 deg tilt rules (scorer's LOSS, our arm's drop) come off for BOTH arms on this
+      world (the card defines the loss without them). (3) E1 + E4 (the paper's form on today's hub, hover + line 0.4,
+      once each, laptop) now; E2/E3 not flown. (4) Port switches S1-S4: not built ("whichever matches the paper more
+      closely": the exact law). Goal in his words: "we want to be able to get their results".
+DECIDED 2026-10-23  C's port runs and the locked "yaw-only" line (Wesley ~22:00: "whatever matches the paper the
+      closest"): the paper's formation does not turn with the load at all (a point load), so neither yaw-only nor the
+      full-attitude frame C flew (diss_balanced_tensions false) is the paper's. C's port rows STAND AS FLOWN with the
+      difference stated (card corrections; row R2685c); no yaw-only re-fly. The exact law (net_law quan) uses no load
+      attitude. The locked rule stays for the network mode in general; C's port arm is a recorded exception.
+DECIDED 2026-10-23  Results backup and laptop space (Wesley ~22:10; supersedes "delete nothing" for these runs only):
+      copy ALL of results/ to his UNSW OneDrive (5 TB; rclone remote, folder multi_drone_control/results), verify it
+      file by file (rclone check), THEN delete from the laptop the sim run folders dated before 2026-10-15 that no figure
+      script, paper, thesis draft or tool names (1,009 folders, 18.7 GB as of 22:05); keep the 317 cited ones, every
+      rig run, videos, analysis, logs and the registry. Restore with rclone copy from OneDrive.
+      UPDATE 22:20: UNSW blocks rclone ("admin approval required"; not worked around). Instead: per-day archives
+      ~/mdc_onedrive_upload/results_<day>.tar.zst (pack.sh: tar | zstd -6, each verified against the disk with tar -d,
+      sha256 + size + file count in MANIFEST.txt), uploaded by Wesley through the OneDrive web page, sizes checked there;
+      only then the uncited pre-15 Oct sim runs of those days are deleted. Rounds: Aug-Sep, then 1-14 Oct, then the rest
+      (backup only). Wesley may also ask UNSW IT to approve rclone for later syncs.
+DECIDED 2026-10-23  Quan exact law after its critic (Wesley ~23:20; card .claude/worktrees/agent-a4e026ca138b17b9f/
+      docs/experiments/2026-10-23_quan_exact.md "## Critic"): (1) R7 -> R7b: v_d = measured velocity + a_cmd*dt (no
+      accumulation), a_cmd as the acceleration feed-forward (S1: PX4 takes velocity AND acceleration commands); the
+      critic's offline checks (a) self-stress wind-up signature, (b) 3 quads, (c) R7b with 4 first; R4 (h_c)
+      re-derived from init.m. (2) Nodes: a reading switch, algebraic (main text Eq. 3) and dynamic (S2/S4 with init.m's
+      masses), compared offline; the one that holds flies, the card says which and why. (3) The trackers' 60 deg ring
+      envelope OFF on world C (four_rigid_ground_rig_hubcom_L100), twin only, both arms, by a switch in that world's
+      configs; the rig and every other world keep it. (4) S: the chain claim's N4 miss (6.36 / 6.35 vs 5.66 mm) is
+      reported as missed (frozen bars); s4_hover_L100_it5 re-flown x2 on the current tree for one tree per claim table.
+DECIDED 2026-10-24  Wesley's answers to the morning report (~09:10): (1) the rig keeps 5 SQP iterations ("it is already
+      working as is"): the 2-iteration idea is closed; it2 stays a twin result. (2) Quan readings: vel_k_att 8 for the law's
+      arm; the vertical by the critic's split of R6's modelled pull (vertical (m_L/n) g, horizontal (m_L/n + r) g cot phi,
+      no seed, no estimator); R6b's integral recorded and its code deleted. (3) Quan bars: freeze after he has seen videos
+      and accuracy figures of the trajectories. (4) Test the line overshoot's cause. (5) R4's conflict: Claude's call ->
+      h_c from init.m (3.41 cable lengths: what sets the node plane in their simulation), the Fig. 5 / S6 '2.02 m mean
+      cable' stated beside it as their hardware's. (6) Commit the Quan code (authored by Wesley, no attribution). (7) Backup
+      round 2 uploaded by him. (8) S's chain reporting after he sees videos. (9) Tejen's note sent to him to forward.
+DECIDED 2026-10-24  Quan R7c (quan_vcmd feedforward: v_d = the measured velocity, a_cmd only in the acceleration
+      feed-forward; the offline cause of the line overshoot is R7b applying the path's acceleration ~1.3x): critic WAIVED by
+      Wesley (~09:55); T2 (c_net_quan_r7c_hubcom_linex_v400_L100) flies exploratory; its row carries "critic waived by
+      Wesley 24 Oct".
+DECIDED 2026-10-24  Tejen's completion-wakeup fix 1cfc7a90 ported (Tejen via Wesley ~10:55: "port that targeted change
+      first ... then repeat one identical twin case"): his commit (waitable, backend integration, tests, timing diagnostics;
+      not his docs or other changes) mapped onto the fork (dynamic_planner_ros -> tejen_dynamic_planner, drone_communication
+      -> tejen_mission); one hunk ported by hand (the drain before the state sample: the fork's stateCallback predates his
+      ego-orientation sample) and his source-text test's first assertion adapted to it. Built, his completion test 10/10, gate
+      green (1952). Twin check: thu29_floorjoin_hover_L100 x2 (vs R2695 / R2738), compare installed/accepted,
+      completion_to_collection_ms, certified vs installation world versions. Uncommitted.
+DECIDED 2026-10-28  Velocity filter: slope (Wesley ~10:00 in the lab, 0.55 m pair QUAD2/QUAD3 on plates 11/5, after hE1 ema
+      and hS1 slope: pair swing 0-6 s 2.69 against 1.06 deg rms, hover 3.98 against 0.74, see-saw growing 7 -> 12.5 deg p-p
+      against decaying 8.7 -> 3.5, velocity lag 40 against 20 ms). One flight per arm, not the card's E S E S at 1 m
+      (docs/experiments/2026-10-22_velocity_filter.md): his decision on this pair plus 22 Oct's (slope 1.35-1.46 against
+      ema 2.60-3.72 deg). Today every T1 types MDC_MOCAP_VEL_FILTER=slope. After the lab (not mid-session): slope as the
+      real_io default and the twin's SIM_MOCAP_VEL_FILTER, the working rules' twin-filter line updated.
+DECIDED 2026-10-28  The new payload and the slope filter as defaults (Wesley ~19:00, after the lab): (1) the real-world
+      defaults are the new payload (1.15 kg, 510 mm, slots ~100 x 85 mm; RIG-1028-payload: magnets at r 0.204, Motive
+      pivot within ~5 mm of the centre at rest z 0.013; plate faces ~0.025 above the pivot and the inertia 0.024/0.049
+      are estimates) in real.yaml, with the rig planner prebuilt at 1.15 kg; the M2A ring's values stay in
+      configs/rig/ring_m2a.yaml and its solvers in ~/mdc_rig_generated_m2a_0p86 ("keep all the old stuff", Wesley).
+      (2) slope is the mocap velocity filter default in the real world (every carrier; attach mode leaves the newcomer
+      on ema) and the twin (SIM_MOCAP_VEL_FILTER). (3) Thu 29 flies 4 quads on 1 m cables: baselines, the release chain,
+      Tejen's attach, the pickup and basket. Open from today's pair (RIG-1028-f2b, -ls2c): the ring sank 17-57 cm when
+      the trackers' measured cable pull passed the 14.5 m/s^2 cap (cable_accel_cap); the twin p115 runs test it before
+      any change.
+
+- DECIDED 2026-10-29 (Wesley, lab): the trackers' measured cable pull gets a first-order low-pass, `cable_lp_hz`
+  (tracker parameter, common.yaml default 0 = off; typed `cable_lp_hz:=2.0` on the rig first, h4f). Why: RIG-1029-h4,
+  the 1 m ring bent at 5.3 Hz (opposite plates in phase, neighbours anti-phase) with every tracker feeding its own
+  measured pull back one tick later; a magnet released at the top of the lift. The planned pull (cable_source model)
+  ruled out by Wesley ("we already know the planned pull is not good"). Critic waived by Wesley ("we dont need critic").
+  Risk noted: ~80 ms added lag at low frequency (22 Oct's see-saw came from 40 ms of velocity lag).
+- DECIDED 2026-10-29 (Wesley, lab, after RIG-1029-h4f): `cable_lp_hz` 2.0 is the rig default (real.yaml, section
+  tracker) for every mode; common.yaml (and so the twin) stays 0. Revert: `cable_lp_hz: 0.0` in a params_file or real.yaml.
+- DECIDED 2026-10-29 (Wesley, lab, after RIG-1029-ch1b/-ch1b_2): `cable_lp_order` 2 is the rig default (real.yaml): the
+  measured pull through two 2 Hz stages; the 5.3 Hz bending fell to 0.07-0.09 m/s^2 (one stage: 0.43-0.60). Open: plate 0
+  releases under load in 4 of 4 runs, magnets swapped included (the plate, not the magnet).
+- DECIDED 2026-10-29 (Wesley, lab, after RIG-1029-sq2_2/-sq2_4: the triangle swung at 1.1 Hz with the two low-pass stages'
+  ~120 ms of lag, QUAD4 still on its mat in sq2_4): the rig's measured pull goes through a band-stop at 5.3 Hz (Q 1;
+  cable_notch_hz in real.yaml), the low-pass off (cable_lp_hz 0; kept in the code). Critic waived (Wesley).
+- DECIDED 2026-10-29 (Wesley, afternoon, after Tejen's / Codex's review, docs/tejen/reply_2026-10-29/):
+  (1) Tejen's timing fix (`mpc_command_execution:=partial_step`, oct10 weights unchanged): a twin check of the send
+  path first, then ONE matched rig rehearsal with nothing else changed. (2) His hand-over drift on the rig path stays
+  0.30 m (speed 0.12 m/s); Tejen recommended 0.15 m. (3) The twin's cables: every link (carriers and QUAD4) becomes a
+  cable like the rig's, all the same (supersedes the 9 Oct rigid-link rule); QUAD4's first. (4) Commit the working copy
+  on week7 now.

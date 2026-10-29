@@ -80,14 +80,17 @@ GRID = ('diss_c', 'vel_kp_pos')
 # (vel_kp_pos 0: a pure velocity command). One structure per reading of the node (R1) and the velocity command (R7)
 GEOMETRY = {'rim': (0.225, 0.02), 'hubcom': (0.001, 0.0)}
 QUAN_READINGS = {'quan': ('algebraic', 'measured'), 'quan_dyn': ('dynamic', 'measured'),
-                 'quan_r7': ('algebraic', 'integrated'), 'quan_dyn_r7': ('dynamic', 'integrated')}
+                 'quan_r7': ('algebraic', 'integrated'), 'quan_dyn_r7': ('dynamic', 'integrated'),
+                 'quan_r7c': ('algebraic', 'feedforward')}
 # the start point: init.m's coefficients (k 10 per edge, c 10, its friction gain 5) on its 1 kg nodes, scaled by our
 # quad's 0.55 kg; init.m's lengths are ours (1 m cables), the node plane 3.41 m over the load (R4). The search: a grid
 # over the springs and dampers among the nodes (QUAN_GRID), then one descent pass over QUAN_SPACE (x0.5, x1, x2)
 QUAN_DEFAULTS = dict(quan_k_ij=5.5, quan_c_ij=5.5, quan_k_i=5.5, quan_c_i=5.5, quan_fc=2.75, quan_hc_m=3.41,
-                     quan_node_mass=1.0, vel_kv=4.0, vel_k_att=8.0, quan_rod_mass=0.0, quan_fz_ki=0.0)
-# quan_rod_mass: the pull model's rod beyond the plant's quad mass (R6; this plant's rods are massless, so 0 is exact);
-# quan_fz_ki > 0 flies R6b (fz 'autopilot') at that gain, 0 R6 alone. Neither is searched.
+                     quan_node_mass=1.0, vel_kv=4.0, vel_k_att=8.0, quan_rod_mass=0.0, quan_aexp_zero=0.0,
+                     quan_centre_dyn=0.0, quan_centre_mass=2.0, quan_centre_kp=1.0, quan_centre_kd=5.0)
+# quan_rod_mass: the rod's load-end share in the pull's horizontal part (R6c; 0 exact on this plant's massless rods,
+# 0.055 with twin_rods); quan_aexp_zero 1: no a_expected (R5 'zero'); quan_centre_dyn 1: the dynamic centre (R3
+# 'dynamic') at quan_centre_mass/kp/kd. None is searched.
 QUAN_LAND_VEL, QUAN_LAND_Z = 0.2, 0.06          # the network's LAND ramp (land_vel, net_land_z)
 # world C's rods as the twin has them (make_carry_worlds.py): 0.040 kg along the rod and a 0.035 kg magnet at the
 # payload end, inside drone_mass 0.55. With fly(twin_rods=True) the plant's quads are the 0.475 kg airframe plus half the
@@ -136,8 +139,10 @@ def quan_law(k, structure='quan'):
                                                  c_i=k['quan_c_i'], f_c=k['quan_fc'], hc_m=k['quan_hc_m'],
                                                  range_m=QUAN_RANGE_M, nodes=nodes, vcmd=vcmd,
                                                  node_mass=k['quan_node_mass'], rod_mass=k['quan_rod_mass'],
-                                                 fz='autopilot' if k['quan_fz_ki'] > 0.0 else 'model',
-                                                 fz_ki=k['quan_fz_ki'] or 2.0))
+                                                 aexp='zero' if k['quan_aexp_zero'] else 'path',
+                                                 centre='dynamic' if k['quan_centre_dyn'] else 'path',
+                                                 centre_mass=k['quan_centre_mass'], centre_kp=k['quan_centre_kp'],
+                                                 centre_kd=k['quan_centre_kd']))
 
 
 def fly(case, speed, knobs=None, structure='port', vel_filter='ema', cycles=None, hover_s=HOVER_S, geometry=None,
@@ -156,9 +161,7 @@ def fly(case, speed, knobs=None, structure='port', vel_filter='ema', cycles=None
     pos0 = [load0 + r + L * np.r_[math.cos(e) * r[:2] / np.linalg.norm(r[:2]), math.sin(e)] for r in rho]
     if quan:
         law, h_c = quan_law(k, structure), Z_TARGET + k['quan_hc_m']
-        # what the drones flew before the hand-over: our OCP's cable term, the ring's share along each rod (R6b)
-        a_ocp = [-(M_LOAD / N) * 9.81 / ((p_ - load0)[2] / L) * (p_ - load0) / L / M_QUAD for p_ in pos0]
-        law.start(np.array(pos0), np.zeros((N, 3)), load0, load0, h_c, a_cable0=a_ocp)
+        law.start(np.array(pos0), np.zeros((N, 3)), load0, load0, h_c)
         refs = [(pos0[i], *law.command(i, np.array(pos0), np.zeros((N, 3)), load0, np.zeros(3), load0, (0.0, 0.0),
                                        np.zeros(3), h_c, 0.0)[:3]) for i in range(N)]
     else:
@@ -224,7 +227,8 @@ def fly(case, speed, knobs=None, structure='port', vel_filter='ema', cycles=None
                 x, xd = np.array(plant.p), np.array(v_meas)
                 ax, ay = traj.accel_at(traj_t) if ran else (0.0, 0.0)
                 h_c, hc_dot = p_des[2] + k['quan_hc_m'], (p_des[2] - z_was) / NET_DT
-                law.advance_nodes(x, xd, p_des, (vx, vy) if ran else (0.0, 0.0), h_c, NET_DT, hc_dot=hc_dot)
+                law.advance_nodes(x, xd, p_des, (vx, vy) if ran else (0.0, 0.0), h_c, NET_DT, hc_dot=hc_dot,
+                                  x_L=ps[0:3], xd_L=v_load)
                 refs = [(x[i], *law.command(i, x, xd, ps[0:3], v_load, p_des, (vx, vy) if ran else (0.0, 0.0),
                                             np.array([ax, ay, 0.0]), h_c, NET_DT, hc_dot=hc_dot)[:3])
                         for i in range(N)]
@@ -284,7 +288,8 @@ def score(r):
         e_t = np.linalg.norm(act - np.c_[sched, des[:, 1], des[:, 2]], axis=1)
         out = dict(cf_rms_mm=1000 * _rms(cf[win]), cf_max_mm=1000 * float(np.max(cf[win])),
                    reach_rms_mm=1000 * _rms(reach), reach_mean_mm=1000 * float(np.mean(reach)),
-                   lag_s=float(M.phase_lag_s(t[win], sched[win], act[win, 0])), rmse_t_mm=1000 * _rms(e_t[win]))
+                   lag_s=float(M.phase_lag_s(t[win], sched[win], act[win, 0])), rmse_t_mm=1000 * _rms(e_t[win]),
+                   amp_ratio=float(M.radius_ratio(act[:, :2], np.c_[sched, des[:, 1]], win)))
         out['headline_mm'] = out['cf_rms_mm'] + out['reach_rms_mm']
         out['band_max_mm'] = 1000 * float(np.max(M.segment_error(act, x0, x0 + d, des[:, 1], des[:, 2])[t <= t1]))
     out.update(tilt_mean_deg=float(np.mean(r['tilt'][win])), tilt_peak_deg=float(np.max(r['tilt'])),

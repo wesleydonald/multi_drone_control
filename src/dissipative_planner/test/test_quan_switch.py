@@ -121,19 +121,13 @@ def test_quan_follows_the_path_point_after_the_hold():
     assert all(vd[0] > 0.0 for vd in v)          # every quad's velocity command leads along +x
 
 
-def test_quan_r6b_starts_on_the_ocps_thrust():
-    """R6b (quan_fz autopilot): the first feed-forward after the hand-over is the vertical the OCP flew, from its last
-    cable term per drone, though the pull model carries a rod; quan_fz model publishes the model's."""
-    f, g = _node('quan'), _node('quan')
-    f._quan_params = QuanParams(rod_mass=0.075, fz='autopilot')
-    g._quan_params = QuanParams(rod_mass=0.075)
-    for h in (f, g):
-        for d in range(4):
-            u = (h.drone_pos[d] - h.load_state[0:3]) / 1.0
-            h._last_ocp_ac[d] = -(0.86 / 4) * 9.81 / u[2] * u / 0.55
+def test_quan_hands_over_on_the_pull_split():
+    """R6c: the first vertical feed-forward is the ring's share alone (drone_mass holds the rod), whatever rod_mass
+    adds horizontally; the hand-over line names the split."""
+    f = _node('quan')
+    f._quan_params = QuanParams(rod_mass=0.055)
     _handover(f)
-    _handover(g)
-    assert any('f_i,z autopilot' in m for m in f.log.lines)
+    assert any('pull split rod 0.055 kg' in m for m in f.log.lines)
     for d in range(4):
-        assert np.asarray(f.refs[d][0][2])[2] == pytest.approx(9.81 - f._ho_ac[d][2])
-        assert np.asarray(g.refs[d][0][2])[2] == pytest.approx(9.81 + (0.86 / 4 + 0.075) * 9.81 / 0.55)
+        assert np.asarray(f.refs[d][0][2])[2] == pytest.approx(9.81 + (0.86 / 4) * 9.81 / 0.55)
+

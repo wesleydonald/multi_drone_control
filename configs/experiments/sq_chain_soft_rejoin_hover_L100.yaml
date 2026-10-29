@@ -1,0 +1,124 @@
+name: sq_chain_soft_rejoin_hover_L100
+description: 'With configs/rig/chain_pair_attach_1m.yaml (the rig line''s params). Exploratory (Wesley 27 Oct: the chain with a re-attach): sq_nr_soft_hover_L100 with a second release before the re-attach: the square (QUAD4 welded on plate 9) lifts; QUAD4 soft-detached (announced, 3 s) and handed to Tejen''s floor_join; 15 s later the T''s rider (plate 3, drone 1, ~0 N) detached announced -> the pair 0/6; QUAD4 re-attaches on plate 9 -> the T 0/6/9 (4 -> 3 -> 2 -> 3). Falsifier: no re-weld within 300 s, an abort, or the ring tilt over 35 deg.'
+world: sq_rigid_ground_rig_attach_welded_pickup_L100.sdf
+ball_start: [1.6, 2.0, 0.08]       # tools/make_attach_worlds_L100.py BALL_XY (freed at start; unused by floor_join)
+lab_env:
+  SIM_MOCAP_VEL_FILTER: ema
+  MDC_MOCAP_VEL_DRONES: 0,1,2,3
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    attach_radius: 0.225
+    attach_z: 0.02
+    cable_len: 1.0
+    creep_vel: 0.2
+    drone_mass: 0.55
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.15
+    load_mass: 0.86
+    load_traj: hover
+    measure_rod_len: true
+    num_drones: 3
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    reconfig_mode: ocp
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.0
+    throttle_max: 0.8
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    pos_limit_m: 1.75
+    mode: attach
+    params_file: /home/wesley/multi_drone_control/configs/rig/chain_pair_attach_1m.yaml
+    reserved_attach: 1
+    attach_azimuths_deg: 0,90,180
+    detach_unload_s: 3.0
+    attach_x_offset: 0.0
+    attach_y_offset: 0.225
+    partner: true
+    partner_attached: true
+    weld_radius: 0.01
+    weld_point_z: 0.032
+    partner_contact: true
+    proof_rules: comotion
+    proof_h_plate: 0.0025
+    weld_speed_gate: 0.05
+    tip_max_rate_hz: 120.0
+    tip_noise_sd_m: 0.0005
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 3
+    attach: true
+    clock_hz: 500
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+fleet:
+  num_drones: 3
+  n_total: 4
+timing:
+  duration_s: 600.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 5.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 8.0
+  launch_expect_topics:
+  - /join_planner/phase
+  - /fake_payload/pose
+  dds_udp_only: true
+  bg_param_dump: false
+events:
+- t: 1.0
+  do: LAUNCH
+  arg: tejen_mission partner_mission.launch.py geometry:=rig_twin_L100 plate:=9 carrier_azimuths_deg:=[0.0,90.0,180.0]
+    contact_attach:=true carry_clearance:=0.25 confirm_pickup_release:=true start_gate_topic:=/partner/release mission_mode:=floor_join
+- t: 2.0
+  do: WAIT_PICKUP_FREE    # his launch frees the spawn's ball weld on QUAD4's tip before the creep moves the ring
+  arg: 120
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 20.0
+  do: DETACH              # /fleet/detach 3: the rig's RViz DETACH (the planner sends QUAD4's magnet OFF)
+  arg: 3
+- t: 35.0
+  do: DETACH              # the T's rider (plate 3, ~0 N), announced
+  arg: 1
+- t: 36.0
+  do: WAIT_REWELD         # his rejoin from the air; later events are timed from the re-weld
+  arg: 300
+- t: 46.0
+  do: LAND                # 10 s on four after the re-weld, as the rig sheet
+criteria:
+  require_weld: false
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    baseline:
+      pos: [2.6, -4.4, 3.2]
+      look_at: [0.0, 0.4, 1.8]
+      hfov_deg: 60.0
+      size: [1280, 720]

@@ -1,5 +1,5 @@
-name: c_net_quan_const_katt8_hubcom_linex_v400_L100
-description: 'EXPLORATORY (overnight 24 Oct): the law at R2805''s reading (quan_rod_mass 0.055, quan_fz autopilot, quan_fz_ki 0: the seeded constant; vel_k_att 8; the best hover so far) on the linex_v400 line, once, beside R2803/R2804 (rod 0). Falsifier: no NET_HANDOVER, a VOID, a quad over 60 deg, a fleet abort or fault line, or a band LOSS still growing or with the quads at the guards (tilt > 35 deg, throttle > 0.78).'
+name: c_net_quan_r7c_hubcom_linex_v400_L100
+description: 'EXPLORATORY (24 Oct; card 2026-10-23_quan_exact ''## Line overshoot''): c_net_quan_split_hubcom_linex_v400_L100 with ONE change, R7c (quan_vcmd feedforward: v_d = the measured velocity, a_cmd only as the acceleration feed-forward; configs/twin/c_net_quan_r7c.yaml). Offline: amplitude 1.50 -> 1.19, overrun 209 -> 46 mm, headline 280 -> 211 mm. Falsifier: amplitude ratio at least 1.35 (R2809 1.42) or the overrun at least 120 mm -> R7b''s kv dt a_cmd is not what amplifies the feed-forward in the twin.'
 lab_env:
   SIM_MOCAP_VEL_FILTER: 'ema'
   MDC_MOCAP_VEL_DRONES: '0,1,2,3'
@@ -42,7 +42,7 @@ launch:
     kt_trim: false
     departed_land: true
     departed_ground_idle: true
-    params_file: /home/wesley/multi_drone_control/configs/twin/c_net_quan_const_katt8.yaml
+    params_file: /home/wesley/multi_drone_control/configs/twin/c_net_quan_r7c.yaml
     sim_thrust_map: rig
     sim_thrust_offset: 0.181,0.185,0.187,0.187
     sim_pack_v0: 23.8

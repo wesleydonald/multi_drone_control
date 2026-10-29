@@ -149,6 +149,10 @@ def test_r7_integrates_the_velocity_command_and_r7b_does_not():
     for _ in range(50):
         v_d = law.command(0, x, xd, load, xd[0], load, xd[0][:2], np.array([1.0, 0.0, 0.0]), H_C, 0.1)[0]
     assert np.allclose(v_d, [0.2, 0.0, 0.0])
+    law = _law(x, load, xd=xd, vcmd='feedforward')        # R7c: a_cmd in the feed-forward alone
+    v_d, a_ff, a_cable, a_cmd = law.command(0, x, xd, load, xd[0], load, xd[0][:2], np.array([1.0, 0.0, 0.0]), H_C,
+                                            0.1)
+    assert np.allclose(v_d, xd[0]) and a_cmd[0] == pytest.approx(1.0) and np.allclose(a_ff[:2], (a_cmd - a_cable)[:2])
 
 
 def test_dynamic_nodes_start_on_eq3_rest_there_and_stay_on_the_node_plane():
@@ -171,11 +175,20 @@ def test_dynamic_nodes_start_on_eq3_rest_there_and_stay_on_the_node_plane():
     assert float((law.q[0] - q0) @ (moved[0] - q0)) > 0.0       # toward the quad, horizontally
 
 
-def test_the_pull_model_carries_the_rods():
-    """R6: each quad's modelled pull carries its share of the ring and its own rod."""
+def test_the_pull_split_counts_the_rod_horizontally_only():
+    """R6c: vertically each quad's share of the ring (drone_mass holds its rod); horizontally that share and the
+    rod's load-end share, g cot phi, along the rod's horizontal direction toward the load."""
     x, load = _cone()
-    law = _law(x, load, rod_mass=0.075)
-    assert sum(law.cable_pull(i, x, load)[2] for i in range(4)) == pytest.approx(-(M_L + 4 * 0.075) * 9.81)
+    law = _law(x, load, rod_mass=0.055)
+    for i in range(4):
+        f = law.cable_pull(i, x, load)
+        u = (x[i] - load) / np.linalg.norm(x[i] - load)
+        assert f[2] == pytest.approx(-(M_L / 4) * 9.81)
+        assert np.linalg.norm(f[:2]) == pytest.approx((M_L / 4 + 0.055) * 9.81 / math.tan(ELEV))
+        assert float(f[:2] @ u[:2]) < 0.0 and abs(float(np.cross(f[:2], u[:2]))) < 1e-12
+    assert np.allclose(_law(x, load).cable_pull(1, x, load), -(M_L / 4) * 9.81 / math.sin(ELEV)
+                       * (x[1] - load) / np.linalg.norm(x[1] - load))    # rod 0: the share along the rod
+    assert np.allclose(law.cable_pull(0, x, load, taut_gate=0.0), 0.0)
 
 
 def test_only_robots_in_range_count():
@@ -187,62 +200,42 @@ def test_only_robots_in_range_count():
     assert _law(x, load).neighbours(0, x) == [1, 2, 3]
 
 
-def _pull0(x, load):
-    """Our OCP's cable term before the hand-over: the ring's share along each rod, per kg of drone (m/s^2)."""
-    return [-(M_L / 4) * 9.81 / (xi - load)[2] * (xi - load) / M_Q for xi in x]
-
-
-def test_r6b_is_off_by_default_and_names_its_readings():
-    assert QuanParams().fz == 'model'
+def test_a_expected_is_the_paths_unless_zero():
+    """R5: a_cmd carries the path's acceleration ('path', the default); 'zero' drops it, nothing else changes."""
+    x, load = _cone()
+    a = np.array([0.3, -0.1, 0.0])
+    args = (x, np.zeros_like(x), load, np.zeros(3), load, np.zeros(2), a, H_C, 0.1)
+    assert QuanParams().aexp == 'path'
     with pytest.raises(ValueError):
-        QuanParams(fz='true')
+        QuanParams(aexp='half')
+    a_on = _law(x, load).command(0, *args)[3]
+    a_off = _law(x, load, aexp='zero').command(0, *args)[3]
+    assert np.allclose(a_on - a_off, a) and np.allclose(a_off, 0.0)
+
+
+def test_the_dynamic_centre_follows_the_path_point_and_feels_the_nodes():
+    """R3 dynamic (S2 Eq. 16): the centre starts on the path point at rest, is driven toward a moved path point, and
+    the robots' springs see it, not the path point; 'path' (the default) leaves no state."""
     x, load = _cone()
-    law = QuanLaw(4, M_Q, M_L, QuanParams(rod_mass=0.075))
-    law.start(x, np.zeros_like(x), load, load, H_C, a_cable0=_pull0(x, load))
-    assert np.allclose(law.b_z, 0.0)                                    # R6 alone ignores the drone's earlier thrust
-    _, a_ff, a_cable, a_cmd = law.command(0, x, np.tile([0.0, 0.0, 0.3], (4, 1)), load, np.zeros(3), load,
-                                          np.zeros(2), np.zeros(3), H_C, 0.1)
-    assert np.allclose(law.b_z, 0.0) and a_ff[2] == pytest.approx(9.81 + a_cmd[2] - a_cable[2])
-
-
-def test_r6b_starts_on_the_thrust_flown_before_the_hand_over():
-    """R6b: b_i(0) makes the first vertical feed-forward the OCP's, whatever the pull model adds (here the rod the
-    twin's drone_mass already holds); the horizontal stays the model's."""
-    x, load = _cone()
-    law = QuanLaw(4, M_Q, M_L, QuanParams(rod_mass=0.075, fz='autopilot'))
-    a0 = _pull0(x, load)
-    law.start(x, np.zeros_like(x), load, load, H_C, a_cable0=a0)
-    assert np.allclose(law.b_z, -0.075 * 9.81 / M_Q)
-    for i in range(4):
-        a_ff, a_cable = law.command(i, x, np.zeros_like(x), load, np.zeros(3), load, np.zeros(2), np.zeros(3),
-                                    H_C, 0.1)[1:3]
-        assert a_ff[2] == pytest.approx(9.81 - a0[i][2])
-        assert np.allclose(a_ff[:2], -a_cable[:2])
-    law.start(x, np.zeros_like(x), load, load, H_C, a_cable0=[None, np.full(3, np.nan), a0[2], a0[3]])
-    assert law.b_z[0] == 0.0 and law.b_z[1] == 0.0 and law.b_z[2] < 0.0
-
-
-def test_r6b_integrates_the_vertical_velocity_the_drone_did_not_follow():
-    """R6b: a robot pushed down by its node spring that does not descend lowers its thrust tick by tick, within
-    fz_max; one that follows its command leaves the integral alone."""
-    x, load = _cone()
-    law = QuanLaw(4, M_Q, M_L, QuanParams(k_i=1.0, c_i=0.0, fz='autopilot', fz_ki=2.0, fz_max=0.5))
-    law.start(x, np.zeros_like(x), load, load, H_C)
-    up = x.copy()
-    up[:, 2] += 0.2                                       # the formation 0.2 m high: each spring pushes down
+    assert QuanParams().centre == 'path'
+    law = _law(x, load, centre='dynamic', k_ij=0.5, c_ij=0.25, f_c=0.5)
+    assert np.allclose(law.x0, load[:2]) and np.allclose(law.xd0, 0.0)
     zero = np.zeros_like(x)
-    a_cmd = law.command(0, up, zero, load + [0, 0, 0.2], np.zeros(3), load, np.zeros(2), np.zeros(3), H_C, 0.1)[3]
-    assert a_cmd[2] < 0.0 and law.b_z[0] == 0.0           # the first tick sets the command
-    b = []
-    for _ in range(3):
-        law.command(0, up, zero, load + [0, 0, 0.2], np.zeros(3), load, np.zeros(2), np.zeros(3), H_C, 0.1)
-        b.append(law.b_z[0])
-    assert b[0] == pytest.approx(2.0 * a_cmd[2] * 0.1 * 0.1) and b[2] < b[1] < b[0] < 0.0
-    for _ in range(500):
-        law.command(0, up, zero, load + [0, 0, 0.2], np.zeros(3), load, np.zeros(2), np.zeros(3), H_C, 0.1)
-    assert law.b_z[0] == pytest.approx(-0.5)
-    law.start(x, np.zeros_like(x), load, load, H_C)
-    for _ in range(5):                                    # followed: v_z is what was commanded
-        v_d = law.command(1, x, np.tile(law.v_d[1], (4, 1)), load, np.zeros(3), load, np.zeros(2), np.zeros(3),
-                          H_C, 0.1)[0]
-    assert law.b_z[1] == pytest.approx(0.0, abs=1e-12)
+    p_d = load + [0.5, 0.0, 0.0]
+    h1 = law.forces(0, x, zero, load, np.zeros(3), p_d, np.zeros(2), H_C)[0]
+    assert np.allclose(h1, 0.0, atol=1e-12)                 # the centre has not moved yet: the hand-over's rest
+    for _ in range(20):
+        law.advance_nodes(x, zero, p_d, np.zeros(2), H_C, 0.1, x_L=load, xd_L=np.zeros(3))
+    assert 0.0 < law.x0[0] < 0.5 and law.xd0[0] > 0.0 and abs(law.x0[1]) < 1e-12
+    h1 = law.forces(0, x, zero, load, np.zeros(3), p_d, np.zeros(2), H_C)[0]
+    assert h1[0] > 0.0                                       # the springs pull the formation after its centre
+    free = _law(x, load, centre='dynamic', k_ij=0.0, c_ij=0.0, f_c=0.0)
+    for _ in range(10):
+        free.advance_nodes(x, zero, p_d, np.zeros(2), H_C, 0.1, x_L=load, xd_L=np.zeros(3))
+    pulled = _law(x, load, centre='dynamic', k_ij=2.0, c_ij=0.0, f_c=0.0)
+    for _ in range(10):
+        pulled.advance_nodes(x, zero, p_d, np.zeros(2), H_C, 0.1, x_L=load, xd_L=np.zeros(3))
+    assert pulled.x0[0] < free.x0[0]                         # the nodes hold it back (Eq. 16's reactions)
+    path = _law(x, load)
+    path.advance_nodes(x, zero, p_d, np.zeros(2), H_C, 0.1, x_L=load, xd_L=np.zeros(3))
+    assert np.allclose(path.x0, load[:2])

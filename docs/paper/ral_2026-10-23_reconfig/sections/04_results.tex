@@ -104,21 +104,22 @@ ring's tilt, peaking at 1.45$^\circ$ in the fold-in, against the 5$^\circ$ bar.}
 \end{figure}
 
 \paragraph{Eight to four and back (twin)}
-Release and rejoin compose into a chain, shown here in a single exploratory run. Eight carriers at 45$^\circ$ on 1\,m cables lift a 0.9\,kg ring of radius
-0.5\,m from the floor; every other carrier is released unannounced, in opposite pairs, down to a square of four, and
-the four freed carriers then rejoin one at a time back to eight (Fig.~\ref{fig:s_chain}). Over the eight events no
-drop or abort fired, each rejoin welded 15.1--19.4\,s after its start with its cable's end within 1.3--1.6\,cm of the
-plate through its blend, and the ring's tilt peaked at 3.35$^\circ$. Back at eight, the ring's position error was
-6.3\,mm (rms). The world runs slower than real time here, so this run is about the plan and the physics, not about
-timing; it flew one solver iteration per tick in a single exploratory run, and the claim runs at five iterations are
-pending (Section~\ref{sec:res_scale}).
+Release and rejoin compose into a chain. Eight carriers at 45$^\circ$ on 1\,m cables lift a 0.9\,kg ring of radius
+0.5\,m from the floor; every other carrier is released unannounced, one at a time and 15\,s apart, down to a square of four,
+and the four freed carriers then rejoin one at a time back to eight (Fig.~\ref{fig:s_chain}). In both claim runs, at five
+solver iterations per tick, no drop or abort fired; each release raised the ring's tilt by at most 2.9$^\circ$ with the
+planner resized within 0.4\,s, and each rejoin's planner grew within 16.2--19.4\,s of its start. Back at eight, scored from
+2\,s after the last rejoin's blend ends, the ring's tilt held its bar (0.95--0.99$^\circ$) but its position error, 6.4\,mm
+(rms) in both runs, missed its bar of 5.7\,mm: the last fold-in leaves the ring 36\,mm off, and it returns over about 5\,s.
+The world runs at about a quarter of real time here, so these runs are about the plan and the physics, not about timing
+(Section~\ref{sec:res_scale}).
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/fig_s_chain.pdf}
 \caption{Eight carriers take the 0.9\,kg, 0.5\,m ring through four unannounced releases down to four and four
-rejoins back to eight (twin, not real time). (a) The team size the planner flies; (b) the ring's tilt, peaking at
-3.35$^\circ$.}
+rejoins back to eight (twin, not real time; an earlier exploratory run at one iteration a tick, the claim runs at
+five described in the text). (a) The team size the planner flies; (b) the ring's tilt, peaking at 3.35$^\circ$.}
 \label{fig:s_chain}
 \end{figure}
 

@@ -357,3 +357,91 @@ decisions 22 Oct answer 16 (QUAD4's typed record feeds his launch):
 | `launch/partner_mission.launch.py` (ours) | `ring_cable_len` (typed, refused untyped on the rig) and `ring_cable_elev_deg` ('' = 60) replace the 'rig' table's carriers' cable for his bridge's carrier model and `carry_heights` | the table's 0.55 on 1 m cables put his carriers 0.23 m further in and 0.39 m lower than they fly |
 | `launch/partner_mission.launch.py` (ours) | his MPC's `cable_length` untyped = `magnet_drop_below_quad` - 0.044 (his QUAD2 calibration, as `m1_irl_pickup.launch.py`), rounded to 0.1 mm | was the table's 0.531 whatever the tether; 0.575 still gives 0.531 |
 | `bringup/graph_attach.py` (ours) | passes `ring_cable_len` (our `cable_len`), `ring_cable_elev_deg` (both ours alone: PARTNER_OWNED) and `magnet_drop_below_quad` = `proof_taut_len` + 0.003 unless partner_args types it (then checked against it, as before) | one record: the sheet types QUAD4's numbers once |
+
+## 28 Oct 2026: the new payload
+
+The 1.15 kg payload of 28 Oct (registry RIG-1028-payload; card docs/experiments/2026-10-28_attach_ambitious.md, its
+baseline): magnets at r 0.204, slots ~100 x 85 mm, outer r 0.255. His ring model took it only from the GEOMETRY table.
+
+| file | what | why | commit |
+|---|---|---|---|
+| `launch/partner_mission.launch.py` (ours) | GEOMETRY `rig_twin_L100_p115`: `ring_radius` 0.204, `ring_pitch_diameter` 0.408, `contact_attach_z_m` 0.037 (the _p115 worlds' plate face 0.025 + the 0.012 tip sphere, as 0.032 = 0.020 + 0.012), `ring_collision_outer_diameter` 0.51, the rest as `rig_twin_L100` | his ring bridge, carrier model and contact target on the new ring in the twin (worlds `tools/make_attach_layout_worlds_p115.py`) | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | GEOMETRY `rig` is the new ring (r 0.204, pitch 0.408, plates 0.09); the M2A ring's values are `rig_m2a`; `real:=true` takes `geometry:=rig` (default) or `rig_m2a`, the sim path refuses both | the real-world default is the new payload (real.yaml); the old ring stays reachable with configs/rig/ring_m2a.yaml | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | GEOMETRY key `ring_plate_diameter` (0.06 on the M2A-ring entries, 0.09 on the new ones) feeds `ring_plate_diameter_m` of his ring bridge in both paths (was 0.06 typed in the launch) | the new slots are ~100 x 85 mm; his node already takes the parameter, so nothing of his changes | (uncommitted) |
+| `test/test_partner_mission_rig.py`, `test/test_partner_mission_geometry.py` | the rig ring is 0.204 / 0.408 / 0.09, `rig_m2a` keeps 0.225 / 0.45 / 0.06, `rig_twin_L100_p115`'s values, `rig_m2a` refused in the sim | the tests follow the table | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | launch arg `approach_offset_z` (m, the tip above the plate where his approach ends), typed only in both paths ('' = his planner's 0.30, unchanged) | card 2026-10-28_attach_ambitious V1 (Wesley 28 Oct: the whole approach ~0.15 m above the ring): the arms type 0.30 and then 0.15; nothing of his changes untyped | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | launch args `max_swing_angle_rad` (his ego swing envelope) and `cooperative_tracking_half_m` (his carriers' tracking inflation, x y z), typed only, both paths, written into the backend override the launch generates (last file wins); untyped his files stand (swing 0.17 rad twin c1f6 / 0.2618 rig override, tracking 0.05 m) | card V1: with the tip 0.30 above plate 9 the C++ transit's end is inside his box model of the carriers' tethers on plates 0 and 6 (R2846 stalled 294 s; offline check -0.137 m); the card's re-fly typed swing 0.035 rad and tracking 0.03 m (end +0.023 m): R2847 welded, R2848 tripped his carriers' tracking gate (the same parameter, transfer_backend_node.cpp:1806-1819) and stalled; the second re-fly types the swing alone, 0.02 rad (end +0.018 m); his files and the rig defaults unchanged (Wesley / Tejen decide any default) | (uncommitted) |
+
+Not changed: `ring_collision_bottom_offset_m` -0.27 and `ring_structure_height_m` 0.07 (his ring envelope under the
+plates; the new payload is a flat ring with a net), and his planner's own `ring_plate_diameter_m` (M2B only, not set by
+this launch).
+
+## 28 Oct 2026: pickup_delivery's reattach on his C++ planner (Wesley: "we need to fix the avoidance"; card docs/experiments/2026-10-28_attach_ambitious.md)
+After the drop, pickup_delivery flew TRANSIT_TO_REATTACH on his Python transfer, which has no collision avoidance (the
+card's critic, item 2). The new switch puts it on his C++ planner, as floor_join's attach transit, with a fresh C1F.2b
+hand-over prepared in a hold at the end of CLEAR_DROP_ZONE (the drop leg's hand-over is spent). Default off.
+
+| file | what | why | commit |
+|---|---|---|---|
+| `tejen_mission/online_join_planner.py` | parameter `pickup_cpp_reattach` (default false) and `pickup_cpp_reattach_active` (pickup_delivery only; refuses without the C1F.1 shadow and C1F.2 authority); `cpp_reattach_active()` (floor_join's attach transit or this) replaces `attach_cpp_transit_active` in `c1f2_cpp_transit_phases`, the TRANSIT_TO_REATTACH entry check, its tip offset and its capture exit; `pickup_reattach_prepare_phase()` (CLEAR_DROP_ZONE once cleared) joins `c1f2_prepare_phase`, `c1f2_attach_transit_context` and the stationary hold reference; CLEAR_DROP_ZONE's exit, when on, resets the spent hand-over (`reset_c1f2_for_pickup_retry`) and runs `c1f2_climb_hold_handoff(..., exit_phase=TRANSIT_TO_REATTACH)`; `c1f2_climb_hold_handoff` takes an `exit_phase` (default the mission's takeoff exit, as before) | avoidance on the leg from the drop zone to the plate | (uncommitted) |
+| `test/test_pickup_cpp_reattach.py` (new) | off: the reattach stays Python; on: a C++ phase, prepared in the drop-zone hold, refused without a fresh hand-over, entered once prepared | | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | launch arg `pickup_cpp_reattach` (default false; sim path) passed to his node; when on: his backend's `require_payload_attached_for_enable` off (the empty reattach, as floor_join's), `drop_clear_height` = the drop approach's height and `attach_transit_clearance` raised to 0.05 m over his one (loaded) search floor (`_cpp_reattach_heights`, both checked by `check_search_floor`); typed values win. The rig path does not take it yet | his backend refused the empty hand-over and waited below its floor otherwise (the arms agent's reading of transfer_backend_node.cpp:2135-2145, :2726) | (uncommitted) |
+| `test/test_pickup_cpp_reattach.py` | + the launch: off passes nothing new; on, the hand-over and the transit end sit above his floor | | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | rig path: `contact_match_xy_threshold` takes a typed `match_xy` (0.05 otherwise, as before) | the gate replay (card, V2 replay): xy 0.08 opens 3 of the 5 stalled rig MATCH windows, all 5 with attach_twist zero | (uncommitted) |
+
+## 29 Oct 2026: the shared commitments' start (his backend's start_skew disable; card docs/experiments/2026-10-28_attach_ambitious.md)
+His backend refuses a carrier whose shared commitment starts after the carrier's latest state (`start_skew`,
+transfer_backend_node.cpp:1794-1799; his `cooperative_shared_start_skew_s` default 0 allows no skew, its maximum 0.05 s
+only for a carrier slower than 0.05 m/s) and then disables itself for good (COOPERATIVE_SHARED_INPUT_INVALID_DISABLED).
+His ring world refreshes the commitments in its timer tick before it publishes the same tick's carrier states
+(fake_cooperative_transport_world.py `timer_callback`), so a check that falls between the two sees all three carriers
+skewed by one tick: R2854 and R2855 stopped this way (all three carriers at once, R2855 at ROS 60.8 s). The new switch
+starts the commitments a little before the refresh, in our subclass; his node is untouched. Default off.
+
+| file | what | why | commit |
+|---|---|---|---|
+| `tejen_mission/ring_bridge.py` (ours) | parameter `shared_trajectory_backdate_s` (default 0): `refresh_shared_commitments` builds the commitments from that long before now and keeps the refresh period | a commitment that starts at or before the carriers' latest state passes his start-skew check without his speed exception; kept under 0.05 s so the first control point is still the measured ring (`compute_payload_state` takes the measurement within 0.05 s of now) | (uncommitted) |
+| `test/test_ring_bridge_backdate.py` (new) | off: his timing, and his race reproduced (a refresh one tick after the states fails his check); on (0.04, 50 Hz ticks): the start before the last tick, the period kept; the launch: untyped passes nothing, typed reaches the bridge (twin and rig paths) | | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | launch arg `commit_backdate` (s; '' = his timing), typed only, both paths, passed as the bridge's `shared_trajectory_backdate_s` | 0.04 is two ticks of the bridge's 50 Hz timer (his default `publish_rate_hz`; neither launch path sets it, so twin and rig alike; this row first said 100 Hz in the twin) | (uncommitted) |
+
+## 29 Oct 2026: pickup_cpp_reattach's activation (fix of the 28 Oct switch above)
+
+| file | what | why | commit |
+|---|---|---|---|
+| `tejen_mission/online_join_planner.py` | `pickup_cpp_reattach_applies(mission_mode, requested)` (module level) decides `pickup_cpp_reattach_active` from the launch mode `pickup_delivery`; it tested `self.mission.name == "pickup_delivery"`, but that mission is named `pickup_delivery_reattach`, so the switch never came on (29 Oct 06:10, found in R2863's phases: CLEAR_DROP_ZONE -> TRANSIT_TO_REATTACH "drop zone cleared", his Python transfer) | R2855 and R2863 flew the reattach on his Python transfer; the unit tests set the active flag directly and missed it | (uncommitted) |
+| `test/test_pickup_cpp_reattach.py` | + the launch mode turns it on although the mission is named `pickup_delivery_reattach` | the regression | (uncommitted) |
+
+Checked 29 Oct ~06:14: his whole test suite fails the same 24 tests with and without tonight's edits (his M2 IRL
+contracts, RViz configs, lab YAMLs: older than tonight); the new regression test fails without the fix and passes with it.
+
+## 29 Oct 2026: ours, not his: partner_args may type geometry (bringup)
+| file | what | why | commit |
+|---|---|---|---|
+| `src/bringup/bringup/graph_attach.py` (ours) | `geometry` left `PARTNER_OWNED`: the rig attach passes `geometry rig` (the 28 Oct ring) unless partner_args types `rig_m2a` | the Thursday sheet's revert line typed `geometry:=rig_m2a` in partner_args, which the launch refused as owned | (uncommitted) |
+| `src/bringup/test/test_real_mode_launches.py` | + his ring radius 0.204 by default, 0.225 with `geometry:=rig_m2a` typed | | (uncommitted) |
+
+## 29 Oct 2026 (lab, ~08:30): his carriers' tracking latch, typed off (Tejen agreed to the overnight changes)
+| file | what | why | commit |
+|---|---|---|---|
+| `launch/partner_mission.launch.py` (ours) | launch arg `tracking_check` ('' or 'off'), both paths: 'off' writes `cooperative_tracking_safety_enabled: false` into the backend override the launch generates; his collision inflation by the tracking half-extents is unchanged; untyped his files stand (on) | his own IRL configs run it off (c1f_irl_m1_virtual_ring.yaml); with it on, a carrier more than 5 cm off its published path disables his backend for good (R2830, R2831, R2848, R2860, R2864); the critic's likelier rig latch | (uncommitted) |
+| `test/test_attach_cpp_transit.py` | + untyped nothing; 'off' sets only that flag and reaches the backend's override file | | (uncommitted) |
+
+## 29 Oct 2026 (lab, ~10:05): his climb-end hand-over on the rig, and his climb speed
+| file | what | why | commit |
+|---|---|---|---|
+| `launch/partner_mission.launch.py` (ours) | rig path: `c1f2_prepare_max_lift_drift_m` 0.30 and `c1f2_prepare_settle_speed_mps` 0.12 (the twin path's values; his defaults 0.15 m, 0.08 m/s) | RIG-1029-sq3: at the climb end QUAD4 on its 1 m cable hovered at 0.08-0.09 m/s, so his stationary hand-over to the C++ transit kept "leaving the prepare bounds" and was never granted | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | launch arg `climb_speed` (m/s), typed only, both paths, his planner's `takeoff_speed` (his 0.15) | Wesley: his TAKEOFF climb took 24 s for 3.1 m (sq2_5); the sheet types 0.3 | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | rig path: a typed `minimum_search_z_m` must sit at least 0.10 m under the nominal climb end (`check_search_floor(..., margin=)`) | RIG-1029-sq4_5: with 2.36 typed (0.01 under the nominal 2.37) the ring rode 3 cm low and QUAD4 held at 2.33 m: his backend WAITING_ABOVE_SEARCH_FLOOR for the whole flight, no plan ever tried | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | rig path, typed only: `cpp_authority:=false` sets his `c1f2_cpp_authority_enabled` false (his loaded drop leg on his Python transfer, level at the lift height); `end_after_drop:=true` sets his `end_after_drop` (QUAD4 holds after the drop until LAND) | the drop-off (k1) without his C++ hand-over and search floor that stalled sq3 and sq4_5; no reattach after the drop (the descents aborted 6 of 6 in sq5_2) | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | rig path, typed only: `pickup_xy` -> his `pickup_alignment_capture_xy_m` (his 0.025), `pickup_speed` -> `pickup_alignment_max_relative_speed_mps` (his 0.07) | RIG-1029-k1_4: SETTLE_ABOVE_PICKUP for 26 s; the magnet on the 1 m cable sat 4.1 cm (median) off the object, inside 2.5 cm 17 % of the time, so his tiered capture never fired (his low/high tiers already 0.10/0.12 on the rig) | (uncommitted) |
+
+## 29 Oct 2026 (~13:20, with Tejen at the laptop): his MPC's command execution, its own switch (not flown)
+Tejen's review of sq2_5 / sq5_2 / k1_4 (docs/tejen/reply_2026-10-29/FOLLOWUP_1310.md): all three flew oct10 with
+`command_execution: first_stage_endpoint` at ~30 Hz; his first recommendation is the elapsed-interval correction
+without the oct14 weights or bounds.
+| file | what | why | commit |
+|---|---|---|---|
+| `src/tejen_mpc/tejen_mpc/main.py` | parameter `mpc_command_execution` ('profile' default: unchanged; 'partial_step': the elapsed-interval send path under any profile; 'endpoint': the reverse), set right after the profile; a warn line when not 'profile' | the send path was tied to oct14 (`mpc_partial_step_execution = mpc_profile == 'oct14'`); now it can be tested alone | (uncommitted) |
+| `src/tejen_mpc/test/test_mpc_profile.py` | + typed partial_step under oct10, endpoint under oct14, untyped unchanged (one log line), unknown refused | | (uncommitted) |
+| `src/tejen_mission/launch/partner_mission.launch.py` (ours) | launch arg `mpc_command_execution` (default 'profile'), both paths, to his MPC | to type it in partner_args | (uncommitted) |
+Not flown; Wesley's call, after a twin check.

@@ -858,7 +858,8 @@ NET_PLANNER_KEYS = ('auto_network_handover', 'auto_handover_settle_s', 'diss_ki_
                     'diss_trim_share_weighted', 'handover_blend_s', 'net_damp_relative', 'net_twin_geometry',
                     'net_hold_carry', 'net_law', 'quan_k_ij', 'quan_c_ij', 'quan_k_i', 'quan_c_i', 'quan_fc',
                     'quan_hc_m', 'quan_range_m', 'quan_v_max', 'quan_nodes', 'quan_vcmd', 'quan_node_mass',
-                    'quan_rod_mass', 'quan_fz', 'quan_fz_ki', 'quan_fz_max')
+                    'quan_rod_mass', 'quan_aexp', 'quan_centre', 'quan_centre_mass', 'quan_centre_kp',
+                    'quan_centre_kd')
 VEL_KEYS = ('control_mode', 'vel_kp_pos', 'vel_kv', 'vel_ki', 'vel_k_att', 'vel_swing_k')
 
 
@@ -900,13 +901,13 @@ def test_the_network_flies_the_port_unless_net_law_quan_and_world_c_params_reach
     g = _by_name(sim('network', params_file=os.path.join(twin, 'c_net_quan.yaml')))
     p = g['/dissipative_planner']['params']
     assert p['net_law'] == 'quan' and p['quan_hc_m'] == 3.41 and p['quan_range_m'] == 2.0
-    assert p['quan_vcmd'] == 'measured' and p['quan_nodes'] in ('algebraic', 'dynamic') and p['quan_rod_mass'] == 0.075
-    assert p['quan_fz'] == 'model' and p['quan_fz_ki'] == 2.0
+    assert p['quan_vcmd'] == 'measured' and p['quan_nodes'] in ('algebraic', 'dynamic') and p['quan_rod_mass'] == 0.055
+    assert (p['quan_aexp'], p['quan_centre']) == ('path', 'path') and p['quan_centre_mass'] == 2.0
     assert p['diss_ki_load'] == 0.0
     for i in range(4):
         t = g[f'/tracker_{i}']['params']
         assert t['vel_kp_pos'] == 0.0 and t['vel_ki'] == 0.0 and t['drop_tilt_deg'] == 180.0
-        assert t['max_payload_tilt_deg'] == 180.0
+        assert t['max_payload_tilt_deg'] == 180.0 and t['vel_k_att'] == 8.0
     g = _by_name(sim('dissipative', params_file=os.path.join(twin, 'c_compare_hubcom.yaml')))
     assert all(g[f'/tracker_{i}']['params']['max_payload_tilt_deg'] == 180.0 for i in range(4))
     g = _by_name(rig('dissipative'))
@@ -1149,6 +1150,19 @@ def test_combined_rig_with_his_nodes(dds):
     assert sum(n['executable'] == 'elrs_interface' for n in nodes) == 4
     # his launch saw none of ours (critic 11): his planner kept his own vehicle label, not our drone ids
     assert p['vehicle_id'] == 'drone_0' and not [n for n in nodes if n['executable'] == 'elrs_interface_irl']
+
+
+def test_combined_rig_his_ring_is_the_new_one_unless_partner_args_types_the_old(dds):
+    """28 Oct: his ring model on the rig is the 1.15 kg ring (geometry rig); the sheet's revert types
+    geometry:=rig_m2a in partner_args (was refused as owned until 29 Oct)."""
+    kw = dict(enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01, weld_point_z=0.031,
+              attach_cable_len=0.54, cable_len=0.55, partner_nodes=True, proof_taut_len=0.577)
+    new = _by_name(rig('attach', partner_args='magnet_drop_below_quad:=0.582 mpc_thrust_ratio:=21.5', **kw))
+    old = _by_name(rig('attach', partner_args='geometry:=rig_m2a magnet_drop_below_quad:=0.582 mpc_thrust_ratio:=21.5',
+                       **kw))
+    ring = '/fake_cooperative_transport_world'
+    assert new[ring]['params']['bridge_attach_radius_m'] == 0.204
+    assert old[ring]['params']['bridge_attach_radius_m'] == 0.225
 
 
 @pytest.mark.parametrize('args,match', [
@@ -1585,3 +1599,16 @@ def test_planner_cpus_refuse_a_list_taskset_cannot_read(monkeypatch):
     monkeypatch.setenv('MDC_PLANNER_CPUS', 'P-cores')
     with pytest.raises(RuntimeError, match='MDC_PLANNER_CPUS'):
         rig('mpc', thrust_ratio=24)
+
+
+def test_rig_trackers_notch_the_measured_pull_at_5_3_hz(dds):
+    """Wesley 29 Oct (RIG-1029-sq2_4): every rig tracker notches the measured pull at 5.3 Hz, the low-pass off; both typed."""
+    kw = dict(num_drones=4, attach_azimuths_deg='0,90,180,270', target_z=1.0, lift_ramp_vel=0.15, load_traj='hover')
+    on = _by_name(rig('dissipative', **kw))
+    lp = _by_name(rig('dissipative', cable_notch_hz=0.0, cable_lp_hz=2.0, cable_lp_order=2, **kw))
+    trk = sorted(k for k in on if 'tracker' in k)
+    assert len(trk) == 4
+    assert [(on[k]['params']['cable_notch_hz'], on[k]['params']['cable_notch_q'], on[k]['params']['cable_lp_hz'])
+            for k in trk] == [(5.3, 1.0, 0.0)] * 4
+    assert [(lp[k]['params']['cable_notch_hz'], lp[k]['params']['cable_lp_hz'], lp[k]['params']['cable_lp_order'])
+            for k in trk] == [(0.0, 2.0, 2)] * 4

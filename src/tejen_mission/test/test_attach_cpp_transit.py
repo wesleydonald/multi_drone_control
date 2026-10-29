@@ -181,6 +181,27 @@ def test_the_backend_gets_the_carriers_rods_and_quad4s_own_cable():
     assert 'cooperative_attached_tether_enabled' not in params and params['require_payload_attached_for_enable']
 
 
+def test_tracking_check_off_turns_his_tracking_latch_off_and_nothing_else():
+    """tracking_check:=off (29 Oct, Tejen agreed): his IRL policy, the carriers' tracking no longer latches his backend
+    off; untyped, his files stand."""
+    from launch import LaunchContext
+    m = launch_module()
+
+    def margins(**typed):
+        ctx = LaunchContext()
+        ctx.launch_configurations.update(
+            {'max_swing_angle_rad': '', 'cooperative_tracking_half_m': '', 'tracking_check': '', **typed})
+        return m._backend_margins(ctx)
+    assert margins() == {}
+    off = margins(tracking_check='off')
+    assert off == {'cooperative_tracking_safety_enabled': False}
+    f = m._backend_overrides('base.yaml', m.GEOMETRY['rig_twin'], rod=0.59, floor_join=True, carrier_model='tether',
+                             margins=off).split(',')[1]
+    params = yaml.safe_load(Path(f).read_text())['dynamic_planner_transfer_backend']['ros__parameters']
+    assert params['cooperative_tracking_safety_enabled'] is False
+    assert 'cooperative_tracking_half_x_m' not in params                       # his inflation stays his
+
+
 def test_ring_bridge_numbers_the_carriers_plates_as_his_planner_does():
     stub = SimpleNamespace(_carrier_azimuths=lambda: [270.0, 30.0, 150.0])   # rig_twin, counter-clockwise
     assert RingBridge.carrier_plates(stub) == [9, 1, 5]

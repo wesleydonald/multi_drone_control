@@ -353,6 +353,8 @@ class MotionCapturePublisher(Node):
         self.magnet_tip_body_id = None if tip < 0 else tip
         # extra bodies, each to its own topic ('' = none, the default)
         self.extra_bodies = parse_extra_bodies(self.declare_parameter('extra_bodies', '').value)
+        # the drones the velocity filter below covers ([] = every drone; attach mode leaves its newcomer out)
+        self.vel_filter_drones = list(self.declare_parameter('vel_filter_drones', [-1]).value)
         # map -> drone_<id> on every drone frame; the rig's RViz uses fleet_viz's drone_<i>_mocap frames instead, so
         # real_io_launch turns it off (14 Oct load cut: ~360 TF messages/s from the node every pose passes through)
         self.publish_drone_tf = bool(self.declare_parameter('publish_drone_tf', True).value)
@@ -457,10 +459,17 @@ class MotionCapturePublisher(Node):
                               for drone_id in self.body_to_drone.values()}
         extra_parsers = {rb: ParseData() for rb in self.extra_bodies}
         # card 2026-10-14_tracker_timing: another velocity filter on the carrier drones only (the ring, tip, ball and
-        # QUAD4 feed his stack, our planner and the cable estimate, and keep the old filter)
-        mode = os.environ.get('MDC_MOCAP_VEL_FILTER', 'ema').strip()
+        # QUAD4 feed his stack, our planner and the cable estimate, and keep the old filter). slope is the default
+        # since Wesley's decision of 28 Oct (hE1/hS1); MDC_MOCAP_VEL_FILTER=ema flies the old filter
+        mode = os.environ.get('MDC_MOCAP_VEL_FILTER', 'slope').strip()
         if mode != 'ema':
-            drones = [int(v) for v in os.environ.get('MDC_MOCAP_VEL_DRONES', '0,1,2').split(',') if v.strip()]
+            typed = os.environ.get('MDC_MOCAP_VEL_DRONES', '').strip()
+            if typed:
+                drones = [int(v) for v in typed.split(',') if v.strip()]
+            elif self.vel_filter_drones and self.vel_filter_drones != [-1]:
+                drones = [int(v) for v in self.vel_filter_drones]
+            else:
+                drones = sorted(self.drone_parsers)
             frames = int(os.environ.get('MDC_MOCAP_VEL_FRAMES', '4'))
             for d in drones:
                 if d in self.drone_parsers:

@@ -60,8 +60,9 @@ RIG_PUCK_MASS = 0.06
 # his rig nodes start this long after ours (our trackers and planner load their solvers first; a start
 # mid-load starved them, R0604)
 PARTNER_DELAY_S = 5.0
-# what this launch decides for his rig launch (partner_args may not set them)
-PARTNER_OWNED = ('real', 'geometry', 'contact_attach', 'contact_target_z', 'contact_target_xy', 'ring_cable_len',
+# what this launch decides for his rig launch (partner_args may not set them); geometry is 'rig' (the 28 Oct ring)
+# unless partner_args types rig_m2a (the old ring, configs/rig/ring_m2a.yaml; his launch refuses anything else)
+PARTNER_OWNED = ('real', 'contact_attach', 'contact_target_z', 'contact_target_xy', 'ring_cable_len',
                  'ring_cable_elev_deg')
 # combined rig: proof_taut_len is the measured taut body-to-tip minus this; QUAD4's rod body-to-tip and his
 # magnet_drop_below_quad must agree with that taut length within QUAD4_LEN_TOL_M
@@ -439,6 +440,10 @@ def attach(context, launch_dir, profile_vals):
                          'ref_time_shift': b('ref_time_shift'),
                          'ground_idle': b('ground_idle'),
                          'cable_accel_cap': f('cable_accel_cap'),
+                         'cable_lp_hz': f('cable_lp_hz'),
+                         'cable_lp_order': ParameterValue(LaunchConfiguration('cable_lp_order'), value_type=int),
+                         'cable_notch_hz': f('cable_notch_hz'),
+                         'cable_notch_q': f('cable_notch_q'),
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': kt,
@@ -767,6 +772,10 @@ def attach(context, launch_dir, profile_vals):
                      'ref_time_shift': b('ref_time_shift'),
                          'ground_idle': b('ground_idle'),
                      'cable_accel_cap': f('cable_accel_cap'),
+                     'cable_lp_hz': f('cable_lp_hz'),
+                     'cable_lp_order': ParameterValue(LaunchConfiguration('cable_lp_order'), value_type=int),
+                     'cable_notch_hz': f('cable_notch_hz'),
+                     'cable_notch_q': f('cable_notch_q'),
                      'payload_rest_z': f('payload_rest_z'),
                      'takeoff_spool_s': 0.0,
                      'thrust_ratio': kt,

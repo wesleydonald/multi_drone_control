@@ -1,0 +1,3 @@
+# 29 Oct rig (Wesley): the trackers' measured cable pull through a 2 Hz first-order low-pass (RIG-1029-h4: the 1 m ring
+# bent at 5.3 Hz with every tracker feeding its own pull back one tick later); everything else the real.yaml defaults
+cable_lp_hz: 2.0

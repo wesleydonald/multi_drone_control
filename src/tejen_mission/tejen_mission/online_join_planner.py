@@ -158,6 +158,13 @@ TAKEN_BACK = MissionPhase.TAKEN_BACK.value
 LANDING = MissionPhase.LANDING.value
 LANDED_DISARMED = MissionPhase.LANDED_DISARMED.value
 
+
+def pickup_cpp_reattach_applies(mission_mode: str, requested: bool) -> bool:
+    """pickup_cpp_reattach (multi_drone_control) applies to the pickup_delivery launch mode. Its mission is named
+    pickup_delivery_reattach, so the mode decides, not the mission name (R2855 and R2863 flew without it)."""
+    return bool(requested and str(mission_mode).strip().lower() == "pickup_delivery")
+
+
 # contact_attach: the phases from which the fleet's attach confirmation ends the rejoin
 CONTACT_REJOIN_PHASES = frozenset({
     MissionPhase.TRANSIT_TO_REATTACH,
@@ -558,6 +565,10 @@ class OnlineJoinPlanner(Node):
         # tether through a carrier
         self.attach_cpp_transit = bool(self.declare_parameter("attach_cpp_transit", False).value)
         self.attach_transit_clearance = float(self.declare_parameter("attach_transit_clearance", 0.85).value)
+        # pickup_delivery's flight from the drop zone to the plate on the C++ planner as well (default off;
+        # multi_drone_control, Wesley 28 Oct: "we need to fix the avoidance"): a fresh C1F.2b hand-over at the end of
+        # CLEAR_DROP_ZONE, then TRANSIT_TO_REATTACH avoiding the carriers, as floor_join's attach transit
+        self.pickup_cpp_reattach = bool(self.declare_parameter("pickup_cpp_reattach", False).value)
         self.mission = mission_for_mode(self.mission_mode, attachment_policy=POLICY if self.m2b_progressive else "legacy",
                                         contact_attach=self.contact_attach, attach_cpp_transit=self.attach_cpp_transit)
         self.phase = self.mission.initial_phase
@@ -576,6 +587,11 @@ class OnlineJoinPlanner(Node):
         if self.attach_cpp_transit_active and not (self.c1f1_shadow_transfer_enabled
                                                    and self.c1f2_cpp_authority_enabled):
             raise ValueError("attach_cpp_transit needs c1f1_shadow_transfer_enabled and c1f2_cpp_authority_enabled")
+        self.pickup_cpp_reattach_active = pickup_cpp_reattach_applies(self.mission_mode, self.pickup_cpp_reattach)
+        if self.pickup_cpp_reattach_active and not (self.c1f1_shadow_transfer_enabled
+                                                    and self.c1f2_cpp_authority_enabled):
+            raise ValueError("pickup_cpp_reattach needs c1f1_shadow_transfer_enabled and c1f2_cpp_authority_enabled")
+        self.pickup_reattach_prepare_started = False
         self.is_delivery_rejoin = self.mission.name == "delivery_rejoin"
         self.takeoff_climb_height: Optional[float] = None
         self.delivery_object_start_z: Optional[float] = None
@@ -5117,7 +5133,19 @@ class OnlineJoinPlanner(Node):
             )
             or (getattr(self, 'is_delivery_rejoin', False) and self.phase == MissionPhase.TAKEOFF)
             or (getattr(self, 'attach_cpp_transit_active', False) and self.phase == MissionPhase.TAKEOFF)
+            or self.pickup_reattach_prepare_phase()
         )
+
+    def pickup_reattach_prepare_phase(self) -> bool:
+        """pickup_cpp_reattach: the hold at the end of CLEAR_DROP_ZONE in which the C++ attach transit is prepared."""
+        return bool(getattr(self, 'pickup_cpp_reattach_active', False)
+                    and getattr(self, 'pickup_reattach_prepare_started', False)
+                    and self.phase == MissionPhase.CLEAR_DROP_ZONE)
+
+    def cpp_reattach_active(self) -> bool:
+        """TRANSIT_TO_REATTACH flies on the C++ planner: floor_join's attach transit or pickup_cpp_reattach."""
+        return bool(getattr(self, 'attach_cpp_transit_active', False)
+                    or getattr(self, 'pickup_cpp_reattach_active', False))
 
     def c1f2_initial_prepare_active(self) -> bool:
         return bool(
@@ -5138,14 +5166,17 @@ class OnlineJoinPlanner(Node):
     def c1f2_cpp_transit_phases(self) -> set:
         """The phases the C++ transfer owns once its authority is established."""
         phases = {MissionPhase.TRANSIT_TO_DROP_POINT, MissionPhase.M2_CPP_TRANSIT_CAPTURE}
-        if getattr(self, 'attach_cpp_transit_active', False):
+        if self.cpp_reattach_active():
             phases.add(MissionPhase.TRANSIT_TO_REATTACH)
         return phases
 
     def c1f2_attach_transit_context(self) -> bool:
         """floor_join's C++ flight to the plate: its climb hold (prepare) or TRANSIT_TO_REATTACH."""
-        return bool(getattr(self, 'attach_cpp_transit_active', False)
-                    and self.phase in {MissionPhase.TAKEOFF, MissionPhase.TRANSIT_TO_REATTACH})
+        return bool((getattr(self, 'attach_cpp_transit_active', False)
+                     and self.phase in {MissionPhase.TAKEOFF, MissionPhase.TRANSIT_TO_REATTACH})
+                    or (getattr(self, 'pickup_cpp_reattach_active', False)
+                        and (self.pickup_reattach_prepare_phase()
+                             or self.phase == MissionPhase.TRANSIT_TO_REATTACH)))
 
     def attach_transit_body_target(self) -> TargetState:
         """The C++ attach transit's body target: above the plate at attach_transit_clearance (tip), moving with it."""
@@ -6059,7 +6090,7 @@ class OnlineJoinPlanner(Node):
                     "C1F.2b authority source switched stationary Python hold -> C++ "
                     "at TRANSIT_TO_DROP_POINT entry."
                 )
-        elif new_phase == MissionPhase.TRANSIT_TO_REATTACH and getattr(self, 'attach_cpp_transit_active', False):
+        elif new_phase == MissionPhase.TRANSIT_TO_REATTACH and self.cpp_reattach_active():
             if (
                 not self.c1f2_handoff_ready
                 or not self.c1f2_authority_acknowledged
@@ -7075,7 +7106,7 @@ class OnlineJoinPlanner(Node):
             MissionPhase.SETTLE_ABOVE_DROP_POINT,
         }:
             return np.array([0.0, 0.0, self.drop_approach_clearance])
-        if self.phase == MissionPhase.TRANSIT_TO_REATTACH and getattr(self, 'attach_cpp_transit_active', False):
+        if self.phase == MissionPhase.TRANSIT_TO_REATTACH and self.cpp_reattach_active():
             return np.array([self.approach_offset_x, self.approach_offset_y, self.attach_transit_clearance])
         if self.phase == MissionPhase.DROP_OBJECT:
             return np.array([0.0, 0.0, self.drop_release_clearance])
@@ -7576,7 +7607,7 @@ class OnlineJoinPlanner(Node):
         )
         self.c1f2_climb_hold_handoff(climbed, 'climb', 'the stationary climb hold')
 
-    def c1f2_climb_hold_handoff(self, climbed: bool, what: str, where: str) -> None:
+    def c1f2_climb_hold_handoff(self, climbed: bool, what: str, where: str, exit_phase=None) -> None:
         """A floor start's C1F.2b handoff in TAKEOFF, as LIFT_OBJECT's (which stays as it is: a source contract slices
         it): once climbed, latch the measured position and hold it, settle, then leave for the mission's takeoff exit
         on a prepared C++ transfer."""
@@ -7640,7 +7671,7 @@ class OnlineJoinPlanner(Node):
                 'Re-latched measured hold position; enabling C++ preparation.')
             return
         if self.c1f2_handoff_ready:
-            self.transition_to(self.mission.takeoff_exit, f'C1F.2b C++ transfer prepared from {where}')
+            self.transition_to(exit_phase or self.mission.takeoff_exit, f'C1F.2b C++ transfer prepared from {where}')
 
     def update_preloaded_navigation(self) -> None:
         """Operator-preloaded entry; no fabricated pickup, lift or proof authority."""
@@ -8232,6 +8263,16 @@ class OnlineJoinPlanner(Node):
             return
 
         if self.phase == MissionPhase.CLEAR_DROP_ZONE:
+            if (getattr(self, 'pickup_cpp_reattach_active', False) and not getattr(self, 'end_after_drop', False)):
+                # pickup_cpp_reattach: once clear, a fresh hand-over (the drop leg's is spent), then the C++ transit
+                if not self.pickup_reattach_prepare_started:
+                    if not (self.rate_profile().complete(elapsed) and abs_z_error < self.pickup_z_tolerance):
+                        return
+                    self.reset_c1f2_for_pickup_retry()
+                    self.pickup_reattach_prepare_started = True
+                self.c1f2_climb_hold_handoff(True, 'drop-zone clearance', 'the drop-zone clearance hold',
+                                             exit_phase=MissionPhase.TRANSIT_TO_REATTACH)
+                return
             if self.rate_profile().complete(elapsed) and abs_z_error < self.pickup_z_tolerance:
                 if getattr(self, 'end_after_drop', False):
                     return  # Continue the existing target-relative clearance hold until manual LAND.
@@ -8242,7 +8283,7 @@ class OnlineJoinPlanner(Node):
             return
 
         if self.phase == MissionPhase.TRANSIT_TO_REATTACH:
-            if getattr(self, 'attach_cpp_transit_active', False):
+            if self.cpp_reattach_active():
                 # attach_cpp_transit: the C++ transit ends in its capture region above the plate; his approach (Python)
                 # then comes down to the approach height
                 if self.condition_true_for(
@@ -8635,6 +8676,7 @@ class OnlineJoinPlanner(Node):
                 or (getattr(self, 'preloaded_navigation', False) and self.phase == MissionPhase.TAKEOFF)
                 or (getattr(self, 'is_delivery_rejoin', False) and self.phase == MissionPhase.TAKEOFF)
                 or (getattr(self, 'attach_cpp_transit_active', False) and self.phase == MissionPhase.TAKEOFF)
+                or self.pickup_reattach_prepare_phase()
                 or (
                     self.is_m2b
                     and self.m2b_commissioning_stage == "b2"

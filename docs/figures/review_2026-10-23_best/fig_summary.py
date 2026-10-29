@@ -36,8 +36,9 @@ def cells(table):
 
 
 def name(source, cable):
-    kind = 'rods' if source == 'rig' and max(cable) < 0.8 else 'cables'
-    return f'{source}, ' + ' and '.join(f'{c:g}' for c in sorted(cable)) + rf'\,m {kind}'
+    kind = 'cables'     # every quad hangs on a cable, real world and simulation (Wesley 28 Oct)
+    shown = {'rig': 'real world', 'twin': 'simulation'}[source]
+    return f'{shown}, ' + ' and '.join(f'{c:g}' for c in sorted(cable)) + rf'\,m {kind}'
 
 
 def digits(ax, val):

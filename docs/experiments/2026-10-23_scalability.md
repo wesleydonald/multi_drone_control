@@ -870,3 +870,181 @@ first passes of 1-5 are ~2.6 h of slot time (~1.3 h on two 12-core slots); a cla
      variable, or split it out?
    - The lap-end hold is 3 s, a window for the ATTACH; the rejoin then holds the path itself. A release inside a
      lap-end hold cuts it to the resize's 1.5 s, as every resize hold assigns today.
+
+## Results, N and the harder cases (23 Oct 22:40, lab batch 18: R2764-R2779)
+*Scored against §5 N as frozen (~07:25) with the revisions made before any claim run: N1 and N4 against
+`s4_hover_L100_it5` (14:37), N4's window from the last REJOIN_BLEND_OVER (14:32), N2 against 8.83 deg (15:12). Nothing was
+re-set. The scorer is `tools/s_metrics.py` as fixed at 14:33 (node logs on the runner's clock, cut to run.csv). A
+scratchpad wrapper adds the rejoin stages, the pairs' second resize and the task and lap checks. Clock-free path errors
+come from `tools/n2_bands.py` (b22). Numbers: `results/analysis/s_n_twin_2026-10-23.json`. Registry rows R2764-R2779.*
+
+**Validity: all 16 runs are valid, and none is void.**
+- One tree: week7 63b504f. Each run's git_diff.patch touches docs and the registry only. One host: the lab PC, 2 slots of
+  12 cores.
+- RTF was 0.216-0.250 in every run, so all 16 are flagged under §9's 0.25. Every RELEASE resized the planner within
+  0.40 s (a pair within 0.59 s), so no release was missed.
+- Late ticks were at most 0.22 % (planner) and 0.01 % (trackers). There were no failed solves, and no published tick had
+  res_eq > 1e-2 or no residual logged.
+- Every run flew 5 iterations: the launch log says "5 SQP iterations per tick" at n = 2-8, and sqp_calls is 5 on every
+  tick. The velocity filter was ema on all eight mocaps. The params file was `s_chain_pair.yaml` (sha1 94df7942).
+- The runner's param read-back missed one node in six runs: /tracker_2 (R2765), /tracker_6 (R2768, R2779), /tracker_5
+  (R2772) and /dissipative_planner (R2771, R2778). Their launch logs confirm the iteration count and the laps.
+- **One tree, strictly: for Wesley.** The comparator R2700 / R2701 flew on be34f95 + patch 537551ba. 63b504f adds the
+  case 6 and 7 code (`dissipative_node.py`, `planner_node.py`, `load_trajectory.py`, `ring_bridge.py`, the launch and the
+  runner) behind switches. The claim runs' read-back shows those switches off: rejoin_task false, traj_laps 1,
+  traj_lap_hold_s 0.
+- The 8-quad 5-iteration solve takes 120-210 ms wall at p50 (p95 219-245 ms). It keeps its 0.1 s sim period only
+  because RTF is ~0.22: twin only, not real time.
+
+**N1's comparator at 5 iterations** (s_metrics n1 on R2700 / R2701: 1.341 / 1.320 mm, 0.251 / 0.199 deg). The bars are
+position <= 2 x 1.33 + 3 = **5.66 mm** and tilt <= 2 x 0.225 + 1 = **1.45 deg**, and never above 25 mm / 6 deg. The
+frozen it1 values, 5.72 mm / 1.44 deg, give the same verdicts below.
+
+### The claims
+
+| cell | run | N1 RMSE / tilt peak | N4 RMSE / tilt peak (from the last blend + 2 s) | n4_resize (original window) | late planner / tracker | published > 1e-2 | lift tilt peak / RMSE / worst |
+|---|---|---|---|---|---|---|---|
+| hover | R2764 | 1.32 mm / 0.056 deg | - | - | 0.00 / 0.00 % | 0 of 541 | 0.10 deg / 24.7 / 66.8 mm |
+| hover | R2765 | 1.26 mm / 0.064 deg | - | - | 0.13 / 0.00 % | 0 of 542 | 0.10 deg / 24.5 / 66.9 mm |
+| chain4back | R2766 | 1.31 mm / 0.06 deg | **6.36 mm** / 0.99 deg | 18.91 mm / 1.56 deg | 0.11 / 0.00 % | 0 of 2574 | 0.12 deg / 24.5 / 66.4 mm |
+| chain4back | R2767 | 0.93 mm / 0.03 deg | **6.35 mm** / 0.95 deg | 18.95 mm / 1.58 deg | 0.14 / 0.01 % | 0 of 2613 | 0.11 deg / 24.7 / 66.6 mm |
+| (s4_hover_L100_it5, for the lift) | R2700 / R2701 | 1.34 / 1.32 mm, 0.25 / 0.20 deg | - | - | - | - | 1.77 / 1.87 deg, 19.0 / 20.0 mm |
+
+| chain4back | R2766 | R2767 |
+|---|---|---|
+| N2 release /drone_1, 5, 3, 7: peak from the 5 s mean before (deg) | 1.91, 1.88, 2.47, 2.60 | 1.86, 1.85, 2.69, 2.90 |
+| N2 settled, 5 s before the next event (deg) | 1.06, 0.04, 1.21, 0.04 | 1.05, 0.05, 1.20, 0.05 |
+| N2 planner at n-1 after the RELEASE (s) | 0.38, 0.38, 0.28, 0.38 | 0.37, 0.37, 0.27, 0.37 |
+| N3 rejoin /drone_7, 3, 5, 1: planner one bigger after the ATTACH (s) | 16.18, 17.70, 17.40, 17.30 | 16.17, **19.40**, 18.50, 18.30 |
+| N3 tilt peak (deg) | 1.37, 1.42, 1.27, 1.32 | 1.39, 1.44, 1.29, 1.28 |
+| N3 settled (deg) | 1.27, 0.11, 1.18, 0.04 | 1.26, 0.10, 1.16, 0.04 |
+| rejoin stages: ON_PLATE after START (s) / joint (s) / rod end through the blend (cm) / fold-in peak, weld..+15 s (deg) | 16.1-17.6 / 0.01-0.05 / <= 1.5 / 1.11-1.74 | 16.1-19.3 / 0.02-0.04 / <= 1.5 / 1.18-1.75 |
+| carriers' throttle p95, worst stage / time at the 0.8 cap | 0.646 / 0 % | 0.646 / 0 % |
+
+| bar | hover (R2764 / R2765) | chain4back (R2766 / R2767) |
+|---|---|---|
+| N1 <= 5.66 mm, <= 1.45 deg | holds | holds |
+| N2 n-1 within 2.0 s; peak <= 8.83 and <= 15 deg; settled <= 3 deg; no drop | does not apply | holds at all 8 releases (worst peak 2.90 deg) |
+| N3 one bigger within 20 s; peak <= 10 deg; settled <= 3 deg | does not apply | holds at all 8 rejoins (closest: R2767 /drone_3 at 19.40 s) |
+| N4 back at 8, from the last blend + 2 s, inside N1's bars | does not apply | **misses on position in both** (6.36 / 6.35 > 5.66 mm); tilt holds (0.99 / 0.95 deg) |
+| N4, the original window (reported) | does not apply | misses both (18.9 mm, 1.56 / 1.58 deg) |
+| N5 late <= 1 %, no failed solve | holds | holds |
+| N6 no published tick with res_eq > 1e-2 or none logged | holds | holds |
+
+**Verdict.**
+- **The hover cell HOLDS.** Eight quads hover the ring at 1.3 mm and 0.06 deg, inside N1 in both repeats.
+- **The chain cell DOES NOT HOLD.** N4 misses on position in both valid repeats, by 0.7 mm. Every other bar holds,
+  N2 and N3 with wide margins. By §5 (a bar missed in a valid run) the chain claim is falsified on N4.
+- What the miss is, in plain words: the last fold-in leaves the ring swinging. The ring is 36 mm off its point at
+  REJOIN_BLEND_OVER and 25 mm off when N4's window opens 2 s later. It is back inside 2 mm from 5.1 s after the blend and
+  stays there. From 5 s after the blend to LAND, the RMSE is 1.42 / 1.52 mm. That is an observation, not a bar.
+- The same 6.4-6.5 mm shows in every run that ends with the claim's last rejoin (R2773, R2776, R2777). R2597 at 1 iteration
+  showed it too (6.3 mm). It comes from the fold-in, not from the iteration count.
+- §5's re-fly on an N miss (5 iterations with a lowered RTF cap) was written for a miss at 1 iteration. The claims
+  already fly 5, so that re-fly would not separate anything: Wesley decides how the chain claim is reported.
+
+### The harder cases (exploratory first passes, one run each)
+None of the 16 runs tripped the exploratory falsifier: an abort, a drop, a failed solve, more than 1 % late ticks, or a
+release over 8.83 deg. The draft bars of the addendum are not frozen, so their results below are readings, not verdicts.
+
+| case | run | releases: peak (deg) / n-1 (s) | rejoins: one bigger after the ATTACH (s) / fold-in peak (deg) | path or steady | what the draft bars say |
+|---|---|---|---|---|---|
+| 1 b2b (hover) | R2768 | 1.77-2.88 / <= 0.38 | 18.4, 22.6, 22.6, 25.8 / 2.70-3.30 | N4 7.00 mm, 1.06 deg; return 103.5 s (claim 159-163) | L holds. J's 20 s misses on 3 of 4, because each weld waits for the previous blend. The overlap bar (<= claim mean 1.45 + 1 = 2.45 deg) misses on all four. N4 position misses. Closest rejoiner to the quad folding in: 0.96 m |
+| 1 orbit | R2769 | - | - | clock-free 20.13 mm, 1.08 deg; quads to 1.28 / 1.57 m | inside the 4-quad figure-8 band (33.0 mm, 4.06 deg) |
+| 1 b2b orbit | R2770 | 2.15-3.38 / <= 0.38 | 24.7, 29.0, 21.0, 30.7 / 2.72-3.50 | P back at 8: 20.49 mm, 1.09 deg against the orbit's 20.13 mm (bar 25.16) | L and P hold. J misses: /drone_7 was on its plate 30.6 s after START (bar 30), and every resize took over 20 s. The overlap bar misses on all four. No REJOIN REFUSED, so the run is not void. **The formation walked off its circle (below)** |
+| 2 figure-8 base | R2771 | - | - | clock-free 17.52 mm, 1.24 deg | (base) |
+| 2 two releases | R2772 | 3.44, 3.27 / 0.39, 0.37 | - | P 25.88 mm (bar 21.90) | L holds. P misses by 4 mm. The staged quads stay inside +-1.6 m but come under 0.8 m from a carrier: /drone_1 0.78 m through the lap, /drone_5 0.70 m 2.2 s after its release |
+| 3 opposite pairs | R2773 | pairs 0.12, 0.11 / n-2 in 0.59, 0.49 | 17.3-18.4 / <= 1.77 | N4 6.54 mm, 0.96 deg | Pairs and J hold. N4 misses as the claim's. An opposite pair barely tilts the ring; the claim's single releases of the same quads peak at 1.85-2.90 deg |
+| 3 adjacent pair | R2774 | 7.98 / n=6 in 0.50 | - | the six: 25.7 mm, 4.08 deg (2 s after the resize to LAND); settled 1.76 deg | no falsifier (15 deg, 3 deg); under L's 8.83 and under the 4-quad G135 at 1 m (R2604 / R2610: 10.42 / 11.02 deg) |
+| 4 loss in a fold-in | R2775 | /drone_2: 2.64 from the mean, 2.57 abs to +15 s / n=7 in 0.30, the rejoiner kept | as the claim, then /drone_1's blend cut | settled 1.07 deg; all landed | its draft bars hold. The cut blend stepped /drone_1 from 0.5 to 2.0 N at once, and its rod end reached 2.6 cm (J's 2 cm) |
+| 5 relay | R2776 | 1.84-2.50 / <= 0.39 | 17.4-19.2 / 1.13-2.00 | N4 6.38 mm, 1.00 deg | L and J hold. N4 misses as the claim's. The releases with 7 carrying (2.50, 1.84 deg) sit beside the claim's 2.47-2.90 with 6 and 5 carrying |
+| 6 task (critic waived) | R2777 | as the claim | 16.2-18.0 / <= 1.77 | ring during the tasks: 1.4 mm at n=4; 12.1-13.6 mm at n=5-7; N4 6.43 mm | Each corner was reached 4.7 s after TASK START and held 15 s: the body was within 31 mm and the reference within 21 mm. The task quad stayed >= 0.89 m from any quad and inside +-1.6 m, and J held. The fleet stayed inside N1 only during the first task, because each later TASK starts 0.1 s before the previous blend ends. N4 misses as the claim's |
+| 7 laps base (critic waived) | R2778 | - | - | clock-free 16.49 mm, 1.28 deg | nine laps with eight 3 s holds; the planner's clock never ran back |
+| 7 lap-by-lap chain (critic waived) | R2779 | 2.09-3.18 / <= 0.40 | 20.09, 24.58, 20.66, 20.75 / 1.05-1.91 | P 19.69 mm (bar 20.61) | L and P hold. J's 20 s misses on all four. The clock never ran back |
+
+**Case 1, b2b orbit (R2770): the formation walked about 1 m off its circle.** This is a finding for Wesley.
+- In the held return the ring sat about 0.27 m from its frozen reference: for example (0.095, 0.602) against
+  (0.282, 0.402) m, for 20 s.
+- Each weld's datum shift then moved the path onto the ring, about 0.25 m per rejoin.
+- The ring ended up to |x| 1.01 m and |y| 1.41 m from the origin. Airborne quads reached |x| 2.00 m and |y| 2.41 m. That is
+  past the 1.6 m staging bound and the rig's 1.75 m limit; the twin's limit is off.
+- The likely cause is the horizon still previewing the circle from the frozen clock, the case's named risk. That has not
+  been checked in code.
+- The hover twin (R2768) ratchets the same way, but less. After the last release the ring stays 52 mm off its reference
+  through the first approach, and the claim's ring is back within ~8 s. Each weld adopts where the ring is, and the hover
+  point moves 0.24 m over the four welds.
+
+**Scorer notes (measurement only, no bar touched).**
+- s_metrics scores each RELEASE row on its own, so the first row of a pair has an empty window. The pairs' n-2 resize
+  comes from the planner log.
+- In R2771 and R2772, LAND comes ~58 s after the planner's descent, so the ring sits on the floor. s_metrics' settled tilt
+  for the last release (0.00 deg) and its N1 / N4 windows run into that. R2772's settled is scored to the descent (53.5 s)
+  instead.
+- The ATTACH rows' settled values in b2b (2.3-2.6 deg) are means over the next rejoiner's fold-in.
+
+**For Wesley.**
+1. The chain claim misses N4 on position by 0.7 mm in both repeats. The cause is the last fold-in's swing inside the
+   first 3 s of the window. Report it as missed, or set a new N4 window for later runs only; the bar was not changed here.
+   §5's re-fly at 5 iterations with a lowered cap has nothing to separate at 5 iterations.
+2. One tree, strictly: the N1 / N4 comparator (R2700 / R2701) flew before the case 6 and 7 code went in (behind switches,
+   off in the claims). Accept, or re-fly `s4_hover_L100_it5` x2 on 63b504f.
+3. Case 1 on a path: the held return ratchets the path's datum, about 1 m on the orbit. That rules it out as a claim
+   until the hold or the datum shift changes (case 7's design A, or no shift while held).
+4. Draft-bar misses to weigh before any case becomes a claim:
+   - J's 20 s resize when welds queue (b2b) or follow a lap end (case 7);
+   - case 2's P and its staged spacing (0.70-0.78 m);
+   - the rod end in a cut blend (2.6 cm).
+
+**N1/N4 baseline on the batch 18 tree (23 Oct 23:55; Wesley ~23:20: one tree per claim table).** s4_hover_L100_it5
+re-flown x2 on 63b504f (R2788, R2789; lab batch 20): N1 1.339 / 1.348 mm, 0.267 / 0.210 deg (R2700/R2701: 1.341 / 1.320
+mm, 0.251 / 0.199 deg). The same-tree bars are position <= 5.69 mm and tilt <= 1.48 deg (frozen: 5.66 / 1.45). Verdicts
+unchanged: s8 hover holds; s8_chain4back misses N4 position in both repeats (6.36 / 6.35 mm), its tilt holds.
+
+**B, the bench (24 Oct 00:15-00:46, laptop idle: load 0.22 before, no Gazebo, no lab sync; rows S-BENCHB-1024 and its
+correction; results/analysis/s_bench_B_2026-10-24.json).** N_max as the card defines it:
+
+| Iterations | Rig: 3.5 x whole tick p95 <= 100 ms (the bar) | Idle latency p95 <= 60 ms | Idle whole tick p95 <= 100 ms |
+|---|---|---|---|
+| 5 | 3 | 4 | 5 |
+| 2 | 4 | 6 | 7 |
+| 1 | 4 | 8 | 8 |
+
+At n = 8: idle whole tick p95 256.4 / 126.2 / 83.1 ms at 5 / 2 / 1 iterations (solve p95 218.0 / 87.9 / 45.0 ms).
+**Verdict (B as frozen): rig N_max(1) = 4 < 8, so the 8-quad real-time claim is FALSIFIED, as the card expected.**
+Reviewer 24 Oct (corrected wording): N_max is a PROJECTION, an upper bound (an idle bench times a factor measured with 3
+quads and 3 trackers), not a flown result: 'projected 3 / 4 / 4 quads with every tick at 5 / 2 / 1 full iterations'. The
+rig has flown 4 quads at 5 iterations under the 60 ms budget cut (RIG-1007-r0012, RIG-1008-r305), so 3 at 5 is not a
+flight limit. 1 iteration fails Q1/Q2 on every rig flight: the defensible operating point is 4 at 2 iterations,
+projected. Margin: N_max(1) = 4 sits on the boundary (n = 5 tick p95 28.87 ms vs the 28.57 ms limit; with the measured
+k95 3.43-3.45 instead of the rounded 3.5, n = 5 fits at 99.0-99.6 ms): the frozen 3.5 stands, so 4 stands. The 8-quad
+chain stays a twin result, labelled not real time (it flew at RTF 0.216-0.250, 120-245 ms wall per 5-iteration tick).
+
+**2 iterations, exploratory (24 Oct 01:39; rig decision check after bench B; rows R2796-R2801, R2797c; lab batch 23).**
+s4_*_it2 = the it1 cells with plan_sqp_iters 2. The C bars as written for it1 all hold, in both repeats of every cell:
+
+| Cell | 5 it (mean) | 2 it (both runs) | 1 it (both runs) | 2 it against the bars |
+|---|---|---|---|---|
+| Hover: path / tilt peak / lift tilt | 1.33 mm / 0.23 / 1.82 deg | 1.34, 1.33 mm / 0.24, 0.24 / 1.79, 1.85 | 1.35, 1.37 mm / 0.24, 0.21 / 1.82, 1.87 | C1-C6 hold |
+| Figure-8: path / tilt peak | 11.32 mm / 1.05 deg | 9.80, 9.91 mm / 0.90, 0.86 | 9.66, 9.84 mm / 0.89, 0.93 | C1-C6 hold |
+| Release: peak / settled / n=3 after | 7.82 / 0.08 deg / 0.29 s | 7.91, 8.01 / 0.11, 0.09 / 0.32, 0.31 s | 8.00, 8.46 / 0.10, 0.11 / 0.32 s | C7 holds |
+| Planner solve p50 / p95 (twin lab container, wall) | 85-100 / 102-151 ms | 13-20 / 78-82 ms | 7.5-11 / 68-71 ms | |
+
+Reviewer (24 Oct ~02:30): WEAK as rig evidence; the C claim itself reproduces (every bar, both repeats). The it2 scorer was a
+copy from before the 14:33 s_metrics fix and shifted the node logs twice: only the planner-log numbers move (corrected
+above and in row R2796c), never a verdict. Two trees: the it5/it1 comparators flew be34f95 + patch, the it2 runs 63b504f +
+the Quan patch (planner_solver.py, params.py and the tracker byte-identical; the rest behind off switches). Must not be
+read as rig evidence: bench B ran with plan_fast_refs on (off on the rig; without it 4 quads at 2 iterations projects to
+104.7 ms > 100); the twin at RTF ~0.25 never hit the 5-iteration 60 ms budget cut the rig flies (7-8 Oct: 4 quads at 5,
+solve p95 51-78 ms, <= 1.4 % late); no 3 -> 4 fold-in has flown at 2; i2 fails Q6 at n = 8 (S picks 5, Wesley 23 Oct);
+the solve times are lab-container wall times. The rig default stays 5.
+
+**Reviewer (S's final claim table, 24 Oct ~02:30): supported (strong); every number reproduces; no bar re-set; nothing void.**
+Corrections: the 8-quad hover holds N1, N5, N6 (N2-N4 do not apply), not 'N1-N6'; the chain's N4 window opens with the ring
+27.7 / 27.6 mm off (not 25); after the last blend the error is a monotonic return from 36 mm to ~2.5 mm over 5 s, no
+overshoot (not 'swinging'), and it goes over 2 mm again until +8.7 / +8.6 s (max 2.6 / 2.8 mm); the it2 table flew 63b504f +
+the Quan patch beside C's be34f95 runs (two trees: say so); the N1/N4 comparator s4_hover_L100_it5 is the card's frozen
+design, not a one-variable baseline (world, ring, params file and LAND time also differ): the bars cannot pin a difference
+on fleet size alone; the s8_*_it5 configs' descriptions still say '1 SQP iteration' (left as flown). Must not say: 'scales to
+8 quads' or '8 in real time' without 'twin only'; 3/4/4 as flown; 'the chain holds' or N4 'holds from +5 s' (post-hoc);
+'not the iteration count' as established (one exploratory it1 run on an earlier tree: 'consistent with'); R2770 as a pass
+without its walk-off (airborne quads to |x| 2.00 m, |y| 2.41 m).

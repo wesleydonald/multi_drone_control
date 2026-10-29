@@ -47,6 +47,19 @@ def test_pending_brake_installation_cannot_publish_or_launch_a_replacement():
     assert 'cooperativeInputBlockers(' in disable
 
 
+def test_ready_completion_precedes_attitude_update_and_preserves_admission():
+    source = (Path(__file__).resolve().parents[3] /
+              'src/tejen_dynamic_planner/src/transfer_backend_node.cpp').read_text()
+    state = source.split('    void stateCallback(', 1)[1].split('    void targetCallback(', 1)[0]
+    # the fork's stateCallback predates his ego-orientation sample: the drain precedes the kinematics update
+    assert state.index('pollPlannerFuture();') < state.index('latest_state_ = kinematics_.update(')
+    replan = source.split('    void replanTimer()', 1)[1].split('    void referenceTimer()', 1)[0]
+    assert 'std::packaged_task<PlannerOutcome()>' in replan
+    assert replan.index('(*task)();') < replan.index('completion->notify()')
+    assert 'installation_attempt_time_s' in source
+    assert 'completion_to_collection_ms' in source
+
+
 def hold(position=(.4, -.3, .9)):
     return TrajectoryReference(np.tile(position, (61, 1)),
                                np.zeros((61, 3)), np.zeros((61, 3)))

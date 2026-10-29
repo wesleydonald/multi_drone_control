@@ -1,0 +1,121 @@
+name: sq_floorjoin_hover_L100_p115_v1a15s
+description: 'Card 2026-10-28_attach_ambitious, Revision 3, V1(0.15) with his C++ swing envelope alone shrunk (second re-fly values, written into the card before these runs): max_swing_angle_rad 0.02 typed (his twin 0.17), his tracking inflation 0.05 kept (0.03 tripped his carriers'' tracking gate in R2848). Otherwise as sq_floorjoin_hover_L100_p115_v1a15m, which reads: Card 2026-10-28_attach_ambitious, Revision 3 arm V1(0.15) (flown only if V1(0.30) passes with the rod min >= 0.30 m): as sq_floorjoin_hover_L100_p115_v1a30m (V1(0.30) with his C++ margins max_swing_angle_rad 0.035 and cooperative_tracking_half_m 0.03) with the magnet tip 0.15 m above plate 9''s contact target for the whole approach: attach_transit_clearance 0.15, minimum_search_z_m 2.177 (= ring_z 1.0 + 0.037 + 0.15 + the 1.04 rod - 0.05, as carry_heights), approach_offset_z 0.15. Offline, his model accepts that end by +0.023 m (the tethers) and +0.057 m (the ring''s basket box). Exploratory. Falsifier (Revision 3 bars): TRANSIT_TO_REATTACH not ended within 60 s of its start, the tip at MATCH start outside 0.15 +- 0.05 m above plate 9, no weld within 300 s of his TAKEOFF, an abort, a failed proof, or the rod min (m1 flight) under 0.238 m.'
+world: sq_rigid_ground_rig_attach_pickup_L100_p115.sdf
+ball_start: [1.6, 2.0, 0.08]       # tools/make_attach_worlds_L100.py BALL_XY (unused by floor_join; the runner checks it)
+lab_env:
+  SIM_MOCAP_VEL_FILTER: slope
+  MDC_MOCAP_VEL_DRONES: 0,1,2
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    attach_radius: 0.204
+    attach_z: 0.025
+    cable_len: 1.0
+    creep_vel: 0.2
+    drone_mass: 0.55
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.15
+    load_mass: 1.15
+    load_ixx: 0.024
+    load_izz: 0.049
+    load_traj: hover
+    measure_rod_len: true
+    num_drones: 3
+    payload_rest_z: 0.013
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    reconfig_mode: ocp
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.0
+    throttle_max: 0.9
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    pos_limit_m: 1.75
+    mode: attach
+    reserved_attach: 1
+    attach_azimuths_deg: 0,90,180
+    attach_x_offset: 0.0
+    attach_y_offset: 0.204
+    partner: true
+    weld_radius: 0.01
+    weld_point_z: 0.037
+    partner_contact: true
+    proof_rules: comotion
+    proof_h_plate: 0.0025
+    weld_speed_gate: 0.05
+    tip_max_rate_hz: 120.0
+    tip_noise_sd_m: 0.0005
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 3
+    attach: true
+    clock_hz: 500
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+fleet:
+  num_drones: 3
+  n_total: 4
+timing:
+  duration_s: 600.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 5.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 8.0
+  launch_expect_topics:
+  - /join_planner/phase
+  - /fake_payload/pose
+  dds_udp_only: true
+  bg_param_dump: false
+events:
+- t: 1.0
+  do: LAUNCH
+  arg: tejen_mission partner_mission.launch.py geometry:=rig_twin_L100_p115 plate:=9 carrier_azimuths_deg:=[0.0,90.0,180.0]
+    contact_attach:=true carry_clearance:=0.25 confirm_pickup_release:=true mission_mode:=floor_join
+    attach_transit_clearance:=0.15 minimum_search_z_m:=2.177 approach_offset_z:=0.15
+    max_swing_angle_rad:=0.02
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 20.0
+  do: WAIT_WELD           # our co-motion confirmation; later events are timed from it
+  arg: 300
+- t: 30.0
+  do: LAND                # 10 s on four after the confirmation, as the rig sheet
+criteria:
+  require_weld: false
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+record:
+  period_s: 0.0333
+  fps: 30
+  render: true            # rendered after the run (the stack is down); A0 recorded, render off
+  cameras:
+    baseline:
+      pos: [2.6, -4.4, 3.2]
+      look_at: [0.0, 0.4, 1.8]
+      hfov_deg: 60.0
+      size: [1280, 720]
+    top:                  # steep overhead: QUAD4's mat (0, 1.4), its path to plate 9 between the carriers on 0 and 6
+      pos: [0.0, -1.0, 6.2]
+      look_at: [0.0, 0.45, 1.5]
+      hfov_deg: 60.0
+      size: [1280, 720]

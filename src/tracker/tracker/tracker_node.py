@@ -107,6 +107,16 @@ MAX_CONSEC_SOLVE_FAILS = 15    # tolerate this many bad solves (hold) before dis
 DROP_CONFIRM_S = 0.5           # s after a drop request with no drop: payload checks back on
 MODEL_CAP_PERIOD_S = 1.0       # the model throttle cap follows the pack voltage at most this often
 
+
+def notch_coeffs(f0, q, dt):
+    """Band-stop biquad (RBJ cookbook) at f0 Hz, quality q, sample period dt: (b0, b1, b2, a1, a2), a0 = 1."""
+    w0 = 2.0 * math.pi * f0 * dt
+    alpha = math.sin(w0) / (2.0 * q)
+    a0 = 1.0 + alpha
+    c = -2.0 * math.cos(w0)
+    return 1.0 / a0, c / a0, 1.0 / a0, c / a0, (1.0 - alpha) / a0
+
+
 # Tracker log columns for the rig replay, appended after every older column:
 # thr_out = real throttle sent, thr_off = offset in use (voltage term included),
 # acx/acy/acz = node-0 cable accel the model was given, ref_age = s since the last reference.
@@ -222,6 +232,28 @@ class Controller(Node):
         self._acc_t = None
         self.declare_parameter("cable_accel_cap", CABLE_ACCEL_CAP)
         self.cable_accel_cap = float(self.get_parameter("cable_accel_cap").value)
+        # cable_lp_hz > 0: a first-order low-pass on the measured pull (RIG-1029-h4: the 1 m rig ring bent at 5.3 Hz,
+        # opposite plates in phase, with every tracker feeding its own pull back one tick later); 0 = off
+        self.declare_parameter("cable_lp_hz", 0.0)
+        self.cable_lp_hz = float(self.get_parameter("cable_lp_hz").value)
+        self._cable_lp_alpha = 1.0 - math.exp(-2.0 * math.pi * self.cable_lp_hz * DT) if self.cable_lp_hz > 0.0 else 1.0
+        # cable_lp_order 2: two such stages in series (RIG-1029-ch1: at one stage the bending came back at full strength)
+        self.declare_parameter("cable_lp_order", 1)
+        self.cable_lp_order = int(self.get_parameter("cable_lp_order").value)
+        if self.cable_lp_order not in (1, 2):
+            raise ValueError(f"cable_lp_order must be 1 or 2, got {self.cable_lp_order}")
+        self._lp_cable = [None] * self.cable_lp_order
+        # cable_notch_hz > 0: a band-stop at the ring's bending (RIG-1029-sq2_2/-sq2_4: the two low-pass stages' ~120 ms
+        # of lag let the triangle swing at 1.1 Hz; the notch adds ~30 ms there)
+        self.declare_parameter("cable_notch_hz", 0.0)
+        self.declare_parameter("cable_notch_q", 1.0)
+        self.cable_notch_hz = float(self.get_parameter("cable_notch_hz").value)
+        self.cable_notch_q = float(self.get_parameter("cable_notch_q").value)
+        if self.cable_notch_hz > 0.0 and not (self.cable_notch_hz < 0.5 / DT and self.cable_notch_q > 0.0):
+            raise ValueError(f"cable_notch_hz {self.cable_notch_hz} must be under {0.5 / DT} Hz, cable_notch_q > 0")
+        self._notch = (notch_coeffs(self.cable_notch_hz, self.cable_notch_q, DT) if self.cable_notch_hz > 0.0
+                       else None)
+        self._notch_z = None
         self.get_logger().debug(
             f"[Drone {self.drone_id + 1}] tracker FF toggles: "
             f"cable_ff_scale={self.cable_ff_scale} attitude_ff={self.attitude_ff} "
@@ -1654,6 +1686,18 @@ class Controller(Node):
         solver. Updates and returns the running applied value."""
         ac = np.array(ac, float)
         ac[2] = min(ac[2], 0.0)           # a rod only pulls down on its drone
+        if self.cable_lp_hz > 0.0:
+            for k, stage in enumerate(self._lp_cable):
+                stage = ac.copy() if stage is None else stage + self._cable_lp_alpha * (ac - stage)
+                self._lp_cable[k] = stage
+                ac = stage.copy()
+        if self._notch is not None:
+            b0, b1, b2, a1, a2 = self._notch
+            if self._notch_z is None:
+                self._notch_z = [ac * (1.0 - b0), ac * (b2 - a2)]     # at rest on the first sample
+            y = b0 * ac + self._notch_z[0]
+            self._notch_z = [b1 * ac - a1 * y + self._notch_z[1], b2 * ac - a2 * y]
+            ac = y
         st = self._meas_stats
         st[0] += 1
         m = float(np.linalg.norm(ac))
@@ -1822,6 +1866,8 @@ class Controller(Node):
                         self._applied_cable_vec = (
                             ref_cable[0].copy() if ref_cable is not None
                             else np.zeros(3))
+                        self._lp_cable = [self._applied_cable_vec.copy() for _ in self._lp_cable]
+                        self._notch_z = None
                     ac_cond = self._condition_measured_cable(ac_meas)
                     rows = (self.planner_ref_pos.shape[0]
                             if self.planner_ref_pos is not None else self.N + 1)

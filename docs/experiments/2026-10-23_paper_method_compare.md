@@ -602,7 +602,7 @@ The twin's trackers fly the planned thrust and pull, so the twin decides (the sm
 - **Our planner** should carry the hub as it does the rim: its formation holds the yaw datum, not the ring's yaw. A loss
   in our arm would say its model needs the cables' moment arms (the bench's warning above): a finding about our planner.
 
-**Bars (PROPOSED).** Scored by `tools/c_metrics.py` exactly as C's cells (§5: windows, the target from before the
+**Bars (FROZEN 23 Oct 16:22).** Scored by `tools/c_metrics.py` exactly as C's cells (§5: windows, the target from before the
 hand-over, the headline, LOSS and VOID); n = 2 per config; minimum effect as §5 (the larger of 1 mm and 10 % of the
 better mean).
 
@@ -632,3 +632,65 @@ R2685/R2686). One run each, exploratory: the first sign that the rim attachment,
 **The paper's damping form at its offline-best gains (R2744-R2749, batch 18u, scored 18:25):** a LOSS in all 6 runs
 (hover, line 0.2, line 0.4, x2): the ring tips past 30 deg 20-30 s after the hand-over and the fleet aborts. Its offline
 J of 12 did not carry to the twin (the harness lacks the 4 cm pivot lever).
+
+**The paper's own geometry, the cells (R2750-R2761, batch 18h, scored 23 Oct 19:31 with `tools/c_metrics.py --table
+R2750-R2761 --out results/analysis/c_compare_hub_2026-10-23.json`; reviewer 23 Oct 19:45: supported, corrections
+applied).** One tree for the 14 hub runs, week7 63b504f (dirty files: LaTeX builds only). The rim pairs in G/P are on
+be34f95 + patches; the flight code between them adds only default-off switches (traj_laps, traj_lap_hold_s,
+rejoin_task; read back as off), but step 2 asked for the network's rim pairs again once flight code changed, and they
+were not re-flown (owed). Every run valid, no loss. R2753's runner FAIL is plumbing: Gazebo's clock froze at 98.6 s, after LANDED and the full window.
+
+| Cell | Network rim pair (mean) | Network hub (mean [range]) | Our planner hub | G | P | Verdict (network) | A | O |
+|---|---|---|---|---|---|---|---|---|
+| Hover, 3-D RMS (mm) | 17.4 | 12.2 [11.8-12.5] | 1.4 [1.4-1.4] | no (> 8.7) | no (< 13.9) | partly the geometry | our planner at least as close on the paper's own geometry | holds |
+| Line 0.2, headline (mm) | 41.8 | 40.0 [40.0-40.1] | 31.1 [30.0-32.2] | no | yes (>= 33.4) | the port | our planner at least as close on the paper's own geometry | holds |
+| Line 0.4, headline (mm) | 101.9 | 102.4 [101.6-103.3] | 72.5 [71.1-73.9] | no | yes (>= 81.5) | the port | our planner at least as close on the paper's own geometry | holds |
+
+Reported, not tested:
+
+| Cell | Network ring yaw change, rim -> hub (deg) | Network lag, hub (s) | Our planner, rim -> hub headline (mm) | Our planner ring tilt peak, hub (deg) |
+|---|---|---|---|---|
+| Hover | 22.3-51.1 -> 0.1 | - | 1.3-1.4 -> 1.4 | 0.19 |
+| Line 0.2 | 28.8-48.2 -> 0.2 | 1.25 | 17.0-17.6 -> 31.1 | 1.64 |
+| Line 0.4 | 13.9-14.3 -> 20.1-28.2 | 1.14 | 44.3-46.2 -> 72.5 | 5.92 |
+
+- **The network as first ported, on the hub (R2762 hover, R2763 line 0.2; x1, exploratory):** both valid, 17.7 and
+  23.5 mm, yaw change 0.1 / 0.7 deg; on the rim the same config and gains lost the ring (R2446/R2447 on be34f95 +
+  patch 0853c2de: tilt 45-58 deg, yaw 125-474 deg). R2763 has no PATH_START: its line is scored from the reference's
+  first move, 1.73 s after the top against 4.98 s in the cells, so its 23.5 mm is not on the cells' window.
+- **Reading:** in hover and at 0.2 m/s the network's ring yaw change fell from 22-51 / 29-48 deg on the rim to
+  0.1 / 0.2 deg on the hub; at 0.4 m/s it rose from 14 to 20-28 deg. On the hub the as-ported pair (x1 each,
+  exploratory) held a ring it lost on the rim. The network's hover error falls by 30 % (17.4 -> 12.2 mm), not to half
+  (G: 8.7 mm). Its line error does not move (40 vs 42, 102 vs 102 mm): P is met in both line cells (the card's reading:
+  the port). The lag is not part of the headline; at 0.2 m/s the network's hub reach (31.1 mm) is about our planner's
+  (29.6 mm), and its extra error is the clock-free part (8.9 vs 1.5 mm). Our planner is at least as close in every
+  cell, but it carries the hub worse than the rim on the lines (reach 30 / 71 mm short at the ends against 16 / 44):
+  cause not tested (the OCP does model the 2 cm drop, `attach_z` in rho_i, and its offline pass predicted no loss on the
+  hub). Not claimed: the hub cells in C's claim table (n = 2; the claim needs x3).
+
+**Corrections from the exact-method gap analysis (23 Oct ~21:40; docs/analysis/quan_exact_gap_2026-10-23.md; both
+checked against the run data and the parameter read-back):**
+- **The port's formation is not yaw-only in C.** `diss_balanced_tensions` reads back false in the C runs (R2685's
+  params), so `_frame_rot` uses the ring's full measured rotation (dissipative_network.py:338-344), not `_yaw_rot`.
+  Wherever this card or a draft says "turns with the ring's measured yaw", read "measured attitude".
+- **R2685 (search's best, hover) tipped past 30 deg at hand-over + 63.9 s** (peak 34.4 deg before LAND at 92.6 s): 3.9 s
+  after its 60 s scored window, so its scored verdict stands (valid), but "the best gains held the ring in every run"
+  is true only of the scored windows. R2686-R2690 stay under 30 deg to LAND (peaks 5.0-16.4 deg). Not re-scored (bars
+  frozen); reported beside the port's rows.
+- **Our port follows the authors' simulation code** (integrated nodes, github RflyBUAA/Cooperative-Transportation), not
+  the per-robot law of the paper's text (Eq. 3, 7-10). Wesley 23 Oct ~21:10: the comparison arm should be the method
+  as published; the gap analysis is the plan.
+
+**The network's rim pairs on the hub cells' tree (step 2; R2782-R2786, lab batch 19, 63b504f; R2787 VOID, sim froze
+after LAND with no run.csv, re-flown as R2790).** Scored 23 Oct 23:55 with `tools/c_metrics.py`; the frozen verdicts above
+(against R2685-R2690) stand; this is the same-tree re-read, reported beside them:
+
+| Cell | Rim, frozen pair (mean) | Rim, same tree (mean [range]) | Hub (mean) | G (<= half) | P (>= 80 %) | Same-tree reading |
+|---|---|---|---|---|---|---|
+| Hover, 3-D RMS (mm) | 17.4 | 14.2 [14.0-14.4] | 12.2 | no (> 7.1) | yes (>= 11.4) | the port (frozen: partly the geometry) |
+| Line 0.2, headline (mm) | 41.8 | 42.6 [42.2-43.0] | 40.0 | no | yes (>= 34.1) | the port (as frozen) |
+| Line 0.4, headline (mm) | 101.9 | 102.6 [100.3-104.9] (R2786, R2790) | 102.4 | no | yes (>= 82.1) | the port (as frozen) |
+
+The ring's yaw on the rim, same tree: 23.5-23.7 deg hover, 8.2-45.6 deg line 0.2, 12.6 deg line 0.4 (hub 0.1 / 0.2 /
+20-28). No late loss: tilt peaks to LAND 4.3-14.6 deg. So on one tree the hub removes the yaw swing in hover and at
+0.2 m/s but leaves the error within 20 % of the rim's in every cell.

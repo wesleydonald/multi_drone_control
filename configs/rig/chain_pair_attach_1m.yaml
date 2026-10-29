@@ -1,0 +1,12 @@
+# Re-attach in the square and the pair (Wesley 27 Oct): attach_m1_1m.yaml's switches plus the chain's rules
+# (chain_pair_noxy.yaml: drop_gap 200 with 2 survivors and the 45 deg tilt drop, and the height-only model integral
+# so the T hangs without a sideways lean). No weld_point_z: the sheet types the bench's W.
+newcomer_lifecycle: true
+newcomer_fault_land: true
+departed_ground_idle: true
+drop_takes_back: true
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 45.0
+int_k_xy: 0.0

@@ -1,0 +1,4 @@
+# Wed 28 Oct (Wesley): two_quad_hold5.yaml with a 1.5 m line (line_x / line_spin), ring placed ~0.75 m toward -x first
+traj_hold_s: 5.0
+drop_tilt_deg: 55.0
+traj_distance: 1.5
