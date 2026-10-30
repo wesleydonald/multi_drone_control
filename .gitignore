@@ -60,3 +60,11 @@ tools/remote/debs/
 shortcuts.md
 
 # Tejen/paper supplementary material (2.2 GB, not ours to track)
+# LaTeX build output of the RA-L drafts
+docs/paper/**/*.aux
+docs/paper/**/*.bbl
+docs/paper/**/*.blg
+docs/paper/**/*.fdb_latexmk
+docs/paper/**/*.fls
+docs/paper/**/*.log
+docs/paper/**/*.out

@@ -4,7 +4,7 @@
 Thu 12 Nov); both real-world setups reported; the 2-quad real-world rows are the 28 Oct pair flights on the M2A ring.
 
 Draft: nothing approved, flown or changed in src/ or configs/. On approval it amends
-`docs/plan_thesis_results_2026-10-21.md` (spec items stay, the freeze date moves). Brief: "how do I prove my approach has
+`docs/archive/plan_thesis_results_2026-10-21.md` (spec items stay, the freeze date moves). Brief: "how do I prove my approach has
 added value and what can it do", in simulation (no cage, no packs), with six real-world sessions left.
 
 **Recommendation.** Prove added value with ablations of the same event (with and without the resize, the measured pull,

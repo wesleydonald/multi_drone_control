@@ -106,6 +106,8 @@ STAGE_TRACK_M = 0.03       # m: a staged drone's reference stays this far inside
                            # sat up to 5 mm past its reference on the clamp, 5 cm past it braking)
 # rejoin_task (twin only; card 2026-10-23_scalability case 6)
 TASK_TIP_FLOOR_M = 0.3     # m: a task waypoint keeps the rod's end at least this far above the floor
+# relay_task (twin only; card 2026-10-30_x4_endurance_relay)
+RELAY_SAMPLE_M = 0.02      # m between the samples of a relay route checked against the lap's keep-out
 DETECT_STALE_S = 0.1       # s, a ring or drone pose older than this is not used to detect a release
 TIP_DETECT_S = 0.1         # s of contiguous magnet-marker samples past tip_detect_m, on their stamps: a release
 TIP_DETECT_N = 6           # and at least this many samples in that run (the rig streams ~88 Hz, the twin 60)
@@ -363,6 +365,27 @@ def resize_delay_value(value, sim_time):
     if v > 0.0 and not sim_time:
         raise ValueError('resize_delay_s is twin only (use_sim_time false): X1 ablation arms never fly the rig')
     return v
+
+
+def _sample_route(path, step):
+    """Points (xy) along the polyline `path`, at most `step` apart, its corners included."""
+    out = [np.asarray(path[0], float)[:2]]
+    for a, b in zip(path[:-1], path[1:]):
+        a, b = np.asarray(a, float)[:2], np.asarray(b, float)[:2]
+        n = max(1, int(np.ceil(float(np.linalg.norm(b - a)) / step)))
+        out += [a + (b - a) * (k / n) for k in range(1, n + 1)]
+    return np.array(out)
+
+
+def _inside_keep(samples, pts, keep):
+    """Per sample (xy): closer than `keep` to any of `pts` (xy)."""
+    s, p = np.asarray(samples, float)[:, None, :2], np.asarray(pts, float)[None, :, :2]
+    return np.min(np.linalg.norm(s - p, axis=2), axis=1) < keep
+
+
+def _wps_text(wps):
+    """Task waypoints as an operator line shows them."""
+    return '; '.join(f'({w[0]:.2f}, {w[1]:.2f}, {w[2]:.2f}) {w[3]:.1f} s' for w in wps)
 
 
 def _who(d):
@@ -925,6 +948,13 @@ class DissipativeController(LoadPlanner):
         # 'd x,y,z,dwell; ...' flies staged carrier d to each waypoint (world m), holds it there its dwell and flies it
         # back to its staging point (_start_task). Off: no /fleet/task.
         self._rejoin_task = bool(p('rejoin_task', False).value)
+        # relay_task (twin only; card 2026-10-30_x4_endurance_relay, critic waived by Wesley 30 Oct): a task flies
+        # on a lapped path. A carrier's TASK waits until it leaves, a carrier's leave waits until no other is off the
+        # ring, the path is held while a task's drone is inside the lap's keep-out (out from its staging point, and
+        # its way back), and the task ends parked at its last waypoint; an ATTACH flies it back (_relay_attach).
+        self._relay_task = bool(p('relay_task', False).value)
+        self._relay_next = {}         # d -> the waypoints of the task d flies when it leaves (a carrier's TASK)
+        self._relay_leave = None      # a carrier whose leave waits for the ring to be full again
         # traj_lap_hold_s (twin only; the same card, case 7): > 0 = the path is held this long at each lap end but the
         # last, through the reconfiguration hold (_lap_end_tick). 0 = off.
         self._lap_hold_s = float(p('traj_lap_hold_s', 0.0).value)
@@ -940,6 +970,8 @@ class DissipativeController(LoadPlanner):
                              'it does not land)')
         if self._rejoin_task and not self._rejoin_departed:
             raise ValueError('rejoin_task needs rejoin_departed (a task flies a staged carrier)')
+        if self._relay_task and not self._rejoin_task:
+            raise ValueError('relay_task needs rejoin_task (a relay leave flies a task)')
         if self._lap_hold_s > 0.0 and self._reconfig_mode != 'ocp':
             raise ValueError('traj_lap_hold_s needs reconfig_mode ocp (the network phase runs its own clock)')
         # Where each departed drone was parked, so it keeps getting a reference after
@@ -1550,6 +1582,14 @@ class DissipativeController(LoadPlanner):
         if self.detached[d]:
             return
         if self._reconfig_mode == 'ocp':
+            if getattr(self, '_relay_task', False):
+                away = self._relay_away(d)
+                if away is not None:
+                    # relay_task: an announced leave never takes the ring below one off (8 -> 7, never 6)
+                    self._relay_leave = d
+                    self.get_logger().warn(f'[dissipative] RELAY LEAVE QUEUED {_who(d)}: {away}; it leaves once that '
+                                           f'fold-in blend is over, the path still held')
+                    return
             busy = self._rejoin_busy() if getattr(self, '_rejoin_departed', False) else None
             if busy is not None:
                 self.get_logger().warn(f'[dissipative] detach {d} refused: {busy}')
@@ -3394,6 +3434,9 @@ class DissipativeController(LoadPlanner):
             f'[dissipative] departed {_who(d)} stages {reach + REJOIN_STAGE_OUT_M:.2f} m from the ring on plate '
             f'{plate_of_azimuth(np.degrees(az))}\'s bearing at {pos[2]:.2f} m (rejoin_departed: rod {length:.3f} m '
             f'kept for /fleet/attach {d})')
+        wps = getattr(self, '_relay_next', {}).pop(d, None)
+        if wps is not None and getattr(self, '_relay_task', False):
+            self._start_task(d, wps)
 
     def _rejoin_limit(self):
         """The position limit a staged or rejoining drone keeps inside: pos_limit_m when set, else Wesley's 1.75 m."""
@@ -3460,8 +3503,17 @@ class DissipativeController(LoadPlanner):
         """Why a DETACH must wait: a rejoin flying (its approach, weld or retreat) or a rejoiner's fold-in blend
         (critic M2), or None. A carrier on its task is away from the ring."""
         for x, r in self._rejoin.items():
-            if r['mode'] not in ('stage', 'task'):
+            if r['mode'] not in ('stage', 'task', 'park'):
                 return f'{_who(x)} is rejoining (its {r["mode"]})'
+        b = getattr(self, '_rejoin_blend', None)
+        return None if b is None else f'{_who(b["d"])} is folding back in (its blend)'
+
+    def _relay_away(self, d):
+        """relay_task: why carrier d's leave must wait (another carrier is off the ring: staged, on its task, parked,
+        on its way back or folding in), or None."""
+        for x, r in self._rejoin.items():
+            if x != d:
+                return f'{_who(x)} is off the ring (its {r["mode"]})'
         b = getattr(self, '_rejoin_blend', None)
         return None if b is None else f'{_who(b["d"])} is folding back in (its blend)'
 
@@ -3486,11 +3538,11 @@ class DissipativeController(LoadPlanner):
             if rj['mode'] in ('approach', 'weld'):
                 self._rejoin_approach_tick(d, rj, hold, g, zero)
                 continue
-            if rj['mode'] == 'task':
+            if rj['mode'] in ('task', 'park', 'return'):
                 goal, v_goal = self._task_goal(rj)
             else:
                 goal, v_goal = self._stage_point(rj) if rj['mode'] == 'stage' else (rj['goal'], zero)
-            vmax = APPROACH_VEL if rj['mode'] in ('retreat', 'task') else DETACH_STEP_VEL
+            vmax = APPROACH_VEL if rj['mode'] in ('retreat', 'task', 'park', 'return') else DETACH_STEP_VEL
             _, v, _ = take_back_ramp(rj['q'], rj['v'], goal - v_goal * dt, np.zeros(2), dt, vmax=vmax, v_g=v_goal)
             q, v = self._stage_inside(rj['q'], v, dt)
             rj['q'], rj['v'] = q, v
@@ -3504,6 +3556,11 @@ class DissipativeController(LoadPlanner):
                     self._reconfig_hold_left = max(self._reconfig_hold_left, 1.0)   # held until it is clear
             elif rj['mode'] == 'task':
                 self._task_step(d, rj, goal, q, dt)
+            elif rj['mode'] == 'return':
+                self._relay_return_step(d, rj, goal, q)
+            if rj.get('relay') and (rj['mode'] == 'return' or rj.get('attach_queued')
+                                    or (rj['mode'] == 'task' and self._relay_inside(rj, q))):
+                self._relay_hold(d)
             self._publish_ref(d, [(*self._stage_hold(q + v * (self.dt * k), v), g, zero) for k in range(self.N + 1)])
 
     def _rejoin_refused(self, d, rj):
@@ -3523,7 +3580,7 @@ class DissipativeController(LoadPlanner):
         if getattr(self, '_traj_running', False):
             # critic M3: the ATTACH would stop the ring in one tick and step the staged drone's reference
             return 'the path is running (a rejoin flies in a hold: hover, or the path held)'
-        busy = [x for x, r in self._rejoin.items() if x != d and r['mode'] not in ('stage', 'task')]
+        busy = [x for x, r in self._rejoin.items() if x != d and r['mode'] not in ('stage', 'task', 'park')]
         if busy:
             return f'{_who(busy[0])} is rejoining (one at a time)'
         if self._unload is not None:
@@ -3544,6 +3601,9 @@ class DissipativeController(LoadPlanner):
         left, with the trajectory held. The tip loop (TipLoop, its band scaled to this rod) trims the body's height on
         the measured end in the hold over the plate (critic B1: the departed hold sat 1-4 cm high, R2312)."""
         rj = self._rejoin.get(d)
+        if rj is not None and rj.get('relay') and rj['mode'] in ('task', 'park'):
+            self._relay_attach(d, rj)
+            return
         why = self._rejoin_refused(d, rj)
         if why is not None:
             self.get_logger().warn(f'[dissipative] REJOIN REFUSED {_who(d)}: {why}')
@@ -3746,6 +3806,10 @@ class DissipativeController(LoadPlanner):
                else 'the cap never bound')
         self.get_logger().info(f'[dissipative] REJOIN BLEND OVER {_who(b["d"])}: its rod end at most '
                                f'{100.0 * b["max_off"]:.1f} cm from its plate point through the blend; {cap}')
+        d = getattr(self, '_relay_leave', None)
+        if d is not None and self._relay_away(d) is None:
+            self._relay_leave = None             # the ring is full again: the queued leave goes, the path still held
+            self._fleet_detach_cb(Int32(data=int(d)))
 
     def _rejoin_retreat(self, d, rj, why):
         """A rejoin with no weld: straight up until its rod's end clears the plate by CLEARANCE_M (the approach's own
@@ -3759,6 +3823,11 @@ class DissipativeController(LoadPlanner):
         rj['frames'].clear()
         self.get_logger().warn(f'[dissipative] REJOIN ABORT {_who(d)} ({why}): up to {z_up:.2f} m, then back to its '
                                f'staging point; the trajectory resumes once it is clear')
+        x = getattr(self, '_relay_leave', None)
+        if x is not None:
+            self._relay_leave = None             # the ring stays one short: the queued leave would take it to two
+            self.get_logger().warn(f'[dissipative] RELAY LEAVE CANCELLED {_who(x)}: {_who(d)} did not weld back; it '
+                                   f'stays on the ring')
 
     def _rejoin_out(self, d, why):
         """LAND or a drop: d leaves its staging or its rejoin for this flight and lands alone (the departed landing).
@@ -3779,11 +3848,12 @@ class DissipativeController(LoadPlanner):
         if self.load_state is not None:
             c = np.asarray(self.load_state[0:2], float)
             w = (quat_to_rot_np(self.load_state[3:7]) @ rj['rho'])[:2]
-            if rj['mode'] == 'task':                     # away from the ring: out along its own bearing from where it is
+            away = rj['mode'] in ('task', 'park', 'return')
+            if away:                                     # away from the ring: out along its own bearing from where it is
                 w = p[:2] - c
                 r_out = float(np.linalg.norm(w))
             u = w / max(float(np.linalg.norm(w)), 1e-6)
-            if rj['mode'] not in ('stage', 'task'):
+            if rj['mode'] != 'stage' and not away:
                 z_up = max(z_up, float(self._plate_world(rj)[2]) + rj['btt'] + CLEARANCE_M)
         r_clear = _departed_clear_r(self)
         out = _land_clear(self, c, np.array([*(c + max(r_out, r_clear + REJOIN_OUT_MARGIN_M) * u), z_up]),
@@ -3798,7 +3868,7 @@ class DissipativeController(LoadPlanner):
         self._land_alone.add(d)
         self._rejoin_landing.add(d)
         what = (f'staged {_who(d)} leaves ({why})' if rj['mode'] == 'stage' else f'TASK ABORT {_who(d)} ({why})'
-                if rj['mode'] == 'task' else f'REJOIN ABORT {_who(d)} ({why})')
+                if rj['mode'] in ('task', 'park', 'return') else f'REJOIN ABORT {_who(d)} ({why})')
         self.get_logger().warn(f'[dissipative] {what}: up to {z_up:.2f} m clear of the ring, '
                                f'out to ({out[0]:.2f}, {out[1]:.2f}), then it lands alone')
 
@@ -3809,6 +3879,13 @@ class DissipativeController(LoadPlanner):
             d, wps = parse_task(msg.data)
         except ValueError as e:
             self.get_logger().warn(f'[dissipative] TASK REFUSED {msg.data!r}: {e}')
+            return
+        if (getattr(self, '_relay_task', False) and 0 <= d < len(self.detached) and not self.detached[d]
+                and d in self.slot2drone and d not in self._rejoin):
+            # relay_task: a carrier's task is flown when it leaves (_stage_departed); a later TASK replaces it
+            self._relay_next[d] = wps
+            self.get_logger().warn(f'[dissipative] TASK QUEUED {_who(d)}: {_wps_text(wps)}; flown when it leaves '
+                                   f'(relay_task)')
             return
         self._start_task(d, wps)
 
@@ -3853,6 +3930,10 @@ class DissipativeController(LoadPlanner):
                 return f'waypoint {k} ({w[0]:.2f}, {w[1]:.2f}) is outside the staging bound +-{lim:.2f} m'
             if w[2] - rj['btt'] < TASK_TIP_FLOOR_M:
                 return f'waypoint {k} at z {w[2]:.2f} m puts its rod\'s end under {TASK_TIP_FLOOR_M:.2f} m'
+        if getattr(self, '_relay_task', False):
+            if getattr(self, '_traj_running', False):
+                return 'the path is running (a relay task starts in a hold, as its leave)'
+            return self._relay_route_refused(rj, wps)
         route = [rj['q']] + [np.asarray(w[:3], float) for w in wps] + [self._stage_point(rj)[0]]
         near = _min_dist_xy(route, self._task_ring_points())
         if near < rj['r_stage'] - TAKE_BACK_REACHED_M:
@@ -3869,14 +3950,28 @@ class DissipativeController(LoadPlanner):
         if why is not None:
             self.get_logger().warn(f'[dissipative] TASK REFUSED {_who(d)}: {why}')
             return
-        rj.update(mode='task', task=[np.asarray(w[:3], float) for w in wps], dwell=[float(w[3]) for w in wps], leg=0,
-                  dwell_left=None, task_t0=self.get_clock().now().nanoseconds * 1e-9)
-        pts = '; '.join(f'({w[0]:.2f}, {w[1]:.2f}, {w[2]:.2f}) {w[3]:.1f} s' for w in wps)
-        self.get_logger().warn(f'[dissipative] TASK START {_who(d)}: {pts}, at {APPROACH_VEL:.2f} m/s, then back to its '
-                               f'staging point')
+        task, dwell = [np.asarray(w[:3], float) for w in wps], [float(w[3]) for w in wps]
+        relay = getattr(self, '_relay_task', False)
+        if relay:
+            # out from its staging point (where the ring is held), not straight from its plate
+            task, dwell = [self._stage_point(rj)[0]] + task, [0.0] + dwell
+        rj.update(mode='task', task=task, dwell=dwell, leg=0, dwell_left=None,
+                  task_t0=self.get_clock().now().nanoseconds * 1e-9)
+        if relay:
+            rj.update(relay=True, relay_wps=[tuple(float(v) for v in w) for w in wps], lead=1)
+        then = ('parked at the last until an ATTACH (relay_task: the path held while it is inside the lap\'s keep-out)'
+                if relay else 'then back to its staging point')
+        self.get_logger().warn(f'[dissipative] TASK START {_who(d)}: {_wps_text(wps)}, at {APPROACH_VEL:.2f} m/s, '
+                               f'{then}')
 
     def _task_goal(self, rj):
-        """(goal, its velocity) of a carrier on its task: its waypoint, still, then its staging point."""
+        """(goal, its velocity) of a carrier on its task: its waypoint, still, then its staging point. relay_task: parked,
+        its last waypoint; on its way back, the waypoints it only passed, in reverse, then its staging point."""
+        if rj['mode'] == 'park':
+            return rj['task'][-1], np.zeros(3)
+        if rj['mode'] == 'return':
+            k = rj['back_leg']
+            return (rj['back'][k], np.zeros(3)) if k < len(rj['back']) else self._stage_point(rj)
         k = rj['leg']
         return (rj['task'][k], np.zeros(3)) if k < len(rj['task']) else self._stage_point(rj)
 
@@ -3896,13 +3991,130 @@ class DissipativeController(LoadPlanner):
         elif rj['dwell_left'] is None:
             if reached:
                 rj['dwell_left'] = rj['dwell'][k]
-                self.get_logger().info(f'[dissipative] TASK AT {_who(d)} waypoint {k + 1} of {n} ({goal[0]:.2f}, '
-                                       f'{goal[1]:.2f}, {goal[2]:.2f}) {after:.1f} s after its TASK START: '
-                                       f'{rj["dwell"][k]:.1f} s there')
+                lead = rj.get('lead', 0)             # relay_task: its staging point goes first, not a typed waypoint
+                if k >= lead:
+                    self.get_logger().info(f'[dissipative] TASK AT {_who(d)} waypoint {k + 1 - lead} of {n - lead} '
+                                           f'({goal[0]:.2f}, {goal[1]:.2f}, {goal[2]:.2f}) {after:.1f} s after its TASK '
+                                           f'START: {rj["dwell"][k]:.1f} s there')
         else:
             rj['dwell_left'] -= dt
             if rj['dwell_left'] <= 1e-9:
                 rj['leg'], rj['dwell_left'] = k + 1, None
+                if rj.get('relay') and k + 1 >= n:
+                    self._relay_park(d, rj, after)
+
+    # ── relay_task (twin only; card 2026-10-30_x4_endurance_relay) ───────────────────────────────────────────────────
+    def _relay_route(self, rj, wps):
+        """(route out, route back) of relay task wps: out from its staging point through the waypoints; back from the
+        last through the waypoints it only passed (no dwell), in reverse, to its staging point."""
+        stage = self._stage_point(rj)[0]
+        pts = [np.asarray(w[:3], float) for w in wps]
+        via = [p for p, w in zip(pts[:-1], wps[:-1]) if float(w[3]) <= 0.0]
+        return [stage] + pts, [pts[-1]] + via[::-1] + [stage]
+
+    def _relay_keep(self, rj):
+        """A relay drone's keep-out radius about every planned ring point: its staging radius, as a task's."""
+        return rj['r_stage'] - TAKE_BACK_REACHED_M
+
+    def _relay_inside(self, rj, q):
+        """True while q lies inside the keep-out of the ring's planned points (the whole lap while a path is to fly)."""
+        ring = self._task_ring_points()
+        return float(np.min(np.linalg.norm(ring - np.asarray(q, float)[:2], axis=1))) < self._relay_keep(rj)
+
+    def _relay_route_refused(self, rj, wps):
+        """relay_task: why this route cannot fly, or None. Out and back keep the staging radius of the ring where it is
+        now (held at a lap end: it flies them with the path held while inside the keep-out); every waypoint keeps it
+        from the whole lap; and once out of the lap's keep-out the route out stays out, so the path runs only while
+        the drone is clear of every point of it."""
+        keep = self._relay_keep(rj)
+        ring = self._task_ring_points()
+        out, back = self._relay_route(rj, wps)
+        for k, w in enumerate(out[1:], 1):
+            near = float(np.min(np.linalg.norm(ring - w[:2], axis=1)))
+            if near < keep:
+                return f'waypoint {k} ({w[0]:.2f}, {w[1]:.2f}) comes {near:.2f} m from the lap (keep-out {keep:.2f} m)'
+        near = min(_min_dist_xy(out, ring[:1]), _min_dist_xy(back, ring[:1]))
+        if near < keep:
+            return f'its route comes {near:.2f} m from the ring where it is held (keep-out {keep:.2f} m)'
+        inside = _inside_keep(_sample_route(out, RELAY_SAMPLE_M), ring, keep)
+        first_out = int(np.argmin(inside)) if not inside.all() else len(inside)
+        if inside[first_out:].any():
+            return f'its route out comes back inside the lap\'s keep-out ({keep:.2f} m) after leaving it'
+        return None
+
+    def _relay_hold(self, d):
+        """The path held a second more for relay drone d (inside the lap's keep-out, on its way back, or its ATTACH
+        waiting for it to park); said when it stops a running path, which the route check should never let happen."""
+        if getattr(self, '_traj_running', False) and self._reconfig_hold_left <= 0.0:
+            self.get_logger().warn(f'[dissipative] RELAY HOLD {_who(d)}: the path stops mid-lap at t={self.traj_t:.2f} s')
+        self._reconfig_hold_left = max(self._reconfig_hold_left, 1.0)
+
+    def _relay_park(self, d, rj, after):
+        """Its last dwell is over: it holds at its last waypoint (clear of the lap) until an ATTACH flies it back."""
+        rj['mode'] = 'park'
+        w = rj['task'][-1]
+        self.get_logger().warn(f'[dissipative] TASK PARKED {_who(d)} at ({w[0]:.2f}, {w[1]:.2f}, {w[2]:.2f}) {after:.1f} s '
+                               f'after its TASK START: an ATTACH flies it back to its plate')
+        if rj.pop('attach_queued', False):
+            self._relay_return(d, rj)
+
+    def _relay_attach_refused(self, d, rj):
+        """Why relay drone d cannot start its way back (or queue it) now, or None."""
+        if self._dropped is not None:
+            return 'the ring was dropped'
+        if self._land_to_ground or self.descending:
+            return 'LAND or the descent in progress'
+        if getattr(self, '_traj_running', False):
+            return 'the path is running (its way back flies in a hold)'
+        busy = [x for x, r in self._rejoin.items() if x != d and r['mode'] not in ('stage', 'task', 'park')]
+        if busy:
+            return f'{_who(busy[0])} is rejoining (one at a time)'
+        if rj.get('attach_queued'):
+            return 'its ATTACH is already queued'
+        return None
+
+    def _relay_attach(self, d, rj):
+        """/fleet/attach of a relay drone. Parked, it flies back to its staging point with the path held and its rejoin
+        starts there; still on its task, the ATTACH waits for it to park, the path held meanwhile (its dwell is never
+        cut). Refused while the path runs."""
+        why = self._relay_attach_refused(d, rj)
+        if why is not None:
+            self.get_logger().warn(f'[dissipative] REJOIN REFUSED {_who(d)}: {why}')
+            return
+        if rj['mode'] == 'task':
+            rj['attach_queued'] = True
+            self._relay_hold(d)
+            self.get_logger().warn(f'[dissipative] RELAY ATTACH QUEUED {_who(d)}: on its task (leg {rj["leg"]} of '
+                                   f'{len(rj["task"])}); it flies back once parked, the path held')
+            return
+        self._relay_return(d, rj)
+
+    def _relay_return(self, d, rj):
+        """Its way back: from where it is parked through the waypoints it only passed, in reverse, to its staging
+        point, with the path held; its rejoin starts there (_relay_return_step)."""
+        _, back = self._relay_route(rj, rj['relay_wps'])
+        rj.update(mode='return', back=back[1:-1], back_leg=0)
+        rj.pop('attach_queued', None)
+        self._relay_hold(d)
+        via = ''.join(f' via ({p[0]:.2f}, {p[1]:.2f})' for p in rj['back'])
+        self.get_logger().warn(f'[dissipative] RELAY RETURN {_who(d)}: from ({rj["q"][0]:.2f}, {rj["q"][1]:.2f}){via} '
+                               f'to its staging point, the path held; its rejoin starts there')
+
+    def _relay_return_step(self, d, rj, goal, q):
+        """Its way back after this tick's reference q: a via point reached moves on; its staging point reached ends the
+        task and starts its rejoin."""
+        if float(np.linalg.norm(goal - q)) >= TAKE_BACK_REACHED_M:
+            return
+        if rj['back_leg'] < len(rj['back']):
+            rj['back_leg'] += 1
+            return
+        after = self.get_clock().now().nanoseconds * 1e-9 - rj['task_t0']
+        rj['mode'] = 'stage'
+        for key in ('task', 'dwell', 'leg', 'dwell_left', 'task_t0', 'back', 'back_leg', 'relay', 'relay_wps', 'lead'):
+            rj.pop(key, None)
+        self.get_logger().warn(f'[dissipative] TASK DONE {_who(d)}: back at its staging point {after:.1f} s after its '
+                               f'TASK START; its rejoin starts')
+        self._start_rejoin(d)
 
     def _net_slot2drone(self):
         """Network slot -> physical drone for ALL n_net nodes: the parent's (possibly

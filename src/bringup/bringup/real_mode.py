@@ -135,7 +135,7 @@ PLANNER_OPTIONAL = {'land_unwind': 'bool', 'dist_est': 'str', 'dist_tau': 'float
                     'drop_on_loss': 'bool', 'drop_takes_back': 'bool', 'drop_gap_deg': 'float',
                     'tip_detect_m': 'float', 'fig8_size': 'float', 'pos_limit_m': 'float',
                     'rejoin_departed': 'bool', 'rejoin_task': 'bool', 'traj_laps': 'int', 'traj_lap_hold_s': 'float',
-                    'resize_delay_s': 'float'}
+                    'resize_delay_s': 'float', 'relay_task': 'bool'}
 # the trackers' thrust map, which the disturbance estimate reads delivered thrust through
 DIST_MAP = ('thrust_ratio', 'thrust_offset', 'thrust_offset_v_slope', 'thrust_v_ref')
 
@@ -178,6 +178,9 @@ def planner_options(context, rejoin=False):
     if opts.get('rejoin_task') and not (rejoin and opts.get('rejoin_departed')):
         raise RuntimeError("rejoin_task flies only with rejoin_departed, in the twin's mode:=dissipative (a task flies a "
                            'staged carrier)')
+    if opts.get('relay_task') and not (rejoin and opts.get('rejoin_task')):
+        raise RuntimeError("relay_task flies only with rejoin_task, in the twin's mode:=dissipative (card "
+                           '2026-10-30_x4_endurance_relay)')
     if opts.get('traj_laps', 1) != 1 and context.launch_configurations.get('real', 'false') == 'true':
         raise RuntimeError('traj_laps flies only in the twin (card 2026-10-23_scalability, case 7)')
     if opts.get('traj_lap_hold_s', 0.0) > 0.0 and not (

@@ -1,6 +1,6 @@
 # Session state (read after every compaction; keep it short and current)
 
-Updated: Fri 30 Oct 2026, 11:41 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
+Updated: Fri 30 Oct 2026, 15:05 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
 `docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
 
 ## FRI 30 OCT LAB (from 08:00; sheet docs/rig/fri_2026-10-30.md) -- read first
@@ -171,6 +171,40 @@ Updated: Fri 30 Oct 2026, 11:41 AEDT (from `date`). Only what a new session need
   plan_fast_refs (existing switches). Bench 24 Oct on this laptop: tick at 1 it 82.5 ms (8), 106 ms (9; residual 43 ms of
   it). In docs/sim_runs_todo.md under X3; runs after X1, before X4's long runs; then the solve-time figure redone with
   the ground computer's 1-iteration tick for 2-9 against the 100 ms period.
+- 15:05 COMMITTED + PUSHED (Wesley ran the push): week7 97da92d (29-30 Oct, 310 files), main 425ee7e (merge of week7),
+  NEW BRANCH week8 (current, tracking origin/week8) = 97da92d. Not in it: X4 (worktree, merge into week8 after X1),
+  X1's later runs/registry rows (next commit on week8). Overleaf push pending (git -C ~/thesis_full_draft push origin
+  full-draft-1030:main; Overleaf back at 15:03).
+- 15:10 X1 interim (4 quads, unscored): ours ~ no resize ~ late resize (tilt 6-8 deg, dip 29-34 mm); planned pull 17-18 deg
+  / 52-66 mm; no resize + planned pull 21 deg / 142-155 mm: the measured pull catches the release first. Wesley: add the
+  uneven square -> T cell to X1 (drop_tilt_deg 80 in sim; queued with the X1 agent after its batch) and the full square
+  chain on the figure-eight in two variants (square -> T announced / unannounced with the drop raised); in sim_runs_todo.
+- 15:20 Wed sheet DRAFT docs/rig/wed_2026-11-04.md (pre-flight P1-P5: stream check per set, bench latency with the set,
+  console --small-angle 90, W/L re-measure; h3t heave check; sq6b with K 0.045 and new W/L; the 1 m release TO
+  DESK-CHECK: detection, body set <= 8, drop settings). Agents running: X1 (lab PC), X3b+full-chain cards/configs (no
+  runs), F1 bending figure.
+- 15:26 Wed sheet: h3t, h4m1 (M1 four-quad hover, bodies 8,11-14,21,24), sq6b, the release x2 (/drone_3/magnet OFF,
+  tip_detect_m 0.04 typed); dry runs pass; fake-mocap read-backs Mon/Tue. Supervisors' 5 papers in
+  docs/papers/supervisors/ (git-ignored); a review agent writes docs/analysis/supervisor_papers_review_2026-10-30.md.
+  X1 agent paused on its own chain (B 8-quad R2960-63 -> C R2952 re-fly -> D sqT x14), resumes itself to score.
+- 15:55 Desk check of the Wed lines (fake mocap): sq6b reads back his MPC cable 1.0, contact xy 0.045, load 1.15; h4m1/rel
+  REFUSED tip_detect_m on the line -> configs/rig/m1_release_tip.yaml (new); R4 throttle_max 0.95 (the triangle left after a
+  release flew 0.73-0.83). Second pass with the fake drones on the right plates running (scratchpad desk2). F1 done (the
+  band-stop never flew four carriers: h4m1 is its first). Supervisors' review done (thrust map optimistic at 0.6-0.8).
+  X4 card + configs B = 600 s (worktree, --check OK). X3b and X2-full cards: bars FROZEN ~15:46 (Wesley; X3b lab runs
+  res_every 1, tuf timing runs *_rt0 at 0). Arena 6 x 6 x 5 m. Queue after X1: X3b (lab), X2-full, then X4 (after its merge).
+- 16:16 X1 DONE, lab PC FREE (card docs/experiments/2026-10-30_x1_release_ablation.md, Results + sqT Results; rows
+  R2915-R2978 + R2924c; scores results/analysis/x1_2026-10-30.json, tools/x1_metrics.py). B1 (the resize keeps the ring up)
+  FALSIFIED on both fleets: no resize within 0.5 deg / 1.5 mm of ours (4 and 8 quads); late resize = no resize; B3 the
+  measured pull CONFIRMED (planned pull 2.4-4.4x the tilt rise); neither (no resize + planned pull) hangs the ring at
+  13-19 deg. sqT (drop 80, envelope off, twin only): peaks 56-58 deg in every measured-pull arm, U1 confirmed by the dip
+  only (+9 mm) while no resize ends MORE level (2.2 vs 8-10.5 deg); planned pull dropped 3 of 4. R2952 void (runner hung
+  after LAND, killed; re-flown R2964). All X1 runs flew src = 97da92d content; X4's merge into src (16:14) came after.
+- 16:20 X1 first pass DONE (63 runs R2915-R2978; measured pull holds the ring, resize adds nothing in the even cells; the
+  T settles 7-13 deg off level with the resize vs 2.2 without: Wesley: fix before the freeze). X4 MERGED into week8
+  (two additive conflicts resolved; 37 X4 tests; gate --quick PASSED 2019 tests). Cleanup: 5 worktrees, 9 branches
+  deleted (Wesley ran it), 7 plans to docs/archive. Direction block at the top of docs/handin_plan.md. Next: commit,
+  the T-fix agent in a worktree, the lab queue X3b -> X4 overnight.
 - Planner 3-quad solver: .build_sig_3 02:18, .so 08:26 (loaded "geometry + sources unchanged", load_mass 1.150).
 
 ## OVERNIGHT 29 -> 30 Oct (loop 00:09-07:21: QUEUE DONE; morning report docs/reports/morning_report_2026-10-30.md) -- read first

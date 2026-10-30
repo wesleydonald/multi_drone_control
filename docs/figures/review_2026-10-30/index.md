@@ -321,3 +321,93 @@ simulation. Rejected: one shared log axis or a ratio plot (Wesley asked for line
 
 **Files.** `fig_summary.{py,pdf,png}`; the PDF copied over the draft's `Images/results/fig_summary.pdf` (same name and
 label; the old two designs stay in `../review_2026-10-23_best/`).
+
+---
+
+## Added 30 Oct: `fig_res_bend` (F1, fig:res_bend, Results, the later setup)
+
+**One message.** With four carriers the 1.15 kg ring bends at about 5.3 Hz and the trackers' measured cable pull feeds
+it: filtering only what the trackers feed back shrinks the oscillation in the raw measured pull (one 2 Hz low-pass
+stage, then two). With three carriers the two stages' lag let the ring slide sideways at 1.1 Hz, and the 5.3 Hz
+band-stop flew with neither the bending nor the slide (a quarter of it).
+
+**What is drawn.** (a) the amplitude spectrum of the vertical measured pull `acm_z` (logged before the cap, the slew
+limit and any filter), the mean of the carriers' power spectra, 2-8 Hz; (b) the amplitude spectrum of the ring
+centre's horizontal motion (motion capture, x and y power summed), 0.5-2.5 Hz. One colour per filter (a red ramp for
+none / one / two low-pass stages, blue for the band-stop), solid four carriers, dashed three; the band-stop's centre
+(5.3 Hz, from the trackers' params.json) dotted grey; the slide's peak frequency written on it. Welch, Hann, 4 s
+segments at 75 % overlap, 'spectrum' scaling shown as a sinusoid's amplitude sqrt(2P); the pull's rows taken as 50 Hz
+samples (the tracker's tick, as the registry did); the ring pose resampled at 100 Hz on its stamps.
+
+**Data** (real world, 29 Oct, tree 413ec0e + working copy; the filter of each flight read from the trackers'
+params.json; carriers = the planner's n):
+
+| Flight | Carriers | Filter on the measured pull | Window (s after TAKEOFF) |
+|---|---|---|---|
+| RIG-1029-h4 | 4 (plates 0/3/6/9) | none | 11.5-20.2 (lift start to plate 0's release) |
+| RIG-1029-h4f (h4f_3) | 4 | one 2 Hz stage | 11.7-24.3 (to LAND) |
+| RIG-1029-ch1b | 4 | two 2 Hz stages | 11.7-24.6 (to the UNLOAD before the first release) |
+| RIG-1029-sq2_2 | 3 (3/11/7) | two 2 Hz stages | 11.7-27.4 (to the drop at 34 deg) |
+| RIG-1029-sq2_5 | 3 (3/11/7) | 5.3 Hz band-stop, Q 1 | 10.8-26.8 (16 s cap) |
+
+Window rule, the same for every flight: from 'pretension done' (the lift ramp starts) to the flight's first event
+(unannounced detach, unload, drop, LAND), at most 16 s (sq2_2's lift-to-drop span). Sources: the launch log (events),
+`<flight>_logs/logs/tracker/drone*/log.csv` (acm_z), the bag's `/payload/motion_capture_state` (decoded with rclpy,
+93 Hz), the planner log (the registry's sideways numbers).
+
+**Numbers** (script printout):
+
+| Flight | Pull peak | 4-6.5 Hz pull sd, per carrier (m/s^2) | Sideways peak | 0.8-1.5 Hz sd x / y (cm) |
+|---|---|---|---|---|
+| h4, none | 5.38 Hz, 0.77 m/s^2 | 0.57-0.62 | none | 0.1 / 0.1 |
+| h4f, one stage | 5.12 Hz, 0.46 | 0.36-0.42 | none | 0.2 / 0.1 |
+| ch1b, two stages | 5.19 Hz, 0.35 | 0.22-0.29 | none | 0.2 / 0.1 |
+| sq2_2, two stages, 3 | none | 0.06-0.17 | 1.12 Hz, 2.3 cm | 1.0 / 1.4 |
+| sq2_5, band-stop, 3 | none | 0.04-0.06 | 1.16 Hz, 0.6 cm | 0.5 / 0.3 |
+
+**The registry's numbers reproduce, but their windows are not "in hover after the lift" and not like for like.**
+With the registry rows' own windows (rows as 50 Hz samples, butter(2) band-pass, filtfilt): h4 0.57-0.62 (TAKEOFF +
+11.4-19.8 s, the lift; the registry's 0.61 is 0.62 here from TAKEOFF's last digits), h4f 0.40-0.47 (the same lift
+window), ch1b 0.07-0.09 (the 4 s before plate 0's loss, 24.1-27.8 s: at the top, during drone 4's unload), sq2_2
+0.05-0.11 (19.0-27.2 s, after the top); sq2_2's slide 1.5 / 1.9 cm (planner log at 10 Hz; the bag gives 1.3 / 1.9).
+So the registry compares h4 and h4f in the lift with ch1b at the top. Over the same lift window (11.4-19.8 s) two
+stages give 0.25-0.33 m/s^2, not 0.07-0.09; at the top 0.14-0.19 (20-24.6 s), and one stage 0.23-0.30 (20-24.2 s).
+The text should say "two stages halved the bending in the lift and it died away at the top", not "removed it".
+Resampling the pull on its logged time stamps instead of taking rows as 50 Hz samples gives 3-7 % less (h4 0.54-0.59,
+h4f 0.39-0.45, the linear interpolation smooths) and sq2_2's QUAD1 0.06 instead of 0.11 (its rows are irregular).
+
+**What the figure cannot show (for the text).**
+- The band-stop flew only on three carriers, where the two-stage flight showed no 5.3 Hz bending either. So the data
+  show "with the band-stop, neither bending nor slide", not that it removes a bending that was there. The one
+  four-carrier band-stop flight, RIG-1030-h4n (30 Oct, another day and stream setup), lifted for 3 s before an
+  operator LAND for a heave; its 2-10 Hz pull peaked at 2-2.7 Hz (the heave), too short to tell.
+- The slide came with three carriers only: ch1b (four carriers, the same two stages) shows no 1.1 Hz motion
+  (0.2 / 0.1 cm). The attribution to the stages' lag rests on sq2_4 (the triangle swung with QUAD4 on its mat) and
+  the applied pull running 120 ms behind the measured (registry sq2_2), not on this figure.
+- One flight per filter, no repeats.
+
+**Draft caption.** The ring's bending and the filters on the measured cable pull, in the real world (1.15\,kg ring,
+1\,m cables), one flight per filter, from the start of the lift to the flight's first event (9 to 16\,s). (a)
+Amplitude spectrum of the vertical measured cable pull (an acceleration on the UAV, logged before the filter), the
+mean of the carriers' spectra. (b) Amplitude spectrum of the horizontal motion of the ring's centre. With four
+carriers and no filter the pull peaked at 5.4\,Hz, the ring bending. Filtering only the pull the controllers feed
+back lowered the peak from 0.77 to 0.46\,m\,s$^{-2}$ with one 2\,Hz low-pass stage and to 0.35\,m\,s$^{-2}$ with
+two. With three carriers neither filter showed a peak near 5.3\,Hz (the band-stop's centre, dotted). The two stages
+let the ring slide at 1.1\,Hz (2.3\,cm), the band-stop about a quarter of that (0.6\,cm).
+
+**The loop.** Round 1: two spectra with the analysis bands shaded, hero weights swapped between panels; the 5.3 Hz
+label sat on the no-filter peak and the slide's label hit the drift edge. Round 2: label left of the line, the label
+on the 1.1 Hz peak, ticks without trailing zeros. Blind critic (PNG and caption only), taken: the caption no longer
+says the band-stop "shows neither" (its 1.1 Hz bump is a quarter of the two stages') and says that with three
+carriers neither filter showed the bending; the band-stop's centre dotted (dashed meant three carriers); one line
+weight for every flight in both panels; the light no-filter red darkened (greyscale); the bands deleted (unexplained
+marks; the numbers stay here); (b) from 0.5 Hz with ticks; (b) named "ring centre, horizontal motion"; the caption
+gives the windows, says "mean of the carriers' spectra" (the power spectra are averaged, so opposed carriers do not
+cancel) and which frequency is measured (5.4) and which is the band-stop's (5.3). Rejected: (1) a missing arm (three
+carriers unfiltered, or the band-stop on four): no lab day here, reported above for Wesley; (2) the pull in N: the
+controllers use it as an acceleration, the caption says so. Audit PASS (6.27 x 2.55 in, CMR only, nothing under
+8 pt, no collisions); greyscale and deuteranopia previews checked.
+
+**Files.** `fig_res_bend.{py,pdf,png}` (run with ROS sourced: the script decodes the bags); the PDF copied to
+`~/mdc_wt/thesis/docs/thesis_drafts/full_draft_2026-10-30/Images/results/` and `~/thesis_full_draft/Images/results/`
+(no .tex edited). LaTeX: `\includegraphics[width=\textwidth]{Images/results/fig_res_bend.pdf}`, label `fig:res_bend`.

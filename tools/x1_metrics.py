@@ -25,13 +25,11 @@ import sys
 
 import numpy as np
 import pandas as pd
-import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import metrics as M  # noqa: E402
 import release_bands as RB  # noqa: E402
-import run_logs  # noqa: E402
 import s_metrics as S  # noqa: E402
 
 AFTER_S = 10.0          # dip and path-error window after the release
@@ -76,9 +74,15 @@ def score(run_dir):
     with open(os.path.join(run_dir, 'manifest.json')) as fh:
         man = json.load(fh)
     name = os.path.basename(run_dir.rstrip('/'))
-    m = re.search(r'x1_([a-z0-9]+)_([a-z0-9]+)$', name)
+    m = re.search(r'x1_([A-Za-z0-9]+)_([a-z0-9]+)$', name)
     cell, arm = (m.group(1), m.group(2)) if m else (None, None)
-    rb = RB.Run(run_dir)
+    try:
+        rb = RB.Run(run_dir)
+    except SystemExit:
+        # no LAND: the ring was dropped and the fleet landed on the drop; the window ends at LANDED (or the last row)
+        ev0 = pd.read_csv(os.path.join(logs, 'events.csv'))
+        landed = ev0[ev0.event.astype(str) == 'LANDED'].sim_time
+        rb = RB.Run(run_dir, tland=float(landed.iloc[0]) if len(landed) else float(df.t.max()))
     te, tland = rb.te, rb.tland
     out = dict(run=name.split('_')[0], cell=cell, arm=arm, t_release=te, t_land=tland)
     met = rb.metrics()
@@ -117,6 +121,13 @@ def score(run_dir):
     low = (t < tland) & (t > te) & (z < DROP_Z)
     out['dropped'] = bool(s['dropped'] or low.any())
     out['drop_reason'] = (re.findall(r'DROP AND LAND[^\n]*', txt) or [None])[0]
+    ev = pd.read_csv(os.path.join(logs, 'events.csv'))
+    ab = ev[ev.event.astype(str) == 'FLEET_ABORT']
+    out['aborted'] = (f"{float(ab.sim_time.iloc[0]) - te:+.2f} s: {ab.arg.iloc[0]}" if len(ab) else None)
+    out['loss'] = bool(out['dropped'] or out['aborted'])
+    # sqT's tilt drop is at 80 deg: when the ring first passed it (a dropped ring's later tilt is the fall, not the flight)
+    over = np.nonzero((rb.t >= te) & (np.linalg.norm(rb.th, axis=1) > 80.0))[0]
+    out['t_over80_s'] = float(rb.t[over[0]] - te) if over.size else None
     det = re.search(r'stays in the model, the loss is acted on at t=([\d.]+) s \(detected at ([\d.]+) s\)', txt)
     t_ready = float(man.get('t_ready_sim', 0.0))
     out['detect_s'] = (float(det.group(2)) - t_ready - te) if det else (out['resize_s'] if arm != 'nors' else None)

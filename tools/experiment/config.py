@@ -236,7 +236,13 @@ def mocap_loss_arg(arg):
 
 
 def wait_log_arg(arg):
-    """WAIT_LOG arg -> (compiled regex, timeout SIM s or None): '[timeout_s] regex'."""
+    """WAIT_LOG arg -> (compiled regex, timeout SIM s or None): '[timeout_s] [#n] regex'."""
+    return wait_log_spec(arg)[:2]
+
+
+def wait_log_spec(arg):
+    """WAIT_LOG arg -> (compiled regex, timeout SIM s or None, n): '[timeout_s] [#n] regex', where #n waits for the
+    n-th matching line of the run (default the first; the relay's repeated lines, card 2026-10-30_x4_endurance_relay)."""
     text = str(arg or '').strip()
     if not text:
         raise ValueError('WAIT_LOG needs a regex as its arg')
@@ -246,8 +252,17 @@ def wait_log_arg(arg):
     except ValueError:
         timeout, rest = None, text
     if timeout is not None and (timeout <= 0 or not rest.strip()):
-        raise ValueError(f"WAIT_LOG arg {arg!r}: expected '[timeout_s] regex' with timeout > 0")
-    return re.compile(rest.strip()), timeout
+        raise ValueError(f"WAIT_LOG arg {arg!r}: expected '[timeout_s] [#n] regex' with timeout > 0")
+    rest = rest.strip()
+    nth = 1
+    m = re.match(r'#(\d+)\s+(\S.*)$', rest)
+    if m:
+        nth, rest = int(m.group(1)), m.group(2)
+        if nth < 1:
+            raise ValueError(f"WAIT_LOG arg {arg!r}: #n counts from 1")
+    elif rest.startswith('#') and re.match(r'#\d+$', rest):
+        raise ValueError(f"WAIT_LOG arg {arg!r}: '#n' needs a regex after it")
+    return re.compile(rest), timeout, nth
 
 
 def wait_traj_arg(arg):
@@ -433,6 +448,7 @@ class ExperimentConfig:
         # 0 disables early stopping and runs the full duration_s.
         self.stop_after_abort_s = 12.0
         self.events = []
+        self.relay = None                # experiment/relay.py's RelayPlan when the config has a relay: section
         self.criteria = None
         # True when the launch is DELIBERATELY told a different mass/geometry than the
         # world (a robustness arm); otherwise run_experiment refuses a mismatch.
@@ -482,6 +498,15 @@ class ExperimentConfig:
                 setattr(c, k, float(tim[k]))
         c.events = [Event(e['t'], e['do'], e.get('arg'))
                     for e in (raw.get('events') or [])]
+        c.relay = None
+        if raw.get('relay') is not None:
+            # the endurance relay's rota (twin only; card 2026-10-30_x4_endurance_relay): its events follow the
+            # config's own (ARM, TAKEOFF, WAIT_LIFT)
+            from .relay import expand
+            knobs = {**params_file_knobs(c.launch_args.get('params_file')), **c.launch_args,
+                     'num_drones': c.num_drones}
+            c.relay = expand(raw['relay'], knobs, max([e.t for e in c.events], default=0.0) + 1.0)
+            c.events += [Event(e['t'], e['do'], e.get('arg')) for e in c.relay.events]
         c.cmd_ready_topic = str(raw.get('cmd_ready_topic', c.cmd_ready_topic))
         partner = any(e.do == 'LAUNCH' and 'partner_mission' in str(e.arg) for e in c.events)
         ball = raw.get('ball_start', PARTNER_BALL_START if partner else None)
@@ -540,6 +565,7 @@ class ExperimentConfig:
                        '0.5 untyped)')
         bad += self._rejoin_problems(knobs)
         bad += self._traj_problems(knobs)
+        bad += self._relay_problems(knobs)
         if bad:
             raise ValueError(f'{self.name}: invalid experiment config:\n  '
                              + '\n  '.join(bad))
@@ -580,6 +606,31 @@ class ExperimentConfig:
                 if z < rod + TASK_ROD_CLEAR_M - 1e-9:
                     bad.append(f'TASK of drone {d}: waypoint z {z:g} m under the rod + {TASK_ROD_CLEAR_M:g} m '
                                f'({rod + TASK_ROD_CLEAR_M:.2f} m): its end would near the floor')
+        return bad
+
+    def _relay_problems(self, knobs):
+        """A relay (card 2026-10-30_x4_endurance_relay) flies on the planner's relay_task with announced soft detaches,
+        the lapped path its rota was built for, lap-end holds long enough for its events, and a duration that holds
+        the projected mission."""
+        def on(v):
+            return str(v).strip().lower() in ('1', 'true', 'yes')
+        plan = getattr(self, 'relay', None)
+        if plan is None:
+            return ['relay_task: true without a relay: section (the rota)'] if on(knobs.get('relay_task', '')) else []
+        bad = []
+        if plan.n_leaves and not (on(knobs.get('relay_task', '')) and on(knobs.get('rejoin_task', ''))):
+            bad.append('relay: needs relay_task: true and rejoin_task: true (with rejoin_departed)')
+        if plan.n_leaves and float(knobs.get('detach_unload_s') or 0.0) <= 0.0:
+            bad.append('relay: the leaves are announced soft detaches: detach_unload_s > 0')
+        laps = knobs.get('traj_laps')
+        if laps in (None, '') or int(float(laps)) != plan.laps:
+            bad.append(f'relay: the rota flies traj_laps {plan.laps} ({plan.first} + {plan.n_leaves} leaves + '
+                       f'{plan.final} final), the config types {laps!r}')
+        if float(knobs.get('traj_lap_hold_s') or 0.0) < 2.0:
+            bad.append('relay: traj_lap_hold_s >= 2 (the TASK, ATTACH and DETACH go 0.3-1.0 s into the lap-end hold)')
+        if self.duration_s < 1.15 * plan.mission_s:
+            bad.append(f'relay: duration_s {self.duration_s:g} under 1.15 x the projected mission '
+                       f'{plan.mission_s:.0f} s ({1.15 * plan.mission_s:.0f} s)')
         return bad
 
     def _traj_problems(self, knobs):

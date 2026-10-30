@@ -116,6 +116,7 @@ fleet_resize:
   drop_gap_deg: ''             # deg, '' = off (a 180 deg gap drops): after the lift a loss keeps flying while the survivors' largest empty arc (a pair: its larger arc) is at most this; 200 flies the T and the opposite pair (Wesley 21 Oct; the pair needs min_survivors 2; card 2026-10-21_chain_release)
   rejoin_departed: ''          # '' = off: a carrier that leaves holds at a ring-frame staging point, and /fleet/attach <d> flies it back to its own plate and re-welds its tether (twin mode:=dissipative only; needs departed_land false and io tether_tips; code design B, card 2026-10-23_rejoin_departed)
   rejoin_task: ''              # '' = off: /fleet/task "d x,y,z,dwell; ..." flies a staged carrier to each waypoint and back to its staging point (twin mode:=dissipative only; needs rejoin_departed; card 2026-10-23_scalability case 6)
+  relay_task: ''               # '' = off: tasks fly on a lapped path (a carrier's TASK waits for its leave, a leave for a full ring, the path held while the drone is inside the lap's keep-out, parked at its last waypoint until an ATTACH flies it back; twin mode:=dissipative only; needs rejoin_task; card 2026-10-30_x4_endurance_relay)
   drop_tilt_deg: ''            # deg, '' = 30: the trackers' ring-tilt drop threshold
   drop_samples: ''             # '' = 2: consecutive ring samples over it
   drop_glitch_step_deg: ''     # deg, '' = 15: a frame-to-frame ring attitude step above this is a pose glitch (rig bags: real capsizes stay under it)

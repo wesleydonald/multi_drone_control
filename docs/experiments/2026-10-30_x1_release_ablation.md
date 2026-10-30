@@ -129,5 +129,152 @@ Yes, twin only, default off (Wesley 30 Oct ~12:35: approved, **critic waived** f
   final tree after the thesis tables, the switch and its tests come out together (one commit), and the X1 rows keep
   the tree they flew.
 
-## Results
-(after the runs)
+## Addendum: the uneven cell `sqT`, square to a T (Wesley 30 Oct ~15:10; written and FROZEN ~15:20, before any sqT run)
+
+**Question.** At 4 quads in the even M1 cell the no-resize arm came within ~1 deg and ~3 mm of ours, because the measured
+pull catches the release first (with the planned pull the resize cut the dip ~150 -> ~60 mm). Does the resize matter
+on its own when the old plan is badly wrong about the geometry: the square losing plate 9, which leaves a T whose
+survivors' largest gap is 180 deg (the CoG on the opposite pair's line)?
+
+**Cell.** `x1_sqT_<arm>.yaml`: `x1_h4_<arm>` in the square world `four_rigid_ground_rig_L100.sdf` (carriers typed
+0,270,180,90 = plates 0/9/6/3; the 0.86 kg ring; R2249/R2318/R2319/R2823's world), unannounced RELEASE of plate 9
+(drone 1) at 25 s in hover, LAND 20 s later. The same seven arms (ours, no resize, late 0.5 / 1 / 2 s, planned pull,
+no resize + planned pull), 2 runs each = 14 runs. Params `configs/twin/x1_sqT.yaml` = `s_chain_pair.yaml` (the T flies
+under `drop_gap_deg 200`, `min_survivors 2`) with **`drop_tilt_deg 80`**.
+
+**Tilt limits raised, twin only, and why.** The unannounced square-to-T release peaks at 57-61 deg on 1 m cables in
+the twin (R2249, R2823; 76.7-80.2 deg after a 45 deg drop at 5 iterations, R2318/R2319), so at 30 or 45 deg every arm
+would be dropped and nothing could be compared. Two limits act on the ring's tilt, both in the trackers:
+- `drop_tilt_deg` (the trackers' ring-tilt drop request to the planner; 30 by default, 45 in the chain params) -> **80**;
+- the trackers' ring-tilt envelope `max_payload_tilt_deg` (60 deg: a fleet DISARM, harder than a drop) is switched off
+  by the twin's existing launch switch `payload_tilt_envelope: false` (it sets 180; there is no launch knob for 80), so
+  80 deg (the drop) is the ring's only tilt rule.
+- The planner has no ring-tilt drop of its own (it drops on the trackers' /fleet/drop request, on a loss leaving fewer
+  than `min_survivors`, or on a gap over `drop_gap_deg`). The quads' own 60 deg attitude envelope stays: a quad past it
+  is an envelope fault (a loss, reported).
+
+**Bars (frozen ~15:20, before any sqT run).** Metrics as section 5 (tilt rise, abs peak, dip, drop, T6 settle,
+t_level, settled tilt, path error over 10 s, resize time). "Loss" = a drop (the 80 deg rule or the planner) or a fleet
+abort (an envelope fault). ours_max = the larger of ours' two repeats; means over two.
+- **U1 (the resize on its own; the cell's headline).** CONFIRMED if in both no-resize repeats: tilt rise >
+  ours_max + 1.0 deg, or dip > ours_max + 5 mm, or settled tilt > ours_max + 1.0 deg, or a loss where ours has none.
+  FALSIFIED if the no-resize means are within 1.0 deg (tilt rise), 5 mm (dip) and 1.0 deg (settled tilt) of ours and
+  neither arm loses the ring. Otherwise inconclusive.
+- **U2 (late resize in order).** Arm means of tilt rise non-decreasing ours <= 0.5 s <= 1 s <= 2 s <= no resize, no
+  neighbour inverted by more than max(0.5 deg, 5 % of ours' mean); and the 2 s arm worse than ours in both repeats by
+  U1's rule. Falsified by a larger inversion or the 2 s arm within U1's falsifying band of ours.
+- **U3 (the measured pull).** Planned pull vs ours by U1's rule (confirm / falsify as U1).
+- **U4 (the resize with the planned pull).** No resize + planned pull vs planned pull by U1's rule, the planned-pull arm
+  as the reference (its max and means in place of ours').
+- **U5 (ours recovers).** Both ours runs: no loss, abs peak <= 80 deg, T6 settle <= 5.0 s. t_level (back to the
+  pre-release attitude) is reported, not barred: the T's own level is not the square's (R2249 settled at 6.7 deg).
+- **Validity** as section 5, plus: the planner does not drop the T for its gap (`drop_gap_deg 200` flies it; a gap drop
+  is a config error, void).
+
+Reading caveat (stated before the runs): the twin's links are rigid hinged rods, which may exaggerate a T's roll
+against the rig's slack-able cables (R2249's note).
+
+**Cost.** 14 runs, 4 slots x 4 cpus, ~40 min of lab time, after batch B and its re-fly.
+
+## Results (scored 30 Oct ~15:45; sections 1-8's cells; the sqT addendum's table below)
+
+One tree for every run (week7 284ffb4 + the working tree with `resize_delay_s`; src unchanged across batches A-D, the
+manifests' git_diff.patch). 49 valid runs; one void (R2952: the runner deadlocked after LAND, re-flown as R2964).
+Scores: `tools/x1_metrics.py` -> `results/analysis/x1_2026-10-30.json`. Each cell's two repeats are listed in order.
+
+| Cell | Arm | Runs | Tilt rise (deg) | Abs peak (deg) | Dip (mm) | Drop | T6 settle (s) | t_level (s) | Settled tilt (deg) | Path error 10 s (mm) | Resize after release (s) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 4 quads hover, 0.86 kg | ours | R2918, R2934 | 5.73 / 7.16 | 4.29 / 5.62 | 29.1 / 33.7 | no | 4.0 / 3.9 | 2.6 / 2.5 | 0.05 / 0.05 | 42.2 / 44.3 | 0.38 / 0.28 |
+| 4 quads hover, 0.86 kg | late 0.5 s | R2920, R2936 | 6.94 / 6.93 | 5.39 / 5.39 | 32.5 / 33.2 | no | 4.9 / 5.0 | 3.6 / 3.7 | 0.07 / 0.07 | 45.5 / 45.9 | 0.79 / 0.87 |
+| 4 quads hover, 0.86 kg | late 1 s | R2921, R2937 | 6.90 / 6.80 | 5.35 / 5.25 | 32.5 / 33.1 | no | 5.2 / 5.2 | 3.7 / 3.7 | 0.04 / 0.03 | 44.5 / 44.4 | 1.38 / 1.37 |
+| 4 quads hover, 0.86 kg | late 2 s | R2922, R2938 | 6.91 / 7.17 | 5.34 / 5.68 | 32.6 / 34.0 | no | 3.6 / 4.7 | - / - | 0.05 / 0.05 | 41.3 / 42.4 | 2.37 / 2.30 |
+| 4 quads hover, 0.86 kg | no resize | R2919, R2935 | 6.97 / 6.74 | 5.43 / 5.17 | 32.8 / 32.7 | no | 3.7 / 3.6 | - / - | 0.20 / 0.20 | 41.6 / 41.0 | none / none |
+| 4 quads hover, 0.86 kg | planned pull | R2923, R2939 | 16.73 / 16.62 | 17.18 / 17.07 | 53.3 / 52.3 | no | 10.3 / 10.4 | 13.2 / 13.2 | 1.91 / 1.92 | 41.9 / 41.7 | 0.34 / 0.34 |
+| 4 quads hover, 0.86 kg | no resize + planned pull (neighbour) | R2924, R2940 | 21.15 / 20.97 | 21.58 / 21.42 | 142.3 / 142.2 | no | 6.0 / 6.0 | - / - | 18.94 / 18.97 | 304.6 / 303.5 | none / none |
+| 4 quads mid figure-8, 0.86 kg | ours | R2925, R2941 | 7.63 / 7.20 | 6.48 / 6.05 | 34.3 / 31.3 | no | 12.9 / 12.8 | - / - | 3.57 / 3.68 | 48.9 / 47.8 | 0.36 / 0.36 |
+| 4 quads mid figure-8, 0.86 kg | late 0.5 s | R2927, R2943 | 6.98 / 7.06 | 5.78 / 5.89 | 31.2 / 31.5 | no | 11.6 / 12.6 | - / - | 3.63 / 3.60 | 49.0 / 48.4 | 0.86 / 0.96 |
+| 4 quads mid figure-8, 0.86 kg | late 1 s | R2928, R2944 | 7.01 / 6.96 | 5.85 / 5.79 | 31.7 / 32.0 | no | 12.6 / 11.8 | - / - | 3.63 / 3.67 | 48.4 / 48.1 | 1.36 / 1.36 |
+| 4 quads mid figure-8, 0.86 kg | late 2 s | R2929, R2945 | 6.68 / 6.94 | 5.50 / 5.76 | 31.0 / 32.4 | no | 12.7 / 12.8 | - / - | 3.66 / 3.65 | 47.8 / 47.9 | 2.36 / 2.36 |
+| 4 quads mid figure-8, 0.86 kg | no resize | R2926, R2942 | 6.75 / 6.80 | 5.52 / 5.59 | 30.7 / 30.6 | no | 12.9 / 12.9 | - / - | 3.63 / 3.66 | 46.2 / 47.4 | none / none |
+| 4 quads mid figure-8, 0.86 kg | planned pull | R2930, R2946 | 18.36 / 17.78 | 18.78 / 18.21 | 65.6 / 63.9 | no | 8.0 / 7.9 | - / - | 2.63 / 2.60 | 44.7 / 44.4 | 0.36 / 0.36 |
+| 4 quads mid figure-8, 0.86 kg | no resize + planned pull (neighbour) | R2931, R2947 | 21.58 / 21.45 | 21.98 / 21.85 | 154.6 / 154.7 | no | 6.2 / 6.2 | - / - | 17.74 / 17.74 | 222.1 / 222.3 | none / none |
+| 8 quads hover, 0.9 kg | ours | R2950, R2957 | 1.63 / 1.55 | 1.63 / 1.54 | 15.2 / 14.5 | no | 4.5 / 4.5 | 2.8 / 2.8 | 1.06 / 1.07 | 28.1 / 28.1 | 0.37 / 0.37 |
+| 8 quads hover, 0.9 kg | late 0.5 s | R2959, R2964 | 1.57 / 1.59 | 1.57 / 1.59 | 15.2 / 15.0 | no | 5.3 / 5.5 | 2.9 / 2.9 | 1.06 / 1.07 | 30.3 / 30.6 | 0.85 / 0.85 |
+| 8 quads hover, 0.9 kg | late 1 s | R2953, R2960 | 1.42 / 1.53 | 1.40 / 1.54 | 13.2 / 14.8 | no | 5.5 / 5.6 | 1.4 / 1.4 | 1.06 / 1.07 | 27.8 / 28.1 | 1.37 / 1.37 |
+| 8 quads hover, 0.9 kg | late 2 s | R2954, R2961 | 1.71 / 1.69 | 1.73 / 1.73 | 16.3 / 15.8 | no | 5.3 / 5.5 | 1.4 / 1.4 | 1.06 / 1.07 | 26.7 / 26.4 | 2.36 / 2.35 |
+| 8 quads hover, 0.9 kg | no resize | R2951, R2958 | 1.63 / 1.66 | 1.60 / 1.65 | 14.7 / 14.6 | no | 6.1 / 6.2 | - / - | 1.19 / 1.19 | 25.7 / 25.4 | none / none |
+| 8 quads hover, 0.9 kg | planned pull | R2955, R2962 | 7.21 / 6.81 | 7.21 / 6.82 | 38.3 / 35.4 | no | 3.7 / 3.5 | 3.6 / 3.5 | 0.40 / 0.39 | 33.3 / 32.0 | 0.40 / 0.41 |
+| 8 quads hover, 0.9 kg | no resize + planned pull (neighbour) | R2956, R2963 | 13.40 / 13.44 | 13.41 / 13.44 | 71.3 / 71.2 | no | 7.5 / 7.4 | - / - | 13.18 / 13.18 | 86.7 / 86.7 | none / none |
+| 4 quads hover, 1.15 kg | ours | R2932, R2948 | 9.27 / 9.76 | 7.95 / 8.40 | 43.9 / 46.3 | no | 5.5 / 5.5 | 3.3 / 3.3 | 0.04 / 0.06 | 46.6 / 47.7 | 0.33 / 0.34 |
+| 4 quads hover, 1.15 kg | no resize | R2933, R2949 | 9.93 / 9.31 | 8.60 / 7.98 | 47.2 / 44.0 | no | 4.4 / 4.3 | - / - | 0.21 / 0.22 | 47.1 / 45.1 | none / none |
+
+**Verdict against the frozen bars.**
+
+| Bar | Outcome | Numbers (arm means unless stated) |
+|---|---|---|
+| B1 the resize keeps the ring up (no resize vs ours) | **FALSIFIED** as frozen: on both fleets the no-resize arm is within 1 deg and 5 mm of ours, and neither repeat is worse by more | h4 6.85 vs 6.44 deg, 32.8 vs 31.4 mm; h8 1.64 vs 1.59 deg, 14.7 vs 14.9 mm. Secondary cells the same: f4 6.77 vs 7.41 deg, 30.7 vs 32.8 mm; 1.15 kg 9.62 vs 9.52 deg, 45.6 vs 45.1 mm |
+| B2 late resize in order, 2 s worse than ours | **FALSIFIED** in h4 and f4: no inversion over 0.5 deg, but the 2 s arm is not 1 deg worse than ours (the late arms sit with no resize) | h4 ours 6.44, 0.5 s 6.93, 1 s 6.85, 2 s 7.04, none 6.85; f4 7.41, 7.02, 6.99, 6.81, 6.77; h8 (reported) 1.59, 1.58, 1.48, 1.70, 1.64 |
+| B3 the measured pull matters (planned pull vs ours) | **CONFIRMED** in h4 (both repeats); the same in f4 and h8 (reported) | h4 16.73 / 16.62 vs 5.73 / 7.16 deg, dip 53.3 / 52.3 vs 29.1 / 33.7 mm, settles 10.3 s to 1.9 deg; f4 18.4 / 17.8 vs 7.6 / 7.2 deg; h8 7.2 / 6.8 vs 1.6 / 1.6 deg |
+| B4 ours is safe | Frozen rule: **holds** in every cell (no drop, abs peak <= 8.4 deg, t_level 2.5-3.3 s in the hover cells). Revised T6 settle (13:10): holds in h4 (3.9-4.0 s) and h8 (4.5 s), **misses at 1.15 kg** (5.5 / 5.5 s against 5.0) | the no-resize arm settles faster on T6 at 1.15 kg (4.3-4.4 s) |
+
+**2 x 2 neighbour (exploratory, no bar): no resize and no measured pull together lose the level.** The ring hangs at
+19.0 deg (h4), 17.7 deg (f4, last 5 s) and 13.2 deg (h8) to LAND, dips 142 / 155 / 71 mm, path error 304 / 222 / 87 mm.
+Either mechanism alone keeps it near level: the measured pull alone (no resize) 0.20 / 1.19 deg settled, the resize alone
+(planned pull) 1.9 / 0.4 deg.
+
+**Reading.**
+- With the measured pull the peak arrives 0.37-0.40 s after the release, at the planner's detection (0.28-0.41 s): the
+  trackers' measured pull (50 Hz, on each carrier) has already caught the transient, so a resize at detection, or 0.5-2 s
+  later, cannot change the peak or the dip, and does not.
+- What the resize still buys with the measured pull is small and steady: settled tilt 0.05 vs 0.20 deg (h4), 1.06 vs
+  1.19 deg (h8), 0.05 vs 0.21 deg (1.15 kg); and the leaver leaves the model (without it the freed quad holds its slot
+  reference over the ring until the fleet's LAND).
+- With the planned pull the resize is what levels the ring (settled 1.9 vs 19.0 deg in h4, 0.4 vs 13.2 deg in h8).
+- So in these cells the release is held by two redundant mechanisms, the measured pull first; the thesis claim "the
+  resize keeps the ring up" does not hold as worded. Claims that do hold: the measured pull cuts the release peak 2.4-4.4x (tilt rise, arm means)
+  (B3), and either mechanism alone keeps a level ring where neither does not (the neighbour).
+- Caveat: the twin's rigid rods and zero added delay; the rig's mocap path was ~95 ms late on 30 Oct, which slows the
+  measured pull and may move the balance towards the resize (X9's question).
+
+**Surprises.** R2924 (h4) and R2931 (f4), no resize + planned pull: a FLEET ABORT 9 s after LAND ('drone 2 disarmed unexpectedly': the freed quad, still in the planner's model, landed and disarmed outside the fleet's touchdown), after the scored window; not seen in their repeats or in any no-resize run. R2952's runner hung after a normal landing (futex wait, sim clock running, rows only in memory); R2955's
+runner stopped 1.65 s after LANDED on a clock freeze (valid: the window was complete). Both 8-quad teardowns.
+
+## Results: uneven cell sqT (scored 30 Oct ~16:15)
+
+14 valid runs, R2965-R2978, the same tree as the main cells (batch D, 4 slots x 4 cpus). Every run's trackers read back
+`drop_tilt_deg` 80 and `max_payload_tilt_deg` 180; the planner kept the T (gap 180 deg under `drop_gap_deg` 200) in
+every resized run; no fleet abort. "Dropped" = the trackers' 80 deg rule dropped the ring; a dropped run's later tilt and
+dip are the fall, so they are not shown. "Held under 10 deg" is a reading added after the runs (not barred): the first
+time the tilt stays under 10 deg for 1 s.
+
+| Arm | Runs | Tilt rise (deg) | Abs peak (deg) | Dip (mm) | Loss | Held under 10 deg (s) | Tilt +5 s / +10 s (deg) | Settled tilt (deg) | T6 settle (s) | Path error 10 s (mm) | Resize after release (s) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| ours | R2965, R2972 | 57.11 / 56.99 | 57.11 / 57.00 | 100.2 / 99.5 | no / no | 2.76 / 2.74 | 6.1, 9.1 / 5.8, 9.6 | 8.30 / 10.52 | 5.4 / 13.4 | 100.5 / 100.2 | 0.31 / 0.31 |
+| late 0.5 s | R2967, R2974 | 57.30 / 56.62 | 57.30 / 56.62 | 107.8 / 107.1 | no / no | 1.27 / 2.79 | 9.3, 9.6 / 9.0, 9.3 | 7.82 / 7.84 | 15.9 / 16.0 | 86.3 / 86.2 | 0.81 / 0.81 |
+| late 1 s | R2968, R2975 | 56.44 / 56.00 | 56.45 / 55.98 | 107.9 / 108.0 | no / no | 1.25 / 1.24 | 8.6, 9.5 / 8.5, 10.5 | 9.72 / 13.07 | 6.6 / 16.7 | 85.5 / 86.8 | 1.31 / 1.32 |
+| late 2 s | R2969, R2976 | 56.18 / 56.61 | 56.18 / 56.62 | 106.3 / 106.6 | no / no | 1.24 / 1.25 | 5.8, 7.6 / 6.0, 7.6 | 6.77 / 6.78 | 10.4 / 10.3 | 88.2 / 89.2 | 2.31 / 2.30 |
+| no resize | R2966, R2973 | 58.06 / 56.37 | 58.06 / 56.38 | 109.9 / 108.7 | no / no | 1.26 / 1.24 | 2.2, 2.2 / 2.0, 2.2 | 2.19 / 2.19 | 4.5 / 4.4 | 89.2 / 87.6 | none / none |
+| planned pull | R2970, R2977 | dropped / 79.33 | dropped / 78.74 | dropped / 114.5 | dropped, past 80 deg at +0.68 s / no | - / 2.02 | dropped / 2.5, 1.3 | dropped / 1.40 | dropped / 7.3 | dropped / 68.2 | 0.27 / 0.26 |
+| no resize + planned pull | R2971, R2978 | dropped / dropped | dropped / dropped | dropped / dropped | dropped, past 80 deg at +0.62 s / dropped, past 80 deg at +0.63 s | - / - | dropped / dropped | dropped / dropped | - / - | dropped / dropped | none / none |
+
+**Verdict against the frozen bars (U1-U5).**
+
+| Bar | Outcome | Numbers |
+|---|---|---|
+| U1 the resize on its own (no resize vs ours) | **CONFIRMED as frozen, by the dip alone**: 109.9 / 108.7 mm against ours_max 100.2 + 5 | the tilt rise is the same (57.2 vs 57.1 deg means) and no resize ends **more** level (2.2 vs 8.3 / 10.5 deg) and nearer its point (88 vs 100 mm) |
+| U2 late resize in order | **holds as frozen**: no inversion over 2.85 deg, and the 2 s arm dips more than ours in both repeats (106.3 / 106.6 > 105.2 mm) | tilt rise flat across the measured-pull arms, 56.0-58.1 deg |
+| U3 the measured pull (planned pull vs ours) | **CONFIRMED** | planned pull: one ring dropped (past 80 deg at +0.68 s), the other peaked at 78.7 deg, dip 114.5 mm |
+| U4 the resize with the planned pull | **CONFIRMED** | no resize + planned pull: both rings dropped (past 80 deg at +0.62 / +0.63 s), against one of two with the resize |
+| U5 ours recovers | **MISS**: no loss and peak 57 deg (<= 80), but T6 settle 5.4 / 13.4 s > 5.0 | after the resize the T drifts to 8.3 / 10.5 deg over the next 20 s (the rider planned near 0 N; R2249 settled at 6.7 deg) |
+
+**Reading.**
+- The T's peak (56-58 deg at +0.69-0.71 s) is the same in every measured-pull arm: detection is at +0.31 s and the
+  resize at detection, late or never does not change it. Only the measured pull keeps the ring under the 80 deg rule:
+  with the planned pull the ring passes 80 deg in 0.62-0.68 s in three of four runs.
+- The resize at detection saves ~9 mm of dip, but the T it plans is the weak point: with the plate-3 carrier planned
+  near 0 N the ring hangs 7-13 deg off level, while the old square plan (no resize) holds it at 2.2 deg. In this cell
+  the old plan is "wrong about the geometry" in a direction that helps.
+- So the uneven cell does not show the resize mattering on its own for keeping the ring up; it shows the measured pull
+  is what survives the T, and that the resized T's steady tilt is worth a look (the rider's planned share).
+- Caveat as stated before the runs: rigid hinged rods may exaggerate the T's roll against the rig's cables.
+

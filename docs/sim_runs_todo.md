@@ -16,20 +16,34 @@ moment its runs are scored, with the run ids. Order: top to bottom within a prio
 ## P1: the headline results and the claims
 
 - [~] **X1 release ablation** (card `docs/experiments/2026-10-30_x1_release_ablation.md`, configs `configs/experiments/x1_*`).
+  - [x] First pass 30 Oct: 63 runs R2915-R2978 (R2952 void, re-flown R2964), scored `results/analysis/x1_2026-10-30.json`.
+        The measured pull holds the ring through a release (late or no resize fly the same: B1, B2 falsified); the
+        planned pull is 2.4-4.4x worse (B3); in the T our planner settles 7-13 deg off level against 2.2 without the
+        resize (U5 missed): the T fix comes first (Wesley 30 Oct). Claims re-fly on the final tree.
   - Arms: ours, no resize, resize 0.5 / 1 / 2 s late, planned pull, no resize + planned pull.
   - Cells: 4 quads hover and figure-8, 8 quads hover, plus the 1.15 kg cell.
   - Running on the lab PC since 30 Oct ~12:40.
   - The paper's hand-over arm moved to X8 (no loss handling for it in the code yet).
-- [ ] **X4 endurance relay** (card `docs/experiments/2026-10-30_x4_endurance_relay.md`; built in a worktree, merge after X1).
+  - [x] **Uneven cell (Wesley 30 Oct), flown 30 Oct R2965-R2978:** the square 0/3/6/9 to a T, one unannounced release in hover, the same seven arms x2
+        (14 runs), `drop_tilt_deg: 80` in simulation only (the square-to-T release peaks 57-61 deg on 1 m cables; at 30 every
+        arm drops). Compares recovery: peak tilt, dip, time back to level. Queued with the X1 agent after its batch.
+- [ ] **X4 endurance relay** (card `docs/experiments/2026-10-30_x4_endurance_relay.md`; merged into week8 30 Oct 16:12, its
+  37 tests pass; B = 600 s in its configs, every --check passes).
   - Pack budget B = 10 min. Command: `lab_batch.py --slots 2 --cpus 12 --wall-cap-min 180 --warm-from-config`.
   - [ ] `x4_relay_short` (3 swaps, exploratory first check, ~25 min)
   - [ ] `x4_relay_30min` x2 (~2.3 h each)
   - [ ] `x4_fixed_B` x2 (the fixed-team baseline)
   - [ ] `x4_relay_30min_m115` x1 (the 1.15 kg cell, new world approved 30 Oct)
 - [ ] **X2 the supervisor's chain** 4 -> 3 -> 2 -> 3 -> 4, a lap per stage, hover / figure-8 / spinny line. 11 runs.
+  - [ ] **The full chain on the figure-eight in one run (Wesley 30 Oct):** square 4 -> 3 -> 2 -> 3 -> 4, a lap per stage,
+        two variants differing only at the square-to-T step: (A) that step announced (soft detach, 25-29 deg seen in
+        R2840/R2842), (B) that step unannounced with `drop_tilt_deg: 80` (simulation only). Every other step
+        unannounced. x2 each. Configs from c4_softdetach9_fig8_L100 / c4_detach9_fig8_L100 and the chain laps.
   - The square-to-T step stays unannounced: the drop rule puts the ring down there, reported as the rule's boundary.
   - The rest (T -> pair -> T -> square) flies from a fresh start in the T layout (decided 30 Oct).
   - Configs to write (the laps exist since 23 Oct).
+  - [x] The full chain's card 30 Oct (`docs/experiments/2026-10-30_x2_full_chain_fig8.md`), bars FROZEN ~15:46 (Wesley);
+        configs `x2_full_fig8_{soft,unann,base}` + `configs/twin/x2_chain_tip80.yaml` (pass --check). 6 runs ~1 h.
 - [ ] **X3 the 8-quad set as claims:** R2768-R2779's nine cases re-flown as claims, plus the never-flown 8 -> 2 -> 8
   (`s8_chain2back`). 20 runs, needs an it5 config copy and the scorer merge for same-time releases.
   - [ ] s8 hover / figure-8 / orbit (baselines)
@@ -42,7 +56,11 @@ moment its runs are scored, with the run ids. Order: top to bottom within a prio
   needs it (`plan_res_every: 0`) and `plan_fast_refs` on; existing switches, no new code. Ground computer, idle bench
   24 Oct (results/analysis/s_bench_B_2026-10-24.json, host tuf): tick at 1 iteration 82.5 ms with 8 (max 90), 106 ms
   with 9, of which the residual 33 / 43 ms.
-  - [ ] Card first: the same bars as X3 (S card L, J, N4, P), it1 against X3's it5 claims.
+  - [x] Card 30 Oct (`docs/experiments/2026-10-30_x3b_realtime_8_9.md`), bars FROZEN ~15:46 (Wesley; lab runs res_every 1):
+        C8 (it1 + res 0 + fast refs = the same verdicts as it5 on N1, L, J, N4, P) and R8 (closed-loop tick p95 <= 100 ms,
+        <= 1 % over 150 ms). Configs `x3b_s8_{hover,fig8,chain4back}_rt`, `x3b_s9_{hover,chain4back}_rt` and it5
+        comparators `x3_s8_*_it5`, `x3_s4_hover_it5`; tuf timing runs `x3b_s{8,9}_chain4back_rt0` (res 0). All pass --check.
+        18 lab runs ~2.1 h.
   - [ ] Lab PC, x2 each: s8_hover / s8_chain4back / s8_fig8 at it1 (configs exist: `*_it1.yaml`), plus the two switches;
         s9_hover_R53_L100_it1 (exists, never flown) and a new s9 chain (9 -> 5 -> 9) on nine_rigid_ground_rig_R53_L100.
   - [ ] Ground computer (this laptop, headless, the rig stack down, laptop idle): one closed-loop 8-quad and one 9-quad it1
@@ -59,6 +77,12 @@ moment its runs are scored, with the run ids. Order: top to bottom within a prio
 
 After the code-tree freeze (Fri 6 Nov), with the slope estimate. Each config x2, plus one 1.15 kg cell per table.
 Generated from the run ids the full draft cites (Results and discussion, 30 Oct); the left column is the draft's section.
+**Manifest (30 Oct 16:01): `docs/analysis/x11_refly_manifest.md`, batch lists `configs/batches/x11_{A,B,C}.txt`, made by
+`tools/x11_manifest.py` from every file the full draft inputs.** 143 configs: A 86 cited claims (re-fly x2), B 39 cited
+exploratory runs (the s8 set flies in X3, fri30_sq6b/sq_floorjoin in 4.3; the rest need a call: re-fly or keep as
+exploratory), C 18 from before 21 Oct ("The Switch of Solvers": ta_/tb_ R1887-R1908, dl_d1, w4_gi; the older tree and
+cables: re-fly, cite as the earlier setup, or drop). One config is missing: `c_net_quan_const_katt8_hubcom_hover_L100`
+(the exact published law, R2805/R2812), to rebuild from R2805's params_file.yaml.
 
 - [ ] **4.1 fixed team, simulation columns** (12 configs): b2/b3/b4 hover, fig8big, linespinc (`*_L100_slope`; b3 hover
       flew ema), r1m_traj3 circle / linex / spin

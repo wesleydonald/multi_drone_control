@@ -35,7 +35,7 @@ from std_msgs.msg import Bool, Empty, Float64, Float64MultiArray, Int32, String
 
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
-from .config import (mocap_loss_arg, mocap_tilt_arg, wait_lift_arg, wait_log_arg, wait_reweld_arg, wait_traj_arg,
+from .config import (mocap_loss_arg, mocap_tilt_arg, wait_lift_arg, wait_log_spec, wait_reweld_arg, wait_traj_arg,
                      wrench_arg)
 
 ARM_FAIL = 'fleet manager ARM failed or refused'
@@ -129,7 +129,7 @@ class ExperimentRunner(Node):
         self._object_attached = False
         self.t_partner_release = None
         self._partner_release_wait = None   # t the WAIT_PARTNER_RELEASE event fired
-        self._log_wait = None               # (regex, t fired, timeout) of a WAIT_LOG
+        self._log_wait = None               # (regex, t fired, timeout, n-th line) of a WAIT_LOG
         self._planner_lines = []            # (t, text) of every dissipative planner /rosout line this run
         self._traj_wait = None              # (target, in laps, t fired, timeout) of a WAIT_TRAJ
         self._traj_samples = []             # (t, trajectory clock, lap_s) per /payload/trajectory_state, for WAIT_TRAJ
@@ -401,6 +401,16 @@ class ExperimentRunner(Node):
                (re.compile(r'TASK DONE drone \d+ \(/drone_(\d+)\)'), 'TASK_DONE'),
                (re.compile(r'TASK ABORT drone \d+ \(/drone_(\d+)\)'), 'TASK_ABORT'),
                (re.compile(r'TASK REFUSED(?: drone \d+ \(/drone_(\d+)\))?'), 'TASK_REFUSED'),
+               # relay_task (card 2026-10-30_x4_endurance_relay): a carrier's queued task and leave, its park, its way
+               # back, a cancelled leave, a path stopped mid-lap; every announced release's resize
+               (re.compile(r'TASK QUEUED drone \d+ \(/drone_(\d+)\)'), 'TASK_QUEUED'),
+               (re.compile(r'TASK PARKED drone \d+ \(/drone_(\d+)\)'), 'TASK_PARKED'),
+               (re.compile(r'RELAY RETURN drone \d+ \(/drone_(\d+)\)'), 'RELAY_RETURN'),
+               (re.compile(r'RELAY ATTACH QUEUED drone \d+ \(/drone_(\d+)\)'), 'RELAY_ATTACH_QUEUED'),
+               (re.compile(r'RELAY LEAVE QUEUED drone \d+ \(/drone_(\d+)\)'), 'RELAY_LEAVE_QUEUED'),
+               (re.compile(r'RELAY LEAVE CANCELLED drone \d+ \(/drone_(\d+)\)'), 'RELAY_LEAVE_CANCELLED'),
+               (re.compile(r'RELAY HOLD drone \d+ \(/drone_(\d+)\)'), 'RELAY_HOLD'),
+               (re.compile(r'\] DETACH drone \d+ \(/drone_(\d+)\) \(OCP resize\)'), 'DETACH_RESIZE'),
                (re.compile(r'\] lap (\d+) done at t='), 'LAP_DONE'),
                (re.compile(r'PARTNER RELEASE: drone (\d+)'), 'PARTNER_RELEASE'),
                (re.compile(r'PARTNER HANDOFF()'), 'PARTNER_HANDOFF'),
@@ -560,8 +570,9 @@ class ExperimentRunner(Node):
             self.get_logger().warn(
                 f'[exp] t={t:6.2f} partner released; later events shifted {shift:+.2f} s')
         if self._log_wait is not None:
-            pat, t0, timeout = self._log_wait
-            hit = next((tl for tl, ln in self._planner_lines if pat.search(ln)), None)
+            pat, t0, timeout, nth = (tuple(self._log_wait) + (1,))[:4]
+            hits = [tl for tl, ln in self._planner_lines if pat.search(ln)]
+            hit = hits[nth - 1] if len(hits) >= nth else None
             seen = hit is not None
             if not seen and not (timeout and t - t0 >= timeout):
                 return                      # WAIT_LOG blocks the rest of the schedule
@@ -653,8 +664,8 @@ class ExperimentRunner(Node):
                 self._partner_release_wait = t
                 return
             if ev.do == 'WAIT_LOG':
-                pat, timeout = wait_log_arg(ev.arg)
-                self._log_wait = (pat, t, timeout)
+                pat, timeout, nth = wait_log_spec(ev.arg)
+                self._log_wait = (pat, t, timeout, nth)
                 return
             if ev.do == 'WAIT_TRAJ':
                 x, in_laps, timeout = wait_traj_arg(ev.arg)

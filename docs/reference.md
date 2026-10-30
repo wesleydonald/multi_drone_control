@@ -8,7 +8,7 @@ Where the rest went:
 - **What is running and what's next:** `docs/SESSION_STATE.md`.
 - **Decisions:** `docs/decisions.md`. The locked ones are in `CLAUDE.md`.
 - **Run results:** `results/registry.csv`.
-- **Plans:** `docs/archive/plan_m1_remaining_2026-10-11.md` and `docs/thesis_plan_2026-10-11.md`.
+- **Plans:** `docs/archive/plan_m1_remaining_2026-10-11.md` and `docs/archive/thesis_plan_2026-10-11.md`; the current plan is `docs/plan_rescope_2026-10-30.md` with `docs/handin_plan.md`.
 - **The old sections 3 (status), 4 (results to 7 Oct), 5 (locked decisions), 7 (open problems) and 8 (plan):** in git,
   `git show 0e91d86:CURRENT_STATE.md`.
 

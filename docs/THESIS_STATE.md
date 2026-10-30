@@ -37,14 +37,20 @@ thesis chat's own. The shared board is `docs/handin_plan.md`: tick thesis items 
 - Main text <= 50 pp at hand-in (85 now with the appendix; appendix candidates marked in comments).
 
 ## Open in the text
+- The arena is 6 x 6 x 5 m (Wesley 30 Oct): `system_overview.tex` line 12 says 6 x 6 x 4 m. Fix it in Overleaf after the push.
+- The supervisors' papers (`docs/papers/supervisors/`, review `docs/analysis/supervisor_papers_review_2026-10-30.md`): cite
+  them, reword G4, and the review's "Borrow now" items (listed in `handin_plan.md` section 1).
 - The confirmation tolerance (6 mm), settled after the first real join.
 - The test-case table's planned join cells.
 - The nomenclature (TODO), the abstract, the conclusion.
 
 ## Figures
+F1 (the ring's bending, `fig_res_bend`, 30 Oct) is in the review folder and both Images/results, not yet in any
+.tex: word it as "two low-pass stages halved the bending in the lift", not "removed", and do not claim the band-stop
+removes it (it flew only with three carriers, where the bending never showed; four carriers first fly it Wed 4 Nov).
 Done 30 Oct and committed: the solve time as flown (replaces the tick figure), Figure 17 (the rejoin storyboard),
 Figure 12 (grouped bars), Figure 22 (rendered laps, `tools/snapshot_render.py`). Still to make (figures_needed.md):
-F1 the ring's bending and band-stop; F2 the simulated join storyboard (after the re-fly); X1, X4, X2 when their runs
+F2 the simulated join storyboard (after the re-fly); X1, X4, X2 when their runs
 are final; the real-world 1 m figures after S1/S2. Photos asked of Wesley: the ring in flight, a carrier close-up,
 QUAD4 with its tether, the earlier setup, the cage.
 

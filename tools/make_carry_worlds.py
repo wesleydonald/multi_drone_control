@@ -95,6 +95,9 @@ WORLDS = {
     'eight_rigid_ground_rig_R50_L100.sdf': ['--n', '8', '--payload-mass', '0.9', '--plates', '8'],
     'six_rigid_ground_rig_R50_L100.sdf': ['--n', '6', '--payload-mass', '0.9', '--plates', '6'],
     'nine_rigid_ground_rig_R53_L100.sdf': ['--n', '9', '--payload-mass', '0.9', '--plates', '9'],
+    # X4's 1.15 kg cell (card 2026-10-30_x4_endurance_relay; Wesley 30 Oct: claims on the 0.86-class ring plus one
+    # 1.15 kg cell per table): the 8-quad ring above at the new payload's mass
+    'eight_rigid_ground_rig_R50_m115_L100.sdf': ['--n', '8', '--payload-mass', '1.15', '--plates', '8'],
     # thesis R (card 2026-10-23_refly_1m; Wesley 23 Oct): Tier B's layouts and the push world at 1 m
     'four_rigid_ground_rig_3969_L100.sdf': ['--n', '4', '--azimuths', '30,90,180,270'],
     'four_rigid_ground_rig_gap135_L100.sdf': ['--n', '4', '--azimuths', '30,90,165,270'],
@@ -124,6 +127,7 @@ WORLD_OVERRIDES = {w: ['--cable-len', '1.0'] for w in WORLDS if w.endswith('_L10
 # the S rings: 8 quads 0.765 m apart (chord) at 60 deg on 1 m cables; real time capped at 0.4, where an 8-quad planner
 # tick (100-220 ms wall in the twin) stays inside its 100 ms of sim
 for w, (r, outer) in {'eight_rigid_ground_rig_R50_L100.sdf': (0.5, 0.53),
+                      'eight_rigid_ground_rig_R50_m115_L100.sdf': (0.5, 0.53),
                       'six_rigid_ground_rig_R50_L100.sdf': (0.5, 0.53),
                       'nine_rigid_ground_rig_R53_L100.sdf': (0.53, 0.56)}.items():
     WORLD_OVERRIDES[w] += ['--attach-radius', str(r), '--ring-outer-r', str(outer), '--real-time-factor', '0.4',

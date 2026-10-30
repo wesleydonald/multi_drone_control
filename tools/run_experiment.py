@@ -1103,8 +1103,10 @@ def main():
         n_bad = 0
         for path in args.config:
             try:
-                checked_config(path)
+                cfg = checked_config(path)
                 print(f'ok    {path}')
+                if getattr(cfg, 'relay', None) is not None:
+                    print(cfg.relay.table())
             except (SystemExit, ValueError) as e:
                 n_bad += 1
                 print(f'FAIL  {e}')

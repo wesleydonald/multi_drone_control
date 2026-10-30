@@ -25,15 +25,12 @@ Wesley runs two focused chats; each owns its files and only reads the other's.
 - Keep it current at every milestone (a batch started or scored, a decision, a commit, a
   merge). Anything durable also goes where it belongs straight away: decisions in
   `docs/decisions.md`, run results in `results/registry.csv`, preferences here or in memory.
-- 22 Oct ultracode push: its authority, decided values and ordered work queue are at the top of
-  `docs/SESSION_STATE.md`; the designs and the critic's integration order are in `docs/analysis/push_1022_plan.md`.
-- Rescope of 30 Oct (`docs/plan_rescope_2026-10-30.md`, approved except X9, decisions.md): headline X1 (release ablation)
-  and X4 (8-quad endurance relay); freeze by Thu 19 Nov at the latest, aim Thu 12 Nov; hand-in Fri 20 Nov.
-- Until hand-in: `docs/handin_plan.md` (everything left: writing, supervisor, lab sessions, figures, reviews) and
-  `docs/sim_runs_todo.md` (every simulation run left). Tick items the moment they close.
-- The current plan is `docs/plan_thesis_results_2026-10-21.md` (approved 21 Oct: the supervisor's results spec,
-  1 m cables, the 90 deg chain, rig 4->3->4 with the basket, sim U/S/C, videos). Its status table is how Wesley
-  follows progress: update the row (status, commits, run ids) the moment a work package moves.
+- The plan is the rescope of 30 Oct (`docs/plan_rescope_2026-10-30.md`, approved except X9, decisions.md): headline X1
+  (release ablation) and X4 (8-quad endurance relay); freeze by Thu 19 Nov at the latest, aim Thu 12 Nov; hand-in Fri
+  20 Nov. It replaced the 21 Oct plan (`docs/archive/plan_thesis_results_2026-10-21.md`, its spec items kept).
+- How Wesley follows progress, until hand-in: `docs/handin_plan.md` (the direction at its top, then everything left:
+  writing, supervisor, lab sessions, figures, reviews) and `docs/sim_runs_todo.md` (every simulation run left). Tick
+  items the moment they close.
 
 ## Working with Wesley
 - **Push back.** When a decision of his looks wrong or weaker than an alternative, say so
@@ -82,9 +79,10 @@ Wesley runs two focused chats; each owns its files and only reads the other's.
   28 Oct (hE1/hS1); `MDC_MOCAP_VEL_FILTER=ema` / `SIM_MOCAP_VEL_FILTER=ema` fly the old one. In attach mode the
   newcomer keeps `ema` (Tejen's controller reads it). Twin runs 22-28 Oct flew `ema`, older ones none.
 - The rig's trackers put their measured cable pull through a band-stop at 5.3 Hz (`cable_notch_hz` 5.3, Q 1, in
-  real.yaml; Wesley 29 Oct): the 1 m ring bends at 5.3 Hz (RIG-1029-h4); two 2 Hz low-pass stages stopped it but their lag
-  let the triangle swing at 1.1 Hz (RIG-1029-sq2_2/-sq2_4), so the low-pass is off (`cable_lp_hz` 0). common.yaml: both
-  off (the twin's ring is rigid).
+  real.yaml; Wesley 29 Oct): the 1 m ring bends at 5.3 Hz with four carriers (RIG-1029-h4); two 2 Hz low-pass stages
+  halved it in the lift but their lag let the triangle swing at 1.1 Hz (RIG-1029-sq2_2/-sq2_4), so the low-pass is off
+  (`cable_lp_hz` 0). The band-stop has flown only with three carriers, where the bending never showed (F1, 30 Oct):
+  its first four-carrier flight is Wed 4 Nov's h4m1. common.yaml: both off (the twin's ring is rigid).
 - The payload is the 1.15 kg ring of 28 Oct (real.yaml: load_mass, inertia estimate, attach_radius 0.204, attach_z
   0.025 estimate, payload_rest_z 0.013; the planner solver is built at its mass). The 0.86 kg M2A ring flies with its
   values typed (`configs/rig/ring_m2a.yaml`) and solvers prebuilt at 0.86 (a copy: `~/mdc_rig_generated_m2a_0p86`).
