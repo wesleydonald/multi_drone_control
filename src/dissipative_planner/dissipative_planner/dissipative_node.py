@@ -355,6 +355,16 @@ def _min_dist_xy(path, pts):
     return best
 
 
+def resize_delay_value(value, sim_time):
+    """resize_delay_s as the node flies it: a delay >= 0 s, and only on sim time (the twin)."""
+    v = float(value)
+    if v < 0.0:
+        raise ValueError(f'resize_delay_s must be >= 0, got {v:g}')
+    if v > 0.0 and not sim_time:
+        raise ValueError('resize_delay_s is twin only (use_sim_time false): X1 ablation arms never fly the rig')
+    return v
+
+
 def _who(d):
     """A drone in operator lines: its label (1-4, as RViz, the fleet manager and the airframes)
     and its topic index."""
@@ -640,6 +650,12 @@ class DissipativeController(LoadPlanner):
         self._detect_count = {}
         self._detect_ok = {}          # each drone's excess on its last tick within the threshold
         self._detect_refused = set()  # detected but refused (min_survivors): do not re-fire
+        # resize_delay_s (twin only; card 2026-10-30_x1_release_ablation, critic waived by Wesley 30 Oct): the planner
+        # acts on an unannounced loss (resize or drop) this many sim seconds after detecting it, flying the leaver in
+        # its model meanwhile; longer than the flight = X1's no-resize arm. 0 = at detection.
+        self._resize_delay_s = resize_delay_value(p('resize_delay_s', 0.0).value,
+                                                  bool(self.get_parameter('use_sim_time').value))
+        self._resize_due = {}         # d -> sim time at which its detected loss is acted on
         # > 0: the magnet-marker check (Wesley 21 Oct, card 2026-10-21_tip_detect). A carrier's magnet marker
         # (/drone_<d>/magnet_tip_state: on the rig Motive bodies 21-24 through mocap_extra_bodies, in the twin the end
         # of its rod) that sits this much further from its plate than its attached offset, for TIP_DETECT_S, has let
@@ -1113,6 +1129,7 @@ class DissipativeController(LoadPlanner):
             self._network_plan()
             return
         self._unload_tick()
+        self._resize_due_tick()
         self._detect_tick()
         # Freeze the trajectory clock across a resize, so a fleet that is still
         # settling into its new ring is not also asked to chase a moving target.
@@ -1910,7 +1927,7 @@ class DissipativeController(LoadPlanner):
             return
         over_of = {}
         for i, d in enumerate(list(self.slot2drone)):
-            if self.detached[d] or d in self._detect_refused:
+            if self.detached[d] or d in self._detect_refused or d in getattr(self, '_resize_due', {}):
                 continue
             t_d = getattr(self, '_drone_t', {}).get(d)
             if t_d is not None and now - t_d > DETECT_STALE_S:
@@ -1948,7 +1965,32 @@ class DissipativeController(LoadPlanner):
 
     def _on_unannounced(self, d):
         """A release found without being told (a stretched cable or a magnet off its plate): drop the ring, or resize
-        to the survivors, as drop_on_loss and the drop rule say."""
+        to the survivors, as drop_on_loss and the drop rule say; resize_delay_s later when that is set."""
+        if getattr(self, '_resize_delay_s', 0.0) > 0.0:
+            if d not in self._resize_due:
+                now = self.get_clock().now().nanoseconds * 1e-9
+                self._resize_due[d] = now + self._resize_delay_s
+                self.get_logger().warn(
+                    f'[dissipative] resize_delay_s {self._resize_delay_s:g}: {_who(d)} stays in the model, the loss '
+                    f'is acted on at t={self._resize_due[d]:.2f} s (detected at {now:.2f} s)')
+            return
+        self._act_on_loss(d)
+
+    def _resize_due_tick(self):
+        """resize_delay_s: act on each detected loss once its delay has run."""
+        if not getattr(self, '_resize_due', None):
+            return
+        now = self.get_clock().now().nanoseconds * 1e-9
+        for d, due in list(self._resize_due.items()):
+            if self.detached[d]:
+                self._resize_due.pop(d)
+            elif now >= due:
+                self._resize_due.pop(d)
+                self.get_logger().warn(f'[dissipative] LATE RESIZE: acting on the loss of {_who(d)} '
+                                       f'{self._resize_delay_s:g} s after its detection')
+                self._act_on_loss(d)
+
+    def _act_on_loss(self, d):
         why = self._drop_due(d) if self._drop_on_loss else None
         if why is not None:
             self._drop_and_land(f'unannounced loss of {_who(d)}: {why}')
@@ -2020,7 +2062,7 @@ class DissipativeController(LoadPlanner):
         if (self._tip_detect_m <= 0.0 or self.phase != 'planner' or self._reconfig_mode != 'ocp'
                 or self._land_to_ground or self._unload is not None or not self.takeoff_seen
                 or d not in self.slot2drone or self.detached[d] or d in self._detect_refused
-                or d in self._tip_unarmed or not np.all(np.isfinite(tip))):
+                or d in getattr(self, '_resize_due', {}) or d in self._tip_unarmed or not np.all(np.isfinite(tip))):
             self._tip_run.pop(d, None)
             return
         if d in self._tip_raw and np.array_equal(tip, self._tip_raw[d]):

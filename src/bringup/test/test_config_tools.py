@@ -117,7 +117,7 @@ def test_the_rig_flies_the_new_payload_and_the_twin_keeps_its_ring():
     for mode in ('mpc', 'dissipative', 'attach', 'm2'):
         real = profile_args(f'real/{mode}')
         assert (real['load_mass'], real['attach_radius'], real['attach_z'], real['payload_rest_z']) == \
-            ('1.15', '0.204', '0.025', '0.013'), mode
+            ('1.15', '0.204', '0.028', '0.013'), mode
     sim = profile_args('sim/dissipative')
     assert (sim['load_mass'], sim['attach_radius'], sim['attach_z'], sim['payload_rest_z']) == \
         ('0.86', '0.225', '0.02', '0.02')

@@ -14,7 +14,8 @@ fleet_geometry:
                                # izz/2 plus the 26 mm thickness, as the twin's _p115 worlds
   load_izz: 0.049
   attach_radius: 0.204         # the magnet markers on plates 0/3/6/9, 0.201-0.209 m from the centre (RIG-1028-payload)
-  attach_z: 0.025              # the plate faces above the pivot: markers 2.7 cm up less the old 2.25 mm marker offset (estimate)
+  attach_z: 0.028              # the cables' ends on the magnets above the pivot: QUAD4's magnet marker on its plate, 29 Oct
+                               # (W; Wesley 30 Oct: use it). The thin disk's plate faces sit ~6 mm below the pivot
   pivot_offset_z: -0.04
   rod_tol_frac: 0.25
   rod_spread_m: 0.08

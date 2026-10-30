@@ -75,7 +75,7 @@ def main():
 
     # design A: digits on a log axis
     S.setup()
-    fig = S.figure('full', 2.3)
+    fig = S.figure('full', 2.55)        # 2.3 in of panels plus the legend below
     axs = fig.subplots(1, 2, sharey=True)
     for ax, val, letter, text in ((axs[0], rig, 'a', names[0]), (axs[1], twin, 'b', names[1])):
         digits(ax, val)
@@ -87,8 +87,11 @@ def main():
     axs[0].set_ylim(0.7, 130)
     axs[0].set_yticks([1, 3, 10, 30, 100])
     axs[0].minorticks_off()
-    axs[0].annotate('digit = carriers', xy=(1, 1), xycoords='axes fraction', xytext=(0, 4), textcoords='offset points',
-                    ha='right', va='bottom', fontsize=8, color=S.GREY)
+    from matplotlib.lines import Line2D
+    keys = [Line2D([], [], ls='none', marker=f'${n}$', ms=6.5, mew=0, color=S.FLEET_COLOUR[n]) for n in (2, 3, 4)]
+    from matplotlib.legend_handler import HandlerTuple
+    S.ps.legend_below(fig, [tuple(keys)], ['number of carriers'], ncol=1, handlelength=2.6,
+                      handler_map={tuple: HandlerTuple(ndivide=None, pad=0.2)})
     axs[0].set_ylabel('Tracking error (mm)')
     S.g_ticks(axs[0], which='y')
     S.save(fig, 'fig_summary')
@@ -109,8 +112,6 @@ def main():
             t.set_color(S.FLEET_COLOUR[n])
         ax.set_xlabel('Carriers')
         ax.tick_params(length=0)
-        for side in ('left', 'bottom'):
-            ax.spines[side].set_visible(False)
         S.panel(ax, letter, text)
     axs[0].set_yticks(range(len(MOTIONS) - 1, -1, -1), list(MOTIONS))
     S.save(fig, 'fig_summary_grid')

@@ -112,7 +112,10 @@ GEOMETRY = {
         'magnet_drop_below_quad': 1.04, 'mpc_cable_length': 1.0,
         'thrust_ratio': 22.0, 'thrust_ratio_feedback': True, 'vehicle_mass': 0.55,
         'plate': '9', 'carrier_azimuths_deg': '[90.0, 330.0, 210.0]', 'contact_attach_z_m': 0.037,
-        'object_bottom_below_tip': 0.16, 'object_rest_z': 0.08,
+        # the rig's pickup object (Wesley 29 Oct; RIG-1021-q1pick): a 100 x 100 x 25 mm (estimated) 0.15 kg magnet plate
+        # in the _p115 worlds (tools/make_attach_worlds.py plate_model): centre 0.0125 up at rest, its bottom at most
+        # 0.0525 under the tip inside the weld radius
+        'object_bottom_below_tip': 0.0525, 'object_rest_z': 0.0125, 'pickup_object': 'plate',
     },
     # real:=true only. The rig layout as rig_twin, his IRL values for QUAD4: body origin to magnet marker 0.575
     # (irl_commissioning.yaml, also his M2 QUAD4 geometry), his MPC's own cable length and kT (his IRL launches
@@ -151,13 +154,67 @@ CARRIER_BODY_ABOVE_PIVOT = 0.04    # pivot_offset_z -0.04: the rod pivot 4 cm be
 MAGNET_BOTTOM_BELOW_TIP = 0.05     # his ego model's magnet disk: centre 0.025 below the cable end, half-height 0.025
 DROP_OFFSET_Z = 0.15               # his planner's drop_offset_z: the drop point above the ring origin
 SEARCH_FLOOR_MARGIN = 0.05         # his C++ search floor this far under the transit height
+# the low route (Wesley 29 Oct: "I never want the incoming quad to fly that high"): QUAD4 carries the object's bottom
+# (or the bare magnet) this far above the ring's plates, as the attach's 0.30 m approach, never over the carriers
+LOW_ROUTE_CLEARANCE = 0.30
+QUAD4_MAX_BODY_Z = 2.6             # rig: the launch refuses a transit that puts QUAD4's body higher (transit:=over lifts it)
+DROP_CLEAR_HEIGHT = 0.45           # his planner's drop_clear_height default (tip above the drop point after the drop)
+DROP_RELEASE_CLEARANCE = 0.14      # his planner's drop_release_clearance default (tip above the drop point at the release)
+# the low route after the drop: a 3 cm climb from the release (R2898/R2899: his MPC overshot 0.18-0.19 m on losing the
+# 0.15 kg plate, to 2.62 m from a 2.43 m climb), and that overshoot counted in the ceiling check
+DROP_CLEAR_ABOVE_RELEASE = 0.03
+DROP_UNLOAD_OVERSHOOT_M = 0.20
+# his geometry-aware pickup on the twin's plate (in place of the spanner_8mm.yaml profile): the target 0.0225 over its
+# centre (its top face 0.0125, less his 0.002 overtravel, plus the twin tip's 0.012 sphere)
+PLATE_PROFILE = {'payload_name': 'plate_100mm', 'payload_collision_size_x': 0.100, 'payload_collision_size_y': 0.100,
+                 'payload_collision_size_z': 0.025, 'payload_pickup_point_x': 0.0, 'payload_pickup_point_y': 0.0,
+                 'payload_pickup_point_z': 0.0125, 'magnet_marker_to_contact_face_z': -0.012}
 
 
-def carry_heights(G, *, ring_z, rod, attach_z, clearance=None):
-    """His heights for a transit that carries the object's bottom (or, on the way to the plate, the magnet's)
-    clearance (default half the carriers' cable) above the carriers' bodies: pickup_lift_height (the tip above the
-    object at rest), drop_approach_clearance (tip above the drop point), attach_transit_clearance (tip above the
-    plate) and the C++ search floor (body) for the loaded and the unloaded transit."""
+def transit_route(context, floor_join):
+    """transit:=low|over; untyped: low for pickup_delivery, over for floor_join (the rig sheet types the attach's low
+    heights itself)."""
+    typed = LaunchConfiguration('transit').perform(context).strip()
+    return typed or ('over' if floor_join else 'low')
+
+
+def planned_body_heights(*, floor_join, ring_z, attach_z, rod, object_rest_z, lift, drop_approach, drop_clear,
+                         attach_clearance, search_floor):
+    """QUAD4's planned body heights (m) for each leg of its mission."""
+    drop = ring_z + DROP_OFFSET_Z
+    legs = {'search floor': search_floor, 'transit to the plate': ring_z + attach_z + attach_clearance + rod}
+    if not floor_join:
+        legs.update({'lift with the object': object_rest_z + lift + rod, 'over the drop point': drop + drop_approach + rod,
+                     'clear of the drop (+ the unload overshoot)': drop + drop_clear + rod + DROP_UNLOAD_OVERSHOOT_M})
+    return legs
+
+
+def check_transit_ceiling(legs, *, refuse, log):
+    """Log QUAD4's planned heights; over QUAD4_MAX_BODY_Z refuse the launch (rig) or warn (twin)."""
+    text = ', '.join(f'{k} {v:.2f}' for k, v in legs.items())
+    high = {k: v for k, v in legs.items() if v > QUAD4_MAX_BODY_Z + 1e-6}
+    if high and refuse:
+        raise RuntimeError(f'partner_mission: QUAD4 would fly above {QUAD4_MAX_BODY_Z} m ('
+                           + ', '.join(f'{k} {v:.2f} m' for k, v in high.items())
+                           + '): type the low heights (transit:=low) or transit:=over to allow it')
+    log(f'QUAD4 planned body heights (m): {text}' + (f'; ABOVE {QUAD4_MAX_BODY_Z} m' if high else ''))
+
+
+def carry_heights(G, *, ring_z, rod, attach_z, clearance=None, route='over'):
+    """His heights for a transit: pickup_lift_height (the tip above the object at rest), drop_approach_clearance
+    (tip above the drop point), attach_transit_clearance (tip above the plate) and the C++ search floor (body) for
+    the loaded and the unloaded transit. route 'over': the object's bottom (or, on the way to the plate, the
+    magnet's) clearance (default half the carriers' cable) above the carriers' bodies; 'low': the object's bottom
+    (or the tip) LOW_ROUTE_CLEARANCE above the ring's plates, in between the carriers as the attach comes in."""
+    if route == 'low':
+        plate = ring_z + attach_z
+        loaded_tip = plate + LOW_ROUTE_CLEARANCE + G['object_bottom_below_tip']
+        empty_tip = plate + LOW_ROUTE_CLEARANCE
+        return {'pickup_lift_height': loaded_tip - G['object_rest_z'],
+                'drop_approach_clearance': loaded_tip - (ring_z + DROP_OFFSET_Z),
+                'attach_transit_clearance': LOW_ROUTE_CLEARANCE,
+                'minimum_search_z_m': loaded_tip + rod - SEARCH_FLOOR_MARGIN,
+                'minimum_search_z_m_empty': empty_tip + rod - SEARCH_FLOOR_MARGIN}
     carriers = ring_z + G['ring_cable_len'] * math.sin(math.radians(G['ring_cable_elev_deg'])) \
         + CARRIER_BODY_ABOVE_PIVOT
     clearance = 0.5 * G['ring_cable_len'] if clearance is None else clearance
@@ -303,15 +360,20 @@ def _nodes(context):
     floor_join = L('mission_mode').perform(context).strip() == 'floor_join'
     carrier_model = L('carrier_model').perform(context)
     clearance = L('carry_clearance').perform(context).strip()
+    plate_object = G.get('pickup_object') == 'plate'
+    route = transit_route(context, floor_join)
     H = carry_heights(G, ring_z=float(L('ring_z').perform(context)), rod=G['magnet_drop_below_quad'],
-                      attach_z=G['contact_attach_z_m'] or 0.025, clearance=float(clearance) if clearance else None)
+                      attach_z=G['contact_attach_z_m'] or 0.025, clearance=float(clearance) if clearance else None,
+                      route=route)
     if not floor_join:
         H['minimum_search_z_m_empty'] = H['minimum_search_z_m']
     # a typed value wins (the m1c_*/m1x_* configs type the old high transit: 2.3 / 2.7 / 1.35)
     height = lambda name, key=None: float(L(name).perform(context)) if name in typed else H[key or name]  # noqa: E731
     attach_z = G['contact_attach_z_m'] or 0.025
     cpp_reattach = _flag(context, 'pickup_cpp_reattach') and not floor_join
-    extra = {}
+    # the low route climbs 3 cm after the drop (his 0.45 m, or back to the transit height, overshoots past the cap)
+    extra = ({'drop_clear_height': DROP_RELEASE_CLEARANCE + DROP_CLEAR_ABOVE_RELEASE}
+             if route == 'low' and not floor_join else {})
     if cpp_reattach:
         extra = _cpp_reattach_heights(height, ring_z=float(L('ring_z').perform(context)), attach_z=attach_z,
                                       rod=G['magnet_drop_below_quad'], typed=typed)
@@ -320,6 +382,13 @@ def _nodes(context):
                                                       + height('attach_transit_clearance') if floor_join
                                                       else G['object_rest_z'] + height('pickup_lift_height'))
                        + G['magnet_drop_below_quad'])
+    check_transit_ceiling(planned_body_heights(
+        floor_join=floor_join, ring_z=float(L('ring_z').perform(context)), attach_z=attach_z,
+        rod=G['magnet_drop_below_quad'], object_rest_z=G['object_rest_z'], lift=height('pickup_lift_height'),
+        drop_approach=height('drop_approach_clearance'), drop_clear=extra.get('drop_clear_height', DROP_CLEAR_HEIGHT),
+        attach_clearance=extra.get('attach_transit_clearance', height('attach_transit_clearance')),
+        search_floor=height('minimum_search_z_m', 'minimum_search_z_m_empty')),
+        refuse=False, log=lambda msg: print(f'partner_mission ({route} transit): {msg}', flush=True))
 
     object_bridge = Node(
         package='ros_gz_bridge', executable='parameter_bridge', name='pickup_object_pose_bridge',
@@ -401,7 +470,9 @@ def _nodes(context):
             # contact weld (Wesley: a magnet touching a steel ball): tip within 0.10 m of the
             # 0.08 m ball's centre = touching its top. 0.18 welded mid-descent 18 cm off
             # the tip, which is why the pickup looked wrong (R0625-R0633)
-            'attach_radius': 0.10,
+            # the plate (pickup_object plate): the tip on its top face sits 0.0245 over its centre; 0.04 allows
+            # 3.2 cm of xy there (0.10 welded it 9.5 cm under the magnet)
+            'attach_radius': 0.04 if plate_object else 0.10,
             'attach_speed_threshold': 1.0,
             'attach_dwell_time_s': 0.0,
             # the object only: never /payload/* (that is the ring weld)
@@ -437,8 +508,9 @@ def _nodes(context):
                 'pickup_tip_speed_tolerance': 0.60,
                 'pickup_approach_clearance': 0.35,
                 # tip target = ball centre + 0.09: 1 cm above the top of the 0.08 m ball
-                # (0.03 put the target inside the ball; the rod was pushed aside)
-                'pickup_attach_clearance': 0.09,
+                # (0.03 put the target inside the ball; the rod was pushed aside); the plate: 1 cm over its top face
+                'pickup_attach_clearance': 0.0225 if plate_object else 0.09,
+                **(PLATE_PROFILE if plate_object else {}),
                 # a HIGH transit (Wesley 2026-09-26: near-collisions): lift the quad to
                 # ~1.9 m at the pickup, fly the C++ transit above a 1.8 m floor so the
                 # 0.49 m rod + ball clear the carriers (tops ~1.1 m), and only descend
@@ -486,6 +558,11 @@ def _nodes(context):
                 'c1f2_prepare_settle_speed_mps': 0.12,
                 **({'takeoff_speed': float(LaunchConfiguration('climb_speed').perform(context))}
                    if LaunchConfiguration('climb_speed').perform(context).strip() else {}),
+                # the rig path's drop-off switches, typed only, so the twin flies the rig sheet's k1 line (30 Oct)
+                **({'c1f2_cpp_authority_enabled': False}
+                   if LaunchConfiguration('cpp_authority').perform(context).strip() == 'false' else {}),
+                **({'end_after_drop': True}
+                   if LaunchConfiguration('end_after_drop').perform(context).strip() == 'true' else {}),
                 # the descent ends on the contact target (ring_bridge's attachment point), held
                 # with no lead; the planner's contact-mode gates are his ground-ring values
                 # (the card's neighbours move one of them: contact_lead / contact_dz / contact_dx).
@@ -508,7 +585,9 @@ def _nodes(context):
                     # typed only (his twin values otherwise): the rig's match gate in the twin (plan 2026-10-15 N6)
                     **{k: float(L(arg).perform(context)) for arg, k in (
                         ('match_xy', 'contact_match_xy_threshold'), ('match_speed', 'contact_match_xy_velocity_threshold'),
-                        ('match_dwell', 'dwell_time_s')) if L(arg).perform(context).strip()}}
+                        ('match_dwell', 'dwell_time_s'), ('descent_debounce', 'contact_abort_xy_debounce_s'),
+                        ('descent_abort_xy', 'contact_abort_xy_threshold'))
+                        if L(arg).perform(context).strip()}}
                    if contact else {}),
             },
         ])
@@ -676,9 +755,35 @@ def _rig_nodes(context):
     carrier_model = LaunchConfiguration('carrier_model').perform(context)
     rod = f('magnet_drop_below_quad', G['magnet_drop_below_quad'])
     clearance = LaunchConfiguration('carry_clearance').perform(context).strip()
+    route = transit_route(context, floor_join)
     H = carry_heights(G, ring_z=float(LaunchConfiguration('ring_z').perform(context)), rod=rod,
-                      attach_z=float(target_z), clearance=float(clearance) if clearance else None)
+                      attach_z=float(target_z), clearance=float(clearance) if clearance else None, route=route)
     search_floor = f('minimum_search_z_m', H['minimum_search_z_m_empty' if floor_join else 'minimum_search_z_m'])
+    # the low route climbs 3 cm after the drop (his 0.45 m, or back to the transit height, overshoots past the cap)
+    drop_clear = (DROP_RELEASE_CLEARANCE + DROP_CLEAR_ABOVE_RELEASE
+                  if route == 'low' and not floor_join else DROP_CLEAR_HEIGHT)
+    # rig: never higher than QUAD4_MAX_BODY_Z (Wesley 29 Oct, after RIG-1029-sq2_5's 3.1 m climb and the 3.3 m
+    # preview of the drop-off): refused, unless transit:=over is typed
+    check_transit_ceiling(planned_body_heights(
+        floor_join=floor_join, ring_z=float(LaunchConfiguration('ring_z').perform(context)), attach_z=float(target_z),
+        rod=rod, object_rest_z=G['object_rest_z'], lift=f('pickup_lift_height', H['pickup_lift_height']),
+        drop_approach=f('drop_approach_clearance', H['drop_approach_clearance']), drop_clear=drop_clear,
+        attach_clearance=f('attach_transit_clearance', H['attach_transit_clearance']), search_floor=search_floor),
+        refuse=route != 'over' or 'transit' not in typed,
+        log=lambda msg: print(f'partner_mission rig ({route} transit): {msg}', flush=True))
+    # pickup_contact_height (typed only; m1_irl_pickup.launch.py's measurement, Wesley 21 Oct, RIG-1021-q1pick: the
+    # magnet marker above the object's marker with the magnet face resting on it): his contact point on the real
+    # object instead of his commissioning puck's (86 x 86 x 22 mm, 0.012 over its marker)
+    object_point = {}
+    if 'pickup_contact_height' in typed:
+        face_z = float(_irl_block(share, 'online_join_planner')['magnet_marker_to_contact_face_z'])
+        point_z = f('pickup_contact_height', 0.0) + face_z
+        size, thick = f('pickup_object_size', 0.10), f('pickup_object_thickness', 0.025)
+        object_point = {'magnet_attachment_manager_irl': {'pickup_point_offset_z': point_z},
+                        'online_join_planner': {'payload_pickup_point_z': point_z, 'payload_collision_size_x': size,
+                                                'payload_collision_size_y': size, 'payload_collision_size_z': thick}}
+        print(f'partner_mission rig: the object\'s contact point {point_z:+.4f} m over its marker '
+              f'(contact height {point_z - face_z:.4f}, face {face_z}); {size} x {size} x {thick} m', flush=True)
     # rig: a typed floor at least 0.10 m under the nominal climb end (RIG-1029-sq4_5: the ring rode 3 cm low and QUAD4
     # held at 2.33 m under a 2.36 m floor, his backend WAITING_ABOVE_SEARCH_FLOOR for the whole flight)
     check_search_floor(search_floor, what='climb end' if floor_join else 'lift end', start_body_z=(
@@ -743,6 +848,7 @@ def _rig_nodes(context):
         package='tejen_mission', executable='magnet_attachment_manager_irl',
         name='magnet_attachment_manager_irl', namespace=NS, output='screen',
         parameters=[{**_irl_block(share, 'magnet_attachment_manager_irl'),
+                     **object_point.get('magnet_attachment_manager_irl', {}),
                      'use_sim_time': False,
                      'magnet_command_topic': f'/{NS}/magnet/command',
                      'object_attached_topic': ball_attached,
@@ -764,6 +870,7 @@ def _rig_nodes(context):
             str(share / 'config' / 'm1_measured_tip_pickup.yaml'),
             {k: ground_ring[k] for k in GROUND_RING_PICKUP_KEYS},
             str(share / 'config' / 'm1_measured_tip_tracking.yaml'),
+            object_point.get('online_join_planner', {}),
             {
                 'use_sim_time': False,
                 'vehicle_id': 'drone_0',
@@ -787,6 +894,7 @@ def _rig_nodes(context):
                 'static_obstacle_count': 0,
                 'pickup_lift_height': f('pickup_lift_height', H['pickup_lift_height']),
                 'drop_approach_clearance': f('drop_approach_clearance', H['drop_approach_clearance']),
+                **({'drop_clear_height': drop_clear} if route == 'low' and not floor_join else {}),
                 'attach_cpp_transit': _flag(context, 'attach_cpp_transit'),
                 'attach_transit_clearance': f('attach_transit_clearance', H['attach_transit_clearance']),
                 **({'approach_offset_z': f('approach_offset_z', 0.30)} if 'approach_offset_z' in typed else {}),
@@ -851,8 +959,12 @@ def _rig_nodes(context):
                 # his gates hold for dwell_time_s unbroken (his 1.0 s): a3_2 (15 Oct) sat 42 s in MATCH, both conditions
                 # true 36 % of the time, never a clean second; replayed, 0.5 s passes at 1.1 s. Typed only.
                 **({'dwell_time_s': f('match_dwell', 1.0)} if 'match_dwell' in typed else {}),
-                'contact_abort_xy_threshold': 0.08,
+                # descent_abort_xy (typed only): plan_rig_fix_2026-10-30 W2a, the replay of sq5_2's swing (a full descent
+                # survives 49 % of start ticks at 0.08 m with a 1 s debounce, 85 % at 0.10 m)
+                'contact_abort_xy_threshold': f('descent_abort_xy', 0.08) if 'descent_abort_xy' in typed else 0.08,
                 'contact_abort_xy_velocity_threshold': 0.25,
+                # descent_debounce (typed only; DECISIONS_1355 section 2): RIG-1029-sq5_2's 6 of 6 descents left on one tick
+                **({'contact_abort_xy_debounce_s': f('descent_debounce', 0.0)} if 'descent_debounce' in typed else {}),
                 # plan 2026-10-14 WP3: hold at the bottom for the contact (gross errors and his quiet-miss rule leave),
                 # three tries in the give-up time, and his measured-tip trim instead of hand-set contact_dx/dy
                 'contact_bottom_hold': True,
@@ -971,6 +1083,9 @@ def _arguments():
         DeclareLaunchArgument('tracking_check', default_value='', choices=['', 'off']),   # 'off': his tracking latch off, as his IRL configs
         DeclareLaunchArgument('cooperative_tracking_half_m', default_value=''),
         DeclareLaunchArgument('carry_clearance', default_value=''),   # m above the carriers' bodies; '' = cable/2
+        # low: in between the carriers, 0.30 m over the plates (Wesley 29 Oct); over: above the carriers (21-23 Oct);
+        # '' = low for pickup_delivery, over for floor_join. The rig refuses a body above 2.6 m unless over is typed
+        DeclareLaunchArgument('transit', default_value='', choices=['', 'low', 'over']),
         DeclareLaunchArgument('ring_z', default_value='1.0'),          # the carried ring's height (target_z)
         # tether: his attached-tether model of the carriers' rods; column: the old tall carrier boxes
         DeclareLaunchArgument('carrier_model', default_value='tether', choices=['tether', 'column']),
@@ -996,10 +1111,16 @@ def _arguments():
         DeclareLaunchArgument('attach_z_lowpass', default_value=''),     # rig: Hz, his target's plate height low-passed ('' = raw)
         DeclareLaunchArgument('pickup_xy', default_value=''),      # rig: m, his pickup capture window ('' = 0.025)
         DeclareLaunchArgument('pickup_speed', default_value=''),   # rig: m/s, his pickup relative-speed limit ('' = 0.07)
+        # rig, typed only: his contact point on the real object (tools/pickup_geometry.py, the magnet face on its centre)
+        DeclareLaunchArgument('pickup_contact_height', default_value=''),   # m, magnet marker over the object's marker
+        DeclareLaunchArgument('pickup_object_thickness', default_value=''),   # m ('' = 0.025, RIG-1021-q1pick)
+        DeclareLaunchArgument('pickup_object_size', default_value=''),   # m, its side ('' = 0.10)
         DeclareLaunchArgument('end_after_drop', default_value='', choices=['', 'true']),   # rig: hold after the drop until LAND
         DeclareLaunchArgument('cpp_authority', default_value='', choices=['', 'false']),   # rig: 'false' = his Python transfers only
         DeclareLaunchArgument('climb_speed', default_value=''),   # m/s, his TAKEOFF climb ('' = his 0.15)
         DeclareLaunchArgument('match_dwell', default_value=''),          # rig: s, his gates' unbroken hold ('' = his 1.0)
+        DeclareLaunchArgument('descent_debounce', default_value=''),   # s: his contact descent's 8 cm restart held this long ('' = one tick)
+        DeclareLaunchArgument('descent_abort_xy', default_value=''),   # m: his contact descent's position restart ('' = rig 0.08, twin his)
         DeclareLaunchArgument('match_xy', default_value=''),             # twin: m, his contact match xy gate ('' = his)
         DeclareLaunchArgument('attach_twist', default_value='', choices=['', 'zero']),   # 'zero': the bridge's twist zero in hover ('' = raw)
         DeclareLaunchArgument('commit_backdate', default_value=''),   # s: the bridge's shared commitments start this long before now ('' = his timing)

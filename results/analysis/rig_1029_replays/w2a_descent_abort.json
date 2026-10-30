@@ -1,0 +1,215 @@
+{
+ "check": {
+  "n": 93,
+  "err_diff_median_cm": 0.07415418419563806,
+  "err_diff_p95_cm": 0.5512209276460097,
+  "speed_diff_median": 0.0004885323328096408,
+  "speed_diff_p95": 0.017016227442262114
+ },
+ "descents": [
+  {
+   "descent": 1,
+   "start_s_after_his_takeoff": 16.581173419952393,
+   "flown_s": 0.5981242656707764,
+   "abort_tick_s": 0.6113841533660889,
+   "abort_cause": "position",
+   "err_at_abort_cm": 9.432007135127572,
+   "speed_at_abort": 0.1005825237198747,
+   "peak_err_before_abort_cm": 6.3230833209777835,
+   "median_err_inside_cm": 4.317585824592751,
+   "after_hold": {
+    "hold_s": 0.21972441673278809,
+    "ended_s_before_abort": 0.03774619102478027,
+    "jump_cm": 4.85794047361339
+   },
+   "longest_run_inside_s": 0.03333333333333333,
+   "abort_run_len_s": 1.1317012627919516,
+   "debounced_abort_s": 0.9429690837860107,
+   "debounced_before_contact": true,
+   "recorded_until_s": 23.36443066596985
+  },
+  {
+   "descent": 2,
+   "start_s_after_his_takeoff": 18.84849500656128,
+   "flown_s": 1.7669622898101807,
+   "abort_tick_s": 1.7186522483825684,
+   "abort_cause": "position",
+   "err_at_abort_cm": 8.015811100434323,
+   "speed_at_abort": 0.14878977772880525,
+   "peak_err_before_abort_cm": 7.538871031609556,
+   "median_err_inside_cm": 3.767099623341526,
+   "after_hold": null,
+   "longest_run_inside_s": 0.03333333333333333,
+   "abort_run_len_s": 1.6235390027364096,
+   "debounced_abort_s": 2.0307631492614746,
+   "debounced_before_contact": true,
+   "recorded_until_s": 21.097109079360962
+  },
+  {
+   "descent": 3,
+   "start_s_after_his_takeoff": 23.71619462966919,
+   "flown_s": 1.9341678619384766,
+   "abort_tick_s": 1.9615044593811035,
+   "abort_cause": "position",
+   "err_at_abort_cm": 8.282709075746583,
+   "speed_at_abort": 0.08966174977466715,
+   "peak_err_before_abort_cm": 7.779100913850025,
+   "median_err_inside_cm": 5.743834038409808,
+   "after_hold": null,
+   "longest_run_inside_s": 0.03333333333333333,
+   "abort_run_len_s": 1.6819193681081137,
+   "debounced_abort_s": 2.2708232402801514,
+   "debounced_before_contact": true,
+   "recorded_until_s": 16.22940945625305
+  },
+  {
+   "descent": 4,
+   "start_s_after_his_takeoff": 33.47898602485657,
+   "flown_s": 0.33489489555358887,
+   "abort_tick_s": 0.34675049781799316,
+   "abort_cause": "position",
+   "err_at_abort_cm": 8.930082306584417,
+   "speed_at_abort": 0.018048894949969953,
+   "peak_err_before_abort_cm": 4.104869780639676,
+   "median_err_inside_cm": 3.6787739591834305,
+   "after_hold": {
+    "hold_s": 0.21369624137878418,
+    "ended_s_before_abort": 0.029518842697143555,
+    "jump_cm": 4.950766005389261
+   },
+   "longest_run_inside_s": 0.03333333333333333,
+   "abort_run_len_s": 0.43035224278767903,
+   "debounced_abort_s": 0.6535313129425049,
+   "debounced_before_contact": true,
+   "recorded_until_s": 6.466618061065674
+  },
+  {
+   "descent": 5,
+   "start_s_after_his_takeoff": 34.94660830497742,
+   "flown_s": 2.736598253250122,
+   "abort_tick_s": 2.7204387187957764,
+   "abort_cause": "position",
+   "err_at_abort_cm": 9.052246467231038,
+   "speed_at_abort": 0.04047198811063132,
+   "peak_err_before_abort_cm": 7.202015629722496,
+   "median_err_inside_cm": 4.467209174883202,
+   "after_hold": {
+    "hold_s": 0.21979880332946777,
+    "ended_s_before_abort": 0.013763189315795898,
+    "jump_cm": 2.650967280864854
+   },
+   "longest_run_inside_s": 0.03333333333333333,
+   "abort_run_len_s": 0.8574970086415609,
+   "debounced_abort_s": 3.0436456203460693,
+   "debounced_before_contact": true,
+   "recorded_until_s": 4.998995780944824
+  },
+  {
+   "descent": 6,
+   "start_s_after_his_takeoff": 39.01596927642822,
+   "flown_s": 0.03472280502319336,
+   "abort_tick_s": 0.01733112335205078,
+   "abort_cause": "position",
+   "err_at_abort_cm": 8.384249774731623,
+   "speed_at_abort": 0.03369095826552142,
+   "peak_err_before_abort_cm": null,
+   "median_err_inside_cm": 8.847794046129923,
+   "after_hold": null,
+   "longest_run_inside_s": 0.03333333333333333,
+   "abort_run_len_s": 0.9401090463002523,
+   "debounced_abort_s": 0.31789278984069824,
+   "debounced_before_contact": true,
+   "recorded_until_s": 0.9296348094940186
+  }
+ ],
+ "split": {
+  "plate_rms_cm": 5.084095503824308,
+  "tip_rms_cm": 8.756858224538838,
+  "err_rms_cm": 10.186166740988654,
+  "err_median_cm": 7.202015629722496,
+  "err_over_8cm_frac": 0.4567243675099867,
+  "tip_minus_plate_mean_cm": [
+   0.14547236922835752,
+   -0.13077773310493462
+  ]
+ },
+ "descent_rate": 0.08,
+ "start_height": 0.3,
+ "end_height": -0.01,
+ "full_descent_s": 3.875,
+ "sweep": [
+  {
+   "xy": 0.08,
+   "debounce_s": 0.0,
+   "starts": 635,
+   "full_descent_fits": 0.0
+  },
+  {
+   "xy": 0.08,
+   "debounce_s": 0.3,
+   "starts": 635,
+   "full_descent_fits": 0.02047244094488189
+  },
+  {
+   "xy": 0.08,
+   "debounce_s": 0.5,
+   "starts": 635,
+   "full_descent_fits": 0.11968503937007874
+  },
+  {
+   "xy": 0.08,
+   "debounce_s": 1.0,
+   "starts": 635,
+   "full_descent_fits": 0.49133858267716535
+  },
+  {
+   "xy": 0.1,
+   "debounce_s": 0.0,
+   "starts": 635,
+   "full_descent_fits": 0.009448818897637795
+  },
+  {
+   "xy": 0.1,
+   "debounce_s": 0.3,
+   "starts": 635,
+   "full_descent_fits": 0.27716535433070866
+  },
+  {
+   "xy": 0.1,
+   "debounce_s": 0.5,
+   "starts": 635,
+   "full_descent_fits": 0.32440944881889766
+  },
+  {
+   "xy": 0.1,
+   "debounce_s": 1.0,
+   "starts": 635,
+   "full_descent_fits": 0.8472440944881889
+  },
+  {
+   "xy": 0.12,
+   "debounce_s": 0.0,
+   "starts": 635,
+   "full_descent_fits": 0.23622047244094488
+  },
+  {
+   "xy": 0.12,
+   "debounce_s": 0.3,
+   "starts": 635,
+   "full_descent_fits": 0.30393700787401573
+  },
+  {
+   "xy": 0.12,
+   "debounce_s": 0.5,
+   "starts": 635,
+   "full_descent_fits": 0.462992125984252
+  },
+  {
+   "xy": 0.12,
+   "debounce_s": 1.0,
+   "starts": 635,
+   "full_descent_fits": 0.8519685039370078
+  }
+ ],
+ "tip_held_frac": 0.13856529736358061
+}

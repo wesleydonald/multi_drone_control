@@ -1,7 +1,7 @@
 name: sq_floorjoin_hover_L100_p115
 description: 'Baseline of card 2026-10-28_attach_ambitious (every new switch off). The 28 Oct payload (RIG-1028-payload): 1.15 kg, magnets at r 0.204, plate faces 0.025 above the pivot, at rest 0.013, inertia estimate ixx 0.024 / izz 0.049, in the _p115 square attach world (tools/make_attach_layout_worlds_p115.py); his ring model geometry:=rig_twin_L100_p115; throttle_max 0.9 (the T 0/3/6 loads like a pair, R2839-R2842); the slope filter on the carriers (the newcomer keeps ema); no params_file (chain_pair_attach_1m.yaml stalled his planner in R2830/R2831). sq_floorjoin_hover_L100 (R2825) otherwise: carriers on rig plates 0/3/6 (the T of the square); QUAD4 (Tejen''s controller, floor_join) joins plate 9 -> the square. Exploratory. Falsifier: no weld within 300 s of his TAKEOFF, an abort, or a clearance under 0.25 m.'
 world: sq_rigid_ground_rig_attach_pickup_L100_p115.sdf
-ball_start: [1.6, 2.0, 0.08]       # tools/make_attach_worlds_L100.py BALL_XY (unused by floor_join; the runner checks it)
+ball_start: [1.6, 2.0, 0.0125]       # tools/make_attach_worlds_L100.py BALL_XY, the plate (unused by floor_join; the runner checks it)
 lab_env:
   SIM_MOCAP_VEL_FILTER: slope
   MDC_MOCAP_VEL_DRONES: 0,1,2

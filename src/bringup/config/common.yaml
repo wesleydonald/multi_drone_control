@@ -108,6 +108,7 @@ fleet_resize:
   detach_post_blend_s: ''      # s, '' = 1: survivors' blend after the resize
   tip_detect_m: ''             # m, '' = off: a carrier's magnet marker (/drone_<d>/magnet_tip_state) this much further from its plate than its attached offset for 0.1 s, its distance from the ring centre moved too, has let go; held off after a ring-pose glitch (Wesley 21 Oct; card 2026-10-21_tip_detect rev 3)
   detach_detect_m: 0.06        # m, '' = 0 (off): a cable this much over its length for 2 ticks = an unannounced detach (7 Oct; on by default 8 Oct)
+  resize_delay_s: ''           # s, '' = 0: act on an unannounced loss this long after its detection, the leaver kept in the model meanwhile; longer than the flight = no resize (twin mode:=dissipative, reconfig_mode ocp; card 2026-10-30_x1_release_ablation)
   departed_land: true          # a freed drone lands after its step-out while the fleet flies on (7 Oct; on by default with detection, 8 Oct)
   departed_ground_idle: true   # ...is pushed to its own resting height and disarmed alone there (cards 2026-10-09_departed_ground_idle, _departed_disarm_alone; default 9 Oct after the LAND re-fly's reviewer)
   drop_on_loss: true           # drop the ring and land every drone on a second loss or a capsize (card 2026-10-08_drop_and_land; on by default with detection, 8 Oct)
@@ -238,6 +239,15 @@ partner:
   proof_fail_dwell_s: ''
   proof_timeout_s: ''
   proof_ma_s: ''
+  # the co-motion proof's drift, speed window and loss/separation limits ('' = the manager's 0.006 m, 0.2 s, 0.045,
+  # 0.045), and tip_skip_repeats: a magnet-tip pose equal to the last (Motive's hold while it has lost the marker:
+  # RIG-1029 13-34 % of body 24's samples) is not a sample, so the proof's 0.1 s gap rule restarts across it
+  # (docs/analysis/attach_gates_2026-10-30.md; off by default, typed only)
+  comotion_d_ok: ''
+  comotion_speed_window_s: ''
+  comotion_lost: ''
+  comotion_sep_xy: ''
+  tip_skip_repeats: false
   # the contact's c0 from the dwell's last contact_c0_tail_s and a vertical-speed gate contact_vz_max ('' = the
   # manager's 0.05 s / 0.02 m/s), so a tip still arriving sets no c0 (critic F7; on by default, Wesley 11 Oct)
   contact_still: true

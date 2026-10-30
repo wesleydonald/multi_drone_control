@@ -1,0 +1,180 @@
+# 
+
+# diff all
+###WARNING: NO CUSTOM DEFAULTS FOUND###
+
+# version
+# Betaflight / STM32F7X2 (S7X2) 4.3.1 Jul 13 2022 / 03:36:10 (8d4f005) MSP API: 1.44
+###ERROR IN diff: NO CONFIG FOUND###
+# start the command batch
+batch start
+
+# reset configuration to default settings
+defaults nosave
+
+board_name TMOTORF7_AIO
+manufacturer_id TMTR
+mcu_id 001d001a3432500220393650
+signature 
+
+# resources
+resource BEEPER 1 C13
+resource MOTOR 1 C06
+resource MOTOR 2 C07
+resource MOTOR 3 B00
+resource MOTOR 4 B01
+resource MOTOR 5 B06
+resource MOTOR 6 B08
+resource MOTOR 7 B07
+resource MOTOR 8 C09
+resource PPM 1 A15
+resource LED_STRIP 1 A08
+resource SERIAL_TX 1 A09
+resource SERIAL_TX 2 A02
+resource SERIAL_TX 4 A00
+resource SERIAL_TX 5 C12
+resource SERIAL_RX 1 A10
+resource SERIAL_RX 2 A03
+resource SERIAL_RX 3 C11
+resource SERIAL_RX 4 A01
+resource SERIAL_RX 5 D02
+resource I2C_SCL 2 B10
+resource I2C_SDA 2 B11
+resource LED 1 B02
+resource SPI_SCK 1 A05
+resource SPI_SCK 2 B13
+resource SPI_SCK 3 B03
+resource SPI_MISO 1 A06
+resource SPI_MISO 2 B14
+resource SPI_MISO 3 B04
+resource SPI_MOSI 1 A07
+resource SPI_MOSI 2 B15
+resource SPI_MOSI 3 B05
+resource CAMERA_CONTROL 1 B09
+resource ADC_BATT 1 C01
+resource ADC_RSSI 1 C03
+resource ADC_CURR 1 C02
+resource BARO_CS 1 C15
+resource PINIO 1 C14
+resource PINIO 2 C10
+resource FLASH_CS 1 C08
+resource OSD_CS 1 B12
+resource GYRO_EXTI 1 C04
+resource GYRO_CS 1 A04
+
+# timer
+timer C06 AF2
+# pin C06: TIM3 CH1 (AF2)
+timer C07 AF2
+# pin C07: TIM3 CH2 (AF2)
+timer B00 AF3
+# pin B00: TIM8 CH2N (AF3)
+timer B01 AF2
+# pin B01: TIM3 CH4 (AF2)
+timer B06 AF2
+# pin B06: TIM4 CH1 (AF2)
+timer B08 AF2
+# pin B08: TIM4 CH3 (AF2)
+timer A15 AF1
+# pin A15: TIM2 CH1 (AF1)
+timer B09 AF3
+# pin B09: TIM11 CH1 (AF3)
+timer A08 AF1
+# pin A08: TIM1 CH1 (AF1)
+timer B07 AF2
+# pin B07: TIM4 CH2 (AF2)
+timer C09 AF3
+# pin C09: TIM8 CH4 (AF3)
+
+# dma
+dma ADC 1 1
+# ADC 1: DMA2 Stream 4 Channel 0
+dma pin C06 0
+# pin C06: DMA1 Stream 4 Channel 5
+dma pin C07 0
+# pin C07: DMA1 Stream 5 Channel 5
+dma pin B00 0
+# pin B00: DMA2 Stream 2 Channel 0
+dma pin B01 0
+# pin B01: DMA1 Stream 2 Channel 5
+dma pin B06 0
+# pin B06: DMA1 Stream 0 Channel 2
+dma pin B08 0
+# pin B08: DMA1 Stream 7 Channel 2
+dma pin A15 0
+# pin A15: DMA1 Stream 5 Channel 3
+dma pin A08 0
+# pin A08: DMA2 Stream 6 Channel 0
+dma pin B07 0
+# pin B07: DMA1 Stream 3 Channel 2
+dma pin C09 0
+# pin C09: DMA2 Stream 7 Channel 7
+
+# feature
+feature -RX_PARALLEL_PWM
+feature RX_SERIAL
+feature TELEMETRY
+feature LED_STRIP
+feature OSD
+
+# serial
+serial 0 64 115200 57600 0 115200
+
+# aux
+aux 0 0 0 1700 2100 0 0
+aux 1 41 3 1700 2100 0 0
+
+# master
+set acc_calibration = 57,-112,-161,1
+set baro_spi_device = 3
+set serialrx_provider = CRSF
+set blackbox_device = SPIFLASH
+set motor_pwm_protocol = DSHOT600
+set motor_output_reordering = 2,3,0,1,4,5,6,7
+set align_board_roll = 180
+set current_meter = ADC
+set battery_meter = ADC
+set ibata_scale = 500
+set beeper_inversion = ON
+set beeper_od = OFF
+set max7456_spi_bus = 2
+set pinio_box = 40,41,42,43
+set flash_spi_bus = 3
+set gyro_1_bustype = SPI
+set gyro_1_spibus = 1
+
+profile 0
+
+profile 1
+
+profile 2
+
+# restore original profile selection
+profile 0
+
+rateprofile 0
+
+rateprofile 1
+
+rateprofile 2
+
+rateprofile 3
+
+# rateprofile 3
+set roll_rc_rate = 10
+set pitch_rc_rate = 10
+set yaw_rc_rate = 10
+set roll_srate = 10
+set pitch_srate = 10
+set yaw_srate = 10
+
+rateprofile 4
+
+rateprofile 5
+
+# restore original rateprofile selection
+rateprofile 3
+
+# save configuration
+save
+# 

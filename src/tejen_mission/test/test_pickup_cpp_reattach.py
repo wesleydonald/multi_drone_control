@@ -99,12 +99,16 @@ def _planner(params):
 
 
 def test_launch_off_by_default_passes_nothing_new():
-    planner = _planner(_launch_params())
+    planner = _planner(_launch_params(transit='over'))
     assert planner['pickup_cpp_reattach'] is False and 'drop_clear_height' not in planner
+    # the low route (the default since 29 Oct) climbs only 3 cm after the drop (R2898/R2899's unload overshoot)
+    planner = _planner(_launch_params())
+    assert planner['pickup_cpp_reattach'] is False
+    assert planner['drop_clear_height'] == pytest.approx(0.17)
 
 
 def test_launch_on_puts_the_handover_and_the_transit_end_above_his_search_floor():
-    p = _launch_params(pickup_cpp_reattach='true')
+    p = _launch_params(pickup_cpp_reattach='true', transit='over')
     planner = _planner(p)
     assert planner['pickup_cpp_reattach'] is True
     assert planner['drop_clear_height'] == pytest.approx(planner['drop_approach_clearance'])

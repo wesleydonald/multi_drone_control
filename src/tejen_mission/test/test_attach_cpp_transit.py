@@ -162,6 +162,51 @@ def test_the_carried_object_and_the_magnet_pass_half_a_cable_above_the_carriers(
         pytest.approx(H['pickup_lift_height'] + 0.4 - 0.275)
 
 
+@pytest.mark.parametrize('geometry, rod, attach_z', [('rig_twin_L100_p115', 1.04, 0.037), ('rig', 0.575, 0.03)])
+def test_the_low_route_carries_the_object_and_the_magnet_030_over_the_plates(geometry, rod, attach_z):
+    """Wesley 29 Oct: the incoming quad never flies over the carriers; it comes in 0.30 m above the ring."""
+    m = launch_module()
+    G = m.GEOMETRY[geometry]
+    H = m.carry_heights(G, ring_z=1.0, rod=rod, attach_z=attach_z, route='low')
+    plate = 1.0 + attach_z
+    tip = G['object_rest_z'] + H['pickup_lift_height']
+    assert tip - G['object_bottom_below_tip'] == pytest.approx(plate + 0.30)                  # the object's bottom
+    assert 1.0 + m.DROP_OFFSET_Z + H['drop_approach_clearance'] == pytest.approx(tip)          # level to the drop
+    assert H['attach_transit_clearance'] == pytest.approx(0.30)                               # the attach's approach
+    assert H['minimum_search_z_m'] == pytest.approx(tip + rod - 0.05)
+    assert H == m.carry_heights(G, ring_z=1.0, rod=rod, attach_z=attach_z, clearance=0.4, route='low')
+    over = m.carry_heights(G, ring_z=1.0, rod=rod, attach_z=attach_z)
+    assert H['pickup_lift_height'] < over['pickup_lift_height'] - 0.3
+
+
+def _legs(m, H, G, *, rod=1.04, attach_z=0.037, floor_join=False, drop_clear=None):
+    return m.planned_body_heights(
+        floor_join=floor_join, ring_z=1.0, attach_z=attach_z, rod=rod, object_rest_z=G['object_rest_z'],
+        lift=H['pickup_lift_height'], drop_approach=H['drop_approach_clearance'],
+        drop_clear=0.17 if drop_clear is None else drop_clear,
+        attach_clearance=H['attach_transit_clearance'],
+        search_floor=H['minimum_search_z_m_empty' if floor_join else 'minimum_search_z_m'])
+
+
+def test_the_rig_refuses_a_transit_over_26_m_and_passes_the_low_route():
+    m = launch_module()
+    G = m.GEOMETRY['rig_twin_L100_p115']
+    logs = []
+    low = m.carry_heights(G, ring_z=1.0, rod=1.04, attach_z=0.037, route='low')
+    m.check_transit_ceiling(_legs(m, low, G), refuse=True, log=logs.append)
+    assert max(_legs(m, low, G).values()) <= m.QUAD4_MAX_BODY_Z and 'ABOVE' not in logs[-1]
+    over = m.carry_heights(G, ring_z=1.0, rod=1.04, attach_z=0.037, clearance=0.25)
+    with pytest.raises(RuntimeError, match='above 2.6 m'):                 # the 3.3 m drop-off preview, R2895
+        m.check_transit_ceiling(_legs(m, over, G), refuse=True, log=logs.append)
+    m.check_transit_ceiling(_legs(m, over, G), refuse=False, log=logs.append)   # the twin only warns
+    assert 'ABOVE 2.6 m' in logs[-1]
+    with pytest.raises(RuntimeError):                                      # his 0.45 m climb after the drop
+        m.check_transit_ceiling(_legs(m, low, G, drop_clear=0.45), refuse=True, log=logs.append)
+    with pytest.raises(RuntimeError, match='unload overshoot'):            # back to the transit height: R2899's 2.62 m
+        m.check_transit_ceiling(_legs(m, low, G, drop_clear=low['drop_approach_clearance']), refuse=True,
+                                log=logs.append)
+
+
 def test_the_backend_gets_the_carriers_rods_and_quad4s_own_cable():
     m = launch_module()
     files = m._backend_overrides('base.yaml', m.GEOMETRY['rig_twin'], rod=0.59, floor_join=True,

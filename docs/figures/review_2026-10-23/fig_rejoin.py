@@ -55,8 +55,8 @@ def main():
     plate = np.array([rc[1] - 0.225, rc[2] + 0.02])
     r_lo, r_hi = rc[1] - 0.225, rc[1] + 0.225
     ax.plot([r_lo, r_hi], [rc[2], rc[2]], color=S.INK, lw=2.2, solid_capstyle='butt', zorder=3)
-    ax.annotate('ring', xy=(r_hi, rc[2]), xytext=(4, 0), textcoords='offset points', ha='left', va='center',
-                fontsize=8, color=S.GREY)
+    ax.annotate('ring', xy=(0.5 * (plate[0] + r_hi), rc[2]), xytext=(0, -5), textcoords='offset points', ha='center',
+                va='top', fontsize=8, color=S.GREY)     # under the bar: its end now meets the box's right side
     for tt, name in ((ev['REJOIN_WELD'], 'weld'), (ev['REJOIN_BLEND_OVER'] + 2.0, 'folded in')):
         i = at(tt)
         piv = np.array([body[i, 1], body[i, 2] - PIVOT_DZ])

@@ -1,0 +1,2 @@
+# diagnostic (30 Oct, RIG-1030 heave): the trackers fly the planner's planned cable pull instead of the measured one
+cable_source: 'model'

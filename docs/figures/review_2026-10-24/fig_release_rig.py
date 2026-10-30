@@ -45,8 +45,9 @@ def main():
     released = int(ev.loc[ev.event == 'RELEASE', 'arg'].iloc[0].split('/drone_')[1].rstrip(')'))
     t = run.t.to_numpy() - t_rel
     S.setup()
-    fig = S.figure('full', 3.6)
+    fig = S.figure('full', 3.85)        # 3.6 in of panels plus the legend below
     a, b, c = fig.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [1.6, 1, 1]})
+    key = {}
     for f in sorted(glob.glob(os.path.join(RIG, FLIGHT + '_logs', 'logs', 'tracker', 'drone*', 'log.csv'))):
         k = int(os.path.basename(os.path.dirname(f))[5])
         tr = pd.read_csv(f)
@@ -56,9 +57,9 @@ def main():
         dt = np.nanmedian(np.diff(tt))
         ten = pd.Series(ten).rolling(max(1, int(round(SMOOTH_S / dt))), center=True, min_periods=1).mean().to_numpy()
         m = (tt >= WINDOW[0]) & (tt <= WINDOW[1])
-        a.plot(tt[m], ten[m], color=S.RED if k == released else S.BLUE, lw=S.LW_HERO if k == released else S.LW_CTX)
-    a.annotate('released carrier', xy=(0.02, 0.06), xycoords='axes fraction', fontsize=8, color=S.RED)
-    a.annotate('three survivors', xy=(0.02, 0.86), xycoords='axes fraction', fontsize=8, color=S.BLUE)
+        line, = a.plot(tt[m], ten[m], color=S.RED if k == released else S.BLUE,
+                       lw=S.LW_HERO if k == released else S.LW_CTX)
+        key['released carrier' if k == released else 'three survivors'] = line
     a.set_ylabel('Measured\ntension (N)')
     a.set_ylim(0, 7)
     m = (t >= WINDOW[0]) & (t <= WINDOW[1])
@@ -75,6 +76,7 @@ def main():
                ha='left', va='top', fontsize=8, color=S.GREY)
     c.set_xlim(*WINDOW)
     c.set_xlabel('Time after the release (s)')
+    S.ps.legend_below(fig, list(key.values()), list(key), ncol=2)
     S.save(fig, 'fig_release_rig')
 
 

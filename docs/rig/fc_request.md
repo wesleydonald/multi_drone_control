@@ -1,43 +1,29 @@
-# Request: flight-controller settings on QUAD1, QUAD2, QUAD3 (and QUAD4)
+# Request: calibrate the accelerometer on QUAD1 and QUAD2 (Wesley, 30 Oct 2026)
 
-**From Wesley, 14 Oct 2026.** Arming refusals cost 11 of 46 launches on 14 Oct (registry rows RIG-1014-*, "ARM FAILED
-... FC says '!ERR*'").
+**Problem.** QUAD1 and QUAD2 often refuse to arm (`!ERR*`), for example 2 of 3 ARMs in h4n on 30 Oct. Replugging the
+battery helps for about a minute.
 
-## What happens
-- The carriers rest tilted 11-13 deg on their rods while they wait to be armed.
-- Their FC reports `!ERR*` (arming disabled) for minutes at a time, and arming is refused. Replugging the pack
-  usually clears it for about a minute.
-- QUAD1's own attitude telemetry read a roll of -60 to -84 deg while it sat at ~12 deg. Its attitude estimate is far
-  off, which points at Betaflight's small-angle arming check (default 25 deg).
-- In flight the FCs report `AIR` (airmode). Both our controller and Tejen's send rate commands through the
-  Betaflight rate curve, so the FC's attitude estimate is not used in flight. It only gates arming.
+**Cause.** Their FCs believe they are tilted 25-112 deg while they sit at 12-15 deg (QUAD3 and QUAD4 read the real
+tilt). Betaflight refuses to arm above `small_angle` (25 deg). On the bench QUAD1's accelerometer reads 1.10 g right
+side up and 0.87 g upside down, so Betaflight (which trusts it only between 0.9 and 1.1 g) ignores it, and the
+attitude drifts with the gyro.
 
-## Please, per drone (Betaflight CLI)
-1. While the drone shows `!ERR`, run `status` and note the arming-disable flags (we expect ANGLE). Do the same
-   once while it shows `AIR*` after a refused arm (no disable flag there, so that refusal has another cause).
-2. Calibrate the accelerometer on a level surface (Setup tab, "Calibrate Accelerometer").
-3. Watch the attitude in the Configurator for 5 min on a level bench: a slow drift points at the estimator, a
-   steady wrong angle at the accelerometer.
-4. Run these and keep the output:
-   - `get small_angle`
-   - `get acc_calibration`
-   - `get align_board_roll`, `get align_board_pitch`, `get align_board_yaw`
-5. Then:
-```
-set small_angle = 180
-save
-```
-- `small_angle = 180` lets it arm at any tilt. They sit tilted on their rods and fly rate mode, so this is safe for
-  us. Our console then checks the real (mocap) tilt before ARM instead, so a tipped-over drone still cannot be
-  armed.
-- Not `gyro_cal_on_first_arm`: it would delay the arm past our software's confirm window.
+**Please, on QUAD1 and QUAD2:**
+1. Back up the settings: `diff all` in the CLI, saved as `docs/rig/fc/QUADn_diff_<date>.txt`.
+2. Props off, the quad right side up on a level surface, untouched. Setup tab, "Calibrate Accelerometer"; it takes
+   ~2 s and is stored on the FC (no `save` needed). Then the Setup tab reads roll and pitch ~0 and the Sensors tab's
+   accelerometer reads X, Y ~0 (the web app shows 1 g as ~0.25 on Z with QUAD1's Betaflight 4.3.1).
+3. The arming angle off: Configuration tab, Arming, "Maximum ARM Angle" 180, Save and Reboot (CLI: `set small_angle
+   = 180`, `save`). The quads fly in rate mode, so the FC's attitude only gates arming; our console still blocks a quad
+   on its side from mocap. On all four quads; then run the console with `--small-angle 180`.
+4. Back up again: `diff all` saved as `docs/rig/fc/QUADn_diff_<date>_after.txt`.
 
-## Acceptance
-Leave the drone on its plate for 10 min, then arm and disarm. Repeat 5 times per drone with no refusal.
+**Approved** by the supervisor 30 Oct ("Also find the minimum arming angle in the configuration and either turn that
+off or increase it"); docs/decisions.md.
 
-## For QUAD4
-The same settings would help (it also showed `!ERR*` while waiting).
+**Check.** `python3 tools/fc_probe.py armcheck /dev/ttyACM0 --tx=/dev/QUADn --seconds=600` with the quad on its rod
+(read-only): the accelerometer reads 1.00 +- 0.03 g, the FC's tilt matches the real tilt for 10 min, and nothing
+blocks arming. Then 5 arms in a row without a refusal.
 
-All four quads are Wesley's; any FC change needs the supervisor's OK first (Wesley, 15 Oct). Backups before any
-change: `docs/rig/fc/QUADn_diff_<date>.txt` (QUAD4's of 15 Oct: Betaflight 4.3.1, T-Motor F7 AIO, blackbox on
-the onboard flash, accelerometer calibrated, small_angle at its default 25).
+Evidence: registry RIG-1029-h4, RIG-1030-h3t and
+RIG-1030-h4n, and this file's git history.

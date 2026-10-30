@@ -1089,7 +1089,7 @@ def test_combined_rig_one_coil_writer_aux_zeroed_and_his_ball_from_our_mocap(dds
     mux = g['/elrs_mux_3']['params']
     assert mux['zero_partner_aux'] is True and mux['partner_hold_until_planner'] is True      # O6, F3
     p = g['/dissipative_planner']['params']
-    assert (p['contact_ball_mass'], p['contact_span_wait_ball']) == (0.06, True)               # F8, F9
+    assert (p['contact_ball_mass'], p['contact_span_wait_ball']) == (0.15, True)               # F8, F9 (RIG-1021-q1pick)
     mocap = next(n for k, n in g.items() if n['executable'] == 'motion_capture_publisher_node')
     assert mocap['params']['extra_bodies'] == '6:/pickup/motion_capture_state'
     assert mocap['params']['magnet_tip_body_id'] == 24
@@ -1126,11 +1126,12 @@ def test_combined_rig_with_his_nodes(dds):
     on the wall clock with his topics; still one mocap node, one radio per drone, no Gazebo node."""
     nodes = rig('attach', enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01,
                 weld_point_z=0.031, attach_cable_len=0.54, cable_len=0.55, partner_nodes=True, proof_taut_len=0.577,
-                partner_args='pickup_lift_height:=2.1 magnet_drop_below_quad:=0.582 mpc_thrust_ratio:=21.5')
+                partner_args='pickup_lift_height:=1.9 magnet_drop_below_quad:=0.582 mpc_thrust_ratio:=21.5')
     g = _assert_rig_graph(nodes, 4, 35.2)
     p = g['/online_join_planner']['params']
     assert p['contact_attach'] is True and p['ring_attached_topic'] == '/magnet/object_attached'
-    assert (p['pickup_lift_height'], p['magnet_drop_below_quad'], p['final_attach_offset_z']) == (2.1, 0.582, -0.01)
+    # typed 1.9 (body 2.51 m): his rig launch refuses a planned QUAD4 body over 2.6 m (Wesley 29 Oct)
+    assert (p['pickup_lift_height'], p['magnet_drop_below_quad'], p['final_attach_offset_z']) == (1.9, 0.582, -0.01)
     assert g['/fake_cooperative_transport_world']['params']['bridge_attach_z_m'] == 0.031
     # one plate point for both stacks (plan 2026-10-14 WP3): his target is our weld point in x, y too
     assert tuple(g['/fake_cooperative_transport_world']['params']['bridge_attach_xy_m']) == pytest.approx((0.0, 0.225))
@@ -1573,6 +1574,22 @@ def test_the_task_and_lap_switches_reach_the_twin_planner_only_when_set():
             launch()
 
 
+
+def test_resize_delay_reaches_the_twin_dissipative_planner_only_and_is_refused_elsewhere():
+    """Card 2026-10-30_x1_release_ablation (twin only, off by default): resize_delay_s reaches the twin's mode:=dissipative
+    planner with reconfig_mode ocp; unset, no planner gets it (the loss is acted on at detection). Refused on the rig,
+    in the attach and carry graphs and with reconfig_mode network."""
+    p = _planner(_by_name(sim('dissipative', num_drones=4, reconfig_mode='ocp', resize_delay_s=1.0)))
+    assert p['resize_delay_s'] == 1.0
+    for g in (sim('mpc'), sim('dissipative'), sim('network'), rig('dissipative', thrust_ratio=35.2)):
+        assert 'resize_delay_s' not in _planner(_by_name(g))
+    for launch in (lambda: rig('dissipative', thrust_ratio=35.2, reconfig_mode='ocp', resize_delay_s=1.0),
+                   lambda: sim('mpc', resize_delay_s=1.0),
+                   lambda: sim('attach', resize_delay_s=1.0),
+                   lambda: sim('dissipative', num_drones=4, reconfig_mode='network', resize_delay_s=1.0)):
+        with pytest.raises(RuntimeError, match='resize_delay_s flies only'):
+            launch()
+
 # ── MDC_PLANNER_CPUS: the planner pinned with taskset (card 2026-10-23_scalability; default unset) ─────────────
 
 PLANNERS = {'mpc_planner', 'dissipative_planner'}
@@ -1612,3 +1629,19 @@ def test_rig_trackers_notch_the_measured_pull_at_5_3_hz(dds):
             for k in trk] == [(5.3, 1.0, 0.0)] * 4
     assert [(lp[k]['params']['cable_notch_hz'], lp[k]['params']['cable_lp_hz'], lp[k]['params']['cable_lp_order'])
             for k in trk] == [(0.0, 2.0, 2)] * 4
+
+
+def test_combined_rig_comotion_thresholds_and_tip_repeats_only_when_typed(dds):
+    """docs/analysis/attach_gates_2026-10-30.md: the co-motion proof's drift / speed window / loss limits and the
+    frozen-marker filter reach our manager only when typed; untyped, the manager keeps its defaults."""
+    base = dict(enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.035, weld_point_z=0.031,
+                attach_cable_len=0.54, cable_len=0.55, partner_nodes=True, proof_taut_len=0.577,
+                partner_args='magnet_drop_below_quad:=0.582 mpc_thrust_ratio:=21.5')
+    mgr = _by_name(rig('attach', **base))['/magnet_attachment_manager']['params']
+    assert not any(k in mgr for k in ('comotion_d_ok', 'comotion_speed_window_s', 'comotion_lost', 'comotion_sep_xy',
+                                      'tip_skip_repeats'))
+    assert mgr['comotion_contact_xy'] == 0.035
+    mgr = _by_name(rig('attach', comotion_d_ok=0.008, comotion_speed_window_s=0.5, comotion_lost=0.06,
+                       comotion_sep_xy=0.06, tip_skip_repeats=True, **base))['/magnet_attachment_manager']['params']
+    assert (mgr['comotion_d_ok'], mgr['comotion_speed_window_s'], mgr['comotion_lost'], mgr['comotion_sep_xy'],
+            mgr['tip_skip_repeats']) == (0.008, 0.5, 0.06, 0.06, True)

@@ -134,7 +134,8 @@ PLANNER_OPTIONAL = {'land_unwind': 'bool', 'dist_est': 'str', 'dist_tau': 'float
                     'detach_detect_m': 'float', 'departed_land': 'bool', 'departed_ground_idle': 'bool',
                     'drop_on_loss': 'bool', 'drop_takes_back': 'bool', 'drop_gap_deg': 'float',
                     'tip_detect_m': 'float', 'fig8_size': 'float', 'pos_limit_m': 'float',
-                    'rejoin_departed': 'bool', 'rejoin_task': 'bool', 'traj_laps': 'int', 'traj_lap_hold_s': 'float'}
+                    'rejoin_departed': 'bool', 'rejoin_task': 'bool', 'traj_laps': 'int', 'traj_lap_hold_s': 'float',
+                    'resize_delay_s': 'float'}
 # the trackers' thrust map, which the disturbance estimate reads delivered thrust through
 DIST_MAP = ('thrust_ratio', 'thrust_offset', 'thrust_offset_v_slope', 'thrust_v_ref')
 
@@ -183,6 +184,10 @@ def planner_options(context, rejoin=False):
             rejoin and LaunchConfiguration('reconfig_mode').perform(context).strip() == 'ocp'):
         raise RuntimeError("traj_lap_hold_s flies only in the twin's mode:=dissipative with reconfig_mode:=ocp (it holds "
                            'the clock through the resize hold)')
+    if opts.get('resize_delay_s', 0.0) != 0.0 and not (
+            rejoin and LaunchConfiguration('reconfig_mode').perform(context).strip() == 'ocp'):
+        raise RuntimeError("resize_delay_s flies only in the twin's mode:=dissipative with reconfig_mode:=ocp (X1's "
+                           'late and no-resize arms, card 2026-10-30_x1_release_ablation)')
     if opts.get('offset_free') == 'on' and truthy(context, 'kt_trim'):
         raise RuntimeError('offset_free on with kt_trim on: two adaptive loops on one vertical residual')
     if opts.get('int_mode') in ('model', 'auto'):

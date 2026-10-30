@@ -1,0 +1,124 @@
+name: tri_floorjoin_hover_L100_p115_sq52_ps
+description: 'Exploratory neighbour of E2c (R2872/R2873: QUAD4 lost control in its climb with partial_step at 60 ms), one change against tri_floorjoin_hover_L100_p115_sq52 (E0, no added delay): Tejen''s mpc_command_execution:=partial_step. Falsifier: QUAD4 loses control in its climb as in R2872/R2873 (then the fix alone, without the delay, destabilises it). E0: the triangle attach as the rig flew it on 29 Oct (RIG-1029-sq5_2): carriers on plates 3/11/7 (attach_azimuths_deg 90,330,210, clockwise) with throttle_max 0.95 and the 5.3 Hz notch on their measured cable pull (cable_notch_hz, the rig default; typed here for parity), the slope filter on the carriers (QUAD4 ema), the 1.15 kg ring in the triangle _p115 world (tools/make_attach_layout_worlds_p115.py --layout tri), his ring model geometry:=rig_twin_L100_p115; QUAD4 (Tejen''s controller, floor_join, his Python transfer: attach_cpp_transit false) joins plate 9 from its mat at (0, 1.4) with sq5_2''s partner_args (attach_transit_clearance 0.30, approach_offset_z 0.30, zero twist, MATCH 0.08 m / 0.5 s, climb 0.3 m/s, commit_backdate 0.04, tracking_check off, carry_clearance 0.25, search floor 2.20 as typed on the rig) plus match_speed 0.15 (the rig path''s built-in MATCH speed; the twin path''s default is 0.08). Card 2026-10-29_rig_timing_twin_attach.'
+world: three_rigid_ground_rig_attach_pickup_L100_p115.sdf
+ball_start: [-0.45, 1.75, 0.0125]      # tools/make_attach_layout_worlds_p115.py OBJECT_XY, the plate (unused by floor_join; the runner checks it)
+lab_env:
+  SIM_MOCAP_VEL_FILTER: slope
+  MDC_MOCAP_VEL_DRONES: 0,1,2
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    attach_radius: 0.204
+    attach_z: 0.025
+    cable_len: 1.0
+    creep_vel: 0.2
+    drone_mass: 0.55
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.15
+    load_mass: 1.15
+    load_ixx: 0.024
+    load_izz: 0.049
+    load_traj: hover
+    measure_rod_len: true
+    num_drones: 3
+    payload_rest_z: 0.013
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    reconfig_mode: ocp
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.0
+    throttle_max: 0.95
+    cable_notch_hz: 5.3      # the rig default since 29 Oct (real.yaml): typed for parity
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    pos_limit_m: 1.75
+    mode: attach
+    reserved_attach: 1
+    attach_azimuths_deg: 90,330,210
+    attach_x_offset: 0.0
+    attach_y_offset: 0.204
+    partner: true
+    weld_radius: 0.01
+    weld_point_z: 0.037
+    partner_contact: true
+    proof_rules: comotion
+    proof_h_plate: 0.0025
+    weld_speed_gate: 0.05
+    tip_max_rate_hz: 120.0
+    tip_noise_sd_m: 0.0005
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 3
+    attach: true
+    clock_hz: 500
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+fleet:
+  num_drones: 3
+  n_total: 4
+timing:
+  duration_s: 600.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 5.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 8.0
+  launch_expect_topics:
+  - /join_planner/phase
+  - /fake_payload/pose
+  dds_udp_only: true
+  bg_param_dump: false
+events:
+- t: 1.0
+  do: LAUNCH
+  arg: tejen_mission partner_mission.launch.py geometry:=rig_twin_L100_p115 plate:=9 carrier_azimuths_deg:=[90.0,330.0,210.0]
+    contact_attach:=true carry_clearance:=0.25 confirm_pickup_release:=true mission_mode:=floor_join
+    attach_cpp_transit:=false attach_transit_clearance:=0.30 minimum_search_z_m:=2.20 approach_offset_z:=0.30
+    attach_twist:=zero match_xy:=0.08 match_dwell:=0.5 match_speed:=0.15 climb_speed:=0.3
+    commit_backdate:=0.04 tracking_check:=off
+    mpc_command_execution:=partial_step
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 20.0
+  do: WAIT_WELD           # our co-motion confirmation; 150 s caps a stalled attach (the rig gave up 40 s after his TAKEOFF)
+  arg: 150
+- t: 30.0
+  do: LAND                # 10 s on four after the confirmation, as the rig sheet
+criteria:
+  require_weld: false
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    baseline:
+      pos: [2.6, -4.4, 3.2]
+      look_at: [0.0, 0.4, 1.8]
+      hfov_deg: 60.0
+      size: [1280, 720]
+    top:                  # steep overhead: QUAD4's mat (0, 1.4), its path to plate 9 between the carriers on 11 and 7
+      pos: [0.0, -1.0, 6.2]
+      look_at: [0.0, 0.45, 1.5]
+      hfov_deg: 60.0
+      size: [1280, 720]

@@ -1,7 +1,7 @@
 name: sq_pickup_hover_L100_p115_cppreattach
 description: 'Card 2026-10-28_attach_ambitious, Revision 3 avoidance fix, one variable against A0 pickup (sq_pickup_hover_L100_p115, R2845): pickup_cpp_reattach:=true, his C++ planner flies pickup_delivery''s TRANSIT_TO_REATTACH (the drop zone to above plate 9) with the carriers'' avoidance, after a fresh C1F.2b hand-over at the end of CLEAR_DROP_ZONE (A0: his Python transfer at approach_offset_z, no avoidance; critic 2). The partner launch passes it (sim path, 29 Oct ~01:45): his backend with require_payload_attached_for_enable off, the hand-over at the end of CLEAR_DROP_ZONE and the transit end above its loaded search floor (the card, Arms prepared). Everything else as A0: the 1.15 kg payload (RIG-1028-payload) in the _p115 square attach world, his ring model geometry:=rig_twin_L100_p115, throttle_max 0.9, the slope filter on the carriers (the newcomer keeps ema), no params_file, carry_clearance 0.25; carriers on plates 0/3/6, QUAD4 (Tejen''s controller, pickup_delivery) joins plate 9. Exploratory. Falsifier (Revision 3 avoidance-fix bars): no weld within 420 s of his TAKEOFF, TRANSIT_TO_REATTACH not completed on the C++ planner, an abort or envelope fault, a failed proof, or the rod min (tools/m1_metrics.py flight) under 0.238 m.'
 world: sq_rigid_ground_rig_attach_pickup_L100_p115.sdf
-ball_start: [1.6, 2.0, 0.08]       # tools/make_attach_worlds_L100.py BALL_XY (the runner checks it)
+ball_start: [1.6, 2.0, 0.0125]       # tools/make_attach_worlds_L100.py BALL_XY, the plate (the runner checks it)
 lab_env:
   SIM_MOCAP_VEL_FILTER: slope
   MDC_MOCAP_VEL_DRONES: 0,1,2

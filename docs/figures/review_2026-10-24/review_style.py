@@ -47,7 +47,8 @@ def ref_line(ax, y, text=None, x=1.0, ha='right', va='bottom', dy=1.5, horizonta
     if horizontal:
         ax.axhline(y, **REF)
         if text:
-            ax.annotate(text, xy=(x, y), xycoords=('axes fraction', 'data'), xytext=(0, dy if va == 'bottom' else -dy),
+            dx = {'right': -2, 'left': 2}.get(ha, 0)        # clear of the box's side (full box, Wesley 30 Oct)
+            ax.annotate(text, xy=(x, y), xycoords=('axes fraction', 'data'), xytext=(dx, dy if va == 'bottom' else -dy),
                         textcoords='offset points', ha=ha, va=va, fontsize=8, color=GREY)
     else:
         ax.axvline(y, **REF)

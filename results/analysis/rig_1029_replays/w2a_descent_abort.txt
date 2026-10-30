@@ -1,0 +1,21 @@
+check vs his CSV: {'n': 93, 'err_diff_median_cm': 0.07415418419563806, 'err_diff_p95_cm': 0.5512209276460097, 'speed_diff_median': 0.0004885323328096408, 'speed_diff_p95': 0.017016227442262114}
+split {'plate_rms_cm': 5.084095503824308, 'tip_rms_cm': 8.756858224538838, 'err_rms_cm': 10.186166740988654, 'err_median_cm': 7.202015629722496, 'err_over_8cm_frac': 0.4567243675099867, 'tip_minus_plate_mean_cm': [0.14547236922835752, -0.13077773310493462]}
+full descent 0.30 -> -0.01 m at 0.08 m/s: 3.88 s; tip held 13.9 %
+{'descent': 1, 'start_s_after_his_takeoff': 16.581, 'flown_s': 0.598, 'abort_tick_s': 0.611, 'abort_cause': 'position', 'err_at_abort_cm': 9.432, 'speed_at_abort': 0.101, 'peak_err_before_abort_cm': 6.323, 'median_err_inside_cm': 4.318, 'after_hold': {'hold_s': 0.21972441673278809, 'ended_s_before_abort': 0.03774619102478027, 'jump_cm': 4.85794047361339}, 'longest_run_inside_s': 0.033, 'abort_run_len_s': 1.132, 'debounced_abort_s': 0.943, 'debounced_before_contact': True, 'recorded_until_s': 23.364}
+{'descent': 2, 'start_s_after_his_takeoff': 18.848, 'flown_s': 1.767, 'abort_tick_s': 1.719, 'abort_cause': 'position', 'err_at_abort_cm': 8.016, 'speed_at_abort': 0.149, 'peak_err_before_abort_cm': 7.539, 'median_err_inside_cm': 3.767, 'after_hold': None, 'longest_run_inside_s': 0.033, 'abort_run_len_s': 1.624, 'debounced_abort_s': 2.031, 'debounced_before_contact': True, 'recorded_until_s': 21.097}
+{'descent': 3, 'start_s_after_his_takeoff': 23.716, 'flown_s': 1.934, 'abort_tick_s': 1.962, 'abort_cause': 'position', 'err_at_abort_cm': 8.283, 'speed_at_abort': 0.09, 'peak_err_before_abort_cm': 7.779, 'median_err_inside_cm': 5.744, 'after_hold': None, 'longest_run_inside_s': 0.033, 'abort_run_len_s': 1.682, 'debounced_abort_s': 2.271, 'debounced_before_contact': True, 'recorded_until_s': 16.229}
+{'descent': 4, 'start_s_after_his_takeoff': 33.479, 'flown_s': 0.335, 'abort_tick_s': 0.347, 'abort_cause': 'position', 'err_at_abort_cm': 8.93, 'speed_at_abort': 0.018, 'peak_err_before_abort_cm': 4.105, 'median_err_inside_cm': 3.679, 'after_hold': {'hold_s': 0.21369624137878418, 'ended_s_before_abort': 0.029518842697143555, 'jump_cm': 4.950766005389261}, 'longest_run_inside_s': 0.033, 'abort_run_len_s': 0.43, 'debounced_abort_s': 0.654, 'debounced_before_contact': True, 'recorded_until_s': 6.467}
+{'descent': 5, 'start_s_after_his_takeoff': 34.947, 'flown_s': 2.737, 'abort_tick_s': 2.72, 'abort_cause': 'position', 'err_at_abort_cm': 9.052, 'speed_at_abort': 0.04, 'peak_err_before_abort_cm': 7.202, 'median_err_inside_cm': 4.467, 'after_hold': {'hold_s': 0.21979880332946777, 'ended_s_before_abort': 0.013763189315795898, 'jump_cm': 2.650967280864854}, 'longest_run_inside_s': 0.033, 'abort_run_len_s': 0.857, 'debounced_abort_s': 3.044, 'debounced_before_contact': True, 'recorded_until_s': 4.999}
+{'descent': 6, 'start_s_after_his_takeoff': 39.016, 'flown_s': 0.035, 'abort_tick_s': 0.017, 'abort_cause': 'position', 'err_at_abort_cm': 8.384, 'speed_at_abort': 0.034, 'peak_err_before_abort_cm': None, 'median_err_inside_cm': 8.848, 'after_hold': None, 'longest_run_inside_s': 0.033, 'abort_run_len_s': 0.94, 'debounced_abort_s': 0.318, 'debounced_before_contact': True, 'recorded_until_s': 0.93}
+{'xy': 0.08, 'debounce_s': 0.0, 'starts': 635, 'full_descent_fits': 0.0}
+{'xy': 0.08, 'debounce_s': 0.3, 'starts': 635, 'full_descent_fits': 0.02047244094488189}
+{'xy': 0.08, 'debounce_s': 0.5, 'starts': 635, 'full_descent_fits': 0.11968503937007874}
+{'xy': 0.08, 'debounce_s': 1.0, 'starts': 635, 'full_descent_fits': 0.49133858267716535}
+{'xy': 0.1, 'debounce_s': 0.0, 'starts': 635, 'full_descent_fits': 0.009448818897637795}
+{'xy': 0.1, 'debounce_s': 0.3, 'starts': 635, 'full_descent_fits': 0.27716535433070866}
+{'xy': 0.1, 'debounce_s': 0.5, 'starts': 635, 'full_descent_fits': 0.32440944881889766}
+{'xy': 0.1, 'debounce_s': 1.0, 'starts': 635, 'full_descent_fits': 0.8472440944881889}
+{'xy': 0.12, 'debounce_s': 0.0, 'starts': 635, 'full_descent_fits': 0.23622047244094488}
+{'xy': 0.12, 'debounce_s': 0.3, 'starts': 635, 'full_descent_fits': 0.30393700787401573}
+{'xy': 0.12, 'debounce_s': 0.5, 'starts': 635, 'full_descent_fits': 0.462992125984252}
+{'xy': 0.12, 'debounce_s': 1.0, 'starts': 635, 'full_descent_fits': 0.8519685039370078}

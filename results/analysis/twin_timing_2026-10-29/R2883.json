@@ -1,0 +1,204 @@
+{
+ "windows": [
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 34.552,
+   "dur": 6.067,
+   "err_med_cm": 72.27026094221263,
+   "err_max_cm": 122.08255361694344,
+   "chord_m": 1.0099246699729862,
+   "err_logged_med_cm": 72.29951543016479,
+   "phi_mean": 0.00598943482302139,
+   "theta_mean": 0.20596154843081815,
+   "phi_rms": 0.2775726422187766,
+   "theta_rms": 1.8585098762882752,
+   "total_rms": 1.8791236074216546,
+   "lean": 0.2060486174705365,
+   "f_dom": 0.6557377049180328,
+   "mpc_phi_rms": 0.2716890487814001,
+   "mpc_theta_rms": 1.8104048199843796
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 40.619,
+   "dur": 1.199,
+   "err_med_cm": 4.030308564176259,
+   "err_max_cm": 6.014469850967729,
+   "chord_m": 1.0097844282048194,
+   "err_logged_med_cm": 4.04297015521803,
+   "phi_mean": 0.017268730173181646,
+   "theta_mean": -0.4013365391537036,
+   "phi_rms": 0.7063069455956212,
+   "theta_rms": 2.9827764635259393,
+   "total_rms": 3.065260989338579,
+   "lean": 0.4017078872783884,
+   "f_dom": 0.8333333333333334,
+   "mpc_phi_rms": 0.6763249008485692,
+   "mpc_theta_rms": 2.842714444922692
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 41.818,
+   "dur": 0.133,
+   "err_med_cm": 0.8524152062994302,
+   "err_max_cm": 1.0366608610737618,
+   "chord_m": 1.0098070237504675,
+   "err_logged_med_cm": 0.832350000994591
+  },
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 41.951,
+   "dur": 0.565,
+   "err_med_cm": 3.544778598989234,
+   "err_max_cm": 5.040555434581576,
+   "chord_m": 1.0098510008736772,
+   "err_logged_med_cm": 3.534060203579307
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 42.516,
+   "dur": 3.268,
+   "err_med_cm": 6.123540177043163,
+   "err_max_cm": 12.909219999238818,
+   "chord_m": 1.0097607921104892,
+   "err_logged_med_cm": 6.069260082818002,
+   "phi_mean": -0.057060235640201455,
+   "theta_mean": 0.3244952691302651,
+   "phi_rms": 1.1527393193581916,
+   "theta_rms": 3.379229039912265,
+   "total_rms": 3.5704337051093327,
+   "lean": 0.32947389908646557,
+   "f_dom": 0.6060606060606061,
+   "mpc_phi_rms": 1.1229442180627065,
+   "mpc_theta_rms": 3.3171521613483064
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 45.784,
+   "dur": 3.771,
+   "err_med_cm": 4.755377856121985,
+   "err_max_cm": 9.535194851580583,
+   "chord_m": 1.009923015688838,
+   "err_logged_med_cm": 4.7526836097419,
+   "phi_mean": -0.03745968286408981,
+   "theta_mean": 0.02464998443561199,
+   "phi_rms": 1.198227998931247,
+   "theta_rms": 2.375110869158836,
+   "total_rms": 2.6602447214907166,
+   "lean": 0.04484249739871874,
+   "f_dom": 0.7894736842105263,
+   "mpc_phi_rms": 1.1749390147760836,
+   "mpc_theta_rms": 2.2826383570766273
+  },
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 56.918,
+   "dur": 0.532,
+   "err_med_cm": 8.516877342829005,
+   "err_max_cm": 10.961848969566198,
+   "chord_m": 1.0099000493369958,
+   "err_logged_med_cm": 8.556889312444248
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 57.45,
+   "dur": 12.94,
+   "err_med_cm": 15.654869730136776,
+   "err_max_cm": 168.61798767163953,
+   "chord_m": 1.0096542615658635,
+   "err_logged_med_cm": 15.577302660850581,
+   "phi_mean": -0.8063396972724416,
+   "theta_mean": -0.09956063546460067,
+   "phi_rms": 15.502372582513239,
+   "theta_rms": 26.4310069316614,
+   "total_rms": 30.64182897786278,
+   "lean": 0.812462939174168,
+   "f_dom": 0.46875,
+   "mpc_phi_rms": 14.507022476842979,
+   "mpc_theta_rms": 25.907610381074154
+  }
+ ],
+ "md_windows": 4,
+ "S_md_median": 3.317847347223956,
+ "S_md_max": 30.64182897786278,
+ "axis_rms_md": [
+  2.98,
+  3.38,
+  2.38,
+  26.43
+ ],
+ "S_approach_max": 1.8791236074216546,
+ "lean_median": 0.32947389908646557,
+ "f_dom_md": [
+  0.83,
+  0.61,
+  0.79,
+  0.47
+ ],
+ "E_md_median_cm": 8.798547360723022,
+ "E_md_logged_median_cm": 8.775241434982522,
+ "n_match": 3,
+ "n_descend": 2,
+ "match_durs": [
+  1.199,
+  3.268,
+  12.94
+ ],
+ "descent_durs": [
+  0.133,
+  3.771
+ ],
+ "n_abort": 1,
+ "contact": null,
+ "weld": null,
+ "land": null,
+ "lifted": 20.353,
+ "his_takeoff": 26.318,
+ "phases": [
+  [
+   1.03,
+   "WAIT_FOR_TAKEOFF"
+  ],
+  [
+   26.32,
+   "TAKEOFF"
+  ],
+  [
+   34.55,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   40.62,
+   "MATCH_VELOCITY"
+  ],
+  [
+   41.82,
+   "DESCEND_TO_ATTACHMENT"
+  ],
+  [
+   41.95,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   42.52,
+   "MATCH_VELOCITY"
+  ],
+  [
+   45.78,
+   "DESCEND_TO_ATTACHMENT"
+  ],
+  [
+   49.55,
+   "ATTACH_READY"
+  ],
+  [
+   56.92,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   57.45,
+   "MATCH_VELOCITY"
+  ]
+ ],
+ "path": "results/2026-10-29/R2883_sim_gz_tri_floorjoin_hover_L100_p115_sq52_cd060_db10x10"
+}

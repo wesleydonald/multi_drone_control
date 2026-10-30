@@ -1,0 +1,25 @@
+{
+ "descents": [
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 40.87,
+   "dur_s": 3.77,
+   "next": "ATTACH_READY",
+   "min_tip_above_target_cm": -1.6,
+   "err_median_cm": 0.8
+  }
+ ],
+ "summary": {
+  "descents": 1,
+  "reached_bottom": 1,
+  "restarts_position": 0,
+  "restarts_speed": 0,
+  "contact": 44.653,
+  "weld": 46.179,
+  "give_up": null,
+  "take_back": null,
+  "deepest_cm": -1.6,
+  "max_ref_drop_over8_cm": 0.0,
+  "max_tip_drop_over8_cm": 0.0
+ }
+}

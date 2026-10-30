@@ -109,11 +109,18 @@ def test_contact_target_is_our_weld_point_and_the_rig_values():
     assert (p['proof_rise_max'], p['attach_ready_target_lead_time'], p['attach_ready_land_after_s']) == (
         0.03, 0.0, 0.0)
     assert p['magnet_drop_below_quad'] == 0.575                                       # his IRL value
-    # the puck's bottom half the carriers' cable above them (Wesley 21 Oct): carriers 1.0 + 0.55 sin 60 + 0.04,
-    # + 0.275, + 0.05 puck bottom below the marker, from the puck's 0.03 rest and to the drop point 0.15 up
-    tip = 1.0 + 0.55 * math.sin(math.radians(60.0)) + 0.04 + 0.275 + 0.05
+    # the low route (Wesley 29 Oct): the puck's bottom 0.30 m over the plates (1.0 + the 0.031 contact target),
+    # + 0.05 puck bottom below the marker, from the puck's 0.03 rest and to the drop point 0.15 up, and back after it
+    tip = 1.0 + 0.031 + 0.30 + 0.05
     assert p['pickup_lift_height'] == pytest.approx(tip - 0.03)
     assert p['drop_approach_clearance'] == pytest.approx(tip - 1.15)
+    assert p['drop_clear_height'] == pytest.approx(0.17)       # 3 cm over his 0.14 release (the unload overshoot)
+    # transit:=over: the puck's bottom half the carriers' cable above them (Wesley 21 Oct): carriers 1.0 + 0.55 sin
+    # 60 + 0.04, + 0.275, + 0.05
+    over = _nodes(transit='over')[0]['online_join_planner']['params']
+    tip = 1.0 + 0.55 * math.sin(math.radians(60.0)) + 0.04 + 0.275 + 0.05
+    assert over['pickup_lift_height'] == pytest.approx(tip - 0.03)
+    assert over['drop_approach_clearance'] == pytest.approx(tip - 1.15) and 'drop_clear_height' not in over
     assert p['attach_cpp_transit'] is True
     assert (p['min_reference_z'], p['pickup_alignment_mode']) == (0.58, 'measured_tip_tiered')
     mpc = g['tejen_mpc']
@@ -139,10 +146,12 @@ def test_typed_plate_and_carriers_are_ours_and_clockwise():
 
 def test_typed_values_win():
     g, _ = _nodes(contact_dz='-0.005', magnet_drop_below_quad='0.582', proof_rise_max='0.02',
-                  pickup_lift_height='2.0', mpc_thrust_ratio='24.5')
+                  pickup_lift_height='1.9', mpc_thrust_ratio='24.5')
     p = g['online_join_planner']['params']
     assert (p['final_attach_offset_z'], p['magnet_drop_below_quad'], p['proof_rise_max'],
-            p['pickup_lift_height']) == (-0.005, 0.582, 0.02, 2.0)
+            p['pickup_lift_height']) == (-0.005, 0.582, 0.02, 1.9)
+    with pytest.raises(RuntimeError, match='above 2.6 m'):        # a typed lift that puts the body at 2.61 m
+        _nodes(magnet_drop_below_quad='0.582', pickup_lift_height='2.0')
     assert g['tejen_mpc']['params']['thrust_ratio'] == 24.5
 
 
@@ -283,8 +292,10 @@ def test_one_metre_cables_reach_his_carrier_model_heights_and_mpc():
     """Thu 29 (1 m cables): the carriers' cable is typed (our launch passes cable_len), so his bridge places the
     carriers on 1 m rods and his transit clears them; his MPC's cable follows QUAD4's typed drop (his calibration:
     0.044 under it, 0.531 at the 0.55 m era's 0.575); a typed value still wins."""
+    with pytest.raises(RuntimeError, match='above 2.6 m'):         # untyped, the high transit is refused on the rig
+        _nodes(ring_cable_len='1.0', magnet_drop_below_quad='1.037', contact_target_z='0.048', mission_mode='floor_join')
     g, _ = _nodes(ring_cable_len='1.0', magnet_drop_below_quad='1.037', contact_target_z='0.048',
-                  mission_mode='floor_join')
+                  mission_mode='floor_join', transit='over')
     ring = g['fake_cooperative_transport_world']['params']
     assert (ring['bridge_cable_len_m'], ring['bridge_cable_elev_deg']) == (1.0, 60.0)
     carriers = 1.0 + 1.0 * math.sin(math.radians(60.0)) + 0.04
@@ -292,7 +303,24 @@ def test_one_metre_cables_reach_his_carrier_model_heights_and_mpc():
     assert 1.048 + p['attach_transit_clearance'] - 0.05 == pytest.approx(carriers + 0.5)    # the magnet's bottom
     assert p['pickup_lift_height'] == pytest.approx(carriers + 0.5 + 0.05 - 0.03)
     assert g['tejen_mpc']['params']['cable_length'] == pytest.approx(1.037 - 0.044)
+    low = _nodes(ring_cable_len='1.0', magnet_drop_below_quad='1.037', contact_target_z='0.048',
+                 mission_mode='floor_join', transit='low')[0]['online_join_planner']['params']
+    assert low['attach_transit_clearance'] == pytest.approx(0.30)        # the tip 0.30 m over plate 9, body 2.39 m
     assert _nodes()[0]['tejen_mpc']['params']['cable_length'] == pytest.approx(0.531)           # as flown at 0.55 m
     assert _nodes(mpc_cable_length='1.0')[0]['tejen_mpc']['params']['cable_length'] == 1.0
     ring = _nodes(ring_cable_len='1.0', ring_cable_elev_deg='55.0')[0]['fake_cooperative_transport_world']['params']
     assert ring['bridge_cable_elev_deg'] == 55.0
+
+
+def test_the_measured_contact_point_on_the_real_object_only_when_typed():
+    """RIG-1021-q1pick (picked up first try): his contact point from the bench's contact height, on the 10 x 10 cm
+    object, instead of his commissioning puck's (0.012 over its marker, 86 x 86 x 22 mm)."""
+    g, _ = _nodes()
+    assert g['online_join_planner']['params']['payload_pickup_point_z'] == 0.012
+    assert g['magnet_attachment_manager_irl']['params']['pickup_point_offset_z'] == 0.012
+    g, _ = _nodes(pickup_contact_height='0.018', pickup_object_thickness='0.025')
+    p, m = g['online_join_planner']['params'], g['magnet_attachment_manager_irl']['params']
+    assert p['payload_pickup_point_z'] == pytest.approx(0.018 - 0.0225)          # 21 Oct: 4.5 mm under its marker
+    assert m['pickup_point_offset_z'] == pytest.approx(0.018 - 0.0225)
+    assert (p['payload_collision_size_x'], p['payload_collision_size_y'], p['payload_collision_size_z']) == (
+        0.10, 0.10, 0.025)

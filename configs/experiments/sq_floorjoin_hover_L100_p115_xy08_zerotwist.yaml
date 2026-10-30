@@ -1,7 +1,7 @@
 name: sq_floorjoin_hover_L100_p115_xy08_zerotwist
 description: 'Card 2026-10-28_attach_ambitious, Revision 3 V2 xy 0.08 and V3'' zero twist together (one run, after each alone), against A0 (sq_floorjoin_hover_L100_p115, R2843/R2844): the contact MATCH xy gate 0.08 m (match_xy:=0.08 -> his contact_match_xy_threshold, the V2 replay''s pick; A0 untyped = his code default 0.025 m in the twin, the rig block hard-codes 0.05; his descent abort xy follows as max(gate, 0.05) = 0.08; speed 0.08 m/s and dwell 1.0 s stay his twin defaults); and attach_twist:=zero (the decided 16 Oct option, decisions.md: ring_bridge zeroes the plate''s twist in hover, so his MATCH gates and his following read the plate''s position only; A0 the raw finite-difference twist). Everything else as A0: the 1.15 kg payload (RIG-1028-payload) in the _p115 square attach world, his ring model geometry:=rig_twin_L100_p115, throttle_max 0.9, the slope filter on the carriers (the newcomer keeps ema), no params_file, carry_clearance 0.25; carriers on plates 0/3/6, QUAD4 (Tejen''s controller, floor_join) joins plate 9. Exploratory. Falsifier (Revision 2 safety + the A0 bars): no weld within 300 s of his TAKEOFF, an abort or envelope fault, a failed proof, or the rod min (tools/m1_metrics.py flight, the rod until the first CONTACT) under 0.238 m.'
 world: sq_rigid_ground_rig_attach_pickup_L100_p115.sdf
-ball_start: [1.6, 2.0, 0.08]       # tools/make_attach_worlds_L100.py BALL_XY (unused by floor_join; the runner checks it)
+ball_start: [1.6, 2.0, 0.0125]       # tools/make_attach_worlds_L100.py BALL_XY, the plate (unused by floor_join; the runner checks it)
 lab_env:
   SIM_MOCAP_VEL_FILTER: slope
   MDC_MOCAP_VEL_DRONES: 0,1,2

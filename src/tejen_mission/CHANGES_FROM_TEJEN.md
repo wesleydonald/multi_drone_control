@@ -445,3 +445,57 @@ without the oct14 weights or bounds.
 | `src/tejen_mpc/test/test_mpc_profile.py` | + typed partial_step under oct10, endpoint under oct14, untyped unchanged (one log line), unknown refused | | (uncommitted) |
 | `src/tejen_mission/launch/partner_mission.launch.py` (ours) | launch arg `mpc_command_execution` (default 'profile'), both paths, to his MPC | to type it in partner_args | (uncommitted) |
 Not flown; Wesley's call, after a twin check.
+Twin check 29 Oct (R2872-R2877, docs/reports/twin_timing_2026-10-30.md): with the rig's 50-60 ms delay it flips QUAD4
+(in the climb, or in the approach with the rates alone delayed); not flown on the rig (Wesley 17:20).
+
+## 29 Oct 2026 (18:43, Wesley away): his contact descent's position restart, debounced behind a switch (not flown)
+Codex's proposal (docs/tejen/reply_2026-10-29/DECISIONS_1355.md section 2): RIG-1029-sq5_2's 6 of 6 descents left on
+one tick past 8 cm while the magnet swung on its 1 m cable. Not approved by Tejen yet; off unless typed.
+| file | what | why | commit |
+|---|---|---|---|
+| `tejen_mission/online_join_planner.py` | parameter `contact_abort_xy_debounce_s` (default 0 = his single-tick restart): > 0, the contact descent's and the bottom's 8 cm position restart (`contact_abort_xy_threshold`) waits for that long a continuous violation, timed on the tip samples; a stale tip or a gap over `CONTACT_ABORT_MAX_GAP_S` (0.10 s) between violating samples restarts the count; each attempt counts afresh (reset in `transition_to`), the descent's count carries into ATTACH_READY; the speed restart is unchanged and immediate | Codex: 0.30 s of continuous fresh violation, reset on recovery, phase/attempt or stale evidence, missing samples earn no dwell, its own timer, the 0.25 m/s body-speed restart unchanged | (uncommitted) |
+| `test/test_descent_debounce.py` | new: off = one tick; a short excursion keeps descending; 0.3 s continuous restarts; recovery resets; the speed restart stays immediate; missing samples and a stale tip earn no time; a new attempt counts afresh; the bottom continues the descent's count; no contact is ever reported by it | | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | launch arg `descent_debounce` (s; '' = his one tick), both paths, to `contact_abort_xy_debounce_s` | to type it in partner_args | (uncommitted) |
+Not checked by Codex: the extra commanded descent while misaligned (descent speed x 0.3 s) against the plate geometry.
+
+## 29 Oct 2026 (19:10, Wesley away): the debounce ignores a frozen tip; a typed restart distance (not flown)
+docs/analysis/rig_1029_replays.md (W2a): on the rig the tip marker's pose repeats for ~0.2 s at a time with fresh
+timestamps (sq5_2: 13.4 % of samples; Motive's last pose while it has lost the marker); 3 of sq5_2's 6 restarts fired on
+the first new sample after such a hold. And a 0.3 s debounce barely helps on the recorded swing (a full 3.9 s descent
+survives from 2 % of start ticks; 1.0 s: 49 %; 1.0 s with 0.10 m: 85 %).
+| file | what | why | commit |
+|---|---|---|---|
+| `tejen_mission/online_join_planner.py` | `contact_position_lost`: a tip sample equal to the last one is timed at the sample it repeats (so a frozen marker earns no time and a hold longer than the 0.10 s gap restarts the count); only with `contact_abort_xy_debounce_s` > 0 | the frozen marker above | (uncommitted) |
+| `test/test_descent_debounce.py` | the tip moves each tick; + a frozen tip earns no time and restarts the count | | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | launch arg `descent_abort_xy` (m), typed only, both paths, to `contact_abort_xy_threshold` (rig 0.08 otherwise; twin his) | the replay's 0.10 m arm; Wesley's call | (uncommitted) |
+
+## 29 Oct 2026 (19:42): the drop-off switches on the twin path too
+| file | what | why | commit |
+|---|---|---|---|
+| `launch/partner_mission.launch.py` (ours) | sim path, typed only: `cpp_authority:=false` -> `c1f2_cpp_authority_enabled` false, `end_after_drop:=true` -> `end_after_drop` (as the rig path) | the twin preview of the Fri 30 sheet's k1 line (Wesley: videos of tomorrow's runs) | (uncommitted) |
+
+## 29 Oct 2026 (23:30, Wesley at the machine): QUAD4 never flies over the carriers; a rig ceiling of 2.6 m
+Wesley ~22:00, after the twin preview of the drop-off (R2895: body 3.30 m on the transit, 26 s down at 0.04 m/s): "I
+never want the incoming quad to fly that high". The 21-23 Oct rule put the carried object's bottom over the carriers'
+bodies (body ~3.3 m on 1 m cables).
+| file | what | why | commit |
+|---|---|---|---|
+| `launch/partner_mission.launch.py` (ours) | `carry_heights(..., route=)`: 'low' carries the object's bottom (or the bare magnet) `LOW_ROUTE_CLEARANCE` 0.30 m over the ring's plates (pickup lift, drop approach, search floors; the attach transit 0.30); launch arg `transit` ('' = low for pickup_delivery, over for floor_join; 'over' = the old rule); the low route climbs back to its own transit height after the drop (`drop_clear_height` = `drop_approach_clearance`; his 0.45 m would put the body at 2.64 m) | Wesley 29 Oct | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | `planned_body_heights` + `check_transit_ceiling`: both paths print QUAD4's planned body height per leg; the rig path REFUSES any above `QUAD4_MAX_BODY_Z` 2.6 m unless `transit:=over` is typed (the twin warns) | so the high climb of RIG-1029-sq2_5 (3.1 m) and the 3.3 m drop-off cannot reach the rig again | (uncommitted) |
+| `test/test_attach_cpp_transit.py` | + the low route's heights; the rig ceiling refuses the over route and his 0.45 m climb, passes the low route | | (uncommitted) |
+| `test/test_partner_mission_rig.py`, `test/test_pickup_cpp_reattach.py` | the old over-the-carriers checks now type `transit:=over`; + the low default's heights; untyped high floor_join refused on the rig; a typed 2.0 m lift (body 2.61 m) refused | | (uncommitted) |
+Desk check 23:20 (no rig): sq6 search floor 2.20, transit 2.37 m; k1_5 lift, drop approach and clear 2.42 m.
+
+## 29 Oct 2026 (23:46): the plate in the twin, and the real object's contact point on the rig (not flown)
+| file | what | why | commit |
+|---|---|---|---|
+| `launch/partner_mission.launch.py` (ours) | GEOMETRY `rig_twin_L100_p115`: `pickup_object` plate, its `object_rest_z` / `object_bottom_below_tip`; sim path, plate only: the magnet manager's `attach_radius`, `pickup_attach_clearance` and `PLATE_PROFILE` (his payload_* for a 100 mm plate) in place of the 0.08 m ball's and the spanner profile's | Wesley 29 Oct: the pickup object is the rig's 100 x 100 mm magnet plate, not a ball (worlds: tools/make_attach_worlds.py plate_model) | (uncommitted) |
+| `launch/partner_mission.launch.py` (ours) | rig path, typed only: `pickup_contact_height` (m1_irl_pickup's measurement), `pickup_object_thickness`, `pickup_object_size` -> his planner's `payload_pickup_point_z` and `payload_collision_size_*`, his magnet manager's `pickup_point_offset_z` (contact + his magnet_marker_to_contact_face_z) | the combined launch flew his commissioning puck (86 x 86 x 22 mm, +0.012) while RIG-1021-q1pick's first-try pickup was calibrated on the real 10 x 10 cm object (-0.0045) | (uncommitted) |
+| `test/test_partner_mission_rig.py` | + the measured contact point only when typed | | (uncommitted) |
+| `src/bringup/test/test_real_mode_launches.py` (ours) | the combined-rig test types a 1.9 m lift (body 2.51 m) instead of 2.1 (2.71 m, now refused) | | (uncommitted) |
+
+## 30 Oct 2026 (00:40, overnight): the climb after the drop
+| file | what | why | commit |
+|---|---|---|---|
+| `launch/partner_mission.launch.py` (ours) | the low route's `drop_clear_height` 0.17 (his 0.14 release + `DROP_CLEAR_ABOVE_RELEASE` 0.03; was back to the transit height); the ceiling check adds `DROP_UNLOAD_OVERSHOOT_M` 0.20 to the after-drop leg | twin R2898/R2899: his MPC overshot 0.18-0.19 m on losing the 0.15 kg plate, to 2.62 m (over the 2.6 m ceiling) | (uncommitted) |
+| `test/test_attach_cpp_transit.py`, `test/test_partner_mission_rig.py`, `test/test_pickup_cpp_reattach.py` | the 3 cm climb; a climb back to the transit height is refused by the overshoot rule | | (uncommitted) |

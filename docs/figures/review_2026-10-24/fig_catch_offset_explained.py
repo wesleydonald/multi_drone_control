@@ -56,7 +56,7 @@ def drawing(ax):
 def main():
     rows = U.runs()
     S.setup()
-    fig = S.figure('full', 2.5)
+    fig = S.figure('full', 2.75)        # 2.5 in of panels plus the legend below
     gs = fig.add_gridspec(1, 3, width_ratios=[0.95, 1, 1], wspace=0.22)
     a = fig.add_subplot(gs[0])
     axs = [fig.add_subplot(gs[1]), None]
@@ -75,12 +75,6 @@ def main():
             ax.plot(ds, mean, color=col, lw=S.LW_HERO, zorder=3)
             ax.plot([float(r['d']) for r in ok], [r['tilt'] for r in ok], mk, ms=S.MS if mk == 'o' else S.MS - 0.4,
                     mfc=col, mec='white', mew=0.4, zorder=4)
-            if direction == 'ri':
-                at = 12.0 if arm == 'slot' else 14.0
-                y = float(np.interp(at, ds, mean))
-                ax.annotate(text, xy=(at, y), xytext=(-6, 4) if arm == 'slot' else (0, 5),
-                            textcoords='offset points', ha='right' if arm == 'slot' else 'center',
-                            va='bottom', fontsize=8, color=col)
         top = 20 if direction == 'ri' else 16
         ax.set_xticks(list(range(0, top + 1, 4)))
         ax.set_xlim(-0.8, top + 0.8)
@@ -94,6 +88,10 @@ def main():
     S.panel(a, 'a')
     S.panel(axs[0], 'b')
     S.panel(axs[1], 'c')
+    from matplotlib.lines import Line2D
+    keys = [Line2D([], [], color=col, lw=S.LW_HERO, marker=mk, ms=S.MS if mk == 'o' else S.MS - 0.4, mfc=col,
+                   mec='white', mew=0.4) for _, col, mk, _ in arms]
+    S.ps.legend_below(fig, keys, [text for *_, text in arms], ncol=2)
     S.save(fig, 'fig_catch_offset_explained')
 
 

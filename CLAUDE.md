@@ -8,14 +8,29 @@ decisions change often. Keep this file current: when a rule, default or decision
 update it here in the same session (a stale rule is worse than none) and commit it on the
 current branch like any other file (it reaches main with the merges).
 
+## Two chats (from 30 Oct, until hand-in)
+Wesley runs two focused chats; each owns its files and only reads the other's.
+- **Lab and results** (real world AND simulation): owns `src/`, `configs/`, `tools/`, the lab PC, `results/` and the
+  registry, experiment cards, analysis, rig sheets, Tejen's notes; state in `docs/SESSION_STATE.md`.
+- **Thesis**: owns the thesis sources (`~/thesis_full_draft` until pushed, then Overleaf), `docs/figures/` for thesis
+  figures made from finished data, the thesis drafts folders, supervisor feedback; state in `docs/THESIS_STATE.md`.
+  It reads the registry, cards and decisions but never edits code, configs or results, and never runs the lab PC.
+- Shared: `docs/handin_plan.md` (each chat ticks its own items; the lab chat ticks a result with its run ids and card
+  when it is final, which is the thesis chat's signal to write it up), `docs/decisions.md` (append only, both),
+  `docs/sim_runs_todo.md` (the lab chat). A one-off question can go to either chat if it changes nothing of the other's.
+
 ## Start of a session, and after every compaction
-- Read `docs/SESSION_STATE.md` before acting: branch and SHA, what is running (task ids),
+- Read your chat's state file before acting (`docs/SESSION_STATE.md`, or `docs/THESIS_STATE.md` in the thesis chat): branch and SHA, what is running (task ids),
   decisions made this session, open questions, the next step. Trust it over the summary.
 - Keep it current at every milestone (a batch started or scored, a decision, a commit, a
   merge). Anything durable also goes where it belongs straight away: decisions in
   `docs/decisions.md`, run results in `results/registry.csv`, preferences here or in memory.
 - 22 Oct ultracode push: its authority, decided values and ordered work queue are at the top of
   `docs/SESSION_STATE.md`; the designs and the critic's integration order are in `docs/analysis/push_1022_plan.md`.
+- Rescope of 30 Oct (`docs/plan_rescope_2026-10-30.md`, approved except X9, decisions.md): headline X1 (release ablation)
+  and X4 (8-quad endurance relay); freeze by Thu 19 Nov at the latest, aim Thu 12 Nov; hand-in Fri 20 Nov.
+- Until hand-in: `docs/handin_plan.md` (everything left: writing, supervisor, lab sessions, figures, reviews) and
+  `docs/sim_runs_todo.md` (every simulation run left). Tick items the moment they close.
 - The current plan is `docs/plan_thesis_results_2026-10-21.md` (approved 21 Oct: the supervisor's results spec,
   1 m cables, the 90 deg chain, rig 4->3->4 with the basket, sim U/S/C, videos). Its status table is how Wesley
   follows progress: update the row (status, commits, run ids) the moment a work package moves.
@@ -95,6 +110,10 @@ current branch like any other file (it reaches main with the merges).
 - Verification ladder: pytest -> `tools/gate.sh --quick` -> headless Gazebo -> rig. Source
   `~/ros2_humble/install/setup.bash` and `install/setup.bash`.
 - `python3 tools/prebuild_planner.py` after touching the planner or masses, before any batch.
+- Rig day, before T1 (stack down): `python3 tools/mocap_stream_check.py --expect <bodies>` must say OK. Motive streams
+  only the bodies the flight uses, at most 8 at 240 Hz (attach 6,8,11-14,24; 3 quads 8,11-13,21-23): the mocap PC's
+  forwarder tops out at ~2,250 packets/s, and on 30 Oct 10 bodies made every pose 95 ms late and every ring lift heaved
+  (RIG-1030-bench_mocap).
 - Before a run: `results/registry.csv` and `docs/decisions.md`. After: one registry row per
   run, then the report. Append registry rows with LF; never rewrite the file (csv.writer
   changes every line's ending and quoting).
@@ -126,9 +145,13 @@ current branch like any other file (it reaches main with the merges).
 - The model integral (`int_mode auto`) is the default everywhere (5 and 8 Oct).
 - The network is yaw-only and open-loop in load pose except the bounded common-mode trim.
 - Attach at 0.2 m/s.
-- The twin's links become cables like the rig's, every one the same (Wesley 29 Oct: they are all the same cable in
-  real life; QUAD4's first, for Tejen's timing test, then the carriers). Until built, the twin flies rigid links
-  (9 Oct); the rig's are metal cables that bend but do not stretch once taut.
+- QUAD4 never flies over the carriers (Wesley 29 Oct: "I never want the incoming quad to fly that high"): it comes in
+  between them, 0.30 m over the ring's plates, for the attach and with the object (`transit` low, the pickup's default;
+  the rig sheet types the attach's 0.30 m). The rig launch refuses any planned QUAD4 body height over 2.6 m unless
+  `transit:=over` is typed. In the twin the object lies in plate 9's gap, as on the rig.
+- The twin's links stay 1 m rods hinged at both ends (they swing as pendulums; the rig's metal cables are straight and
+  taut in flight, RIG-1029 cable analysis). Wesley 29 Oct: first give the twin the rig's delays (command/radio, motor
+  lag, mocap) so it reproduces the rig's in-flight swing; segmented cables (slack at rest, takeoff, releases) later.
 - Combined M1 (11 Oct): `contact_still` is on by default (c0 from a still window). A take-back during a trajectory
   moves with the ring; until that is reviewed the rig refuses an orbit under `partner_contact` (hover only).
   week4 stays as it is. `week5` (12 Oct: rig-wed + the take-back race fix) is the testing tree from Wed 14, rig and twin.

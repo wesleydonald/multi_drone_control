@@ -179,6 +179,8 @@ CONTACT_DROPPED_PHASES = CONTACT_REJOIN_PHASES | {MissionPhase.CLEAR_DROP_ZONE}
 # drop_check_puck: after the release dwell, how long the drop waits for fresh poses of the object and the marker before
 # it gives up as for an object stuck on the magnet (multi_drone_control rig-port critic round 2, A7)
 DROP_PUCK_WAIT_S = 2.0
+# contact_abort_xy_debounce_s: a longer gap between violating tip samples restarts the count (3 planner ticks at 30 Hz)
+CONTACT_ABORT_MAX_GAP_S = 0.10
 
 
 def _vec3_from_position(position) -> np.ndarray:
@@ -1951,6 +1953,12 @@ class OnlineJoinPlanner(Node):
                 self.declare_parameter('contact_abort_xy_threshold', 0.05).value))
             self.contact_abort_xy_velocity_threshold = max(self.contact_match_xy_velocity_threshold, float(
                 self.declare_parameter('contact_abort_xy_velocity_threshold', 0.15).value))
+            # multi_drone_control 29 Oct (DECISIONS_1355 section 2; RIG-1029-sq5_2: 6 of 6 descents left on one tick past
+            # 8 cm as the magnet swung): > 0 = the position restart needs this long a continuous violation on fresh tip
+            # samples; the speed restart stays immediate. 0 = his single-tick restart
+            self.contact_abort_xy_debounce_s = max(0., float(self.declare_parameter(
+                'contact_abort_xy_debounce_s', 0.0).value))
+            self.contact_abort_xy_since = None    # sample time of the current run's first violation
             if self.proof_rise_rate <= 0. or self.contact_give_up_s <= 0.:
                 raise ValueError('contact_attach needs a positive proof_rise_rate and contact_give_up_s')
             # multi_drone_control rig (critic F9): the object flag is inferred (it clears with the OFF), so the drop
@@ -5869,6 +5877,8 @@ class OnlineJoinPlanner(Node):
     def transition_to(self, new_phase: MissionPhase, reason: str) -> None:
         if new_phase == self.phase:
             return
+        if not (self.phase == MissionPhase.DESCEND_TO_ATTACHMENT and new_phase == MissionPhase.ATTACH_READY):
+            self.contact_abort_xy_since = None    # each attempt earns its own debounce; the bottom continues the descent
         if new_phase == MissionPhase.ATTACH_READY:
             # each bottom hold earns its own quiet-miss time (multi_drone_control, plan WP3)
             self.contact_bottom_entries = getattr(self, 'contact_bottom_entries', 0) + 1
@@ -6151,6 +6161,36 @@ class OnlineJoinPlanner(Node):
                              MissionPhase.LANDED_DISARMED}:
                 self.target_drop_trim.reset()
                 self.target_ring_trim.reset()
+
+    def contact_position_lost(self, xy_error: float) -> bool:
+        """The contact descent's position restart (contact_abort_xy_threshold), held for contact_abort_xy_debounce_s of
+        continuous violation timed on the tip samples: stale evidence, or a gap between new samples longer than
+        CONTACT_ABORT_MAX_GAP_S (a repeated sample is not new), restarts the count, so missing samples earn no time.
+        Its own timer: the MATCH and bottom-hold dwells are not shared."""
+        if not xy_error > self.contact_abort_xy_threshold:
+            self.contact_abort_xy_since = None
+            return False
+        hold = getattr(self, 'contact_abort_xy_debounce_s', 0.0)
+        if hold <= 0.0:
+            return True
+        t = self.last_magnet_tip_pose_time if self.use_measured_magnet_tip else self.last_drone_time
+        tip = self.measured_magnet_tip_position if self.use_measured_magnet_tip else None
+        if t is not None and tip is not None:
+            # Motive repeats the tip's last pose while it has lost the marker (RIG-1029-sq5_2: 14 % of samples, held
+            # ~0.2 s): a repeat is not new evidence, so it is timed at the sample it repeats
+            seen = getattr(self, 'contact_abort_tip_seen', None)
+            if seen is not None and np.array_equal(seen[0], tip):
+                t = min(t, seen[1])
+            else:
+                self.contact_abort_tip_seen = (np.array(tip, dtype=float), t)
+        if t is None or not 0.0 <= self._physical_now_s() - t <= self.input_timeout_s:
+            self.contact_abort_xy_since = None
+            return False
+        run = self.contact_abort_xy_since
+        if run is None or t - run[1] > CONTACT_ABORT_MAX_GAP_S:
+            run = (t, t)
+        self.contact_abort_xy_since = (run[0], t)
+        return t - run[0] >= hold
 
     def condition_true_for(self, condition: bool, duration: float) -> bool:
         if not condition:
@@ -8364,7 +8404,7 @@ class OnlineJoinPlanner(Node):
                            or self.ground_ring_relative_speed_mps
                            > self.descend_abort_xy_velocity_threshold)
             elif getattr(self, 'contact_attach', False):
-                too_far = (xy_error > self.contact_abort_xy_threshold
+                too_far = (self.contact_position_lost(xy_error)
                            or xy_relative_velocity > self.contact_abort_xy_velocity_threshold)
             else:
                 too_far = (xy_error > self.descend_abort_xy_threshold
@@ -8406,7 +8446,8 @@ class OnlineJoinPlanner(Node):
                 plate_rel = self.plate_frame_tip_offset()
                 self.update_bottom_hold(xy_error if plate_rel is None else float(np.linalg.norm(plate_rel[:2])),
                                         xy_relative_velocity, z_error, plate_rel)
-            elif xy_error > abort_xy or xy_relative_velocity > abort_velocity:
+            elif ((self.contact_position_lost(xy_error) if getattr(self, 'contact_attach', False)
+                   else xy_error > abort_xy) or xy_relative_velocity > abort_velocity):
                 self.transition_to(
                     MissionPhase.APPROACH_ABOVE_TARGET,
                     "terminal attachment alignment lost",

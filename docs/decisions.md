@@ -638,3 +638,97 @@ DECIDED 2026-10-28  The new payload and the slope filter as defaults (Wesley ~19
   0.30 m (speed 0.12 m/s); Tejen recommended 0.15 m. (3) The twin's cables: every link (carriers and QUAD4) becomes a
   cable like the rig's, all the same (supersedes the 9 Oct rigid-link rule); QUAD4's first. (4) Commit the working copy
   on week7 now.
+- DECIDED 2026-10-29 (Wesley, ~15:10; revises (3) above): the twin's links stay hinged rods (they already swing as
+  pendulums; the rig's cable is straight and taut in flight). First add the rig's delays to the twin (command/radio,
+  motor lag, mocap) so it reproduces the rig's 2-5 deg in-flight swing and Tejen's timing fix can be judged offline;
+  segmented cables for every link later, as a second step if needed.
+- DECIDED 2026-10-29 (Wesley, 16:45; after the rig-timing twin, R2866-R2871): Tejen's timing fix is judged on the 60 ms
+  twin (E2c: 2 runs, bars frozen 16:46 in the card 2026-10-29_rig_timing_twin_attach, with Codex's send-path checks),
+  then the one matched rig run. The 50 ms twin did not reproduce the rig's swing (E1 falsified); 60 ms partly does.
+- DECIDED 2026-10-29 (Wesley, 17:20; after E2c, R2872-R2875): Tejen's timing fix does not fly on the rig for now.
+  With partial_step, QUAD4 flipped in its climb in all three twin runs with a 50-60 ms delay and was fine without it;
+  his current send climbed normally at every delay. Next: an exploratory channel split in the twin (the 60 ms delay on
+  the throttle only, then on the rates only, one run each), and a note to Tejen with the twin result.
+- OPEN 2026-10-29 (19:35, for Fri 30 morning): type the debounce on Tejen's descent restart on the rig (sq6:
+  `descent_debounce:=1.0`, 8 cm; sq6b: + `descent_abort_xy:=0.10`)? Replay of sq5_2: full descents surviving 0 % as
+  flown, 49 % / 85 %; twin R2878-R2885 (exploratory). A gate in his code: Wesley's word, Tejen told.
+- OPEN 2026-10-29 (19:35): the 2-quad baselines (B2) on the 0.86 kg ring (flights under ~90 s), or skip: the pair cannot
+  carry the 1.15 kg ring under 0.95 (docs/analysis/rig_1029_replays.md W1).
+- DECIDED 2026-10-29 (Wesley ~22:00, after the twin preview of the drop-off R2895, QUAD4's body at 3.30 m): "I never
+  want the incoming quad to fly that high". Supersedes 23 Oct (1) (carry_clearance 0.25 over the carriers' bodies,
+  body ~3.25 m): QUAD4 comes in between the carriers 0.30 m over the plates, with the object as for the attach
+  (`transit` low, the pickup default; `transit:=over` keeps the old rule, typed only). The rig launch refuses any planned
+  QUAD4 body height over 2.6 m unless `transit:=over` is typed. Same evening: the pickup object in the twin and RViz is
+  the rig's 100 x 100 mm square magnet plate, not a ball (Wesley), placed in plate 9's gap as on the rig.
+- OPEN 2026-10-30 (02:15, overnight; for Wesley before sq6b): the attach's gates after the descent
+  (docs/analysis/attach_gates_2026-10-30.md): (1) our co-motion proof on body 24: type G = `tip_skip_repeats:=true
+  comotion_d_ok:=0.008 comotion_speed_window_s:=0.5` (replay of f4's caught magnet: 0 of 108 start times prove as
+  configured, 107 with G; twin R2906/R2908 still weld); (2) K = the bench catch spread + 5 mm, else 0.035 (0.024 is the
+  old 60 mm plates'); (3) his `contact_give_up_s:=120` (45 s fits ~4 attempts). sq6b0 is the line without them.
+- OPEN 2026-10-30 (02:15): h3tw, the planner's ring-position weight x2 in the triangle's hover (plan_w_pos_scale 2.0,
+  configs/rig/hover_wpos2.yaml; docs/analysis/ring_drift_2026-10-30.md), bar frozen on the sheet; a planner gain.
+- DECIDED 2026-10-30 (Wesley ~10:55, the supervisor's OK: "Yep. Also find the minimum arming angle in the configuration
+  and either turn that off or increase it"): calibrate the accelerometer on QUAD1 and QUAD2 (it reads ~1.08-1.10 g at
+  rest; their FCs drift to 25-112 deg believed tilt and refuse ARM, RIG-1029-h4, RIG-1030-h3t/-h4n) and set
+  small_angle 180 on the FCs (the arming tilt limit; they fly rate mode, the console still blocks a quad on its side
+  from mocap, TILT_DOWN_DEG 25). Steps and check: docs/rig/fc_request.md. Console: `--small-angle 180` from then on.
+- 2026-10-30 ~11:15: QUAD1 done (Wesley): accelerometer calibrated, small_angle 90 (his value; 90 still refuses a quad on
+  its side or upside down). Bench check RIG-1030-q1_acc: 1.00 g, FC tilt steady at the rod's 11.6 deg for 3 min.
+- DECIDED 2026-10-30 (Wesley ~11:40): Motive streams fewer bodies (only those a flight uses), checked before T1 with
+  tools/mocap_stream_check.py (rule in the working rules). Why: the mocap forwarder saturates at ~2,250 packets/s; 10
+  bodies at 240 Hz delivered 225 Hz per body with every pose 95 ms late (bench: body 11 alone 7.5 ms, all 10 95 ms;
+  QUAD4 blackbox in flight 95 ms; all carriers ~75-113 ms later than 29 Oct), and every ring lift of 30 Oct heaved.
+  Wesley: on 29 Oct markers 21-23 were probably not streamed.
+- OPEN 2026-10-30: the 4-quad T1 (tools/t1_four_markers.sh) uses 9 bodies (8, 11-14, 21-24): 2,160 packets/s at 240 Hz,
+  96 % of the forwarder's limit. Drop the markers where a flight does not need them, or Motive at 200 Hz (Wesley).
+- OPEN 2026-10-30: does the heave go with the delay gone? Re-fly h3t (and sq6b) with the reduced body set when 3 quads
+  may fly; the twin (R2909-R2914) says 90 ms alone gives a slower rocking, not the fast heave.
+- DECIDED 2026-10-30 (Wesley ~12:30, on docs/plan_rescope_2026-10-30.md): (1) the thesis's added value headlines X1 (one
+  unannounced release: ours vs no resize, resize 0.5-2 s late, the planned pull, the paper's hand-over) and X4 (the
+  8-quad endurance relay, carriers out to charge or on errands, ~30 min); (2) freezes: "as long as we need, so for now
+  until 19 Nov, but ideally earlier" (plan to Thu 12 Nov, hard limit Thu 19 Nov); (3) real-world results report both
+  setups for now (0.55 m / 0.86 kg and 1 m / 1.15 kg); (4) the comparison with Quan et al.: our port is the compared
+  arm, the law as published one row (it loses the ring, R2744-R2749). Wesley also: Motive streams only the bodies a
+  flight needs, his to choose. The rest of the plan's section 7 stays OPEN.
+- DECIDED 2026-10-30 (Wesley ~12:35, rescope section 7): (a) new twin-only code behind switches (default off) approved,
+  critic waived for `resize_delay_s` (X1's late-resize arm), the X4 relay rota and the random-failure generator; X8's
+  network loss handling still gets the critic if it touches the law. (b) X4: pack budget B = 5 min, swaps announced
+  (planned soft detach). (c) The chain's square-to-T step stays unannounced as decided 21 Oct (the gap rule drops the
+  ring there; reported as the rule's boundary). (d) The twin's ring for claims: 0.86 kg, plus one 1.15 kg cell per
+  table. Still OPEN from section 7: contributions C1-C4, re-fly scope (cited tables only), the real-world order, the
+  RA-L drafts (park), and the final-tree re-fly's velocity filter (slope default vs ema as flown).
+- DECIDED 2026-10-30 (Wesley ~13:10): the rescope (docs/plan_rescope_2026-10-30.md) is approved except X9 (delay
+  tolerance), which is dropped; the real-world 2-quad case uses Wed 28 Oct's pair flights on the 0.86 kg M2A ring with
+  0.55 m cables (RIG-1028-f2a, -ls2a, -ls2b_4, -f2b, -f2c), labelled as that setup. "I approve everything else":
+  contributions C1-C4, re-fly only the cited tables, the real-world order of section 4, the RA-L drafts parked to after
+  20 Nov. (The final-tree re-fly's velocity filter was not in the rescope: still OPEN, recommended slope.)
+- DECIDED 2026-10-30 (Wesley ~13:40, X4 built in a worktree): the pack budget B = 10 min (the rota needs ~9.7 min:
+  each swap holds the path ~46 s with one quad off the ring at a time; the 30-min mission = 3 B); the new world
+  eight_rigid_ground_rig_R50_m115_L100.sdf (the 1.15 kg cell) may fly; a hover dwell at the pad stands for charging;
+  the 0.9 kg R 0.5 m ring is the 8-quad claim ring.
+- CORRECTION 2026-10-30 (~13:50, the pack's fact-check, docs/thesis_factcheck_2026-10-31.md): the decision above on the
+  Quan et al. comparison said the law as published "loses the ring, R2744-R2749". Those runs flew the paper's form with
+  its Eq. 9 damping and Eq. 10 acceleration; the exact law at its best reading (R2805, R2812, exploratory,
+  docs/experiments/2026-10-23_quan_exact.md) held the ring ~0.11 m off and landed. The decision (our port compared, the
+  published law as one row) stands; which published arm is the row is asked of Wesley.
+- OPEN 2026-10-30 (Wesley's measurements ~14:00): the 1.15 kg ring is a thin disk 5-10 mm thick with 12 plates on top
+  (both payloads 12 plates; the M2A's circular, 55 mm); a UAV with its 1 m cable 0.583 kg; magnet hold ~10 N. real.yaml's
+  attach_z 0.025 ("the plate faces above the pivot", an estimate) is likely too high for a thin disk: measure the plate
+  face above body 8's pivot on Wed 4 Nov (tools/payload_geometry.py, as 29 Oct) and type the measured attach_z
+  (attach geometry: Wesley's word).
+- DECIDED 2026-10-30 (Wesley ~13:50, "Just use the Oct 29 reading"): the 1.15 kg ring's attach_z in real.yaml 0.025 ->
+  0.028, the cables' ends on the magnets above the ring's pivot as QUAD4's magnet marker read on its plate on 29 Oct (W).
+  The planner's attach points are the cable ends (attach_radius 0.204 also comes from the markers); the thin disk's plate
+  faces themselves sit ~6 mm below the pivot (W 0.028 less the then marker-to-face 34.1 mm). A runtime parameter: no
+  rebuild. Closes the OPEN of ~14:00.
+- DECIDED 2026-10-30 (Wesley ~14:00): the Quan et al. comparison shows BOTH published arms as rows beside our port: the
+  exact law at its best reading (R2805/R2812: ring ~0.11 m off, landed) and the paper's damping form (R2744-R2749: lost
+  the ring). G5 is narrowed: simulation predicts the trends of the real flights; the prediction-band hits are reported
+  as they are (2 of 11 on path error, 2 of 11 on tilt), no band claim for the 4-12 Nov flights.
+- DECIDED 2026-10-30 (Wesley ~14:05): the release chain after the square-to-T step (unannounced; the gap rule drops the
+  ring there): the rest of the chain (T -> pair -> T -> square) flies from a fresh start in the T layout, and the
+  square-to-T drop is reported as the drop rule's boundary.
+- DECIDED 2026-10-30 (Wesley ~14:15, on the draft's open items): the final-tree re-fly flies the slope velocity estimate
+  (closes the OPEN of 30 Oct); the thesis states the catch radius as 45 mm (the next attach flights type weld_radius
+  0.045); the ring inertias stay labelled model values; the later ring's reference point is taken as its centre of mass;
+  the magnet's hold against the angle of pull is not claimed.

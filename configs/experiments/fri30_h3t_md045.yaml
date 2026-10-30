@@ -1,0 +1,98 @@
+name: fri30_h3t_md045
+description: 'D (mocap): + 45 ms mocap delay (SIM_MOCAP_DELAY_S 0.045, every body), half of B (R2910). Base: the rig''s h3t (RIG-1030-h3t: 3 quads on plates 3/11/7 typed 90,330,210, mode dissipative, hover, target_z 1.0, lift_ramp_vel 0.15, throttle_max 0.95, floor start) in the triangle _p115 world (fri30_h3t, R2886) with the rig''s 5.3 Hz notch on the measured cable pull typed for parity (real.yaml). Exploratory, no card: does ~90 ms of extra delay reproduce the 30 Oct rig heave (~1.2 Hz, ring and carriers in phase, growing ~2x/s from 1-2 s into the lift ramp), and does it matter whether it sits in the mocap or in the commands? Delays switch on at 19.5 s node sim time (after the takeoff creep, which flips drones with a delay on, R1100; >= 2.5 s before the lift ramp at ~22-24 s); the mocap delay ramps in over 2 s. Falsifier: B and C fly like A (no growing 1 Hz heave).'
+lab_env:
+  SIM_MOCAP_VEL_FILTER: slope
+  MDC_MOCAP_VEL_DRONES: 0,1,2
+  SIM_MOCAP_DELAY_S: '0.045'
+  SIM_MOCAP_DELAY_FROM_S: '19.5'
+world: three_rigid_ground_rig_tri_L100_p115.sdf
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    mode: dissipative
+    num_drones: 3
+    attach_azimuths_deg: 90,330,210
+    load_traj: hover
+    target_z: 1.0
+    lift_ramp_vel: 0.15
+    creep_vel: 0.2
+    pretension_s: 3.0
+    start_taut: false
+    cable_len: 1.0
+    attach_radius: 0.204
+    attach_z: 0.025
+    payload_rest_z: 0.013
+    pivot_offset_z: -0.04
+    load_mass: 1.15
+    load_ixx: 0.024
+    load_izz: 0.049
+    drone_mass: 0.55
+    measure_rod_len: true
+    rod_tol_frac: 0.25
+    rod_spread_m: 0.08
+    z_taut_gate: 0.9
+    z_i_gate: 0.25
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    reconfig_mode: ocp
+    thrust_ratio: 35.2
+    takeoff_thrust_ratio: 0.0
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    throttle_max: 0.95
+    cable_notch_hz: 5.3
+    kt_trim: false
+    departed_land: true
+    departed_ground_idle: true
+    params_file: /home/wesley/multi_drone_control/configs/rig/drop_and_land.yaml
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187
+    sim_pack_v0: 23.8
+    traj_speed: 0.2
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 3
+    sim_thrust_map: rig
+    sim_pack_v0: 23.8
+fleet:
+  num_drones: 3
+  n_total: 3
+timing:
+  duration_s: 101.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 40.0
+  do: LAND
+criteria:
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    iso:
+      pos:
+      - 3.46
+      - -3.16
+      - 4.66
+      look_at:
+      - 0.0
+      - 0.3
+      - 1.2
+      hfov_deg: 60.0
+      size:
+      - 1280
+      - 720

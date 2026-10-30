@@ -36,6 +36,10 @@ WORLDS = {
     'three_rigid_ground_rig_L100_p115.sdf': ['--n', '3'],
     'two_rigid_ground_rig_L100_p115.sdf': ['--n', '2'],
     'three_rigid_ground_rig_T_L100_p115.sdf': ['--n', '3', '--azimuths', '0,270,180'],
+    # the triangle 3/11/7 the rig flies its 3-quad baselines on (docs/rig/fri_2026-10-30.md; clockwise 90,330,210)
+    'three_rigid_ground_rig_tri_L100_p115.sdf': ['--n', '3', '--azimuths', '270,30,150'],
+    # the M1 layout (carriers 3/11/7 + plate 9; make_carry_worlds' _3915) for X1's 1.15 kg cell (card 2026-10-30_x1_release_ablation)
+    'four_rigid_ground_rig_3915_L100_p115.sdf': ['--n', '4', '--azimuths', '30,90,150,270'],
 }
 INERTIA = re.compile(r'(<model name="payload">.*?<inertia>)<ixx>[^<]+</ixx>(<ixy>0</ixy><ixz>0</ixz>)'
                      r'<iyy>[^<]+</iyy>(<iyz>0</iyz>)<izz>[^<]+</izz>', re.S)

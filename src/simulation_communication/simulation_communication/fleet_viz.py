@@ -19,7 +19,8 @@ Publishes:
     /payload/actual_path         where the payload has actually been
     /fleet/id_markers            floating text label (drone id) above each drone, the plate numbers,
                                  and at marker_hz the swung magnet: the tip sphere (grey coil OFF,
-                                 orange ON, green attached), the tether from QUAD4's body, the puck
+                                 orange ON, green attached), the tether from QUAD4's body, the pickup
+                                 plate (a box, ns 'puck')
     /fleet/mocap_summary         std_msgs/String JSON at summary_hz for the console: per body z,
                                  tilt_deg, speed_mps, age_s, rate_hz, max_gap_s
 
@@ -28,7 +29,7 @@ Params:
     payload_size    (float[3]) payload ring diameter dx,dy (radius = dx/2) and thickness
     path_max_len    (int)   ring-buffer length for the payload track
     tip_topic       (str)   magnet tip, PoseStamped ('' = none)
-    puck_topic      (str)   puck, MotionCaptureState ('' = none)
+    puck_topic      (str)   the pickup object, MotionCaptureState ('' = none)
     tether_drone    (int)   the drone whose body holds the tether (QUAD4 = 3)
     coil_topic      (str)   QUAD4's coil latch, String ON/OFF ('' = none)
     attached_topic  (str)   the ring weld, Bool ('' = none)
@@ -64,12 +65,12 @@ PLATE_RADIUS = 0.03
 PLATE_THICK = 0.005
 PLATE_Z = 0.0225
 
-# The swung magnet (rig): tip sphere, tether, Tejen's puck (86 x 22 mm)
+# The swung magnet (rig): tip sphere, tether, the pickup object: the 100 x 100 x 25 mm plate (RIG-1021-q1pick) centred
+# on its pose (on the rig the pose is the object's marker, above the plate's centre)
 TIP_DIAMETER = 0.04
 TETHER_WIDTH = 0.004
 TETHER_ANCHOR = (0.0, 0.0, -0.03)      # QUAD4's body frame: where the tether leaves the airframe
-PUCK_DIAMETER = 0.086
-PUCK_HEIGHT = 0.022
+PICKUP_SIZE = (0.100, 0.100, 0.025)
 MARKER_LIFETIME_S = 0.5                # a stream that stops loses its marker
 TIP_OFF = (0.6, 0.6, 0.6)
 TIP_ON = (1.0, 0.55, 0.0)
@@ -135,7 +136,7 @@ def _marker(ns, kind, stamp, frame, lifetime_s, rgb, alpha=1.0):
 
 def swung_magnet_markers(stamp, tip=None, body=None, puck=None, coil_on=False, attached=False,
                          frame=FRAME, lifetime_s=MARKER_LIFETIME_S):
-    """The tip sphere, the tether (QUAD4's body + R TETHER_ANCHOR -> the tip) and the puck cylinder for the poses
+    """The tip sphere, the tether (QUAD4's body + R TETHER_ANCHOR -> the tip) and the pickup plate (a box) for the poses
     given (geometry_msgs/Pose; None is not drawn, and the tether needs both the tip and the body)."""
     out = []
     if tip is not None:
@@ -155,11 +156,10 @@ def swung_magnet_markers(stamp, tip=None, body=None, puck=None, coil_on=False, a
     if puck is not None:
         p = puck.position
         w, x, y, z = unit_quat(puck.orientation)
-        m = _marker('puck', Marker.CYLINDER, stamp, frame, lifetime_s, PUCK_RGB)
+        m = _marker('puck', Marker.CUBE, stamp, frame, lifetime_s, PUCK_RGB)
         m.pose = Pose(position=Point(x=float(p.x), y=float(p.y), z=float(p.z)),
                       orientation=Quaternion(w=w, x=x, y=y, z=z))
-        m.scale.x = m.scale.y = PUCK_DIAMETER
-        m.scale.z = PUCK_HEIGHT
+        m.scale.x, m.scale.y, m.scale.z = PICKUP_SIZE
         out.append(m)
     return out
 

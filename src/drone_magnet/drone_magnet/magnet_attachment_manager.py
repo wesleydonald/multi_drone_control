@@ -81,6 +81,10 @@ class MagnetAttachmentManager(Node):
         # Pose sources. Gazebo PosePublisher often publishes PoseArray without
         # names on the ROS side, so the pose index is parameterised.
         self.magnet_tip_pose_topic = self.declare_parameter('magnet_tip_pose_topic', '/magnet_tip_pose').value
+        # a tip pose equal to the last is Motive's hold while it has lost the marker (RIG-1029: 13-34 % of body 24's
+        # samples), not a sample: dropped, so the proof's gap rule restarts its dwells across it (default off)
+        self.tip_skip_repeats = bool(self.declare_parameter('tip_skip_repeats', False).value)
+        self._last_raw_tip = None
         self.object_pose_topic = self.declare_parameter('object_pose_topic', '/model/payload_model/pose').value
         self.magnet_tip_pose_index = int(self.declare_parameter('magnet_tip_pose_index', -1).value)
         self.object_pose_index = int(self.declare_parameter('object_pose_index', 0).value)
@@ -439,6 +443,8 @@ class MagnetAttachmentManager(Node):
             return
         now = time.time()
         new_pos = self._pose_to_position(pose)
+        if self._repeated_tip(new_pos):
+            return
         self.prev_magnet_tip_position = self.magnet_tip_position
         self.magnet_tip_position, self.magnet_tip_velocity = self._update_position_and_velocity(
             new_pos, now, self.magnet_tip_position, self.last_magnet_tip_time,
@@ -448,10 +454,19 @@ class MagnetAttachmentManager(Node):
         if self._proof is not None:
             self._proof_sample()
 
+    def _repeated_tip(self, pos) -> bool:
+        """tip_skip_repeats: True for a tip pose identical to the last one received (and remember this one)."""
+        if not getattr(self, 'tip_skip_repeats', False):
+            return False
+        last, self._last_raw_tip = self._last_raw_tip, np.array(pos, dtype=float)
+        return last is not None and bool(np.array_equal(last, self._last_raw_tip))
+
     def magnet_tip_pose_stamped_callback(self, msg: PoseStamped) -> None:
         """Update magnet tip from a world-frame PoseStamped, e.g. /magnet_tip_pose."""
         now = time.time()
         new_pos = self._pose_to_position(msg.pose)
+        if self._repeated_tip(new_pos):
+            return
         self.prev_magnet_tip_position = self.magnet_tip_position
         self.magnet_tip_position, self.magnet_tip_velocity = self._update_position_and_velocity(
             new_pos, now, self.magnet_tip_position, self.last_magnet_tip_time,

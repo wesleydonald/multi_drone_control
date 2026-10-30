@@ -1,0 +1,13 @@
+# attach_m1_1m.yaml on the 0.86 kg M2A ring (ring_m2a.yaml's values; one params_file per line, so both live here):
+# the Fri 30 Oct sheet's sq036m, the 0/3/6 attach if the 1.15 kg ring runs out of thrust. Fly it with the ring's own
+# solvers: MDC_RIG_ACADOS_ROOT=$HOME/mdc_rig_generated_m2a_0p86 (built at 0.86 kg), and geometry:=rig_m2a in his args.
+newcomer_lifecycle: true
+newcomer_fault_land: true
+departed_ground_idle: true
+drop_takes_back: true
+load_mass: 0.86
+load_ixx: 0.02733
+load_izz: 0.05452
+attach_radius: 0.225
+attach_z: 0.0175
+payload_rest_z: 0.0275
