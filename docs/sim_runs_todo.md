@@ -70,7 +70,8 @@ moment its runs are scored, with the run ids. Order: top to bottom within a prio
         2-9 carriers (bench + the closed-loop points) against the 100 ms period, the real flights (2-4, 5 iterations) kept.
   - Earlier exploratory it1 runs (23 Oct): R2464 (8 hover: tilt max 0.08 deg; solve 44 / tick 79 ms p50, p95 101),
     R2587 (8 -> 4), R2588 / R2597 (8 -> 4 -> 8, tilt max 3.3 deg).
-- [ ] **X8 the paper's method through a loss** (one-day box): 4 quads hover, one unannounced loss, world C (their centre
+- [ ] **X8 the paper's method through a loss** (card `docs/experiments/2026-10-30_x8_network_loss.md`, bars frozen 30 Oct; ours vs the
+  port told 0.35 s after, + the never-told port; 15 runs `x8_*`; after the T fix; the exact law's row to P3) (one-day box): 4 quads hover, one unannounced loss, world C (their centre
   hook) and the rim; ours, our port, the exact law. 15 runs. Gets a critic if it touches the network's law.
 
 ## P1: the final-tree re-fly of every table the thesis cites (X11)
@@ -81,8 +82,10 @@ Generated from the run ids the full draft cites (Results and discussion, 30 Oct)
 `tools/x11_manifest.py` from every file the full draft inputs.** 143 configs: A 86 cited claims (re-fly x2), B 39 cited
 exploratory runs (the s8 set flies in X3, fri30_sq6b/sq_floorjoin in 4.3; the rest need a call: re-fly or keep as
 exploratory), C 18 from before 21 Oct ("The Switch of Solvers": ta_/tb_ R1887-R1908, dl_d1, w4_gi; the older tree and
-cables: re-fly, cite as the earlier setup, or drop). One config is missing: `c_net_quan_const_katt8_hubcom_hover_L100`
-(the exact published law, R2805/R2812), to rebuild from R2805's params_file.yaml.
+cables). Wesley 30 Oct: B re-flies only where a table claims it (the 1.15 kg fixed-team cells, the 4.3 joins); C drops
+ta_/tb_ (their 1 m r1m_* re-fly) and cites dl_d1, w4_gi as the earlier setup. `c_net_quan_const_katt8_hubcom_hover_L100` (the exact
+published law, R2805/R2812) rebuilt 30 Oct by the X8 agent: R6b was deleted in 284ffb4, so it flies R6c
+(`configs/twin/c_net_quan_const_katt8_r6c.yaml`; R2813: the same result), pending Wesley's word.
 
 - [ ] **4.1 fixed team, simulation columns** (12 configs): b2/b3/b4 hover, fig8big, linespinc (`*_L100_slope`; b3 hover
       flew ema), r1m_traj3 circle / linex / spin

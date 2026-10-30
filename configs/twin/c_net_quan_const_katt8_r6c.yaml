@@ -1,0 +1,32 @@
+# The exact law at its best reading (R2805, R2812: ring ~0.11 m off, landed) on the current tree, for the final-tree
+# re-fly (X11) of configs/experiments/c_net_quan_const_katt8_hubcom_hover_L100.yaml. Its own copy, so a later edit of
+# configs/twin/c_net_quan.yaml cannot change a cited row (the s_chain_pair.yaml rule of 22 Oct).
+# R2805/R2812 flew configs/twin/c_net_quan_const_katt8.yaml on week7 63b504f + the uncommitted Quan patch: these
+# values plus R6b (quan_fz autopilot, quan_fz_ki 0: the vertical pull a constant seeded from the OCP's last cable term).
+# R6b was deleted from the code in 284ffb4 and replaced by R6c, the split of the modelled pull (vertical (m_L/n) g,
+# horizontal (m_L/n + quan_rod_mass) g cot phi; Wesley 24 Oct); quan_fz is now an unknown knob that the launch refuses
+# (bringup/profiles.py). R2813 (R6c, the same gains) reproduced R2805/R2812: 109.1 mm RMS, height -4.8 mm mean, landed
+# (R2805/R2812: 110.0/118.3 mm, -3.6/-3.7 mm). The readings R1-R10: configs/twin/c_net_quan.yaml, quan_law.py.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_tilt_deg: 180.0
+payload_tilt_envelope: false
+traj_hold_s: 5.0
+net_hold_carry: true
+net_law: 'quan'
+quan_nodes: 'algebraic'
+quan_vcmd: 'measured'
+diss_ki_load: 0.0
+vel_kp_pos: 0.0
+vel_kv: 3.0
+vel_k_att: 8.0
+quan_k_ij: 0.5
+quan_c_ij: 0.25
+quan_k_i: 1.0
+quan_c_i: 1.0
+quan_fc: 0.5
+quan_node_mass: 1.0
+quan_rod_mass: 0.055
+quan_hc_m: 3.41
+quan_range_m: 2.0

@@ -1,0 +1,11 @@
+# E2's params (configs/rig/chain_pair_tip.yaml) with the model integral's xy gain at the common.yaml default (5.26 N/m)
+# instead of 0, twin only (attach-side T-offset analysis, 30 Oct, docs/analysis/t_offset_attach_2026-10-30.md): one
+# variable against rj3_pairrelease_rejoin_L100_tip (R2589/R2594/R2595), the T formed by a join with the xy integral on.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 45.0
+int_k_xy: 5.26
+tip_detect_m: 0.04

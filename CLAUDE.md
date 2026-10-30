@@ -15,9 +15,14 @@ Wesley runs two focused chats; each owns its files and only reads the other's.
 - **Thesis**: owns the thesis sources (`~/thesis_full_draft` until pushed, then Overleaf), `docs/figures/` for thesis
   figures made from finished data, the thesis drafts folders, supervisor feedback; state in `docs/THESIS_STATE.md`.
   It reads the registry, cards and decisions but never edits code, configs or results, and never runs the lab PC.
+- Start each chat with its command: `/lab` or `/thesis` (`.claude/skills/lab`, `.claude/skills/thesis`).
+- **The results feed `docs/results_feed.md`**: the lab chat appends an entry the moment anything the thesis depends on
+  changes (a result final, a number changed or wrong, a figure ready, a decision or fact that changes the text, a cited
+  result gone stale); the thesis chat reads every entry after the last one it processed (noted in THESIS_STATE).
 - Shared: `docs/handin_plan.md` (each chat ticks its own items; the lab chat ticks a result with its run ids and card
-  when it is final, which is the thesis chat's signal to write it up), `docs/decisions.md` (append only, both),
-  `docs/sim_runs_todo.md` (the lab chat). A one-off question can go to either chat if it changes nothing of the other's.
+  when it is final, and posts it in the feed: the thesis chat's signal to write it up), `docs/decisions.md` (append
+  only, both), `docs/sim_runs_todo.md` (the lab chat). A one-off question can go to either chat if it changes nothing of
+  the other's.
 
 ## Start of a session, and after every compaction
 - Read your chat's state file before acting (`docs/SESSION_STATE.md`, or `docs/THESIS_STATE.md` in the thesis chat): branch and SHA, what is running (task ids),

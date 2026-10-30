@@ -137,7 +137,7 @@ freeze), with the slope estimate; B and C need a decision first.
 | The Newcomer's Join in Simulation | `sq_floorjoin_hover_L100_p115_v1a30s_zt_xy08_bd` | R2862 | ok |
 | The Newcomer's Join in Simulation | `sq_pickup_hover_L100_p115_cppreattach_bd` | R2865 | ok |
 | The Planner's Tick; Harder Cases and Endurance; res_scale_8.tex; Eight UAVs Through Four Releases and Four Rejoins | `s8_chain4back_fig8laps_R50_L100_it5` | R2779 | ok |
-| results_discussion.tex; Comparison with the Method of Quan et al. | `c_net_quan_const_katt8_hubcom_hover_L100` | R2805, R2812 | MISSING |
+| results_discussion.tex; Comparison with the Method of Quan et al. | `c_net_quan_const_katt8_hubcom_hover_L100` | R2805, R2812 | ok |
 | results_discussion.tex; Comparison with the Method of Quan et al. | `c_pl_linex_v400_L100` | R2448, R2737 | ok |
 
 ## C. Before 21 Oct (older tree and cables; re-fly, cite as the earlier setup, or drop) (18 configs)

@@ -1,0 +1,14 @@
+# X8, the paper's method through a loss (card docs/experiments/2026-10-30_x8_network_loss.md): our planner on world C (four_rigid_ground_rig_hubcom_L100).
+# configs/twin/c_compare_hubcom.yaml (the C table's arm, as flown) plus the loss rules below; nothing else changed.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_tilt_deg: 180.0
+payload_tilt_envelope: false
+traj_hold_s: 5.0
+net_hold_carry: true
+net_twin_geometry: true
+# X8's loss rule, the same text in every arm of the cell: drop_gap_deg 200 lets our planner fly on with the T a
+# loss of one of four leaves (its largest gap 180 deg; on the hub the cables meet at the ring's centre of mass, so
+# the T is no capsize there). Inert in the network phase (the planner's loss rules run only before the hand-over).
+drop_gap_deg: 200.0

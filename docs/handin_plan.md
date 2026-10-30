@@ -8,19 +8,21 @@ the dates below are only the fixed ones (lab sessions, the freezes Wesley set, h
 
 **First, before the code freeze (Wesley 30 Oct): fix the square-to-T settle.** X1's first pass: after an unannounced
 release from the square, our planner settles the T 7-13 deg off level where no resize settles at 2.2 deg. Diagnose
-from the logs, fix behind a switch, critic, twin (X1's sqT cell), then the default. X2-full waits for it.
+from the logs, fix behind a switch, critic, twin (X1's sqT cell), then the default. X2-full and X8 wait for it.
 
 **Lab PC (lab chat), each batch as the last ends, from the 30 Oct commit on week8:**
 1. X3b, 18 runs (~2.1 h): 8 and 9 carriers at one planner iteration per tick, with the five-iteration comparators.
    Bars frozen (lab runs compute the residual every tick).
 2. X4, the short exploratory run, then the claims (~5 h on 2 slots). Bars frozen, B = 10 min. Merged 30 Oct.
 3. X2-full, 6 runs (~1 h), after the T fix: the 4 -> 3 -> 2 -> 3 -> 4 chain on the figure-eight. Bars frozen.
-4. X8 if its check needs no code (card being written; bars to Wesley first). If it needs code: P3.
+4. X8, ours against the port (15 runs, ~45 min on 4 slots; bars frozen 30 Oct), after the T fix; the exact law's loss row: P3.
 5. Then the code freeze (Fri 6 Nov): X11 (86 cited claims x2) and the claims of X1-X4 and X8 on that one tree
    (Sat 7 - Sun 8), simulation freeze Mon 9.
 
 **This laptop (the ground computer), on a quiet day with the rig stack down:** X3b's two timing runs (`*_rt0`) and the
 solver bench, then the solve-time figure with the one-iteration tick for 2-9 carriers.
+
+**After the T fix, before the freeze:** QUAD4's fold-in gets the rejoin's weld-height cap (card, critic; Wesley 30 Oct).
 
 **Real world:** S1 Wed 4 Nov, the sheet `docs/rig/wed_2026-11-04.md` is desk-checked (h3t, h4m1, sq6b x3-4, release
 x2; W and L measured on the day). S2 Thu 5 Nov: sheet Mon/Tue (attach first if S1 went to the heave, then the 1 m
@@ -30,9 +32,7 @@ baselines), after the thrust-margin check from the logs.
 sections), the arena fix (6 x 6 x 5 m), cite the supervisors and reword G4, F1's caption ("halved", not "removed"),
 then each planned box as the lab chat ticks its result here.
 
-**Wesley's open calls:** X11's exploratory (39) and pre-21 Oct (18) cited configs: re-fly, keep as cited, or drop;
-S2's repeats (2 or 3 per cell); X8's bars when its card is in; the review's five facts (UAV build and pack, cameras and
-Motive version, where tau 0.12 s came from); pushing week8.
+**Wesley's open calls:** the T fix's default (after its runs and the critic). Push week8 once the T fix is merged (Wesley).
 
 **Fixed dates**
 - Lab sessions, Wed and Thu 8-11 am: 4/5 Nov, 11/12 Nov, 18/19 Nov.
@@ -110,8 +110,8 @@ answers, the ones left:
 
 **S2, Thu 5 Nov:**
 - [ ] Attach x3 (first, if S1 went to the heave).
-- [ ] 1 m baselines: h3, f3, ls3, h4, ls4. The supervisors' papers fly 3 per cell and report mean +- SD (most of the
-      draft's real-world cells are one flight): Wesley's call, 2 or 3 per cell against the session's ~10-15 flights.
+- [ ] 1 m baselines: h3, f3, ls3, h4, ls4, 2 flights per cell (Wesley 30 Oct; the third in S4 for the cells the thesis
+      leans on).
 - [ ] Release x2 if missing.
 
 **S3, Wed 11 Nov:**

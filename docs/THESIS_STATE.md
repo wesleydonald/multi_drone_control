@@ -1,17 +1,24 @@
-# Thesis state (the THESIS chat reads this first; keep it short and current)
+# Thesis state (the THESIS chat reads this first, via `/thesis`; keep it short and current)
 
-Updated: Fri 30 Oct 2026, 14:50 AEDT. Hand-in Fri 20 Nov. The lab chat keeps `docs/SESSION_STATE.md`; this file is the
+Updated: Fri 30 Oct 2026, 17:16 AEDT. Hand-in Fri 20 Nov. The lab chat keeps `docs/SESSION_STATE.md`; this file is the
 thesis chat's own. The shared board is `docs/handin_plan.md`: tick thesis items there.
 
+## Results feed
+Last processed: none yet. Start with F001 in `docs/results_feed.md` (the lab chat's feed; read every entry after the
+one named here, act, then update this line to the newest entry processed).
+
 ## Where the thesis is
-- **Overleaf is the master.** Wesley pushes; this chat never pushes.
+- **Overleaf is the master.** Wesley pushes; this chat never pushes. The full draft (1f755ef, 7420c37, c943094) IS on
+  Overleaf (checked 30 Oct 17:14): pull Overleaf first and edit there. `~/thesis_full_draft` has one untracked file,
+  `Images/results/fig_res_bend.pdf` (F1), to add through Overleaf when F003 is applied.
+- **For Wesley's review:** `docs/thesis_review/REVIEW_GUIDE.md` (section by section: pages, status, what to look at;
+  F001-F009 mapped to file:line; the three things to review first) and the PDF built 30 Oct beside it. 83 pp, main text
+  59 (limit 50), 0 undefined refs, 0 overfull boxes; 11 planned boxes and 4 pending figures in chapter 4.
 - **`~/thesis_full_draft`** is a git worktree of `~/thesis`, branch `full-draft-1030`, three commits on Overleaf 9eea11f:
   - 1f755ef: the full draft;
   - 7420c37: the nomenclature as TODO;
   - the four figures of 30 Oct with their text.
 
-  To put it on Overleaf, Wesley runs `git -C ~/thesis_full_draft push origin full-draft-1030:main`. Once pushed, edit
-  in Overleaf (or pull it) and treat Overleaf as the source again.
 - **`~/thesis`:** the old clone (two August local edits in Project_plan / Project_preparations; leave them).
 - **Build check, as Overleaf does it:** `latexmk -pdf -outdir=<scratch> main.tex`, with the latexmkrc's nomencl rule.
   Expect 0 undefined references and no overfull boxes.
@@ -38,6 +45,9 @@ thesis chat's own. The shared board is `docs/handin_plan.md`: tick thesis items 
 
 ## Open in the text
 - The arena is 6 x 6 x 5 m (Wesley 30 Oct): `system_overview.tex` line 12 says 6 x 6 x 4 m. Fix it in Overleaf after the push.
+- Setup table facts (Wesley 30 Oct): QUAD1-2 CineLog35 V2, QUAD3-4 CineLog35 V3; 1350 mAh packs; masses as measured (0.55 kg,
+  0.583 kg with the 1 m cable and magnet); ten OptiTrack PrimeX 13 at 240 Hz; Motive version from the supervisors' paper or
+  omitted; every real flight from this laptop. Do not source the rate model's tau 0.12 s / 100 deg/s.
 - The supervisors' papers (`docs/papers/supervisors/`, review `docs/analysis/supervisor_papers_review_2026-10-30.md`): cite
   them, reword G4, and the review's "Borrow now" items (listed in `handin_plan.md` section 1).
 - The confirmation tolerance (6 mm), settled after the first real join.
@@ -55,6 +65,7 @@ are final; the real-world 1 m figures after S1/S2. Photos asked of Wesley: the r
 QUAD4 with its tether, the earlier setup, the cage.
 
 ## Next for this chat
-1. Wesley reads the draft and picks the sections for supervisor feedback round 1.
-2. Fold in the feedback.
-3. Fill each planned box as the lab chat ticks its result in `handin_plan.md`.
+1. Catch up on the feed (F001-F009 at first): apply each to the Overleaf sources, F003/F004 (the bending paragraph,
+   now wrong) and F009 (G4, cite the supervisors) first; Appendix B's title still says "Rig".
+2. Wesley reviews with REVIEW_GUIDE.md and picks the sections for supervisor feedback round 1 (this weekend).
+3. Fold in the feedback; fill each planned box as the lab chat posts a RESULT in the feed.

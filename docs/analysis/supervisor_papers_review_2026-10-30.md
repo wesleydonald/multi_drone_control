@@ -244,3 +244,7 @@ wind map and planner (WIND), the LSTM estimator.
 4. Where tau = 0.12 s and the 100 deg/s rate curve came from: identified on our quads, or taken from WIND's values.
 5. Whether to ask Mitchell how his pose stream reaches his laptop (his papers stream one or two bodies, so the forwarder
    limit never bit him). He may know a faster path than the forwarder.
+
+**Wesley's answers (30 Oct 16:52):** 1. the arena is 6 x 6 x 5 m. 2. QUAD1-2 CineLog35 V2, QUAD3-4 CineLog35 V3, 1350 mAh
+packs, masses as measured (the packs are newer). 3. Ten PrimeX 13; the Motive version from the paper or omitted; every
+real flight from this laptop. 4. tau and the rate curve: not sourced in the thesis. 5. Not asking about the stream path.
