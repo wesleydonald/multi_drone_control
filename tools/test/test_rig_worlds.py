@@ -126,6 +126,33 @@ def test_the_hub_world_is_the_1m_four_with_every_rod_at_the_centre():
     assert text.count('gz-sim-pose-publisher-system') == base_text.count('gz-sim-pose-publisher-system') == 5
 
 
+def test_world_c_hangs_the_hub_at_the_centre_of_mass_and_the_rods_from_the_drone_centres():
+    """Quan et al. exactly (card 2026-10-23_quan_exact, Wesley 23 Oct ~21:45): the hub world with the 1 mm hub on the
+    ring's centre of mass and each rod's other end at its drone's centre, the paper's model to the letter; the ring,
+    rods, quads, masses and pose publishers as the hub world's."""
+    name, base = 'four_rigid_ground_rig_hubcom_L100.sdf', 'four_rigid_ground_rig_hub_L100.sdf'
+    g, b = world_geometry(ASSETS / name), world_geometry(ASSETS / base)
+    assert g['attach_radius'] == pytest.approx(0.001, abs=1e-6)
+    assert g['attach_z'] == pytest.approx(0.0, abs=1e-6) and b['attach_z'] == pytest.approx(0.02)
+    assert g['pivot_dz'] == pytest.approx(0.0, abs=1e-6) and b['pivot_dz'] == pytest.approx(0.04)
+    assert g['attach_azimuths'] == b['attach_azimuths'] == [0.0, 90.0, 180.0, 270.0]
+    for k in ('cable_len', 'load_mass', 'load_ixx', 'load_izz', 'drone_mass', 'rod_mass', 'num_drones'):
+        assert g[k] == pytest.approx(b[k], abs=1e-6), k
+    lift = _lift(name)
+    ring_z = _xyz(lift.find("model[@name='payload']"))[2]
+    for i in range(4):
+        stub = _xyz(lift.find(f"link[@name='stub_pay_{i}']"))
+        assert math.hypot(stub[0], stub[1]) == pytest.approx(0.001, abs=1e-6) and stub[2] == pytest.approx(ring_z)
+        assert lift.find(f"joint[@name='tether_{i}_to_drone{i}']").find('pose') is None     # at the drone centre
+        d = _xyz(next(inc for inc in lift.findall('include') if inc.findtext('name') == f'x3_drone{i}'))
+        assert math.dist(stub, d) == pytest.approx(1.0, abs=1e-5)
+    body, base_body = (_lift(w).find("model[@name='payload']/link[@name='body']") for w in (name, base))
+    assert {v.get('name') for v in body.findall('visual')} == {v.get('name') for v in base_body.findall('visual')}
+    for tag in ('inertial', 'collision'):
+        assert ET.tostring(body.find(tag)) == ET.tostring(base_body.find(tag))
+    assert (ASSETS / name).read_text().count('gz-sim-pose-publisher-system') == 5
+
+
 def test_the_s_rings_have_a_plate_per_quad_and_a_real_time_cap():
     for name, n in (('eight_rigid_ground_rig_R50_L100.sdf', 8), ('six_rigid_ground_rig_R50_L100.sdf', 6)):
         root = ET.parse(ASSETS / name).getroot()

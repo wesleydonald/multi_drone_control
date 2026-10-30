@@ -1,0 +1,82 @@
+{
+ "check": {
+  "n": 132,
+  "xy_diff_median_cm": 0.11521919682198727,
+  "xy_diff_p95_cm": 0.3847882783196829,
+  "clearance_diff_median_cm": 0.039435550570487976,
+  "reason_agree": 0.9312977099236641,
+  "his_reasons": {
+   "capture_dwell": 2,
+   "capture_xy": 38,
+   "relative_speed": 91,
+   "stale_evidence": 1
+  }
+ },
+ "stats": {
+  "settle_s": 26.261770486831665,
+  "xy_median_cm": 4.049334811959396,
+  "xy_p90_cm": 8.176138273925385,
+  "speed_median": 0.10909359113243754,
+  "speed_p90": 0.20562824251313339,
+  "clearance_min": 0.24862489051818848,
+  "speed_xy_part_median": 0.105679829196391,
+  "speed_z_part_median": 0.015756356536839666,
+  "corr_xy_speed": 0.03367797342112006,
+  "speed_median_when_xy_le_2p5cm": 0.10319137552122132,
+  "speed_median_when_xy_gt_4cm": 0.12073543591675609
+ },
+ "settings": {
+  "as flown (0.025 m, 0.07 m/s, 0.5 s)": {
+   "xy": 0.025,
+   "speed": 0.07,
+   "dwell": 0.5,
+   "first_close_s": null,
+   "closures": 0,
+   "all_true_frac": 0.02284263959390863,
+   "xy_true_frac": 0.16878172588832488,
+   "speed_true_frac": 0.28553299492385786,
+   "runs_ge_dwell": 0,
+   "longest_run_s": 0.23094943364461262,
+   "median_run_s": 0.1496756394704183
+  },
+  "next trial (0.06 m, 0.15 m/s, 0.5 s)": {
+   "xy": 0.06,
+   "speed": 0.15,
+   "dwell": 0.5,
+   "first_close_s": 0.5601084232330322,
+   "closures": 19,
+   "all_true_frac": 0.5685279187817259,
+   "xy_true_frac": 0.7385786802030457,
+   "speed_true_frac": 0.7360406091370558,
+   "runs_ge_dwell": 9,
+   "longest_run_s": 3.531241687138875,
+   "median_run_s": 0.35014859040578206
+  },
+  "xy 0.06 only (speed 0.07)": {
+   "xy": 0.06,
+   "speed": 0.07,
+   "dwell": 0.5,
+   "first_close_s": 12.395606756210327,
+   "closures": 2,
+   "all_true_frac": 0.21446700507614214,
+   "xy_true_frac": 0.7385786802030457,
+   "speed_true_frac": 0.28553299492385786,
+   "runs_ge_dwell": 1,
+   "longest_run_s": 1.2005861123402914,
+   "median_run_s": 0.16519096692403157
+  },
+  "speed 0.15 only (xy 0.025)": {
+   "xy": 0.025,
+   "speed": 0.15,
+   "dwell": 0.5,
+   "first_close_s": 7.194286823272705,
+   "closures": 2,
+   "all_true_frac": 0.13324873096446702,
+   "xy_true_frac": 0.16878172588832488,
+   "speed_true_frac": 0.7360406091370558,
+   "runs_ge_dwell": 2,
+   "longest_run_s": 0.7356744130452474,
+   "median_run_s": 0.23337629636128743
+  }
+ }
+}

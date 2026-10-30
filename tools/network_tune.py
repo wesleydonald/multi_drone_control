@@ -14,6 +14,10 @@ and a sagging pack, the mocap velocity filter at 120 Hz. Scored by the functions
     python3 tools/network_tune.py --gains diss_c=4.5,vel_kv=5 --structure paper    # one candidate
     python3 tools/network_tune.py --emit p1 --structure paper --gains ...          # its twin confirmation configs
     python3 tools/network_tune.py --bench                # compute per tick: the step, + a 21-node preview, the loop
+    python3 tools/network_tune.py --search --structure quan --workers 4
+                                                         # Quan et al. as printed (quan_law.py) on world C: the hub
+                                                         # at the ring's CoM, rods at the drone centres (card
+                                                         # docs/experiments/2026-10-23_quan_exact.md, its search)
 
 What it cannot show (tools/velocity_probe.py, docs/design/sil_bench.md §7): contact, aerodynamics, mocap noise and
 latency, the rods' mass, the 4 cm pivot (its rods hang from the drone centres), our OCP's lift (it starts settled on
@@ -37,6 +41,7 @@ for pkg in ('mpc_planner', 'dissipative_planner', 'tracker', 'drone_communicatio
 
 import metrics as M  # noqa: E402
 from dissipative_planner.dissipative_network import DissipativeNetwork, DissipativeParams  # noqa: E402
+from dissipative_planner.quan_law import QuanLaw, QuanParams  # noqa: E402
 from drone_communication.velocity_filter import VelocityFilter  # noqa: E402
 from mpc_planner.geometry import attach_points, thrust_attitude  # noqa: E402
 from mpc_planner.load_trajectory import LoadTrajectory  # noqa: E402
@@ -70,6 +75,36 @@ SPACE = [('diss_c', (3.0, 4.5, 6.0, 9.0, 12.0)), ('diss_k_slot', (9.0, 18.0, 36.
          ('vel_kp_pos', (1.0, 1.5, 2.0, 2.5)), ('vel_kv', (3.0, 4.0, 5.0)), ('vel_k_att', (6.0, 8.0, 12.0, 16.0)),
          ('diss_ki_load', (0.5, 1.0, 2.0))]
 GRID = ('diss_c', 'vel_kp_pos')
+# Quan et al. as printed (card 2026-10-23_quan_exact): world C's attachment (the hub at the ring's centre of mass, the
+# rods from the drone centres, as this plant hangs them), the law's coefficients and the stand-in autopilot's two gains
+# (vel_kp_pos 0: a pure velocity command). One structure per reading of the node (R1) and the velocity command (R7)
+GEOMETRY = {'rim': (0.225, 0.02), 'hubcom': (0.001, 0.0)}
+QUAN_READINGS = {'quan': ('algebraic', 'measured'), 'quan_dyn': ('dynamic', 'measured'),
+                 'quan_r7': ('algebraic', 'integrated'), 'quan_dyn_r7': ('dynamic', 'integrated'),
+                 'quan_r7c': ('algebraic', 'feedforward')}
+# the start point: init.m's coefficients (k 10 per edge, c 10, its friction gain 5) on its 1 kg nodes, scaled by our
+# quad's 0.55 kg; init.m's lengths are ours (1 m cables), the node plane 3.41 m over the load (R4). The search: a grid
+# over the springs and dampers among the nodes (QUAN_GRID), then one descent pass over QUAN_SPACE (x0.5, x1, x2)
+QUAN_DEFAULTS = dict(quan_k_ij=5.5, quan_c_ij=5.5, quan_k_i=5.5, quan_c_i=5.5, quan_fc=2.75, quan_hc_m=3.41,
+                     quan_node_mass=1.0, vel_kv=4.0, vel_k_att=8.0, quan_rod_mass=0.0, quan_aexp_zero=0.0,
+                     quan_centre_dyn=0.0, quan_centre_mass=2.0, quan_centre_kp=1.0, quan_centre_kd=5.0)
+# quan_rod_mass: the rod's load-end share in the pull's horizontal part (R6c; 0 exact on this plant's massless rods,
+# 0.055 with twin_rods); quan_aexp_zero 1: no a_expected (R5 'zero'); quan_centre_dyn 1: the dynamic centre (R3
+# 'dynamic') at quan_centre_mass/kp/kd. None is searched.
+QUAN_LAND_VEL, QUAN_LAND_Z = 0.2, 0.06          # the network's LAND ramp (land_vel, net_land_z)
+# world C's rods as the twin has them (make_carry_worlds.py): 0.040 kg along the rod and a 0.035 kg magnet at the
+# payload end, inside drone_mass 0.55. With fly(twin_rods=True) the plant's quads are the 0.475 kg airframe plus half the
+# rod and the payload carries the other half and the magnets: the twin's statics on these massless rods
+TWIN_ROD_KG, TWIN_MAGNET_KG = 0.040, 0.035
+QUAN_SPACE = [(k, tuple(f * QUAN_DEFAULTS[k] for f in (0.5, 1.0, 2.0)))
+              for k in ('quan_k_ij', 'quan_c_ij', 'quan_k_i', 'quan_c_i', 'quan_fc')] + \
+    [('vel_kv', (3.0, 4.0, 5.0)), ('vel_k_att', (8.0, 12.0, 16.0))]
+QUAN_GRID = ('quan_k_ij', 'quan_c_ij')
+# --quan-start low: the second start (card §3.3), the low point R7b held calm in its 20 s hover (discriminator c)
+QUAN_LOW_START = dict(QUAN_DEFAULTS, quan_k_ij=0.25, quan_c_ij=0.25, quan_k_i=2.0, quan_c_i=1.0, quan_fc=0.25)
+QUAN_CASES = (('hover', 0.0), ('line_x', 0.4))
+QUAN_RANGE_M = 2.0                            # quan_law.py R8
+BAND_M = 0.30                                 # world C's loss rule (c_metrics BAND_LOSS_M)
 CASES = (('hover', 0.0), ('line_x', 0.2), ('line_x', 0.4), ('line_x', 0.6))
 QUICK = (('hover', 0.0), ('line_x', 0.2), ('line_x', 0.4))
 # the claim's whole cycles (the v600 neighbour's at 0.6), so the search sees the claim's window (the critic, M4)
@@ -93,23 +128,52 @@ def params_of(knobs, structure):
                                 damp_relative=k['net_damp_relative'])
 
 
-def fly(case, speed, knobs=None, structure='port', vel_filter='ema', cycles=None, hover_s=HOVER_S):
+def quan_knobs(knobs=None):
+    """The quan structures' knobs over QUAN_DEFAULTS, with the stand-in autopilot's position term off (R7)."""
+    return {**QUAN_DEFAULTS, **(knobs or {}), 'vel_kp_pos': 0.0, 'net_traj_lean': False, 'net_damp_relative': False}
+
+
+def quan_law(k, structure='quan'):
+    nodes, vcmd = QUAN_READINGS[structure]
+    return QuanLaw(N, M_QUAD, M_LOAD, QuanParams(k_ij=k['quan_k_ij'], c_ij=k['quan_c_ij'], k_i=k['quan_k_i'],
+                                                 c_i=k['quan_c_i'], f_c=k['quan_fc'], hc_m=k['quan_hc_m'],
+                                                 range_m=QUAN_RANGE_M, nodes=nodes, vcmd=vcmd,
+                                                 node_mass=k['quan_node_mass'], rod_mass=k['quan_rod_mass'],
+                                                 aexp='zero' if k['quan_aexp_zero'] else 'path',
+                                                 centre='dynamic' if k['quan_centre_dyn'] else 'path',
+                                                 centre_mass=k['quan_centre_mass'], centre_kp=k['quan_centre_kp'],
+                                                 centre_kd=k['quan_centre_kd']))
+
+
+def fly(case, speed, knobs=None, structure='port', vel_filter='ema', cycles=None, hover_s=HOVER_S, geometry=None,
+        land_at=None, twin_rods=False):
     """One flight from the hand-over (t = 0), settled on the taut 60 deg cone at Z_TARGET: a hover of hover_s, or a
     HOLD_S hover then `cycles` whole cycles of the line (default: the claim's, CYCLES). Returns time series at 50 Hz,
-    or {'diverged': t}."""
-    k, p = params_of(knobs, structure)
+    or {'diverged': t}. geometry rim (C's plates) or hubcom (world C, the quan structure's). land_at (quan, s): from
+    then the held height ramps to the floor as the network's LAND does, the node plane with it. twin_rods: the
+    twin's rod masses in the plant (TWIN_ROD_KG); the controllers keep drone_mass and load_mass."""
+    quan = structure in QUAN_READINGS
+    k, p = (quan_knobs(knobs), None) if quan else params_of(knobs, structure)
     cycles = CYCLES.get(round(float(speed), 3), 4) if cycles is None else cycles
-    rho = attach_points(N, ATTACH_R, ATTACH_Z)
+    rho = attach_points(N, *GEOMETRY[geometry or ('hubcom' if quan else 'rim')])
     load0 = np.array([0.0, 0.0, Z_TARGET])
     e = math.radians(ELEV_DEG)
-    pos0 = [load0 + r + L * np.array([r[0] / ATTACH_R * math.cos(e), r[1] / ATTACH_R * math.cos(e), math.sin(e)])
-            for r in rho]
-    net = DissipativeNetwork(N, rho, L, M_QUAD, M_LOAD, 9.81, p)
-    net.seed(pos0)
+    pos0 = [load0 + r + L * np.r_[math.cos(e) * r[:2] / np.linalg.norm(r[:2]), math.sin(e)] for r in rho]
+    if quan:
+        law, h_c = quan_law(k, structure), Z_TARGET + k['quan_hc_m']
+        law.start(np.array(pos0), np.zeros((N, 3)), load0, load0, h_c)
+        refs = [(pos0[i], *law.command(i, np.array(pos0), np.zeros((N, 3)), load0, np.zeros(3), load0, (0.0, 0.0),
+                                       np.zeros(3), h_c, 0.0)[:3]) for i in range(N)]
+    else:
+        net = DissipativeNetwork(N, rho, L, M_QUAD, M_LOAD, 9.81, p)
+        net.seed(pos0)
+        refs = [net.reference(i, np.array([1.0, 0, 0, 0]), load0) for i in range(N)]
     # each quad starts at the attitude its share of the ring needs, so t = 0 is the settled hover the OCP hands over
-    q0 = [rot_to_quat(thrust_attitude(net.reference(i, np.array([1.0, 0, 0, 0]), load0)[2])) for i in range(N)]
-    quads = [QuadParams(mass=M_QUAD, thrust_map='rig', thrust_offset=PLANT_OFFSETS[i]) for i in range(N)]
-    plant = SilPlant(quads, [Link(rho[i], L, attached=True) for i in range(N)], PayloadParams(mass=M_LOAD),
+    q0 = [rot_to_quat(thrust_attitude(refs[i][2])) for i in range(N)]
+    m_q, m_l = ((M_QUAD - TWIN_MAGNET_KG - 0.5 * TWIN_ROD_KG, M_LOAD + N * (TWIN_MAGNET_KG + 0.5 * TWIN_ROD_KG))
+                if twin_rods else (M_QUAD, M_LOAD))
+    quads = [QuadParams(mass=m_q, thrust_map='rig', thrust_offset=PLANT_OFFSETS[i]) for i in range(N)]
+    plant = SilPlant(quads, [Link(rho[i], L, attached=True) for i in range(N)], PayloadParams(mass=m_l),
                      pack={'v0': PACK_V0})
     kick = math.radians(YAW_KICK_DEG)
     plant.reset(pos0, load0, drone_quat=q0, load_R=np.array([[math.cos(kick), -math.sin(kick), 0.0],
@@ -124,7 +188,6 @@ def fly(case, speed, knobs=None, structure='port', vel_filter='ema', cycles=None
     sim_t = (HOLD_S + T_path if line else hover_s) + TAIL_S
     v_meas = [np.zeros(3)] * N
     v_load = np.zeros(3)
-    refs = [net.reference(i, np.array([1.0, 0, 0, 0]), load0) for i in range(N)]
     cmd = []
     for i in range(N):
         thr = float(np.linalg.norm(refs[i][2])) / KT
@@ -149,14 +212,30 @@ def fly(case, speed, knobs=None, structure='port', vel_filter='ema', cycles=None
             if ran:
                 traj_t = min(traj_t + NET_DT, T_path)
             dx, dy, vx, vy = traj.offset_at(traj_t)
-            p_des = load0 + np.array([dx, dy, 0.0])
+            z_was = p_des[2]
+            if land_at is not None and t >= land_at:
+                z_cmd = max(QUAN_LAND_Z, z_was - QUAN_LAND_VEL * NET_DT)
+            else:
+                z_cmd = z_was
+            p_des = load0 + np.array([dx, dy, z_cmd - Z_TARGET])
             a = None
             if k['net_traj_lean']:
                 ax, ay = traj.accel_at(traj_t)
                 a = np.array([ax, ay, 0.0]) if math.hypot(ax, ay) > 1e-9 else None
-            v_des = np.array([vx if ran else 0.0, vy if ran else 0.0, 0.0]) if k['net_damp_relative'] else None
-            net.step(ps[0:3], ps[3:7], v_load, p_des, NET_DT, load_accel=a, p_des_vel=v_des)
-            refs = [net.reference(i, ps[3:7], p_des, taut_gate=1.0, load_accel=a) for i in range(N)]
+            if quan:
+                # the law at the node's 10 Hz from each quad's view: positions, the filtered velocities, the ring's
+                x, xd = np.array(plant.p), np.array(v_meas)
+                ax, ay = traj.accel_at(traj_t) if ran else (0.0, 0.0)
+                h_c, hc_dot = p_des[2] + k['quan_hc_m'], (p_des[2] - z_was) / NET_DT
+                law.advance_nodes(x, xd, p_des, (vx, vy) if ran else (0.0, 0.0), h_c, NET_DT, hc_dot=hc_dot,
+                                  x_L=ps[0:3], xd_L=v_load)
+                refs = [(x[i], *law.command(i, x, xd, ps[0:3], v_load, p_des, (vx, vy) if ran else (0.0, 0.0),
+                                            np.array([ax, ay, 0.0]), h_c, NET_DT, hc_dot=hc_dot)[:3])
+                        for i in range(N)]
+            else:
+                v_des = np.array([vx if ran else 0.0, vy if ran else 0.0, 0.0]) if k['net_damp_relative'] else None
+                net.step(ps[0:3], ps[3:7], v_load, p_des, NET_DT, load_accel=a, p_des_vel=v_des)
+                refs = [net.reference(i, ps[3:7], p_des, taut_gate=1.0, load_accel=a) for i in range(N)]
         if step % every['ctrl'] == 0:
             for i in range(N):
                 st = plant.drone_state(i)
@@ -171,7 +250,9 @@ def fly(case, speed, knobs=None, structure='port', vel_filter='ema', cycles=None
             c = cmd[i]
             plant.set_command(i, c[0], c[1], c[2] * 2.0 - 1.0, c[3], True)
         plant.step(SIM_DT)
-        if step % 50 == 0 and (not plant.is_finite() or plant.load_tilt_deg() > 80.0):
+        # world C's tilt is free: there a fall, not a tilt, is the divergence
+        if step % 50 == 0 and (not plant.is_finite() or (plant.xL[2] < p_des[2] - 0.8 if quan
+                                                          else plant.load_tilt_deg() > 80.0)):
             return {'diverged': round(t, 2), **_series(rows)}
     return {**_series(rows), 'case': case, 'speed': speed, 'T_path': T_path, 'hover_s': hover_s}
 
@@ -191,7 +272,8 @@ def score(r):
     if r['case'] == 'hover':
         win = t <= r['hover_s']
         e = np.linalg.norm(act - des, axis=1)
-        out = dict(err_rms_mm=1000 * _rms(e[win]), err_first5_rms_mm=1000 * _rms(e[t <= FIRST_S]))
+        out = dict(err_rms_mm=1000 * _rms(e[win]), err_first5_rms_mm=1000 * _rms(e[t <= FIRST_S]),
+                   band_max_mm=1000 * float(np.max(e[win])))
     else:
         v, d = r['speed'], LINE_M
         T = math.pi * d / v
@@ -206,8 +288,10 @@ def score(r):
         e_t = np.linalg.norm(act - np.c_[sched, des[:, 1], des[:, 2]], axis=1)
         out = dict(cf_rms_mm=1000 * _rms(cf[win]), cf_max_mm=1000 * float(np.max(cf[win])),
                    reach_rms_mm=1000 * _rms(reach), reach_mean_mm=1000 * float(np.mean(reach)),
-                   lag_s=float(M.phase_lag_s(t[win], sched[win], act[win, 0])), rmse_t_mm=1000 * _rms(e_t[win]))
+                   lag_s=float(M.phase_lag_s(t[win], sched[win], act[win, 0])), rmse_t_mm=1000 * _rms(e_t[win]),
+                   amp_ratio=float(M.radius_ratio(act[:, :2], np.c_[sched, des[:, 1]], win)))
         out['headline_mm'] = out['cf_rms_mm'] + out['reach_rms_mm']
+        out['band_max_mm'] = 1000 * float(np.max(M.segment_error(act, x0, x0 + d, des[:, 1], des[:, 2])[t <= t1]))
     out.update(tilt_mean_deg=float(np.mean(r['tilt'][win])), tilt_peak_deg=float(np.max(r['tilt'])),
                quad_tilt_peak_deg=float(np.max(r['quad_tilt'])), thr_peak=float(np.max(r['thr'])),
                yaw_peak_deg=float(np.max(np.abs(r['yaw'] - r['yaw'][0]))),
@@ -236,12 +320,22 @@ def case_name(case, speed):
     return 'hover' if case == 'hover' else f'linex_v{1000 * speed:.0f}'
 
 
-def guards(results, hover_ref_mm=None):
-    """The card's guards over one candidate's scored cases (and its 1.25x margin flight): [] when it passes."""
+def guards(results, hover_ref_mm=None, tilt_free=False):
+    """The card's guards over one candidate's scored cases (and its 1.25x margin flight): [] when it passes. tilt_free
+    (world C, card 2026-10-23_quan_exact): the ring's tilt and yaw are free, so the ring staying within BAND_M of the
+    path replaces their guards."""
     bad = []
     for name, s in results.items():
         if 'diverged' in s:
             bad.append(f'{name} diverged at {s["diverged"]:.1f} s')
+            continue
+        if tilt_free:
+            if s['quad_tilt_peak_deg'] > GUARD_QUAD_TILT:
+                bad.append(f'{name} quad tilt {s["quad_tilt_peak_deg"]:.1f} deg')
+            if s['thr_peak'] > GUARD_THR:
+                bad.append(f'{name} throttle {s["thr_peak"]:.3f}')
+            if s.get('band_max_mm', 0.0) > 1000 * BAND_M:
+                bad.append(f'{name} ring {s["band_max_mm"]:.0f} mm off the path')
             continue
         if s['tilt_peak_deg'] > GUARD_RING_TILT:
             bad.append(f'{name} ring tilt {s["tilt_peak_deg"]:.1f} deg')
@@ -272,60 +366,82 @@ def evaluate(args):
     for case, speed in cases:
         out[case_name(case, speed)] = score(fly(case, speed, knobs, structure, vel_filter))
     if ('line_x', 0.4) in cases:
-        k = {**DEFAULTS, **knobs}
-        hot = {**knobs, 'vel_kp_pos': GUARD_MARGIN * k['vel_kp_pos'], 'vel_kv': GUARD_MARGIN * k['vel_kv']}
+        k = quan_knobs(knobs) if structure in QUAN_READINGS else {**DEFAULTS, **knobs}
+        hot = {**knobs, 'vel_kv': GUARD_MARGIN * k['vel_kv']}
+        if structure not in QUAN_READINGS:                      # the quan structure flies no position term to scale
+            hot['vel_kp_pos'] = GUARD_MARGIN * k['vel_kp_pos']
         out['margin_linex_v400'] = score(fly('line_x', 0.4, hot, structure, vel_filter))
     return knobs, structure, out
 
 
-def search(structure, vel_filter, workers, passes=2, log=print):
+def search(structure, vel_filter, workers, passes=2, log=print, start=None):
     """The card's retune of one structure. Stage 1: every (diss_c, vel_kp_pos) of SPACE, the rest at DEFAULTS. Stage 2:
     coordinate descent over SPACE from stage 1's best, two passes: per knob every value with the rest held, a candidate
     kept when it ranks better (rank). When no grid point passes every guard, stage 2 starts from the one with the
     fewest guard failures (then the lowest J, then the latest divergence) and walks toward feasibility on the same
     rank. The hover guard is against today's gains (or, if those fail, against the best feasible grid point).
-    Returns (best knobs, its J, every candidate); J inf when nothing passes."""
+    Returns (best knobs, its J, every candidate); J inf when nothing passes.
+
+    structure quan (card 2026-10-23_quan_exact): QUAN_SPACE from QUAN_DEFAULTS on world C, the grid over QUAN_GRID,
+    one descent pass, the cases QUAN_CASES (hover and line_x 0.4, then the margin flight), world C's guards and no
+    hover guard (the law has no "today's" point)."""
     from multiprocessing import Pool
     seen = {}
     key = lambda k: json.dumps(k, sort_keys=True)  # noqa: E731
-    values = dict(SPACE)
+    quan = structure in QUAN_READINGS
+    defaults, space, gr = (QUAN_DEFAULTS, QUAN_SPACE, QUAN_GRID) if quan else (DEFAULTS, SPACE, GRID)
+    if quan and start == 'low':
+        defaults = QUAN_LOW_START
+        space = [(k, tuple(f * defaults[k] for f in (0.5, 1.0, 2.0))) if k.startswith('quan') else (k, v)
+                 for k, v in space]
+    cases, passes = (QUAN_CASES, 1) if quan else (CASES, passes)
+    values = dict(space)
 
     def run(cands):
         todo = [k for k in cands if key(k) not in seen]
-        for knobs, _, res in pool.imap(evaluate, [(k, structure, vel_filter, CASES) for k in todo]):
+        for knobs, _, res in pool.imap(evaluate, [(k, structure, vel_filter, cases) for k in todo]):
             seen[key(knobs)] = res
 
     def feasible_j(k):
         res = seen[key(k)]
-        return objective(res) if not guards(res, hover_ref) else math.inf
+        return objective(res) if not guards(res, hover_ref, quan) else math.inf
 
     def rank(k):
         res = seen[key(k)]
         div = min((s['diverged'] for s in res.values() if 'diverged' in s), default=math.inf)
-        return len(guards(res, hover_ref)), objective(res), -div
+        if quan:
+            # the quan critic (F2): a point that diverges must not outrank one that holds, however far off: first the
+            # cases lost, then the guards broken, then how far the ring got (the worst case's band), then J
+            n_div = sum('diverged' in s for s in res.values())
+            band = max((s.get('band_max_mm', 0.0) for s in res.values() if 'diverged' not in s), default=math.inf)
+            return n_div, len(guards(res, hover_ref, quan)), band, objective(res), -div
+        return len(guards(res, hover_ref, quan)), objective(res), -div
+
+    def nfail(k):
+        return len(guards(seen[key(k)], hover_ref, quan))
 
     with Pool(workers, maxtasksperchild=4) as pool:
-        run([dict(DEFAULTS)] + [{**DEFAULTS, GRID[0]: a, GRID[1]: b} for a in values[GRID[0]] for b in values[GRID[1]]])
-        today = seen[key(DEFAULTS)]
-        hover_ref = None if guards(today) else today['hover']['err_rms_mm']
-        grid = [k for k in (json.loads(s) for s in seen) if not guards(seen[key(k)])]
-        if hover_ref is None and grid:
+        run([dict(defaults)] + [{**defaults, gr[0]: a, gr[1]: b} for a in values[gr[0]] for b in values[gr[1]]])
+        today = seen[key(defaults)]
+        hover_ref = None if quan or guards(today) else today['hover']['err_rms_mm']
+        grid = [k for k in (json.loads(s) for s in seen) if not guards(seen[key(k)], None, quan)]
+        if hover_ref is None and grid and not quan:
             hover_ref = min(seen[key(k)]['hover']['err_rms_mm'] for k in grid)
         best = json.loads(min(seen, key=lambda s: rank(json.loads(s))))
-        log(f'[{structure}] stage 1: today {guards(today) or "passes"}; stage 2 starts from {best} '
-            + (f'J {feasible_j(best):.1f}' if not rank(best)[0] else f'(no grid point passes; {rank(best)[0]} '
+        log(f'[{structure}] stage 1: start {guards(today, None, quan) or "passes"}; stage 2 starts from {best} '
+            + (f'J {feasible_j(best):.1f}' if not nfail(best) else f'(no grid point passes; {nfail(best)} '
                'guard failures, the fewest)'))
         for p in range(passes):
-            for name, vals in SPACE:
+            for name, vals in space:
                 run([{**best, name: v} for v in vals])
                 for v in vals:
                     k = {**best, name: v}
                     if rank(k) < rank(best):
                         best = k
                 log(f'[{structure}] stage 2 pass {p + 1} {name}: {best[name]} J {feasible_j(best):.1f}, '
-                    f'{rank(best)[0]} guard failures')
+                    f'{nfail(best)} guard failures')
         best_j = feasible_j(best)
-    return best, best_j, [dict(knobs=json.loads(s), results=v, J=objective(v), guards=guards(v, hover_ref))
+    return best, best_j, [dict(knobs=json.loads(s), results=v, J=objective(v), guards=guards(v, hover_ref, quan))
                           for s, v in seen.items()]
 
 
@@ -424,22 +540,27 @@ def main(argv=None):
     ap.add_argument('--bench', action='store_true')
     ap.add_argument('--emit', metavar='NAME', help='write the twin confirmation configs of --gains for --structure '
                                                   'port or paper (configs/twin/c_net_NAME.yaml + two experiments)')
-    ap.add_argument('--structure', default='both', choices=('port', 'paper', 'both'))
-    ap.add_argument('--gains', default='', help='knob=value,... over DEFAULTS (one candidate)')
+    ap.add_argument('--structure', default='both', choices=('port', 'paper', 'both', *QUAN_READINGS),
+                    help='quan: Quan et al. as printed on world C (card 2026-10-23_quan_exact)')
+    ap.add_argument('--gains', default='', help='knob=value,... over DEFAULTS (quan: QUAN_DEFAULTS; one candidate)')
     ap.add_argument('--filter', default='ema', choices=('ema', 'slope', 'none'), help='the mocap velocity filter')
+    ap.add_argument('--quan-start', default='init', choices=('init', 'low'),
+                    help="quan searches: start at init.m's coefficients (default) or at the low point (card §3.3)")
     ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--out', help='JSON path (default results/analysis/network_tune_<kind>_<date>.json)')
     a = ap.parse_args(argv)
+    quan = a.structure in QUAN_READINGS
     forms = ('port', 'paper') if a.structure == 'both' else (a.structure,)
     knobs = {k: float(v) for k, v in (kv.split('=') for kv in a.gains.split(',') if kv)}
-    unknown = sorted(set(knobs) - set(DEFAULTS))
+    defaults = QUAN_DEFAULTS if quan else DEFAULTS
+    unknown = sorted(set(knobs) - set(defaults))
     if unknown:
-        ap.error(f'unknown knob(s) {", ".join(unknown)}; known: {", ".join(DEFAULTS)}')
+        ap.error(f'unknown knob(s) {", ".join(unknown)}; known: {", ".join(defaults)}')
     if a.bench:
         print(json.dumps(bench(), indent=1))
         return 0
     if a.emit:
-        if a.structure == 'both':
+        if a.structure == 'both' or quan:
             ap.error('--emit needs --structure port or paper')
         for p in emit(a.emit, a.structure, knobs):
             print('wrote', p)
@@ -447,7 +568,7 @@ def main(argv=None):
     if a.search:
         out = {}
         for s in forms:
-            best, j, cands = search(s, a.filter, a.workers)
+            best, j, cands = search(s, a.filter, a.workers, start=a.quan_start)
             out[s] = dict(best=best, J=j, candidates=cands)
         path = _out_path(a.out, 'search')
     else:
@@ -456,15 +577,18 @@ def main(argv=None):
         jobs = [(knobs, s, a.filter, cases) for s in forms]
         with Pool(min(a.workers, len(jobs))) as pool:
             res = pool.map(evaluate, jobs)
-        out = {s: dict(knobs={**DEFAULTS, **k}, results=r, J=objective(r), guards=guards(r)) for k, s, r in res}
+        out = {s: dict(knobs={**defaults, **k}, results=r, J=objective(r), guards=guards(r, None, quan))
+               for k, s, r in res}
         print(_table([(s, out[s]['results']) for s in forms]))
         for s in forms:
             print(f'{s}: J {out[s]["J"]:.1f} mm, guards {out[s]["guards"] or "pass"}')
         path = _out_path(a.out, 'quick' if a.quick or not a.gains else 'one')
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, 'w') as fh:
-        json.dump(dict(card='docs/experiments/2026-10-23_paper_method_compare.md', filter=a.filter,
-                       geometry=dict(n=N, cable_len=L, elev_deg=ELEV_DEG, attach_radius=ATTACH_R, load_mass=M_LOAD,
+        ar, az = GEOMETRY['hubcom' if quan else 'rim']
+        json.dump(dict(card='docs/experiments/2026-10-23_' + ('quan_exact.md' if quan else 'paper_method_compare.md'),
+                       filter=a.filter,
+                       geometry=dict(n=N, cable_len=L, elev_deg=ELEV_DEG, attach_radius=ar, attach_z=az, load_mass=M_LOAD,
                                      quad_mass=M_QUAD, line_m=LINE_M, thrust_ratio=KT, offsets=PLANT_OFFSETS),
                        results=out), fh, indent=1, default=float)
     print(f'-> {path}')

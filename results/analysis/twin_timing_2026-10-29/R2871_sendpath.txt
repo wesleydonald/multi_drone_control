@@ -1,0 +1,9 @@
+his log aligned to sim time (height residual 0.9 mm)
+metadata: profile oct10, command_execution first_stage_endpoint, stage None, control 30.0 Hz
+TAKEOFF tick: row 3 at sim 26.34 s; first command [ 0.0478 -0.      0.4959  0.    ]; hover throttle 0.4459; |first - [0, 0, hover, 0]| = [0.0478 0.     0.05   0.    ] (one nominal interval allows [0.0339 0.0339 0.0173 0.0339])
+ticks after TAKEOFF 1711; sim interval median 33.1 ms (5-95 % 22.7-41.4); wall period median 196.7 ms
+per tick |du| max [0.1    0.1    0.0372 0.0728], p99 [0.1    0.1    0.0189 0.0345] (one nominal 33.3 ms interval at the bounds: [0.0333 0.0333 0.0167 0.0333]; the 100 ms endpoint: [0.1  0.1  0.05 0.1 ])
+  roll: steps over the interval bound 1083 of 1711 (63.3 %); |du|/dt median 2.031, p99 6.145, max 7.156 per s
+  pitch: steps over the interval bound 799 of 1711 (46.7 %); |du|/dt median 0.802, p99 5.599, max 6.858 per s
+  throttle: steps over the interval bound 25 of 1711 (1.5 %); |du|/dt median 0.042, p99 0.670, max 1.129 per s
+  yaw: steps over the interval bound 27 of 1711 (1.6 %); |du|/dt median 0.108, p99 1.085, max 2.282 per s

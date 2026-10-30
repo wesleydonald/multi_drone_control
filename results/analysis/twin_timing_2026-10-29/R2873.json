@@ -1,0 +1,32 @@
+{
+ "windows": [],
+ "md_windows": 0,
+ "S_md_median": NaN,
+ "S_md_max": NaN,
+ "axis_rms_md": [],
+ "S_approach_max": NaN,
+ "lean_median": NaN,
+ "f_dom_md": [],
+ "E_md_median_cm": NaN,
+ "n_match": 0,
+ "n_descend": 0,
+ "match_durs": [],
+ "descent_durs": [],
+ "n_abort": 0,
+ "contact": null,
+ "weld": null,
+ "land": null,
+ "lifted": 20.312,
+ "his_takeoff": 26.274,
+ "phases": [
+  [
+   1.04,
+   "WAIT_FOR_TAKEOFF"
+  ],
+  [
+   26.27,
+   "TAKEOFF"
+  ]
+ ],
+ "path": "results/2026-10-29/R2873_sim_gz_tri_floorjoin_hover_L100_p115_sq52_cd060_ps"
+}

@@ -1,0 +1,9 @@
+# The M2A ring (0.86 kg, plates at r 0.225, flown until 28 Oct): the old real-world defaults, to revert from the new
+# payload. Needs the planner prebuilt at 0.86 kg (tools/prebuild_rig.sh --load-mass 0.86 --load-ixx 0.02733
+# --load-izz 0.05452) and the ring as Motive body 8 with its 22 Oct pivot.
+load_mass: 0.86
+load_ixx: 0.02733
+load_izz: 0.05452
+attach_radius: 0.225
+attach_z: 0.0175
+payload_rest_z: 0.0275

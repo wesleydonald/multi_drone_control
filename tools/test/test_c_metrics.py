@@ -23,7 +23,7 @@ def _shuttle(t, d, v):
 
 def _make(tmp, rid='R9001', arm='planner', case='line', v=0.4, d=0.9, cycles=2, lag=0.3, amp=1.0, shift=0.01,
           tilt_at=None, abort_at=None, log_lines=(), dip_mm=0.0, keep=1.0, path_event=True, yaw_rate=0.0,
-          standing=0.0, handover_event=True, path_at=5.0):
+          standing=0.0, handover_event=True, path_at=5.0, world=None):
     """One twin run: the lift tops out at 20 s, the network arm hands over 1.5 s later (shifting its datum, and the
     ring with it, by `shift` m in x), a line starts at 25 s for `cycles` whole cycles, the ring `lag` s late at `amp`
     of its length. `standing`: the ring that far off its target in x all along; the network's datum moves onto it at
@@ -82,10 +82,11 @@ def _make(tmp, rid='R9001', arm='planner', case='line', v=0.4, d=0.9, cycles=2, 
             w.writerow([f'{e[0]:.3f}', e[1], e[2]])
     mode = 'network' if net else 'dissipative'
     json.dump({'launch_args': {'mode': mode, 'load_traj': 'line_x' if case == 'line' else 'hover',
-                               'traj_speed': v}}, open(root / 'manifest.json', 'w'))
+                               'traj_speed': v}, **({'world': world} if world else {})},
+              open(root / 'manifest.json', 'w'))
     json.dump({'auto_network_handover': net, 'net_damp_relative': arm == 'paper', 'net_traj_lean': arm == 'paper',
                'load_traj': 'line_x' if case == 'line' else 'hover', 'traj_speed': v, 'traj_distance': d,
-               'auto_handover_settle_s': 1.5},
+               'auto_handover_settle_s': 1.5, **({'net_law': 'quan'} if arm == 'quan' else {})},
               open(root / 'logs' / 'dissipative_planner' / '20261023_000000' / 'params.json', 'w'))
     with open(root / 'logs' / 'launch.log', 'w') as fh:
         fh.write(''.join(f'{x}\n' for x in log_lines))
@@ -217,6 +218,24 @@ def test_one_tilt_sample_over_30_deg_is_not_a_drop(tmp_path):
     rows[i][4] = '35.0'
     csv.writer(open(path, 'w', newline='')).writerows(rows)
     assert C.score(root)['valid']
+
+
+def test_world_c_scores_the_band_rule_instead_of_the_tilt_rule_and_names_the_quan_arm(tmp_path):
+    """Card 2026-10-23_quan_exact (Wesley 23 Oct): on world C the ring's tilt is free, so the tilt rule is off for both
+    arms; the ring held more than 0.30 m off the path for 1 s after the hand-over is the loss instead."""
+    c = C.TILT_FREE_WORLDS[0]
+    tilted = C.score(_make(tmp_path, rid='R9050', tilt_at=30.0, world=c))
+    assert tilted['valid'] and not tilted['lost'] and tilted['card'] == C.QUAN_CARD
+    assert not C.score(_make(tmp_path, rid='R9051', case='hover', standing=0.25, world=c))['lost']
+    off = C.score(_make(tmp_path, rid='R9052', case='hover', standing=0.35, world=c))
+    assert off['valid'] and any('300 mm off the path' in w for w in off['lost'])
+    assert any('ring tilt over 30' in w for w in C.score(_make(tmp_path, rid='R9053', tilt_at=30.0))['lost'])
+    q = C.score(_make(tmp_path, rid='R9054', arm='quan', world=c))
+    assert q['arm'] == 'quan' and q['valid'] and not q['lost']
+    row = next(csv.reader([C.registry_row(q)]))
+    assert row[3] == C.QUAN_CARD and row[5] == 'c_pl_hubcom_linex_v400_L100 (our planner)'
+    assert row[4].startswith('Quan et al. as printed')
+    assert "centroid" in row[6] and len(row[6].split(' / ')) == len(row[7].split(' / '))
 
 
 def test_the_registry_row_is_one_lf_line_with_the_verdict(tmp_path):

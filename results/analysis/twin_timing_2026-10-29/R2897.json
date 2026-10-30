@@ -1,0 +1,111 @@
+{
+ "windows": [
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 34.544,
+   "dur": 5.698,
+   "err_med_cm": 71.67159699495704,
+   "err_max_cm": 120.41563733867355,
+   "chord_m": 1.0098958601144608,
+   "err_logged_med_cm": 71.67303471008253,
+   "phi_mean": 0.0029979536836379004,
+   "theta_mean": 0.3096365268487933,
+   "phi_rms": 0.028707935369799705,
+   "theta_rms": 0.9953492388461378,
+   "total_rms": 0.9957631509675292,
+   "lean": 0.3096510398582132,
+   "f_dom": 0.5263157894736842,
+   "mpc_phi_rms": 0.0031738667693546286,
+   "mpc_theta_rms": 0.9746386683964159
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 40.242,
+   "dur": 0.534,
+   "err_med_cm": 1.892212505287265,
+   "err_max_cm": 4.259792678298642,
+   "chord_m": 1.0099522326702843,
+   "err_logged_med_cm": 1.8978855322270098
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 40.776,
+   "dur": 3.771,
+   "err_med_cm": 0.8167067077416111,
+   "err_max_cm": 3.676420078938226,
+   "chord_m": 1.0099700864183738,
+   "err_logged_med_cm": 0.8172190595989497,
+   "phi_mean": 0.007424800737259516,
+   "theta_mean": -0.1235933451062204,
+   "phi_rms": 0.06913395742781177,
+   "theta_rms": 0.5342299062874032,
+   "total_rms": 0.5386845986674188,
+   "lean": 0.12381616461727969,
+   "f_dom": 0.2631578947368421,
+   "mpc_phi_rms": 0.05981850353519435,
+   "mpc_theta_rms": 0.5152765966563961
+  }
+ ],
+ "md_windows": 1,
+ "S_md_median": 0.5386845986674188,
+ "S_md_max": 0.5386845986674188,
+ "axis_rms_md": [
+  0.53
+ ],
+ "S_approach_max": 0.9957631509675292,
+ "lean_median": 0.21673360223774643,
+ "f_dom_md": [
+  0.26
+ ],
+ "E_md_median_cm": 0.8885679454583764,
+ "E_md_logged_median_cm": 0.8898629559996503,
+ "n_match": 1,
+ "n_descend": 1,
+ "match_durs": [
+  0.534
+ ],
+ "descent_durs": [
+  3.771
+ ],
+ "n_abort": 0,
+ "contact": 44.736,
+ "weld": 46.248,
+ "land": 56.248,
+ "lifted": 20.342,
+ "his_takeoff": 26.315,
+ "phases": [
+  [
+   1.03,
+   "WAIT_FOR_TAKEOFF"
+  ],
+  [
+   26.32,
+   "TAKEOFF"
+  ],
+  [
+   34.54,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   40.24,
+   "MATCH_VELOCITY"
+  ],
+  [
+   40.78,
+   "DESCEND_TO_ATTACHMENT"
+  ],
+  [
+   44.55,
+   "ATTACH_READY"
+  ],
+  [
+   44.74,
+   "LIFT_PROOF"
+  ],
+  [
+   46.28,
+   "RING_ATTACHED"
+  ]
+ ],
+ "path": "results/2026-10-29/R2897_sim_gz_fri30_sq6b"
+}

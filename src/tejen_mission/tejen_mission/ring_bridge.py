@@ -168,6 +168,14 @@ class RingBridge(FakeCooperativeTransportWorld):
         return RigidBodyState(x=float(s['hover_x']) + dx, y=float(s['hover_y']) + dy,
                               z=z, yaw=yaw, vx=vx, vy=vy, vz=0.0, yaw_rate=0.0)
 
+    def refresh_shared_commitments(self, valid_from_s: float) -> None:
+        """shared_trajectory_backdate_s > 0: the carriers' shared commitments start that long before now. His parent
+        publishes them ahead of the same tick's carrier states, so his backend can see a commitment starting after a
+        carrier's latest state ('start_skew'), disable itself and stay off (R2854, R2855)."""
+        back = max(0.0, float(self._param('shared_trajectory_backdate_s', 0.0)))
+        FakeCooperativeTransportWorld.refresh_shared_commitments(self, valid_from_s - back)
+        self.last_shared_commitment_publish_s = float(valid_from_s)   # the refresh period stays as typed
+
     def _plate_xy(self):
         """The attach plate's point in the ring frame: bridge_attach_xy_m when set (our weld point, so both stacks aim
         at one point: on 14 Oct his nominal plate and our measured point were 2.4 cm apart), else his nominal."""

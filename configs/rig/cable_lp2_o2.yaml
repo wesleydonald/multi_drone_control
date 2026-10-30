@@ -1,0 +1,4 @@
+# 29 Oct rig (Wesley): the measured cable pull through TWO 2 Hz first-order stages (cuts the ring's 5.3 Hz bending to
+# ~1/8 instead of ~1/3; ~160 ms of lag at low frequency instead of ~80); RIG-1029-ch1 bent at full strength with one
+cable_lp_hz: 2.0
+cable_lp_order: 2

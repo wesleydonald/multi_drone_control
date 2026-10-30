@@ -8,15 +8,21 @@ fleet_geometry:
   num_drones: 4
   cable_len: 1.0
   drone_mass: 0.583            # kg with pack, cable and magnet: the 0.55 m cable's 0.040 kg is ~0.073 at 1 m (Wesley 22 Oct)
-  attach_radius: 0.225
-  attach_z: 0.0175             # the plates 1.75 cm above the ring's centre of mass, where Motive's pivot is (22 Oct)
+  load_mass: 1.15              # the new payload of 28 Oct (Wesley: 1.15 kg, 510 mm, slots ~100 x 85 mm); the M2A ring's
+                               # 0.86 kg values fly with params_file:=configs/rig/ring_m2a.yaml
+  load_ixx: 0.0246             # kg m^2, estimated: a flat annulus, outer r 0.255, inner r ~0.14 (not measured);
+                               # izz/2 plus the 26 mm thickness, as the twin's _p115 worlds
+  load_izz: 0.049
+  attach_radius: 0.204         # the magnet markers on plates 0/3/6/9, 0.201-0.209 m from the centre (RIG-1028-payload)
+  attach_z: 0.028              # the cables' ends on the magnets above the pivot: QUAD4's magnet marker on its plate, 29 Oct
+                               # (W; Wesley 30 Oct: use it). The thin disk's plate faces sit ~6 mm below the pivot
   pivot_offset_z: -0.04
   rod_tol_frac: 0.25
   rod_spread_m: 0.08
 takeoff:
   lift_ramp_vel: 0.1
   z_taut_gate: 0.9
-  payload_rest_z: 0.0275       # the ring's centre of mass at rest (22 Oct pivot move; it read 0.0276)
+  payload_rest_z: 0.013        # the new payload's Motive pivot at rest (28 Oct: 1.30-1.31 cm, centre of mass ~1 cm)
 height_hold:
   z_i_gate: 0.25
 trajectory:
@@ -55,6 +61,13 @@ combined_m1:
   # word (a params_file value is ignored)
   contact_rig_orbit: false
 
+tracker:
+  # the measured pull's filter on the rig (Wesley 29 Oct): the 1 m ring bends at 5.3 Hz (RIG-1029-h4). Two 2 Hz low-pass
+  # stages stopped it (RIG-1029-ch1b) but their ~120 ms of lag let the triangle swing at 1.1 Hz (RIG-1029-sq2_2, -sq2_4);
+  # a band-stop at 5.3 Hz instead (~30 ms at 1.1 Hz). The low-pass is kept, off: cable_lp_hz 2.0, cable_lp_order 2 to fly it
+  cable_lp_hz: 0.0
+  cable_notch_hz: 5.3
+  cable_notch_q: 1.0
 modes:
   mpc: {}
   free_hover:

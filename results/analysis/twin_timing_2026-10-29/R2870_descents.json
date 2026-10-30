@@ -1,0 +1,76 @@
+{
+ "descents": [
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 41.69,
+   "dur_s": 3.77,
+   "next": "ATTACH_READY",
+   "min_tip_above_target_cm": -1.9,
+   "err_median_cm": 1.8
+  },
+  {
+   "phase": "ATTACH_READY",
+   "t0": 45.45,
+   "dur_s": 15.13,
+   "next": "APPROACH_ABOVE_TARGET",
+   "min_tip_above_target_cm": -5.3,
+   "err_median_cm": 2.8,
+   "err_at_restart_cm": 8.3,
+   "tip_speed_at_restart": 0.076,
+   "cause": "position",
+   "over8_s": 0.0,
+   "tip_drop_over8_cm": 0.0,
+   "ref_drop_over8_cm": 0.0,
+   "tip_above_target_at_restart_cm": -3.4,
+   "radial_cm": 1.2,
+   "tangential_cm": 8.2
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 61.69,
+   "dur_s": 1.8,
+   "next": "APPROACH_ABOVE_TARGET",
+   "min_tip_above_target_cm": 12.1,
+   "err_median_cm": 4.0,
+   "err_at_restart_cm": 8.2,
+   "tip_speed_at_restart": 0.056,
+   "cause": "position",
+   "over8_s": 0.0,
+   "tip_drop_over8_cm": 0.0,
+   "ref_drop_over8_cm": 0.0,
+   "tip_above_target_at_restart_cm": 12.1,
+   "radial_cm": -2.1,
+   "tangential_cm": 7.9
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 64.69,
+   "dur_s": 1.73,
+   "next": "APPROACH_ABOVE_TARGET",
+   "min_tip_above_target_cm": 13.3,
+   "err_median_cm": 5.3,
+   "err_at_restart_cm": 7.9,
+   "tip_speed_at_restart": 0.065,
+   "cause": "position",
+   "over8_s": 0.0,
+   "tip_drop_over8_cm": 0.0,
+   "ref_drop_over8_cm": 0.1,
+   "tip_above_target_at_restart_cm": 13.3,
+   "radial_cm": -0.6,
+   "tangential_cm": 7.9
+  }
+ ],
+ "summary": {
+  "descents": 3,
+  "reached_bottom": 1,
+  "restarts_position": 3,
+  "restarts_speed": 0,
+  "contact": null,
+  "weld": null,
+  "give_up": 71.69,
+  "take_back": 71.69,
+  "deepest_cm": -5.3,
+  "max_ref_drop_over8_cm": 0.1,
+  "max_tip_drop_over8_cm": 0.0
+ }
+}

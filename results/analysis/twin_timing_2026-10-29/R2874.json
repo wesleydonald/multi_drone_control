@@ -1,0 +1,111 @@
+{
+ "windows": [
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 34.653,
+   "dur": 6.134,
+   "err_med_cm": 75.35653206904757,
+   "err_max_cm": 119.87387004547665,
+   "chord_m": 1.0100002148459253,
+   "err_logged_med_cm": 75.35509824779761,
+   "phi_mean": 0.000759553474848567,
+   "theta_mean": 0.21139229912367552,
+   "phi_rms": 0.029534892669569737,
+   "theta_rms": 1.1645717105843625,
+   "total_rms": 1.1649461699917258,
+   "lean": 0.21139366369471593,
+   "f_dom": 0.6486486486486486,
+   "mpc_phi_rms": 6.475967891344184e-05,
+   "mpc_theta_rms": 1.1247698107643984
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 40.787,
+   "dur": 0.532,
+   "err_med_cm": 1.9442123155574649,
+   "err_max_cm": 3.211255200245824,
+   "chord_m": 1.0098959136416508,
+   "err_logged_med_cm": 1.9423587974723409
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 41.319,
+   "dur": 3.767,
+   "err_med_cm": 0.6924475347597514,
+   "err_max_cm": 3.245369929292805,
+   "chord_m": 1.0099860432058168,
+   "err_logged_med_cm": 0.6932867980827173,
+   "phi_mean": -0.00020407132241922858,
+   "theta_mean": -0.07247456848396742,
+   "phi_rms": 0.02704339327191716,
+   "theta_rms": 0.4317925312352753,
+   "total_rms": 0.4326385733498872,
+   "lean": 0.07247485579179802,
+   "f_dom": 0.2631578947368421,
+   "mpc_phi_rms": 5.9691603934360944e-05,
+   "mpc_theta_rms": 0.3885034880709805
+  }
+ ],
+ "md_windows": 1,
+ "S_md_median": 0.4326385733498872,
+ "S_md_max": 0.4326385733498872,
+ "axis_rms_md": [
+  0.43
+ ],
+ "S_approach_max": 1.1649461699917258,
+ "lean_median": 0.14193425974325696,
+ "f_dom_md": [
+  0.26
+ ],
+ "E_md_median_cm": 0.7644574799318631,
+ "E_md_logged_median_cm": 0.763981465664379,
+ "n_match": 1,
+ "n_descend": 1,
+ "match_durs": [
+  0.532
+ ],
+ "descent_durs": [
+  3.767
+ ],
+ "n_abort": 0,
+ "contact": 45.214,
+ "weld": 46.732,
+ "land": 56.733,
+ "lifted": 20.349,
+ "his_takeoff": 26.324,
+ "phases": [
+  [
+   1.03,
+   "WAIT_FOR_TAKEOFF"
+  ],
+  [
+   26.32,
+   "TAKEOFF"
+  ],
+  [
+   34.65,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   40.79,
+   "MATCH_VELOCITY"
+  ],
+  [
+   41.32,
+   "DESCEND_TO_ATTACHMENT"
+  ],
+  [
+   45.09,
+   "ATTACH_READY"
+  ],
+  [
+   45.22,
+   "LIFT_PROOF"
+  ],
+  [
+   46.75,
+   "RING_ATTACHED"
+  ]
+ ],
+ "path": "results/2026-10-29/R2874_sim_gz_tri_floorjoin_hover_L100_p115_sq52_ps"
+}

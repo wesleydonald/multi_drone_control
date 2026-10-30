@@ -1,0 +1,12 @@
+# OPTION for Thu 29 (Wesley's call): chain_pair_tip.yaml with the trackers' measured-pull cap at 20 m/s^2 (11 N at
+# 0.55 kg; default 14.5). A pair carrying 1.15 kg should measure ~13.5-14.6 m/s^2 on the rig, at the default cap, where
+# Wed 28's pair sank 17-57 cm (RIG-1028-f2b, -ls2c). Untested: the twin's pull never reaches 14.5 (R2839-R2842).
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 45.0
+int_k_xy: 0.0
+tip_detect_m: 0.04
+cable_accel_cap: 20.0

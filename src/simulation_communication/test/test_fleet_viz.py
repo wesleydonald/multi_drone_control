@@ -11,7 +11,7 @@ from interfaces.msg import MotionCaptureState
 from std_msgs.msg import Bool, String
 from visualization_msgs.msg import Marker
 
-from simulation_communication.fleet_viz import (MARKER_LIFETIME_S, PUCK_DIAMETER, PUCK_HEIGHT, TIP_ATTACHED,
+from simulation_communication.fleet_viz import (MARKER_LIFETIME_S, PICKUP_SIZE, TIP_ATTACHED,
                                                 TIP_DIAMETER, TIP_OFF, TIP_ON, BodyTrack, FleetViz, StreamStats,
                                                 coil_word, mocap_summary, swung_magnet_markers, tilt_deg)
 
@@ -32,22 +32,24 @@ def _rgb(m):
 ROLL_90 = (math.cos(math.pi / 4), math.sin(math.pi / 4), 0.0, 0.0)     # 90 deg about x
 
 
-def test_tip_tether_and_puck_with_their_namespaces_types_sizes_and_lifetime():
-    tip, body, puck = _pose(0.1, 0.2, 1.0), _pose(0.1, 0.2, 1.6), _pose(1.0, 1.6, 0.011)
+def test_tip_tether_and_pickup_plate_with_their_namespaces_types_sizes_and_lifetime():
+    tip, body, puck = _pose(0.1, 0.2, 1.0), _pose(0.1, 0.2, 1.6), _pose(1.0, 1.6, 0.0125, ROLL_90)
     ms = swung_magnet_markers(Time(sec=5), tip, body, puck)
     assert [(m.ns, m.type) for m in ms] == [('magnet_tip', Marker.SPHERE), ('tether', Marker.LINE_STRIP),
-                                            ('puck', Marker.CYLINDER)]
+                                            ('puck', Marker.CUBE)]
     for m in ms:
         assert m.header.frame_id == 'map' and m.action == Marker.ADD and m.header.stamp.sec == 5
         assert m.lifetime.sec + 1e-9 * m.lifetime.nanosec == pytest.approx(MARKER_LIFETIME_S)
-    sphere, line, cyl = ms
+    sphere, line, plate = ms
     assert _xyz(sphere.pose.position) == pytest.approx((0.1, 0.2, 1.0))
     assert (sphere.scale.x, sphere.scale.y, sphere.scale.z) == pytest.approx((TIP_DIAMETER,) * 3)
     assert len(line.points) == 2 and 0.0 < line.scale.x < 0.01
     assert _xyz(line.points[0]) == pytest.approx((0.1, 0.2, 1.57))           # 3 cm below the body centre
     assert _xyz(line.points[1]) == pytest.approx((0.1, 0.2, 1.0))
-    assert _xyz(cyl.pose.position) == pytest.approx((1.0, 1.6, 0.011))
-    assert (cyl.scale.x, cyl.scale.y, cyl.scale.z) == pytest.approx((PUCK_DIAMETER, PUCK_DIAMETER, PUCK_HEIGHT))
+    assert _xyz(plate.pose.position) == pytest.approx((1.0, 1.6, 0.0125))
+    assert (plate.scale.x, plate.scale.y, plate.scale.z) == pytest.approx((0.100, 0.100, 0.025)) == PICKUP_SIZE
+    o = plate.pose.orientation
+    assert (o.w, o.x, o.y, o.z) == pytest.approx(ROLL_90)                   # oriented by its pose
 
 
 def test_the_tether_leaves_the_body_through_its_attitude():

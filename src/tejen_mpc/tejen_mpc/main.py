@@ -459,6 +459,19 @@ class Controller(Node):
                 'partial-step command execution')
         else:
             self.get_logger().info('MPC profile oct10 (his 11a0683f controller)')
+        # mpc_command_execution (multi_drone_control, 29 Oct, Tejen's review of the rig runs): 'profile' keeps the
+        # profile's send path; 'partial_step' sends the elapsed-interval command under oct10 too, its weights and bounds
+        # unchanged ('endpoint' the reverse)
+        command_execution = str(self.declare_parameter('mpc_command_execution', 'profile').value).strip()
+        if command_execution not in ('profile', 'partial_step', 'endpoint'):
+            self.get_logger().fatal(
+                f'Unknown mpc_command_execution {command_execution!r}; expected profile, partial_step or endpoint')
+            raise ValueError(f'mpc_command_execution {command_execution!r}')
+        if command_execution != 'profile':
+            self.mpc_partial_step_execution = command_execution == 'partial_step'
+            self.get_logger().warn(
+                f'MPC command execution {command_execution} (mpc_command_execution), '
+                f'the {self.mpc_profile} weights and bounds unchanged')
 
         # self.ocp, self.sim_integrator = generate_ocp_controller()
         self.ocp, self.sim_integrator = generate_payload_ocp_controller(

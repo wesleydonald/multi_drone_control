@@ -1,0 +1,40 @@
+{
+ "windows": [
+  {
+   "phase": "SETTLE_ABOVE_PICKUP",
+   "t0": 1793230860.496,
+   "dur": 26.262,
+   "err_med_cm": 162.68924090521816,
+   "err_max_cm": 170.07454133084545,
+   "chord_m": 1.0084544723775246,
+   "phi_mean": -0.6357492699617795,
+   "theta_mean": 0.3595226755993898,
+   "phi_rms": 1.7538989687200925,
+   "theta_rms": 1.3298535589796014,
+   "total_rms": 2.2010615804216194,
+   "lean": 0.7303654486125967,
+   "f_dom": 0.703125,
+   "mpc_phi_rms": 1.759689958255657,
+   "mpc_theta_rms": 1.348063219968575
+  }
+ ],
+ "md_windows": 0,
+ "S_md_median": NaN,
+ "S_md_max": NaN,
+ "axis_rms_md": [],
+ "S_approach_max": NaN,
+ "lean_median": 0.7303654486125967,
+ "f_dom_md": [],
+ "E_md_median_cm": NaN,
+ "settle": {
+  "total_rms": 2.2010615804216194,
+  "err_med_cm": 162.68924090521816,
+  "dur": 26.262
+ },
+ "n_match": 0,
+ "n_descend": 0,
+ "match_durs": [],
+ "descent_durs": [],
+ "n_abort": 0,
+ "path": "results/rig/2026-10-29/k1_4"
+}

@@ -46,11 +46,13 @@ from mpc_planner.geometry import (quat_to_rot_np, attach_points, rot_z,
                                   centre_from_pivot)
 from mpc_planner.load_trajectory import ORBIT_RAMP_S
 from mpc_planner.params import prebuild_sizes
-from mpc_planner.planner_node import LoadPlanner, DRONE_MASS, PLANNER_HZ, TouchdownDetector
+from mpc_planner.planner_node import (CABLE_TAUT_HI_FRAC, CABLE_TAUT_LO_FRAC, LoadPlanner, DRONE_MASS, PLANNER_HZ,
+                                      TouchdownDetector)
 from mpc_planner.reference_builder import unload_tensions
 
 from dissipative_planner.dissipative_network import (
     DissipativeNetwork, DissipativeParams)
+from dissipative_planner.quan_law import QuanLaw, QuanParams
 from utility_objects.position_limit import POS_LIMIT_LAND_MARGIN_M, clear_point, limit_ray, limit_xy
 
 
@@ -353,6 +355,16 @@ def _min_dist_xy(path, pts):
     return best
 
 
+def resize_delay_value(value, sim_time):
+    """resize_delay_s as the node flies it: a delay >= 0 s, and only on sim time (the twin)."""
+    v = float(value)
+    if v < 0.0:
+        raise ValueError(f'resize_delay_s must be >= 0, got {v:g}')
+    if v > 0.0 and not sim_time:
+        raise ValueError('resize_delay_s is twin only (use_sim_time false): X1 ablation arms never fly the rig')
+    return v
+
+
 def _who(d):
     """A drone in operator lines: its label (1-4, as RViz, the fleet manager and the airframes)
     and its topic index."""
@@ -467,6 +479,22 @@ class DissipativeController(LoadPlanner):
         # The 5 s pre-path hold (traj_hold_s) the OCP began runs to its end in the network phase, so the
         # path starts when it would under the OCP: the hand-over comes 1.5 s into the hold (same card).
         self._net_hold_carry = bool(p('net_hold_carry', False).value)
+        # What flies after the hand-over (card 2026-10-23_quan_exact; 'quan' off until its critic): 'port' this node's
+        # network, 'quan' the paper's per-robot force law as printed (quan_law.py: its readings are listed there)
+        self._net_law = str(p('net_law', 'port').value).strip().lower()
+        if self._net_law not in ('port', 'quan'):
+            raise ValueError(f"net_law must be 'port' or 'quan', got {self._net_law!r}")
+        self._quan_params = QuanParams(
+            k_ij=float(p('quan_k_ij', 5.0).value), c_ij=float(p('quan_c_ij', 5.0).value),
+            k_i=float(p('quan_k_i', 5.0).value), c_i=float(p('quan_c_i', 5.0).value),
+            f_c=float(p('quan_fc', 2.5).value), hc_m=float(p('quan_hc_m', 3.41).value),
+            range_m=float(p('quan_range_m', 2.0).value), v_max=float(p('quan_v_max', 2.0).value),
+            nodes=str(p('quan_nodes', 'algebraic').value), vcmd=str(p('quan_vcmd', 'measured').value),
+            node_mass=float(p('quan_node_mass', 1.0).value), rod_mass=float(p('quan_rod_mass', 0.0).value),
+            aexp=str(p('quan_aexp', 'path').value), centre=str(p('quan_centre', 'path').value),
+            centre_mass=float(p('quan_centre_mass', 2.0).value), centre_kp=float(p('quan_centre_kp', 1.0).value),
+            centre_kd=float(p('quan_centre_kd', 5.0).value))
+        self._quan = None
         # ATTACH capacity: the network is provisioned with reserved_attach EXTRA nodes
         # beyond the n tethered drones the OCP flies. The reserved slots start off-network
         # (detach()-ed, hence inert) and are welded in mid-flight by attach(). The parent
@@ -622,6 +650,12 @@ class DissipativeController(LoadPlanner):
         self._detect_count = {}
         self._detect_ok = {}          # each drone's excess on its last tick within the threshold
         self._detect_refused = set()  # detected but refused (min_survivors): do not re-fire
+        # resize_delay_s (twin only; card 2026-10-30_x1_release_ablation, critic waived by Wesley 30 Oct): the planner
+        # acts on an unannounced loss (resize or drop) this many sim seconds after detecting it, flying the leaver in
+        # its model meanwhile; longer than the flight = X1's no-resize arm. 0 = at detection.
+        self._resize_delay_s = resize_delay_value(p('resize_delay_s', 0.0).value,
+                                                  bool(self.get_parameter('use_sim_time').value))
+        self._resize_due = {}         # d -> sim time at which its detected loss is acted on
         # > 0: the magnet-marker check (Wesley 21 Oct, card 2026-10-21_tip_detect). A carrier's magnet marker
         # (/drone_<d>/magnet_tip_state: on the rig Motive bodies 21-24 through mocap_extra_bodies, in the twin the end
         # of its rod) that sits this much further from its plate than its attached offset, for TIP_DETECT_S, has let
@@ -1095,6 +1129,7 @@ class DissipativeController(LoadPlanner):
             self._network_plan()
             return
         self._unload_tick()
+        self._resize_due_tick()
         self._detect_tick()
         # Freeze the trajectory clock across a resize, so a fleet that is still
         # settling into its new ring is not also asked to chase a moving target.
@@ -1892,7 +1927,7 @@ class DissipativeController(LoadPlanner):
             return
         over_of = {}
         for i, d in enumerate(list(self.slot2drone)):
-            if self.detached[d] or d in self._detect_refused:
+            if self.detached[d] or d in self._detect_refused or d in getattr(self, '_resize_due', {}):
                 continue
             t_d = getattr(self, '_drone_t', {}).get(d)
             if t_d is not None and now - t_d > DETECT_STALE_S:
@@ -1930,7 +1965,32 @@ class DissipativeController(LoadPlanner):
 
     def _on_unannounced(self, d):
         """A release found without being told (a stretched cable or a magnet off its plate): drop the ring, or resize
-        to the survivors, as drop_on_loss and the drop rule say."""
+        to the survivors, as drop_on_loss and the drop rule say; resize_delay_s later when that is set."""
+        if getattr(self, '_resize_delay_s', 0.0) > 0.0:
+            if d not in self._resize_due:
+                now = self.get_clock().now().nanoseconds * 1e-9
+                self._resize_due[d] = now + self._resize_delay_s
+                self.get_logger().warn(
+                    f'[dissipative] resize_delay_s {self._resize_delay_s:g}: {_who(d)} stays in the model, the loss '
+                    f'is acted on at t={self._resize_due[d]:.2f} s (detected at {now:.2f} s)')
+            return
+        self._act_on_loss(d)
+
+    def _resize_due_tick(self):
+        """resize_delay_s: act on each detected loss once its delay has run."""
+        if not getattr(self, '_resize_due', None):
+            return
+        now = self.get_clock().now().nanoseconds * 1e-9
+        for d, due in list(self._resize_due.items()):
+            if self.detached[d]:
+                self._resize_due.pop(d)
+            elif now >= due:
+                self._resize_due.pop(d)
+                self.get_logger().warn(f'[dissipative] LATE RESIZE: acting on the loss of {_who(d)} '
+                                       f'{self._resize_delay_s:g} s after its detection')
+                self._act_on_loss(d)
+
+    def _act_on_loss(self, d):
         why = self._drop_due(d) if self._drop_on_loss else None
         if why is not None:
             self._drop_and_land(f'unannounced loss of {_who(d)}: {why}')
@@ -2002,7 +2062,7 @@ class DissipativeController(LoadPlanner):
         if (self._tip_detect_m <= 0.0 or self.phase != 'planner' or self._reconfig_mode != 'ocp'
                 or self._land_to_ground or self._unload is not None or not self.takeoff_seen
                 or d not in self.slot2drone or self.detached[d] or d in self._detect_refused
-                or d in self._tip_unarmed or not np.all(np.isfinite(tip))):
+                or d in getattr(self, '_resize_due', {}) or d in self._tip_unarmed or not np.all(np.isfinite(tip))):
             self._tip_run.pop(d, None)
             return
         if d in self._tip_raw and np.array_equal(tip, self._tip_raw[d]):
@@ -3902,6 +3962,18 @@ class DissipativeController(LoadPlanner):
                     f'[dissipative] handover datum shifted ({off[0]:+.3f},{off[1]:+.3f}) m so the '
                     f'network starts on the measured load (bumpless)')
         self._net_hold_z = float(self._net_p_des[2])   # hold this height; traj_t keeps running
+        if getattr(self, '_net_law', 'port') == 'quan':
+            self._quan = QuanLaw(self.n, self.drone_mass, self.load_mass, self._quan_params, self.dyn.g)
+            x, xd = self._quan_view()
+            self._quan.start(x, xd, load_p, self._net_p_des, self._net_hold_z + self._quan_params.hc_m,
+                             xd_L=self.load_state[7:10] if self.load_state is not None else None)
+            qp = self._quan_params
+            self.get_logger().info(
+                f'[dissipative] the law after the hand-over: Quan et al. Eq. 3, 7-10 (net_law quan, '
+                f'{self._quan_params.nodes} nodes, v_d {self._quan_params.vcmd}), node plane '
+                f'{self._net_hold_z + self._quan_params.hc_m:.2f} m, l_i(0) ' + ' '.join(
+                    f'{v:.3f}' for v in self._quan.li0) + f' m, pull split rod {qp.rod_mass:g} kg, a_expected '
+                f'{qp.aexp}, centre {qp.centre}')
         self.phase_pub.publish(String(data='network'))
         self.get_logger().info(
             '[dissipative] handover OCP -> dissipative network (airborne)')
@@ -4092,6 +4164,9 @@ class DissipativeController(LoadPlanner):
         load_pos = self.load_state[0:3]
         load_quat = self.load_state[3:7]
         load_vel = self.load_state[7:10]
+        if getattr(self, '_quan', None) is not None:
+            self._quan_plan(p_des, (vx, vy) if clock_ran else (0.0, 0.0), clock_ran, z_was)
+            return
         # the target's commanded velocity, which the pinned payload and anchor move with (net_damp_relative)
         v_des = (np.array([vx if clock_ran else 0.0, vy if clock_ran else 0.0,
                            (self._net_hold_z - z_was) * PLANNER_HZ]) if self.diss.damp_relative else None)
@@ -4166,6 +4241,43 @@ class DissipativeController(LoadPlanner):
         if self._traj_hold_left <= 0.0:
             self.get_logger().info(f'[planner] hover hold done: {self.load_traj} starts')
         return True
+
+    def _quan_view(self):
+        """The law's x_i and x'_i in slot order: each tethered drone's measured centre and velocity."""
+        x, xd = [], []
+        for i in range(self.n):
+            d = self.slot2drone[i]
+            x.append(np.asarray(self.drone_pos[d], float))
+            v = self.drone_vel[d]
+            xd.append(np.zeros(3) if v is None else np.asarray(v, float))
+        return np.array(x), np.array(xd)
+
+    def _quan_plan(self, p_des, v_path, clock_ran, z_was):
+        """net_law quan, one tick: every tethered drone's command from the paper's law (quan_law.py), published as the
+        velocity reference v_d with its thrust feedforward; the position is the drone's own, carried along v_d. The
+        load is a point here: nothing reads its attitude (the rod's tautness from the two positions, not _rim_dist)."""
+        dt = 1.0 / PLANNER_HZ
+        x, xd = self._quan_view()
+        x_L = self.load_state[0:3]
+        a_exp = np.zeros(3)
+        if clock_ran and not self._net_landing:
+            ax, ay = self.traj.accel_at(self.traj_t)
+            a_exp = np.array([float(ax), float(ay), 0.0])
+        h_c = self._net_hold_z + self._quan_params.hc_m
+        hc_dot = (self._net_hold_z - z_was) * PLANNER_HZ
+        self._quan.advance_nodes(x, xd, p_des, v_path, h_c, dt, hc_dot=hc_dot, x_L=x_L, xd_L=self.load_state[7:10])
+        for i in range(self.n):
+            d = self.slot2drone[i]
+            if self.detached[d]:
+                self._publish_ref(d, [self._detached_reference(i)] * (self.N + 1))
+                continue
+            lo, hi = CABLE_TAUT_LO_FRAC * self.cable_len_i[i], CABLE_TAUT_HI_FRAC * self.cable_len_i[i]
+            gate = float(np.clip((float(np.linalg.norm(x[i] - x_L)) - lo) / max(hi - lo, 1e-6), 0.0, 1.0))
+            v_d, a_ff, a_cable, _ = self._quan.command(
+                i, x, xd, x_L, self.load_state[7:10], p_des, v_path, a_exp, h_c, dt,
+                hc_dot=hc_dot, taut_gate=gate)
+            self._publish_ref(d, [(x[i] + v_d * (self.dt * k), v_d, a_ff, a_cable) for k in range(self.N + 1)])
+        self._log_tick()
 
     def _net_body_refs(self, i, nodes):
         """net_twin_geometry: a tethered slot's nodes moved from the rod's drone end to the drone centre, at the

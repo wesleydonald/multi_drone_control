@@ -1,0 +1,170 @@
+{
+ "sq5_2": {
+  "/magnet_tip_pose": {
+   "n": 11824,
+   "repeated_frac": 0.13380698638247485,
+   "holds": 141,
+   "hold_s_median": 0.20734143257141113,
+   "hold_s_max": 0.3376283645629883,
+   "jump_cm_median": 1.3517164763767984,
+   "jump_cm_max": 15.858632713610262
+  },
+  "/tejen/magnet_tip_pose": {
+   "n": 11417,
+   "repeated_frac": 0.13857743517869656,
+   "holds": 141,
+   "hold_s_median": 0.20694279670715332,
+   "hold_s_max": 0.3377375602722168,
+   "jump_cm_median": 1.3517164763767984,
+   "jump_cm_max": 15.858632713610262
+  },
+  "/drone_3/motion_capture_state": {
+   "n": 11726,
+   "repeated_frac": 0.0,
+   "holds": 0,
+   "hold_s_median": 0.0,
+   "hold_s_max": 0.0,
+   "jump_cm_median": 0.0,
+   "jump_cm_max": 0.0
+  },
+  "/payload/motion_capture_state": {
+   "n": 11386,
+   "repeated_frac": 0.003513394817742644,
+   "holds": 16,
+   "hold_s_median": 0.0319439172744751,
+   "hold_s_max": 0.08634567260742188,
+   "jump_cm_median": 0.1659566027912558,
+   "jump_cm_max": 0.7807879547752317
+  },
+  "/pickup/motion_capture_state": {
+   "n": 11513,
+   "repeated_frac": 0.0,
+   "holds": 0,
+   "hold_s_median": 0.0,
+   "hold_s_max": 0.0,
+   "jump_cm_median": 0.0,
+   "jump_cm_max": 0.0
+  },
+  "/drone_0/motion_capture_state": {
+   "n": 11639,
+   "repeated_frac": 0.0,
+   "holds": 0,
+   "hold_s_median": 0.0,
+   "hold_s_max": 0.0,
+   "jump_cm_median": 0.0,
+   "jump_cm_max": 0.0
+  }
+ },
+ "k1_4": {
+  "/magnet_tip_pose": {
+   "n": 15962,
+   "repeated_frac": 0.0272539314579287,
+   "holds": 27,
+   "hold_s_median": 0.21528077125549316,
+   "hold_s_max": 0.23073172569274902,
+   "jump_cm_median": 2.2088454335281376,
+   "jump_cm_max": 5.976186790562671
+  },
+  "/tejen/magnet_tip_pose": {
+   "n": 15665,
+   "repeated_frac": 0.027770684371807967,
+   "holds": 27,
+   "hold_s_median": 0.215071439743042,
+   "hold_s_max": 0.2301468849182129,
+   "jump_cm_median": 2.2088454335281376,
+   "jump_cm_max": 5.976186790562671
+  },
+  "/drone_3/motion_capture_state": {
+   "n": 15858,
+   "repeated_frac": 0.0,
+   "holds": 0,
+   "hold_s_median": 0.0,
+   "hold_s_max": 0.0,
+   "jump_cm_median": 0.0,
+   "jump_cm_max": 0.0
+  },
+  "/payload/motion_capture_state": {
+   "n": 15532,
+   "repeated_frac": 0.0034125297791513746,
+   "holds": 1,
+   "hold_s_median": 0.5979268550872803,
+   "hold_s_max": 0.5979268550872803,
+   "jump_cm_median": 0.008312404150572569,
+   "jump_cm_max": 0.008312404150572569
+  },
+  "/pickup/motion_capture_state": {
+   "n": 15648,
+   "repeated_frac": 6.391001469930338e-05,
+   "holds": 1,
+   "hold_s_median": 0.020370960235595703,
+   "hold_s_max": 0.020370960235595703,
+   "jump_cm_median": 0.009848880754432243,
+   "jump_cm_max": 0.009848880754432243
+  },
+  "/drone_0/motion_capture_state": {
+   "n": 15757,
+   "repeated_frac": 0.08980705762883981,
+   "holds": 8,
+   "hold_s_median": 1.1588042974472046,
+   "hold_s_max": 7.264488697052002,
+   "jump_cm_median": 12.529145254225735,
+   "jump_cm_max": 17.296643083330938
+  }
+ },
+ "sq2_5": {
+  "/magnet_tip_pose": {
+   "n": 18602,
+   "repeated_frac": 0.1713886350196226,
+   "holds": 203,
+   "hold_s_median": 0.20972061157226562,
+   "hold_s_max": 2.2692923545837402,
+   "jump_cm_median": 2.0120919187553947,
+   "jump_cm_max": 158.5022537223951
+  },
+  "/tejen/magnet_tip_pose": {
+   "n": 18239,
+   "repeated_frac": 0.17479986840662354,
+   "holds": 203,
+   "hold_s_median": 0.20930981636047363,
+   "hold_s_max": 2.2698824405670166,
+   "jump_cm_median": 2.0120919187553947,
+   "jump_cm_max": 158.5022537223951
+  },
+  "/drone_3/motion_capture_state": {
+   "n": 18421,
+   "repeated_frac": 0.0,
+   "holds": 0,
+   "hold_s_median": 0.0,
+   "hold_s_max": 0.0,
+   "jump_cm_median": 0.0,
+   "jump_cm_max": 0.0
+  },
+  "/payload/motion_capture_state": {
+   "n": 18001,
+   "repeated_frac": 0.00022222222222222223,
+   "holds": 2,
+   "hold_s_median": 0.03653872013092041,
+   "hold_s_max": 0.03945469856262207,
+   "jump_cm_median": 0.13607914475116628,
+   "jump_cm_max": 0.20740940702256905
+  },
+  "/pickup/motion_capture_state": {
+   "n": 18145,
+   "repeated_frac": 0.0,
+   "holds": 0,
+   "hold_s_median": 0.0,
+   "hold_s_max": 0.0,
+   "jump_cm_median": 0.0,
+   "jump_cm_max": 0.0
+  },
+  "/drone_0/motion_capture_state": {
+   "n": 18301,
+   "repeated_frac": 0.0,
+   "holds": 0,
+   "hold_s_median": 0.0,
+   "hold_s_max": 0.0,
+   "jump_cm_median": 0.0,
+   "jump_cm_max": 0.0
+  }
+ }
+}

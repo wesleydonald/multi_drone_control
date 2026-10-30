@@ -14,6 +14,7 @@ with publish_magnet_tip_pose:=true.
 
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 import numpy as np
@@ -42,10 +43,23 @@ class MagnetTipPublisher(Node):
         # mocap-like noise on the twin tip (m, sd per axis; 0 = none): the rig's tip is never noiseless
         self.noise_sd_m = float(self.declare_parameter('noise_sd_m', 0.0).value)
         self._rng = np.random.default_rng()
+        # the rig's body-24 holds (RIG-1029: 13-34 % of the tip's samples, ~0.2 s each, fresh stamps): random freezes
+        # of freeze_s, started so that about freeze_frac of the time is frozen (0 = off; env SIM_TIP_FREEZE_FRAC /
+        # SIM_TIP_FREEZE_S / SIM_TIP_NOISE_SD for the runner's lab_env)
+        self.freeze_frac = float(self.declare_parameter(
+            'freeze_frac', float(os.environ.get('SIM_TIP_FREEZE_FRAC', '0.0'))).value)
+        self.freeze_s = float(self.declare_parameter(
+            'freeze_s', float(os.environ.get('SIM_TIP_FREEZE_S', '0.2'))).value)
+        if os.environ.get('SIM_TIP_NOISE_SD'):
+            self.noise_sd_m = float(os.environ['SIM_TIP_NOISE_SD'])
+        if self.freeze_frac > 0.0 or self.noise_sd_m > 0.0:
+            self.get_logger().warn(f'tip freezes {self.freeze_frac:.0%} of the time ({self.freeze_s:.2f} s each), '
+                                   f'noise {self.noise_sd_m * 1000:.1f} mm sd')
         # test only (runner TIP_FREEZE; card 2026-10-09_approach_tip_feedback): repeat the last output for the
         # given seconds, as a frozen mocap body would. Inert unless a message arrives.
         self._frozen = None             # (pose, until) while frozen
         self._last_out = None
+        self._last_rand_t = None
         self.create_subscription(Float64, '~/freeze', self._freeze_cb, 1)
         self.pub = self.create_publisher(PoseStamped, self.magnet_tip_topic, 10)
         self.create_subscription(PoseArray, self.x3_pose_topic, self.pose_callback, 10)
@@ -148,6 +162,12 @@ class MagnetTipPublisher(Node):
         self._last_pub_t = now
         if self._frozen is not None and now >= self._frozen[1]:
             self._frozen = None
+        if (self._frozen is None and self._last_out is not None and 0.0 < self.freeze_frac < 1.0
+                and self._last_rand_t is not None
+                and self._rng.random() < (now - self._last_rand_t) * self.freeze_frac
+                / (self.freeze_s * (1.0 - self.freeze_frac))):
+            self._frozen = (self._last_out, now + self.freeze_s)
+        self._last_rand_t = now
         if self._frozen is not None:
             out_pose = self._frozen[0]
         elif self.noise_sd_m > 0.0:

@@ -111,7 +111,9 @@ LAB_ENV = {'SIM_CMD_DELAY_S': float, 'SIM_CMD_DELAY_FROM_S': float, 'SIM_MOCAP_D
            'SIM_MOCAP_VEL_RING': ('ema', 'slope'), 'MDC_MOCAP_VEL_DRONES': str,
            'TRACKER_CMD_NEXT_TICK': ('0', '1'), 'TRACKER_DELAY_COMP_S': float,
            # per-channel command delay (card 2026-10-23_pair_mode_timing)
-           'SIM_CMD_DELAY_THR_S': float, 'SIM_CMD_DELAY_ATT_S': float}
+           'SIM_CMD_DELAY_THR_S': float, 'SIM_CMD_DELAY_ATT_S': float,
+           # the rig's frozen magnet marker on the twin tip (drone_magnet magnet_tip_publisher; RIG-1029)
+           'SIM_TIP_FREEZE_FRAC': float, 'SIM_TIP_FREEZE_S': float, 'SIM_TIP_NOISE_SD': float}
 
 
 def lab_env(raw, path='config'):

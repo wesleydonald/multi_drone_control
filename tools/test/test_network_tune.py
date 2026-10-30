@@ -147,3 +147,18 @@ def test_the_bench_returns_finite_times():
     assert set(b) == {'net_step_ms', 'net_step_preview21_ms', 'velocity_loop_ms'}
     assert all(np.isfinite(v).all() and v[0] > 0 for v in b.values())
     assert b['net_step_preview21_ms'][0] > b['net_step_ms'][0]
+
+
+def test_the_quan_structure_flies_world_c_with_a_pure_velocity_command():
+    """Card 2026-10-23_quan_exact: the paper's law on world C (the hub at the ring's CoM, the rods from the drone
+    centres), the stand-in autopilot without its position term, world C's guards (no ring tilt or yaw guard, the
+    ring within BAND_M of the path)."""
+    k = NT.quan_knobs({'quan_k_ij': 8.0})
+    assert k['quan_k_ij'] == 8.0 and k['vel_kp_pos'] == 0.0 and k['quan_fc'] == NT.QUAN_DEFAULTS['quan_fc']
+    assert NT.GEOMETRY['hubcom'] == (0.001, 0.0)
+    loose = _ok(tilt_peak_deg=40.0, yaw_peak_deg=50.0, yaw_growth_deg_s=1.0, band_max_mm=120.0)
+    assert NT.guards({'hover': loose}, tilt_free=True) == [] and NT.guards({'hover': loose})
+    out = NT.guards({'hover': _ok(band_max_mm=310.0, quad_tilt_peak_deg=36.0)}, tilt_free=True)
+    assert len(out) == 2 and 'quad tilt' in out[0] and 'off the path' in out[1]
+    r = NT.fly('hover', 0.0, None, 'quan', hover_s=1.0)
+    assert 'diverged' not in r and r['t'][-1] > 1.0

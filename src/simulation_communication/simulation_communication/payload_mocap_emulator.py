@@ -55,8 +55,8 @@ class PayloadMocapEmulator(Node):
         self.declare_parameter('mocap_delay_s', float(os.environ.get('SIM_MOCAP_DELAY_S', '0.0')))
         # the rig mocap node's velocity filter (card 2026-10-14_tracker_timing): 'none' keeps the plain difference,
         # 'ema' is the rig's alpha 0.2 (its ~45 ms lag), 'slope' the least-squares slope. The twin flies the rig's
-        # filter, so 'ema' by default (Wesley 22 Oct; 'none' before, which hid the rig's pair swing)
-        self.declare_parameter('velocity_filter', os.environ.get('SIM_MOCAP_VEL_FILTER', 'ema'))
+        # filter: 'slope' by default since the rig's default became slope (Wesley 28 Oct; 'ema' 22-28 Oct, 'none' before)
+        self.declare_parameter('velocity_filter', os.environ.get('SIM_MOCAP_VEL_FILTER', 'slope'))
         # the ring's own filter when the carriers are filtered: the rig's ema, or slope (card 2026-10-22_velocity_filter,
         # the ring arm; default ema)
         self.declare_parameter('ring_velocity_filter', os.environ.get('SIM_MOCAP_VEL_RING', 'ema'))
@@ -79,9 +79,11 @@ class PayloadMocapEmulator(Node):
         vmode = str(self.get_parameter('velocity_filter').value)
         self._vfilt = None
         if vmode != 'none':
-            # as the rig: the chosen filter on the listed carriers, the rig's ema on the ring and QUAD4
-            carriers = [int(v) for v in os.environ.get('MDC_MOCAP_VEL_DRONES', '0,1,2').split(',') if v.strip()]
-            dmode = vmode if (vmode == 'ema' or int(drone_id) in carriers) else 'ema'
+            # as the rig: the chosen filter on the listed carriers (unset = every drone, as the rig's detach mode; an
+            # attach config lists its carriers so the newcomer keeps ema), the rig's ema on the ring
+            typed = os.environ.get('MDC_MOCAP_VEL_DRONES', '').strip()
+            carriers = [int(v) for v in typed.split(',') if v.strip()] if typed else None
+            dmode = vmode if (vmode == 'ema' or carriers is None or int(drone_id) in carriers) else 'ema'
             rmode = str(self.get_parameter('ring_velocity_filter').value)
             self._vfilt = {'drone': VelocityFilter(dmode), 'payload': VelocityFilter(rmode)}
             self.get_logger().warn(f'[MOCAP{drone_id}] velocity filter {dmode} (ring {rmode})')

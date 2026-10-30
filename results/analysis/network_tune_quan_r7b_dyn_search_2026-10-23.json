@@ -1,0 +1,862 @@
+{
+ "card": "docs/experiments/2026-10-23_quan_exact.md",
+ "filter": "ema",
+ "geometry": {
+  "n": 4,
+  "cable_len": 1.0,
+  "elev_deg": 60.0,
+  "attach_radius": 0.001,
+  "attach_z": 0.0,
+  "load_mass": 0.86,
+  "quad_mass": 0.55,
+  "line_m": 0.9,
+  "thrust_ratio": 35.2,
+  "offsets": [
+   0.181,
+   0.185,
+   0.187,
+   0.187
+  ]
+ },
+ "results": {
+  "quan_dyn": {
+   "best": {
+    "quan_c_i": 2.75,
+    "quan_c_ij": 11.0,
+    "quan_fc": 1.375,
+    "quan_hc_m": 3.41,
+    "quan_k_i": 5.5,
+    "quan_k_ij": 5.5,
+    "quan_node_mass": 1.0,
+    "vel_k_att": 16.0,
+    "vel_kv": 4.0
+   },
+   "J": Infinity,
+   "candidates": [
+    {
+     "knobs": {
+      "quan_c_i": 5.5,
+      "quan_c_ij": 5.5,
+      "quan_fc": 2.75,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 5.5,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "err_rms_mm": 1240.7394833057836,
+       "err_first5_rms_mm": 43.7862838104533,
+       "band_max_mm": 2593.8356342527427,
+       "tilt_mean_deg": 59.538978673813375,
+       "tilt_peak_deg": 169.6168058955689,
+       "quad_tilt_peak_deg": 34.06128294465206,
+       "thr_peak": 0.8,
+       "yaw_peak_deg": 165.7805379198035,
+       "yaw_growth_deg_s": 3.907122859302036
+      },
+      "linex_v400": {
+       "diverged": 36.85
+      },
+      "margin_linex_v400": {
+       "diverged": 34.2
+      }
+     },
+     "J": Infinity,
+     "guards": [
+      "hover throttle 0.800",
+      "hover ring 2594 mm off the path",
+      "linex_v400 diverged at 36.9 s",
+      "margin_linex_v400 diverged at 34.2 s"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 5.5,
+      "quan_c_ij": 2.75,
+      "quan_fc": 2.75,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 2.75,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 51.6
+      },
+      "linex_v400": {
+       "diverged": 33.6
+      },
+      "margin_linex_v400": {
+       "cf_rms_mm": 1200.387950482936,
+       "cf_max_mm": 2428.5917822588235,
+       "reach_rms_mm": 765.4220811078244,
+       "reach_mean_mm": -200.37510876989722,
+       "lag_s": 0.06357162286897836,
+       "rmse_t_mm": 1431.1386014850546,
+       "headline_mm": 1965.8100315907604,
+       "band_max_mm": 2807.8936298916615,
+       "tilt_mean_deg": 55.90508784902012,
+       "tilt_peak_deg": 142.64928298596018,
+       "quad_tilt_peak_deg": 34.396890867930935,
+       "thr_peak": 0.8,
+       "yaw_peak_deg": 114.33349229004915,
+       "yaw_growth_deg_s": 2.448154992376057
+      }
+     },
+     "J": Infinity,
+     "guards": [
+      "hover diverged at 51.6 s",
+      "linex_v400 diverged at 33.6 s",
+      "margin_linex_v400 throttle 0.800",
+      "margin_linex_v400 ring 2808 mm off the path"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 5.5,
+      "quan_c_ij": 5.5,
+      "quan_fc": 2.75,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 2.75,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 28.65
+      },
+      "linex_v400": {
+       "diverged": 38.2
+      },
+      "margin_linex_v400": {
+       "diverged": 37.1
+      }
+     },
+     "J": Infinity,
+     "guards": [
+      "hover diverged at 28.6 s",
+      "linex_v400 diverged at 38.2 s",
+      "margin_linex_v400 diverged at 37.1 s"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 5.5,
+      "quan_c_ij": 11.0,
+      "quan_fc": 2.75,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 2.75,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 33.1
+      },
+      "linex_v400": {
+       "diverged": 28.45
+      },
+      "margin_linex_v400": {
+       "diverged": 28.5
+      }
+     },
+     "J": Infinity,
+     "guards": [
+      "hover diverged at 33.1 s",
+      "linex_v400 diverged at 28.4 s",
+      "margin_linex_v400 diverged at 28.5 s"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 5.5,
+      "quan_c_ij": 2.75,
+      "quan_fc": 2.75,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 5.5,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 37.45
+      },
+      "linex_v400": {
+       "diverged": 56.1
+      },
+      "margin_linex_v400": {
+       "diverged": 27.7
+      }
+     },
+     "J": Infinity,
+     "guards": [
+      "hover diverged at 37.5 s",
+      "linex_v400 diverged at 56.1 s",
+      "margin_linex_v400 diverged at 27.7 s"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 5.5,
+      "quan_c_ij": 11.0,
+      "quan_fc": 2.75,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 5.5,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 27.3
+      },
+      "linex_v400": {
+       "cf_rms_mm": 1169.4251826728346,
+       "cf_max_mm": 2166.5385925203364,
+       "reach_rms_mm": 607.248315753938,
+       "reach_mean_mm": -211.81315689533196,
+       "lag_s": 0.0358365987387569,
+       "rmse_t_mm": 1326.0225954698412,
+       "headline_mm": 1776.6734984267725,
+       "band_max_mm": 2553.879343550014,
+       "tilt_mean_deg": 62.407732498415825,
+       "tilt_peak_deg": 178.56919294887803,
+       "quad_tilt_peak_deg": 34.6675939802382,
+       "thr_peak": 0.8,
+       "yaw_peak_deg": 97.93746847703669,
+       "yaw_growth_deg_s": -0.7025092513969498
+      },
+      "margin_linex_v400": {
+       "cf_rms_mm": 1092.038613364115,
+       "cf_max_mm": 2230.4734841072423,
+       "reach_rms_mm": 514.4463773886771,
+       "reach_mean_mm": -188.46014906542632,
+       "lag_s": 0.12661122114842993,
+       "rmse_t_mm": 1212.7366052989123,
+       "headline_mm": 1606.484990752792,
+       "band_max_mm": 2500.690978120733,
+       "tilt_mean_deg": 60.311491386397776,
+       "tilt_peak_deg": 128.77272079698827,
+       "quad_tilt_peak_deg": 34.062634606164764,
+       "thr_peak": 0.8,
+       "yaw_peak_deg": 45.81002599512705,
+       "yaw_growth_deg_s": 0.5985168744413198
+      }
+     },
+     "J": 1776.6734984267725,
+     "guards": [
+      "hover diverged at 27.3 s",
+      "linex_v400 throttle 0.800",
+      "linex_v400 ring 2554 mm off the path",
+      "margin_linex_v400 throttle 0.800",
+      "margin_linex_v400 ring 2501 mm off the path"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 5.5,
+      "quan_c_ij": 2.75,
+      "quan_fc": 2.75,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 11.0,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 31.4
+      },
+      "linex_v400": {
+       "diverged": 28.3
+      },
+      "margin_linex_v400": {
+       "diverged": 37.35
+      }
+     },
+     "J": Infinity,
+     "guards": [
+      "hover diverged at 31.4 s",
+      "linex_v400 diverged at 28.3 s",
+      "margin_linex_v400 diverged at 37.4 s"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 5.5,
+      "quan_c_ij": 5.5,
+      "quan_fc": 2.75,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 11.0,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 30.9
+      },
+      "linex_v400": {
+       "diverged": 32.05
+      },
+      "margin_linex_v400": {
+       "diverged": 26.55
+      }
+     },
+     "J": Infinity,
+     "guards": [
+      "hover diverged at 30.9 s",
+      "linex_v400 diverged at 32.0 s",
+      "margin_linex_v400 diverged at 26.6 s"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 5.5,
+      "quan_c_ij": 11.0,
+      "quan_fc": 2.75,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 11.0,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 28.65
+      },
+      "linex_v400": {
+       "diverged": 26.7
+      },
+      "margin_linex_v400": {
+       "diverged": 26.75
+      }
+     },
+     "J": Infinity,
+     "guards": [
+      "hover diverged at 28.6 s",
+      "linex_v400 diverged at 26.7 s",
+      "margin_linex_v400 diverged at 26.8 s"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 5.5,
+      "quan_c_ij": 11.0,
+      "quan_fc": 2.75,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 2.75,
+      "quan_k_ij": 5.5,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 30.4
+      },
+      "linex_v400": {
+       "diverged": 24.75
+      },
+      "margin_linex_v400": {
+       "diverged": 32.4
+      }
+     },
+     "J": Infinity,
+     "guards": [
+      "hover diverged at 30.4 s",
+      "linex_v400 diverged at 24.8 s",
+      "margin_linex_v400 diverged at 32.4 s"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 5.5,
+      "quan_c_ij": 11.0,
+      "quan_fc": 2.75,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 11.0,
+      "quan_k_ij": 5.5,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 29.35
+      },
+      "linex_v400": {
+       "diverged": 34.55
+      },
+      "margin_linex_v400": {
+       "cf_rms_mm": 1083.453938806716,
+       "cf_max_mm": 2287.3684320577804,
+       "reach_rms_mm": 500.74992623764535,
+       "reach_mean_mm": -95.11774115683313,
+       "lag_s": -0.04130913147147477,
+       "rmse_t_mm": 1186.8227347446882,
+       "headline_mm": 1584.2038650443615,
+       "band_max_mm": 2443.6316232242284,
+       "tilt_mean_deg": 64.17607977123835,
+       "tilt_peak_deg": 143.78773947324333,
+       "quad_tilt_peak_deg": 34.4643229775302,
+       "thr_peak": 0.8,
+       "yaw_peak_deg": 135.6408817759569,
+       "yaw_growth_deg_s": 1.4652497976952923
+      }
+     },
+     "J": Infinity,
+     "guards": [
+      "hover diverged at 29.4 s",
+      "linex_v400 diverged at 34.5 s",
+      "margin_linex_v400 throttle 0.800",
+      "margin_linex_v400 ring 2444 mm off the path"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 2.75,
+      "quan_c_ij": 11.0,
+      "quan_fc": 2.75,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 5.5,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 40.55
+      },
+      "linex_v400": {
+       "cf_rms_mm": 1018.8877280179696,
+       "cf_max_mm": 2193.3576421479297,
+       "reach_rms_mm": 756.9403403082699,
+       "reach_mean_mm": -296.10116919886593,
+       "lag_s": 0.10378817520275192,
+       "rmse_t_mm": 1260.5697948772588,
+       "headline_mm": 1775.8280683262396,
+       "band_max_mm": 2577.3850441983445,
+       "tilt_mean_deg": 30.758751162770547,
+       "tilt_peak_deg": 176.36448845913822,
+       "quad_tilt_peak_deg": 31.63644294296696,
+       "thr_peak": 0.7630888440512066,
+       "yaw_peak_deg": 176.35691406287418,
+       "yaw_growth_deg_s": 3.8950855978001786
+      },
+      "margin_linex_v400": {
+       "cf_rms_mm": 863.1265681549567,
+       "cf_max_mm": 2135.032739197649,
+       "reach_rms_mm": 587.4473489954065,
+       "reach_mean_mm": -275.2318886985349,
+       "lag_s": 0.07174873409254161,
+       "rmse_t_mm": 1030.9961005323528,
+       "headline_mm": 1450.5739171503633,
+       "band_max_mm": 2522.9067688591804,
+       "tilt_mean_deg": 36.902520935780274,
+       "tilt_peak_deg": 174.743547070997,
+       "quad_tilt_peak_deg": 32.55443753658657,
+       "thr_peak": 0.7753039827995234,
+       "yaw_peak_deg": 205.74778732396643,
+       "yaw_growth_deg_s": 3.840491726848317
+      }
+     },
+     "J": 1775.8280683262396,
+     "guards": [
+      "hover diverged at 40.5 s",
+      "linex_v400 ring 2577 mm off the path",
+      "margin_linex_v400 ring 2523 mm off the path"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 11.0,
+      "quan_c_ij": 11.0,
+      "quan_fc": 2.75,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 5.5,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 61.05
+      },
+      "linex_v400": {
+       "diverged": 33.7
+      },
+      "margin_linex_v400": {
+       "diverged": 26.7
+      }
+     },
+     "J": Infinity,
+     "guards": [
+      "hover diverged at 61.0 s",
+      "linex_v400 diverged at 33.7 s",
+      "margin_linex_v400 diverged at 26.7 s"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 2.75,
+      "quan_c_ij": 11.0,
+      "quan_fc": 1.375,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 5.5,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "err_rms_mm": 1303.7292651659554,
+       "err_first5_rms_mm": 47.08806256472297,
+       "band_max_mm": 2562.5394223344324,
+       "tilt_mean_deg": 34.313106658901155,
+       "tilt_peak_deg": 82.5439829139134,
+       "quad_tilt_peak_deg": 31.20862152625988,
+       "thr_peak": 0.7430922353701136,
+       "yaw_peak_deg": 87.11942067335077,
+       "yaw_growth_deg_s": 1.8126360280230533
+      },
+      "linex_v400": {
+       "cf_rms_mm": 810.9968375070414,
+       "cf_max_mm": 2202.2983264417912,
+       "reach_rms_mm": 636.9362688091229,
+       "reach_mean_mm": -270.1976584418859,
+       "lag_s": 0.07526000467265649,
+       "rmse_t_mm": 1005.0629687170174,
+       "headline_mm": 1447.9331063161644,
+       "band_max_mm": 2573.483431621878,
+       "tilt_mean_deg": 27.370052281281176,
+       "tilt_peak_deg": 114.5277302992911,
+       "quad_tilt_peak_deg": 33.76049208528044,
+       "thr_peak": 0.8,
+       "yaw_peak_deg": 161.13376052143516,
+       "yaw_growth_deg_s": 3.972901397242567
+      },
+      "margin_linex_v400": {
+       "cf_rms_mm": 780.2165698080239,
+       "cf_max_mm": 2134.9474258074424,
+       "reach_rms_mm": 577.3729762013573,
+       "reach_mean_mm": -216.9557374202156,
+       "lag_s": 0.004187569063573645,
+       "rmse_t_mm": 960.3195019571606,
+       "headline_mm": 1357.5895460093811,
+       "band_max_mm": 2502.063037846056,
+       "tilt_mean_deg": 14.912644810878081,
+       "tilt_peak_deg": 60.839299869511116,
+       "quad_tilt_peak_deg": 33.22274115311272,
+       "thr_peak": 0.8,
+       "yaw_peak_deg": 56.9066020272787,
+       "yaw_growth_deg_s": 0.35344532760268405
+      }
+     },
+     "J": 1447.9331063161644,
+     "guards": [
+      "hover ring 2563 mm off the path",
+      "linex_v400 throttle 0.800",
+      "linex_v400 ring 2573 mm off the path",
+      "margin_linex_v400 throttle 0.800",
+      "margin_linex_v400 ring 2502 mm off the path"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 2.75,
+      "quan_c_ij": 11.0,
+      "quan_fc": 5.5,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 5.5,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 51.15
+      },
+      "linex_v400": {
+       "cf_rms_mm": 941.0638735568862,
+       "cf_max_mm": 2179.1576529986305,
+       "reach_rms_mm": 739.5044027272729,
+       "reach_mean_mm": -214.70876011399906,
+       "lag_s": 0.071351103852346,
+       "rmse_t_mm": 1173.6656970030288,
+       "headline_mm": 1680.568276284159,
+       "band_max_mm": 2569.1948513973757,
+       "tilt_mean_deg": 26.07405645481581,
+       "tilt_peak_deg": 88.97041068939562,
+       "quad_tilt_peak_deg": 30.77052512539999,
+       "thr_peak": 0.7115214629713246,
+       "yaw_peak_deg": 43.15664176615686,
+       "yaw_growth_deg_s": 0.3356448906991128
+      },
+      "margin_linex_v400": {
+       "diverged": 50.25
+      }
+     },
+     "J": 1680.568276284159,
+     "guards": [
+      "hover diverged at 51.1 s",
+      "linex_v400 ring 2569 mm off the path",
+      "margin_linex_v400 diverged at 50.2 s"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 2.75,
+      "quan_c_ij": 11.0,
+      "quan_fc": 1.375,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 5.5,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 3.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 41.4
+      },
+      "linex_v400": {
+       "cf_rms_mm": 809.6912835603109,
+       "cf_max_mm": 2270.055535225947,
+       "reach_rms_mm": 618.9486236471353,
+       "reach_mean_mm": -244.57095919949492,
+       "lag_s": 0.07750988939537855,
+       "rmse_t_mm": 996.8194112067658,
+       "headline_mm": 1428.6399072074462,
+       "band_max_mm": 2623.5352308562597,
+       "tilt_mean_deg": 30.149861426885465,
+       "tilt_peak_deg": 94.83861660483237,
+       "quad_tilt_peak_deg": 33.50753405408489,
+       "thr_peak": 0.791521303036548,
+       "yaw_peak_deg": 391.30087991064187,
+       "yaw_growth_deg_s": 12.212671783996296
+      },
+      "margin_linex_v400": {
+       "cf_rms_mm": 842.6632672903627,
+       "cf_max_mm": 2217.512753919953,
+       "reach_rms_mm": 645.4570930930831,
+       "reach_mean_mm": -288.19881747641824,
+       "lag_s": 0.0896546581772587,
+       "rmse_t_mm": 1032.4045951206306,
+       "headline_mm": 1488.1203603834458,
+       "band_max_mm": 2585.8504458876446,
+       "tilt_mean_deg": 29.309405646904295,
+       "tilt_peak_deg": 111.10050636328066,
+       "quad_tilt_peak_deg": 33.717906888963284,
+       "thr_peak": 0.8,
+       "yaw_peak_deg": 489.3824995587091,
+       "yaw_growth_deg_s": 13.225768669726394
+      }
+     },
+     "J": 1428.6399072074462,
+     "guards": [
+      "hover diverged at 41.4 s",
+      "linex_v400 throttle 0.792",
+      "linex_v400 ring 2624 mm off the path",
+      "margin_linex_v400 throttle 0.800",
+      "margin_linex_v400 ring 2586 mm off the path"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 2.75,
+      "quan_c_ij": 11.0,
+      "quan_fc": 1.375,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 5.5,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 8.0,
+      "vel_kv": 5.0
+     },
+     "results": {
+      "hover": {
+       "err_rms_mm": 1089.796610217816,
+       "err_first5_rms_mm": 44.7097858663316,
+       "band_max_mm": 2514.4504974136107,
+       "tilt_mean_deg": 50.46933379429117,
+       "tilt_peak_deg": 174.13926776589352,
+       "quad_tilt_peak_deg": 33.615346127110044,
+       "thr_peak": 0.8,
+       "yaw_peak_deg": 85.1170062135148,
+       "yaw_growth_deg_s": 1.6234567837816682
+      },
+      "linex_v400": {
+       "cf_rms_mm": 780.2165698080239,
+       "cf_max_mm": 2134.9474258074424,
+       "reach_rms_mm": 577.3729762013573,
+       "reach_mean_mm": -216.9557374202156,
+       "lag_s": 0.004187569063573645,
+       "rmse_t_mm": 960.3195019571606,
+       "headline_mm": 1357.5895460093811,
+       "band_max_mm": 2502.063037846056,
+       "tilt_mean_deg": 14.912644810878081,
+       "tilt_peak_deg": 60.839299869511116,
+       "quad_tilt_peak_deg": 33.22274115311272,
+       "thr_peak": 0.8,
+       "yaw_peak_deg": 56.9066020272787,
+       "yaw_growth_deg_s": 0.35344532760268405
+      },
+      "margin_linex_v400": {
+       "cf_rms_mm": 990.9786293626878,
+       "cf_max_mm": 2294.3473494679124,
+       "reach_rms_mm": 719.462875041799,
+       "reach_mean_mm": -252.0840065074012,
+       "lag_s": 0.004241283571673035,
+       "rmse_t_mm": 1217.568010803476,
+       "headline_mm": 1710.4415044044867,
+       "band_max_mm": 2660.4481812446516,
+       "tilt_mean_deg": 41.63665004184452,
+       "tilt_peak_deg": 175.66021917184833,
+       "quad_tilt_peak_deg": 33.583481729580704,
+       "thr_peak": 0.8,
+       "yaw_peak_deg": 309.4336945929062,
+       "yaw_growth_deg_s": 7.116474198863673
+      }
+     },
+     "J": 1357.5895460093811,
+     "guards": [
+      "hover throttle 0.800",
+      "hover ring 2514 mm off the path",
+      "linex_v400 throttle 0.800",
+      "linex_v400 ring 2502 mm off the path",
+      "margin_linex_v400 throttle 0.800",
+      "margin_linex_v400 ring 2660 mm off the path"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 2.75,
+      "quan_c_ij": 11.0,
+      "quan_fc": 1.375,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 5.5,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 12.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "diverged": 59.85
+      },
+      "linex_v400": {
+       "diverged": 51.1
+      },
+      "margin_linex_v400": {
+       "cf_rms_mm": 986.646725459794,
+       "cf_max_mm": 2406.124673868217,
+       "reach_rms_mm": 683.0703347955614,
+       "reach_mean_mm": -290.7532875052477,
+       "lag_s": -0.07945723164316629,
+       "rmse_t_mm": 1186.421269581468,
+       "headline_mm": 1669.7170602553554,
+       "band_max_mm": 2788.5456582548427,
+       "tilt_mean_deg": 25.00435780545531,
+       "tilt_peak_deg": 89.86531976399267,
+       "quad_tilt_peak_deg": 31.24770217402297,
+       "thr_peak": 0.7482670612958026,
+       "yaw_peak_deg": 98.19410188267318,
+       "yaw_growth_deg_s": 0.24585423167020834
+      }
+     },
+     "J": Infinity,
+     "guards": [
+      "hover diverged at 59.9 s",
+      "linex_v400 diverged at 51.1 s",
+      "margin_linex_v400 ring 2789 mm off the path"
+     ]
+    },
+    {
+     "knobs": {
+      "quan_c_i": 2.75,
+      "quan_c_ij": 11.0,
+      "quan_fc": 1.375,
+      "quan_hc_m": 3.41,
+      "quan_k_i": 5.5,
+      "quan_k_ij": 5.5,
+      "quan_node_mass": 1.0,
+      "vel_k_att": 16.0,
+      "vel_kv": 4.0
+     },
+     "results": {
+      "hover": {
+       "err_rms_mm": 1039.2532526630328,
+       "err_first5_rms_mm": 51.76466661037323,
+       "band_max_mm": 2572.4126826096876,
+       "tilt_mean_deg": 57.67537760440203,
+       "tilt_peak_deg": 164.29229752934592,
+       "quad_tilt_peak_deg": 30.71941564477866,
+       "thr_peak": 0.7039600876983056,
+       "yaw_peak_deg": 151.85131841347078,
+       "yaw_growth_deg_s": 3.4299167128839625
+      },
+      "linex_v400": {
+       "cf_rms_mm": 964.7202663207178,
+       "cf_max_mm": 2272.4767378585516,
+       "reach_rms_mm": 755.1666898482464,
+       "reach_mean_mm": -302.08696185664587,
+       "lag_s": -0.04593872739294458,
+       "rmse_t_mm": 1202.8056111423437,
+       "headline_mm": 1719.8869561689642,
+       "band_max_mm": 2543.8552446762137,
+       "tilt_mean_deg": 52.06249738224346,
+       "tilt_peak_deg": 158.60832771134884,
+       "quad_tilt_peak_deg": 31.12851765944204,
+       "thr_peak": 0.7646240443453628,
+       "yaw_peak_deg": 832.4228664026663,
+       "yaw_growth_deg_s": 27.08939436715726
+      },
+      "margin_linex_v400": {
+       "cf_rms_mm": 840.2219439767795,
+       "cf_max_mm": 2084.8502850154273,
+       "reach_rms_mm": 635.4549841599331,
+       "reach_mean_mm": -337.8397906943694,
+       "lag_s": -0.05223245916028607,
+       "rmse_t_mm": 1022.2185963415358,
+       "headline_mm": 1475.6769281367126,
+       "band_max_mm": 2412.235113193196,
+       "tilt_mean_deg": 43.92980206146595,
+       "tilt_peak_deg": 115.9628286436827,
+       "quad_tilt_peak_deg": 34.22461206432524,
+       "thr_peak": 0.8,
+       "yaw_peak_deg": 575.4447515831788,
+       "yaw_growth_deg_s": 18.36005427612502
+      }
+     },
+     "J": 1719.8869561689642,
+     "guards": [
+      "hover ring 2572 mm off the path",
+      "linex_v400 ring 2544 mm off the path",
+      "margin_linex_v400 throttle 0.800",
+      "margin_linex_v400 ring 2412 mm off the path"
+     ]
+    }
+   ]
+  }
+ }
+}

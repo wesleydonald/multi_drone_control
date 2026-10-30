@@ -1,0 +1,47 @@
+# One variable from c_net_quan.yaml (card 2026-10-23_quan_exact, '## Line overshoot'): R5 a_expected zero.
+# Quan et al. exactly (card docs/experiments/2026-10-23_quan_exact.md; decisions 2026-10-23, Wesley ~21:45 and ~23:20):
+# after the hand-over each quad flies the paper's per-robot law (Eq. 3, 7-10; net_law quan,
+# dissipative_planner/quan_law.py) on world C (four_rigid_ground_rig_hubcom_L100.sdf). Flies only after the card's
+# critic and Wesley's frozen bars. The readings (quan_law.py R1-R10, the card's §3.1):
+#   R1 nodes: quan_nodes (algebraic = Eq. 3; dynamic = S2/S4 node masses, init.m's 1 kg)
+#   R2 k_d,i scales the node-node sums and the friction only; k_i, c_i outside it (Eq. 7 as typeset; S2 control1)
+#   R3 x_0 = q_0: the commanded path point on the node plane, a rigid leader (S2; init.m p00)
+#   R4 h_c: the node plane 3.41 m (3.41 cable lengths) above the load's commanded height (init.m: robot 1.0 m from
+#      the payload, node plane -12 against the payload's -8.5858)
+#   R5 a_expected: the path's commanded acceleration
+#   R6 f_i and g cancel in Eq. 10; the stand-in's thrust feed-forward carries the weight and a modelled pull
+#   R6c the pull split (Wesley 24 Oct): vertical (m_L/n) g (drone_mass 0.55 already holds rod and magnet),
+#      horizontal (m_L/n + 0.055) g cot phi along the rod's horizontal direction (0.055: magnet + half the rod)
+#   R7b v_d = the measured velocity + a_cmd dt (no accumulated state), a_cmd the acceleration feed-forward (S1); our
+#      velocity loop with no position term (vel_kp_pos 0) and no I-term (vel_ki 0)
+#   R8 r 2 m; the coefficients and vel_kv: the card's §3.3 search (23 Oct), its best point under R7b with
+#      algebraic nodes, the only reading that held the hover within the band offline; vel_k_att 8 (Wesley 24 Oct:
+#      16 drives a 2.6 Hz wobble, R2793 against R2795)
+#   R9 the law at the planner's 10 Hz
+#   R10 the ring's attitude never read (the load is a point)
+# World C's tilt rules off, as in our planner's arm: the trackers' ring-tilt drop at 180 deg never trips
+# (drop_on_loss stays on for the loss detector) and their 60 deg ring envelope is off (Wesley 23 Oct, twin only).
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_tilt_deg: 180.0
+payload_tilt_envelope: false
+traj_hold_s: 5.0
+net_hold_carry: true
+net_law: 'quan'
+quan_nodes: 'algebraic'
+quan_vcmd: 'measured'
+quan_aexp: 'zero'
+diss_ki_load: 0.0
+vel_kp_pos: 0.0
+vel_kv: 3.0
+vel_k_att: 8.0
+quan_k_ij: 0.5
+quan_c_ij: 0.25
+quan_k_i: 1.0
+quan_c_i: 1.0
+quan_fc: 0.5
+quan_node_mass: 1.0
+quan_rod_mass: 0.055
+quan_hc_m: 3.41
+quan_range_m: 2.0

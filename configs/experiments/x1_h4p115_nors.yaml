@@ -1,0 +1,107 @@
+criteria:
+  forbid_abort: false
+  min_payload_z: -1.0
+  min_peak_payload_z: 0.5
+description: 'X1 cell h4p115: h4 with the 28 Oct ring (1.15 kg, magnets r 0.204, plate faces 0.025, rest 0.013, inertia estimate
+  ixx 0.024 / izz 0.049) in four_rigid_ground_rig_3915_L100_p115 (tools/make_carry_worlds_p115.py). Arm no resize: resize_delay_s
+  999 (longer than the flight), the planner keeps the leaver in its model. card docs/experiments/2026-10-30_x1_release_ablation.md
+  (bars frozen 30 Oct ~12:50). Falsifier (B1): on both fleets the no-resize arm within 1 deg of tilt rise and 5 mm of dip
+  of ours.'
+events:
+- do: ARM
+  t: 3.0
+- do: TAKEOFF
+  t: 6.0
+- arg: 0.3 60
+  do: WAIT_LIFT
+  t: 8.0
+- arg: 1
+  do: RELEASE
+  t: 25.0
+- do: LAND
+  t: 45.0
+lab_env:
+  SIM_MOCAP_VEL_FILTER: slope
+  MDC_MOCAP_VEL_DRONES: 0,1,2,3
+fleet:
+  n_total: 4
+  num_drones: 4
+io_launch:
+  args:
+    detach: true
+    num_drones: 4
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    tether_tips: true
+    tether_len: 1.0
+  file: sim_io_launch.py
+launch:
+  args:
+    departed_land: true
+    attach_azimuths_deg: 330,270,210,90
+    attach_radius: 0.204
+    attach_z: 0.025
+    cable_len: 1.0
+    creep_vel: 0.2
+    drone_mass: 0.55
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.15
+    load_mass: 1.15
+    load_traj: hover
+    measure_rod_len: true
+    mode: dissipative
+    num_drones: 4
+    params_file: /home/wesley/multi_drone_control/configs/twin/s_chain_pair.yaml
+    payload_rest_z: 0.013
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    reconfig_mode: ocp
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.0
+    throttle_max: 0.8
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    departed_ground_idle: true
+    plan_sqp_iters: 5
+    plan_fast_refs: true
+    load_ixx: 0.024
+    load_izz: 0.049
+    resize_delay_s: 999.0
+  file: sim_control_launch.py
+  package: bringup
+name: x1_h4p115_nors
+timing:
+  duration_s: 135.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+world: four_rigid_ground_rig_3915_L100_p115.sdf
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    baseline:
+      pos:
+      - 2.0
+      - -4.6
+      - 2.9
+      look_at:
+      - 0.35
+      - 0.0
+      - 1.1
+      hfov_deg: 60.0
+      size:
+      - 1280
+      - 720

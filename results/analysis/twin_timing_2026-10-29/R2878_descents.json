@@ -1,0 +1,87 @@
+{
+ "descents": [
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 41.58,
+   "dur_s": 3.07,
+   "next": "APPROACH_ABOVE_TARGET",
+   "min_tip_above_target_cm": 3.6,
+   "err_median_cm": 2.7,
+   "err_at_restart_cm": 6.6,
+   "tip_speed_at_restart": 0.222,
+   "cause": "speed",
+   "tip_above_target_at_restart_cm": 4.0,
+   "radial_cm": -3.8,
+   "tangential_cm": 5.4
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 46.41,
+   "dur_s": 3.77,
+   "next": "ATTACH_READY",
+   "min_tip_above_target_cm": -3.2,
+   "err_median_cm": 2.7
+  },
+  {
+   "phase": "ATTACH_READY",
+   "t0": 50.18,
+   "dur_s": 7.93,
+   "next": "APPROACH_ABOVE_TARGET",
+   "min_tip_above_target_cm": -5.5,
+   "err_median_cm": 4.2,
+   "err_at_restart_cm": 7.0,
+   "tip_speed_at_restart": 0.105,
+   "cause": "unclear",
+   "tip_above_target_at_restart_cm": -3.8,
+   "radial_cm": -3.9,
+   "tangential_cm": 5.8
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 59.88,
+   "dur_s": 0.73,
+   "next": "APPROACH_ABOVE_TARGET",
+   "min_tip_above_target_cm": 20.3,
+   "err_median_cm": 6.5,
+   "err_at_restart_cm": 14.2,
+   "tip_speed_at_restart": 0.29,
+   "cause": "position",
+   "over8_s": 0.29,
+   "tip_drop_over8_cm": 4.5,
+   "ref_drop_over8_cm": 1.6,
+   "tip_above_target_at_restart_cm": 20.3,
+   "radial_cm": 2.6,
+   "tangential_cm": 14.0
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 62.74,
+   "dur_s": 0.84,
+   "next": "APPROACH_ABOVE_TARGET",
+   "min_tip_above_target_cm": 21.2,
+   "err_median_cm": 6.2,
+   "err_at_restart_cm": 12.3,
+   "tip_speed_at_restart": 0.194,
+   "cause": "position",
+   "over8_s": 0.13,
+   "tip_drop_over8_cm": 0.8,
+   "ref_drop_over8_cm": 0.5,
+   "tip_above_target_at_restart_cm": 21.2,
+   "radial_cm": -1.4,
+   "tangential_cm": 12.2
+  }
+ ],
+ "summary": {
+  "descents": 4,
+  "reached_bottom": 1,
+  "restarts_position": 2,
+  "restarts_speed": 1,
+  "contact": null,
+  "weld": null,
+  "give_up": 71.575,
+  "take_back": 71.575,
+  "deepest_cm": -5.5,
+  "max_ref_drop_over8_cm": 1.6,
+  "max_tip_drop_over8_cm": 4.5
+ }
+}

@@ -47,6 +47,8 @@ KEPT_COMMON = (
     'weld_radius', 'weld_velocity_clock', 'enable_obstacle_avoidance', 'partner',
     'partner_attached', 'partner_m2', 'partner_m2_part', 'partner_contact', 'contact_fold_seed', 'contact_still', 'proof_rules',
     'dry_hold',
+    # the co-motion proof's typed thresholds and the frozen-marker filter (docs/analysis/attach_gates_2026-10-30.md)
+    'comotion_d_ok', 'comotion_speed_window_s', 'comotion_lost', 'comotion_sep_xy', 'tip_skip_repeats',
     'partner_tilt_cut', 'tilt_slow_deg', 'partner_stuck_guard', 'warm_fault_not_live',
     'fc_disarm_land', 'welded_on_load')
 KEPT_SIM = ('legacy', 'sil', 'sim_interface', 'ff_cap_force', 'sim_thrust_map', 'sim_thrust_offset',

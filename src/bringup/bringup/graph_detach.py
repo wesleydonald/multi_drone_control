@@ -29,14 +29,18 @@ ladder: trackers, fleet manager and the dissipative planner after real_io_launch
 real_control's rig values (decisions 2026-10-03). A detach resizes the OCP and releases that
 drone's magnet on the same tick (reconfig_mode ocp, detach_magnet true).
 """
-from bringup.real_mode import (apply_rig_values, map_and_geometry, planner_options, planner_prefix,
-                               position_limit, rig_io, rig_magnet_latches, rig_thrust_ratio, tracker_drop_options,
+from bringup.real_mode import (apply_rig_values, map_and_geometry, payload_envelope_options, planner_options,
+                               planner_prefix, position_limit, rig_io, rig_magnet_latches, rig_thrust_ratio, tracker_drop_options,
                                truthy)
 from launch.actions import LogInfo
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
 from launch_ros.parameter_descriptions import ParameterValue
 from tracker.thrust_model import resolve_thrust_ratio
+
+# the network mode's net_law quan coefficients (card 2026-10-23_quan_exact)
+QUAN_KNOBS = ('quan_k_ij', 'quan_c_ij', 'quan_k_i', 'quan_c_i', 'quan_fc', 'quan_hc_m', 'quan_range_m', 'quan_v_max',
+              'quan_node_mass', 'quan_rod_mass', 'quan_centre_mass', 'quan_centre_kp', 'quan_centre_kd')
 
 PARENT_MODEL = 'lift_system'
 
@@ -79,7 +83,10 @@ def dissipative(context, launch_dir, profile_vals, network=False):
             'diss_ki_load': f('diss_ki_load'), 'diss_a_i_load_max': f('diss_a_i_load_max'),
             'diss_trim_share_weighted': b('diss_trim_share_weighted'), 'handover_blend_s': f('handover_blend_s'),
             'net_damp_relative': b('net_damp_relative'), 'net_twin_geometry': b('net_twin_geometry'),
-            'net_hold_carry': b('net_hold_carry')} if network else {})
+            'net_hold_carry': b('net_hold_carry'), 'net_law': LaunchConfiguration('net_law'),
+            'quan_nodes': LaunchConfiguration('quan_nodes'), 'quan_vcmd': LaunchConfiguration('quan_vcmd'),
+            'quan_aexp': LaunchConfiguration('quan_aexp'), 'quan_centre': LaunchConfiguration('quan_centre'),
+            **{k: f(k) for k in QUAN_KNOBS}} if network else {})
 
     # partner_m2 (multi_drone_control 2026-09-26): our stack on top of Tejen's M2 world
     # after his four drones have joined the ring. His per-drone stacks own the /drone_i
@@ -127,9 +134,13 @@ def dissipative(context, launch_dir, profile_vals, network=False):
                              'w_thr_ref': ParameterValue(LaunchConfiguration('w_thr_ref'), value_type=float),
                              'x0_relax_frac': ParameterValue(LaunchConfiguration('x0_relax_frac'), value_type=float),
                              'ref_time_shift': ParameterValue(LaunchConfiguration('ref_time_shift'), value_type=bool),
-                         **tracker_drop_options(context),
+                         **tracker_drop_options(context), **payload_envelope_options(context),
                          'ground_idle': ParameterValue(LaunchConfiguration('ground_idle'), value_type=bool),
                              'cable_accel_cap': ParameterValue(LaunchConfiguration('cable_accel_cap'), value_type=float),
+                             'cable_lp_hz': ParameterValue(LaunchConfiguration('cable_lp_hz'), value_type=float),
+                             'cable_lp_order': ParameterValue(LaunchConfiguration('cable_lp_order'), value_type=int),
+                             'cable_notch_hz': ParameterValue(LaunchConfiguration('cable_notch_hz'), value_type=float),
+                             'cable_notch_q': ParameterValue(LaunchConfiguration('cable_notch_q'), value_type=float),
                              'payload_rest_z': f('payload_rest_z'),
                              'takeoff_spool_s': f('takeoff_spool_s'),
                              'pose_timeout_s': ParameterValue(LaunchConfiguration('pose_timeout_s'), value_type=float),
@@ -184,9 +195,13 @@ def dissipative(context, launch_dir, profile_vals, network=False):
                          'w_thr_ref': ParameterValue(LaunchConfiguration('w_thr_ref'), value_type=float),
                          'x0_relax_frac': ParameterValue(LaunchConfiguration('x0_relax_frac'), value_type=float),
                          'ref_time_shift': ParameterValue(LaunchConfiguration('ref_time_shift'), value_type=bool),
-                         **tracker_drop_options(context),
+                         **tracker_drop_options(context), **payload_envelope_options(context),
                          'ground_idle': ParameterValue(LaunchConfiguration('ground_idle'), value_type=bool),
                          'cable_accel_cap': ParameterValue(LaunchConfiguration('cable_accel_cap'), value_type=float),
+                         'cable_lp_hz': ParameterValue(LaunchConfiguration('cable_lp_hz'), value_type=float),
+                         'cable_lp_order': ParameterValue(LaunchConfiguration('cable_lp_order'), value_type=int),
+                         'cable_notch_hz': ParameterValue(LaunchConfiguration('cable_notch_hz'), value_type=float),
+                         'cable_notch_q': ParameterValue(LaunchConfiguration('cable_notch_q'), value_type=float),
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'pose_timeout_s': ParameterValue(LaunchConfiguration('pose_timeout_s'), value_type=float),
@@ -353,6 +368,10 @@ def _sim_network_legacy(context, launch_dir, profile_vals):
                          **tracker_drop_options(context),
                          'ground_idle': ParameterValue(LaunchConfiguration('ground_idle'), value_type=bool),
                          'cable_accel_cap': ParameterValue(LaunchConfiguration('cable_accel_cap'), value_type=float),
+                         'cable_lp_hz': ParameterValue(LaunchConfiguration('cable_lp_hz'), value_type=float),
+                         'cable_lp_order': ParameterValue(LaunchConfiguration('cable_lp_order'), value_type=int),
+                         'cable_notch_hz': ParameterValue(LaunchConfiguration('cable_notch_hz'), value_type=float),
+                         'cable_notch_q': ParameterValue(LaunchConfiguration('cable_notch_q'), value_type=float),
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': kt,
@@ -455,6 +474,10 @@ def real_dissipative(context, launch_dir, profile_vals):
                          **tracker_drop_options(context),
                          'ground_idle': ParameterValue(LaunchConfiguration('ground_idle'), value_type=bool),
                          'cable_accel_cap': ParameterValue(LaunchConfiguration('cable_accel_cap'), value_type=float),
+                         'cable_lp_hz': ParameterValue(LaunchConfiguration('cable_lp_hz'), value_type=float),
+                         'cable_lp_order': ParameterValue(LaunchConfiguration('cable_lp_order'), value_type=int),
+                         'cable_notch_hz': ParameterValue(LaunchConfiguration('cable_notch_hz'), value_type=float),
+                         'cable_notch_q': ParameterValue(LaunchConfiguration('cable_notch_q'), value_type=float),
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': f('thrust_ratio'),

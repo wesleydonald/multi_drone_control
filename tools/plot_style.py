@@ -194,11 +194,14 @@ def thesis():
         'xtick.labelsize': 8,
         'ytick.labelsize': 8,
         'legend.fontsize': 8,
-        'legend.frameon': False,
+        'legend.frameon': True,              # Wesley 30 Oct: legends below the axes, framed
+        'legend.fancybox': True,
+        'legend.edgecolor': '0.75',
+        'legend.framealpha': 1.0,
         'legend.handlelength': 1.8,
         'axes.linewidth': 0.6,
-        'axes.spines.top': False,
-        'axes.spines.right': False,
+        'axes.spines.top': True,             # Wesley 30 Oct: a full box round every axes
+        'axes.spines.right': True,
         'axes.grid': False,
         'axes.labelpad': 3,
         'xtick.direction': 'out',
@@ -219,6 +222,18 @@ def thesis():
         'savefig.dpi': 300,
         'pdf.fonttype': 42,
     })
+
+
+def legend_below(fig, handles=None, labels=None, ncol=2, **kw):
+    """The thesis legend: one per figure, below every axes and outside them, framed, in ncol columns."""
+    if handles is None:
+        handles, labels = [], []
+        for ax in fig.axes:
+            for h, l in zip(*ax.get_legend_handles_labels()):
+                if l not in labels and not l.startswith('_'):
+                    handles.append(h)
+                    labels.append(l)
+    return fig.legend(handles, labels, loc='outside lower center', ncol=ncol, **kw)
 
 
 def panel_label(ax, letter, dx_pt=0, dy_pt=4):

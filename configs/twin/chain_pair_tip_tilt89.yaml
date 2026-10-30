@@ -1,0 +1,10 @@
+# 27 Oct twin only: chain_pair_tip.yaml with the trackers' tilt drop at 89 deg (with payload_tilt_envelope false: no tilt rule),
+# to see whether the loaded square-to-T release would recover if nothing dropped the ring
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 89.0
+int_k_xy: 0.0
+tip_detect_m: 0.04

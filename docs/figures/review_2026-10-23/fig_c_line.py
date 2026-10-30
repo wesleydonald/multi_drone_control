@@ -50,22 +50,19 @@ def line_run(rid):
 
 def main():
     S.setup()
-    fig = S.figure('full', 2.6)
+    fig = S.figure('full', 2.85)        # 2.6 in of panels plus the legend below
     axs = fig.subplots(2, 1, sharex=True, sharey=True)
     dist = None
     for ax, rids, col, text in ((axs[0], OURS, S.BLUE, 'our planner'),
                                 (axs[1], NET, S.RED, 'network')):
-        for rid in rids:
+        for k, rid in enumerate(rids):
             u, e, dist, s = line_run(rid)
-            ax.plot(u, 1000 * e, color=col, lw=S.LW_CTX, alpha=0.9)
+            ax.plot(u, 1000 * e, color=col, lw=S.LW_CTX, alpha=0.9, label=text if k == 0 else None)
             print(rid, s['arm'], f"cf {s['cf_rms_mm']:.1f} rms / {s['cf_max_mm']:.1f} max mm, "
                   f"reach {s['reach_mean_mm']:.1f} mm, u {u.min():.3f}..{u.max():.3f}")
         for x in (0.0, dist):
             S.ref_line(ax, x, horizontal=False)
-        ax.annotate(text, xy=(dist, 1.0), xycoords=('data', 'axes fraction'), xytext=(-4, -1),
-                    textcoords='offset points', ha='right', va='top', fontsize=8, color=col)
-    axs[0].annotate('ends of the line', xy=(0.0, 1.0), xycoords=('data', 'axes fraction'), xytext=(4, -1),
-                    textcoords='offset points', ha='left', va='top', fontsize=8, color=S.GREY)
+    ends, = axs[0].plot([], [], **S.REF)
     axs[1].set_xlabel(r'Ring position along the line (m)')
     axs[1].set_xlim(-0.05, dist + 0.05)
     axs[1].set_ylim(0, 30)
@@ -74,6 +71,8 @@ def main():
     fig.supylabel(r'Distance from the line (mm)', fontsize=9)
     S.ps.panel_label(axs[0], 'a')
     S.ps.panel_label(axs[1], 'b')
+    (h_ours,), (h_net,) = (ax.get_legend_handles_labels()[0] for ax in axs)
+    S.ps.legend_below(fig, [h_ours, h_net, ends], ['our planner', 'network', 'ends of the line'], ncol=3)
     S.save(fig, 'fig_c_line')
 
 

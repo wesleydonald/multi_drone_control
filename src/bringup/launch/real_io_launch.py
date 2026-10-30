@@ -78,6 +78,9 @@ def _args():
         DeclareLaunchArgument('mocap_extra_bodies', default_value='',
                               description="more Motive bodies, '<id>:/<topic>,...' (combined M1: his ball "
                                           "6:/pickup/motion_capture_state); '' = none"),
+        DeclareLaunchArgument('mocap_vel_drones', default_value='',
+                              description="drones the mocap velocity filter covers, comma list; '' = every drone "
+                                          "(MDC_MOCAP_VEL_DRONES, when set, wins)"),
         DeclareLaunchArgument('rviz', default_value='true',
                               description='open RViz2 (drone models + payload + ArmPanel)'),
         # The STL is the real TBS frame in mm; 0.001 renders it at its true 209 mm
@@ -150,6 +153,9 @@ def launch_setup(context, *args, **kwargs):
     extra = LaunchConfiguration('mocap_extra_bodies').perform(context).strip()
     if extra:
         mocap_params['extra_bodies'] = extra
+    vel = LaunchConfiguration('mocap_vel_drones').perform(context).strip()
+    if vel:
+        mocap_params['vel_filter_drones'] = [int(v) for v in vel.split(',')]
     mocap_params['publish_drone_tf'] = False     # RViz follows fleet_viz's drone_<i>_mocap frames (14 Oct load cut)
     nodes.append(Node(
         package='drone_communication',

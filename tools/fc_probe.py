@@ -8,6 +8,10 @@ props OFF, radio link up.
                                     # panel MAGNET toggle and see which channel jumps
     tools/fc_probe.py cli           # dump the mode (aux) table, PINIO setup and receiver
                                     # protocol from the CLI, decoded
+    tools/fc_probe.py armcheck --tx=/dev/QUAD1 --seconds=60
+                                    # read-only, once a second: what blocks arming, the attitude
+                                    # the FC believes, its raw accelerometer tilt, the gyro at rest;
+                                    # --tx holds the radio link (disarmed) so RXLOSS hides nothing
 
 Channel naming: Betaflight counts CRSF channels 1..16 as ROLL PITCH THR YAW AUX1..AUX12.
 ELRSCommand.channel_k maps to packet slot k (k<=3) or k+1 (k>=4), i.e. CRSF channel k+1
@@ -130,7 +134,82 @@ def cli_dump(port):
     print('\nFC is now in CLI mode: power-cycle it before flying or before `rc`.')
 
 
+# ── arm check (read-only) ──────────────────────────────────────────────────────
+# Betaflight 4.3 armingDisableFlags, bit order
+ARM_FLAGS = ['NOGYRO', 'FAILSAFE', 'RXLOSS', 'BADRX', 'BOXFAILSAFE', 'RUNAWAY', 'CRASH', 'THROTTLE', 'ANGLE',
+             'BOOTGRACE', 'NOPREARM', 'LOAD', 'CALIB', 'CLI', 'CMS', 'BST', 'MSP', 'PARALYZE', 'GPS', 'RESCUE_SW',
+             'RPMFILTER', 'REBOOT_REQD', 'DSHOT_BBANG', 'NO_ACC_CAL', 'MOTOR_PROTO', 'ARMSWITCH']
+
+
+def arming_flags(status_ex):
+    """Names of the set armingDisableFlags in an MSP_STATUS_EX reply."""
+    n = status_ex[15]                              # bytes of extra flight-mode flags after the fixed 16
+    i = 16 + n
+    count, flags = status_ex[i], struct.unpack('<I', status_ex[i + 1:i + 5])[0]
+    return [ARM_FLAGS[b] if b < len(ARM_FLAGS) else f'bit{b}' for b in range(min(count, 32)) if flags >> b & 1]
+
+
+def tx_hold_disarmed(tx_port, stop):
+    """Keep the link up with a disarmed frame (sticks centred, throttle and every aux low) every 10 ms."""
+    import os
+    import numpy as np
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src', 'drone_communication'))
+    from drone_communication.elrs_interface import channelsCrsfToChannelsPacket
+    tx = serial.Serial(tx_port, 921600, timeout=0.01)
+    pkt = np.full(16, 173, dtype=np.uint16)
+    pkt[0] = pkt[1] = pkt[3] = 993
+    frame = channelsCrsfToChannelsPacket(pkt)
+    while not stop.is_set():
+        tx.write(frame)
+        if tx.in_waiting:
+            tx.read(tx.in_waiting)
+        time.sleep(0.01)
+    tx.close()
+
+
+def arm_check(port, tx_port=None, seconds=60.0):
+    """Every second: the FC's arming-disable flags, the attitude it believes, the tilt its raw accelerometer gives
+    and the gyro at rest. Nothing is written to the FC. With tx_port, our TX holds the link (disarmed) so RXLOSS
+    does not hide the rest."""
+    import math
+    import threading
+    stop = threading.Event()
+    if tx_port:
+        threading.Thread(target=tx_hold_disarmed, args=(tx_port, stop), daemon=True).start()
+    ser = serial.Serial(port, BAUD, timeout=0.05)
+    time.sleep(0.5)
+    if msp_request(ser, 1) is None:
+        sys.exit('no MSP reply: is the FC in CLI mode (power-cycle it), the web app connected, or the port wrong?')
+    print('   t  FC roll/pitch (deg)  FC tilt   acc tilt  |acc| g   gyro dps (x,y,z)   arming blocked by')
+    t0 = time.time()
+    try:
+        while time.time() - t0 < seconds:
+            st, att, imu = msp_request(ser, 150), msp_request(ser, 108), msp_request(ser, 102)
+            if not (st and att and imu):
+                continue
+            roll, pitch = (v / 10.0 for v in struct.unpack('<2h', att[:4]))
+            tilt = math.degrees(math.acos(max(-1.0, min(1.0, math.cos(math.radians(roll)) * math.cos(math.radians(pitch))))))
+            a = struct.unpack('<9h', imu[:18])
+            ax, ay, az = a[0:3]
+            norm = math.sqrt(ax * ax + ay * ay + az * az) or 1.0
+            acc_tilt = math.degrees(math.acos(max(-1.0, min(1.0, az / norm))))
+            flags = arming_flags(st)
+            print(f'{time.time() - t0:4.0f}  {roll:+7.1f} {pitch:+7.1f}      {tilt:5.1f}    {acc_tilt:5.1f}    '
+                  f'{norm / 512:4.2f}   {a[3]:+4d} {a[4]:+4d} {a[5]:+4d}     {" ".join(flags) or "nothing (would arm)"}',
+                  flush=True)
+            time.sleep(max(0.0, 1.0 - (time.time() - t0) % 1.0))
+    except KeyboardInterrupt:
+        pass
+    stop.set()
+
+
 if __name__ == '__main__':
-    if len(sys.argv) < 2 or sys.argv[1] not in ('rc', 'cli'):
+    if len(sys.argv) < 2 or sys.argv[1] not in ('rc', 'cli', 'armcheck'):
         sys.exit(__doc__)
-    (rc_watch if sys.argv[1] == 'rc' else cli_dump)(port_from_args(sys.argv[2:]))
+    if sys.argv[1] == 'armcheck':
+        rest = sys.argv[2:]
+        tx = next((a.split('=', 1)[1] for a in rest if a.startswith('--tx=')), None)
+        secs = float(next((a.split('=', 1)[1] for a in rest if a.startswith('--seconds=')), 60))
+        arm_check(port_from_args(rest), tx, secs)
+    else:
+        (rc_watch if sys.argv[1] == 'rc' else cli_dump)(port_from_args(sys.argv[2:]))

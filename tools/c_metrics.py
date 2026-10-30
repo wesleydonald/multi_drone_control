@@ -26,6 +26,10 @@ A run (card §5): a fleet abort, ring tilt over 30 deg on 2 samples (the drop ru
 on), a quad over 60 deg, or a drop, loss or envelope line in the log before the window ends is a LOSS: the method
 failed, and the run ranks behind every run of the other arm that did not. VOID is for plumbing only: under 95 % of
 the window's rows (with no loss), or a network arm with no hand-over; a VOID run is re-flown once.
+World C (card docs/experiments/2026-10-23_quan_exact.md; Wesley 23 Oct): the cables meet at the ring's centre of mass,
+so its tilt is free and the tilt rule is off for both arms; instead the ring leaving a band of BAND_LOSS_M around the
+path (the hover's target; the line, its ends included) for BAND_HOLD_S after the hand-over is a LOSS. The paper's law
+as printed flies as the arm 'quan' (net_law quan).
 """
 import csv
 import datetime
@@ -46,6 +50,10 @@ import metrics as M  # noqa: E402
 import run_logs  # noqa: E402
 
 CARD = 'docs/experiments/2026-10-23_paper_method_compare.md'
+QUAN_CARD = 'docs/experiments/2026-10-23_quan_exact.md'
+# world C: nothing holds the ring's tilt there, so the band rule replaces the tilt rule (QUAN_CARD)
+TILT_FREE_WORLDS = ('four_rigid_ground_rig_hubcom_L100.sdf',)
+BAND_LOSS_M, BAND_HOLD_S = 0.30, 1.0
 HOVER_S = 60.0
 FIRST_S = 5.0
 DROP_TILT_DEG = 30.0       # the trackers' drop rule (2 samples), applied to both arms
@@ -56,8 +64,9 @@ LOG_FAULTS = ('DROP AND LAND', 'ENVELOPE FAULT', 'UNANNOUNCED DETACH', 'FLEET AB
 # a difference is stated only when every run of one arm beats every run of the other by at least this much (card §5,
 # PROPOSED): the larger of MIN_EFFECT_MM and MIN_EFFECT_FRAC of the better arm's mean
 MIN_EFFECT_MM, MIN_EFFECT_FRAC = 1.0, 0.10
-ARMS = ('planner', 'port', 'paper')
-ARM_TEXT = {'planner': 'our planner', 'port': "the network, our port of Quan et al. (damping against still nodes)",
+ARMS = ('planner', 'port', 'paper', 'quan')
+ARM_TEXT = {'quan': 'Quan et al. as printed (the per-robot law, Eq. 3, 7-10)',
+'planner': 'our planner', 'port': "the network, our port of Quan et al. (damping against still nodes)",
             'paper': "the network, the paper's form (Eq. 9 damping, Eq. 10 acceleration)",
             'rel': 'the network, Eq. 9 damping only', 'lean': 'the network, Eq. 10 acceleration only'}
 
@@ -101,9 +110,11 @@ def _true(v):
 
 
 def arm_of(p):
-    """planner / port / paper (rel, lean: one half of the paper's form) from the parameters that flew."""
+    """planner / port / paper (rel, lean: one half of the paper's form) / quan from the parameters that flew."""
     if not _true(p.get('auto_network_handover', False)) and str(p.get('mode', '')) != 'network':
         return 'planner'
+    if str(p.get('net_law', 'port')).strip().lower() == 'quan':
+        return 'quan'
     rel, lean = _true(p.get('net_damp_relative', False)), _true(p.get('net_traj_lean', False))
     return {(False, False): 'port', (True, True): 'paper', (True, False): 'rel', (False, True): 'lean'}[(rel, lean)]
 
@@ -192,9 +203,12 @@ def score(d):
     settle = float(p.get('auto_handover_settle_s', 1.5) or 1.5)
     t_ho_ev = _first(ev, 'NET_HANDOVER')
     t_ho = t_ho_ev if (arm != 'planner' and t_ho_ev is not None) else t_top + settle
+    world = str(_json(os.path.join(d, 'manifest.json')).get('world', ''))
+    tilt_free = world in TILT_FREE_WORLDS
     r = {'run': os.path.basename(d.rstrip('/')).split('_')[0], 'dir': d,
          'config': os.path.basename(d.rstrip('/')).split('_sim_gz_')[-1], 'arm': arm, 'case': case,
-         't_top': t_top, 't_handover': t_ho, 'notes': []}
+         't_top': t_top, 't_handover': t_ho, 'tilt_free': tilt_free,
+         'card': QUAN_CARD if tilt_free or arm == 'quan' else CARD, 'notes': []}
     if arm != 'planner' and t_ho_ev is not None and abs(t_ho_ev - (t_top + settle)) > HANDOVER_TOL_S:
         r['notes'].append(f'NET_HANDOVER {t_ho_ev - t_top:.2f} s after the top (expected {settle:.1f})')
 
@@ -212,6 +226,7 @@ def score(d):
         win = _window(t, w0, w1)
         e = np.linalg.norm(act - tgt0, axis=1)
         first = _window(t, w0, w0 + FIRST_S)
+        band = e
         r.update(err_rms_mm=1000 * _rms(e[win]), err_first5_rms_mm=1000 * _rms(e[first]),
                  z_err_mean_mm=1000 * float(np.nanmean((act[:, 2] - tgt0[2])[win])),
                  err_own_rms_mm=1000 * _rms(np.linalg.norm(act - ref, axis=1)[win]))
@@ -243,6 +258,7 @@ def score(d):
             reach = M.turnaround_reach(t, act[:, 0], t_p0, T, x0, x0 + dist, t_end=w1)
             return cf, reach, np.array([x[2] for x in reach]) if reach else np.array([math.nan])
         cf, reach, rs = path(own0[0] - off[0], ref[:, 1] - off[1], ref[:, 2] - off[2])
+        band = M.segment_error(act, own0[0] - off[0], own0[0] - off[0] + dist, ref[:, 1] - off[1], ref[:, 2] - off[2])
         cf_own, _, rs_own = path(own0[0], ref[:, 1], ref[:, 2])
         ext = _window(t, w0 - 1.0, w1 + 1.0)
         tk, xk = M.schedule_knots(t, ref[:, :2], ext)
@@ -267,6 +283,16 @@ def score(d):
     thr = np.nanmax(np.column_stack([run[f'd{i}_thr'] for i in range(n)]), axis=1) if n else np.zeros(t.size)
     r.update(window=[w0, w1], tilt_mean_deg=float(np.nanmean(tilt[win])), tilt_peak_deg=float(np.nanmax(tilt[win])),
              quad_tilt_peak_deg=float(np.nanmax(quad_tilt[win])), thr_peak=float(np.nanmax(thr[win])))
+    if tilt_free and n > 1 and np.any(win) and all(f'd{i}_{c}' in run for i in range(n) for c in 'xy'):
+        dxy = np.stack([run[[f'd{i}_x', f'd{i}_y']].to_numpy() for i in range(n)], axis=1)[win]
+        r['centroid_offset_rms_mm'] = 1000 * _rms(np.linalg.norm(act[win, :2] - np.nanmean(dxy, axis=1), axis=1))
+        pairs = [np.linalg.norm(dxy[:, i] - dxy[:, j], axis=1) for i in range(n) for j in range(i + 1, n)]
+        r['shape_spread_pct'] = 100 * max(float(np.nanstd(p) / np.nanmean(p)) for p in pairs)
+        ten = rod_tensions(run, p, act, n)
+        if ten is not None:
+            tw = ten[win]
+            r['tension_spread_pct'] = 100 * float(np.nanmean((np.nanmax(tw, axis=1) - np.nanmin(tw, axis=1))
+                                                             / np.maximum(np.nanmean(tw, axis=1), 1e-3)))
     if all(f'payload_q{c}' in run for c in 'wxyz') and np.any(win):
         # the ring's yaw from where it was at the window's start: the network's formation turns with it, a mode
         # network_tune.py found growing at today's gains (card)
@@ -288,10 +314,16 @@ def score(d):
     aborts = [x for x, name, _ in ev if name == 'FLEET_ABORT' and x <= w1]
     if aborts:
         lost.append(f'fleet abort at {aborts[0]:.1f} s')
-    k_rule = np.convolve((tilt > DROP_TILT_DEG).astype(int), [1, 1], 'valid') >= 2
-    early = _window(t, t_top - 30.0, w1)[1:]
-    if np.any(k_rule & early):
-        lost.append(f'ring tilt over {DROP_TILT_DEG:.0f} deg at {float(t[1:][k_rule & early][0]):.1f} s')
+    if tilt_free:
+        r['notes'].append('world C: the band rule, no tilt rule')
+        held = _held(t, _window(t, t_ho, w1) & (band > BAND_LOSS_M), BAND_HOLD_S)
+        if held is not None:
+            lost.append(f'ring over {1000 * BAND_LOSS_M:.0f} mm off the path for {BAND_HOLD_S:.0f} s at {held:.1f} s')
+    else:
+        k_rule = np.convolve((tilt > DROP_TILT_DEG).astype(int), [1, 1], 'valid') >= 2
+        early = _window(t, t_top - 30.0, w1)[1:]
+        if np.any(k_rule & early):
+            lost.append(f'ring tilt over {DROP_TILT_DEG:.0f} deg at {float(t[1:][k_rule & early][0]):.1f} s')
     if np.any((quad_tilt > QUAD_TILT_DEG) & _window(t, t_top - 30.0, w1)):
         lost.append(f'a quad over {QUAD_TILT_DEG:.0f} deg')
     faults = _log_faults(d)
@@ -313,6 +345,19 @@ def score(d):
     r['valid'] = not void
     r['why'] = void
     return r
+
+
+def _held(t, flag, hold_s):
+    """The first time `flag` has held without a break for hold_s, or None."""
+    t0 = None
+    for ti, f in zip(t, flag):
+        if not f:
+            t0 = None
+        elif t0 is None:
+            t0 = ti
+        elif ti - t0 >= hold_s:
+            return float(ti)
+    return None
 
 
 def _rms(x):
@@ -345,8 +390,40 @@ METRICS = {'hover': [('err_rms_mm', '3-D error from the hand-over, RMS', '{:.1f}
                     ('solve_p50_ms', 'tracker solve, median', '{:.1f} ms')]}
 
 
-def metric_list(case):
-    return METRICS['hover' if case == 'hover' else 'line'] + METRICS['both']
+# world C only (QUAN_CARD), reported: the ring under the quads' centroid (geometry with equal elevations, not their
+# Theorem 2), the formation keeping its shape (Theorem 1), and the load sharing of their Fig. 3D from each rod's
+# estimated tension (the twin logs none)
+METRICS['world_c'] = [('centroid_offset_rms_mm', "ring off the quads' centroid, horizontal, RMS", '{:.1f} mm'),
+                      ('shape_spread_pct', 'quad-quad distances, largest std over mean', '{:.2f} %'),
+                      ('tension_spread_pct', 'estimated rod tensions, (max - min) over mean, mean', '{:.1f} %')]
+TWIN_KT, TWIN_V_REF, TWIN_SLOPE = 35.2, 23.5, 0.022
+
+
+def rod_tensions(run, p, act, n):
+    """Each rod's tension (N, rows x n) estimated from the logged throttle through the twin's affine map (the quad's
+    own sim_thrust_offset at the 23.8 V pack it starts on), its tilt and its vertical acceleration:
+    t_i u_z,i = T_i cos(tilt_i) - m (a_z,i + g), u_i the measured ring-to-quad line. None without the columns."""
+    cols = [f'd{i}_{c}' for i in range(n) for c in ('thr', 'tilt_deg', 'vz', 'z', 'x', 'y')]
+    if not all(c in run for c in cols):
+        return None
+    m = float(p.get('drone_mass', 0.55) or 0.55)
+    offs = [float(v) for v in str(p.get('sim_thrust_offset', '') or '').split(',') if v.strip()]
+    offs = (offs * n)[:n] if offs else [float(p.get('thrust_offset', 0.185) or 0.185)] * n
+    v0 = float(p.get('sim_pack_v0', 23.8) or 23.8)
+    t = run.t.to_numpy()
+    out = []
+    for i in range(n):
+        thrust = m * TWIN_KT * (run[f'd{i}_thr'].to_numpy() - offs[i] - TWIN_SLOPE * (TWIN_V_REF - v0))
+        az = np.gradient(run[f'd{i}_vz'].to_numpy(), t)
+        d = np.c_[run[f'd{i}_x'], run[f'd{i}_y'], run[f'd{i}_z']] - act
+        uz = d[:, 2] / np.maximum(np.linalg.norm(d, axis=1), 1e-6)
+        out.append((thrust * np.cos(np.radians(run[f'd{i}_tilt_deg'].to_numpy())) - m * (az + 9.81))
+                   / np.maximum(uz, 0.05))
+    return np.column_stack(out)
+
+
+def metric_list(case, world_c=False):
+    return METRICS['hover' if case == 'hover' else 'line'] + METRICS['both'] + (METRICS['world_c'] if world_c else [])
 
 
 def _fmt(f, v):
@@ -356,10 +433,11 @@ def _fmt(f, v):
 def registry_row(r):
     """run,date,config,card,variable,baseline,metric,value,repeat_of,verdict,reviewer,notes as one LF CSV line."""
     import io
-    ms = metric_list(r['case'])
-    date = os.path.basename(os.path.dirname(os.path.abspath(r['dir'])))
+    ms = metric_list(r['case'], r.get('tilt_free', False))
+    date =os.path.basename(os.path.dirname(os.path.abspath(r['dir'])))
     variable = f"{ARM_TEXT.get(r['arm'], r['arm'])}; {r['case']}"
-    baseline = '' if r['arm'] == 'planner' else f"c_pl_{r['case']}_L100 (our planner)"
+    pl = 'c_pl_hubcom' if r.get('tilt_free') else 'c_pl'
+    baseline = '' if r['arm'] == 'planner' else f"{pl}_{r['case']}_L100 (our planner)"
     value = ' / '.join(_fmt(f, r.get(k)) or '-' for k, _, f in ms)
     verdict = ('VOID (card rule: ' + '; '.join(r['why']) + ')' if not r['valid']
                else 'LOSS (card rule: ' + '; '.join(r['lost']) + ')' if r.get('lost') else 'valid (card rule)')
@@ -368,7 +446,7 @@ def registry_row(r):
                          and np.isfinite(r.get('datum_shift_mm', math.nan)) else []))
     buf = io.StringIO()
     csv.writer(buf, lineterminator='\n').writerow(
-        [r['run'], date, r['config'], CARD, variable, baseline, ' / '.join(name for _, name, _ in ms), value, '',
+        [r['run'], date, r['config'], r.get('card', CARD), variable, baseline, ' / '.join(name for _, name, _ in ms), value, '',
          verdict, '', notes])
     return buf.getvalue()
 
@@ -406,7 +484,8 @@ def table(rows):
         for a in arms:
             mine = [r for r in rr if r['arm'] == a]
             ok = [r for r in mine if not r.get('lost')]
-            cells[case][a] = {k: _cell([r.get(k) for r in ok]) for k, _, _ in metric_list(case)}
+            cells[case][a] = {k: _cell([r.get(k) for r in ok])
+                              for k, _, _ in metric_list(case, any(r.get('tilt_free') for r in rr))}
             cells[case][a]['runs'] = dict(n=len(mine), lost=len(mine) - len(ok))
 
         def ranked(a, k):
@@ -450,7 +529,7 @@ def markdown(cells, beats):
         out.append('|---|' + '---|' * len(arms))
         out.append('| runs (lost) | ' + ' | '.join(f"{arms[a]['runs']['n']} ({arms[a]['runs']['lost']})"
                                                 for a in arms) + ' |')
-        for k, name, f in metric_list(case):
+        for k, name, f in metric_list(case, any('centroid_offset_rms_mm' in arms[a] for a in arms)):
             row = []
             for a in arms:
                 c = arms[a][k]

@@ -157,10 +157,10 @@ def _startup_block():
     return compile(ast.Module(body=init.body[start:stop], type_ignores=[]), 'main.py', 'exec')
 
 
-def _start(profile, logs):
+def _start(profile, logs, **extra):
     logger = SimpleNamespace(**{lvl: (lambda m, lvl=lvl: logs.append((lvl, m)))
                                 for lvl in ('info', 'warn', 'fatal')})
-    params = {} if profile is None else {'mpc_profile': profile}
+    params = ({} if profile is None else {'mpc_profile': profile}) | extra
     node = SimpleNamespace(
         declare_parameter=lambda name, default: SimpleNamespace(value=params.get(name, default)),
         get_logger=lambda: logger)
@@ -193,3 +193,25 @@ def test_the_solver_and_the_mode_switch_weights_come_from_the_same_profile():
     assert text.count('mpc_profile=self.mpc_profile') == 2      # the OCP and the mode matrices
     acados_text = (SRC / 'acados.py').read_text()
     assert acados_text.count('mpc_profile=mpc_profile') == 2    # the weights and the cache key
+
+
+def test_command_execution_follows_the_profile_unless_typed():
+    """mpc_command_execution (29 Oct, Tejen's review): 'partial_step' under oct10 sends the elapsed-interval command
+    with the oct10 weights and bounds; untyped, each profile keeps its own send path and its one log line."""
+    logs = []
+    node = _start('oct10', logs, mpc_command_execution='partial_step')
+    assert (node.mpc_profile, node.mpc_partial_step_execution) == ('oct10', True)
+    assert [lvl for lvl, _ in logs] == ['info', 'warn'] and 'partial_step' in logs[1][1]
+    logs = []
+    node = _start('oct14', logs, mpc_command_execution='endpoint')
+    assert (node.mpc_profile, node.mpc_partial_step_execution) == ('oct14', False)
+    logs = []
+    node = _start('oct10', logs, mpc_command_execution='profile')
+    assert node.mpc_partial_step_execution is False and [lvl for lvl, _ in logs] == ['info']
+
+
+def test_an_unknown_command_execution_is_refused_loudly():
+    logs = []
+    with pytest.raises(ValueError, match='mpc_command_execution'):
+        _start('oct10', logs, mpc_command_execution='elapsed')
+    assert logs[-1][0] == 'fatal'

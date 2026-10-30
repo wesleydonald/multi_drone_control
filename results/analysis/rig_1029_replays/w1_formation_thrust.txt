@@ -1,0 +1,114 @@
+bias per quad {1: -0.005, 2: -0.006, 3: -0.024, 4: -0.022} gain correction 0.11 per kg
+rms on the calibration set 0.019 -> 0.012
+
+# formation table
+1.15 kg      square 0/3/6/9                     p 0 t  3.26 N  model 0.634 / 0.667  cal 0.620 / 0.653
+1.15 kg      square 0/3/6/9                     p 3 t  3.26 N  model 0.634 / 0.667  cal 0.620 / 0.653
+1.15 kg      square 0/3/6/9                     p 6 t  3.26 N  model 0.634 / 0.667  cal 0.620 / 0.653
+1.15 kg      square 0/3/6/9                     p 9 t  3.26 N  model 0.634 / 0.667  cal 0.620 / 0.653
+1.15 kg      four 3/7/9/11 (after the attach)   p 3 t  5.07 N  model 0.723 / 0.756  cal 0.728 / 0.761
+1.15 kg      four 3/7/9/11 (after the attach)   p 7 t  2.89 N  model 0.617 / 0.650  cal 0.598 / 0.631
+1.15 kg      four 3/7/9/11 (after the attach)   p 9 t  2.17 N  model 0.582 / 0.615  cal 0.556 / 0.589
+1.15 kg      four 3/7/9/11 (after the attach)   p11 t  2.89 N  model 0.617 / 0.650  cal 0.598 / 0.631
+1.15 kg      triangle 3/11/7                    p 3 t  4.34 N  model 0.688 / 0.721  cal 0.685 / 0.718
+1.15 kg      triangle 3/11/7                    p11 t  4.34 N  model 0.688 / 0.721  cal 0.685 / 0.718
+1.15 kg      triangle 3/11/7                    p 7 t  4.34 N  model 0.688 / 0.721  cal 0.685 / 0.718
+1.15 kg      T 0/3/6                            p 0 t  6.51 N  model 0.796 / 0.829  cal 0.816 / 0.849
+1.15 kg      T 0/3/6                            p 3 t  0.10 N  model 0.485 / 0.518  cal 0.438 / 0.471
+1.15 kg      T 0/3/6                            p 6 t  6.51 N  model 0.796 / 0.829  cal 0.816 / 0.849
+1.15 kg      pair 0/6                           p 0 t  6.51 N  model 0.796 / 0.829  cal 0.816 / 0.849
+1.15 kg      pair 0/6                           p 6 t  6.51 N  model 0.796 / 0.829  cal 0.816 / 0.849
+0.86 kg M2A  square 0/3/6/9                     p 0 t  2.44 N  model 0.594 / 0.627  cal 0.571 / 0.604
+0.86 kg M2A  square 0/3/6/9                     p 3 t  2.44 N  model 0.594 / 0.627  cal 0.571 / 0.604
+0.86 kg M2A  square 0/3/6/9                     p 6 t  2.44 N  model 0.594 / 0.627  cal 0.571 / 0.604
+0.86 kg M2A  square 0/3/6/9                     p 9 t  2.44 N  model 0.594 / 0.627  cal 0.571 / 0.604
+0.86 kg M2A  four 3/7/9/11 (after the attach)   p 3 t  3.79 N  model 0.660 / 0.693  cal 0.651 / 0.684
+0.86 kg M2A  four 3/7/9/11 (after the attach)   p 7 t  2.16 N  model 0.581 / 0.614  cal 0.555 / 0.588
+0.86 kg M2A  four 3/7/9/11 (after the attach)   p 9 t  1.62 N  model 0.556 / 0.589  cal 0.524 / 0.557
+0.86 kg M2A  four 3/7/9/11 (after the attach)   p11 t  2.16 N  model 0.581 / 0.614  cal 0.555 / 0.588
+0.86 kg M2A  triangle 3/11/7                    p 3 t  3.25 N  model 0.634 / 0.667  cal 0.619 / 0.652
+0.86 kg M2A  triangle 3/11/7                    p11 t  3.25 N  model 0.634 / 0.667  cal 0.619 / 0.652
+0.86 kg M2A  triangle 3/11/7                    p 7 t  3.25 N  model 0.634 / 0.667  cal 0.619 / 0.652
+0.86 kg M2A  T 0/3/6                            p 0 t  4.87 N  model 0.714 / 0.747  cal 0.716 / 0.749
+0.86 kg M2A  T 0/3/6                            p 3 t  0.10 N  model 0.485 / 0.518  cal 0.438 / 0.471
+0.86 kg M2A  T 0/3/6                            p 6 t  4.87 N  model 0.714 / 0.747  cal 0.716 / 0.749
+0.86 kg M2A  pair 0/6                           p 0 t  4.87 N  model 0.714 / 0.747  cal 0.716 / 0.749
+0.86 kg M2A  pair 0/6                           p 6 t  4.87 N  model 0.714 / 0.747  cal 0.716 / 0.749
+
+# per flight: first and last bin per quad
+h4f_3   square                 Q1 p 0 66-70 s z0.98 tilt 1.3 el 59.8 | start V 23.5 meas 0.624 p95 0.635 model 0.634 cal 0.629 | end V 23.5 meas 0.624 model 0.634
+h4f_3   square                 Q2 p 3 66-70 s z0.98 tilt 1.3 el 60.2 | start V 23.1 meas 0.642 p95 0.654 model 0.643 cal 0.637 | end V 23.1 meas 0.642 model 0.643
+h4f_3   square                 Q3 p 6 66-70 s z0.98 tilt 1.3 el 61.0 | start V 23.2 meas 0.628 p95 0.642 model 0.641 cal 0.616 | end V 23.2 meas 0.628 model 0.641
+h4f_3   square                 Q4 p 9 66-70 s z0.98 tilt 1.3 el 60.5 | start V 23.4 meas 0.608 p95 0.620 model 0.636 cal 0.614 | end V 23.4 meas 0.608 model 0.636
+f4      square                 Q1 p 0 70-74 s z0.97 tilt 2.6 el 59.9 | start V 23.0 meas 0.614 p95 0.633 model 0.645 cal 0.640 | end V 23.0 meas 0.614 model 0.645
+f4      square                 Q2 p 3 70-74 s z0.97 tilt 2.6 el 60.0 | start V 22.6 meas 0.670 p95 0.691 model 0.654 cal 0.648 | end V 22.6 meas 0.670 model 0.654
+f4      square                 Q3 p 6 70-74 s z0.97 tilt 2.6 el 60.8 | start V 22.7 meas 0.618 p95 0.637 model 0.652 cal 0.627 | end V 22.7 meas 0.618 model 0.652
+f4      square                 Q4 p 9 70-74 s z0.97 tilt 2.6 el 61.1 | start V 22.8 meas 0.645 p95 0.670 model 0.650 cal 0.627 | end V 22.8 meas 0.645 model 0.650
+ch1b    square                 Q1 p 0 45-53 s z0.94 tilt 2.3 el 60.5 | start V 23.8 meas 0.630 p95 0.636 model 0.628 cal 0.623 | end V 23.6 meas 0.646 model 0.632
+ch1b    square                 Q2 p 3 45-53 s z0.94 tilt 2.3 el 60.1 | start V 23.5 meas 0.620 p95 0.627 model 0.634 cal 0.628 | end V 23.4 meas 0.619 model 0.636
+ch1b    square                 Q3 p 6 45-53 s z0.94 tilt 2.3 el 61.1 | start V 23.8 meas 0.616 p95 0.621 model 0.628 cal 0.603 | end V 23.7 meas 0.622 model 0.630
+ch1b    square                 Q4 p 9 45-53 s z0.94 tilt 2.3 el 60.8 | start V 23.7 meas 0.590 p95 0.596 model 0.630 cal 0.607 | end V 23.6 meas 0.593 model 0.632
+ch1b_2  square                 Q1 p 0 71-86 s z0.97 tilt 1.7 el 59.9 | start V 23.4 meas 0.615 p95 0.622 model 0.636 cal 0.632 | end V 23.1 meas 0.611 model 0.643
+ch1b_2  square                 Q2 p 3 71-86 s z0.97 tilt 1.7 el 60.3 | start V 22.9 meas 0.655 p95 0.663 model 0.647 cal 0.641 | end V 22.6 meas 0.678 model 0.654
+ch1b_2  square                 Q3 p 6 71-86 s z0.97 tilt 1.7 el 60.6 | start V 23.2 meas 0.608 p95 0.619 model 0.641 cal 0.616 | end V 23.0 meas 0.617 model 0.645
+ch1b_2  square                 Q4 p 9 71-86 s z0.97 tilt 1.7 el 60.7 | start V 23.1 meas 0.626 p95 0.634 model 0.643 cal 0.621 | end V 22.9 meas 0.653 model 0.647
+sq2_5   triangle               Q1 p 3 70-114 s z0.98 tilt 2.8 el 59.8 | start V 23.7 meas 0.688 p95 0.703 model 0.683 cal 0.690 | end V 22.5 meas 0.734 model 0.710
+sq2_5   triangle               Q2 p11 70-114 s z0.98 tilt 2.8 el 60.1 | start V 23.2 meas 0.703 p95 0.728 model 0.694 cal 0.699 | end V 22.3 meas 0.758 model 0.714
+sq2_5   triangle               Q3 p 7 70-114 s z0.98 tilt 2.8 el 60.5 | start V 23.2 meas 0.693 p95 0.708 model 0.694 cal 0.681 | end V 22.4 meas 0.736 model 0.712
+sq5_2   triangle               Q1 p 3 47-61 s z0.96 tilt 2.5 el 60.3 | start V 24.0 meas 0.694 p95 0.713 model 0.677 cal 0.683 | end V 23.5 meas 0.692 model 0.688
+sq5_2   triangle               Q2 p11 47-61 s z0.96 tilt 2.5 el 59.9 | start V 23.4 meas 0.686 p95 0.701 model 0.690 cal 0.695 | end V 23.2 meas 0.688 model 0.694
+sq5_2   triangle               Q3 p 7 47-61 s z0.96 tilt 2.5 el 60.5 | start V 23.5 meas 0.669 p95 0.676 model 0.688 cal 0.675 | end V 23.2 meas 0.674 model 0.694
+sq3     triangle               Q1 p 3 147-183 s z0.95 tilt 3.2 el 60.7 | start V 24.0 meas 0.685 p95 0.696 model 0.677 cal 0.683 | end V 23.1 meas 0.711 model 0.696
+sq3     triangle               Q2 p11 147-183 s z0.95 tilt 3.2 el 60.2 | start V 23.7 meas 0.668 p95 0.681 model 0.683 cal 0.688 | end V 23.0 meas 0.691 model 0.699
+sq3     triangle               Q3 p 7 147-183 s z0.95 tilt 3.2 el 60.5 | start V 23.8 meas 0.652 p95 0.664 model 0.681 cal 0.668 | end V 23.2 meas 0.676 model 0.694
+sq4_5   triangle               Q1 p 3 109-141 s z0.97 tilt 2.8 el 60.3 | start V 22.8 meas 0.727 p95 0.742 model 0.703 cal 0.710 | end V 22.2 meas 0.731 model 0.716
+sq4_5   triangle               Q2 p11 109-141 s z0.97 tilt 2.8 el 59.9 | start V 22.5 meas 0.710 p95 0.732 model 0.710 cal 0.715 | end V 22.0 meas 0.748 model 0.721
+sq4_5   triangle               Q3 p 7 109-141 s z0.97 tilt 2.8 el 60.9 | start V 22.6 meas 0.708 p95 0.731 model 0.707 cal 0.695 | end V 22.1 meas 0.749 model 0.718
+k1_4    triangle               Q1 p 3 111-135 s z0.98 tilt 3.5 el 61.4 | start V 22.4 meas 0.733 p95 0.762 model 0.712 cal 0.719 | end V 22.1 meas 0.759 model 0.718
+k1_4    triangle               Q2 p11 111-135 s z0.98 tilt 3.5 el 59.3 | start V 22.2 meas 0.717 p95 0.738 model 0.716 cal 0.721 | end V 22.0 meas 0.705 model 0.721
+k1_4    triangle               Q3 p 7 111-135 s z0.98 tilt 3.5 el 59.5 | start V 22.2 meas 0.693 p95 0.706 model 0.716 cal 0.703 | end V 21.9 meas 0.721 model 0.723
+sq1     T                      Q1 p 0 144-146 s z0.90 tilt 8.6 el 58.8 | start V 22.0 meas 0.868 p95 0.892 model 0.829 cal 0.859 | end V 22.0 meas 0.868 model 0.829
+sq1     T                      Q2 p 3 144-146 s z0.90 tilt 8.6 el 64.7 | start V 22.8 meas 0.506 p95 0.518 model 0.500 cal 0.462 | end V 22.8 meas 0.506 model 0.500
+sq1     T                      Q3 p 6 144-146 s z0.90 tilt 8.6 el 61.1 | start V 22.2 meas 0.829 p95 0.843 model 0.824 cal 0.835 | end V 22.2 meas 0.829 model 0.824
+ch1b_2  T (sinking, after the  Q1 p 0 90-93 s z0.81 tilt 24.2 el 60.8 | start V 22.9 meas 0.781 p95 0.800 model 0.809 cal 0.839 | end V 22.9 meas 0.781 model 0.809
+ch1b_2  T (sinking, after the  Q2 p 3 90-93 s z0.81 tilt 24.2 el 69.4 | start V 22.6 meas 0.600 p95 0.658 model 0.505 cal 0.466 | end V 22.6 meas 0.600 model 0.505
+ch1b_2  T (sinking, after the  Q3 p 6 90-93 s z0.81 tilt 24.2 el 61.7 | start V 22.7 meas 0.779 p95 0.823 model 0.813 cal 0.824 | end V 22.7 meas 0.779 model 0.813
+hS1     pair (0.55 m cables)   Q2 p11 24-28 s z0.99 tilt 1.4 el 59.3 | start V 23.1 meas 0.730 p95 0.738 model 0.706 cal 0.714 | end V 23.1 meas 0.730 model 0.706
+hS1     pair (0.55 m cables)   Q3 p 5 24-28 s z0.99 tilt 1.4 el 61.0 | start V 23.0 meas 0.727 p95 0.736 model 0.709 cal 0.698 | end V 23.0 meas 0.727 model 0.709
+hS2     pair (0.55 m cables)   Q2 p11 44-52 s z0.98 tilt 1.2 el 59.7 | start V 22.3 meas 0.782 p95 0.793 model 0.724 cal 0.731 | end V 22.2 meas 0.778 model 0.726
+hS2     pair (0.55 m cables)   Q3 p 5 44-52 s z0.98 tilt 1.2 el 61.1 | start V 22.7 meas 0.745 p95 0.765 model 0.715 cal 0.704 | end V 22.5 meas 0.762 model 0.720
+
+# fade per minute (measured, model voltage term)
+ch1b_2  Q1 12 s dV -0.3  -0.018/min  model +0.033/min
+ch1b_2  Q2 12 s dV -0.3  +0.116/min  model +0.033/min
+ch1b_2  Q3 12 s dV -0.2  +0.042/min  model +0.022/min
+ch1b_2  Q4 12 s dV -0.2  +0.131/min  model +0.022/min
+sq2_5   Q1 40 s dV -1.2  +0.068/min  model +0.040/min
+sq2_5   Q2 40 s dV -0.9  +0.082/min  model +0.030/min
+sq2_5   Q3 40 s dV -0.8  +0.065/min  model +0.026/min
+sq5_2   Q1 12 s dV -0.5  -0.011/min  model +0.055/min
+sq5_2   Q2 12 s dV -0.2  +0.011/min  model +0.022/min
+sq5_2   Q3 12 s dV -0.3  +0.026/min  model +0.033/min
+sq3     Q1 32 s dV -0.9  +0.049/min  model +0.037/min
+sq3     Q2 32 s dV -0.7  +0.042/min  model +0.029/min
+sq3     Q3 32 s dV -0.6  +0.044/min  model +0.025/min
+sq4_5   Q1 28 s dV -0.6  +0.009/min  model +0.028/min
+sq4_5   Q2 28 s dV -0.5  +0.083/min  model +0.024/min
+sq4_5   Q3 28 s dV -0.5  +0.088/min  model +0.024/min
+k1_4    Q1 20 s dV -0.3  +0.080/min  model +0.020/min
+k1_4    Q2 20 s dV -0.2  -0.035/min  model +0.013/min
+k1_4    Q3 20 s dV -0.3  +0.085/min  model +0.020/min
+
+# margin under 0.95 (worst carrier), fade median 0.066 /min
+1.15 kg      square 0/3/6/9                     23.5 V start 0.629  margin +0.321  after 90 s +0.221
+1.15 kg      four 3/7/9/11 (after the attach)   23.5 V start 0.738  margin +0.212  after 90 s +0.113
+1.15 kg      triangle 3/11/7                    23.5 V start 0.709  margin +0.241  after 90 s +0.141
+1.15 kg      T 0/3/6                            22.0 V start 0.863  margin +0.087  after 90 s -0.013
+1.15 kg      pair 0/6                           22.0 V start 0.863  margin +0.087  after 90 s -0.013
+0.86 kg M2A  square 0/3/6/9                     23.5 V start 0.581  margin +0.369  after 90 s +0.270
+0.86 kg M2A  four 3/7/9/11 (after the attach)   23.5 V start 0.661  margin +0.289  after 90 s +0.189
+0.86 kg M2A  triangle 3/11/7                    23.5 V start 0.644  margin +0.306  after 90 s +0.207
+0.86 kg M2A  T 0/3/6                            22.0 V start 0.764  margin +0.186  after 90 s +0.087
+0.86 kg M2A  pair 0/6                           22.0 V start 0.764  margin +0.186  after 90 s +0.087
+
+# effort p95 - median per layout (median, max) {'T': (0.014, 0.025), 'T (sinking, after the release)': (0.044, 0.058), 'pair (0.55 m cables)': (0.009, 0.02), 'square': (0.01, 0.025), 'triangle': (0.025, 0.146)}

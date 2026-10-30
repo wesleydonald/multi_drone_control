@@ -1,0 +1,4 @@
+# The Fri 30 Oct sheet's optional h3tw (docs/analysis/ring_drift_2026-10-30.md): the triangle's hover with the planner's
+# ring-position weight doubled, against h3t, to see whether the formation's slow drift (0.07-0.23 Hz, 1.4-3.8 cm,
+# carried by the planner's references) shrinks. Twin-flown only on the figure-8 (x3, R1957/R1981). Wesley's word first.
+plan_w_pos_scale: 2.0

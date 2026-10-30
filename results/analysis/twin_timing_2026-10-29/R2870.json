@@ -1,0 +1,249 @@
+{
+ "windows": [
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 34.455,
+   "dur": 6.334,
+   "err_med_cm": 74.44588720801593,
+   "err_max_cm": 119.88898785176534,
+   "chord_m": 1.0099146946511701,
+   "err_logged_med_cm": 74.51198633935628,
+   "phi_mean": 0.0066992546063496215,
+   "theta_mean": 0.15958362691406994,
+   "phi_rms": 0.07833264966760926,
+   "theta_rms": 1.6610011362812414,
+   "total_rms": 1.662847190433181,
+   "lean": 0.15972418098500227,
+   "f_dom": 0.6282722513089005,
+   "mpc_phi_rms": 0.07374950046592782,
+   "mpc_theta_rms": 1.6185351118180114
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 40.789,
+   "dur": 0.899,
+   "err_med_cm": 2.2916601615376253,
+   "err_max_cm": 3.245592918738397,
+   "chord_m": 1.0098006534319632,
+   "err_logged_med_cm": 2.312199323884894
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 41.688,
+   "dur": 3.767,
+   "err_med_cm": 1.8185738149733621,
+   "err_max_cm": 3.534945076082358,
+   "chord_m": 1.0098283874480016,
+   "err_logged_med_cm": 1.8159248970150292,
+   "phi_mean": 0.022144231004026637,
+   "theta_mean": -0.00692063445803055,
+   "phi_rms": 0.7821022541981153,
+   "theta_rms": 0.9170493592605794,
+   "total_rms": 1.20526489343298,
+   "lean": 0.023200477323998624,
+   "f_dom": 0.5263157894736842,
+   "mpc_phi_rms": 0.7677975902226771,
+   "mpc_theta_rms": 0.8980256344877735
+  },
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 60.589,
+   "dur": 0.532,
+   "err_med_cm": 5.460646179197466,
+   "err_max_cm": 8.45904001110922,
+   "chord_m": 1.0099037119268641,
+   "err_logged_med_cm": 5.479230652792138
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 61.121,
+   "dur": 0.568,
+   "err_med_cm": 5.969793104366544,
+   "err_max_cm": 7.425714544291946,
+   "chord_m": 1.010103778510656,
+   "err_logged_med_cm": 5.993430052682233
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 61.689,
+   "dur": 1.8,
+   "err_med_cm": 4.034515635725916,
+   "err_max_cm": 7.413447702668635,
+   "chord_m": 1.009774805053024,
+   "err_logged_med_cm": 4.001999296484366,
+   "phi_mean": -0.20418346624794026,
+   "theta_mean": -0.022626951609047714,
+   "phi_rms": 1.4461961421665106,
+   "theta_rms": 0.4878240547153125,
+   "total_rms": 1.5262554143970093,
+   "lean": 0.2054333634737599,
+   "f_dom": 0.5555555555555556,
+   "mpc_phi_rms": 1.4298939125895247,
+   "mpc_theta_rms": 0.4664273868057694
+  },
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 63.489,
+   "dur": 0.567,
+   "err_med_cm": 7.141977196456509,
+   "err_max_cm": 9.848981674779402,
+   "chord_m": 1.0094786029856855,
+   "err_logged_med_cm": 7.130546597879767
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 64.056,
+   "dur": 0.634,
+   "err_med_cm": 4.681399312800601,
+   "err_max_cm": 9.866017486210254,
+   "chord_m": 1.0099329684440344,
+   "err_logged_med_cm": 4.6531334917971225
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 64.69,
+   "dur": 1.731,
+   "err_med_cm": 5.149736350973939,
+   "err_max_cm": 7.980713760425619,
+   "chord_m": 1.0098653470938883,
+   "err_logged_med_cm": 5.09711091982706,
+   "phi_mean": -0.21796282843075757,
+   "theta_mean": 0.009203127045329397,
+   "phi_rms": 1.410551065922571,
+   "theta_rms": 0.911205844223625,
+   "total_rms": 1.6792707941611413,
+   "lean": 0.21815703546974674,
+   "f_dom": 0.5769230769230769,
+   "mpc_phi_rms": 1.3860662635370629,
+   "mpc_theta_rms": 0.8982209766194211
+  },
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 66.421,
+   "dur": 0.534,
+   "err_med_cm": 7.41961037860425,
+   "err_max_cm": 9.966407297718272,
+   "chord_m": 1.0103190315121373,
+   "err_logged_med_cm": 7.397412917673445
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 66.955,
+   "dur": 4.735,
+   "err_med_cm": 7.785771145944599,
+   "err_max_cm": 13.969129803240776,
+   "chord_m": 1.0099397671608241,
+   "err_logged_med_cm": 7.829143936392062,
+   "phi_mean": -0.0701477141678398,
+   "theta_mean": -0.07162060744461655,
+   "phi_rms": 1.5464065052198468,
+   "theta_rms": 1.459441612920354,
+   "total_rms": 2.1263449628199615,
+   "lean": 0.10025075168650266,
+   "f_dom": 0.8391608391608392,
+   "mpc_phi_rms": 1.5059166208112529,
+   "mpc_theta_rms": 1.4222237509026185
+  }
+ ],
+ "md_windows": 4,
+ "S_md_median": 1.6027631042790753,
+ "S_md_max": 2.1263449628199615,
+ "axis_rms_md": [
+  0.92,
+  1.45,
+  1.41,
+  1.55
+ ],
+ "S_approach_max": 1.662847190433181,
+ "lean_median": 0.15972418098500227,
+ "f_dom_md": [
+  0.53,
+  0.56,
+  0.58,
+  0.84
+ ],
+ "E_md_median_cm": 3.7483330359106475,
+ "E_md_logged_median_cm": 3.702247048980135,
+ "n_match": 4,
+ "n_descend": 3,
+ "match_durs": [
+  0.899,
+  0.568,
+  0.634,
+  4.735
+ ],
+ "descent_durs": [
+  3.767,
+  1.8,
+  1.731
+ ],
+ "n_abort": 2,
+ "contact": null,
+ "weld": null,
+ "land": null,
+ "lifted": 20.265,
+ "his_takeoff": 26.224,
+ "phases": [
+  [
+   1.03,
+   "WAIT_FOR_TAKEOFF"
+  ],
+  [
+   26.22,
+   "TAKEOFF"
+  ],
+  [
+   34.45,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   40.79,
+   "MATCH_VELOCITY"
+  ],
+  [
+   41.69,
+   "DESCEND_TO_ATTACHMENT"
+  ],
+  [
+   45.45,
+   "ATTACH_READY"
+  ],
+  [
+   60.59,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   61.12,
+   "MATCH_VELOCITY"
+  ],
+  [
+   61.69,
+   "DESCEND_TO_ATTACHMENT"
+  ],
+  [
+   63.49,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   64.06,
+   "MATCH_VELOCITY"
+  ],
+  [
+   64.69,
+   "DESCEND_TO_ATTACHMENT"
+  ],
+  [
+   66.42,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   66.95,
+   "MATCH_VELOCITY"
+  ],
+  [
+   71.69,
+   "TAKEN_BACK"
+  ]
+ ],
+ "path": "results/2026-10-29/R2870_sim_gz_tri_floorjoin_hover_L100_p115_sq52_cd060"
+}

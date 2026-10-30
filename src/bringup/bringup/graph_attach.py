@@ -50,18 +50,22 @@ ATTACH_DRONE_NAME = 'x3_drone3'
 # ('' = its default)
 PROOF_KNOBS = ('contact_dwell_s', 'proof_d_ok', 'proof_d_fail', 'proof_h_plate', 'proof_dwell_s',
                'proof_fail_dwell_s', 'proof_timeout_s', 'proof_ma_s')
+# proof_rules comotion: its own thresholds, passed only when set ('' = its default)
+COMOTION_KNOBS = ('comotion_d_ok', 'comotion_speed_window_s', 'comotion_lost', 'comotion_sep_xy')
 # combined M1 on the rig: his ball (Motive body 6, his IRL id) for his mission, from our mocap node
 BALL_ROUTE = '6:/pickup/motion_capture_state'
 # combined M1 on the rig: QUAD4's radio latch listens here, written by magnet_gate_3 alone (critic F4: the RViz
 # MAGNET D4 row and any shell `ros2 topic pub /drone_3/magnet` no longer reach the coil)
 COIL_TOPIC = f'/drone_{ATTACH_DRONE_ID}/magnet_coil'
-# his puck (irl_commissioning.yaml pickup_object_mass_kg) for our model of a taken-back QUAD4 (the twin ball is 0.1)
-RIG_PUCK_MASS = 0.06
+# the rig's pickup object for our model of a taken-back QUAD4 (the twin ball is 0.1): the 10 x 10 cm magnet plate,
+# 0.15 kg (RIG-1021-q1pick; his commissioning puck was 0.06)
+RIG_PUCK_MASS = 0.15
 # his rig nodes start this long after ours (our trackers and planner load their solvers first; a start
 # mid-load starved them, R0604)
 PARTNER_DELAY_S = 5.0
-# what this launch decides for his rig launch (partner_args may not set them)
-PARTNER_OWNED = ('real', 'geometry', 'contact_attach', 'contact_target_z', 'contact_target_xy', 'ring_cable_len',
+# what this launch decides for his rig launch (partner_args may not set them); geometry is 'rig' (the 28 Oct ring)
+# unless partner_args types rig_m2a (the old ring, configs/rig/ring_m2a.yaml; his launch refuses anything else)
+PARTNER_OWNED = ('real', 'contact_attach', 'contact_target_z', 'contact_target_xy', 'ring_cable_len',
                  'ring_cable_elev_deg')
 # combined rig: proof_taut_len is the measured taut body-to-tip minus this; QUAD4's rod body-to-tip and his
 # magnet_drop_below_quad must agree with that taut length within QUAD4_LEN_TOL_M
@@ -204,6 +208,12 @@ def _contact_manager_params(context, real):
         v = LaunchConfiguration(k).perform(context).strip()
         if v:
             out[k] = float(v)
+    for k in COMOTION_KNOBS:
+        v = LaunchConfiguration(k).perform(context).strip()
+        if v:
+            out[k] = float(v)
+    if truthy(context, 'tip_skip_repeats'):
+        out['tip_skip_repeats'] = True
     if real:
         out['sim_catch'] = False
         out['proof_taut_len'] = float(LaunchConfiguration('proof_taut_len').perform(context))
@@ -439,6 +449,10 @@ def attach(context, launch_dir, profile_vals):
                          'ref_time_shift': b('ref_time_shift'),
                          'ground_idle': b('ground_idle'),
                          'cable_accel_cap': f('cable_accel_cap'),
+                         'cable_lp_hz': f('cable_lp_hz'),
+                         'cable_lp_order': ParameterValue(LaunchConfiguration('cable_lp_order'), value_type=int),
+                         'cable_notch_hz': f('cable_notch_hz'),
+                         'cable_notch_q': f('cable_notch_q'),
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': kt,
@@ -553,7 +567,7 @@ def attach(context, launch_dir, profile_vals):
                          'contact_fold_seed': LaunchConfiguration('contact_fold_seed').perform(context),
                          'contact_joint_state_topic': (
                              '' if real else '/payload/detachable_joint_state'),
-                         # rig: his 60 g puck, and no span while it reads attached (critic F8, F9)
+                         # rig: the 0.15 kg object, and no span while it reads attached (critic F8, F9)
                          # rig: the release guard before the take-back's rise (card 2026-10-10_combined_m1_contact
                          # rev 10, critic round 4 F7), reading plate 9 at the magnet manager's weld point (round 2, A4)
                          **({'contact_ball_mass': RIG_PUCK_MASS, 'contact_span_wait_ball': True,
@@ -767,6 +781,10 @@ def attach(context, launch_dir, profile_vals):
                      'ref_time_shift': b('ref_time_shift'),
                          'ground_idle': b('ground_idle'),
                      'cable_accel_cap': f('cable_accel_cap'),
+                     'cable_lp_hz': f('cable_lp_hz'),
+                     'cable_lp_order': ParameterValue(LaunchConfiguration('cable_lp_order'), value_type=int),
+                     'cable_notch_hz': f('cable_notch_hz'),
+                     'cable_notch_q': f('cable_notch_q'),
                      'payload_rest_z': f('payload_rest_z'),
                      'takeoff_spool_s': 0.0,
                      'thrust_ratio': kt,

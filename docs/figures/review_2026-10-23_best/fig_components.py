@@ -127,7 +127,7 @@ def design_table():
         ax.tick_params(axis='y', length=0)
         for yy in y:
             ax.axhline(yy, color=S.FILL, lw=0.5, zorder=0)
-    axs[2].annotate('open: twin', xy=(1, 1), xycoords='axes fraction', xytext=(0, 4), textcoords='offset points',
+    axs[2].annotate('open: simulation', xy=(1, 1), xycoords='axes fraction', xytext=(0, 4), textcoords='offset points',
                     ha='right', va='bottom', fontsize=8, color=S.GREY)
     S.g_ticks(*axs, which='x')
     S.save(fig, 'fig_components')

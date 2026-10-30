@@ -1,0 +1,33 @@
+{
+ "descents": [
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 40.81,
+   "dur_s": 3.77,
+   "next": "ATTACH_READY",
+   "min_tip_above_target_cm": -1.5,
+   "err_median_cm": 0.8
+  },
+  {
+   "phase": "ATTACH_READY",
+   "t0": 44.58,
+   "dur_s": 0.16,
+   "next": "LIFT_PROOF",
+   "min_tip_above_target_cm": -2.0,
+   "err_median_cm": 0.2
+  }
+ ],
+ "summary": {
+  "descents": 1,
+  "reached_bottom": 1,
+  "restarts_position": 0,
+  "restarts_speed": 0,
+  "contact": 44.727,
+  "weld": 46.254,
+  "give_up": null,
+  "take_back": null,
+  "deepest_cm": -2.0,
+  "max_ref_drop_over8_cm": 0.0,
+  "max_tip_drop_over8_cm": 0.0
+ }
+}

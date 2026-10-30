@@ -1,0 +1,312 @@
+{
+ "windows": [
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 34.543,
+   "dur": 6.334,
+   "err_med_cm": 74.52102264370583,
+   "err_max_cm": 120.49092062463131,
+   "chord_m": 1.009877696463896,
+   "err_logged_med_cm": 74.57801489002085,
+   "phi_mean": 0.017953778485079803,
+   "theta_mean": 0.19772397207071313,
+   "phi_rms": 0.06647461696323528,
+   "theta_rms": 1.8645484987839458,
+   "total_rms": 1.865733094260236,
+   "lean": 0.19853742038545646,
+   "f_dom": 0.6282722513089005,
+   "mpc_phi_rms": 0.0604300354894749,
+   "mpc_theta_rms": 1.8088708427123201
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 40.877,
+   "dur": 1.0,
+   "err_med_cm": 3.3016772274440567,
+   "err_max_cm": 5.4699697788534545,
+   "chord_m": 1.0099568563727217,
+   "err_logged_med_cm": 3.2592885347667218,
+   "phi_mean": 0.020834310530481372,
+   "theta_mean": -1.2367694961456772,
+   "phi_rms": 0.26573704820302196,
+   "theta_rms": 2.362733290822647,
+   "total_rms": 2.377630076851584,
+   "lean": 1.2369449684976745,
+   "f_dom": 1.0,
+   "mpc_phi_rms": 0.24454832634945067,
+   "mpc_theta_rms": 2.3584774405569475
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 41.877,
+   "dur": 3.768,
+   "err_med_cm": 2.1589184328679485,
+   "err_max_cm": 4.830083244215038,
+   "chord_m": 1.0099272240325234,
+   "err_logged_med_cm": 2.1367803359942332,
+   "phi_mean": -0.04832842764198972,
+   "theta_mean": -0.06594522273905626,
+   "phi_rms": 0.5686965640511297,
+   "theta_rms": 1.7028754826190564,
+   "total_rms": 1.7953274607348502,
+   "lean": 0.08175823701897429,
+   "f_dom": 0.7894736842105263,
+   "mpc_phi_rms": 0.5500648847945471,
+   "mpc_theta_rms": 1.6630084747977085
+  },
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 61.548,
+   "dur": 0.53,
+   "err_med_cm": 4.526510281144365,
+   "err_max_cm": 8.502297818655098,
+   "chord_m": 1.0099810608123532,
+   "err_logged_med_cm": 4.592845094195938
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 62.078,
+   "dur": 0.536,
+   "err_med_cm": 3.8227135438193693,
+   "err_max_cm": 6.608367736520264,
+   "chord_m": 1.0099383672961768,
+   "err_logged_med_cm": 3.7765051673466603
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 62.614,
+   "dur": 1.331,
+   "err_med_cm": 3.7773145444534264,
+   "err_max_cm": 7.693133751200512,
+   "chord_m": 1.0099374784523043,
+   "err_logged_med_cm": 3.8105923582894565,
+   "phi_mean": 0.24274351830928848,
+   "theta_mean": 0.06119019267883559,
+   "phi_rms": 1.173033081820722,
+   "theta_rms": 0.6980441354211447,
+   "total_rms": 1.3650172988067493,
+   "lean": 0.25033708347195566,
+   "f_dom": 0.75,
+   "mpc_phi_rms": 1.166553285536232,
+   "mpc_theta_rms": 0.6824649990040282
+  },
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 63.945,
+   "dur": 0.532,
+   "err_med_cm": 4.8599707312008205,
+   "err_max_cm": 8.2243478601585,
+   "chord_m": 1.010245095387663,
+   "err_logged_med_cm": 4.847496886681001
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 64.477,
+   "dur": 1.033,
+   "err_med_cm": 4.956505065075623,
+   "err_max_cm": 8.088672902152227,
+   "chord_m": 1.0098097635122436,
+   "err_logged_med_cm": 5.073858248165896,
+   "phi_mean": 0.022480538815101515,
+   "theta_mean": 0.4075072370513963,
+   "phi_rms": 0.33794519660121525,
+   "theta_rms": 0.9642592018762883,
+   "total_rms": 1.0217645346697695,
+   "lean": 0.4081268465497953,
+   "f_dom": 0.9677419354838711,
+   "mpc_phi_rms": 0.31436732404705436,
+   "mpc_theta_rms": 1.0298458162590534
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 65.51,
+   "dur": 1.333,
+   "err_med_cm": 4.304828178978519,
+   "err_max_cm": 7.575010643101958,
+   "chord_m": 1.0098774372200814,
+   "err_logged_med_cm": 4.312083493860987,
+   "phi_mean": -0.03822371637093639,
+   "theta_mean": 0.13320710246114517,
+   "phi_rms": 1.4132433217847309,
+   "theta_rms": 1.1845435629849441,
+   "total_rms": 1.8440173912352906,
+   "lean": 0.13858277179830045,
+   "f_dom": 0.75,
+   "mpc_phi_rms": 1.42189883563029,
+   "mpc_theta_rms": 1.1295188589077245
+  },
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 66.843,
+   "dur": 0.533,
+   "err_med_cm": 6.898826134790392,
+   "err_max_cm": 9.355944422987598,
+   "chord_m": 1.0102276365517229,
+   "err_logged_med_cm": 6.886966716077116
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 67.376,
+   "dur": 0.702,
+   "err_med_cm": 4.8886671723500985,
+   "err_max_cm": 8.721045515107278,
+   "chord_m": 1.0100294621859036,
+   "err_logged_med_cm": 4.9118598976237795
+  },
+  {
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "t0": 68.078,
+   "dur": 0.733,
+   "err_med_cm": 5.1863536627610545,
+   "err_max_cm": 7.729778519477451,
+   "chord_m": 1.009969023824139,
+   "err_logged_med_cm": 5.138010262988887
+  },
+  {
+   "phase": "APPROACH_ABOVE_TARGET",
+   "t0": 68.811,
+   "dur": 0.532,
+   "err_med_cm": 6.254105908114796,
+   "err_max_cm": 9.468805139881056,
+   "chord_m": 1.009878697906998,
+   "err_logged_med_cm": 6.482651178999774
+  },
+  {
+   "phase": "MATCH_VELOCITY",
+   "t0": 69.343,
+   "dur": 2.566,
+   "err_med_cm": 6.71299422264512,
+   "err_max_cm": 11.893483914337638,
+   "chord_m": 1.0098215361239282,
+   "err_logged_med_cm": 6.764669251959171,
+   "phi_mean": 0.32783070131952047,
+   "theta_mean": -0.19569537710023374,
+   "phi_rms": 1.3118847718701563,
+   "theta_rms": 1.2398328778293854,
+   "total_rms": 1.8050560156436997,
+   "lean": 0.38179791689590364,
+   "f_dom": 0.38961038961038963,
+   "mpc_phi_rms": 1.2805636182031985,
+   "mpc_theta_rms": 1.1993851563485556
+  }
+ ],
+ "md_windows": 6,
+ "S_md_median": 1.800191738189275,
+ "S_md_max": 2.377630076851584,
+ "axis_rms_md": [
+  2.36,
+  1.7,
+  1.17,
+  0.96,
+  1.41,
+  1.31
+ ],
+ "S_approach_max": 1.865733094260236,
+ "lean_median": 0.25033708347195566,
+ "f_dom_md": [
+  1.0,
+  0.79,
+  0.75,
+  0.97,
+  0.75,
+  0.39
+ ],
+ "E_md_median_cm": 3.671123549235874,
+ "E_md_logged_median_cm": 3.6473062649253083,
+ "n_match": 5,
+ "n_descend": 4,
+ "match_durs": [
+  1.0,
+  0.536,
+  1.033,
+  0.702,
+  2.566
+ ],
+ "descent_durs": [
+  3.768,
+  1.331,
+  1.333,
+  0.733
+ ],
+ "n_abort": 3,
+ "contact": null,
+ "weld": null,
+ "land": null,
+ "lifted": 20.353,
+ "his_takeoff": 26.315,
+ "phases": [
+  [
+   1.03,
+   "WAIT_FOR_TAKEOFF"
+  ],
+  [
+   26.32,
+   "TAKEOFF"
+  ],
+  [
+   34.54,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   40.88,
+   "MATCH_VELOCITY"
+  ],
+  [
+   41.88,
+   "DESCEND_TO_ATTACHMENT"
+  ],
+  [
+   45.65,
+   "ATTACH_READY"
+  ],
+  [
+   61.55,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   62.08,
+   "MATCH_VELOCITY"
+  ],
+  [
+   62.61,
+   "DESCEND_TO_ATTACHMENT"
+  ],
+  [
+   63.95,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   64.48,
+   "MATCH_VELOCITY"
+  ],
+  [
+   65.51,
+   "DESCEND_TO_ATTACHMENT"
+  ],
+  [
+   66.84,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   67.38,
+   "MATCH_VELOCITY"
+  ],
+  [
+   68.08,
+   "DESCEND_TO_ATTACHMENT"
+  ],
+  [
+   68.81,
+   "APPROACH_ABOVE_TARGET"
+  ],
+  [
+   69.34,
+   "MATCH_VELOCITY"
+  ],
+  [
+   71.91,
+   "TAKEN_BACK"
+  ]
+ ],
+ "path": "results/2026-10-29/R2871_sim_gz_tri_floorjoin_hover_L100_p115_sq52_cd060"
+}

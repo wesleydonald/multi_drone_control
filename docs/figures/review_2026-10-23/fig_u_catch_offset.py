@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """U: the magnet caught off its slot (card docs/experiments/2026-10-23_catch_offset.md, Results).
 
-Message: radially in, folding in at the measured catch point keeps the ring's fold-in tilt near 1-2 deg to 16 cm,
+Message: radially in, folding in at the measured catch point keeps the ring's fold-in tilt near 0.4-2.6 deg to 20 cm,
 while assuming the slot lets it grow past the 5 deg bar from 8 cm; along the rim the order reverses past 8 cm.
 Hero: the fold-in tilt peak against the catch offset, the two arms in blue (measured) and red (slot assumed), one
 marker per run, the line through the cell means. Left out: the separation (its own finding), the steady tilt, the
-path after, the VOID runs (re-flown; preliminary). Data: R2629-R2684 through tools/catch_offset.analyse.
+path after, the VOID runs (re-flown). Data: R2629-R2684 and the re-flies / 20 cm extension R2727-R2732 through
+tools/catch_offset.analyse.
 """
 import json
 import os
@@ -18,18 +19,18 @@ import review_style as S  # noqa: E402
 import catch_offset as C  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 
-RUNS = 'R2629-R2684'
+RUNS = ['R2629-R2684', 'R2727-R2732']
 # the card's Results class R2634 as VOID: its only failure is the runner's mocap-staleness race 2 s after LANDED,
 # outside every scored window (the scorer's code counts any manifest failure); it is re-flown
 VOID_AS_CARD = {'R2634'}
-CACHE = os.path.join(S.SCRATCH, 'u_runs.json')
+CACHE = os.path.join(S.SCRATCH, 'u_runs_r2732.json')
 
 
 def runs():
     if os.path.exists(CACHE):
         return json.load(open(CACHE))
     out = []
-    for d in C.run_dirs([RUNS]):
+    for d in C.run_dirs(RUNS):
         r = C.analyse(d)
         out.append(dict(run=r['run'], arm=r['arm'], direction=r['direction'], d=r['d_cm'], verdict=C.verdict(r),
                         failures=r['failures'], void=r['void'], tilt=r.get('fold_tilt_peak_deg')))
@@ -67,17 +68,18 @@ def main():
                             ha='center' if r['tilt'] is None else 'right', va='bottom' if r['tilt'] is None
                             else 'top', fontsize=7, color=col)
             if direction == 'ri':
-                at = 12.0 if arm == 'slot' else 10.0
+                at = 12.0 if arm == 'slot' else 14.0
                 y = float(np.interp(at, ds, mean))
                 ax.annotate(text, xy=(at, y), xytext=(-6, 4) if arm == 'slot' else (0, 5),
                             textcoords='offset points', ha='right' if arm == 'slot' else 'center',
                             va='bottom', fontsize=8, color=col)
         ax.set_xlabel(xlabel)
-        ax.set_xticks([0, 4, 8, 12, 16])
-        ax.set_xlim(-0.8, 16.8)
+        top = 20 if direction == 'ri' else 16      # the 20 cm extension flew radially only
+        ax.set_xticks(list(range(0, top + 1, 4)))
+        ax.set_xlim(-0.8, top + 0.8)
     axs[0].set_ylabel(r'Fold-in ring tilt peak ($^\circ$)')
-    axs[0].set_ylim(0, 18)
-    axs[0].set_yticks([0, 5, 10, 15])
+    axs[0].set_ylim(0, 21)
+    axs[0].set_yticks([0, 5, 10, 15, 20])
     S.ps.panel_label(axs[0], 'a')
     S.ps.panel_label(axs[1], 'b')
     S.save(fig, 'fig_u_catch_offset')

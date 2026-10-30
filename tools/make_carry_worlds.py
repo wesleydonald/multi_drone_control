@@ -27,7 +27,9 @@ leaning-pair test the T at 1 m with the push tool; a world in PUSH_WORLDS also c
 
 Thesis C on the paper's own geometry (card 2026-10-23_paper_method_compare, Wesley 23 Oct) adds the 1 m four with every
 rod hinged on a 1 mm hub at the ring's centre (--hub-r), on the plates' plane: Quan et al.'s cables meet at the load's
-centre. Not 0: the planner and the network take each quad's azimuth from its attach point.
+centre. Not 0: the planner and the network take each quad's azimuth from its attach point. Quan et al. exactly (card
+2026-10-23_quan_exact, Wesley 23 Oct) adds world C: that hub at the ring's centre of mass (--attach-z 0) and the rods'
+drone ends at the drone centres (--pivot-dz 0).
 
 Usage:  python3 tools/make_carry_worlds.py [--check]
 
@@ -105,6 +107,9 @@ WORLDS = {
     # thesis C on the paper's own geometry (card 2026-10-23_paper_method_compare; Wesley 23 Oct): the 1 m four with
     # every rod on a 1 mm hub at the ring's centre
     'four_rigid_ground_rig_hub_L100.sdf': ['--n', '4', '--hub-r', '0.001'],
+    # Quan et al. exactly, world C (decisions 2026-10-23, Wesley ~21:45; card 2026-10-23_quan_exact): the hub at the
+    # ring's centre of mass and every rod's other end at the drone's centre, the paper's model to the letter
+    'four_rigid_ground_rig_hubcom_L100.sdf': ['--n', '4', '--hub-r', '0.001', '--attach-z', '0.0'],
 }
 # worlds that also carry the runner's WRENCH tool, as the 0.55 m three/four_rigid_ground_rig_push.sdf
 PUSH_WORLDS = ('three_rigid_ground_rig_push_L100.sdf', 'three_rigid_ground_rig_T_push_L100.sdf')
@@ -131,8 +136,10 @@ for w in ('four_rigid_ground_rig.sdf', 'three_rigid_ground_rig_T.sdf', 'two_rigi
           'four_rigid_ground_rig_3969_L100.sdf', 'four_rigid_ground_rig_gap135_L100.sdf',
           'four_rigid_ground_rig_gap165_L100.sdf', 'four_rigid_ground_rig_gap180_L100.sdf',
           'three_rigid_ground_rig_push_L100.sdf', 'three_rigid_ground_rig_T_push_L100.sdf',
-          'four_rigid_ground_rig_hub_L100.sdf'):
+          'four_rigid_ground_rig_hub_L100.sdf', 'four_rigid_ground_rig_hubcom_L100.sdf'):
     WORLD_OVERRIDES[w] = WORLD_OVERRIDES.get(w, []) + ['--tether-pose-hz', '60']
+# world C's rods end at the drone centre (after RIG_ARGS' 4 cm pivot)
+WORLD_OVERRIDES['four_rigid_ground_rig_hubcom_L100.sdf'] += ['--pivot-dz', '0.0']
 RIG_ARGS = ['--cable-len', str(CABLE_LEN), '--detachable', '--ground-start',
             '--attach-radius', str(ATTACH_RADIUS), '--pivot-dz', str(PIVOT_DZ),
             '--rod-mass', str(ROD_MASS), '--magnet-mass', str(MAGNET_MASS),
@@ -160,6 +167,7 @@ def world_expect(name):
                 cable_len=float(_arg(name, '--cable-len', CABLE_LEN)),
                 attach_radius=float(hub if hub is not None else _arg(name, '--attach-radius', ATTACH_RADIUS)),
                 attach_z=float(_arg(name, '--attach-z', EXPECT['attach_z'])),
+                pivot_dz=float(_arg(name, '--pivot-dz', PIVOT_DZ)),
                 num_drones=int(_arg(name, '--n', 3)))
 
 

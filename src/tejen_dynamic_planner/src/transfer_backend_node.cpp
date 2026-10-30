@@ -5,6 +5,7 @@
 #include "tejen_dynamic_planner/reference_recovery.hpp"
 #include "tejen_dynamic_planner/execution_fallback.hpp"
 #include "tejen_dynamic_planner/experiment_workspace.hpp"
+#include "tejen_dynamic_planner/planner_completion_waitable.hpp"
 
 #include "dynamic_planner/bspline.hpp"
 #include "dynamic_planner/committed_trajectory.hpp"
@@ -499,6 +500,12 @@ struct PlannerOutcome {
     std::unique_ptr<RecedingHorizonPlanner> retained_planner;
     ReplanResult result;
     double candidate_available_time_s = std::numeric_limits<double>::quiet_NaN();
+    std::chrono::steady_clock::time_point completion_steady_time;
+    double result_collection_time_s = std::numeric_limits<double>::quiet_NaN();
+    double completion_to_collection_ms = std::numeric_limits<double>::quiet_NaN();
+    double installation_attempt_time_s = std::numeric_limits<double>::quiet_NaN();
+    double installation_splice_margin_ms = std::numeric_limits<double>::quiet_NaN();
+    std::optional<std::uint64_t> installation_world_version;
     double previous_timing_s = 0.0;
     bool authority_installed = false;
     double authority_install_time_s = std::numeric_limits<double>::quiet_NaN();
@@ -959,6 +966,10 @@ public:
         marker_qos.reliable().transient_local();
         marker_pub_ = create_publisher<MarkerArray>(marker_topic_, marker_qos);
 
+        planner_completion_ = std::make_shared<PlannerCompletionWaitable>(
+            get_node_base_interface()->get_context(), [this] { pollPlannerFuture(); });
+        get_node_waitables_interface()->add_waitable(planner_completion_, nullptr);
+
         reference_timer_ = rclcpp::create_timer(
             get_node_base_interface(), get_node_timers_interface(), get_clock(),
             rclcpp::Duration::from_seconds(1.0 / kControlReferenceHz),
@@ -998,7 +1009,10 @@ public:
     }
 
     ~TransferBackendNode() override {
+        planner_completion_->stop();
+        if (planner_worker_.valid()) planner_worker_.wait();
         if (planner_future_.valid()) planner_future_.wait();
+        get_node_waitables_interface()->remove_waitable(planner_completion_, nullptr);
         if (csv_) csv_.flush();
         if (replan_csv_) replan_csv_.flush();
     }
@@ -1303,7 +1317,8 @@ private:
                                "terminal_hold_rejections,incumbent_remaining_unsafe,"
                                "planning_world_version,recheck_world_version,final_recheck_world_version,recheck_error,"
                                "incumbent_recheck_performed,incumbent_recheck_world_version,"
-                               "worker_exception,worker_error,previous_trajectory_elapsed_s,trajectory_elapsed_s,candidate_available_time_s,certified_world_version,authority_installed,authority_install_time_s,installation_rejection\n";
+                               "worker_exception,worker_error,previous_trajectory_elapsed_s,trajectory_elapsed_s,candidate_available_time_s,certified_world_version,authority_installed,authority_install_time_s,installation_rejection,"
+                               "result_collection_time_s,completion_to_collection_ms,installation_attempt_time_s,installation_splice_margin_ms,installation_world_version\n";
             } else {
                 RCLCPP_WARN(get_logger(), "Could not open C1F.0 replan CSV: %s", replan_csv_path_.c_str());
             }
@@ -1318,6 +1333,10 @@ private:
             disableBackend("ROS_TIME_BACKJUMP_DISABLED");
             kinematics_.reset();
         }
+        // A completed result may already match the current world. Drain it
+        // before applying this queued state sample, not after invalidating
+        // its certificate. The new measurement is still processed below.
+        pollPlannerFuture();
         try {
             latest_state_ = kinematics_.update(position, velocity, now_s);
             last_state_receive_ros_s_ = now_s;
@@ -2830,6 +2849,9 @@ private:
             nullptr,
             std::numeric_limits<double>::infinity()};
         PlannerOutcome outcome = planner_future_.get();
+        outcome.result_collection_time_s = get_clock()->now().seconds();
+        outcome.completion_to_collection_ms = 1e3 * std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - outcome.completion_steady_time).count();
         const bool discarded = outcome.epoch != epoch_;
         if (discarded) {
             outcome.installation_rejection = "obsolete_authority_epoch";
@@ -2845,9 +2867,13 @@ private:
                 std::optional<CommittedTrajectory> replacement_commit{
                     outcome.planner->committedTrajectory()};
                 static_assert(std::is_nothrow_swappable_v<decltype(replacement_commit)>);
+                outcome.installation_attempt_time_s = get_clock()->now().seconds();
+                outcome.installation_splice_margin_ms = 1e3 * (
+                    outcome.result.splice_time_s - outcome.installation_attempt_time_s);
+                outcome.installation_world_version = world_->currentVersion();
                 outcome.installation_rejection = dynamic_planner::installCertifiedReplacement(
                     *world_, outcome.result, outcome.epoch, epoch_,
-                    outcome.candidate_available_time_s, get_clock()->now().seconds(),
+                    outcome.candidate_available_time_s, outcome.installation_attempt_time_s,
                     outcome.request_ros_time_s, authority_granted_, [&]() noexcept {
                         planner_.swap(outcome.planner);
                         shadow_commit_.swap(replacement_commit);
@@ -3245,8 +3271,7 @@ private:
         }
         auto world = world_;
         auto ros_clock = get_clock();
-        planner_future_ = std::async(
-            std::launch::async,
+        auto task = std::make_shared<std::packaged_task<PlannerOutcome()>>(
             [sequence, epoch, planner = std::move(planner), retained_planner = std::move(retained_planner), target, target_predictor, world,
              ros_clock, measured, now_s, submitted_octopus_wall_budget_s]() mutable {
                 PlannerOutcome outcome;
@@ -3274,8 +3299,18 @@ private:
                     outcome.worker_error = "unknown exception";
                 }
                 outcome.candidate_available_time_s = ros_clock->now().seconds();
+                outcome.completion_steady_time = std::chrono::steady_clock::now();
                 return outcome;
             });
+        planner_future_ = task->get_future();
+        // packaged_task publishes the result (including exceptions) before it
+        // returns. A notification inside the task body would race future-ready
+        // and could lose the only wake-up. Only ROS callbacks drain/install.
+        auto completion = planner_completion_;
+        planner_worker_ = std::async(std::launch::async, [task, completion] {
+            (*task)();
+            completion->notify();
+        });
     }
 
     void referenceTimer() {
@@ -3927,7 +3962,13 @@ private:
         if (result.certified_world_version) replan_csv_ << *result.certified_world_version;
         replan_csv_ << ',' << outcome.authority_installed << ',';
         if (outcome.authority_installed) replan_csv_ << outcome.authority_install_time_s;
-        replan_csv_ << ',' << safeCsvField(outcome.installation_rejection) << '\n';
+        replan_csv_ << ',' << safeCsvField(outcome.installation_rejection) << ','
+                    << outcome.result_collection_time_s << ','
+                    << outcome.completion_to_collection_ms << ','
+                    << outcome.installation_attempt_time_s << ','
+                    << outcome.installation_splice_margin_ms << ',';
+        if (outcome.installation_world_version) replan_csv_ << *outcome.installation_world_version;
+        replan_csv_ << '\n';
         replan_csv_.flush();
     }
 
@@ -4369,6 +4410,8 @@ private:
     std::shared_ptr<VersionedWorld> world_;
     std::unique_ptr<RecedingHorizonPlanner> planner_;
     std::future<PlannerOutcome> planner_future_;
+    std::future<void> planner_worker_;
+    std::shared_ptr<PlannerCompletionWaitable> planner_completion_;
     ReplanResult latest_replan_result_;
 
     std::string latest_status_ = "DISABLED_WAITING_FOR_TARGET";

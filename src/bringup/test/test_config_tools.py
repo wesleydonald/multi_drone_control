@@ -91,7 +91,7 @@ def test_launch_args_are_parsed_without_executing_the_launch():
 
 THRUST_MAP = ('thrust_ratio', 'takeoff_thrust_ratio', 'thrust_offset', 'thrust_offset_v_slope',
               'thrust_v_ref', 'throttle_max', 'kt_trim')
-RIG_GEOMETRY = ('cable_len', 'attach_radius', 'pivot_offset_z', 'rod_tol_frac',
+RIG_GEOMETRY = ('cable_len', 'pivot_offset_z', 'rod_tol_frac',
                 'rod_spread_m', 'lift_ramp_vel', 'z_taut_gate', 'z_i_gate', 'reconfig_mode',
                 'auto_network_handover')
 
@@ -110,14 +110,17 @@ def test_the_twin_flies_the_rig_thrust_map_and_geometry(mode):
     assert (sim['cable_len'], sim['drone_mass'], real['drone_mass']) == ('1.0', '0.55', '0.583')
 
 
-def test_the_rig_types_the_rings_centre_of_mass_and_the_twin_keeps_its_ring():
-    """Wesley 22 Oct: the rig's plates sit 1.75 cm above the ring's centre of mass, which rests at 2.75 cm (Motive's
-    pivot moved there); the twin's worlds keep their symmetric ring (0.02 / 0.02) until regenerated."""
+def test_the_rig_flies_the_new_payload_and_the_twin_keeps_its_ring():
+    """Wesley 28 Oct: the rig's default payload is the 1.15 kg ring (RIG-1028-payload: magnets at r 0.204, plates
+    ~2.5 cm above the pivot, which rests at 1.3 cm); the twin's default worlds keep the M2A ring (0.86 kg, r 0.225,
+    0.02 / 0.02) and its _p115 worlds type the new payload's values."""
     for mode in ('mpc', 'dissipative', 'attach', 'm2'):
         real = profile_args(f'real/{mode}')
-        assert (real['attach_z'], real['payload_rest_z']) == ('0.0175', '0.0275'), mode
+        assert (real['load_mass'], real['attach_radius'], real['attach_z'], real['payload_rest_z']) == \
+            ('1.15', '0.204', '0.028', '0.013'), mode
     sim = profile_args('sim/dissipative')
-    assert (sim['attach_z'], sim['payload_rest_z']) == ('0.02', '0.02')
+    assert (sim['load_mass'], sim['attach_radius'], sim['attach_z'], sim['payload_rest_z']) == \
+        ('0.86', '0.225', '0.02', '0.02')
 
 
 def test_the_figure8_has_its_own_size_knob():

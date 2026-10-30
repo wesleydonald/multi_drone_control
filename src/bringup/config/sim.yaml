@@ -26,6 +26,10 @@ height_hold:
   z_i_gate: 0.25
 landing:
   land_rearm_touchdown: true   # twin default (Wesley 17 Oct); the rig after a critic look at its wall-clock pose check
+watchdogs:
+  # the trackers' 60 deg ring-tilt envelope (a fleet disarm); false only on world C, where the ring's tilt is free
+  # (Wesley 23 Oct, card 2026-10-23_quan_exact; twin only, the rig keeps it)
+  payload_tilt_envelope: true
 trajectory:
   traj_speed: 0.4
 thrust_map:
