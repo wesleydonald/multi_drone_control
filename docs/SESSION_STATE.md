@@ -1,23 +1,23 @@
 # Session state (the LAB chat reads this first, via `/lab`; keep it short and current)
 
-Updated: Fri 30 Oct 2026, 17:18 AEDT (from `date`). Branch **week8** at the 30 Oct 17:30 commit (see `git log -1`), nothing pushed (Wesley: push week8
+Updated: Fri 30 Oct 2026, 17:31 AEDT (from `date`). Branch **week8** at the 30 Oct 17:30 commit (see `git log -1`), nothing pushed (Wesley: push week8
 once the T fix is merged). The full log up to this point: `docs/archive/session_state_to_2026-10-30.md`. History also in
 `docs/decisions.md`, `results/registry.csv` and `git log`.
 
-## Running when the last chat closed (30 Oct 17:30)
-- **Lab PC, overnight, detached from any chat:** `~/mdc_overnight/lab_overnight_1030.sh` (its own session; logs
-  `~/mdc_overnight/lab_x3b.log`, `~/mdc_overnight/lab_x4.log`). Flying the rest of
-  X3b from R3010 (15 runs: s9 hover and chain at the real-time setting, the it5 comparators, then every config's second repeat),
-  then X4 (6 runs: the short relay, the two 30-min relays, the fixed team x2, the 1.15 kg relay). Nobody scores them
-  yet: score X3b on its card (`docs/experiments/2026-10-30_x3b_realtime_8_9.md`) and X4 with `tools/x4_metrics.py`, and
-  write their registry rows. To stop it: kill the script's PID (`pgrep -af lab_overnight_1030`), then SIGINT its
-  lab_batch (it removes its containers). Check `ssh drones@drones docker ps` after any stop: a run that starts as the
-  batch is stopped can leave its container up (30 Oct 17:15 two did, and the next batch refused to start;
-  `docker rm -f wesley_slotN; docker network rm wesley_slotN` on the lab PC clears them). Relaunched 17:18 after that.
-- Nothing else: no agents, no laptop Gazebo.
+## Running when the last chat closed (30 Oct 17:31): NOTHING
+- The lab PC queue was stopped at 17:30 (Wesley closed the laptop, and the lab runs are driven from it over ssh; a
+  sleeping laptop would void them). The lab PC is empty (no wesley_* containers or networks); no agents; no laptop Gazebo.
+- **To resume** (lab PC, check `ssh drones@drones docker ps` and `uptime` first): the rest of X3b, 15 runs, then X4, 6
+  runs, with `bash ~/mdc_overnight/lab_overnight_1030.sh 999999` launched detached (`setsid nohup ... &`), or per batch
+  as in that script. X3b flown so far: R2979-R2981 (unscored); void R2982, R2983, R3010-R3012. Score X3b on its card,
+  X4 with `tools/x4_metrics.py`, and write their registry rows. Only start overnight batches when the laptop stays awake.
+- After any stop, check `ssh drones@drones docker ps`: a run that starts as a batch is stopped can leave its container
+  up and block the next batch (`docker rm -f wesley_slotN; docker network rm wesley_slotN` on the lab PC). Don't use
+  `pkill -f <pattern>` from a shell whose own command line contains the pattern: it kills itself.
 
 ## First job: the T fix (Wesley 30 Oct: "it shows our method is worse than doing nothing, this needs to be fixed")
 Before the code freeze (Fri 6 Nov). X2-full and X8 both wait for it.
+**Wesley 30 Oct 17:30: the fix's default is decided at the start of the next session** (with him; nothing merged before).
 - **The defect:** after an unannounced release turns the square into a T, our planner settled the ring 7-13 deg off
   level (X1 sqT R2965/R2972; today's tree R2997 6.95), where flying on without the resize settled at 2.2.
 - **The cause** (four agents, `docs/analysis/t_offset_{model,forensics,attach}_2026-10-30.md`): the T's middle carrier
@@ -69,7 +69,7 @@ join into a T with the switch (`rj3_..._kxy_zsf`), the switch with `int_k_xy` 0 
   the final tree.
 
 ## Owed
-- Registry rows: R2997-R3003 written (exploratory), R3004-R3009 VOID (cancelled repeats); X3b R2979-R2983 written (3 flown
+- Registry rows: R3010-R3012 VOID written; R2997-R3003 written (exploratory), R3004-R3009 VOID (cancelled repeats); X3b R2979-R2983 written (3 flown
   unscored, 2 VOID). Owed: the overnight X3b/X4 runs, and A's R3201+ (in its worktree registry).
 - The results feed (`docs/results_feed.md`): post the T fix's result for the thesis chat when it is final.
 - Tejen follow-ups (`docs/handin_plan.md` section 6).
