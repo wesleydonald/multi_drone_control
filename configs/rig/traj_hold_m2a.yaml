@@ -1,0 +1,8 @@
+# configs/rig/traj_hold.yaml on the 0.86 kg M2A ring (configs/rig/ring_m2a.yaml's values): a launch reads one params file.
+traj_hold_s: 5.0
+load_mass: 0.86
+load_ixx: 0.02733
+load_izz: 0.05452
+attach_radius: 0.225
+attach_z: 0.0175
+payload_rest_z: 0.0275

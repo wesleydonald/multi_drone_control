@@ -1,0 +1,10 @@
+configs/experiments/x11_r1m_tb_g135_r1.yaml
+configs/experiments/x11_r1m_tb_g135_r2.yaml
+configs/experiments/x11_r1m_tb_g150_r1.yaml
+configs/experiments/x11_r1m_tb_g150_r2.yaml
+configs/experiments/x11_r1m_tb_g165_r1.yaml
+configs/experiments/x11_r1m_tb_g165_r2.yaml
+configs/experiments/x11_r1m_tb_g180_r1.yaml
+configs/experiments/x11_r1m_tb_g180_r2.yaml
+configs/experiments/x11_r1m_tb_g180drop_r1.yaml
+configs/experiments/x11_r1m_ta_a1_r3.yaml

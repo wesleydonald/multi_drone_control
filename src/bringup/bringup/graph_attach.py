@@ -35,6 +35,7 @@ import shlex
 
 from bringup.real_mode import (_TYPED_KEY, apply_rig_values, map_and_geometry, planner_options, planner_prefix,
                                position_limit, rig_io, rig_magnet_latches, rig_thrust_ratio, tracker_drop_options,
+                               tracker_land_options,
                                truthy)
 from launch.actions import GroupAction, IncludeLaunchDescription, LogInfo, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -51,7 +52,7 @@ ATTACH_DRONE_NAME = 'x3_drone3'
 PROOF_KNOBS = ('contact_dwell_s', 'proof_d_ok', 'proof_d_fail', 'proof_h_plate', 'proof_dwell_s',
                'proof_fail_dwell_s', 'proof_timeout_s', 'proof_ma_s')
 # proof_rules comotion: its own thresholds, passed only when set ('' = its default)
-COMOTION_KNOBS = ('comotion_d_ok', 'comotion_speed_window_s', 'comotion_lost', 'comotion_sep_xy')
+COMOTION_KNOBS = ('comotion_d_ok', 'comotion_speed_window_s', 'comotion_lost', 'comotion_sep_xy', 'comotion_taut_margin', 'comotion_normal_max', 'comotion_normal_ok', 'comotion_sep_normal', 'comotion_normal_min', 'comotion_speed', 'comotion_speed_ok', 'comotion_proof_dwell_s', 'comotion_inconclusive_s')
 # combined M1 on the rig: his ball (Motive body 6, his IRL id) for his mission, from our mocap node
 BALL_ROUTE = '6:/pickup/motion_capture_state'
 # combined M1 on the rig: QUAD4's radio latch listens here, written by magnet_gate_3 alone (critic F4: the RViz
@@ -181,6 +182,9 @@ def _partner_nodes(context):
             # QUAD4's record feeds his launch (decisions 22 Oct, answer 16): his body-to-marker drop is the taut
             # length (his MPC's cable follows it); a typed partner_args drop wins, checked against it
             **({'magnet_drop_below_quad': f'{taut + PROOF_TAUT_MARGIN_M:.4f}'} if taut > 0.0 else {}),
+            # a start-welded QUAD4: his TAKEOFF waits for our release (RIG-1105-nr1r: pressed during the 20 s route,
+            # his climb started where QUAD4 was then and it flew 1.3 m across the ring at the hand-over)
+            **({'takeoff_gate_topic': '/partner/release'} if truthy(context, 'partner_attached') else {}),
             **_partner_launch_args(context)}
     path = os.path.join(get_package_share_directory('tejen_mission'), 'launch', 'partner_mission.launch.py')
     return [LogInfo(msg=f'[launch] COMBINED M1: his rig nodes in {PARTNER_DELAY_S:.0f} s: '
@@ -300,6 +304,60 @@ def _catch_aim(context, real, partner, sil):
                              f'the slot ({x0:+.4f}, {y0:+.4f})')
 
 
+def reattach_plate_point(x, y, k):
+    """(x', y', from_plate) for plate k: (x, y), a ring-frame point measured on one plate, turned about the ring's
+    centre onto plate k. Plates count clockwise from the ring's +x, 30 deg each; the maths is counter-clockwise."""
+    if math.hypot(x, y) < 0.05:
+        raise RuntimeError(f'reattach_plate: attach_x_offset, attach_y_offset ({x:+.3f}, {y:+.3f}) is not on a plate')
+    cw = (-math.degrees(math.atan2(y, x))) % 360.0
+    p0 = int(round(cw / 30.0)) % 12
+    if abs((cw - 30.0 * p0 + 180.0) % 360.0 - 180.0) > 10.0:
+        raise RuntimeError(f'reattach_plate: attach_x_offset, attach_y_offset sit {cw:.1f} deg clockwise, '
+                           f'more than 10 deg off a plate')
+    a = -math.radians(30.0 * (k - p0))
+    return x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a), p0
+
+
+def _reattach_plate(context):
+    """reattach_plate:=k (default '' = off): QUAD4 attaches, or re-attaches after partner_attached's release, on plate
+    k. The typed attach point (on the rig, plate 9's measured point) is turned onto plate k before anything reads it,
+    and his plate:= follows in partner_args. Returns the launch log line, or ''."""
+    raw = context.launch_configurations.get('reattach_plate', '').strip()
+    if not raw:
+        return ''
+    try:
+        k = int(raw)
+    except ValueError:
+        raise RuntimeError(f'reattach_plate: {raw!r} is not a plate number 0-11')
+    if not 0 <= k < 12:
+        raise RuntimeError(f'reattach_plate: {k} is not a plate number 0-11')
+    x = float(LaunchConfiguration('attach_x_offset').perform(context))
+    y = float(LaunchConfiguration('attach_y_offset').perform(context))
+    xk, yk, p0 = reattach_plate_point(x, y, k)
+    # profiles.apply has already turned the typed clockwise angles counter-clockwise ('even' names no plate)
+    spec = LaunchConfiguration('attach_azimuths_deg').perform(context)
+    carriers = [] if spec.strip() == 'even' else \
+        [int(round(-float(a) / 30.0)) % 12 for a in spec.split(',') if a.strip()]
+    if k in carriers:
+        raise RuntimeError(f'reattach_plate: plate {k} holds a carrier (attach_azimuths_deg on plates {carriers})')
+    # the rig starts his mission from partner_args; the twin's partner launch is the experiment's own line (its plate:=)
+    lc = context.launch_configurations
+    toks = shlex.split(lc.get('partner_args', ''))
+    his = [t.partition(':=')[2] for t in toks if t.startswith('plate:=')]
+    if his and int(his[-1]) != k:
+        raise RuntimeError(f'reattach_plate {k} but partner_args types plate:={his[-1]}: one plate for both stacks')
+    if 'partner_args' in lc and truthy(context, 'partner') and not his:
+        lc['partner_args'] = ' '.join([*map(shlex.quote, toks), f'plate:={k}'])
+    lc['attach_x_offset'] = f'{xk:.4f}'
+    lc['attach_y_offset'] = f'{yk:.4f}'
+    gap = min((abs((30.0 * (k - c) + 180.0) % 360.0 - 180.0) for c in carriers), default=float('nan'))
+    turn = (30 * (k - p0) + 180) % 360 - 180
+    his_note = f'his plate:={k}' if 'partner_args' in lc else 'his plate:= is his own launch\'s'
+    return (f'[launch] reattach_plate {k}: QUAD4\'s plate point ({xk:+.4f}, {yk:+.4f}) m in the ring frame, plate '
+            f'{p0}\'s typed ({x:+.4f}, {y:+.4f}) turned {turn:+d} deg clockwise; {his_note}; the nearest '
+            f'carrier {gap:.0f} deg away')
+
+
 def _attach_point_source(context, real, partner):
     """measured (the fold-in at the newcomer's catch point, as flown) or slot (twin only: at the typed slot)."""
     src = (context.launch_configurations.get('attach_point_source', '') or 'measured').strip().lower()
@@ -344,6 +402,10 @@ def attach(context, launch_dir, profile_vals):
              LogInfo(msg=f'[launch] {kt_note}; takeoff {kt_to:.2f}')]
     if real:
         nodes.append(LogInfo(msg=rig_note))
+    # after apply_rig_values, which would put the rig's plate-9 default back over an untyped point
+    plate_note = _reattach_plate(context)
+    if plate_note:
+        nodes.append(LogInfo(msg=plate_note))
 
     # SIL: controllers only. The bench is the simulator, so every Gazebo-facing node
     # below is skipped. See the `sil` launch argument. The rig has none of them either.
@@ -452,7 +514,7 @@ def attach(context, launch_dir, profile_vals):
                          'cable_lp_hz': f('cable_lp_hz'),
                          'cable_lp_order': ParameterValue(LaunchConfiguration('cable_lp_order'), value_type=int),
                          'cable_notch_hz': f('cable_notch_hz'),
-                         'cable_notch_q': f('cable_notch_q'),
+                         'cable_notch_q': f('cable_notch_q'), 'cable_pull_up_max': f('cable_pull_up_max'),
                          'payload_rest_z': f('payload_rest_z'),
                          'takeoff_spool_s': f('takeoff_spool_s'),
                          'thrust_ratio': kt,
@@ -784,7 +846,7 @@ def attach(context, launch_dir, profile_vals):
                      'cable_lp_hz': f('cable_lp_hz'),
                      'cable_lp_order': ParameterValue(LaunchConfiguration('cable_lp_order'), value_type=int),
                      'cable_notch_hz': f('cable_notch_hz'),
-                     'cable_notch_q': f('cable_notch_q'),
+                     'cable_notch_q': f('cable_notch_q'), 'cable_pull_up_max': f('cable_pull_up_max'),
                      'payload_rest_z': f('payload_rest_z'),
                      'takeoff_spool_s': 0.0,
                      'thrust_ratio': kt,
@@ -810,6 +872,9 @@ def attach(context, launch_dir, profile_vals):
                      **({'tilt_fault_topic': f'/drone_{d}/tilt_fault',
                          'tilt_slow_deg': f('tilt_slow_deg')} if tilt_cut else {}),
                      **({'warm_fault_not_live': True} if warm_not_live else {}),
+                     # flown by the other stream (its mux 'partner') the ring's tilt is not its business (RIG-1105-k1ob_2)
+                     **({'mux_state_topic': f'/drone_{d}/mux_state'} if not sil else {}),
+                     **tracker_land_options(context),      # folded in, it is a carrier on the landed ring too
                      **map_tracker}],
         # In SIL there is no mux, so this tracker publishes straight onto
         # /drone_3/ELRSCommand, which the bench plant consumes. Everything else about
@@ -920,7 +985,9 @@ def attach(context, launch_dir, profile_vals):
                                 if partner_attached else {}),
                              # the tilt cut: the mux's 'cut' turns the coil OFF for good (critic round 2, H-B)
                              **({'cut_state_topic': f'/drone_{d}/mux_state'} if tilt_cut or stuck_guard else {}),
-                             'dry': truthy(context, 'dry_hold')}],
+                             'dry': truthy(context, 'dry_hold'),
+                             # typed only (Wesley 4 Nov, k1m_3/_4): an operator OFF that always reaches the coil
+                             'operator_topic': LaunchConfiguration('magnet_operator_topic').perform(context).strip()}],
                 output='screen'))
             lc = lambda k: float(LaunchConfiguration(k).perform(context))  # noqa: E731
             nodes.append(LogInfo(msg=(

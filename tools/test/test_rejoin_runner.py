@@ -89,8 +89,10 @@ def test_the_runner_logs_the_rejoin_lines_as_events():
                  '[dissipative] REJOIN ABORT drone 4 (/drone_3) (LAND): up to 2.31 m clear of the ring',
                  '[dissipative] REJOIN REFUSED drone 4 (/drone_3): drone 2 (/drone_1) is rejoining (one at a time)',
                  "[dissipative] the twin's tether joint of drone 4 (/drone_3): detached",
-                 '[dissipative] staged drone 4 (/drone_3) leaves (LAND): up to 1.93 m clear of the ring'):
+                 '[dissipative] staged drone 4 (/drone_3) leaves (LAND): up to 1.93 m clear of the ring',
+                 '[dissipative] FOLD-IN CAP ON drone 4 (/drone_3) (level): rod 1.000 m (measured 1.000, the OCP 1.000)',
+                 '[dissipative] FOLD-IN CAP OVER drone 4 (/drone_3) (its blend is over): the cap never bound'):
         rn.ExperimentRunner._rosout_cb(f, types.SimpleNamespace(name='dissipative_planner', msg=text))
     assert rows == [('REJOIN_START', '1'), ('REJOIN_ON_PLATE', '1'), ('JOINT_ATTACHED', '1'), ('REJOIN_WELD', '1'),
                     ('FOLD_IN', '1'), ('REJOIN_BLEND_OVER', '1'), ('REJOIN_ABORT', '3'), ('REJOIN_REFUSED', '3'),
-                    ('JOINT_DETACHED', '3'), ('STAGED_LEAVES', '3')]
+                    ('JOINT_DETACHED', '3'), ('STAGED_LEAVES', '3'), ('FOLDIN_CAP_ON', '3'), ('FOLDIN_CAP_OVER', '3')]

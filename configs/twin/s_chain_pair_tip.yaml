@@ -1,0 +1,8 @@
+# s_chain_pair.yaml with the magnet-marker check typed, tip_detect_m 0.04 as the real-world files (Wesley 31 Oct, the release detector, docs/analysis/release_detector_2026-10-31.md option F): the 8-9 carrier chain cells only.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 45.0
+tip_detect_m: 0.04

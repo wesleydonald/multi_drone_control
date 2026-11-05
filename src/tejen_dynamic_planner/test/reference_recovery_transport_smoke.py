@@ -17,7 +17,7 @@ from std_msgs.msg import Bool, String
 from trajectory_msgs.msg import MultiDOFJointTrajectory
 
 
-def main(reference_recovery_enabled=False, cooperative_tracking_safety_enabled=True):
+def main(reference_recovery_enabled=False, cooperative_tracking_safety_enabled=True, tracking_check_half=None):
     root = Path(__file__).resolve().parents[3]
     ns = '/reference_recovery_smoke'
     topics = dict(state_topic='state', target_topic='target', enable_topic='enable',
@@ -40,6 +40,9 @@ def main(reference_recovery_enabled=False, cooperative_tracking_safety_enabled=T
                   cooperative_drone_state_topics=[ns+'/peer_state'],
                   cooperative_committed_trajectory_topics=[ns+'/peer_future'],
                   cooperative_vehicle_ids=['peer'])
+    if tracking_check_half is not None:
+        # local 5 Nov: the check's own bound; the 0.05 inflation above stays
+        params.update({f'cooperative_tracking_check_half_{a}_m': tracking_check_half for a in 'xyz'})
     args = [str(root/'install/tejen_dynamic_planner/lib/tejen_dynamic_planner/dynamic_planner_transfer_backend'),
             '--ros-args', '--log-level', 'error', '-r', '__node:=reference_recovery_smoke_backend']
     for key, value in params.items():
@@ -138,7 +141,18 @@ def main(reference_recovery_enabled=False, cooperative_tracking_safety_enabled=T
         # Same 80 mm peer error / 50 mm inflation in both policies. Diagnostic
         # mode must keep the epoch/grant while still reporting ratio > 1.
         action, peer_mode = None, 'mismatch'
-        if not cooperative_tracking_safety_enabled:
+        if tracking_check_half is not None and tracking_check_half > .08:
+            # local 5 Nov: the 80 mm error sits inside the wider check bound, so enforcement keeps the grant
+            pump(1.3)
+            assert statuses[-1]['granted'] and statuses[-1]['epoch'] == epoch, \
+                'an error inside the check bound withdrew authority'
+            assert not statuses[-1]['blockers']
+            ratios = [float(text.split('max_track_ratio=')[1].split()[0])
+                      for text in diagnostics if 'max_track_ratio=' in text]
+            assert ratios and abs(max(ratios) - .08 / tracking_check_half) < .05, 'ratio not against the check bound'
+            peer_mode = 'missing'
+            blocker = 'peer:state_stale'
+        elif not cooperative_tracking_safety_enabled:
             pump(1.3)
             assert statuses[-1]['granted'] and statuses[-1]['epoch'] == epoch, \
                 'diagnostic-only peer mismatch withdrew authority'
@@ -177,7 +191,8 @@ def main(reference_recovery_enabled=False, cooperative_tracking_safety_enabled=T
         assert not statuses[-1]['granted'] and statuses[-1]['epoch'] >= epoch
         assert statuses[-1]['reason'] == 'RECOVERY_CANCELLED'
         print('PASS: missing/gapped/stale peer blocks; tracking enforcement='+
-              str(cooperative_tracking_safety_enabled)+'; fresh replacement seed/grant; LAND cancels')
+              str(cooperative_tracking_safety_enabled)+', check bound='+str(tracking_check_half)+
+              '; fresh replacement seed/grant; LAND cancels')
     finally:
         process.terminate()
         try: process.wait(timeout=5.)
@@ -190,3 +205,4 @@ if __name__ == '__main__':
     if os.environ.get('ROS_LOCALHOST_ONLY') != '1' or not os.environ.get('ROS_DOMAIN_ID'):
         raise SystemExit('Use a dedicated ROS_DOMAIN_ID with ROS_LOCALHOST_ONLY=1; backend only.')
     main()
+    main(tracking_check_half=.20)     # local 5 Nov (CHANGES_FROM_TEJEN.md)

@@ -178,3 +178,22 @@ arm gets one unless Wesley waives it (Code needed).
    `drop_gap_deg 200` in both cells so our planner flies the T. Recommend yes (at 30/60 deg our planner drops the ring
    by rule on the rim and nothing is compared).
 4. **Freeze the bars** L1-L3 as written (20 mm margin; settle 10 s on world C).
+
+## Reviewer (4 Nov ~22:30, on R3592-R3593, R3636-R3647): supported, with corrections
+Recomputed with the reviewer's own scorer from section 5 (the 3 Nov scratch scorer is gone; `tools/x8_metrics.py` was
+never written). L1 hub: ours E 315.1 / 312.2 mm (bar 335.1), port 365.0 / 369.6. L2 rim: ours 243.7 / 235.8 (bar 263.7),
+port 448.0 / 446.2. L3: no ours run loses the ring; hub settle 5.66 / 5.59 s. The exact law never told aborts at
++1.27 / +1.26 s. Validity: the leaver over 1.06 m out within 1 s in every run, our resize 0.28-0.34 s after the release,
+the port's DETACH at +0.35 s, late ticks at most 0.17 %, no failed solves; R3593 (fetched by hand) complete.
+
+| Correction | What the text must say |
+|---|---|
+| The hub pair spans two trees | Ours flew on lab_1103q3's tree, the port on lab_1104c's (R3594/R3595 never ran). The difference is attach-mode code and `partner_release_around`, off and bit-identical when off; the read-backs differ only in that switch. Say so; the rim cell is one batch, one tree. |
+| "Loses the ring", hub | The port was over 300 mm for 0.99 / 1.02 s against the 1 s rule (one 21 ms sample of margin); ours 0.60 / 0.53 s. Do not claim a hub loss: L1 stands on E alone. |
+| "Loses the ring", rim | Only the offline 80 deg rule: over 80 deg for 0.15 / 0.17 s from +0.6 s (abs 83.35 / 83.23), the ring stayed up (z 1.00 m at LAND), hanging at 45-74 deg. Write "passes the 80 deg drop limit", not "drops the ring". |
+| Ours on the hub | Not "barely moving": the ring swings 0.31 m at +1.3 s and the free ring tilts 80.6 / 82.7 deg (port 117). Reported only. |
+| Ours on the rim | The repeats disagree late: R3642 grows from 7.2 to 16.1 deg by LAND, R3643 stays 6.8-7.0. E and L3 unchanged, but "ours settles level" is out. |
+
+The current tree, not the final one: re-fly after the freeze, reviewer again on that table. Reviewer's scorer and output:
+`results/analysis/review_x2_x8_2026-11-04/rev_x8/`. Minor: section 6's hub smoke runs were never flown; R3640's leaver reads 3.81 m/s,
+3.65 m at the abort sample against the registry's 3.49 / 3.54 (a smoke run, no bar).

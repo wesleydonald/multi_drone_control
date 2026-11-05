@@ -45,14 +45,15 @@ KEPT_COMMON = (
     'attach_blend_balanced', 'attach_datum_shift', 'attach_moving', 'newcomer_lifecycle', 'newcomer_fault_land',
     'diss_balanced_tensions',
     'weld_radius', 'weld_velocity_clock', 'enable_obstacle_avoidance', 'partner',
-    'partner_attached', 'partner_m2', 'partner_m2_part', 'partner_contact', 'contact_fold_seed', 'contact_still', 'proof_rules',
+    'partner_attached', 'reattach_plate', 'partner_m2', 'partner_m2_part', 'partner_contact', 'contact_fold_seed', 'contact_still', 'proof_rules',
     'dry_hold',
+    'magnet_operator_topic',
     # the co-motion proof's typed thresholds and the frozen-marker filter (docs/analysis/attach_gates_2026-10-30.md)
-    'comotion_d_ok', 'comotion_speed_window_s', 'comotion_lost', 'comotion_sep_xy', 'tip_skip_repeats',
+    'comotion_d_ok', 'comotion_speed_window_s', 'comotion_lost', 'comotion_sep_xy', 'comotion_taut_margin', 'comotion_normal_min', 'comotion_speed', 'comotion_speed_ok', 'comotion_proof_dwell_s', 'comotion_inconclusive_s', 'comotion_normal_max', 'comotion_normal_ok', 'comotion_sep_normal', 'tip_skip_repeats',
     'partner_tilt_cut', 'tilt_slow_deg', 'partner_stuck_guard', 'warm_fault_not_live',
     'fc_disarm_land', 'welded_on_load')
 KEPT_SIM = ('legacy', 'sil', 'sim_interface', 'ff_cap_force', 'sim_thrust_map', 'sim_thrust_offset',
-            'sim_pack_v0', 'sim_catch')
+            'sim_pack_v0', 'sim_catch', 'plan_rod_level')
 KEPT_REAL = ('real_io', 'rviz', 'magnet_channel', 'magnet_initial', 'attach_magnet_initial',
              'require_fc_armed', 'detach_magnet', 'hover_z', 'proof_taut_len', 'weld_point_z',
              # Motive body ids, forwarded to real_io_launch.py by the graphs that include it
@@ -101,6 +102,38 @@ def as_launch_string(v):
     if isinstance(v, float):
         return repr(v)
     return str(v)
+
+
+def rod_model(vals):
+    """(plan_rod_level, rod_mass, rod_com) a planner flies, from its merged knobs (launch strings or typed values). The
+    switch reads the twin's rod from rod_level_mass and rod_level_com_frac x cable_len unless rod_mass or rod_com is
+    typed. It stays off under sil:=true (the SIL plant's rods have no mass) and reconfig_mode network (the port's arms).
+    One resolver for the launch, tools/check_geometry.py and tools/prebuild_planner.py, so they cannot disagree."""
+    def num(k):
+        try:
+            return float(vals.get(k))
+        except (TypeError, ValueError):
+            return None
+
+    def on(k):
+        return str(vals.get(k, '')).strip().lower() in ('1', 'true', 'yes')
+
+    level = (on('plan_rod_level') and not on('sil')
+             and str(vals.get('reconfig_mode', '')).strip().lower() != 'network')
+    mass, com = num('rod_mass'), num('rod_com')
+    if level:
+        mass = num('rod_level_mass') if mass is None else mass
+        if com is None and num('rod_level_com_frac') is not None and num('cable_len') is not None:
+            com = num('rod_level_com_frac') * num('cable_len')
+    return level, mass or 0.0, com or 0.0
+
+
+def chosen_knobs(lc):
+    """The knobs this launch chose itself: typed, or in its params_file (not the profiles' defaults)."""
+    from bringup.real_mode import _TYPED_KEY
+    out = {k for k in str(lc.get(_TYPED_KEY, '')).split(',') if k}
+    pf = str(lc.get('params_file', '')).strip()
+    return out | (set(flatten(_load(pf))) if pf else set())
 
 
 def side_file(side, legacy=False):

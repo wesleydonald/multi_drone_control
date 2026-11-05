@@ -143,6 +143,8 @@ GROUND_IDLE_MARGIN = 0.03      # m above spawn z: back on the floor (ground_idle
 DEPARTED_IDLE_MARGIN = 0.10    # m above spawn z: a departed drone the planner holds there is down (the planner's
                                # DEPARTED_DOWN_HIGH_M; QUAD4 stopped 4-7 cm above its mat height on 14 Oct)
 GROUND_IDLE_HOLD_S = 0.2
+CARRIERS_DOWN_BAND_M = 0.15     # m over its rest: a carrier released on the landed ring idles within this (Wesley 5 Nov)
+CARRIERS_DOWN_BAND_MAX_M = 0.20 # m: refused above (the drop when the idle cuts the throttle)
 
 # Takeoff spool floor. The applied throttle eases from FLOOR*u to u over
 # takeoff_spool_s, NOT from 0. On a taut air-start the drones bear the load from
@@ -234,6 +236,9 @@ class Controller(Node):
         self.cable_accel_cap = float(self.get_parameter("cable_accel_cap").value)
         # cable_lp_hz > 0: a first-order low-pass on the measured pull (RIG-1029-h4: the 1 m rig ring bent at 5.3 Hz,
         # opposite plates in phase, with every tracker feeding its own pull back one tick later); 0 = off
+        # the measured pull's upward z may reach this (m/s^2); 0 = a rod only pulls down (docs/analysis/tracker_clamp_2026-10-31.md)
+        self.declare_parameter("cable_pull_up_max", 0.0)
+        self.cable_pull_up_max = max(0.0, float(self.get_parameter("cable_pull_up_max").value))
         self.declare_parameter("cable_lp_hz", 0.0)
         self.cable_lp_hz = float(self.get_parameter("cable_lp_hz").value)
         self._cable_lp_alpha = 1.0 - math.exp(-2.0 * math.pi * self.cable_lp_hz * DT) if self.cable_lp_hz > 0.0 else 1.0
@@ -459,6 +464,21 @@ class Controller(Node):
         # a drone the planner reports off the ring and landing by itself (card 2026-10-09_departed_ground_idle):
         # it idles on the floor while the ring still flies. Counts only if received after this ARM.
         self._departed = False
+        # carriers_down_alone (card 2026-11-05_carriers_down_alone; off = today): the planner's /drone_i/carrier_released
+        # lets a carrier on the landed ring idle and ask to be disarmed alone within carriers_down_band_m of its rest
+        self.carriers_down_alone = bool(self.declare_parameter('carriers_down_alone', False).value)
+        self.carriers_down_band_m = float(self.declare_parameter('carriers_down_band_m', CARRIERS_DOWN_BAND_M).value)
+        if not GROUND_IDLE_MARGIN <= self.carriers_down_band_m <= CARRIERS_DOWN_BAND_MAX_M:
+            raise ValueError(f'carriers_down_band_m {self.carriers_down_band_m:g}: {GROUND_IDLE_MARGIN:g} up to '
+                             f'{CARRIERS_DOWN_BAND_MAX_M:g} m (the drop when its idle cuts the throttle)')
+        self._carrier_released = False
+        self._carrier_ticks = 0
+        self._carrier_asked = False
+        if self.carriers_down_alone:
+            self.create_subscription(
+                Bool, f'/drone_{self.drone_id}/carrier_released', self._carrier_released_cb,
+                QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                           reliability=ReliabilityPolicy.RELIABLE))
         self._armed_at = None
         self.create_subscription(
             Bool, f'/drone_{self.drone_id}/departed', self._departed_cb,
@@ -911,7 +931,7 @@ class Controller(Node):
         # the ring-attach runaway), so the envelope check needs it.
         q = msg.pose.orientation
         self.payload_quat = (q.w, q.x, q.y, q.z)
-        if self.drop_on_loss:
+        if self.drop_on_loss and not getattr(self, '_off_ring', False):
             self._drop_rule(self.payload_quat)
 
     def _drop_rule(self, q):
@@ -938,10 +958,18 @@ class Controller(Node):
     def _payload_dropped_cb(self, msg):
         self._payload_dropped = bool(msg.data)
 
+    def _off_ring_cb(self, msg):
+        off = str(msg.data).strip() == 'partner'          # his (or the approach) stream flies it, not this tracker
+        if off != self._off_ring:
+            self.get_logger().warn(f'[Drone {self.drone_id + 1}] ' + (
+                'its mux forwards the other stream: the ring-tilt checks stand down' if off
+                else 'its mux is not on the other stream: the ring-tilt checks apply'))
+        self._off_ring = off
+
     def _payload_checks_down(self):
-        """The ring is not ours to check: dropped by the planner, or this tracker asked for the drop
-        within DROP_CONFIRM_S. Past that with no drop the 60 deg fault applies again, as before."""
-        if self._payload_dropped:
+        """The ring is not ours to check: another stream flies this drone (its mux), the planner dropped it, or this
+        tracker asked for the drop within DROP_CONFIRM_S. Past that with no drop the 60 deg fault applies again."""
+        if getattr(self, '_off_ring', False) or self._payload_dropped:
             return True
         if self._drop_requested_t is None:
             return False
@@ -973,6 +1001,16 @@ class Controller(Node):
         self.drop_tilt_deg = float(p('drop_tilt_deg', 30.0).value)
         self.drop_samples = int(p('drop_samples', 2).value)
         self.drop_glitch_step_deg = float(p('drop_glitch_step_deg', 15.0).value)
+        # the newcomer's tracker: while its mux forwards the other stream (/drone_<d>/mux_state 'partner') the ring's
+        # tilt is not its business, no ring-tilt fault and no drop request (RIG-1105-k1ob_2: the ring past 80 deg
+        # disarmed QUAD4 while his stream flew it clear of the ring; it fell ~2.5 m). The mux covers welded starts,
+        # which get no planner on_load (welded_on_load off). '' = always checked
+        self._off_ring = False
+        mux_state_topic = str(p('mux_state_topic', '').value).strip()
+        if mux_state_topic:
+            self.create_subscription(String, mux_state_topic, self._off_ring_cb,
+                                     QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                                                reliability=ReliabilityPolicy.RELIABLE))
         # the position limit (Wesley 22 Oct; 0 = off, card 2026-10-22_position_limit): every reference this tracker
         # flies is kept POS_LIMIT_REF_MARGIN_M inside +-pos_limit_m in x and y, whoever sent it
         self.pos_limit_m = float(p('pos_limit_m', 0.0).value)
@@ -1058,6 +1096,9 @@ class Controller(Node):
             self._gi_ticks = 0
             self._gi_latched = False
             self._departed = False
+            self._carrier_released = False
+            self._carrier_ticks = 0
+            self._carrier_asked = False
             self._armed_at = self.get_clock().now().nanoseconds
             self._kt_z_max = -1e9
             self._kt_payload_z0 = (float(self.payload_pos[2])
@@ -1351,6 +1392,14 @@ class Controller(Node):
         elif self.armed and self.takeoff_requested and self._armed_at is not None:
             self._departed = True
 
+    def _carrier_released_cb(self, msg):
+        # as _departed_cb: a latched True from an earlier flight does not count
+        if not msg.data:
+            self._carrier_released = False
+        elif self.armed and self.takeoff_requested and self._armed_at is not None:
+            self._carrier_released = True
+            self._carrier_ticks = 0
+
     def _ground_idle_update(self):
         """ground_idle: True, latched until the next ARM, once a drone that flew is back within
         GROUND_IDLE_MARGIN of its resting height, with the ring resting and its reference at the
@@ -1358,6 +1407,8 @@ class Controller(Node):
         over (R0997)."""
         if not self.ground_idle or self.current_pose is None or self._kt_spawn_z is None:
             return False
+        if getattr(self, '_carrier_released', False):
+            self._carrier_down_tick()
         if self._gi_latched:
             return True
         z = float(self.current_pose[2])
@@ -1387,6 +1438,32 @@ class Controller(Node):
                 self.get_logger().info(f'[Drone {self.drone_id + 1}] down at its rest off the ring: '
                                        f'asking the fleet manager to disarm it alone')
         return self._gi_latched
+
+    def _carrier_down_tick(self):
+        """carriers_down_alone (card 2026-11-05_carriers_down_alone): a carrier the planner released on the landed ring,
+        its reference at the floor, within -GROUND_IDLE_MARGIN..+carriers_down_band_m of its own resting height and
+        still (its whole speed) for GROUND_IDLE_HOLD_S, idles (if it has not already) and asks once to be disarmed
+        alone. At most the band's drop when the idle cuts the throttle (Wesley 5 Nov: 0.15 m)."""
+        if self._carrier_asked:
+            return
+        z = float(self.current_pose[2])
+        speed = float(np.linalg.norm(self.current_pose[7:10])) if len(self.current_pose) > 9 else 0.0
+        band = self.carriers_down_band_m
+        ref = self._current_ref_pos
+        at_rest = (ref is not None and float(ref[2]) <= self._kt_spawn_z + band
+                   and -GROUND_IDLE_MARGIN <= z - self._kt_spawn_z <= band and speed <= 0.05)
+        self._carrier_ticks = self._carrier_ticks + 1 if at_rest else 0
+        if self._carrier_ticks < GROUND_IDLE_HOLD_S * FREQUENCY_HZ or getattr(self, '_down_alone_pub', None) is None:
+            return
+        self._carrier_asked = True
+        if not self._gi_latched:
+            self._gi_latched = True
+            self.get_logger().warn(f'[Drone {self.drone_id + 1}] on the floor after the flight: armed idle until disarm')
+        self.keep_alive_on_disarm = True            # the disarm that follows must not end this process
+        self._down_alone_pub.publish(Bool(data=True))
+        self.get_logger().info(f'[Drone {self.drone_id + 1}] down at its rest on the landed ring (carriers_down_alone, '
+                               f'{z - self._kt_spawn_z:+.2f} m, band {band:.2f}): asking the fleet manager to disarm '
+                               f'it alone')
 
     def _velocity_step(self, ref_acc):
         """Stage V: produce the channels from the velocity loop instead of the MPC.
@@ -1685,7 +1762,7 @@ class Controller(Node):
         model, so the IMU->model->command->IMU feedback cannot spike or slam the
         solver. Updates and returns the running applied value."""
         ac = np.array(ac, float)
-        ac[2] = min(ac[2], 0.0)           # a rod only pulls down on its drone
+        ac[2] = min(ac[2], getattr(self, 'cable_pull_up_max', 0.0))   # a rod only pulls down, up to a typed bound
         if self.cable_lp_hz > 0.0:
             for k, stage in enumerate(self._lp_cable):
                 stage = ac.copy() if stage is None else stage + self._cable_lp_alpha * (ac - stage)

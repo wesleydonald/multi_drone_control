@@ -142,6 +142,32 @@ LIFT_OBJECT = MissionPhase.LIFT_OBJECT.value
 TRANSIT_TO_DROP_POINT = MissionPhase.TRANSIT_TO_DROP_POINT.value
 WAIT_HOLD_GROUND_M = 0.05   # m above the lowest pose seen in WAIT_FOR_TAKEOFF: still on the ground (multi_drone_control)
 TAKEOFF_AIRBORNE_M = 0.03   # m above the TAKEOFF start: off the mat, the timed climb starts (multi_drone_control)
+# multi_drone_control 4 Nov: a TAKEOFF this far above the ground it booted on starts in the air (after a partner release)
+TAKEOFF_FROM_AIR_M = 0.5
+TAKEOFF_FROM_AIR_CLIMB_M = 0.05   # m: its least climb, to the approach height
+# multi_drone_control 4 Nov (RIG-1104-k1m_2/_3/_4): on the 1 m cable the object swung 0.23-0.26 m (median) around the
+# drop point, so the transit's 0.18 m held 0.5 s never passed; drop_on_arrival releases at the transit height as soon as
+# the magnet is inside drop_on_arrival_xy_m for this long
+DROP_ON_ARRIVAL_DWELL_S = 0.10
+
+
+def line_up_stage(ring_xy, plate_xy, quad_xy, radius, lateral):
+    """The staging point (xy) on the plate's radial line at `radius` from the ring centre, or None when the quad is
+    inside `radius` or already within `lateral` of that line on the plate's side."""
+    u = plate_xy - ring_xy
+    n = float(np.linalg.norm(u))
+    if n < 1e-6:
+        return None
+    u = u / n
+    rel = quad_xy - ring_xy
+    if float(np.linalg.norm(rel)) <= radius:
+        return None
+    along = float(rel @ u)
+    off = abs(float(rel[0] * u[1] - rel[1] * u[0]))
+    if along > 0.0 and off <= lateral:
+        return None
+    return ring_xy + radius * u
+
 TAKEOFF_LIFT_BY_FLOOR_M = 0.10  # m: min_reference_z this far above the start lifts the vehicle before the climb
 SETTLE_ABOVE_DROP_POINT = MissionPhase.SETTLE_ABOVE_DROP_POINT.value
 DESCEND_TO_DROP_HEIGHT = MissionPhase.DESCEND_TO_DROP_HEIGHT.value
@@ -396,6 +422,12 @@ class OnlineJoinPlanner(Node):
         self.drone_command_topic = str(
             self.declare_parameter("drone_command_topic", "drone_command").value
         )
+        # multi_drone_control 5 Nov (RIG-1105-nr1r): a TAKEOFF before our planner has released a start-welded QUAD4 is
+        # held and carried out at the release (our /partner/release), so his climb starts where the release left it.
+        # '' = off (his behaviour).
+        self.takeoff_gate_topic = str(self.declare_parameter("takeoff_gate_topic", "").value).strip()
+        self.takeoff_gate_open = not self.takeoff_gate_topic
+        self.takeoff_held = False
         self.magnet_command_topic = str(
             self.declare_parameter("magnet_command_topic", "/magnet/command").value
         )
@@ -602,6 +634,15 @@ class OnlineJoinPlanner(Node):
         self.experiment_navigation_z = float(self.declare_parameter(
             'experiment_navigation_z', 1.35).value)
         self.end_after_drop = bool(self.declare_parameter('end_after_drop', False).value)
+        self.drop_on_arrival = bool(self.declare_parameter('drop_on_arrival', False).value)
+        self.drop_on_arrival_xy_m = float(self.declare_parameter('drop_on_arrival_xy_m', 0.12).value)
+        # multi_drone_control 4 Nov (Wesley's supervisor; RIG-1104-k1m_2-4: the magnet swung into the carriers' cables):
+        # the lift ends only at its full height, so the transit to the ring is level (up, then over)
+        self.lift_full_before_transit = bool(self.declare_parameter('lift_full_before_transit', False).value)
+        # multi_drone_control 4 Nov (Wesley): to the ring along the plate's line, between the carriers (line_up_target)
+        self.line_up = bool(self.declare_parameter('line_up', False).value)
+        self.line_up_radius_m = float(self.declare_parameter('line_up_radius_m', 1.2).value)
+        self.line_up_lateral_m = float(self.declare_parameter('line_up_lateral_m', 0.25).value)
         self.experiment_navigation_ready_publisher = None
         if self.preloaded_navigation:
             self.experiment_navigation_ready_publisher = self.create_publisher(
@@ -1959,6 +2000,14 @@ class OnlineJoinPlanner(Node):
             self.contact_abort_xy_debounce_s = max(0., float(self.declare_parameter(
                 'contact_abort_xy_debounce_s', 0.0).value))
             self.contact_abort_xy_since = None    # sample time of the current run's first violation
+            # multi_drone_control 3 Nov (Tejen's review wesley-attach-review-20261103, priority 1): true = past the
+            # position band the descent holds its authorised height and resumes once back inside, instead of restarting
+            # the approach; past contact_descent_gross_xy_m or the speed abort it still restarts. False = his restart
+            self.contact_descent_hold = bool(self.declare_parameter('contact_descent_hold', False).value)
+            self.contact_descent_gross_xy_m = max(self.contact_abort_xy_threshold, float(
+                self.declare_parameter('contact_descent_gross_xy_m', 0.20).value))
+            self.contact_descent_holding = False
+            self.contact_hold_last_s = None
             if self.proof_rise_rate <= 0. or self.contact_give_up_s <= 0.:
                 raise ValueError('contact_attach needs a positive proof_rise_rate and contact_give_up_s')
             # multi_drone_control rig (critic F9): the object flag is inferred (it clears with the OFF), so the drop
@@ -2526,6 +2575,8 @@ class OnlineJoinPlanner(Node):
         self.create_subscription(
             String, self.drone_command_topic, self.drone_command_callback, 10
         )
+        if self.takeoff_gate_topic:
+            self.create_subscription(String, self.takeoff_gate_topic, self.takeoff_gate_callback, 5)
         if self.is_m2b:
             if self.m2b_require_recent_link_statistics:
                 self.create_subscription(
@@ -4551,8 +4602,27 @@ class OnlineJoinPlanner(Node):
             status.data = json.dumps(payload, separators=(",", ":"))
             self.m2b_latch_stability_publisher.publish(status)
 
+    def takeoff_gate_callback(self, msg: String) -> None:
+        """Our release of the start-welded QUAD4 (takeoff_gate_topic, repeated every 1 s): a held TAKEOFF goes now, and a
+        TAKEOFF refused in the air is tried again."""
+        first = not self.takeoff_gate_open
+        self.takeoff_gate_open = True
+        if self.takeoff_held and self.phase == MissionPhase.WAIT_FOR_TAKEOFF:
+            self.takeoff_held = False
+            if first:
+                self.get_logger().warn(f"takeoff gate open ({self.takeoff_gate_topic}): the held TAKEOFF goes now")
+            self.drone_command_callback(String(data="TAKEOFF"))
+        elif first:
+            self.get_logger().info(f"takeoff gate open ({self.takeoff_gate_topic})")
+
     def drone_command_callback(self, msg: String) -> None:
         command = str(msg.data).strip().upper()
+        if command == "TAKEOFF" and not getattr(self, "takeoff_gate_open", True):
+            if not self.takeoff_held:
+                self.get_logger().warn(f"TAKEOFF held until our release ({self.takeoff_gate_topic}): "
+                                       "it goes when QUAD4 is released")
+            self.takeoff_held = True
+            return
         if command == "TAKEOFF":
             takeoff_now = self._physical_now_s()
             self.takeoff_command_time = takeoff_now
@@ -4600,15 +4670,32 @@ class OnlineJoinPlanner(Node):
                 and self.drone_position is not None
             ):
                 refusal = self.floor_start_refusal()
+                if refusal is not None and self.in_the_air():
+                    # multi_drone_control 5 Nov (critic, card 2026-11-05_rig_fixes): released in the air, his MPC may
+                    # already fly QUAD4 through our mux; a refusal never disarms there. It holds where it is, and the
+                    # TAKEOFF is tried again at the next takeoff gate message (1 s) or press
+                    if getattr(self, 'air_hold_position', None) is None:
+                        self.air_hold_position = self.drone_position.copy()
+                        self.get_logger().error(f'{self.mission.name}: TAKEOFF refused in the air ({refusal}); '
+                                                'holding where it is, tried again at the next release or TAKEOFF')
+                    self.takeoff_held = True
+                    return
                 if refusal is not None:
                     self.refuse_takeoff(refusal)
                     return
+                self.air_hold_position = None
                 # the ground hold, not the live pose: his MPC may already be climbing (14 Oct t6/t6f)
-                self.takeoff_start_position = self.wait_takeoff_hold().copy()
+                hold = self.wait_takeoff_hold()
+                # multi_drone_control 4 Nov: released in the air (partner_attached), the climb starts where the vehicle
+                # is; the ground hold is the mat it booted on, which pulled it down and back across the ring
+                ground = getattr(self, 'wait_ground_z', None)
+                self.takeoff_from_air = bool(ground is not None
+                                             and float(self.drone_position[2]) > ground + TAKEOFF_FROM_AIR_M)
+                self.takeoff_start_position = (self.drone_position if self.takeoff_from_air else hold).copy()
                 # The first mocap pose may have arrived while the disarmed quad
                 # was being carried. Ground height belongs to accepted TAKEOFF.
                 self.initial_quad_z = float(self.takeoff_start_position[2])
-                self.takeoff_airborne = False
+                self.takeoff_airborne = self.takeoff_from_air
                 self.latch_takeoff_climb()
                 if getattr(self, 'preloaded_navigation', False):
                     self.takeoff_height = max(0., self.experiment_navigation_z-self.initial_quad_z)
@@ -5117,11 +5204,38 @@ class OnlineJoinPlanner(Node):
                 f"Body transfer target requested outside TRANSFER phase {self.phase.value}."
             )
         target = self.target_state(spec.target_source)
-        return TargetState(
+        body = TargetState(
             target.position + self.desired_tip_offset() + self.quad_reference_offset_from_tip(),
             target.velocity,
             target.acceleration,
         )
+        if spec.target_source in (TargetSource.DROP_POINT, TargetSource.ATTACHMENT_POINT):
+            return self.line_up_target(body)
+        return body
+
+    def line_up_target(self, body: TargetState) -> TargetState:
+        """multi_drone_control 4 Nov (Wesley: line up with the plate, never get stuck): from outside line_up_radius_m
+        of the ring centre and more than line_up_lateral_m off the plate's radial line, the transit aims first at the
+        point on that line at line_up_radius_m (the target's height), then straight in between the carriers. No dwell;
+        inside the radius, or with the ring or plate pose missing, the target is unchanged."""
+        if not getattr(self, 'line_up', False):
+            return body
+        ring, plate, quad = (getattr(self, name, None) for name in
+                             ('payload_position', 'attachment_position', 'drone_position'))
+        if ring is None or plate is None or quad is None:
+            return body
+        if getattr(self, '_line_up_done_phase', None) == self.phase:
+            return body                   # lined up once in this phase: stays direct (no flip-flop at the band's edge)
+        stage = line_up_stage(np.asarray(ring, float)[:2], np.asarray(plate, float)[:2], np.asarray(quad, float)[:2],
+                              self.line_up_radius_m, self.line_up_lateral_m)
+        if stage is None:
+            self._line_up_done_phase = self.phase
+            return body
+        if not getattr(self, '_line_up_said', False):
+            self._line_up_said = True
+            self.get_logger().info(f'line up: QUAD4 {np.linalg.norm(np.asarray(quad, float)[:2] - np.asarray(ring, float)[:2]):.2f} m '
+                                   f'from the ring, off the plate line: staging at ({stage[0]:+.2f}, {stage[1]:+.2f})')
+        return TargetState(np.array([stage[0], stage[1], body.position[2]]), body.velocity, np.zeros(3))
 
     def c1f1_shadow_phase_active(self) -> bool:
         return bool(
@@ -5879,6 +5993,7 @@ class OnlineJoinPlanner(Node):
             return
         if not (self.phase == MissionPhase.DESCEND_TO_ATTACHMENT and new_phase == MissionPhase.ATTACH_READY):
             self.contact_abort_xy_since = None    # each attempt earns its own debounce; the bottom continues the descent
+        self.contact_descent_holding, self.contact_hold_last_s = False, None    # a hold ends with its phase
         if new_phase == MissionPhase.ATTACH_READY:
             # each bottom hold earns its own quiet-miss time (multi_drone_control, plan WP3)
             self.contact_bottom_entries = getattr(self, 'contact_bottom_entries', 0) + 1
@@ -6161,6 +6276,21 @@ class OnlineJoinPlanner(Node):
                              MissionPhase.LANDED_DISARMED}:
                 self.target_drop_trim.reset()
                 self.target_ring_trim.reset()
+
+    def contact_descent_hold_tick(self, holding: bool, xy_error: float) -> None:
+        """contact_descent_hold: while holding, the descent's clock (phase_entry_time) moves with the time, so its
+        progress, the reference and the completion check stay at the height it had authorised; out of the hold it
+        continues from there."""
+        now = self._physical_now_s()
+        if holding and self.contact_hold_last_s is not None:
+            self.phase_entry_time += now - self.contact_hold_last_s
+        self.contact_hold_last_s = now if holding else None
+        if holding != self.contact_descent_holding:
+            self.get_logger().info(
+                f'Contact descent {"held" if holding else "resumed"}: tip {100.0 * xy_error:.1f} cm off the plate '
+                f'(band {100.0 * self.contact_abort_xy_threshold:.0f} cm, restart past '
+                f'{100.0 * self.contact_descent_gross_xy_m:.0f} cm)')
+        self.contact_descent_holding = holding
 
     def contact_position_lost(self, xy_error: float) -> bool:
         """The contact descent's position restart (contact_abort_xy_threshold), held for contact_abort_xy_debounce_s of
@@ -7071,6 +7201,10 @@ class OnlineJoinPlanner(Node):
                 self.drop_descent_speed,
             )
         if phase == MissionPhase.CLEAR_DROP_ZONE:
+            if getattr(self, 'drop_on_arrival', False):
+                start = self.drop_approach_clearance
+                return RateProfile(np.array([0.0, 0.0, start]),
+                                   np.array([0.0, 0.0, max(start, self.drop_clear_height)]), self.drop_clear_speed)
             return RateProfile(
                 np.array([0.0, 0.0, self.drop_release_clearance]),
                 np.array([0.0, 0.0, self.drop_clear_height]),
@@ -7149,6 +7283,8 @@ class OnlineJoinPlanner(Node):
         if self.phase == MissionPhase.TRANSIT_TO_REATTACH and self.cpp_reattach_active():
             return np.array([self.approach_offset_x, self.approach_offset_y, self.attach_transit_clearance])
         if self.phase == MissionPhase.DROP_OBJECT:
+            if getattr(self, 'drop_on_arrival', False):
+                return np.array([0.0, 0.0, self.drop_approach_clearance])
             return np.array([0.0, 0.0, self.drop_release_clearance])
         if self.phase in {
             MissionPhase.TRANSIT_TO_REATTACH,
@@ -7530,12 +7666,25 @@ class OnlineJoinPlanner(Node):
         earlier copy of TAKEOFF than this planner gets (14 Oct t6: 0.8 s, t6f: 1.8 s); a reference that followed the
         measured pose let it drift 0.4-0.5 m while it climbed."""
         p = self.drone_position
+        if getattr(self, 'air_hold_position', None) is not None:
+            return self.air_hold_position            # a TAKEOFF refused in the air: hold there
+        if getattr(self, 'takeoff_held', False) and not getattr(self, 'takeoff_gate_open', True):
+            # multi_drone_control 5 Nov: a TAKEOFF held for our release reached his MPC too; our mux drops its stream
+            # until the release, so it follows the vehicle (a hover where QUAD4 is) instead of the boot mat 1-2 m below
+            return p.copy()
         ground = getattr(self, 'wait_ground_z', None)
         if ground is None or float(p[2]) < ground:
             self.wait_ground_z = ground = float(p[2])
         if getattr(self, 'wait_hold_position', None) is None or float(p[2]) <= ground + WAIT_HOLD_GROUND_M:
             self.wait_hold_position = p.copy()
         return self.wait_hold_position
+
+    def in_the_air(self) -> bool:
+        """More than TAKEOFF_FROM_AIR_M above the lowest pose seen in WAIT_FOR_TAKEOFF (released in the air by our
+        planner), as the take-off-from-air latch reads it."""
+        ground = getattr(self, 'wait_ground_z', None)
+        return bool(ground is not None and self.drone_position is not None
+                    and float(self.drone_position[2]) > ground + TAKEOFF_FROM_AIR_M)
 
     def takeoff_climb_started(self) -> bool:
         """The TAKEOFF climb runs on time only once the vehicle is off its mat: his MPC can get TAKEOFF long after this
@@ -7598,8 +7747,8 @@ class OnlineJoinPlanner(Node):
             clearance = (self.attach_transit_clearance if getattr(self, 'attach_cpp_transit_active', False)
                          else self.approach_offset_z)
             approach_z = float(self.attachment_position[2]) + clearance + rod
-            self.takeoff_climb_height = max(
-                self.takeoff_height, approach_z - float(self.takeoff_start_position[2]))
+            least = TAKEOFF_FROM_AIR_CLIMB_M if getattr(self, 'takeoff_from_air', False) else self.takeoff_height
+            self.takeoff_climb_height = max(least, approach_z - float(self.takeoff_start_position[2]))
         if self.takeoff_climb_height is not None:
             self.get_logger().info(
                 f'{self.mission.name}: TAKEOFF climbs {self.takeoff_climb_height:.2f} m before '
@@ -8202,7 +8351,8 @@ class OnlineJoinPlanner(Node):
                 return
 
             # Legacy/Python-only behaviour remains unchanged when C1F.2 is disabled.
-            if (object_airborne or tracked_lift) and self.pickup_proof_proven:
+            lifted = tracked_lift if getattr(self, 'lift_full_before_transit', False) else (object_airborne or tracked_lift)
+            if lifted and self.pickup_proof_proven:
                 reason = (
                     f"object lifted {object_clearance:.2f} m"
                     if object_airborne
@@ -8236,6 +8386,14 @@ class OnlineJoinPlanner(Node):
                 transition_reason = (
                     "moving rendezvous entered dynamically-capturable bridge region"
                 )
+            elif getattr(self, 'drop_on_arrival', False):
+                # multi_drone_control 4 Nov: no settle, no descent: the magnet over the drop point releases at the
+                # transit height (DROP_OBJECT holds it, CLEAR_DROP_ZONE does not descend)
+                good = (xy_error < self.drop_on_arrival_xy_m and abs_z_error < self.pickup_z_tolerance)
+                if self.condition_true_for(good, DROP_ON_ARRIVAL_DWELL_S):
+                    self.transition_to(MissionPhase.DROP_OBJECT,
+                                       f'drop on arrival: the magnet {xy_error:.3f} m from the drop point')
+                return
             else:
                 # Preserve the pre-C1F.6 Python-only mission contract. The new
                 # bridge-feasibility gate is specifically the C++ -> Python
@@ -8403,6 +8561,10 @@ class OnlineJoinPlanner(Node):
                                and self.ground_ring_xy_m > self.descend_abort_xy_threshold)
                            or self.ground_ring_relative_speed_mps
                            > self.descend_abort_xy_velocity_threshold)
+            elif getattr(self, 'contact_attach', False) and getattr(self, 'contact_descent_hold', False):
+                fast = xy_relative_velocity > self.contact_abort_xy_velocity_threshold
+                too_far = fast or not xy_error <= self.contact_descent_gross_xy_m
+                self.contact_descent_hold_tick(not too_far and xy_error > self.contact_abort_xy_threshold, xy_error)
             elif getattr(self, 'contact_attach', False):
                 too_far = (self.contact_position_lost(xy_error)
                            or xy_relative_velocity > self.contact_abort_xy_velocity_threshold)
@@ -8414,6 +8576,8 @@ class OnlineJoinPlanner(Node):
                     MissionPhase.APPROACH_ABOVE_TARGET,
                     "attachment descent aborted after loss of relative alignment",
                 )
+            elif getattr(self, 'contact_descent_holding', False):
+                return
             elif (self.target_ring_trim.descent.complete if tiered
                   else self.rate_profile().complete(elapsed)):
                 self.transition_to(
@@ -8844,10 +9008,16 @@ class OnlineJoinPlanner(Node):
                 self.last_rate_profile_complete = self.pickup_tier_descent.complete
                 return self.build_tiered_pickup_reference()
             profile = self.rate_profile()
+            start, goal = profile.start_tip_offset, profile.goal_tip_offset
+            holding = (self.phase == MissionPhase.DESCEND_TO_ATTACHMENT
+                       and getattr(self, 'contact_descent_holding', False))
+            if holding:
+                # contact_descent_hold: every horizon sample at the held height, none descending behind the hold
+                start = goal = profile.tip_offset_at(self.phase_elapsed())
             reference, duration, complete = rate_controlled_manoeuvre(
                 target,
-                profile.start_tip_offset + quad_offset,
-                profile.goal_tip_offset + quad_offset,
+                start + quad_offset,
+                goal + quad_offset,
                 rate=profile.rate,
                 elapsed=self.phase_elapsed(),
                 dt=self.dt,
@@ -8856,7 +9026,7 @@ class OnlineJoinPlanner(Node):
                 max_reference_speed=self.max_reference_speed,
             )
             self.last_rate_profile_duration = duration
-            self.last_rate_profile_complete = complete
+            self.last_rate_profile_complete = complete and not holding
             return reference
 
         raise RuntimeError(

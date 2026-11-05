@@ -1,0 +1,14 @@
+configs/experiments/sq_pickup_hover_L100_p115_cppreattach_bd_noxy_over.yaml
+configs/experiments/sq_pickup_hover_L100_p115_cppreattach_bd_noxy_over.yaml
+configs/experiments/sq_floorjoin_hover_L100_p115_noxy_low.yaml
+configs/experiments/sq_floorjoin_hover_L100_p115_noxy_low.yaml
+configs/experiments/sq_floorjoin_hover_L100_p115_v1a30s_zt_xy08_bd_noxy.yaml
+configs/experiments/sq_floorjoin_hover_L100_p115_v1a30s_zt_xy08_bd_noxy.yaml
+configs/experiments/fri30_sq6b_g_frz.yaml
+configs/experiments/fri30_sq6b_g_frz.yaml
+configs/experiments/fri30_sq6b_frz.yaml
+configs/experiments/fri30_sq6b_frz.yaml
+configs/experiments/fri30_sq6b_g.yaml
+configs/experiments/fri30_sq6b_g.yaml
+configs/experiments/fri30_sq6b.yaml
+configs/experiments/fri30_sq6b.yaml

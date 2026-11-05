@@ -137,7 +137,8 @@ def test_every_config_passes_the_runner_checks():
         R.checked_config(os.path.join(G.OUT, new['name'] + '.yaml'))
         if src.get('mis_seed'):     # a robustness arm keeps the same deliberate errors, of the same size
             mis = lambda x: config_mismatches(os.path.join(ASSETS, x['world']), lp, x['launch']['args'])  # noqa: E731
-            d0, d1 = ({k: c - w for k, w, c in mis(x)} for x in (src, new))
+            # the rod in the plan scales its centre of mass with the typed length, a consequence and not an error typed
+            d0, d1 = ({k: c - w for k, w, c in mis(x) if k != 'rod_com'} for x in (src, new))
             assert d0.keys() == d1.keys() and all(d1[k] == pytest.approx(d0[k], abs=1e-6) for k in d0), new['name']
 
 

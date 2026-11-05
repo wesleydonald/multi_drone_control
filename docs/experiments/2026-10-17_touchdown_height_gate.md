@@ -310,3 +310,26 @@ touchdown, before A can act. The join runs are exploratory for the mission itsel
 
 **Open:** the legacy profile has no A. Whether `sim_legacy.yaml` should get it is a launch default (Wesley). The
 should-fixes (the stale-reset count in the log line; a rig log through a Motive dropout) are still open before the rig.
+
+## Decision (Wesley 5 Nov ~16:25)
+
+**A (`land_rearm_touchdown`) is the rig default** (`src/bringup/config/real.yaml`, with `land_descend_to_stall` and
+`carriers_down_alone`; a params_file can turn it off). The twin keeps it on (sim.yaml, since 17 Oct). Why: with the
+rig's LAND settings (descend_to_stall on, A off), a carrier 0.03 stronger than its thrust map gave a false touchdown
+1 s after ring-down with the carriers ~0.8 m up, and LANDED disarmed them in the air (R3757, R3758; card
+2026-11-05_carriers_down_alone). With A on, the same stronger carrier landed every drone at its rest in the twin
+(R3726, a hover LAND without QUAD4). Twin check on the rig settings with A on:
+`cda_b_k1s_rearm`, `cda_d_k1s_rearm`, queued. The must-fixes above were met on 17-18 Oct.
+
+**The rig-path critic's should-fixes** (5 Nov, logged only; which tick fires is unchanged, pinned against the reviewed
+code in `src/mpc_planner/test/test_touchdown_stale.py`):
+1. **Stale-reset count.** The touchdown line ends with `stale-pose ticks N (dK n, ...)` under A: the stall-test ticks
+   this LAND that a stale pose held at zero, per drone.
+2. **Dropout log.** One warning as a drone's pose goes stale in the stall test (`LAND stall test: dK pose 0.35 s old (no
+   mocap message; Motive dropout?)`, or `no pose yet`), and one line as it comes back (`fresh again after n stale
+   tick(s)`).
+3. **Skip or repeat?** Answered from the October rig bags, not a new flight: a lost body's last pose is repeated bit
+   for bit, not skipped (frozen ring poses for long runs after crashes, `tools/mocap_glitch_scan.py`; card
+   2026-10-21_tip_detect rev 3). So the 0.2 s arrival-time check catches only a stopped stream (forwarder, network,
+   our node), and a lost carrier during a LAND reads as a stall, exactly as with A off. Catching that needs a
+   repeat test in the stall test (a behaviour change: critic and Wesley's word). Not built.

@@ -189,18 +189,42 @@ def planned_body_heights(*, floor_join, ring_z, attach_z, rod, object_rest_z, li
     return legs
 
 
-def check_transit_ceiling(legs, *, refuse, log):
-    """Log QUAD4's planned heights; over QUAD4_MAX_BODY_Z refuse the launch (rig) or warn (twin)."""
+def check_transit_ceiling(legs, *, refuse, log, ceiling=QUAD4_MAX_BODY_Z):
+    """Log QUAD4's planned heights; over the ceiling (QUAD4_MAX_BODY_Z unless max_body_z is typed) refuse the launch
+    (rig) or warn (twin)."""
     text = ', '.join(f'{k} {v:.2f}' for k, v in legs.items())
-    high = {k: v for k, v in legs.items() if v > QUAD4_MAX_BODY_Z + 1e-6}
+    high = {k: v for k, v in legs.items() if v > ceiling + 1e-6}
     if high and refuse:
-        raise RuntimeError(f'partner_mission: QUAD4 would fly above {QUAD4_MAX_BODY_Z} m ('
+        raise RuntimeError(f'partner_mission: QUAD4 would fly above {ceiling} m ('
                            + ', '.join(f'{k} {v:.2f} m' for k, v in high.items())
                            + '): type the low heights (transit:=low) or transit:=over to allow it')
-    log(f'QUAD4 planned body heights (m): {text}' + (f'; ABOVE {QUAD4_MAX_BODY_Z} m' if high else ''))
+    log(f'QUAD4 planned body heights (m): {text}' + (f'; ABOVE {ceiling} m' if high else ''))
 
 
-def carry_heights(G, *, ring_z, rod, attach_z, clearance=None, route='over'):
+def _drop_height(context):
+    """Typed only: drop_height (m, the object's bottom above the ring origin, about the net), else None."""
+    v = LaunchConfiguration('drop_height').perform(context).strip()
+    return float(v) if v else None
+
+
+def _ceiling(context):
+    """QUAD4's ceiling: max_body_z if typed (Wesley 4 Nov: the pickup line up to ~2.8 m), else QUAD4_MAX_BODY_Z;
+    never above 3.0 m."""
+    v = LaunchConfiguration('max_body_z').perform(context).strip()
+    c = float(v) if v else QUAD4_MAX_BODY_Z
+    if not QUAD4_MAX_BODY_Z <= c <= 3.0:
+        raise RuntimeError(f'partner_mission: max_body_z {c} outside [{QUAD4_MAX_BODY_Z}, 3.0]')
+    return c
+
+
+def _release_clear(context, drop_clear, drop_approach):
+    """With drop_on_arrival the release is at the transit height and the climb after it never goes lower: the
+    after-drop leg (plus the unload overshoot) starts there."""
+    on = LaunchConfiguration('drop_on_arrival').perform(context).strip() == 'true'
+    return max(drop_clear, drop_approach) if on else drop_clear
+
+
+def carry_heights(G, *, ring_z, rod, attach_z, clearance=None, route='over', drop_height=None):
     """His heights for a transit: pickup_lift_height (the tip above the object at rest), drop_approach_clearance
     (tip above the drop point), attach_transit_clearance (tip above the plate) and the C++ search floor (body) for
     the loaded and the unloaded transit. route 'over': the object's bottom (or, on the way to the plate, the
@@ -209,6 +233,10 @@ def carry_heights(G, *, ring_z, rod, attach_z, clearance=None, route='over'):
     if route == 'low':
         plate = ring_z + attach_z
         loaded_tip = plate + LOW_ROUTE_CLEARANCE + G['object_bottom_below_tip']
+        if drop_height is not None:
+            # drop_height (Wesley 4 Nov, his supervisor: drop 0.5-0.6 m above the net, which sits about level with the
+            # ring's bottom): the carried object's bottom this far above the ring origin, on the loaded legs only
+            loaded_tip = ring_z + drop_height + G['object_bottom_below_tip']
         empty_tip = plate + LOW_ROUTE_CLEARANCE
         return {'pickup_lift_height': loaded_tip - G['object_rest_z'],
                 'drop_approach_clearance': loaded_tip - (ring_z + DROP_OFFSET_Z),
@@ -292,6 +320,42 @@ def _backend_overrides(base, G, *, rod, floor_join, carrier_model, margins=None)
     return f'{base},{out.name}'
 
 
+def _throttle_max(context):
+    """Typed only (rig and twin): mpc_throttle_max raises his OCP's 0.60 throttle bound at run time (Te-Jen's review of
+    RIG-1104-k1m_3: carrying the object QUAD4 sat at 0.60 for 17 s and sank 0.4 m under his reference)."""
+    v = LaunchConfiguration('mpc_throttle_max').perform(context).strip()
+    b = LaunchConfiguration('mpc_battery_comp').perform(context).strip()
+    # mpc_battery_comp (typed only): his radio throttle + this per volt below 23.5 V (the rig's identified 0.022)
+    return {**({'throttle_state_max': float(v)} if v else {}), **({'battery_comp_slope': float(b)} if b else {})}
+
+
+def _takeoff_gate(context):
+    """Typed only (our combined rig launch types it for a start-welded QUAD4): his TAKEOFF waits for this topic."""
+    topic = LaunchConfiguration('takeoff_gate_topic').perform(context).strip()
+    return {'takeoff_gate_topic': topic} if topic else {}
+
+
+def _drop_on_arrival(context):
+    """Typed only (rig and twin): drop_on_arrival:=true releases at the transit height once the magnet is within
+    drop_on_arrival_xy ('' = 0.12 m) of the drop point for 0.1 s, skipping his settle and descent."""
+    if LaunchConfiguration('drop_on_arrival').perform(context).strip() != 'true':
+        return {}
+    xy = LaunchConfiguration('drop_on_arrival_xy').perform(context).strip()
+    return {'drop_on_arrival': True, **({'drop_on_arrival_xy_m': float(xy)} if xy else {})}
+
+
+def _lift_full(context):
+    """Typed only (rig and twin): lift_full:=true ends his loaded lift only at its full height (up, then over);
+    line_up:=true sends his transits to the ring along the plate's line first (line_up_radius, line_up_lateral)."""
+    v = lambda name: LaunchConfiguration(name).perform(context).strip()  # noqa: E731
+    out = {'lift_full_before_transit': True} if v('lift_full') == 'true' else {}
+    if v('line_up') == 'true':
+        out['line_up'] = True
+        out.update({k: float(v(a)) for a, k in (('line_up_radius', 'line_up_radius_m'),
+                                                ('line_up_lateral', 'line_up_lateral_m')) if v(a)})
+    return out
+
+
 # his planner's pickup values from his last successful IRL pickup (m1_ground_ring.yaml, 7 Oct 17:53); the
 # rest of that file is his ground-ring trial, which contact_attach refuses
 GROUND_RING_PICKUP_KEYS = ('min_reference_z', 'pickup_overtravel', 'pickup_max_overtravel',
@@ -364,7 +428,7 @@ def _nodes(context):
     route = transit_route(context, floor_join)
     H = carry_heights(G, ring_z=float(L('ring_z').perform(context)), rod=G['magnet_drop_below_quad'],
                       attach_z=G['contact_attach_z_m'] or 0.025, clearance=float(clearance) if clearance else None,
-                      route=route)
+                      route=route, drop_height=_drop_height(context))
     if not floor_join:
         H['minimum_search_z_m_empty'] = H['minimum_search_z_m']
     # a typed value wins (the m1c_*/m1x_* configs type the old high transit: 2.3 / 2.7 / 1.35)
@@ -385,10 +449,12 @@ def _nodes(context):
     check_transit_ceiling(planned_body_heights(
         floor_join=floor_join, ring_z=float(L('ring_z').perform(context)), attach_z=attach_z,
         rod=G['magnet_drop_below_quad'], object_rest_z=G['object_rest_z'], lift=height('pickup_lift_height'),
-        drop_approach=height('drop_approach_clearance'), drop_clear=extra.get('drop_clear_height', DROP_CLEAR_HEIGHT),
+        drop_approach=height('drop_approach_clearance'),
+        drop_clear=_release_clear(context, extra.get('drop_clear_height', DROP_CLEAR_HEIGHT), height('drop_approach_clearance')),
         attach_clearance=extra.get('attach_transit_clearance', height('attach_transit_clearance')),
         search_floor=height('minimum_search_z_m', 'minimum_search_z_m_empty')),
-        refuse=False, log=lambda msg: print(f'partner_mission ({route} transit): {msg}', flush=True))
+        refuse=False, log=lambda msg: print(f'partner_mission ({route} transit): {msg}', flush=True),
+        ceiling=_ceiling(context))
 
     object_bridge = Node(
         package='ros_gz_bridge', executable='parameter_bridge', name='pickup_object_pose_bridge',
@@ -563,6 +629,8 @@ def _nodes(context):
                    if LaunchConfiguration('cpp_authority').perform(context).strip() == 'false' else {}),
                 **({'end_after_drop': True}
                    if LaunchConfiguration('end_after_drop').perform(context).strip() == 'true' else {}),
+                **_drop_on_arrival(context), **_takeoff_gate(context),
+                **_lift_full(context),
                 # the descent ends on the contact target (ring_bridge's attachment point), held
                 # with no lead; the planner's contact-mode gates are his ground-ring values
                 # (the card's neighbours move one of them: contact_lead / contact_dz / contact_dx).
@@ -586,8 +654,11 @@ def _nodes(context):
                     **{k: float(L(arg).perform(context)) for arg, k in (
                         ('match_xy', 'contact_match_xy_threshold'), ('match_speed', 'contact_match_xy_velocity_threshold'),
                         ('match_dwell', 'dwell_time_s'), ('descent_debounce', 'contact_abort_xy_debounce_s'),
-                        ('descent_abort_xy', 'contact_abort_xy_threshold'))
-                        if L(arg).perform(context).strip()}}
+                        ('descent_abort_xy', 'contact_abort_xy_threshold'), ('descent_gross_xy', 'contact_descent_gross_xy_m'),
+                        ('descent_abort_speed', 'contact_abort_xy_velocity_threshold'))
+                        if L(arg).perform(context).strip()},
+                    **({'contact_descent_hold': L('descent_hold').perform(context).strip().lower() in ('1', 'true', 'yes')}
+                       if L('descent_hold').perform(context).strip() else {})}
                    if contact else {}),
             },
         ])
@@ -618,6 +689,7 @@ def _nodes(context):
             # linear sim plant, x3 0.643 kg, motorConstant 0.62e-6: 4*0.62e-6*4631^2/0.643
             'thrust_ratio': G['thrust_ratio'],
             'enable_thrust_ratio_feedback': G['thrust_ratio_feedback'],
+            **_throttle_max(context),
             'xy_bias_mode': 'legacy_integral',
             # a cached solver: a fresh acados build at launch starved drone 3's mocap (R0600)
             'acados_cache_dir': os.path.expanduser('~/.cache/multi_drone_control/tejen_payload_mpc'),
@@ -637,7 +709,8 @@ def _nodes(context):
             'mpc_command_execution': ParameterValue(L('mpc_command_execution'), value_type=str),
         }],
         remappings=[('motion_capture_state', state),
-                    ('ELRSCommand', f'/drone_{DRONE}/ELRSCommand_tejen')])
+                    ('ELRSCommand', f'/drone_{DRONE}/ELRSCommand_tejen'),
+                    ('telemetry', f'/drone_{DRONE}/telemetry')])
 
     supervisor = Node(
         package='tejen_mission', executable='simulation_test_supervisor',
@@ -757,7 +830,8 @@ def _rig_nodes(context):
     clearance = LaunchConfiguration('carry_clearance').perform(context).strip()
     route = transit_route(context, floor_join)
     H = carry_heights(G, ring_z=float(LaunchConfiguration('ring_z').perform(context)), rod=rod,
-                      attach_z=float(target_z), clearance=float(clearance) if clearance else None, route=route)
+                      attach_z=float(target_z), clearance=float(clearance) if clearance else None, route=route,
+                      drop_height=_drop_height(context))
     search_floor = f('minimum_search_z_m', H['minimum_search_z_m_empty' if floor_join else 'minimum_search_z_m'])
     # the low route climbs 3 cm after the drop (his 0.45 m, or back to the transit height, overshoots past the cap)
     drop_clear = (DROP_RELEASE_CLEARANCE + DROP_CLEAR_ABOVE_RELEASE
@@ -767,10 +841,11 @@ def _rig_nodes(context):
     check_transit_ceiling(planned_body_heights(
         floor_join=floor_join, ring_z=float(LaunchConfiguration('ring_z').perform(context)), attach_z=float(target_z),
         rod=rod, object_rest_z=G['object_rest_z'], lift=f('pickup_lift_height', H['pickup_lift_height']),
-        drop_approach=f('drop_approach_clearance', H['drop_approach_clearance']), drop_clear=drop_clear,
+        drop_approach=f('drop_approach_clearance', H['drop_approach_clearance']),
+        drop_clear=_release_clear(context, drop_clear, f('drop_approach_clearance', H['drop_approach_clearance'])),
         attach_clearance=f('attach_transit_clearance', H['attach_transit_clearance']), search_floor=search_floor),
         refuse=route != 'over' or 'transit' not in typed,
-        log=lambda msg: print(f'partner_mission rig ({route} transit): {msg}', flush=True))
+        log=lambda msg: print(f'partner_mission rig ({route} transit): {msg}', flush=True), ceiling=_ceiling(context))
     # pickup_contact_height (typed only; m1_irl_pickup.launch.py's measurement, Wesley 21 Oct, RIG-1021-q1pick: the
     # magnet marker above the object's marker with the magnet face resting on it): his contact point on the real
     # object instead of his commissioning puck's (86 x 86 x 22 mm, 0.012 over its marker)
@@ -908,11 +983,20 @@ def _rig_nodes(context):
                 **({'c1f2_cpp_authority_enabled': False} if val('cpp_authority', '') == 'false' else {}),
                 # end_after_drop:=true: after the drop QUAD4 holds clear of the drop zone until LAND (no reattach)
                 **({'end_after_drop': True} if val('end_after_drop', '') == 'true' else {}),
+                # drop_on_arrival:=true (Wesley 4 Nov, k1m_2-4: the swinging object never passed his 0.18 m held 0.5 s):
+                # release at the transit height once the magnet is inside drop_on_arrival_xy of the drop point
+                **_drop_on_arrival(context), **_takeoff_gate(context),
+                **_lift_full(context),
                 # pickup_xy / pickup_speed (typed only; his m1_measured_tip_pickup.yaml 0.025 m / 0.07 m/s): RIG-1029-k1_4, the
                 # magnet on the 1 m cable sat 4.1 cm (median) off the object and inside 2.5 cm only 17 % of the time, so his
                 # tiered capture never fired (his low and high tiers are already 0.10 / 0.12 on the rig, below)
                 **({'pickup_alignment_capture_xy_m': f('pickup_xy', 0.025)} if 'pickup_xy' in typed else {}),
                 **({'pickup_alignment_max_relative_speed_mps': f('pickup_speed', 0.07)} if 'pickup_speed' in typed else {}),
+                # pickup_proof_drift / _speed / _loss (typed only; Wesley 4 Nov, RIG-1104-k1m: the object lifted 1.3 m on the magnet
+                # but the magnet-object gap moved ~2 cm as it left the floor, past his 0.015 m drift, so the lift never proved)
+                **({'pickup_proof_maximum_contact_drift_m': f('pickup_proof_drift', 0.015)} if 'pickup_proof_drift' in typed else {}),
+                **({'pickup_proof_relative_speed_mps': f('pickup_proof_speed', 0.03)} if 'pickup_proof_speed' in typed else {}),
+                **({'pickup_proof_loss_contact_drift_m': f('pickup_proof_loss', 0.045)} if 'pickup_proof_loss' in typed else {}),
                 'magnet_drop_below_quad': f('magnet_drop_below_quad', G['magnet_drop_below_quad']),
                 # no auto-land from ATTACH_READY (its magnet OFF would drop QUAD4 off the ring)
                 'attach_ready_land_after_s': 0.0,
@@ -962,7 +1046,13 @@ def _rig_nodes(context):
                 # descent_abort_xy (typed only): plan_rig_fix_2026-10-30 W2a, the replay of sq5_2's swing (a full descent
                 # survives 49 % of start ticks at 0.08 m with a 1 s debounce, 85 % at 0.10 m)
                 'contact_abort_xy_threshold': f('descent_abort_xy', 0.08) if 'descent_abort_xy' in typed else 0.08,
-                'contact_abort_xy_velocity_threshold': 0.25,
+                # descent_abort_speed (typed only; Tejen's review 3 Nov: 0.35 trial): the gross-motion bound of the descent
+                'contact_abort_xy_velocity_threshold': f('descent_abort_speed', 0.25) if 'descent_abort_speed' in typed else 0.25,
+                # descent_hold / descent_gross_xy (typed only; Tejen's review 3 Nov, priority 1): past the position band the
+                # descent holds its height and resumes inside it; it restarts only past descent_gross_xy or the speed abort
+                **({'contact_descent_hold': val('descent_hold', '').strip().lower() in ('1', 'true', 'yes')}
+                   if 'descent_hold' in typed else {}),
+                **({'contact_descent_gross_xy_m': f('descent_gross_xy', 0.20)} if 'descent_gross_xy' in typed else {}),
                 # descent_debounce (typed only; DECISIONS_1355 section 2): RIG-1029-sq5_2's 6 of 6 descents left on one tick
                 **({'contact_abort_xy_debounce_s': f('descent_debounce', 0.0)} if 'descent_debounce' in typed else {}),
                 # plan 2026-10-14 WP3: hold at the bottom for the contact (gross errors and his quiet-miss rule leave),
@@ -999,6 +1089,7 @@ def _rig_nodes(context):
             'use_external_reference': True,
             'thrust_ratio': f('mpc_thrust_ratio', G['thrust_ratio']),
             'enable_thrust_ratio_feedback': G['thrust_ratio_feedback'],
+            **_throttle_max(context),
             'cable_length': f('mpc_cable_length', round(rod - MPC_CABLE_BELOW_DROP, 4)),
             'acados_cache_dir': os.path.expanduser('~/.cache/multi_drone_control/tejen_payload_mpc'),
             'pose_timeout_s': 0.25,
@@ -1116,11 +1207,28 @@ def _arguments():
         DeclareLaunchArgument('pickup_object_thickness', default_value=''),   # m ('' = 0.025, RIG-1021-q1pick)
         DeclareLaunchArgument('pickup_object_size', default_value=''),   # m, its side ('' = 0.10)
         DeclareLaunchArgument('end_after_drop', default_value='', choices=['', 'true']),   # rig: hold after the drop until LAND
+        DeclareLaunchArgument('takeoff_gate_topic', default_value=''),   # his TAKEOFF held until this topic speaks
+        DeclareLaunchArgument('drop_on_arrival', default_value='', choices=['', 'true']),   # release at the transit height
+        DeclareLaunchArgument('line_up', default_value='', choices=['', 'true']),   # to the ring along the plate's line
+        DeclareLaunchArgument('line_up_radius', default_value=''),    # m, the staging point's distance ('' = 1.2)
+        DeclareLaunchArgument('line_up_lateral', default_value=''),   # m, lined up within this of the line ('' = 0.25)
+        DeclareLaunchArgument('lift_full', default_value='', choices=['', 'true']),   # his lift to its full height first
+        DeclareLaunchArgument('drop_height', default_value=''),   # m: the carried object's bottom above the ring origin (~ the net)
+        DeclareLaunchArgument('max_body_z', default_value=''),    # m: QUAD4's ceiling ('' = 2.6; at most 3.0)
+        DeclareLaunchArgument('mpc_battery_comp', default_value=''),   # his radio throttle per volt below 23.5 V ('' = none)
+        DeclareLaunchArgument('mpc_throttle_max', default_value=''),   # his OCP's throttle bound ('' = his 0.60; 0.60-0.95)
+        DeclareLaunchArgument('drop_on_arrival_xy', default_value=''),   # m: the magnet's radius over the drop point ('' = 0.12)
         DeclareLaunchArgument('cpp_authority', default_value='', choices=['', 'false']),   # rig: 'false' = his Python transfers only
         DeclareLaunchArgument('climb_speed', default_value=''),   # m/s, his TAKEOFF climb ('' = his 0.15)
         DeclareLaunchArgument('match_dwell', default_value=''),          # rig: s, his gates' unbroken hold ('' = his 1.0)
         DeclareLaunchArgument('descent_debounce', default_value=''),   # s: his contact descent's 8 cm restart held this long ('' = one tick)
         DeclareLaunchArgument('descent_abort_xy', default_value=''),   # m: his contact descent's position restart ('' = rig 0.08, twin his)
+        DeclareLaunchArgument('pickup_proof_drift', default_value=''),   # m: his pickup proof's magnet-object drift, rig ('' = 0.015)
+        DeclareLaunchArgument('pickup_proof_speed', default_value=''),   # m/s: its relative speed ('' = 0.03)
+        DeclareLaunchArgument('pickup_proof_loss', default_value=''),    # m: its loss drift, above the drift ('' = 0.045)
+        DeclareLaunchArgument('descent_abort_speed', default_value=''),   # m/s: his contact descent's speed abort, rig ('' = 0.25)
+        DeclareLaunchArgument('descent_hold', default_value=''),   # true: past the band his contact descent holds its height ('' = his restart)
+        DeclareLaunchArgument('descent_gross_xy', default_value=''),   # m: with descent_hold, a restart only past this ('' = 0.20)
         DeclareLaunchArgument('match_xy', default_value=''),             # twin: m, his contact match xy gate ('' = his)
         DeclareLaunchArgument('attach_twist', default_value='', choices=['', 'zero']),   # 'zero': the bridge's twist zero in hover ('' = raw)
         DeclareLaunchArgument('commit_backdate', default_value=''),   # s: the bridge's shared commitments start this long before now ('' = his timing)

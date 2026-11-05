@@ -215,7 +215,7 @@ def twin_switches():
         cut_node = cut + node_offset(rid) if cut is not None else None
         s = switch(rid, cut_node)
         tag = dict(run=rid, config=config_name(rid), pull=pull, git=man.get('git_sha', '')[:7],
-                   dirty=len(man.get('dirty_files') or []), cut=kind)
+                   dirty=man.get('dirty_files') or 0, cut=kind)
         if s is None:
             none.append(tag)
             continue

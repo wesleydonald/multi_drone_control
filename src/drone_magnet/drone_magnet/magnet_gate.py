@@ -29,6 +29,10 @@ On a restart it forwards nothing for restore_s while it listens to its own latch
 The full M1 (start_ours, QUAD4 starts welded as a carrier): the coil is ours from boot (our detach releases it),
 his from /partner/release on (his pickup), and ours again from our span's first ON.
 
+The operator OFF (Wesley 4 Nov, RIG-1104-k1m_3/_4: his drop never started and an operator OFF had no way through;
+operator_topic '' = off): an OFF there reaches the coil whoever holds it and counts as his drop; every ON after it, his
+or ours, is held until an operator ON, which only clears the hold (the next ON of his or ours drives the coil).
+
 The tilt cut (card docs/experiments/2026-10-11_quad4_tilt_cut.md, critic round 2 H-B; cut_state_topic '' = off): when
 QUAD4's mux reads 'cut' (it has disarmed the vehicle), the coil goes OFF at once and stays OFF, re-sent at 2 Hz, and
 both inputs are dropped until this node restarts: a dead QUAD4 must not hang on plate 9, and neither his rejoin's ON
@@ -83,6 +87,8 @@ class MagnetGate:
         self._held_off_in = None
         self._held_on = False
         self._dropped_after_cut = False
+        self.operator_off = False     # an operator OFF holds every ON until an operator ON
+        self._held_on_operator = False
 
     def his_phase(self, phase):
         self.phase = str(phase).strip().upper()
@@ -118,6 +124,31 @@ class MagnetGate:
         self.last = 'OFF'
         return None
 
+    def operator(self, text):
+        """The operator's OFF: the coil OFF now, held OFF until an operator ON (which forwards nothing itself)."""
+        w = magnet_word(text)
+        if w is None or self.dry or self.source == CUT:
+            return None
+        if w == 'OFF':
+            self.operator_off = True
+            self._held_on_operator = False
+            self.dropped = True
+            self.events.append('OPERATOR OFF: coil OFF; every ON (his or ours) is held until an operator ON')
+            self.last = 'OFF'
+            return 'OFF'
+        if self.operator_off:
+            self.operator_off = False
+            self.events.append('operator ON: the hold is cleared; the next ON of his or ours drives the coil')
+        return None
+
+    def _operator_held(self, who, w):
+        if w == 'ON' and self.operator_off:
+            if not self._held_on_operator:
+                self._held_on_operator = True
+                self.events.append(f'{who} ON held: the operator OFF holds the coil OFF')
+            return True
+        return False
+
     def partner(self, text):
         w = magnet_word(text)
         if w is None:
@@ -126,6 +157,8 @@ class MagnetGate:
             return self._dry_drop('his', w)
         if self.source == CUT:
             return self._dropped_cut('his', w)
+        if self._operator_held('his', w):
+            return None
         if self.source != PARTNER:
             if not self._dropped_partner:
                 self._dropped_partner = True
@@ -147,6 +180,8 @@ class MagnetGate:
             return self._dry_drop('our', w)
         if self.source == CUT:
             return self._dropped_cut('our', w)
+        if self._operator_held('our', w):
+            return None
         if self.source == PARTNER:
             if w == 'OFF':
                 if not self._dropped_ours_off:
@@ -201,6 +236,7 @@ class MagnetGateNode(Node):
         release_topic = str(self.declare_parameter('release_topic', '').value)
         cut_state_topic = str(self.declare_parameter('cut_state_topic', '').value)
         dry = bool(self.declare_parameter('dry', False).value)
+        operator_topic = str(self.declare_parameter('operator_topic', '').value)
         self.gate = MagnetGate(start_ours=start_ours, dry=dry)
         self._t0 = self.get_clock().now().nanoseconds * 1e-9
         self._restore_s = restore_s
@@ -216,6 +252,8 @@ class MagnetGateNode(Node):
                                      GATE_STATE_QOS)
         if puck_topic:
             self.create_subscription(Bool, puck_topic, lambda m: self._on(self.gate.puck, m.data), 10)
+        if operator_topic:
+            self.create_subscription(String, operator_topic, lambda m: self._on(self.gate.operator, m.data), 10)
         if release_topic:
             self.create_subscription(
                 String, release_topic,
@@ -236,7 +274,8 @@ class MagnetGateNode(Node):
             self.state_pub.publish(String(data=self.gate.source))
         self.get_logger().info(
             f'[magnet_gate] drone {d}: {out_topic} follows his {partner_topic} until the first ON on '
-            f'{ours_topic} (our span), then ours only' + (f'; his puck from {puck_topic}' if puck_topic else ''))
+            f'{ours_topic} (our span), then ours only' + (f'; his puck from {puck_topic}' if puck_topic else '')
+            + (f'; an OFF on {operator_topic} always passes' if operator_topic else ''))
 
     def _mux_state_cb(self, msg):
         if msg.data.strip().lower() != CUT or self.gate.source == CUT:
@@ -266,7 +305,7 @@ class MagnetGateNode(Node):
         out = feed(value)
         for e in self.gate.events:
             # one severity per call site (rclpy refuses a logger call that changes it)
-            if 'OURS' in e or 'PARTNER' in e or 'held' in e or 'DRY' in e:
+            if 'OURS' in e or 'PARTNER' in e or 'held' in e or 'DRY' in e or 'OPERATOR' in e:
                 self.get_logger().warn(f'[magnet_gate] {e}')
             else:
                 self.get_logger().info(f'[magnet_gate] {e}')

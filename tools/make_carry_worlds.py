@@ -5,10 +5,11 @@ tools/make_carry_worlds.py
 Generate the rig-twin carry worlds and their drone models, so the sim geometry is
 the rig's as flown on 30 Sep 2026 (docs/decisions.md; rig-thrust-map-and-geometry):
 
-  drone      0.475 kg airframe with pack over all links  -> models/x3_rig_drone{i}.sdf
+  drone      0.510 kg airframe with pack over all links -> models/x3_rig_drone{i}.sdf
   rod        0.55 m from a ball 4 cm below the drone centre to the magnet, ball at
-             both ends; rod + magnet 0.075 kg = 0.040 along the rod + 0.035 magnet at
-             the payload end (split not weighed; the total is)
+             both ends; rod + magnet 0.040 kg = 0.002 along the rod + 0.038 magnet at
+             the payload end (Wesley 4 Nov: magnet + 1 m cable about 0.040 kg, the magnet
+             about 95 %; was 0.040 + 0.035 on a 0.475 airframe; each drone stays 0.55 kg)
   ring       0.86 kg, outer diameter 0.51 m, 40 mm thick, magnets at r 0.225 flush
              with the top face (attach_z 0.020 above the CoG)
 
@@ -49,12 +50,12 @@ GEN = os.path.join(ASSETS, 'generate_rigid_world.py')
 
 PIVOT_DZ = 0.04
 CABLE_LEN = 0.55
-ROD_MASS = 0.040
-MAGNET_MASS = 0.035
+ROD_MASS = 0.002
+MAGNET_MASS = 0.038
 ATTACH_RADIUS = 0.225
 RING_OUTER_R = 0.255
 RING_THICKNESS = 0.040
-AIRFRAME_MASS = 0.475
+AIRFRAME_MASS = 0.510
 LEGACY_BASE_MASS, ROTOR_MASS = 0.6, 0.01
 RIG_BASE_MASS = AIRFRAME_MASS - 4 * ROTOR_MASS
 
@@ -98,6 +99,11 @@ WORLDS = {
     # X4's 1.15 kg cell (card 2026-10-30_x4_endurance_relay; Wesley 30 Oct: claims on the 0.86-class ring plus one
     # 1.15 kg cell per table): the 8-quad ring above at the new payload's mass
     'eight_rigid_ground_rig_R50_m115_L100.sdf': ['--n', '8', '--payload-mass', '1.15', '--plates', '8'],
+    # X4's relay on a damped universal at each plate (Wesley 31 Oct, docs/analysis/x4_weld_kick_2026-10-31.md): a free
+    # stub on a ball spins on after a release and the re-weld hands the rod its velocity; and the T for the short test
+    'eight_rigid_ground_rig_R50_uh_L100.sdf': ['--n', '8', '--payload-mass', '0.9', '--plates', '8'],
+    'eight_rigid_ground_rig_R50_m115_uh_L100.sdf': ['--n', '8', '--payload-mass', '1.15', '--plates', '8'],
+    'three_rigid_ground_rig_T_uh_L100.sdf': ['--n', '3', '--azimuths', '0,270,180'],
     # thesis R (card 2026-10-23_refly_1m; Wesley 23 Oct): Tier B's layouts and the push world at 1 m
     'four_rigid_ground_rig_3969_L100.sdf': ['--n', '4', '--azimuths', '30,90,180,270'],
     'four_rigid_ground_rig_gap135_L100.sdf': ['--n', '4', '--azimuths', '30,90,165,270'],
@@ -128,6 +134,8 @@ WORLD_OVERRIDES = {w: ['--cable-len', '1.0'] for w in WORLDS if w.endswith('_L10
 # tick (100-220 ms wall in the twin) stays inside its 100 ms of sim
 for w, (r, outer) in {'eight_rigid_ground_rig_R50_L100.sdf': (0.5, 0.53),
                       'eight_rigid_ground_rig_R50_m115_L100.sdf': (0.5, 0.53),
+                      'eight_rigid_ground_rig_R50_uh_L100.sdf': (0.5, 0.53),
+                      'eight_rigid_ground_rig_R50_m115_uh_L100.sdf': (0.5, 0.53),
                       'six_rigid_ground_rig_R50_L100.sdf': (0.5, 0.53),
                       'nine_rigid_ground_rig_R53_L100.sdf': (0.53, 0.56)}.items():
     WORLD_OVERRIDES[w] += ['--attach-radius', str(r), '--ring-outer-r', str(outer), '--real-time-factor', '0.4',
@@ -142,6 +150,10 @@ for w in ('four_rigid_ground_rig.sdf', 'three_rigid_ground_rig_T.sdf', 'two_rigi
           'three_rigid_ground_rig_push_L100.sdf', 'three_rigid_ground_rig_T_push_L100.sdf',
           'four_rigid_ground_rig_hub_L100.sdf', 'four_rigid_ground_rig_hubcom_L100.sdf'):
     WORLD_OVERRIDES[w] = WORLD_OVERRIDES.get(w, []) + ['--tether-pose-hz', '60']
+WORLD_OVERRIDES['three_rigid_ground_rig_T_uh_L100.sdf'] += ['--tether-pose-hz', '60']
+for w in ('eight_rigid_ground_rig_R50_uh_L100.sdf', 'eight_rigid_ground_rig_R50_m115_uh_L100.sdf',
+          'three_rigid_ground_rig_T_uh_L100.sdf'):
+    WORLD_OVERRIDES[w] += ['--plate-damping', '1e-4']
 # world C's rods end at the drone centre (after RIG_ARGS' 4 cm pivot)
 WORLD_OVERRIDES['four_rigid_ground_rig_hubcom_L100.sdf'] += ['--pivot-dz', '0.0']
 RIG_ARGS = ['--cable-len', str(CABLE_LEN), '--detachable', '--ground-start',

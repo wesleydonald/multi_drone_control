@@ -44,6 +44,7 @@ from .geometry import (quat_to_rot_np, attach_points, nominal_cable_dirs,
 from .load_trajectory import KINDS, LoadTrajectory, ORBIT_RAMP_S, path_radius
 from .planner_solver import PlannerSolver, HorizonFallback, PLAN_N, PLAN_TF, rod_accel_at
 from .params import PlannerConfig, load_inertia
+from .rod_reread import RodReread
 from .creep_controller import CreepController
 from .reference_builder import ReferenceBuilder
 from .disturbance_estimator import DisturbanceEstimator
@@ -89,6 +90,7 @@ LAND_GRACE_S  = 1.5           # s to ignore the stall test after LAND, while the
                               # drones are still catching up to the new reference
 LAND_MAX_DROP = 1.50          # m safety floor below the handover height
 LAND_POSE_FRESH_S = 0.2       # s: land_rearm_touchdown reads only poses this fresh
+POSE_SKEW_WARN_S = 0.25       # s: a slot's pose this much older than the ring's (mocap stamps) is logged
 
 # Cable-FF soft-start. The payload sits on the GROUND through the handover settle,
 # so stepping the full tension feedforward on at handover makes the drones lurch to
@@ -107,6 +109,8 @@ BREAKAWAY_VZ = 0.03
 
 LAND_DEPARTED_WAIT_S = 15.0   # s to wait for a departed (detached) drone to come
                               # down before /fleet/landed disarms the whole fleet
+CARRIERS_STILL_MPS = 0.05     # carriers_down_alone: every carrier and the ring this still (the trackers' |vz| bound)
+CARRIERS_STILL_S = 0.5        # ...for this long in a row (critic, 5 Nov: one still tick was the whole test)
 
 
 class ZBias:
@@ -242,6 +246,15 @@ def static_cable_z(planned_a_z, load_mass, drone_mass):
     return [v / tot * (-float(load_mass) * 9.81 / float(drone_mass)) for v in a]
 
 
+def stamp_s(msg):
+    """A message's header stamp in seconds, or None when it is unset (or the message has no header)."""
+    s = getattr(getattr(msg, 'header', None), 'stamp', None)
+    if s is None:
+        return None
+    v = s.sec + s.nanosec * 1e-9
+    return v if v > 0.0 else None
+
+
 def tick_log_header(n_drones, n_slots):
     """Columns of the planner's log.csv. The first block is the original layout; later
     columns are only ever appended, so readers by name or by position keep working.
@@ -276,6 +289,9 @@ def tick_log_header(n_drones, n_slots):
     # this tick, the measured azimuth blank only without a pivot (like len)
     cols += ['yaw_ref0', 'plan_yaw1', 'plan_yaw5'] + [f'az1_{i}' for i in range(n_slots)]
     cols += [f'az0_{i}' for i in range(n_slots)]
+    # per slot, the ring pose's mocap stamp minus the slot drone's (s; + = the drone's pose is older): RIG-1105-sq8_2's
+    # carriers ran ~0.6 s behind the ring; blank without both stamps
+    cols += [f'skew{i}' for i in range(n_slots)]
     return cols
 
 
@@ -354,6 +370,14 @@ class LoadPlanner(Node):
         # reference published here is kept POS_LIMIT_REF_MARGIN_M inside +-pos_limit_m in x and y (the fleet manager
         # lands the fleet on a drone past the limit itself)
         self._pos_limit_m = float(self.declare_parameter('pos_limit_m', 0.0).value)
+        # the ring more than ring_low_land_m under its height reference for ring_low_land_s after the lift lands the
+        # fleet (a low pack sank the ring under every tilt rule, R3444); 0 = off
+        self._ring_low_m = float(self.declare_parameter('ring_low_land_m', 0.0).value)
+        self._ring_low_s = float(self.declare_parameter('ring_low_land_s', 3.0).value)
+        self._ring_low_since = None
+        self._ring_low_sent = False
+        self._ring_low_pub = (self.create_publisher(String, '/fleet/command', 10) if self._ring_low_m > 0.0
+                              else None)
         # The breakaway freeze holds the pull where the ring broke free, but only through the
         # pretension: once the lift ramp starts the cap returns to 1 over ff_cap_release_s.
         # Held for the whole flight (0 here) it told the trackers the rods pull 7-27 % less
@@ -370,6 +394,9 @@ class LoadPlanner(Node):
         self._zbias_warned = False
         self._load_t = None                    # monotonic time of the last payload pose
         self._drone_t = {}                     # monotonic time of each drone's last pose
+        self._load_stamp = None                # the last ring pose's mocap stamp (s)
+        self._drone_stamp = {}                 # each drone's last pose's mocap stamp (s)
+        self._pose_skew_warned = 0.0
         self.auto_slot_assign = cfg.auto_slot_assign
         self.load_traj = cfg.load_traj
         if self.load_traj not in KINDS:          # an unknown kind used to hover silently
@@ -383,6 +410,7 @@ class LoadPlanner(Node):
         # Flight-sequence runtime state (not params).
         self._settle_left = 0.0
         self.traj_t = 0.0            # elapsed lateral-trajectory time (post-hover)
+        self._traj_rate = 1.0        # the path clock's rate (the attach pause slows it to 0 and back; 1 otherwise)
         self.descending = False      # latched once the lateral trajectory closes
         self._land_to_ground = False # LAND command: descend all the way to ground
         self._landed = False         # descent finished, load back at start height
@@ -431,6 +459,10 @@ class LoadPlanner(Node):
         self.rod_mass = float(self.declare_parameter('rod_mass', 0.0).value)
         self.rod_lam = (float(self.declare_parameter('rod_com', 0.0).value) / self.cable_len
                         if self.rod_mass > 0.0 else 0.0)
+        # references that balance the rod: level tensions, the cables leaning (card 2026-10-31_rod_in_plan; twin only)
+        self._rod_level = bool(self.declare_parameter('plan_rod_level', False).value)
+        if self._rod_level and self.rod_mass <= 0.0:
+            raise ValueError('plan_rod_level needs rod_mass > 0')
         self.dyn = LoadCableDynamics(
             self.n, self.load_mass, self.load_inertia, [self.cable_len] * self.n,
             self.rho, self.drone_mass, rod_mass=self.rod_mass, rod_lam=self.rod_lam)
@@ -459,6 +491,21 @@ class LoadPlanner(Node):
         # drone stronger than its thrust map hovered 0.26 m above a reference stopped at 0 (card
         # 2026-10-17_land_ref_below_rest, R2088)
         self._land_no_floor = bool(self.declare_parameter('land_descend_to_stall', False).value)
+        # while the LAND waits for a departed drone, the carriers stalled on the floor idle and are disarmed alone
+        # (card 2026-11-05_carriers_down_alone): the rig's carriers hovered 6.5-8.6 s waiting for QUAD4 (5 Nov)
+        self._carriers_alone = bool(self.declare_parameter('carriers_down_alone', False).value)
+        if self._carriers_alone and not self._land_no_floor:
+            raise ValueError('carriers_down_alone needs land_descend_to_stall (a reference stopped at z 0 stalls with '
+                             'the carriers still over the floor)')
+        self._carriers_released = set()
+        self._carrier_pubs = {}
+        self._td_by_stall = False
+        self._carriers_still_ct = 0
+        self._land_stale = {}                  # land_rearm_touchdown: stall-test ticks a stale pose held, per drone
+        self._land_stale_run = {}              # ...and the drones stale now, with their current run's ticks
+        self._carriers_busy_said = False
+        # each rod's length read again in the pretension's full-pull hold (card 2026-10-31_rod_len_reread)
+        self._rod_reread = RodReread() if bool(self.declare_parameter('rod_len_reread', False).value) else None
         self.solver = PlannerSolver(self.dyn, self.get_logger(), pin_rates=self.pin_cable_rates)
         self._configure_solver(self.solver)
         # Pre-built OCPs by fleet size, for handing back after a reconfiguration.
@@ -477,7 +524,7 @@ class LoadPlanner(Node):
             pivot_offset=self.pivot_offset, drone_yaw=self._slot_yaw)
         # Builds the per-node OCP tracking reference from the lift schedule + load
         # trajectory (fed the schedule via refs.update() before each planner solve).
-        self.refs = ReferenceBuilder(self.dyn, self.n, self._s_nom, self.dt, self.traj)
+        self.refs = ReferenceBuilder(self.dyn, self.n, self._s_nom, self.dt, self.traj, rod_level=self._rod_level)
         self.refs.rate_ff = self._rate_ff
         self.refs.ref_lag_s = self._ref_lag_s
 
@@ -914,7 +961,7 @@ class LoadPlanner(Node):
             'distance': self.traj.distance, 'laps': self.traj.laps, 'lap_s': float(self.traj.lap_s() or 0.0),
             'hover_x': float(self.hover_xy[0]), 'hover_y': float(self.hover_xy[1]),
             'z': float(z), 'traj_t': float(self.traj_t),
-            'hold_s': float(max(0.0, getattr(self, '_reconfig_hold_left', 0.0))),
+            'hold_s': float(max(0.0, getattr(self, '_reconfig_hold_left', 0.0), getattr(self, '_pause_hold_s', 0.0))),
             'descending': bool(self.descending), 'landing': bool(self._land_to_ground),
             # the trajectory clock advances only once the lift has topped out
             'running': bool(self.phase == 'planner' and self.lift_z0 is not None
@@ -930,6 +977,7 @@ class LoadPlanner(Node):
         tick_log_header). Interactive Gazebo runs (Wesley flies, the logs are read
         afterwards) had no payload record at all. Never raises."""
         try:
+            self._pose_skew_note()
             if self._run_log_dir is None:
                 return
             if getattr(self, '_tick_log', None) is None:
@@ -948,6 +996,20 @@ class LoadPlanner(Node):
             if not getattr(self, '_tick_log_warned', False):
                 self._tick_log_warned = True
                 self.get_logger().warn(f'[planner] tick log off: {e}')
+
+    def _pose_skew_note(self):
+        """Log a slot whose pose reached the planner well behind the ring's (by mocap stamp), at most every 5 s:
+        RIG-1105-sq8_2's carriers ran ~0.6 s behind the ring in the lift and at LAND (the bag had them on time)."""
+        ring = self._load_stamp
+        if ring is None:
+            return
+        late = [(d, ring - s) for d in self.slot2drone[:self.n]
+                if (s := self._drone_stamp.get(d)) is not None and ring - s > POSE_SKEW_WARN_S]
+        now = time.monotonic()
+        if late and now - self._pose_skew_warned >= 5.0:
+            self._pose_skew_warned = now
+            self.get_logger().warn('[planner] late poses: ' + ', '.join(f'drone {d + 1} {1e3 * a:.0f} ms' for d, a in late)
+                                   + ' behind the ring (mocap stamps)')
 
     def _tick_log_row(self):
         nd, ns = self._log_nd, self._log_ns
@@ -1030,6 +1092,12 @@ class LoadPlanner(Node):
         else:
             row += [''] * 3
         row += fit(az1, ns) + [r[5] if r else '' for r in per_rod]
+        ring, stamps = getattr(self, '_load_stamp', None), getattr(self, '_drone_stamp', {})
+        skew = []
+        for i in range(self.n):
+            s = stamps.get(self.slot2drone[i]) if i < len(self.slot2drone) else None
+            skew.append(f'{ring - s:.3f}' if ring is not None and s is not None else '')
+        row += fit(skew, ns)
         return row
 
     # Mocap callbacks
@@ -1042,6 +1110,7 @@ class LoadPlanner(Node):
             p.x, p.y, p.z, o.w, o.x, o.y, o.z,
             lv.x, lv.y, lv.z, av.x, av.y, av.z])
         self._load_t = time.monotonic()
+        self._load_stamp = stamp_s(msg)
         if self.hover_xy is None:
             self.hover_xy = (p.x, p.y)
 
@@ -1053,6 +1122,7 @@ class LoadPlanner(Node):
         o = msg.pose.orientation
         self.drone_quat[i] = np.array([o.w, o.x, o.y, o.z])
         self._drone_t[i] = time.monotonic()
+        self._drone_stamp[i] = stamp_s(msg)
 
     def _fleet_command_cb(self, msg: String):
         cmd = msg.data.strip().upper()
@@ -1103,6 +1173,16 @@ class LoadPlanner(Node):
         self._land_ff_off_said = False
         self._land_anchor = None
         self._land_drop = 0.0
+        self._td_by_stall = False
+        self._carriers_released = set()
+        self._carriers_still_ct = 0
+        self._carriers_busy_said = False
+        self._land_stale = {}
+        self._land_stale_run = {}
+        if getattr(self, '_carriers_alone', False):
+            for d in self.slot2drone[:self.n]:
+                # made now, so the trackers and the manager have matched it by the touchdown; False clears a last flight's
+                self._carrier_release_pub(d).publish(Bool(data=False))
         self.get_logger().info('[planner] LAND - descending to the floor')
 
     def _land_departed_wait_s(self):
@@ -1122,10 +1202,39 @@ class LoadPlanner(Node):
         if not self._land_rearm:
             return self._touchdown.update(zs)
         now = time.monotonic()
-        if any(now - self._drone_t.get(d, -1e9) > LAND_POSE_FRESH_S for d in self.slot2drone[:self.n]):
+        stale = {d: now - self._drone_t.get(d, -1e9) for d in self.slot2drone[:self.n]
+                 if now - self._drone_t.get(d, -1e9) > LAND_POSE_FRESH_S}
+        self._note_stale_poses(stale)
+        if stale:
             self._touchdown._stall_ct = 0                  # a frozen pose reads as a stall
             return False
         return self._touchdown.update(zs)
+
+    def _note_stale_poses(self, stale):
+        """land_rearm_touchdown's stale poses, logged only (rig-path critic, card 2026-10-17_touchdown_height_gate):
+        each drone's stall-test ticks held by a stale pose this LAND (in the touchdown line), and one line as each
+        dropout starts and ends. Stale is by arrival time: a lost Motive body whose last pose keeps arriving (the rig
+        bags repeat it, tools/mocap_glitch_scan.py) is not seen here and reads as a stall, as with the re-arm off."""
+        for d, age in stale.items():
+            self._land_stale[d] = self._land_stale.get(d, 0) + 1
+            if d not in self._land_stale_run:
+                self._land_stale_run[d] = 0
+                old = f'pose {age:.2f} s old (no mocap message; Motive dropout?)' if age < 1e8 else 'no pose yet'
+                self.get_logger().warn(f'[planner] LAND stall test: d{d} {old}: stall count held at 0 while it is stale')
+            self._land_stale_run[d] += 1
+        for d in [d for d in self._land_stale_run if d not in stale]:
+            n = self._land_stale_run.pop(d)
+            what = 'pose fresh again' if d in self.slot2drone[:self.n] else 'left the load'
+            self.get_logger().info(f'[planner] LAND stall test: d{d} {what} after {n} stale tick(s) '
+                                   f'({n / PLANNER_HZ:.1f} s)')
+
+    def _land_stale_text(self):
+        """The touchdown line's tail under land_rearm_touchdown: the stall-test ticks a stale pose held this LAND."""
+        if not self._land_rearm:
+            return ''
+        n = sum(self._land_stale.values())
+        per = ', '.join(f'd{d} {k}' for d, k in sorted(self._land_stale.items()))
+        return f'; stale-pose ticks {n}' + (f' ({per})' if n else '')
 
     def _land_hold_refs(self):
         """LAND with the load already resting: the rods are slack and the OCP has no
@@ -1225,6 +1334,57 @@ class LoadPlanner(Node):
         /fleet/landed (a fleet-wide disarm) cannot catch one airborne. The plain
         planner has no departed drones; the dissipative node overrides this."""
         return True
+
+    def _carriers_down_tick(self):
+        """carriers_down_alone (card 2026-11-05_carriers_down_alone), each tick of the LAND's wait for a departed drone:
+        once the touchdown came by the stall, the ring is down, every carrier and the ring have been still on fresh
+        poses for CARRIERS_STILL_S and no take-back can still pull the ring (_take_back_busy), each carrier on the load
+        gets /drone_d/carrier_released True, once per LAND. Its tracker then idles it and asks to be disarmed alone only
+        within its carriers_down_band_m of its own rest; the fleet manager disarms it. QUAD4's landing and LANDED are as
+        before."""
+        if not getattr(self, '_carriers_alone', False) or not self._td_by_stall or not self._load_down():
+            self._carriers_still_ct = 0
+            return
+        carriers = [d for d in self.slot2drone[:self.n] if d not in self._carriers_released]
+        if not carriers:
+            return
+        busy = self._take_back_busy()
+        if busy is not None and not getattr(self, '_carriers_busy_said', False):
+            self._carriers_busy_said = True
+            self.get_logger().info(f'[planner] carriers_down_alone: carriers held armed while {busy}')
+        now = time.monotonic()
+        vel = self._slot_vel() or []
+        still = (busy is None and now - getattr(self, '_load_t', -1e9) <= LAND_POSE_FRESH_S
+                 and float(np.linalg.norm(self.load_state[7:10])) <= CARRIERS_STILL_MPS
+                 and len(vel) == len(self.slot2drone[:self.n])
+                 and all(v is not None and now - self._drone_t.get(d, -1e9) <= LAND_POSE_FRESH_S
+                         and float(np.linalg.norm(v)) <= CARRIERS_STILL_MPS
+                         for d, v in zip(self.slot2drone[:self.n], vel)))
+        self._carriers_still_ct = getattr(self, '_carriers_still_ct', 0) + 1 if still else 0
+        if self._carriers_still_ct < int(round(CARRIERS_STILL_S * PLANNER_HZ)):
+            return
+        for d in carriers:
+            self._carrier_release_pub(d).publish(Bool(data=True))
+            self._carriers_released.add(d)
+        self.get_logger().info(
+            f'[planner] carriers_down_alone: ring down, touchdown by the stall, every carrier and the ring still for '
+            f'{CARRIERS_STILL_S:.1f} s; '
+            + ', '.join(f'd{d} z {float(self.drone_pos[d][2]):.2f}' for d in carriers if self.drone_pos[d] is not None)
+            + ' released to idle at their rest and be disarmed alone while the LAND waits for the departed drone(s)')
+
+    def _take_back_busy(self):
+        """Why a departed drone could still pull the landed ring (the detach mode: a take-back before its release is
+        seen), else None. The plain planner has none."""
+        return None
+
+    def _carrier_release_pub(self, d):
+        """/drone_d/carrier_released (latched): a carrier on the landed ring may idle and be disarmed alone within its
+        own band. Not /drone_d/departed, so a departed drone's lone landing stays exactly as it was."""
+        pub = self._carrier_pubs.get(d)
+        if pub is None:
+            pub = self._carrier_pubs[d] = self.create_publisher(Bool, f'/drone_{d}/carrier_released', QoSProfile(
+                depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        return pub
 
     def _drone_at(self, i):
         """Measured position of the physical drone occupying OCP slot i (identity
@@ -1403,11 +1563,36 @@ class LoadPlanner(Node):
     def _plan_timer(self):
         self._tick_t0 = time.perf_counter()
         try:
+            self._ring_low_check()
             self._plan()
         finally:
             if self._tick_pub is not None:
                 t = self.get_clock().now().nanoseconds * 1e-9
                 self._tick_pub.publish(Float64MultiArray(data=[t, 1.0 / PLANNER_HZ]))
+
+    def _ring_low_check(self):
+        """ring_low_land_m > 0: the ring that far under its height reference for ring_low_land_s in a row, once the
+        lift has topped out and before any LAND, descent or drop, lands every drone (once a flight)."""
+        if getattr(self, '_ring_low_m', 0.0) <= 0.0 or self._ring_low_sent:
+            return
+        lz0, ls = self.lift_z0, self.load_state
+        armed = (self.phase == 'planner' and lz0 is not None and ls is not None and self.takeoff_seen
+                 and self.lift_progress >= (self.target_z - lz0) - 1e-6
+                 and not self.descending and not self._land_to_ground
+                 and getattr(self, '_dropped', None) is None)
+        deficit = min(self.target_z, lz0 + self.lift_progress) - float(ls[2]) if armed else 0.0
+        if deficit <= self._ring_low_m:
+            self._ring_low_since = None
+            return
+        t = self.get_clock().now().nanoseconds * 1e-9
+        if self._ring_low_since is None:
+            self._ring_low_since = t
+        if t - self._ring_low_since >= self._ring_low_s:
+            self._ring_low_sent = True
+            self._ring_low_pub.publish(String(data='LAND'))
+            self.get_logger().error(f'[planner] RING LOW: the ring {deficit:.2f} m under its reference for '
+                                    f'{t - self._ring_low_since:.1f} s (limit {self._ring_low_m:.2f} m, '
+                                    f'{self._ring_low_s:.1f} s): LAND, every drone lands')
 
     def _plan(self):
         if self.load_state is None or any(d is None for d in self.drone_pos):
@@ -1507,7 +1692,13 @@ class LoadPlanner(Node):
                     self.get_logger().info(
                         f'[planner] pretension: ring broke free at {self._ff_cap:.0%} of the planned '
                         f'pull (up {rose_now:+.3f} m, vz {float(self.load_state[9]):+.2f}); pull held there')
+                rr = getattr(self, '_rod_reread', None)
+                if rr is not None and self._ff_t >= self.pretension_s:
+                    rr.sample([self._rim_dist(i) for i in range(self.n)])
                 if not self._pretensioning():
+                    if rr is not None:
+                        rr.finish(self.get_clock().now().nanoseconds * 1e-9, self.cable_len_i[:self.n])
+                        self._say_rod_reread(rr, 'the hold')
                     rose = float(self.load_state[2]) - self.lift_z0
                     self.get_logger().info(
                         f'[planner] pretension done (ring z {self.load_state[2]:.3f}, '
@@ -1538,6 +1729,7 @@ class LoadPlanner(Node):
                     if not self._touched_down:
                         stalled = self._touchdown_stalled()
                         self._touched_down = stalled or self.lift_progress <= floor + 1e-6
+                        self._td_by_stall = bool(stalled)
                         if self._touched_down and (self._land_rearm or self._land_no_floor):
                             rz = getattr(self, '_rest_z', {})
                             hs = ', '.join(
@@ -1546,7 +1738,7 @@ class LoadPlanner(Node):
                                 for d in self.slot2drone[:self.n] if self.drone_pos[d] is not None)
                             self.get_logger().info(
                                 f'[planner] touchdown by {"stall" if stalled else "max drop"}: {hs}; '
-                                f'reference {self._land_drop:.2f} m below the anchors')
+                                f'reference {self._land_drop:.2f} m below the anchors{self._land_stale_text()}')
                         if self._touched_down and not self._departed_down():
                             self.get_logger().info(
                                 '[planner] survivors down — reference held, waiting '
@@ -1555,6 +1747,8 @@ class LoadPlanner(Node):
                     if self._touched_down:
                         self._land_wait_ct += 1
                         done = self._departed_down()
+                        if not done:
+                            self._carriers_down_tick()
                         wait_s = self._land_departed_wait_s()
                         if not done and self._land_wait_ct >= int(wait_s * PLANNER_HZ):
                             self.get_logger().warn(
@@ -1621,7 +1815,7 @@ class LoadPlanner(Node):
                     if self._traj_hold_left <= 0.0:
                         self.get_logger().info(f'[planner] hover hold done: {self.load_traj} starts')
                 elif self.load_traj != 'hover' and lift_done:
-                    self.traj_t += 1.0 / PLANNER_HZ
+                    self.traj_t += getattr(self, '_traj_rate', 1.0) / PLANNER_HZ
                     if self.traj.complete(self.traj_t):
                         self.descending = True
                         self.get_logger().info(
@@ -1652,10 +1846,12 @@ class LoadPlanner(Node):
         self._update_zbias()
         self.refs.update(self.hover_xy, self.lift_z0, self.lift_progress,
                          self.target_z, self._lift_vel, self.traj_t,
-                         z_bias=self._zbias.value)
+                         z_bias=self._zbias.value, traj_rate=getattr(self, '_traj_rate', 1.0))
         if self._lint is not None:
             self._update_lumped()
             self._apply_load_force()
+        if getattr(self, '_rod_reread', None) is not None:
+            self._update_rod_reread()
         self._solve_and_publish()
 
     def _solve_and_publish(self):
@@ -1770,7 +1966,7 @@ class LoadPlanner(Node):
         advancing = self.traj_t > self._traj_t_drawn
         self._traj_t_drawn = self.traj_t
         for k in range(self.N + 1):
-            t_k = self.traj_t + self.dt * k if advancing else self.traj_t
+            t_k = self.traj_t + getattr(self, '_traj_rate', 1.0) * self.dt * k if advancing else self.traj_t
             kx, ky, _, _ = self.traj.offset_at(t_k)
             ps = PoseStamped()
             ps.header = path.header
@@ -1837,6 +2033,10 @@ class LoadPlanner(Node):
                 f'[planner] resize to n={new_n} got {len(drone_ids)} drone ids')
             return False
         self.dyn, self.solver, self.rho = entry
+        rr = getattr(self, '_rod_reread', None)
+        if rr is not None and not rr.done:
+            rr.cancel('a resize')
+            self._say_rod_reread(rr, 'a reading')
         self.n = int(new_n)
         if rho is not None:
             self.rho = [np.asarray(r, float).reshape(3) for r in rho]
@@ -1847,7 +2047,7 @@ class LoadPlanner(Node):
         self.solver.set_geometry(rho=self.rho, cable_lengths=list(self.cable_len_i[:self.n]))
         self._s_nom = nominal_cable_dirs(self.rho, self.cable_elev_deg)
         self.refs = ReferenceBuilder(self.dyn, self.n, self._s_nom, self.dt,
-                                     self.traj)
+                                     self.traj, rod_level=getattr(self, '_rod_level', False))
         self.refs.rate_ff = getattr(self, '_rate_ff', False)
         self.refs.ref_lag_s = getattr(self, '_ref_lag_s', 0.0)
         # The new builder starts at yaw 0; keep the placement datum or a ring placed
@@ -1941,9 +2141,40 @@ class LoadPlanner(Node):
                 f'Holding with no rod pull -- press LAND.')
         if self.measure_rod_len and measure:          # not on a slack creep (a LAND there)
             self._apply_measured_rod_lengths()
+        rr = getattr(self, '_rod_reread', None)
+        if rr is not None and not (self.pretension_s > 0.0 and self.lift_ramp_vel > 0.0 and not self._airborne_start()):
+            rr.cancel('this start has no pretension hold')
+            self._say_rod_reread(rr, 'the start')
         self.get_logger().info(
             f'[planner] {reason} — coupled planner active '
             f'(lift from z={self.lift_z0:.2f})')
+
+    def _update_rod_reread(self):
+        """rod_len_reread after the hold: the ramp to its reading (rod_reread.py)."""
+        rr = self._rod_reread
+        if rr.state != 'ramp':
+            return
+        if self.descending or self._land_to_ground:
+            rr.cancel('a descent')
+            self._say_rod_reread(rr, 'ramp')
+            return
+        lens = rr.step(self.get_clock().now().nanoseconds * 1e-9)
+        self.cable_len_i = list(lens) + list(self.cable_len_i[self.n:])
+        self.solver.set_geometry(cable_lengths=lens)
+        if rr.done:
+            self._say_rod_reread(rr, 'ramp')
+
+    def _say_rod_reread(self, rr, was):
+        lens = [round(float(v), 4) for v in self.cable_len_i[:self.n]]
+        if rr.state == 'ramp':
+            self.get_logger().info(f'[planner] rod_len_reread: rods read {[round(float(v), 4) for v in rr.target]} m '
+                                   f'under full pull, from {lens} m; ramping')
+        elif rr.state == 'done':
+            from rclpy.parameter import Parameter
+            self.set_parameters([Parameter('measured_rod_len', Parameter.Type.DOUBLE_ARRAY, lens)])
+            self.get_logger().info(f'[planner] rod_len_reread: flying {lens} m')
+        elif rr.state in ('refused', 'cancelled'):
+            self.get_logger().warn(f'[planner] rod_len_reread: {rr.state}, {rr.why}; flying {lens} m (was {was})')
 
     def _apply_measured_rod_lengths(self):
         """At handover the rods are taut, so |drone - rim| is the rod length. Replace the

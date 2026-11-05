@@ -1,0 +1,15 @@
+# attach_m1_1m_m2a.yaml for the object drop with the three carriers on the orbit (Wesley 5 Nov ~10:20): the path's 5 s hover hold,
+# NO attach_pause (the circle keeps going through his pickup and drop), the tilt drop 55 deg and the loss check 15 cm.
+newcomer_lifecycle: true
+newcomer_fault_land: true
+departed_ground_idle: true
+drop_takes_back: true
+load_mass: 0.86
+load_ixx: 0.02733
+load_izz: 0.05452
+attach_radius: 0.225
+attach_z: 0.0175
+payload_rest_z: 0.0275
+traj_hold_s: 5.0
+drop_tilt_deg: 55.0
+detach_detect_m: 0.15

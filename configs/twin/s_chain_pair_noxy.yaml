@@ -1,0 +1,9 @@
+# configs/twin/s_chain_pair.yaml with the height-only model integral (int_k_xy 0), exploratory (31 Oct, x1_h4_noxy): one
+# variable against x1_h4_ours.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 45.0
+int_k_xy: 0.0

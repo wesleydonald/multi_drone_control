@@ -1,0 +1,18 @@
+# X8's rim cell, our arm, with the sideways integral off (int_k_xy 0): configs/twin/x8_rim_ours.yaml plus int_k_xy 0.0, for the
+# final-tree claim batch of 7-8 Nov (docs/claim_batch_2026-11-07.md). The release leaves the T 0/3/6 (gap 180 deg); Wesley's fallback
+# of 31 Oct 17:16 types int_k_xy 0 in the cells that form a T (the rod-in-plan fix was reversed 4 Nov ~23:00). Twin only.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+traj_hold_s: 5.0
+net_hold_carry: true
+net_twin_geometry: true
+# X8's loss rules, the same text in every arm of the cell (as X1's sqT cell, Wesley 30 Oct ~15:10, twin only):
+# drop_gap_deg 200 flies the T (our planner; inert in the network phase), the trackers' ring-tilt drop at 80 deg
+# (only our planner acts on it: the network phase ignores /fleet/drop) and the trackers' 60 deg ring envelope off
+# (a fleet disarm in every mode), so the square-to-T transient (57-61 deg for our planner, R2249, R2823) is compared,
+# not dropped. The scorer applies the 80 deg rule to every arm offline (the card's loss rule).
+drop_gap_deg: 200.0
+drop_tilt_deg: 80.0
+payload_tilt_envelope: false
+int_k_xy: 0.0

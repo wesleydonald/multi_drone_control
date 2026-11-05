@@ -1,0 +1,4 @@
+# configs/rig/hover_reread.yaml plus configs/rig/hover_tick.yaml, for Thu 5 Nov's four-carrier hover if both calls are on.
+rod_len_reread: true
+plan_fast_refs: true
+plan_res_every: 0

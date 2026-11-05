@@ -204,16 +204,16 @@ def test_floor_start_rests_on_the_floor():
 
 def test_rod_and_magnet_masses():
     rod = _lift('four_rigid_ground_rig.sdf').find("model[@name='tether_0']/link[@name='rod']")
-    assert float(rod.findtext('inertial/mass')) == pytest.approx(0.075)
-    # magnet at the payload end pulls the CoM 0.035*0.275/0.075 below the rod centre
-    assert _xyz(rod.find('inertial'))[2] == pytest.approx(-0.035 * 0.275 / 0.075, abs=1e-6)
+    assert float(rod.findtext('inertial/mass')) == pytest.approx(0.040)     # 0.002 rod + 0.038 magnet (4 Nov)
+    # magnet at the payload end pulls the CoM 0.038*0.275/0.040 below the rod centre
+    assert _xyz(rod.find('inertial'))[2] == pytest.approx(-0.038 * 0.275 / 0.040, abs=1e-6)
 
 
 def test_rig_models_only_change_the_base_mass_and_inertia():
     for i in range(4):
         legacy = (ASSETS / 'models' / f'x3_drone{i}.sdf').read_text().splitlines()
         rig = (ASSETS / 'models' / f'x3_rig_drone{i}.sdf').read_text().splitlines()
-        rig = [ln for ln in rig if 'Rig twin' not in ln and '(base 0.435' not in ln]
+        rig = [ln for ln in rig if 'Rig twin' not in ln and '(base 0.4' not in ln]
         diff = [(a.strip(), b.strip()) for a, b in zip(legacy, rig) if a != b]
         assert len(legacy) == len(rig)
         assert [a[:5] for a, _ in diff] == ['<mass', '<ixx>', '<iyy>', '<izz>']

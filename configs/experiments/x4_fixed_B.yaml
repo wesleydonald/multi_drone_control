@@ -87,6 +87,7 @@ relay:
   leaves: 0
   land_at_budget: true
   budget_s: 600.0
+  wait_timeout_s: 720.0
 criteria:
   forbid_abort: true
   min_payload_z: 0.005

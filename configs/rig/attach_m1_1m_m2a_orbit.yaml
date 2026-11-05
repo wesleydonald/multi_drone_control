@@ -1,0 +1,15 @@
+# attach_m1_1m_m2a.yaml + the orbit re-attach (Thu 5 Nov sheet section 5, Wesley's call; twin R3696): the path's 5 s hover
+# hold and attach_pause (his TAKEOFF after the release slows the circle to rest; the re-attach speeds it back up).
+# A launch reads one params file, so the attach file's values are repeated here.
+newcomer_lifecycle: true
+newcomer_fault_land: true
+departed_ground_idle: true
+drop_takes_back: true
+load_mass: 0.86
+load_ixx: 0.02733
+load_izz: 0.05452
+attach_radius: 0.225
+attach_z: 0.0175
+payload_rest_z: 0.0275
+traj_hold_s: 5.0
+attach_pause: true

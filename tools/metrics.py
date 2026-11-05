@@ -50,6 +50,18 @@ def summarise(values):
             'min': float(np.min(v)), 'max': float(np.max(v))}
 
 
+def spread_text(values, nd=2):
+    """A table cell in the supervisors' format: mean +- SD for n >= 3, both values for n = 2, the value for n = 1."""
+    v = [float(x) for x in np.ravel(values) if x is not None and np.isfinite(x)]
+    if not v:
+        return '-'
+    if len(v) == 1:
+        return f'{v[0]:.{nd}f}'
+    if len(v) == 2:
+        return f'{min(v):.{nd}f} - {max(v):.{nd}f}'
+    return f'{np.mean(v):.{nd}f} +- {np.std(v, ddof=1):.{nd}f}'
+
+
 def sweep_window(t, desired_xy, frac=0.01):
     """Boolean mask for the part of the run where the COMMANDED path is moving.
 

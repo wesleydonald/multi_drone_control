@@ -759,6 +759,16 @@ public:
             declare_parameter<double>("cooperative_tracking_half_x_m", 0.10),
             declare_parameter<double>("cooperative_tracking_half_y_m", 0.10),
             declare_parameter<double>("cooperative_tracking_half_z_m", 0.10));
+        // The tracking_mismatch check's bound alone; < 0 (default) uses the inflation above
+        // (local change 5 Nov 2026, CHANGES_FROM_TEJEN.md).
+        cooperative_tracking_check_half_extents_ = Vec3(
+            declare_parameter<double>("cooperative_tracking_check_half_x_m", -1.0),
+            declare_parameter<double>("cooperative_tracking_check_half_y_m", -1.0),
+            declare_parameter<double>("cooperative_tracking_check_half_z_m", -1.0));
+        for (int axis = 0; axis < 3; ++axis) {
+            if (cooperative_tracking_check_half_extents_(axis) < 0.0)
+                cooperative_tracking_check_half_extents_(axis) = cooperative_tracking_error_half_extents_(axis);
+        }
         cooperative_attached_tether_enabled_ = declare_parameter<bool>(
             "cooperative_attached_tether_enabled", false);
         cooperative_attached_plate_topics_ = declare_parameter<std::vector<std::string>>(
@@ -1118,6 +1128,7 @@ private:
             (cooperative_physical_half_extents_.array() <= 0.0).any() ||
             !cooperative_tracking_error_half_extents_.allFinite() ||
             (cooperative_tracking_error_half_extents_.array() < 0.0).any() ||
+            !cooperative_tracking_check_half_extents_.allFinite() ||
             !std::isfinite(cooperative_ring_pose_timeout_s_) || !(cooperative_ring_pose_timeout_s_ > 0.0) ||
             cooperative_ring_pose_index_ < 0 || cooperative_ring_plate_count_ <= 0 ||
             !std::isfinite(cooperative_ring_plate_pitch_diameter_m_) || !(cooperative_ring_plate_pitch_diameter_m_ > 0.0) ||
@@ -1807,7 +1818,7 @@ private:
         double ratio = 0.;
         bool inside = true;
         for (int axis = 0; axis < 3; ++axis) {
-            const double bound = cooperative_tracking_error_half_extents_(axis);
+            const double bound = cooperative_tracking_check_half_extents_(axis);
             if (bound <= 1e-12) inside = inside && error(axis) <= 1e-6;
             else {
                 ratio = std::max(ratio, error(axis) / bound);
@@ -4332,6 +4343,7 @@ private:
     Vec3 cooperative_physical_half_extents_ = Vec3(0.105, 0.105, 0.060);
     bool cooperative_tracking_safety_enabled_ = true;
     Vec3 cooperative_tracking_error_half_extents_ = Vec3::Constant(0.10);
+    Vec3 cooperative_tracking_check_half_extents_ = Vec3::Constant(0.10);
     bool cooperative_attached_tether_enabled_ = false;
     int cooperative_ring_pose_index_ = 1;
     double cooperative_ring_pose_timeout_s_ = 0.50;

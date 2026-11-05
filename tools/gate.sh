@@ -58,6 +58,7 @@ if python3 -m pytest src/utility_objects/test/test_safety.py \
                     src/mpc_planner/test/test_res_defer.py \
                     src/mpc_planner/test/test_load_inertia_param.py \
                     src/mpc_planner/test/test_planner_log.py \
+                    src/mpc_planner/test/test_carriers_down_alone.py \
                     src/tejen_mpc/test/test_mpc_profile.py \
                     src/tejen_mpc/test/test_command_execution.py \
                     src/tejen_mission/test/test_partner_mission_mpc_profile.py \

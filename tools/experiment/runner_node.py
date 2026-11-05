@@ -392,6 +392,9 @@ class ExperimentRunner(Node):
                (re.compile(r'tether joint of drone \d+ \(/drone_(\d+)\): detached'), 'JOINT_DETACHED'),
                (re.compile(r'REJOIN WELD drone \d+ \(/drone_(\d+)\)'), 'REJOIN_WELD'),
                (re.compile(r'REJOIN BLEND OVER drone \d+ \(/drone_(\d+)\)'), 'REJOIN_BLEND_OVER'),
+               # QUAD4's fold-in under the cap (foldin_cap, card 2026-11-05_quad4_foldin_weld_cap)
+               (re.compile(r'FOLD-IN CAP ON drone \d+ \(/drone_(\d+)\)'), 'FOLDIN_CAP_ON'),
+               (re.compile(r'FOLD-IN CAP OVER drone \d+ \(/drone_(\d+)\)'), 'FOLDIN_CAP_OVER'),
                (re.compile(r'REJOIN ABORT drone \d+ \(/drone_(\d+)\)'), 'REJOIN_ABORT'),
                (re.compile(r'REJOIN REFUSED drone \d+ \(/drone_(\d+)\)'), 'REJOIN_REFUSED'),
                (re.compile(r'staged drone \d+ \(/drone_(\d+)\) leaves'), 'STAGED_LEAVES'),

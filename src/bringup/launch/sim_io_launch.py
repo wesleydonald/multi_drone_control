@@ -161,6 +161,9 @@ def launch_setup(context, *args, **kwargs):
     if rig_pack:
         tel.update({'pack_model': True, 'rate_hz': 10.0,
                     'pack_v0': float(LaunchConfiguration('sim_pack_v0').perform(context))})
+        drain = LaunchConfiguration('sim_pack_drain').perform(context).strip()
+        if drain:                       # X4's packs recharge at the pad: a budget, not a battery model
+            tel['pack_drain'] = float(drain)
     nodes.append(Node(
         package='simulation_communication', executable='sim_telemetry',
         name='sim_telemetry', parameters=[tel],
@@ -255,5 +258,6 @@ def generate_launch_description():
         # the rig twin's plant; a world in old_worlds/ takes sim_thrust_map:=linear
         DeclareLaunchArgument('sim_thrust_map', default_value='rig'),
         DeclareLaunchArgument('sim_pack_v0', default_value='23.8'),
+        DeclareLaunchArgument('sim_pack_drain', default_value=''),
         OpaqueFunction(function=launch_setup),
     ])

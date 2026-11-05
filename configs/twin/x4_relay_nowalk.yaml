@@ -1,0 +1,9 @@
+# X4's relay (docs/analysis/x4_relay_fail2_2026-11-01.md): configs/twin/s_chain_pair_noxy.yaml with the home point held: attach_datum_shift off, so a fold-in does not latch the ring's lean in a hold as a new home (1 cm per fold-in, R3444). Twin only, X4's arms only.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 45.0
+int_k_xy: 0.0
+attach_datum_shift: false

@@ -259,3 +259,15 @@ def test_slot_gate_holds_ready_on_a_layout_off_its_plates():
     assert any('56 deg off their plates' in w for w in con.readiness(s, NOW))
     s.on_log(20, 'dissipative_planner', ok)                  # the relaunch's line replaces it
     assert con.readiness(s, NOW) == []
+
+
+def test_his_takeoff_is_held_until_our_release_only_while_quad4_is_ours():
+    """5 Nov: a welded QUAD4 (mux 'ours') not yet released: his planner holds his TAKEOFF, so the 2 s ack waits."""
+    s = con.ConsoleState(4, partner=3)
+    s.mux[3] = 'ours'
+    assert s.his_takeoff_held()
+    s.on_release()
+    assert not s.his_takeoff_held()
+    s = con.ConsoleState(4, partner=3)
+    s.mux[3] = 'partner'                                    # a floor start: his from boot
+    assert not s.his_takeoff_held()

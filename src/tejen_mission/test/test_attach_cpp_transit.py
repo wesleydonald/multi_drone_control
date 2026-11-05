@@ -247,6 +247,27 @@ def test_tracking_check_off_turns_his_tracking_latch_off_and_nothing_else():
     assert 'cooperative_tracking_half_x_m' not in params                       # his inflation stays his
 
 
+def test_carriers_tracking_check_bound_is_wider_than_their_collision_inflation():
+    """Wesley 5 Nov: his carriers' tracking check at 0.20 m (was the 0.05 m inflation): the T flown with int_k_xy 0
+    hovers 0.050 m off its published path and latched his backend off (R3738, R3749, R3750). The inflation stays 0.05
+    (at 0.20 the carriers' tether boxes cover the low transit end); the backend's own default for the check follows
+    the inflation, and nothing in the launch's overrides touches it."""
+    dyn = Path(__file__).resolve().parents[2] / 'tejen_dynamic_planner'
+    cfg = yaml.safe_load((dyn / 'config' / 'c1f6_moving_rendezvous.yaml').read_text())
+    p = cfg['dynamic_planner_transfer_backend']['ros__parameters']
+    assert [p[f'cooperative_tracking_check_half_{a}_m'] for a in 'xyz'] == [0.20] * 3
+    assert [p[f'cooperative_tracking_half_{a}_m'] for a in 'xyz'] == [0.05] * 3
+    assert p.get('cooperative_tracking_safety_enabled', True) is True           # the check stays on (his default)
+    src = (dyn / 'src' / 'transfer_backend_node.cpp').read_text()
+    assert '"cooperative_tracking_check_half_x_m", -1.0' in src
+    assert 'const double bound = cooperative_tracking_check_half_extents_(axis);' in src
+    m = launch_module()
+    f = m._backend_overrides('base.yaml', m.GEOMETRY['rig_twin_L100_p115'], rod=1.04, floor_join=True,
+                             carrier_model='tether', margins={}).split(',')[1]
+    over = yaml.safe_load(Path(f).read_text())['dynamic_planner_transfer_backend']['ros__parameters']
+    assert not any(k.startswith('cooperative_tracking') for k in over)
+
+
 def test_ring_bridge_numbers_the_carriers_plates_as_his_planner_does():
     stub = SimpleNamespace(_carrier_azimuths=lambda: [270.0, 30.0, 150.0])   # rig_twin, counter-clockwise
     assert RingBridge.carrier_plates(stub) == [9, 1, 5]

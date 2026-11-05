@@ -123,3 +123,48 @@ Known limits, beside the claim: the rejoin is the twin's (a weld wherever the ro
 pads hover at the staging height (no landing, no pack model); the errand's pickup and delivery carry no object; the
 staging bound (+-1.57 m) leaves the errand's top-edge leg only 3-4 cm outside the lap's keep-out; 8 quads run below
 real time.
+
+## 9. First complete relays (1 Nov, R3455-R3457; not claim runs; judged after the run, Wesley 2 Nov)
+The adopted setting (`x4_*_v3`, Wesley 2 Nov): universal plate hinge, rod in the plan, `int_k_xy` 0, `sim_pack_drain` 0, `attach_datum_shift` false. One run each on a tree that isn't final, so these aren't the claim. The bars of section 5 stay as written; two are missed.
+
+| Bar (section 5) | R3456, 0.9 kg | R3457, 1.15 kg |
+|---|---|---|
+| R1 swaps done of 26 | 26 | 26 |
+| R1 mission, written at least 1700 s | **1666 s, misses by 34 s** | **1671 s, misses by 29 s** |
+| R2 carriers, at least 7 | 7-8 (76 % of the flight at 7) | 7-8 (76 %) |
+| R3 event tilt peak, at most 5.0 deg | 1.84 (release), 0.44 (fold-in) | 1.24 (release), 0.34 (fold-in) |
+| R4 last lap over first, at most 1.25 | x0.64, 19.5 to 12.4 mm | **x1.40, 14.0 to 19.5 mm, misses** |
+| R4 worst lap, at most 20.5 mm (1.25 x the fixed team's mean lap, 16.4 mm, R3455 alone) | 19.5 mm | 19.5 mm |
+| R5 height drift, at most 10 mm | +0.1 mm | 0.0 mm |
+| R6 RELAY HOLD lines | 0 | 0 |
+| R7 longest pack, at most 600 s | 549 s | 546 s |
+| Mission over B (reported) | 2.78 | 2.78 |
+| Late ticks (void over 1 %), RTF (void under 0.15) | 0.34 %, 0.21 | 0.34 %, 0.21 |
+
+Fixed team R3455: lands at 581 s = 0.97 B, no drop (F1 holds), laps 13.6 to 20.4 mm.
+
+- **R3456 is not one fold-in short.** The first scoring said 25 of 26. The planner's log has all 26 `REJOIN WELD` lines, and the 26th fold-in and blend are in `events.csv`: the runner lost that one line off `/rosout`. `tools/x4_metrics.py` now takes a fold-in as proof of its weld (test added). The registry's R3456 row reads 25, corrected by R3456c.
+- **R1's 1700 s:** the plan projects 1782 s for 26 leaves and the relays fly 1666-1671 s, 0.94 of it, so the path as written cannot reach the bar. Scaling the plan's projection by 0.94 (estimates, none flown): 27 leaves about 1730 s, 28 about 1790 s, 29 about 1860 s = 3.1 B, longest pack about 580 s on each. Only 29 is a real 30 minutes.
+- **R4 on R3457:** a lap's error moves with where the swaps fall (the fixed team itself ranges 13.6-20.4 mm), and the first and last laps are single laps. Its 1.40 looks like that scatter, read from these numbers, not tested; the slope is +0.11 mm per lap, against -0.14 on R3456.
+- Owed for the claim: the final tree, 2 relays and 2 fixed teams at 0.9 kg, 1 relay at 1.15 kg. The mission length is Wesley's call (report of 3 Nov).
+
+## 10. Claim runs on the current tree (3-4 Nov, R3519, R3564-R3567; Q007 item 3; judged after the run)
+26 leaves as configured (the mission length is Wesley's call); re-fly if the tree changes before the 6 Nov freeze.
+
+| Bar (section 5) | R3519 | R3564 | R3565 (1.15 kg) |
+|---|---|---|---|
+| R1 swaps done of 26 | 26 | 26 | 26 |
+| R1 mission, written at least 1700 s | **1681 s, misses** | **1663 s, misses** | **1669 s, misses** |
+| R2 carriers at least 7 | 7-8 | 7-8 | 7-8 |
+| R3 event tilt peak at most 5.0 deg | 1.72 | 1.79 | 1.21 |
+| R4 last lap over first at most 1.25 | x0.81 | x0.88 | x0.91 |
+| R4 worst lap at most 19.6 mm (1.25 x the fixed team's mean lap, 15.6 mm) | 18.3 | 13.6 | 14.9 |
+| R5 height drift at most 10 mm | +0.1 | +0.0 | -0.2 |
+| R6 RELAY HOLD lines | 0 | 0 | 0 |
+| R7 longest pack at most 600 s | 552 | 546 | 547 |
+| Mission over B | 2.80 | 2.77 | 2.78 |
+| Late ticks (void over 1 %), RTF | 0.39 %, 0.21 | 0.31 % | 0.32 %, 0.21 |
+
+Fixed team R3566, R3567: lands at 570 and 569 s = 0.95 B, no drop, worst lap 20.4 and 21.0 mm (F1 holds).
+Every bar holds on both repeats and the 1.15 kg cell except R1's mission length. R3565's harness FAIL is its exit (sim time stalled after LANDED), not the flight.
+- **Wesley 4 Nov ~07:45:** don't worry about the 1700 s mission. 26 leaves stay; the miss stays written here and is not a reason to re-fly. What is left for the claim: the final tree (re-fly if X4's code path changes before the 6 Nov freeze) and the reviewer on this table.

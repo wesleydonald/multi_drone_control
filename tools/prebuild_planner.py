@@ -55,7 +55,7 @@ def config_builds(path):
     sys.path.insert(0, os.path.join(REPO, 'tools'))
     sys.path.insert(0, os.path.join(REPO, 'src', 'bringup'))
     from experiment.config import ExperimentConfig
-    from bringup.profiles import DEFAULT_MODE, LEGACY_DEFAULT_MODE, profile
+    from bringup.profiles import DEFAULT_MODE, LEGACY_DEFAULT_MODE, profile, rod_model
     cfg = ExperimentConfig.from_yaml(path)
     la = cfg.control_args()
     legacy = str(la.get('legacy', '')).strip().lower() == 'true'
@@ -71,7 +71,7 @@ def config_builds(path):
     ixx, izz = _num(vals.get('load_ixx'), 0.0), _num(vals.get('load_izz'), 0.0)
     opts = dict(load_mass=load, drone_mass=_num(vals.get('drone_mass'), DRONE_MASS),
                 inertia=[ixx, ixx, izz] if ixx > 0.0 else load_inertia(load),
-                rod_mass=_num(vals.get('rod_mass'), 0.0), rod_com=_num(vals.get('rod_com'), 0.0),
+                rod_mass=rod_model(vals)[1], rod_com=rod_model(vals)[2],
                 cable_len=_num(vals.get('cable_len'), CABLE_LEN),
                 pin_rates=str(vals.get('pin_cable_rates', '')).strip().lower() == 'true')
     sizes = [n]

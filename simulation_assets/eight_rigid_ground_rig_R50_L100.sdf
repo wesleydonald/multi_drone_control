@@ -224,11 +224,11 @@
         <link name="rod">
         <pose>0.999900 0.000000 0.050000 0 1.550795 0.000000</pose>
         <inertial>
-          <pose>0 0 -0.233333 0 0 0</pose>
-          <mass>0.075</mass>
+          <pose>0 0 -0.475000 0 0 0</pose>
+          <mass>0.04</mass>
           <inertia>
-            <ixx>8.000e-03</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>8.000e-03</iyy><iyz>0</iyz><izz>3.200e-07</izz>
+            <ixx>6.417e-04</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>6.417e-04</iyy><iyz>0</iyz><izz>1.600e-08</izz>
           </inertia>
         </inertial>
         <visual name="tether_0_visual">
@@ -275,11 +275,11 @@
         <link name="rod">
         <pose>0.707036 0.707036 0.050000 0 1.550795 0.785398</pose>
         <inertial>
-          <pose>0 0 -0.233333 0 0 0</pose>
-          <mass>0.075</mass>
+          <pose>0 0 -0.475000 0 0 0</pose>
+          <mass>0.04</mass>
           <inertia>
-            <ixx>8.000e-03</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>8.000e-03</iyy><iyz>0</iyz><izz>3.200e-07</izz>
+            <ixx>6.417e-04</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>6.417e-04</iyy><iyz>0</iyz><izz>1.600e-08</izz>
           </inertia>
         </inertial>
         <visual name="tether_1_visual">
@@ -326,11 +326,11 @@
         <link name="rod">
         <pose>0.000000 0.999900 0.050000 0 1.550795 1.570796</pose>
         <inertial>
-          <pose>0 0 -0.233333 0 0 0</pose>
-          <mass>0.075</mass>
+          <pose>0 0 -0.475000 0 0 0</pose>
+          <mass>0.04</mass>
           <inertia>
-            <ixx>8.000e-03</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>8.000e-03</iyy><iyz>0</iyz><izz>3.200e-07</izz>
+            <ixx>6.417e-04</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>6.417e-04</iyy><iyz>0</iyz><izz>1.600e-08</izz>
           </inertia>
         </inertial>
         <visual name="tether_2_visual">
@@ -377,11 +377,11 @@
         <link name="rod">
         <pose>-0.707036 0.707036 0.050000 0 1.550795 2.356194</pose>
         <inertial>
-          <pose>0 0 -0.233333 0 0 0</pose>
-          <mass>0.075</mass>
+          <pose>0 0 -0.475000 0 0 0</pose>
+          <mass>0.04</mass>
           <inertia>
-            <ixx>8.000e-03</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>8.000e-03</iyy><iyz>0</iyz><izz>3.200e-07</izz>
+            <ixx>6.417e-04</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>6.417e-04</iyy><iyz>0</iyz><izz>1.600e-08</izz>
           </inertia>
         </inertial>
         <visual name="tether_3_visual">
@@ -428,11 +428,11 @@
         <link name="rod">
         <pose>-0.999900 0.000000 0.050000 0 1.550795 3.141593</pose>
         <inertial>
-          <pose>0 0 -0.233333 0 0 0</pose>
-          <mass>0.075</mass>
+          <pose>0 0 -0.475000 0 0 0</pose>
+          <mass>0.04</mass>
           <inertia>
-            <ixx>8.000e-03</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>8.000e-03</iyy><iyz>0</iyz><izz>3.200e-07</izz>
+            <ixx>6.417e-04</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>6.417e-04</iyy><iyz>0</iyz><izz>1.600e-08</izz>
           </inertia>
         </inertial>
         <visual name="tether_4_visual">
@@ -479,11 +479,11 @@
         <link name="rod">
         <pose>-0.707036 -0.707036 0.050000 0 1.550795 -2.356194</pose>
         <inertial>
-          <pose>0 0 -0.233333 0 0 0</pose>
-          <mass>0.075</mass>
+          <pose>0 0 -0.475000 0 0 0</pose>
+          <mass>0.04</mass>
           <inertia>
-            <ixx>8.000e-03</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>8.000e-03</iyy><iyz>0</iyz><izz>3.200e-07</izz>
+            <ixx>6.417e-04</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>6.417e-04</iyy><iyz>0</iyz><izz>1.600e-08</izz>
           </inertia>
         </inertial>
         <visual name="tether_5_visual">
@@ -530,11 +530,11 @@
         <link name="rod">
         <pose>-0.000000 -0.999900 0.050000 0 1.550795 -1.570796</pose>
         <inertial>
-          <pose>0 0 -0.233333 0 0 0</pose>
-          <mass>0.075</mass>
+          <pose>0 0 -0.475000 0 0 0</pose>
+          <mass>0.04</mass>
           <inertia>
-            <ixx>8.000e-03</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>8.000e-03</iyy><iyz>0</iyz><izz>3.200e-07</izz>
+            <ixx>6.417e-04</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>6.417e-04</iyy><iyz>0</iyz><izz>1.600e-08</izz>
           </inertia>
         </inertial>
         <visual name="tether_6_visual">
@@ -581,11 +581,11 @@
         <link name="rod">
         <pose>0.707036 -0.707036 0.050000 0 1.550795 -0.785398</pose>
         <inertial>
-          <pose>0 0 -0.233333 0 0 0</pose>
-          <mass>0.075</mass>
+          <pose>0 0 -0.475000 0 0 0</pose>
+          <mass>0.04</mass>
           <inertia>
-            <ixx>8.000e-03</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>8.000e-03</iyy><iyz>0</iyz><izz>3.200e-07</izz>
+            <ixx>6.417e-04</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>6.417e-04</iyy><iyz>0</iyz><izz>1.600e-08</izz>
           </inertia>
         </inertial>
         <visual name="tether_7_visual">

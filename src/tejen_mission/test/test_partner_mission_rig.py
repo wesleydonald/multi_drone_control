@@ -211,6 +211,98 @@ def test_match_dwell_and_speed_only_when_typed():
     assert p['dwell_time_s'] == 0.5 and p['contact_match_xy_velocity_threshold'] == 0.2
 
 
+def test_descent_abort_speed_only_when_typed():
+    """His contact descent's speed abort stays 0.25 m/s unless typed (Tejen's review 3 Nov asks a 0.35 trial)."""
+    g, _ = _nodes()
+    assert g['online_join_planner']['params']['contact_abort_xy_velocity_threshold'] == 0.25
+    g, _ = _nodes(descent_abort_speed='0.35')
+    assert g['online_join_planner']['params']['contact_abort_xy_velocity_threshold'] == 0.35
+
+
+def test_descent_hold_only_when_typed():
+    """contact_descent_hold (Tejen's review 3 Nov, priority 1) stays his restart unless typed; the gross band with it."""
+    g, _ = _nodes()
+    p = g['online_join_planner']['params']
+    assert 'contact_descent_hold' not in p and 'contact_descent_gross_xy_m' not in p
+    g, _ = _nodes(descent_hold='true', descent_gross_xy='0.25')
+    p = g['online_join_planner']['params']
+    assert p['contact_descent_hold'] is True and p['contact_descent_gross_xy_m'] == 0.25
+
+
+def test_pickup_proof_only_when_typed():
+    """His pickup proof keeps his file's limits unless typed (RIG-1104-k1m: the lift never proved at 0.015 m / 0.03 m/s)."""
+    keys = ('pickup_proof_maximum_contact_drift_m', 'pickup_proof_relative_speed_mps', 'pickup_proof_loss_contact_drift_m')
+    g, _ = _nodes()
+    assert not any(k in g['online_join_planner']['params'] for k in keys)
+    g, _ = _nodes(pickup_proof_drift='0.05', pickup_proof_speed='0.08', pickup_proof_loss='0.08')
+    p = g['online_join_planner']['params']
+    assert [p[k] for k in keys] == [0.05, 0.08, 0.08]
+
+
+def test_drop_on_arrival_only_when_typed():
+    """drop_on_arrival (Wesley 4 Nov, k1m_2-4) stays his settle-and-descend drop unless typed; its radius with it."""
+    g, _ = _nodes()
+    p = g['online_join_planner']['params']
+    assert 'drop_on_arrival' not in p and 'drop_on_arrival_xy_m' not in p
+    g, _ = _nodes(drop_on_arrival='true')
+    p = g['online_join_planner']['params']
+    assert p['drop_on_arrival'] is True and 'drop_on_arrival_xy_m' not in p
+    g, _ = _nodes(drop_on_arrival='true', drop_on_arrival_xy='0.10')
+    assert g['online_join_planner']['params']['drop_on_arrival_xy_m'] == 0.10
+
+
+def test_mpc_throttle_max_only_when_typed():
+    """His controller keeps his 0.60 throttle bound unless mpc_throttle_max is typed (RIG-1104-k1m_3)."""
+    g, _ = _nodes()
+    assert 'throttle_state_max' not in g['tejen_mpc']['params']
+    g, _ = _nodes(mpc_throttle_max='0.8')
+    assert g['tejen_mpc']['params']['throttle_state_max'] == 0.8
+
+
+def test_lift_full_only_when_typed():
+    """lift_full (Wesley's supervisor, 4 Nov: up, then over) keeps his early lift exit unless typed."""
+    g, _ = _nodes()
+    assert 'lift_full_before_transit' not in g['online_join_planner']['params']
+    g, _ = _nodes(lift_full='true')
+    assert g['online_join_planner']['params']['lift_full_before_transit'] is True
+
+
+def test_mpc_battery_comp_only_when_typed():
+    """His radio throttle gets no voltage term unless mpc_battery_comp is typed (RIG-1104-nr9m_2)."""
+    g, _ = _nodes()
+    assert 'battery_comp_slope' not in g['tejen_mpc']['params']
+    g, _ = _nodes(mpc_battery_comp='0.022')
+    assert g['tejen_mpc']['params']['battery_comp_slope'] == 0.022
+
+
+def test_drop_height_and_ceiling_only_when_typed():
+    """drop_height (Wesley 4 Nov: drop 0.5-0.6 m above the net) raises only the loaded legs; with drop_on_arrival the
+    after-drop leg counts the release at the transit height; max_body_z lifts the 2.6 m ceiling, never past 3.0."""
+    g, _ = _nodes()
+    base = g['online_join_planner']['params']
+    g, _ = _nodes(drop_height='0.5')
+    p = g['online_join_planner']['params']
+    assert p['drop_approach_clearance'] > base['drop_approach_clearance'] + 0.1
+    assert p['pickup_lift_height'] - base['pickup_lift_height'] == pytest.approx(
+        p['drop_approach_clearance'] - base['drop_approach_clearance'])
+    with pytest.raises(RuntimeError, match='max_body_z'):
+        _nodes(max_body_z='3.1')
+    mod = _module()
+    legs = {'over the drop point': 2.7}
+    with pytest.raises(RuntimeError, match='above 2.6 m'):
+        mod.check_transit_ceiling(legs, refuse=True, log=lambda m: None)
+    mod.check_transit_ceiling(legs, refuse=True, log=lambda m: None, ceiling=2.8)
+
+
+def test_line_up_only_when_typed():
+    """line_up (Wesley 4 Nov) stays off unless typed; its radius and band with it."""
+    g, _ = _nodes()
+    assert 'line_up' not in g['online_join_planner']['params']
+    g, _ = _nodes(line_up='true', line_up_lateral='0.3')
+    p = g['online_join_planner']['params']
+    assert p['line_up'] is True and p['line_up_lateral_m'] == 0.3 and 'line_up_radius_m' not in p
+
+
 def test_attach_z_lowpass_only_when_typed():
     """The bridge's plate height stays raw (no parameter) unless attach_z_lowpass is typed (a1, 15 Oct)."""
     g, _ = _nodes()
@@ -324,3 +416,12 @@ def test_the_measured_contact_point_on_the_real_object_only_when_typed():
     assert m['pickup_point_offset_z'] == pytest.approx(0.018 - 0.0225)
     assert (p['payload_collision_size_x'], p['payload_collision_size_y'], p['payload_collision_size_z']) == (
         0.10, 0.10, 0.025)
+
+
+def test_takeoff_gate_only_when_typed():
+    """takeoff_gate_topic (5 Nov, RIG-1105-nr1r): his TAKEOFF waits for our release only when typed (our combined rig
+    launch types it for a start-welded QUAD4)."""
+    g, _ = _nodes()
+    assert 'takeoff_gate_topic' not in g['online_join_planner']['params']
+    g, _ = _nodes(takeoff_gate_topic='/partner/release')
+    assert g['online_join_planner']['params']['takeoff_gate_topic'] == '/partner/release'

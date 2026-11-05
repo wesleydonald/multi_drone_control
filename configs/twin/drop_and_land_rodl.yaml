@@ -1,0 +1,8 @@
+# configs/rig/drop_and_land.yaml with the rod in the plan and references that balance it, twin only
+# (card docs/experiments/2026-10-31_rod_in_plan.md).
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+rod_mass: 0.075
+rod_com: 0.267
+plan_rod_level: true

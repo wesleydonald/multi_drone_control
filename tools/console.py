@@ -96,6 +96,7 @@ class ConsoleState:
         self.tracker_armed = [None] * n
         self.his_armed = None
         self.mux = [''] * n
+        self.released = False                # /partner/release heard (a welded QUAD4 handed to his mission)
         self.rest_z = {}
         self.nodes = set()
         self.his_subs, self.his_matched, self.give_up_subs = set(), 0, 0
@@ -175,6 +176,15 @@ class ConsoleState:
     def on_mux(self, i, text):
         with self.lock:
             self.mux[i] = text
+
+    def on_release(self):
+        with self.lock:
+            self.released = True
+
+    def his_takeoff_held(self):
+        """A welded QUAD4 not yet released: his planner holds his TAKEOFF until our release (5 Nov)."""
+        p = self.partner
+        return not self.released and p is not None and 0 <= p < self.n and self.mux[p] == 'ours'
 
     def on_graph(self, nodes, his_subs, his_matched, give_up_subs, his_land_subs=0):
         with self.lock:
@@ -414,6 +424,8 @@ class RosLink:
         node.create_subscription(String, '/fleet/manager_status', lambda m: state.on_manager(m.data), latched)
         node.create_subscription(String, '/fleet/phase', lambda m: state.on_phase(m.data), latched)
         node.create_subscription(String, '/join_planner/phase', lambda m: state.on_his_phase(m.data), latched)
+        node.create_subscription(String, '/partner/release',
+                                 lambda m: state.on_release() if '"running": true' in m.data else None, 5)
         node.create_subscription(String, '/magnet/attach_proof', lambda m: state.on_proof(m.data), 2)
         node.create_subscription(Bool, '/magnet/contact', lambda m: state.on_contact(m.data),
                                  QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
@@ -570,6 +582,8 @@ def gui(state, send, exit_after_ms=None, on_ready=None):
             send.his({'his_arm': 'ARM', 'his_takeoff': 'TAKEOFF', 'his_disarm': 'DISARM'}[key])
             if key == 'his_takeoff':
                 ack['t'] = now
+                if st.his_takeoff_held():
+                    note('his TAKEOFF: his planner holds it until our release, then climbs from where QUAD4 is')
         note(f'sent {btns[key][1]}')
 
     for key, (b, _) in btns.items():
@@ -583,6 +597,8 @@ def gui(state, send, exit_after_ms=None, on_ready=None):
         st = state.snapshot()
         if ack['t'] is not None and st.his_phase not in ('', 'WAIT_FOR_TAKEOFF'):
             ack['t'] = None
+        elif ack['t'] is not None and st.his_takeoff_held():
+            ack['t'] = now                     # held by his planner until our release: timed from the release
         elif ack['t'] is not None and now - ack['t'] > HIS_TAKEOFF_ACK_S:
             ack['t'] = None
             note(f'his planner did not enter TAKEOFF within {HIS_TAKEOFF_ACK_S:.0f} s of his TAKEOFF (still '

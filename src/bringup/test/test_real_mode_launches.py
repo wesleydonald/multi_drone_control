@@ -8,6 +8,7 @@ clock on every node, the rig I/O per drone, the magnet on channel 6, a typed kT.
 modes must evaluate exactly as before, which the sim-graph tests pin.
 """
 import importlib.util
+import math
 import os
 import re
 
@@ -729,6 +730,62 @@ def test_rig_attach_flies_the_m1_layout_and_honours_a_params_file(tmp_path):
     assert p['handover_elev_deg'] == 55.0
 
 
+def test_rig_lands_with_descend_to_stall_by_default(tmp_path):
+    """Wesley 5 Nov ~15:15 (card 2026-10-17_land_ref_below_rest): every rig planner gets land_descend_to_stall true from
+    real.yaml; a params_file turns it off (it is not a launch argument, so it is never typed), with carriers_down_alone
+    off too since that is the rig default as well (5 Nov ~16:25; alone it is refused); the twin does not get it."""
+    from bringup.profiles import kept
+    for g in (rig('mpc', thrust_ratio=35.2), rig('dissipative', thrust_ratio=35.2),
+              rig('attach', enable_approach_mpc=False)):
+        assert _planner(_by_name(g))['land_descend_to_stall'] is True
+    pf = tmp_path / 'off.yaml'
+    pf.write_text('land_descend_to_stall: false\ncarriers_down_alone: false\n')
+    g = rig('dissipative', thrust_ratio=35.2, params_file=str(pf))
+    assert _planner(_by_name(g))['land_descend_to_stall'] is False
+    pf.write_text('land_descend_to_stall: false\n')
+    with pytest.raises(RuntimeError, match='carriers_down_alone needs land_descend_to_stall.*carriers_down_alone: false'):
+        rig('dissipative', thrust_ratio=35.2, params_file=str(pf))
+    assert 'land_descend_to_stall' not in kept('real')
+    for g in (sim('mpc'), sim('dissipative'), sim('attach', legacy=False, num_drones=3)):
+        assert 'land_descend_to_stall' not in _planner(_by_name(g))
+
+
+def test_rig_lands_with_the_rearm_and_carriers_down_alone_by_default(tmp_path):
+    """Wesley 5 Nov ~16:25 (cards 2026-10-17_touchdown_height_gate, 2026-11-05_carriers_down_alone): every rig planner
+    gets land_rearm_touchdown and carriers_down_alone true from real.yaml, and every tracker of a graph with a departed
+    drone (detach, attach, QUAD4's included) gets carriers_down_alone with the trackers' own 0.15 m band (the carry has
+    no departed drone, so its trackers take none); a params_file turns each off; the twin keeps the re-arm on
+    (sim.yaml) and carriers_down_alone off."""
+    from bringup.profiles import kept
+    graphs = {'mpc': lambda **a: rig('mpc', thrust_ratio=35.2, **a),
+              'dissipative': lambda **a: rig('dissipative', thrust_ratio=35.2, **a),
+              'm2': lambda **a: rig('m2', thrust_ratio=35.2, **a),
+              'attach': lambda **a: rig('attach', enable_approach_mpc=False, **a)}
+    for mode, launch in graphs.items():
+        g = _by_name(launch())
+        p = _planner(g)
+        assert (p['land_rearm_touchdown'], p['carriers_down_alone'], p['land_descend_to_stall']) == (True, True, True)
+        tr = _trackers(g)
+        if mode == 'mpc':
+            assert not any('carriers_down_alone' in t for t in tr)
+        else:
+            assert len(tr) == 4 if mode == 'attach' else len(tr) >= 3
+            assert all(t['carriers_down_alone'] is True and 'carriers_down_band_m' not in t for t in tr)
+    pf = tmp_path / 'off.yaml'
+    for key in ('land_rearm_touchdown', 'carriers_down_alone'):
+        pf.write_text(f'{key}: false\n')
+        for mode in ('dissipative', 'attach'):
+            g = _by_name(graphs[mode](params_file=str(pf)))
+            other = ({'land_rearm_touchdown', 'carriers_down_alone'} - {key}).pop()
+            assert _planner(g)[key] is False and _planner(g)[other] is True
+            assert all(t['carriers_down_alone'] is (key != 'carriers_down_alone') for t in _trackers(g))
+        assert key not in kept('real')
+    for g in (sim('mpc'), sim('dissipative'), sim('attach', legacy=False, num_drones=3)):
+        g = _by_name(g)
+        assert _planner(g)['land_rearm_touchdown'] is True and 'carriers_down_alone' not in _planner(g)
+        assert not any('carriers_down_alone' in t or 'carriers_down_band_m' in t for t in _trackers(g))
+
+
 def test_twin_attach_flies_the_rig_layout_on_the_twin_plant():
     """mode:=attach on the twin (8 Oct): the M1 rig layout, the affine plant on every drone including
     the newcomer, the twin geometry to the trackers and the planner, attach_z passed."""
@@ -1047,6 +1104,55 @@ def _combined_rig(**args):
                         weld_radius=0.01, **args))
 
 
+def test_reattach_plate_turns_the_attach_point_for_both_stacks(dds):
+    """reattach_plate:=1 (Wesley 3 Nov): plate 9's measured point (-0.005, 0.197) turned 240 deg clockwise onto plate
+    1 for the manager's weld point and the planner's take-back point; nothing moves without it."""
+    point = {'attach_x_offset': -0.005, 'attach_y_offset': 0.197, 'attach_azimuths_deg': '90,330,210'}
+    off = _combined_rig(**point)
+    on = _combined_rig(reattach_plate=1, **point)
+    assert off['/magnet_attachment_manager']['params']['object_x_offset'] == pytest.approx(-0.005)
+    mgr, plan = on['/magnet_attachment_manager']['params'], on['/dissipative_planner']['params']
+    for p in (mgr['object_x_offset'], plan['attach_x_offset']):
+        assert p == pytest.approx(0.1731, abs=1e-4)
+    for p in (mgr['object_y_offset'], plan['attach_y_offset']):
+        assert p == pytest.approx(-0.0942, abs=1e-4)
+
+
+def test_reattach_plate_on_the_twin_without_partner_args():
+    """The twin's attach launch has no partner_args (his launch is the experiment's own line): plate 9's 0.225 m point
+    turned onto plate 1 for the manager's weld point all the same (R3509 refused at start-up before this)."""
+    g = _twin_partner(partner_attached=True, partner_contact=True, reattach_plate=1)
+    mgr = g['/magnet_attachment_manager']['params']
+    assert (mgr['object_x_offset'], mgr['object_y_offset']) == (pytest.approx(0.1949, abs=1e-4),
+                                                                pytest.approx(-0.1125, abs=1e-4))
+
+
+def test_reattach_plate_sets_his_plate_and_refuses_a_carrier_plate_or_a_mismatch():
+    from bringup.graph_attach import _reattach_plate, reattach_plate_point
+    x, y, p0 = reattach_plate_point(0.0, 0.225, 5)
+    assert p0 == 9 and (x, y) == (pytest.approx(-0.225 * math.cos(math.radians(30.0))), pytest.approx(-0.1125))
+    # the launch configuration as profiles.apply leaves it: the typed 90,330,210 counter-clockwise
+    base = {'attach_x_offset': '0.0', 'attach_y_offset': '0.225', 'attach_azimuths_deg': '270,30,150',
+            'partner': 'true', 'partner_args': 'mission_mode:=floor_join carrier_azimuths_deg:=[90.0,330.0,210.0]'}
+
+    def run(**args):
+        ctx = LaunchContext()
+        ctx.launch_configurations.update({**base, **args})
+        return ctx, _reattach_plate(ctx)
+
+    ctx, note = run()
+    assert note == '' and ctx.launch_configurations['attach_y_offset'] == '0.225'
+    ctx, note = run(reattach_plate='1')
+    assert ctx.launch_configurations['partner_args'].split()[-1] == 'plate:=1' and 'nearest carrier 60 deg' in note
+    ctx, _ = run(reattach_plate='1', partner_args='plate:=1')
+    assert ctx.launch_configurations['partner_args'] == 'plate:=1'
+    for bad, why in (({'reattach_plate': '3'}, 'holds a carrier'), ({'reattach_plate': '12'}, 'not a plate number'),
+                     ({'reattach_plate': '1', 'partner_args': 'plate:=9'}, 'one plate for both stacks'),
+                     ({'reattach_plate': '1', 'attach_x_offset': '0.1', 'attach_y_offset': '0.1'}, 'off a plate')):
+        with pytest.raises(RuntimeError, match=why):
+            run(**bad)
+
+
 def test_partner_contact_rig_graph(dds):
     """Rig: no joint gate or bridge, no sim catch, the typed taut length."""
     g = _combined_rig(proof_taut_len=0.583)
@@ -1064,6 +1170,45 @@ def test_partner_contact_rig_graph(dds):
     old_rules = _combined_rig(proof_rules='contact_lift')['/magnet_attachment_manager']['params']
     assert old_rules['proof_rules'] == 'contact_lift' and 'comotion_contact_xy' not in old_rules
     assert not [n for n in g if 'joint_state' in n]
+
+
+def test_attach_pause_reaches_the_planner_only_when_typed(dds):
+    """attach_pause (Wesley 4 Nov, the orbit re-attach) and its ramp reach the planner only when typed."""
+    kw = dict(enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01, proof_taut_len=0.577,
+              **QUAD4_RECORD)
+    p = _by_name(rig('attach', **kw))['/dissipative_planner']['params']
+    assert 'attach_pause' not in p and 'attach_pause_ramp_s' not in p
+    p = _by_name(rig('attach', attach_pause=True, attach_pause_ramp_s=4.0, **kw))['/dissipative_planner']['params']
+    assert p['attach_pause'] is True and p['attach_pause_ramp_s'] == 4.0
+
+
+def test_foldin_cap_reaches_the_planner_only_when_typed():
+    """foldin_cap (card 2026-11-05_quad4_foldin_weld_cap, off by default) reaches the twin's attach planner only when
+    typed; 'weld' was deleted (Wesley 5 Nov) and is refused."""
+    assert 'foldin_cap' not in _planner(_by_name(sim('attach', **PARTNER_ATTACHED_ORBIT)))
+    assert _planner(_by_name(sim('attach', foldin_cap='level', **PARTNER_ATTACHED_ORBIT)))['foldin_cap'] == 'level'
+    with pytest.raises(RuntimeError, match="foldin_cap 'weld': 'off' or 'level'"):
+        sim('attach', foldin_cap='weld', **PARTNER_ATTACHED_ORBIT)
+
+
+def test_foldin_cap_is_refused_on_the_rig(dds):
+    """foldin_cap flies only in the twin (the critic, 5 Nov): a real launch refuses it before any node starts; off is
+    accepted."""
+    kw = dict(enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01, proof_taut_len=0.577,
+              **QUAD4_RECORD)
+    with pytest.raises(RuntimeError, match='foldin_cap flies only in the twin'):
+        rig('attach', foldin_cap='level', **kw)
+    assert _by_name(rig('attach', foldin_cap='off', **kw))['/dissipative_planner']['params']['foldin_cap'] == 'off'
+
+
+def test_combined_rig_operator_off_topic_only_when_typed(dds):
+    """The gate's operator OFF (Wesley 4 Nov, k1m_3/_4) is off unless magnet_operator_topic is typed."""
+    kw = dict(enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01, proof_taut_len=0.577,
+              **QUAD4_RECORD)
+    g = _assert_rig_graph(rig('attach', **kw), 4, 35.2)
+    assert g['/magnet_gate_3']['params']['operator_topic'] == ''
+    g = _assert_rig_graph(rig('attach', magnet_operator_topic='/drone_3/magnet_operator', **kw), 4, 35.2)
+    assert g['/magnet_gate_3']['params']['operator_topic'] == '/drone_3/magnet_operator'
 
 
 def test_combined_rig_one_coil_writer_aux_zeroed_and_his_ball_from_our_mocap(dds):
@@ -1575,6 +1720,45 @@ def test_the_task_and_lap_switches_reach_the_twin_planner_only_when_set():
 
 
 
+def _trackers(g):
+    return [n['params'] for k, n in g.items() if n['executable'] == 'tracker']
+
+
+def test_carriers_down_alone_reaches_the_planner_only_under_descend_to_stall():
+    """Card 2026-11-05_carriers_down_alone (twin: off by default; the rig's default since 5 Nov ~16:25, its own test
+    above): carriers_down_alone reaches the planner and every tracker (QUAD4's too) when set with land_descend_to_stall,
+    in the twin's dissipative and attach graphs and on the rig, where land_descend_to_stall is the default since 5 Nov
+    ~15:15; unset in the twin, no planner or tracker gets it. Refused without land_descend_to_stall: in the twin unless
+    typed, on the rig when a params_file types it false (the stall then comes with the rig's carriers still in the air)."""
+    for g, n in ((sim('dissipative', land_descend_to_stall=True, carriers_down_alone=True), 4),
+                 (sim('attach', legacy=False, num_drones=3, land_descend_to_stall=True, carriers_down_alone=True), 4),
+                 (rig('attach', enable_approach_mpc=False, land_descend_to_stall=True, carriers_down_alone=True), 4),
+                 (rig('attach', enable_approach_mpc=False, carriers_down_alone=True), 4)):
+        g = _by_name(g)
+        p = _planner(g)
+        assert (p['land_descend_to_stall'], p['carriers_down_alone']) == (True, True)
+        assert len(_trackers(g)) == n and all(t['carriers_down_alone'] is True for t in _trackers(g))
+        assert not any('carriers_down_band_m' in t for t in _trackers(g))     # the trackers' default, 0.15 m
+    for g in (sim('mpc'), sim('dissipative'), sim('dissipative', land_descend_to_stall=True)):
+        g = _by_name(g)
+        assert 'carriers_down_alone' not in _planner(g)
+        assert not any('carriers_down_alone' in t or 'carriers_down_band_m' in t for t in _trackers(g))
+    for launch in (lambda: sim('dissipative', carriers_down_alone=True),
+                   lambda: rig('attach', enable_approach_mpc=False, land_descend_to_stall=False, carriers_down_alone=True)):
+        with pytest.raises(RuntimeError, match='carriers_down_alone needs land_descend_to_stall'):
+            launch()
+
+
+def test_the_carriers_band_reaches_every_tracker_when_typed_and_is_bounded():
+    """carriers_down_band_m (card rev 3; '' = the trackers' 0.15 m, Wesley 5 Nov): typed, every tracker gets it;
+    outside 0.03-0.20 m (the drop when a released carrier's idle cuts its throttle) the launch refuses it."""
+    g = _by_name(rig('attach', enable_approach_mpc=False, carriers_down_alone=True, carriers_down_band_m=0.12))
+    assert [t['carriers_down_band_m'] for t in _trackers(g)] == [0.12] * 4
+    for band in (0.25, 0.01):
+        with pytest.raises(RuntimeError, match='carriers_down_band_m'):
+            sim('dissipative', land_descend_to_stall=True, carriers_down_alone=True, carriers_down_band_m=band)
+
+
 def test_resize_delay_reaches_the_twin_dissipative_planner_only_and_is_refused_elsewhere():
     """Card 2026-10-30_x1_release_ablation (twin only, off by default): resize_delay_s reaches the twin's mode:=dissipative
     planner with reconfig_mode ocp; unset, no planner gets it (the loss is acted on at detection). Refused on the rig,
@@ -1645,3 +1829,87 @@ def test_combined_rig_comotion_thresholds_and_tip_repeats_only_when_typed(dds):
                        comotion_sep_xy=0.06, tip_skip_repeats=True, **base))['/magnet_attachment_manager']['params']
     assert (mgr['comotion_d_ok'], mgr['comotion_speed_window_s'], mgr['comotion_lost'], mgr['comotion_sep_xy'],
             mgr['tip_skip_repeats']) == (0.008, 0.5, 0.06, 0.06, True)
+
+
+def test_plan_rod_level_reaches_the_twin_planner_only_when_set():
+    """plan_rod_level (twin only, sim.yaml; card 2026-10-31_rod_in_plan) goes to the twin's planners with the world's
+    rod, typed or from sim.yaml; refused on the rig; not for the SIL plant or the network's arms, whatever sim.yaml says."""
+    typed = dict(rod_mass=0.08, rod_com=0.3)
+    for g, mass, com in ((sim('dissipative', num_drones=4, reconfig_mode='ocp', plan_rod_level=True), 0.040, 0.025),
+                         (sim('mpc', plan_rod_level=True, cable_len=0.55), 0.040, 0.025 * 0.55),
+                         (sim('attach', legacy=False, plan_rod_level=True), 0.040, 0.025),
+                         (sim('mpc', plan_rod_level=True, **typed), 0.08, 0.3)):
+        p = _planner(_by_name(g))
+        assert p['plan_rod_level'] is True and p['rod_mass'] == mass and p['rod_com'] == pytest.approx(com)
+    for g in (sim('mpc', plan_rod_level=False), sim('network', plan_rod_level=True), sim('mpc', sil=True, plan_rod_level=True),
+              rig('dissipative', thrust_ratio=35.2), rig('mpc', thrust_ratio=35.2)):
+        p = _planner(_by_name(g))
+        assert 'plan_rod_level' not in p and 'rod_mass' not in p
+    for launch in (lambda: rig('dissipative', thrust_ratio=35.2, plan_rod_level=True),
+                   lambda: rig('mpc', thrust_ratio=35.2, plan_rod_level=True, rod_mass=0.075, rod_com=0.267)):
+        with pytest.raises(RuntimeError, match='plan_rod_level flies only in the twin'):
+            launch()
+    with pytest.raises(RuntimeError, match='plan_rod_level needs rod_mass'):
+        sim('mpc', legacy=True, reconfig_mode='ocp', plan_rod_level=True)   # the legacy profile has no rod to read
+
+
+def test_the_rod_zeroes_the_sideways_integral_unless_chosen(tmp_path):
+    """Wherever the rod resolves on (typed; sim.yaml's default off again since Wesley 4 Nov ~22:50) int_k_xy goes to 0
+    unless typed or in the params_file; the default, SIL, the network's arms and real flights keep 5.26."""
+    for g in (sim('dissipative', num_drones=4, reconfig_mode='ocp', plan_rod_level=True),
+              sim('attach', legacy=False, plan_rod_level=True), sim('mpc', plan_rod_level=True)):
+        p = _planner(_by_name(g))
+        assert p['plan_rod_level'] is True and p['int_k_xy'] == 0.0
+    pf = tmp_path / 'xy.yaml'
+    pf.write_text('int_k_xy: 5.26\n')
+    for g in (sim('mpc', plan_rod_level=True, int_k_xy=5.26), sim('mpc', plan_rod_level=True, params_file=str(pf))):
+        p = _planner(_by_name(g))
+        assert p['plan_rod_level'] is True and p['int_k_xy'] == 5.26
+    for g in (sim('mpc'), sim('network', plan_rod_level=True), sim('mpc', sil=True, plan_rod_level=True),
+              rig('dissipative', thrust_ratio=35.2)):
+        p = _planner(_by_name(g))
+        assert 'plan_rod_level' not in p and p['int_k_xy'] == 5.26
+
+
+def test_the_twin_weld_gate_filters_its_speed_by_default(dds):
+    """Wesley 4 Nov ~22:20: weld_vel_filter_s 0.1 in simulation (R3485-R3488); the rig keeps 0 (co-motion confirms)."""
+    mgr = _by_name(sim('attach', legacy=False))['/magnet_attachment_manager']['params']
+    assert mgr['rel_vel_filter_tau_s'] == 0.1
+    kw = dict(enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01, proof_taut_len=0.577,
+              **QUAD4_RECORD)
+    assert _by_name(rig('attach', **kw))['/magnet_attachment_manager']['params']['rel_vel_filter_tau_s'] == 0.0
+
+
+def test_the_pull_bound_reaches_every_tracker_and_is_zero_by_default():
+    """cable_pull_up_max (docs/analysis/tracker_clamp_2026-10-31.md): 0 everywhere unless typed."""
+    for g in (sim('dissipative', num_drones=4, reconfig_mode='ocp'), sim('attach', legacy=False), sim('mpc'),
+              rig('dissipative', thrust_ratio=35.2)):
+        trackers = [n for name, n in _by_name(g).items() if name.startswith('/tracker_')]
+        assert trackers and all(n['params']['cable_pull_up_max'] == 0.0 for n in trackers)
+    trackers = [n for name, n in _by_name(sim('dissipative', num_drones=4, reconfig_mode='ocp', cable_pull_up_max=0.5)).items()
+                if name.startswith('/tracker_')]
+    assert trackers and all(n['params']['cable_pull_up_max'] == 0.5 for n in trackers)
+
+
+def test_the_newcomers_tracker_reads_its_mux_and_the_carriers_do_not(dds):
+    """RIG-1105-k1ob_2: QUAD4's tracker stands its ring-tilt checks down while its mux forwards the other stream; on
+    welded starts too (they get no planner on_load); the carriers' trackers do not subscribe."""
+    kw = dict(enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01, proof_taut_len=0.577,
+              **QUAD4_RECORD)
+    for g in (_by_name(rig('attach', **kw)), _by_name(rig('attach', partner_attached=True, detach_unload_s=3.0, **kw)),
+              _by_name(sim('attach', legacy=False))):
+        assert g['/tracker_3']['params']['mux_state_topic'] == '/drone_3/mux_state'
+        assert '/elrs_mux_3' in g
+        assert all('mux_state_topic' not in g[f'/tracker_{i}']['params'] for i in range(3))
+
+
+def test_a_welded_quad4s_takeoff_waits_for_our_release(dds):
+    """partner_attached (a start-welded QUAD4): his rig launch is given takeoff_gate_topic /partner/release (5 Nov,
+    RIG-1105-nr1r); a floor start is not."""
+    kw = dict(enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01, weld_point_z=0.031,
+              attach_cable_len=0.54, cable_len=0.55, partner_nodes=True, proof_taut_len=0.577,
+              partner_args='magnet_drop_below_quad:=0.582 mpc_thrust_ratio:=21.5')
+    welded = _by_name(rig('attach', partner_attached=True, detach_unload_s=3.0, **kw))
+    assert welded['/online_join_planner']['params']['takeoff_gate_topic'] == '/partner/release'
+    floor = _by_name(rig('attach', **kw))
+    assert 'takeoff_gate_topic' not in floor['/online_join_planner']['params']

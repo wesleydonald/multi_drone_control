@@ -144,6 +144,13 @@ dynamic_planner_transfer_backend:
     cooperative_tracking_half_x_m: 0.05
     cooperative_tracking_half_y_m: 0.05
     cooperative_tracking_half_z_m: 0.05
+    # The tracking_mismatch check's own bound (local, Wesley 5 Nov; was the 0.05
+    # above): a T hovering with int_k_xy 0 sits 0.05 m off its published path and
+    # latched the backend off (R3738). The 0.05 inflation stays: at 0.20 the
+    # carriers' tether boxes cover the low transit end (CHANGES_FROM_TEJEN.md 5 Nov).
+    cooperative_tracking_check_half_x_m: 0.20
+    cooperative_tracking_check_half_y_m: 0.20
+    cooperative_tracking_check_half_z_m: 0.20
 
     # M1 ring/net: the commitment is the true attachment-plane ring centre.
     # Collision geometry is a conservative 0.56 m square footprint spanning

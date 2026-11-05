@@ -25,14 +25,16 @@ solver bench, then the solve-time figure with the one-iteration tick for 2-9 car
 **After the T fix, before the freeze:** QUAD4's fold-in gets the rejoin's weld-height cap (card, critic; Wesley 30 Oct).
 
 **Real world:** S1 Wed 4 Nov, the sheet `docs/rig/wed_2026-11-04.md` is desk-checked (h3t, h4m1, sq6b x3-4, release
-x2; W and L measured on the day). S2 Thu 5 Nov: sheet Mon/Tue (attach first if S1 went to the heave, then the 1 m
-baselines), after the thrust-margin check from the logs.
+x2; W and L measured on the day). S2 Thu 5 Nov: the sheet `docs/rig/thu_2026-11-05.md` is desk-checked 2 Nov (attach first if S1 went to the heave, then
+the release x2 if missing, then the 1 m baselines); its calls are typed Wed afternoon from Wed's logs.
 
 **Thesis chat (starts once the draft is on Overleaf):** supervisor round 1 (this weekend: Wesley picks and rewords the
 sections), the arena fix (6 x 6 x 5 m), cite the supervisors and reword G4, F1's caption ("halved", not "removed"),
 then each planned box as the lab chat ticks its result here.
 
-**Wesley's open calls:** the T fix's default (after its runs and the critic). Push week8 once the T fix is merged (Wesley).
+**Wesley's open calls:** the T fix: he asked first why the sideways integral is needed at all (31 Oct, two read-only
+investigations running); the automatic rule is the preferred fix if nothing is found. Push week8 once the T fix is
+merged (Wesley).
 
 **Fixed dates**
 - Lab sessions, Wed and Thu 8-11 am: 4/5 Nov, 11/12 Nov, 18/19 Nov.
@@ -109,19 +111,28 @@ answers, the ones left:
 - [ ] The 1 m release x2 (QUAD4's magnet off, unannounced).
 
 **S2, Thu 5 Nov:**
+- [ ] The cable-length re-read (Wesley 31 Oct; card `docs/experiments/2026-10-31_rod_len_reread.md`): if Wed's logs hold its reading, the first h3 flies the
+      switch; if the height and tilt bars hold, all the baselines fly it, otherwise all off. `throttle_max:=0.95` on h3, f3, ls3; packs at 24.0 V or more at rest.
 - [ ] Attach x3 (first, if S1 went to the heave).
 - [ ] 1 m baselines: h3, f3, ls3, h4, ls4, 2 flights per cell (Wesley 30 Oct; the third in S4 for the cells the thesis
-      leans on).
+      leans on). f4 added last on the sheet (2 Nov): RIG-1029-f4 flew the 2 Hz low-pass that has since come off.
 - [ ] Release x2 if missing.
+- Flown instead (Wesley's order of 4 Nov evening; registry RIG-1105-*, feed F048): the pickup and drop into the flying ring
+  (k1d, worked), the first real detach and re-attach (square, sq8_2, worked), the orbit with the pause (re-attach not
+  caught), the drop into the moving ring (k1ob_2, in the net, then an automatic drop), the triangle re-attach (not caught).
+  The re-read, the 1 m baselines and release x2 were not flown: they move to S3/S4.
 
-**S3, Wed 11 Nov:**
-- [ ] Nr in hover x3: release, then Tejen's re-attach.
+**S3, Wed 11 Nov:** (sheet `docs/rig/wed_2026-11-11.md`, desk-checked 5 Nov; the M2A ring on 1 m cables; no frozen bars,
+results as measured, Wesley 5 Nov; every LAND flies the rig's new LAND defaults: decisions 5 Nov)
+- [ ] Nr in hover x3: release, then Tejen's re-attach, on the square (11/2/5 + QUAD4 on 8, as sq8_2; Wesley 5 Nov).
 - [ ] If the attach is unreliable: attach attempts only.
 - **Cut line:** nothing below it is counted on for the thesis.
 
-**S4, Thu 12 Nov:**
-- [ ] K in hover x2 (k1_7 as fallback).
-- [ ] Nr on the figure-eight x1.
+**S4, Thu 12 Nov:** (sheet `docs/rig/thu_2026-11-12.md`)
+- [ ] K in hover x2: the small object only, the ring at 1.2 m, drop_height 0.28 (k1z; Wesley 5 Nov).
+- [ ] Nr on a path x1: the orbit (the figure-eight is refused under the combined mode; Wesley 5 Nov), the square's twin
+      run done (R3771).
+- [ ] The funnel on plate 9 for the triangle try (Wesley's print; `cad/funnel/`), match_dwell 1.0 (his call).
 - [ ] Missing re-flies.
 - Real-world freeze 11:00 (aim).
 
@@ -138,8 +149,10 @@ All runs are in `docs/sim_runs_todo.md`. In order:
 - [ ] X3 the 8-quad set.
 - [ ] X3b eight and nine carriers at one iteration per tick (real-time) + the ground computer's tick (before X4's long runs).
 - [ ] X8 the paper's method through a loss.
-- [ ] Code freeze Fri 6 Nov.
-- [ ] X11 final-tree re-fly of every cited table (slope estimate).
+- [x] Code freeze: the tree as of Thu 5 Nov 18:25 (Wesley: "Start running"; 9f20f8b + uncommitted, recorded in every
+      manifest; gate 2200 passed).
+- [ ] The final-tree re-fly of every claim, X1-X4, X8, 4.1/4.2 and X11 (`docs/claim_batch_2026-11-07.md`, 255 runs,
+      started 5 Nov 18:25 on the lab PC, ~22 h; scorers `tools/*_metrics.py`). Each chunk is posted in the feed when scored.
 - [ ] Simulation freeze Mon 9 Nov.
 - [ ] P2 items if time.
 
@@ -159,7 +172,7 @@ Style: full box, legends below and framed, tables with full borders (`tools/plot
 - [ ] The real-world figure-eight with 2/3/4 carriers at 1 m (after S2).
 - [ ] The real-world release at 1 m (after S1/S2).
 - [ ] The first real join (if it happens).
-- [ ] Optional: F3 bands, F4 the gap.
+- [ ] Optional: F4 the gap. (F3 bands dropped 2 Nov, Wesley: no frozen predictions.)
 - [ ] Photos and the mission storyboard: Wesley.
 
 ## 5. Reviews and checks
@@ -171,20 +184,19 @@ Style: full box, legends below and framed, tables with full borders (`tools/plot
 
 ## 6. Admin and housekeeping
 
-- [ ] **Commit** the work since 284ffb4 (Wesley's word; nothing is committed): a lot of code, configs and docs from
-      28-30 Oct. Recommended before the code freeze at the latest.
+- [x] **Commit** the work of 28-30 Oct (committed on week8 by 9f20f8b, 30 Oct 17:31; later work on Wesley's word).
 - [x] Merge X4's worktree (30 Oct 16:12, into week8; 37 tests pass).
 - [x] Tejen: our reply sent; his review back 30 Oct 14:53 (`~/Downloads/RIG_LATENCY_AND_GEOMETRY_REPLY_20261030.md`).
 - [ ] Tejen follow-ups (lab chat): export one rejected low-route candidate per witness type with its full geometry (R2903);
       the real plate's overrides in our launch (collision 0.100/0.100/0.025, his pickup point -0.0045, backend half
       0.050/0.050/0.0125, object centre vs magnet, object_mass_kg stays 0) before any pickup flight; document the frozen-
       marker rule's limit in CHANGES_FROM_TEJEN.md; partial_step re-test in the twin only after the delay paths are separated.
-- [ ] Wed 4 Nov sheet: DRAFT `docs/rig/wed_2026-11-04.md` (30 Oct): lines h3t, h4m1, sq6b, rel1/2; detection and body
+- [x] Wed 4 Nov sheet: `docs/rig/wed_2026-11-04.md`, desk-checked again 2 Nov on the final tree: lines h3t, h3t180, h4m1, sq6b, rel1/2; detection and body
       set settled, his MPC cable typed 1.0 (Wesley), throttle_max 0.95 for the three left after a release; every line
       desk-ok on fake mocap 30 Oct (the release's marker check moved to configs/rig/m1_release_tip.yaml after a refusal).
-- [ ] Thrust margin (lab chat, exploratory, from logs): the carriers' measured pull against the ring's weight in every
-      steady hover (bias, spread, RMS; the review read +9 to +27 %, so the map over-predicts thrust at 0.6-0.8
-      throttle), and the throttle each team needs per pack voltage. Before S2's baselines.
+- [x] Thrust margin (lab chat, exploratory, from logs; done 31 Oct, `docs/analysis/thrust_margin_2026-10-31.md`, feed
+      F015): the +9 to +27 % read is refuted as a map error. For S2: type `throttle_max:=0.95` on h3, f3 and ls3 (no
+      margin at the default 0.8), packs at 24.0 V or more at rest. Weigh one airframe and the ring on 4 Nov (sheet P5).
 - [ ] Backups of the thesis sources (Overleaf is the master).
 - [ ] RA-L drafts: parked until after 20 Nov.
 

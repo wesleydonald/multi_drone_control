@@ -27,7 +27,17 @@ height_hold:
   z_i_gate: 0.25
 trajectory:
   land_unwind: false           # rig: straight down after touchdown; the rig tethers are cables that go slack (Wesley 7 Oct); the twin keeps the unwind (rigid links)
-  traj_speed: 0.125            # m/s path speed (Wesley 7 Oct; the figure-8 now holds it along the whole lap)
+  land_descend_to_stall: true  # rig default (Wesley 5 Nov ~15:15): after ring touchdown the LAND reference keeps descending
+                               # past z 0 until the stall (card 2026-10-17_land_ref_below_rest; 5 Nov the carriers hovered
+                               # 15-23 cm over a reference stopped at 0); a params_file can turn it off (with
+                               # carriers_down_alone: false, which needs it); the twin keeps it off
+  land_rearm_touchdown: true   # rig default (Wesley 5 Nov ~16:25): the LAND stall test re-armed at ring touchdown (card
+                               # 2026-10-17_touchdown_height_gate; without it a carrier 0.03 stronger than its map read a
+                               # stall ~0.8 m up and LANDED disarmed it in the air, R3757/R3758); the twin's since 17 Oct
+  carriers_down_alone: true    # rig default (Wesley 5 Nov ~16:25): while the LAND waits for a taken-back QUAD4 the carriers
+                               # still on the landed ring are disarmed alone within the trackers' 15 cm band
+                               # (carriers_down_band_m, 0.15 unless set; card 2026-11-05_carriers_down_alone); twin off
+  traj_speed: 0.125           # m/s path speed (Wesley 7 Oct; the figure-8 now holds it along the whole lap)
   fig8_size: 0.75              # m: the rig's paths shrink to 0.75 so the outboard quad stays ~1.475 m out, well inside
   traj_distance: 0.75          # the +-1.75 m position limit (Wesley 22 Oct); line_x / line_spin go 0.75 m out
   hover_z: 0.8

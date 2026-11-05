@@ -19,6 +19,9 @@ Wesley runs two focused chats; each owns its files and only reads the other's.
 - **The results feed `docs/results_feed.md`**: the lab chat appends an entry the moment anything the thesis depends on
   changes (a result final, a number changed or wrong, a figure ready, a decision or fact that changes the text, a cited
   result gone stale); the thesis chat reads every entry after the last one it processed (noted in THESIS_STATE).
+- **Requests `docs/lab_requests.md`** (Wesley 30 Oct): the other direction. The thesis chat appends what it needs from
+  the lab chat; the lab chat reads every OPEN request at its start, answers in the feed and closes the request with
+  the feed entry. Messages between the chats are only a nudge: a request not in the file does not exist.
 - Shared: `docs/handin_plan.md` (each chat ticks its own items; the lab chat ticks a result with its run ids and card
   when it is final, and posts it in the feed: the thesis chat's signal to write it up), `docs/decisions.md` (append
   only, both), `docs/sim_runs_todo.md` (the lab chat). A one-off question can go to either chat if it changes nothing of
@@ -60,10 +63,11 @@ Wesley runs two focused chats; each owns its files and only reads the other's.
 ## Exploration vs claims
 - **Exploratory run**: no card, one registry row marked "exploratory" with a one-line
   falsifier. Use it to FIND the failure, not to prove the fix.
-- **Claim** (a thesis table or a rig go/no-go): experiment card (`/experiment`), falsifier
-  and bars written before the runs, numbers in a table against the named baseline, run ids.
-- **Bars are frozen before the runs.** If a bar turns out wrong, score against the original
-  and use the new one only for later runs; never re-score runs already seen.
+- **Claim** (a thesis table or a rig result): experiment card (`/experiment`), a named baseline, numbers in a table with run ids.
+- **Bars:** none frozen beforehand, in simulation (Wesley 2 Nov: "it is fine to decide after a run if it is an acceptable result") or
+  on the rig (Wesley 5 Nov: "it makes no sense to freeze arbitrary bars unless I am comparing my method/results to another paper"):
+  only a comparison with another paper's numbers gets its bars fixed first. Say so wherever a number was judged after the run. Never
+  quietly re-score a bar already written down: a card's bars stay as written, and a miss stays recorded.
 - **One code tree per claim table.** Re-fly on the final tree before the reviewer sees it.
 - One variable per experiment. Numbers go in tables, never in prose.
 - Before repeating an arm, fly its neighbours once: the other sign of the error, one fewer
@@ -86,10 +90,10 @@ Wesley runs two focused chats; each owns its files and only reads the other's.
 - The rig's trackers put their measured cable pull through a band-stop at 5.3 Hz (`cable_notch_hz` 5.3, Q 1, in
   real.yaml; Wesley 29 Oct): the 1 m ring bends at 5.3 Hz with four carriers (RIG-1029-h4); two 2 Hz low-pass stages
   halved it in the lift but their lag let the triangle swing at 1.1 Hz (RIG-1029-sq2_2/-sq2_4), so the low-pass is off
-  (`cable_lp_hz` 0). The band-stop has flown only with three carriers, where the bending never showed (F1, 30 Oct):
-  its first four-carrier flight is Wed 4 Nov's h4m1. common.yaml: both off (the twin's ring is rigid).
+  (`cable_lp_hz` 0). The band-stop's only four-carrier flight so far (h4n, 30 Oct) heaved and landed at +3 s, so it says nothing about the bending, which never showed with three (F1, 30 Oct):
+  its first real four-carrier test is Wed 4 Nov's h4m1. common.yaml: both off (the twin's ring is rigid).
 - The payload is the 1.15 kg ring of 28 Oct (real.yaml: load_mass, inertia estimate, attach_radius 0.204, attach_z
-  0.025 estimate, payload_rest_z 0.013; the planner solver is built at its mass). The 0.86 kg M2A ring flies with its
+  0.028, payload_rest_z 0.013; the planner solver is built at its mass). The 0.86 kg M2A ring flies with its
   values typed (`configs/rig/ring_m2a.yaml`) and solvers prebuilt at 0.86 (a copy: `~/mdc_rig_generated_m2a_0p86`).
   Twin worlds of the new ring carry `_p115`; the older worlds stay the M2A ring.
 
@@ -112,11 +116,13 @@ Wesley runs two focused chats; each owns its files and only reads the other's.
 ## How to work
 - Verification ladder: pytest -> `tools/gate.sh --quick` -> headless Gazebo -> rig. Source
   `~/ros2_humble/install/setup.bash` and `install/setup.bash`.
-- `python3 tools/prebuild_planner.py` after touching the planner or masses, before any batch.
+- `python3 tools/prebuild_planner.py --from-config <cfg>` after touching the planner or masses, before a laptop run (a config that types the rod needs it; plain `prebuild_planner.py` builds rod 0, the rig's); lab batches warm per config (`--warm-from-config`).
 - Rig day, before T1 (stack down): `python3 tools/mocap_stream_check.py --expect <bodies>` must say OK. Motive streams
   only the bodies the flight uses, at most 8 at 240 Hz (attach 6,8,11-14,24; 3 quads 8,11-13,21-23): the mocap PC's
   forwarder tops out at ~2,250 packets/s, and on 30 Oct 10 bodies made every pose 95 ms late and every ring lift heaved
-  (RIG-1030-bench_mocap).
+  (RIG-1030-bench_mocap). **Never record in Motive during flights** (5 Nov: a Motive recording on the mocap PC doubled
+  the command-to-response delay on every quad, 45-65 -> 75-135 ms; every lift bounced at ~1 Hz, two automatic ring
+  drops (RIG-1105-fm9_2, -fm9s); the stream check still said OK; stopped: 45-60 ms, a clean lift, RIG-1105-fm9y_2).
 - Before a run: `results/registry.csv` and `docs/decisions.md`. After: one registry row per
   run, then the report. Append registry rows with LF; never rewrite the file (csv.writer
   changes every line's ending and quoting).
@@ -139,19 +145,26 @@ Wesley runs two focused chats; each owns its files and only reads the other's.
 - LAND lands every drone whatever it is doing; a freed drone off the ring is pushed to its own
   rest and disarmed alone. `newcomer_lifecycle`, `newcomer_fault_land` and `departed_ground_idle`
   are on by default (Wesley 9 Oct, after the LAND re-fly's reviewer); the legacy profile keeps them off.
-  `land_rearm_touchdown` (re-arm the LAND stall test at ring touchdown) is on in the twin (sim.yaml; Wesley 17 Oct);
-  the rig gets it after a critic look at its wall-clock pose check.
+  The rig's LAND defaults since 5 Nov (real.yaml): `land_descend_to_stall` (the reference keeps descending until each
+  quad stops on the floor; the carriers had hovered 15-23 cm up and drifted while waiting for a taken-back QUAD4),
+  `land_rearm_touchdown` (the stall test re-armed at ring touchdown; without it a carrier stronger than its map read a
+  stall ~0.8 m up, R3757/R3758) and `carriers_down_alone` with its 15 cm band (while the LAND waits for QUAD4 the
+  carriers on the landed ring are disarmed alone; it needs `land_descend_to_stall`, so a params_file that turns that off
+  must type `carriers_down_alone: false` too, or the launch refuses). The twin has `land_rearm_touchdown` only (sim.yaml,
+  since 17 Oct).
 - Thrust: the rig and the rig twin use the identified affine map (offset 0.185 + 0.507*mass
   - 0.022*(V - 23.5), gain 35.2 above it; 30 Sep) with `kt_trim` off.
 - The rig twin is the simulation (5 Oct). Old worlds live in `simulation_assets/old_worlds/`
   and fly only with `legacy:=true`; only the network mode still needs it.
-- The model integral (`int_mode auto`) is the default everywhere (5 and 8 Oct).
+- The model integral (`int_mode auto`) is the default everywhere (5 and 8 Oct). The plan's cables are massless in simulation and on the rig (Wesley 4 Nov ~23:00, after a flip of `plan_rod_level` on at ~22:20 and off at ~22:50): the magnet's weight hangs on the cable while the plan counts it in drone_mass, so a T leans on both; reported as a limitation. The twin's links match the hardware since 4 Nov ~23:15: a 0.002 kg cable + a 0.038 kg magnet at the plate, airframe 0.510 (`tools/make_carry_worlds.py`; each quad still 0.55 kg); every twin run before flew 0.040 + 0.035 on 0.475. Typed, the rod sets int_k_xy 0 unless chosen; real flights refuse it. The twin's weld gate filters its speed over 0.1 s (`weld_vel_filter_s`, sim.yaml, Wesley 4 Nov ~22:20).
 - The network is yaw-only and open-loop in load pose except the bounded common-mode trim.
 - Attach at 0.2 m/s.
 - QUAD4 never flies over the carriers (Wesley 29 Oct: "I never want the incoming quad to fly that high"): it comes in
   between them, 0.30 m over the ring's plates, for the attach and with the object (`transit` low, the pickup's default;
   the rig sheet types the attach's 0.30 m). The rig launch refuses any planned QUAD4 body height over 2.6 m unless
-  `transit:=over` is typed. In the twin the object lies in plate 9's gap, as on the rig.
+  `transit:=over` is typed. In the twin the object lies in plate 9's gap, as on the rig. One exception, simulation only
+  (Wesley 5 Nov): the 4.3 pickup-then-re-attach cell flies over (`transit:=over`, ~3.25 m) because on the low route his
+  C++ planner stalls 0.7 m short of the drop point (R3767, R2904).
 - The twin's links stay 1 m rods hinged at both ends (they swing as pendulums; the rig's metal cables are straight and
   taut in flight, RIG-1029 cable analysis). Wesley 29 Oct: first give the twin the rig's delays (command/radio, motor
   lag, mocap) so it reproduces the rig's in-flight swing; segmented cables (slack at rest, takeoff, releases) later.

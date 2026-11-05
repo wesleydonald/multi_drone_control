@@ -1,0 +1,3 @@
+# configs/rig/traj_hold.yaml plus the cable read of configs/rig/hover_reread.yaml, for Thu 5 Nov's paths (card docs/experiments/2026-10-31_rod_len_reread.md).
+traj_hold_s: 5.0
+rod_len_reread: true

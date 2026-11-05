@@ -308,3 +308,277 @@ Should-fix:
 3. log each drone's floor; name each arm's planner node and rest records;
 4. drone 1 at 0.258, 8 mm above LAND_FOLLOW_XY_Z 0.25: check its xy at the stall (the rigid rod can carry load);
 5. the no-record fallback depends on the mocap origin on the rig.
+
+## Rev 4 (5 Nov; written ~13:05 before the runs; simulation bars written first, not frozen: Wesley 2 Nov)
+
+Rev 3's runs stay scored against rev 3's bars (F3 fired; the switch stays off). Rev 4 adds one variable on top of the
+switch and re-flies the baselines on today's tree: every rev-3 run flew the 0.55 m rods and the old twin link; the
+twin's links changed on 4 Nov ~23:15 (rod 0.002 + magnet 0.038 kg at the plate, airframe 0.510) and fly 1 m.
+
+**Why now (rig, 5 Nov, RIG-1105-k1d).** After LAND the three carriers stopped 15-23 cm above z 0 (their rests are
+4.4-6.7 cm, so 10-17 cm above rest) and hovered for ~6 s (each carrier 0.48-0.61 m in xy from ring touchdown to the end of the log), until QUAD4 (taken back, landed
+alone) was down. Their LAND reference stopped at z 0 (57.2 s) while they were 0.17-0.23 m up and lagging it by 0.13-0.20
+m; ground effect and the tracker's weak position stiffness held them there. Rev 3's switch removes that stop, but its
+drones met the floor at the reference's own speed (0.17-0.21 m/s, 0.28-0.31 on the rig LAND path, against 0.01-0.12
+off): the reason it stayed off.
+
+**The variable: a slow final descent under the switch.** After ring touchdown (`_land_hold_refs`), the reference
+moves at `land_vel` until it passes `land_slow_z` (world z of the reference), then at `land_slow_vel`, down to the
+stall as before. Both paths: the straight descent (the rig's) and the unwind (the arc is slowed along its own path,
+position and velocity together, from where it passes `land_slow_z`). Values from the data:
+- `land_slow_vel` **0.10 m/s**: with the switch the drones meet the floor at the reference speed (rev 3: 0.17-0.21 at
+  0.20), so 0.10 aims at the bases' upper end (0.01-0.12) and the rig's softest landings of 14 Oct (0.10-0.38). Half
+  of `land_vel` also keeps today's stall fraction (0.25) twice away even without the fix below.
+- `land_slow_z` **0.40 m**: the drones lag the reference by 0.20-0.24 m at 0.20 m/s on the twin's rig LAND path (R2184,
+  R2185, 1.5-3 s after ring touchdown; 0.10-0.13 on the unwind, R2180) and by 0.13-0.20 m on the rig (k1d). The slowing
+  must start that lag plus ~0.1 m of settling above the rest: 0.30 m above the twin's 0.10 m rest, 0.33-0.36 m above
+  the rig's. Cost: the last 0.30 m at half speed, +1.5 s per LAND.
+
+**Two things the variable must not break (built with it):**
+- **The stall test (the trap).** `TouchdownDetector` expects each tick's drop at `land_vel`; a reference slowed under
+  `LAND_STALL_FRAC` x `land_vel` reads as a stall in the air. It now takes the speed commanded (the slowest slot's
+  node-0 speed; None = `land_vel`, as before).
+- **The max-drop backstop.** It is a clock on `lift_progress` at `land_vel`: on 1 m links the carriers start ~0.9 m
+  up at ring touchdown, and the slowed tail would put the stall after it (LAND to max drop ~12.4 s from a 1 m hover).
+  While slowed, that clock runs at the commanded speed, so it stays a depth.
+
+**Switches** (planner; `common.yaml`, `real_mode.PLANNER_OPTIONAL`): `land_slow_vel` (m/s, default 0 = off: today's
+nodes exactly), `land_slow_z` (m, default 0.40; used only when `land_slow_vel` > 0). Refused (after the critic, at
+the launch and by the planner): `land_slow_vel` above `land_vel`, below 0.05 m/s (at 0.01 the stall test's drop per
+tick is 0.25 mm, inside the mocap noise, and the backstop would run ~150 s), and without `land_descend_to_stall` (never
+flown). Logged: each drone's reference z at the touchdown line. Tests `src/mpc_planner/test/test_land_slow.py` (12)
+and `test_real_mode_launches.py::test_land_slow_vel_reaches_the_planner_only_under_descend_to_stall`: off = the
+committed function node for node (a frozen copy of the pre-switch `_land_hold_refs` and `TouchdownDetector.update` in
+the test; both paths, with and without floor, through the xy follow and the touchdown freeze); fast then slow
+below the zone; with the floor it stops at 0; inside the zone from the start; the slowest slot sets the commanded speed;
+frozen at touchdown; the arc slowed on its circle; the trap (today's detector fires in the air at 0.04 m/s; with the
+commanded speed only on the floor); `_touchdown_stalled` passes it.
+
+**Arms and scenarios** (twin, lab PC, today's tree and worlds, `land_rearm_touchdown` on as the twin default in every
+arm; exploratory: one run per arm and scenario, Wesley 30 Oct):
+
+| scenario | base config (today's world) | A: today (switch off) | B: switch on (rev 3) | C: switch + slow (0.10 below 0.40) |
+|---|---|---|---|---|
+| S1 hover LAND, the rig LAND path (`land_unwind` false) | `b3_hover_L100_slope` | `lr4a_hold_u0` | `lr4b_hold_u0` | `lr4c_hold_u0` |
+| S2 QUAD4 folded in: released on 9, his re-attach, LAND 10 s after the re-weld; rig LAND path | `nr_hover_L100_p9` | `lr4a_nr9_u0` | `lr4b_nr9_u0` | `lr4c_nr9_u0` |
+| S3 orbit 0.125 m/s, LAND on the twin's unwind | `traj3_L100_orbit_v125` | `lr4a_orbit` | `lr4b_orbit` | `lr4c_orbit` |
+| added ~13:20, after S1/S2 (below): S1u the hover on the twin's unwind | `b3_hover_L100_slope` | `lr4a_hold` | `lr4b_hold` | `lr4c_hold` |
+| added ~13:20: S4 drone 1 stronger than its map by 0.03 (sim offset 0.155 against 0.185), rig LAND path | `b3_hover_L100_slope` | `lr4a_strong_u0` | `lr4b_strong_u0` | `lr4c_strong_u0` |
+| added ~13:20: S4u the same on the unwind | `b3_hover_L100_slope` | `lr4a_strong` | `lr4b_strong` | `lr4c_strong` |
+
+**Scored per drone** (rest = its median z before ARM; ring touchdown = first sample after LAND within 5 mm of the
+ring's lowest): height above rest at the stall line and at LANDED; contact speed (mean descent speed over the 0.2 s
+before it first comes within 3 cm of its rest, after LAND); floor tilt (ring down to LANDED, within 3 cm of rest); xy
+drift from ring touchdown to LANDED; ring touchdown to stall and to LANDED; the exit (stall / max drop); any tip (tilt
+after LANDED); faults.
+
+**Bars (rev 4; written before the runs; anything judged after the runs is marked so):**
+
+| # | bar | pass | fail |
+|---|---|---|---|
+| G1 | no touchdown in the air (one-sided height) | B, C: every drone at most 3 cm above its rest at the stall line and at LANDED (lower is the aim) | any drone higher |
+| G2 | height not worse than today | B, C: each drone's height above rest at LANDED at most A's same drone + 2 cm | higher |
+| G3 | contact speed | C: every drone at most 0.13 m/s (0.10 + 0.03); B and A: at most 0.40 (rev 3's F5) | faster |
+| G4 | time | B: LANDED - ring touchdown within 1.0 s of A's (rev 3's F2); C: at most A's + 2.5 s (the slowing costs ~1.5 s by design) and never more than 1.0 s faster | outside |
+| G5 | floor | B, C: floor tilt at most A's + 2 deg; xy slide on the floor at most 3 cm (rev 3's F3, against the same-scenario A run) | larger |
+| G6 | exit and faults | B, C: exit = stall (never the max drop); LANDED within 10 s of ring touchdown; no FLEET ABORT, ENVELOPE FAULT, DROP AND LAND or UNANNOUNCED DETACH that A lacks; no tip | any |
+
+**Falsifier (C):** G1, G3 or G6 fails on any scenario, or C lands a drone higher than B.
+
+**What it cannot say:**
+- the twin has no ground effect, so A's rig hover cannot appear in it: the twin shows that B and C reach the floor
+  and how fast; whether C's shallower freeze (`land_slow_vel` x 1 s + its lag, ~0.2 m below the drone against ~0.4 m
+  for B) still pushes a carrier out of ground effect is a rig question;
+- the twin's links are rigid rods (on the rig LAND path a rod props or pushes a drone; rev 3's F3 failure was drone 0
+  on its rod), and its ground idle cuts the throttle at once;
+- xy drift after ring touchdown (the rig's 0.3-0.6 m) and the planner's wait for a taken-back QUAD4
+  (`LAND_DEPARTED_WAIT_S`) are not this variable; they are scored, not judged.
+
+### Rev 4 results
+
+5 Nov 13:05-13:32, lab PC (4 slots x 6 cpus), week8 9f20f8b + uncommitted (the switches above); R3716-R3724 synced
+13:05, R3725-R3733 synced 13:20 (the main chat's runner edits of 13:05-13:20 went with them; the three arms of each
+scenario always flew together). Scorer: scratchpad `lr4_score.py` (definitions under Scored above; QUAD4's contact
+against where it ends, 2-3 cm over its start). Every runner verdict PASS; no FLEET ABORT, ENVELOPE FAULT, DROP AND LAND or
+UNANNOUNCED DETACH in any run. Numbers judged after the runs.
+
+| scenario | arm | run | exit | LAND to stall (s) | ring down to LANDED (s) | height at LANDED, per drone (cm) | contact (m/s) | floor tilt max (deg) / slide max (cm) | ref z at stall (m) |
+|---|---|---|---|---|---|---|---|---|---|
+| S1 hover, rig path | A | R3719 | stall | 11.8 | 6.83 | 1.2, 0.1, 0.1 | 0.24-0.32 | 14.1 / 2.0 | 0.00 |
+| | B | R3720 | stall | 11.1 | 6.13 | 0, 0.1, 0.1 | 0.37-0.40 | 7.3 / 2.0 | -0.28 |
+| | C | R3721 | stall | 13.4 | 8.41 | 0, 0.1, 0 | 0.30-0.34 | 11.9 / 3.1 | -0.17 |
+| S2 QUAD4 folded in, rig path | A | R3716 | stall | 11.5 | 6.51 | 0.2, 0.1, 0.1, Q4 2.4 | 0.28-0.30, Q4 0.31 | 12.4 / 8.5 (Q4) | 0.00 |
+| | B | R3717 | stall | 11.0 | 6.02 | 0.1, 0, 0, Q4 2.9 | 0.38-0.39, Q4 0.60 | 11.9 / 1.5 | -0.27..-0.22 |
+| | C | R3718 | stall | 13.0 | 8.00 | 0.1 x3, Q4 2.9 | 0.27-0.31, Q4 0.62 | 12.4 / 1.6 | -0.13..-0.11 |
+| S4 strong drone 1, rig path | A | R3725 | stall | 11.0 | 6.05 | 1.2, **26.6**, 0.1 | 0.29-0.31; drone 1 falls 1.25 at disarm, **tips (90 deg)** | 14.6 / 3.0 | 0.00 |
+| | B | R3726 | stall | 12.0 | 7.04 | 0, 0.1, 0.1 | 0.38-0.40 | 7.0 / 2.7 | -0.46 |
+| | C | R3727 | stall | 14.5 | 9.53 | 0, 0, 0 | 0.29-0.31 | 11.3 / 2.2 | -0.28 |
+| S3 orbit, unwind | A | R3722 | stall | 11.9 | 6.89 | 0, 0, 0 | 0.12-0.17 | 0.5 / 0.1 | 0.00 |
+| | B | R3723 | stall | 11.7 | 6.69 | 0, 0, 0 | 0.20 | 0.7 / 0.2 | -0.21 |
+| | C | R3724 | stall | 13.7 | 8.69 | 0, 0, 0 | **0.10** | 0.4 / 0.2 | -0.10 |
+| S1u hover, unwind | A | R3731 | stall | 11.9 | 6.93 | 0, 0, 0 | 0.12-0.18 | 0.4 / 0.1 | 0.00 |
+| | B | R3732 | stall | 11.7 | 6.69 | 0, 0, 0 | 0.20 | 0.2 / 0.1 | -0.21 |
+| | C | R3733 | stall | 13.7 | 8.70 | 0, 0, 0 | **0.10** | 0.4 / 0.1 | -0.10 |
+| S4u strong drone 1, unwind | A | R3728 | stall | 11.8 | 6.75 | 0, **12.4**, 0 | 0.12-0.18; drone 1 falls 0.58 at disarm | 0.5 / 0.1 | 0.00 |
+| | B | R3729 | **max drop** | 12.2 | 7.16 | 0, 0, 0 | 0.19-0.20 | 0.6 / 0.1 | -0.31 |
+| | C | R3730 | stall | 14.8 | 9.77 | 0, 0, 0 | **0.10** | 0.3 / 0.1 | -0.21 |
+
+xy from ring touchdown to LANDED: 45-65 cm in every run and arm. On the unwind it is the arc by design; on the rig path
+the rigid rods push the drones out the same way (r 0.74 -> 1.22 m). Neither is the rig's drift (slack cables, inward).
+
+| bar | result (judged after the runs) |
+|---|---|
+| G1 | **pass**, B and C, all 6 scenarios: every carrier within 0.1 cm of its rest at the stall and at LANDED, QUAD4 2.9 cm over its start (A 2.4). A fails it where a drone is stronger than its map (S4 26.6, S4u 12.4 cm) |
+| G2 | **pass**, B and C everywhere |
+| G3 | **C: pass on the unwind (0.10 m/s in all 9 carrier landings), FAILS on the rig path** (S1 0.30-0.34, S2 0.27-0.31 and QUAD4 0.62, S4 0.29-0.31). **B fails on S2** (QUAD4 0.60 > 0.40). A fails on S4 (drone 1 falls 1.25 m/s at its disarm in the air) |
+| G4 | B passes (-0.70..+0.99 s against A). C passes on S1, S2, S3, S1u (+1.49..+1.80 s); **fails as written on S4 and S4u** (+3.48, +3.02 s), where A's LANDED came from a touchdown declared with drone 1 still 12-27 cm up (C against B there: +2.49, +2.61) |
+| G5 | pass on the run maxima (rev 3's reading). Per drone, S1 C's drone 1 (11.9 deg) is over A's drone 1 + 2 (11.1), and its slide 3.1 cm **fails** the 3 cm by 1 mm (rig path) |
+| G6 | C: **pass** (stall exit in all 6, LANDED 8.0-9.8 s after ring touchdown, no fault, no tip). **B fails on S4u: the max drop fired before the stall** (R3729, 12.2 s after LAND); in R3726 its max-drop clock ended 0.03 m short of the floor |
+
+**Verdict: the falsifier fires as written (G3 on the rig-path scenarios).** Corrected after the critic (point 1): on the
+twin's rig LAND path each carrier is **propped**, not dropped by its rod alone. Above `LAND_FOLLOW_XY_Z` (0.25 m) its xy
+reference is still the anchor, 0.45-0.48 m inboard; the rigid rod pushed against that inward hold leans it 8.6-10 deg
+inward and holds it 0.21-0.26 m over its z reference (0.30-0.38 for the strong drone). At 0.25 m the xy follow engages
+(planner_node.py, `_land_hold_refs`), the drone levels, the prop goes, and it falls the last ~0.15 m. The contact speed
+is then the speed it had at the crossing plus that fall:
+
+| arm (rig path, R3716-R3721, R3725-R3727; carriers) | z over its reference at 0.25 m (m) | xy off its reference / lean | vz at 0.25 m (m/s) | contact (m/s) | 0.25 m to contact (s) |
+|---|---|---|---|---|---|
+| A | 0.23-0.25 | 0.45-0.48 m / 8.6-9.4 deg | -0.09..-0.18 | 0.24-0.32 | 0.5-0.6 |
+| B | 0.22-0.26 (strong drone 0.38) | 0.45-0.48 m / 8.8-10.0 deg | -0.22..-0.24 | 0.37-0.40 | 0.3-0.4 |
+| C | 0.21-0.24 (strong drone 0.37) | 0.45-0.48 m / 8.6-9.8 deg | -0.11..-0.12 | 0.28-0.34 | 0.5-0.6 |
+| on the unwind, all arms (R3722-R3724, R3728-R3733) | 0.08-0.12 (strong 0.22-0.23) | 0.01-0.02 m / 0-0.3 deg | the arm's speed | A 0.12-0.18, B 0.19-0.20, C 0.10 | A/B 0.6-0.7, C 1.2 |
+
+So the gap at the crossing is the same in every arm (the prop) and C lowers the contact by its lower incoming speed
+(0.30 against B's 0.39), not to 0.10. The rig's cables go slack near the floor: at their 0.25 m crossing on 5 Nov the
+carriers were 0.01-0.15 m off their xy reference and leaning 0.2-4.6 deg, so no prop. Where the reference sets the
+descent (the unwind: S3, S1u, S4u) C does what it was built for: 0.10 m/s at the floor in all 9 carrier landings (B
+0.19-0.20, A 0.12-0.18), every drone at its rest, the stall exit every time, for +1.8 s (+3.0 s with the strong drone).
+
+**Findings for the rig (not this variable alone):**
+- **A carrier stronger than its map (S4), corrected after the critic (point 2).** A on the rig path stops drone 1 26.6 cm
+  over its rest, disarms it in the air and it tips over (R3725), but most of that is the prop: at 62.80 s it sits at z
+  0.368, above the follow height, 0.44 m outboard of its anchor, leaning 9.2 deg inward. The map error alone is S4u's
+  12.4 cm (R3728, no prop), inside the 9-16 cm Wesley accepted at LANDED on 10 Oct (decisions.md, "Landing drop"). On the
+  rig (k1d) the carriers rode 0.13-0.20 m over their reference already in the air (53.9 s: z 0.83 against 0.67) and
+  0.15-0.23 m over it once it stopped at z 0. What was new on the rig was not the height but **6.5-8.6 s of hover
+  below 0.25 m with 0.2-1.0 m of xy drift** while the planner waited for QUAD4 (next section). B and C land every drone
+  at its rest in S4 and S4u.
+- **The max-drop backstop is tight on 1 m links.** It is a clock: ~12.4 s from a 1 m hover at 0.20 m/s. Today's stall
+  comes 11.0-11.9 s after LAND (`lift_progress` ends at -1.27..-1.43 of -1.50). B with a strong drone reached it once
+  (R3729) and missed it by 0.03 m once (R3726). C's clock runs at the commanded speed and ended 0.09-0.40 m short.
+- QUAD4 drops 0.60-0.62 m/s on the rig path under B and C (A 0.31). That is the twin's prop again, but it is the drone
+  with the shortest record.
+
+### The follow zone: xy drift below 0.25 m (critic point 2; offline, from the same runs and the 5 Nov rig logs)
+
+Per carrier, from its first crossing of 0.25 m after ring touchdown (scratchpad `lr4_follow.py`):
+
+| | time in the zone, 0.25 m to contact (to LANDED) | xy drift in the zone, to contact (to LANDED) |
+|---|---|---|
+| twin A (all 6 scenarios; not the strong drone A disarmed in the air) | 0.5-0.7 s (1.1-2.2) | 1.3-2.9 cm (1.0-3.6) |
+| twin B | 0.3-0.6 s (1.4-2.4) | 1.3-2.4 cm (1.4-3.8) |
+| twin C | 0.5-1.2 s; 1.2 on the unwind (1.5-3.9) | 1.3-2.8 cm (1.4-3.8) |
+| twin QUAD4 on the rig path, A / B / C (contact against its start height; it ends 2-3 cm higher) | 0.5 / 0.2 / 1.5 s | 16.7 / 10.1 / 21.2 cm (25.0 / 10.6 / 22.1) |
+| rig 5 Nov, A, flights that waited for a taken-back or departed QUAD4 (k1d, nr9m, nr1r_3, nr9o_2, k1o_2, fm9y_2) | - (6.5-8.6 s to LANDED) | 17-102 cm to LANDED (k1d 47-66) |
+| rig 5 Nov, A, flights without the wait (fm9_4, fm9y; fm9_2, fm9s, k1ob_2 ended in a ring drop) | - (0.3-2.6 s to LANDED or the log end) | 0.8-14 cm |
+
+- The twin has no drift source near the floor (1-4 cm in every arm), so it cannot rank the arms on drift. It only shows
+  how long each spends airborne in the zone: C doubles it on the unwind (1.2 s against 0.6).
+- On the rig the drift grows with the time airborne in the zone, ~6-13 cm/s. k1d's 47-66 cm is ~7 s of that: the
+  reference stopped at z 0 with the carriers 0.15-0.23 m over it, and LANDED waited for QUAD4.
+- Estimate for the rig, not measured: under B or C a carrier reaches the floor once its reference has gone its offset
+  (~0.15-0.2 m) further, ~1 s after the crossing under B, ~2 s under C: ~6-13 cm (B) and ~12-26 cm (C) of drift at the
+  rig's rate. C can miss a 10 cm drift bar that B meets.
+
+### The rig: what flies first (after the critic, points 5-7; Wesley's word)
+
+- **Twin first, A off (critic point 5).** Every run above flew `land_rearm_touchdown` on (the twin default); the rig
+  flies it off, and with it off the twin's rig path had false touchdowns in 2 of 4 (17 Oct, 0.55 m rods). To launch
+  (main chat), rig LAND path, 1 m links, A off: `lr4b_hold_u0_norearm`, `lr4c_hold_u0_norearm`, and their base
+  `lr4a_hold_u0_norearm` (today's rig: every switch off).
+- **First rig flight: a plain three-carrier hover LAND (critic point 6).** The 15 s wait for a taken-back QUAD4
+  (`LAND_DEPARTED_WAIT_S`) with the carriers' reference frozen 0.1-0.5 m below the floor is untested. The trackers' ground
+  idle latches only within 3 cm of each drone's spawn height with its reference at the floor (tracker_node.py,
+  `_ground_idle_update`); a carrier resting higher than that (on its magnet, its cable, the mat) keeps pressing on that
+  reference for up to 15 s (R0997's tip-over). The departed-wait case flies only after the first flight shows every
+  carrier's ground-idle line.
+- **Rig bars, frozen before that flight (critic point 7):**
+
+| # | bar | pass |
+|---|---|---|
+| R1 | contact speed | every carrier at most 0.15 m/s (mean over the 0.2 s before it is within 3 cm of its rest), with an A or B flight on the same battery set as the base |
+| R2 | ground idle | every carrier's "on the floor after the flight: armed idle" line within 0.5 s of its contact |
+| R3 | height | every carrier within 3 cm of its rest at the stall line and at LANDED |
+| R4 | floor tilt while armed | every carrier at most 10 deg from contact to disarm |
+| R5 | drift | every carrier's xy drift from its 0.25 m crossing to contact at most 10 cm; no carrier on the ring or a cable |
+| R6 | exit | the stall, with `lift_progress` at least 0.10 m above its -1.50 floor at the stall (logged: the margin) |
+| R7 | no tip | every carrier's tilt at most 30 deg from contact to 2 s after its disarm |
+
+## Critic (rev 4)
+
+Run by the main chat, 5 Nov ~14:10. Verdict: **rewrite the card** (fly with changes). Its points as the main chat relayed
+them (the full text is with the main chat):
+1. (medium) "The rigid rod drops it the last 15 cm" is half right: R3721 drone 0 at 63.87 s is at z 0.255 with its xy
+   reference still the anchor 0.47 m inboard, leaning 8.7 deg inward, its z reference 0.24 m below it, vz -0.12; at
+   64.12 s the xy follow engages, it levels and falls (-0.28, then -0.45 m/s). The rod pushed against the inward xy hold
+   props it while the reference runs ~0.22-0.25 m below; the follow removes the prop. B (bigger gap) 0.37-0.40 against
+   C 0.30-0.34. Settle offline: each drone's z gap at the 0.25 m crossing against its contact speed.
+2. (medium) S4 "reproduces the rig hover" is mostly the rod (R3725 at 62.80 s: drone 1 at z 0.368, 0.44 m outboard of
+   its anchor, leaning 9.2 deg inward); the map error alone is S4u's 12.4 cm. Wesley accepted carriers 9-16 cm up at
+   LANDED (10 Oct). New on the rig (k1d) was 6 s of hover with 0.48-0.61 m of xy drift below 0.25 m: the xy follow, not
+   the reference stop, and C spends ~2x longer in the follow zone. Quantify the follow-zone drift per arm.
+3. (low) Refuse `land_slow_vel` below 0.05 (at 0.01 the stall threshold is 0.25 mm per tick, mocap noise resets it, the
+   backstop runs 150 s) and without `land_descend_to_stall` (never flown), in the launch.
+4. (low) `test_off_is_todays_nodes_exactly` compares the new code with itself: compare against the old behaviour.
+5. (high) Every C run flew with `land_rearm_touchdown` on; on the rig it is off, and with it off the twin's rig path had
+   false touchdowns in 2 of 4. Prepare C and B with it off on the rig path.
+6. (high, for a second flight) The 15 s wait for a taken-back QUAD4 with the reference frozen below the floor is untested;
+   ground idle latches only within 3 cm of the spawn height. A plain three-carrier hover LAND first; the departed-wait
+   case only after that flight shows each carrier's ground-idle line.
+7. (medium) Rig bars: contact <= 0.15 m/s with an A or B flight on the same battery as the base; each carrier's
+   ground-idle line within 0.5 s of contact; floor tilt while armed; xy drift below 0.25 m <= 10 cm with no carrier on
+   the ring or a cable; the max-drop margin at the stall; "no tip" as a number.
+9. Its "not approved" point is wrong: Wesley approved this work ("2) Yes", 5 Nov).
+
+## Response (5 Nov ~14:15)
+
+1. Agreed and settled offline: the table under the verdict. The gap at the crossing is the prop and the same in every
+   arm (0.21-0.26 m); contact follows the incoming speed plus the fall. The verdict text is corrected; registry
+   correction rows R3716c-R3721c, R3725c, R3727c.
+2. Agreed: corrected under Findings; the follow-zone drift per arm is its own section above. The twin cannot rank the
+   arms on drift (1-4 cm in all); on the rig the drift is ~6-13 cm/s while airborne in the zone, and C doubles that time.
+3. Done: refused at the launch (`real_mode.planner_options`) and by the planner; launch test added.
+4. Done: the off test compares against a frozen copy of the committed `_land_hold_refs` and `TouchdownDetector.update`;
+   a check that the comparison fails with the switch on was run once.
+5. Done: `lr4{a,b,c}_hold_u0_norearm` (rig path, A off) prepared and checked (`--check` ok), not launched.
+6. Noted in the rig section: a plain three-carrier hover LAND first, the departed-wait case only after it.
+7. Done: R1-R7 in the rig section, to be frozen before the flight.
+
+What the change does and does not address (the honest reading): the hover Wesley saw is the reference stopping at z 0
+with the carriers riding 0.15-0.23 m over it, held there for ~7 s by the wait for QUAD4. **B** (the reference keeps
+going) removes the stop, so the carriers would reach the floor ~1 s after the 0.25 m crossing instead of hovering, and
+most of the drift window goes with it. **C** adds a softer contact (0.10 against 0.20 m/s where the reference sets it)
+that nobody asked for on the rig, at the price of twice the time airborne in the follow zone: for the drift, C is worse
+than B. Neither touches the drift's own cause (no xy correction below 0.25 m while still airborne) or the 15 s wait;
+with B or C the wait happens on the floor, harmless only if ground idle latches. The direct fixes are in the follow
+zone (follow xy only once a drone is within a few cm of its rest, or keep a soft hold until contact; R0590's tip-over
+is why the follow exists) and in the wait (the carriers idle and disarm alone while QUAD4 lands). Each is a variable of
+its own.
+
+## Decision (Wesley 5 Nov ~15:05)
+
+- **B is the rig default.** `land_descend_to_stall: true` in `src/bringup/config/real.yaml`, so every rig planner gets
+  it; a params_file with `land_descend_to_stall: false` turns it off (it is not a launch argument). The twin keeps it
+  off for now: the weekend claim batch flies the frozen tree, and Wesley may extend it later. `land_rearm_touchdown` is
+  unchanged (twin on, rig off). Launch test `test_rig_lands_with_descend_to_stall_by_default`.
+- **The slow final descent is deleted** (`land_slow_vel`, `land_slow_z`, the commanded-speed stall test, the slowed
+  max-drop clock, their refusals, tests and the arm C configs): it did not beat plain `land_descend_to_stall` on the
+  rig's problem. Its runs stay recorded: R3716-R3733 and R3746 (registry; each run dir keeps its config). The LAND path
+  is the committed one (9f20f8b) again; `test_land_no_floor.py::test_references_are_the_reviewed_ones` pins its
+  references against a frozen copy.
+- **The first rig flights test it.** No separate barred flight (his call); R1-R7 above are not flown as a gate.
+- **Open risk: the departed-wait case.** With a taken-back QUAD4 the carriers' reference stays frozen below the floor
+  for up to 15 s (`LAND_DEPARTED_WAIT_S`). The trackers' ground idle latches only within 3 cm of each drone's spawn
+  height, so a carrier resting higher keeps pressing on that reference. Read each carrier's ground-idle line in the
+  first flights' logs.

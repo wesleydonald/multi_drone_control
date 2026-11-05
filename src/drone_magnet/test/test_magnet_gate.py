@@ -243,3 +243,23 @@ def test_dry_hold_keeps_the_coil_off_and_only_logs_both_inputs():
     assert g.partner('ON') is None and g.ours('ON') is None and g.ours('OFF') is None
     assert g.last == 'OFF' and len(g.events) == 1 and 'DRY HOLD' in g.events[0]
     assert MagnetGate().partner('ON') == 'ON'                     # off by default: today's gate
+
+
+def test_operator_off_drops_his_puck_in_the_transit_and_holds_every_on():
+    """RIG-1104-k1m_3/_4: his OFF is held in the transit, so the object never dropped; the operator's OFF passes."""
+    g = MagnetGate()
+    g.partner('ON'); g.puck(True); g.his_phase('TRANSIT_TO_DROP_POINT')
+    assert g.partner('OFF') is None                   # his OFF held in the transit, as flown
+    assert g.operator('OFF') == 'OFF' and g.dropped
+    assert g.partner('ON') is None and g.ours('ON') is None
+    assert g.source == 'partner'                      # our held ON did not take the coil
+    assert g.operator('ON') is None                   # clears the hold, forwards nothing
+    assert g.partner('ON') == 'ON'
+
+
+def test_operator_off_releases_a_welded_quad4_and_a_cut_or_dry_gate_ignores_it():
+    g = MagnetGate(start_ours=True)
+    assert g.operator('OFF') == 'OFF' and g.ours('ON') is None
+    g = MagnetGate(); g.cut()
+    assert g.operator('OFF') is None and g.last == 'OFF'
+    assert MagnetGate(dry=True).operator('OFF') is None

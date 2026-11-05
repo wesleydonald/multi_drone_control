@@ -14,6 +14,7 @@ launch:
   package: bringup
   file: sim_control_launch.py
   args:
+    plan_rod_level: false        # the real planner (real flights have no rod): pinned at the 4 Nov flip
     mode: dissipative
     num_drones: 9
     attach_azimuths_deg: 0,320,280,240,200,160,120,80,40
